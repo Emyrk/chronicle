@@ -436,6 +436,10 @@ export function parseMapLayer(value: unknown): MapLayerManifest {
   };
 }
 
+export function isPreviewableMapAssetPath(assetPath: string): boolean {
+  return ["original/", "render/", "render-styled/", "renders/", "3d/"].some((prefix) => validAssetPath(assetPath, prefix));
+}
+
 function validAssetPath(assetPath: string, prefix: string): boolean {
   if (!assetPath.startsWith(prefix) || assetPath.length === prefix.length || assetPath.includes("\\")) return false;
   const parts = assetPath.split("/");

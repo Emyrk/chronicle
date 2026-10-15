@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   MAP_MANIFEST_NAMESPACES,
+  isPreviewableMapAssetPath,
   mergeMapManifests,
   parseMapLayer,
   parseMapManifest,
@@ -126,6 +127,21 @@ test("requires exactly the artwork field belonging to the layer", () => {
   assert.throws(() => mergeMapManifests(original(), {
     styled: layer({ mapID: 43, rendered: { path: "render/a.png", width: 1, height: 1 } }),
   }), /styled/);
+});
+
+test("allows only clean preview asset paths from known map layers", () => {
+  for (const path of [
+    "original/123.webp",
+    "render/43-build-digest.png",
+    "render-styled/wailing-caverns.jpeg",
+    "renders/wailing-caverns.png",
+    "3d/wailing-caverns.glb",
+  ]) {
+    assert.equal(isPreviewableMapAssetPath(path), true, path);
+  }
+  for (const path of ["", "manifest.json", "3d/../secret.glb", "original//123.webp", "other/map.png", "3d\\map.glb"]) {
+    assert.equal(isPreviewableMapAssetPath(path), false, path);
+  }
 });
 
 test("rejects unknown fields recursively", () => {

@@ -13,6 +13,7 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+      <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.1.0/model-viewer.min.js"></script>
       {html`<style>
         :root { --bg:#111413; --panel:#191e1c; --panel2:#202622; --line:#36413b; --text:#e6eadf; --muted:#89958d; --moss:#a8c46a; --amber:#e1b25d; --blue:#75aeba; --danger:#df756d; }
         * { box-sizing:border-box; }
@@ -55,6 +56,7 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
         .map-name { overflow:hidden; font-size:13px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
         .badges { display:flex; gap:4px; }
         .badge { min-width:25px; padding:3px 5px; border:1px solid #435048; border-radius:4px; color:#77847c; font:9px 'JetBrains Mono',monospace; text-align:center; }
+        .badge.on.original { color:var(--moss); border-color:#5a6d3b; background:#202819; }
         .badge.on.render { color:var(--amber); border-color:#725d35; background:#2c261a; }
         .badge.on.model { color:var(--blue); border-color:#3b646c; background:#19282b; }
         .editor { min-height:620px; }
@@ -86,6 +88,22 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
         .empty-editor { display:grid; place-items:center; min-height:570px; color:var(--muted); text-align:center; }
         .empty-editor strong { display:block; margin-bottom:6px; color:#c7cec9; }
         .manual-name { max-width:320px; margin-top:12px; }
+        .preview-workbench { margin-top:16px; border:1px solid var(--line); border-radius:9px; overflow:hidden; background:#111513; }
+        .preview-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 13px; border-bottom:1px solid var(--line); background:#1d231f; }
+        .preview-head h3 { margin:0; font-size:12px; letter-spacing:.08em; text-transform:uppercase; }
+        .preview-tabs,.preview-options { display:flex; flex-wrap:wrap; gap:6px; }
+        .preview-tab,.preview-option { padding:6px 9px; border-radius:5px; color:var(--muted); background:#171c19; font:10px 'JetBrains Mono',monospace; }
+        .preview-tab.active,.preview-option.active { color:#11160f; background:var(--moss); border-color:var(--moss); }
+        .preview-stage { min-height:420px; display:grid; place-items:center; padding:16px; background:radial-gradient(circle at 50% 40%,#27302a 0,transparent 55%),#0c0f0e; }
+        .preview-loading,.preview-empty { max-width:430px; color:var(--muted); font-size:12px; line-height:1.6; text-align:center; }
+        .preview-empty strong { display:block; margin-bottom:5px; color:#c6cec8; }
+        .tile-preview { position:relative; width:min(100%,900px); overflow:hidden; background:#050706; box-shadow:0 18px 55px #0009; }
+        .tile-preview img { position:absolute; display:block; background:#151a17; }
+        .image-preview { max-width:100%; max-height:70vh; display:block; object-fit:contain; box-shadow:0 18px 55px #0009; }
+        model-viewer { width:100%; min-height:520px; height:65vh; max-height:760px; background:radial-gradient(circle at 50% 38%,#35423a 0,#141916 64%,#0a0c0b 100%); --poster-color:transparent; }
+        .preview-meta { display:flex; justify-content:space-between; gap:12px; align-items:center; padding:10px 13px; color:var(--muted); border-top:1px solid var(--line); font:10px 'JetBrains Mono',monospace; }
+        .preview-meta a { font-weight:600; }
+        .preview-error { color:#ffaaa4; }
         @media (max-width:920px) { .workspace { grid-template-columns:1fr; } .map-list { max-height:340px; min-height:0; } .layer-grid { grid-template-columns:1fr; } }
         @media (max-width:620px) { main { width:min(100% - 20px,1540px); } header { align-items:flex-start; flex-direction:column; } .header-actions,.toolbar-actions { width:100%; } .toolbar { grid-template-columns:1fr; } .toolbar-actions button { flex:1; } }
       </style>`}
@@ -131,13 +149,19 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
         let selectedID = null;
         let dirty = false;
         let busy = false;
+        let previewData = null;
+        let previewMode = 'original';
+        let previewChoice = 0;
+        let previewRequest = 0;
+        let loadRequest = 0;
+        let addedMaps = new Map();
 
         function escapeHTML(value) { return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
         function setStatus(message, error = false) {
           els.status.className = 'statusline' + (error ? ' error' : '');
           els.status.innerHTML = '<span class="dot ' + (!error && state?.has_draft ? 'draft' : '') + '"></span><span>' + escapeHTML(message) + '</span>';
         }
-        function setBusy(value) { busy = value; updateButtons(); }
+        function setBusy(value) { busy = value; els.namespace.disabled = value; els.search.disabled = value; updateButtons(); }
         function updateButtons() {
           els.save.disabled = busy || !state || !dirty;
           els.publish.disabled = busy || !state?.has_draft || dirty;
@@ -145,10 +169,11 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           els['add-map'].disabled = busy || !state;
         }
         function layerEntry(kind, mapID) { return state?.draft?.[kind]?.instances?.find(item => item.mapID === mapID); }
-        function baseInstance(mapID) { return state?.instances?.find(item => item.mapID === mapID); }
+        function baseInstance(mapID) { return state?.instances?.find(item => item.mapID === mapID && item.original); }
         function allInstances() {
           if (!state) return [];
-          const byID = new Map(state.instances.map(item => [item.mapID, item]));
+          const byID = new Map(state.instances.filter(item => item.original).map(item => [item.mapID, item]));
+          for (const [mapID,item] of addedMaps) byID.set(mapID,item);
           for (const kind of ['renders','3d']) for (const entry of state.draft[kind].instances) {
             if (!byID.has(entry.mapID)) byID.set(entry.mapID, { mapID:entry.mapID, name:entry.name || 'Unnamed map', directory:'', floor_count:0 });
           }
@@ -160,13 +185,13 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           const rows = allInstances().filter(item => (item.name + ' ' + item.mapID + ' ' + (item.directory || '')).toLowerCase().includes(query));
           els.count.textContent = rows.length + ' maps';
           els['map-list'].innerHTML = rows.map(item => {
-            const render = layerEntry('renders', item.mapID)?.renders;
-            const model = layerEntry('3d', item.mapID)?.['3d'];
+            const render = layerEntry('renders', item.mapID)?.renders || item.renders || item.rendered || item.styled;
+            const model = layerEntry('3d', item.mapID)?.['3d'] || item['3d'];
             return '<button class="map-row ' + (item.mapID === selectedID ? 'active' : '') + '" data-map-id="' + item.mapID + '">' +
               '<span class="map-id">#' + item.mapID + '</span><span class="map-name">' + escapeHTML(item.name) + '</span>' +
-              '<span class="badges"><span class="badge render ' + (render ? 'on' : '') + '">PNG</span><span class="badge model ' + (model ? 'on' : '') + '">GLB</span></span></button>';
+              '<span class="badges"><span class="badge original ' + (item.floor_count ? 'on' : '') + '">ORG</span><span class="badge render ' + (render ? 'on' : '') + '">PNG</span><span class="badge model ' + (model ? 'on' : '') + '">GLB</span></span></button>';
           }).join('') || '<div class="empty-editor">No matching maps.</div>';
-          document.querySelectorAll('.map-row').forEach(row => row.addEventListener('click', () => { selectedID = Number(row.dataset.mapId); renderList(); renderEditor(); }));
+          document.querySelectorAll('.map-row').forEach(row => row.addEventListener('click', () => { if (busy) return; selectedID = Number(row.dataset.mapId); renderList(); renderEditor(); }));
         }
         function ensureEntry(kind, mapID) {
           let entry = layerEntry(kind, mapID);
@@ -177,7 +202,7 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           }
           return entry;
         }
-        function selectedName() { return baseInstance(selectedID)?.name || layerEntry('renders', selectedID)?.name || layerEntry('3d', selectedID)?.name || ''; }
+        function selectedName() { return baseInstance(selectedID)?.name || addedMaps.get(selectedID)?.name || layerEntry('renders', selectedID)?.name || layerEntry('3d', selectedID)?.name || ''; }
         function fieldNumber(id) { const value = Number(document.getElementById(id)?.value); return Number.isFinite(value) ? value : 0; }
         function syncEditor() {
           if (!state || !selectedID || !document.getElementById('map-name')) return;
@@ -194,6 +219,88 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
             }
           }
           if (modelEntry) modelEntry.name = name;
+        }
+        function assetURL(path) { return '/internal/api/v1/maps/' + encodeURIComponent(state.namespace) + '/preview-assets/' + path.split('/').map(encodeURIComponent).join('/'); }
+        function previewSources() {
+          if (!previewData) return { floors:[], images:[], models:[] };
+          const draftRender = state.has_draft ? layerEntry('renders', selectedID)?.renders : null;
+          const draftModel = state.has_draft ? layerEntry('3d', selectedID)?.['3d'] : null;
+          const publishedRender = previewData.published_renders || (!state.has_draft ? previewData.renders : null);
+          const publishedModel = previewData.published_3d || (!state.has_draft ? previewData['3d'] : null);
+          return {
+            floors:previewData.floors || [],
+            images:[
+              draftRender ? { label:'Draft manual', artwork:draftRender } : null,
+              publishedRender && publishedRender.path !== draftRender?.path ? { label:'Published manual', artwork:publishedRender } : null,
+              previewData.rendered ? { label:'Generated', artwork:previewData.rendered } : null,
+              previewData.styled ? { label:'Styled', artwork:previewData.styled } : null,
+            ].filter(Boolean),
+            models:[
+              draftModel ? { label:'Draft model', asset:draftModel } : null,
+              publishedModel && publishedModel.path !== draftModel?.path ? { label:'Published model', asset:publishedModel } : null,
+            ].filter(Boolean),
+          };
+        }
+        function renderPreview() {
+          const stage = document.getElementById('preview-stage');
+          const options = document.getElementById('preview-options');
+          const meta = document.getElementById('preview-meta');
+          if (!stage || !options || !meta) return;
+          document.querySelectorAll('.preview-tab').forEach(button => button.classList.toggle('active', button.dataset.mode === previewMode));
+          if (!previewData) { options.innerHTML = ''; stage.innerHTML = '<div class="preview-loading">Loading original tiles and artwork metadata…</div>'; meta.innerHTML = ''; return; }
+          const sources = previewSources();
+          let choices = previewMode === 'original' ? sources.floors.map((floor,index) => ({label:'Floor ' + floor.floor, value:index})) : previewMode === 'rendered' ? sources.images.map((image,index) => ({label:image.label,value:index})) : sources.models.map((model,index) => ({label:model.label,value:index}));
+          if (previewChoice >= choices.length) previewChoice = 0;
+          options.innerHTML = choices.map((choice,index) => '<button class="preview-option ' + (index === previewChoice ? 'active' : '') + '" data-preview-choice="' + index + '">' + escapeHTML(choice.label) + '</button>').join('');
+          document.querySelectorAll('.preview-option').forEach(button => button.addEventListener('click', () => { previewChoice = Number(button.dataset.previewChoice); renderPreview(); }));
+          if (previewMode === 'original') {
+            const floor = sources.floors[previewChoice];
+            if (!floor) { stage.innerHTML = '<div class="preview-empty"><strong>No original instance art</strong>This map has no native floor tile set in manifest.original.json.</div>'; meta.innerHTML = 'Original art is the native client floor tile layer.'; return; }
+            const columns = Math.max(1, ...floor.tiles.map(tile => tile.column + 1));
+            const rows = Math.max(1, ...floor.tiles.map(tile => tile.row + 1));
+            const images = floor.tiles.map(tile => {
+              const left = tile.column * floor.tileWidth / floor.width * 100;
+              const top = tile.row * floor.tileHeight / floor.height * 100;
+              const width = floor.tileWidth / floor.width * 100;
+              const height = floor.tileHeight / floor.height * 100;
+              return '<img src="' + assetURL(tile.path) + '" alt="" loading="lazy" style="left:' + left + '%;top:' + top + '%;width:' + width + '%;height:' + height + '%" />';
+            }).join('');
+            stage.innerHTML = '<div class="tile-preview" style="aspect-ratio:' + floor.width + '/' + floor.height + '">' + images + '</div>';
+            meta.innerHTML = '<span>Original · ' + floor.width + '×' + floor.height + ' · ' + columns + '×' + rows + ' tiles</span><span>' + escapeHTML(floor.bounds ? 'calibrated bounds' : 'no world bounds') + '</span>';
+          } else if (previewMode === 'rendered') {
+            const image = sources.images[previewChoice];
+            if (!image) { stage.innerHTML = '<div class="preview-empty"><strong>No rendered artwork</strong>Upload a manual PNG or publish a generated or styled render.</div>'; meta.innerHTML = ''; return; }
+            const url = assetURL(image.artwork.path);
+            stage.innerHTML = '<img class="image-preview" src="' + url + '" alt="' + escapeHTML(image.label + ' preview') + '" />';
+            meta.innerHTML = '<span>' + escapeHTML(image.label) + ' · ' + image.artwork.width + '×' + image.artwork.height + '</span><a href="' + url + '" target="_blank" rel="noreferrer">Open asset ↗</a>';
+          } else {
+            const model = sources.models[previewChoice];
+            if (!model) { stage.innerHTML = '<div class="preview-empty"><strong>No 3D model</strong>Upload a GLB to orbit, zoom, and inspect it here.</div>'; meta.innerHTML = ''; return; }
+            const url = assetURL(model.asset.path);
+            stage.innerHTML = '<model-viewer src="' + url + '" alt="3D model preview" camera-controls auto-rotate shadow-intensity="1" environment-image="neutral" interaction-prompt="auto"><div slot="progress-bar"></div></model-viewer>';
+            meta.innerHTML = '<span>' + escapeHTML(model.label) + ' · GLB · drag to orbit · scroll to zoom</span><a href="' + url + '" target="_blank" rel="noreferrer">Open asset ↗</a>';
+          }
+        }
+        async function loadPreview() {
+          if (!state || !selectedID) return;
+          const request = ++previewRequest;
+          const namespace = state.namespace;
+          const mapID = selectedID;
+          previewData = null; previewChoice = 0; renderPreview();
+          try {
+            const response = await fetch('/internal/api/v1/maps/' + namespace + '/instances/' + mapID + '/preview');
+            const result = await response.json();
+            if (!response.ok && response.status !== 404) throw new Error(result.error || 'Preview failed');
+            if (request !== previewRequest || !state || state.namespace !== namespace || selectedID !== mapID) return;
+            previewData = response.ok ? result : { mapID, name:selectedName(), floors:[] };
+            renderPreview();
+          } catch (error) {
+            if (request !== previewRequest || !state || state.namespace !== namespace || selectedID !== mapID) return;
+            previewData = { mapID, name:selectedName(), floors:[] };
+            renderPreview();
+            const stage = document.getElementById('preview-stage');
+            if (stage && !previewSources().images.length && !previewSources().models.length) stage.innerHTML = '<div class="preview-empty preview-error"><strong>Preview unavailable</strong>' + escapeHTML(error.message) + '</div>';
+          }
         }
         function renderEditor() {
           if (!state || !selectedID) { els.editor.innerHTML = '<div class="empty-editor"><div><strong>No map selected</strong>Select a map from the inventory.</div></div>'; return; }
@@ -218,43 +325,65 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
                 '<div class="path ' + (!model ? 'empty-path' : '') + '">' + escapeHTML(model?.path || 'No 3D model registered') + '</div>' +
                 '<label class="upload">Upload or replace GLB<input id="model-file" type="file" accept="model/gltf-binary,.glb" /></label>' +
                 '<div class="card-actions"><button id="remove-model" class="danger" ' + (!model ? 'disabled' : '') + '>Remove model</button></div></article>' +
-            '</div><div class="json-panel"><details><summary>Draft source manifests</summary><pre id="json-preview"></pre></details></div></div>';
+            '</div>' +
+            '<section class="preview-workbench"><div class="preview-head"><h3>Artwork preview</h3><div class="preview-tabs"><button class="preview-tab active" data-mode="original">Original</button><button class="preview-tab" data-mode="rendered">Rendered</button><button class="preview-tab" data-mode="3d">3D model</button></div></div>' +
+            '<div class="preview-head"><div class="preview-options" id="preview-options"></div><span class="count">draft-aware</span></div><div class="preview-stage" id="preview-stage"><div class="preview-loading">Loading preview…</div></div><div class="preview-meta" id="preview-meta"></div></section>' +
+            '<div class="json-panel"><details><summary>Draft source manifests</summary><pre id="json-preview"></pre></details></div></div>';
           document.getElementById('has-bounds').addEventListener('change', event => { document.getElementById('bounds').hidden = !event.target.checked; syncEditor(); markDirty(); });
           document.querySelectorAll('#editor input').forEach(input => { if (input.type !== 'file' && input.id !== 'has-bounds') input.addEventListener('input', () => { syncEditor(); markDirty(); renderList(); }); });
           document.getElementById('render-file').addEventListener('change', event => uploadAsset('renders', event.target.files[0]));
           document.getElementById('model-file').addEventListener('change', event => uploadAsset('3d', event.target.files[0]));
           document.getElementById('remove-render').addEventListener('click', () => removeLayer('renders'));
           document.getElementById('remove-model').addEventListener('click', () => removeLayer('3d'));
+          document.querySelectorAll('.preview-tab').forEach(button => button.addEventListener('click', () => { previewMode = button.dataset.mode; previewChoice = 0; renderPreview(); }));
           renderJSON();
+          loadPreview();
         }
         function renderJSON() { const pre = document.getElementById('json-preview'); if (pre && state) pre.textContent = JSON.stringify({ renders:state.draft.renders, '3d':state.draft['3d'] }, null, 2); }
         function removeLayer(kind) {
           state.draft[kind].instances = state.draft[kind].instances.filter(item => item.mapID !== selectedID);
+          if (!baseInstance(selectedID) && !layerEntry('renders', selectedID) && !layerEntry('3d', selectedID)) {
+            addedMaps.delete(selectedID);
+            selectedID = allInstances()[0]?.mapID || null;
+          }
           markDirty(); renderList(); renderEditor();
         }
         async function uploadAsset(kind, file) {
-          if (!file) return;
-          syncEditor(); setBusy(true); setStatus('Uploading ' + file.name + '…');
+          if (!file || !state || !selectedID) return;
+          syncEditor();
+          const namespace = state.namespace;
+          const mapID = selectedID;
+          const name = document.getElementById('map-name').value.trim();
+          setBusy(true); setStatus('Uploading ' + file.name + '…');
           try {
-            const data = new FormData(); data.append('mapID', String(selectedID)); data.append('file', file);
-            const response = await fetch('/internal/api/v1/maps/' + state.namespace + '/assets/' + kind, { method:'POST', body:data });
+            const data = new FormData(); data.append('mapID', String(mapID)); data.append('file', file);
+            const response = await fetch('/internal/api/v1/maps/' + namespace + '/assets/' + kind, { method:'POST', body:data });
             const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Upload failed');
-            const entry = ensureEntry(kind, selectedID); entry.name = document.getElementById('map-name').value.trim();
+            if (!state || state.namespace !== namespace || selectedID !== mapID) return;
+            const entry = ensureEntry(kind, mapID); entry.name = name;
             if (kind === 'renders') entry.renders = { path:result.path, width:result.width, height:result.height };
             else entry['3d'] = { path:result.path };
             dirty = true; setStatus('Asset uploaded. Save the draft to register it.'); renderList(); renderEditor();
-          } catch (error) { setStatus(error.message, true); } finally { setBusy(false); }
+          } catch (error) {
+            if (state?.namespace === namespace && selectedID === mapID) setStatus(error.message, true);
+          } finally { setBusy(false); }
         }
         async function load() {
-          const namespace = els.namespace.value; state = null; selectedID = null; dirty = false; setBusy(true); setStatus('Loading ' + namespace + '/maps manifests…'); els['map-list'].innerHTML = ''; renderEditor();
+          const namespace = els.namespace.value;
+          const request = ++loadRequest;
+          previewRequest++;
+          state = null; selectedID = null; dirty = false; addedMaps = new Map(); setBusy(true); setStatus('Loading ' + namespace + '/maps manifests…'); els['map-list'].innerHTML = ''; renderEditor();
           try {
             const response = await fetch('/internal/api/v1/maps/' + namespace);
             const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Load failed');
+            if (request !== loadRequest || els.namespace.value !== namespace) return;
             state = result; selectedID = state.instances[0]?.mapID || null;
             setStatus(state.has_draft ? 'Saved draft loaded. Publish when it is ready.' : 'Published manifests loaded. Changes stay private until saved and published.');
             renderList(); renderEditor();
-          } catch (error) { setStatus(error.message, true); els.editor.innerHTML = '<div class="empty-editor"><div><strong>Namespace unavailable</strong>' + escapeHTML(error.message) + '</div></div>'; }
-          finally { setBusy(false); }
+          } catch (error) {
+            if (request !== loadRequest || els.namespace.value !== namespace) return;
+            setStatus(error.message, true); els.editor.innerHTML = '<div class="empty-editor"><div><strong>Namespace unavailable</strong>' + escapeHTML(error.message) + '</div></div>';
+          } finally { if (request === loadRequest) setBusy(false); }
         }
         async function saveDraft() {
           syncEditor(); setBusy(true); setStatus('Validating and saving draft…');
@@ -286,7 +415,7 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           const rawID = prompt('Map ID'); if (rawID === null) return; const mapID = Number(rawID);
           if (!Number.isSafeInteger(mapID) || mapID <= 0) return setStatus('Map ID must be a positive integer.', true);
           const name = prompt('Map name (required for IDs missing from the original manifest)', baseInstance(mapID)?.name || ''); if (name === null || !name.trim()) return setStatus('A map name is required.', true);
-          if (!baseInstance(mapID)) state.instances.push({mapID,name:name.trim(),directory:'',floor_count:0});
+          if (!baseInstance(mapID)) addedMaps.set(mapID, {mapID,name:name.trim(),directory:'',floor_count:0,original:false});
           selectedID = mapID; renderList(); renderEditor();
         });
         load();

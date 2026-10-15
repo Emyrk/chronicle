@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import {
   MAP_MANIFEST_FORMAT,
   MAP_MANIFEST_NAMESPACES,
+  isPreviewableMapAssetPath,
   mergeMapManifests,
   parseMapLayer,
   parseMapManifest,
@@ -276,6 +277,7 @@ maps.get("/internal/api/v1/maps/:namespace", async (c) => {
   if (!isNamespace(namespace)) return c.json({ error: "Unsupported map namespace" }, 404);
   try {
     const state = await loadState(c.env.MAPS, namespace);
+    const originalInstanceIDs = new Set(state.original.instances.map((instance) => instance.mapID));
     return c.json({
       namespace,
       target: state.original.target,
@@ -287,7 +289,10 @@ maps.get("/internal/api/v1/maps/:namespace", async (c) => {
         mapID: instance.mapID,
         name: instance.name,
         directory: instance.directory,
+        original: originalInstanceIDs.has(instance.mapID),
         floor_count: instance.floors.length,
+        rendered: instance.rendered,
+        styled: instance.styled,
         renders: instance.renders,
         "3d": instance["3d"],
       })),
@@ -296,6 +301,47 @@ maps.get("/internal/api/v1/maps/:namespace", async (c) => {
     const message = errorMessage(error);
     return c.json({ error: message }, message.endsWith("does not exist") ? 404 : 500);
   }
+});
+
+maps.get("/internal/api/v1/maps/:namespace/instances/:mapID/preview", async (c) => {
+  const namespace = c.req.param("namespace");
+  const mapID = Number(c.req.param("mapID"));
+  if (!isNamespace(namespace)) return c.json({ error: "Unsupported map namespace" }, 404);
+  if (!Number.isSafeInteger(mapID) || mapID <= 0) return c.json({ error: "Invalid map ID" }, 400);
+  try {
+    const state = await loadState(c.env.MAPS, namespace);
+    const instance = state.preview.instances.find((candidate) => candidate.mapID === mapID);
+    if (!instance) return c.json({ error: "Map instance not found" }, 404);
+    return c.json({
+      mapID: instance.mapID,
+      name: instance.name,
+      directory: instance.directory,
+      floors: instance.floors,
+      rendered: instance.rendered,
+      styled: instance.styled,
+      renders: instance.renders,
+      "3d": instance["3d"],
+      published_renders: state.published.renders.instances.find((entry) => entry.mapID === mapID)?.renders,
+      published_3d: state.published["3d"].instances.find((entry) => entry.mapID === mapID)?.["3d"],
+    }, 200, { "Cache-Control": "private, no-store" });
+  } catch (error) {
+    return c.json({ error: errorMessage(error) }, 500);
+  }
+});
+
+maps.get("/internal/api/v1/maps/:namespace/preview-assets/:layer/:filename", async (c) => {
+  const namespace = c.req.param("namespace");
+  const assetPath = `${c.req.param("layer")}/${c.req.param("filename")}`;
+  if (!isNamespace(namespace)) return c.json({ error: "Unsupported map namespace" }, 404);
+  if (!isPreviewableMapAssetPath(assetPath)) return c.json({ error: "Invalid map asset path" }, 400);
+  const object = await c.env.MAPS.get(`${root(namespace)}/${assetPath}`);
+  if (!object) return c.json({ error: "Map asset not found" }, 404);
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set("ETag", object.httpEtag);
+  headers.set("Cache-Control", "private, max-age=300");
+  headers.set("X-Content-Type-Options", "nosniff");
+  return new Response(object.body, { headers });
 });
 
 maps.put("/internal/api/v1/maps/:namespace/draft", async (c) => {

@@ -110,6 +110,14 @@ identifies the Cloudflare account endpoint and the `icons` bucket, so the bindin
 
 Each namespace must already contain `<namespace>/maps/manifest.original.json`. The dashboard reads the existing optional layer manifests, uploads immutable assets beneath `renders/` or `3d/`, and stores private draft metadata at `<namespace>/maps/drafts/manual.json`.
 
+Selecting a map opens a draft-aware preview workbench:
+
+- **Original** assembles the native `manifest.original.json` floor tiles into the complete client map and provides a floor selector.
+- **Rendered** switches between the manual PNG, generated render, and styled artwork when those layers exist.
+- **3D model** loads the draft or published GLB in an orbit, pan, and zoom viewer powered by Google's pinned `<model-viewer>` web component.
+
+Preview assets are streamed through Access-protected Worker routes instead of directly from the public bucket. This keeps GLB loading same-origin and avoids relying on bucket CORS settings.
+
 Saving a draft does not change public map metadata. Publishing:
 
 1. verifies that every draft asset exists in R2,
