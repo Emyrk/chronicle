@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "react-router-dom"
-import { ArrowLeft, BarChart3, CheckCircle, ChevronDown, CircleDashed, Loader2, UserRound } from "lucide-react"
+import { ArrowLeft, BarChart3, CheckCircle, ChevronDown, CircleDashed, Loader2, Timer, UserRound } from "lucide-react"
 import { useSiteConfig, useSupportedInstanceProgressionBosses } from "@/api/queries"
-import { useParseScoreSpreads, useRankingsEncounters } from "@/api/rankingsQueries"
+import { useParseScoreSpreads, useRankingsEncounters, useTimeParseSpreads } from "@/api/rankingsQueries"
 import type { ParseScoreSpread } from "@/api/typesGenerated"
 import { Button } from "@/components/ui/button"
 import {
@@ -28,6 +28,7 @@ import {
   type ParsingMetric,
   type ParsingView,
 } from "./parsingState"
+import { KillTimesView } from "./KillTimesView"
 import { SpecView } from "./SpecView"
 import { SpreadsView } from "./SpreadsView"
 import { difficultyLabel, selectSpreadDifficulty, spreadDifficulties } from "./spreadBands"
@@ -116,7 +117,13 @@ export function ParsingInstanceView({ instanceName }: { instanceName: string }) 
 
   const bossQuery = useParseScoreSpreads({ metric, encounterNames: boss ? [boss] : [] }, restored)
   const allBossSpreads = useMemo(() => bossQuery.data?.spreads ?? [], [bossQuery.data])
-  const difficulties = useMemo(() => spreadDifficulties(allBossSpreads), [allBossSpreads])
+  const timesQuery = useTimeParseSpreads(instanceName, restored && view === "times")
+  const allTimeSpreads = useMemo(() => timesQuery.data?.spreads ?? [], [timesQuery.data])
+  // The difficulty picker follows the active view's data.
+  const difficulties = useMemo(
+    () => spreadDifficulties(view === "times" ? allTimeSpreads : allBossSpreads),
+    [allBossSpreads, allTimeSpreads, view],
+  )
   const difficulty = selectSpreadDifficulty(difficulties, params.get("diff") ?? "", params.get("size") ?? "")
   const bossSpreads = useMemo(
     () =>
@@ -125,6 +132,15 @@ export function ParsingInstanceView({ instanceName }: { instanceName: string }) 
       ),
     [allBossSpreads, difficulty],
   )
+  const timeSpreads = useMemo(
+    () =>
+      allTimeSpreads.filter(
+        (s) => s.difficulty_name === difficulty?.difficultyName && s.max_players === difficulty?.maxPlayers,
+      ),
+    [allTimeSpreads, difficulty],
+  )
+  // Picking a boss anywhere leaves the full-clear selection of the kill-times view.
+  const selectBoss = (name: string) => update({ boss: name, clear: "" })
 
   const setMetric = (next: ParsingMetric) => {
     if (next === metric) return
@@ -163,7 +179,7 @@ export function ParsingInstanceView({ instanceName }: { instanceName: string }) 
             </h4>
             <div className="space-y-1">
               {section.names.map((name) => {
-                const isSelected = name === boss
+                const isSelected = name === boss && !(view === "times" && params.get("clear") === "1")
                 const hasKills = recordedNames.has(name)
                 const isSubdued = section.kind !== "boss" || !hasKills
                 const EncounterIcon = hasKills ? CheckCircle : CircleDashed
@@ -171,7 +187,7 @@ export function ParsingInstanceView({ instanceName }: { instanceName: string }) 
                   <button
                     key={name}
                     type="button"
-                    onClick={() => update({ boss: name })}
+                    onClick={() => selectBoss(name)}
                     title={`${name}${hasKills ? "" : " (no kills yet)"}`}
                     className={cn(
                       "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-all duration-150",
@@ -244,7 +260,7 @@ export function ParsingInstanceView({ instanceName }: { instanceName: string }) 
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className="styled-scrollbar max-h-[60vh] overflow-y-auto">
-                      <DropdownMenuRadioGroup value={boss} onValueChange={(value) => update({ boss: value })}>
+                      <DropdownMenuRadioGroup value={boss} onValueChange={selectBoss}>
                         {bosses.map((name) => (
                           <DropdownMenuRadioItem key={name} value={name}>{name}</DropdownMenuRadioItem>
                         ))}
@@ -252,14 +268,16 @@ export function ParsingInstanceView({ instanceName }: { instanceName: string }) 
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
-                <Segmented
-                  value={metric}
-                  options={[
-                    { value: "dps", label: "DPS" },
-                    { value: "hps", label: "HPS" },
-                  ]}
-                  onChange={setMetric}
-                />
+                {view !== "times" && (
+                  <Segmented
+                    value={metric}
+                    options={[
+                      { value: "dps", label: "DPS" },
+                      { value: "hps", label: "HPS" },
+                    ]}
+                    onChange={setMetric}
+                  />
+                )}
                 {difficulties.length > 1 && difficulty && (
                   <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
@@ -292,13 +310,30 @@ export function ParsingInstanceView({ instanceName }: { instanceName: string }) 
               options={[
                 { value: "spreads", label: "All specs", icon: <BarChart3 className="h-3.5 w-3.5" /> },
                 { value: "spec", label: "Spec details", icon: <UserRound className="h-3.5 w-3.5" /> },
+                { value: "times", label: "Kill times", icon: <Timer className="h-3.5 w-3.5" /> },
               ]}
               onChange={setView}
             />
           </div>
         </div>
 
-        {bossQuery.data && !bossQuery.data.available ? (
+        {view === "times" ? (
+          timesQuery.isError ? (
+            <p className="rounded-xl border bg-card py-10 text-center text-sm text-muted-foreground">Couldn't load kill times.</p>
+          ) : (
+            <KillTimesView
+              instanceName={instanceName}
+              bosses={bosses}
+              boss={boss}
+              showClear={params.get("clear") === "1"}
+              spreads={timeSpreads}
+              difficulty={difficulty}
+              loading={timesQuery.isLoading}
+              onSelectBoss={selectBoss}
+              onSelectClear={() => update({ clear: "1" })}
+            />
+          )
+        ) : bossQuery.data && !bossQuery.data.available ? (
           <p className="rounded-xl border bg-card py-10 text-center text-sm text-muted-foreground">
             Player parses are disabled for this server.
           </p>
@@ -327,7 +362,7 @@ export function ParsingInstanceView({ instanceName }: { instanceName: string }) 
             playerClass={params.get("class") ?? ""}
             playerSpec={params.get("spec") ?? ""}
             playerSubSpec={params.get("sub_spec") ?? ""}
-            onSelectBoss={(name) => update({ boss: name })}
+            onSelectBoss={selectBoss}
             onSelectSpec={(changes) => update(changes)}
           />
         )}

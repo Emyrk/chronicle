@@ -6,7 +6,7 @@
  * last selection from localStorage; a shared link always wins.
  */
 
-export type ParsingView = "spreads" | "spec"
+export type ParsingView = "spreads" | "spec" | "times"
 export type ParsingMetric = "dps" | "hps"
 
 export const PARSING_PREFS_KEY = "chronicle.leaderboards.parsing"
@@ -15,7 +15,7 @@ export const PARSING_PREFS_KEY = "chronicle.leaderboards.parsing"
  * Params that mark a URL as an explicit parsing selection. `instance`, `diff`
  * and `size` are excluded: the instance picker sets them on a fresh visit.
  */
-export const PARSING_SELECTION_PARAMS = ["view", "metric", "boss", "hide", "offrole", "class", "spec", "sub_spec"] as const
+export const PARSING_SELECTION_PARAMS = ["view", "metric", "boss", "clear", "hide", "offrole", "class", "spec", "sub_spec"] as const
 
 export interface ParsingPrefs {
   view: ParsingView
@@ -42,8 +42,12 @@ export const DEFAULT_PARSING_PREFS: ParsingPrefs = {
   bossByInstance: {},
 }
 
+function toParsingView(value: unknown): ParsingView {
+  return value === "spec" || value === "times" ? value : "spreads"
+}
+
 export function parsingView(params: URLSearchParams): ParsingView {
-  return params.get("view") === "spec" ? "spec" : "spreads"
+  return toParsingView(params.get("view"))
 }
 
 export function parsingMetric(params: URLSearchParams): ParsingMetric {
@@ -82,7 +86,7 @@ export function readParsingPrefs(raw: string | null): ParsingPrefs {
     const list = (value: unknown) => (Array.isArray(value) ? value.filter((v) => typeof v === "string") : [])
     const str = (value: unknown) => (typeof value === "string" ? value : "")
     return {
-      view: parsed.view === "spec" ? "spec" : "spreads",
+      view: toParsingView(parsed.view),
       metric: parsed.metric === "hps" ? "hps" : "dps",
       hidden: { dps: list(parsed.hidden?.dps), hps: list(parsed.hidden?.hps) },
       showOffRole: parsed.showOffRole === true,

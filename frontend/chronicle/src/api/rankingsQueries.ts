@@ -11,6 +11,7 @@ import type {
   ParseScoreCohortBucketsResponse,
   ParseScoreCohortResponse,
   ParseScoreSpreadsResponse,
+  TimeParseSpreadsResponse,
   TimeParseCohortBucketsResponse,
   TimeParseCohortKind,
   TimeParseCohortResponse,
@@ -444,6 +445,23 @@ export function useTimeParseCohortBuckets(date: string, period: TimeParseCohortP
       ),
     staleTime: RANKINGS_STALE_TIME,
     enabled: !!date,
+  });
+}
+
+/**
+ * Kill-time and clear-time parse spreads for one instance. Always the live
+ * 60-day window ending today.
+ */
+export function useTimeParseSpreads(instanceName: string, enabled = true) {
+  const searchParams = new URLSearchParams({ instance_name: instanceName, period: "60d" });
+  return useQuery({
+    queryKey: ["rankings", "time-parse-spreads", instanceName],
+    queryFn: () =>
+      fetchJSON<TimeParseSpreadsResponse>(
+        `/api/v1/rankings/time-parse-cohorts/spreads?${searchParams.toString()}`,
+      ),
+    staleTime: RANKINGS_STALE_TIME,
+    enabled: enabled && !!instanceName,
   });
 }
 

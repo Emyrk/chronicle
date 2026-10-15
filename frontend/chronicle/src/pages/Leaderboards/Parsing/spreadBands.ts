@@ -1,4 +1,4 @@
-import type { ParseScoreSpread, RankingsFilterClass } from "@/api/typesGenerated"
+import type { ParseScoreSpread, RankingsFilterClass, TimeParseSpread } from "@/api/typesGenerated"
 import { niceStep } from "@/pages/Parsing/cohort/cohortStats"
 
 export interface SpreadBand {
@@ -40,7 +40,9 @@ export interface SpreadDifficultyOption {
 }
 
 /** Difficulty/size combos present in spreads, most kills first. */
-export function spreadDifficulties(spreads: readonly ParseScoreSpread[]): SpreadDifficultyOption[] {
+export function spreadDifficulties(
+  spreads: readonly Pick<ParseScoreSpread, "difficulty_name" | "max_players" | "sample_size">[],
+): SpreadDifficultyOption[] {
   const options = new Map<string, SpreadDifficultyOption>()
   for (const spread of spreads) {
     const key = `${spread.difficulty_name}|${spread.max_players}`
@@ -125,4 +127,28 @@ export function offRoleKeys(spreads: readonly ParseScoreSpread[], key: (spread: 
 export function difficultyLabel(difficultyName: string, maxPlayers: number): string {
   const size = maxPlayers > 0 && !difficultyName.includes(String(maxPlayers)) ? `${maxPlayers} Player` : ""
   return [difficultyName, size].filter(Boolean).join(" · ")
+}
+
+/** Slowest duration that reaches a tier, or null if no run did. */
+export function timeCutoff(spread: TimeParseSpread, floor: number): number | null {
+  return spread.cutoffs.find((cutoff) => cutoff.floor === floor)?.duration_ms ?? null
+}
+
+/**
+ * Parse-tier bands for a kill-time spread, fastest first. Faster is better,
+ * so each tier runs from where the next better tier ends to the slowest
+ * time that still reaches it, and the sub-25 tail runs to the slowest run.
+ */
+export function timeBands(spread: TimeParseSpread): SpreadBand[] {
+  const reached = spread.cutoffs
+    .filter((c): c is { floor: number; duration_ms: number } => c.duration_ms !== null && c.duration_ms !== undefined)
+    .sort((a, b) => b.floor - a.floor)
+  const bands: SpreadBand[] = []
+  let start = spread.min_ms
+  for (const cutoff of reached) {
+    bands.push({ floor: cutoff.floor, start, end: cutoff.duration_ms })
+    start = cutoff.duration_ms
+  }
+  bands.push({ floor: 0, start, end: spread.max_ms })
+  return bands.filter((band) => band.end > band.start)
 }

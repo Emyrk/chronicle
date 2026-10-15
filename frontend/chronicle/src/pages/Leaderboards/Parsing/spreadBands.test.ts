@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { ParseScoreSpread } from "@/api/typesGenerated"
-import { difficultyLabel, offRoleKeys, selectSpreadDifficulty, spreadBands, spreadDifficulties, spreadScale } from "./spreadBands"
+import { difficultyLabel, offRoleKeys, selectSpreadDifficulty, spreadBands, spreadDifficulties, spreadScale, timeBands } from "./spreadBands"
 
 function spread(cutoffs: Record<number, number | null>): ParseScoreSpread {
   return {
@@ -85,5 +85,36 @@ describe("difficultyLabel", () => {
     expect(difficultyLabel("", 0)).toBe("")
     expect(difficultyLabel("40 Player", 40)).toBe("40 Player")
     expect(difficultyLabel("Heroic", 25)).toBe("Heroic · 25 Player")
+  })
+})
+
+describe("timeBands", () => {
+  it("runs from the fastest kill through each tier to the slowest", () => {
+    const spread = {
+      kind: "boss_kill" as const,
+      difficulty_name: "",
+      max_players: 0,
+      sample_size: 50,
+      status: "ok",
+      min_ms: 40_000,
+      median_ms: 70_000,
+      max_ms: 150_000,
+      cutoffs: [
+        { floor: 25, duration_ms: 90_000 },
+        { floor: 50, duration_ms: 70_000 },
+        { floor: 75, duration_ms: 60_000 },
+        { floor: 95, duration_ms: 50_000 },
+        { floor: 99, duration_ms: 45_000 },
+        { floor: 100, duration_ms: null },
+      ],
+    }
+    expect(timeBands(spread)).toEqual([
+      { floor: 99, start: 40_000, end: 45_000 },
+      { floor: 95, start: 45_000, end: 50_000 },
+      { floor: 75, start: 50_000, end: 60_000 },
+      { floor: 50, start: 60_000, end: 70_000 },
+      { floor: 25, start: 70_000, end: 90_000 },
+      { floor: 0, start: 90_000, end: 150_000 },
+    ])
   })
 })
