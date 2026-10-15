@@ -189,27 +189,28 @@ func handleParseScoreCohortWithStore(store parseScoreCohortQuerier, w http.Respo
 		return
 	}
 
+	scoreValues := make([]parsepolicy.GroupedScoreValue, len(rows))
+	for i, row := range rows {
+		scoreValues[i] = parsepolicy.GroupedScoreValue{Group: row.RunID.String(), Value: row.MetricValue}
+	}
+	scores := parsepolicy.ScoreExcludingGroups(scoreValues)
+
 	entries := make([]chroniclesdk.ParseScoreCohortEntry, 0, len(rows))
 	status := parsepolicy.StatusSampleTooSmall
-	for _, row := range rows {
-		cohort := make([]float64, 0, len(rows))
-		for _, candidate := range rows {
-			if candidate.RunID != row.RunID {
-				cohort = append(cohort, candidate.MetricValue)
-			}
-		}
-		score, scored := parsepolicy.Score(cohort, row.MetricValue)
+	for i, row := range rows {
+		score := scores[i]
 		if score.Status == parsepolicy.StatusOK {
 			status = parsepolicy.StatusOK
 		} else if status == parsepolicy.StatusSampleTooSmall && score.Status == parsepolicy.StatusLowConfidence {
 			status = parsepolicy.StatusLowConfidence
 		}
 		entry := chroniclesdk.ParseScoreCohortEntry{
-			Rank: score.Rank, PlayerGUID: row.PlayerGuid, PlayerName: row.PlayerName, MetricValue: row.MetricValue,
-			Status: string(score.Status), KilledAt: row.KilledAt.Time, RunID: row.RunID, InstanceID: row.InstanceID,
+			Rank: score.Rank, SampleSize: score.SampleSize, PlayerGUID: row.PlayerGuid,
+			PlayerName: row.PlayerName, MetricValue: row.MetricValue, Status: string(score.Status),
+			KilledAt: row.KilledAt.Time, RunID: row.RunID, InstanceID: row.InstanceID,
 			LogHashedSlug: row.LogHashedSlug.String,
 		}
-		if scored {
+		if score.Scored {
 			entry.PreciseScore = score.PreciseScore
 			entry.DisplayScore = score.DisplayScore
 		}

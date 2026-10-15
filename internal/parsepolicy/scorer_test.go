@@ -10,12 +10,13 @@ import (
 // Hand-verified N=6 fixture from the issue.
 // Cohort (sorted): [100, 200, 300, 400, 500, 600]
 // Positions:
-//   100 → (0+0.5)/6*100 =  8.333…
-//   200 → (1+0.5)/6*100 = 25.000
-//   300 → (2+0.5)/6*100 = 41.667…
-//   400 → (3+0.5)/6*100 = 58.333…
-//   500 → (4+0.5)/6*100 = 75.000
-//   600 → 100 (max anchor)
+//
+//	100 → (0+0.5)/6*100 =  8.333…
+//	200 → (1+0.5)/6*100 = 25.000
+//	300 → (2+0.5)/6*100 = 41.667…
+//	400 → (3+0.5)/6*100 = 58.333…
+//	500 → (4+0.5)/6*100 = 75.000
+//	600 → 100 (max anchor)
 var fixtureN6 = []float64{100, 200, 300, 400, 500, 600}
 
 func TestScore(t *testing.T) {
@@ -179,12 +180,12 @@ func TestScore(t *testing.T) {
 			wantStatus:  parsepolicy.StatusLowConfidence,
 		},
 		{
-			name:        "sample_19_low_confidence",
-			cohort:      makeLinear(19, 100, 100),
-			value:       1000, // midpoint
-			wantOK:      true,
-			wantRank:    10,
-			wantStatus:  parsepolicy.StatusLowConfidence,
+			name:       "sample_19_low_confidence",
+			cohort:     makeLinear(19, 100, 100),
+			value:      1000, // midpoint
+			wantOK:     true,
+			wantRank:   10,
+			wantStatus: parsepolicy.StatusLowConfidence,
 		},
 		{
 			name:       "sample_20_ok",
@@ -285,6 +286,91 @@ func TestScore(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestScoreExcludingGroupsMatchesNaive(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		values []parsepolicy.GroupedScoreValue
+	}{
+		{
+			name: "ties_and_multiple_values_per_run",
+			values: []parsepolicy.GroupedScoreValue{
+				{Group: "run-a", Value: 100}, {Group: "run-a", Value: 300},
+				{Group: "run-b", Value: 100}, {Group: "run-b", Value: 300},
+				{Group: "run-c", Value: 200}, {Group: "run-c", Value: 400},
+				{Group: "run-d", Value: 300}, {Group: "run-d", Value: 500},
+				{Group: "run-e", Value: 400}, {Group: "run-e", Value: 600},
+			},
+		},
+		{
+			name: "sample_too_small",
+			values: []parsepolicy.GroupedScoreValue{
+				{Group: "run-a", Value: 100}, {Group: "run-a", Value: 200},
+				{Group: "run-b", Value: 300}, {Group: "run-b", Value: 400},
+				{Group: "run-c", Value: 500}, {Group: "run-c", Value: 600},
+			},
+		},
+		{
+			name: "low_confidence_with_values_outside_comparison_range",
+			values: []parsepolicy.GroupedScoreValue{
+				{Group: "edge", Value: 1}, {Group: "edge", Value: 1000},
+				{Group: "run-a", Value: 100}, {Group: "run-b", Value: 200},
+				{Group: "run-c", Value: 300}, {Group: "run-d", Value: 400},
+				{Group: "run-e", Value: 500}, {Group: "run-f", Value: 600},
+			},
+		},
+		{
+			name:   "confidence_threshold",
+			values: groupedLinearValues(22),
+		},
+		{
+			name: "invalid_value_fallback",
+			values: []parsepolicy.GroupedScoreValue{
+				{Group: "invalid", Value: math.NaN()},
+				{Group: "run-a", Value: 100}, {Group: "run-b", Value: 200},
+				{Group: "run-c", Value: 300}, {Group: "run-d", Value: 400},
+				{Group: "run-e", Value: 500}, {Group: "run-f", Value: 600},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := parsepolicy.ScoreExcludingGroups(tc.values)
+			if len(got) != len(tc.values) {
+				t.Fatalf("len(results) = %d, want %d", len(got), len(tc.values))
+			}
+			for i, value := range tc.values {
+				cohort := make([]float64, 0, len(tc.values))
+				for _, candidate := range tc.values {
+					if candidate.Group != value.Group {
+						cohort = append(cohort, candidate.Value)
+					}
+				}
+				want, wantScored := parsepolicy.Score(cohort, value.Value)
+				if got[i].Scored != wantScored {
+					t.Errorf("result %d scored = %v, want %v", i, got[i].Scored, wantScored)
+				}
+				if got[i].Rank != want.Rank || got[i].DisplayScore != want.DisplayScore ||
+					got[i].SampleSize != want.SampleSize || got[i].Status != want.Status ||
+					math.Abs(got[i].PreciseScore-want.PreciseScore) > 1e-9 {
+					t.Errorf("result %d = %+v, want %+v", i, got[i].ScoreResult, want)
+				}
+			}
+		})
+	}
+}
+
+func groupedLinearValues(count int) []parsepolicy.GroupedScoreValue {
+	values := make([]parsepolicy.GroupedScoreValue, count)
+	for i := range values {
+		values[i] = parsepolicy.GroupedScoreValue{Group: string(rune('a' + i)), Value: float64((i + 1) * 100)}
+	}
+	return values
 }
 
 func TestAverageParse(t *testing.T) {

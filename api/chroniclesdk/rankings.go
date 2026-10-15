@@ -291,6 +291,7 @@ type ParseScoreCohortBucketsResponse struct {
 // ParseScoreCohortEntry is one membership row scored against its exact live cohort.
 type ParseScoreCohortEntry struct {
 	Rank          int       `json:"rank"`
+	SampleSize    int       `json:"sample_size"`
 	PlayerGUID    string    `json:"player_guid"`
 	PlayerName    string    `json:"player_name"`
 	MetricValue   float64   `json:"metric_value"`

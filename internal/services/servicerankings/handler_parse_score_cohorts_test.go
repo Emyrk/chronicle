@@ -229,6 +229,7 @@ func TestParseScoreCohorts_WindowMetricsScoringAndDuplicateNames(t *testing.T) {
 	assert.Equal(t, 6, cohort.Entries[5].Rank)
 	for _, entry := range cohort.Entries {
 		assert.Equal(t, "low_confidence", entry.Status)
+		assert.Equal(t, 5, entry.SampleSize)
 	}
 }
 

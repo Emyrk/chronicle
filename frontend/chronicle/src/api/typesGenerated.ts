@@ -2593,6 +2593,7 @@ export interface ParseScoreCohortBucketsResponse {
  */
 export interface ParseScoreCohortEntry {
     readonly rank: number;
+    readonly sample_size: number;
     readonly player_guid: string;
     readonly player_name: string;
     readonly metric_value: number;

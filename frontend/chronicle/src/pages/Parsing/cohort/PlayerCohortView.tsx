@@ -17,6 +17,12 @@ import {
 import { CohortDistribution } from "./CohortDistribution";
 import { CohortTable, type CohortTableRow } from "./CohortTable";
 import { formatMetric, summarizeCohort, tierCutoffs } from "./cohortStats";
+import {
+  DEFAULT_SUB_SPEC_VALUE,
+  playerCohortSizeKey,
+  selectPlayerCohortSize,
+  selectPlayerSubSpec,
+} from "./playerCohortState";
 import type { UpdateParams } from "./TimeCohortView";
 
 const DEFAULT_PERIOD: TimeParseCohortPeriod = "60d";
@@ -37,10 +43,6 @@ function isUTCDate(value: string | null): value is string {
 
 function distinct(values: readonly string[]): SelectOption[] {
   return [...new Set(values.filter(Boolean))].sort().map((value) => ({ value, label: value }));
-}
-
-function sizeKey(bucket: ParseScoreCohortBucket): string {
-  return `${bucket.difficulty_name}|${bucket.max_players}`;
 }
 
 function sizeLabel(bucket: ParseScoreCohortBucket): string {
@@ -97,9 +99,9 @@ export function PlayerCohortView({ params, updateParams }: { params: URLSearchPa
       ),
     [buckets, encounterName, playerClass],
   );
-  const subSpecs = useMemo(
+  const rawSubSpecs = useMemo(
     () =>
-      distinct(
+      [...new Set(
         buckets
           .filter(
             (bucket) =>
@@ -108,9 +110,20 @@ export function PlayerCohortView({ params, updateParams }: { params: URLSearchPa
               bucket.player_spec === playerSpec,
           )
           .map((bucket) => bucket.player_sub_spec ?? ""),
-      ),
+      )].sort((a, b) => a.localeCompare(b)),
     [buckets, encounterName, playerClass, playerSpec],
   );
+  const subSpecSelection = selectPlayerSubSpec(rawSubSpecs, playerSubSpec);
+  const selectedSubSpec = subSpecSelection.selected;
+  const subSpecOptions = subSpecSelection.options;
+  const showSubSpec = subSpecSelection.showControl;
+
+  useEffect(() => {
+    if (specMode && playerSpec && rawSubSpecs.length > 0 && selectedSubSpec !== playerSubSpec) {
+      updateParams({ sub_spec: selectedSubSpec, difficulty: "", max_players: "", highlight: "" });
+    }
+  }, [playerSpec, playerSubSpec, rawSubSpecs.length, selectedSubSpec, specMode, updateParams]);
+
   const sizeBuckets = useMemo(
     () =>
       buckets
@@ -118,13 +131,22 @@ export function PlayerCohortView({ params, updateParams }: { params: URLSearchPa
           (bucket) =>
             bucket.encounter_name === encounterName &&
             bucket.player_class === playerClass &&
-            (!specMode || (bucket.player_spec === playerSpec && bucket.player_sub_spec === playerSubSpec)),
+            (!specMode || (bucket.player_spec === playerSpec && bucket.player_sub_spec === selectedSubSpec)),
         )
         .sort((a, b) => b.sample_size - a.sample_size),
-    [buckets, encounterName, playerClass, playerSpec, playerSubSpec, specMode],
+    [buckets, encounterName, playerClass, playerSpec, selectedSubSpec, specMode],
   );
   const requestedSize = `${params.get("difficulty") ?? ""}|${params.get("max_players") ?? ""}`;
-  const selectedSize = sizeBuckets.find((bucket) => sizeKey(bucket) === requestedSize) ?? sizeBuckets[0];
+  const selectedSize = selectPlayerCohortSize(sizeBuckets, requestedSize);
+
+  useEffect(() => {
+    if (selectedSize && playerCohortSizeKey(selectedSize) !== requestedSize) {
+      updateParams({
+        difficulty: selectedSize.difficulty_name,
+        max_players: String(selectedSize.max_players),
+      });
+    }
+  }, [requestedSize, selectedSize, updateParams]);
 
   const cohortQuery = useParseScoreCohort({
     date,
@@ -133,7 +155,7 @@ export function PlayerCohortView({ params, updateParams }: { params: URLSearchPa
     encounterName,
     playerClass,
     playerSpec,
-    playerSubSpec,
+    playerSubSpec: selectedSubSpec,
     difficulty: selectedSize?.difficulty_name ?? "",
     maxPlayers: selectedSize?.max_players,
     cohortMode,
@@ -224,13 +246,19 @@ export function PlayerCohortView({ params, updateParams }: { params: URLSearchPa
             className="w-36"
           />
         )}
-        {specMode && subSpecs.length > 0 && (
+        {specMode && showSubSpec && (
           <FilterSelect
             label="Sub-spec"
-            value={playerSubSpec}
-            options={subSpecs}
-            onChange={(value) => updateParams({ sub_spec: value, difficulty: "", max_players: "", highlight: "" })}
-            placeholder="Default"
+            value={selectedSubSpec || DEFAULT_SUB_SPEC_VALUE}
+            options={subSpecOptions}
+            onChange={(value) =>
+              updateParams({
+                sub_spec: value === DEFAULT_SUB_SPEC_VALUE ? "" : value,
+                difficulty: "",
+                max_players: "",
+                highlight: "",
+              })
+            }
             disabled={!playerSpec}
             className="w-36"
           />
@@ -238,9 +266,9 @@ export function PlayerCohortView({ params, updateParams }: { params: URLSearchPa
         {sizeBuckets.length > 0 && (
           <FilterSelect
             label="Difficulty"
-            value={selectedSize ? sizeKey(selectedSize) : ""}
+            value={selectedSize ? playerCohortSizeKey(selectedSize) : ""}
             options={sizeBuckets.map((bucket) => ({
-              value: sizeKey(bucket),
+              value: playerCohortSizeKey(bucket),
               label: `${sizeLabel(bucket)} (${bucket.sample_size})`,
             }))}
             onChange={(value) => {
@@ -282,7 +310,7 @@ export function PlayerCohortView({ params, updateParams }: { params: URLSearchPa
           {highlighted && (
             <div className="rounded-lg border border-primary/40 bg-primary/10 px-4 py-2.5 text-sm">
               Highlighted player: <span className="font-semibold">{highlighted.player_name || highlighted.player_guid}</span>,{" "}
-              {formatMetric(highlighted.metric_value)} {metricLabel}, rank {highlighted.rank} of {cohort.sample_size}, parse{" "}
+              {formatMetric(highlighted.metric_value)} {metricLabel}, rank {highlighted.rank} of {highlighted.sample_size + 1}, parse{" "}
               {highlighted.display_score}.
             </div>
           )}
