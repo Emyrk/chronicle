@@ -133,6 +133,32 @@ For local preview, create or populate a local Wrangler R2 bucket with at least o
 http://localhost:8787/internal/maps
 ```
 
+## Miniature foundry
+
+The Access-protected dashboard at `/internal/miniatures` manages reusable creature-token GLBs shared by every Chronicle server. It stores assets and metadata at the root of the `icons` bucket:
+
+```text
+miniatures/manifest.json
+miniatures/<content-digest>-<name>.glb
+```
+
+The public manifest contract is:
+
+```json
+{
+  "format": "chronicle-unit-miniatures-v1",
+  "miniatures": [{
+    "name": "Deviate serpent",
+    "path": "miniatures/deviate-serpent.glb",
+    "entry_ids": [3669, 3670, 3671, 3673]
+  }]
+}
+```
+
+One model may own many positive creature entry IDs, but each entry ID may appear in only one model. Paths are unique, clean `miniatures/*.glb` paths. The editor validates GLB 2.0 uploads, previews models interactively, detects duplicate assignments, and supports the same R2 draft, ETag, lock, explicit publish, and one-hour public-manifest cache workflow as the Map Foundry.
+
+This establishes the asset registry and editor only. The Chronicle replay client still uses its existing hard-coded boss-miniature mapping until a separate consumer change switches it to `miniatures/manifest.json`.
+
 ## Validation and deployment
 
 ```sh
