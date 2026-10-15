@@ -15,13 +15,15 @@ export const PARSING_PREFS_KEY = "chronicle.leaderboards.parsing"
  * Params that mark a URL as an explicit parsing selection. `instance`, `diff`
  * and `size` are excluded: the instance picker sets them on a fresh visit.
  */
-export const PARSING_SELECTION_PARAMS = ["view", "metric", "boss", "hide", "class", "spec", "sub_spec"] as const
+export const PARSING_SELECTION_PARAMS = ["view", "metric", "boss", "hide", "offrole", "class", "spec", "sub_spec"] as const
 
 export interface ParsingPrefs {
   view: ParsingView
   metric: ParsingMetric
   /** Hidden spread rows per metric; see hiddenKey. */
   hidden: Record<ParsingMetric, string[]>
+  /** Show specs far off-role for the metric (healers on DPS, DPS on HPS). */
+  showOffRole: boolean
   playerClass: string
   playerSpec: string
   playerSubSpec: string
@@ -33,6 +35,7 @@ export const DEFAULT_PARSING_PREFS: ParsingPrefs = {
   view: "spreads",
   metric: "dps",
   hidden: { dps: [], hps: [] },
+  showOffRole: false,
   playerClass: "",
   playerSpec: "",
   playerSubSpec: "",
@@ -82,6 +85,7 @@ export function readParsingPrefs(raw: string | null): ParsingPrefs {
       view: parsed.view === "spec" ? "spec" : "spreads",
       metric: parsed.metric === "hps" ? "hps" : "dps",
       hidden: { dps: list(parsed.hidden?.dps), hps: list(parsed.hidden?.hps) },
+      showOffRole: parsed.showOffRole === true,
       playerClass: str(parsed.playerClass),
       playerSpec: str(parsed.playerSpec),
       playerSubSpec: str(parsed.playerSubSpec),
@@ -110,6 +114,7 @@ export function restoreParsingParams(
   if (prefs.view !== "spreads") set("view", prefs.view)
   if (prefs.metric !== "dps") set("metric", prefs.metric)
   set("hide", [...prefs.hidden[prefs.metric]].sort().join(","))
+  if (prefs.showOffRole) set("offrole", "show")
   set("class", prefs.playerClass)
   set("spec", prefs.playerSpec)
   set("sub_spec", prefs.playerSubSpec)
@@ -125,6 +130,7 @@ export function prefsFromParams(params: URLSearchParams, prev: ParsingPrefs, ins
     view: parsingView(params),
     metric,
     hidden: { ...prev.hidden, [metric]: [...parseHidden(params.get("hide"))] },
+    showOffRole: params.get("offrole") === "show",
     playerClass: params.get("class") ?? "",
     playerSpec: params.get("spec") ?? "",
     playerSubSpec: params.get("sub_spec") ?? "",

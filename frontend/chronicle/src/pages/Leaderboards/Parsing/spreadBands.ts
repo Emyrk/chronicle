@@ -107,3 +107,22 @@ export function spreadScale(spreads: readonly ParseScoreSpread[], targetTicks = 
   for (let tick = min; tick <= max + step / 2; tick += step) ticks.push(tick)
   return { min, max, ticks }
 }
+
+/** Off-role rows have a median below this share of the best median. */
+export const OFF_ROLE_MEDIAN_RATIO = 0.2
+
+/**
+ * Keys of rows that are off-role for this metric, e.g. healers on DPS or
+ * DPS specs on HPS. Detected from the data rather than a role table so it
+ * also covers server-specific specs.
+ */
+export function offRoleKeys(spreads: readonly ParseScoreSpread[], key: (spread: ParseScoreSpread) => string): Set<string> {
+  const best = Math.max(0, ...spreads.filter((s) => s.status !== "sample_too_small").map((s) => s.median))
+  return new Set(spreads.filter((s) => s.median < best * OFF_ROLE_MEDIAN_RATIO).map(key))
+}
+
+/** Human label for a difficulty/size bucket; empty for the default bucket. */
+export function difficultyLabel(difficultyName: string, maxPlayers: number): string {
+  const size = maxPlayers > 0 && !difficultyName.includes(String(maxPlayers)) ? `${maxPlayers} Player` : ""
+  return [difficultyName, size].filter(Boolean).join(" · ")
+}

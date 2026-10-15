@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay"
 import { hiddenKey, isHidden, setSpecHidden, toggleHidden } from "./parsingState"
 import { SpreadChart } from "./SpreadChart"
-import { spreadSpecLabel } from "./spreadBands"
+import { offRoleKeys, spreadSpecLabel } from "./spreadBands"
 
 function specKeyOf(spread: ParseScoreSpread): string {
   return hiddenKey(spread.player_class, spread.player_spec ?? "", spread.player_sub_spec ?? "")
@@ -29,6 +29,8 @@ export function SpreadsView({
   hidden,
   metricLabel,
   loading,
+  showOffRole,
+  onShowOffRoleChange,
   onHiddenChange,
   onOpenSpec,
 }: {
@@ -36,6 +38,8 @@ export function SpreadsView({
   hidden: ReadonlySet<string>
   metricLabel: string
   loading: boolean
+  showOffRole: boolean
+  onShowOffRoleChange: (show: boolean) => void
   onHiddenChange: (hide: string) => void
   onOpenSpec: (spread: ParseScoreSpread) => void
 }) {
@@ -47,15 +51,17 @@ export function SpreadsView({
     return [...byClass.entries()].sort(([a], [b]) => (CLASS_DISPLAY[a] ?? a).localeCompare(CLASS_DISPLAY[b] ?? b))
   }, [spreads])
 
+  const offRole = useMemo(() => offRoleKeys(spreads, specKeyOf), [spreads])
   const visible = useMemo(
     () =>
       spreads
         .filter((s) => !isHidden(hidden, s.player_class, s.player_spec ?? "", s.player_sub_spec ?? ""))
+        .filter((s) => showOffRole || !offRole.has(specKeyOf(s)))
         // Unscored cohorts have no tier cutoffs; keep them below the scored ones.
         .sort((a, b) => Number(a.status === "sample_too_small") - Number(b.status === "sample_too_small")),
-    [hidden, spreads],
+    [hidden, offRole, showOffRole, spreads],
   )
-  const hiddenCount = spreads.length - visible.length
+  const hiddenCount = spreads.filter((s) => isHidden(hidden, s.player_class, s.player_spec ?? "", s.player_sub_spec ?? "")).length
 
   const hideSpread = (spread: ParseScoreSpread) => onHiddenChange(toggleHidden(hidden, specKeyOf(spread)))
 
@@ -136,6 +142,16 @@ export function SpreadsView({
           </DropdownMenuContent>
         </DropdownMenu>
 
+        {offRole.size > 0 && (
+          <button
+            type="button"
+            onClick={() => onShowOffRoleChange(!showOffRole)}
+            title="Specs whose median is under a fifth of the best spec's, such as healers on DPS"
+            className="ml-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            {showOffRole ? "Hide" : "Show"} {offRole.size} off-role spec{offRole.size === 1 ? "" : "s"}
+          </button>
+        )}
         {hidden.size > 0 && (
           <button
             type="button"

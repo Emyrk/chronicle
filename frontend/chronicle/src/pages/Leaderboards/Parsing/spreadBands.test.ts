@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { ParseScoreSpread } from "@/api/typesGenerated"
-import { selectSpreadDifficulty, spreadBands, spreadDifficulties, spreadScale } from "./spreadBands"
+import { difficultyLabel, offRoleKeys, selectSpreadDifficulty, spreadBands, spreadDifficulties, spreadScale } from "./spreadBands"
 
 function spread(cutoffs: Record<number, number | null>): ParseScoreSpread {
   return {
@@ -65,5 +65,25 @@ describe("spreadScale", () => {
     expect(scale.max).toBeGreaterThanOrEqual(1000)
     expect(scale.ticks[0]).toBe(scale.min)
     expect(scale.ticks.at(-1)).toBe(scale.max)
+  })
+})
+
+describe("offRoleKeys", () => {
+  it("flags rows far below the best median", () => {
+    const rows = [
+      { ...spread({}), player_spec: "Combat", median: 750 },
+      { ...spread({}), player_spec: "Protection", median: 190 },
+      { ...spread({}), player_spec: "Holy", median: 14 },
+      { ...spread({}), player_spec: "Fire", median: 5000, status: "sample_too_small" },
+    ]
+    expect([...offRoleKeys(rows, (s) => s.player_spec ?? "")]).toEqual(["Holy"])
+  })
+})
+
+describe("difficultyLabel", () => {
+  it("avoids repeating the size", () => {
+    expect(difficultyLabel("", 0)).toBe("")
+    expect(difficultyLabel("40 Player", 40)).toBe("40 Player")
+    expect(difficultyLabel("Heroic", 25)).toBe("Heroic · 25 Player")
   })
 })

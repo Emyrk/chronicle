@@ -167,24 +167,30 @@ function SpreadRow({
             </span>
 
             <span className={cn("relative h-5 flex-1", !scored && "opacity-40")}>
-              {bands.map((band, i) => (
-                <span
-                  key={band.floor}
-                  className={cn(
-                    "absolute top-0.5 bottom-0.5",
-                    i === 0 && band.start >= scale.min && "rounded-l",
-                    i === bands.length - 1 && "rounded-r",
-                    i < bands.length - 1 && "border-r-2 border-card",
-                  )}
-                  style={{
-                    left: pct(band.start),
-                    width: `calc(${pct(band.end)} - ${pct(band.start)})`,
-                    backgroundColor: parseHexColor(scored ? band.floor : 0),
-                    // The sub-25 tail (deaths, late joins) is context, not a target.
-                    opacity: band.floor === 0 ? 0.35 : undefined,
-                  }}
-                />
-              ))}
+              {bands.map((band, i) => {
+                // The sub-25 tail (deaths, late joins) and the 100 tail (a few
+                // outliers) are drawn as whiskers so the bar spans 25→100.
+                const whisker = scored && (band.floor === 0 || band.floor === 100)
+                const solid = bands.filter((b) => !scored || (b.floor !== 0 && b.floor !== 100))
+                return (
+                  <span
+                    key={band.floor}
+                    className={cn(
+                      "absolute",
+                      whisker ? "top-1/2 h-0.5 -translate-y-1/2" : "top-0.5 bottom-0.5",
+                      !whisker && band === solid[0] && band.start >= scale.min && "rounded-l",
+                      !whisker && band === solid[solid.length - 1] && "rounded-r",
+                      !whisker && i < bands.length - 1 && band !== solid[solid.length - 1] && "border-r-2 border-card",
+                    )}
+                    style={{
+                      left: pct(band.start),
+                      width: `calc(${pct(band.end)} - ${pct(band.start)})`,
+                      backgroundColor: parseHexColor(scored ? band.floor : 0),
+                      opacity: whisker && band.floor === 0 ? 0.5 : undefined,
+                    }}
+                  />
+                )
+              })}
             </span>
 
             {COLUMN_FLOORS.map((floor) => (

@@ -30,7 +30,7 @@ import {
 } from "./parsingState"
 import { SpecView } from "./SpecView"
 import { SpreadsView } from "./SpreadsView"
-import { selectSpreadDifficulty, spreadDifficulties } from "./spreadBands"
+import { difficultyLabel, selectSpreadDifficulty, spreadDifficulties } from "./spreadBands"
 
 function readStoredPrefs() {
   try {
@@ -225,9 +225,9 @@ export function ParsingInstanceView({ instanceName }: { instanceName: string }) 
               </button>
               <h1 className="flex flex-wrap items-baseline gap-x-2 text-xl font-bold leading-tight sm:text-2xl">
                 <span>{instanceName}</span>
-                {difficulty && (
+                {difficulty && difficultyLabel(difficulty.difficultyName, difficulty.maxPlayers) && (
                   <span className="text-sm font-normal text-muted-foreground sm:text-lg">
-                    {[difficulty.difficultyName, difficulty.maxPlayers ? `${difficulty.maxPlayers} Player` : ""].filter(Boolean).join(" · ")}
+                    {difficultyLabel(difficulty.difficultyName, difficulty.maxPlayers)}
                   </span>
                 )}
               </h1>
@@ -264,7 +264,7 @@ export function ParsingInstanceView({ instanceName }: { instanceName: string }) 
                   <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" size="sm" className="h-8 gap-1.5 px-2 text-xs sm:h-7 sm:px-3">
-                        {difficulty.difficultyName} · {difficulty.maxPlayers}
+                        {difficultyLabel(difficulty.difficultyName, difficulty.maxPlayers) || "Standard"}
                         <ChevronDown className="h-3 w-3 opacity-50" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -278,7 +278,7 @@ export function ParsingInstanceView({ instanceName }: { instanceName: string }) 
                       >
                         {difficulties.map((option) => (
                           <DropdownMenuRadioItem key={option.key} value={option.key}>
-                            {option.difficultyName} · {option.maxPlayers} Player
+                            {difficultyLabel(option.difficultyName, option.maxPlayers) || "Standard"}
                           </DropdownMenuRadioItem>
                         ))}
                       </DropdownMenuRadioGroup>
@@ -310,6 +310,8 @@ export function ParsingInstanceView({ instanceName }: { instanceName: string }) 
             hidden={hidden}
             metricLabel={metricLabel}
             loading={bossQuery.isLoading}
+            showOffRole={params.get("offrole") === "show"}
+            onShowOffRoleChange={(show) => update({ offrole: show ? "show" : "" })}
             onHiddenChange={(hide) => update({ hide })}
             onOpenSpec={openSpec}
           />
