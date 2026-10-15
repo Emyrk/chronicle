@@ -32,8 +32,8 @@ describe("getInstanceBackground", () => {
     );
   });
 
-  it("returns the WoW Forever Halls of Lordaeron loading screen", () => {
-    expect(getInstanceBackground("Halls of Lordaeron")).toBe(
+  it("returns the WoW Forever Ruins of Lordaeron loading screen", () => {
+    expect(getInstanceBackground("Ruins of Lordaeron")).toBe(
       "/c/images/loadingscreens/LoadScreenRuinsOfLordaeron.webp",
     );
   });
