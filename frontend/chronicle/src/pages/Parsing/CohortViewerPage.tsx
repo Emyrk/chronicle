@@ -1,11 +1,13 @@
 import { useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { PlayerCohortView } from "./cohort/PlayerCohortView";
 import { TimeCohortView } from "./cohort/TimeCohortView";
 
-type CohortView = "boss" | "clear";
+type CohortView = "boss" | "clear" | "players";
 
 const VIEWS: { value: CohortView; label: string; description: string }[] = [
+  { value: "players", label: "Player DPS / HPS", description: "Every eligible player kill in one exact scoring cohort." },
   { value: "boss", label: "Boss kill times", description: "Every clean kill of one boss, scored by how fast it died." },
   { value: "clear", label: "Clear times", description: "Every full clear of one instance, scored by total clear time." },
 ];
@@ -15,7 +17,7 @@ export function CohortViewerPage() {
   // e.g. /parsing/cohorts?view=boss&instance=Molten+Core&encounter=Ragnaros
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedView = searchParams.get("view");
-  const view: CohortView = requestedView === "clear" ? "clear" : "boss";
+  const view: CohortView = requestedView === "players" ? "players" : requestedView === "clear" ? "clear" : "boss";
 
   // Apply several param changes at once. Empty values delete the param to
   // keep URLs short; replace avoids history spam while clicking through.
@@ -76,12 +78,16 @@ export function CohortViewerPage() {
       </div>
       <p className="mb-4 text-sm text-muted-foreground">{active.description}</p>
 
-      <TimeCohortView
-        key={view}
-        kind={view === "boss" ? "boss_kill" : "clear_time"}
-        params={searchParams}
-        updateParams={updateParams}
-      />
+      {view === "players" ? (
+        <PlayerCohortView key={view} params={searchParams} updateParams={updateParams} />
+      ) : (
+        <TimeCohortView
+          key={view}
+          kind={view === "boss" ? "boss_kill" : "clear_time"}
+          params={searchParams}
+          updateParams={updateParams}
+        />
+      )}
     </div>
   );
 }

@@ -82,6 +82,199 @@ func Score(cohort []float64, value float64) (ScoreResult, bool) {
 	return result(score, n, rankVal), true
 }
 
+// GroupedScoreValue is one value in a scoring cohort. Values with the same
+// Group are excluded together when scoring any member of that group.
+type GroupedScoreValue struct {
+	Group string
+	Value float64
+}
+
+// GroupedScoreResult is the result for one GroupedScoreValue.
+type GroupedScoreResult struct {
+	ScoreResult
+	Scored bool
+}
+
+// ScoreExcludingGroups scores every value against the cohort with all values
+// from its own group removed. The valid-value path runs in O(n log n).
+func ScoreExcludingGroups(values []GroupedScoreValue) []GroupedScoreResult {
+	for _, value := range values {
+		if !isFinitePositive(value.Value) {
+			return scoreExcludingGroupsNaive(values)
+		}
+	}
+
+	uniqueValues := make([]float64, len(values))
+	for i, value := range values {
+		uniqueValues[i] = value.Value
+	}
+	sort.Float64s(uniqueValues)
+	uniqueValues = compactSorted(uniqueValues)
+
+	valueIndexes := make(map[float64]int, len(uniqueValues))
+	for i, value := range uniqueValues {
+		valueIndexes[value] = i
+	}
+	groupIndexes := make(map[string][]int)
+	groups := make([]string, 0)
+	for _, value := range values {
+		if _, exists := groupIndexes[value.Group]; !exists {
+			groups = append(groups, value.Group)
+		}
+		groupIndexes[value.Group] = append(groupIndexes[value.Group], valueIndexes[value.Value])
+	}
+
+	frequencies := newFrequencyTree(len(uniqueValues))
+	for _, value := range values {
+		frequencies.add(valueIndexes[value.Value], 1)
+	}
+
+	results := make([]GroupedScoreResult, len(values))
+	resultIndexes := make(map[string][]int, len(groupIndexes))
+	for i, value := range values {
+		resultIndexes[value.Group] = append(resultIndexes[value.Group], i)
+	}
+	for _, group := range groups {
+		for _, valueIndex := range groupIndexes[group] {
+			frequencies.add(valueIndex, -1)
+		}
+		for _, resultIndex := range resultIndexes[group] {
+			score, scored := scoreFromFrequencies(frequencies, uniqueValues, values[resultIndex].Value)
+			results[resultIndex] = GroupedScoreResult{ScoreResult: score, Scored: scored}
+		}
+		for _, valueIndex := range groupIndexes[group] {
+			frequencies.add(valueIndex, 1)
+		}
+	}
+	return results
+}
+
+func scoreExcludingGroupsNaive(values []GroupedScoreValue) []GroupedScoreResult {
+	results := make([]GroupedScoreResult, len(values))
+	for i, value := range values {
+		cohort := make([]float64, 0, len(values))
+		for _, candidate := range values {
+			if candidate.Group != value.Group {
+				cohort = append(cohort, candidate.Value)
+			}
+		}
+		score, scored := Score(cohort, value.Value)
+		results[i] = GroupedScoreResult{ScoreResult: score, Scored: scored}
+	}
+	return results
+}
+
+func compactSorted(values []float64) []float64 {
+	if len(values) == 0 {
+		return values
+	}
+	compacted := values[:1]
+	for _, value := range values[1:] {
+		if value != compacted[len(compacted)-1] {
+			compacted = append(compacted, value)
+		}
+	}
+	return compacted
+}
+
+func scoreFromFrequencies(frequencies *frequencyTree, values []float64, value float64) (ScoreResult, bool) {
+	if !isFinitePositive(value) {
+		return ScoreResult{}, false
+	}
+	n := frequencies.total()
+	if n < MinSampleForParse {
+		return ScoreResult{SampleSize: n, Status: StatusSampleTooSmall}, false
+	}
+
+	maxIndex := frequencies.indexByOrder(n)
+	if value >= values[maxIndex] {
+		return result(100, n, 1), true
+	}
+
+	valueIndex := sort.SearchFloat64s(values, value)
+	less := frequencies.prefix(valueIndex)
+	equal := frequencies.count(valueIndex)
+	rank := n - less - equal + 1
+
+	if equal > 0 {
+		return result(frequencyPosition(frequencies, valueIndex, n, maxIndex), n, rank), true
+	}
+
+	if less == 0 {
+		minIndex := frequencies.indexByOrder(1)
+		score := value / values[minIndex] * frequencyPosition(frequencies, minIndex, n, maxIndex)
+		if score < 0 {
+			score = 0
+		}
+		return result(score, n, rank), true
+	}
+
+	lowerIndex := frequencies.indexByOrder(less)
+	upperIndex := frequencies.indexByOrder(less + 1)
+	lowerPosition := frequencyPosition(frequencies, lowerIndex, n, maxIndex)
+	upperPosition := frequencyPosition(frequencies, upperIndex, n, maxIndex)
+	t := (value - values[lowerIndex]) / (values[upperIndex] - values[lowerIndex])
+	return result(lowerPosition+t*(upperPosition-lowerPosition), n, rank), true
+}
+
+func frequencyPosition(frequencies *frequencyTree, valueIndex, sampleSize, maxIndex int) float64 {
+	if valueIndex == maxIndex {
+		return 100
+	}
+	less := frequencies.prefix(valueIndex)
+	count := frequencies.count(valueIndex)
+	return float64(2*less+count) / (2 * float64(sampleSize)) * 100
+}
+
+type frequencyTree struct {
+	tree []int
+}
+
+func newFrequencyTree(size int) *frequencyTree {
+	return &frequencyTree{tree: make([]int, size+1)}
+}
+
+func (f *frequencyTree) add(index, delta int) {
+	for i := index + 1; i < len(f.tree); i += i & -i {
+		f.tree[i] += delta
+	}
+}
+
+// prefix returns the number of values with an index less than end.
+func (f *frequencyTree) prefix(end int) int {
+	total := 0
+	for i := end; i > 0; i -= i & -i {
+		total += f.tree[i]
+	}
+	return total
+}
+
+func (f *frequencyTree) count(index int) int {
+	return f.prefix(index+1) - f.prefix(index)
+}
+
+func (f *frequencyTree) total() int {
+	return f.prefix(len(f.tree) - 1)
+}
+
+// indexByOrder returns the zero-based index of the order-th present value.
+func (f *frequencyTree) indexByOrder(order int) int {
+	index := 0
+	bit := 1
+	for bit<<1 < len(f.tree) {
+		bit <<= 1
+	}
+	for bit > 0 {
+		next := index + bit
+		if next < len(f.tree) && f.tree[next] < order {
+			index = next
+			order -= f.tree[next]
+		}
+		bit >>= 1
+	}
+	return index
+}
+
 // buildPositions returns deduplicated (value, position) pairs from a sorted
 // ascending cohort. The maximum is anchored at 100; others use midpoint
 // plotting positions (i-0.5)/N*100 where i is 1-based. Ties share the

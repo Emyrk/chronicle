@@ -44,6 +44,16 @@ func (ts *TestableService) HandleInstanceTimeParses(w http.ResponseWriter, r *ht
 	handleInstanceTimeParsesWithStore(ts.store, w, r)
 }
 
+// HandleParseScoreCohortBuckets exposes the live DPS/HPS cohort bucket handler for tests.
+func (ts *TestableService) HandleParseScoreCohortBuckets(w http.ResponseWriter, r *http.Request) {
+	handleParseScoreCohortBucketsWithStore(ts.store, w, r)
+}
+
+// HandleParseScoreCohort exposes the live DPS/HPS cohort handler for tests.
+func (ts *TestableService) HandleParseScoreCohort(w http.ResponseWriter, r *http.Request) {
+	handleParseScoreCohortWithStore(ts.store, w, r)
+}
+
 // HandleTimeParseCohortBuckets exposes the time-parse cohort buckets handler for tests.
 func (ts *TestableService) HandleTimeParseCohortBuckets(w http.ResponseWriter, r *http.Request) {
 	handleTimeParseCohortBucketsWithStore(ts.store, w, r)

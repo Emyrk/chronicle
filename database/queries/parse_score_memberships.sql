@@ -130,6 +130,89 @@ WHERE (
   ))
   AND CASE WHEN @metric::text = 'hps' THEN membership.hps ELSE membership.dps END > 0;
 
+-- name: ListParseScoreCohortBuckets :many
+SELECT
+    membership.encounter_name,
+    membership.difficulty_name,
+    membership.max_players,
+    membership.player_class,
+    CASE WHEN @cohort_mode::text = 'spec' THEN membership.player_spec ELSE '' END::text AS player_spec,
+    CASE WHEN @cohort_mode::text = 'spec' THEN membership.player_sub_spec ELSE '' END::text AS player_sub_spec,
+    COUNT(*)::bigint AS sample_size
+FROM parse_score_memberships membership
+WHERE (
+      (@tenant_id::uuid <> '00000000-0000-0000-0000-000000000000'::uuid AND membership.tenant_id = @tenant_id)
+      OR
+      (@tenant_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND (
+          membership.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+          OR EXISTS (SELECT 1 FROM tenants tenant WHERE tenant.id = membership.tenant_id AND tenant.include_in_all)
+      ))
+  )
+  AND membership.policy_version = @policy_version
+  AND membership.query_version = @query_version
+  AND membership.killed_at < @cutoff
+  AND (@window_start::timestamptz IS NULL OR membership.killed_at >= @window_start)
+  AND CASE WHEN @metric::text = 'hps' THEN membership.hps ELSE membership.dps END > 0
+  AND (@cohort_mode::text <> 'spec' OR lower(btrim(membership.player_spec)) NOT IN ('', 'unknown'))
+GROUP BY membership.encounter_name, membership.difficulty_name, membership.max_players,
+         membership.player_class,
+         CASE WHEN @cohort_mode::text = 'spec' THEN membership.player_spec ELSE '' END,
+         CASE WHEN @cohort_mode::text = 'spec' THEN membership.player_sub_spec ELSE '' END
+ORDER BY membership.encounter_name, membership.player_class, player_spec, player_sub_spec,
+         membership.difficulty_name, membership.max_players;
+
+-- name: GetParseScoreCohortEntries :many
+SELECT
+    membership.run_id,
+    membership.instance_id,
+    membership.player_guid,
+    COALESCE(player.player_name, '')::text AS player_name,
+    CASE WHEN @metric::text = 'hps' THEN membership.hps ELSE membership.dps END::double precision AS metric_value,
+    membership.killed_at,
+    instance.hashed_slug AS log_hashed_slug
+FROM parse_score_memberships membership
+JOIN log_instances instance ON instance.id = membership.instance_id
+LEFT JOIN LATERAL (
+    SELECT candidate.player_name
+    FROM (
+        SELECT instance_player.name::text AS player_name, 0 AS source_order
+        FROM log_instance_players instance_player
+        WHERE instance_player.instance_id = membership.instance_id
+          AND instance_player.unit_guid::text = membership.player_guid
+        UNION ALL
+        SELECT ranking.player_name::text AS player_name, 1 AS source_order
+        FROM encounter_dps_rankings ranking
+        WHERE ranking.instance_id = membership.instance_id
+          AND ranking.encounter_name = membership.encounter_name
+          AND ranking.player_guid = membership.player_guid
+    ) candidate
+    ORDER BY candidate.source_order, candidate.player_name
+    LIMIT 1
+) player ON true
+WHERE (
+      (@tenant_id::uuid <> '00000000-0000-0000-0000-000000000000'::uuid AND membership.tenant_id = @tenant_id)
+      OR
+      (@tenant_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND (
+          membership.tenant_id = '00000000-0000-0000-0000-000000000000'::uuid
+          OR EXISTS (SELECT 1 FROM tenants tenant WHERE tenant.id = membership.tenant_id AND tenant.include_in_all)
+      ))
+  )
+  AND membership.policy_version = @policy_version
+  AND membership.query_version = @query_version
+  AND membership.killed_at < @cutoff
+  AND (@window_start::timestamptz IS NULL OR membership.killed_at >= @window_start)
+  AND membership.encounter_name = @encounter_name
+  AND membership.difficulty_name = @difficulty_name
+  AND membership.max_players = @max_players
+  AND membership.player_class = @player_class
+  AND (@cohort_mode::text <> 'spec' OR (
+      membership.player_spec = @player_spec
+      AND membership.player_sub_spec = @player_sub_spec
+      AND lower(btrim(membership.player_spec)) NOT IN ('', 'unknown')
+  ))
+  AND CASE WHEN @metric::text = 'hps' THEN membership.hps ELSE membership.dps END > 0
+ORDER BY metric_value DESC, membership.killed_at, membership.id;
+
 -- name: ListParseScoreMemberships :many
 SELECT *
 FROM parse_score_memberships
