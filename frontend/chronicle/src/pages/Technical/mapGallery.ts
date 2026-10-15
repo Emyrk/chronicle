@@ -66,6 +66,27 @@ export interface WowMapInstance {
   styled?: WowMapRenderedInstance;
   renders?: WowMapManualRender;
   "3d"?: WowMap3DAsset;
+  mesh?: WowMapMeshInstance;
+}
+
+/** A dungeon's 3D mesh (glTF binary under `meshes/`) for the Replay Map, placed by its own world extent. */
+export interface WowMapMeshInstance {
+  path: string;
+  /** World-axis bounds of the mesh: `minX..maxX` is world X, `minY..maxY` world Y. */
+  bounds: WowMapFloorBounds;
+  zMin: number;
+  zMax: number;
+  /** The glTF axis convention; see `DUNGEON_MESH_FRAME`. */
+  frame: string;
+  /** Tint for the mesh's `liquid_*` planes (lava, slime); absent, the GLB's own water shows. */
+  liquid?: WowMapMeshLiquid;
+}
+
+export interface WowMapMeshLiquid {
+  /** CSS hex colour, `#rrggbb`. */
+  color: string;
+  /** 0 < opacity <= 1. */
+  opacity: number;
 }
 
 // Catalog entries for manually published assets; replay placement is not yet calibrated.
@@ -150,6 +171,13 @@ export type MapGalleryItem =
     key: string;
     instance: WowMapInstance;
     rendered: WowMapRenderedInstance;
+  }
+  | {
+    /** A mesh-only instance: no map artwork at all, only the Replay Map's 3D mesh. */
+    kind: "mesh";
+    key: string;
+    instance: WowMapInstance;
+    mesh: WowMapMeshInstance;
   };
 
 function stripTrailingSlash(value: string): string {
@@ -225,6 +253,16 @@ export function mapGalleryItems(manifest: WowMapManifest): MapGalleryItem[] {
           key: `styled-${instance.mapID}`,
           instance,
           rendered: instance.styled,
+        }]
+      : []),
+    // An instance with artwork is listed by it; one with only a mesh (a
+    // dungeon without an in-game map) still gets a card.
+    ...(instance.mesh && instance.floors.length === 0 && !instance.rendered && !instance.styled
+      ? [{
+          kind: "mesh" as const,
+          key: `mesh-${instance.mapID}`,
+          instance,
+          mesh: instance.mesh,
         }]
       : []),
   ]);

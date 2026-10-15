@@ -443,17 +443,20 @@ var (
 		Hostiles:  FromMap(MaraudonHostiles()),
 	}
 
-	RuinsOfLordaeronFactory = &CommonFactory{
-		Name:      "Ruins Of Lordaeron",
-		ZoneNames: []string{"ruins of lordaeron"},
-		MapIDs:    []uint32{2999},
-		Hostiles:  FromMap(RuinsOfLordaeronHostiles()),
-	}
-
 	ExcavationSiteWetlandsFactory = &CommonFactory{
 		Name:      "Excavation Site: Wetlands",
 		ZoneNames: []string{"excavation site: wetlands"},
 		Hostiles:  FromMap(ExcavationSiteWetlandsHostiles()),
+	}
+
+	// RuinsOfLordaeronFactory is the WoW Forever "Halls of Lordaeron" dungeon.
+	// The combat log reports the zone as "Ruins of Lordaeron" (map 2999).
+	RuinsOfLordaeronFactory = &CommonFactory{
+		Name:      "Halls of Lordaeron",
+		Category:  InstanceCategoryDungeon,
+		ZoneNames: []string{"ruins of lordaeron"},
+		MapIDs:    []uint32{2999},
+		Hostiles:  FromMap(RuinsOfLordaeronHostiles()),
 	}
 )
 

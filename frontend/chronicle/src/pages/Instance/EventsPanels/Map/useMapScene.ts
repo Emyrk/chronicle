@@ -1,17 +1,19 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
-import {
-  mapManifestUrl,
-  isSupportedMapManifestFormat,
-  type WowMapInstanceFloor,
-  type WowMapLayer,
-  type WowMapManifest,
-  type WowMapOverlay,
+import type {
+  WowMapInstanceFloor,
+  WowMapLayer,
+  WowMapMeshInstance,
+  WowMapOverlay,
+  WowMapRenderedInstance,
 } from "@/pages/Technical/mapGallery";
+import { fetchMapManifest } from "@/pages/Technical/mapManifest";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelRenderProps } from "../types";
-import type { MapPositionSample, MapResult } from "./map.processor";
+import { isMeshOnlyInstance, placeableDungeonMesh } from "./dungeonMeshes";
+import { groupCentre, isStaleRunSample, mergeRunEncounters, runSignature } from "./wholeRun";
+import type { MapEncounterPositions, MapPositionSample, MapResult } from "./map.processor";
 import { inferRoles } from "../Roles/roles.processor";
 import { deriveRecentHealGain, isDeadAt, type EncounterEffects } from "./replayEffects";
 import {
@@ -23,6 +25,7 @@ import {
   focusCentre,
   latestPositionAt,
   projectionScale,
+  renderedDungeonMapPoint,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
   selectHealthBars,
@@ -37,6 +40,8 @@ import {
 interface MapFocus {
   bounds: MapPointBounds;
   autoFit: MapViewport;
+  /** The focus centre (median boss position) on the artwork, or null when no boss is known. */
+  centre: MapPoint | null;
 }
 
 // Fit bounds scan the encounter's whole track, so cache them per encounter
@@ -57,20 +62,30 @@ function cachedFocusBounds(
   return byKey.get(key) ?? null;
 }
 
+// The merged run is rebuilt only when more of the result has streamed in.
+const runCache = new WeakMap<Map<string, MapEncounterPositions>, { signature: string; run: MapEncounterPositions | null }>();
+
+function cachedRun(encounters: Map<string, MapEncounterPositions>): MapEncounterPositions | null {
+  const signature = runSignature(encounters);
+  const cached = runCache.get(encounters);
+  if (cached && cached.signature === signature) return cached.run;
+  const run = mergeRunEncounters(encounters);
+  runCache.set(encounters, { signature, run });
+  return run;
+}
+
+/** The follow camera frames this many yards across the longer axis. */
+const FOLLOW_SPAN_YARDS = 70;
+// The follow centre snaps to this grid (artwork fraction) so sub-pixel drift
+// does not re-frame the camera on every replay tick.
+const FOLLOW_GRID = 1 / 400;
+
 function useMapManifest(iconBaseUrl: string | undefined) {
   return useQuery({
     queryKey: ["wow-map-manifest", iconBaseUrl],
     enabled: Boolean(iconBaseUrl),
     staleTime: 60 * 60 * 1000,
-    queryFn: async () => {
-      const response = await fetch(mapManifestUrl(iconBaseUrl!));
-      if (!response.ok) throw new Error(`Map manifest request failed with ${response.status}`);
-      const manifest = await response.json() as WowMapManifest;
-      if (!isSupportedMapManifestFormat(manifest.format)) {
-        throw new Error(`Unsupported map manifest format: ${manifest.format || "missing"}`);
-      }
-      return manifest;
-    },
+    queryFn: () => fetchMapManifest(iconBaseUrl!),
   });
 }
 
@@ -103,8 +118,26 @@ export interface MapSceneMarker {
 
 export interface MapSceneGround {
   iconBaseUrl: string;
-  canvas: WowMapLayer | WowMapInstanceFloor;
+  canvas: WowMapLayer | WowMapInstanceFloor | WowMapRenderedInstance;
   overlays?: WowMapOverlay[];
+}
+
+/**
+ * The ground while the dungeon mesh stands in for the tiles: no image (the
+ * scene hides the tiles), just the mesh's world extent as a canvas, so markers,
+ * fit and the camera keep the mesh's aspect. Its width spans world Y and its
+ * height world X, as `renderedDungeonMapPoint` projects.
+ */
+function dungeonMeshCanvas(mesh: WowMapMeshInstance): WowMapInstanceFloor {
+  return {
+    floor: 0,
+    width: mesh.bounds.maxY - mesh.bounds.minY,
+    height: mesh.bounds.maxX - mesh.bounds.minX,
+    tileWidth: 0,
+    tileHeight: 0,
+    bounds: mesh.bounds,
+    tiles: [],
+  };
 }
 // Tanks by inferRoles over the encounter's own damage and heal events,
 // recomputed only when more events have streamed in.
@@ -137,6 +170,8 @@ export type MapScene =
   | { status: "message"; title: string; detail: string }
   | {
     status: "ready";
+    /** The scene replays the whole run: `autoFit` / `focusCentre` follow the party. */
+    wholeRun: boolean;
     encounterId: string;
     mapName: string;
     displayedMapId: number;
@@ -156,8 +191,17 @@ export type MapScene =
     focusBounds: MapPointBounds | null;
     /** The auto-fit framing of `focusBounds`: a minimum span, centred on the boss when known. */
     autoFit: MapViewport | null;
+    /** The boss's median position on the artwork (what `autoFit` centres on), or null when no boss is known. */
+    focusCentre: MapPoint | null;
     /** Whether the view should start on `autoFit` (one boss encounter selected) rather than the full map. */
     fitByDefault: boolean;
+    /** The instance's real dungeon mesh from the manifest (`instances[].mesh`), when the scene can place it. */
+    mesh: WowMapMeshInstance | null;
+    /** The instance has no map artwork, only `mesh`: the ground is always the mesh's extent and there is no 2D map. */
+    meshOnly: boolean;
+    /** The run's first sample and last event, in whole-run mode. */
+    runStartMs: number | null;
+    runEndMs: number | null;
     /** Combat events for the replay effects layer. */
     effects: EncounterEffects;
     bossGuids: ReadonlySet<string>;
@@ -165,32 +209,60 @@ export type MapScene =
     tankGuids: ReadonlySet<string>;
   };
 
+export interface MapSceneOptions {
+  /**
+   * Project dungeon positions with the pure world transform instead of the
+   * per-boss artwork calibration (Wailing Caverns): the 3D view's real
+   * dungeon mesh is true geometry, so calibrated points would land off it.
+   * The mesh entry's bounds become the canvas and the projection; without a
+   * placeable mesh the option does nothing.
+   */
+  rawDungeonProjection?: boolean;
+  /**
+   * Replay every processed encounter as one run: the camera follows the
+   * party's median position rather than a boss, and non-player units that
+   * stopped reporting drop off the map.
+   */
+  wholeRun?: boolean;
+}
+
 /**
  * Everything the Map panel's views share: the encounter at the replay cursor,
  * the artwork canvas and the projected unit markers. Both the 2D and 3D views
  * consume this so filters, selection, floor and cursor stay identical.
  */
-export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
+export function useMapScene(props: PanelRenderProps<MapResult>, options: MapSceneOptions = {}): MapScene {
   const sync = useSyncModeContextOptional();
   const iconBaseUrl = props.context.instance.iconBaseUrl;
   const manifestQuery = useMapManifest(iconBaseUrl);
   const timestampMs = sync?.enabled && sync.currentTimestamp ? sync.currentTimestamp.getTime() : null;
+  const wholeRun = Boolean(options.wholeRun);
+  const resultSignature = wholeRun ? runSignature(props.result.encounters) : "";
   const encounter = useMemo(
-    () => selectMapEncounter(props.result.encounters, props.context.selectedEncounterIds, timestampMs),
-    [props.context.selectedEncounterIds, props.result.encounters, timestampMs],
+    () => wholeRun
+      ? cachedRun(props.result.encounters)
+      : selectMapEncounter(props.result.encounters, props.context.selectedEncounterIds, timestampMs),
+    // resultSignature: the run is re-merged as the result streams in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [props.context.selectedEncounterIds, props.result.encounters, timestampMs, wholeRun, resultSignature],
   );
   const cursorMs = timestampMs ?? encounter?.endMs ?? null;
   const visibleUnits = useMemo(() => {
     if (!encounter || cursorMs === null) return [];
     return Array.from(encounter.positionsByUnit.entries()).flatMap(([guid, positions]) => {
       const sample = latestPositionAt(positions, cursorMs);
-      return sample ? [{ guid, sample, positions }] : [];
+      if (!sample) return [];
+      // Across a run, trash that died or despawned must not linger at its last position.
+      if (wholeRun && !props.context.instance.players?.[guid] && isStaleRunSample(sample, cursorMs)) return [];
+      return [{ guid, sample, positions }];
     });
-  }, [cursorMs, encounter]);
+  }, [cursorMs, encounter, props.context.instance.players, wholeRun]);
   const mapId = dominantMapId(visibleUnits.map((unit) => unit.sample));
   const representativeSample = visibleUnits.find((unit) => unit.sample.mapId === mapId)?.sample;
-  const instanceEncounter = props.context.instance.encounters
-    .find((candidate) => candidate.id === encounter?.encounterId);
+  // A run has no single instance encounter: the first with a map stands in for artwork lookup.
+  const instanceEncounter = wholeRun
+    ? props.context.instance.encounters.find((candidate) => candidate.mapId)
+    : props.context.instance.encounters.find((candidate) => candidate.id === encounter?.encounterId);
   const encounterMapId = instanceEncounter?.mapId ?? 0;
   const artworkMapId = encounterMapId || mapId;
   const artwork = manifestQuery.data && artworkMapId !== null
@@ -217,11 +289,17 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
   const selectedFloor = artwork.kind === "instance"
     ? artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0]
     : undefined;
-  const canvas = artwork.kind === "zone" ? zoneSelection?.layer : selectedFloor;
+  const mesh = artwork.kind === "instance" ? placeableDungeonMesh(artwork.instance.mesh) : null;
+  // A mesh-only instance has no floor to fall back on, so its mesh is the
+  // canvas from the start (while the mesh loads too), not only once asked.
+  const meshOnly = artwork.kind === "instance" && isMeshOnlyInstance(artwork.instance);
+  const rawProjection = (Boolean(options.rawDungeonProjection) || meshOnly) && mesh !== null;
+  const meshCanvas = rawProjection && mesh ? dungeonMeshCanvas(mesh) : null;
+  const canvas = artwork.kind === "zone" ? zoneSelection?.layer : meshCanvas ?? selectedFloor;
   if (!canvas) return { status: "message", title: "Map artwork unavailable", detail: "No renderable map layer was published." };
 
-  const dungeonBounds = artwork.kind === "instance" ? selectedFloor?.bounds ?? null : null;
-  const dungeonCalibration = artwork.kind === "instance" && encounter
+  const dungeonBounds = artwork.kind === "instance" ? meshCanvas?.bounds ?? selectedFloor?.bounds ?? null : null;
+  const dungeonCalibration = artwork.kind === "instance" && encounter && !rawProjection
     ? resolveDungeonMapCalibration(
       artwork.instance.mapID,
       encounter,
@@ -229,17 +307,20 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
     )
     : null;
   const overlayAvailable = Boolean(dungeonBounds)
-    && (artwork.kind !== "instance" || artwork.instance.mapID !== 43 || dungeonCalibration !== null);
+    && (artwork.kind !== "instance" || artwork.instance.mapID !== 43 || rawProjection || dungeonCalibration !== null);
   const projectSample = (sample: MapPositionSample): MapPoint | null => artwork.kind === "zone"
     ? zoneMapPoint(sample, artwork.assignment)
     : dungeonBounds && overlayAvailable
-      ? dungeonCalibration
-        ? calibratedDungeonMapPoint(sample, dungeonBounds, dungeonCalibration)
-        : dungeonMapPoint(sample, dungeonBounds)
+      ? meshCanvas
+        ? renderedDungeonMapPoint(sample, dungeonBounds)
+        : dungeonCalibration
+          ? calibratedDungeonMapPoint(sample, dungeonBounds, dungeonCalibration)
+          : dungeonMapPoint(sample, dungeonBounds)
       : null;
 
   const selectedPlayers = props.context.entitySelection.playerIds;
-  const bossGuids = new Set(instanceEncounter?.enemies?.filter((enemy) => enemy.boss).map((enemy) => enemy.id));
+  const bossGuids = new Set((wholeRun ? props.context.instance.encounters : instanceEncounter ? [instanceEncounter] : [])
+    .flatMap((candidate) => candidate.enemies?.filter((enemy) => enemy.boss).map((enemy) => enemy.id) ?? []));
   const markers = visibleUnits.flatMap(({ guid, sample, positions }): MapSceneMarker[] => {
     if (sample.mapId !== mapId) return [];
     const point = projectSample(sample);
@@ -277,27 +358,46 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
   }
   const projectionKey = artwork.kind === "zone"
     ? `zone:${artwork.map.id}:${artwork.assignment.id}`
-    : `instance:${artwork.instance.mapID}:${selectedFloorNumber}:${overlayAvailable}`;
-  const focus = cachedFocusBounds(
+    : `instance:${artwork.instance.mapID}:${selectedFloorNumber}:${overlayAvailable}:${meshCanvas ? "mesh" : "calibrated"}`;
+  // The run's camera follows the party, so the bounds scan of the whole run is skipped.
+  const focus = wholeRun ? null : cachedFocusBounds(
     encounter.positionsByUnit,
     `${mapId}|${projectionKey}|${[...bossGuids].join(",")}`,
     () => {
       const bounds = unitFocusBounds(encounter.positionsByUnit, mapId, projectSample, bossGuids);
       const centre = focusCentre(encounter.positionsByUnit, mapId, bossGuids);
       if (!bounds || !centre) return null;
+      const centrePoint = centre.fromFocus ? projectSample(centre.sample) : null;
       return {
         bounds,
         autoFit: autoFitViewport(bounds, {
           minSpanYards: AUTO_FIT_MIN_SPAN_YARDS,
           scale: projectionScale(projectSample, centre.sample),
-          centre: centre.fromFocus ? projectSample(centre.sample) : null,
+          centre: centrePoint,
         }),
+        centre: centrePoint,
       };
     },
   );
 
+  let followCentre: MapPoint | null = null;
+  let followViewport: MapViewport | null = null;
+  if (wholeRun) {
+    const centre = groupCentre(markers.filter((marker) => marker.kind === "player").map((marker) => marker.point));
+    const reference = markers.find((marker) => marker.kind === "player")?.sample;
+    if (centre && reference) {
+      const snap = (value: number) => Math.round(value / 100 / FOLLOW_GRID) * FOLLOW_GRID * 100;
+      followCentre = { leftPercent: snap(centre.leftPercent), topPercent: snap(centre.topPercent) };
+      followViewport = autoFitViewport(
+        { minLeft: followCentre.leftPercent, maxLeft: followCentre.leftPercent, minTop: followCentre.topPercent, maxTop: followCentre.topPercent },
+        { minSpanYards: FOLLOW_SPAN_YARDS, scale: projectionScale(projectSample, reference), centre: followCentre },
+      );
+    }
+  }
+
   return {
     status: "ready",
+    wholeRun,
     encounterId: encounter.encounterId,
     mapName: artwork.kind === "zone" ? artwork.map.name : artwork.instance.name,
     displayedMapId: artwork.kind === "instance" ? artwork.instance.mapID : mapId,
@@ -317,8 +417,15 @@ export function useMapScene(props: PanelRenderProps<MapResult>): MapScene {
     markers,
     projectSample,
     focusBounds: focus?.bounds ?? null,
-    autoFit: focus?.autoFit ?? null,
-    fitByDefault: props.context.selectedEncounterIds.length === 1 && Boolean(instanceEncounter?.boss),
+    autoFit: wholeRun ? followViewport : focus?.autoFit ?? null,
+    focusCentre: wholeRun ? followCentre : focus?.centre ?? null,
+    mesh,
+    meshOnly,
+    fitByDefault: wholeRun
+      ? followViewport !== null
+      : props.context.selectedEncounterIds.length === 1 && Boolean(instanceEncounter?.boss),
+    runStartMs: wholeRun ? encounter.startMs : null,
+    runEndMs: wholeRun ? encounter.endMs : null,
     effects: encounter.effects,
     bossGuids,
     tankGuids: cachedTankGuids(encounter.effects, props.context.instance.players ?? {}),

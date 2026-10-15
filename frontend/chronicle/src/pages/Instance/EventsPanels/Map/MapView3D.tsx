@@ -7,8 +7,17 @@ import { useSmoothReplayTime } from "../RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../RotationTimeline/useSpellMeta";
 import type { MapPositionSample } from "./map.processor";
 import { interpolatedPositionAt, prefersReducedMotion, VIEW_TRANSITION_MS, type MapPoint, type MapViewport } from "./mapModel";
-import { MAX_EFFECT_PRIMITIVES, MapScene3D, type MapScene3DEffectHover, type MapScene3DUnit } from "./MapScene3D";
-import { DEFAULT_EFFECT_OPTIONS, isBasicAttack, type EncounterEffects } from "./replayEffects";
+import {
+  MAX_EFFECT_PRIMITIVES,
+  MapScene3D,
+  type DungeonMeshRequest,
+  type DungeonMeshState,
+  type MapScene3DEffectHover,
+  type MapScene3DUnit,
+  type MapSceneDirector,
+  type MapSceneFocus,
+} from "./MapScene3D";
+import { DEFAULT_EFFECT_OPTIONS, effectiveCastIconGuids, isBasicAttack, type CastIconMode, type EncounterEffects } from "./replayEffects";
 import type { MapViewRequest } from "./MapView2D";
 import type { MapSceneGround, MapSceneMarker } from "./useMapScene";
 
@@ -29,6 +38,18 @@ export interface MapView3DProps {
   tankGuids?: ReadonlySet<string>;
   /** Called when WebGL cannot be created or the context is lost. */
   onUnavailable: () => void;
+  /** The real dungeon mesh to stand the units on instead of the tiles ("3D map"), or null for the tiles. */
+  dungeonMesh?: DungeonMeshRequest | null;
+  /** Reports the mesh load: loading, ready, or failed (the tiles stay). */
+  onDungeonMeshState?: (state: DungeonMeshState) => void;
+  /** The fight the mesh camera is locked to (zoom and pan), or null for the whole map. */
+  focus?: MapSceneFocus | null;
+  /**
+   * Hand the mesh camera to the cinematic Director, which keeps the boss and
+   * the group framed. Off once the user pins a framing (Fit, Reset, a pan or
+   * a zoom); Follow turns it back on.
+   */
+  cinematic?: boolean;
 }
 
 const SMOOTH_STORAGE_KEY = "chronicle.map.smooth3d";
@@ -42,7 +63,9 @@ interface EffectSettings {
   onlySelected: boolean;
   maxEffects: number;
   bars: boolean;
-  casts: boolean;
+  /** Legacy boolean from before castMode; false migrates to "off". */
+  casts?: boolean;
+  castMode: CastIconMode;
 }
 
 const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
@@ -53,8 +76,14 @@ const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
   onlySelected: false,
   maxEffects: MAX_EFFECT_PRIMITIVES,
   bars: true,
-  casts: true,
+  castMode: "selected",
 };
+
+const CAST_MODES: { value: CastIconMode; label: string; title: string }[] = [
+  { value: "off", label: "Off", title: "No cast icons" },
+  { value: "selected", label: "Selected", title: "Cast icons over selected players and bosses; with nothing selected, over everyone in groups of 10 or fewer" },
+  { value: "all", label: "All", title: "Cast icons over every player and boss" },
+];
 
 const DENSITY_OPTIONS = [16, 32, MAX_EFFECT_PRIMITIVES];
 
@@ -62,6 +91,8 @@ function readStoredEffectSettings(): EffectSettings {
   try {
     const stored = JSON.parse(localStorage.getItem(EFFECTS_STORAGE_KEY) ?? "{}") as Partial<EffectSettings>;
     const settings = { ...DEFAULT_EFFECT_SETTINGS, ...stored };
+    if (!stored.castMode && stored.casts === false) settings.castMode = "off";
+    if (!CAST_MODES.some((mode) => mode.value === settings.castMode)) settings.castMode = "selected";
     if (!DENSITY_OPTIONS.includes(settings.maxEffects)) settings.maxEffects = MAX_EFFECT_PRIMITIVES;
     return settings;
   } catch {
@@ -123,11 +154,16 @@ export default function MapView3D({
   bossGuids,
   tankGuids,
   onUnavailable,
+  dungeonMesh = null,
+  onDungeonMeshState,
+  focus = null,
+  cinematic = false,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<MapScene3D | null>(null);
   const onUnavailableRef = useRef(onUnavailable);
   const onUserViewportRef = useRef(onUserViewport);
+  const onDungeonMeshStateRef = useRef(onDungeonMeshState);
   const colorCacheRef = useRef(new Map<string, string>());
   const [smooth, setSmooth] = useState(readStoredSmooth);
   const smoothMs = useSmoothReplayTime(cursorMs, playing && smooth, playbackSpeed);
@@ -138,7 +174,8 @@ export default function MapView3D({
   useEffect(() => {
     onUnavailableRef.current = onUnavailable;
     onUserViewportRef.current = onUserViewport;
-  }, [onUnavailable, onUserViewport]);
+    onDungeonMeshStateRef.current = onDungeonMeshState;
+  }, [onDungeonMeshState, onUnavailable, onUserViewport]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -150,6 +187,7 @@ export default function MapView3D({
         () => onUnavailableRef.current(),
         setEffectHover,
         (viewport) => onUserViewportRef.current?.(viewport),
+        (state) => onDungeonMeshStateRef.current?.(state),
       );
     } catch {
       onUnavailableRef.current();
@@ -165,6 +203,23 @@ export default function MapView3D({
   useEffect(() => {
     sceneRef.current?.setGround(ground);
   }, [ground]);
+
+  useEffect(() => {
+    sceneRef.current?.setDungeonMesh(dungeonMesh);
+  }, [dungeonMesh]);
+
+  useEffect(() => {
+    sceneRef.current?.setFocus(focus);
+  }, [focus]);
+
+  // Keyed by the boss guids' string so replay ticks never re-engage the Director.
+  const bossKey = bossGuids ? [...bossGuids].join(",") : "";
+  const director = useMemo((): MapSceneDirector | null =>
+    cinematic ? { bossGuids: new Set(bossKey ? bossKey.split(",") : []) } : null,
+  [bossKey, cinematic]);
+  useEffect(() => {
+    sceneRef.current?.setDirector(director);
+  }, [director]);
 
   // The first request frames instantly; later ones (a new key) ease there.
   const appliedViewKeyRef = useRef<string | null>(null);
@@ -205,9 +260,10 @@ export default function MapView3D({
   const selectedKey = markers.some((marker) => marker.muted)
     ? markers.filter((marker) => marker.kind === "player" && !marker.muted).map((marker) => marker.guid).join(",")
     : "";
-  const bossKey = bossGuids ? [...bossGuids].join(",") : "";
   const tankKey = tankGuids ? [...tankGuids].join(",") : "";
+  const playerKey = markers.filter((marker) => marker.kind === "player").map((marker) => marker.guid).join(",");
   const effectOptions = useMemo(() => {
+    const players = playerKey ? playerKey.split(",") : [];
     const selected = selectedKey ? new Set(selectedKey.split(",")) : null;
     const tanks = tankKey ? tankKey.split(",") : [];
     const bosses = bossKey ? new Set(bossKey.split(",")) : null;
@@ -217,7 +273,7 @@ export default function MapView3D({
     return {
       selected,
       bosses,
-      castIconGuids: selectedAndBosses.size > 0 ? selectedAndBosses : null,
+      castIconGuids: effectiveCastIconGuids(effectSettings.castMode, players, selected, bosses),
       healText: healText.size > 0 ? healText : null,
       ...DEFAULT_EFFECT_OPTIONS,
       filterGuids: effectSettings.onlySelected ? selected : null,
@@ -227,10 +283,10 @@ export default function MapView3D({
       showHeals: effectSettings.heals,
       showOverheal: effectSettings.overheal,
     };
-  }, [bossKey, effectSettings, selectedKey, tankKey]);
+  }, [bossKey, effectSettings, playerKey, selectedKey, tankKey]);
 
-  // Spell icons float over selected players and bosses while they cast.
-  const castGuids = effectSettings.enabled && effectSettings.casts ? effectOptions.castIconGuids : null;
+  // Spell icons float over the mode-picked players and bosses while they cast.
+  const castGuids = effectSettings.enabled ? effectOptions.castIconGuids : null;
   const castSpellIds = useMemo(() => {
     if (!effects || !castGuids) return [];
     const ids = new Set<number>();
@@ -309,9 +365,14 @@ export default function MapView3D({
             <button type="button" aria-pressed={effectSettings.onlySelected} onClick={() => updateEffectSettings({ onlySelected: !effectSettings.onlySelected })} title="Only show effects involving the selected players" className={toggleClass(effectSettings.onlySelected)}>
               Only selected
             </button>
-            <button type="button" aria-pressed={effectSettings.casts} onClick={() => updateEffectSettings({ casts: !effectSettings.casts })} title="Spell icons above selected players and bosses while they cast" className={toggleClass(effectSettings.casts)}>
-              Casts
-            </button>
+            <span role="group" aria-label="Cast icons" className="flex items-center gap-0.5">
+              <span className="text-muted-foreground">Casts</span>
+              {CAST_MODES.map((mode) => (
+                <button key={mode.value} type="button" aria-pressed={effectSettings.castMode === mode.value} onClick={() => updateEffectSettings({ castMode: mode.value })} title={mode.title} className={toggleClass(effectSettings.castMode === mode.value)}>
+                  {mode.label}
+                </button>
+              ))}
+            </span>
             <select
               aria-label="Effect density"
               title="Maximum effects drawn at once"

@@ -25,3 +25,6 @@ dist-ssr
 
 *storybook.log
 storybook-static
+
+# Local dev-only map manifest overlay (VITE_MAP_MANIFEST_OVERLAY)
+public/dev-manifest/

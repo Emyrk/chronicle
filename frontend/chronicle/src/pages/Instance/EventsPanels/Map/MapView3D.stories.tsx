@@ -4,11 +4,15 @@ import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/reac
 import { SyncModeProvider, useSyncModeContext } from "../../SyncModeContext";
 import { kreshReal } from "./fixtures/kreshReal";
 import { loadMapFixture, type LoadedMapFixture } from "./fixtures/mapFixture";
+import type { InstanceUnit, KillType, WoWHeroClasses } from "@/api/typesGenerated";
 import type { WoWSpell } from "@/api/wowdb";
+import type { WowMapInstance, WowMapManifest, WowMapMeshInstance } from "@/pages/Technical/mapGallery";
+import type { PanelContext } from "../types";
 import { BOSS_MINI_SLUGS } from "./bossMinis";
-import type { MapPositionSample } from "./map.processor";
-import type { MapHealthSample } from "./map.processor";
+import { dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
+import type { MapHealthSample, MapPositionSample, MapResult } from "./map.processor";
 import { clampViewport, fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt, selectHealthBars, unitFocusBounds, type MapPoint } from "./mapModel";
+import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
 import MapView3D from "./MapView3D";
 import type { MapViewRequest } from "./MapView2D";
 import { addEffectEvent, createEncounterEffects, isDeadAt, type EncounterEffects, type ReplayEffectEvent } from "./replayEffects";
@@ -219,6 +223,35 @@ const BOSS_ENTRY = 3653;
 // The boss faces the tanks along -x; the raid walks in from that side.
 const TANK_SIDE = Math.PI;
 const BOSS_TURN_RATE = 1.2; // radians per second
+// How far from the boss the raid starts its walk in.
+const ENTRANCE_DISTANCE = 36;
+
+/**
+ * Where the fight happens: the boss's world position and map, and the
+ * entrance the raid walks in from, which also puts the tanks on that side.
+ * The default is the synthetic [0, 100] world; RuinsMesh use real
+ * dungeon coordinates on the mesh.
+ */
+interface FightWorld {
+  mapId: number;
+  boss: { x: number; y: number };
+  entrance: { x: number; y: number };
+  bossName: string;
+  bossEntry: number;
+}
+
+const SYNTHETIC_WORLD: FightWorld = {
+  mapId: 1,
+  boss: BOSS_POSITION,
+  entrance: { x: BOSS_POSITION.x - ENTRANCE_DISTANCE, y: BOSS_POSITION.y },
+  bossName: "Kresh",
+  bossEntry: BOSS_ENTRY,
+};
+
+// Turns the roster's angles (tanks at TANK_SIDE) so the tanks face the entrance.
+function fightRotation(world: FightWorld): number {
+  return Math.atan2(world.entrance.y - world.boss.y, world.entrance.x - world.boss.x) - TANK_SIDE;
+}
 
 const MELEE_ABILITY: Record<string, { spellId: number; spellName: string }> = {
   warrior: { spellId: 78, spellName: "Heroic Strike" },
@@ -309,10 +342,16 @@ function dodgesAoe(member: FightMember, members: FightMember[]): boolean {
   return sorted.slice(0, 2).includes(member);
 }
 
-function memberPositions(member: FightMember, index: number, dodges: boolean): MapPositionSample[] {
+function memberPositions(member: FightMember, index: number, dodges: boolean, world: FightWorld = SYNTHETIC_WORLD): MapPositionSample[] {
   const positions: MapPositionSample[] = [];
+  const rotation = fightRotation(world);
+  const angle = member.angle + rotation;
   // Everyone starts in a loose pack at the entrance, behind the healers.
-  const start = { x: BOSS_POSITION.x - 36 + (index % 3) * 1.5, y: BOSS_POSITION.y + ((index % 7) - 3) * 1.8 };
+  const pack = { x: (index % 3) * 1.5, y: ((index % 7) - 3) * 1.8 };
+  const start = {
+    x: world.entrance.x + Math.cos(rotation) * pack.x - Math.sin(rotation) * pack.y,
+    y: world.entrance.y + Math.sin(rotation) * pack.x + Math.cos(rotation) * pack.y,
+  };
   // Tanks run in first; the rest follow.
   const arrive = member.role === "tank" ? PULL_END_MS * 0.6 : PULL_END_MS;
   for (let t = 0; t <= FIGHT_MS; t += FIGHT_SAMPLE_MS) {
@@ -323,8 +362,8 @@ function memberPositions(member: FightMember, index: number, dodges: boolean): M
     }
     const sway = member.role === "tank" || member.role === "melee" ? 0.25 : 0.6;
     const slot = {
-      x: BOSS_POSITION.x + Math.cos(member.angle) * radius + jitter(index, t, sway),
-      y: BOSS_POSITION.y + Math.sin(member.angle) * radius + jitter(index + 11, t, sway),
+      x: world.boss.x + Math.cos(angle) * radius + jitter(index, t, sway),
+      y: world.boss.y + Math.sin(angle) * radius + jitter(index + 11, t, sway),
     };
     const progress = smoothstep(t / arrive);
     const x = start.x + (slot.x - start.x) * progress;
@@ -333,33 +372,33 @@ function memberPositions(member: FightMember, index: number, dodges: boolean): M
       timestampMs: t,
       x,
       y,
-      mapId: 1,
+      mapId: world.mapId,
       facing: progress < 1
         ? Math.atan2(slot.y - start.y, slot.x - start.x)
-        : Math.atan2(BOSS_POSITION.y - y, BOSS_POSITION.x - x),
+        : Math.atan2(world.boss.y - y, world.boss.x - x),
     });
   }
   return positions;
 }
 
 // Stationary; turns at a limited rate to face the main tank.
-function bossPositions(mainTank: MapPositionSample[]): MapPositionSample[] {
+function bossPositions(mainTank: MapPositionSample[], world: FightWorld = SYNTHETIC_WORLD): MapPositionSample[] {
   const positions: MapPositionSample[] = [];
   let facing = 0;
   for (let t = 0; t <= FIGHT_MS; t += FIGHT_SAMPLE_MS) {
     const tank = latestPositionAt(mainTank, t);
     if (tank && t < BOSS_DEATH_MS) {
-      const want = Math.atan2(tank.y - BOSS_POSITION.y, tank.x - BOSS_POSITION.x);
+      const want = Math.atan2(tank.y - world.boss.y, tank.x - world.boss.x);
       const delta = Math.atan2(Math.sin(want - facing), Math.cos(want - facing));
       const step = BOSS_TURN_RATE * (FIGHT_SAMPLE_MS / 1000);
       facing += Math.max(-step, Math.min(step, delta));
     }
-    positions.push({ timestampMs: t, ...BOSS_POSITION, mapId: 1, facing });
+    positions.push({ timestampMs: t, ...world.boss, mapId: world.mapId, facing });
   }
   return positions;
 }
 
-function bossFightUnits(size: number): SyntheticUnit[] {
+function bossFightUnits(size: number, world: FightWorld = SYNTHETIC_WORLD): SyntheticUnit[] {
   const members = fightMembers(size);
   const classCount: Record<string, number> = {};
   const units: SyntheticUnit[] = members.map((member, index) => {
@@ -370,10 +409,10 @@ function bossFightUnits(size: number): SyntheticUnit[] {
       name: member.role === "tank" ? `${name} (tank)` : member.role === "healer" ? `${name} (heals)` : name,
       kind: "player",
       color: `var(--color-class-${member.cls})`,
-      positions: memberPositions(member, index, dodgesAoe(member, members)),
+      positions: memberPositions(member, index, dodgesAoe(member, members), world),
     };
   });
-  units.push({ guid: "Boss", name: "Kresh", kind: "hostile", color: "#fb7185", entry: BOSS_ENTRY, positions: bossPositions(units[0].positions) });
+  units.push({ guid: "Boss", name: world.bossName, kind: "hostile", color: "#fb7185", entry: world.bossEntry, positions: bossPositions(units[0].positions, world) });
   return units;
 }
 
@@ -773,10 +812,26 @@ function WithSpellIcons({ children }: { children: React.ReactNode }) {
 // SyncModeProvider drives the cursor from the pull to the kill on a loop.
 const KRESH_LOOP_PAUSE_MS = 1_000;
 
-function KreshRealPlayer({ fixture }: { fixture: LoadedMapFixture }) {
+// Replays a loaded fixture (the real Kresh kill, or a synthetic encounter
+// built in its shape) through the production useMapScene, looping.
+function FixturePlayer({ fixture, mesh = false }: { fixture: LoadedMapFixture; mesh?: boolean }) {
+  const { instance } = fixture.props.context;
   const sync = useSyncModeContext();
   const { enabled, isPlaying, currentTimestamp, enable, setEncounterBounds, setTimestamp, play } = sync;
-  const scene = useMapScene(fixture.props);
+  // As Map.tsx does with "3D map" on: units project with the pure world
+  // transform once the mesh has loaded; the tiles (calibrated) stay otherwise.
+  const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
+  const scene = useMapScene(fixture.props, { rawDungeonProjection: mesh && meshState === "ready" });
+  const meshEntry = mesh && scene.status === "ready" ? scene.mesh : null;
+  const meshUrl = meshEntry && instance.iconBaseUrl ? dungeonMeshUrl(meshEntry, instance.iconBaseUrl) : null;
+  const dungeonMesh = useMemo((): DungeonMeshRequest | null =>
+    meshEntry && meshUrl ? { url: meshUrl, bounds: meshEntry.bounds, liquid: dungeonMeshLiquid(meshEntry) } : null,
+  [meshEntry, meshUrl]);
+  const focusCentre = scene.status === "ready" ? scene.focusCentre : null;
+  const fitZoom = scene.status === "ready" ? scene.autoFit?.zoom ?? null : null;
+  const focus = useMemo((): MapSceneFocus | null =>
+    focusCentre && fitZoom !== null ? { centre: focusCentre, zoom: fitZoom } : null,
+  [fitZoom, focusCentre]);
 
   useEffect(() => {
     enable();
@@ -818,12 +873,16 @@ function KreshRealPlayer({ fixture }: { fixture: LoadedMapFixture }) {
           bossGuids={scene.bossGuids}
           tankGuids={scene.tankGuids}
           onUnavailable={() => console.warn("WebGL unavailable")}
+          dungeonMesh={dungeonMesh}
+          onDungeonMeshState={setMeshState}
+          focus={focus}
         />
       ) : (
         <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{scene.title}: {scene.detail}</div>
       )}
       <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-white/80">
-        {kreshReal.encounter.name} {elapsed.toFixed(1)}s
+        {instance.encounters[0]?.name} {elapsed.toFixed(1)}s
+        {dungeonMesh && meshState !== "ready" && <span className="ml-1.5 text-amber-200/80">cave {meshState}</span>}
       </div>
     </div>
   );
@@ -834,24 +893,171 @@ function KreshRealPlayer({ fixture }: { fixture: LoadedMapFixture }) {
 // see none, so no cast icons or spell names.
 const KRESH_UNSELECTED = "0x0000120C006422B6";
 
-function KreshRealReplay({ selectPlayers }: { selectPlayers: boolean }) {
+// `instances[].mesh` for Wailing Caverns as frontend/imagecache/meshes/forever/
+// manifest.meshes.json publishes it: bounds and z from the render pipeline's
+// height.json (see docs/wow-map-assets.md for the axis conversion).
+const WC_MESH: WowMapMeshInstance = {
+  path: "3d/wailing-caverns-open-top.glb",
+  bounds: { minX: -389.07001, maxX: 191.6667, minY: -370.83331, maxY: 538.3512 },
+  zMin: -119.1605,
+  zMax: 56.4689,
+  frame: "wow-yup-mirrored-x",
+};
+
+function KreshRealReplay({ selectPlayers, mesh = false }: { selectPlayers: boolean; mesh?: boolean }) {
   const [fixture] = useState(() => {
     const loaded = loadMapFixture(kreshReal, { selectPlayers });
     if (selectPlayers) (loaded.props.context.entitySelection.playerIds as Set<string>).delete(KRESH_UNSELECTED);
     return loaded;
   });
   // Seed the artwork manifest so the scene needs no fetch; only tiles and
-  // boss-mini textures load from the icon CDN.
+  // boss-mini textures load from the icon CDN. The mesh story adds the
+  // Wailing Caverns mesh entry the published manifest carries (the fixture
+  // predates it): the toggle and the mesh's placement come from it alone.
   const [queryClient] = useState(() => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    client.setQueryData(["wow-map-manifest", kreshReal.instance.iconBaseUrl], fixture.manifest);
+    const manifest = mesh
+      ? {
+        ...fixture.manifest,
+        instances: fixture.manifest.instances.map((instance) => (instance.mapID === kreshReal.encounter.mapId
+          ? { ...instance, mesh: WC_MESH }
+          : instance)),
+      }
+      : fixture.manifest;
+    client.setQueryData(["wow-map-manifest", kreshReal.instance.iconBaseUrl], manifest);
     return client;
   });
   return (
     <QueryClientProvider client={queryClient}>
       <WithSpellIcons>
         <SyncModeProvider>
-          <KreshRealPlayer fixture={fixture} />
+          <FixturePlayer fixture={fixture} mesh={mesh} />
+        </SyncModeProvider>
+      </WithSpellIcons>
+    </QueryClientProvider>
+  );
+}
+
+// --- Mesh-only instances: the BossFight group on the real mesh, at real coordinates. ---
+// Synthetic timestamps are offsets from the pull; the sync clock wants dates.
+const MESH_FIGHT_PULL_MS = Date.parse("2026-10-14T20:00:00Z");
+
+/** A BossFight on a mesh-only instance: where it happens and what to call it. */
+interface MeshFight {
+  instance: WowMapInstance;
+  world: FightWorld;
+  encounterId: string;
+}
+
+// Ruins of Lordaeron (map 2999, Forever): the first terrain mesh, open sky.
+// It is absent from the artwork manifest, so it is mesh-only; the
+// liquid keeps the GLB's translucent blue (lake and palace pools are water).
+const RUINS_MESH: WowMapMeshInstance = {
+  path: "3d/ruins-of-lordaeron-open-top.glb",
+  bounds: { minX: 1333.3337, maxX: 1900.0, minY: -33.3333, maxY: 500.0 },
+  zMin: -13.6235,
+  zMax: 195.9512,
+  frame: "wow-yup-mirrored-x",
+};
+const RUINS_INSTANCE: WowMapInstance = { mapID: 2999, name: "Ruins of Lordaeron", instanceType: 0, directory: "", floors: [], mesh: RUINS_MESH };
+// Floor read off the mesh: the flat paved courtyard west of the
+// palace at z ≈ 61.6, clear of buildings within 40 yd of the boss; the raid
+// walks in from the west. The boss entry is a stand-in (no Ruins boss
+// miniature), the name is a placeholder.
+const RUINS_WORLD: FightWorld = {
+  mapId: 2999,
+  boss: { x: 1460, y: 270 },
+  entrance: { x: 1424, y: 270 },
+  bossName: "Courtyard Boss",
+  bossEntry: 0,
+};
+const RUINS_FIGHT: MeshFight = { instance: RUINS_INSTANCE, world: RUINS_WORLD, encounterId: "ruins-courtyard" };
+
+/**
+ * The BossFight encounter on a mesh-only instance, in the shape capture-kresh-fixture
+ * produces, so it runs through the production useMapScene like the real log:
+ * the mesh-only instance resolves from the (seeded) manifest, its mesh extent
+ * is the ground and the units project with the pure world transform.
+ */
+function meshFightFixture(players: number, { instance, world, encounterId }: MeshFight): LoadedMapFixture {
+  const units = bossFightUnits(players, world);
+  const shift = <T extends { timestampMs: number }>(samples: T[]): T[] => samples.map((sample) => ({ ...sample, timestampMs: sample.timestampMs + MESH_FIGHT_PULL_MS }));
+  const effects = createEncounterEffects();
+  for (const event of bossFightEffects(players).events) addEffectEvent(effects, { ...event, timestampMs: event.timestampMs + MESH_FIGHT_PULL_MS });
+  const startMs = MESH_FIGHT_PULL_MS;
+  const endMs = MESH_FIGHT_PULL_MS + FIGHT_MS;
+  const result: MapResult = {
+    encounters: new Map([[encounterId, {
+      encounterId,
+      startMs,
+      endMs,
+      positionsByUnit: new Map(units.map((unit) => [unit.guid, shift(unit.positions)])),
+      healthByUnit: new Map([...bossFightHealth(players)].map(([guid, samples]) => [guid, shift(samples)])),
+      effects,
+    }]]),
+  };
+  const classCount: Record<string, number> = {};
+  const roster = Object.fromEntries(fightMembers(players).map((member) => {
+    const n = (classCount[member.cls] = (classCount[member.cls] ?? 0) + 1);
+    return [member.guid, { name: `${member.cls[0].toUpperCase()}${member.cls.slice(1)} ${n}`, class: member.cls.toUpperCase() as WoWHeroClasses, race: "Unknown" as const, level: 60 }];
+  }));
+  const encounter = {
+    id: encounterId,
+    name: world.bossName,
+    boss: true,
+    mapId: world.mapId,
+    kill_type: "clean" as KillType,
+    start_time: new Date(startMs).toISOString(),
+    end_time: new Date(endMs).toISOString(),
+    enemies: [{ id: "Boss", name: world.bossName, boss: true, damageTaken: 0, damageDone: 0, periods: [] }],
+  };
+  const context: PanelContext = {
+    instance: {
+      id: `${encounterId}-synthetic`,
+      name: instance.name,
+      iconBaseUrl: kreshReal.instance.iconBaseUrl,
+      startTime: encounter.start_time,
+      endTime: encounter.end_time,
+      capabilities: ["unit-position"],
+      players: roster,
+      units: { Boss: { name: world.bossName, entry: world.bossEntry } } as Record<string, InstanceUnit>,
+      encounters: [encounter],
+    },
+    selectedEncounterIds: [encounterId],
+    entitySelection: { enemyIds: new Set(), playerIds: new Set() },
+  };
+  const manifest: WowMapManifest = { ...kreshReal.manifest, instances: [instance] };
+  return {
+    props: {
+      result,
+      totalEvents: effects.events.length,
+      processingTimeMs: null,
+      durationMs: FIGHT_MS,
+      perSecond: false,
+      checkboxChecked: false,
+      loading: false,
+      processing: false,
+      error: null,
+      context,
+    },
+    manifest,
+    startMs,
+    endMs,
+  };
+}
+
+function MeshFightReplay({ players, fight }: { players: number; fight: MeshFight }) {
+  const [fixture] = useState(() => meshFightFixture(players, fight));
+  const [queryClient] = useState(() => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(["wow-map-manifest", fixture.props.context.instance.iconBaseUrl], fixture.manifest);
+    return client;
+  });
+  return (
+    <QueryClientProvider client={queryClient}>
+      <WithSpellIcons>
+        <SyncModeProvider>
+          <FixturePlayer fixture={fixture} mesh />
         </SyncModeProvider>
       </WithSpellIcons>
     </QueryClientProvider>
@@ -1051,6 +1257,29 @@ export const KreshReal: Story = {
  */
 export const KreshRealSelected: Story = {
   render: () => <KreshRealReplay selectPlayers />,
+};
+
+/**
+ * The real Kresh kill with "3D map" on: the Wailing Caverns mesh replaces the
+ * tiles and the raid stands on the cave floor at its real positions, with the
+ * camera locked to the fight. The mesh loads from the icon CDN
+ * (`forever/maps/3d/`); offline the load fails quietly and the story shows the
+ * tiles, as the panel does.
+ */
+export const KreshRealMesh: Story = {
+  render: () => <KreshRealReplay selectPlayers={false} mesh />,
+};
+
+/**
+ * Ruins of Lordaeron, the first terrain mesh: open sky, the walled city and
+ * the palace, on a mesh-only instance (the liquid stays the GLB's blue). The
+ * BossFight group fights on the courtyard west of the palace at real floor
+ * coordinates. The mesh loads from the icon CDN (`forever/maps/3d/`); offline
+ * the units stand on an empty ground.
+ */
+export const RuinsMesh: Story = {
+  args: { players: 10, playbackSpeed: 1 },
+  render: ({ players }) => <MeshFightReplay players={players} fight={RUINS_FIGHT} />,
 };
 
 /**

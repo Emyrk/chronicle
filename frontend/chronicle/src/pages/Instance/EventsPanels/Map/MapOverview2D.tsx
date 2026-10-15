@@ -4,17 +4,16 @@ import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Map as MapIcon, Ro
 import type { Encounter } from "../../InstancePage";
 import {
   mapAssetUrl,
-  mapManifestUrl,
   overlayTilePlacement,
   tilePlacement,
-  isSupportedMapManifestFormat,
   type WowMapInstanceFloor,
   type WowMapLayer,
   type WowMapRenderedInstance,
-  type WowMapManifest,
   type WowMapOverlay,
 } from "@/pages/Technical/mapGallery";
+import { fetchMapManifest } from "@/pages/Technical/mapManifest";
 import type { PanelRenderProps } from "../types";
+import { isMeshOnlyInstance } from "./dungeonMeshes";
 import type { MapEncounterPositions, MapPositionSample, MapResult } from "./map.processor";
 import {
   clampMapCamera,
@@ -39,15 +38,7 @@ function useMapManifest(iconBaseUrl: string | undefined) {
     queryKey: ["wow-map-manifest", iconBaseUrl],
     enabled: Boolean(iconBaseUrl),
     staleTime: 60 * 60 * 1000,
-    queryFn: async () => {
-      const response = await fetch(mapManifestUrl(iconBaseUrl!));
-      if (!response.ok) throw new Error(`Map manifest request failed with ${response.status}`);
-      const manifest = await response.json() as WowMapManifest;
-      if (!isSupportedMapManifestFormat(manifest.format)) {
-        throw new Error(`Unsupported map manifest format: ${manifest.format || "missing"}`);
-      }
-      return manifest;
-    },
+    queryFn: () => fetchMapManifest(iconBaseUrl!),
   });
 }
 
@@ -474,6 +465,9 @@ export function MapOverview2D(props: PanelRenderProps<MapResult>) {
     return <MapMessage title="No position telemetry" detail="The selected encounters do not contain unit-position data." />;
   }
   if (!artwork) return <MapMessage title={`Map ${artworkMapId} is unavailable`} detail="The active dataset does not publish artwork or rendered geometry for this world map." />;
+  if (artwork.kind === "instance" && isMeshOnlyInstance(artwork.instance)) {
+    return <MapMessage title="No map artwork for this instance" detail={`${artwork.instance.name} has no 2D map; it is 3D only. Select a single encounter to open its 3D Replay Map.`} />;
+  }
   if (!canvas) return <MapMessage title="Map assets unavailable" detail="No renderable map layer was published." />;
   if (routes.length === 0) return <MapMessage title="Route unavailable" detail="The selected encounters do not contain player positions that can be projected onto this map." />;
 

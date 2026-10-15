@@ -49,12 +49,33 @@ jq -e '.instances[0].rendered == null and .instances[0].styled == null' "$MOCK_M
 MAPS_UPLOAD_MODE=styled ./upload-maps-r2.sh >/dev/null
 jq -e '.instances[0].styled.path == "render-styled/43-wailing-caverns-v2.jpeg"' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
 
+mkdir -p "${tmp}/meshes"
+cat > "${tmp}/meshes/manifest.meshes.json" <<'JSON'
+{"format":"chronicle-wow-map-art-v2","target":{"product":"wow_classic_beta"},"instances":[{"mapID":43,"mesh":{"path":"3d/wailing-caverns-open-top.glb","bounds":{"minX":-389.07,"maxX":191.667,"minY":-370.833,"maxY":538.351},"zMin":-119.16,"zMax":56.469,"frame":"wow-yup-mirrored-x"}}]}
+JSON
+before="$(sha256sum "$MOCK_MAP_REMOTE/manifest.json")"
+if MESHES_DIR="${tmp}/meshes" MAPS_UPLOAD_MODE=meshes ./upload-maps-r2.sh >"${tmp}/failure.log" 2>&1; then
+  echo "mesh manifest without its GLB unexpectedly published" >&2
+  exit 1
+fi
+[[ "$before" == "$(sha256sum "$MOCK_MAP_REMOTE/manifest.json")" ]]
+printf 'glTF' > "${tmp}/meshes/wailing-caverns-open-top.glb"
+# A checkout without generated maps still publishes the mesh layer.
+MAPS_DIR="${tmp}/no-generated-maps" MESHES_DIR="${tmp}/meshes" MAPS_UPLOAD_MODE=meshes ./upload-maps-r2.sh >/dev/null
+jq -e '.instances[0].mesh.path == "3d/wailing-caverns-open-top.glb" and .instances[0].mesh.frame == "wow-yup-mirrored-x" and .instances[0].mesh.bounds.minX == -389.07 and .instances[0].styled.path == "render-styled/43-wailing-caverns-v2.jpeg"' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
+[[ -f "$MOCK_MAP_REMOTE/3d/wailing-caverns-open-top.glb" ]]
+# The manifest-only mode needs no GLB beside the manifest and uploads none.
+rm "${tmp}/meshes/wailing-caverns-open-top.glb" "$MOCK_MAP_REMOTE/3d/wailing-caverns-open-top.glb"
+MESHES_DIR="${tmp}/meshes" MAPS_UPLOAD_MODE=meshes-manifest ./upload-maps-r2.sh >/dev/null
+[[ ! -e "$MOCK_MAP_REMOTE/3d/wailing-caverns-open-top.glb" ]]
+jq -e '.instances[0].mesh.path == "3d/wailing-caverns-open-top.glb"' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
+
 printf 'png' > "${MAPS_DIR}/render/43.png"
 cat > "${MAPS_DIR}/manifest.rendered.json" <<'JSON'
 {"format":"chronicle-wow-map-art-v2","target":{"product":"wow_classic_beta","build":"1.0","region":"us","locale":"enUS"},"instances":[{"mapID":43,"rendered":{"path":"render/43.png","width":1200,"height":800,"source":"wmo","bounds":{"minX":0,"maxX":1,"minY":0,"maxY":1}}}]}
 JSON
 MAPS_UPLOAD_MODE=rendered ./upload-maps-r2.sh >/dev/null
-jq -e '.instances[0].rendered.path == "render/43.png" and .instances[0].styled.path == "render-styled/43-wailing-caverns-v2.jpeg"' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
+jq -e '.instances[0].rendered.path == "render/43.png" and .instances[0].styled.path == "render-styled/43-wailing-caverns-v2.jpeg" and .instances[0].mesh.path == "3d/wailing-caverns-open-top.glb"' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
 
 # Hand-uploaded assets are already remote; publishing either source only merges JSON.
 mkdir -p "$MOCK_MAP_REMOTE/renders" "$MOCK_MAP_REMOTE/3d"
@@ -64,7 +85,7 @@ MAPS_UPLOAD_MODE=renders ./upload-maps-r2.sh >/dev/null
 jq -e '([.instances[].renders.path] | sort) == (["renders/RFC-shaded.png", "renders/RoL-shaded-aligned.png", "renders/WC-shaded-water.png"] | sort) and .instances[0].rendered.path == "render/43.png"' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
 jq -e '([.instances[].mapID] | sort) == [43,389,2999] and (.instances[] | select(.mapID == 389) | .name == "Ragefire Chasm" and .floors == [] and ."3d" == null)' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
 MAPS_UPLOAD_MODE=3d ./upload-maps-r2.sh >/dev/null
-jq -e '([.instances[]."3d".path] | sort) == (["3d/ragefire-chasm-open-top.glb", "3d/ruins-of-lordaeron-open-top.glb", "3d/wailing-caverns-open-top.glb"] | sort) and .instances[0].renders.path == "renders/WC-shaded-water.png" and .instances[0].styled != null' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
+jq -e '([.instances[]."3d".path] | sort) == (["3d/ragefire-chasm-open-top.glb", "3d/ruins-of-lordaeron-open-top.glb", "3d/wailing-caverns-open-top.glb"] | sort) and .instances[0].renders.path == "renders/WC-shaded-water.png" and .instances[0].styled != null and .instances[0].mesh.path == "3d/wailing-caverns-open-top.glb"' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
 [[ -f "$MOCK_MAP_REMOTE/manifest.renders.json" && -f "$MOCK_MAP_REMOTE/manifest.3d.json" ]]
 
 # Regenerating native art must not drop floorless instances from manual layers.

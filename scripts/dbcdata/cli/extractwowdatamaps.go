@@ -85,12 +85,12 @@ type wowMapInstance struct {
 	Floors       []wowMapInstanceFloor   `json:"floors"`
 	Rendered     *wowMapRenderedInstance `json:"rendered,omitempty"`
 	Styled       *wowMapRenderedInstance `json:"styled,omitempty"`
+	Mesh         *wowMapMeshInstance     `json:"mesh,omitempty"`
 	Renders      *wowMapManualRender     `json:"renders,omitempty"`
 	Model3D      *wowMap3DAsset          `json:"3d,omitempty"`
 }
 
-// Manually published assets can be registered without regenerating native maps.
-// Bounds are optional until the artwork is calibrated for replay overlays.
+// Manually published assets may be listed before their replay placement is calibrated.
 type wowMapManualRender struct {
 	Path   string             `json:"path"`
 	Width  int32              `json:"width"`
@@ -100,6 +100,30 @@ type wowMapManualRender struct {
 
 type wowMap3DAsset struct {
 	Path string `json:"path"`
+}
+
+// wowMapMeshFrame is the only glTF axis convention the frontend places:
+// Y-up with X mirrored, glTF (x, y, z) = (-wow_x, wow_z, wow_y).
+const wowMapMeshFrame = "wow-yup-mirrored-x"
+
+// wowMapMeshInstance announces a dungeon's 3D mesh (a glTF binary under
+// meshes/) with the world extent that places it, so the frontend needs no
+// artwork or rendered layer to use it.
+type wowMapMeshInstance struct {
+	Path   string            `json:"path"`
+	Bounds wowMapFloorBounds `json:"bounds"`
+	ZMin   float64           `json:"zMin"`
+	ZMax   float64           `json:"zMax"`
+	Frame  string            `json:"frame"`
+	// Liquid tints the mesh's `liquid_*` planes (lava, slime); absent, the
+	// frontend keeps the GLB's own translucent water.
+	Liquid *wowMapMeshLiquid `json:"liquid,omitempty"`
+}
+
+// wowMapMeshLiquid is a CSS hex colour (#rrggbb) and an opacity in (0, 1].
+type wowMapMeshLiquid struct {
+	Color   string  `json:"color"`
+	Opacity float64 `json:"opacity"`
 }
 
 type wowMapRenderedInstance struct {

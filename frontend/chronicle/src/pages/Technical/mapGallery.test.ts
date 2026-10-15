@@ -143,3 +143,40 @@ describe("map gallery rendering model", () => {
     ]);
   });
 });
+
+describe("mesh-only instances", () => {
+  const mesh = {
+    path: "3d/ragefire-chasm-open-top.glb",
+    bounds: { minX: -416.2582, maxX: 102.9279, minY: -108.4728, maxY: 275.3513 },
+    zMin: -66.1637,
+    zMax: 59.4058,
+    frame: "wow-yup-mirrored-x",
+    liquid: { color: "#d66020", opacity: 0.85 },
+  };
+  const manifest: WowMapManifest = {
+    format: "chronicle-wow-map-art-v2",
+    target: { product: "wow_classic_beta", build: "1.60.1.70205", region: "us", locale: "enUS" },
+    maps: [],
+    instances: [
+      { mapID: 389, name: "Ragefire Chasm", instanceType: 0, directory: "", floors: [], mesh },
+      {
+        mapID: 43,
+        name: "Wailing Caverns",
+        instanceType: 1,
+        directory: "WailingCaverns",
+        floors: [{ floor: 1, width: 1002, height: 668, tileWidth: 256, tileHeight: 256, tiles: [{ row: 0, column: 0, fileDataID: 1, path: "original/1.webp" }] }],
+        mesh: { ...mesh, path: "3d/wailing-caverns-open-top.glb", liquid: undefined },
+      },
+    ],
+  };
+
+  it("lists an instance that has only a mesh, and not a mesh beside artwork", () => {
+    const items = mapGalleryItems(manifest);
+    expect(items.map((item) => item.key)).toEqual(["mesh-389", "instance-43-1"]);
+    expect(items[0]).toMatchObject({ kind: "mesh", instance: { name: "Ragefire Chasm" }, mesh });
+  });
+
+  it("lists nothing for an instance with neither artwork nor mesh", () => {
+    expect(mapGalleryItems({ ...manifest, instances: [{ mapID: 389, name: "Ragefire Chasm", instanceType: 0, directory: "", floors: [] }] })).toEqual([]);
+  });
+});

@@ -2058,11 +2058,12 @@ func RuinsOfLordaeronHostiles() map[uint32]Identity {
 	LoadBosses(hostile, map[uint32]string{
 		250483: "Witherfang",
 		250631: "The Abandoned",
-		250657: "Rath'Mael",
-		250660: "The Baron",
+		250657: "Rath'mael",
 		256035: "Viktor the Vile",
 		256097: "Bjork",
 	})
+	// The Butcher encounter is fought against a unit named "The Baron".
+	hostile[250660] = Identity{Affiliation: types.AffiliationHostile, Name: "The Baron", EncounterName: "The Butcher", Boss: true}
 	return hostile
 }
 

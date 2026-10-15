@@ -1,0 +1,39 @@
+{
+  "format": "chronicle-wow-map-art-v2",
+  "target": {
+    "product": "wow_classic_beta"
+  },
+  "instances": [
+    {
+      "mapID": 43,
+      "mesh": {
+        "path": "3d/wailing-caverns-open-top.glb",
+        "bounds": {
+          "minX": -389.07001,
+          "maxX": 191.6667,
+          "minY": -370.83331,
+          "maxY": 538.3512
+        },
+        "zMin": -119.1605,
+        "zMax": 56.4689,
+        "frame": "wow-yup-mirrored-x"
+      }
+    },
+    {
+      "mapID": 2999,
+      "name": "Ruins of Lordaeron",
+      "mesh": {
+        "path": "3d/ruins-of-lordaeron-open-top.glb",
+        "bounds": {
+          "minX": 1333.3337,
+          "maxX": 1900.0,
+          "minY": -33.3333,
+          "maxY": 500.0
+        },
+        "zMin": -13.6235,
+        "zMax": 195.9512,
+        "frame": "wow-yup-mirrored-x"
+      }
+    }
+  ]
+}

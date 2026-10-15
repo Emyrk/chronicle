@@ -33,6 +33,17 @@ const WHEEL_ZOOM_SPEED = 0.0015;
 const WHEEL_REPORT_DELAY_MS = 150;
 
 function MapTiles({ ground: { canvas, iconBaseUrl, overlays } }: { ground: MapSceneGround }) {
+  if ("source" in canvas) {
+    // A rendered instance map is one image covering the whole canvas.
+    return (
+      <img
+        src={mapAssetUrl(iconBaseUrl, canvas.path)}
+        alt=""
+        draggable={false}
+        className="pointer-events-none absolute inset-0 size-full select-none object-fill"
+      />
+    );
+  }
   return (
     <>
       {canvas.tiles.map((tile) => (
