@@ -35,6 +35,7 @@ import {
   useRankingsStats,
   useRankingsLeaderboard,
   useRankingsKillTimes,
+  useRankingsClearTimes,
   useRankingsKillTimeLeaderboard,
   useRankingsSuccessRates,
   useRankingsRealms,
@@ -640,6 +641,12 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     queryEnablement.killTimeStats,
   )
 
+  const { data: clearTimeStats = [] } = useRankingsClearTimes(
+    instanceName,
+    periodParam,
+    queryEnablement.killTimeStats,
+  )
+
   const killTimeStats = useMemo(
     () => rawKillTimeStats.filter((stat) => selectedEncounters.has(stat.encounter_name)),
     [rawKillTimeStats, selectedEncounters],
@@ -1137,7 +1144,12 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
         {metric === "killtime" && (
           killTimeSubTab === "boxplot" ? (
-            <KillTimeContent stats={killTimeStats} loading={killTimeStatsLoading} />
+            <div className="space-y-4">
+              {clearTimeStats.length > 0 && (
+                <KillTimeContent stats={clearTimeStats} loading={false} title="Full Clear Time" unit="clears" trimOutliers />
+              )}
+              <KillTimeContent stats={killTimeStats} loading={killTimeStatsLoading} />
+            </div>
           ) : (
             <>
               {/* Encounter selector — kill times only make sense per-boss */}
@@ -1204,6 +1216,13 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 // ── Kill Time Content ────────────────────────────────────────────────────
 
 function formatTime(seconds: number): string {
+  if (seconds >= 3600) {
+    // Full clears: h:mm:ss, whole seconds.
+    const total = Math.round(seconds)
+    const h = Math.floor(total / 3600)
+    const m = Math.floor((total % 3600) / 60)
+    return `${h}:${String(m).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`
+  }
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
   const sWhole = Math.floor(s)
@@ -1212,11 +1231,32 @@ function formatTime(seconds: number): string {
   return `${m}:${String(sWhole).padStart(2, "0")}${fracStr}`
 }
 
-function KillTimeContent({ stats, loading }: { stats: RankingsKillTimeStats[]; loading: boolean }) {
+function KillTimeContent({
+  stats,
+  loading,
+  title = "Kill Time by Encounter",
+  unit = "kills",
+  trimOutliers = false,
+}: {
+  stats: RankingsKillTimeStats[]
+  loading: boolean
+  title?: string
+  /** Plural noun for the sample count in tooltips. */
+  unit?: string
+  /**
+   * Cap the axis at Q3 + 3×IQR so a few runaway runs (e.g. a raid left open
+   * overnight) don't squash the box; whiskers past it run to the edge.
+   */
+  trimOutliers?: boolean
+}) {
   if (loading) return <RankingsLoadingState />
 
-  const scaleMax = Math.max(...stats.map((s) => s.max_secs), 1)
-  const step = scaleMax <= 300 ? 30 : 60
+  const scaleMax = Math.max(
+    ...stats.map((s) => (trimOutliers ? Math.min(s.max_secs, s.q3_secs + 3 * (s.q3_secs - s.q1_secs)) : s.max_secs)),
+    1,
+  )
+  // Smallest clock-friendly step that keeps the axis at a dozen ticks or fewer.
+  const step = [30, 60, 120, 300, 600, 900, 1800, 3600].find((s) => scaleMax / s <= 12) ?? 7200
   const ticks: number[] = []
   for (let v = 0; v <= scaleMax; v += step) ticks.push(v)
   if (ticks[ticks.length - 1] < scaleMax) ticks.push(Math.ceil(scaleMax / step) * step)
@@ -1233,7 +1273,7 @@ function KillTimeContent({ stats, loading }: { stats: RankingsKillTimeStats[]; l
 
   return (
     <div className="rounded-xl border bg-card p-3 sm:p-5">
-      <h3 className="mb-3 text-sm font-medium text-muted-foreground sm:mb-5">Kill Time by Encounter</h3>
+      <h3 className="mb-3 text-sm font-medium text-muted-foreground sm:mb-5">{title}</h3>
       {/* Column header */}
       <div className="hidden items-center gap-3 px-1 pb-1 sm:flex">
         <div className="w-40 shrink-0" />
@@ -1243,7 +1283,7 @@ function KillTimeContent({ stats, loading }: { stats: RankingsKillTimeStats[]; l
       <TooltipProvider>
       <div className="space-y-1.5">
         {stats.map((s) => {
-          const pct = (v: number) => `${(v / axisMax) * 100}%`
+          const pct = (v: number) => `${(Math.min(v, axisMax) / axisMax) * 100}%`
           const iqr = s.q3_secs - s.q1_secs
           return (
             <Tooltip key={s.encounter_name}>
@@ -1297,7 +1337,7 @@ function KillTimeContent({ stats, loading }: { stats: RankingsKillTimeStats[]; l
               >
                 <div className="flex items-center justify-between mb-2.5">
                   <span className="text-xs font-semibold">{s.encounter_name}</span>
-                  <span className="text-[10px] text-muted-foreground">{s.count.toLocaleString()} kills</span>
+                  <span className="text-[10px] text-muted-foreground">{s.count.toLocaleString()} {unit}</span>
                 </div>
                 <div className="space-y-1 text-xs">
                   <TimeStatLine label="Fastest" value={formatTime(s.min_secs)} />
