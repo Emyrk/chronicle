@@ -210,6 +210,22 @@ func (c *Chronicle) initStorage(ctx context.Context) error {
 type UploadMeta struct {
 	Format database.LogFormat
 	Flavor database.WoWFlavor
+	// SourceID is an optional client-chosen identifier for the source file
+	// (X-Chronicle-Source-Id). Re-uploading a file under the same SourceID
+	// replaces the previously uploaded group's contents and reparses it,
+	// rather than creating a second group.
+	SourceID string
+}
+
+// DuplicateUploadError is returned by UploadLogs when the owner has already
+// uploaded a byte-identical file. It carries the existing group and files.
+type DuplicateUploadError struct {
+	Group database.WoWLogGroup
+	Files []database.LogFile
+}
+
+func (e *DuplicateUploadError) Error() string {
+	return fmt.Sprintf("log file already uploaded as log group %s", e.Group.ID)
 }
 
 func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, logType database.LogType, realmID uuid.UUID, meta UploadMeta) (*database.WoWLogGroup, []database.LogFile, error) {
@@ -356,6 +372,37 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, logTyp
 		}
 	}
 
+	if len(hashes) == 1 {
+		existing, err := c.Zed.GetLogFileByOwnerHash(ctx, database.GetLogFileByOwnerHashParams{
+			Owner: cl.Subject,
+			Hash:  hashes[0],
+		})
+		switch {
+		case err == nil:
+			g, err := c.Zed.GetWoWLogGroupByID(ctx, existing.WowLogID)
+			if err != nil {
+				return nil, nil, fmt.Errorf("fetch duplicate log group: %w", err)
+			}
+			return nil, nil, &DuplicateUploadError{Group: g.WoWLogGroup, Files: g.Files}
+		case err != nil && !errors.Is(err, pgx.ErrNoRows):
+			return nil, nil, fmt.Errorf("check duplicate log file: %w", err)
+		}
+
+		if meta.SourceID != "" {
+			groupID, err := c.Zed.GetLogGroupIDBySource(ctx, database.GetLogGroupIDBySourceParams{
+				Owner:    cl.Subject,
+				SourceID: meta.SourceID,
+			})
+			switch {
+			case err == nil:
+				return c.replaceLogFile(ctx, groupID, tmpFiles[0], hashes[0], fileMetas[0].originalSize,
+					fileMetas[0].compressedSize, fileMetas[0].contentEnc, realmID)
+			case !errors.Is(err, pgx.ErrNoRows):
+				return nil, nil, fmt.Errorf("look up log source: %w", err)
+			}
+		}
+	}
+
 	var group database.WoWLogGroup
 	// tmpFiles and hashes are the files that were uploaded now on local disk.
 	err = c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
@@ -392,6 +439,17 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, logTyp
 		})
 		if err != nil {
 			return err
+		}
+
+		if meta.SourceID != "" {
+			err = tx.InsertLogGroupSource(ctx, database.InsertLogGroupSourceParams{
+				LogGroupID: group.ID,
+				Owner:      cl.Subject,
+				SourceID:   meta.SourceID,
+			})
+			if err != nil {
+				return err
+			}
 		}
 
 		// Insert both files
@@ -461,6 +519,51 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, logTyp
 
 	// Both files are now fully uploaded in the database and object storage
 	return &group, dbFiles, nil
+}
+
+// replaceLogFile swaps the contents of an existing single-file log group for a
+// newly uploaded (grown) copy of the same source file and enqueues a reparse.
+// Replacing is used rather than appending because the uploader sends the whole
+// file again; there is no delta to append.
+func (c *Chronicle) replaceLogFile(ctx context.Context, groupID uuid.UUID, src io.Reader, hash string, size int64, compressedSize *int64, contentEnc *string, realmID uuid.UUID) (*database.WoWLogGroup, []database.LogFile, error) {
+	g, err := c.Zed.GetWoWLogGroupByID(ctx, groupID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("fetch log group %s: %w", groupID, err)
+	}
+	if len(g.Files) == 0 {
+		return nil, nil, fmt.Errorf("no files found for log group %s", groupID)
+	}
+	file := g.Files[0]
+
+	contentType := "text/plain;charset=UTF-8"
+	if contentEnc != nil {
+		contentType = "application/gzip"
+	}
+	if _, err := c.Storage.UploadFile(ctx, BucketRaidLogs, c.logPath(file.ID), src, storage.FileOptions{
+		ContentType: ptr.Ref(contentType),
+	}); err != nil {
+		return nil, nil, fmt.Errorf("upload replacement log file: %w", err)
+	}
+
+	err = c.Zed.UpdateLogFileAfterAppend(ctx, database.UpdateLogFileAfterAppendParams{
+		ID:                  file.ID,
+		Hash:                hash,
+		SizeBytes:           size,
+		CompressedSizeBytes: database.Int8(compressedSize),
+		ContentEncoding:     database.Text(contentEnc),
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("update log file record: %w", err)
+	}
+	file.Hash = hash
+	file.SizeBytes = size
+	file.CompressedSizeBytes = database.Int8(compressedSize)
+	file.ContentEncoding = database.Text(contentEnc)
+
+	if _, err := c.EnqueueReParseLog(ctx, groupID, false, false, realmID); err != nil {
+		return nil, nil, fmt.Errorf("enqueue reparse after replace: %w", err)
+	}
+	return &g.WoWLogGroup, []database.LogFile{file}, nil
 }
 
 // AppendServerLog appends new (gzip-compressed) data to an existing log group's

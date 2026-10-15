@@ -87,6 +87,7 @@ type sqlcQuerier interface {
 	DeleteDiscordAnnouncementSource(ctx context.Context, arg DeleteDiscordAnnouncementSourceParams) error
 	DeleteDiscordMembershipGrantCheck(ctx context.Context, userID uuid.UUID) error
 	DeleteEmptyCooldownOverrides(ctx context.Context, datasetID uuid.UUID) error
+	DeleteExpiredDevicePairings(ctx context.Context) (int64, error)
 	DeleteExpiredGuildResourceVisitors(ctx context.Context) error
 	DeleteExpiredOAuthRelayCodes(ctx context.Context) (int64, error)
 	DeleteGearList(ctx context.Context, arg DeleteGearListParams) (int64, error)
@@ -209,6 +210,8 @@ type sqlcQuerier interface {
 	GetDatasetImportSummary(ctx context.Context, datasetID uuid.UUID) (GetDatasetImportSummaryRow, error)
 	GetDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) ([]byte, error)
 	GetDeploymentInfo(ctx context.Context) (DeploymentInfo, error)
+	GetDevicePairingByDeviceCodeHash(ctx context.Context, deviceCodeHash []byte) (DevicePairing, error)
+	GetDevicePairingByUserCode(ctx context.Context, userCode string) (DevicePairing, error)
 	GetDiscordAnnouncement(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error)
 	GetDiscordAnnouncementByRun(ctx context.Context, arg GetDiscordAnnouncementByRunParams) (GuildDiscordLogAnnouncement, error)
 	// Discord raid-log announcements
@@ -276,6 +279,13 @@ type sqlcQuerier interface {
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
 	GetLeaderboardVersionRequirements(ctx context.Context, instanceName string) (LeaderboardVersionRequirement, error)
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)
+	GetLogFileByOwnerHash(ctx context.Context, arg GetLogFileByOwnerHashParams) (LogFile, error)
+	// Answers "do you already have this source id?" before a client sends a body:
+	// the owner's group for the source id plus the largest file the server holds
+	// for it. A source-keyed group has exactly one file, replaced in place as the
+	// log grows (see UpdateLogFileAfterAppend), so the max is that file's size.
+	GetLogGroupBySource(ctx context.Context, arg GetLogGroupBySourceParams) (GetLogGroupBySourceRow, error)
+	GetLogGroupIDBySource(ctx context.Context, arg GetLogGroupIDBySourceParams) (uuid.UUID, error)
 	GetLogGroupInstanceIDByOrdinal(ctx context.Context, arg GetLogGroupInstanceIDByOrdinalParams) (uuid.UUID, error)
 	GetLogInstanceForDiscordAnnouncement(ctx context.Context, id uuid.UUID) (LogInstance, error)
 	// Fetch instance metadata needed for parse scoring.
@@ -327,6 +337,7 @@ type sqlcQuerier interface {
 	GetTimeParseClearTimeMembershipCohort(ctx context.Context, arg GetTimeParseClearTimeMembershipCohortParams) ([]int64, error)
 	GetTimeParseScoreForContract(ctx context.Context, arg GetTimeParseScoreForContractParams) (TimeParseScore, error)
 	GetTimeParseScoringInstance(ctx context.Context, arg GetTimeParseScoringInstanceParams) (GetTimeParseScoringInstanceRow, error)
+	GetUploadDeviceByTokenHash(ctx context.Context, tokenHash string) (UploadDevice, error)
 	GetUploadKey(ctx context.Context, id uuid.UUID) (WowServerUploadKey, error)
 	GetUploadKeyByHash(ctx context.Context, secretHash string) (GetUploadKeyByHashRow, error)
 	GetUserActionBarSlots(ctx context.Context, userID uuid.UUID) (GetUserActionBarSlotsRow, error)
@@ -417,6 +428,7 @@ type sqlcQuerier interface {
 	InsertDataset(ctx context.Context, arg InsertDatasetParams) (Dataset, error)
 	InsertDerivedConsumableBuffs(ctx context.Context, datasetID uuid.UUID) (int64, error)
 	InsertDerivedConsumables(ctx context.Context, datasetID uuid.UUID) (int64, error)
+	InsertDevicePairing(ctx context.Context, arg InsertDevicePairingParams) (DevicePairing, error)
 	InsertDiscordMembershipGrantCheck(ctx context.Context, arg InsertDiscordMembershipGrantCheckParams) (DiscordMembershipGrantCheck, error)
 	InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error)
 	InsertEncounterCharacterFights(ctx context.Context, arg []InsertEncounterCharacterFightsParams) *InsertEncounterCharacterFightsBatchResults
@@ -431,6 +443,9 @@ type sqlcQuerier interface {
 	InsertInstanceSpeedrun(ctx context.Context, arg InsertInstanceSpeedrunParams) error
 	InsertInstanceUnits(ctx context.Context, arg []InsertInstanceUnitsParams) *InsertInstanceUnitsBatchResults
 	InsertLogFile(ctx context.Context, arg InsertLogFileParams) (LogFile, error)
+	// Records the client-supplied source id (X-Chronicle-Source-Id) a log group was
+	// uploaded under, so a later upload of the same grown file can replace it.
+	InsertLogGroupSource(ctx context.Context, arg InsertLogGroupSourceParams) error
 	InsertLogInstanceEvents(ctx context.Context, arg []InsertLogInstanceEventsParams) *InsertLogInstanceEventsBatchResults
 	// Modification Requests
 	InsertModificationRequest(ctx context.Context, arg InsertModificationRequestParams) (ApplicationModificationRequest, error)
@@ -449,6 +464,7 @@ type sqlcQuerier interface {
 	InsertTenant(ctx context.Context, arg InsertTenantParams) (Tenant, error)
 	InsertTimeParseBossScore(ctx context.Context, arg InsertTimeParseBossScoreParams) error
 	InsertTimeParseScore(ctx context.Context, arg InsertTimeParseScoreParams) (TimeParseScore, error)
+	InsertUploadDevice(ctx context.Context, arg InsertUploadDeviceParams) (UploadDevice, error)
 	// Upload Keys
 	InsertUploadKey(ctx context.Context, arg InsertUploadKeyParams) (WowServerUploadKey, error)
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
@@ -593,6 +609,7 @@ type sqlcQuerier interface {
 	ListTimeParseReplacementLogGroups(ctx context.Context, arg ListTimeParseReplacementLogGroupsParams) ([]uuid.UUID, error)
 	// Locate surviving uploads for logical runs whose source log group is deleted.
 	ListTimeParseReplacementLogGroupsForDeletedLogGroup(ctx context.Context, arg ListTimeParseReplacementLogGroupsForDeletedLogGroupParams) ([]uuid.UUID, error)
+	ListUploadDevicesByUser(ctx context.Context, userID uuid.UUID) ([]UploadDevice, error)
 	ListUploadKeysByRealm(ctx context.Context, realmID uuid.UUID) ([]ListUploadKeysByRealmRow, error)
 	ListUserCustomPanelInstallations(ctx context.Context, userID uuid.UUID) ([]ListUserCustomPanelInstallationsRow, error)
 	ListUserFavoriteGuilds(ctx context.Context, userID uuid.UUID) ([]ListUserFavoriteGuildsRow, error)
@@ -679,6 +696,8 @@ type sqlcQuerier interface {
 	RecordAuthzMigration(ctx context.Context, version int32) error
 	RecordGuildInstanceView(ctx context.Context, arg RecordGuildInstanceViewParams) error
 	RecordGuildResourceView(ctx context.Context, arg RecordGuildResourceViewParams) error
+	// Single-use: flips approved -> redeemed exactly once.
+	RedeemDevicePairing(ctx context.Context, id uuid.UUID) (DevicePairing, error)
 	RedeemOAuthRelayCode(ctx context.Context, codeHash []byte) (RedeemOAuthRelayCodeRow, error)
 	RefreshParseScoreMembershipsForLogGroup(ctx context.Context, arg RefreshParseScoreMembershipsForLogGroupParams) (RefreshParseScoreMembershipsForLogGroupRow, error)
 	RefreshTimeParseBossKillMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseBossKillMembershipsForLogGroupParams) (RefreshTimeParseBossKillMembershipsForLogGroupRow, error)
@@ -695,6 +714,8 @@ type sqlcQuerier interface {
 	// tenant's additive flavor tags. Dataset selection uses the same precedence as
 	// ResolveDatasetByRealm; tenant tags augment rather than replace dataset tags.
 	ResolveDatasetWithFlavorByRealm(ctx context.Context, id uuid.UUID) (ResolveDatasetWithFlavorByRealmRow, error)
+	// Approve or deny a pending, unexpired pairing on behalf of a user.
+	ResolveDevicePairingByUserCode(ctx context.Context, arg ResolveDevicePairingByUserCodeParams) (DevicePairing, error)
 	ResolveExternalAPIRealm(ctx context.Context, arg ResolveExternalAPIRealmParams) (ResolveExternalAPIRealmRow, error)
 	ResolveExternalAPIServer(ctx context.Context, server string) (ResolveExternalAPIServerRow, error)
 	// Returns log groups that have been parsed and still have raw files on storage.
@@ -702,6 +723,7 @@ type sqlcQuerier interface {
 	// major.minor.patch comparison. The caller deduplicates rows by log group and
 	// applies its own distinct log-group limit.
 	ResyncCandidateLogGroups(ctx context.Context) ([]ResyncCandidateLogGroupsRow, error)
+	RevokeUploadDevice(ctx context.Context, arg RevokeUploadDeviceParams) (int64, error)
 	SearchCreatureTemplates(ctx context.Context, arg SearchCreatureTemplatesParams) ([]SearchCreatureTemplatesRow, error)
 	SearchGamePlayers(ctx context.Context, arg SearchGamePlayersParams) ([]SearchGamePlayersRow, error)
 	SearchItemSets(ctx context.Context, arg SearchItemSetsParams) ([]SearchItemSetsRow, error)
@@ -770,6 +792,7 @@ type sqlcQuerier interface {
 	// time window. Used by the discovery endpoint to surface activity metrics.
 	TenantDiscoveryStats(ctx context.Context, since pgtype.Timestamptz) ([]TenantDiscoveryStatsRow, error)
 	TouchLogInstanceRankingSource(ctx context.Context, instanceID uuid.UUID) error
+	TouchUploadDeviceLastUsed(ctx context.Context, id uuid.UUID) error
 	TouchUploadKeyLastUsed(ctx context.Context, id uuid.UUID) error
 	TrackUserPanelLayout(ctx context.Context, arg TrackUserPanelLayoutParams) (UserTrackedLayout, error)
 	TryAcquireAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)

@@ -792,6 +792,19 @@ CREATE TABLE deployment_info (
     deployment_token text
 );
 
+CREATE TABLE device_pairings (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_code text NOT NULL,
+    device_code_hash bytea NOT NULL,
+    device_name text NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    user_id uuid,
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT device_pairings_device_code_hash_length CHECK ((octet_length(device_code_hash) = 32)),
+    CONSTRAINT device_pairings_status CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'denied'::text, 'redeemed'::text])))
+);
+
 CREATE TABLE discord_membership_grant_checks (
     user_id uuid NOT NULL,
     next_check_at timestamp with time zone NOT NULL,
@@ -1135,6 +1148,12 @@ CREATE TABLE leaderboard_version_requirements (
     min_addon_version text DEFAULT ''::text NOT NULL,
     min_addon_version_num bigint DEFAULT 0 NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE log_group_sources (
+    log_group_id uuid NOT NULL,
+    owner uuid NOT NULL,
+    source_id text NOT NULL
 );
 
 CREATE TABLE log_instance_encounter_damage_unit_summary (
@@ -1761,6 +1780,16 @@ CREATE TABLE time_parse_scores (
     CONSTRAINT time_parse_scores_check CHECK ((((clear_duration_ms IS NULL) AND (clear_server_precise_score IS NULL) AND (clear_server_display_score IS NULL) AND (clear_server_rank IS NULL) AND (clear_server_sample_size IS NULL) AND (clear_server_status IS NULL) AND (clear_realm_precise_score IS NULL) AND (clear_realm_display_score IS NULL) AND (clear_realm_rank IS NULL) AND (clear_realm_sample_size IS NULL) AND (clear_realm_status IS NULL) AND (clear_guild_precise_score IS NULL) AND (clear_guild_display_score IS NULL) AND (clear_guild_rank IS NULL) AND (clear_guild_sample_size IS NULL) AND (clear_guild_status IS NULL)) OR ((clear_duration_ms IS NOT NULL) AND (clear_server_precise_score IS NOT NULL) AND (clear_server_display_score IS NOT NULL) AND (clear_server_rank IS NOT NULL) AND (clear_server_sample_size IS NOT NULL) AND (clear_server_status IS NOT NULL) AND (clear_realm_precise_score IS NOT NULL) AND (clear_realm_display_score IS NOT NULL) AND (clear_realm_rank IS NOT NULL) AND (clear_realm_sample_size IS NOT NULL) AND (clear_realm_status IS NOT NULL) AND (((guild_id IS NULL) AND (clear_guild_precise_score IS NULL) AND (clear_guild_display_score IS NULL) AND (clear_guild_rank IS NULL) AND (clear_guild_sample_size IS NULL) AND (clear_guild_status IS NULL)) OR ((guild_id IS NOT NULL) AND (clear_guild_precise_score IS NOT NULL) AND (clear_guild_display_score IS NOT NULL) AND (clear_guild_rank IS NOT NULL) AND (clear_guild_sample_size IS NOT NULL) AND (clear_guild_status IS NOT NULL))))))
 );
 
+CREATE TABLE upload_devices (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    name text NOT NULL,
+    token_hash text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_used_at timestamp with time zone,
+    revoked_at timestamp with time zone
+);
+
 CREATE TABLE user_action_bar_slots (
     user_id uuid NOT NULL,
     slot_1 uuid,
@@ -2293,6 +2322,15 @@ ALTER TABLE ONLY dbc_vulnerability_spells
 ALTER TABLE ONLY deployment_info
     ADD CONSTRAINT deployment_info_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY device_pairings
+    ADD CONSTRAINT device_pairings_device_code_hash_key UNIQUE (device_code_hash);
+
+ALTER TABLE ONLY device_pairings
+    ADD CONSTRAINT device_pairings_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY device_pairings
+    ADD CONSTRAINT device_pairings_user_code_key UNIQUE (user_code);
+
 ALTER TABLE ONLY discord_membership_grant_checks
     ADD CONSTRAINT discord_membership_grant_checks_pkey PRIMARY KEY (user_id);
 
@@ -2388,6 +2426,9 @@ ALTER TABLE ONLY leaderboard_version_requirements
 
 ALTER TABLE ONLY log_file
     ADD CONSTRAINT log_file_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY log_group_sources
+    ADD CONSTRAINT log_group_sources_pkey PRIMARY KEY (log_group_id);
 
 ALTER TABLE ONLY log_instance_encounter_damage_unit_summary
     ADD CONSTRAINT log_instance_encounter_damage_unit_summary_pkey PRIMARY KEY (encounter_id, unit_guid);
@@ -2539,6 +2580,12 @@ ALTER TABLE ONLY time_parse_scores
 ALTER TABLE ONLY time_parse_scores
     ADD CONSTRAINT time_parse_scores_tenant_id_instance_id_lookback_days_polic_key UNIQUE (tenant_id, instance_id, lookback_days, policy_version, query_version);
 
+ALTER TABLE ONLY upload_devices
+    ADD CONSTRAINT upload_devices_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY upload_devices
+    ADD CONSTRAINT upload_devices_token_hash_key UNIQUE (token_hash);
+
 ALTER TABLE ONLY user_action_bar_slots
     ADD CONSTRAINT user_action_bar_slots_pkey PRIMARY KEY (user_id);
 
@@ -2641,6 +2688,8 @@ ALTER TABLE ONLY wow_servers
 CREATE INDEX dbc_affected_aura_duration_modifiers_modifier_idx ON dbc_affected_aura_duration_modifiers USING btree (dataset_id, modifier_spell_id);
 
 CREATE INDEX dbc_consumable_buffs_spell_idx ON dbc_consumable_buffs USING btree (dataset_id, spell_id);
+
+CREATE INDEX device_pairings_expires_at_idx ON device_pairings USING btree (expires_at);
 
 CREATE INDEX discord_membership_grant_checks_due_idx ON discord_membership_grant_checks USING btree (next_check_at, user_id) WHERE (suspended_until_login = false);
 
@@ -2826,6 +2875,8 @@ CREATE INDEX instance_speedruns_cohort_lookup_idx ON instance_speedruns USING bt
 
 CREATE INDEX item_daily_prices_future_lookup_idx ON item_daily_prices USING btree (realm_id, auction_house_faction, item_id, price_date) WHERE (price_copper IS NOT NULL);
 
+CREATE UNIQUE INDEX log_group_sources_owner_source_id ON log_group_sources USING btree (owner, source_id);
+
 CREATE UNIQUE INDEX log_instance_raid_group_clean_kill_idx ON log_instance_raid_group_snapshots USING btree (encounter_id) WHERE (snapshot_type = 'clean_kill'::raid_group_snapshot_type);
 
 CREATE UNIQUE INDEX log_instance_raid_group_final_idx ON log_instance_raid_group_snapshots USING btree (instance_id) WHERE (snapshot_type = 'final'::raid_group_snapshot_type);
@@ -2863,6 +2914,8 @@ CREATE INDEX river_notification_created_at_idx ON river_notification USING btree
 CREATE INDEX river_notification_topic_id_idx ON river_notification USING btree (topic, id);
 
 CREATE INDEX telemetry_notices_audience_idx ON telemetry_notices USING btree (audience);
+
+CREATE INDEX upload_devices_user_id_idx ON upload_devices USING btree (user_id);
 
 CREATE UNIQUE INDEX user_auths_unique_linked_id ON user_auth_links USING btree (lower(linked_id), provider);
 
@@ -2997,6 +3050,9 @@ ALTER TABLE ONLY dbc_spells
 ALTER TABLE ONLY dbc_vulnerability_spells
     ADD CONSTRAINT dbc_vulnerability_spells_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY device_pairings
+    ADD CONSTRAINT device_pairings_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
 ALTER TABLE ONLY discord_membership_grant_checks
     ADD CONSTRAINT discord_membership_grant_checks_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
@@ -3116,6 +3172,12 @@ ALTER TABLE ONLY log_file
 
 ALTER TABLE ONLY log_file
     ADD CONSTRAINT log_file_wow_log_id_fkey FOREIGN KEY (wow_log_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY log_group_sources
+    ADD CONSTRAINT log_group_sources_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY log_group_sources
+    ADD CONSTRAINT log_group_sources_owner_fkey FOREIGN KEY (owner) REFERENCES users(id);
 
 ALTER TABLE ONLY log_instance_encounter_damage_unit_summary
     ADD CONSTRAINT log_instance_encounter_damage_unit_summary_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES log_instance_encounters(id) ON DELETE CASCADE;
@@ -3257,6 +3319,9 @@ ALTER TABLE ONLY time_parse_scores
 
 ALTER TABLE ONLY time_parse_scores
     ADD CONSTRAINT time_parse_scores_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY upload_devices
+    ADD CONSTRAINT upload_devices_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY user_action_bar_slots
     ADD CONSTRAINT user_action_bar_slots_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
@@ -3422,5 +3487,3 @@ CREATE POLICY tenant_realm_isolation ON wow_server_realms USING ((server_id IN (
 ALTER TABLE wow_server_realms ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE wow_servers ENABLE ROW LEVEL SECURITY;
-
-

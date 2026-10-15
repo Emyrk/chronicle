@@ -1000,10 +1000,75 @@ export interface DescriptionPayload {
     readonly website_url: string;
 }
 
+// From chroniclesdk/devices.go
+/**
+ * DevicePairInfo is what the approving user sees.
+ */
+export interface DevicePairInfo {
+    readonly code: string;
+    readonly device_name: string;
+    readonly expires_at: string;
+}
+
+// From chroniclesdk/devices.go
+export interface DevicePairPollRequest {
+    readonly device_code: string;
+}
+
+// From chroniclesdk/devices.go
+export interface DevicePairPollResponse {
+    readonly status: DevicePairStatus;
+    /**
+     * Token is only set once, when Status is "approved".
+     */
+    readonly token?: string;
+}
+
+// From chroniclesdk/devices.go
+/**
+ * DevicePairStartRequest begins pairing a non-browser client.
+ */
+export interface DevicePairStartRequest {
+    /**
+     * DeviceName is a human-readable name shown to the user on approval.
+     */
+    readonly device_name: string;
+}
+
+// From chroniclesdk/devices.go
+export interface DevicePairStartResponse {
+    /**
+     * Code is the short code shown to the user, e.g. "ABCD-1234".
+     */
+    readonly code: string;
+    /**
+     * DeviceCode is the opaque polling secret. Never place it in a URL.
+     */
+    readonly device_code: string;
+    readonly expires_in: number;
+    readonly verify_url: string;
+    /**
+     * Interval is the minimum number of seconds between polls.
+     */
+    readonly interval: number;
+}
+
+// From chroniclesdk/devices.go
+export type DevicePairStatus = "denied" | "expired" | "approved" | "pending";
+
+export const DevicePairStatuses: DevicePairStatus[] = ["denied", "expired", "approved", "pending"];
+
 // From chroniclesdk/guild_page.go
 export type DeviceVisibility = "all" | "desktop" | "mobile";
 
 export const DeviceVisibilitys: DeviceVisibility[] = ["all", "desktop", "mobile"];
+
+// From chroniclesdk/devices.go
+export interface DeviceWhoAmIResponse {
+    readonly user_id: string;
+    readonly device_id: string;
+    readonly device_name: string;
+}
 
 // From chroniclesdk/guild_page.go
 export interface DiscordChannel {
@@ -2459,9 +2524,37 @@ export interface LogParseReport {
 }
 
 // From chroniclesdk/response.go
+/**
+ * LogSourceResponse answers a client's pre-flight "do you already have this
+ * source id?" check (see X-Chronicle-Source-Id on upload-v2). It describes what
+ * the caller has uploaded under that id, so a client can skip sending bytes the
+ * server already holds.
+ */
+export interface LogSourceResponse {
+    readonly log_id: string;
+    /**
+     * Size is how many bytes of the source the server holds.
+     */
+    readonly size: number;
+    /**
+     * URL is the absolute link to the parsed report.
+     */
+    readonly url?: string;
+}
+
+// From chroniclesdk/response.go
 export interface LogUploadResponse {
     readonly log_id: string;
     readonly file_ids: readonly string[];
+    /**
+     * URL is the absolute link to the parsed report.
+     */
+    readonly url?: string;
+    /**
+     * Duplicate is true when a byte-identical file was already uploaded;
+     * LogID and Files then refer to the existing upload.
+     */
+    readonly duplicate?: boolean;
 }
 
 // From chroniclesdk/server_application.go
@@ -4156,6 +4249,14 @@ export interface UpdateUserTalentBuildRequest {
     readonly name?: string;
     readonly build?: string;
     readonly locked?: boolean;
+}
+
+// From chroniclesdk/devices.go
+export interface UploadDevice {
+    readonly id: string;
+    readonly name: string;
+    readonly created_at: string;
+    readonly last_used_at: string | null;
 }
 
 // From chroniclesdk/azerothcore.go

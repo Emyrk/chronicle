@@ -1333,6 +1333,17 @@ type DeploymentInfo struct {
 	DeploymentToken        pgtype.Text        `db:"deployment_token" json:"deployment_token"`
 }
 
+type DevicePairing struct {
+	ID             uuid.UUID          `db:"id" json:"id"`
+	UserCode       string             `db:"user_code" json:"user_code"`
+	DeviceCodeHash []byte             `db:"device_code_hash" json:"device_code_hash"`
+	DeviceName     string             `db:"device_name" json:"device_name"`
+	Status         string             `db:"status" json:"status"`
+	UserID         uuid.NullUUID      `db:"user_id" json:"user_id"`
+	ExpiresAt      pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type DiscordMembershipGrantCheck struct {
 	UserID              uuid.UUID          `db:"user_id" json:"user_id"`
 	NextCheckAt         pgtype.Timestamptz `db:"next_check_at" json:"next_check_at"`
@@ -1659,6 +1670,12 @@ type LogFile struct {
 	CompressedSizeBytes pgtype.Int8 `db:"compressed_size_bytes" json:"compressed_size_bytes"`
 	// Content encoding used for storage (e.g., gzip), NULL if stored raw
 	ContentEncoding pgtype.Text `db:"content_encoding" json:"content_encoding"`
+}
+
+type LogGroupSource struct {
+	LogGroupID uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	Owner      uuid.UUID `db:"owner" json:"owner"`
+	SourceID   string    `db:"source_id" json:"source_id"`
 }
 
 type LogInstance struct {
@@ -2185,6 +2202,16 @@ type TimeParseScore struct {
 	PolicyVersion           int16              `db:"policy_version" json:"policy_version"`
 	QueryVersion            int16              `db:"query_version" json:"query_version"`
 	ComputedAt              pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
+}
+
+type UploadDevice struct {
+	ID         uuid.UUID          `db:"id" json:"id"`
+	UserID     uuid.UUID          `db:"user_id" json:"user_id"`
+	Name       string             `db:"name" json:"name"`
+	TokenHash  string             `db:"token_hash" json:"token_hash"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	LastUsedAt pgtype.Timestamptz `db:"last_used_at" json:"last_used_at"`
+	RevokedAt  pgtype.Timestamptz `db:"revoked_at" json:"revoked_at"`
 }
 
 type User struct {
