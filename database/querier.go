@@ -170,7 +170,7 @@ type sqlcQuerier interface {
 	GearTrendsSlotItems(ctx context.Context, arg GearTrendsSlotItemsParams) ([]GearTrendsSlotItemsRow, error)
 	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg GetAnyParseScoreReceiptForTenantInstanceParams) (ParseScoreReceipt, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
-	GetBillingSubscriptionByStripeID(ctx context.Context, stripeSubscriptionID pgtype.Text) (BillingSubscription, error)
+	GetBillingSubscriptionByProviderID(ctx context.Context, arg GetBillingSubscriptionByProviderIDParams) (BillingSubscription, error)
 	GetBillingSubscriptionByUserID(ctx context.Context, userID uuid.UUID) (BillingSubscription, error)
 	GetBillingWebhookEvent(ctx context.Context, stripeEventID string) (BillingWebhookEvent, error)
 	GetCanonicalSpellByID(ctx context.Context, arg GetCanonicalSpellByIDParams) (GetCanonicalSpellByIDRow, error)

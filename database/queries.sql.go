@@ -1099,29 +1099,38 @@ func (q *sqlQuerier) UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServ
 	return i, err
 }
 
-const getBillingSubscriptionByStripeID = `-- name: GetBillingSubscriptionByStripeID :one
-SELECT user_id, stripe_customer_id, stripe_subscription_id, tier, status, current_period_end, cancel_at_period_end, updated_at FROM billing_subscriptions
-WHERE stripe_subscription_id = $1
+const getBillingSubscriptionByProviderID = `-- name: GetBillingSubscriptionByProviderID :one
+SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id FROM billing_subscriptions
+WHERE provider = $1
+  AND provider_subscription_id = $2
 `
 
-func (q *sqlQuerier) GetBillingSubscriptionByStripeID(ctx context.Context, stripeSubscriptionID pgtype.Text) (BillingSubscription, error) {
-	row := q.db.QueryRow(ctx, getBillingSubscriptionByStripeID, stripeSubscriptionID)
+type GetBillingSubscriptionByProviderIDParams struct {
+	Provider               string      `db:"provider" json:"provider"`
+	ProviderSubscriptionID pgtype.Text `db:"provider_subscription_id" json:"provider_subscription_id"`
+}
+
+func (q *sqlQuerier) GetBillingSubscriptionByProviderID(ctx context.Context, arg GetBillingSubscriptionByProviderIDParams) (BillingSubscription, error) {
+	row := q.db.QueryRow(ctx, getBillingSubscriptionByProviderID, arg.Provider, arg.ProviderSubscriptionID)
 	var i BillingSubscription
 	err := row.Scan(
 		&i.UserID,
-		&i.StripeCustomerID,
-		&i.StripeSubscriptionID,
-		&i.Tier,
+		&i.ProviderCustomerID,
+		&i.ProviderSubscriptionID,
+		&i.ProductCode,
 		&i.Status,
 		&i.CurrentPeriodEnd,
 		&i.CancelAtPeriodEnd,
 		&i.UpdatedAt,
+		&i.Provider,
+		&i.ProviderProductID,
+		&i.ProviderPriceID,
 	)
 	return i, err
 }
 
 const getBillingSubscriptionByUserID = `-- name: GetBillingSubscriptionByUserID :one
-SELECT user_id, stripe_customer_id, stripe_subscription_id, tier, status, current_period_end, cancel_at_period_end, updated_at FROM billing_subscriptions
+SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id FROM billing_subscriptions
 WHERE user_id = $1
 `
 
@@ -1130,13 +1139,16 @@ func (q *sqlQuerier) GetBillingSubscriptionByUserID(ctx context.Context, userID 
 	var i BillingSubscription
 	err := row.Scan(
 		&i.UserID,
-		&i.StripeCustomerID,
-		&i.StripeSubscriptionID,
-		&i.Tier,
+		&i.ProviderCustomerID,
+		&i.ProviderSubscriptionID,
+		&i.ProductCode,
 		&i.Status,
 		&i.CurrentPeriodEnd,
 		&i.CancelAtPeriodEnd,
 		&i.UpdatedAt,
+		&i.Provider,
+		&i.ProviderProductID,
+		&i.ProviderPriceID,
 	)
 	return i, err
 }
@@ -1178,7 +1190,7 @@ SELECT EXISTS (
   SELECT 1
   FROM billing_grants
   WHERE user_id = $1
-    AND tier = $2
+    AND product_code = $2
     AND revoked_at IS NULL
     AND starts_at <= NOW()
     AND expires_at > NOW()
@@ -1186,12 +1198,12 @@ SELECT EXISTS (
 `
 
 type HasActiveBillingGrantParams struct {
-	UserID uuid.UUID `db:"user_id" json:"user_id"`
-	Tier   string    `db:"tier" json:"tier"`
+	UserID      uuid.UUID `db:"user_id" json:"user_id"`
+	ProductCode string    `db:"product_code" json:"product_code"`
 }
 
 func (q *sqlQuerier) HasActiveBillingGrant(ctx context.Context, arg HasActiveBillingGrantParams) (bool, error) {
-	row := q.db.QueryRow(ctx, hasActiveBillingGrant, arg.UserID, arg.Tier)
+	row := q.db.QueryRow(ctx, hasActiveBillingGrant, arg.UserID, arg.ProductCode)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -1201,32 +1213,32 @@ const insertBillingGrant = `-- name: InsertBillingGrant :one
 INSERT INTO billing_grants (
   id,
   user_id,
-  tier,
+  product_code,
   starts_at,
   expires_at,
   months,
   reason,
   granted_by
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, user_id, tier, starts_at, expires_at, months, reason, granted_by, created_at, revoked_at
+RETURNING id, user_id, product_code, starts_at, expires_at, months, reason, granted_by, created_at, revoked_at
 `
 
 type InsertBillingGrantParams struct {
-	ID        uuid.UUID          `db:"id" json:"id"`
-	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
-	Tier      string             `db:"tier" json:"tier"`
-	StartsAt  pgtype.Timestamptz `db:"starts_at" json:"starts_at"`
-	ExpiresAt pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
-	Months    int32              `db:"months" json:"months"`
-	Reason    string             `db:"reason" json:"reason"`
-	GrantedBy uuid.UUID          `db:"granted_by" json:"granted_by"`
+	ID          uuid.UUID          `db:"id" json:"id"`
+	UserID      uuid.UUID          `db:"user_id" json:"user_id"`
+	ProductCode string             `db:"product_code" json:"product_code"`
+	StartsAt    pgtype.Timestamptz `db:"starts_at" json:"starts_at"`
+	ExpiresAt   pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	Months      int32              `db:"months" json:"months"`
+	Reason      string             `db:"reason" json:"reason"`
+	GrantedBy   uuid.UUID          `db:"granted_by" json:"granted_by"`
 }
 
 func (q *sqlQuerier) InsertBillingGrant(ctx context.Context, arg InsertBillingGrantParams) (BillingGrant, error) {
 	row := q.db.QueryRow(ctx, insertBillingGrant,
 		arg.ID,
 		arg.UserID,
-		arg.Tier,
+		arg.ProductCode,
 		arg.StartsAt,
 		arg.ExpiresAt,
 		arg.Months,
@@ -1237,7 +1249,7 @@ func (q *sqlQuerier) InsertBillingGrant(ctx context.Context, arg InsertBillingGr
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
-		&i.Tier,
+		&i.ProductCode,
 		&i.StartsAt,
 		&i.ExpiresAt,
 		&i.Months,
@@ -1282,40 +1294,52 @@ func (q *sqlQuerier) MarkBillingWebhookEventProcessed(ctx context.Context, strip
 const upsertBillingSubscription = `-- name: UpsertBillingSubscription :one
 INSERT INTO billing_subscriptions (
   user_id,
-  stripe_customer_id,
-  stripe_subscription_id,
-  tier,
+  provider,
+  provider_customer_id,
+  provider_subscription_id,
+  provider_product_id,
+  provider_price_id,
+  product_code,
   status,
   current_period_end,
   cancel_at_period_end
-) VALUES ($1, $2, $3, $4, $5, $6, $7)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 ON CONFLICT (user_id) DO UPDATE SET
-  stripe_customer_id = EXCLUDED.stripe_customer_id,
-  stripe_subscription_id = EXCLUDED.stripe_subscription_id,
-  tier = EXCLUDED.tier,
+  provider = EXCLUDED.provider,
+  provider_customer_id = EXCLUDED.provider_customer_id,
+  provider_subscription_id = EXCLUDED.provider_subscription_id,
+  provider_product_id = EXCLUDED.provider_product_id,
+  provider_price_id = EXCLUDED.provider_price_id,
+  product_code = EXCLUDED.product_code,
   status = EXCLUDED.status,
   current_period_end = EXCLUDED.current_period_end,
   cancel_at_period_end = EXCLUDED.cancel_at_period_end,
   updated_at = NOW()
-RETURNING user_id, stripe_customer_id, stripe_subscription_id, tier, status, current_period_end, cancel_at_period_end, updated_at
+RETURNING user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id
 `
 
 type UpsertBillingSubscriptionParams struct {
-	UserID               uuid.UUID          `db:"user_id" json:"user_id"`
-	StripeCustomerID     string             `db:"stripe_customer_id" json:"stripe_customer_id"`
-	StripeSubscriptionID pgtype.Text        `db:"stripe_subscription_id" json:"stripe_subscription_id"`
-	Tier                 string             `db:"tier" json:"tier"`
-	Status               string             `db:"status" json:"status"`
-	CurrentPeriodEnd     pgtype.Timestamptz `db:"current_period_end" json:"current_period_end"`
-	CancelAtPeriodEnd    bool               `db:"cancel_at_period_end" json:"cancel_at_period_end"`
+	UserID                 uuid.UUID          `db:"user_id" json:"user_id"`
+	Provider               string             `db:"provider" json:"provider"`
+	ProviderCustomerID     string             `db:"provider_customer_id" json:"provider_customer_id"`
+	ProviderSubscriptionID pgtype.Text        `db:"provider_subscription_id" json:"provider_subscription_id"`
+	ProviderProductID      pgtype.Text        `db:"provider_product_id" json:"provider_product_id"`
+	ProviderPriceID        pgtype.Text        `db:"provider_price_id" json:"provider_price_id"`
+	ProductCode            string             `db:"product_code" json:"product_code"`
+	Status                 string             `db:"status" json:"status"`
+	CurrentPeriodEnd       pgtype.Timestamptz `db:"current_period_end" json:"current_period_end"`
+	CancelAtPeriodEnd      bool               `db:"cancel_at_period_end" json:"cancel_at_period_end"`
 }
 
 func (q *sqlQuerier) UpsertBillingSubscription(ctx context.Context, arg UpsertBillingSubscriptionParams) (BillingSubscription, error) {
 	row := q.db.QueryRow(ctx, upsertBillingSubscription,
 		arg.UserID,
-		arg.StripeCustomerID,
-		arg.StripeSubscriptionID,
-		arg.Tier,
+		arg.Provider,
+		arg.ProviderCustomerID,
+		arg.ProviderSubscriptionID,
+		arg.ProviderProductID,
+		arg.ProviderPriceID,
+		arg.ProductCode,
 		arg.Status,
 		arg.CurrentPeriodEnd,
 		arg.CancelAtPeriodEnd,
@@ -1323,13 +1347,16 @@ func (q *sqlQuerier) UpsertBillingSubscription(ctx context.Context, arg UpsertBi
 	var i BillingSubscription
 	err := row.Scan(
 		&i.UserID,
-		&i.StripeCustomerID,
-		&i.StripeSubscriptionID,
-		&i.Tier,
+		&i.ProviderCustomerID,
+		&i.ProviderSubscriptionID,
+		&i.ProductCode,
 		&i.Status,
 		&i.CurrentPeriodEnd,
 		&i.CancelAtPeriodEnd,
 		&i.UpdatedAt,
+		&i.Provider,
+		&i.ProviderProductID,
+		&i.ProviderPriceID,
 	)
 	return i, err
 }

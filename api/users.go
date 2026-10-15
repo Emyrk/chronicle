@@ -30,9 +30,9 @@ func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	adsFree := billing.RoleIsAdFree(roles)
+	adsFree := billing.RolesHaveEntitlement(roles, billing.EntitlementAdFree)
 	if a.Opts.Billing != nil {
-		adsFree, err = a.Opts.Billing.IsAdFree(ctx, state.Claims.Subject, roles)
+		adsFree, err = a.Opts.Billing.HasEntitlement(ctx, state.Claims.Subject, billing.EntitlementAdFree)
 		if err != nil {
 			httpapi.InternalServerError(w, err)
 			return

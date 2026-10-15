@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"github.com/stripe/stripe-go/v87"
@@ -121,13 +123,87 @@ func testStripePrice(id string, amount int64, interval stripe.PriceRecurringInte
 	}
 }
 
-func TestRoleIsAdFree(t *testing.T) {
+func TestRolesHaveEntitlement(t *testing.T) {
 	t.Parallel()
-	require.True(t, RoleIsAdFree([]string{"user", "supporter"}))
-	require.False(t, RoleIsAdFree([]string{"user"}))
+	require.True(t, RolesHaveEntitlement([]string{"user", "supporter"}, EntitlementAdFree))
+	require.False(t, RolesHaveEntitlement([]string{"user"}, EntitlementAdFree))
 }
 
-func TestSubscriptionIsAdFree(t *testing.T) {
+type entitlementStore struct {
+	database.Store
+	grant           bool
+	subscription    database.BillingSubscription
+	subscriptionErr error
+	grantChecks     []database.HasActiveBillingGrantParams
+	upsert          database.UpsertBillingSubscriptionParams
+	upsertCalled    bool
+}
+
+func (s *entitlementStore) HasActiveBillingGrant(_ context.Context, arg database.HasActiveBillingGrantParams) (bool, error) {
+	s.grantChecks = append(s.grantChecks, arg)
+	return s.grant, nil
+}
+
+func (s *entitlementStore) GetBillingSubscriptionByUserID(context.Context, uuid.UUID) (database.BillingSubscription, error) {
+	return s.subscription, s.subscriptionErr
+}
+
+func (s *entitlementStore) UpsertBillingSubscription(_ context.Context, arg database.UpsertBillingSubscriptionParams) (database.BillingSubscription, error) {
+	s.upsert = arg
+	s.upsertCalled = true
+	return database.BillingSubscription{}, nil
+}
+
+func TestHasEntitlement(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	tests := []struct {
+		name      string
+		roles     []string
+		grant     bool
+		sub       database.BillingSubscription
+		subErr    error
+		want      bool
+		wantGrant bool
+	}{
+		{name: "role", roles: []string{string(ProductSupporter)}, subErr: pgx.ErrNoRows, want: true},
+		{name: "grant", grant: true, subErr: pgx.ErrNoRows, want: true, wantGrant: true},
+		{name: "subscription", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: string(stripe.SubscriptionStatusActive)}, want: true, wantGrant: true},
+		{name: "none", subErr: pgx.ErrNoRows, want: false, wantGrant: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			store := &entitlementStore{
+				grant:           tt.grant,
+				subscription:    tt.sub,
+				subscriptionErr: tt.subErr,
+			}
+			s := New(Options{
+				Store: store,
+				Roles: func(context.Context, uuid.UUID) ([]string, error) {
+					return tt.roles, nil
+				},
+			})
+
+			got, err := s.HasEntitlement(context.Background(), userID, EntitlementAdFree)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+			if tt.wantGrant {
+				require.Equal(t, []database.HasActiveBillingGrantParams{{
+					UserID:      userID,
+					ProductCode: string(ProductSupporter),
+				}}, store.grantChecks)
+			} else {
+				require.Empty(t, store.grantChecks)
+			}
+		})
+	}
+}
+
+func TestSubscriptionHasEntitlement(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, time.October, 13, 12, 0, 0, 0, time.UTC)
 	future := pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true}
@@ -138,19 +214,90 @@ func TestSubscriptionIsAdFree(t *testing.T) {
 		sub  database.BillingSubscription
 		want bool
 	}{
-		{name: "active supporter", sub: database.BillingSubscription{Tier: TierSupporter, Status: "active"}, want: true},
-		{name: "trialing supporter", sub: database.BillingSubscription{Tier: TierSupporter, Status: "trialing"}, want: true},
-		{name: "canceled but paid through", sub: database.BillingSubscription{Tier: TierSupporter, Status: "canceled", CurrentPeriodEnd: future}, want: true},
-		{name: "expired cancellation", sub: database.BillingSubscription{Tier: TierSupporter, Status: "canceled", CurrentPeriodEnd: past}, want: false},
-		{name: "past due", sub: database.BillingSubscription{Tier: TierSupporter, Status: "past_due"}, want: false},
-		{name: "wrong tier", sub: database.BillingSubscription{Tier: TierFree, Status: "active"}, want: false},
+		{name: "active supporter", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "active"}, want: true},
+		{name: "trialing supporter", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "trialing"}, want: true},
+		{name: "canceled but paid through", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "canceled", CurrentPeriodEnd: future}, want: true},
+		{name: "expired cancellation", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "canceled", CurrentPeriodEnd: past}, want: false},
+		{name: "past due", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "past_due"}, want: false},
+		{name: "unknown product", sub: database.BillingSubscription{ProductCode: "unknown", Status: "active"}, want: false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tt.want, subscriptionIsAdFree(now, tt.sub))
+			require.Equal(t, tt.want, subscriptionHasEntitlement(now, tt.sub, EntitlementAdFree))
 		})
+	}
+}
+
+func TestStripeSubscriptionPurchase(t *testing.T) {
+	t.Parallel()
+
+	firstEnd := time.Date(2026, time.November, 15, 12, 0, 0, 0, time.UTC)
+	latestEnd := firstEnd.AddDate(0, 1, 0)
+	sub := testStripeSubscription("prod_supporter", "price_monthly", firstEnd)
+	sub.Items.Data = append(sub.Items.Data, &stripe.SubscriptionItem{
+		Price:            &stripe.Price{ID: "price_monthly", Product: &stripe.Product{ID: "prod_supporter"}},
+		CurrentPeriodEnd: latestEnd.Unix(),
+	})
+
+	got, err := stripeSubscriptionPurchase(sub)
+	require.NoError(t, err)
+	require.Equal(t, "prod_supporter", got.productID)
+	require.Equal(t, "price_monthly", got.priceID)
+	require.Equal(t, pgtype.Timestamptz{Time: latestEnd, Valid: true}, got.periodEnd)
+}
+
+func TestStripeSubscriptionPurchaseRejectsInvalidItems(t *testing.T) {
+	t.Parallel()
+
+	_, err := stripeSubscriptionPurchase(&stripe.Subscription{})
+	require.ErrorContains(t, err, "missing items")
+
+	sub := testStripeSubscription("prod_supporter", "price_monthly", time.Now())
+	sub.Items.Data = append(sub.Items.Data, &stripe.SubscriptionItem{
+		Price: &stripe.Price{ID: "price_annual", Product: &stripe.Product{ID: "prod_supporter"}},
+	})
+	_, err = stripeSubscriptionPurchase(sub)
+	require.ErrorContains(t, err, "multiple products or prices")
+}
+
+func TestUpsertSubscriptionPersistsPurchaseIdentity(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	periodEnd := time.Date(2026, time.November, 15, 12, 0, 0, 0, time.UTC)
+	store := &entitlementStore{}
+	s := New(Options{Store: store})
+	sub := testStripeSubscription("prod_supporter", "price_annual", periodEnd)
+	sub.ID = "sub_123"
+	sub.Customer = &stripe.Customer{ID: "cus_123"}
+	sub.Status = stripe.SubscriptionStatusActive
+	sub.CancelAtPeriodEnd = true
+
+	err := s.upsertSubscription(context.Background(), userID, ProductSupporter, sub)
+	require.NoError(t, err)
+	require.True(t, store.upsertCalled)
+	require.Equal(t, database.UpsertBillingSubscriptionParams{
+		UserID:                 userID,
+		Provider:               ProviderStripe,
+		ProviderCustomerID:     "cus_123",
+		ProviderSubscriptionID: pgtype.Text{String: "sub_123", Valid: true},
+		ProviderProductID:      pgtype.Text{String: "prod_supporter", Valid: true},
+		ProviderPriceID:        pgtype.Text{String: "price_annual", Valid: true},
+		ProductCode:            string(ProductSupporter),
+		Status:                 string(stripe.SubscriptionStatusActive),
+		CurrentPeriodEnd:       pgtype.Timestamptz{Time: periodEnd, Valid: true},
+		CancelAtPeriodEnd:      true,
+	}, store.upsert)
+}
+
+func testStripeSubscription(productID, priceID string, periodEnd time.Time) *stripe.Subscription {
+	return &stripe.Subscription{
+		Items: &stripe.SubscriptionItemList{Data: []*stripe.SubscriptionItem{{
+			Price:            &stripe.Price{ID: priceID, Product: &stripe.Product{ID: productID}},
+			CurrentPeriodEnd: periodEnd.Unix(),
+		}}},
 	}
 }
 

@@ -2,7 +2,6 @@ package billing
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"sort"
@@ -12,17 +11,18 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stripe/stripe-go/v87"
 )
 
 const (
-	TierFree      = "free"
-	TierSupporter = "supporter"
+	TierFree       = "free"
+	TierSupporter  = "supporter"
+	ProviderStripe = "stripe"
 )
 
 type priceRetriever func(context.Context, string, *stripe.PriceRetrieveParams) (*stripe.Price, error)
+type RoleResolver func(context.Context, uuid.UUID) ([]string, error)
 
 type Options struct {
 	Store         database.Store
@@ -30,6 +30,7 @@ type Options struct {
 	WebhookSecret string
 	PriceIDs      []string
 	AccessURL     *url.URL
+	Roles         RoleResolver
 }
 
 type Service struct {
@@ -40,6 +41,7 @@ type Service struct {
 	allowedPrices map[string]struct{}
 	accessURL     *url.URL
 	retrievePrice priceRetriever
+	roles         RoleResolver
 
 	pricesMu sync.Mutex
 	prices   []chroniclesdk.BillingPrice
@@ -65,6 +67,7 @@ func New(opts Options) *Service {
 		allowedPrices: allowedPrices,
 		accessURL:     opts.AccessURL,
 		retrievePrice: retrievePrice,
+		roles:         opts.Roles,
 	}
 }
 
@@ -172,55 +175,6 @@ func billingPriceFromStripe(price *stripe.Price) (chroniclesdk.BillingPrice, err
 	}, nil
 }
 
-func RoleIsAdFree(roles []string) bool {
-	for _, role := range roles {
-		if role == TierSupporter {
-			return true
-		}
-	}
-	return false
-}
-
-func (s *Service) IsAdFree(ctx context.Context, userID uuid.UUID, roles []string) (bool, error) {
-	if RoleIsAdFree(roles) {
-		return true, nil
-	}
-
-	granted, err := s.store.HasActiveBillingGrant(ctx, database.HasActiveBillingGrantParams{
-		UserID: userID,
-		Tier:   TierSupporter,
-	})
-	if err != nil {
-		return false, fmt.Errorf("check billing grant: %w", err)
-	}
-	if granted {
-		return true, nil
-	}
-
-	sub, err := s.store.GetBillingSubscriptionByUserID(ctx, userID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("get billing subscription: %w", err)
-	}
-	return subscriptionIsAdFree(time.Now(), sub), nil
-}
-
-func subscriptionIsAdFree(now time.Time, sub database.BillingSubscription) bool {
-	if sub.Tier != TierSupporter {
-		return false
-	}
-	switch sub.Status {
-	case string(stripe.SubscriptionStatusActive), string(stripe.SubscriptionStatusTrialing):
-		return true
-	case string(stripe.SubscriptionStatusCanceled):
-		return sub.CurrentPeriodEnd.Valid && sub.CurrentPeriodEnd.Time.After(now)
-	default:
-		return false
-	}
-}
-
 func giftWindow(now time.Time, latest pgtype.Timestamptz, months int32) (time.Time, time.Time) {
 	start := now.UTC()
 	if latest.Valid && latest.Time.After(start) {
@@ -244,14 +198,14 @@ func (s *Service) GrantMonths(ctx context.Context, userID, grantedBy uuid.UUID, 
 	start, expires := giftWindow(time.Now(), latest, months)
 
 	grant, err := s.store.InsertBillingGrant(ctx, database.InsertBillingGrantParams{
-		ID:        uuid.New(),
-		UserID:    userID,
-		Tier:      TierSupporter,
-		StartsAt:  pgtype.Timestamptz{Time: start, Valid: true},
-		ExpiresAt: pgtype.Timestamptz{Time: expires, Valid: true},
-		Months:    months,
-		Reason:    reason,
-		GrantedBy: grantedBy,
+		ID:          uuid.New(),
+		UserID:      userID,
+		ProductCode: string(ProductSupporter),
+		StartsAt:    pgtype.Timestamptz{Time: start, Valid: true},
+		ExpiresAt:   pgtype.Timestamptz{Time: expires, Valid: true},
+		Months:      months,
+		Reason:      reason,
+		GrantedBy:   grantedBy,
 	})
 	if err != nil {
 		return database.BillingGrant{}, fmt.Errorf("insert billing grant: %w", err)

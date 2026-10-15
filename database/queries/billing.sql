@@ -2,24 +2,31 @@
 SELECT * FROM billing_subscriptions
 WHERE user_id = $1;
 
--- name: GetBillingSubscriptionByStripeID :one
+-- name: GetBillingSubscriptionByProviderID :one
 SELECT * FROM billing_subscriptions
-WHERE stripe_subscription_id = $1;
+WHERE provider = $1
+  AND provider_subscription_id = $2;
 
 -- name: UpsertBillingSubscription :one
 INSERT INTO billing_subscriptions (
   user_id,
-  stripe_customer_id,
-  stripe_subscription_id,
-  tier,
+  provider,
+  provider_customer_id,
+  provider_subscription_id,
+  provider_product_id,
+  provider_price_id,
+  product_code,
   status,
   current_period_end,
   cancel_at_period_end
-) VALUES ($1, $2, $3, $4, $5, $6, $7)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 ON CONFLICT (user_id) DO UPDATE SET
-  stripe_customer_id = EXCLUDED.stripe_customer_id,
-  stripe_subscription_id = EXCLUDED.stripe_subscription_id,
-  tier = EXCLUDED.tier,
+  provider = EXCLUDED.provider,
+  provider_customer_id = EXCLUDED.provider_customer_id,
+  provider_subscription_id = EXCLUDED.provider_subscription_id,
+  provider_product_id = EXCLUDED.provider_product_id,
+  provider_price_id = EXCLUDED.provider_price_id,
+  product_code = EXCLUDED.product_code,
   status = EXCLUDED.status,
   current_period_end = EXCLUDED.current_period_end,
   cancel_at_period_end = EXCLUDED.cancel_at_period_end,
@@ -37,7 +44,7 @@ WHERE user_id = $1
 INSERT INTO billing_grants (
   id,
   user_id,
-  tier,
+  product_code,
   starts_at,
   expires_at,
   months,
@@ -51,7 +58,7 @@ SELECT EXISTS (
   SELECT 1
   FROM billing_grants
   WHERE user_id = $1
-    AND tier = $2
+    AND product_code = $2
     AND revoked_at IS NULL
     AND starts_at <= NOW()
     AND expires_at > NOW()

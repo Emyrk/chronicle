@@ -808,27 +808,30 @@ type AuthzSchemaMigration struct {
 }
 
 type BillingGrant struct {
-	ID        uuid.UUID          `db:"id" json:"id"`
-	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
-	Tier      string             `db:"tier" json:"tier"`
-	StartsAt  pgtype.Timestamptz `db:"starts_at" json:"starts_at"`
-	ExpiresAt pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
-	Months    int32              `db:"months" json:"months"`
-	Reason    string             `db:"reason" json:"reason"`
-	GrantedBy uuid.UUID          `db:"granted_by" json:"granted_by"`
-	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	RevokedAt pgtype.Timestamptz `db:"revoked_at" json:"revoked_at"`
+	ID          uuid.UUID          `db:"id" json:"id"`
+	UserID      uuid.UUID          `db:"user_id" json:"user_id"`
+	ProductCode string             `db:"product_code" json:"product_code"`
+	StartsAt    pgtype.Timestamptz `db:"starts_at" json:"starts_at"`
+	ExpiresAt   pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	Months      int32              `db:"months" json:"months"`
+	Reason      string             `db:"reason" json:"reason"`
+	GrantedBy   uuid.UUID          `db:"granted_by" json:"granted_by"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	RevokedAt   pgtype.Timestamptz `db:"revoked_at" json:"revoked_at"`
 }
 
 type BillingSubscription struct {
-	UserID               uuid.UUID          `db:"user_id" json:"user_id"`
-	StripeCustomerID     string             `db:"stripe_customer_id" json:"stripe_customer_id"`
-	StripeSubscriptionID pgtype.Text        `db:"stripe_subscription_id" json:"stripe_subscription_id"`
-	Tier                 string             `db:"tier" json:"tier"`
-	Status               string             `db:"status" json:"status"`
-	CurrentPeriodEnd     pgtype.Timestamptz `db:"current_period_end" json:"current_period_end"`
-	CancelAtPeriodEnd    bool               `db:"cancel_at_period_end" json:"cancel_at_period_end"`
-	UpdatedAt            pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	UserID                 uuid.UUID          `db:"user_id" json:"user_id"`
+	ProviderCustomerID     string             `db:"provider_customer_id" json:"provider_customer_id"`
+	ProviderSubscriptionID pgtype.Text        `db:"provider_subscription_id" json:"provider_subscription_id"`
+	ProductCode            string             `db:"product_code" json:"product_code"`
+	Status                 string             `db:"status" json:"status"`
+	CurrentPeriodEnd       pgtype.Timestamptz `db:"current_period_end" json:"current_period_end"`
+	CancelAtPeriodEnd      bool               `db:"cancel_at_period_end" json:"cancel_at_period_end"`
+	UpdatedAt              pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	Provider               string             `db:"provider" json:"provider"`
+	ProviderProductID      pgtype.Text        `db:"provider_product_id" json:"provider_product_id"`
+	ProviderPriceID        pgtype.Text        `db:"provider_price_id" json:"provider_price_id"`
 }
 
 type BillingWebhookEvent struct {

@@ -251,6 +251,7 @@ func (s *Service) Start(ctx context.Context) error {
 		SecretKey:     s.stripeSecretKey,
 		WebhookSecret: s.stripeWebhookSecret,
 		PriceIDs:      s.supporterPriceIDs(),
+		Roles:         zed.UserChronicleRoles,
 		AccessURL:     au,
 	})
 

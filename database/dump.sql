@@ -213,7 +213,7 @@ CREATE TABLE authz_schema_migrations (
 CREATE TABLE billing_grants (
     id uuid NOT NULL,
     user_id uuid NOT NULL,
-    tier text NOT NULL,
+    product_code text NOT NULL,
     starts_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     months integer NOT NULL,
@@ -226,13 +226,16 @@ CREATE TABLE billing_grants (
 
 CREATE TABLE billing_subscriptions (
     user_id uuid NOT NULL,
-    stripe_customer_id text NOT NULL,
-    stripe_subscription_id text,
-    tier text NOT NULL,
+    provider_customer_id text NOT NULL,
+    provider_subscription_id text,
+    product_code text NOT NULL,
     status text NOT NULL,
     current_period_end timestamp with time zone,
     cancel_at_period_end boolean DEFAULT false NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    provider text DEFAULT 'stripe'::text NOT NULL,
+    provider_product_id text,
+    provider_price_id text
 );
 
 CREATE TABLE billing_webhook_events (
@@ -2215,10 +2218,10 @@ ALTER TABLE ONLY billing_subscriptions
     ADD CONSTRAINT billing_subscriptions_pkey PRIMARY KEY (user_id);
 
 ALTER TABLE ONLY billing_subscriptions
-    ADD CONSTRAINT billing_subscriptions_stripe_customer_id_key UNIQUE (stripe_customer_id);
+    ADD CONSTRAINT billing_subscriptions_provider_customer_id_key UNIQUE (provider_customer_id);
 
 ALTER TABLE ONLY billing_subscriptions
-    ADD CONSTRAINT billing_subscriptions_stripe_subscription_id_key UNIQUE (stripe_subscription_id);
+    ADD CONSTRAINT billing_subscriptions_provider_subscription_id_key UNIQUE (provider_subscription_id);
 
 ALTER TABLE ONLY billing_webhook_events
     ADD CONSTRAINT billing_webhook_events_pkey PRIMARY KEY (stripe_event_id);
