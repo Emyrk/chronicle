@@ -2652,6 +2652,255 @@ func (q *sqlQuerier) UpsertDatasetTalentTrees(ctx context.Context, arg UpsertDat
 	return err
 }
 
+const deleteExpiredDevicePairings = `-- name: DeleteExpiredDevicePairings :execrows
+DELETE FROM device_pairings WHERE expires_at <= NOW() - interval '1 hour'
+`
+
+func (q *sqlQuerier) DeleteExpiredDevicePairings(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredDevicePairings)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getDevicePairingByDeviceCodeHash = `-- name: GetDevicePairingByDeviceCodeHash :one
+SELECT id, user_code, device_code_hash, device_name, status, user_id, expires_at, created_at FROM device_pairings WHERE device_code_hash = $1
+`
+
+func (q *sqlQuerier) GetDevicePairingByDeviceCodeHash(ctx context.Context, deviceCodeHash []byte) (DevicePairing, error) {
+	row := q.db.QueryRow(ctx, getDevicePairingByDeviceCodeHash, deviceCodeHash)
+	var i DevicePairing
+	err := row.Scan(
+		&i.ID,
+		&i.UserCode,
+		&i.DeviceCodeHash,
+		&i.DeviceName,
+		&i.Status,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getDevicePairingByUserCode = `-- name: GetDevicePairingByUserCode :one
+SELECT id, user_code, device_code_hash, device_name, status, user_id, expires_at, created_at FROM device_pairings
+WHERE user_code = $1 AND expires_at > NOW()
+`
+
+func (q *sqlQuerier) GetDevicePairingByUserCode(ctx context.Context, userCode string) (DevicePairing, error) {
+	row := q.db.QueryRow(ctx, getDevicePairingByUserCode, userCode)
+	var i DevicePairing
+	err := row.Scan(
+		&i.ID,
+		&i.UserCode,
+		&i.DeviceCodeHash,
+		&i.DeviceName,
+		&i.Status,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getUploadDeviceByTokenHash = `-- name: GetUploadDeviceByTokenHash :one
+SELECT id, user_id, name, token_hash, created_at, last_used_at, revoked_at FROM upload_devices
+WHERE token_hash = $1 AND revoked_at IS NULL
+`
+
+func (q *sqlQuerier) GetUploadDeviceByTokenHash(ctx context.Context, tokenHash string) (UploadDevice, error) {
+	row := q.db.QueryRow(ctx, getUploadDeviceByTokenHash, tokenHash)
+	var i UploadDevice
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.TokenHash,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const insertDevicePairing = `-- name: InsertDevicePairing :one
+INSERT INTO device_pairings (user_code, device_code_hash, device_name, expires_at)
+VALUES ($1, $2, $3, $4)
+RETURNING id, user_code, device_code_hash, device_name, status, user_id, expires_at, created_at
+`
+
+type InsertDevicePairingParams struct {
+	UserCode       string             `db:"user_code" json:"user_code"`
+	DeviceCodeHash []byte             `db:"device_code_hash" json:"device_code_hash"`
+	DeviceName     string             `db:"device_name" json:"device_name"`
+	ExpiresAt      pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+}
+
+func (q *sqlQuerier) InsertDevicePairing(ctx context.Context, arg InsertDevicePairingParams) (DevicePairing, error) {
+	row := q.db.QueryRow(ctx, insertDevicePairing,
+		arg.UserCode,
+		arg.DeviceCodeHash,
+		arg.DeviceName,
+		arg.ExpiresAt,
+	)
+	var i DevicePairing
+	err := row.Scan(
+		&i.ID,
+		&i.UserCode,
+		&i.DeviceCodeHash,
+		&i.DeviceName,
+		&i.Status,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const insertUploadDevice = `-- name: InsertUploadDevice :one
+INSERT INTO upload_devices (user_id, name, token_hash)
+VALUES ($1, $2, $3)
+RETURNING id, user_id, name, token_hash, created_at, last_used_at, revoked_at
+`
+
+type InsertUploadDeviceParams struct {
+	UserID    uuid.UUID `db:"user_id" json:"user_id"`
+	Name      string    `db:"name" json:"name"`
+	TokenHash string    `db:"token_hash" json:"token_hash"`
+}
+
+func (q *sqlQuerier) InsertUploadDevice(ctx context.Context, arg InsertUploadDeviceParams) (UploadDevice, error) {
+	row := q.db.QueryRow(ctx, insertUploadDevice, arg.UserID, arg.Name, arg.TokenHash)
+	var i UploadDevice
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.TokenHash,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const listUploadDevicesByUser = `-- name: ListUploadDevicesByUser :many
+SELECT id, user_id, name, token_hash, created_at, last_used_at, revoked_at FROM upload_devices
+WHERE user_id = $1 AND revoked_at IS NULL
+ORDER BY created_at DESC
+`
+
+func (q *sqlQuerier) ListUploadDevicesByUser(ctx context.Context, userID uuid.UUID) ([]UploadDevice, error) {
+	rows, err := q.db.Query(ctx, listUploadDevicesByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UploadDevice
+	for rows.Next() {
+		var i UploadDevice
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Name,
+			&i.TokenHash,
+			&i.CreatedAt,
+			&i.LastUsedAt,
+			&i.RevokedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const redeemDevicePairing = `-- name: RedeemDevicePairing :one
+UPDATE device_pairings
+SET status = 'redeemed'
+WHERE id = $1 AND status = 'approved' AND expires_at > NOW()
+RETURNING id, user_code, device_code_hash, device_name, status, user_id, expires_at, created_at
+`
+
+// Single-use: flips approved -> redeemed exactly once.
+func (q *sqlQuerier) RedeemDevicePairing(ctx context.Context, id uuid.UUID) (DevicePairing, error) {
+	row := q.db.QueryRow(ctx, redeemDevicePairing, id)
+	var i DevicePairing
+	err := row.Scan(
+		&i.ID,
+		&i.UserCode,
+		&i.DeviceCodeHash,
+		&i.DeviceName,
+		&i.Status,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const resolveDevicePairingByUserCode = `-- name: ResolveDevicePairingByUserCode :one
+UPDATE device_pairings
+SET status = $1, user_id = $2
+WHERE user_code = $3 AND status = 'pending' AND expires_at > NOW()
+RETURNING id, user_code, device_code_hash, device_name, status, user_id, expires_at, created_at
+`
+
+type ResolveDevicePairingByUserCodeParams struct {
+	Status   string        `db:"status" json:"status"`
+	UserID   uuid.NullUUID `db:"user_id" json:"user_id"`
+	UserCode string        `db:"user_code" json:"user_code"`
+}
+
+// Approve or deny a pending, unexpired pairing on behalf of a user.
+func (q *sqlQuerier) ResolveDevicePairingByUserCode(ctx context.Context, arg ResolveDevicePairingByUserCodeParams) (DevicePairing, error) {
+	row := q.db.QueryRow(ctx, resolveDevicePairingByUserCode, arg.Status, arg.UserID, arg.UserCode)
+	var i DevicePairing
+	err := row.Scan(
+		&i.ID,
+		&i.UserCode,
+		&i.DeviceCodeHash,
+		&i.DeviceName,
+		&i.Status,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const revokeUploadDevice = `-- name: RevokeUploadDevice :execrows
+UPDATE upload_devices SET revoked_at = NOW()
+WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+`
+
+type RevokeUploadDeviceParams struct {
+	ID     uuid.UUID `db:"id" json:"id"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) RevokeUploadDevice(ctx context.Context, arg RevokeUploadDeviceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeUploadDevice, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const touchUploadDeviceLastUsed = `-- name: TouchUploadDeviceLastUsed :exec
+UPDATE upload_devices SET last_used_at = NOW() WHERE id = $1
+`
+
+func (q *sqlQuerier) TouchUploadDeviceLastUsed(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, touchUploadDeviceLastUsed, id)
+	return err
+}
+
 const claimDiscordAnnouncementDelivery = `-- name: ClaimDiscordAnnouncementDelivery :one
 UPDATE guild_discord_log_announcements
 SET delivery_attempted_at = NOW(),
@@ -4794,6 +5043,81 @@ func (q *sqlQuerier) GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, err
 	return i, err
 }
 
+const getLogFileByOwnerHash = `-- name: GetLogFileByOwnerHash :one
+SELECT id, owner, wow_log_id, hash, size_bytes, mime_type, created_at, updated_at, storage_deleted_at, compressed_size_bytes, content_encoding FROM log_file WHERE owner = $1 AND hash = $2
+`
+
+type GetLogFileByOwnerHashParams struct {
+	Owner uuid.UUID `db:"owner" json:"owner"`
+	Hash  string    `db:"hash" json:"hash"`
+}
+
+func (q *sqlQuerier) GetLogFileByOwnerHash(ctx context.Context, arg GetLogFileByOwnerHashParams) (LogFile, error) {
+	row := q.db.QueryRow(ctx, getLogFileByOwnerHash, arg.Owner, arg.Hash)
+	var i LogFile
+	err := row.Scan(
+		&i.ID,
+		&i.Owner,
+		&i.WowLogID,
+		&i.Hash,
+		&i.SizeBytes,
+		&i.MimeType,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.StorageDeletedAt,
+		&i.CompressedSizeBytes,
+		&i.ContentEncoding,
+	)
+	return i, err
+}
+
+const getLogGroupBySource = `-- name: GetLogGroupBySource :one
+SELECT
+  s.log_group_id,
+  COALESCE(MAX(f.size_bytes), 0)::bigint AS size_bytes
+FROM log_group_sources s
+LEFT JOIN log_file f ON f.wow_log_id = s.log_group_id
+WHERE s.owner = $1 AND s.source_id = $2
+GROUP BY s.log_group_id
+`
+
+type GetLogGroupBySourceParams struct {
+	Owner    uuid.UUID `db:"owner" json:"owner"`
+	SourceID string    `db:"source_id" json:"source_id"`
+}
+
+type GetLogGroupBySourceRow struct {
+	LogGroupID uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	SizeBytes  int64     `db:"size_bytes" json:"size_bytes"`
+}
+
+// Answers "do you already have this source id?" before a client sends a body:
+// the owner's group for the source id plus the largest file the server holds
+// for it. A source-keyed group has exactly one file, replaced in place as the
+// log grows (see UpdateLogFileAfterAppend), so the max is that file's size.
+func (q *sqlQuerier) GetLogGroupBySource(ctx context.Context, arg GetLogGroupBySourceParams) (GetLogGroupBySourceRow, error) {
+	row := q.db.QueryRow(ctx, getLogGroupBySource, arg.Owner, arg.SourceID)
+	var i GetLogGroupBySourceRow
+	err := row.Scan(&i.LogGroupID, &i.SizeBytes)
+	return i, err
+}
+
+const getLogGroupIDBySource = `-- name: GetLogGroupIDBySource :one
+SELECT log_group_id FROM log_group_sources WHERE owner = $1 AND source_id = $2
+`
+
+type GetLogGroupIDBySourceParams struct {
+	Owner    uuid.UUID `db:"owner" json:"owner"`
+	SourceID string    `db:"source_id" json:"source_id"`
+}
+
+func (q *sqlQuerier) GetLogGroupIDBySource(ctx context.Context, arg GetLogGroupIDBySourceParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getLogGroupIDBySource, arg.Owner, arg.SourceID)
+	var log_group_id uuid.UUID
+	err := row.Scan(&log_group_id)
+	return log_group_id, err
+}
+
 const getWoWLogFilesByGroupID = `-- name: GetWoWLogFilesByGroupID :many
 SELECT
   id, owner, wow_log_id, hash, size_bytes, mime_type, created_at, updated_at, storage_deleted_at, compressed_size_bytes, content_encoding
@@ -5113,6 +5437,24 @@ func (q *sqlQuerier) InsertLogFile(ctx context.Context, arg InsertLogFileParams)
 		&i.ContentEncoding,
 	)
 	return i, err
+}
+
+const insertLogGroupSource = `-- name: InsertLogGroupSource :exec
+INSERT INTO log_group_sources(log_group_id, owner, source_id)
+VALUES ($1, $2, $3)
+`
+
+type InsertLogGroupSourceParams struct {
+	LogGroupID uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	Owner      uuid.UUID `db:"owner" json:"owner"`
+	SourceID   string    `db:"source_id" json:"source_id"`
+}
+
+// Records the client-supplied source id (X-Chronicle-Source-Id) a log group was
+// uploaded under, so a later upload of the same grown file can replace it.
+func (q *sqlQuerier) InsertLogGroupSource(ctx context.Context, arg InsertLogGroupSourceParams) error {
+	_, err := q.db.Exec(ctx, insertLogGroupSource, arg.LogGroupID, arg.Owner, arg.SourceID)
+	return err
 }
 
 const insertWoWLogGroup = `-- name: InsertWoWLogGroup :one
@@ -10270,7 +10612,7 @@ WHERE true
     -- Cursor pagination (first_encounter_time, id) - pass '0001-01-01' to skip
     AND CASE
         WHEN $5 :: timestamptz != '0001-01-01'::timestamptz THEN
-            (COALESCE((SELECT MIN(lie.start_time) FROM log_instance_encounters lie WHERE lie.instance_id = li.id), wlg.created_at) < $5 
+            (COALESCE((SELECT MIN(lie.start_time) FROM log_instance_encounters lie WHERE lie.instance_id = li.id), wlg.created_at) < $5
              OR (COALESCE((SELECT MIN(lie.start_time) FROM log_instance_encounters lie WHERE lie.instance_id = li.id), wlg.created_at) = $5 AND li.id < $6 :: uuid))
         ELSE true
     END
@@ -10384,7 +10726,7 @@ SELECT DISTINCT ON (
     (SELECT COUNT(*) FROM log_instance_players lip2 WHERE lip2.instance_id = li.id) as player_count,
     (SELECT COUNT(*) FROM log_instance_encounters lie WHERE lie.instance_id = li.id AND lie.boss = true) as boss_count,
     (SELECT COUNT(*) FROM log_instance_encounters lie WHERE lie.instance_id = li.id AND lie.boss = true AND lie.kill_type IN ('clean', 'partial')) as boss_kills,
-    COALESCE((SELECT EXTRACT(EPOCH FROM (MAX(lie.end_time) - MIN(lie.start_time))) * 1000 
+    COALESCE((SELECT EXTRACT(EPOCH FROM (MAX(lie.end_time) - MIN(lie.start_time))) * 1000
      FROM log_instance_encounters lie WHERE lie.instance_id = li.id), 0)::float8 as duration_ms,
     g.id as guild_id,
     g.name as guild_name,
@@ -10432,7 +10774,7 @@ WHERE lip.name ILIKE $1
     -- Cursor pagination
     AND CASE
         WHEN $6 :: timestamptz != '0001-01-01'::timestamptz THEN
-            (COALESCE((SELECT MIN(lie.start_time) FROM log_instance_encounters lie WHERE lie.instance_id = li.id), wlg.created_at) < $6 
+            (COALESCE((SELECT MIN(lie.start_time) FROM log_instance_encounters lie WHERE lie.instance_id = li.id), wlg.created_at) < $6
              OR (COALESCE((SELECT MIN(lie.start_time) FROM log_instance_encounters lie WHERE lie.instance_id = li.id), wlg.created_at) = $6 AND li.id < $7 :: uuid))
         ELSE true
     END
