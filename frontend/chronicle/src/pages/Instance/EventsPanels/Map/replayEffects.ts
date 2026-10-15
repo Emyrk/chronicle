@@ -556,6 +556,42 @@ export function isBasicAttack(event: Pick<ReplayEffectEvent, "kind" | "spellId" 
   return BASIC_ATTACK_NAMES.has(event.spellName.trim().toLowerCase());
 }
 
+/**
+ * Spell ids of every non-basic cast in the encounter, whoever casts them and
+ * whatever the cast mode or selection, ordered by first cast time.
+ */
+export function collectCastSpellIds(events: readonly ReplayEffectEvent[]): number[] {
+  const first = new Map<number, number>();
+  for (const event of events) {
+    if ((event.kind !== "cast_start" && event.kind !== "cast_go") || isBasicAttack(event)) continue;
+    const prev = first.get(event.spellId!);
+    if (prev === undefined || event.timestampMs < prev) first.set(event.spellId!, event.timestampMs);
+  }
+  return [...first.entries()].sort((a, b) => a[1] - b[1] || a[0] - b[0]).map(([id]) => id);
+}
+
+/** Most icons preloaded, kept well below the scene's icon texture cache. */
+export const MAX_PRELOAD_ICONS = 96;
+
+/**
+ * Icon urls to preload: one per distinct url, in the order of the spell ids
+ * (first cast first), skipping excluded urls (the placeholder), capped.
+ */
+export function iconPreloadUrls(
+  spellIds: readonly number[],
+  iconUrl: (spellId: number) => string,
+  exclude: ReadonlySet<string> = new Set(),
+  max = MAX_PRELOAD_ICONS,
+): string[] {
+  const out = new Set<string>();
+  for (const id of spellIds) {
+    if (out.size >= max) break;
+    const url = iconUrl(id);
+    if (url && !exclude.has(url)) out.add(url);
+  }
+  return [...out];
+}
+
 /** How long an interrupted enemy cast's icon stays up (greyed). */
 export const INTERRUPTED_ICON_MS = 800;
 /** How long an interrupted player cast's icon stays up (greyed). */

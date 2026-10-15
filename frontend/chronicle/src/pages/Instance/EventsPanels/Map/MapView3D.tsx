@@ -17,7 +17,7 @@ import {
   type MapSceneDirector,
   type MapSceneFocus,
 } from "./MapScene3D";
-import { DEFAULT_EFFECT_OPTIONS, effectiveCastIconGuids, isBasicAttack, type CastIconMode, type EncounterEffects } from "./replayEffects";
+import { collectCastSpellIds, DEFAULT_EFFECT_OPTIONS, effectiveCastIconGuids, iconPreloadUrls, type CastIconMode, type EncounterEffects } from "./replayEffects";
 import type { MapViewRequest } from "./MapView2D";
 import type { MapSceneGround, MapSceneMarker } from "./useMapScene";
 
@@ -287,16 +287,18 @@ export default function MapView3D({
 
   // Spell icons float over the mode-picked players and bosses while they cast.
   const castGuids = effectSettings.enabled ? effectOptions.castIconGuids : null;
-  const castSpellIds = useMemo(() => {
-    if (!effects || !castGuids) return [];
-    const ids = new Set<number>();
-    for (const event of effects.events) {
-      if ((event.kind !== "cast_start" && event.kind !== "cast_go") || isBasicAttack(event)) continue;
-      if (castGuids.has(event.source)) ids.add(event.spellId!);
-    }
-    return [...ids];
-  }, [castGuids, effects]);
-  const { meta: spellMeta } = useSpellMeta(castSpellIds);
+  // Every cast spell in the encounter, so mode or selection changes fetch nothing new.
+  const castSpellIds = useMemo(() => (effects ? collectCastSpellIds(effects.events) : []), [effects]);
+  const { meta: spellMeta, loading: spellMetaLoading } = useSpellMeta(castSpellIds);
+
+  // Once the spell data is in, load the icon images ahead of playback.
+  useEffect(() => {
+    if (!effectSettings.enabled || spellMetaLoading || castSpellIds.length === 0) return;
+    const placeholder = spellMeta(null).icon;
+    sceneRef.current?.preloadIcons(
+      iconPreloadUrls(castSpellIds, (id) => spellMeta(id).icon, new Set([placeholder])),
+    );
+  }, [castSpellIds, effectSettings.enabled, spellMeta, spellMetaLoading]);
 
   useEffect(() => {
     const container = containerRef.current;

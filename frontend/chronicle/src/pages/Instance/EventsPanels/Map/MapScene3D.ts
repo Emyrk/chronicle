@@ -1814,6 +1814,16 @@ export class MapScene3D {
     return texture;
   }
 
+  /** Starts loading cast icons ahead of their first draw, through the same cache as iconTexture. */
+  preloadIcons(urls: readonly string[]) {
+    // Newest insert is most recently used, so walk backwards: the earliest
+    // urls end up freshest and are the last to be evicted.
+    for (let i = Math.min(urls.length, MAX_ICON_TEXTURES) - 1; i >= 0; i--) {
+      if (this.disposed) return;
+      this.iconTexture(urls[i]!);
+    }
+  }
+
   // The icon's texture once loaded, starting the load on first use; null
   // while loading or after a failed load (retried after ICON_RETRY_MS).
   private iconTexture(url: string): THREE.Texture | null {
