@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chronauth/authkeys"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/api/httpmw"
 	"github.com/Emyrk/chronicle/internal/itempricing"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
@@ -264,7 +265,11 @@ func (s *Service) Start(ctx context.Context) error {
 		return fmt.Errorf("create api: %w", err)
 	}
 
-	oauthService.SetBrowserAuth(handler.Auth.AuthenticationMiddleware, handler.Auth.Authenticated(false))
+	oauthService.SetBrowserAuth(
+		httpmw.BrowserOnly(au),
+		handler.Auth.AuthenticationMiddleware,
+		handler.Auth.Authenticated(false),
+	)
 	s.httpHandler.Set(handler.Routes())
 	s.app = handler
 
