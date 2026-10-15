@@ -102,7 +102,7 @@ export function LeaderboardsPage({ mode }: { mode: LeaderboardsMode }) {
       <div className="flex gap-6">
         <div className="min-w-0 flex-1">
           {mode !== "speedruns" ? (
-            <RankingsLanding />
+            <RankingsLanding showTopPlayers={mode !== "parsing"} />
           ) : (
             <SpeedrunLeaderboard />
           )}
