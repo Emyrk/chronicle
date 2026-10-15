@@ -1,6 +1,6 @@
 # Ruins of Lordaeron local 3D preview
 
-Runs a real WoW Forever "Halls of Lordaeron" log (map 2999) through a local
+Runs a real WoW Forever "Ruins of Lordaeron" log (map 2999) through a local
 backend and shows it in the Replay Map's "3D map" on the dungeon mesh, before
 the mesh is on the CDN. Nothing here touches prod.
 
@@ -60,10 +60,10 @@ Find the instance id (it is random per upload):
 
 ```bash
 docker exec chronicle-postgres psql -U postgres -d chronicle_ruins -At \
-  -c "select id from log_instances where name = 'Halls of Lordaeron'"
+  -c "select id from log_instances where name = 'Ruins of Lordaeron'"
 ```
 
-Expect one instance named "Halls of Lordaeron" with 47 encounters: 6 bosses
+Expect one instance named "Ruins of Lordaeron" with 47 encounters: 6 bosses
 (Witherfang, The Butcher, Viktor the Vile, The Abandoned, Bjork, Rath'mael;
 two of them also have a 0s duplicate) and 39 trash.
 

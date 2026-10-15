@@ -31,6 +31,12 @@ describe("getInstanceBackground", () => {
       "/c/images/loadingscreens/LoadingScreenExcavationSite.webp",
     );
   });
+
+  it("returns the WoW Forever Ruins of Lordaeron loading screen", () => {
+    expect(getInstanceBackground("Ruins of Lordaeron")).toBe(
+      "/c/images/loadingscreens/LoadScreenRuinsOfLordaeron.webp",
+    );
+  });
 });
 
 describe("getInstanceAccentColor", () => {
