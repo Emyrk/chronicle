@@ -7,7 +7,8 @@
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "db:migrate:local": "wrangler d1 migrations apply chronicle-telemetry --local",
-    "db:migrate:remote": "wrangler d1 migrations apply chronicle-telemetry --remote"
+    "db:migrate:remote": "wrangler d1 migrations apply chronicle-telemetry --remote",
+    "test": "node --test --experimental-strip-types test/*.test.ts"
   },
   "dependencies": {
     "hono": "^4.7.0"
