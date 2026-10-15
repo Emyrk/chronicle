@@ -13,6 +13,10 @@ miniatureDashboard.get("/internal/miniatures", (c) => c.html(
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+      {html`<script>
+        self.ModelViewerElement = self.ModelViewerElement || {};
+        self.ModelViewerElement.meshoptDecoderLocation = "https://cdn.jsdelivr.net/npm/meshoptimizer/meshopt_decoder.js";
+      </script>`}
       <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.1.0/model-viewer.min.js"></script>
       {html`<style>
         :root { --bg:#111312; --panel:#191d1a; --line:#374039; --text:#e9ebe5; --muted:#8c968e; --bone:#d5c5a2; --moss:#9dbd72; --blue:#77aeb9; --danger:#df756d; }
