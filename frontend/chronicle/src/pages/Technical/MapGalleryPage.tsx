@@ -21,6 +21,8 @@ import {
   type MapGalleryItem,
   type WowMapMeshInstance,
 } from "./mapGallery";
+import { GalleryPagination } from "./GalleryPagination";
+import { galleryPage } from "./galleryPage";
 import { fetchMapManifest } from "./mapManifest";
 
 // A mesh-only instance has no image; its card and modal show the mesh's
@@ -221,6 +223,7 @@ export function MapGalleryPage() {
   const { data: datasets } = useDatasets();
   const [datasetOverride, setDatasetOverride] = useState("");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [selectedMap, setSelectedMap] = useState<MapGalleryItem | null>(null);
   const selectedDataset = datasets?.find((dataset) => dataset.id === datasetOverride);
   const iconBaseUrl = datasetOverride ? selectedDataset?.icon_base_url : tenantIconBaseUrl;
@@ -244,6 +247,7 @@ export function MapGalleryPage() {
         || item.map.assignments?.some((assignment) => String(assignment.mapID).includes(query));
     });
   }, [items, search]);
+  const visibleItems = useMemo(() => galleryPage(filteredItems, page), [filteredItems, page]);
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(120,88,36,0.12),transparent_35%)]">
@@ -283,6 +287,7 @@ export function MapGalleryPage() {
                       value={datasetOverride}
                       onChange={(event) => {
                         setDatasetOverride(event.target.value);
+                        setPage(1);
                         setSelectedMap(null);
                       }}
                       className="rounded-md border border-amber-950/60 bg-[#11100d] px-3 py-2 font-sans text-sm normal-case tracking-normal text-amber-50 outline-none [color-scheme:dark] transition-colors focus:border-amber-700/70"
@@ -302,7 +307,10 @@ export function MapGalleryPage() {
                   <input
                     type="search"
                     value={search}
-                    onChange={(event) => setSearch(event.target.value)}
+                    onChange={(event) => {
+                      setSearch(event.target.value);
+                      setPage(1);
+                    }}
                     placeholder="Filter by name or map ID…"
                     className="w-full rounded-md border border-amber-950/60 bg-black/25 py-2 pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-amber-700/70"
                   />
@@ -346,11 +354,19 @@ export function MapGalleryPage() {
 
         {iconBaseUrl && filteredItems.length > 0 && (
           <>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Showing {filteredItems.length} of {items.length} map layers
-            </p>
+            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-muted-foreground">
+                Showing {visibleItems.start}–{visibleItems.end} of {filteredItems.length} matching map layers
+                {filteredItems.length !== items.length ? ` (${items.length} total)` : ""}
+              </p>
+              <GalleryPagination
+                page={visibleItems.page}
+                totalPages={visibleItems.totalPages}
+                onPageChange={setPage}
+              />
+            </div>
             <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-              {filteredItems.map((item) => (
+              {visibleItems.items.map((item) => (
                 <MapCard
                   key={item.key}
                   item={item}
@@ -358,6 +374,13 @@ export function MapGalleryPage() {
                   onSelect={setSelectedMap}
                 />
               ))}
+            </div>
+            <div className="mt-5">
+              <GalleryPagination
+                page={visibleItems.page}
+                totalPages={visibleItems.totalPages}
+                onPageChange={setPage}
+              />
             </div>
           </>
         )}

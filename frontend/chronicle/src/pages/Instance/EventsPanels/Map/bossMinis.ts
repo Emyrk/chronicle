@@ -73,10 +73,14 @@ export function parseMiniatureManifest(value: unknown): MiniatureManifest {
   return { format: MINIATURE_MANIFEST_FORMAT, miniatures };
 }
 
-export async function fetchMiniatureUrls(baseUrl = ICON_CDN): Promise<ReadonlyMap<number, string>> {
+export async function fetchMiniatureManifest(baseUrl = ICON_CDN): Promise<MiniatureManifest> {
   const response = await fetch(miniatureManifestUrl(baseUrl));
   if (!response.ok) throw new Error(`Miniature manifest request failed with ${response.status}`);
-  const manifest = parseMiniatureManifest(await response.json());
+  return parseMiniatureManifest(await response.json());
+}
+
+export async function fetchMiniatureUrls(baseUrl = ICON_CDN): Promise<ReadonlyMap<number, string>> {
+  const manifest = await fetchMiniatureManifest(baseUrl);
   return new Map(manifest.miniatures.flatMap((miniature) =>
     miniature.entry_ids.map((entry) => [entry, miniatureAssetUrl(miniature.path, baseUrl)] as const),
   ));

@@ -63,6 +63,7 @@ import {
   ConsumablesPage,
   CooldownSpellsPage,
   MapGalleryPage,
+  MiniaturesPage,
 } from "./pages/Technical"
 import {
   AccountLayout,
@@ -217,6 +218,7 @@ function App() {
           <Route path="consumables" element={<ConsumablesPage />} />
           <Route path="cooldowns" element={<CooldownSpellsPage />} />
           <Route path="maps" element={<MapGalleryPage />} />
+          <Route path="miniatures" element={<MiniaturesPage />} />
         </Route>
         <Route path="/contact" element={<Contact />} />
         <Route path="/privacy" element={<Privacy />} />

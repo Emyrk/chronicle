@@ -1,14 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BOSS_MINI_SLUGS,
   MINIATURE_MANIFEST_FORMAT,
   bossMiniSlug,
   bossMiniUrl,
+  fetchMiniatureManifest,
+  fetchMiniatureUrls,
   miniatureAssetUrl,
   miniatureManifestUrl,
   miniatureUrlCandidates,
   parseMiniatureManifest,
 } from "./bossMinis";
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("bossMinis", () => {
   it("maps each Wailing Caverns boss entry to its model file", () => {
@@ -63,6 +67,27 @@ describe("bossMinis", () => {
         { name: "Two", path: "miniatures/two.glb", entry_ids: [1] },
       ],
     })).toThrow(/Duplicate miniature entry ID/);
+  });
+
+  it("fetches the full manifest and derives the replay lookup from it", async () => {
+    const payload = {
+      format: MINIATURE_MANIFEST_FORMAT,
+      miniatures: [
+        { name: "Shared serpent", path: "miniatures/serpent.glb", entry_ids: [3670, 3671] },
+        { name: "Firelord", path: "miniatures/firelord.glb", entry_ids: [11502] },
+      ],
+    };
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => payload });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchMiniatureManifest("https://icons.example/root/")).resolves.toEqual(payload);
+    await expect(fetchMiniatureUrls("https://icons.example/root/")).resolves.toEqual(new Map([
+      [3670, "https://icons.example/root/miniatures/serpent.glb"],
+      [3671, "https://icons.example/root/miniatures/serpent.glb"],
+      [11502, "https://icons.example/root/miniatures/firelord.glb"],
+    ]));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledWith("https://icons.example/root/miniatures/manifest.json");
   });
 
   it("prefers the published model and keeps the bundled model as a fallback", () => {
