@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft, BookOpen, Braces, ChevronDown, Clock, FileCode, FileType2, FlaskConical, Globe2, Images, Map, PawPrint, ShieldAlert, ShieldCheck, Sparkles, Swords, TimerReset } from "lucide-react";
+import { ArrowLeft, BookOpen, Box, Braces, ChevronDown, Clock, FileCode, FileType2, FlaskConical, Globe2, Images, Map, PawPrint, ShieldAlert, ShieldCheck, Sparkles, Swords, TimerReset } from "lucide-react";
 import { useDatasets, useSiteConfig } from "@/api/queries";
 import { Card } from "@/components/ui/Card/Card";
 import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
@@ -77,6 +77,12 @@ const TECHNICAL_LINKS: TechnicalLink[] = [
     description: "UI map artwork and coordinate metadata published for the active dataset",
     href: "/technical/maps",
     icon: <Map className="h-4 w-4" />,
+  },
+  {
+    title: "Miniature Registry",
+    description: "Interactive previews of every unit model published in the shared miniature manifest",
+    href: "/technical/miniatures",
+    icon: <Box className="h-4 w-4" />,
   },
   {
     title: "Talent Trees",

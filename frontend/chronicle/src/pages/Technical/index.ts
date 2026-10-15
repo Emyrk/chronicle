@@ -11,3 +11,4 @@ export { PetTargetingAbilitiesPage } from "./PetTargetingAbilitiesPage";
 export { ConsumablesPage } from "./ConsumablesPage";
 export { CooldownSpellsPage } from "./CooldownSpellsPage";
 export { MapGalleryPage } from "./MapGalleryPage";
+export { MiniaturesPage } from "./MiniaturesPage";
