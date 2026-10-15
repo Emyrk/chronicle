@@ -22,6 +22,10 @@ export function selectPlayerSubSpec(values: readonly string[], requested: string
   };
 }
 
+export function playerCohortBucketMatchesSubSpec(bucket: ParseScoreCohortBucket, selectedSubSpec: string): boolean {
+  return (bucket.player_sub_spec ?? "") === selectedSubSpec;
+}
+
 export function playerCohortSizeKey(bucket: ParseScoreCohortBucket): string {
   return `${bucket.difficulty_name}|${bucket.max_players}`;
 }
