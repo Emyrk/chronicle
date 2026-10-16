@@ -194,6 +194,11 @@ func (s *Service) revoke(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) browserApprovalHandler(w http.ResponseWriter, r *http.Request) {
+	authClaims, ok := chronauth.AuthenticatedClaims(r.Context())
+	if !ok {
+		http.Redirect(w, r, "/login?from="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
 		renderDevicePage(w, http.StatusOK, devicePageData{
@@ -239,7 +244,7 @@ func (s *Service) browserApprovalHandler(w http.ResponseWriter, r *http.Request)
 				Message: "Chronicle Sidekick is now authorized to use your Chronicle account.",
 			}
 		}
-		subject := chronauth.MustAuthenticatedClaims(r.Context()).Subject.String()
+		subject := authClaims.Subject.String()
 		if err := s.store.approveDevice(r.Context(), signature, subject, state); err != nil {
 			if errors.Is(err, fosite.ErrNotFound) {
 				renderDevicePage(w, http.StatusNotFound, devicePageData{

@@ -268,7 +268,9 @@ func (s *Service) Start(ctx context.Context) error {
 	oauthService.SetBrowserAuth(
 		httpmw.BrowserOnly(au),
 		handler.Auth.AuthenticationMiddleware,
-		handler.Auth.Authenticated(false),
+		// Optional so signed-out visitors are redirected to the login page
+		// instead of receiving a plain-text 401.
+		handler.Auth.Authenticated(true),
 	)
 	s.httpHandler.Set(handler.Routes())
 	s.app = handler

@@ -19,6 +19,9 @@ export function Login() {
   const branding = siteConfig?.tenant?.branding ?? siteConfig?.branding ?? null
   const loading = (authLoading || providersLoading) && !providersError
   const authError = searchParams.get("error")
+  // Same-origin path to return to after login (e.g. the server-rendered /oauth/device page).
+  const fromParam = searchParams.get("from")
+  const returnPath = fromParam?.startsWith("/") && !fromParam.startsWith("//") ? fromParam : null
 
   const resetToken = searchParams.get("reset_token")
   const [mode, setMode] = useState<"login" | "register" | "forgot" | "reset">(resetToken ? "reset" : "login")
@@ -36,9 +39,14 @@ export function Login() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate("/", { replace: true })
+      if (returnPath) {
+        // Full navigation: the return path may be a server-rendered page.
+        window.location.replace(returnPath)
+      } else {
+        navigate("/", { replace: true })
+      }
     }
-  }, [isAuthenticated, navigate])
+  }, [isAuthenticated, navigate, returnPath])
 
   const handleOAuthLogin = (providerName: string) => {
     const params = new URLSearchParams(window.location.search)
@@ -110,7 +118,7 @@ export function Login() {
       }
 
       // Login: session cookie is set by the server, reload to pick it up
-      window.location.href = "/"
+      window.location.href = returnPath ?? "/"
     } catch {
       setFormError("Network error. Please try again.")
     } finally {
