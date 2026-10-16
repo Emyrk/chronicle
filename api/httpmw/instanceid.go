@@ -69,6 +69,13 @@ func InstanceIDMiddleware(db *authz.Authz) func(next http.Handler) http.Handler 
 	}
 }
 
+type instancePrivateKey struct{}
+
+func InstancePrivate(ctx context.Context) bool {
+	private, _ := ctx.Value(instancePrivateKey{}).(bool)
+	return private
+}
+
 func InstanceViewMiddleware(db *authz.Authz) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -78,6 +85,7 @@ func InstanceViewMiddleware(db *authz.Authz) func(next http.Handler) http.Handle
 				httpapi.InternalServerError(w, err)
 				return
 			}
+			r = r.WithContext(context.WithValue(r.Context(), instancePrivateKey{}, private))
 			if !private {
 				next.ServeHTTP(w, r)
 				return

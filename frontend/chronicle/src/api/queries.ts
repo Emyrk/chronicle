@@ -1287,7 +1287,10 @@ export function useInstance(instanceId: string, options?: Omit<UseQueryOptions<W
     retry: false,
     queryFn: async () => {
       const response = await fetch(`/api/v1/raidlogs/instances/${instanceId}`);
-      if (!response.ok) throw await readAPIError(response, response.status === 403 ? "This is a private log. Request access from its owner to view it." : "Failed to fetch instance");
+      if (response.status === 403) {
+        throw await readAPIError(response, "This is a private log. Request access from its owner to view it.");
+      }
+      if (!response.ok) throw new Error("Failed to fetch instance");
       return response.json() as Promise<WoWParsedInstance>;
     },
     ...options,

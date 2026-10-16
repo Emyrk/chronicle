@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryOptions } from "@tanstack/react-query";
 
-export type PrivateLogAccessStatus = "none" | "pending" | "approved" | "denied" | "revoked";
+export type PrivateLogAccessStatus = "none" | "owner" | "pending" | "approved" | "denied" | "revoked";
 
 export interface PrivateLogAccessContext {
   is_owner?: boolean;
@@ -15,28 +15,22 @@ export interface PrivateLogShare {
 }
 
 export interface PrivateLogShareMetadata {
-  code: string;
-  log_id?: string;
-  instance_id?: string;
-  instance_slug?: string;
-  log_name?: string;
-  instance_name?: string;
+  log_group_id: string;
   owner_name?: string;
-  created_at?: string;
+  private: boolean;
   access_status?: PrivateLogAccessStatus;
-  request_status?: PrivateLogAccessStatus;
-  has_access?: boolean;
-  access?: PrivateLogAccessContext;
 }
 
 export interface PrivateLogAccessRequest {
   id: string;
-  user_id?: string;
-  user_name?: string;
-  username?: string;
+  log_group_id: string;
+  requester_id: string;
+  requester_name?: string;
   status: PrivateLogAccessStatus;
-  created_at?: string;
-  updated_at?: string;
+  created_at: string;
+  updated_at: string;
+  decided_by?: string;
+  decided_at?: string;
 }
 
 export class PrivateLogAPIError extends Error {
@@ -87,7 +81,7 @@ async function readError(response: Response, fallback: string): Promise<Error> {
 export function useCreatePrivateLogShare() {
   return useMutation({
     mutationFn: async (logId: string) => {
-      const response = await fetch(`/api/v1/raidlogs/logs/${encodeURIComponent(logId)}/private-share`, {
+      const response = await fetch(`/api/v1/raidlogs/logs/${encodeURIComponent(logId)}/private-share-links`, {
         method: "POST",
       });
       if (!response.ok) throw await readError(response, "Failed to create private share link");

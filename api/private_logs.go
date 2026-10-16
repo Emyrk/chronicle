@@ -95,7 +95,7 @@ func (api *API) CreatePrivateLogShareLink(w http.ResponseWriter, r *http.Request
 
 	httpapi.Write(ctx, w, http.StatusCreated, chroniclesdk.PrivateLogShareLink{
 		ID: link.ID, LogGroupID: link.LogGroupID, Code: link.Code,
-		URL: requestOrigin(r) + "/private-log/" + link.Code, CreatedAt: link.CreatedAt.Time,
+		URL: requestOrigin(r) + "/private-log-shares/" + link.Code, CreatedAt: link.CreatedAt.Time,
 	})
 }
 
@@ -147,8 +147,18 @@ func (api *API) ResolvePrivateLogShareLink(w http.ResponseWriter, r *http.Reques
 		Private:    link.Private,
 	}
 	if claims, ok := chronauth.AuthenticatedClaims(ctx); ok {
-		if claims.Subject == link.Owner {
-			response.AccessStatus = "owner"
+		actor, _ := authz.ActorFromContext(ctx)
+		canView, checkErr := api.Zed.CheckOne(ctx, nil, policy.New().Raid_log(link.PrivateLogShareLink.LogGroupID).CanView_User(actor))
+		if checkErr != nil {
+			httpapi.InternalServerError(w, checkErr)
+			return
+		}
+		if canView {
+			if claims.Subject == link.Owner {
+				response.AccessStatus = "owner"
+			} else {
+				response.AccessStatus = "approved"
+			}
 		} else if request, requestErr := api.Zed.GetPrivateLogAccessRequestForUser(ctx, database.GetPrivateLogAccessRequestForUserParams{
 			LogGroupID: link.PrivateLogShareLink.LogGroupID, RequesterID: claims.Subject,
 		}); requestErr == nil {
@@ -178,8 +188,14 @@ func (api *API) RequestPrivateLogAccess(w http.ResponseWriter, r *http.Request) 
 		httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{Message: "log is public"})
 		return
 	}
-	if claims.Subject == link.Owner {
-		httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{Message: "log owner already has access"})
+	actor, _ := authz.ActorFromContext(ctx)
+	canView, err := api.Zed.CheckOne(ctx, nil, policy.New().Raid_log(link.PrivateLogShareLink.LogGroupID).CanView_User(actor))
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if canView {
+		httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{Message: "you already have access to this log"})
 		return
 	}
 

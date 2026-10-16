@@ -4836,6 +4836,7 @@ export interface WoWInstance {
     readonly tenant_slug?: string;
     readonly tenant_include_in_all?: boolean;
     readonly log_group_id: string;
+    readonly private: boolean;
     readonly name: string;
     readonly slug: string;
     readonly start_time?: string;

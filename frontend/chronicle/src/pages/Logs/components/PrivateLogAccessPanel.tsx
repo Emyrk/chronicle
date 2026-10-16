@@ -100,7 +100,7 @@ export function PrivateLogAccessPanel({ logId }: { logId: string }) {
         ) : (
           <div className="space-y-2">
             {requests.data.map((request) => {
-              const name = request.user_name ?? request.username ?? request.user_id ?? "Chronicle user";
+              const name = request.requester_name ?? request.requester_id ?? "Chronicle user";
               const busy = updateRequest.isPending && updateRequest.variables?.requestId === request.id;
               return (
                 <div key={request.id} className="flex flex-col gap-3 rounded-lg border px-3 py-3 sm:flex-row sm:items-center">

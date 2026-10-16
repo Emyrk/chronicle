@@ -793,7 +793,8 @@ parse_rows AS MATERIALIZED (
         psr.encounter_name,
         psr.precise_score
     FROM parse_score_results psr
-    JOIN wow_log_groups psr_group ON psr_group.id = psr.log_group_id AND NOT psr_group.private
+    JOIN log_instances psr_instance ON psr_instance.id = psr.instance_id
+    JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NOT psr_group.private
     JOIN selected_encounters selected ON selected.encounter_name = psr.encounter_name
     WHERE psr.tenant_id = @tenant_id
       AND psr.player_guid = @player_guid
