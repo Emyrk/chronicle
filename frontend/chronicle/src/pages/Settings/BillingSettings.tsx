@@ -130,8 +130,8 @@ const COMPARISON = [
   },
   {
     feature: "Raw log downloads",
-    friendly: "Browse parsed logs on Chronicle.",
-    exalted: "Also download the original combat log file behind any of your uploads.",
+    friendly: "—",
+    exalted: "Download the original combat log file behind any of your uploads. Use Chronicle as an archive for your raw data.",
   },
   {
     feature: "Private logs",
