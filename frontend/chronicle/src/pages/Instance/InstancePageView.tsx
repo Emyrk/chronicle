@@ -1394,9 +1394,6 @@ function EncounterDetail({
   layouts,
 }: EncounterDetailProps) {
   const availablePresetLayouts = getAvailablePresetLayouts(instance.capabilities ?? []);
-  const isSingle = encounters.length === 1;
-  const encounter = encounters[0];
-
   // Active tab and collapsible state
   const [activeTab, setActiveTab] = useState<'enemies' | 'players'>('enemies');
   const [isEntityPanelOpen, setIsEntityPanelOpen] = useState(false);
@@ -1545,39 +1542,9 @@ function EncounterDetail({
   const selectedPlayerCount = entitySelection.playerIds.size;
   const totalSelectionCount = selectedEnemyCount + selectedPlayerCount;
 
-  // Build title
-  const title = isSingle
-    ? encounter.name
-    : `${encounters.length} Encounters Selected`;
-
-  const subtitle = isSingle
-    ? (encounter.kill_type === "wipe" ? "(Wipe)" : encounter.kill_type === "partial" ? "(Partial)" : encounter.kill_type === "reset" ? "(Reset)" : null)
-    : encounters.map(e => e.name).filter((v, i, a) => a.indexOf(v) === i).join(", ");
-
-  return (
-    <div className="flex-1 min-w-0">
-      {/* Encounter header */}
-      <div className={cn("mb-6", "flex items-center justify-between")}>
-        <div className="flex items-center gap-3">
-          {isSingle && (
-            encounter.kill_type === "clean" ? (
-              <CheckCircle className="h-6 w-6 text-green-500" />
-            ) : encounter.kill_type === "partial" ? (
-              <AlertTriangle className="h-6 w-6 text-yellow-500" />
-            ) : encounter.kill_type === "reset" ? (
-              <RotateCcw className="h-6 w-6 text-orange-500" />
-            ) : (
-              <Skull className="h-6 w-6 text-red-500" />
-            )
-          )}
-          <div>
-            <h2 className="text-xl font-semibold">{title}</h2>
-            {subtitle && !isMobile && (
-              <p className="text-sm text-muted-foreground truncate max-w-md">{subtitle}</p>
-            )}
-          </div>
-        </div>
-        <div className={cn("flex text-muted-foreground text-sm", isMobile ? "flex-col items-end gap-0.5" : "items-center gap-4")}>
+  // Selected encounters are shown in the sidebar; only durations are surfaced here.
+  const durations = (
+    <div className={cn("flex items-center whitespace-nowrap text-muted-foreground", isMobile ? "gap-3 text-xs" : "gap-4 text-sm")}>
           <Tooltip>
             <TooltipTrigger asChild>
               <div className="flex items-center gap-1.5">
@@ -1615,17 +1582,19 @@ function EncounterDetail({
               </TooltipContent>
             </Tooltip>
           )}
-        </div>
-      </div>
+    </div>
+  );
 
+  return (
+    <div className="flex-1 min-w-0">
       {/* Entity selection - Enemies and Players tabs */}
       <Tabs value={activeTab} onValueChange={(v) => {
         setActiveTab(v as 'enemies' | 'players');
         setIsEntityPanelOpen(true);
       }} className="mb-3">
         <Collapsible open={isEntityPanelOpen} onOpenChange={setIsEntityPanelOpen}>
-          <Card className="p-4" data-help-entity-panel>
-            <div className="flex items-center justify-between">
+          <Card className={isMobile ? "p-3 gap-2" : "p-4"} data-help-entity-panel>
+            <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <TabsList>
                   <TabsTrigger value="enemies" className="gap-1.5">
@@ -1669,15 +1638,17 @@ function EncounterDetail({
                   </button>
                 )}
               </div>
-              <CollapsibleTrigger asChild>
-                <button className="flex items-center gap-2 px-3 py-2 -mr-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-                  <span className="text-xs">
-                    {mergedEnemies.length} enemies
-                  </span>
-                  <ChevronRight className="h-4 w-4 transition-transform duration-200 [[data-state=open]_&]:rotate-90" />
-                </button>
-              </CollapsibleTrigger>
+              <div className="flex items-center gap-2">
+                {!isMobile && durations}
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center px-2 py-2 -mr-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                    <ChevronRight className="h-4 w-4 transition-transform duration-200 [[data-state=open]_&]:rotate-90" />
+                    <span className="sr-only">Toggle entity list</span>
+                  </button>
+                </CollapsibleTrigger>
+              </div>
             </div>
+            {isMobile && durations}
 
             <CollapsibleContent>
               <div>
