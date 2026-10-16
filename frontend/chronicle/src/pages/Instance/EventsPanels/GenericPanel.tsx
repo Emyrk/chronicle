@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { PanelRenderProps } from "./types";
 import { formatNumber } from "@/lib/format";
+import { shouldShowInitialPanelState } from "./genericPanelState";
 
 export function GenericPanel<TResult>({
   loading,
@@ -19,15 +20,16 @@ export function GenericPanel<TResult>({
   }
 
   // Keep showing prior results while sync mode incrementally processes updates.
-  // Only show blocking states if we don't have any processed events yet.
-  if (loading && totalEvents === 0) {
+  // An empty result is still a completed result, so only block before the first
+  // aggregation finishes. This avoids empty panels flashing on every replay tick.
+  if (shouldShowInitialPanelState(loading, totalEvents, processingTimeMs)) {
     return (
       <div className="h-full min-h-0 text-xs text-muted-foreground flex items-center justify-center">
         Fetching data...
       </div>
     );
   }
-  if (processing && totalEvents === 0) {
+  if (shouldShowInitialPanelState(processing, totalEvents, processingTimeMs)) {
     return (
       <div className="h-full min-h-0 text-xs text-muted-foreground flex items-center justify-center">
         Processing...
