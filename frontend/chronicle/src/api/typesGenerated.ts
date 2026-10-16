@@ -1130,9 +1130,7 @@ export interface DuplicateInstance {
 }
 
 // From chroniclesdk/log.go
-export type Duration = 180000000000;
-
-export const Durations: Duration[] = [180000000000];
+export type Duration = number;
 
 // From chroniclesdk/gamedata.go
 /**
