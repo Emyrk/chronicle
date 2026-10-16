@@ -349,6 +349,7 @@ export function GuildPageEditor() {
                 guild={pageConfig!.guild}
                 panels={[...currentTab.panels]}
                 isEditing={!currentTabIsRequired}
+                panelLayout={currentTheme.panel_layout}
                 onLayoutChange={handleLayoutChange}
                 onPanelConfig={handlePanelConfig}
                 onPanelDelete={handlePanelDelete}
