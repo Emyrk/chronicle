@@ -273,6 +273,13 @@ export interface PanelRenderProps<TResult> {
   /** Flips the card to its back (renderCardBack), for panels with their own settings button. */
   flipCard?: () => void;
 
+  /**
+   * The right side of the card's title row, for panels to portal compact
+   * controls into instead of spending a row of their own. Null until mounted
+   * and in hosts without a title row.
+   */
+  headerSlot?: HTMLElement | null;
+
 }
 
 /**

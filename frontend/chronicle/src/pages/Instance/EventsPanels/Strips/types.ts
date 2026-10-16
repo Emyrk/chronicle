@@ -2,7 +2,7 @@ import type { StripOrientation } from "@/components/layout/GridLayoutEditor";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import type { ProcessorEvent } from "../processorTypes";
 
-export type StripType = "replay" | "raid_durability" | "consumables_cost";
+export type StripType = "replay" | "replay_controller" | "raid_durability" | "consumables_cost";
 
 export interface StripSizeProfile {
   minLength: number;
@@ -58,5 +58,10 @@ export interface StripDefinition<
   supportedOrientations: readonly StripOrientation[];
   defaultOrientation: StripOrientation;
   size: StripSizeProfile;
+  /**
+   * Where the hover bar (selector, Filters, Edit) appears: over the strip's
+   * top edge (default), or just above it for strips with controls up there.
+   */
+  hoverChrome?: "inside" | "above";
   render: (props: StripRenderProps<TResult>) => React.ReactNode;
 }

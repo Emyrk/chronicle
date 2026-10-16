@@ -29,3 +29,20 @@ describe("layout strip persistence", () => {
     });
   });
 });
+
+describe("layout appearance", () => {
+  const items = [{ id: "panel-1", title: "Map", x: 0, y: 0, w: 12, h: 7 }];
+
+  it("round-trips the seamless and fit flags", () => {
+    const serialized = serializeLayoutLab(items, { "panel-1": "map" }, undefined, undefined, { seamless: true, fit: true });
+    expect(JSON.parse(serialized)).toMatchObject({ seamless: true, fit: true });
+    expect(parseLayoutLab(serialized)).toMatchObject({ seamless: true, fit: true });
+  });
+
+  it("leaves it out of layouts that are not seamless", () => {
+    const serialized = serializeLayoutLab(items, { "panel-1": "map" });
+    expect("seamless" in JSON.parse(serialized)).toBe(false);
+    expect(parseLayoutLab(serialized).seamless).toBeUndefined();
+    expect(parseLayoutLab(JSON.stringify({ ...JSON.parse(serialized), seamless: "yes" })).seamless).toBeUndefined();
+  });
+});

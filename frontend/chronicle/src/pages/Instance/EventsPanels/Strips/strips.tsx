@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- strip definitions and their renderers are intentionally colocated */
-import { Activity, Coins, Timer } from "lucide-react";
+import { Activity, Coins, SlidersHorizontal, Timer } from "lucide-react";
 import { useMemo } from "react";
 import { useConsumableDisambiguations } from "@/api/queries";
 import type { ConsumableDisambiguation } from "@/api/typesGenerated";
@@ -27,6 +27,8 @@ import {
   stripOptionValue,
   stripTitleMode,
 } from "./stripOptions";
+import { replayControllerProcessor } from "./replayController.processor";
+import { ReplayControllerStrip } from "./ReplayControllerStrip";
 import { stripReplayProgress } from "./stripReplay";
 import type { StripDefinition, StripRenderProps, StripType } from "./types";
 
@@ -258,6 +260,18 @@ export const STRIPS: Record<StripType, StripDefinition<any, any>> = {
     defaultOrientation: "horizontal",
     size: DEFAULT_SIZE,
     render: () => <ReplayStrip />,
+  },
+  replay_controller: {
+    ...replayControllerProcessor,
+    id: "replay_controller_strip",
+    label: "Replay Controller",
+    icon: <SlidersHorizontal className="h-4 w-4" />,
+    syncDataMode: "full",
+    supportedOrientations: HORIZONTAL_ONLY,
+    defaultOrientation: "horizontal",
+    size: DEFAULT_SIZE,
+    hoverChrome: "above",
+    render: (props) => <ReplayControllerStrip {...props} />,
   },
   raid_durability: {
     ...statusProcessor,

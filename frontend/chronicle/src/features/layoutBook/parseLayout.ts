@@ -7,7 +7,27 @@ import {
   DEFAULT_INSTANCE_PANEL_TYPES,
 } from "@/pages/Instance/viewDefaults";
 
-export interface LayoutLabExportV1 {
+/**
+ * How a layout is laid out, stored as top-level flags in the layout JSON. Not
+ * offered in the UI yet; set by presets or by hand in the JSON.
+ */
+export interface LayoutAppearance {
+  /** Butt panels and strips together with no gaps or rounding. */
+  seamless?: boolean;
+  /** In focus mode, stretch panel rows so the layout fills the screen (strip rows keep their size). */
+  fit?: boolean;
+}
+
+/** The appearance flags set to true in `raw` (anything else is ignored). */
+export function readLayoutAppearance(raw: unknown): LayoutAppearance {
+  const value = (raw ?? {}) as Record<string, unknown>;
+  return {
+    ...(value.seamless === true ? { seamless: true } : {}),
+    ...(value.fit === true ? { fit: true } : {}),
+  };
+}
+
+export interface LayoutLabExportV1 extends LayoutAppearance {
   version: 1;
   items: GridEditorItem[];
   panelTypesById: Record<string, EventsPanelType>;
@@ -20,6 +40,7 @@ export function serializeLayoutLab(
   panelTypesById: Record<string, EventsPanelType>,
   panelOptionsById?: Record<string, string | null>,
   panelFiltersById?: Record<string, PanelFilter[]>,
+  appearance?: LayoutAppearance,
 ): string {
   const filteredPanelOptions = panelOptionsById
     ? Object.fromEntries(Object.entries(panelOptionsById).filter(([, value]) => value !== null)) as Record<string, string>
@@ -39,6 +60,7 @@ export function serializeLayoutLab(
     ...(filteredPanelFilters && Object.keys(filteredPanelFilters).length > 0
       ? { panelFiltersById: filteredPanelFilters }
       : {}),
+    ...readLayoutAppearance(appearance),
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -62,6 +84,7 @@ export function parseLayoutLab(raw: string): LayoutLabExportV1 {
     panelFiltersById: parsed.panelFiltersById && typeof parsed.panelFiltersById === "object"
       ? parsed.panelFiltersById as Record<string, PanelFilter[]>
       : undefined,
+    ...readLayoutAppearance(parsed),
   };
 }
 

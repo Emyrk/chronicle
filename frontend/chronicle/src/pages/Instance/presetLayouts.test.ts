@@ -65,3 +65,21 @@ describe("preset layout availability", () => {
     expect(labels).toContain("Interrupts");
   });
 });
+
+describe("Map preset", () => {
+  it("follows Player Timeline and stacks the map on the replay controller seamlessly", () => {
+    const ids = PRESET_LAYOUTS.map((preset) => preset.id);
+    expect(ids.indexOf("map")).toBe(ids.indexOf("player_timeline") + 1);
+    const preset = PRESET_LAYOUTS_BY_ID.map;
+    if (!isPanelPresetLayout(preset)) throw new Error("Map should be a panels preset");
+    expect(preset.seamless).toBe(true);
+    const [map, strip] = preset.layoutItems;
+    expect(preset.panelTypes[map.id]).toBe("map");
+    expect(strip).toMatchObject({ kind: "strip", stripType: "replay_controller", y: map.y + map.h, w: map.w });
+  });
+
+  it("needs unit positions", () => {
+    expect(getAvailablePresetLayouts([]).map((preset) => preset.id)).not.toContain("map");
+    expect(getAvailablePresetLayouts(["unit-position"]).map((preset) => preset.id)).toContain("map");
+  });
+});

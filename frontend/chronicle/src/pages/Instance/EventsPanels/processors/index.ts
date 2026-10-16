@@ -31,6 +31,7 @@ import { rotationsProcessor } from "../Rotations/rotations.processor";
 import { mapProcessor } from "../Map/map.processor";
 import { actualRaidHealthProcessor } from "../Status/actualRaidHealth.processor";
 import { statusProcessor } from "../Status/status.processor";
+import { replayControllerProcessor } from "../Strips/replayController.processor";
 import { healerCastsProcessor } from "../HealerCasts/healerCasts.processor";
 import { spellCountProcessor } from "../SpellCount/spellCount.processor";
 import { cooldownUsageProcessor } from "../CooldownUsage/cooldownUsage.processor";
@@ -214,6 +215,7 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   cooldown_usage: cooldownUsageProcessor,
   replay_strip: { ...emptyProcessor, id: "replay_strip" },
   raid_durability_strip: { ...statusProcessor, id: "raid_durability_strip" },
+  replay_controller_strip: { ...replayControllerProcessor, id: "replay_controller_strip" },
   // Rotations
   rotations: rotationsProcessor,
   // Control timelines

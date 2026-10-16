@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue, ty
 import { createPortal } from "react-dom";
 import { useSearchParams, Link } from "react-router-dom";
 import { useSession, useCreateShare, fetchSharedView, toastError, type UserPanelLayout } from "@/api/queries";
-import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown, RotateCcw } from "lucide-react";
+import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown, RotateCcw, Maximize2, Minimize2 } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -33,6 +33,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 import { cn } from "@/lib/utils";
+import { SeamlessLayoutContext } from "./EventsPanels/SeamlessLayoutContext";
+import { useFocusMode } from "@/hooks/useFocusMode";
 import type { Instance, Encounter, EncounterPhase, EnemyUnit } from "./InstancePage";
 import { activePhaseForTimeRange, phaseTimeRangeSelection, phaseWidthPercent } from "./phaseTimeRange";
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
@@ -76,7 +78,7 @@ import { DuplicatesBadge } from "./DuplicatesBadge";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import { formatClassLabel, formatRaceLabel } from "../ArmoryPage/characterDisplay";
 import { LAYOUT_ACTION_BAR_KEYS, type LayoutActionBarSlots } from "@/features/layoutBook/layoutBookStore";
-import { parsePanelLayout } from "@/features/layoutBook/parseLayout";
+import { parsePanelLayout, readLayoutAppearance, type LayoutAppearance } from "@/features/layoutBook/parseLayout";
 import {
   DEFAULT_INSTANCE_LAYOUT_ITEMS,
   ALTERNATE_INSTANCE_LAYOUT_ITEMS,
@@ -944,6 +946,10 @@ export interface SharedViewPayload {
     pageState?: unknown;
     items?: GridEditorItem[];
     panelTypesById?: Record<string, EventsPanelType>;
+    /** No gaps or rounding between items. */
+    seamless?: boolean;
+    /** In focus mode, stretch panel rows to fill the screen. */
+    fit?: boolean;
   };
   // Legacy v1 compatibility (flattened fields)
   items?: GridEditorItem[];
@@ -1029,6 +1035,7 @@ interface LayoutSnapshot {
   panelOptionsById: Record<string, string | null>;
   panelFiltersById: Record<string, PanelFilter[]>;
   activePresetId: string | null;
+  appearance: LayoutAppearance;
   /** View state of the page being popped out, if a page preset was active. */
   pageState?: unknown;
 }
@@ -1053,6 +1060,24 @@ interface EventsPanelGridProps {
   onPanelOptionChange: (itemID: string, option: string | null) => void;
   onPanelFiltersChange: (itemID: string, filters: PanelFilter[]) => void;
   onExplainerClick: (panelType: EventsPanelType) => void;
+  /** No gaps or rounding between items (the layout's `seamless`). */
+  seamless?: boolean;
+  /** Fill the container's height: panel rows stretch, strip-only rows keep their size (the layout's `fit`, in focus mode). */
+  fit?: boolean;
+}
+
+/**
+ * Row template that fills the grid's height: rows holding a panel share the
+ * spare height (never below a normal row), rows holding only strips keep the
+ * normal row height.
+ */
+function fitGridRows(items: readonly GridEditorItem[]): string {
+  const rowCount = Math.max(0, ...items.map((item) => item.y + item.h));
+  return Array.from({ length: rowCount }, (_, row) => {
+    const covering = items.filter((item) => row >= item.y && row < item.y + item.h);
+    const stripOnly = covering.length > 0 && covering.every((item) => item.kind === "strip");
+    return stripOnly ? `${PANEL_ROW_HEIGHT_PX}px` : `minmax(${PANEL_ROW_HEIGHT_PX}px, 1fr)`;
+  }).join(" ");
 }
 
 function EventsPanelGrid({
@@ -1070,11 +1095,15 @@ function EventsPanelGrid({
   onPanelOptionChange,
   onPanelFiltersChange,
   onExplainerClick,
+  seamless = false,
+  fit = false,
 }: EventsPanelGridProps) {
+  const fitRows = fit && !isMobile ? fitGridRows(layoutItems) : null;
   return (
+    <SeamlessLayoutContext.Provider value={seamless}>
     <div
-      className="grid gap-3 grid-cols-1 sm:grid-cols-12"
-      style={{ gridAutoRows: `${PANEL_ROW_HEIGHT_PX}px` }}
+      className={cn("grid grid-cols-1 sm:grid-cols-12", seamless ? "gap-0" : "gap-3", fitRows && "h-full")}
+      style={fitRows ? { gridTemplateRows: fitRows } : { gridAutoRows: `${PANEL_ROW_HEIGHT_PX}px` }}
     >
       {layoutItems.map((item, index) => {
         const panelType = panelTypesById[item.id] ?? "empty";
@@ -1128,6 +1157,7 @@ function EventsPanelGrid({
         );
       })}
     </div>
+    </SeamlessLayoutContext.Provider>
   );
 }
 
@@ -1157,6 +1187,7 @@ function PoppedOutLayoutContent({
   const [seedFiltersById, setSeedFiltersById] = useState(() => session.snapshot.panelFiltersById);
   const [seedFiltersVersion, setSeedFiltersVersion] = useState(1);
   const [activePresetId, setActivePresetId] = useState(session.snapshot.activePresetId);
+  const [appearance, setAppearance] = useState(session.snapshot.appearance);
 
 
   const applyPreset = useCallback((presetId: string) => {
@@ -1179,6 +1210,7 @@ function PoppedOutLayoutContent({
     setSeedFiltersById({ ...preset.panelFilters });
     setSeedFiltersVersion((version) => version + 1);
     setActivePresetId(presetId);
+    setAppearance(readLayoutAppearance(preset));
   }, []);
 
   const castLayout = useCallback((layout: UserPanelLayout) => {
@@ -1199,6 +1231,7 @@ function PoppedOutLayoutContent({
       setSeedFiltersById({ ...filters });
       setSeedFiltersVersion((version) => version + 1);
       setActivePresetId(null);
+      setAppearance(readLayoutAppearance(parsed));
       toast.success("Cast layout", { description: layout.title });
     } catch {
       toast.error("Failed to cast layout", { description: "Layout payload is invalid." });
@@ -1310,6 +1343,7 @@ function PoppedOutLayoutContent({
                 onPanelOptionChange={handlePanelOptionChange}
                 onPanelFiltersChange={handlePanelFiltersChange}
                 onExplainerClick={onExplainerClick}
+                seamless={appearance.seamless}
               />
             </ChartDataRegistryProvider>
           </PanelTimingProvider>
@@ -1350,6 +1384,10 @@ interface EncounterDetailProps {
   isMobile: boolean;
   /** Currently active preset ID (null if custom layout) */
   activePresetId: string | null;
+  layoutAppearance: LayoutAppearance;
+  /** Focus mode: only the preset row and the layout, filling the screen. */
+  focused: boolean;
+  onFocusedChange: (focused: boolean) => void;
   /** Full-page content owned by the active layout, or null for a panel grid. */
   pageType: InstancePageType | null;
   /** Share-link state binding for the active page; the key remounts it on import. */
@@ -1386,6 +1424,9 @@ function EncounterDetail({
   showHints,
   isMobile,
   activePresetId,
+  layoutAppearance,
+  focused,
+  onFocusedChange,
   pageType,
   pageState,
   onPresetChange,
@@ -1586,7 +1627,8 @@ function EncounterDetail({
   );
 
   return (
-    <div className="flex-1 min-w-0">
+    <div className={cn("flex-1 min-w-0", focused && "flex min-h-0 flex-col")}>
+      {!focused && (<>
       {/* Entity selection - Enemies and Players tabs */}
       <Tabs value={activeTab} onValueChange={(v) => {
         setActiveTab(v as 'enemies' | 'players');
@@ -1917,9 +1959,10 @@ function EncounterDetail({
           </Card>
         </Collapsible>
       </Tabs>
+      </>)}
 
       {/* Preset layout tabs */}
-      <div className="flex gap-1 overflow-x-auto mb-3 pb-1 pt-1 styled-scrollbar">
+      <div className={cn("flex shrink-0 gap-1 overflow-x-auto pb-1 pt-1 styled-scrollbar", focused ? "mb-2" : "mb-3")}>
         {availablePresetLayouts.map((preset) => (
           <button
             key={preset.id}
@@ -1936,6 +1979,22 @@ function EncounterDetail({
           </button>
         ))}
         {pageType && <PageModeIndicator presets={availablePresetLayouts} onPresetChange={onPresetChange} />}
+        {!isMobile && (
+          <button
+            type="button"
+            onClick={() => onFocusedChange(!focused)}
+            title={focused ? "Exit focus (Esc)" : "Focus: hide everything but the encounters and the layout (Shift+F; Ctrl+Shift+F for fullscreen too)"}
+            className={cn(
+              "ml-auto flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              focused
+                ? "text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            {focused ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            {focused ? "Exit focus" : "Focus"}
+          </button>
+        )}
       </div>
 
       {pageType ? (
@@ -1946,6 +2005,7 @@ function EncounterDetail({
 
           <ChartDataRegistryProvider>
             <PortalContainerProvider container={typeof document === "undefined" ? null : document.body}>
+              <div className={cn(focused && "min-h-0 flex-1 overflow-auto styled-scrollbar")}>
               <EventsPanelGrid
                 layoutItems={layoutItems}
                 panelTypesById={panelTypesById}
@@ -1961,13 +2021,18 @@ function EncounterDetail({
                 onPanelOptionChange={onPanelOptionChange}
                 onPanelFiltersChange={onPanelFiltersChange}
                 onExplainerClick={onExplainerClick}
+                seamless={layoutAppearance.seamless}
+                fit={focused && layoutAppearance.fit}
               />
+              </div>
             </PortalContainerProvider>
           </ChartDataRegistryProvider>
 
-          <div className="mt-4 flex justify-end">
-            <PanelTimingDisplay />
-          </div>
+          {!focused && (
+            <div className="mt-4 flex justify-end">
+              <PanelTimingDisplay />
+            </div>
+          )}
         </PanelTimingProvider>
       )}
 
@@ -2115,6 +2180,42 @@ export function InstancePageView({
   );
 
   const isMobile = useIsMobile();
+
+  const [focusParam, setFocusParam] = useFocusMode();
+  const focused = focusParam && isEncounterView && !isMobile;
+  // Leaving focus also leaves browser fullscreen, if Ctrl+Shift+F entered it.
+  const setFocused = useCallback((next: boolean) => {
+    setFocusParam(next);
+    if (!next && document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+  }, [setFocusParam]);
+
+  // Shift+F toggles focus, Ctrl/Cmd+Shift+F toggles focus with browser
+  // fullscreen, and Esc leaves focus. Never while typing, and Esc is left to
+  // an open dialog or menu (in fullscreen the browser takes Esc itself).
+  useEffect(() => {
+    if (!isEncounterView || isMobile) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.defaultPrevented || (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)))) return;
+      if (event.code === "KeyF" && event.shiftKey && !event.altKey && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        if (focused && document.fullscreenElement) {
+          setFocused(false);
+        } else {
+          setFocused(true);
+          // The whole page goes fullscreen so portalled tooltips and menus still show.
+          void document.documentElement.requestFullscreen?.().catch(() => undefined);
+        }
+      } else if (event.code === "KeyF" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault();
+        setFocused(!focused);
+      } else if (event.key === "Escape" && focused && !document.querySelector("[role=dialog], [role=menu], [role=listbox]")) {
+        setFocused(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [focused, isEncounterView, isMobile, setFocused]);
   const showLiveSessionControls = showDebugDesktopControls(searchParams, isMobile);
   const { data: session } = useSession();
   const isLoggedIn = !!session?.user_id;
@@ -2167,6 +2268,8 @@ export function InstancePageView({
   const layoutPopupRef = useRef<LayoutPopupSession | null>(null);
 
   const [importedLayoutItems, setImportedLayoutItems] = useState<GridEditorItem[] | null>(null);
+  // The imported layout's appearance; the default layout carries its own.
+  const [importedLayoutAppearance, setImportedLayoutAppearance] = useState<LayoutAppearance>({});
 
   const [activeLayoutId, setActiveLayoutId] = useState<string | null>(defaultLayoutId);
 
@@ -2311,6 +2414,7 @@ export function InstancePageView({
     const panelOptions = items.map((item) => preset.panelOptions[item.id] ?? null);
 
     setImportedLayoutItems(items);
+    setImportedLayoutAppearance(readLayoutAppearance(preset));
     setViewState((prev) => ({
       ...prev,
       panels,
@@ -2457,6 +2561,10 @@ export function InstancePageView({
     () => importedLayoutItems ?? baseOrderedLayoutItems,
     [importedLayoutItems, baseOrderedLayoutItems],
   );
+  const layoutAppearance = useMemo((): LayoutAppearance => importedLayoutItems
+    ? importedLayoutAppearance
+    : viewState.layout !== "alternate" ? readLayoutAppearance(cachedDefaultLayout) : {},
+  [cachedDefaultLayout, importedLayoutAppearance, importedLayoutItems, viewState.layout]);
 
   const panelTypesByID = useMemo<Record<string, EventsPanelType>>(() => {
     const next: Record<string, EventsPanelType> = {};
@@ -2527,6 +2635,7 @@ export function InstancePageView({
         panelOptionsById: { ...panelOptionsByID },
         panelFiltersById: structuredClone(panelFiltersByID),
         activePresetId,
+        appearance: layoutAppearance,
         pageState: activePageType ? pageStateRef.current : undefined,
       },
     };
@@ -2536,6 +2645,7 @@ export function InstancePageView({
   }, [
     activeLayoutItems,
     activePresetId,
+    layoutAppearance,
     instance.id,
     instance.name,
     panelFiltersByID,
@@ -2877,6 +2987,7 @@ export function InstancePageView({
     setActiveLayoutId(sharedPageType ? null : typeof payload.layoutId === "string" ? payload.layoutId : null);
     if (!sharedPageType) {
       setImportedLayoutItems(orderedItems);
+      setImportedLayoutAppearance(readLayoutAppearance(payload.layout));
       setActivePresetId(null);
     } else {
       const requestedPreset = sharedPageLayout?.presetId
@@ -2920,6 +3031,7 @@ export function InstancePageView({
       ...(Object.keys(panelFiltersByID).length > 0
         ? { panelFiltersById: panelFiltersByID }
         : {}),
+      ...layoutAppearance,
     };
     const json = JSON.stringify(payload, null, 2);
     navigator.clipboard.writeText(json).then(() => {
@@ -2927,7 +3039,7 @@ export function InstancePageView({
     }).catch(() => {
       window.prompt("Copy this layout JSON:", json);
     });
-  }, [activeLayoutItems, panelTypesByID, panelOptionsByID, panelFiltersByID]);
+  }, [activeLayoutItems, layoutAppearance, panelTypesByID, panelOptionsByID, panelFiltersByID]);
 
   const handleImportLayout = useCallback(() => {
     const raw = window.prompt("Paste exported layout JSON");
@@ -2940,6 +3052,8 @@ export function InstancePageView({
         panelTypesById?: Record<string, EventsPanelType>;
         panelOptionsById?: Record<string, string>;
         panelFiltersById?: Record<string, PanelFilter[]>;
+        seamless?: boolean;
+        fit?: boolean;
       };
 
       if (parsed.version !== 1) {
@@ -2969,6 +3083,7 @@ export function InstancePageView({
 
       setActiveLayoutId(null);
       setImportedLayoutItems(orderedItems);
+      setImportedLayoutAppearance(readLayoutAppearance(parsed));
       setActivePresetId(null);
 
       // Restore per-panel filters from imported layout.
@@ -3030,6 +3145,7 @@ export function InstancePageView({
       layout: {
         kind: "panels",
         items: activeLayoutItems,
+        ...layoutAppearance,
         panelTypesById: Object.fromEntries(Object.entries(panelTypesByID).map(([id, panelType]) => [
           id,
           canonicalizeCustomPanelRef(panelType) ?? panelType,
@@ -3043,7 +3159,7 @@ export function InstancePageView({
         ...(Object.keys(panelFiltersByID).length > 0 ? { panelFilters: panelFiltersByID } : {}),
       },
     };
-  }, [activeLayoutId, activeLayoutItems, activePageType, activePresetId, allMergedEnemies, instance.encounters, instance.players, panelFiltersByID, panelOptionsByID, panelTypesByID, timeRange?.enabled, timeRange?.startOffsetMs, timeRange?.endOffsetMs, viewState.encounters, viewState.enemies, viewState.includeWipes, viewState.players]);
+  }, [activeLayoutId, activeLayoutItems, activePageType, activePresetId, layoutAppearance, allMergedEnemies, instance.encounters, instance.players, panelFiltersByID, panelOptionsByID, panelTypesByID, timeRange?.enabled, timeRange?.startOffsetMs, timeRange?.endOffsetMs, viewState.encounters, viewState.enemies, viewState.includeWipes, viewState.players]);
 
   useEffect(() => {
     liveSession.registerViewApplier((view) => {
@@ -3158,6 +3274,7 @@ export function InstancePageView({
       setPanels(orderedPanels, orderedOptions);
       setActiveLayoutId(layout.id);
       setImportedLayoutItems(orderedItems);
+      setImportedLayoutAppearance(readLayoutAppearance(parsed));
       setActivePresetId(null);
 
       // Restore per-panel filters from the layout.
@@ -3322,11 +3439,14 @@ export function InstancePageView({
     <div
       data-live-cursor-surface="instance"
       className={cn(
-        "w-full py-6",
+        "w-full",
+        // Focus mode reads as its own space: an accent line along the top and a faint tint behind the panels.
+        focused ? "flex h-screen flex-col overflow-hidden border-t-2 border-primary bg-primary/[0.06] p-2" : "py-6",
         // Mobile: minimal padding, full width
-        isMobile ? "px-2" : "px-4",
+        !focused && (isMobile ? "px-2" : "px-4"),
       )}
     >
+      {!focused && (<>
       {/* Header */}
       <div className={cn("mb-6 rounded-lg border relative", heroic && "border-purple-500/30")}>
         {/* Background image */}
@@ -3598,6 +3718,7 @@ export function InstancePageView({
 
         </div>
       </div>
+      </>)}
 
 
       {/* Share context menu (right-click) */}
@@ -3675,7 +3796,7 @@ export function InstancePageView({
       )}
 
       {isEncounterView ? (
-        <div className="flex gap-6 relative">
+        <div className={cn("flex gap-6 relative", focused && "min-h-0 flex-1 gap-3")}>
         {/* Mobile backdrop */}
         {isMobile && sidebarOpen && (
           <div 
@@ -3752,6 +3873,9 @@ export function InstancePageView({
             showHints={showHints}
             isMobile={isMobile}
             activePresetId={activePresetId}
+            layoutAppearance={layoutAppearance}
+            focused={focused}
+            onFocusedChange={setFocused}
             pageType={activePageType}
             pageState={pageStateBinding}
             layoutPopup={layoutPopup}
