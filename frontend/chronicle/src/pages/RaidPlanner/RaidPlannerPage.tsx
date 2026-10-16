@@ -10,7 +10,7 @@ import {
   useSession,
   useUpdateRaidComposition,
 } from "@/api/queries";
-import type { RaidComposition, RecentInstance } from "@/api/typesGenerated";
+import type { RaidComposition } from "@/api/typesGenerated";
 import { serverCapabilities } from "@/config/serverCapabilities";
 import { gearClassesForFlavor } from "@/pages/Gear/classInfo";
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
@@ -19,7 +19,7 @@ import { GROUP_SIZE, MAX_GROUPS, defaultPlannerGuild, emptyBoard, entryName, pla
 import type { ParsedSignUp, RaidHelperEvent } from "./raidHelper";
 import { RaidHelperImportModal } from "./RaidHelperImportModal";
 import { RaidImportModal } from "./RaidImportModal";
-import type { RaidImportResult } from "./raidImport";
+import { fetchRaidImport, type RaidImportResult } from "./raidImport";
 import { compositionToData, dataToComposition } from "./compSerde";
 import { SavedCompsList } from "./SavedCompsList";
 import { GuildSelector } from "./GuildSelector";
@@ -85,6 +85,7 @@ export function RaidPlannerPage() {
   const dragRef = useRef<DragPayload | null>(null);
   const hoverRef = useRef<HoverTarget | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const linkedImportRef = useRef<string | null>(null);
   const pastRef = useRef<Composition[]>([]);
   const futureRef = useRef<Composition[]>([]);
 
@@ -92,7 +93,17 @@ export function RaidPlannerPage() {
   const { data: session } = useSession();
   const { data: favorites } = useMyFavorites({ enabled: !!session });
   const urlCompId = searchParams.get("comp");
-  const selectedGuild = defaultPlannerGuild(guild, favorites?.guilds ?? [], !!urlCompId);
+  const linkedRaidID = searchParams.get("raid");
+  const linkedGuildID = searchParams.get("guild");
+  const linkedGuildName = searchParams.get("guildName");
+  const linkedGuild = useMemo(
+    () => linkedGuildID && linkedGuildName ? { id: linkedGuildID, name: linkedGuildName } : null,
+    [linkedGuildID, linkedGuildName],
+  );
+  const selectedGuild = useMemo(
+    () => defaultPlannerGuild(guild ?? linkedGuild, favorites?.guilds ?? [], !!urlCompId),
+    [favorites?.guilds, guild, linkedGuild, urlCompId],
+  );
   const { data: rosterData, isLoading: rosterLoading } = useGuildCharacters(selectedGuild?.id);
   const createCompMutation = useCreateRaidComposition();
   const updateCompMutation = useUpdateRaidComposition();
@@ -464,18 +475,42 @@ export function RaidPlannerPage() {
     setEditing(null);
   };
 
-  const applyRaidImport = (result: RaidImportResult, raid: RecentInstance, importedGuild: PlannerGuild) => {
+  const applyRaidImport = (result: RaidImportResult, raidTitle: string, importedGuild: PlannerGuild | null) => {
     updateComp(() => ({ board: result.board, bench: result.bench }));
-    setGuild(importedGuild);
+    if (importedGuild) setGuild(importedGuild);
     setPendingGroups(result.board.length || 1);
     setPhase("set");
-    setTitle(raid.name);
+    setTitle(raidTitle);
     setSavedComp(null);
     setHydratedCompId(null);
     const next = new URLSearchParams(searchParams);
     next.delete("comp");
     setSearchParams(next, { replace: true });
   };
+
+  useEffect(() => {
+    if (!linkedRaidID || rosterLoading || linkedImportRef.current === linkedRaidID) return;
+    const controller = new AbortController();
+    linkedImportRef.current = linkedRaidID;
+    void fetchRaidImport(linkedRaidID, rosterData?.members ?? [], controller.signal)
+      .then((imported) => {
+        setComp({ board: imported.board, bench: imported.bench });
+        if (selectedGuild) setGuild(selectedGuild);
+        setPendingGroups(imported.board.length || 1);
+        setPhase("set");
+        setTitle(imported.title);
+        setSavedComp(null);
+        setHydratedCompId(null);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        toast.error(err instanceof Error ? err.message : "Failed to import that raid");
+      });
+    return () => {
+      controller.abort();
+      if (linkedImportRef.current === linkedRaidID) linkedImportRef.current = null;
+    };
+  }, [linkedRaidID, rosterData, rosterLoading, selectedGuild]);
 
   /**
    * Apply raid-helper sign-ups: board-bound entries fill first-empty slots

@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated render components are intentional. */
 import { useEffect, useState } from "react";
-import { ChevronLeft, UsersRound } from "lucide-react";
+import { ChevronLeft, ExternalLink, UsersRound } from "lucide-react";
 import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 import {
   Tooltip,
@@ -8,6 +8,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/Tooltip/tooltip";
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
+import { raidPlannerLink } from "@/pages/RaidPlanner/raidPlannerLink";
 import { GenericPanel } from "../GenericPanel";
 import type { RaidGroupProcessorEvent } from "../processorTypes";
 import type { PanelDefinition, PanelRenderProps } from "../types";
@@ -158,6 +159,17 @@ function RaidCompositionContent(props: PanelRenderProps<RaidCompositionResult>) 
 
   return (
     <GenericPanel {...props}>
+      <div className="flex shrink-0 justify-end px-1 pb-1">
+        <a
+          href={raidPlannerLink(context.instance)}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          Open in planner
+          <ExternalLink className="size-3" />
+        </a>
+      </div>
       <div className="styled-scrollbar min-h-0 flex-1 overflow-y-auto px-1 pb-1">
         {result.encounterID === null ? (
           <div className="flex h-full items-center justify-center px-4 text-center text-sm text-muted-foreground">

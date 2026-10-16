@@ -1,14 +1,9 @@
 import { useEffect, useState } from "react";
 import { CalendarDays, Loader2, Users, X } from "lucide-react";
 import { useGuildCharacters } from "@/api/queries";
-import type {
-  InstanceRaidGroupResponse,
-  RecentInstance,
-  RecentInstancesResponse,
-  WoWAttendanceInstance,
-} from "@/api/typesGenerated";
+import type { RecentInstance, RecentInstancesResponse } from "@/api/typesGenerated";
 import { GuildSelector } from "./GuildSelector";
-import { buildRaidImport, type RaidImportResult } from "./raidImport";
+import { fetchRaidImport, type RaidImportResult } from "./raidImport";
 import type { PlannerGuild } from "./types";
 
 interface RaidImportModalProps {
@@ -16,7 +11,7 @@ interface RaidImportModalProps {
   onClose: () => void;
   guild: PlannerGuild | null;
   hasComposition: boolean;
-  onApply: (result: RaidImportResult, raid: RecentInstance, guild: PlannerGuild) => void;
+  onApply: (result: RaidImportResult, title: string, guild: PlannerGuild) => void;
 }
 
 function raidDate(raid: RecentInstance): string {
@@ -74,17 +69,9 @@ export function RaidImportModal({
     setImportingID(raid.id);
     setError(null);
     try {
-      const [instanceResponse, raidGroupResponse] = await Promise.all([
-        fetch(`/api/v1/raidlogs/instances/${encodeURIComponent(raid.id)}?attendance_only=true`),
-        fetch(`/api/v1/raidlogs/instances/${encodeURIComponent(raid.id)}/raid-group`),
-      ]);
-      if (!instanceResponse.ok) throw new Error("Failed to load that raid");
-      const instance = (await instanceResponse.json()) as WoWAttendanceInstance;
-      const raidGroup = raidGroupResponse.ok
-        ? ((await raidGroupResponse.json()) as InstanceRaidGroupResponse)
-        : null;
       if (!selectedGuild) throw new Error("Choose a guild before importing a raid");
-      onApply(buildRaidImport(instance, raidGroup, rosterData?.members ?? []), raid, selectedGuild);
+      const imported = await fetchRaidImport(raid.id, rosterData?.members ?? []);
+      onApply(imported, imported.title, selectedGuild);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to import that raid");

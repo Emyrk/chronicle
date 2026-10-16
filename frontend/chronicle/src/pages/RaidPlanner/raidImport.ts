@@ -53,6 +53,24 @@ function preferredComposition(raidGroup: InstanceRaidGroupResponse | null): Inst
   return raidGroup.final ?? raidGroup.clean_kills.at(-1)?.composition ?? null;
 }
 
+export async function fetchRaidImport(
+  instanceID: string,
+  roster: readonly GuildRosterCharacter[],
+  signal?: AbortSignal,
+): Promise<RaidImportResult & { title: string }> {
+  const encodedID = encodeURIComponent(instanceID);
+  const [instanceResponse, raidGroupResponse] = await Promise.all([
+    fetch(`/api/v1/raidlogs/instances/${encodedID}?attendance_only=true`, { signal }),
+    fetch(`/api/v1/raidlogs/instances/${encodedID}/raid-group`, { signal }),
+  ]);
+  if (!instanceResponse.ok) throw new Error("Failed to load that raid");
+  const instance = (await instanceResponse.json()) as WoWAttendanceInstance;
+  const raidGroup = raidGroupResponse.ok
+    ? ((await raidGroupResponse.json()) as InstanceRaidGroupResponse)
+    : null;
+  return { ...buildRaidImport(instance, raidGroup, roster), title: instance.name };
+}
+
 export function buildRaidImport(
   instance: WoWAttendanceInstance,
   raidGroup: InstanceRaidGroupResponse | null,
