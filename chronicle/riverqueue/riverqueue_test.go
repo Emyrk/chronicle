@@ -14,8 +14,8 @@ func TestRemoveQueue(t *testing.T) {
 	ctx := testutil.Context(t, testutil.WaitShort)
 	queues, err := New(ctx, Options{})
 	require.NoError(t, err)
-	require.Contains(t, queues.queues, river.QueueDefault)
+	require.True(t, queues.ConsumesQueue(river.QueueDefault))
 
 	queues.RemoveQueue(river.QueueDefault)
-	require.NotContains(t, queues.queues, river.QueueDefault)
+	require.False(t, queues.ConsumesQueue(river.QueueDefault))
 }

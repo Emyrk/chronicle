@@ -263,7 +263,7 @@ func (s *Service) Options() serpent.OptionSet {
 	return serpent.OptionSet{
 		{
 			Name:        "Log Parsing Worker Count",
-			Description: "Number of workers to use for parsing raid log files.",
+			Description: "Number of workers to use for parsing raid log files. Set to 0 to disable parsing on this server.",
 			Required:    false,
 			Flag:        "log-parse-worker-count",
 			Env:         "CHRONICLE_LOG_PARSING_WORKERS",

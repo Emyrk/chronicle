@@ -70,6 +70,12 @@ func (q *Queues) AddQueue(name string, config river.QueueConfig) *Queues {
 	return q
 }
 
+// ConsumesQueue reports whether this River client is configured to poll a queue.
+func (q *Queues) ConsumesQueue(name string) bool {
+	_, ok := q.queues[name]
+	return ok
+}
+
 // RemoveQueue prevents this River client from consuming jobs from the named queue.
 func (q *Queues) RemoveQueue(name string) *Queues {
 	delete(q.queues, name)
