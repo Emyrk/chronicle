@@ -82,6 +82,12 @@ func validateTheme(theme chroniclesdk.GuildPageTheme) error {
 		return fmt.Errorf("invalid header layout: %q", theme.HeaderLayout)
 	}
 
+	switch theme.PanelLayout {
+	case "", "cards", "seamless":
+	default:
+		return fmt.Errorf("invalid panel layout: %q", theme.PanelLayout)
+	}
+
 	return nil
 }
 

@@ -2,6 +2,12 @@ import type { GuildPageTheme, GuildTag, SocialPlatform } from "@/api/typesGenera
 import { GuildTags, SocialPlatforms } from "@/api/typesGenerated";
 import { ICON_BASE_URL } from "@/config/iconUrl";
 import { SOCIAL_PLATFORM_META } from "./GuildPageHeader";
+import {
+  getPanelLayout,
+  PANEL_LAYOUT_CARDS,
+  PANEL_LAYOUT_SEAMLESS,
+  type PanelLayout,
+} from "../panelLayout";
 import { ChevronDown, Settings2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -38,6 +44,11 @@ export function HeaderEditor({ theme, onChange }: HeaderEditorProps) {
 
   const tags = theme.tags ?? [];
   const socials: Partial<Record<SocialPlatform, string>> = theme.socials ?? {};
+  const panelLayout = getPanelLayout(theme.panel_layout);
+
+  const setPanelLayout = (layout: PanelLayout) => {
+    onChange({ ...theme, panel_layout: layout });
+  };
 
   const toggleTag = (tag: GuildTag) => {
     const newTags = tags.includes(tag)
@@ -67,9 +78,9 @@ export function HeaderEditor({ theme, onChange }: HeaderEditorProps) {
           <Settings2 className="h-5 w-5" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold">Page Header Settings</span>
+          <span className="block text-sm font-semibold">Page Appearance</span>
           <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
-            Customize your logo, layout, description, tags, and social links
+            Customize your header, panel layout, description, tags, and social links
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-2 text-xs font-medium text-primary">
@@ -98,6 +109,62 @@ export function HeaderEditor({ theme, onChange }: HeaderEditorProps) {
               <option value="left">Left aligned</option>
               <option value="left_joined">Left aligned — joined</option>
             </select>
+          </div>
+
+          {/* Panel Layout */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Panel layout</label>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {([
+                {
+                  value: PANEL_LAYOUT_CARDS,
+                  label: "Cards",
+                  description: "Spaced and rounded",
+                },
+                {
+                  value: PANEL_LAYOUT_SEAMLESS,
+                  label: "Seamless",
+                  description: "Joined with sharp edges",
+                },
+              ] as const).map((option) => {
+                const selected = panelLayout === option.value;
+                const seamless = option.value === PANEL_LAYOUT_SEAMLESS;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setPanelLayout(option.value)}
+                    aria-pressed={selected}
+                    className={`flex items-center gap-3 border p-3 text-left transition-colors ${
+                      selected
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border hover:bg-muted/50"
+                    } ${seamless ? "rounded-sm" : "rounded-lg"}`}
+                  >
+                    <span
+                      className={`grid h-9 w-11 shrink-0 grid-cols-2 border border-border bg-background ${
+                        seamless ? "gap-0 rounded-none" : "gap-1 rounded-md p-1"
+                      }`}
+                      aria-hidden="true"
+                    >
+                      {[0, 1, 2, 3].map((cell) => (
+                        <span
+                          key={cell}
+                          className={`bg-muted-foreground/40 ${seamless ? "border border-background/60" : "rounded-[2px]"}`}
+                        />
+                      ))}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium">{option.label}</span>
+                      <span className="block text-xs text-muted-foreground">{option.description}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Seamless keeps panel headers for labels. Rename or hide each header from that panel&apos;s Style settings.
+            </p>
           </div>
 
           {/* Logo URL */}

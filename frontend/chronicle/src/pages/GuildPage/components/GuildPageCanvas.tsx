@@ -7,6 +7,7 @@ import { getPanelStyle } from "./PanelConfigModal";
 import { GripVertical, Settings, Trash2, Monitor, Smartphone } from "lucide-react";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { GridEdgeResizeControls } from "@/components/layout/GridEdgeResizeControls";
+import { getPanelLayout, PANEL_LAYOUT_SEAMLESS } from "../panelLayout";
 import {
   gridItemChanged,
   resizeGridItemFromEdge,
@@ -41,6 +42,7 @@ interface GuildPageCanvasProps {
   guild: GuildInfo;
   panels: GuildPagePanel[];
   isEditing: boolean;
+  panelLayout?: string;
   onLayoutChange?: (layout: LayoutItem[]) => void;
   onPanelConfig?: (panelId: string) => void;
   onPanelDelete?: (panelId: string) => void;
@@ -74,6 +76,7 @@ export function GuildPageCanvas({
   guild,
   panels,
   isEditing,
+  panelLayout,
   onLayoutChange,
   onPanelConfig,
   onPanelDelete,
@@ -82,6 +85,7 @@ export function GuildPageCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const containerWidth = useContainerWidth(containerRef);
   const isMobile = useIsMobile();
+  const seamless = getPanelLayout(panelLayout) === PANEL_LAYOUT_SEAMLESS;
 
   // On mobile, use 2 columns and stack panels vertically
   const cols = isMobile ? 2 : 12;
@@ -181,6 +185,7 @@ export function GuildPageCanvas({
         gridConfig={{
           cols,
           rowHeight,
+          margin: seamless ? [0, 0] : [10, 10],
           containerPadding: [0, 0],
         }}
         dragConfig={{
@@ -235,12 +240,14 @@ export function GuildPageCanvas({
         return (
           <div
             key={panel.id}
-            className={`group/resize-panel ${bgClass} relative overflow-hidden rounded-lg ${
+            className={`group/resize-panel ${bgClass} relative overflow-hidden ${
+              seamless ? "rounded-none shadow-none" : "rounded-lg shadow-sm"
+            } ${
               style.background === "transparent"
                 ? isEditing
                   ? "border border-dashed border-muted-foreground/30"
                   : ""
-                : "border border-border shadow-sm"
+                : "border border-border"
             }`}
             style={bgStyle}
           >

@@ -228,6 +228,7 @@ export function GuildPage() {
               guild={pageConfig.guild}
               panels={currentTab.panels}
               isEditing={false}
+              panelLayout={pageConfig.theme.panel_layout}
             />
           )}
         </div>

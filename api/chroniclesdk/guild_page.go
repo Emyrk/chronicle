@@ -36,9 +36,12 @@ type GuildPageTheme struct {
 	// classic centered header; "left" for the armory-style identity with the
 	// description beside it, centered as a pair; "left_joined" for the
 	// identity with the description underneath it, left-aligned.
-	HeaderLayout string                    `json:"header_layout,omitempty"`
-	Tags         []GuildTag                `json:"tags,omitempty"`
-	Socials      map[SocialPlatform]string `json:"socials,omitempty"` // platform key -> URL
+	HeaderLayout string `json:"header_layout,omitempty"`
+	// PanelLayout selects panel presentation: "" or "cards" keeps spacing and
+	// rounded corners; "seamless" removes panel gaps, rounding, and shadows.
+	PanelLayout string                    `json:"panel_layout,omitempty"`
+	Tags        []GuildTag                `json:"tags,omitempty"`
+	Socials     map[SocialPlatform]string `json:"socials,omitempty"` // platform key -> URL
 }
 
 const MaxDescriptionLength = 500

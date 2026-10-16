@@ -1664,6 +1664,11 @@ export interface GuildPageTheme {
      * identity with the description underneath it, left-aligned.
      */
     readonly header_layout?: string;
+    /**
+     * PanelLayout selects panel presentation: "" or "cards" keeps spacing and
+     * rounded corners; "seamless" removes panel gaps, rounding, and shadows.
+     */
+    readonly panel_layout?: string;
     readonly tags?: readonly GuildTag[];
     readonly socials?: Record<SocialPlatform, string>; // platform key -> URL
 }
