@@ -13,6 +13,12 @@ import (
 	"github.com/stripe/stripe-go/v87"
 )
 
+func TestPublicTierName(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "revered", TierRevered)
+	require.Equal(t, "supporter", string(ProductSupporter))
+}
+
 func TestSupporterPrices(t *testing.T) {
 	t.Parallel()
 

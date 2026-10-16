@@ -17,7 +17,7 @@ import (
 
 const (
 	TierFree       = "free"
-	TierSupporter  = "supporter"
+	TierRevered    = "revered"
 	ProviderStripe = "stripe"
 )
 

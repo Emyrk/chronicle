@@ -120,7 +120,7 @@ func (s *Service) Summary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if adFree {
-		result.Tier = TierSupporter
+		result.Tier = TierRevered
 	}
 	if sub, err := s.store.GetBillingSubscriptionByUserID(r.Context(), claims.Subject); err == nil {
 		result.Status = sub.Status
