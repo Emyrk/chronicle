@@ -1983,7 +1983,7 @@ function EncounterDetail({
           <button
             type="button"
             onClick={() => onFocusedChange(!focused)}
-            title={focused ? "Exit focus (Esc)" : "Focus: hide everything but the encounters and the layout (Shift+F)"}
+            title={focused ? "Exit focus (Esc)" : "Focus: hide everything but the encounters and the layout (Shift+F; Ctrl+Shift+F for fullscreen too)"}
             className={cn(
               "ml-auto flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
               focused
@@ -2181,17 +2181,32 @@ export function InstancePageView({
 
   const isMobile = useIsMobile();
 
-  const [focusParam, setFocused] = useFocusMode();
+  const [focusParam, setFocusParam] = useFocusMode();
   const focused = focusParam && isEncounterView && !isMobile;
+  // Leaving focus also leaves browser fullscreen, if Ctrl+Shift+F entered it.
+  const setFocused = useCallback((next: boolean) => {
+    setFocusParam(next);
+    if (!next && document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+  }, [setFocusParam]);
 
-  // Shift+F toggles focus; Esc leaves it. Never while typing, and Esc is left
-  // to an open dialog or menu.
+  // Shift+F toggles focus, Ctrl/Cmd+Shift+F toggles focus with browser
+  // fullscreen, and Esc leaves focus. Never while typing, and Esc is left to
+  // an open dialog or menu (in fullscreen the browser takes Esc itself).
   useEffect(() => {
     if (!isEncounterView || isMobile) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (event.defaultPrevented || (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)))) return;
-      if (event.code === "KeyF" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      if (event.code === "KeyF" && event.shiftKey && !event.altKey && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        if (focused && document.fullscreenElement) {
+          setFocused(false);
+        } else {
+          setFocused(true);
+          // The whole page goes fullscreen so portalled tooltips and menus still show.
+          void document.documentElement.requestFullscreen?.().catch(() => undefined);
+        }
+      } else if (event.code === "KeyF" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
         event.preventDefault();
         setFocused(!focused);
       } else if (event.key === "Escape" && focused && !document.querySelector("[role=dialog], [role=menu], [role=listbox]")) {
