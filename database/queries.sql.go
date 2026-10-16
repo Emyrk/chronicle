@@ -9766,15 +9766,27 @@ func (q *sqlQuerier) RedeemOAuthRelayCode(ctx context.Context, codeHash []byte) 
 }
 
 const createOAuthDeviceSession = `-- name: CreateOAuthDeviceSession :exec
-INSERT INTO oauth_device_sessions (device_signature, user_signature, request, expires_at)
-VALUES ($1, $2, $3, $4)
+INSERT INTO oauth_device_sessions (
+  device_signature, user_signature, request, expires_at,
+  sidekick_installation_id, sidekick_installation_name,
+  sidekick_installation_platform, sidekick_installation_version
+)
+VALUES (
+  $1, $2, $3, $4,
+  $5, $6,
+  $7, $8
+)
 `
 
 type CreateOAuthDeviceSessionParams struct {
-	DeviceSignature string             `db:"device_signature" json:"device_signature"`
-	UserSignature   string             `db:"user_signature" json:"user_signature"`
-	Request         []byte             `db:"request" json:"request"`
-	ExpiresAt       pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	DeviceSignature              string             `db:"device_signature" json:"device_signature"`
+	UserSignature                string             `db:"user_signature" json:"user_signature"`
+	Request                      []byte             `db:"request" json:"request"`
+	ExpiresAt                    pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	SidekickInstallationID       uuid.NullUUID      `db:"sidekick_installation_id" json:"sidekick_installation_id"`
+	SidekickInstallationName     pgtype.Text        `db:"sidekick_installation_name" json:"sidekick_installation_name"`
+	SidekickInstallationPlatform pgtype.Text        `db:"sidekick_installation_platform" json:"sidekick_installation_platform"`
+	SidekickInstallationVersion  pgtype.Text        `db:"sidekick_installation_version" json:"sidekick_installation_version"`
 }
 
 func (q *sqlQuerier) CreateOAuthDeviceSession(ctx context.Context, arg CreateOAuthDeviceSessionParams) error {
@@ -9783,6 +9795,10 @@ func (q *sqlQuerier) CreateOAuthDeviceSession(ctx context.Context, arg CreateOAu
 		arg.UserSignature,
 		arg.Request,
 		arg.ExpiresAt,
+		arg.SidekickInstallationID,
+		arg.SidekickInstallationName,
+		arg.SidekickInstallationPlatform,
+		arg.SidekickInstallationVersion,
 	)
 	return err
 }
@@ -9870,18 +9886,37 @@ func (q *sqlQuerier) DeleteOAuthTokenSession(ctx context.Context, arg DeleteOAut
 	return result.RowsAffected(), nil
 }
 
+const deleteOAuthTokenSessionsByRequestID = `-- name: DeleteOAuthTokenSessionsByRequestID :execrows
+DELETE FROM oauth_token_sessions
+WHERE request_id = $1
+`
+
+func (q *sqlQuerier) DeleteOAuthTokenSessionsByRequestID(ctx context.Context, requestID string) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOAuthTokenSessionsByRequestID, requestID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getOAuthDeviceSession = `-- name: GetOAuthDeviceSession :one
-SELECT device_signature, user_signature, request, invalidated
+SELECT device_signature, user_signature, request, invalidated,
+  sidekick_installation_id, sidekick_installation_name,
+  sidekick_installation_platform, sidekick_installation_version
 FROM oauth_device_sessions
 WHERE (device_signature = $1 OR user_signature = $1)
   AND expires_at > NOW()
 `
 
 type GetOAuthDeviceSessionRow struct {
-	DeviceSignature string `db:"device_signature" json:"device_signature"`
-	UserSignature   string `db:"user_signature" json:"user_signature"`
-	Request         []byte `db:"request" json:"request"`
-	Invalidated     bool   `db:"invalidated" json:"invalidated"`
+	DeviceSignature              string        `db:"device_signature" json:"device_signature"`
+	UserSignature                string        `db:"user_signature" json:"user_signature"`
+	Request                      []byte        `db:"request" json:"request"`
+	Invalidated                  bool          `db:"invalidated" json:"invalidated"`
+	SidekickInstallationID       uuid.NullUUID `db:"sidekick_installation_id" json:"sidekick_installation_id"`
+	SidekickInstallationName     pgtype.Text   `db:"sidekick_installation_name" json:"sidekick_installation_name"`
+	SidekickInstallationPlatform pgtype.Text   `db:"sidekick_installation_platform" json:"sidekick_installation_platform"`
+	SidekickInstallationVersion  pgtype.Text   `db:"sidekick_installation_version" json:"sidekick_installation_version"`
 }
 
 func (q *sqlQuerier) GetOAuthDeviceSession(ctx context.Context, signature string) (GetOAuthDeviceSessionRow, error) {
@@ -9892,6 +9927,10 @@ func (q *sqlQuerier) GetOAuthDeviceSession(ctx context.Context, signature string
 		&i.UserSignature,
 		&i.Request,
 		&i.Invalidated,
+		&i.SidekickInstallationID,
+		&i.SidekickInstallationName,
+		&i.SidekickInstallationPlatform,
+		&i.SidekickInstallationVersion,
 	)
 	return i, err
 }
@@ -17541,6 +17580,478 @@ func (q *sqlQuerier) GetSharedViewByInstanceAndHash(ctx context.Context, arg Get
 		&i.InstanceSlug,
 	)
 	return i, err
+}
+
+const deleteSidekickWoWDirectoriesExcept = `-- name: DeleteSidekickWoWDirectoriesExcept :execrows
+DELETE FROM sidekick_wow_directories
+WHERE sidekick_id = $1
+  AND NOT (path = ANY($2::text[]))
+`
+
+type DeleteSidekickWoWDirectoriesExceptParams struct {
+	SidekickID  uuid.UUID `db:"sidekick_id" json:"sidekick_id"`
+	ActivePaths []string  `db:"active_paths" json:"active_paths"`
+}
+
+func (q *sqlQuerier) DeleteSidekickWoWDirectoriesExcept(ctx context.Context, arg DeleteSidekickWoWDirectoriesExceptParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSidekickWoWDirectoriesExcept, arg.SidekickID, arg.ActivePaths)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const disconnectSidekickInstallation = `-- name: DisconnectSidekickInstallation :one
+UPDATE sidekick_installations
+SET disconnected_at = NOW(),
+    updated_at = NOW()
+WHERE id = $1
+  AND user_id = $2
+  AND disconnected_at IS NULL
+RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+`
+
+type DisconnectSidekickInstallationParams struct {
+	ID     uuid.UUID `db:"id" json:"id"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) DisconnectSidekickInstallation(ctx context.Context, arg DisconnectSidekickInstallationParams) (SidekickInstallation, error) {
+	row := q.db.QueryRow(ctx, disconnectSidekickInstallation, arg.ID, arg.UserID)
+	var i SidekickInstallation
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Platform,
+		&i.Version,
+		&i.LastSeenAt,
+		&i.LastUploadAt,
+		&i.DisconnectedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getSidekickInstallationForOAuthRequest = `-- name: GetSidekickInstallationForOAuthRequest :one
+SELECT si.id
+FROM sidekick_oauth_grants sog
+JOIN sidekick_installations si ON si.id = sog.sidekick_id
+WHERE sog.oauth_request_id = $1
+  AND si.user_id = $2
+  AND sog.revoked_at IS NULL
+  AND si.disconnected_at IS NULL
+`
+
+type GetSidekickInstallationForOAuthRequestParams struct {
+	OauthRequestID string    `db:"oauth_request_id" json:"oauth_request_id"`
+	UserID         uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) GetSidekickInstallationForOAuthRequest(ctx context.Context, arg GetSidekickInstallationForOAuthRequestParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getSidekickInstallationForOAuthRequest, arg.OauthRequestID, arg.UserID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertSidekickOAuthGrant = `-- name: InsertSidekickOAuthGrant :exec
+INSERT INTO sidekick_oauth_grants (oauth_request_id, sidekick_id)
+VALUES ($1, $2)
+ON CONFLICT (oauth_request_id) DO UPDATE SET
+  sidekick_id = EXCLUDED.sidekick_id,
+  revoked_at = NULL
+`
+
+type InsertSidekickOAuthGrantParams struct {
+	OauthRequestID string    `db:"oauth_request_id" json:"oauth_request_id"`
+	SidekickID     uuid.UUID `db:"sidekick_id" json:"sidekick_id"`
+}
+
+func (q *sqlQuerier) InsertSidekickOAuthGrant(ctx context.Context, arg InsertSidekickOAuthGrantParams) error {
+	_, err := q.db.Exec(ctx, insertSidekickOAuthGrant, arg.OauthRequestID, arg.SidekickID)
+	return err
+}
+
+const listSidekickInstallationsByUser = `-- name: ListSidekickInstallationsByUser :many
+SELECT id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+FROM sidekick_installations
+WHERE user_id = $1
+ORDER BY disconnected_at NULLS FIRST, created_at DESC
+`
+
+func (q *sqlQuerier) ListSidekickInstallationsByUser(ctx context.Context, userID uuid.UUID) ([]SidekickInstallation, error) {
+	rows, err := q.db.Query(ctx, listSidekickInstallationsByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SidekickInstallation
+	for rows.Next() {
+		var i SidekickInstallation
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Name,
+			&i.Platform,
+			&i.Version,
+			&i.LastSeenAt,
+			&i.LastUploadAt,
+			&i.DisconnectedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSidekickIssues = `-- name: ListSidekickIssues :many
+SELECT id, sidekick_id, code, message, details, first_reported_at, last_reported_at, resolved_at
+FROM sidekick_issues
+WHERE sidekick_id = $1
+ORDER BY resolved_at NULLS FIRST, last_reported_at DESC
+LIMIT $2
+`
+
+type ListSidekickIssuesParams struct {
+	SidekickID uuid.UUID `db:"sidekick_id" json:"sidekick_id"`
+	LimitCount int32     `db:"limit_count" json:"limit_count"`
+}
+
+func (q *sqlQuerier) ListSidekickIssues(ctx context.Context, arg ListSidekickIssuesParams) ([]SidekickIssue, error) {
+	rows, err := q.db.Query(ctx, listSidekickIssues, arg.SidekickID, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SidekickIssue
+	for rows.Next() {
+		var i SidekickIssue
+		if err := rows.Scan(
+			&i.ID,
+			&i.SidekickID,
+			&i.Code,
+			&i.Message,
+			&i.Details,
+			&i.FirstReportedAt,
+			&i.LastReportedAt,
+			&i.ResolvedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSidekickWoWDirectories = `-- name: ListSidekickWoWDirectories :many
+SELECT sidekick_id, path, tenant_name, tenant_base_url, realmlist, created_at, updated_at
+FROM sidekick_wow_directories
+WHERE sidekick_id = $1
+ORDER BY tenant_name, path
+`
+
+func (q *sqlQuerier) ListSidekickWoWDirectories(ctx context.Context, sidekickID uuid.UUID) ([]SidekickWowDirectory, error) {
+	rows, err := q.db.Query(ctx, listSidekickWoWDirectories, sidekickID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SidekickWowDirectory
+	for rows.Next() {
+		var i SidekickWowDirectory
+		if err := rows.Scan(
+			&i.SidekickID,
+			&i.Path,
+			&i.TenantName,
+			&i.TenantBaseUrl,
+			&i.Realmlist,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const renameSidekickInstallation = `-- name: RenameSidekickInstallation :one
+UPDATE sidekick_installations
+SET name = $1,
+    updated_at = NOW()
+WHERE id = $2
+  AND user_id = $3
+  AND disconnected_at IS NULL
+RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+`
+
+type RenameSidekickInstallationParams struct {
+	Name   string    `db:"name" json:"name"`
+	ID     uuid.UUID `db:"id" json:"id"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) RenameSidekickInstallation(ctx context.Context, arg RenameSidekickInstallationParams) (SidekickInstallation, error) {
+	row := q.db.QueryRow(ctx, renameSidekickInstallation, arg.Name, arg.ID, arg.UserID)
+	var i SidekickInstallation
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Platform,
+		&i.Version,
+		&i.LastSeenAt,
+		&i.LastUploadAt,
+		&i.DisconnectedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const resolveSidekickIssuesExcept = `-- name: ResolveSidekickIssuesExcept :execrows
+UPDATE sidekick_issues
+SET resolved_at = NOW()
+WHERE sidekick_id = $1
+  AND resolved_at IS NULL
+  AND NOT (code = ANY($2::text[]))
+`
+
+type ResolveSidekickIssuesExceptParams struct {
+	SidekickID  uuid.UUID `db:"sidekick_id" json:"sidekick_id"`
+	ActiveCodes []string  `db:"active_codes" json:"active_codes"`
+}
+
+func (q *sqlQuerier) ResolveSidekickIssuesExcept(ctx context.Context, arg ResolveSidekickIssuesExceptParams) (int64, error) {
+	result, err := q.db.Exec(ctx, resolveSidekickIssuesExcept, arg.SidekickID, arg.ActiveCodes)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const revokeActiveSidekickOAuthGrants = `-- name: RevokeActiveSidekickOAuthGrants :many
+UPDATE sidekick_oauth_grants
+SET revoked_at = NOW()
+WHERE sidekick_id = $1
+  AND revoked_at IS NULL
+RETURNING oauth_request_id
+`
+
+func (q *sqlQuerier) RevokeActiveSidekickOAuthGrants(ctx context.Context, sidekickID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, revokeActiveSidekickOAuthGrants, sidekickID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var oauth_request_id string
+		if err := rows.Scan(&oauth_request_id); err != nil {
+			return nil, err
+		}
+		items = append(items, oauth_request_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const touchSidekickUpload = `-- name: TouchSidekickUpload :execrows
+UPDATE sidekick_installations
+SET last_seen_at = NOW(),
+    last_upload_at = NOW(),
+    updated_at = NOW()
+WHERE id = $1
+  AND user_id = $2
+  AND disconnected_at IS NULL
+`
+
+type TouchSidekickUploadParams struct {
+	ID     uuid.UUID `db:"id" json:"id"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) TouchSidekickUpload(ctx context.Context, arg TouchSidekickUploadParams) (int64, error) {
+	result, err := q.db.Exec(ctx, touchSidekickUpload, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateSidekickHeartbeat = `-- name: UpdateSidekickHeartbeat :one
+UPDATE sidekick_installations
+SET platform = $1,
+    version = $2,
+    last_seen_at = NOW(),
+    updated_at = NOW()
+WHERE id = $3
+  AND user_id = $4
+  AND disconnected_at IS NULL
+RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+`
+
+type UpdateSidekickHeartbeatParams struct {
+	Platform string    `db:"platform" json:"platform"`
+	Version  string    `db:"version" json:"version"`
+	ID       uuid.UUID `db:"id" json:"id"`
+	UserID   uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) UpdateSidekickHeartbeat(ctx context.Context, arg UpdateSidekickHeartbeatParams) (SidekickInstallation, error) {
+	row := q.db.QueryRow(ctx, updateSidekickHeartbeat,
+		arg.Platform,
+		arg.Version,
+		arg.ID,
+		arg.UserID,
+	)
+	var i SidekickInstallation
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Platform,
+		&i.Version,
+		&i.LastSeenAt,
+		&i.LastUploadAt,
+		&i.DisconnectedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertActiveSidekickIssue = `-- name: UpsertActiveSidekickIssue :one
+INSERT INTO sidekick_issues (sidekick_id, code, message, details)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (sidekick_id, code) WHERE resolved_at IS NULL
+DO UPDATE SET
+  message = EXCLUDED.message,
+  details = EXCLUDED.details,
+  last_reported_at = NOW()
+RETURNING id, sidekick_id, code, message, details, first_reported_at, last_reported_at, resolved_at
+`
+
+type UpsertActiveSidekickIssueParams struct {
+	SidekickID uuid.UUID `db:"sidekick_id" json:"sidekick_id"`
+	Code       string    `db:"code" json:"code"`
+	Message    string    `db:"message" json:"message"`
+	Details    string    `db:"details" json:"details"`
+}
+
+func (q *sqlQuerier) UpsertActiveSidekickIssue(ctx context.Context, arg UpsertActiveSidekickIssueParams) (SidekickIssue, error) {
+	row := q.db.QueryRow(ctx, upsertActiveSidekickIssue,
+		arg.SidekickID,
+		arg.Code,
+		arg.Message,
+		arg.Details,
+	)
+	var i SidekickIssue
+	err := row.Scan(
+		&i.ID,
+		&i.SidekickID,
+		&i.Code,
+		&i.Message,
+		&i.Details,
+		&i.FirstReportedAt,
+		&i.LastReportedAt,
+		&i.ResolvedAt,
+	)
+	return i, err
+}
+
+const upsertSidekickInstallation = `-- name: UpsertSidekickInstallation :one
+INSERT INTO sidekick_installations (id, user_id, name, platform, version)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  platform = EXCLUDED.platform,
+  version = EXCLUDED.version,
+  disconnected_at = NULL,
+  updated_at = NOW()
+WHERE sidekick_installations.user_id = EXCLUDED.user_id
+RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+`
+
+type UpsertSidekickInstallationParams struct {
+	ID       uuid.UUID `db:"id" json:"id"`
+	UserID   uuid.UUID `db:"user_id" json:"user_id"`
+	Name     string    `db:"name" json:"name"`
+	Platform string    `db:"platform" json:"platform"`
+	Version  string    `db:"version" json:"version"`
+}
+
+func (q *sqlQuerier) UpsertSidekickInstallation(ctx context.Context, arg UpsertSidekickInstallationParams) (SidekickInstallation, error) {
+	row := q.db.QueryRow(ctx, upsertSidekickInstallation,
+		arg.ID,
+		arg.UserID,
+		arg.Name,
+		arg.Platform,
+		arg.Version,
+	)
+	var i SidekickInstallation
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Platform,
+		&i.Version,
+		&i.LastSeenAt,
+		&i.LastUploadAt,
+		&i.DisconnectedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertSidekickWoWDirectory = `-- name: UpsertSidekickWoWDirectory :exec
+INSERT INTO sidekick_wow_directories (
+  sidekick_id, path, tenant_name, tenant_base_url, realmlist
+)
+VALUES (
+  $1, $2, $3, $4, $5
+)
+ON CONFLICT (sidekick_id, path) DO UPDATE SET
+  tenant_name = EXCLUDED.tenant_name,
+  tenant_base_url = EXCLUDED.tenant_base_url,
+  realmlist = EXCLUDED.realmlist,
+  updated_at = NOW()
+`
+
+type UpsertSidekickWoWDirectoryParams struct {
+	SidekickID    uuid.UUID `db:"sidekick_id" json:"sidekick_id"`
+	Path          string    `db:"path" json:"path"`
+	TenantName    string    `db:"tenant_name" json:"tenant_name"`
+	TenantBaseUrl string    `db:"tenant_base_url" json:"tenant_base_url"`
+	Realmlist     string    `db:"realmlist" json:"realmlist"`
+}
+
+func (q *sqlQuerier) UpsertSidekickWoWDirectory(ctx context.Context, arg UpsertSidekickWoWDirectoryParams) error {
+	_, err := q.db.Exec(ctx, upsertSidekickWoWDirectory,
+		arg.SidekickID,
+		arg.Path,
+		arg.TenantName,
+		arg.TenantBaseUrl,
+		arg.Realmlist,
+	)
+	return err
 }
 
 const getSiteConfig = `-- name: GetSiteConfig :one

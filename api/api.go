@@ -247,6 +247,10 @@ func (api *API) Routes() chi.Router {
 				r.Post("/authcheck", api.checkAuthorization)
 				r.Post("/live-sessions", api.liveSessions.Create)
 				r.Get("/me/storage", api.GetMyStorage)
+				r.Get("/me/sidekicks", api.ListMySidekicks)
+				r.Patch("/me/sidekicks/{sidekickID}", api.RenameMySidekick)
+				r.Delete("/me/sidekicks/{sidekickID}", api.DisconnectMySidekick)
+				r.Put("/sidekick/status", api.UpdateSidekickStatus)
 				if api.Opts.Billing != nil {
 					r.Get("/me/billing", api.Opts.Billing.Summary)
 					r.Post("/me/billing/checkout", api.Opts.Billing.CreateCheckout)
@@ -322,6 +326,7 @@ func (api *API) Routes() chi.Router {
 					r.Put("/{userID}/roles", api.AdminSetUserRoles)
 					r.Put("/{userID}/retention", api.AdminSetUserRetention)
 					r.Get("/{userID}/grants", api.GetUserGrants)
+					r.Get("/{userID}/sidekicks", api.AdminListUserSidekicks)
 					r.Put("/{userID}/grants", api.UpsertUserGrant)
 					r.Delete("/{userID}/grants/{source}", api.DeleteUserGrant)
 				})

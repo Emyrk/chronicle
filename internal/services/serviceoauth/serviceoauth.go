@@ -32,7 +32,57 @@ const (
 	ScopeAll          = "all"
 	accessTokenPrefix = "ory_at_"
 	deviceGrantType   = "urn:ietf:params:oauth:grant-type:device_code"
+
+	installationIDParam       = "installation_id"
+	installationNameParam     = "installation_name"
+	installationPlatformParam = "installation_platform"
+	installationVersionParam  = "installation_version"
+	sidekickSessionExtraKey   = "sidekick_installation_id"
 )
+
+type sidekickMetadata struct {
+	ID       uuid.UUID
+	Name     string
+	Platform string
+	Version  string
+}
+
+func sidekickMetadataFromValues(form url.Values) (sidekickMetadata, bool, error) {
+	rawID := strings.TrimSpace(form.Get(installationIDParam))
+	if rawID == "" {
+		return sidekickMetadata{}, false, nil
+	}
+	id, err := uuid.Parse(rawID)
+	if err != nil || id == uuid.Nil {
+		return sidekickMetadata{}, false, errors.New("invalid sidekick installation_id")
+	}
+	metadata := sidekickMetadata{
+		ID:       id,
+		Name:     strings.TrimSpace(form.Get(installationNameParam)),
+		Platform: strings.TrimSpace(form.Get(installationPlatformParam)),
+		Version:  strings.TrimSpace(form.Get(installationVersionParam)),
+	}
+	if metadata.Name == "" {
+		metadata.Name = "Chronicle Sidekick"
+	}
+	if len(metadata.Name) > 100 || len(metadata.Platform) > 100 || len(metadata.Version) > 100 {
+		return sidekickMetadata{}, false, errors.New("sidekick installation metadata is too long")
+	}
+	return metadata, true, nil
+}
+
+func sidekickInstallationIDFromSession(session fosite.Session) (uuid.UUID, bool) {
+	defaultSession, ok := session.(*fosite.DefaultSession)
+	if !ok || defaultSession == nil {
+		return uuid.Nil, false
+	}
+	rawID := defaultSession.GetUsername()
+	if rawID == "" {
+		rawID, _ = defaultSession.GetExtraClaims()[sidekickSessionExtraKey].(string)
+	}
+	id, err := uuid.Parse(rawID)
+	return id, err == nil && id != uuid.Nil
+}
 
 var compiledClient = &fosite.DefaultClient{
 	ID:         ClientID,
@@ -156,6 +206,18 @@ func (s *Service) serveBrowserApproval(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) deviceAuthorization(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		s.provider.WriteAccessError(r.Context(), w, nil, fosite.ErrInvalidRequest.WithHint(err.Error()))
+		return
+	}
+	metadata, hasMetadata, err := sidekickMetadataFromValues(r.Form)
+	if err != nil {
+		s.provider.WriteAccessError(r.Context(), w, nil, fosite.ErrInvalidRequest.WithHint(err.Error()))
+		return
+	}
+	if hasMetadata {
+		r = r.WithContext(withPendingSidekickMetadata(r.Context(), metadata))
+	}
 	request, err := s.provider.NewDeviceRequest(r.Context(), r)
 	if err != nil {
 		s.provider.WriteAccessError(r.Context(), w, request, err)
@@ -307,7 +369,8 @@ func (s *Service) authenticateBearer(r *http.Request) (context.Context, bool) {
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || !strings.HasPrefix(parts[1], accessTokenPrefix) {
 		return r.Context(), false
 	}
-	_, request, err := s.provider.IntrospectToken(r.Context(), parts[1], fosite.AccessToken, &fosite.DefaultSession{}, ScopeAll)
+	session := &fosite.DefaultSession{}
+	_, request, err := s.provider.IntrospectToken(r.Context(), parts[1], fosite.AccessToken, session, ScopeAll)
 	if err != nil {
 		return r.Context(), false
 	}
@@ -316,5 +379,8 @@ func (s *Service) authenticateBearer(r *http.Request) (context.Context, bool) {
 		return r.Context(), false
 	}
 	ctx := chronauth.WithClaims(r.Context(), &claims.Claims{Subject: userID})
+	if installationID, ok := sidekickInstallationIDFromSession(request.GetSession()); ok {
+		ctx = withSidekickInstallationID(ctx, installationID)
+	}
 	return authz.AsUser(ctx, userID), true
 }

@@ -5,11 +5,13 @@ import {
   useResyncUserRoles,
   useUserGrants,
   useDeleteUserGrant,
+  useAdminUserSidekicks,
   type User,
   type DataGrant,
 } from "@/api/queries";
 import { Card } from "@/components/ui/Card/Card";
 import { UserCharactersSection } from "./UserCharactersSection";
+import { SidekickCards } from "@/pages/Settings/SidekickSettings";
 import { Button } from "@/components/ui/button";
 import {
   Users,
@@ -30,6 +32,7 @@ import {
   Copy,
   Check,
   ExternalLink,
+  Laptop,
 } from "lucide-react";
 
 function formatBytes(bytes: number): string {
@@ -160,6 +163,7 @@ function UserRow({ user }: UserRowProps) {
   const [copiedId, setCopiedId] = useState(false);
   const resyncMutation = useResyncUserRoles();
   const { data: grants, isLoading: grantsLoading } = useUserGrants(user.id, { enabled: expanded });
+  const { data: sidekicks, isLoading: sidekicksLoading } = useAdminUserSidekicks(user.id, expanded);
 
   const percentage = user.max_storage_bytes > 0 
     ? Math.min((user.consumed_storage_bytes / user.max_storage_bytes) * 100, 100) 
@@ -270,6 +274,22 @@ function UserRow({ user }: UserRowProps) {
 
           {/* Linked characters */}
           <UserCharactersSection userId={user.id} enabled={expanded} />
+
+          {/* Chronicle Sidekicks */}
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+              <Laptop className="h-4 w-4 text-muted-foreground" />
+              Chronicle Sidekicks
+            </div>
+            {sidekicksLoading ? (
+              <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading Sidekicks...
+              </div>
+            ) : (
+              <SidekickCards sidekicks={sidekicks?.sidekicks ?? []} readOnly />
+            )}
+          </div>
 
           {/* Storage grants */}
           <div>

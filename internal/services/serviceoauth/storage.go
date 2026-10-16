@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/ory/fosite"
@@ -35,6 +36,11 @@ type oauthStore interface {
 	DeleteExpiredOAuthTokenSessions(context.Context) (int64, error)
 	RevokeOAuthTokenSessions(context.Context, database.RevokeOAuthTokenSessionsParams) (int64, error)
 	RotateOAuthRefreshToken(context.Context, database.RotateOAuthRefreshTokenParams) (int64, error)
+	DeleteOAuthTokenSessionsByRequestID(context.Context, string) (int64, error)
+	UpsertSidekickInstallation(context.Context, database.UpsertSidekickInstallationParams) (database.SidekickInstallation, error)
+	RevokeActiveSidekickOAuthGrants(context.Context, uuid.UUID) ([]string, error)
+	InsertSidekickOAuthGrant(context.Context, database.InsertSidekickOAuthGrantParams) error
+	GetSidekickInstallationForOAuthRequest(context.Context, database.GetSidekickInstallationForOAuthRequestParams) (uuid.UUID, error)
 	InTx(context.Context, func(database.Store) error, *pgx.TxOptions) error
 }
 
@@ -261,12 +267,19 @@ func (s *storage) CreateDeviceAuthSession(ctx context.Context, deviceSignature, 
 	if expiresAt.IsZero() {
 		expiresAt = request.GetRequestedAt().Add(s.deviceCodeLifespan)
 	}
-	return s.dbFor(ctx).CreateOAuthDeviceSession(ctx, database.CreateOAuthDeviceSessionParams{
+	params := database.CreateOAuthDeviceSessionParams{
 		DeviceSignature: deviceSignature,
 		UserSignature:   userSignature,
 		Request:         encoded,
 		ExpiresAt:       pgtype.Timestamptz{Time: expiresAt, Valid: true},
-	})
+	}
+	if metadata, ok := pendingSidekickMetadata(ctx); ok {
+		params.SidekickInstallationID = uuid.NullUUID{UUID: metadata.ID, Valid: true}
+		params.SidekickInstallationName = pgtype.Text{String: metadata.Name, Valid: true}
+		params.SidekickInstallationPlatform = pgtype.Text{String: metadata.Platform, Valid: metadata.Platform != ""}
+		params.SidekickInstallationVersion = pgtype.Text{String: metadata.Version, Valid: metadata.Version != ""}
+	}
+	return s.dbFor(ctx).CreateOAuthDeviceSession(ctx, params)
 }
 
 func (s *storage) GetDeviceCodeSession(ctx context.Context, signature string, session fosite.Session) (fosite.DeviceRequester, error) {
@@ -320,9 +333,49 @@ func (s *storage) approveDevice(ctx context.Context, userSignature, subject stri
 	if err != nil {
 		return err
 	}
-	_, err = s.dbFor(ctx).UpdateOAuthDeviceSessionByUserSignature(ctx, database.UpdateOAuthDeviceSessionByUserSignatureParams{
-		Request: encoded, UserSignature: userSignature,
-	})
+
+	metadata := sidekickMetadata{
+		ID:       row.SidekickInstallationID.UUID,
+		Name:     row.SidekickInstallationName.String,
+		Platform: row.SidekickInstallationPlatform.String,
+		Version:  row.SidekickInstallationVersion.String,
+	}
+	hasMetadata := state == fosite.UserCodeAccepted && row.SidekickInstallationID.Valid
+	userID, err := uuid.Parse(subject)
+	if state == fosite.UserCodeAccepted && err != nil {
+		return err
+	}
+
+	err = s.db.InTx(ctx, func(tx database.Store) error {
+		if hasMetadata {
+			if _, err := tx.UpsertSidekickInstallation(ctx, database.UpsertSidekickInstallationParams{
+				ID: metadata.ID, UserID: userID, Name: metadata.Name,
+				Platform: metadata.Platform, Version: metadata.Version,
+			}); err != nil {
+				return err
+			}
+			requestIDs, err := tx.RevokeActiveSidekickOAuthGrants(ctx, metadata.ID)
+			if err != nil {
+				return err
+			}
+			for _, requestID := range requestIDs {
+				if _, err := tx.DeleteOAuthTokenSessionsByRequestID(ctx, requestID); err != nil {
+					return err
+				}
+			}
+			defaultSession := request.GetSession().(*fosite.DefaultSession)
+			defaultSession.Username = metadata.ID.String()
+			defaultSession.GetExtraClaims()[sidekickSessionExtraKey] = metadata.ID.String()
+			encoded, err = encodeRequest(request)
+			if err != nil {
+				return err
+			}
+		}
+		_, err := tx.UpdateOAuthDeviceSessionByUserSignature(ctx, database.UpdateOAuthDeviceSessionByUserSignatureParams{
+			Request: encoded, UserSignature: userSignature,
+		})
+		return err
+	}, nil)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fosite.ErrNotFound
 	}
@@ -351,7 +404,15 @@ func (s *storage) createToken(ctx context.Context, tokenType, signature, accessS
 	if expiresAt.IsZero() {
 		expiresAt = request.GetRequestedAt().Add(lifespan)
 	}
-	return s.dbFor(ctx).CreateOAuthTokenSession(ctx, database.CreateOAuthTokenSessionParams{
+	db := s.dbFor(ctx)
+	if installationID, ok := sidekickInstallationIDFromSession(request.GetSession()); ok {
+		if err := db.InsertSidekickOAuthGrant(ctx, database.InsertSidekickOAuthGrantParams{
+			OauthRequestID: request.GetID(), SidekickID: installationID,
+		}); err != nil {
+			return err
+		}
+	}
+	return db.CreateOAuthTokenSession(ctx, database.CreateOAuthTokenSessionParams{
 		TokenType: tokenType, Signature: signature, RequestID: request.GetID(),
 		AccessSignature: accessSignature, Request: encoded,
 		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},

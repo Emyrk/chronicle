@@ -1433,7 +1433,14 @@ CREATE TABLE oauth_device_sessions (
     request jsonb NOT NULL,
     invalidated boolean DEFAULT false NOT NULL,
     expires_at timestamp with time zone NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    sidekick_installation_id uuid,
+    sidekick_installation_name text,
+    sidekick_installation_platform text,
+    sidekick_installation_version text,
+    CONSTRAINT oauth_device_sessions_sidekick_installation_name_check CHECK (((sidekick_installation_name IS NULL) OR ((char_length(sidekick_installation_name) >= 1) AND (char_length(sidekick_installation_name) <= 100)))),
+    CONSTRAINT oauth_device_sessions_sidekick_installation_platform_check CHECK (((sidekick_installation_platform IS NULL) OR (char_length(sidekick_installation_platform) <= 100))),
+    CONSTRAINT oauth_device_sessions_sidekick_installation_version_check CHECK (((sidekick_installation_version IS NULL) OR (char_length(sidekick_installation_version) <= 100)))
 );
 
 CREATE TABLE oauth_relay_codes (
@@ -1721,6 +1728,57 @@ CREATE TABLE shared_views (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     instance_slug text DEFAULT ''::text NOT NULL,
     CONSTRAINT shared_views_payload_max_10kb CHECK ((octet_length((payload)::text) <= 10240))
+);
+
+CREATE TABLE sidekick_installations (
+    id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    name text NOT NULL,
+    platform text DEFAULT ''::text NOT NULL,
+    version text DEFAULT ''::text NOT NULL,
+    last_seen_at timestamp with time zone,
+    last_upload_at timestamp with time zone,
+    disconnected_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT sidekick_installations_name_check CHECK (((char_length(name) >= 1) AND (char_length(name) <= 100))),
+    CONSTRAINT sidekick_installations_platform_check CHECK ((char_length(platform) <= 100)),
+    CONSTRAINT sidekick_installations_version_check CHECK ((char_length(version) <= 100))
+);
+
+CREATE TABLE sidekick_issues (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    sidekick_id uuid NOT NULL,
+    code text NOT NULL,
+    message text NOT NULL,
+    details text DEFAULT ''::text NOT NULL,
+    first_reported_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_reported_at timestamp with time zone DEFAULT now() NOT NULL,
+    resolved_at timestamp with time zone,
+    CONSTRAINT sidekick_issues_code_check CHECK (((char_length(code) >= 1) AND (char_length(code) <= 100))),
+    CONSTRAINT sidekick_issues_details_check CHECK ((char_length(details) <= 4000)),
+    CONSTRAINT sidekick_issues_message_check CHECK (((char_length(message) >= 1) AND (char_length(message) <= 500)))
+);
+
+CREATE TABLE sidekick_oauth_grants (
+    oauth_request_id text NOT NULL,
+    sidekick_id uuid NOT NULL,
+    revoked_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE sidekick_wow_directories (
+    sidekick_id uuid NOT NULL,
+    path text NOT NULL,
+    tenant_name text NOT NULL,
+    tenant_base_url text NOT NULL,
+    realmlist text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT sidekick_wow_directories_path_check CHECK (((char_length(path) >= 1) AND (char_length(path) <= 2000))),
+    CONSTRAINT sidekick_wow_directories_realmlist_check CHECK ((char_length(realmlist) <= 255)),
+    CONSTRAINT sidekick_wow_directories_tenant_base_url_check CHECK (((char_length(tenant_base_url) >= 1) AND (char_length(tenant_base_url) <= 500))),
+    CONSTRAINT sidekick_wow_directories_tenant_name_check CHECK (((char_length(tenant_name) >= 1) AND (char_length(tenant_name) <= 100)))
 );
 
 CREATE TABLE site_config (
@@ -2636,6 +2694,18 @@ ALTER TABLE ONLY shared_views
 ALTER TABLE ONLY shared_views
     ADD CONSTRAINT shared_views_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY sidekick_installations
+    ADD CONSTRAINT sidekick_installations_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY sidekick_issues
+    ADD CONSTRAINT sidekick_issues_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY sidekick_oauth_grants
+    ADD CONSTRAINT sidekick_oauth_grants_pkey PRIMARY KEY (oauth_request_id);
+
+ALTER TABLE ONLY sidekick_wow_directories
+    ADD CONSTRAINT sidekick_wow_directories_pkey PRIMARY KEY (sidekick_id, path);
+
 ALTER TABLE ONLY site_config
     ADD CONSTRAINT site_config_pkey PRIMARY KEY (id);
 
@@ -3011,6 +3081,14 @@ CREATE UNIQUE INDEX river_job_unique_idx ON river_job USING btree (unique_key) W
 CREATE INDEX river_notification_created_at_idx ON river_notification USING btree (created_at);
 
 CREATE INDEX river_notification_topic_id_idx ON river_notification USING btree (topic, id);
+
+CREATE INDEX sidekick_installations_user_id_idx ON sidekick_installations USING btree (user_id, created_at DESC);
+
+CREATE UNIQUE INDEX sidekick_issues_active_code_idx ON sidekick_issues USING btree (sidekick_id, code) WHERE (resolved_at IS NULL);
+
+CREATE INDEX sidekick_issues_history_idx ON sidekick_issues USING btree (sidekick_id, last_reported_at DESC);
+
+CREATE INDEX sidekick_oauth_grants_sidekick_id_idx ON sidekick_oauth_grants USING btree (sidekick_id) WHERE (revoked_at IS NULL);
 
 CREATE INDEX telemetry_notices_audience_idx ON telemetry_notices USING btree (audience);
 
@@ -3389,6 +3467,18 @@ ALTER TABLE ONLY shared_views
 
 ALTER TABLE ONLY shared_views
     ADD CONSTRAINT shared_views_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY sidekick_installations
+    ADD CONSTRAINT sidekick_installations_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY sidekick_issues
+    ADD CONSTRAINT sidekick_issues_sidekick_id_fkey FOREIGN KEY (sidekick_id) REFERENCES sidekick_installations(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY sidekick_oauth_grants
+    ADD CONSTRAINT sidekick_oauth_grants_sidekick_id_fkey FOREIGN KEY (sidekick_id) REFERENCES sidekick_installations(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY sidekick_wow_directories
+    ADD CONSTRAINT sidekick_wow_directories_sidekick_id_fkey FOREIGN KEY (sidekick_id) REFERENCES sidekick_installations(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY talent_builds
     ADD CONSTRAINT talent_builds_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id);

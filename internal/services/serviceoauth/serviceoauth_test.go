@@ -105,6 +105,9 @@ func TestDeviceAuthorizationRefreshAndRevocation(t *testing.T) {
 	require.NoError(t, service.configure(ctx, db, "https://chronicle.example"))
 
 	userID := uuid.New()
+	_, err := db.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "sidekick-user"})
+	require.NoError(t, err)
+	installationID := uuid.New()
 	service.SetBrowserAuth(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := chronauth.WithClaims(r.Context(), &claims.Claims{Subject: userID})
@@ -113,8 +116,12 @@ func TestDeviceAuthorizationRefreshAndRevocation(t *testing.T) {
 	})
 
 	device := postForm[deviceAuthorizationResponse](t, service, "/device/authorize", url.Values{
-		"client_id": {ClientID},
-		"scope":     {ScopeAll},
+		"client_id":               {ClientID},
+		"scope":                   {ScopeAll},
+		installationIDParam:       {installationID.String()},
+		installationNameParam:     {"Raid laptop"},
+		installationPlatformParam: {"windows"},
+		installationVersionParam:  {"1.2.3"},
 	}, http.StatusOK)
 	require.NotEmpty(t, device.DeviceCode)
 	require.NotEmpty(t, device.UserCode)
@@ -147,6 +154,14 @@ func TestDeviceAuthorizationRefreshAndRevocation(t *testing.T) {
 	require.Equal(t, "bearer", strings.ToLower(initial.TokenType))
 	assertBearerIdentity(t, service, initial.AccessToken, userID, http.StatusNoContent)
 	assertOAuthAuthenticationMiddleware(t, service, initial.AccessToken, userID, http.StatusNoContent)
+	installations, err := db.ListSidekickInstallationsByUser(ctx, userID)
+	require.NoError(t, err)
+	require.Len(t, installations, 1)
+	require.Equal(t, installationID, installations[0].ID)
+	require.Equal(t, "Raid laptop", installations[0].Name)
+	require.Equal(t, "windows", installations[0].Platform)
+	require.Equal(t, "1.2.3", installations[0].Version)
+	assertBearerSidekickIdentity(t, service, initial.AccessToken, installationID)
 
 	restarted := &Service{}
 	require.NoError(t, restarted.configure(ctx, db, "https://chronicle.example"))
@@ -162,6 +177,7 @@ func TestDeviceAuthorizationRefreshAndRevocation(t *testing.T) {
 	require.NotEqual(t, initial.RefreshToken, rotated.RefreshToken)
 	assertBearerIdentity(t, service, initial.AccessToken, userID, http.StatusUnauthorized)
 	assertBearerIdentity(t, service, rotated.AccessToken, userID, http.StatusNoContent)
+	assertBearerSidekickIdentity(t, service, rotated.AccessToken, installationID)
 
 	revoked := postFormRaw(t, service, "/revoke", url.Values{
 		"token":           {rotated.RefreshToken},
@@ -450,6 +466,21 @@ func assertBearerIdentity(t *testing.T, service *Service, token string, want uui
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	require.Equal(t, status, rec.Code, rec.Body.String())
+}
+
+func assertBearerSidekickIdentity(t *testing.T, service *Service, token string, want uuid.UUID) {
+	t.Helper()
+	handler := service.BearerAuthenticated(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		installationID, ok := SidekickInstallationID(r.Context())
+		require.True(t, ok)
+		require.Equal(t, want, installationID)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
 }
 
 func assertOAuthAuthenticationMiddleware(t *testing.T, service *Service, token string, want uuid.UUID, status int) {

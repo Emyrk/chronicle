@@ -1,5 +1,5 @@
 import { useQueries, useQuery, useMutation, useQueryClient, keepPreviousData, type UseQueryOptions } from "@tanstack/react-query";
-import type { WhatsNewStatus } from "./typesGenerated";
+import type { ListSidekicksResponse, RenameSidekickRequest, SidekickInstallation, WhatsNewStatus } from "./typesGenerated";
 import type { WoWSpell } from "./wowdb";
 import {
   recordPublicNoticeResult,
@@ -201,6 +201,59 @@ export function useSession(options?: Omit<UseQueryOptions<Session | null>, "quer
     },
     retry: false,
     ...options,
+  });
+}
+
+export function useMySidekicks() {
+  return useQuery({
+    queryKey: ["sidekicks", "me"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/me/sidekicks");
+      if (!response.ok) throw new Error("Failed to fetch Sidekicks");
+      return response.json() as Promise<ListSidekicksResponse>;
+    },
+    refetchInterval: 30_000,
+  });
+}
+
+export function useAdminUserSidekicks(userID: string, enabled = true) {
+  return useQuery({
+    queryKey: ["sidekicks", "admin", userID],
+    queryFn: async () => {
+      const response = await fetch(`/api/v1/admin/users/${userID}/sidekicks`);
+      if (!response.ok) throw new Error("Failed to fetch user Sidekicks");
+      return response.json() as Promise<ListSidekicksResponse>;
+    },
+    enabled: enabled && Boolean(userID),
+    refetchInterval: enabled ? 30_000 : false,
+  });
+}
+
+export function useRenameSidekick() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const request: RenameSidekickRequest = { name };
+      const response = await fetch(`/api/v1/me/sidekicks/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      });
+      if (!response.ok) throw new Error("Failed to rename Sidekick");
+      return response.json() as Promise<SidekickInstallation>;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sidekicks", "me"] }),
+  });
+}
+
+export function useDisconnectSidekick() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(`/api/v1/me/sidekicks/${id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Failed to disconnect Sidekick");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sidekicks", "me"] }),
   });
 }
 

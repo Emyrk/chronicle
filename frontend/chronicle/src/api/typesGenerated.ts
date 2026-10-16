@@ -1130,7 +1130,9 @@ export interface DuplicateInstance {
 }
 
 // From chroniclesdk/log.go
-export type Duration = number;
+export type Duration = 180000000000;
+
+export const Durations: Duration[] = [180000000000];
 
 // From chroniclesdk/gamedata.go
 /**
@@ -2475,6 +2477,11 @@ export interface ListRaidCompositionsResponse {
     readonly limit: number;
 }
 
+// From chroniclesdk/sidekick.go
+export interface ListSidekicksResponse {
+    readonly sidekicks: readonly SidekickInstallation[];
+}
+
 // From chroniclesdk/panel_layout.go
 export interface ListUserPanelLayoutsResponse {
     readonly layouts: readonly UserPanelLayout[];
@@ -3183,6 +3190,11 @@ export interface RegressionSnapshotSummary {
     readonly created_at: string;
 }
 
+// From chroniclesdk/sidekick.go
+export interface RenameSidekickRequest {
+    readonly name: string;
+}
+
 // From chroniclesdk/guild_page.go
 export interface ReorderTabsRequest {
     readonly tab_ids: readonly string[];
@@ -3490,6 +3502,55 @@ export interface SharedViewResponse {
     readonly instance_id: string;
     readonly instance_slug?: string;
     readonly payload: Record<string, string>;
+}
+
+// From chroniclesdk/sidekick.go
+export interface SidekickInstallation {
+    readonly id: string;
+    readonly name: string;
+    readonly platform?: string;
+    readonly version?: string;
+    readonly online: boolean;
+    readonly last_seen_at?: string;
+    readonly last_upload_at?: string;
+    readonly disconnected_at?: string;
+    readonly created_at: string;
+    readonly wow_directories: readonly SidekickWoWDirectory[];
+    readonly issues: readonly SidekickIssue[];
+}
+
+// From chroniclesdk/sidekick.go
+export interface SidekickIssue {
+    readonly id: string;
+    readonly code: string;
+    readonly message: string;
+    readonly details?: string;
+    readonly first_reported_at: string;
+    readonly last_reported_at: string;
+    readonly resolved_at?: string;
+}
+
+// From chroniclesdk/sidekick.go
+export interface SidekickIssueReport {
+    readonly code: string;
+    readonly message: string;
+    readonly details?: string;
+}
+
+// From chroniclesdk/sidekick.go
+export interface SidekickStatusRequest {
+    readonly platform?: string;
+    readonly version?: string;
+    readonly wow_directories: readonly SidekickWoWDirectory[];
+    readonly issues: readonly SidekickIssueReport[];
+}
+
+// From chroniclesdk/sidekick.go
+export interface SidekickWoWDirectory {
+    readonly path: string;
+    readonly tenant_name: string;
+    readonly tenant_base_url: string;
+    readonly realmlist?: string;
 }
 
 // From chroniclesdk/sim.go
