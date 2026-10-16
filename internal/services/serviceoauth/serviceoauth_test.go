@@ -47,6 +47,45 @@ type oauthErrorResponse struct {
 	Error string `json:"error"`
 }
 
+func TestDevicePageRendering(t *testing.T) {
+	t.Parallel()
+	for _, testCase := range []struct {
+		name string
+		data devicePageData
+		want []string
+	}{
+		{
+			name: "authorization form",
+			data: devicePageData{State: devicePageAuthorize, UserCode: "ABCD-EFGH", Title: "Link this device", Message: "Confirm the code."},
+			want: []string{`action="/oauth/device"`, `value="ABCD-EFGH"`, "Authorize device"},
+		},
+		{
+			name: "approved",
+			data: devicePageData{State: devicePageApproved, Title: "Device linked", Message: "Sidekick is connected."},
+			want: []string{"Device linked", "Authorization complete", "return to Chronicle Sidekick"},
+		},
+		{
+			name: "denied",
+			data: devicePageData{State: devicePageDenied, Title: "Authorization denied", Message: "Sidekick was not connected."},
+			want: []string{"Authorization denied", "No access was granted"},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			renderDevicePage(recorder, http.StatusOK, testCase.data)
+			response := recorder.Result()
+			defer func() { _ = response.Body.Close() }()
+			require.Equal(t, "text/html; charset=utf-8", response.Header.Get("Content-Type"))
+			require.Equal(t, "no-store", response.Header.Get("Cache-Control"))
+			require.Equal(t, "DENY", response.Header.Get("X-Frame-Options"))
+			for _, want := range testCase.want {
+				require.Contains(t, recorder.Body.String(), want)
+			}
+			require.NotContains(t, recorder.Body.String(), `{"message":`)
+		})
+	}
+}
+
 func TestDeviceAuthorizationRefreshAndRevocation(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitLong)
@@ -82,6 +121,9 @@ func TestDeviceAuthorizationRefreshAndRevocation(t *testing.T) {
 		"decision":  {"approve"},
 	})
 	require.Equal(t, http.StatusOK, approval.Code, approval.Body.String())
+	require.Equal(t, "text/html; charset=utf-8", approval.Header().Get("Content-Type"))
+	require.Contains(t, approval.Body.String(), "Device linked")
+	require.Contains(t, approval.Body.String(), "return to Chronicle Sidekick")
 
 	initial := postForm[tokenResponse](t, service, "/token", url.Values{
 		"grant_type":  {deviceGrantType},
