@@ -29,241 +29,245 @@ var devicePageTemplate = template.Must(template.New("oauth-device").Parse(`<!doc
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>{{.Title}} · Chronicle</title>
+  <link rel="icon" href="/c/chronicle/favicon.ico">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto+Mono:wght@500;600&display=swap">
   <style>
     @font-face {
       font-family: "Friz Quadrata";
       src: url("/c/fonts/FrizQuadrata-Regular.woff2") format("woff2");
       font-display: swap;
     }
+    /* Mirrors the frontend theme tokens in frontend/chronicle/src/index.css. */
     :root {
+      --background: oklch(0.2891 0 0);
+      --foreground: oklch(0.9300 0.0035 247.8602);
+      --card: oklch(0.2686 0 0);
+      --primary: #5F8FA6;
+      --primary-darker: oklch(0.3818 0.0603 233.7748);
+      --primary-foreground: oklch(0.8914 0 0);
+      --secondary: oklch(0.5692 0.0609 82.3871);
+      --muted-foreground: oklch(0.7593 0.0073 67.7161);
+      --destructive: oklch(0.6368 0.2078 25.3313);
+      --success: oklch(0.792 0.209 151.711); /* tailwind green-400 */
+      --border: oklch(0.3407 0 0);
+      --ring: oklch(0.5204 0.0833 232.6334);
+      --radius: 0.2rem;
+      --font-mono: "Roboto Mono", ui-monospace, monospace;
+      --font-wow: "Friz Quadrata", ui-serif, serif;
       color-scheme: dark;
-      --ink: #f4ead4;
-      --muted: #a89c87;
-      --faint: #716957;
-      --gold: #d7a955;
-      --gold-bright: #f2cc7c;
-      --blue: #61b9df;
-      --panel: #15130f;
-      --line: #3b3326;
-      font-family: Georgia, "Times New Roman", serif;
+      font-family: Inter, ui-sans-serif, sans-serif, system-ui;
     }
     * { box-sizing: border-box; }
     body {
-      min-height: 100vh;
+      min-height: 100svh;
       margin: 0;
-      display: grid;
-      place-items: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem 5rem;
       overflow-x: hidden;
-      color: var(--ink);
-      background:
-        radial-gradient(circle at 50% 18%, #3a2c1a 0, #17130d 34%, transparent 60%),
-        linear-gradient(145deg, #080909, #0d0c09 52%, #080909);
+      color: var(--foreground);
+      background: var(--background);
     }
-    body::before {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      content: "";
-      opacity: .34;
-      background-image:
-        linear-gradient(#d6b66f08 1px, transparent 1px),
-        linear-gradient(90deg, #d6b66f08 1px, transparent 1px);
-      background-size: 46px 46px;
-      mask-image: radial-gradient(circle at center, black, transparent 76%);
-    }
-    .shell {
-      position: relative;
-      width: min(31rem, calc(100% - 2rem));
-      margin: 2rem 0;
-      animation: arrive .45s cubic-bezier(.2,.8,.2,1) both;
-    }
-    .seal {
-      position: relative;
-      z-index: 2;
-      display: grid;
-      width: 4.25rem;
-      height: 4.25rem;
-      margin: 0 auto -2.1rem;
-      place-items: center;
-      border: 1px solid #e3b85e88;
+    main { width: 100%; max-width: 28rem; animation: arrive .5s cubic-bezier(.22,1,.36,1) both; }
+
+    /* Login page MagicLogo: pulsing blue glow and rising particles. */
+    .hero { position: relative; width: 16rem; max-width: 100%; margin: 0 auto 1.25rem; }
+    .hero img { position: relative; z-index: 1; display: block; width: 100%; }
+    .glow { position: absolute; border-radius: 9999px; pointer-events: none; animation: pulse 4.5s cubic-bezier(.4,0,.6,1) infinite; }
+    .glow.a { left: -15%; top: 5%; width: 130%; height: 90%; background: rgb(96 165 250 / .15); filter: blur(40px); }
+    .glow.b { right: -20%; top: 55%; width: 60%; height: 45%; background: rgb(147 197 253 / .1); filter: blur(64px); rotate: -15deg; animation-delay: 1.5s; }
+    .particles { position: absolute; inset: -2rem; z-index: 2; pointer-events: none; }
+    .particles span {
+      position: absolute;
+      left: var(--x);
+      top: var(--y);
+      width: var(--size);
+      height: var(--size);
       border-radius: 50%;
-      color: var(--gold-bright);
-      background: radial-gradient(circle at 38% 28%, #49381f, #20190f 66%);
-      box-shadow: 0 0 0 7px #0e0d0a, 0 0 2.5rem #c38a3038;
-      font: 700 1.8rem/1 "Friz Quadrata", Georgia, serif;
-      text-shadow: 0 2px 8px #000;
+      background: radial-gradient(circle, rgb(147 197 253 / .8) 0%, rgb(96 165 250 / .5) 50%, transparent 100%);
+      box-shadow: 0 0 4px 1px rgb(96 165 250 / .3);
+      animation: float-up var(--duration) ease-out infinite, sparkle 3s ease-in-out infinite;
+      animation-delay: var(--delay);
     }
+
     .card {
       position: relative;
       overflow: hidden;
-      padding: 4.25rem clamp(1.4rem, 6vw, 2.75rem) 2.5rem;
-      border: 1px solid var(--line);
-      border-radius: 3px;
-      background:
-        linear-gradient(135deg, #ffffff05, transparent 34%),
-        var(--panel);
-      box-shadow: 0 1.5rem 5rem #000a, inset 0 1px #ffffff08;
+      padding: 2rem;
+      border: 1px solid var(--border);
+      border-radius: calc(var(--radius) + 4px);
+      background: var(--card);
+      box-shadow: 0 20px 25px -5px rgb(0 0 0 / .25), 0 8px 10px -6px rgb(0 0 0 / .2);
       text-align: center;
     }
-    .card::before, .card::after {
+    .card::before {
       position: absolute;
-      width: 4rem;
-      height: 4rem;
+      inset: 0 0 auto;
+      height: 1px;
       content: "";
-      border-color: #b98a4266;
+      background: linear-gradient(90deg, transparent, var(--secondary), transparent);
+      opacity: .7;
     }
-    .card::before { top: .75rem; left: .75rem; border-top: 1px solid; border-left: 1px solid; }
-    .card::after { right: .75rem; bottom: .75rem; border-right: 1px solid; border-bottom: 1px solid; }
     .eyebrow {
-      margin: 0 0 .8rem;
-      color: var(--gold);
-      font: 600 .68rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
-      letter-spacing: .2em;
+      margin: 0 0 .5rem;
+      color: var(--secondary);
+      font: 600 .7rem/1 var(--font-mono);
+      letter-spacing: .18em;
       text-transform: uppercase;
     }
-    h1 {
-      max-width: 22rem;
-      margin: 0 auto .85rem;
-      font: 400 clamp(2rem, 8vw, 2.75rem)/1.05 "Friz Quadrata", Georgia, serif;
-      letter-spacing: -.025em;
-    }
-    .lede {
-      max-width: 23rem;
-      margin: 0 auto;
-      color: var(--muted);
-      font-size: .98rem;
-      line-height: 1.65;
-    }
-    .rule {
-      display: flex;
-      align-items: center;
-      gap: .75rem;
-      margin: 1.7rem 0;
-      color: #806a46;
-    }
-    .rule::before, .rule::after { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, #6b5735); content: ""; }
+    h1 { margin: 0 0 .6rem; font: 400 1.75rem/1.15 var(--font-wow); }
+    p { margin: 0; }
+    .muted { color: var(--muted-foreground); font-size: .875rem; line-height: 1.4rem; }
+    .rule { display: flex; align-items: center; gap: .75rem; margin: 1.5rem 0; color: var(--secondary); font-size: .6rem; }
+    .rule::before, .rule::after { flex: 1; height: 1px; content: ""; background: linear-gradient(90deg, transparent, var(--border)); }
     .rule::after { transform: scaleX(-1); }
-    .code-label {
-      display: block;
-      margin-bottom: .6rem;
-      color: #c8bda8;
-      font: 600 .7rem/1 ui-monospace, SFMono-Regular, Consolas, monospace;
-      letter-spacing: .12em;
-      text-align: left;
-      text-transform: uppercase;
-    }
-    .code-input {
+    form { text-align: left; }
+    label { display: block; margin-bottom: .4rem; font-size: .875rem; font-weight: 500; }
+    input {
       width: 100%;
-      border: 1px solid #58472d;
-      border-radius: 3px;
+      padding: .75rem;
+      border: 1px solid var(--border);
+      border-radius: calc(var(--radius) + 2px);
       outline: none;
-      padding: .95rem 1rem;
-      color: #fff5df;
-      background: #090a09;
-      box-shadow: inset 0 2px 9px #0009;
-      font: 600 1.25rem/1 ui-monospace, SFMono-Regular, Consolas, monospace;
-      letter-spacing: .11em;
+      color: var(--foreground);
+      background: var(--background);
+      box-shadow: inset 0 2px 6px rgb(0 0 0 / .25);
+      font: 600 1.25rem/1.5rem var(--font-mono);
+      letter-spacing: .15em;
       text-align: center;
       text-transform: uppercase;
-      transition: border-color .16s, box-shadow .16s;
+      transition: border-color .15s, box-shadow .15s;
     }
-    .code-input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px #d7a9551f, inset 0 2px 9px #0009; }
+    input:focus-visible { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent), inset 0 2px 6px rgb(0 0 0 / .25); }
     .scope {
-      display: grid;
-      grid-template-columns: auto 1fr;
+      display: flex;
       gap: .75rem;
-      margin: 1rem 0 1.45rem;
-      padding: .9rem 1rem;
-      border: 1px solid #272823;
-      background: #0d0e0c;
-      color: var(--muted);
+      margin: 1rem 0 1.25rem;
+      padding: .75rem 1rem;
+      border: 1px solid var(--border);
+      border-left: 2px solid var(--primary);
+      border-radius: calc(var(--radius) + 2px);
+      background: color-mix(in oklch, var(--primary-darker) 18%, transparent);
       font-size: .8rem;
-      line-height: 1.55;
-      text-align: left;
     }
-    .scope svg { width: 1.1rem; color: var(--blue); }
-    .actions { display: grid; grid-template-columns: 1fr 1.6fr; gap: .75rem; }
+    .scope svg { flex: none; width: 1.1rem; height: 1.1rem; margin-top: .1rem; color: var(--primary); }
+    .actions { display: grid; grid-template-columns: 1fr 1.6fr; gap: .5rem; }
     button {
-      min-height: 3rem;
-      border-radius: 3px;
+      height: 2.5rem;
+      padding: 0 1rem;
+      border: 1px solid transparent;
+      border-radius: calc(var(--radius) + 2px);
       cursor: pointer;
-      font: 600 .76rem/1 ui-monospace, SFMono-Regular, Consolas, monospace;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      transition: transform .14s, border-color .14s, background .14s;
+      font: 500 .875rem/1 inherit;
+      font-family: inherit;
+      transition: background .15s, transform .15s;
     }
     button:hover { transform: translateY(-1px); }
-    button:active { transform: translateY(0); }
-    .deny { border: 1px solid #403a30; color: #a79d8c; background: #11110f; }
-    .deny:hover { border-color: #695f4e; color: #ddd2be; }
-    .approve { border: 1px solid #d7a955aa; color: #211708; background: linear-gradient(#efd087, #b98536); box-shadow: 0 7px 22px #b9853625; }
-    .approve:hover { background: linear-gradient(#f8dda0, #c89543); }
-    .result-mark {
+    button:active { transform: none; }
+    button:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent); }
+    .approve { color: var(--primary-foreground); background: var(--primary-darker); }
+    .approve:hover { background: color-mix(in oklch, var(--primary-darker) 90%, transparent); }
+    .deny { color: #fff; background: color-mix(in oklch, var(--destructive) 60%, transparent); }
+    .deny:hover { background: color-mix(in oklch, var(--destructive) 54%, transparent); }
+    .mark {
       display: grid;
-      width: 4.25rem;
-      height: 4.25rem;
-      margin: 1.8rem auto 1.35rem;
+      width: 4rem;
+      height: 4rem;
+      margin: 0 auto 1.25rem;
       place-items: center;
-      border: 1px solid #5e936d;
+      border: 1px solid color-mix(in oklch, var(--success) 60%, transparent);
       border-radius: 50%;
-      color: #a7d4ae;
-      background: #142219;
-      box-shadow: 0 0 2rem #5e936d22;
+      color: var(--success);
+      background: color-mix(in oklch, var(--success) 10%, transparent);
+      box-shadow: 0 0 2rem color-mix(in oklch, var(--success) 20%, transparent);
+      animation: pop .55s cubic-bezier(.22,1,.36,1) .1s both;
     }
-    .result-mark.denied, .result-mark.error { border-color: #956251; color: #dda08a; background: #281713; box-shadow: 0 0 2rem #a85b4222; }
-    .result-mark svg { width: 2rem; height: 2rem; }
-    .return-note {
-      margin: 1.5rem 0 0;
-      color: var(--gold);
-      font: 600 .72rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
-      letter-spacing: .08em;
-      text-transform: uppercase;
+    .mark.denied, .mark.error {
+      border-color: color-mix(in oklch, var(--destructive) 60%, transparent);
+      color: var(--destructive);
+      background: color-mix(in oklch, var(--destructive) 10%, transparent);
+      box-shadow: 0 0 2rem color-mix(in oklch, var(--destructive) 20%, transparent);
     }
-    .footnote { margin: 1.25rem auto 0; color: var(--faint); font-size: .72rem; line-height: 1.55; }
-    @keyframes arrive { from { opacity: 0; transform: translateY(10px) scale(.99); } }
-    @media (max-width: 28rem) { .actions { grid-template-columns: 1fr; } .approve { grid-row: 1; } }
-    @media (prefers-reduced-motion: reduce) { .shell { animation: none; } button { transition: none; } }
+    .mark svg { width: 1.75rem; height: 1.75rem; }
+    .status { margin-top: 1.25rem; color: var(--secondary); font: 600 .7rem/1.5 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; }
+    .footnote { margin-top: .5rem; font-size: .75rem; }
+
+    @keyframes arrive { from { opacity: 0; transform: translateY(10px); } }
+    @keyframes pop { 0% { opacity: 0; transform: scale(.6); } 60% { opacity: 1; transform: scale(1.08); } 100% { transform: none; } }
+    @keyframes pulse { 50% { opacity: .5; } }
+    @keyframes sparkle { 0%, 100% { opacity: .2; } 50% { opacity: .6; } }
+    @keyframes float-up {
+      0% { opacity: 0; transform: translateY(0) scale(0); }
+      15% { opacity: 1; transform: translateY(-20px) scale(1); }
+      85% { opacity: .8; transform: translateY(calc(var(--travel) * .8)) scale(.8); }
+      100% { opacity: 0; transform: translateY(var(--travel)) scale(.3); }
+    }
+    @media (max-width: 26rem) { .actions { grid-template-columns: 1fr; } .approve { grid-row: 1; } }
+    @media (prefers-reduced-motion: reduce) {
+      main, .mark, .glow, button { animation: none; transition: none; }
+      .particles { display: none; }
+    }
   </style>
 </head>
 <body>
-  <main class="shell">
-    <div class="seal" aria-hidden="true">C</div>
+  <main>
+    <div class="hero">
+      <div class="glow a" aria-hidden="true"></div>
+      <div class="glow b" aria-hidden="true"></div>
+      <div class="particles" aria-hidden="true">
+        <span style="--x:14%;--y:30%;--duration:5s;--delay:-0.0s;--size:2.5px;--travel:-140px"></span>
+        <span style="--x:22%;--y:52%;--duration:9s;--delay:-0.4s;--size:3.5px;--travel:-180px"></span>
+        <span style="--x:31%;--y:38%;--duration:4s;--delay:-0.8s;--size:2px;--travel:-120px"></span>
+        <span style="--x:40%;--y:58%;--duration:7s;--delay:-1.2s;--size:3px;--travel:-200px"></span>
+        <span style="--x:48%;--y:26%;--duration:11s;--delay:-1.6s;--size:2.5px;--travel:-160px"></span>
+        <span style="--x:57%;--y:44%;--duration:6s;--delay:-2.0s;--size:3.5px;--travel:-110px"></span>
+        <span style="--x:66%;--y:34%;--duration:8s;--delay:-2.4s;--size:2px;--travel:-190px"></span>
+        <span style="--x:74%;--y:56%;--duration:5s;--delay:-2.8s;--size:3px;--travel:-150px"></span>
+        <span style="--x:82%;--y:40%;--duration:10s;--delay:-3.2s;--size:2.5px;--travel:-130px"></span>
+        <span style="--x:88%;--y:28%;--duration:7s;--delay:-3.6s;--size:3.5px;--travel:-170px"></span>
+        <span style="--x:35%;--y:22%;--duration:12s;--delay:-4.0s;--size:2px;--travel:-100px"></span>
+        <span style="--x:62%;--y:60%;--duration:4s;--delay:-4.4s;--size:3px;--travel:-185px"></span>
+      </div>
+      <img src="/c/chronicle/ChronicleLogoCenter.svg" alt="Chronicle">
+    </div>
     <section class="card">
-      <p class="eyebrow">Chronicle Sidekick</p>
-      <h1>{{.Title}}</h1>
-      <p class="lede">{{.Message}}</p>
-
       {{if eq .State "authorize"}}
+        <p class="eyebrow">Chronicle Sidekick</p>
+        <h1>{{.Title}}</h1>
+        <p class="muted">{{.Message}}</p>
         <div class="rule" aria-hidden="true">◆</div>
         <form method="post" action="/oauth/device">
-          <label class="code-label" for="user-code">Device code</label>
-          <input class="code-input" id="user-code" name="user_code" value="{{.UserCode}}" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" required autofocus>
-          <div class="scope">
+          <label for="user-code">Device code</label>
+          <input id="user-code" name="user_code" value="{{.UserCode}}" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" required autofocus>
+          <div class="scope muted">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 4.5 6v5.4c0 4.8 3.2 8 7.5 9.6 4.3-1.6 7.5-4.8 7.5-9.6V6L12 3Z"/><path d="m9 12 2 2 4-4"/></svg>
-            <span>Sidekick will be able to act with your existing Chronicle permissions. It cannot gain access beyond your account.</span>
+            <span>Sidekick will act with your existing Chronicle permissions. Only approve a code shown by Sidekick on a device you recognize.</span>
           </div>
           <div class="actions">
             <button class="deny" name="decision" value="deny" type="submit">Deny</button>
             <button class="approve" name="decision" value="approve" type="submit">Authorize device</button>
           </div>
         </form>
-        <p class="footnote">Only approve a code shown by Chronicle Sidekick on a device you recognize.</p>
       {{else}}
-        <div class="result-mark {{.State}}" aria-hidden="true">
+        <div class="mark {{.State}}" aria-hidden="true">
           {{if eq .State "approved"}}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg>
           {{else}}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>
           {{end}}
         </div>
+        <h1>{{.Title}}</h1>
+        <p class="muted">{{.Message}}</p>
         {{if eq .State "approved"}}
-          <p class="return-note">Authorization complete</p>
-          <p class="footnote">You can close this window and return to Chronicle Sidekick.</p>
+          <p class="status">Authorization complete</p>
+          <p class="muted footnote">You can close this window and return to Chronicle Sidekick.</p>
         {{else if eq .State "denied"}}
-          <p class="return-note">No access was granted</p>
-          <p class="footnote">You can safely close this window.</p>
+          <p class="status">No access was granted</p>
+          <p class="muted footnote">You can safely close this window.</p>
         {{else}}
-          <p class="footnote">Return to Chronicle Sidekick and start the connection process again.</p>
+          <p class="muted footnote">Return to Chronicle Sidekick and start the connection process again.</p>
         {{end}}
       {{end}}
     </section>
