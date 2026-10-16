@@ -1320,8 +1320,8 @@ COMMENT ON COLUMN log_instances.guild_id IS 'If set, that means it was a guild r
 
 CREATE TABLE parsed_log_group (
     id uuid NOT NULL,
-    parse_generation bigint NOT NULL,
-    finalized_at timestamp with time zone
+    parse_generation bigint DEFAULT 1 NOT NULL,
+    finalized_at timestamp with time zone DEFAULT '-infinity'::timestamp with time zone
 );
 
 COMMENT ON TABLE parsed_log_group IS 'A parsed_log_group is a wow_log_group that has been processed and contains parsed logs. A duplicate allows deleting this one row to clear all parsed logs for a given wow_log_group.';

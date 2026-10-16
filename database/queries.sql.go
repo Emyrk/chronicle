@@ -10723,8 +10723,8 @@ func (q *sqlQuerier) InsertParsedLogGroup(ctx context.Context, id uuid.UUID) err
 }
 
 const insertStagedParsedLogGroup = `-- name: InsertStagedParsedLogGroup :exec
-INSERT INTO parsed_log_group (id, parse_generation)
-VALUES ($1, $2)
+INSERT INTO parsed_log_group (id, parse_generation, finalized_at)
+VALUES ($1, $2, NULL)
 `
 
 type InsertStagedParsedLogGroupParams struct {

@@ -9,10 +9,6 @@ ALTER TABLE parsed_log_group
   ADD COLUMN parse_generation BIGINT NOT NULL DEFAULT 1,
   ADD COLUMN finalized_at TIMESTAMPTZ DEFAULT '-infinity'::timestamptz;
 
-ALTER TABLE parsed_log_group
-  ALTER COLUMN parse_generation DROP DEFAULT,
-  ALTER COLUMN finalized_at DROP DEFAULT;
-
 CREATE VIEW log_instances_guild AS
 SELECT
   li.id,

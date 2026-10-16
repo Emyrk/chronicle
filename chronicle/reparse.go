@@ -68,16 +68,18 @@ func (c *Chronicle) NewWorkerReLogParse() river.Worker[ArgsLogReparse] {
 func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogReparse]) error {
 	// Clear the parsed data for the log group and re-initiate parsing
 	db := w.parent.Zed
+	parseGeneration := effectiveParseGeneration(job.Args.ParseGeneration)
 
 	logGroup, err := db.GetWoWLogGroupByID(ctx, job.Args.LogID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil
+			return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "load_log_group", staleParseGeneration(parseGeneration, nil))
 		}
 		return fmt.Errorf("fetch log group: %w", err)
 	}
-	if logGroup.WoWLogGroup.ParseGeneration != job.Args.ParseGeneration {
-		return nil
+	if !isCurrentParseGeneration(job.Args.ParseGeneration, logGroup.WoWLogGroup.ParseGeneration) {
+		current := logGroup.WoWLogGroup.ParseGeneration
+		return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "initial_generation_check", staleParseGeneration(parseGeneration, &current))
 	}
 
 	var metadata logReparseMetadata
@@ -99,7 +101,7 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 	if job.Args.TenantID != uuid.Nil {
 		parseCtx = servicetenant.WithTenantID(ctx, job.Args.TenantID)
 	}
-	parseArgs := newReplacementArgsLogParse(parseCtx, job.Args.LogID, job.Args.ParseGeneration, job.Args.Verbose, job.Args.IdentityMode, job.Args.RealmID, previousRankingRunIDs)
+	parseArgs := newReplacementArgsLogParse(parseCtx, job.Args.LogID, parseGeneration, job.Args.Verbose, job.Args.IdentityMode, job.Args.RealmID, previousRankingRunIDs)
 	insertOpts := parseArgs.InsertOpts()
 	insertOpts.Pending = true
 	insertOpts.Tags = []string{fmt.Sprintf("owner_%s", logGroup.WoWLogGroup.Owner.String())}

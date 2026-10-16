@@ -189,6 +189,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	if job.Args.TenantID != uuid.Nil {
 		ctx = servicetenant.WithTenantID(ctx, job.Args.TenantID)
 	}
+	parseGeneration := effectiveParseGeneration(job.Args.ParseGeneration)
 	jobStart := time.Now()
 	metrics := w.parent.metrics
 	report := &chroniclesdk.LogParseReport{
@@ -215,21 +216,21 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	logGroup, err := db.GetWoWLogGroupByID(ctx, job.Args.LogID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			w.parent.logger.Warn("log parse job for non-existent log group", "log_id", job.Args.LogID)
 			jobResult = "cancelled"
-			return nil
+			return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "load_log_group", staleParseGeneration(parseGeneration, nil))
 		}
 		jobResult = "failure"
 		return fmt.Errorf("fetch log group: %w", err)
 	}
-	if logGroup.WoWLogGroup.ParseGeneration != job.Args.ParseGeneration {
+	if !isCurrentParseGeneration(job.Args.ParseGeneration, logGroup.WoWLogGroup.ParseGeneration) {
 		jobResult = "cancelled"
-		return nil
+		current := logGroup.WoWLogGroup.ParseGeneration
+		return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "initial_generation_check", staleParseGeneration(parseGeneration, &current))
 	}
-	if err := w.parent.stageParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration); err != nil {
+	if err := w.parent.stageParseGeneration(ctx, job.Args.LogID, parseGeneration); err != nil {
 		if errors.Is(err, errStaleParseGeneration) {
 			jobResult = "cancelled"
-			return nil
+			return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "stage_output", err)
 		}
 		jobResult = "failure"
 		return fmt.Errorf("stage parse generation: %w", err)
@@ -341,7 +342,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	flavor, flavorChanged = resolveLogFlavor(flavor, explicitFlavor, resolved)
 	if flavorChanged {
 		err := db.InTx(ctx, func(tx *authz.AuthzTX) error {
-			if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, job.Args.ParseGeneration); err != nil {
+			if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
 				return err
 			}
 			return tx.UpdateWoWLogGroupFlavor(ctx, database.UpdateWoWLogGroupFlavorParams{
@@ -351,7 +352,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		}, nil)
 		if errors.Is(err, errStaleParseGeneration) {
 			jobResult = "cancelled"
-			return nil
+			return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "persist_flavor", err)
 		}
 		if err != nil {
 			w.parent.logger.WarnContext(ctx, "persist resolved log flavor", slog.Any("error", err))
@@ -502,7 +503,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		}()
 		var dbinstance database.LogInstance
 		err = db.InTx(ctx, func(tx *authz.AuthzTX) error {
-			if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, job.Args.ParseGeneration); err != nil {
+			if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
 				return err
 			}
 			guild, err := finalized.Guilds.Insert(ctx, encountersState.Units, instanceID, realmID, resolved.DatasetID, tx)
@@ -813,7 +814,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			insertLockHeld = false
 			jobResult = "cancelled"
 			if errors.Is(err, errStaleParseGeneration) {
-				return nil
+				return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "write_instance", err)
 			}
 			return river.JobCancel(fmt.Errorf("insert finalized encounters: %w", err))
 		}
@@ -824,7 +825,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		rankingRunAffectedIDs := []uuid.UUID{dbinstance.ID}
 		if instanceStart.Valid {
 			dupErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
-				if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, job.Args.ParseGeneration); err != nil {
+				if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
 					return err
 				}
 				var err error
@@ -835,7 +836,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				w.parent.insertParsedInstanceMu.Unlock()
 				insertLockHeld = false
 				jobResult = "cancelled"
-				return nil
+				return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "link_duplicates", dupErr)
 			}
 			if dupErr != nil {
 				slog.WarnContext(ctx, "duplicate detection failed", slog.String("err", dupErr.Error()))
@@ -848,7 +849,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		// transaction so a ranking error cannot roll back the parsed instance.
 		if !invalidLog && finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil {
 			rankErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
-				if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, job.Args.ParseGeneration); err != nil {
+				if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
 					return err
 				}
 				if err := insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName, resolved.DatasetID, flavor, talentTreeData); err != nil {
@@ -858,7 +859,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			}, nil)
 			if errors.Is(rankErr, errStaleParseGeneration) {
 				jobResult = "cancelled"
-				return nil
+				return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "write_rankings", rankErr)
 			}
 			if rankErr != nil {
 				slog.WarnContext(ctx, "insert dps rankings failed",
@@ -882,7 +883,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	// Keep compact current-known cohorts synchronized after every successful
 	// parse so live windows immediately include late historical uploads.
 	membershipErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
-		if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, job.Args.ParseGeneration); err != nil {
+		if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
 			return err
 		}
 		if result, err := tx.RefreshParseScoreMembershipsForLogGroup(ctx, database.RefreshParseScoreMembershipsForLogGroupParams{
@@ -913,16 +914,16 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	}, nil)
 	if errors.Is(membershipErr, errStaleParseGeneration) {
 		jobResult = "cancelled"
-		return nil
+		return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "refresh_memberships", membershipErr)
 	}
 	if membershipErr != nil {
 		return fmt.Errorf("fence parse membership refresh: %w", membershipErr)
 	}
 
-	if err := w.parent.finalizeParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration); err != nil {
+	if err := w.parent.finalizeParseGeneration(ctx, job.Args.LogID, parseGeneration); err != nil {
 		if errors.Is(err, errStaleParseGeneration) {
 			jobResult = "cancelled"
-			return nil
+			return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "finalize_output", err)
 		}
 		jobResult = "failure"
 		return fmt.Errorf("finalize parse generation: %w", err)

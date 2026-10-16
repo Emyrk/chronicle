@@ -70,8 +70,8 @@ WHERE wow_log_groups.id = $1
 ;
 
 -- name: InsertStagedParsedLogGroup :exec
-INSERT INTO parsed_log_group (id, parse_generation)
-VALUES (@id, @parse_generation)
+INSERT INTO parsed_log_group (id, parse_generation, finalized_at)
+VALUES (@id, @parse_generation, NULL)
 ;
 
 -- name: FinalizeParsedLogGroup :one

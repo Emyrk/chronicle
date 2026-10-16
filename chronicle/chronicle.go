@@ -71,6 +71,7 @@ type Chronicle struct {
 	primaryDomain      string
 	defaultFlavor      database.WoWFlavor
 	defaultDatasetID   uuid.UUID
+	recordParseAbort   func(context.Context, parseGenerationAbortOutput) error
 	resolveDataset     func(ctx context.Context, realmID uuid.UUID) ResolvedDataset
 
 	mu                     sync.Mutex

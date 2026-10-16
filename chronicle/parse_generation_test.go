@@ -2,18 +2,118 @@ package chronicle
 
 import (
 	"context"
+	"encoding/json"
+	"io"
+	"log/slog"
 	"slices"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/require"
 )
+
+func TestParseGenerationEarlyStaleJobsRecordAbortOutput(t *testing.T) {
+	ctx := testutil.Context(t, testutil.WaitLong)
+	store, logID := parseGenerationFixture(t, ctx)
+	_, err := advanceGenerationTx(ctx, store, logID, true)
+	require.NoError(t, err)
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	var outputs []parseGenerationAbortOutput
+	chron := &Chronicle{
+		Zed:     authz.NewDatabaseOnly(logger, store),
+		logger:  logger,
+		metrics: newLogParseMetrics(nil),
+		recordParseAbort: func(_ context.Context, output parseGenerationAbortOutput) error {
+			outputs = append(outputs, output)
+			return nil
+		},
+	}
+
+	parseJob := &river.Job[ArgsLogParse]{
+		Args:   ArgsLogParse{LogID: logID, ParseGeneration: 1},
+		JobRow: &rivertype.JobRow{Attempt: 1, MaxAttempts: 2},
+	}
+	require.NoError(t, (&WorkerLogParse{parent: chron}).Work(ctx, parseJob))
+	require.Len(t, outputs, 1)
+	require.Equal(t, parseGenerationAbortOutput{
+		Status: "aborted", Reason: staleParseGenerationReason,
+		JobGeneration: 1, ExpectedGeneration: 1, CurrentGeneration: ptrInt64(2),
+		Checkpoint: "initial_generation_check",
+	}, outputs[0])
+	encoded, err := json.Marshal(outputs[0])
+	require.NoError(t, err)
+	require.JSONEq(t, `{"status":"aborted","reason":"stale_parse_generation","job_generation":1,"expected_generation":1,"current_generation":2,"checkpoint":"initial_generation_check"}`, string(encoded))
+
+	legacyReparseJob := &river.Job[ArgsLogReparse]{
+		Args:   ArgsLogReparse{LogID: logID},
+		JobRow: &rivertype.JobRow{Attempt: 1, MaxAttempts: 5},
+	}
+	require.NoError(t, (&WorkerLogReparse{parent: chron}).Work(ctx, legacyReparseJob))
+	require.Len(t, outputs, 2)
+	require.Equal(t, parseGenerationAbortOutput{
+		Status: "aborted", Reason: staleParseGenerationReason,
+		JobGeneration: 0, ExpectedGeneration: 1, CurrentGeneration: ptrInt64(2),
+		Checkpoint: "initial_generation_check",
+	}, outputs[1])
+}
+
+func TestParseGenerationLegacyJobsNormalizeToGenerationOne(t *testing.T) {
+	t.Parallel()
+	for _, jobGeneration := range []struct {
+		name       string
+		generation int64
+	}{
+		{name: "parse", generation: ArgsLogParse{}.ParseGeneration},
+		{name: "reparse", generation: ArgsLogReparse{}.ParseGeneration},
+	} {
+		t.Run(jobGeneration.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, int64(1), effectiveParseGeneration(jobGeneration.generation))
+			require.True(t, isCurrentParseGeneration(jobGeneration.generation, 1))
+			require.False(t, isCurrentParseGeneration(jobGeneration.generation, 2))
+		})
+	}
+}
+
+func TestParseGenerationFinalizationStaleAbortOutput(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	store, logID := parseGenerationFixture(t, ctx)
+	_, err := advanceGenerationTx(ctx, store, logID, true)
+	require.NoError(t, err)
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	var output parseGenerationAbortOutput
+	chron := &Chronicle{
+		logger: logger,
+		recordParseAbort: func(_ context.Context, got parseGenerationAbortOutput) error {
+			output = got
+			return nil
+		},
+	}
+	staleErr := store.InTx(ctx, func(tx database.Store) error {
+		return lockExpectedParseGeneration(ctx, tx, logID, 1)
+	}, nil)
+	require.ErrorIs(t, staleErr, errStaleParseGeneration)
+	require.NoError(t, chron.abortStaleParseGeneration(ctx, logID, 1, "finalize_output", staleErr))
+	require.Equal(t, parseGenerationAbortOutput{
+		Status: "aborted", Reason: staleParseGenerationReason,
+		JobGeneration: 1, ExpectedGeneration: 1, CurrentGeneration: ptrInt64(2),
+		Checkpoint: "finalize_output",
+	}, output)
+}
+
+func ptrInt64(value int64) *int64 { return &value }
 
 func TestParseGenerationParseVsReparse(t *testing.T) {
 	t.Parallel()
