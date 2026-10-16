@@ -27,6 +27,7 @@ import { createStatusRaidHealthModel } from "../Status/statusRaidHealth";
 import { timelineProcessor, type TimelineResult, type TimelineSeriesMeta } from "./timeline.processor";
 import { applyAggregation } from "./aggregations";
 import { TimelineFilterEditor } from "./TimelineFilterEditor";
+import { useActualRaidDurabilityModel } from "../Status/useRaidDurabilityModel";
 import { createTimelineRaidDurabilityBars } from "./timelineRaidDurability";
 import {
   createTimelinePhaseAnnotations,
@@ -199,12 +200,19 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
       playerLife.state.transitions(durabilityEncounter.encounterId, playerId),
     ]));
   }, [context.instance.players, durabilityEncounter, playerLife.error, playerLife.loading, playerLife.state]);
-  const durabilityModel = useMemo(() => createStatusRaidHealthModel(
+  const estimatedDurabilityModel = useMemo(() => createStatusRaidHealthModel(
     durabilityEncounter
       ? Array.from(durabilityEncounter.units.values()).filter((unit) => unit.kind === "player")
       : [],
     durabilityLifeTransitions,
   ), [durabilityEncounter, durabilityLifeTransitions]);
+  const actualDurability = useActualRaidDurabilityModel(
+    context,
+    durabilityEncounter?.encounterId ?? null,
+    durabilityEnabled,
+  );
+  const durabilityUsesActual = actualDurability.supported && actualDurability.available;
+  const durabilityModel = durabilityUsesActual ? actualDurability.model : estimatedDurabilityModel;
   const durabilityBars = useMemo(() => {
     if (!durabilityEncounter || durabilityModel.unitCount === 0) return [];
     return createTimelineRaidDurabilityBars(
@@ -360,7 +368,7 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
       const scale = xScale as unknown as D3ScaleLinear;
 
       return (
-        <g aria-label="Estimated raid durability background">
+        <g aria-label={`${durabilityUsesActual ? "Actual" : "Estimated"} raid durability background`}>
           {durabilityBars.map((bar, index) => {
             const x1 = scale(bar.startSec);
             const x2 = scale(bar.endSec);
@@ -375,7 +383,7 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
                 fill={bar.color}
                 fillOpacity={0.18}
               >
-                <title>{`${Math.round(bar.percent)}% estimated raid durability`}</title>
+                <title>{`${Math.round(bar.percent)}% ${durabilityUsesActual ? "actual" : "estimated"} raid durability`}</title>
               </rect>
             );
           })}
@@ -393,7 +401,7 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
         </g>
       );
     },
-    [durabilityBars],
+    [durabilityBars, durabilityUsesActual],
   );
 
   const phaseAnnotationLayer = useCallback(
