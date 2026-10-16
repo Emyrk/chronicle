@@ -68,7 +68,6 @@ import { FavoritesList } from "@/components/Favorites";
 
 export { BillingSettings } from "./Settings/BillingSettings";
 export { CustomPanelSettings } from "./Settings/CustomPanelSettings";
-export { SidekickSettings } from "./Settings/SidekickSettings";
 
 const LAYOUT_LAB_INSTANCE_REFERENCE_STORAGE_KEY = "layout-lab.instance-reference";
 const LAYOUT_LAB_RESIZE_HINT_DISMISSED_STORAGE_KEY = "layout-lab.resize-hint-dismissed";
@@ -160,8 +159,6 @@ const allTabs: Tab[] = [
   { path: "/account/characters", label: "Characters", icon: Swords },
   { path: "/account/billing", label: "Billing", icon: CreditCard },
   { path: "/account/storage", label: "Storage", icon: HardDrive },
-  // Sidekick remains directly accessible at /account/sidekick while it is in development.
-  // { path: "/account/sidekick", label: "Sidekick", icon: Monitor },
   // { path: "/account/notifications", label: "Notifications", icon: Bell },
   // { path: "/account/privacy", label: "Privacy", icon: Shield },
   // { path: "/account/appearance", label: "Appearance", icon: Palette },
