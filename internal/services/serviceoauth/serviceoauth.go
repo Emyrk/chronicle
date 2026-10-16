@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"html/template"
 	"net/http"
 	"net/url"
 	"strings"
@@ -193,53 +192,74 @@ func (s *Service) revoke(w http.ResponseWriter, r *http.Request) {
 	s.provider.WriteRevocationResponse(r.Context(), w, err)
 }
 
-var approvalPage = template.Must(template.New("oauth-device").Parse(`<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Authorize Chronicle Sidekick</title></head>
-<body><main><h1>Authorize Chronicle Sidekick</h1>
-<form method="post"><label>Device code <input name="user_code" value="{{.}}" required></label>
-<button name="decision" value="approve" type="submit">Approve</button>
-<button name="decision" value="deny" type="submit">Deny</button></form></main></body></html>`))
-
 func (s *Service) browserApprovalHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := approvalPage.Execute(w, r.URL.Query().Get("user_code")); err != nil {
-			httpapi.InternalServerError(w, err)
-		}
+		renderDevicePage(w, http.StatusOK, devicePageData{
+			State:    devicePageAuthorize,
+			UserCode: strings.TrimSpace(r.URL.Query().Get("user_code")),
+			Title:    "Link this device",
+			Message:  "Confirm the code shown in Chronicle Sidekick to connect it to your account.",
+		})
 	case http.MethodPost:
 		if err := r.ParseForm(); err != nil {
-			httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid approval request."})
+			renderDevicePage(w, http.StatusBadRequest, devicePageData{
+				State: devicePageError, Title: "That request was unreadable",
+				Message: "Chronicle could not read the authorization request. Return to Sidekick and try again.",
+			})
 			return
 		}
 		userCode := strings.TrimSpace(r.Form.Get("user_code"))
 		signature, err := s.deviceStrategy.UserCodeSignature(r.Context(), userCode)
 		if err != nil {
-			httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid device code."})
+			renderDevicePage(w, http.StatusBadRequest, devicePageData{
+				State: devicePageError, Title: "Check the device code",
+				Message: "This code is not valid. Compare it with the code shown in Chronicle Sidekick.",
+			})
 			return
 		}
 		deviceRequest, err := s.store.GetDeviceCodeSession(r.Context(), signature, &fosite.DefaultSession{})
 		if err != nil || s.deviceStrategy.ValidateUserCode(r.Context(), deviceRequest, userCode) != nil {
-			httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Device code not found or expired."})
+			renderDevicePage(w, http.StatusNotFound, devicePageData{
+				State: devicePageError, Title: "This code has expired",
+				Message: "The device code was not found or is no longer active.",
+			})
 			return
 		}
 		state := fosite.UserCodeRejected
+		page := devicePageData{
+			State: devicePageDenied, Title: "Authorization denied",
+			Message: "Chronicle Sidekick was not connected to your account.",
+		}
 		if r.Form.Get("decision") == "approve" {
 			state = fosite.UserCodeAccepted
+			page = devicePageData{
+				State: devicePageApproved, Title: "Device linked",
+				Message: "Chronicle Sidekick is now authorized to use your Chronicle account.",
+			}
 		}
 		subject := chronauth.MustAuthenticatedClaims(r.Context()).Subject.String()
 		if err := s.store.approveDevice(r.Context(), signature, subject, state); err != nil {
 			if errors.Is(err, fosite.ErrNotFound) {
-				httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Device code not found or expired."})
+				renderDevicePage(w, http.StatusNotFound, devicePageData{
+					State: devicePageError, Title: "This code has expired",
+					Message: "The device code was already used or is no longer active.",
+				})
 				return
 			}
-			httpapi.InternalServerError(w, err)
+			renderDevicePage(w, http.StatusInternalServerError, devicePageData{
+				State: devicePageError, Title: "Authorization interrupted",
+				Message: "Chronicle could not complete the authorization. Return to Sidekick and try again.",
+			})
 			return
 		}
-		httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.Response{Message: "Device authorization updated. You may return to Chronicle Sidekick."})
+		renderDevicePage(w, http.StatusOK, page)
 	default:
 		w.Header().Set("Allow", "GET, POST")
-		httpapi.Write(r.Context(), w, http.StatusMethodNotAllowed, chroniclesdk.Response{Message: "Method not allowed."})
+		renderDevicePage(w, http.StatusMethodNotAllowed, devicePageData{
+			State: devicePageError, Title: "Method not allowed",
+			Message: "Open the authorization link from Chronicle Sidekick to continue.",
+		})
 	}
 }
 
