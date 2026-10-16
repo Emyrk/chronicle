@@ -22,6 +22,7 @@ WITH representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id
     FROM log_instances li
+    JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.private
     WHERE li.category = 'raid'
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
@@ -91,6 +92,7 @@ WITH representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         li.id
     FROM log_instances li
+    JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.private
     WHERE li.category = 'raid'
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         -- Prefer the upload with the broadest boss-ranking coverage. The group
