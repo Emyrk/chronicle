@@ -90,7 +90,6 @@ import {
   isPanelPresetLayout,
   PRESET_LAYOUTS,
   PRESET_LAYOUTS_BY_ID,
-  isSeamlessPreset,
   DEFAULT_PRESET_ID,
   type InstancePageType,
   type PresetLayout,
@@ -946,6 +945,8 @@ export interface SharedViewPayload {
     pageState?: unknown;
     items?: GridEditorItem[];
     panelTypesById?: Record<string, EventsPanelType>;
+    /** No gaps or rounding between items. */
+    seamless?: boolean;
   };
   // Legacy v1 compatibility (flattened fields)
   items?: GridEditorItem[];
@@ -1031,6 +1032,8 @@ interface LayoutSnapshot {
   panelOptionsById: Record<string, string | null>;
   panelFiltersById: Record<string, PanelFilter[]>;
   activePresetId: string | null;
+  /** No gaps or rounding between items. */
+  seamless: boolean;
   /** View state of the page being popped out, if a page preset was active. */
   pageState?: unknown;
 }
@@ -1164,6 +1167,7 @@ function PoppedOutLayoutContent({
   const [seedFiltersById, setSeedFiltersById] = useState(() => session.snapshot.panelFiltersById);
   const [seedFiltersVersion, setSeedFiltersVersion] = useState(1);
   const [activePresetId, setActivePresetId] = useState(session.snapshot.activePresetId);
+  const [seamless, setSeamless] = useState(session.snapshot.seamless);
 
 
   const applyPreset = useCallback((presetId: string) => {
@@ -1186,6 +1190,7 @@ function PoppedOutLayoutContent({
     setSeedFiltersById({ ...preset.panelFilters });
     setSeedFiltersVersion((version) => version + 1);
     setActivePresetId(presetId);
+    setSeamless(preset.seamless ?? false);
   }, []);
 
   const castLayout = useCallback((layout: UserPanelLayout) => {
@@ -1206,6 +1211,7 @@ function PoppedOutLayoutContent({
       setSeedFiltersById({ ...filters });
       setSeedFiltersVersion((version) => version + 1);
       setActivePresetId(null);
+      setSeamless(parsed.seamless === true);
       toast.success("Cast layout", { description: layout.title });
     } catch {
       toast.error("Failed to cast layout", { description: "Layout payload is invalid." });
@@ -1317,7 +1323,7 @@ function PoppedOutLayoutContent({
                 onPanelOptionChange={handlePanelOptionChange}
                 onPanelFiltersChange={handlePanelFiltersChange}
                 onExplainerClick={onExplainerClick}
-                seamless={isSeamlessPreset(activePresetId)}
+                seamless={seamless}
               />
             </ChartDataRegistryProvider>
           </PanelTimingProvider>
@@ -1358,6 +1364,8 @@ interface EncounterDetailProps {
   isMobile: boolean;
   /** Currently active preset ID (null if custom layout) */
   activePresetId: string | null;
+  /** No gaps or rounding between items. */
+  layoutSeamless: boolean;
   /** Full-page content owned by the active layout, or null for a panel grid. */
   pageType: InstancePageType | null;
   /** Share-link state binding for the active page; the key remounts it on import. */
@@ -1394,6 +1402,7 @@ function EncounterDetail({
   showHints,
   isMobile,
   activePresetId,
+  layoutSeamless,
   pageType,
   pageState,
   onPresetChange,
@@ -1969,7 +1978,7 @@ function EncounterDetail({
                 onPanelOptionChange={onPanelOptionChange}
                 onPanelFiltersChange={onPanelFiltersChange}
                 onExplainerClick={onExplainerClick}
-                seamless={isSeamlessPreset(activePresetId)}
+                seamless={layoutSeamless}
               />
             </PortalContainerProvider>
           </ChartDataRegistryProvider>
@@ -2176,6 +2185,8 @@ export function InstancePageView({
   const layoutPopupRef = useRef<LayoutPopupSession | null>(null);
 
   const [importedLayoutItems, setImportedLayoutItems] = useState<GridEditorItem[] | null>(null);
+  // Whether the imported layout is seamless; the default layout carries its own.
+  const [importedLayoutSeamless, setImportedLayoutSeamless] = useState(false);
 
   const [activeLayoutId, setActiveLayoutId] = useState<string | null>(defaultLayoutId);
 
@@ -2320,6 +2331,7 @@ export function InstancePageView({
     const panelOptions = items.map((item) => preset.panelOptions[item.id] ?? null);
 
     setImportedLayoutItems(items);
+    setImportedLayoutSeamless(preset.seamless ?? false);
     setViewState((prev) => ({
       ...prev,
       panels,
@@ -2466,6 +2478,9 @@ export function InstancePageView({
     () => importedLayoutItems ?? baseOrderedLayoutItems,
     [importedLayoutItems, baseOrderedLayoutItems],
   );
+  const layoutSeamless = importedLayoutItems
+    ? importedLayoutSeamless
+    : viewState.layout !== "alternate" && cachedDefaultLayout?.seamless === true;
 
   const panelTypesByID = useMemo<Record<string, EventsPanelType>>(() => {
     const next: Record<string, EventsPanelType> = {};
@@ -2536,6 +2551,7 @@ export function InstancePageView({
         panelOptionsById: { ...panelOptionsByID },
         panelFiltersById: structuredClone(panelFiltersByID),
         activePresetId,
+        seamless: layoutSeamless,
         pageState: activePageType ? pageStateRef.current : undefined,
       },
     };
@@ -2545,6 +2561,7 @@ export function InstancePageView({
   }, [
     activeLayoutItems,
     activePresetId,
+    layoutSeamless,
     instance.id,
     instance.name,
     panelFiltersByID,
@@ -2886,6 +2903,7 @@ export function InstancePageView({
     setActiveLayoutId(sharedPageType ? null : typeof payload.layoutId === "string" ? payload.layoutId : null);
     if (!sharedPageType) {
       setImportedLayoutItems(orderedItems);
+      setImportedLayoutSeamless(payload.layout?.seamless === true);
       setActivePresetId(null);
     } else {
       const requestedPreset = sharedPageLayout?.presetId
@@ -2929,6 +2947,7 @@ export function InstancePageView({
       ...(Object.keys(panelFiltersByID).length > 0
         ? { panelFiltersById: panelFiltersByID }
         : {}),
+      ...(layoutSeamless ? { seamless: true } : {}),
     };
     const json = JSON.stringify(payload, null, 2);
     navigator.clipboard.writeText(json).then(() => {
@@ -2936,7 +2955,7 @@ export function InstancePageView({
     }).catch(() => {
       window.prompt("Copy this layout JSON:", json);
     });
-  }, [activeLayoutItems, panelTypesByID, panelOptionsByID, panelFiltersByID]);
+  }, [activeLayoutItems, layoutSeamless, panelTypesByID, panelOptionsByID, panelFiltersByID]);
 
   const handleImportLayout = useCallback(() => {
     const raw = window.prompt("Paste exported layout JSON");
@@ -2949,6 +2968,7 @@ export function InstancePageView({
         panelTypesById?: Record<string, EventsPanelType>;
         panelOptionsById?: Record<string, string>;
         panelFiltersById?: Record<string, PanelFilter[]>;
+        seamless?: boolean;
       };
 
       if (parsed.version !== 1) {
@@ -2978,6 +2998,7 @@ export function InstancePageView({
 
       setActiveLayoutId(null);
       setImportedLayoutItems(orderedItems);
+      setImportedLayoutSeamless(parsed.seamless === true);
       setActivePresetId(null);
 
       // Restore per-panel filters from imported layout.
@@ -3039,6 +3060,7 @@ export function InstancePageView({
       layout: {
         kind: "panels",
         items: activeLayoutItems,
+        ...(layoutSeamless ? { seamless: true } : {}),
         panelTypesById: Object.fromEntries(Object.entries(panelTypesByID).map(([id, panelType]) => [
           id,
           canonicalizeCustomPanelRef(panelType) ?? panelType,
@@ -3052,7 +3074,7 @@ export function InstancePageView({
         ...(Object.keys(panelFiltersByID).length > 0 ? { panelFilters: panelFiltersByID } : {}),
       },
     };
-  }, [activeLayoutId, activeLayoutItems, activePageType, activePresetId, allMergedEnemies, instance.encounters, instance.players, panelFiltersByID, panelOptionsByID, panelTypesByID, timeRange?.enabled, timeRange?.startOffsetMs, timeRange?.endOffsetMs, viewState.encounters, viewState.enemies, viewState.includeWipes, viewState.players]);
+  }, [activeLayoutId, activeLayoutItems, activePageType, activePresetId, layoutSeamless, allMergedEnemies, instance.encounters, instance.players, panelFiltersByID, panelOptionsByID, panelTypesByID, timeRange?.enabled, timeRange?.startOffsetMs, timeRange?.endOffsetMs, viewState.encounters, viewState.enemies, viewState.includeWipes, viewState.players]);
 
   useEffect(() => {
     liveSession.registerViewApplier((view) => {
@@ -3167,6 +3189,7 @@ export function InstancePageView({
       setPanels(orderedPanels, orderedOptions);
       setActiveLayoutId(layout.id);
       setImportedLayoutItems(orderedItems);
+      setImportedLayoutSeamless(parsed.seamless === true);
       setActivePresetId(null);
 
       // Restore per-panel filters from the layout.
@@ -3761,6 +3784,7 @@ export function InstancePageView({
             showHints={showHints}
             isMobile={isMobile}
             activePresetId={activePresetId}
+            layoutSeamless={layoutSeamless}
             pageType={activePageType}
             pageState={pageStateBinding}
             layoutPopup={layoutPopup}

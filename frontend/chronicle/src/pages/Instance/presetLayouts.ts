@@ -306,9 +306,3 @@ export const PRESET_LAYOUTS_BY_ID = Object.fromEntries(
 ) as Record<string, PresetLayout>;
 
 export const DEFAULT_PRESET_ID = "summary";
-
-/** Whether the preset lays its panels out seamlessly (no gaps or rounding). */
-export function isSeamlessPreset(presetId: string | null): boolean {
-  const preset = presetId ? PRESET_LAYOUTS_BY_ID[presetId] : undefined;
-  return Boolean(preset && isPanelPresetLayout(preset) && preset.seamless);
-}

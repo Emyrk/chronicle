@@ -1205,6 +1205,8 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
   const [panelTypesById, setPanelTypesById] = useState<Record<string, EventsPanelType>>(DEFAULT_INSTANCE_PANEL_TYPES);
   const [panelOptionsById, setPanelOptionsById] = useState<Record<string, string | null>>({});
   const [panelFiltersById, setPanelFiltersById] = useState<Record<string, PanelFilter[]>>({});
+  // Kept so saving here never drops it; there is no control for it yet.
+  const [seamless, setSeamless] = useState(false);
   // Separate seed state: only set on load/import, not from live editing feedback.
   const [seedFiltersById, setSeedFiltersById] = useState<Record<string, PanelFilter[]>>({});
   const [seedFiltersVersion, setSeedFiltersVersion] = useState(0);
@@ -1344,6 +1346,7 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
         Object.entries(parsed.panelOptionsById ?? {}).map(([itemId, value]) => [itemId, value ?? null]),
       ));
       setPanelFiltersById(parsed.panelFiltersById ?? {});
+      setSeamless(parsed.seamless === true);
       setSeedFiltersById(parsed.panelFiltersById ?? {});
       setSeedFiltersVersion((v) => v + 1);
       setMetaTitle(activeLayout.title);
@@ -1370,7 +1373,7 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
         title: trimmedTitle || editingLayout.title,
         description: metaDescription,
         icon: metaIcon,
-        payload: JSON.parse(serializeLayoutLab(items, panelTypesById, panelOptionsById, panelFiltersById)),
+        payload: JSON.parse(serializeLayoutLab(items, panelTypesById, panelOptionsById, panelFiltersById, seamless)),
       } as never);
       toast.success("Layout saved", { description: trimmedTitle || editingLayout.title });
     } catch (error) {
@@ -1558,7 +1561,7 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
   };
 
   const handleExport = async () => {
-    const serialized = serializeLayoutLab(items, panelTypesById, panelOptionsById, panelFiltersById);
+    const serialized = serializeLayoutLab(items, panelTypesById, panelOptionsById, panelFiltersById, seamless);
     await navigator.clipboard.writeText(serialized);
     toast.success("Layout copied to clipboard");
   };
@@ -1573,6 +1576,7 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
         Object.entries(parsed.panelOptionsById ?? {}).map(([itemId, value]) => [itemId, value ?? null]),
       ));
       setPanelFiltersById(parsed.panelFiltersById ?? {});
+      setSeamless(parsed.seamless === true);
       setSeedFiltersById(parsed.panelFiltersById ?? {});
       setSeedFiltersVersion((v) => v + 1);
       setImportError(null);
@@ -1893,6 +1897,7 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
                       Object.entries(parsed.panelOptionsById ?? {}).map(([itemId, value]) => [itemId, value ?? null]),
                     ));
                     setPanelFiltersById(parsed.panelFiltersById ?? {});
+                    setSeamless(parsed.seamless === true);
                     setSeedFiltersById(parsed.panelFiltersById ?? {});
                     setSeedFiltersVersion((v) => v + 1);
                   }}

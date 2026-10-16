@@ -13,6 +13,11 @@ export interface LayoutLabExportV1 {
   panelTypesById: Record<string, EventsPanelType>;
   panelOptionsById?: Record<string, string>;
   panelFiltersById?: Record<string, PanelFilter[]>;
+  /**
+   * Butt panels and strips together with no gaps or rounding. Not offered in
+   * the UI yet; set by presets or by hand in the layout JSON.
+   */
+  seamless?: boolean;
 }
 
 export function serializeLayoutLab(
@@ -20,6 +25,7 @@ export function serializeLayoutLab(
   panelTypesById: Record<string, EventsPanelType>,
   panelOptionsById?: Record<string, string | null>,
   panelFiltersById?: Record<string, PanelFilter[]>,
+  seamless?: boolean,
 ): string {
   const filteredPanelOptions = panelOptionsById
     ? Object.fromEntries(Object.entries(panelOptionsById).filter(([, value]) => value !== null)) as Record<string, string>
@@ -39,6 +45,7 @@ export function serializeLayoutLab(
     ...(filteredPanelFilters && Object.keys(filteredPanelFilters).length > 0
       ? { panelFiltersById: filteredPanelFilters }
       : {}),
+    ...(seamless ? { seamless: true } : {}),
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -62,6 +69,7 @@ export function parseLayoutLab(raw: string): LayoutLabExportV1 {
     panelFiltersById: parsed.panelFiltersById && typeof parsed.panelFiltersById === "object"
       ? parsed.panelFiltersById as Record<string, PanelFilter[]>
       : undefined,
+    ...(parsed.seamless === true ? { seamless: true } : {}),
   };
 }
 

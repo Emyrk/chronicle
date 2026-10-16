@@ -6,7 +6,6 @@ import {
   isPanelPresetLayout,
   PRESET_LAYOUTS,
   PRESET_LAYOUTS_BY_ID,
-  isSeamlessPreset,
 } from "./presetLayouts";
 import {
   deserializeTimelineConfig,
@@ -72,10 +71,8 @@ describe("Map preset", () => {
     const ids = PRESET_LAYOUTS.map((preset) => preset.id);
     expect(ids.indexOf("map")).toBe(ids.indexOf("player_timeline") + 1);
     const preset = PRESET_LAYOUTS_BY_ID.map;
-    expect(isSeamlessPreset("map")).toBe(true);
-    expect(isSeamlessPreset("summary")).toBe(false);
-    expect(isSeamlessPreset(null)).toBe(false);
     if (!isPanelPresetLayout(preset)) throw new Error("Map should be a panels preset");
+    expect(preset.seamless).toBe(true);
     const [map, strip] = preset.layoutItems;
     expect(preset.panelTypes[map.id]).toBe("map");
     expect(strip).toMatchObject({ kind: "strip", stripType: "replay_controller", y: map.y + map.h, w: map.w });
