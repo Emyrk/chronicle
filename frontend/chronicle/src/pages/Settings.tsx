@@ -160,7 +160,8 @@ const allTabs: Tab[] = [
   { path: "/account/characters", label: "Characters", icon: Swords },
   { path: "/account/billing", label: "Billing", icon: CreditCard },
   { path: "/account/storage", label: "Storage", icon: HardDrive },
-  { path: "/account/sidekick", label: "Sidekick", icon: Monitor },
+  // Sidekick remains directly accessible at /account/sidekick while it is in development.
+  // { path: "/account/sidekick", label: "Sidekick", icon: Monitor },
   // { path: "/account/notifications", label: "Notifications", icon: Bell },
   // { path: "/account/privacy", label: "Privacy", icon: Shield },
   // { path: "/account/appearance", label: "Appearance", icon: Palette },
