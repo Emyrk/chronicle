@@ -215,7 +215,7 @@ describe("mapProcessor", () => {
   describe("health", () => {
     const start = new Date("2026-10-07T20:00:00Z");
 
-    function resources(unit: string, offsetMilli: number, currentHealth: number, absorb = 0): UnitResourcesProcessorEvent {
+    function resources(unit: string, offsetMilli: number, currentHealth: number, absorb = 0, currentPower = 0): UnitResourcesProcessorEvent {
       return {
         type: "unit_resources",
         index: offsetMilli,
@@ -227,9 +227,9 @@ describe("mapProcessor", () => {
         currentHealth,
         maximumHealth: 1000,
         absorb,
-        powerType: "mana",
-        currentPower: 0,
-        maximumPower: 0,
+        powerType: "Mana",
+        currentPower,
+        maximumPower: 500,
         attackPower: 0,
         spellPower: 0,
         unitLevel: null,
@@ -251,6 +251,20 @@ describe("mapProcessor", () => {
       ]);
       expect(encounter.healthByUnit.get("boss")).toHaveLength(1);
       expect(encounter.effects.events).toEqual([]);
+    });
+
+    it("keeps power changes for players only, for the raid frames", () => {
+      const state = mapProcessor.createState();
+      const withPlayer: ProcessorContext = { ...context, players: { healer: { name: "Healer", class: "PRIEST" } as ProcessorContext["players"][string] } };
+      for (const event of [resources("healer", 100, 1000, 0, 500), resources("healer", 200, 1000, 0, 500), resources("healer", 300, 1000, 0, 420), resources("boss", 300, 900, 0, 100)]) {
+        mapProcessor.processEvent(state, event, "encounter", start, "unit_resources", withPlayer);
+      }
+      const encounter = state.encounters.get("encounter")!;
+      expect(encounter.powerByUnit.get("healer")).toEqual([
+        { timestampMs: start.getTime() + 100, current: 500, max: 500, type: "mana" },
+        { timestampMs: start.getTime() + 300, current: 420, max: 500, type: "mana" },
+      ]);
+      expect(encounter.powerByUnit.has("boss")).toBe(false);
     });
   });
 });

@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view components intentionally share this module. */
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Crosshair, Focus, Map as MapIcon, Maximize, Route, Users } from "lucide-react";
+import { Crosshair, Focus, HeartPulse, Map as MapIcon, Maximize, Route, Users } from "lucide-react";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { fetchMiniatureUrls } from "./bossMinis";
@@ -19,6 +19,7 @@ import {
 } from "./mapModel";
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
 import { MapView2D, type MapViewRequest } from "./MapView2D";
+import { RaidFrames } from "./RaidFrames";
 import { useMapScene } from "./useMapScene";
 import { encounterJumps, mapPresentationForSelection } from "./wholeRun";
 
@@ -94,6 +95,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   [fitZoom, focusCentre]);
   const autoFit = ready?.autoFit ?? null;
   const defaultViewport = ready?.fitByDefault && autoFit ? autoFit : FULL_MAP_VIEWPORT;
+  const [showRaidFrames, setShowRaidFrames] = useState(true);
   const [storedFraming, setFraming] = useState<MapFraming>(INITIAL_MAP_FRAMING);
   // A new selection or replay moving into another encounter re-frames;
   // loading states (e.g. reprocessing after a filter change) keep the framing.
@@ -178,6 +180,16 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               Fit
             </button>
           )}
+          <button
+            type="button"
+            aria-pressed={showRaidFrames}
+            onClick={() => setShowRaidFrames(!showRaidFrames)}
+            title="Show every player's health and power"
+            className={`${framingButtonClass} ${showRaidFrames ? "bg-primary/20 text-foreground" : ""}`}
+          >
+            <HeartPulse className="h-3 w-3" />
+            Raid
+          </button>
           <button type="button" onClick={() => applyFraming(FULL_MAP_VIEWPORT)} title="Show the full map" className={framingButtonClass}>
             <Maximize className="h-3 w-3" />
             Reset
@@ -205,7 +217,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
           )}
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-white/10 bg-black/70">
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-md border border-white/10 bg-black/70">
         {!show3D ? (meshOnly
           ? <MapMessage title="No map artwork for this instance" detail={`${scene.mapName} has no 2D map; it is 3D only, and this browser could not provide WebGL.`} />
           : view2D
@@ -232,6 +244,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
             />
           </Suspense>
         )}
+        {showRaidFrames && <RaidFrames frames={scene.raidFrames} />}
       </div>
       {jumps.length > 0 && scene.runStartMs !== null && (
         <div className="flex flex-col gap-1 px-1">
