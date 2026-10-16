@@ -120,6 +120,7 @@ export interface MapSceneMarker {
 export interface MapRaidFrame {
   guid: string;
   name: string;
+  class: string;
   color: string;
   tank: boolean;
   dead: boolean;
@@ -414,7 +415,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const tankGuids = cachedTankGuids(encounter.effects, props.context.instance.players ?? {});
   const raidFrames = Object.entries(props.context.instance.players ?? {})
     .filter(([guid]) => encounter.healthByUnit.has(guid))
-    .map(([guid, player]): MapRaidFrame & { class: string } => {
+    .map(([guid, player]): MapRaidFrame => {
       const health = latestHealthAt(encounter.healthByUnit.get(guid) ?? [], cursorMs);
       const power = latestHealthAt(encounter.powerByUnit.get(guid) ?? [], cursorMs);
       return {

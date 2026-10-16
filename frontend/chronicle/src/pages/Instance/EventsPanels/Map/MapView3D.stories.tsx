@@ -905,7 +905,7 @@ function FixturePlayer({ fixture, mesh = false }: { fixture: LoadedMapFixture; m
         <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{scene.title}: {scene.detail}</div>
       )}
       {scene.status === "ready" && <RaidFrames frames={scene.raidFrames} />}
-      <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-white/80">
+      <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-white/80">
         {instance.encounters[0]?.name} {elapsed.toFixed(1)}s
         {dungeonMesh && meshState !== "ready" && <span className="ml-1.5 text-amber-200/80">cave {meshState}</span>}
       </div>
