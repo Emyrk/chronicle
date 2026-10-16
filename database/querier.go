@@ -288,6 +288,13 @@ type sqlcQuerier interface {
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
 	GetLeaderboardVersionRequirements(ctx context.Context, instanceName string) (LeaderboardVersionRequirement, error)
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)
+	GetLogFileByOwnerHash(ctx context.Context, arg GetLogFileByOwnerHashParams) (LogFile, error)
+	// Answers "do you already have this source id?" before a client sends a body:
+	// the owner's group for the source id plus the largest file the server holds
+	// for it. A source-keyed group has exactly one file, replaced in place as the
+	// log grows (see UpdateLogFileAfterAppend), so the max is that file's size.
+	GetLogGroupBySource(ctx context.Context, arg GetLogGroupBySourceParams) (GetLogGroupBySourceRow, error)
+	GetLogGroupIDBySource(ctx context.Context, arg GetLogGroupIDBySourceParams) (uuid.UUID, error)
 	GetLogGroupInstanceIDByOrdinal(ctx context.Context, arg GetLogGroupInstanceIDByOrdinalParams) (uuid.UUID, error)
 	GetLogInstanceForDiscordAnnouncement(ctx context.Context, id uuid.UUID) (LogInstance, error)
 	// Fetch instance metadata needed for parse scoring.
@@ -449,6 +456,9 @@ type sqlcQuerier interface {
 	InsertInstanceSpeedrun(ctx context.Context, arg InsertInstanceSpeedrunParams) error
 	InsertInstanceUnits(ctx context.Context, arg []InsertInstanceUnitsParams) *InsertInstanceUnitsBatchResults
 	InsertLogFile(ctx context.Context, arg InsertLogFileParams) (LogFile, error)
+	// Records the client-supplied source id (X-Chronicle-Source-Id) a log group was
+	// uploaded under, so a later upload of the same grown file can replace it.
+	InsertLogGroupSource(ctx context.Context, arg InsertLogGroupSourceParams) error
 	InsertLogInstanceEvents(ctx context.Context, arg []InsertLogInstanceEventsParams) *InsertLogInstanceEventsBatchResults
 	// Modification Requests
 	InsertModificationRequest(ctx context.Context, arg InsertModificationRequestParams) (ApplicationModificationRequest, error)

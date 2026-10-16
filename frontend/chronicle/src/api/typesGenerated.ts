@@ -2530,9 +2530,37 @@ export interface LogParseReport {
 }
 
 // From chroniclesdk/response.go
+/**
+ * LogSourceResponse answers a client's pre-flight "do you already have this
+ * source id?" check (see X-Chronicle-Source-Id on upload-v2). It describes what
+ * the caller has uploaded under that id, so a client can skip sending bytes the
+ * server already holds.
+ */
+export interface LogSourceResponse {
+    readonly log_id: string;
+    /**
+     * Size is how many bytes of the source the server holds.
+     */
+    readonly size: number;
+    /**
+     * URL is the absolute link to the parsed report.
+     */
+    readonly url?: string;
+}
+
+// From chroniclesdk/response.go
 export interface LogUploadResponse {
     readonly log_id: string;
     readonly file_ids: readonly string[];
+    /**
+     * URL is the absolute link to the parsed report.
+     */
+    readonly url?: string;
+    /**
+     * Duplicate is true when a byte-identical file was already uploaded;
+     * LogID and Files then refer to the existing upload.
+     */
+    readonly duplicate?: boolean;
 }
 
 // From chroniclesdk/server_application.go
