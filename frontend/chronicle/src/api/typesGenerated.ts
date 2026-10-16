@@ -69,6 +69,48 @@ export interface AdminBackfillTimeParseScoresResponse {
     readonly job_state: string;
 }
 
+// From chroniclesdk/billing.go
+export interface AdminBillingActivityResponse {
+    readonly reconciliation_runs: readonly AdminBillingReconciliationRun[];
+    readonly webhook_deliveries: readonly AdminBillingWebhookDelivery[];
+    readonly subscriptions: readonly AdminBillingSubscription[];
+}
+
+// From chroniclesdk/billing.go
+export interface AdminBillingReconciliationRun {
+    readonly id: string;
+    readonly status: string;
+    readonly started_at: string;
+    readonly completed_at?: string;
+    readonly subscriptions_seen: number;
+    readonly subscriptions_changed: number;
+    readonly subscriptions_skipped_invalid: number;
+    readonly error_text?: string;
+}
+
+// From chroniclesdk/billing.go
+export interface AdminBillingSubscription {
+    readonly user_id: string;
+    readonly provider: string;
+    readonly provider_customer_id: string;
+    readonly provider_subscription_id?: string;
+    readonly provider_product_id?: string;
+    readonly provider_price_id?: string;
+    readonly product_code: string;
+    readonly status: string;
+    readonly current_period_end?: string;
+    readonly cancel_at_period_end: boolean;
+    readonly updated_at: string;
+}
+
+// From chroniclesdk/billing.go
+export interface AdminBillingWebhookDelivery {
+    readonly stripe_event_id: string;
+    readonly event_type: string;
+    readonly received_at: string;
+    readonly processed_at?: string;
+}
+
 // From chroniclesdk/user.go
 export interface AdminBulkDeleteResponse {
     readonly requested: number;

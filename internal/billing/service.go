@@ -122,6 +122,20 @@ func (s *Service) priceAllowed(priceID string) bool {
 	return ok
 }
 
+func (s *Service) reconciliationEnabled() bool {
+	return s != nil && s.listSubscriptions != nil && len(s.allowedPrices) > 0
+}
+
+func (s *Service) validateSubscriptionPurchase(product ProductCode, purchase stripePurchase) error {
+	if !ProductHasEntitlement(product, EntitlementAdFree) {
+		return fmt.Errorf("unknown billing product %q", product)
+	}
+	if !s.priceAllowed(purchase.priceID) {
+		return fmt.Errorf("Stripe price %q is not configured for product %q", purchase.priceID, product)
+	}
+	return nil
+}
+
 func (s *Service) supporterPrices(ctx context.Context) ([]chroniclesdk.BillingPrice, error) {
 	s.pricesMu.Lock()
 	defer s.pricesMu.Unlock()

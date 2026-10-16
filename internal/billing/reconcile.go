@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
@@ -47,7 +48,7 @@ type reconciliationCounts struct {
 }
 
 func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconcileSubscriptions]) (workErr error) {
-	if w.Billing == nil || w.Billing.listSubscriptions == nil {
+	if w.Billing == nil || !w.Billing.reconciliationEnabled() {
 		return nil
 	}
 	runID := uuid.New()
@@ -62,7 +63,9 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 			status = "failed"
 			errorText = workErr.Error()
 		}
-		if err := w.Store.CompleteBillingReconciliationRun(ctx, database.CompleteBillingReconciliationRunParams{
+		completionCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if err := w.Store.CompleteBillingReconciliationRun(completionCtx, database.CompleteBillingReconciliationRunParams{
 			ID:                          runID,
 			Status:                      status,
 			SubscriptionsSeen:           counts.seen,
@@ -82,21 +85,42 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 	if err != nil {
 		return fmt.Errorf("list Stripe subscriptions: %w", err)
 	}
+	seen := make(map[string]struct{}, len(subscriptions))
 	for _, sub := range subscriptions {
 		counts.seen++
-		if sub == nil {
+		if sub == nil || sub.ID == "" {
 			counts.invalid++
 			continue
 		}
-		userID, err := uuid.Parse(sub.Metadata["chronicle_user_id"])
-		product := ProductCode(sub.Metadata["chronicle_product_code"])
-		if err != nil || !ProductHasEntitlement(product, EntitlementAdFree) {
+		seen[sub.ID] = struct{}{}
+		userID, product, err := w.Billing.subscriptionOwner(ctx, sub)
+		if err != nil {
 			counts.invalid++
 			continue
 		}
 		changed, err := w.Billing.upsertSubscriptionIfChanged(ctx, userID, product, sub)
 		if err != nil {
 			return fmt.Errorf("reconcile Stripe subscription %q: %w", sub.ID, err)
+		}
+		if changed {
+			counts.changed++
+		}
+	}
+
+	localSubscriptions, err := w.Store.ListBillingSubscriptionsForReconciliation(ctx)
+	if err != nil {
+		return fmt.Errorf("list local billing subscriptions: %w", err)
+	}
+	for _, sub := range localSubscriptions {
+		if sub.Provider != ProviderStripe || !sub.ProviderSubscriptionID.Valid {
+			continue
+		}
+		if _, ok := seen[sub.ProviderSubscriptionID.String]; ok {
+			continue
+		}
+		changed, err := w.Billing.cancelSubscriptionIfChanged(ctx, sub)
+		if err != nil {
+			return fmt.Errorf("cancel missing Stripe subscription %q: %w", sub.ProviderSubscriptionID.String, err)
 		}
 		if changed {
 			counts.changed++
@@ -120,6 +144,9 @@ func (s *Service) upsertSubscriptionIfChanged(ctx context.Context, userID uuid.U
 	if err != nil {
 		return false, err
 	}
+	if err := s.validateSubscriptionPurchase(product, purchase); err != nil {
+		return false, err
+	}
 	rows, err := s.store.UpsertBillingSubscriptionIfChanged(ctx, database.UpsertBillingSubscriptionIfChangedParams{
 		UserID:                 userID,
 		Provider:               ProviderStripe,
@@ -134,6 +161,25 @@ func (s *Service) upsertSubscriptionIfChanged(ctx context.Context, userID uuid.U
 	})
 	if err != nil {
 		return false, fmt.Errorf("upsert billing subscription: %w", err)
+	}
+	return rows > 0, nil
+}
+
+func (s *Service) cancelSubscriptionIfChanged(ctx context.Context, sub database.BillingSubscription) (bool, error) {
+	rows, err := s.store.UpsertBillingSubscriptionIfChanged(ctx, database.UpsertBillingSubscriptionIfChangedParams{
+		UserID:                 sub.UserID,
+		Provider:               sub.Provider,
+		ProviderCustomerID:     sub.ProviderCustomerID,
+		ProviderSubscriptionID: sub.ProviderSubscriptionID,
+		ProviderProductID:      sub.ProviderProductID,
+		ProviderPriceID:        sub.ProviderPriceID,
+		ProductCode:            sub.ProductCode,
+		Status:                 string(stripe.SubscriptionStatusCanceled),
+		CurrentPeriodEnd:       sub.CurrentPeriodEnd,
+		CancelAtPeriodEnd:      sub.CancelAtPeriodEnd,
+	})
+	if err != nil {
+		return false, fmt.Errorf("mark billing subscription canceled: %w", err)
 	}
 	return rows > 0, nil
 }

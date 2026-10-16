@@ -1334,13 +1334,13 @@ func (q *sqlQuerier) InsertBillingWebhookEvent(ctx context.Context, arg InsertBi
 	return result.RowsAffected(), nil
 }
 
-const listBillingSubscriptions = `-- name: ListBillingSubscriptions :many
+const listBillingSubscriptionsForReconciliation = `-- name: ListBillingSubscriptionsForReconciliation :many
 SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id FROM billing_subscriptions
-ORDER BY updated_at DESC
+WHERE provider = 'stripe'
 `
 
-func (q *sqlQuerier) ListBillingSubscriptions(ctx context.Context) ([]BillingSubscription, error) {
-	rows, err := q.db.Query(ctx, listBillingSubscriptions)
+func (q *sqlQuerier) ListBillingSubscriptionsForReconciliation(ctx context.Context) ([]BillingSubscription, error) {
+	rows, err := q.db.Query(ctx, listBillingSubscriptionsForReconciliation)
 	if err != nil {
 		return nil, err
 	}
@@ -1395,6 +1395,44 @@ func (q *sqlQuerier) ListRecentBillingReconciliationRuns(ctx context.Context, li
 			&i.SubscriptionsChanged,
 			&i.SubscriptionsSkippedInvalid,
 			&i.ErrorText,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentBillingSubscriptions = `-- name: ListRecentBillingSubscriptions :many
+SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id FROM billing_subscriptions
+ORDER BY updated_at DESC
+LIMIT $1
+`
+
+func (q *sqlQuerier) ListRecentBillingSubscriptions(ctx context.Context, limit int32) ([]BillingSubscription, error) {
+	rows, err := q.db.Query(ctx, listRecentBillingSubscriptions, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BillingSubscription
+	for rows.Next() {
+		var i BillingSubscription
+		if err := rows.Scan(
+			&i.UserID,
+			&i.ProviderCustomerID,
+			&i.ProviderSubscriptionID,
+			&i.ProductCode,
+			&i.Status,
+			&i.CurrentPeriodEnd,
+			&i.CancelAtPeriodEnd,
+			&i.UpdatedAt,
+			&i.Provider,
+			&i.ProviderProductID,
+			&i.ProviderPriceID,
 		); err != nil {
 			return nil, err
 		}

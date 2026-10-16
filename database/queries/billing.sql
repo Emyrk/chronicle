@@ -122,9 +122,14 @@ UPDATE billing_webhook_events
 SET processed_at = NOW()
 WHERE stripe_event_id = $1;
 
--- name: ListBillingSubscriptions :many
+-- name: ListBillingSubscriptionsForReconciliation :many
 SELECT * FROM billing_subscriptions
-ORDER BY updated_at DESC;
+WHERE provider = 'stripe';
+
+-- name: ListRecentBillingSubscriptions :many
+SELECT * FROM billing_subscriptions
+ORDER BY updated_at DESC
+LIMIT $1;
 
 -- name: ListRecentBillingWebhookEvents :many
 SELECT * FROM billing_webhook_events

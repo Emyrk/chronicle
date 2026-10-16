@@ -146,7 +146,7 @@ func (s *Service) AdminActivity(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	subscriptions, err := s.store.ListBillingSubscriptions(r.Context())
+	subscriptions, err := s.store.ListRecentBillingSubscriptions(r.Context(), 100)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -421,11 +421,14 @@ func stripeSubscriptionPurchase(sub *stripe.Subscription) (stripePurchase, error
 }
 
 func (s *Service) upsertSubscription(ctx context.Context, userID uuid.UUID, product ProductCode, sub *stripe.Subscription) error {
-	if sub.Customer == nil {
+	if sub.Customer == nil || sub.Customer.ID == "" {
 		return fmt.Errorf("subscription missing customer")
 	}
 	purchase, err := stripeSubscriptionPurchase(sub)
 	if err != nil {
+		return err
+	}
+	if err := s.validateSubscriptionPurchase(product, purchase); err != nil {
 		return err
 	}
 	_, err = s.store.UpsertBillingSubscription(ctx, database.UpsertBillingSubscriptionParams{

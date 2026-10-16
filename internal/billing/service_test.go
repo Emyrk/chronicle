@@ -274,7 +274,7 @@ func TestUpsertSubscriptionPersistsPurchaseIdentity(t *testing.T) {
 	userID := uuid.New()
 	periodEnd := time.Date(2026, time.November, 15, 12, 0, 0, 0, time.UTC)
 	store := &entitlementStore{}
-	s := New(Options{Store: store})
+	s := New(Options{Store: store, PriceIDs: []string{"price_annual"}})
 	sub := testStripeSubscription("prod_supporter", "price_annual", periodEnd)
 	sub.ID = "sub_123"
 	sub.Customer = &stripe.Customer{ID: "cus_123"}

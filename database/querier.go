@@ -503,7 +503,7 @@ type sqlcQuerier interface {
 	ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, arg ListAllWoWLogGroupsWithOwnerPaginatedParams) ([]ListAllWoWLogGroupsWithOwnerPaginatedRow, error)
 	ListAllWoWServerRealms(ctx context.Context) ([]WowServerRealm, error)
 	ListAuraDurationModifiersForDerivation(ctx context.Context, datasetID uuid.UUID) ([]ListAuraDurationModifiersForDerivationRow, error)
-	ListBillingSubscriptions(ctx context.Context) ([]BillingSubscription, error)
+	ListBillingSubscriptionsForReconciliation(ctx context.Context) ([]BillingSubscription, error)
 	ListClassBuffIgnorePolicies(ctx context.Context) ([]ListClassBuffIgnorePoliciesRow, error)
 	ListClassBuffPoliciesForDataset(ctx context.Context, datasetID uuid.UUID) ([]ListClassBuffPoliciesForDatasetRow, error)
 	ListConsumableDisambiguationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumableDisambiguationsByDatasetRow, error)
@@ -572,6 +572,7 @@ type sqlcQuerier interface {
 	// snapshot it scores against, e.g. historical canonical snapshots).
 	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ListRankingsForInstanceRow, error)
 	ListRecentBillingReconciliationRuns(ctx context.Context, limit int32) ([]BillingReconciliationRun, error)
+	ListRecentBillingSubscriptions(ctx context.Context, limit int32) ([]BillingSubscription, error)
 	ListRecentBillingWebhookEvents(ctx context.Context, limit int32) ([]BillingWebhookEvent, error)
 	// Pages logical runs, then returns every upload in each selected duplicate group.
 	// The first row for each run is its representative: most boss encounters, then

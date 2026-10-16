@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/riverqueue/river"
 	"github.com/stretchr/testify/require"
 	"github.com/stripe/stripe-go/v87"
@@ -17,12 +18,14 @@ import (
 
 type reconciliationStore struct {
 	database.Store
-	providerRow database.BillingSubscription
-	providerErr error
-	upserts     []database.UpsertBillingSubscriptionParams
-	changedRows []int64
-	runID       uuid.UUID
-	completion  database.CompleteBillingReconciliationRunParams
+	providerRow        database.BillingSubscription
+	providerErr        error
+	upserts            []database.UpsertBillingSubscriptionParams
+	conditionalUpserts []database.UpsertBillingSubscriptionIfChangedParams
+	changedRows        []int64
+	localSubscriptions []database.BillingSubscription
+	runID              uuid.UUID
+	completion         database.CompleteBillingReconciliationRunParams
 }
 
 func (s *reconciliationStore) GetBillingSubscriptionByProviderID(context.Context, database.GetBillingSubscriptionByProviderIDParams) (database.BillingSubscription, error) {
@@ -34,13 +37,18 @@ func (s *reconciliationStore) UpsertBillingSubscription(_ context.Context, arg d
 	return database.BillingSubscription{}, nil
 }
 
-func (s *reconciliationStore) UpsertBillingSubscriptionIfChanged(context.Context, database.UpsertBillingSubscriptionIfChangedParams) (int64, error) {
+func (s *reconciliationStore) UpsertBillingSubscriptionIfChanged(_ context.Context, arg database.UpsertBillingSubscriptionIfChangedParams) (int64, error) {
+	s.conditionalUpserts = append(s.conditionalUpserts, arg)
 	if len(s.changedRows) == 0 {
 		return 0, nil
 	}
 	rows := s.changedRows[0]
 	s.changedRows = s.changedRows[1:]
 	return rows, nil
+}
+
+func (s *reconciliationStore) ListBillingSubscriptionsForReconciliation(context.Context) ([]database.BillingSubscription, error) {
+	return s.localSubscriptions, nil
 }
 
 func (s *reconciliationStore) InsertBillingReconciliationRun(_ context.Context, id uuid.UUID) (database.BillingReconciliationRun, error) {
@@ -58,7 +66,7 @@ func TestSubscriptionWebhookUsesAuthoritativeStateAndMetadata(t *testing.T) {
 	userID := uuid.New()
 	periodEnd := time.Now().Add(24 * time.Hour)
 	store := &reconciliationStore{providerErr: pgx.ErrNoRows}
-	svc := New(Options{Store: store})
+	svc := New(Options{Store: store, PriceIDs: []string{"price_monthly"}})
 	authoritative := testStripeSubscription("prod_supporter", "price_monthly", periodEnd)
 	authoritative.ID = "sub_authoritative"
 	authoritative.Customer = &stripe.Customer{ID: "cus_authoritative"}
@@ -87,7 +95,7 @@ func TestSubscriptionWebhookFallsBackToLocalOwner(t *testing.T) {
 	t.Parallel()
 	userID := uuid.New()
 	store := &reconciliationStore{providerRow: database.BillingSubscription{UserID: userID, ProductCode: string(ProductSupporter)}}
-	svc := New(Options{Store: store})
+	svc := New(Options{Store: store, PriceIDs: []string{"price_monthly"}})
 	authoritative := testStripeSubscription("prod_supporter", "price_monthly", time.Now().Add(time.Hour))
 	authoritative.ID = "sub_existing"
 	authoritative.Customer = &stripe.Customer{ID: "cus_existing"}
@@ -120,8 +128,8 @@ func TestReconciliationCountsChangedNoopAndInvalidMetadata(t *testing.T) {
 	invalid.Customer = &stripe.Customer{ID: "cus_invalid"}
 	invalid.Metadata = map[string]string{"chronicle_user_id": "not-a-uuid", "chronicle_product_code": string(ProductSupporter)}
 
-	store := &reconciliationStore{changedRows: []int64{1, 0}}
-	svc := New(Options{Store: store})
+	store := &reconciliationStore{providerErr: pgx.ErrNoRows, changedRows: []int64{1, 0}}
+	svc := New(Options{Store: store, PriceIDs: []string{"price_monthly"}})
 	svc.listSubscriptions = func(context.Context) ([]*stripe.Subscription, error) {
 		return []*stripe.Subscription{validChanged, validNoop, invalid}, nil
 	}
@@ -134,10 +142,58 @@ func TestReconciliationCountsChangedNoopAndInvalidMetadata(t *testing.T) {
 	require.Equal(t, int32(1), store.completion.SubscriptionsSkippedInvalid)
 }
 
+func TestReconciliationCancelsLocalSubscriptionMissingFromStripe(t *testing.T) {
+	t.Parallel()
+
+	local := database.BillingSubscription{
+		UserID:                 uuid.New(),
+		Provider:               ProviderStripe,
+		ProviderCustomerID:     "cus_missing",
+		ProviderSubscriptionID: text("sub_missing"),
+		ProviderProductID:      text("prod_supporter"),
+		ProviderPriceID:        text("price_monthly"),
+		ProductCode:            string(ProductSupporter),
+		Status:                 string(stripe.SubscriptionStatusActive),
+		CurrentPeriodEnd:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+	}
+	store := &reconciliationStore{
+		localSubscriptions: []database.BillingSubscription{local},
+		changedRows:        []int64{1},
+	}
+	svc := New(Options{Store: store, PriceIDs: []string{"price_monthly"}})
+	svc.listSubscriptions = func(context.Context) ([]*stripe.Subscription, error) { return nil, nil }
+
+	err := (&ReconciliationWorker{Billing: svc, Store: store}).Work(context.Background(), &river.Job[ArgsReconcileSubscriptions]{})
+	require.NoError(t, err)
+	require.Equal(t, int32(1), store.completion.SubscriptionsChanged)
+	require.Len(t, store.conditionalUpserts, 1)
+	require.Equal(t, string(stripe.SubscriptionStatusCanceled), store.conditionalUpserts[0].Status)
+	require.Equal(t, local.CurrentPeriodEnd, store.conditionalUpserts[0].CurrentPeriodEnd)
+}
+
+func TestAuthoritativeSubscriptionRejectsUnconfiguredPriceAndEmptyCustomer(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	store := &reconciliationStore{}
+	svc := New(Options{Store: store, PriceIDs: []string{"price_monthly"}})
+
+	wrongPrice := testStripeSubscription("prod_supporter", "price_other", time.Now().Add(time.Hour))
+	wrongPrice.Customer = &stripe.Customer{ID: "cus_123"}
+	err := svc.upsertSubscription(context.Background(), userID, ProductSupporter, wrongPrice)
+	require.ErrorContains(t, err, "is not configured")
+
+	emptyCustomer := testStripeSubscription("prod_supporter", "price_monthly", time.Now().Add(time.Hour))
+	emptyCustomer.Customer = &stripe.Customer{}
+	err = svc.upsertSubscription(context.Background(), userID, ProductSupporter, emptyCustomer)
+	require.ErrorContains(t, err, "missing customer")
+	require.Empty(t, store.upserts)
+}
+
 func TestReconciliationRecordsFailureAndRetries(t *testing.T) {
 	t.Parallel()
 	store := &reconciliationStore{}
-	svc := New(Options{Store: store})
+	svc := New(Options{Store: store, PriceIDs: []string{"price_monthly"}})
 	svc.listSubscriptions = func(context.Context) ([]*stripe.Subscription, error) { return nil, errors.New("stripe unavailable") }
 	worker := &ReconciliationWorker{Billing: svc, Store: store}
 	err := worker.Work(context.Background(), &river.Job[ArgsReconcileSubscriptions]{})
