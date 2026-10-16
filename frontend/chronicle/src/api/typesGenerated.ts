@@ -177,21 +177,6 @@ export interface AdminClearLogInvalidationResponse {
     readonly failed: readonly AdminBulkLogFailure[];
 }
 
-// From chroniclesdk/billing.go
-export interface AdminGrantBillingMonthsRequest {
-    readonly months: number;
-    readonly reason: string;
-}
-
-// From chroniclesdk/billing.go
-export interface AdminGrantBillingMonthsResponse {
-    readonly tier: string;
-    readonly starts_at: string;
-    readonly expires_at: string;
-    readonly months: number;
-    readonly reason: string;
-}
-
 // From chroniclesdk/user.go
 export interface AdminInvalidateLogsRequest {
     readonly log_ids: readonly string[];
@@ -3395,7 +3380,7 @@ export interface Session {
     readonly consumed_storage_bytes: number;
     readonly preferences: Preferences;
     /**
-     * AdsFree indicates that the user has an active paid, gifted, or supporter entitlement.
+     * AdsFree indicates that Stripe reports an active ad-free entitlement for the user.
      */
     readonly ads_free: boolean;
     /**

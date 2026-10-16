@@ -219,20 +219,6 @@ CREATE TABLE billing_entitlements (
     synced_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
-CREATE TABLE billing_grants (
-    id uuid NOT NULL,
-    user_id uuid NOT NULL,
-    product_code text NOT NULL,
-    starts_at timestamp with time zone NOT NULL,
-    expires_at timestamp with time zone NOT NULL,
-    months integer NOT NULL,
-    reason text NOT NULL,
-    granted_by uuid NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    revoked_at timestamp with time zone,
-    CONSTRAINT billing_grants_months_check CHECK ((months > 0))
-);
-
 CREATE TABLE billing_reconciliation_runs (
     id uuid NOT NULL,
     status text NOT NULL,
@@ -2237,9 +2223,6 @@ ALTER TABLE ONLY billing_entitlements
 ALTER TABLE ONLY billing_entitlements
     ADD CONSTRAINT billing_entitlements_provider_provider_entitlement_id_key UNIQUE (provider, provider_entitlement_id);
 
-ALTER TABLE ONLY billing_grants
-    ADD CONSTRAINT billing_grants_pkey PRIMARY KEY (id);
-
 ALTER TABLE ONLY billing_reconciliation_runs
     ADD CONSTRAINT billing_reconciliation_runs_pkey PRIMARY KEY (id);
 
@@ -2719,8 +2702,6 @@ ALTER TABLE ONLY wow_servers
 
 CREATE INDEX billing_entitlements_user_key_idx ON billing_entitlements USING btree (user_id, entitlement_key);
 
-CREATE INDEX billing_grants_active_idx ON billing_grants USING btree (user_id, expires_at) WHERE (revoked_at IS NULL);
-
 CREATE INDEX billing_reconciliation_runs_started_at_idx ON billing_reconciliation_runs USING btree (started_at DESC);
 
 CREATE INDEX dbc_affected_aura_duration_modifiers_modifier_idx ON dbc_affected_aura_duration_modifiers USING btree (dataset_id, modifier_spell_id);
@@ -2982,12 +2963,6 @@ ALTER TABLE ONLY application_modification_requests
 
 ALTER TABLE ONLY billing_entitlements
     ADD CONSTRAINT billing_entitlements_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY billing_grants
-    ADD CONSTRAINT billing_grants_granted_by_fkey FOREIGN KEY (granted_by) REFERENCES users(id);
-
-ALTER TABLE ONLY billing_grants
-    ADD CONSTRAINT billing_grants_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY billing_subscriptions
     ADD CONSTRAINT billing_subscriptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;

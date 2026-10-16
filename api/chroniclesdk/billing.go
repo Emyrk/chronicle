@@ -64,16 +64,3 @@ type AdminBillingActivityResponse struct {
 	WebhookDeliveries  []AdminBillingWebhookDelivery   `json:"webhook_deliveries"`
 	Subscriptions      []AdminBillingSubscription      `json:"subscriptions"`
 }
-
-type AdminGrantBillingMonthsRequest struct {
-	Months int32  `json:"months"`
-	Reason string `json:"reason"`
-}
-
-type AdminGrantBillingMonthsResponse struct {
-	Tier      string    `json:"tier"`
-	StartsAt  time.Time `json:"starts_at"`
-	ExpiresAt time.Time `json:"expires_at"`
-	Months    int32     `json:"months"`
-	Reason    string    `json:"reason"`
-}

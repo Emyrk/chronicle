@@ -14,7 +14,6 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -204,31 +203,6 @@ func (s *Service) AdminActivity(w http.ResponseWriter, r *http.Request) {
 		result.Subscriptions = append(result.Subscriptions, item)
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, result)
-}
-
-func (s *Service) GrantMonthsHTTP(w http.ResponseWriter, r *http.Request) {
-	userID, err := uuid.Parse(chi.URLParam(r, "userID"))
-	if err != nil {
-		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid user ID."})
-		return
-	}
-	var req chroniclesdk.AdminGrantBillingMonthsRequest
-	if !httpapi.Read(r.Context(), w, r, &req) {
-		return
-	}
-	claims := chronauth.MustAuthenticatedClaims(r.Context())
-	grant, err := s.GrantMonths(r.Context(), userID, claims.Subject, req.Months, req.Reason)
-	if err != nil {
-		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: err.Error()})
-		return
-	}
-	httpapi.Write(r.Context(), w, http.StatusCreated, chroniclesdk.AdminGrantBillingMonthsResponse{
-		Tier:      grant.ProductCode,
-		StartsAt:  grant.StartsAt.Time,
-		ExpiresAt: grant.ExpiresAt.Time,
-		Months:    grant.Months,
-		Reason:    grant.Reason,
-	})
 }
 
 func (s *Service) Webhook(w http.ResponseWriter, r *http.Request) {

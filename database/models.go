@@ -816,19 +816,6 @@ type BillingEntitlement struct {
 	SyncedAt              pgtype.Timestamptz `db:"synced_at" json:"synced_at"`
 }
 
-type BillingGrant struct {
-	ID          uuid.UUID          `db:"id" json:"id"`
-	UserID      uuid.UUID          `db:"user_id" json:"user_id"`
-	ProductCode string             `db:"product_code" json:"product_code"`
-	StartsAt    pgtype.Timestamptz `db:"starts_at" json:"starts_at"`
-	ExpiresAt   pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
-	Months      int32              `db:"months" json:"months"`
-	Reason      string             `db:"reason" json:"reason"`
-	GrantedBy   uuid.UUID          `db:"granted_by" json:"granted_by"`
-	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	RevokedAt   pgtype.Timestamptz `db:"revoked_at" json:"revoked_at"`
-}
-
 type BillingReconciliationRun struct {
 	ID                          uuid.UUID          `db:"id" json:"id"`
 	Status                      string             `db:"status" json:"status"`

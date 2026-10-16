@@ -6,12 +6,9 @@ import (
 	"net/url"
 	"sort"
 	"sync"
-	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stripe/stripe-go/v87"
 )
 
@@ -26,7 +23,6 @@ type priceRetriever func(context.Context, string, *stripe.PriceRetrieveParams) (
 type subscriptionRetriever func(context.Context, string, *stripe.SubscriptionRetrieveParams) (*stripe.Subscription, error)
 type subscriptionLister func(context.Context) ([]*stripe.Subscription, error)
 type activeEntitlementLister func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error)
-type RoleResolver func(context.Context, uuid.UUID) ([]string, error)
 
 type Options struct {
 	Store         database.Store
@@ -34,7 +30,6 @@ type Options struct {
 	WebhookSecret string
 	PriceIDs      []string
 	AccessURL     *url.URL
-	Roles         RoleResolver
 }
 
 type Service struct {
@@ -49,7 +44,6 @@ type Service struct {
 	retrieveSubscription   subscriptionRetriever
 	listSubscriptions      subscriptionLister
 	listActiveEntitlements activeEntitlementLister
-	roles                  RoleResolver
 
 	pricesMu sync.Mutex
 	prices   []chroniclesdk.BillingPrice
@@ -107,7 +101,6 @@ func New(opts Options) *Service {
 		retrieveSubscription:   retrieveSubscription,
 		listSubscriptions:      listSubscriptions,
 		listActiveEntitlements: listActiveEntitlements,
-		roles:                  opts.Roles,
 	}
 }
 
@@ -253,42 +246,4 @@ func billingPriceFromStripe(price *stripe.Price) (chroniclesdk.BillingPrice, err
 		UnitAmount:     price.UnitAmount,
 		IntervalMonths: months,
 	}, nil
-}
-
-func giftWindow(now time.Time, latest pgtype.Timestamptz, months int32) (time.Time, time.Time) {
-	start := now.UTC()
-	if latest.Valid && latest.Time.After(start) {
-		start = latest.Time
-	}
-	return start, start.AddDate(0, int(months), 0)
-}
-
-func (s *Service) GrantMonths(ctx context.Context, userID, grantedBy uuid.UUID, months int32, reason string) (database.BillingGrant, error) {
-	if months < 1 || months > 120 {
-		return database.BillingGrant{}, fmt.Errorf("months must be between 1 and 120")
-	}
-	if reason == "" {
-		return database.BillingGrant{}, fmt.Errorf("reason is required")
-	}
-
-	latest, err := s.store.GetLatestActiveBillingGrantExpiry(ctx, userID)
-	if err != nil {
-		return database.BillingGrant{}, fmt.Errorf("get latest billing grant: %w", err)
-	}
-	start, expires := giftWindow(time.Now(), latest, months)
-
-	grant, err := s.store.InsertBillingGrant(ctx, database.InsertBillingGrantParams{
-		ID:          uuid.New(),
-		UserID:      userID,
-		ProductCode: string(ProductSupporter),
-		StartsAt:    pgtype.Timestamptz{Time: start, Valid: true},
-		ExpiresAt:   pgtype.Timestamptz{Time: expires, Valid: true},
-		Months:      months,
-		Reason:      reason,
-		GrantedBy:   grantedBy,
-	})
-	if err != nil {
-		return database.BillingGrant{}, fmt.Errorf("insert billing grant: %w", err)
-	}
-	return grant, nil
 }

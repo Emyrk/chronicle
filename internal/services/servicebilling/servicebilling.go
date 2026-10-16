@@ -10,7 +10,6 @@ import (
 	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
-	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/coder/serpent"
@@ -59,7 +58,6 @@ func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
 		servicedbstore.OnDatabaseStore(),
-		serviceauthz.OnAuthz(),
 		serviceaccessurl.OnAccessURL(),
 	}
 }
@@ -81,7 +79,6 @@ func (s *Service) Start(ctx context.Context) error {
 		SecretKey:     s.stripeSecretKey,
 		WebhookSecret: s.stripeWebhookSecret,
 		PriceIDs:      s.supporterPriceIDs(),
-		Roles:         serviceauthz.Authz(s.broker).UserChronicleRoles,
 		AccessURL:     accessURL,
 	})
 	if err := s.Billing.ValidateAccount(ctx, s.stripeAccountID); err != nil {

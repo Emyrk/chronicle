@@ -1267,45 +1267,6 @@ func (q *sqlQuerier) GetBillingWebhookEvent(ctx context.Context, stripeEventID s
 	return i, err
 }
 
-const getLatestActiveBillingGrantExpiry = `-- name: GetLatestActiveBillingGrantExpiry :one
-SELECT MAX(expires_at)::timestamptz
-FROM billing_grants
-WHERE user_id = $1
-  AND revoked_at IS NULL
-  AND expires_at > NOW()
-`
-
-func (q *sqlQuerier) GetLatestActiveBillingGrantExpiry(ctx context.Context, userID uuid.UUID) (pgtype.Timestamptz, error) {
-	row := q.db.QueryRow(ctx, getLatestActiveBillingGrantExpiry, userID)
-	var column_1 pgtype.Timestamptz
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
-const hasActiveBillingGrant = `-- name: HasActiveBillingGrant :one
-SELECT EXISTS (
-  SELECT 1
-  FROM billing_grants
-  WHERE user_id = $1
-    AND product_code = $2
-    AND revoked_at IS NULL
-    AND starts_at <= NOW()
-    AND expires_at > NOW()
-)
-`
-
-type HasActiveBillingGrantParams struct {
-	UserID      uuid.UUID `db:"user_id" json:"user_id"`
-	ProductCode string    `db:"product_code" json:"product_code"`
-}
-
-func (q *sqlQuerier) HasActiveBillingGrant(ctx context.Context, arg HasActiveBillingGrantParams) (bool, error) {
-	row := q.db.QueryRow(ctx, hasActiveBillingGrant, arg.UserID, arg.ProductCode)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
 const hasBillingEntitlement = `-- name: HasBillingEntitlement :one
 SELECT EXISTS (
   SELECT 1
@@ -1325,58 +1286,6 @@ func (q *sqlQuerier) HasBillingEntitlement(ctx context.Context, arg HasBillingEn
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
-}
-
-const insertBillingGrant = `-- name: InsertBillingGrant :one
-INSERT INTO billing_grants (
-  id,
-  user_id,
-  product_code,
-  starts_at,
-  expires_at,
-  months,
-  reason,
-  granted_by
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, user_id, product_code, starts_at, expires_at, months, reason, granted_by, created_at, revoked_at
-`
-
-type InsertBillingGrantParams struct {
-	ID          uuid.UUID          `db:"id" json:"id"`
-	UserID      uuid.UUID          `db:"user_id" json:"user_id"`
-	ProductCode string             `db:"product_code" json:"product_code"`
-	StartsAt    pgtype.Timestamptz `db:"starts_at" json:"starts_at"`
-	ExpiresAt   pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
-	Months      int32              `db:"months" json:"months"`
-	Reason      string             `db:"reason" json:"reason"`
-	GrantedBy   uuid.UUID          `db:"granted_by" json:"granted_by"`
-}
-
-func (q *sqlQuerier) InsertBillingGrant(ctx context.Context, arg InsertBillingGrantParams) (BillingGrant, error) {
-	row := q.db.QueryRow(ctx, insertBillingGrant,
-		arg.ID,
-		arg.UserID,
-		arg.ProductCode,
-		arg.StartsAt,
-		arg.ExpiresAt,
-		arg.Months,
-		arg.Reason,
-		arg.GrantedBy,
-	)
-	var i BillingGrant
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.ProductCode,
-		&i.StartsAt,
-		&i.ExpiresAt,
-		&i.Months,
-		&i.Reason,
-		&i.GrantedBy,
-		&i.CreatedAt,
-		&i.RevokedAt,
-	)
-	return i, err
 }
 
 const insertBillingReconciliationRun = `-- name: InsertBillingReconciliationRun :one

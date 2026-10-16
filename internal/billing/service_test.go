@@ -163,19 +163,11 @@ func testStripePrice(id string, amount int64, interval stripe.PriceRecurringInte
 	}
 }
 
-func TestRolesHaveEntitlement(t *testing.T) {
-	t.Parallel()
-	require.True(t, RolesHaveEntitlement([]string{"user", "supporter"}, EntitlementAdFree))
-	require.False(t, RolesHaveEntitlement([]string{"user"}, EntitlementAdFree))
-}
-
 type entitlementStore struct {
 	database.Store
-	grant               bool
 	billingEntitled     bool
 	subscription        database.BillingSubscription
 	subscriptionErr     error
-	grantChecks         []database.HasActiveBillingGrantParams
 	entitlementChecks   []database.HasBillingEntitlementParams
 	providerCustomer    database.BillingSubscription
 	providerCustomerErr error
@@ -186,11 +178,6 @@ type entitlementStore struct {
 	deletedDataGrant    database.DeleteDataGrantParams
 	upsert              database.UpsertBillingSubscriptionParams
 	upsertCalled        bool
-}
-
-func (s *entitlementStore) HasActiveBillingGrant(_ context.Context, arg database.HasActiveBillingGrantParams) (bool, error) {
-	s.grantChecks = append(s.grantChecks, arg)
-	return s.grant, nil
 }
 
 func (s *entitlementStore) HasBillingEntitlement(_ context.Context, arg database.HasBillingEntitlementParams) (bool, error) {
@@ -240,60 +227,19 @@ func (s *entitlementStore) DeleteDataGrant(_ context.Context, arg database.Delet
 	return nil
 }
 
-func TestHasEntitlement(t *testing.T) {
+func TestHasEntitlementUsesPersistedStripeEntitlement(t *testing.T) {
 	t.Parallel()
 
 	userID := uuid.New()
-	tests := []struct {
-		name            string
-		roles           []string
-		grant           bool
-		billingEntitled bool
-		want            bool
-		wantGrantCheck  bool
-		wantStripeCheck bool
-	}{
-		{name: "role", roles: []string{string(ProductSupporter)}, want: true},
-		{name: "grant", grant: true, want: true, wantGrantCheck: true},
-		{name: "Stripe active entitlement", billingEntitled: true, want: true, wantGrantCheck: true, wantStripeCheck: true},
-		{name: "none", wantGrantCheck: true, wantStripeCheck: true},
-	}
+	store := &entitlementStore{billingEntitled: true}
+	s := New(Options{Store: store})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			store := &entitlementStore{
-				grant:           tt.grant,
-				billingEntitled: tt.billingEntitled,
-			}
-			s := New(Options{
-				Store: store,
-				Roles: func(context.Context, uuid.UUID) ([]string, error) {
-					return tt.roles, nil
-				},
-			})
-
-			got, err := s.HasEntitlement(context.Background(), userID, EntitlementAdFree)
-			require.NoError(t, err)
-			require.Equal(t, tt.want, got)
-			if tt.wantGrantCheck {
-				require.Equal(t, []database.HasActiveBillingGrantParams{{
-					UserID:      userID,
-					ProductCode: string(ProductSupporter),
-				}}, store.grantChecks)
-			} else {
-				require.Empty(t, store.grantChecks)
-			}
-			if tt.wantStripeCheck {
-				require.Equal(t, []database.HasBillingEntitlementParams{{
-					UserID:         userID,
-					EntitlementKey: string(EntitlementAdFree),
-				}}, store.entitlementChecks)
-			} else {
-				require.Empty(t, store.entitlementChecks)
-			}
-		})
-	}
+	got, err := s.HasEntitlement(context.Background(), userID, EntitlementAdFree)
+	require.NoError(t, err)
+	require.True(t, got)
+	require.Equal(t, []database.HasBillingEntitlementParams{{
+		UserID: userID, EntitlementKey: string(EntitlementAdFree),
+	}}, store.entitlementChecks)
 }
 
 func TestEntitlementSummaryWebhookFetchesAuthoritativeEntitlements(t *testing.T) {
@@ -440,17 +386,4 @@ func testStripeSubscription(productID, priceID string, periodEnd time.Time) *str
 			CurrentPeriodEnd: periodEnd.Unix(),
 		}}},
 	}
-}
-
-func TestGiftWindowUsesCalendarMonthsAndStacks(t *testing.T) {
-	t.Parallel()
-	now := time.Date(2026, time.January, 31, 12, 0, 0, 0, time.UTC)
-	start, expires := giftWindow(now, pgtype.Timestamptz{}, 1)
-	require.Equal(t, now, start)
-	require.Equal(t, now.AddDate(0, 1, 0), expires)
-
-	latest := pgtype.Timestamptz{Time: time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC), Valid: true}
-	start, expires = giftWindow(now, latest, 3)
-	require.Equal(t, latest.Time, start)
-	require.Equal(t, latest.Time.AddDate(0, 3, 0), expires)
 }

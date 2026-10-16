@@ -314,9 +314,6 @@ func (api *API) Routes() chi.Router {
 					r.Get("/{userID}/grants", api.GetUserGrants)
 					r.Put("/{userID}/grants", api.UpsertUserGrant)
 					r.Delete("/{userID}/grants/{source}", api.DeleteUserGrant)
-					if api.Opts.Billing != nil {
-						r.Post("/{userID}/billing/grants", api.Opts.Billing.GrantMonthsHTTP)
-					}
 				})
 
 				r.Route("/logs", func(r chi.Router) {

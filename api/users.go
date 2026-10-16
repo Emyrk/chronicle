@@ -30,8 +30,8 @@ func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	adsFree := billing.RolesHaveEntitlement(roles, billing.EntitlementAdFree)
-	canDownloadRawLogs := billing.RolesHaveEntitlement(roles, billing.EntitlementDownloadRawLogs)
+	adsFree := false
+	canDownloadRawLogs := false
 	if a.Opts.Billing != nil {
 		adsFree, err = a.Opts.Billing.HasEntitlement(ctx, state.Claims.Subject, billing.EntitlementAdFree)
 		if err != nil {
