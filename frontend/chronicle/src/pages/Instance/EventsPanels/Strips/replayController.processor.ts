@@ -1,5 +1,5 @@
 /**
- * Replay controller strip data: party damage per 2s (the Timeline processor
+ * Replay controller strip data: party damage in 500ms bins (the Timeline processor
  * with a fixed series), player deaths (from the same), and enemy cast starts
  * for the boss-cast markers. Times are absolute ms so the strip lines them up
  * with the replay cursor.
@@ -9,7 +9,8 @@ import type { PanelProcessor, ProcessorContext, ProcessorEvent } from "../proces
 import { timelineProcessor, type TimelineResult } from "../Timeline/timeline.processor";
 import type { TimelineSeriesConfig } from "../Timeline/timelineTypes";
 
-export const REPLAY_CONTROLLER_BIN_MS = 2000;
+// Fine bins; the strip groups them into bars sized to the fight (replayBucketMs).
+export const REPLAY_CONTROLLER_BIN_MS = 500;
 export const PARTY_DAMAGE_SERIES_ID = "party_damage";
 
 const PARTY_DAMAGE_SERIES: TimelineSeriesConfig = {

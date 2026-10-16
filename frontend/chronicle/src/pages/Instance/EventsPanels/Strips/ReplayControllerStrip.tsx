@@ -5,7 +5,9 @@ import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { StripRenderProps } from "./types";
 import type { ReplayControllerResult } from "./replayController.processor";
 import {
+  formatBucket,
   formatReplayClock,
+  replayBucketMs,
   replayControllerBars,
   replayControllerMarkers,
   replayControllerTicks,
@@ -36,7 +38,8 @@ export function ReplayControllerStrip({ result, context }: StripRenderProps<Repl
   const bossGuids = useMemo(() => new Set(context.instance.encounters
     .flatMap((encounter) => encounter.enemies?.filter((enemy) => enemy.boss).map((enemy) => enemy.id) ?? [])),
   [context.instance.encounters]);
-  const bars = useMemo(() => bounds ? replayControllerBars(result, bounds, cursorMs) : [], [bounds, cursorMs, result]);
+  const bucketMs = bounds ? replayBucketMs(bounds.endMs - bounds.startMs) : 0;
+  const bars = useMemo(() => bounds ? replayControllerBars(result, bounds, cursorMs, bucketMs) : [], [bounds, bucketMs, cursorMs, result]);
   const markers = useMemo(() => bounds
     ? replayControllerMarkers(result, bounds, cursorMs, bossGuids, (guid) => context.instance.units?.[guid]?.name ?? context.instance.players?.[guid]?.name ?? "Boss")
     : [],
@@ -128,7 +131,7 @@ export function ReplayControllerStrip({ result, context }: StripRenderProps<Repl
           })}
         </div>
         <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
-          <span className="flex items-center gap-1" title="Party damage per 2 seconds"><span className="h-1.5 w-1.5 bg-[var(--chart-3)]" />Dmg/2s</span>
+          <span className="flex items-center gap-1" title={`Party damage per ${formatBucket(bucketMs)}`}><span className="h-1.5 w-1.5 bg-[var(--chart-3)]" />Dmg/{formatBucket(bucketMs)}</span>
           <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rotate-45 bg-[var(--color-class-enemy)]" />Boss</span>
           <span className="flex items-center gap-1"><Skull className="h-2 w-2 text-red-400" />Death</span>
         </div>
