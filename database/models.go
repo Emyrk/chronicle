@@ -2409,6 +2409,12 @@ type UserFavoritePlayer struct {
 	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
+type UserMapControl struct {
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	Controls  []byte             `db:"controls" json:"controls"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type UserPanelLayout struct {
 	ID              uuid.UUID          `db:"id" json:"id"`
 	UserID          uuid.NullUUID      `db:"user_id" json:"user_id"`

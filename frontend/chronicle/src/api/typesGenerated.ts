@@ -2548,6 +2548,19 @@ export interface LogosPayload {
     readonly background_banner: string;
 }
 
+// From chroniclesdk/map_controls.go
+/**
+ * MapControls are a user's replay map camera keybinds.
+ */
+export interface MapControls {
+    /**
+     * Bindings maps a camera action (e.g. "move_forward") to a
+     * KeyboardEvent.code (e.g. "KeyW"). Actions left out use the default key.
+     * Empty when the user has not changed the defaults.
+     */
+    readonly bindings: Record<string, string>;
+}
+
 // From chroniclesdk/guild_page.go
 export const MaxDescriptionLength = 500;
 
