@@ -44,32 +44,24 @@ const REWARDS = [
   {
     title: "Ad-Free Browsing",
     icon: "inv_misc_eye_01",
-    slot: "Trinket",
-    subtype: "Aura",
     effects: ["Equip: Removes all advertisements from Chronicle."],
     flavor: "Clear line of sight to every pull.",
   },
   {
     title: "Expanded Log Storage",
     icon: "inv_misc_bag_10",
-    slot: "Bag",
-    subtype: "Container",
-    effects: ["Equip: Increases your log storage by 1 GB."],
+    effects: ["Equip: Increases your log storage by 300 MB."],
     flavor: "Holds a whole season of wipes.",
   },
   {
     title: "Raw Log Downloads",
     icon: "inv_scroll_03",
-    slot: "Scroll",
-    subtype: "Reusable",
     effects: ["Use: Download the original combat log file behind any of your uploads."],
     flavor: "Every swing, every wipe, unabridged.",
   },
   {
     title: "Private Logs",
     icon: "ability_stealth",
-    slot: "Cloak",
-    subtype: "Stealth",
     effects: ["Equip: Keeps your uploads out of public view."],
     flavor: "What happens in progression stays in progression.",
   },
@@ -102,7 +94,9 @@ export function BillingSettings() {
 
       <Achievement billing={billing} />
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid items-start gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
+        {exalted ? <SubscriptionPanel billing={billing} /> : <PlanPicker prices={billing.prices ?? []} />}
+
         <div>
           <h3 className="font-wow text-xl font-semibold">{EXALTED_TIER_NAME} Rewards</h3>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -111,10 +105,81 @@ export function BillingSettings() {
             ))}
           </div>
         </div>
-
-        {exalted ? <SubscriptionPanel billing={billing} /> : <PlanPicker prices={billing.prices ?? []} />}
       </div>
+
+      <ComparisonTable exalted={exalted} />
     </section>
+  )
+}
+
+const COMPARISON = [
+  {
+    feature: "Log parsing, panels, rankings, and replays",
+    friendly: "Full access. Core analysis is never paywalled.",
+    exalted: "Full access, same as everyone.",
+  },
+  {
+    feature: "Advertisements",
+    friendly: "Limited ads appear on some pages to help cover hosting costs.",
+    exalted: "No ads anywhere on Chronicle.",
+  },
+  {
+    feature: "Log storage",
+    friendly: "The standard storage allowance for your uploads.",
+    exalted: "An extra 300 MB on top of the standard allowance.",
+  },
+  {
+    feature: "Raw log downloads",
+    friendly: "Browse parsed logs on Chronicle.",
+    exalted: "Also download the original combat log file behind any of your uploads.",
+  },
+  {
+    feature: "Private logs",
+    friendly: "Uploads are publicly viewable.",
+    exalted: "Keep uploads private so only you can view them.",
+  },
+]
+
+/** Plain-language breakdown of what Exalted changes compared to the free tier. */
+function ComparisonTable({ exalted }: { exalted: boolean }) {
+  return (
+    <div className={FRAME}>
+      <h3
+        className="rounded-t-[10px] border-b-2 border-[#6b5320] px-4 py-2.5 text-center font-wow text-base font-bold tracking-[0.08em]"
+        style={{ color: GOLD }}
+      >
+        Friendly vs Exalted
+      </h3>
+      <div className="overflow-hidden rounded-b-[10px] bg-[#17130f]">
+        <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)] gap-4 border-b border-[#6b5320]/60 px-5 py-2.5 font-wow text-sm sm:grid">
+          <span className="text-muted-foreground">Feature</span>
+          <span className={cn(exalted ? "text-muted-foreground" : "text-[#00c000]")}>
+            Friendly <span className="font-sans text-xs text-muted-foreground">(free)</span>
+          </span>
+          <span style={{ color: GOLD }}>{EXALTED_TIER_NAME}</span>
+        </div>
+        <dl className="divide-y divide-white/5">
+          {COMPARISON.map(({ feature, friendly, exalted: exaltedText }) => (
+            <div
+              key={feature}
+              className="grid gap-2 px-5 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)] sm:gap-4"
+            >
+              <dt className="font-medium text-white">{feature}</dt>
+              <dd className="text-muted-foreground">
+                <span className="mr-1 font-wow text-xs text-[#00c000] sm:hidden">Friendly:</span>
+                {friendly}
+              </dd>
+              <dd className="text-zinc-200">
+                <span className="mr-1 font-wow text-xs sm:hidden" style={{ color: GOLD }}>
+                  {EXALTED_TIER_NAME}:
+                </span>
+                {exaltedText}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </div>
   )
 }
 
@@ -188,7 +253,7 @@ function Achievement({ billing }: { billing: BillingSummary }) {
       </div>
 
       <p className="mt-4 border-t border-[#6b5320]/60 pt-3 text-center font-wow text-sm" style={{ color: "#ffd200" }}>
-        Reward: Ad-free browsing, +1 GB storage, raw log downloads, and private logs
+        Reward: Ad-free browsing, +300 MB storage, raw log downloads, and private logs
       </p>
     </div>
   )
@@ -237,10 +302,6 @@ function RewardTooltip({ reward, unlocked }: { reward: (typeof REWARDS)[number];
       </div>
       <div className="mt-2 space-y-0.5">
         <div className="text-white">Binds when Exalted</div>
-        <div className="flex justify-between text-white">
-          <span>{reward.slot}</span>
-          <span>{reward.subtype}</span>
-        </div>
         <div style={{ color: unlocked ? "#ffffff" : "#ff2020" }}>Requires Chronicle – Exalted</div>
         {reward.effects.map((line) => (
           <div key={line} style={{ color: QUALITY_COLOR.uncommon }}>
@@ -277,7 +338,7 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
 
   const monthlyPrice = prices.find((price) => price.interval_months === 1)
   const bestPriceID = bestValuePriceID(prices, monthlyPrice)
-  const selectedPrice = prices.find((price) => price.id === (selectedPriceID ?? bestPriceID)) ?? prices[0]
+  const selectedPrice = prices.find((price) => price.id === (selectedPriceID ?? monthlyPrice?.id)) ?? prices[0]
   const qualities = billingPriceQualities(prices)
   const sorted = [...prices].sort((a, b) => b.interval_months - a.interval_months)
 
@@ -353,14 +414,17 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
         disabled={!selectedPrice || checkout.isPending}
         onClick={() => selectedPrice && void openBilling(() => checkout.mutateAsync(selectedPrice.id))}
       >
-        Become {EXALTED_TIER_NAME}
+        <span className="flex flex-col items-center leading-tight">
+          <span>Become {EXALTED_TIER_NAME}</span>
+          {selectedPrice ? (
+            <span className="mt-0.5 font-sans text-xs font-medium text-[#f0c060]/80">
+              Buy now · {formatBillingAmount(selectedPrice.unit_amount, selectedPrice.currency)}{" "}
+              {billingPeriodDescription(selectedPrice.interval_months).toLowerCase()}
+            </span>
+          ) : null}
+        </span>
       </button>
-      {selectedPrice ? (
-        <p className="text-center text-xs text-muted-foreground">
-          {formatBillingAmount(selectedPrice.unit_amount, selectedPrice.currency)}{" "}
-          {billingPeriodDescription(selectedPrice.interval_months).toLowerCase()}. Cancel anytime.
-        </p>
-      ) : null}
+      <p className="text-center text-xs text-muted-foreground">Secure checkout with Stripe. Cancel anytime.</p>
     </FramePanel>
   )
 }
