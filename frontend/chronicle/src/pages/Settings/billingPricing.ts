@@ -45,11 +45,11 @@ export function bestValuePriceID(prices: readonly BillingPrice[], monthlyPrice?:
   return bestID
 }
 
-export const EXALTED_TIER_NAME = "Exalted"
+export const SUPPORTER_TIER_NAME = "Revered"
 
-// The backend product code stays "supporter"; users see it as the Exalted tier.
+// The backend product code stays "supporter"; users see it as the Revered tier.
 export function billingTierLabel(tier: string): string {
-  if (tier === "supporter") return EXALTED_TIER_NAME
+  if (tier === "supporter") return SUPPORTER_TIER_NAME
   if (tier === "free") return "Friendly"
   return tier.charAt(0).toUpperCase() + tier.slice(1)
 }

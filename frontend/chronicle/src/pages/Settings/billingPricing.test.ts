@@ -56,8 +56,8 @@ describe("billing pricing", () => {
 })
 
 describe("billingTierLabel", () => {
-  it("presents the supporter product as Exalted", () => {
-    expect(billingTierLabel("supporter")).toBe("Exalted")
+  it("presents the supporter product as Revered", () => {
+    expect(billingTierLabel("supporter")).toBe("Revered")
     expect(billingTierLabel("free")).toBe("Friendly")
   })
 })

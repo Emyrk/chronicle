@@ -100,9 +100,9 @@ export function Footer() {
                 </a>
               </li>
               <li>
-                <Link to="/exalted" className="hover:text-foreground transition-colors inline-flex items-center gap-1">
+                <Link to="/revered" className="hover:text-foreground transition-colors inline-flex items-center gap-1">
                   <Crown className="h-4 w-4 text-[#f0c060]" aria-hidden="true" />
-                  Become Exalted
+                  Become Revered
                 </Link>
               </li>
               <li>

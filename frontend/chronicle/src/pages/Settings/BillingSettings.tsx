@@ -5,7 +5,7 @@ import { iconUrl } from "@/config/iconUrl"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
-  EXALTED_TIER_NAME,
+  SUPPORTER_TIER_NAME,
   type BillingQuality,
   bestValuePriceID,
   billingDiscountPercent,
@@ -23,7 +23,8 @@ const GOLD = "#f0c060"
 const FRAME = "rounded-lg border border-border bg-card shadow-2xl shadow-black/40 ring-1 ring-white/10"
 const TOOLTIP = "rounded-lg border-2 border-[#4a4a6a] bg-[#1a1a2e] shadow-lg"
 
-// WoW reputation standings, in order. Free users sit at Friendly; Exalted fills the bar.
+// WoW reputation standings, in order. Free users sit at Friendly; subscribers reach Revered.
+// Exalted is intentionally left unfilled for a future tier.
 const STANDINGS = ["Hated", "Hostile", "Unfriendly", "Neutral", "Friendly", "Honored", "Revered", "Exalted"] as const
 
 const QUALITY_COLOR: Record<BillingQuality, string> = {
@@ -84,7 +85,7 @@ export function BillingSettings() {
   }
 
   return (
-    <ExaltedOverview
+    <ReveredOverview
       billing={billing}
       panel={billing.ads_free ? <SubscriptionPanel billing={billing} /> : <PlanPicker prices={billing.prices ?? []} />}
     />
@@ -92,22 +93,22 @@ export function BillingSettings() {
 }
 
 /**
- * The full Exalted pitch: title, achievement, rewards, and comparison. Shared by
- * the account billing page and the public /exalted page, which supply their own
+ * The full Revered pitch: title, achievement, rewards, and comparison. Shared by
+ * the account billing page and the public /revered page, which supply their own
  * call-to-action panel.
  */
-export function ExaltedOverview({ billing, panel }: { billing?: BillingSummary; panel: React.ReactNode }) {
-  const exalted = billing?.ads_free ?? false
+export function ReveredOverview({ billing, panel }: { billing?: BillingSummary; panel: React.ReactNode }) {
+  const revered = billing?.ads_free ?? false
 
   return (
     <section className="max-w-5xl space-y-8">
       <div className="space-y-3">
         <h2 className="font-wow text-3xl leading-tight sm:text-4xl">
-          <span style={{ color: GOLD }}>{exalted ? "You are Exalted" : "Become Exalted"}</span>{" "}
+          <span style={{ color: GOLD }}>{revered ? "You are Revered" : "Become Revered"}</span>{" "}
           <span className="text-white">with Chronicle</span>
         </h2>
         <p className="max-w-3xl text-muted-foreground">
-          {EXALTED_TIER_NAME} is Chronicle&apos;s optional supporter subscription. It helps cover hosting and
+          {SUPPORTER_TIER_NAME} is Chronicle&apos;s optional supporter subscription. It helps cover hosting and
           development, removes ads, and adds a few extras for your own logs. Everything else on Chronicle stays free
           for everyone.
         </p>
@@ -119,16 +120,16 @@ export function ExaltedOverview({ billing, panel }: { billing?: BillingSummary; 
         {panel}
 
         <div>
-          <h3 className="font-wow text-xl font-semibold">{EXALTED_TIER_NAME} Rewards</h3>
+          <h3 className="font-wow text-xl font-semibold">{SUPPORTER_TIER_NAME} Rewards</h3>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             {REWARDS.map((reward) => (
-              <RewardTooltip key={reward.title} reward={reward} unlocked={exalted} />
+              <RewardTooltip key={reward.title} reward={reward} unlocked={revered} />
             ))}
           </div>
         </div>
       </div>
 
-      <ComparisonTable exalted={exalted} />
+      <ComparisonTable revered={revered} />
     </section>
   )
 }
@@ -137,55 +138,55 @@ const COMPARISON = [
   {
     feature: "Log parsing, panels, rankings, and replays",
     friendly: "Full access. Core analysis is never paywalled.",
-    exalted: "Full access, same as everyone.",
+    revered: "Full access, same as everyone.",
   },
   {
     feature: "Advertisements",
     friendly: "Limited ads appear on some pages to help cover hosting costs.",
-    exalted: "No ads anywhere on Chronicle.",
+    revered: "No ads anywhere on Chronicle.",
   },
   {
     feature: "Log storage",
     friendly: "The standard storage allowance for your uploads.",
-    exalted: "An extra 300 MB on top of the standard allowance.",
+    revered: "An extra 300 MB on top of the standard allowance.",
   },
   {
     feature: "Raw log downloads",
     friendly: "—",
-    exalted: "Download the original combat log file behind any of your uploads. Use Chronicle as an archive for your raw data.",
+    revered: "Download the original combat log file behind any of your uploads. Use Chronicle as an archive for your raw data.",
   },
   {
     feature: "Private logs",
     friendly: "Uploads are publicly viewable.",
-    exalted: "Keep uploads private so only you can view them.",
+    revered: "Keep uploads private so only you can view them.",
   },
   {
     feature: "Supporting Chronicle",
     friendly: "—",
-    exalted: "Your subscription directly funds hosting and ongoing development.",
+    revered: "Your subscription directly funds hosting and ongoing development.",
   },
 ]
 
-/** Plain-language breakdown of what Exalted changes compared to the free tier. */
-function ComparisonTable({ exalted }: { exalted: boolean }) {
+/** Plain-language breakdown of what Revered changes compared to the free tier. */
+function ComparisonTable({ revered }: { revered: boolean }) {
   return (
     <div className={FRAME}>
       <h3
         className="rounded-t-lg border-b border-border bg-[oklch(0.36_0_0)] px-4 py-2 text-center font-wow text-base font-bold tracking-[0.08em]"
         style={{ color: GOLD }}
       >
-        Friendly vs Exalted
+        Friendly vs Revered
       </h3>
       <div className="overflow-hidden rounded-b-lg">
         <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)] gap-4 border-b border-border px-5 py-2.5 font-wow text-sm sm:grid">
           <span className="text-muted-foreground">Feature</span>
-          <span className={cn(exalted ? "text-muted-foreground" : "text-[#00c000]")}>
+          <span className={cn(revered ? "text-muted-foreground" : "text-[#00c000]")}>
             Friendly <span className="font-sans text-xs text-muted-foreground">(free)</span>
           </span>
-          <span style={{ color: GOLD }}>{EXALTED_TIER_NAME}</span>
+          <span style={{ color: GOLD }}>{SUPPORTER_TIER_NAME}</span>
         </div>
         <dl className="divide-y divide-white/5">
-          {COMPARISON.map(({ feature, friendly, exalted: exaltedText }) => (
+          {COMPARISON.map(({ feature, friendly, revered: reveredText }) => (
             <div
               key={feature}
               className="grid gap-2 px-5 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)] sm:gap-4"
@@ -197,9 +198,9 @@ function ComparisonTable({ exalted }: { exalted: boolean }) {
               </dd>
               <dd className="text-zinc-200">
                 <span className="mr-1 font-wow text-xs sm:hidden" style={{ color: GOLD }}>
-                  {EXALTED_TIER_NAME}:
+                  {SUPPORTER_TIER_NAME}:
                 </span>
-                {exaltedText}
+                {reveredText}
               </dd>
             </div>
           ))}
@@ -221,11 +222,11 @@ function useOpenBilling() {
 
 /** WoW achievement row: greyed out with a reputation progress bar until earned. */
 function Achievement({ billing }: { billing?: BillingSummary }) {
-  const exalted = billing?.ads_free ?? false
-  const standing = exalted ? EXALTED_TIER_NAME : billingTierLabel(billing?.tier ?? "free")
+  const revered = billing?.ads_free ?? false
+  const standing = revered ? SUPPORTER_TIER_NAME : billingTierLabel(billing?.tier ?? "free")
   const standingIndex = Math.max(0, STANDINGS.indexOf(standing as (typeof STANDINGS)[number]))
-  // Free users show a sliver of progress into their standing; Exalted is a full bar.
-  const fill = exalted ? 100 : ((standingIndex + 0.15) / STANDINGS.length) * 100
+  // Free users show a sliver of progress into Friendly; subscribers fill through Revered.
+  const fill = ((standingIndex + (revered ? 1 : 0.15)) / STANDINGS.length) * 100
 
   return (
     <div className={cn(FRAME, "p-4 sm:p-5")}>
@@ -238,18 +239,18 @@ function Achievement({ billing }: { billing?: BillingSummary }) {
           height={64}
           className={cn(
             "size-14 shrink-0 rounded border-2 sm:size-16",
-            exalted ? "border-[#c9a227]" : "border-zinc-600 opacity-60 grayscale",
+            revered ? "border-[#c9a227]" : "border-zinc-600 opacity-60 grayscale",
           )}
         />
         <div className="min-w-0 flex-1 text-center">
-          <p className="font-wow text-xl font-bold sm:text-2xl" style={{ color: exalted ? GOLD : "#a1a1aa" }}>
-            {EXALTED_TIER_NAME}
+          <p className="font-wow text-xl font-bold sm:text-2xl" style={{ color: revered ? GOLD : "#a1a1aa" }}>
+            {SUPPORTER_TIER_NAME}
           </p>
-          <p className="mt-0.5 text-sm text-zinc-300">Raise your reputation with Chronicle to Exalted.</p>
+          <p className="mt-0.5 text-sm text-zinc-300">Raise your reputation with Chronicle to Revered.</p>
         </div>
         <div className="flex w-16 shrink-0 flex-col items-center gap-1">
-          <PointsShield earned={exalted} />
-          {exalted && billing?.current_period_end ? (
+          <PointsShield earned={revered} />
+          {revered && billing?.current_period_end ? (
             <span className="text-[10px] text-zinc-400">
               {billing.cancel_at_period_end ? "Ends" : "Renews"}{" "}
               {new Date(billing.current_period_end).toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "2-digit" })}
@@ -269,7 +270,7 @@ function Achievement({ billing }: { billing?: BillingSummary }) {
           className="relative h-5 overflow-hidden rounded-sm border border-black bg-black/60"
         >
           <div
-            className={cn("h-full", exalted ? "bg-[#00aa88]" : "bg-[#00a000]")}
+            className={cn("h-full", revered ? "bg-[#00aa88]" : "bg-[#00a000]")}
             style={{ width: `${fill}%` }}
           />
           <span className="absolute inset-0 flex items-center justify-center font-wow text-xs text-white [text-shadow:1px_1px_1px_#000]">
@@ -327,8 +328,8 @@ function RewardTooltip({ reward, unlocked }: { reward: (typeof REWARDS)[number];
         </h4>
       </div>
       <div className="mt-2 space-y-0.5">
-        <div className="text-white">Binds when Exalted</div>
-        <div style={{ color: unlocked ? "#ffffff" : "#ff2020" }}>Requires Chronicle – Exalted</div>
+        <div className="text-white">Binds when Revered</div>
+        <div style={{ color: unlocked ? "#ffffff" : "#ff2020" }}>Requires Chronicle – Revered</div>
         {reward.effects.map((line) => (
           <div key={line} style={{ color: QUALITY_COLOR.uncommon }}>
             {line}
@@ -430,7 +431,7 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
         </div>
       ) : (
         <p className="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-          {EXALTED_TIER_NAME} pricing is temporarily unavailable.
+          {SUPPORTER_TIER_NAME} pricing is temporarily unavailable.
         </p>
       )}
 
@@ -441,7 +442,7 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
         onClick={() => selectedPrice && void openBilling(() => checkout.mutateAsync(selectedPrice.id))}
       >
         <span className="flex flex-col items-center leading-tight">
-          <span>Become {EXALTED_TIER_NAME}</span>
+          <span>Become {SUPPORTER_TIER_NAME}</span>
           {selectedPrice ? (
             <span className="mt-0.5 font-sans text-xs font-medium text-[#f0c060]/80">
               Buy now · {formatBillingAmount(selectedPrice.unit_amount, selectedPrice.currency)}{" "}
@@ -465,7 +466,7 @@ function SubscriptionPanel({ billing }: { billing: BillingSummary }) {
         <div className="flex justify-between gap-3">
           <dt className="text-muted-foreground">Reputation</dt>
           <dd className="font-wow" style={{ color: GOLD }}>
-            {EXALTED_TIER_NAME}
+            {SUPPORTER_TIER_NAME}
           </dd>
         </div>
         {billing.status ? (
