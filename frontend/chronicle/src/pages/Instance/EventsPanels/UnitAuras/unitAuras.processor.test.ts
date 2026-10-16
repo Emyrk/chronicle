@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   materializeActiveUnitAuras,
+  materializeCurrentUnitAuras,
   unitAurasProcessor,
   unitAuraUptimeDurationMs,
 } from "./unitAuras.processor";
@@ -229,6 +230,109 @@ describe("unitAurasProcessor", () => {
     expect(first.get(TARGET)?.auras.get("id:772")?.totalUptimeMs).toBe(7000);
     expect(second).toEqual(first);
     expect(state.byUnit.size).toBe(0);
+  });
+
+  it("materializes active replay auras with known remaining durations", () => {
+    const state = unitAurasProcessor.createState();
+    process(aura({ offsetMilli: 1000 }), state);
+    process(aura({
+      index: 2,
+      offsetMilli: 2000,
+      spellName: "Rend",
+      spellId: 772,
+      isBuff: false,
+    }), state);
+    process(aura({
+      index: 3,
+      offsetMilli: 3000,
+      spellName: "Rend",
+      spellId: 772,
+      isBuff: false,
+      amount: 0,
+      application: AuraApplication.Fades,
+      state: AuraState.Removed,
+      transition: AuraTransition.Removed,
+    }), state);
+
+    const at2500 = materializeCurrentUnitAuras(state, "enc1", 2500, 10_000);
+    const aurasAt2500 = at2500.get(TARGET)?.auras;
+
+    expect([...aurasAt2500?.keys() ?? []].sort()).toEqual(["id:1243", "id:772"]);
+    expect(aurasAt2500?.get("id:1243")).toMatchObject({
+      replayState: "active",
+      totalUptimeMs: 1500,
+      remainingMs: null,
+      startsInMs: null,
+      countdownTotalMs: 9000,
+      segments: [{ startMs: 1000, endMs: 2500 }],
+    });
+    expect(aurasAt2500?.get("id:772")).toMatchObject({
+      replayState: "active",
+      totalUptimeMs: 500,
+      remainingMs: 500,
+      startsInMs: null,
+      countdownTotalMs: 1000,
+      segments: [{ startMs: 2000, endMs: 2500 }],
+    });
+
+    const at500 = materializeCurrentUnitAuras(state, "enc1", 500, 10_000);
+    expect(at500.get(TARGET)?.auras.get("id:1243")).toMatchObject({
+      replayState: "upcoming",
+      remainingMs: null,
+      startsInMs: 500,
+      countdownTotalMs: 1000,
+    });
+    expect(at500.get(TARGET)?.auras.get("id:772")).toMatchObject({
+      replayState: "upcoming",
+      remainingMs: null,
+      startsInMs: 1500,
+      countdownTotalMs: 2000,
+    });
+
+    const at3500 = materializeCurrentUnitAuras(state, "enc1", 3500, 10_000);
+    expect([...at3500.get(TARGET)?.auras.keys() ?? []]).toEqual(["id:1243"]);
+    expect(state.byUnit.get(TARGET)?.auras.has("id:772")).toBe(true);
+  });
+
+  it("only previews upcoming auras less than 30 seconds before activation", () => {
+    const state = unitAurasProcessor.createState();
+    process(aura({ offsetMilli: 40_000 }), state);
+
+    expect(materializeCurrentUnitAuras(state, "enc1", 10_000, 50_000).size).toBe(0);
+    expect(
+      materializeCurrentUnitAuras(state, "enc1", 10_001, 50_000)
+        .get(TARGET)?.auras.get("id:1243"),
+    ).toMatchObject({
+      startsInMs: 29_999,
+      countdownTotalMs: 30_000,
+    });
+  });
+
+  it("counts through refresh segments when calculating remaining replay duration", () => {
+    const state = unitAurasProcessor.createState();
+    process(aura({ offsetMilli: 1000 }), state);
+    process(aura({
+      index: 2,
+      offsetMilli: 2000,
+      transition: AuraTransition.Refreshed,
+    }), state);
+    process(aura({
+      index: 3,
+      offsetMilli: 5000,
+      amount: 0,
+      application: AuraApplication.Fades,
+      state: AuraState.Removed,
+      transition: AuraTransition.Removed,
+    }), state);
+
+    expect(
+      materializeCurrentUnitAuras(state, "enc1", 1500, 10_000)
+        .get(TARGET)?.auras.get("id:1243")?.remainingMs,
+    ).toBe(3500);
+    expect(
+      materializeCurrentUnitAuras(state, "enc1", 2500, 10_000)
+        .get(TARGET)?.auras.get("id:1243")?.remainingMs,
+    ).toBe(2500);
   });
 
   it("excludes time after a player dies from the uptime denominator", () => {
