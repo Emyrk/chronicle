@@ -44,3 +44,23 @@ export function bestValuePriceID(prices: readonly BillingPrice[], monthlyPrice?:
   }
   return bestID
 }
+
+export const EXALTED_TIER_NAME = "Exalted"
+
+// The backend product code stays "supporter"; users see it as the Exalted tier.
+export function billingTierLabel(tier: string): string {
+  if (tier === "supporter") return EXALTED_TIER_NAME
+  if (tier === "free") return "Neutral"
+  return tier.charAt(0).toUpperCase() + tier.slice(1)
+}
+
+export type BillingQuality = "uncommon" | "rare" | "epic" | "legendary"
+
+const qualityLadder: readonly BillingQuality[] = ["uncommon", "rare", "epic", "legendary"]
+
+// Longer periods get rarer item qualities; the longest period is always legendary.
+export function billingPriceQualities(prices: readonly BillingPrice[]): Map<string, BillingQuality> {
+  const sorted = [...prices].sort((a, b) => a.interval_months - b.interval_months)
+  const offset = Math.max(0, qualityLadder.length - sorted.length)
+  return new Map(sorted.map((price, i) => [price.id, qualityLadder[Math.min(offset + i, qualityLadder.length - 1)]]))
+}

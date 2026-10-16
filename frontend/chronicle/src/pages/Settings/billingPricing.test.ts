@@ -5,6 +5,8 @@ import {
   billingDiscountPercent,
   billingPeriodDescription,
   billingPeriodLabel,
+  billingPriceQualities,
+  billingTierLabel,
   formatMonthlyAmount,
 } from "./billingPricing"
 
@@ -50,5 +52,21 @@ describe("billing pricing", () => {
 
   it("marks the largest discount as the best value", () => {
     expect(bestValuePriceID([monthly, quarterly, annual], monthly)).toBe("price_annual")
+  })
+})
+
+describe("billingTierLabel", () => {
+  it("presents the supporter product as Exalted", () => {
+    expect(billingTierLabel("supporter")).toBe("Exalted")
+    expect(billingTierLabel("free")).toBe("Neutral")
+  })
+})
+
+describe("billingPriceQualities", () => {
+  it("assigns rarer qualities to longer periods", () => {
+    const qualities = billingPriceQualities([annual, monthly, quarterly])
+    expect(qualities.get(monthly.id)).toBe("rare")
+    expect(qualities.get(quarterly.id)).toBe("epic")
+    expect(qualities.get(annual.id)).toBe("legendary")
   })
 })
