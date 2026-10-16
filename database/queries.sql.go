@@ -16857,6 +16857,50 @@ func (q *sqlQuerier) UpsertRetentionRule(ctx context.Context, arg UpsertRetentio
 	return i, err
 }
 
+const listRiverQueueMetrics = `-- name: ListRiverQueueMetrics :many
+SELECT
+  queue,
+  state::text AS state,
+  COUNT(*) AS job_count,
+  GREATEST(EXTRACT(EPOCH FROM (NOW() - MIN(created_at))), 0)::double precision AS oldest_job_age_seconds
+FROM river_job
+WHERE state IN ('available', 'pending', 'retryable', 'running', 'scheduled')
+GROUP BY queue, state
+ORDER BY queue, state
+`
+
+type ListRiverQueueMetricsRow struct {
+	Queue               string  `db:"queue" json:"queue"`
+	State               string  `db:"state" json:"state"`
+	JobCount            int64   `db:"job_count" json:"job_count"`
+	OldestJobAgeSeconds float64 `db:"oldest_job_age_seconds" json:"oldest_job_age_seconds"`
+}
+
+func (q *sqlQuerier) ListRiverQueueMetrics(ctx context.Context) ([]ListRiverQueueMetricsRow, error) {
+	rows, err := q.db.Query(ctx, listRiverQueueMetrics)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRiverQueueMetricsRow
+	for rows.Next() {
+		var i ListRiverQueueMetricsRow
+		if err := rows.Scan(
+			&i.Queue,
+			&i.State,
+			&i.JobCount,
+			&i.OldestJobAgeSeconds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteModificationRequest = `-- name: DeleteModificationRequest :exec
 DELETE FROM application_modification_requests WHERE id = $1
 `

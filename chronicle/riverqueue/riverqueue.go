@@ -5,13 +5,16 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/leveledlog"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivertype"
@@ -33,8 +36,9 @@ const (
 )
 
 type Options struct {
-	Logger *slog.Logger
-	Pool   *pgxpool.Pool
+	Logger   *slog.Logger
+	Pool     *pgxpool.Pool
+	Registry prometheus.Registerer
 
 	LogParsingWorkers int
 	InsertOnly        bool
@@ -43,13 +47,20 @@ type Queues struct {
 	*river.Client[pgx.Tx]
 	UI http.Handler
 
-	opts         Options
-	workers      *river.Workers
-	queues       map[string]river.QueueConfig
-	periodicJobs []*river.PeriodicJob
+	opts              Options
+	workers           *river.Workers
+	queues            map[string]river.QueueConfig
+	periodicJobs      []*river.PeriodicJob
+	registry          prometheus.Registerer
+	metrics           *riverMetrics
+	cancelMetricsFeed func()
 }
 
 func New(_ context.Context, opts Options) (*Queues, error) {
+	registry := opts.Registry
+	if registry == nil {
+		registry = prometheus.NewRegistry()
+	}
 	return &Queues{
 		UI:      nil,
 		opts:    opts,
@@ -57,6 +68,8 @@ func New(_ context.Context, opts Options) (*Queues, error) {
 		queues: map[string]river.QueueConfig{
 			river.QueueDefault: {MaxWorkers: 5},
 		},
+		registry: registry,
+		metrics:  newRiverMetrics(registry),
 	}, nil
 }
 
@@ -90,11 +103,23 @@ func (q *Queues) Start(ctx context.Context) error {
 		queues = map[string]river.QueueConfig{}
 	}
 
+	queueNames := make([]string, 0, len(q.queues))
+	for name, config := range q.queues {
+		queueNames = append(queueNames, name)
+		q.metrics.configuredWorkers.WithLabelValues(name).Set(float64(config.MaxWorkers))
+	}
+	slices.Sort(queueNames)
+	collector := newRiverQueueCollector(database.New(q.opts.Pool), q.opts.Logger, q.metrics, queueNames)
+	if err := q.registry.Register(collector); err != nil {
+		return fmt.Errorf("register River queue metrics collector: %w", err)
+	}
+
 	riverClient, err := river.NewClient(driver, &river.Config{
 		Queues:       queues,
 		Workers:      q.workers,
 		Logger:       leveledlog.New(q.opts.Logger.With(slog.String("service", "riverqueue")), slog.LevelWarn),
 		Middleware:   WorkerMiddleware(q.opts.Logger),
+		Hooks:        []rivertype.Hook{q.metrics.hook()},
 		PeriodicJobs: q.periodicJobs,
 		// Retain all jobs
 		// TODO: Create our own reaper to clean up old jobs after a certain period
@@ -106,9 +131,30 @@ func (q *Queues) Start(ctx context.Context) error {
 		return err
 	}
 
+	var metricEvents <-chan *river.Event
+	if !q.opts.InsertOnly {
+		var cancelMetricsFeed func()
+		metricEvents, cancelMetricsFeed = riverClient.Subscribe(
+			river.EventKindJobCancelled,
+			river.EventKindJobCompleted,
+			river.EventKindJobFailed,
+			river.EventKindJobSnoozed,
+		)
+		q.cancelMetricsFeed = cancelMetricsFeed
+	}
 	err = riverClient.Start(ctx)
 	if err != nil {
+		if q.cancelMetricsFeed != nil {
+			q.cancelMetricsFeed()
+		}
 		return err
+	}
+	if metricEvents != nil {
+		go func() {
+			for event := range metricEvents {
+				q.metrics.observeEvent(event)
+			}
+		}()
 	}
 
 	riverUI, err := webUI(ctx, q.opts.Logger, riverClient)
@@ -158,5 +204,8 @@ func webUI(ctx context.Context, parentLogger *slog.Logger, client *river.Client[
 }
 
 func (q *Queues) Close(ctx context.Context) error {
+	if q.cancelMetricsFeed != nil {
+		q.cancelMetricsFeed()
+	}
 	return q.StopAndCancel(ctx)
 }

@@ -12,12 +12,14 @@ type logParseMetrics struct {
 	linesProcessed   prometheus.Counter
 	instancesParsed  prometheus.Counter
 	encountersParsed prometheus.Counter
+	instanceFailures prometheus.Counter
 
 	// Stage durations
-	loadFileDuration   prometheus.Histogram
-	parseDuration      prometheus.Histogram
-	finalizeDuration   prometheus.Histogram
-	dbInsertDuration   prometheus.Histogram
+	loadFileDuration prometheus.Histogram
+	parseDuration    prometheus.Histogram
+	finalizeDuration prometheus.Histogram
+	dbInsertDuration prometheus.Histogram
+	consumerDuration *prometheus.HistogramVec
 }
 
 // newLogParseMetrics creates metrics for log parsing with the given registerer.
@@ -70,6 +72,13 @@ func newLogParseMetrics(reg prometheus.Registerer) *logParseMetrics {
 			Help:      "Total encounters (boss fights) parsed",
 		}),
 
+		instanceFailures: factory.NewCounter(prometheus.CounterOpts{
+			Namespace: "chronicle",
+			Subsystem: "logparse",
+			Name:      "instance_failures_total",
+			Help:      "Total instances that failed finalization or validation while their parse job continued",
+		}),
+
 		loadFileDuration: factory.NewHistogram(prometheus.HistogramOpts{
 			Namespace: "chronicle",
 			Subsystem: "logparse",
@@ -101,5 +110,13 @@ func newLogParseMetrics(reg prometheus.Registerer) *logParseMetrics {
 			Help:      "Time spent inserting parsed data into database",
 			Buckets:   stageBuckets,
 		}),
+
+		consumerDuration: factory.NewHistogramVec(prometheus.HistogramOpts{
+			Namespace: "chronicle",
+			Subsystem: "logparse",
+			Name:      "consumer_duration_seconds",
+			Help:      "Time spent in each code-defined parser or consumer stage",
+			Buckets:   stageBuckets,
+		}, []string{"consumer"}),
 	}
 }

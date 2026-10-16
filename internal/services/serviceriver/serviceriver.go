@@ -18,6 +18,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
+	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/Emyrk/chronicle/internal/services/serviceretention"
 	"github.com/Emyrk/chronicle/internal/services/servicetelemetry"
@@ -58,6 +59,7 @@ func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
 		servicepgxpool.OnPGXPool(),
+		serviceprometheus.OnPrometheus(),
 		servicebilling.OnBilling(),
 		servicechronicle.OnChronicle(),
 		servicebot.OnDiscordBot(),
@@ -75,6 +77,7 @@ func (s *Service) Start(ctx context.Context) error {
 	q, err := riverqueue.New(ctx, riverqueue.Options{
 		Logger:            logger,
 		Pool:              pool,
+		Registry:          serviceprometheus.Registry(s.broker),
 		LogParsingWorkers: int(s.logParsingWorkers),
 		InsertOnly:        false,
 	})

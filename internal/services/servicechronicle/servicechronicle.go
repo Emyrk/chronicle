@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
+	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewowdb"
@@ -53,6 +54,7 @@ func (s *Service) DependsOn() []string {
 		serviceauthz.OnAuthz(),
 		servicestorage.OnStorage(),
 		servicewowdb.OnWoWDB(),
+		serviceprometheus.OnPrometheus(),
 		servicetenant.OnTenant(),
 		servicedataset.OnDataset(),
 	}
@@ -85,6 +87,7 @@ func (s *Service) Start(ctx context.Context) error {
 		Zed:             zed,
 		Ps:              ps,
 		WoWDB:           wowDB.GameDB(),
+		Registry:        serviceprometheus.Registry(s.broker),
 		EmitParsingLogs: s.emitParseLogs,
 		PrimaryDomain:   tenantSvc.PrimaryDomain(),
 		// Stamp the build-tag flavor on new log groups.
