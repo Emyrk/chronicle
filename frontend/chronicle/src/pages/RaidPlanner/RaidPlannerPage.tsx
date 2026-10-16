@@ -9,7 +9,7 @@ import {
   useSession,
   useUpdateRaidComposition,
 } from "@/api/queries";
-import type { GuildInfo, RaidComposition } from "@/api/typesGenerated";
+import type { GuildInfo, RaidComposition, RecentInstance } from "@/api/typesGenerated";
 import { serverCapabilities } from "@/config/serverCapabilities";
 import { gearClassesForFlavor } from "@/pages/Gear/classInfo";
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
@@ -17,6 +17,8 @@ import type { Board, DragPayload, HoverTarget, SlotEntry, SlotLocation } from ".
 import { GROUP_SIZE, MAX_GROUPS, emptyBoard, entryName, playerEntry } from "./types";
 import type { ParsedSignUp, RaidHelperEvent } from "./raidHelper";
 import { RaidHelperImportModal } from "./RaidHelperImportModal";
+import { RaidImportModal } from "./RaidImportModal";
+import type { RaidImportResult } from "./raidImport";
 import { compositionToData, dataToComposition } from "./compSerde";
 import { SavedCompsList } from "./SavedCompsList";
 import { GuildSelector } from "./GuildSelector";
@@ -457,6 +459,18 @@ export function RaidPlannerPage() {
       return { board: prev.board, bench: [...prev.bench, entry] };
     });
     setEditing(null);
+  };
+
+  const applyRaidImport = (result: RaidImportResult, raid: RecentInstance) => {
+    updateComp(() => ({ board: result.board, bench: result.bench }));
+    setPendingGroups(result.board.length || 1);
+    setPhase("set");
+    setTitle(raid.name);
+    setSavedComp(null);
+    setHydratedCompId(null);
+    const next = new URLSearchParams(searchParams);
+    next.delete("comp");
+    setSearchParams(next, { replace: true });
   };
 
   /**
@@ -943,6 +957,14 @@ export function RaidPlannerPage() {
       )}
 
       <KeybindsOverlay open={keybindsOpen} onClose={() => setKeybindsOpen(false)} />
+      <RaidImportModal
+        key={importSource === "raid" ? "raid-open" : "raid-closed"}
+        open={importSource === "raid"}
+        onClose={() => setImportSource(null)}
+        roster={rosterData?.members ?? []}
+        hasComposition={comp.board.length > 0 || comp.bench.length > 0}
+        onApply={applyRaidImport}
+      />
       <RaidHelperImportModal
         key={importSource ?? "closed"}
         open={importSource === "raid-helper"}
