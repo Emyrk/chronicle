@@ -505,6 +505,8 @@ function BuiltinEventsPanel({
   const [panelContext, setPanelContext] = useState<Record<string, unknown> | null>(null);
   const [panelContextVersion, setPanelContextVersion] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  // Panels portal their own controls into the title row (PanelRenderProps.headerSlot).
+  const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
   const [filterContextMenu, setFilterContextMenu] = useState<{ x: number; y: number } | null>(null);
   // Buffer filter edits while the card is flipped; apply on flip-back.
   const [pendingFilters, setPendingFilters] = useState<PanelFilter[] | null>(null);
@@ -1010,6 +1012,7 @@ function BuiltinEventsPanel({
                   </HintTooltip>
                 )}
               </h3>
+              <div ref={setHeaderSlot} className="flex min-w-0 flex-1 items-center justify-end" />
               {showCheckbox && (
                 <label
                   className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground hover:text-foreground pr-2"
@@ -1049,6 +1052,7 @@ function BuiltinEventsPanel({
                 registerChartData,
                 hasCustomFilters,
                 flipCard,
+                headerSlot,
               })}
             </div>
           </>

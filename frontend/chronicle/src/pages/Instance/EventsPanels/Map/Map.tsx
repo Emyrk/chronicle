@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view components intentionally share this module. */
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Crosshair, Focus, HeartPulse, Keyboard, Map as MapIcon, Maximize, Route, Users } from "lucide-react";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
@@ -137,95 +138,92 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   };
   const view2D = <MapView2D ground={scene.ground} markers={scene.markers} view={view} onUserViewport={handleUserViewport} />;
 
+  // In the card's title row when the host offers one, so the map gets the height.
+  const headerControls = (
+    <div className="flex min-w-0 shrink-0 items-center gap-2 text-[10px] text-muted-foreground">
+      {!scene.overlayAvailable && <span className="text-amber-300/80">position overlay unavailable</span>}
+      <span className="flex items-center gap-1"><Users className="h-3 w-3" />{scene.markers.length}</span>
+      {scene.floors.length > 1 && (
+        <select
+          aria-label="Map floor"
+          value={scene.selectedFloorNumber ?? ""}
+          onChange={(event) => scene.setFloorNumber(Number(event.target.value))}
+          className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground [color-scheme:dark]"
+        >
+          {scene.floors.map((floor) => <option key={floor} value={floor}>Floor {floor}</option>)}
+        </select>
+      )}
+      {canFollow ? (
+        <button
+          type="button"
+          aria-pressed={following}
+          onClick={followGroup}
+          disabled={scene.wholeRun && !autoFit}
+          title="Keep the camera on the boss and the group"
+          className={`${framingButtonClass} ${following ? "bg-primary/20 text-foreground" : ""}`}
+        >
+          <Crosshair className="h-3 w-3" />
+          Follow
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => autoFit && applyFraming(autoFit)}
+          disabled={!autoFit}
+          title="Zoom to the boss area"
+          className={framingButtonClass}
+        >
+          <Focus className="h-3 w-3" />
+          Fit
+        </button>
+      )}
+      <button
+        type="button"
+        aria-pressed={showRaidFrames}
+        onClick={() => setShowRaidFrames(!showRaidFrames)}
+        title="Show every player's health and power"
+        className={`${framingButtonClass} ${showRaidFrames ? "bg-primary/20 text-foreground" : ""}`}
+      >
+        <HeartPulse className="h-3 w-3" />
+        Raid
+      </button>
+      <button type="button" onClick={() => applyFraming(FULL_MAP_VIEWPORT)} title="Show the full map" className={framingButtonClass}>
+        <Maximize className="h-3 w-3" />
+        Reset
+      </button>
+      {props.flipCard && (
+        <button type="button" onClick={props.flipCard} title="Camera keybinds" className={framingButtonClass}>
+          <Keyboard className="h-3 w-3" />
+          Controls
+        </button>
+      )}
+      {onExitWholeRun && (
+        <button type="button" onClick={onExitWholeRun} title="Back to the 2D route overview" className={framingButtonClass}>
+          <Route className="h-3 w-3" />
+          Overview
+        </button>
+      )}
+      {show3D && meshUrl && (
+        <button
+          type="button"
+          aria-pressed={meshWanted}
+          disabled={meshOnly}
+          onClick={toggleMesh}
+          title={meshOnly
+            ? "This instance has no map artwork; the real dungeon mesh is all there is to show"
+            : "Stand the units on the real dungeon mesh instead of the map tiles"}
+          className={`${framingButtonClass} ${meshWanted ? "bg-primary/20 text-foreground disabled:opacity-100" : ""}`}
+        >
+          3D map
+          {dungeonMesh && meshState === "loading" && <span className="font-normal text-muted-foreground">loading cave…</span>}
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-2">
-      <div className="flex items-center justify-between gap-2 px-1 text-[10px] text-muted-foreground">
-        <div className="min-w-0 truncate">
-          <span className="font-semibold text-foreground">{scene.mapName}</span>
-          <span className="ml-1.5 font-mono">world {scene.displayedMapId}</span>
-          {!scene.overlayAvailable && (
-            <span className="ml-1.5 text-amber-300/80">position overlay unavailable</span>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="flex items-center gap-1"><Users className="h-3 w-3" />{scene.markers.length}</span>
-          {scene.floors.length > 1 && (
-            <select
-              aria-label="Map floor"
-              value={scene.selectedFloorNumber ?? ""}
-              onChange={(event) => scene.setFloorNumber(Number(event.target.value))}
-              className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground [color-scheme:dark]"
-            >
-              {scene.floors.map((floor) => <option key={floor} value={floor}>Floor {floor}</option>)}
-            </select>
-          )}
-          {canFollow ? (
-            <button
-              type="button"
-              aria-pressed={following}
-              onClick={followGroup}
-              disabled={scene.wholeRun && !autoFit}
-              title="Keep the camera on the boss and the group"
-              className={`${framingButtonClass} ${following ? "bg-primary/20 text-foreground" : ""}`}
-            >
-              <Crosshair className="h-3 w-3" />
-              Follow
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => autoFit && applyFraming(autoFit)}
-              disabled={!autoFit}
-              title="Zoom to the boss area"
-              className={framingButtonClass}
-            >
-              <Focus className="h-3 w-3" />
-              Fit
-            </button>
-          )}
-          <button
-            type="button"
-            aria-pressed={showRaidFrames}
-            onClick={() => setShowRaidFrames(!showRaidFrames)}
-            title="Show every player's health and power"
-            className={`${framingButtonClass} ${showRaidFrames ? "bg-primary/20 text-foreground" : ""}`}
-          >
-            <HeartPulse className="h-3 w-3" />
-            Raid
-          </button>
-          <button type="button" onClick={() => applyFraming(FULL_MAP_VIEWPORT)} title="Show the full map" className={framingButtonClass}>
-            <Maximize className="h-3 w-3" />
-            Reset
-          </button>
-          {props.flipCard && (
-            <button type="button" onClick={props.flipCard} title="Camera keybinds" className={framingButtonClass}>
-              <Keyboard className="h-3 w-3" />
-              Controls
-            </button>
-          )}
-          {onExitWholeRun && (
-            <button type="button" onClick={onExitWholeRun} title="Back to the 2D route overview" className={framingButtonClass}>
-              <Route className="h-3 w-3" />
-              Overview
-            </button>
-          )}
-          {show3D && meshUrl && (
-            <button
-              type="button"
-              aria-pressed={meshWanted}
-              disabled={meshOnly}
-              onClick={toggleMesh}
-              title={meshOnly
-                ? "This instance has no map artwork; the real dungeon mesh is all there is to show"
-                : "Stand the units on the real dungeon mesh instead of the map tiles"}
-              className={`${framingButtonClass} ${meshWanted ? "bg-primary/20 text-foreground disabled:opacity-100" : ""}`}
-            >
-              3D map
-              {dungeonMesh && meshState === "loading" && <span className="font-normal text-muted-foreground">loading cave…</span>}
-            </button>
-          )}
-        </div>
-      </div>
+      {props.headerSlot ? createPortal(headerControls, props.headerSlot) : <div className="flex justify-end px-1">{headerControls}</div>}
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-md border border-white/10 bg-black/70">
         {!show3D ? (meshOnly
           ? <MapMessage title="No map artwork for this instance" detail={`${scene.mapName} has no 2D map; it is 3D only, and this browser could not provide WebGL.`} />
@@ -316,14 +314,15 @@ function MapContent(props: PanelRenderProps<MapResult>) {
     }
     setWholeRun(true);
   };
+  const wholeRunButton = (
+    <button type="button" onClick={startWholeRun} title="Replay the whole run in 3D, the camera following the group" className={framingButtonClass}>
+      <Route className="h-3 w-3" />
+      Whole run
+    </button>
+  );
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex justify-end px-3 pt-2">
-        <button type="button" onClick={startWholeRun} title="Replay the whole run in 3D, the camera following the group" className={framingButtonClass}>
-          <Route className="h-3 w-3" />
-          Whole run
-        </button>
-      </div>
+      {props.headerSlot ? createPortal(wholeRunButton, props.headerSlot) : <div className="flex justify-end px-3 pt-2">{wholeRunButton}</div>}
       <div className="min-h-0 flex-1">
         <MapOverview2D {...props} />
       </div>
