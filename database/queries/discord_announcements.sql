@@ -114,12 +114,16 @@ ORDER BY created_at, log_group_id, instance_ordinal;
 -- name: GetLogGroupInstanceIDByOrdinal :one
 SELECT li.id
 FROM log_instances li
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.private AND NOT wlg.private
 WHERE li.log_group_id = @log_group_id
 ORDER BY li.start_time ASC NULLS LAST, li.id ASC
 LIMIT 1 OFFSET @instance_ordinal;
 
 -- name: GetLogInstanceForDiscordAnnouncement :one
-SELECT * FROM log_instances WHERE id = @id;
+SELECT li.*
+FROM log_instances li
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.private
+WHERE li.id = @id;
 
 -- name: ListInstancesForDiscordAnnouncement :many
 SELECT
@@ -162,6 +166,7 @@ LEFT JOIN LATERAL (
       (EXTRACT(EPOCH FROM (previous_li.end_time - previous_li.start_time)) * 1000)::bigint AS duration_ms
     FROM instance_speedruns previous_sr
     JOIN log_instances previous_li ON previous_li.id = previous_sr.instance_id
+    JOIN wow_log_groups previous_group ON previous_group.id = previous_li.log_group_id AND NOT previous_group.private
     WHERE previous_sr.guild_id = li.guild_id
       AND previous_sr.instance_name = li.name
       AND previous_li.difficulty_name = li.difficulty_name

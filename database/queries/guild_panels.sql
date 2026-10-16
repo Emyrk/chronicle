@@ -38,6 +38,7 @@ LEFT JOIN LATERAL (
     FROM (
         SELECT psr.player_spec, psr.player_role, MAX(psr.killed_at) AS last_seen
         FROM parse_score_results psr
+JOIN wow_log_groups psr_group ON psr_group.id = psr.log_group_id AND NOT psr_group.private
         WHERE psr.tenant_id = @tenant_id
           AND psr.player_guid = gp.id::text
           AND psr.status IN ('ok', 'low_confidence')
@@ -46,6 +47,7 @@ LEFT JOIN LATERAL (
               FROM (
                   SELECT psr2.instance_id, MAX(psr2.killed_at) AS latest_kill
                   FROM parse_score_results psr2
+JOIN wow_log_groups psr2_group ON psr2_group.id = psr2.log_group_id AND NOT psr2_group.private
                   WHERE psr2.tenant_id = @tenant_id
                     AND psr2.player_guid = gp.id::text
                     AND psr2.status IN ('ok', 'low_confidence')
@@ -79,6 +81,7 @@ LEFT JOIN LATERAL (
                     psr.encounter_name,
                     psr.precise_score
                 FROM parse_score_results psr
+JOIN wow_log_groups psr_group ON psr_group.id = psr.log_group_id AND NOT psr_group.private
                 WHERE psr.tenant_id = @tenant_id
                   AND psr.player_guid = gp.id::text
                   AND psr.metric = CASE WHEN latest.player_role = 'heal' THEN 'hps' ELSE 'dps' END
@@ -129,8 +132,10 @@ WITH guild_members AS (
         psr.display_score,
         psr.killed_at
     FROM parse_score_results psr
+JOIN wow_log_groups psr_group ON psr_group.id = psr.log_group_id AND NOT psr_group.private
     JOIN guild_members gm ON gm.player_guid = psr.player_guid
-    LEFT JOIN log_instances li ON li.id = psr.instance_id
+    JOIN log_instances li ON li.id = psr.instance_id
+JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.private
     WHERE psr.tenant_id = @tenant_id
       AND psr.metric = @metric
       AND psr.status IN ('ok', 'low_confidence')
@@ -181,6 +186,7 @@ WITH representative_instances AS (
         li.id,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM log_instances li
+JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.private
     WHERE li.invalidated_at IS NULL
     ORDER BY COALESCE(li.duplicate_group_id, li.id),
         (SELECT COUNT(DISTINCT coverage.encounter_name)
@@ -203,6 +209,7 @@ WITH representative_instances AS (
         sr.ranked_completion_time::timestamptz AS completion_time
     FROM representative_instances representative
     JOIN log_instances li ON li.id = representative.id
+JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.private
     JOIN instance_speedruns sr ON sr.instance_id = representative.id
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = @guild_id::uuid
@@ -226,6 +233,7 @@ WITH representative_instances AS (
             COUNT(*)::bigint AS sample_size,
             COUNT(*) FILTER (WHERE member.duration_ms >= c.duration_ms)::bigint AS at_least_as_slow
         FROM time_parse_clear_time_memberships member
+JOIN wow_log_groups member_group ON member_group.id = member.log_group_id AND NOT member_group.private
         WHERE @by_parse::boolean
           AND member.tenant_id = @tenant_id
           AND member.policy_version = @policy_version::smallint
@@ -269,6 +277,7 @@ SELECT
     MAX(lie.end_time)::timestamptz AS last_killed_at
 FROM log_instance_encounters lie
 JOIN log_instances li ON li.id = lie.instance_id
+JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.private
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 WHERE li.guild_id = @guild_id::uuid
   AND lie.boss = true
@@ -290,6 +299,7 @@ WITH deduped AS (
         psr.precise_score,
         psr.killed_at
     FROM parse_score_results psr
+JOIN wow_log_groups psr_group ON psr_group.id = psr.log_group_id AND NOT psr_group.private
     WHERE psr.tenant_id = @tenant_id
       AND psr.guild_id = @guild_id::uuid
       AND psr.run_id = ANY(@run_ids::uuid[])

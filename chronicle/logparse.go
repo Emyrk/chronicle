@@ -251,6 +251,8 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	//      value without re-resolving.
 	lg := logGroup.WoWLogGroup
 	invalidLog := lg.InvalidatedAt.Valid
+	publicLog := !lg.Private
+	publicRankedLog := !invalidLog && publicLog
 	logFormat := lg.LogType.Format()
 	if lg.Format.Valid {
 		logFormat = lg.Format.LogFormat
@@ -509,17 +511,21 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
 				return err
 			}
-			guild, err := finalized.Guilds.Insert(ctx, encountersState.Units, instanceID, realmID, resolved.DatasetID, tx)
-			if err != nil {
-				return fmt.Errorf("insert guild: %w", err)
-			}
+			var guild *database.Guild
 			var guildID uuid.UUID
-			if guild != nil {
-				guildID = guild.ID
-			}
+			if publicLog {
+				var err error
+				guild, err = finalized.Guilds.Insert(ctx, encountersState.Units, instanceID, realmID, resolved.DatasetID, tx)
+				if err != nil {
+					return fmt.Errorf("insert guild: %w", err)
+				}
+				if guild != nil {
+					guildID = guild.ID
+				}
 
-			if err := finalized.Loot.Insert(ctx, instanceID, realmID, tx); err != nil {
-				return fmt.Errorf("insert loot: %w", err)
+				if err := finalized.Loot.Insert(ctx, instanceID, realmID, tx); err != nil {
+					return fmt.Errorf("insert loot: %w", err)
+				}
 			}
 
 			recorderName := ""
@@ -729,7 +735,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 					break
 				}
 			}
-			if !invalidLog && finalized.Rankings != nil && finalized.Rankings.Speedrun != nil && hasBossKill {
+			if publicRankedLog && finalized.Rankings != nil && finalized.Rankings.Speedrun != nil && hasBossKill {
 				sr := finalized.Rankings.Speedrun
 				proofJSON, err := json.Marshal(rankings.SpeedrunProofPayload{
 					Proof:      sr.Proof,
@@ -825,8 +831,11 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		// Duplicate detection is best-effort, but it must use its own transaction.
 		// A failed statement aborts a PostgreSQL transaction even when the Go error
 		// is logged, which would otherwise roll back the successfully parsed instance.
-		rankingRunAffectedIDs := []uuid.UUID{dbinstance.ID}
-		if instanceStart.Valid {
+		var rankingRunAffectedIDs []uuid.UUID
+		if publicLog {
+			rankingRunAffectedIDs = []uuid.UUID{dbinstance.ID}
+		}
+		if publicLog && instanceStart.Valid {
 			dupErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
 				if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
 					return err
@@ -850,7 +859,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 
 		// Rankings are supplementary. Persist them atomically in a separate
 		// transaction so a ranking error cannot roll back the parsed instance.
-		if !invalidLog && finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil {
+		if publicRankedLog && finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil {
 			rankErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
 				if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
 					return err
@@ -872,7 +881,10 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			}
 		}
 
-		refreshIDs := rankingRunRefresh.AfterRankingCommit(rankingRunAffectedIDs...)
+		var refreshIDs []uuid.UUID
+		if publicLog {
+			refreshIDs = rankingRunRefresh.AfterRankingCommit(rankingRunAffectedIDs...)
+		}
 		if len(refreshIDs) > 0 {
 			if err := w.parent.EnqueueRankingRunRefresh(ctx, refreshIDs...); err != nil {
 				w.parent.logger.WarnContext(ctx, "failed to enqueue ranking run refresh",
@@ -940,7 +952,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 
 	// Enqueue parse score computation for each successfully parsed instance.
 	// Fire-and-forget: scoring failure doesn't fail the parse, but log errors.
-	if !invalidLog && w.parent.queue != nil {
+	if publicRankedLog && w.parent.queue != nil {
 		for _, inst := range jobOut.Instances {
 			_, enqErr := w.parent.queue.Insert(ctx, parseargs.ArgsComputeParseScores{
 				InstanceID: inst.ID,
@@ -997,7 +1009,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	jobResult = "success"
 	_ = river.RecordOutput(ctx, jobOut)
 
-	if w.parent.queue == nil {
+	if w.parent.queue == nil || !publicLog {
 		return nil
 	}
 	persistedInstances, err := db.GetInstancesByLogGroupID(ctx, job.Args.LogID)

@@ -6,11 +6,15 @@ INSERT INTO parse_score_results (
     encounter_name, player_guid, player_name, player_class, player_spec, player_sub_spec, player_role,
     metric, metric_value, precise_score, display_score, rank, sample_size, status,
     instance_name, difficulty_name, max_players, killed_at
-) VALUES (
+)
+SELECT
     @tenant_id, @instance_id, @run_id, @snapshot_id, @log_group_id, @guild_id,
     @encounter_name, @player_guid, @player_name, @player_class, @player_spec, @player_sub_spec, @player_role,
     @metric, @metric_value, @precise_score, @display_score, @rank, @sample_size, @status,
     @instance_name, @difficulty_name, @max_players, @killed_at
+WHERE EXISTS (
+    SELECT 1 FROM wow_log_groups log_group
+    WHERE log_group.id = @log_group_id AND NOT log_group.private
 );
 
 -- name: InsertWindowedParseScoreReceipt :one
@@ -20,10 +24,16 @@ INSERT INTO parse_score_receipts (
     tenant_id, instance_id, snapshot_id,
     policy_version, query_version, lookback_days,
     source_count, result_count, cutoff, window_start, cohort_mode, computed_at
-) VALUES (
+)
+SELECT
     @tenant_id, @instance_id, NULL,
     @policy_version, @query_version, @lookback_days,
     @source_count, @result_count, @cutoff, @window_start, @cohort_mode, now()
+WHERE EXISTS (
+    SELECT 1
+    FROM log_instances instance
+    JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id
+    WHERE instance.id = @instance_id AND NOT log_group.private
 )
 ON CONFLICT (tenant_id, instance_id, lookback_days, policy_version, query_version)
 WHERE snapshot_id IS NULL
@@ -40,23 +50,29 @@ RETURNING *;
 SELECT pg_advisory_xact_lock(hashtextextended(@lock_key, 0));
 
 -- name: GetAnyParseScoreReceiptForTenantInstance :one
-SELECT *
-FROM parse_score_receipts
-WHERE tenant_id = @tenant_id
-  AND instance_id = @instance_id
+SELECT receipt.*
+FROM parse_score_receipts receipt
+JOIN log_instances instance ON instance.id = receipt.instance_id
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.private
+WHERE receipt.tenant_id = @tenant_id
+  AND receipt.instance_id = @instance_id
 ORDER BY computed_at DESC
 LIMIT 1;
 
 -- name: HasParseScoreResultsForTenantInstance :one
 SELECT EXISTS (
-    SELECT 1 FROM parse_score_results
-    WHERE tenant_id = @tenant_id AND instance_id = @instance_id
+    SELECT 1
+    FROM parse_score_results result
+    JOIN wow_log_groups log_group ON log_group.id = result.log_group_id AND NOT log_group.private
+    WHERE result.tenant_id = @tenant_id AND result.instance_id = @instance_id
 );
 
 -- name: GetParseScoreReceiptForInstance :many
 -- Get all receipts for an instance (any snapshot).
-SELECT * FROM parse_score_receipts
-WHERE instance_id = @instance_id
+SELECT receipt.* FROM parse_score_receipts receipt
+JOIN log_instances instance ON instance.id = receipt.instance_id
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.private
+WHERE receipt.instance_id = @instance_id
 ORDER BY computed_at DESC;
 
 -- name: ListParseScoreResultsForContract :many
@@ -65,6 +81,7 @@ ORDER BY computed_at DESC;
 SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
     psr.*
 FROM parse_score_results psr
+JOIN wow_log_groups log_group ON log_group.id = psr.log_group_id AND NOT log_group.private
 WHERE psr.tenant_id = @tenant_id
   AND psr.instance_id = @instance_id
   AND psr.snapshot_id = @snapshot_id::uuid
@@ -75,6 +92,7 @@ ORDER BY psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.create
 SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
     psr.*
 FROM parse_score_results psr
+JOIN wow_log_groups log_group ON log_group.id = psr.log_group_id AND NOT log_group.private
 WHERE psr.tenant_id = @tenant_id
   AND psr.instance_id = @instance_id
   AND psr.snapshot_id IS NULL
@@ -87,6 +105,7 @@ ORDER BY psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.create
 SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
     psr.*
 FROM parse_score_results psr
+JOIN wow_log_groups log_group ON log_group.id = psr.log_group_id AND NOT log_group.private
 WHERE psr.tenant_id = @tenant_id
   AND psr.instance_id = @instance_id
   AND psr.metric = @metric
@@ -98,6 +117,7 @@ ORDER BY psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_s
 SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric)
     psr.*
 FROM parse_score_results psr
+JOIN wow_log_groups log_group ON log_group.id = psr.log_group_id AND NOT log_group.private
 WHERE psr.instance_id = @instance_id
 ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric,
          psr.created_at DESC;
@@ -138,6 +158,7 @@ SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
     psr.player_spec,
     psr.player_role
 FROM parse_score_results psr
+JOIN wow_log_groups log_group ON log_group.id = psr.log_group_id AND NOT log_group.private
 WHERE psr.tenant_id = @tenant_id
   AND psr.player_guid = @player_guid
   AND psr.metric = @metric
@@ -165,6 +186,7 @@ FROM (
       AND (edr.dps > 0 OR edr.hps > 0)
 ) candidates
 JOIN log_instances li ON li.id = candidates.instance_id
+JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.private
 WHERE li.start_time >= @repair_since
   AND li.invalidated_at IS NULL
   AND NOT EXISTS (
@@ -194,5 +216,6 @@ SELECT
     li.log_group_id,
     li.guild_id
 FROM log_instances li
+JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.private
 WHERE li.id = @id
   AND li.invalidated_at IS NULL;

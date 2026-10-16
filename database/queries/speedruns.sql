@@ -5,18 +5,26 @@ INSERT INTO instance_speedruns (
     ranked_start_time, ranked_completion_time, ranked_duration_ms,
     boss_to_boss_start_time, boss_to_boss_completion_time, boss_to_boss_duration_ms,
     proof, addon_version, parser_version_num, addon_version_num
-) VALUES (
+)
+SELECT
     @instance_id, @instance_name, @realm_id, @guild_id,
     @qualified, @start_time, @completion_time, @duration_ms,
     @ranked_start_time, @ranked_completion_time, @ranked_duration_ms,
     @boss_to_boss_start_time, @boss_to_boss_completion_time, @boss_to_boss_duration_ms,
     @proof, @addon_version, @parser_version_num, @addon_version_num
+WHERE EXISTS (
+    SELECT 1
+    FROM log_instances instance
+    JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id
+    WHERE instance.id = @instance_id
+      AND NOT log_group.private
 );
 
 -- name: GetInstanceSpeedrun :one
 SELECT sr.*, li.capabilities
 FROM instance_speedruns sr
 JOIN log_instances li ON li.id = sr.instance_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.private
 WHERE sr.instance_id = $1;
 
 -- name: GetInstanceEncounterKillTimes :many
@@ -61,6 +69,7 @@ WITH anchor AS (
         li.realm_id,
         wsr.server_id
     FROM log_instances li
+    JOIN wow_log_groups anchor_group ON anchor_group.id = li.log_group_id AND NOT anchor_group.private
     JOIN wow_server_realms wsr ON wsr.id = li.realm_id
     WHERE li.id = @instance_id
 ),
@@ -97,6 +106,7 @@ deduped AS (
     FROM anchor a
     JOIN instance_speedruns sr ON sr.instance_name = a.name
     JOIN log_instances li ON li.id = sr.instance_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.private
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     LEFT JOIN guilds g ON g.id = sr.guild_id
     LEFT JOIN instance_overview_metrics iom
@@ -164,6 +174,7 @@ WITH deduped AS (
         COALESCE(youtube.video_url, '')::text AS youtube_url
     FROM instance_speedruns sr
     JOIN log_instances li ON li.id = sr.instance_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.private
     JOIN guilds g ON sr.guild_id = g.id
     LEFT JOIN guild_pages gp ON gp.guild_id = sr.guild_id
     JOIN wow_server_realms wsr ON sr.realm_id = wsr.id
@@ -232,6 +243,7 @@ OFFSET @result_offset::bigint;
 SELECT DISTINCT sr.instance_name, li.difficulty_name
 FROM instance_speedruns sr
 JOIN log_instances li ON li.id = sr.instance_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.private
 JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
 WHERE sr.qualified = true
   AND sr.boss_to_boss_duration_ms IS NOT NULL
@@ -244,6 +256,7 @@ ORDER BY sr.instance_name, li.difficulty_name;
 SELECT DISTINCT li.difficulty_name
 FROM instance_speedruns sr
 JOIN log_instances li ON li.id = sr.instance_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.private
 JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
 WHERE sr.instance_name = @instance_name
   AND sr.qualified = true
@@ -254,6 +267,8 @@ ORDER BY li.difficulty_name;
 -- Returns distinct realm names that have at least one qualified speedrun.
 SELECT DISTINCT COALESCE(wsr.name, '') AS realm_name
 FROM instance_speedruns sr
+JOIN log_instances li ON li.id = sr.instance_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.private
 JOIN wow_server_realms wsr ON sr.realm_id = wsr.id
 WHERE sr.qualified = true
   AND sr.boss_to_boss_duration_ms IS NOT NULL
@@ -275,6 +290,7 @@ WITH deduped AS (
         sr.ranked_completion_time::timestamptz AS completion_time
     FROM instance_speedruns sr
     JOIN log_instances li ON li.id = sr.instance_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.private
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = @guild_id :: uuid
       AND sr.ranked_duration_ms > 0
@@ -306,6 +322,7 @@ SELECT
     COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id))::bigint AS clears
 FROM instance_speedruns sr
 JOIN log_instances li ON li.id = sr.instance_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.private
 JOIN guilds g ON g.id = sr.guild_id
 LEFT JOIN guild_pages gp ON gp.guild_id = sr.guild_id
 JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
