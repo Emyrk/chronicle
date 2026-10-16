@@ -77,6 +77,49 @@ WHERE (billing_subscriptions.provider,
        EXCLUDED.current_period_end,
        EXCLUDED.cancel_at_period_end);
 
+-- name: GetBillingSubscriptionByProviderCustomerID :one
+SELECT * FROM billing_subscriptions
+WHERE provider = $1
+  AND provider_customer_id = $2;
+
+-- name: GetBillingEntitlementOwnerByProviderCustomerID :one
+SELECT user_id FROM billing_entitlements
+WHERE provider = $1
+  AND provider_customer_id = $2
+LIMIT 1;
+
+-- name: ListBillingEntitlementsByUserID :many
+SELECT * FROM billing_entitlements
+WHERE user_id = $1
+ORDER BY entitlement_key;
+
+-- name: HasBillingEntitlement :one
+SELECT EXISTS (
+  SELECT 1
+  FROM billing_entitlements
+  WHERE user_id = $1
+    AND entitlement_key = $2
+);
+
+-- name: DeleteBillingEntitlementsByProviderCustomerID :exec
+DELETE FROM billing_entitlements
+WHERE provider = $1
+  AND provider_customer_id = $2;
+
+-- name: UpsertBillingEntitlement :one
+INSERT INTO billing_entitlements (
+  user_id,
+  provider,
+  provider_customer_id,
+  provider_entitlement_id,
+  entitlement_key
+) VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (provider, provider_customer_id, entitlement_key) DO UPDATE SET
+  user_id = EXCLUDED.user_id,
+  provider_entitlement_id = EXCLUDED.provider_entitlement_id,
+  synced_at = NOW()
+RETURNING *;
+
 -- name: GetLatestActiveBillingGrantExpiry :one
 SELECT MAX(expires_at)::timestamptz
 FROM billing_grants
@@ -121,6 +164,13 @@ ON CONFLICT (stripe_event_id) DO NOTHING;
 UPDATE billing_webhook_events
 SET processed_at = NOW()
 WHERE stripe_event_id = $1;
+
+-- name: ListBillingProviderCustomersForReconciliation :many
+SELECT provider, provider_customer_id
+FROM billing_subscriptions
+UNION
+SELECT provider, provider_customer_id
+FROM billing_entitlements;
 
 -- name: ListBillingSubscriptionsForReconciliation :many
 SELECT * FROM billing_subscriptions

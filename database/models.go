@@ -807,6 +807,15 @@ type AuthzSchemaMigration struct {
 	AppliedAt pgtype.Timestamptz `db:"applied_at" json:"applied_at"`
 }
 
+type BillingEntitlement struct {
+	UserID                uuid.UUID          `db:"user_id" json:"user_id"`
+	Provider              string             `db:"provider" json:"provider"`
+	ProviderCustomerID    string             `db:"provider_customer_id" json:"provider_customer_id"`
+	ProviderEntitlementID string             `db:"provider_entitlement_id" json:"provider_entitlement_id"`
+	EntitlementKey        string             `db:"entitlement_key" json:"entitlement_key"`
+	SyncedAt              pgtype.Timestamptz `db:"synced_at" json:"synced_at"`
+}
+
 type BillingGrant struct {
 	ID          uuid.UUID          `db:"id" json:"id"`
 	UserID      uuid.UUID          `db:"user_id" json:"user_id"`

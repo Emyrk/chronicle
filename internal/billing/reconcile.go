@@ -81,12 +81,26 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 		}
 	}()
 
+	providerCustomers, err := w.Store.ListBillingProviderCustomersForReconciliation(ctx)
+	if err != nil {
+		return fmt.Errorf("list local billing customers: %w", err)
+	}
+	customers := make(map[string]struct{}, len(providerCustomers))
+	for _, customer := range providerCustomers {
+		if customer.Provider == ProviderStripe && customer.ProviderCustomerID != "" {
+			customers[customer.ProviderCustomerID] = struct{}{}
+		}
+	}
+
 	localSubscriptions, err := w.Store.ListBillingSubscriptionsForReconciliation(ctx)
 	if err != nil {
 		return fmt.Errorf("list local billing subscriptions: %w", err)
 	}
 	localByProviderID := make(map[string]database.BillingSubscription, len(localSubscriptions))
 	for _, sub := range localSubscriptions {
+		if sub.Provider == ProviderStripe && sub.ProviderCustomerID != "" {
+			customers[sub.ProviderCustomerID] = struct{}{}
+		}
 		if sub.Provider == ProviderStripe && sub.ProviderSubscriptionID.Valid {
 			localByProviderID[sub.ProviderSubscriptionID.String] = sub
 		}
@@ -124,6 +138,9 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 		if err != nil {
 			return fmt.Errorf("reconcile Stripe subscription %q: %w", sub.ID, err)
 		}
+		if sub.Customer != nil && sub.Customer.ID != "" {
+			customers[sub.Customer.ID] = struct{}{}
+		}
 		if changed {
 			counts.changed++
 		}
@@ -145,14 +162,25 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 			if changed {
 				counts.changed++
 			}
+			if local.ProviderCustomerID != "" {
+				customers[local.ProviderCustomerID] = struct{}{}
+			}
 			continue
 		}
 		changed, err := w.Billing.reconcileSubscription(ctx, sub)
 		if err != nil {
 			return fmt.Errorf("reconcile locally missing Stripe subscription %q: %w", subscriptionID, err)
 		}
+		if sub.Customer != nil && sub.Customer.ID != "" {
+			customers[sub.Customer.ID] = struct{}{}
+		}
 		if changed {
 			counts.changed++
+		}
+	}
+	for customerID := range customers {
+		if err := w.Billing.syncStripeEntitlementsIfConfigured(ctx, customerID); err != nil {
+			return fmt.Errorf("reconcile Stripe entitlements for customer %q: %w", customerID, err)
 		}
 	}
 	if w.Logger != nil {

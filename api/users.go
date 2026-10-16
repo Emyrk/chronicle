@@ -31,8 +31,14 @@ func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	adsFree := billing.RolesHaveEntitlement(roles, billing.EntitlementAdFree)
+	canDownloadRawLogs := billing.RolesHaveEntitlement(roles, billing.EntitlementDownloadRawLogs)
 	if a.Opts.Billing != nil {
 		adsFree, err = a.Opts.Billing.HasEntitlement(ctx, state.Claims.Subject, billing.EntitlementAdFree)
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		canDownloadRawLogs, err = a.Opts.Billing.HasEntitlement(ctx, state.Claims.Subject, billing.EntitlementDownloadRawLogs)
 		if err != nil {
 			httpapi.InternalServerError(w, err)
 			return
@@ -46,6 +52,7 @@ func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 		MaxStorageBytes:      user.MaxStorageBytes,
 		ConsumedStorageBytes: user.ConsumedStorageBytes,
 		Preferences:          userPreferences(user),
+		CanDownloadRawLogs:   canDownloadRawLogs,
 		AdsFree:              adsFree,
 		Email:                user.Email,
 		AuthProvider:         state.Claims.Provider,

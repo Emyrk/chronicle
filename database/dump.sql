@@ -210,6 +210,15 @@ CREATE TABLE authz_schema_migrations (
     applied_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE billing_entitlements (
+    user_id uuid NOT NULL,
+    provider text NOT NULL,
+    provider_customer_id text NOT NULL,
+    provider_entitlement_id text NOT NULL,
+    entitlement_key text NOT NULL,
+    synced_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE billing_grants (
     id uuid NOT NULL,
     user_id uuid NOT NULL,
@@ -2222,6 +2231,12 @@ ALTER TABLE ONLY application_modification_requests
 ALTER TABLE ONLY authz_schema_migrations
     ADD CONSTRAINT authz_schema_migrations_pkey PRIMARY KEY (version);
 
+ALTER TABLE ONLY billing_entitlements
+    ADD CONSTRAINT billing_entitlements_pkey PRIMARY KEY (provider, provider_customer_id, entitlement_key);
+
+ALTER TABLE ONLY billing_entitlements
+    ADD CONSTRAINT billing_entitlements_provider_provider_entitlement_id_key UNIQUE (provider, provider_entitlement_id);
+
 ALTER TABLE ONLY billing_grants
     ADD CONSTRAINT billing_grants_pkey PRIMARY KEY (id);
 
@@ -2702,6 +2717,8 @@ ALTER TABLE ONLY wow_server_upload_keys
 ALTER TABLE ONLY wow_servers
     ADD CONSTRAINT wow_servers_pkey PRIMARY KEY (id);
 
+CREATE INDEX billing_entitlements_user_key_idx ON billing_entitlements USING btree (user_id, entitlement_key);
+
 CREATE INDEX billing_grants_active_idx ON billing_grants USING btree (user_id, expires_at) WHERE (revoked_at IS NULL);
 
 CREATE INDEX billing_reconciliation_runs_started_at_idx ON billing_reconciliation_runs USING btree (started_at DESC);
@@ -2962,6 +2979,9 @@ ALTER TABLE ONLY application_modification_requests
 
 ALTER TABLE ONLY application_modification_requests
     ADD CONSTRAINT application_modification_requests_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES users(id);
+
+ALTER TABLE ONLY billing_entitlements
+    ADD CONSTRAINT billing_entitlements_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY billing_grants
     ADD CONSTRAINT billing_grants_granted_by_fkey FOREIGN KEY (granted_by) REFERENCES users(id);

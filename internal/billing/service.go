@@ -25,6 +25,7 @@ type accountRetriever func(context.Context, *stripe.AccountRetrieveParams) (*str
 type priceRetriever func(context.Context, string, *stripe.PriceRetrieveParams) (*stripe.Price, error)
 type subscriptionRetriever func(context.Context, string, *stripe.SubscriptionRetrieveParams) (*stripe.Subscription, error)
 type subscriptionLister func(context.Context) ([]*stripe.Subscription, error)
+type activeEntitlementLister func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error)
 type RoleResolver func(context.Context, uuid.UUID) ([]string, error)
 
 type Options struct {
@@ -37,17 +38,18 @@ type Options struct {
 }
 
 type Service struct {
-	store                database.Store
-	stripe               *stripe.Client
-	webhookSecret        string
-	priceIDs             []string
-	allowedPrices        map[string]struct{}
-	accessURL            *url.URL
-	retrieveAccount      accountRetriever
-	retrievePrice        priceRetriever
-	retrieveSubscription subscriptionRetriever
-	listSubscriptions    subscriptionLister
-	roles                RoleResolver
+	store                  database.Store
+	stripe                 *stripe.Client
+	webhookSecret          string
+	priceIDs               []string
+	allowedPrices          map[string]struct{}
+	accessURL              *url.URL
+	retrieveAccount        accountRetriever
+	retrievePrice          priceRetriever
+	retrieveSubscription   subscriptionRetriever
+	listSubscriptions      subscriptionLister
+	listActiveEntitlements activeEntitlementLister
+	roles                  RoleResolver
 
 	pricesMu sync.Mutex
 	prices   []chroniclesdk.BillingPrice
@@ -59,6 +61,7 @@ func New(opts Options) *Service {
 	var retrievePrice priceRetriever
 	var retrieveSubscription subscriptionRetriever
 	var listSubscriptions subscriptionLister
+	var listActiveEntitlements activeEntitlementLister
 	if opts.SecretKey != "" {
 		client = stripe.NewClient(opts.SecretKey)
 		retrieveAccount = client.V1Accounts.Retrieve
@@ -75,6 +78,17 @@ func New(opts Options) *Service {
 			}
 			return subscriptions, nil
 		}
+		listActiveEntitlements = func(ctx context.Context, customerID string) ([]*stripe.EntitlementsActiveEntitlement, error) {
+			var entitlements []*stripe.EntitlementsActiveEntitlement
+			params := &stripe.EntitlementsActiveEntitlementListParams{Customer: stripe.String(customerID)}
+			for entitlement, err := range client.V1EntitlementsActiveEntitlements.List(ctx, params).All(ctx) {
+				if err != nil {
+					return nil, err
+				}
+				entitlements = append(entitlements, entitlement)
+			}
+			return entitlements, nil
+		}
 	}
 	priceIDs := uniqueStrings(opts.PriceIDs)
 	allowedPrices := make(map[string]struct{}, len(priceIDs))
@@ -82,17 +96,18 @@ func New(opts Options) *Service {
 		allowedPrices[priceID] = struct{}{}
 	}
 	return &Service{
-		store:                opts.Store,
-		stripe:               client,
-		webhookSecret:        opts.WebhookSecret,
-		priceIDs:             priceIDs,
-		allowedPrices:        allowedPrices,
-		accessURL:            opts.AccessURL,
-		retrieveAccount:      retrieveAccount,
-		retrievePrice:        retrievePrice,
-		retrieveSubscription: retrieveSubscription,
-		listSubscriptions:    listSubscriptions,
-		roles:                opts.Roles,
+		store:                  opts.Store,
+		stripe:                 client,
+		webhookSecret:          opts.WebhookSecret,
+		priceIDs:               priceIDs,
+		allowedPrices:          allowedPrices,
+		accessURL:              opts.AccessURL,
+		retrieveAccount:        retrieveAccount,
+		retrievePrice:          retrievePrice,
+		retrieveSubscription:   retrieveSubscription,
+		listSubscriptions:      listSubscriptions,
+		listActiveEntitlements: listActiveEntitlements,
+		roles:                  opts.Roles,
 	}
 }
 
@@ -152,7 +167,7 @@ func (s *Service) reconciliationEnabled() bool {
 }
 
 func (s *Service) validateSubscriptionPurchase(product ProductCode, purchase stripePurchase) error {
-	if !ProductHasEntitlement(product, EntitlementAdFree) {
+	if product != ProductSupporter {
 		return fmt.Errorf("unknown billing product %q", product)
 	}
 	if !s.priceAllowed(purchase.priceID) {

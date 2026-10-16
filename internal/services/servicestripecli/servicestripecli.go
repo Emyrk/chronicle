@@ -31,6 +31,7 @@ var webhookSecretPattern = regexp.MustCompile(`whsec_[A-Za-z0-9_]+`)
 
 var eventTypes = []string{
 	"checkout.session.completed",
+	"entitlements.active_entitlement_summary.updated",
 	"customer.subscription.created",
 	"customer.subscription.updated",
 	"customer.subscription.deleted",

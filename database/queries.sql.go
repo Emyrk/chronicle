@@ -1131,6 +1131,71 @@ func (q *sqlQuerier) CompleteBillingReconciliationRun(ctx context.Context, arg C
 	return err
 }
 
+const deleteBillingEntitlementsByProviderCustomerID = `-- name: DeleteBillingEntitlementsByProviderCustomerID :exec
+DELETE FROM billing_entitlements
+WHERE provider = $1
+  AND provider_customer_id = $2
+`
+
+type DeleteBillingEntitlementsByProviderCustomerIDParams struct {
+	Provider           string `db:"provider" json:"provider"`
+	ProviderCustomerID string `db:"provider_customer_id" json:"provider_customer_id"`
+}
+
+func (q *sqlQuerier) DeleteBillingEntitlementsByProviderCustomerID(ctx context.Context, arg DeleteBillingEntitlementsByProviderCustomerIDParams) error {
+	_, err := q.db.Exec(ctx, deleteBillingEntitlementsByProviderCustomerID, arg.Provider, arg.ProviderCustomerID)
+	return err
+}
+
+const getBillingEntitlementOwnerByProviderCustomerID = `-- name: GetBillingEntitlementOwnerByProviderCustomerID :one
+SELECT user_id FROM billing_entitlements
+WHERE provider = $1
+  AND provider_customer_id = $2
+LIMIT 1
+`
+
+type GetBillingEntitlementOwnerByProviderCustomerIDParams struct {
+	Provider           string `db:"provider" json:"provider"`
+	ProviderCustomerID string `db:"provider_customer_id" json:"provider_customer_id"`
+}
+
+func (q *sqlQuerier) GetBillingEntitlementOwnerByProviderCustomerID(ctx context.Context, arg GetBillingEntitlementOwnerByProviderCustomerIDParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getBillingEntitlementOwnerByProviderCustomerID, arg.Provider, arg.ProviderCustomerID)
+	var user_id uuid.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
+const getBillingSubscriptionByProviderCustomerID = `-- name: GetBillingSubscriptionByProviderCustomerID :one
+SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id FROM billing_subscriptions
+WHERE provider = $1
+  AND provider_customer_id = $2
+`
+
+type GetBillingSubscriptionByProviderCustomerIDParams struct {
+	Provider           string `db:"provider" json:"provider"`
+	ProviderCustomerID string `db:"provider_customer_id" json:"provider_customer_id"`
+}
+
+func (q *sqlQuerier) GetBillingSubscriptionByProviderCustomerID(ctx context.Context, arg GetBillingSubscriptionByProviderCustomerIDParams) (BillingSubscription, error) {
+	row := q.db.QueryRow(ctx, getBillingSubscriptionByProviderCustomerID, arg.Provider, arg.ProviderCustomerID)
+	var i BillingSubscription
+	err := row.Scan(
+		&i.UserID,
+		&i.ProviderCustomerID,
+		&i.ProviderSubscriptionID,
+		&i.ProductCode,
+		&i.Status,
+		&i.CurrentPeriodEnd,
+		&i.CancelAtPeriodEnd,
+		&i.UpdatedAt,
+		&i.Provider,
+		&i.ProviderProductID,
+		&i.ProviderPriceID,
+	)
+	return i, err
+}
+
 const getBillingSubscriptionByProviderID = `-- name: GetBillingSubscriptionByProviderID :one
 SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id FROM billing_subscriptions
 WHERE provider = $1
@@ -1241,6 +1306,27 @@ func (q *sqlQuerier) HasActiveBillingGrant(ctx context.Context, arg HasActiveBil
 	return exists, err
 }
 
+const hasBillingEntitlement = `-- name: HasBillingEntitlement :one
+SELECT EXISTS (
+  SELECT 1
+  FROM billing_entitlements
+  WHERE user_id = $1
+    AND entitlement_key = $2
+)
+`
+
+type HasBillingEntitlementParams struct {
+	UserID         uuid.UUID `db:"user_id" json:"user_id"`
+	EntitlementKey string    `db:"entitlement_key" json:"entitlement_key"`
+}
+
+func (q *sqlQuerier) HasBillingEntitlement(ctx context.Context, arg HasBillingEntitlementParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasBillingEntitlement, arg.UserID, arg.EntitlementKey)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const insertBillingGrant = `-- name: InsertBillingGrant :one
 INSERT INTO billing_grants (
   id,
@@ -1332,6 +1418,72 @@ func (q *sqlQuerier) InsertBillingWebhookEvent(ctx context.Context, arg InsertBi
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const listBillingEntitlementsByUserID = `-- name: ListBillingEntitlementsByUserID :many
+SELECT user_id, provider, provider_customer_id, provider_entitlement_id, entitlement_key, synced_at FROM billing_entitlements
+WHERE user_id = $1
+ORDER BY entitlement_key
+`
+
+func (q *sqlQuerier) ListBillingEntitlementsByUserID(ctx context.Context, userID uuid.UUID) ([]BillingEntitlement, error) {
+	rows, err := q.db.Query(ctx, listBillingEntitlementsByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BillingEntitlement
+	for rows.Next() {
+		var i BillingEntitlement
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Provider,
+			&i.ProviderCustomerID,
+			&i.ProviderEntitlementID,
+			&i.EntitlementKey,
+			&i.SyncedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBillingProviderCustomersForReconciliation = `-- name: ListBillingProviderCustomersForReconciliation :many
+SELECT provider, provider_customer_id
+FROM billing_subscriptions
+UNION
+SELECT provider, provider_customer_id
+FROM billing_entitlements
+`
+
+type ListBillingProviderCustomersForReconciliationRow struct {
+	Provider           string `db:"provider" json:"provider"`
+	ProviderCustomerID string `db:"provider_customer_id" json:"provider_customer_id"`
+}
+
+func (q *sqlQuerier) ListBillingProviderCustomersForReconciliation(ctx context.Context) ([]ListBillingProviderCustomersForReconciliationRow, error) {
+	rows, err := q.db.Query(ctx, listBillingProviderCustomersForReconciliation)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBillingProviderCustomersForReconciliationRow
+	for rows.Next() {
+		var i ListBillingProviderCustomersForReconciliationRow
+		if err := rows.Scan(&i.Provider, &i.ProviderCustomerID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listBillingSubscriptionsForReconciliation = `-- name: ListBillingSubscriptionsForReconciliation :many
@@ -1484,6 +1636,49 @@ WHERE stripe_event_id = $1
 func (q *sqlQuerier) MarkBillingWebhookEventProcessed(ctx context.Context, stripeEventID string) error {
 	_, err := q.db.Exec(ctx, markBillingWebhookEventProcessed, stripeEventID)
 	return err
+}
+
+const upsertBillingEntitlement = `-- name: UpsertBillingEntitlement :one
+INSERT INTO billing_entitlements (
+  user_id,
+  provider,
+  provider_customer_id,
+  provider_entitlement_id,
+  entitlement_key
+) VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (provider, provider_customer_id, entitlement_key) DO UPDATE SET
+  user_id = EXCLUDED.user_id,
+  provider_entitlement_id = EXCLUDED.provider_entitlement_id,
+  synced_at = NOW()
+RETURNING user_id, provider, provider_customer_id, provider_entitlement_id, entitlement_key, synced_at
+`
+
+type UpsertBillingEntitlementParams struct {
+	UserID                uuid.UUID `db:"user_id" json:"user_id"`
+	Provider              string    `db:"provider" json:"provider"`
+	ProviderCustomerID    string    `db:"provider_customer_id" json:"provider_customer_id"`
+	ProviderEntitlementID string    `db:"provider_entitlement_id" json:"provider_entitlement_id"`
+	EntitlementKey        string    `db:"entitlement_key" json:"entitlement_key"`
+}
+
+func (q *sqlQuerier) UpsertBillingEntitlement(ctx context.Context, arg UpsertBillingEntitlementParams) (BillingEntitlement, error) {
+	row := q.db.QueryRow(ctx, upsertBillingEntitlement,
+		arg.UserID,
+		arg.Provider,
+		arg.ProviderCustomerID,
+		arg.ProviderEntitlementID,
+		arg.EntitlementKey,
+	)
+	var i BillingEntitlement
+	err := row.Scan(
+		&i.UserID,
+		&i.Provider,
+		&i.ProviderCustomerID,
+		&i.ProviderEntitlementID,
+		&i.EntitlementKey,
+		&i.SyncedAt,
+	)
+	return i, err
 }
 
 const upsertBillingSubscription = `-- name: UpsertBillingSubscription :one

@@ -2,6 +2,7 @@ package billing
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -170,17 +171,31 @@ func TestRolesHaveEntitlement(t *testing.T) {
 
 type entitlementStore struct {
 	database.Store
-	grant           bool
-	subscription    database.BillingSubscription
-	subscriptionErr error
-	grantChecks     []database.HasActiveBillingGrantParams
-	upsert          database.UpsertBillingSubscriptionParams
-	upsertCalled    bool
+	grant               bool
+	billingEntitled     bool
+	subscription        database.BillingSubscription
+	subscriptionErr     error
+	grantChecks         []database.HasActiveBillingGrantParams
+	entitlementChecks   []database.HasBillingEntitlementParams
+	providerCustomer    database.BillingSubscription
+	providerCustomerErr error
+	entitlementOwner    uuid.UUID
+	persisted           []database.UpsertBillingEntitlementParams
+	deletedCustomer     database.DeleteBillingEntitlementsByProviderCustomerIDParams
+	dataGrant           database.UpsertDataGrantParams
+	deletedDataGrant    database.DeleteDataGrantParams
+	upsert              database.UpsertBillingSubscriptionParams
+	upsertCalled        bool
 }
 
 func (s *entitlementStore) HasActiveBillingGrant(_ context.Context, arg database.HasActiveBillingGrantParams) (bool, error) {
 	s.grantChecks = append(s.grantChecks, arg)
 	return s.grant, nil
+}
+
+func (s *entitlementStore) HasBillingEntitlement(_ context.Context, arg database.HasBillingEntitlementParams) (bool, error) {
+	s.entitlementChecks = append(s.entitlementChecks, arg)
+	return s.billingEntitled, nil
 }
 
 func (s *entitlementStore) GetBillingSubscriptionByUserID(context.Context, uuid.UUID) (database.BillingSubscription, error) {
@@ -193,23 +208,55 @@ func (s *entitlementStore) UpsertBillingSubscription(_ context.Context, arg data
 	return database.BillingSubscription{}, nil
 }
 
+func (s *entitlementStore) GetBillingSubscriptionByProviderCustomerID(_ context.Context, _ database.GetBillingSubscriptionByProviderCustomerIDParams) (database.BillingSubscription, error) {
+	return s.providerCustomer, s.providerCustomerErr
+}
+
+func (s *entitlementStore) GetBillingEntitlementOwnerByProviderCustomerID(_ context.Context, _ database.GetBillingEntitlementOwnerByProviderCustomerIDParams) (uuid.UUID, error) {
+	return s.entitlementOwner, nil
+}
+
+func (s *entitlementStore) InTx(ctx context.Context, fn func(database.Store) error, _ *pgx.TxOptions) error {
+	return fn(s)
+}
+
+func (s *entitlementStore) DeleteBillingEntitlementsByProviderCustomerID(_ context.Context, arg database.DeleteBillingEntitlementsByProviderCustomerIDParams) error {
+	s.deletedCustomer = arg
+	return nil
+}
+
+func (s *entitlementStore) UpsertBillingEntitlement(_ context.Context, arg database.UpsertBillingEntitlementParams) (database.BillingEntitlement, error) {
+	s.persisted = append(s.persisted, arg)
+	return database.BillingEntitlement{}, nil
+}
+
+func (s *entitlementStore) UpsertDataGrant(_ context.Context, arg database.UpsertDataGrantParams) (database.DataGrant, error) {
+	s.dataGrant = arg
+	return database.DataGrant{}, nil
+}
+
+func (s *entitlementStore) DeleteDataGrant(_ context.Context, arg database.DeleteDataGrantParams) error {
+	s.deletedDataGrant = arg
+	return nil
+}
+
 func TestHasEntitlement(t *testing.T) {
 	t.Parallel()
 
 	userID := uuid.New()
 	tests := []struct {
-		name      string
-		roles     []string
-		grant     bool
-		sub       database.BillingSubscription
-		subErr    error
-		want      bool
-		wantGrant bool
+		name            string
+		roles           []string
+		grant           bool
+		billingEntitled bool
+		want            bool
+		wantGrantCheck  bool
+		wantStripeCheck bool
 	}{
-		{name: "role", roles: []string{string(ProductSupporter)}, subErr: pgx.ErrNoRows, want: true},
-		{name: "grant", grant: true, subErr: pgx.ErrNoRows, want: true, wantGrant: true},
-		{name: "subscription", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: string(stripe.SubscriptionStatusActive), CurrentPeriodEnd: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}}, want: true, wantGrant: true},
-		{name: "none", subErr: pgx.ErrNoRows, want: false, wantGrant: true},
+		{name: "role", roles: []string{string(ProductSupporter)}, want: true},
+		{name: "grant", grant: true, want: true, wantGrantCheck: true},
+		{name: "Stripe active entitlement", billingEntitled: true, want: true, wantGrantCheck: true, wantStripeCheck: true},
+		{name: "none", wantGrantCheck: true, wantStripeCheck: true},
 	}
 
 	for _, tt := range tests {
@@ -217,8 +264,7 @@ func TestHasEntitlement(t *testing.T) {
 			t.Parallel()
 			store := &entitlementStore{
 				grant:           tt.grant,
-				subscription:    tt.sub,
-				subscriptionErr: tt.subErr,
+				billingEntitled: tt.billingEntitled,
 			}
 			s := New(Options{
 				Store: store,
@@ -230,7 +276,7 @@ func TestHasEntitlement(t *testing.T) {
 			got, err := s.HasEntitlement(context.Background(), userID, EntitlementAdFree)
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
-			if tt.wantGrant {
+			if tt.wantGrantCheck {
 				require.Equal(t, []database.HasActiveBillingGrantParams{{
 					UserID:      userID,
 					ProductCode: string(ProductSupporter),
@@ -238,41 +284,91 @@ func TestHasEntitlement(t *testing.T) {
 			} else {
 				require.Empty(t, store.grantChecks)
 			}
+			if tt.wantStripeCheck {
+				require.Equal(t, []database.HasBillingEntitlementParams{{
+					UserID:         userID,
+					EntitlementKey: string(EntitlementAdFree),
+				}}, store.entitlementChecks)
+			} else {
+				require.Empty(t, store.entitlementChecks)
+			}
 		})
 	}
 }
 
-func TestSubscriptionHasEntitlement(t *testing.T) {
+func TestEntitlementSummaryWebhookFetchesAuthoritativeEntitlements(t *testing.T) {
 	t.Parallel()
-	now := time.Date(2026, time.October, 13, 12, 0, 0, 0, time.UTC)
-	insideGrace := pgtype.Timestamptz{Time: now.Add(-entitlementGracePeriod + time.Second), Valid: true}
-	atGraceBoundary := pgtype.Timestamptz{Time: now.Add(-entitlementGracePeriod), Valid: true}
-	future := pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true}
 
-	tests := []struct {
-		name string
-		sub  database.BillingSubscription
-		want bool
-	}{
-		{name: "active bounded period", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "active", CurrentPeriodEnd: future}, want: true},
-		{name: "trialing inside grace", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "trialing", CurrentPeriodEnd: insideGrace}, want: true},
-		{name: "canceled inside grace", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "canceled", CurrentPeriodEnd: insideGrace}, want: true},
-		{name: "past due inside grace", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "past_due", CurrentPeriodEnd: insideGrace}, want: true},
-		{name: "grace boundary expired", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "active", CurrentPeriodEnd: atGraceBoundary}, want: false},
-		{name: "active missing period", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "active"}, want: false},
-		{name: "incomplete", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "incomplete", CurrentPeriodEnd: future}, want: false},
-		{name: "incomplete expired", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "incomplete_expired", CurrentPeriodEnd: future}, want: false},
-		{name: "paused", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "paused", CurrentPeriodEnd: future}, want: false},
-		{name: "unpaid", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "unpaid", CurrentPeriodEnd: future}, want: false},
-		{name: "unknown product", sub: database.BillingSubscription{ProductCode: "unknown", Status: "active", CurrentPeriodEnd: future}, want: false},
+	userID := uuid.New()
+	store := &entitlementStore{providerCustomer: database.BillingSubscription{UserID: userID}}
+	s := New(Options{Store: store})
+	s.listActiveEntitlements = func(_ context.Context, customerID string) ([]*stripe.EntitlementsActiveEntitlement, error) {
+		require.Equal(t, "cus_123", customerID)
+		return []*stripe.EntitlementsActiveEntitlement{{ID: "ent_ads", LookupKey: string(EntitlementAdFree)}}, nil
+	}
+	raw, err := json.Marshal(stripe.EntitlementsActiveEntitlementSummary{Customer: "cus_123"})
+	require.NoError(t, err)
+
+	err = s.processEvent(context.Background(), stripe.Event{
+		Type: stripe.EventTypeEntitlementsActiveEntitlementSummaryUpdated,
+		Data: &stripe.EventData{Raw: raw},
+	})
+	require.NoError(t, err)
+	require.Len(t, store.persisted, 1)
+	require.Equal(t, string(EntitlementAdFree), store.persisted[0].EntitlementKey)
+}
+
+func TestSyncStripeEntitlementsPersistsAuthoritativeSnapshotAndStorageGrant(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	store := &entitlementStore{providerCustomer: database.BillingSubscription{UserID: userID}}
+	s := New(Options{Store: store})
+	s.listActiveEntitlements = func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error) {
+		return []*stripe.EntitlementsActiveEntitlement{
+			{ID: "ent_storage", LookupKey: string(EntitlementStorage300MB)},
+			{ID: "ent_ads", LookupKey: string(EntitlementAdFree)},
+		}, nil
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tt.want, subscriptionHasEntitlement(now, tt.sub, EntitlementAdFree))
-		})
+	err := s.syncStripeEntitlements(context.Background(), "cus_123")
+	require.NoError(t, err)
+	require.Equal(t, database.DeleteBillingEntitlementsByProviderCustomerIDParams{Provider: ProviderStripe, ProviderCustomerID: "cus_123"}, store.deletedCustomer)
+	require.Len(t, store.persisted, 2)
+	require.Equal(t, stripeStorageGrantBytes, store.dataGrant.StorageBytes)
+	require.Equal(t, stripeStorageGrantSource, store.dataGrant.Source)
+	require.Empty(t, store.deletedDataGrant.Source)
+}
+
+func TestSyncStripeEntitlementsUsesPersistedOwnerWithoutSubscription(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	store := &entitlementStore{providerCustomerErr: pgx.ErrNoRows, entitlementOwner: userID}
+	s := New(Options{Store: store})
+	s.listActiveEntitlements = func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error) {
+		return []*stripe.EntitlementsActiveEntitlement{{ID: "ent_ads", LookupKey: string(EntitlementAdFree)}}, nil
 	}
+
+	require.NoError(t, s.syncStripeEntitlements(context.Background(), "cus_123"))
+	require.Len(t, store.persisted, 1)
+	require.Equal(t, userID, store.persisted[0].UserID)
+}
+
+func TestSyncStripeEntitlementsRemovesStorageGrantWhenAbsent(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	store := &entitlementStore{providerCustomer: database.BillingSubscription{UserID: userID}}
+	s := New(Options{Store: store})
+	s.listActiveEntitlements = func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error) {
+		return nil, nil
+	}
+
+	err := s.syncStripeEntitlements(context.Background(), "cus_123")
+	require.NoError(t, err)
+	require.Empty(t, store.persisted)
+	require.Equal(t, database.DeleteDataGrantParams{UserID: userID, Source: stripeStorageGrantSource}, store.deletedDataGrant)
 }
 
 func TestStripeSubscriptionPurchase(t *testing.T) {

@@ -3399,6 +3399,10 @@ export interface Session {
      */
     readonly ads_free: boolean;
     /**
+     * CanDownloadRawLogs indicates that the user can download original combat log files.
+     */
+    readonly can_download_raw_logs: boolean;
+    /**
      * Email is the user's email address (if available).
      */
     readonly email: string;

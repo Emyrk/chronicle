@@ -75,6 +75,7 @@ type sqlcQuerier interface {
 	DeleteAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) error
 	DeleteAllParsedLogsByGroupID(ctx context.Context, id uuid.UUID) error
 	DeleteAllTelemetryNotices(ctx context.Context) error
+	DeleteBillingEntitlementsByProviderCustomerID(ctx context.Context, arg DeleteBillingEntitlementsByProviderCustomerIDParams) error
 	DeleteClassBuffIgnore(ctx context.Context, arg DeleteClassBuffIgnoreParams) error
 	// Release representative IDs that moved to a different logical run before the
 	// state-based refresh upserts all desired rows in arbitrary UUID order.
@@ -171,6 +172,8 @@ type sqlcQuerier interface {
 	GearTrendsSlotItems(ctx context.Context, arg GearTrendsSlotItemsParams) ([]GearTrendsSlotItemsRow, error)
 	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg GetAnyParseScoreReceiptForTenantInstanceParams) (ParseScoreReceipt, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
+	GetBillingEntitlementOwnerByProviderCustomerID(ctx context.Context, arg GetBillingEntitlementOwnerByProviderCustomerIDParams) (uuid.UUID, error)
+	GetBillingSubscriptionByProviderCustomerID(ctx context.Context, arg GetBillingSubscriptionByProviderCustomerIDParams) (BillingSubscription, error)
 	GetBillingSubscriptionByProviderID(ctx context.Context, arg GetBillingSubscriptionByProviderIDParams) (BillingSubscription, error)
 	GetBillingSubscriptionByUserID(ctx context.Context, userID uuid.UUID) (BillingSubscription, error)
 	GetBillingWebhookEvent(ctx context.Context, stripeEventID string) (BillingWebhookEvent, error)
@@ -413,6 +416,7 @@ type sqlcQuerier interface {
 	// cannot fill the whole board.
 	GuildTopParses(ctx context.Context, arg GuildTopParsesParams) ([]GuildTopParsesRow, error)
 	HasActiveBillingGrant(ctx context.Context, arg HasActiveBillingGrantParams) (bool, error)
+	HasBillingEntitlement(ctx context.Context, arg HasBillingEntitlementParams) (bool, error)
 	HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error)
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
@@ -503,6 +507,8 @@ type sqlcQuerier interface {
 	ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, arg ListAllWoWLogGroupsWithOwnerPaginatedParams) ([]ListAllWoWLogGroupsWithOwnerPaginatedRow, error)
 	ListAllWoWServerRealms(ctx context.Context) ([]WowServerRealm, error)
 	ListAuraDurationModifiersForDerivation(ctx context.Context, datasetID uuid.UUID) ([]ListAuraDurationModifiersForDerivationRow, error)
+	ListBillingEntitlementsByUserID(ctx context.Context, userID uuid.UUID) ([]BillingEntitlement, error)
+	ListBillingProviderCustomersForReconciliation(ctx context.Context) ([]ListBillingProviderCustomersForReconciliationRow, error)
 	ListBillingSubscriptionsForReconciliation(ctx context.Context) ([]BillingSubscription, error)
 	ListClassBuffIgnorePolicies(ctx context.Context) ([]ListClassBuffIgnorePoliciesRow, error)
 	ListClassBuffPoliciesForDataset(ctx context.Context, datasetID uuid.UUID) ([]ListClassBuffPoliciesForDatasetRow, error)
@@ -847,6 +853,7 @@ type sqlcQuerier interface {
 	UpdateWoWLogGroupLogType(ctx context.Context, arg UpdateWoWLogGroupLogTypeParams) error
 	UpdateWoWServer(ctx context.Context, arg UpdateWoWServerParams) (WowServer, error)
 	UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServerRealmParams) (WowServerRealm, error)
+	UpsertBillingEntitlement(ctx context.Context, arg UpsertBillingEntitlementParams) (BillingEntitlement, error)
 	UpsertBillingSubscription(ctx context.Context, arg UpsertBillingSubscriptionParams) (BillingSubscription, error)
 	UpsertBillingSubscriptionIfChanged(ctx context.Context, arg UpsertBillingSubscriptionIfChangedParams) (int64, error)
 	UpsertClassBuffIgnore(ctx context.Context, arg UpsertClassBuffIgnoreParams) error

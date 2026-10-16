@@ -2,13 +2,11 @@ package billing
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/stripe/stripe-go/v87"
 )
 
@@ -19,12 +17,18 @@ type Entitlement string
 const (
 	ProductSupporter ProductCode = "supporter"
 
-	EntitlementAdFree Entitlement = "ad_free"
+	EntitlementStorage300MB    Entitlement = "+300mb-storage"
+	EntitlementDownloadRawLogs Entitlement = "download-raw-logs"
+	EntitlementPrivateLogs     Entitlement = "private-logs"
+	EntitlementAdFree          Entitlement = "ad-free"
 )
 
 var productEntitlements = map[ProductCode]map[Entitlement]struct{}{
 	ProductSupporter: {
-		EntitlementAdFree: {},
+		EntitlementStorage300MB:    {},
+		EntitlementDownloadRawLogs: {},
+		EntitlementPrivateLogs:     {},
+		EntitlementAdFree:          {},
 	},
 }
 
@@ -40,6 +44,23 @@ func RolesHaveEntitlement(roles []string, entitlement Entitlement) bool {
 		}
 	}
 	return false
+}
+
+const billingGracePeriod = 3 * 24 * time.Hour
+
+func subscriptionBlocksCheckout(now time.Time, sub database.BillingSubscription) bool {
+	if !sub.CurrentPeriodEnd.Valid {
+		return false
+	}
+	switch sub.Status {
+	case string(stripe.SubscriptionStatusActive),
+		string(stripe.SubscriptionStatusTrialing),
+		string(stripe.SubscriptionStatusCanceled),
+		string(stripe.SubscriptionStatusPastDue):
+		return now.Before(sub.CurrentPeriodEnd.Time.Add(billingGracePeriod))
+	default:
+		return false
+	}
 }
 
 func (s *Service) HasEntitlement(ctx context.Context, userID uuid.UUID, entitlement Entitlement) (bool, error) {
@@ -69,29 +90,12 @@ func (s *Service) HasEntitlement(ctx context.Context, userID uuid.UUID, entitlem
 		}
 	}
 
-	sub, err := s.store.GetBillingSubscriptionByUserID(ctx, userID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
+	granted, err := s.store.HasBillingEntitlement(ctx, database.HasBillingEntitlementParams{
+		UserID:         userID,
+		EntitlementKey: string(entitlement),
+	})
 	if err != nil {
-		return false, fmt.Errorf("get billing subscription: %w", err)
+		return false, fmt.Errorf("check persisted billing entitlement %q: %w", entitlement, err)
 	}
-	return subscriptionHasEntitlement(time.Now(), sub, entitlement), nil
-}
-
-const entitlementGracePeriod = 3 * 24 * time.Hour
-
-func subscriptionHasEntitlement(now time.Time, sub database.BillingSubscription, entitlement Entitlement) bool {
-	if !ProductHasEntitlement(ProductCode(sub.ProductCode), entitlement) || !sub.CurrentPeriodEnd.Valid {
-		return false
-	}
-	switch sub.Status {
-	case string(stripe.SubscriptionStatusActive),
-		string(stripe.SubscriptionStatusTrialing),
-		string(stripe.SubscriptionStatusCanceled),
-		string(stripe.SubscriptionStatusPastDue):
-		return now.Before(sub.CurrentPeriodEnd.Time.Add(entitlementGracePeriod))
-	default:
-		return false
-	}
+	return granted, nil
 }

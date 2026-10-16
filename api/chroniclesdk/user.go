@@ -20,6 +20,8 @@ type Session struct {
 	Preferences          Preferences `json:"preferences"`
 	// AdsFree indicates that the user has an active paid, gifted, or supporter entitlement.
 	AdsFree bool `json:"ads_free"`
+	// CanDownloadRawLogs indicates that the user can download original combat log files.
+	CanDownloadRawLogs bool `json:"can_download_raw_logs"`
 	// Email is the user's email address (if available).
 	Email string `json:"email"`
 	// EmailVerified indicates whether the user's email has been verified.

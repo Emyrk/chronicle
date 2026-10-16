@@ -24,6 +24,7 @@ type reconciliationStore struct {
 	conditionalUpserts []database.UpsertBillingSubscriptionIfChangedParams
 	changedRows        []int64
 	localSubscriptions []database.BillingSubscription
+	providerCustomers  []database.ListBillingProviderCustomersForReconciliationRow
 	runID              uuid.UUID
 	completion         database.CompleteBillingReconciliationRunParams
 }
@@ -45,6 +46,10 @@ func (s *reconciliationStore) UpsertBillingSubscriptionIfChanged(_ context.Conte
 	rows := s.changedRows[0]
 	s.changedRows = s.changedRows[1:]
 	return rows, nil
+}
+
+func (s *reconciliationStore) ListBillingProviderCustomersForReconciliation(context.Context) ([]database.ListBillingProviderCustomersForReconciliationRow, error) {
+	return s.providerCustomers, nil
 }
 
 func (s *reconciliationStore) ListBillingSubscriptionsForReconciliation(context.Context) ([]database.BillingSubscription, error) {
