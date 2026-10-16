@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Search, Sparkles, X } from "lucide-react";
 import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
+import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip";
 import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
@@ -10,6 +11,8 @@ import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { cn } from "@/lib/utils";
 import {
   materializeActiveUnitAuras,
+  materializeCurrentUnitAuras,
+  type ReplayUnitAuraState,
   type UnitAuraEntry,
   type UnitAuraSegment,
   type UnitAurasResult,
@@ -37,6 +40,10 @@ interface DisplaySegment extends UnitAuraSegment {
 
 interface AuraRow extends Omit<UnitAuraEntry, "segments"> {
   segments: DisplaySegment[];
+  replayState: ReplayUnitAuraState | null;
+  remainingMs: number | null;
+  startsInMs: number | null;
+  countdownTotalMs: number | null;
 }
 
 const SOURCE_COLORS = [
@@ -67,6 +74,14 @@ function formatTime(ms: number): string {
 
 function formatDuration(ms: number): string {
   const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
+}
+
+function formatRemaining(ms: number): string {
+  const totalSeconds = Math.max(1, Math.ceil(ms / 1000));
   if (totalSeconds < 60) return `${totalSeconds}s`;
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
@@ -183,14 +198,22 @@ function CompactAuraTile({
   durationMs,
   players,
   units,
+  showUptime,
 }: {
   row: AuraRow;
   durationMs: number;
   players: PanelRenderProps<UnitAurasResult>["context"]["instance"]["players"];
   units: PanelRenderProps<UnitAurasResult>["context"]["instance"]["units"];
+  showUptime: boolean;
 }) {
   const percent = compactAuraPercent(row.totalUptimeMs, durationMs);
   const colors = compactAuraColors(percent);
+  const fullUptimeColors = compactAuraColors(100);
+  const countdownMs = row.replayState === "upcoming" ? row.startsInMs : row.remainingMs;
+  const countdownPercent = countdownMs !== null && row.countdownTotalMs
+    ? compactAuraPercent(countdownMs, row.countdownTotalMs)
+    : 100;
+  const replayRingColor = row.replayState === "upcoming" ? "#71717a" : fullUptimeColors.ring;
   const appliers = uniqueAuraAppliers(row.segments).map((source) => ({
     guid: source.guid,
     name: resolveSourceName(source.guid, source.name, players, units),
@@ -214,14 +237,25 @@ function CompactAuraTile({
 
   return (
     <div
-      className="group relative size-12 shrink-0 rounded-[10px] p-[3px] transition-transform hover:z-10 hover:scale-105"
+      className={cn(
+        "group relative size-12 shrink-0 rounded-[10px] p-[3px] transition-transform hover:z-10 hover:scale-105",
+        !showUptime && row.replayState === "active" && "animate-replay-pop",
+      )}
       style={{
-        background: `conic-gradient(${colors.ring} ${percent * 3.6}deg, rgba(82, 82, 82, 0.5) 0deg)`,
+        background: showUptime
+          ? `conic-gradient(${colors.ring} ${percent * 3.6}deg, rgba(82, 82, 82, 0.5) 0deg)`
+          : `conic-gradient(${replayRingColor} ${countdownPercent * 3.6}deg, rgba(82, 82, 82, 0.35) 0deg)`,
       }}
     >
       <div
         className="relative flex size-full items-center justify-center overflow-hidden rounded-[7px] border border-black/30 shadow-inner"
-        style={{ backgroundColor: colors.surface }}
+        style={{
+          backgroundColor: showUptime
+            ? colors.surface
+            : row.replayState === "upcoming"
+              ? "rgb(39 39 42 / 0.88)"
+              : fullUptimeColors.surface,
+        }}
       >
         <Sparkles className="absolute size-4 text-foreground/50" />
         <SpellIdTooltip
@@ -232,6 +266,7 @@ function CompactAuraTile({
           className={cn(
             "relative z-10 flex size-full items-center justify-center overflow-hidden text-[0px]",
             "[&_img]:size-full [&_img]:rounded-[6px] [&_img]:border-0 [&_img]:object-cover",
+            row.replayState === "upcoming" && "[&_img]:grayscale [&_img]:opacity-45",
             "[&>span]:flex [&>span]:size-full [&>span]:items-center [&>span]:justify-center [&>span]:text-[0px]",
           )}
         />
@@ -242,12 +277,19 @@ function CompactAuraTile({
           className="absolute -left-1 -top-1 z-20 size-3 rounded-full border-2 border-card bg-rose-500 shadow-sm"
         />
       )}
-      <span
-        className="absolute -bottom-1 -right-1 z-20 rounded-[3px] px-1 py-0.5 font-mono text-[9px] font-bold leading-none text-slate-950 tabular-nums shadow-sm"
-        style={{ backgroundColor: colors.badge }}
-      >
-        {formatCompactAuraPercent(percent)}%
-      </span>
+      {(showUptime || countdownMs !== null) && (
+        <span
+          className={cn(
+            "absolute -bottom-1 -right-1 z-20 rounded-[3px] px-1 py-0.5 font-mono text-[9px] font-bold leading-none tabular-nums shadow-sm",
+            showUptime ? "text-slate-950" : "bg-zinc-950/90 text-zinc-100",
+          )}
+          style={showUptime ? { backgroundColor: colors.badge } : undefined}
+        >
+          {showUptime
+            ? `${formatCompactAuraPercent(percent)}%`
+            : `${row.replayState === "upcoming" ? "in " : ""}${formatRemaining(countdownMs!)}`}
+        </span>
+      )}
     </div>
   );
 }
@@ -257,25 +299,41 @@ function CompactAuraGrid({
   durationMs,
   players,
   units,
+  showUptime,
 }: {
   rows: AuraRow[];
   durationMs: number;
   players: PanelRenderProps<UnitAurasResult>["context"]["instance"]["players"];
   units: PanelRenderProps<UnitAurasResult>["context"]["instance"]["units"];
+  showUptime: boolean;
 }) {
   return (
     <div className="flex flex-wrap content-start gap-3 p-3">
       {rows.map((row) => (
         <CompactAuraTile
-          key={row.auraKey}
+          key={`${row.auraKey}:${row.replayState ?? "recorded"}`}
           row={row}
           durationMs={durationMs}
           players={players}
           units={units}
+          showUptime={showUptime}
         />
       ))}
     </div>
   );
+}
+
+function activeAurasBeforeUpcoming(rows: AuraRow[]): AuraRow[] {
+  const upcoming = rows
+    .filter((row) => row.replayState === "upcoming")
+    .sort((a, b) => (
+      (a.startsInMs ?? Number.POSITIVE_INFINITY) - (b.startsInMs ?? Number.POSITIVE_INFINITY)
+      || a.spellName.localeCompare(b.spellName)
+    ));
+  return [
+    ...rows.filter((row) => row.replayState !== "upcoming"),
+    ...upcoming,
+  ];
 }
 
 function AuraSection({
@@ -286,6 +344,7 @@ function AuraSection({
   players,
   units,
   encounterNames,
+  showUptime,
 }: {
   title: "Buffs" | "Debuffs";
   rows: AuraRow[];
@@ -294,6 +353,7 @@ function AuraSection({
   players: PanelRenderProps<UnitAurasResult>["context"]["instance"]["players"];
   units: PanelRenderProps<UnitAurasResult>["context"]["instance"]["units"];
   encounterNames: ReadonlyMap<string, string>;
+  showUptime: boolean;
 }) {
   const buffs = title === "Buffs";
   if (rows.length === 0) return null;
@@ -309,7 +369,14 @@ function AuraSection({
       </div>
       <div className="divide-y divide-border/45">
         {rows.map((row) => (
-          <div key={row.auraKey} className="px-2.5 py-2 transition-colors hover:bg-muted/20">
+          <div
+            key={`${row.auraKey}:${row.replayState ?? "recorded"}`}
+            className={cn(
+              "px-2.5 py-2 transition-colors hover:bg-muted/20",
+              !showUptime && row.replayState === "active" && "animate-replay-pop",
+              row.replayState === "upcoming" && "bg-zinc-500/5 text-muted-foreground opacity-60 grayscale",
+            )}
+          >
             <div className="mb-1.5 flex items-center gap-2">
               <SpellIdTooltip
                 spellId={row.spellId}
@@ -317,18 +384,28 @@ function AuraSection({
                 size={24}
                 className="min-w-0 flex-1 truncate text-xs font-medium"
               />
-              <div className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
-                {formatPercent(row.totalUptimeMs, uptimeDurationMs)}
-              </div>
+              {(showUptime || row.remainingMs !== null || row.startsInMs !== null) && (
+                <div className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+                  {showUptime
+                    ? formatPercent(row.totalUptimeMs, uptimeDurationMs)
+                    : row.replayState === "upcoming"
+                      ? `active in ${formatRemaining(row.startsInMs!)}`
+                      : `${formatRemaining(row.remainingMs!)} remaining`}
+                </div>
+              )}
             </div>
-            <AuraTimeline
-              segments={row.segments}
-              durationMs={timelineDurationMs}
-              players={players}
-              units={units}
-              encounterNames={encounterNames}
-            />
-            <SourceSummary segments={row.segments} players={players} units={units} />
+            {showUptime && (
+              <>
+                <AuraTimeline
+                  segments={row.segments}
+                  durationMs={timelineDurationMs}
+                  players={players}
+                  units={units}
+                  encounterNames={encounterNames}
+                />
+                <SourceSummary segments={row.segments} players={players} units={units} />
+              </>
+            )}
           </div>
         ))}
       </div>
@@ -338,7 +415,14 @@ function AuraSection({
 
 function buildUnitAuraRows(
   unitGuid: string,
-  byUnit: ReadonlyMap<string, { auras: Map<string, UnitAuraEntry> }>,
+  byUnit: ReadonlyMap<string, {
+    auras: ReadonlyMap<string, UnitAuraEntry & {
+      replayState?: ReplayUnitAuraState;
+      remainingMs?: number | null;
+      startsInMs?: number | null;
+      countdownTotalMs?: number | null;
+    }>;
+  }>,
   encounterOffsets: ReadonlyMap<string, number>,
   auraSearchQuery: string,
 ): { buffs: AuraRow[]; debuffs: AuraRow[] } {
@@ -349,6 +433,10 @@ function buildUnitAuraRows(
     .filter((aura) => fuzzyAuraNameMatch(auraSearchQuery, aura.spellName))
     .map((aura): AuraRow => ({
       ...aura,
+      replayState: aura.replayState ?? null,
+      remainingMs: aura.remainingMs ?? null,
+      startsInMs: aura.startsInMs ?? null,
+      countdownTotalMs: aura.countdownTotalMs ?? null,
       segments: mergeAdjacentAuraSegments(
         [...aura.segments].sort((a, b) => {
           const aOffset = encounterOffsets.get(a.encounterId) ?? 0;
@@ -365,9 +453,16 @@ function buildUnitAuraRows(
       }),
     }));
 
-  const byUptime = (a: AuraRow, b: AuraRow) => (
-    b.totalUptimeMs - a.totalUptimeMs || a.spellName.localeCompare(b.spellName)
-  );
+  const byUptime = (a: AuraRow, b: AuraRow) => {
+    if (a.replayState !== b.replayState) {
+      if (a.replayState === "active") return -1;
+      if (b.replayState === "active") return 1;
+    }
+    if (a.replayState === "upcoming" && b.replayState === "upcoming") {
+      return (a.startsInMs ?? 0) - (b.startsInMs ?? 0) || a.spellName.localeCompare(b.spellName);
+    }
+    return b.totalUptimeMs - a.totalUptimeMs || a.spellName.localeCompare(b.spellName);
+  };
   return {
     buffs: mapped.filter((aura) => aura.isBuff).sort(byUptime),
     debuffs: mapped.filter((aura) => !aura.isBuff).sort(byUptime),
@@ -381,6 +476,9 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
   const selectedGuidSet = useMemo(() => new Set(selectedGuids), [selectedGuids]);
   const [activeTabGuid, setActiveTabGuid] = useState<string | null>(null);
   const playerSpecializations = usePlayerSpecializations();
+  const syncMode = useSyncModeContextOptional();
+  const showUptime = syncMode?.enabled !== true;
+  const syncTimestamp = syncMode?.currentTimestamp ?? null;
 
   const encounterOffsets = useMemo(() => {
     const offsets = new Map<string, number>();
@@ -409,12 +507,57 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
     return offsets;
   }, [context.instance.encounters, context.selectedEncounterIds, durationMs]);
 
-  const byUnit = useMemo(
+  const replayCursor = useMemo(() => {
+    if (showUptime || !syncTimestamp) return null;
+    const timestampMs = syncTimestamp.getTime();
+    const selectedEncounters = context.instance.encounters.filter((encounter) => (
+      context.selectedEncounterIds.includes(encounter.id)
+    ));
+    const encounter = selectedEncounters.find((candidate) => {
+      const startMs = new Date(candidate.start_time).getTime();
+      const endMs = new Date(candidate.end_time).getTime();
+      return timestampMs >= startMs && timestampMs <= endMs;
+    }) ?? selectedEncounters[0];
+    if (!encounter) return null;
+
+    const startMs = new Date(encounter.start_time).getTime();
+    const endOffsetMs = new Date(encounter.end_time).getTime() - startMs;
+    return {
+      encounterId: encounter.id,
+      offsetMs: Math.max(0, Math.min(endOffsetMs, timestampMs - startMs)),
+      endOffsetMs,
+    };
+  }, [
+    context.instance.encounters,
+    context.selectedEncounterIds,
+    showUptime,
+    syncTimestamp,
+  ]);
+
+  const allByUnit = useMemo(
     () => materializeActiveUnitAuras(result, encounterEndOffsets),
     [encounterEndOffsets, result],
   );
+  const byUnit = useMemo(
+    () => showUptime
+      ? allByUnit
+      : replayCursor
+        ? materializeCurrentUnitAuras(
+            result,
+            replayCursor.encounterId,
+            replayCursor.offsetMs,
+            replayCursor.endOffsetMs,
+          )
+        : new Map(),
+    [allByUnit, replayCursor, result, showUptime],
+  );
 
-  const searchUnits = useMemo<UnitSearchOption[]>(() => [...byUnit.values()]
+  const searchableByUnit = useMemo(
+    () => showUptime ? allByUnit : new Map([...allByUnit, ...byUnit]),
+    [allByUnit, byUnit, showUptime],
+  );
+
+  const searchUnits = useMemo<UnitSearchOption[]>(() => [...searchableByUnit.values()]
     .map((unit) => {
       const owner = context.instance.units?.[unit.guid]?.owner?.toString() ?? null;
       const playerGuid = context.instance.players?.[unit.guid]
@@ -437,7 +580,7 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
         specializationIconUrl: specialization?.iconUrl,
       };
     }), [
-      byUnit,
+      searchableByUnit,
       context.instance.players,
       context.instance.units,
       playerSpecializations,
@@ -465,6 +608,12 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
   ), [auraSearchQuery, byUnit, encounterOffsets, selectedUnits]);
   const detailedUnit = selectedUnits.find((unit) => unit.guid === activeTabGuid) ?? selectedUnits[0] ?? null;
   const detailedRows = detailedUnit ? rowsByUnit.get(detailedUnit.guid) : null;
+
+  const emptyAuraMessage = auraSearchQuery
+    ? `${showUptime ? "No auras" : "No active auras"} match “${auraSearchQuery}”`
+    : showUptime
+      ? "No recorded auras"
+      : "No active auras";
 
   const toggleUnit = (guid: string) => {
     const next = selectedGuidSet.has(guid)
@@ -552,14 +701,15 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
                     </div>
                     {rows.buffs.length + rows.debuffs.length > 0 ? (
                       <CompactAuraGrid
-                        rows={[...rows.buffs, ...rows.debuffs]}
+                        rows={activeAurasBeforeUpcoming([...rows.buffs, ...rows.debuffs])}
                         durationMs={uptimeDurationByUnit.get(unit.guid) ?? durationMs}
                         players={context.instance.players}
                         units={context.instance.units}
+                        showUptime={showUptime}
                       />
                     ) : (
                       <div className="px-3 py-5 text-center text-xs text-muted-foreground">
-                        No auras match “{auraSearchQuery}”
+                        {emptyAuraMessage}
                       </div>
                     )}
                   </section>
@@ -599,6 +749,7 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
                       players={context.instance.players}
                       units={context.instance.units}
                       encounterNames={encounterNames}
+                      showUptime={showUptime}
                     />
                     <AuraSection
                       title="Debuffs"
@@ -608,11 +759,12 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
                       players={context.instance.players}
                       units={context.instance.units}
                       encounterNames={encounterNames}
+                      showUptime={showUptime}
                     />
                   </>
                 ) : (
                   <div className="px-3 py-8 text-center text-xs text-muted-foreground">
-                    No auras match “{auraSearchQuery}”
+                    {emptyAuraMessage}
                   </div>
                 )}
               </div>

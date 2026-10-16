@@ -233,6 +233,107 @@ function finishAurasOnTarget(
   }
 }
 
+export type ReplayUnitAuraState = "active" | "upcoming";
+
+export interface CurrentUnitAuraEntry extends UnitAuraEntry {
+  replayState: ReplayUnitAuraState;
+  remainingMs: number | null;
+  startsInMs: number | null;
+  countdownTotalMs: number | null;
+}
+
+export interface CurrentUnitAuraData extends Omit<UnitAuraData, "auras"> {
+  auras: Map<string, CurrentUnitAuraEntry>;
+}
+
+interface AuraWindow {
+  startMs: number;
+  endMs: number;
+  firstSegment: UnitAuraSegment;
+}
+
+function continuousAuraWindows(segments: UnitAuraSegment[]): AuraWindow[] {
+  const windows: AuraWindow[] = [];
+  for (const segment of segments) {
+    const previous = windows.at(-1);
+    if (previous && segment.startMs <= previous.endMs) {
+      previous.endMs = Math.max(previous.endMs, segment.endMs);
+      continue;
+    }
+    windows.push({
+      startMs: segment.startMs,
+      endMs: segment.endMs,
+      firstSegment: segment,
+    });
+  }
+  return windows;
+}
+
+export function materializeCurrentUnitAuras(
+  state: UnitAurasResult,
+  encounterId: string,
+  cursorOffsetMs: number,
+  encounterEndOffsetMs: number,
+): Map<string, CurrentUnitAuraData> {
+  const completeByUnit = materializeActiveUnitAuras(
+    state,
+    new Map([[encounterId, encounterEndOffsetMs]]),
+  );
+  const byUnit = new Map<string, CurrentUnitAuraData>();
+
+  for (const unit of completeByUnit.values()) {
+    for (const aura of unit.auras.values()) {
+      const encounterSegments = aura.segments
+        .filter((candidate) => candidate.encounterId === encounterId)
+        .sort((a, b) => a.startMs - b.startMs);
+      const windows = continuousAuraWindows(encounterSegments);
+      const activeWindow = windows.find((window) => (
+        window.startMs <= cursorOffsetMs && window.endMs > cursorOffsetMs
+      ));
+      const upcomingWindow = activeWindow
+        ? null
+        : windows.find((window) => (
+            window.startMs > cursorOffsetMs
+            && window.startMs - cursorOffsetMs < 30_000
+          )) ?? null;
+      const replayWindow = activeWindow ?? upcomingWindow;
+      if (!replayWindow) continue;
+
+      const replayState: ReplayUnitAuraState = activeWindow ? "active" : "upcoming";
+      const remainsAtEncounterEnd = replayState === "active" && [...state.activeAuras.values()].some((active) => (
+        active.encounterId === encounterId
+        && active.targetGuid === unit.guid
+        && active.auraKey === aura.auraKey
+        && active.startOffsetMs >= replayWindow.startMs
+        && active.startOffsetMs <= replayWindow.endMs
+      ));
+      let currentUnit = byUnit.get(unit.guid);
+      if (!currentUnit) {
+        currentUnit = { guid: unit.guid, name: unit.name, auras: new Map() };
+        byUnit.set(unit.guid, currentUnit);
+      }
+      currentUnit.auras.set(aura.auraKey, {
+        ...aura,
+        totalUptimeMs: replayState === "active" ? cursorOffsetMs - replayWindow.startMs : 0,
+        segments: [{
+          ...replayWindow.firstSegment,
+          endMs: replayState === "active" ? cursorOffsetMs : replayWindow.firstSegment.endMs,
+        }],
+        replayState,
+        remainingMs: replayState === "active" && !remainsAtEncounterEnd
+          ? replayWindow.endMs - cursorOffsetMs
+          : null,
+        startsInMs: replayState === "upcoming" ? replayWindow.startMs - cursorOffsetMs : null,
+        countdownTotalMs: replayState === "active"
+          ? replayWindow.endMs - replayWindow.startMs
+          : Math.min(30_000, replayWindow.startMs),
+      });
+    }
+  }
+
+  return byUnit;
+}
+
 export function materializeActiveUnitAuras(
   state: UnitAurasResult,
   encounterEndOffsets: ReadonlyMap<string, number> = state.maxOffsetByEncounter,
