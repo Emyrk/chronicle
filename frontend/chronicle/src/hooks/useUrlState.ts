@@ -651,6 +651,7 @@ const PANEL_CODES: Record<PanelType, string> = {
   timeline: 'tl',
   rotations: 'rot',
   map: 'map',
+  raid_frames: 'rf',
   status: 'st',
   healer_casts: 'hc',
   spell_count: 'sc',

@@ -80,6 +80,7 @@ import { createLoggingMetadataPanel } from "./LoggingMetadata/LoggingMetadata";
 import { createRaidCompositionPanel } from "./RaidComposition/RaidComposition";
 import { createMapPanel } from "./Map/Map";
 import { createFriendlyClassBuffsPanel } from "./FriendlyClassBuffs/FriendlyClassBuffs";
+import { createRaidFramesPanel } from "./RaidFrames/RaidFrames";
 
 import { createDispelsDonePanel, createDispelsReceivedPanel } from "./Dispel/Dispel";
 import { createInterruptsPanel } from "./Interrupt/Interrupt";
@@ -140,6 +141,7 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   timeline: createTimelinePanel(),
   // Replay
   map: createMapPanel(),
+  raid_frames: createRaidFramesPanel(),
   status: createStatusPanel(),
   healer_casts: createHealerCastsPanel(),
   spell_count: createSpellCountPanel(),
