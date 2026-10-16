@@ -1357,7 +1357,8 @@ CREATE TABLE wow_log_groups (
     flavor text[],
     invalidated_at timestamp with time zone,
     invalid_reason text DEFAULT ''::text NOT NULL,
-    parse_generation bigint DEFAULT 1 NOT NULL
+    parse_generation bigint DEFAULT 1 NOT NULL,
+    private boolean DEFAULT false NOT NULL
 );
 
 CREATE TABLE wow_server_realms (
@@ -1538,6 +1539,28 @@ CREATE TABLE parse_score_results (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     player_sub_spec text DEFAULT ''::text NOT NULL,
     CONSTRAINT parse_score_results_metric_check CHECK ((metric = ANY (ARRAY['dps'::text, 'hps'::text])))
+);
+
+CREATE TABLE private_log_access_requests (
+    id uuid NOT NULL,
+    log_group_id uuid NOT NULL,
+    share_link_id uuid NOT NULL,
+    requester_id uuid NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    decided_by uuid,
+    decided_at timestamp with time zone,
+    CONSTRAINT private_log_access_requests_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'denied'::text, 'revoked'::text])))
+);
+
+CREATE TABLE private_log_share_links (
+    id uuid NOT NULL,
+    log_group_id uuid NOT NULL,
+    code text NOT NULL,
+    created_by uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    revoked_at timestamp with time zone
 );
 
 CREATE TABLE raid_compositions (
@@ -2637,6 +2660,18 @@ ALTER TABLE ONLY parse_score_results
 ALTER TABLE ONLY parsed_log_group
     ADD CONSTRAINT parsed_log_group_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY private_log_access_requests
+    ADD CONSTRAINT private_log_access_requests_log_group_id_requester_id_key UNIQUE (log_group_id, requester_id);
+
+ALTER TABLE ONLY private_log_access_requests
+    ADD CONSTRAINT private_log_access_requests_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY private_log_share_links
+    ADD CONSTRAINT private_log_share_links_code_key UNIQUE (code);
+
+ALTER TABLE ONLY private_log_share_links
+    ADD CONSTRAINT private_log_share_links_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY raid_compositions
     ADD CONSTRAINT raid_compositions_pkey PRIMARY KEY (id);
 
@@ -3067,6 +3102,10 @@ CREATE INDEX oauth_token_sessions_expires_at_idx ON oauth_token_sessions USING b
 
 CREATE INDEX oauth_token_sessions_request_id_idx ON oauth_token_sessions USING btree (request_id, token_type);
 
+CREATE INDEX private_log_access_requests_owner_listing_idx ON private_log_access_requests USING btree (log_group_id, status, created_at);
+
+CREATE INDEX private_log_share_links_log_group_id_idx ON private_log_share_links USING btree (log_group_id);
+
 CREATE INDEX raid_compositions_user_tenant_idx ON raid_compositions USING btree (user_id, tenant_id);
 
 CREATE INDEX ranking_runs_instance_filter_idx ON ranking_runs USING btree (instance_name, difficulty_name, max_players, realm_id);
@@ -3428,6 +3467,24 @@ ALTER TABLE ONLY parse_score_results
 
 ALTER TABLE ONLY parsed_log_group
     ADD CONSTRAINT parsed_log_group_id_fkey FOREIGN KEY (id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY private_log_access_requests
+    ADD CONSTRAINT private_log_access_requests_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES users(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY private_log_access_requests
+    ADD CONSTRAINT private_log_access_requests_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY private_log_access_requests
+    ADD CONSTRAINT private_log_access_requests_requester_id_fkey FOREIGN KEY (requester_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY private_log_access_requests
+    ADD CONSTRAINT private_log_access_requests_share_link_id_fkey FOREIGN KEY (share_link_id) REFERENCES private_log_share_links(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY private_log_share_links
+    ADD CONSTRAINT private_log_share_links_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY private_log_share_links
+    ADD CONSTRAINT private_log_share_links_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY raid_compositions
     ADD CONSTRAINT raid_compositions_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE SET NULL;

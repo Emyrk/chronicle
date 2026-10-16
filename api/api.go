@@ -533,6 +533,9 @@ func (api *API) Routes() chi.Router {
 			r.Get("/census", api.Census)
 
 			// Public site-wide statistics
+			r.Get("/private-log-shares/{code}", api.ResolvePrivateLogShareLink)
+			r.With(api.Auth.Authenticated(false)).Post("/private-log-shares/{code}/request", api.RequestPrivateLogAccess)
+
 			r.Get("/stats", api.SiteStats)
 
 			r.Group(func(r chi.Router) {
@@ -558,6 +561,12 @@ func (api *API) Routes() chi.Router {
 									r.Post("/reparse", api.WoWLogReparse)
 									r.Delete("/delete-files", api.DeleteWoWLogFiles)
 									r.Delete("/instances/{instance_id}", api.WoWLogDeleteInstance)
+									r.Post("/private-share-links", api.CreatePrivateLogShareLink)
+									r.Delete("/private-share-links/{linkID}", api.RevokePrivateLogShareLink)
+									r.Get("/access-requests", api.ListPrivateLogAccessRequests)
+									r.Post("/access-requests/{requestID}/approve", api.ApprovePrivateLogAccessRequest)
+									r.Post("/access-requests/{requestID}/deny", api.DenyPrivateLogAccessRequest)
+									r.Post("/access-requests/{requestID}/revoke", api.RevokePrivateLogAccessRequest)
 								})
 								r.Get("/", api.WoWLogGroup)
 								r.Get("/files/{fileID}/download", api.WoWLogFileDownload)
@@ -571,7 +580,11 @@ func (api *API) Routes() chi.Router {
 					r.Group(func(r chi.Router) {
 						r.Route("/instances", func(r chi.Router) {
 							r.Route("/{instance_id}", func(r chi.Router) {
-								r.Use(httpmw.InstanceIDMiddleware(api.Opts.Zed))
+								r.Use(
+									httpmw.InstanceIDMiddleware(api.Opts.Zed),
+									api.Auth.Authenticated(true),
+									httpmw.InstanceViewMiddleware(api.Opts.Zed),
+								)
 								r.Get("/events/{type}", api.InstanceEvents)
 								r.With(api.trackGuildInstanceView).Get("/", api.Instance)
 

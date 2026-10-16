@@ -168,9 +168,10 @@ definition armory_player {
 definition raid_log {
   relation chronicle: chronicle
   relation uploader: user
+  relation approved_viewer: user
 
-  // View: uploader, guild members (if guild-linked), or public
-  permission view = uploader + chronicle->admin_logs
+  permission view = uploader + approved_viewer + chronicle->admin_logs
+  permission manage_access = uploader + chronicle->admin_logs
   permission reparse = chronicle->admin_logs + (uploader & chronicle->can_reparse)
   permission delete_files = uploader + chronicle->admin_logs
   permission upload_youtube = uploader + chronicle->admin_logs

@@ -8,6 +8,7 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/authzed/gochugaru/rel"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -64,6 +65,42 @@ func InstanceIDMiddleware(db *authz.Authz) func(next http.Handler) http.Handler 
 			}
 
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), instanceIDKey{}, inst)))
+		})
+	}
+}
+
+func InstanceViewMiddleware(db *authz.Authz) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			inst := Instance(r.Context())
+			private, err := db.GetWoWLogGroupPrivacy(r.Context(), inst.LogGroupID)
+			if err != nil {
+				httpapi.InternalServerError(w, err)
+				return
+			}
+			if !private {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			actor, ok := authz.ActorFromContext(r.Context())
+			if !ok {
+				httpapi.Forbidden(w, nil)
+				return
+			}
+			canView, err := db.CheckOne(r.Context(), nil, rel.Relationship{
+				ResourceType: "instance", ResourceID: inst.ID.String(), ResourceRelation: "view",
+				SubjectType: "user", SubjectID: actor.Object().ID,
+			})
+			if err != nil {
+				httpapi.InternalServerError(w, err)
+				return
+			}
+			if !canView {
+				httpapi.Forbidden(w, nil)
+				return
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/authzed/gochugaru/rel"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -193,6 +194,56 @@ func TestGuildDiscordBotPermissions(t *testing.T) {
 
 	require.NoError(t, zed.SetGuildDiscordBotEnabled(ctx, guildID, false))
 	checkManage(t, leaderID, false)
+}
+
+func TestPrivateLogInstanceAccess(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(broker)
+
+	ownerID := uuid.New()
+	viewerID := uuid.New()
+	otherID := uuid.New()
+	adminID := uuid.New()
+	publicInstanceID := uuid.New()
+	privateInstanceID := uuid.New()
+	privateLogID := uuid.New()
+
+	b := policy.New()
+	chronicle := b.GlobalChronicle()
+	chronicle.Moderate_logs(b.User(adminID))
+	b.Raid_log(privateLogID).
+		Uploader(b.User(ownerID)).
+		Approved_viewer(b.User(viewerID)).
+		Chronicle(chronicle)
+	b.Instance(privateInstanceID).Raid_log(b.Raid_log(privateLogID))
+	b.Instance(publicInstanceID).PublicWildcard().Raid_log(b.Raid_log(uuid.New()))
+	_, err := zed.Write(ctx, *b.Txn())
+	require.NoError(t, err)
+
+	checkInstance := func(userID, instanceID uuid.UUID, expected bool) {
+		t.Helper()
+		allowed, err := zed.CheckOne(ctx, nil, rel.Relationship{
+			ResourceType: "instance", ResourceID: instanceID.String(), ResourceRelation: "view",
+			SubjectType: "user", SubjectID: userID.String(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, expected, allowed)
+	}
+
+	checkInstance(otherID, publicInstanceID, true)
+	checkInstance(ownerID, privateInstanceID, true)
+	checkInstance(viewerID, privateInstanceID, true)
+	checkInstance(otherID, privateInstanceID, false)
+	checkInstance(adminID, privateInstanceID, true)
+
+	deleteBuilder := policy.New()
+	deleteBuilder.Raid_log(privateLogID).Delete().Approved_viewer(deleteBuilder.User(viewerID))
+	_, err = zed.Write(ctx, *deleteBuilder.Txn())
+	require.NoError(t, err)
+	checkInstance(viewerID, privateInstanceID, false)
 }
 
 func TestInTx_NilWrapped(t *testing.T) {

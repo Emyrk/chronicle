@@ -1336,7 +1336,7 @@ func (obj *ObjInstance) Create() *InstanceRelates {
 	return &InstanceRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Raid_log schema.zed:183
+// Raid_log schema.zed:184
 // Relationship: instance:<id>#raid_log@raid_log:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Raid_log() etc.
 func (obj *ObjInstance) Raid_log(subs ...*ObjRaid_log) *ObjInstance {
@@ -1354,7 +1354,7 @@ func (r *InstanceRelates) Raid_log(subs ...*ObjRaid_log) *InstanceRelates {
 	return r
 }
 
-// PublicWildcard schema.zed:184
+// PublicWildcard schema.zed:185
 // Relationship: instance:<id>#public@user:*
 func (obj *ObjInstance) PublicWildcard() *ObjInstance {
 	obj.src.Touch().Add("public", &v1.ObjectReference{
@@ -1873,6 +1873,10 @@ func (obj *ObjRaid_log) AsSubject() *v1.SubjectReference {
 	}
 }
 
+func (obj *ObjRaid_log) RelationApproved_viewer() string {
+	return "approved_viewer"
+}
+
 func (obj *ObjRaid_log) RelationChronicle() string {
 	return "chronicle"
 }
@@ -1883,6 +1887,10 @@ func (obj *ObjRaid_log) RelationUploader() string {
 
 func (obj *ObjRaid_log) PermissionView() string {
 	return "view"
+}
+
+func (obj *ObjRaid_log) PermissionManage_access() string {
+	return "manage_access"
 }
 
 func (obj *ObjRaid_log) PermissionReparse() string {
@@ -1954,8 +1962,27 @@ func (r *Raid_logRelates) Uploader(subs ...*ObjUser) *Raid_logRelates {
 	return r
 }
 
+// Approved_viewer schema.zed:171
+// Relationship: raid_log:<id>#approved_viewer@user:<id>
+// Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Approved_viewer() etc.
+func (obj *ObjRaid_log) Approved_viewer(subs ...*ObjUser) *ObjRaid_log {
+	for _, sub := range subs {
+		obj.src.Touch().Add("approved_viewer", sub.src.Obj, "")
+	}
+	return obj
+}
+
+// Approved_viewer on Relates uses the specified operation (Touch/Create/Delete)
+func (r *Raid_logRelates) Approved_viewer(subs ...*ObjUser) *Raid_logRelates {
+	for _, sub := range subs {
+		r.rel.Add("approved_viewer", sub.src.Obj, "")
+	}
+	return r
+}
+
 // CanView_Chronicle checks if the subject has view permission
 // // Object: raid_log:<id>
+// Schema: permission view = uploader + approved_viewer + chronicle->admin_logs
 func (obj *ObjRaid_log) CanView_Chronicle(sub *ObjChronicle) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
@@ -1970,12 +1997,43 @@ func (obj *ObjRaid_log) CanView_Chronicle(sub *ObjChronicle) rel.Relationship {
 
 // CanView_User checks if the subject has view permission
 // // Object: raid_log:<id>
+// Schema: permission view = uploader + approved_viewer + chronicle->admin_logs
 func (obj *ObjRaid_log) CanView_User(sub *ObjUser) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
 		ResourceType:     r.ObjectType,
 		ResourceID:       r.ObjectId,
 		ResourceRelation: "view",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
+	}
+}
+
+// CanManage_access_Chronicle checks if the subject has manage_access permission
+// // Object: raid_log:<id>
+// Schema: permission manage_access = uploader + chronicle->admin_logs
+func (obj *ObjRaid_log) CanManage_access_Chronicle(sub *ObjChronicle) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "manage_access",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
+	}
+}
+
+// CanManage_access_User checks if the subject has manage_access permission
+// // Object: raid_log:<id>
+// Schema: permission manage_access = uploader + chronicle->admin_logs
+func (obj *ObjRaid_log) CanManage_access_User(sub *ObjUser) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "manage_access",
 		SubjectType:      s.Obj.ObjectType,
 		SubjectID:        s.Obj.ObjectId,
 		SubjectRelation:  s.OptionalRelation,

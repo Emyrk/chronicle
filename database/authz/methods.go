@@ -99,12 +99,18 @@ func (z *interceptor) InsertEncounterCharacterFights(ctx context.Context, arg []
 }
 
 func (z *interceptor) InsertInstance(ctx context.Context, arg database.InsertInstanceParams) (database.LogInstance, error) {
-	b := policy.New()
-	b.Instance(arg.ID).
-		PublicWildcard().
-		Raid_log(b.Raid_log(arg.LogGroupID))
+	private, err := z.Store.GetWoWLogGroupPrivacy(ctx, arg.LogGroupID)
+	if err != nil {
+		return database.LogInstance{}, fmt.Errorf("get log group privacy: %w", err)
+	}
 
-	_, err := z.Write(ctx, *b.Txn())
+	b := policy.New()
+	instance := b.Instance(arg.ID).Raid_log(b.Raid_log(arg.LogGroupID))
+	if !private {
+		instance.PublicWildcard()
+	}
+
+	_, err = z.Write(ctx, *b.Txn())
 	if err != nil {
 		return database.LogInstance{}, err
 	}
@@ -122,6 +128,34 @@ func (z *interceptor) InsertWoWLogGroup(ctx context.Context, arg database.Insert
 		return database.WoWLogGroup{}, err
 	}
 	return z.Store.InsertWoWLogGroup(ctx, arg)
+}
+
+func (z *interceptor) ApprovePrivateLogAccessRequest(ctx context.Context, arg database.ApprovePrivateLogAccessRequestParams) (database.PrivateLogAccessRequest, error) {
+	request, err := z.Store.ApprovePrivateLogAccessRequest(ctx, arg)
+	if err != nil {
+		return database.PrivateLogAccessRequest{}, err
+	}
+
+	b := policy.New()
+	b.Raid_log(request.LogGroupID).Approved_viewer(b.User(request.RequesterID))
+	if _, err := z.Write(ctx, *b.Txn()); err != nil {
+		return database.PrivateLogAccessRequest{}, fmt.Errorf("write approved viewer relation: %w", err)
+	}
+	return request, nil
+}
+
+func (z *interceptor) RevokePrivateLogAccessRequest(ctx context.Context, arg database.RevokePrivateLogAccessRequestParams) (database.PrivateLogAccessRequest, error) {
+	request, err := z.Store.RevokePrivateLogAccessRequest(ctx, arg)
+	if err != nil {
+		return database.PrivateLogAccessRequest{}, err
+	}
+
+	b := policy.New()
+	b.Raid_log(request.LogGroupID).Delete().Approved_viewer(b.User(request.RequesterID))
+	if _, err := z.Write(ctx, *b.Txn()); err != nil {
+		return database.PrivateLogAccessRequest{}, fmt.Errorf("delete approved viewer relation: %w", err)
+	}
+	return request, nil
 }
 
 func (z *interceptor) CreateUserPanelLayout(ctx context.Context, arg database.CreateUserPanelLayoutParams) (database.UserPanelLayout, error) {

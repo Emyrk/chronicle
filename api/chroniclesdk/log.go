@@ -44,6 +44,7 @@ type WoWLogGroup struct {
 	LogType   string             `json:"log_type"`
 	Format    string             `json:"format,omitempty"`
 	Flavor    []string           `json:"flavor,omitempty"`
+	Private   bool               `json:"private"`
 
 	InvalidatedAt *time.Time `json:"invalidated_at,omitempty"`
 	InvalidReason string     `json:"invalid_reason,omitempty"`
