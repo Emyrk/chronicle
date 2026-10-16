@@ -135,6 +135,7 @@ func TestDeviceAuthorizationRefreshAndRevocation(t *testing.T) {
 	require.Equal(t, ScopeAll, initial.Scope)
 	require.Equal(t, "bearer", strings.ToLower(initial.TokenType))
 	assertBearerIdentity(t, service, initial.AccessToken, userID, http.StatusNoContent)
+	assertOAuthAuthenticationMiddleware(t, service, initial.AccessToken, userID, http.StatusNoContent)
 
 	restarted := &Service{}
 	require.NoError(t, restarted.configure(ctx, db, "https://chronicle.example"))
@@ -279,6 +280,23 @@ func TestConcurrentRefreshIsSingleUse(t *testing.T) {
 	assertBearerIdentity(t, service, winner.AccessToken, userID, http.StatusNoContent)
 }
 
+func TestAuthenticationMiddlewarePassesChronicleJWTsThrough(t *testing.T) {
+	t.Parallel()
+
+	service := &Service{}
+	handler := service.AuthenticationMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, ok := chronauth.AuthenticatedClaims(r.Context())
+		require.False(t, ok)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/whoami", nil)
+	req.Header.Set("Authorization", "Bearer header.payload.signature")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusNoContent, rec.Code)
+}
+
 func TestDeviceAuthorizationRateLimit(t *testing.T) {
 	t.Parallel()
 	limiter := newDeviceAuthorizationLimiter()
@@ -417,6 +435,26 @@ func assertBearerIdentity(t *testing.T, service *Service, token string, want uui
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, status, rec.Code, rec.Body.String())
+}
+
+func assertOAuthAuthenticationMiddleware(t *testing.T, service *Service, token string, want uuid.UUID, status int) {
+	t.Helper()
+	handler := service.AuthenticationMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := chronauth.AuthenticatedClaims(r.Context())
+		if !ok {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		require.Equal(t, want, claims.Subject)
+		_, ok = authz.ActorFromContext(r.Context())
+		require.True(t, ok)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/raidlogs/logs/upload-v2", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

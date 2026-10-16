@@ -55,6 +55,13 @@ func bearerToken(r *http.Request) string {
 // AuthenticationMiddleware should avoid hitting the database.
 func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// An earlier authentication middleware, such as service OAuth, may have
+		// already established Chronicle claims for this request.
+		if state := AuthenticationState(r); state != nil && state.Error == nil && state.Claims != nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		// Bearer token auth (CLI / programmatic clients). Takes precedence over
 		// the session cookie. Unlike the cookie path, a bad bearer token does
 		// not trigger a logout (there is no session to clear) and tokens are
