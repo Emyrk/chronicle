@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
 	"github.com/Emyrk/chronicle/internal/services/serviceapi"
+	"github.com/Emyrk/chronicle/internal/services/servicebilling"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 
 	"github.com/coder/serpent"
@@ -56,18 +57,22 @@ type Service struct {
 
 func New(broker *services.Services) *Service {
 	return &Service{
-		broker:                 broker,
-		executable:             "stripe",
-		lookPath:               exec.LookPath,
-		command:                exec.CommandContext,
-		accessURL:              serviceaccessurl.AccessURL,
-		configureWebhookSecret: serviceapi.ConfigureDevStripeWebhookSecret,
+		broker:     broker,
+		executable: "stripe",
+		lookPath:   exec.LookPath,
+		command:    exec.CommandContext,
+		accessURL:  serviceaccessurl.AccessURL,
+		configureWebhookSecret: func(broker *services.Services, secret string) error {
+			return servicebilling.ConfigureDevStripeWebhookSecret(broker, secret, serviceapi.DevAuth(broker))
+		},
 	}
 }
 
 func (s *Service) Name() string { return services.ServiceStripeCLI }
 
-func (s *Service) Configures() []string { return []string{serviceapi.OnAPI()} }
+func (s *Service) Configures() []string {
+	return []string{servicebilling.OnBilling(), serviceapi.OnAPI()}
+}
 
 func (s *Service) DependsOn() []string {
 	return []string{

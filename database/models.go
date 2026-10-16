@@ -820,6 +820,17 @@ type BillingGrant struct {
 	RevokedAt   pgtype.Timestamptz `db:"revoked_at" json:"revoked_at"`
 }
 
+type BillingReconciliationRun struct {
+	ID                          uuid.UUID          `db:"id" json:"id"`
+	Status                      string             `db:"status" json:"status"`
+	StartedAt                   pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	CompletedAt                 pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+	SubscriptionsSeen           int32              `db:"subscriptions_seen" json:"subscriptions_seen"`
+	SubscriptionsChanged        int32              `db:"subscriptions_changed" json:"subscriptions_changed"`
+	SubscriptionsSkippedInvalid int32              `db:"subscriptions_skipped_invalid" json:"subscriptions_skipped_invalid"`
+	ErrorText                   string             `db:"error_text" json:"error_text"`
+}
+
 type BillingSubscription struct {
 	UserID                 uuid.UUID          `db:"user_id" json:"user_id"`
 	ProviderCustomerID     string             `db:"provider_customer_id" json:"provider_customer_id"`

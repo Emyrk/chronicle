@@ -135,6 +135,77 @@ func (s *Service) Summary(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusOK, result)
 }
 
+func (s *Service) AdminActivity(w http.ResponseWriter, r *http.Request) {
+	runs, err := s.store.ListRecentBillingReconciliationRuns(r.Context(), 50)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	webhooks, err := s.store.ListRecentBillingWebhookEvents(r.Context(), 100)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	subscriptions, err := s.store.ListBillingSubscriptions(r.Context())
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	result := chroniclesdk.AdminBillingActivityResponse{
+		ReconciliationRuns: make([]chroniclesdk.AdminBillingReconciliationRun, 0, len(runs)),
+		WebhookDeliveries:  make([]chroniclesdk.AdminBillingWebhookDelivery, 0, len(webhooks)),
+		Subscriptions:      make([]chroniclesdk.AdminBillingSubscription, 0, len(subscriptions)),
+	}
+	for _, run := range runs {
+		item := chroniclesdk.AdminBillingReconciliationRun{
+			ID:                          run.ID.String(),
+			Status:                      run.Status,
+			StartedAt:                   run.StartedAt.Time,
+			SubscriptionsSeen:           run.SubscriptionsSeen,
+			SubscriptionsChanged:        run.SubscriptionsChanged,
+			SubscriptionsSkippedInvalid: run.SubscriptionsSkippedInvalid,
+			ErrorText:                   run.ErrorText,
+		}
+		if run.CompletedAt.Valid {
+			completedAt := run.CompletedAt.Time
+			item.CompletedAt = &completedAt
+		}
+		result.ReconciliationRuns = append(result.ReconciliationRuns, item)
+	}
+	for _, delivery := range webhooks {
+		item := chroniclesdk.AdminBillingWebhookDelivery{
+			StripeEventID: delivery.StripeEventID,
+			EventType:     delivery.EventType,
+			ReceivedAt:    delivery.ReceivedAt.Time,
+		}
+		if delivery.ProcessedAt.Valid {
+			processedAt := delivery.ProcessedAt.Time
+			item.ProcessedAt = &processedAt
+		}
+		result.WebhookDeliveries = append(result.WebhookDeliveries, item)
+	}
+	for _, sub := range subscriptions {
+		item := chroniclesdk.AdminBillingSubscription{
+			UserID:                 sub.UserID.String(),
+			Provider:               sub.Provider,
+			ProviderCustomerID:     sub.ProviderCustomerID,
+			ProviderSubscriptionID: sub.ProviderSubscriptionID.String,
+			ProviderProductID:      sub.ProviderProductID.String,
+			ProviderPriceID:        sub.ProviderPriceID.String,
+			ProductCode:            sub.ProductCode,
+			Status:                 sub.Status,
+			CancelAtPeriodEnd:      sub.CancelAtPeriodEnd,
+			UpdatedAt:              sub.UpdatedAt.Time,
+		}
+		if sub.CurrentPeriodEnd.Valid {
+			periodEnd := sub.CurrentPeriodEnd.Time
+			item.CurrentPeriodEnd = &periodEnd
+		}
+		result.Subscriptions = append(result.Subscriptions, item)
+	}
+	httpapi.Write(r.Context(), w, http.StatusOK, result)
+}
+
 func (s *Service) GrantMonthsHTTP(w http.ResponseWriter, r *http.Request) {
 	userID, err := uuid.Parse(chi.URLParam(r, "userID"))
 	if err != nil {
@@ -206,6 +277,13 @@ func (s *Service) Webhook(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (s *Service) retrieveAuthoritativeSubscription(ctx context.Context, subscriptionID string) (*stripe.Subscription, error) {
+	if s.retrieveSubscription == nil {
+		return nil, fmt.Errorf("stripe subscription retrieval is not configured")
+	}
+	return s.retrieveSubscription(ctx, subscriptionID, nil)
+}
+
 func (s *Service) processEvent(ctx context.Context, event stripe.Event) error {
 	switch event.Type {
 	case stripe.EventTypeCheckoutSessionCompleted:
@@ -217,30 +295,94 @@ func (s *Service) processEvent(ctx context.Context, event stripe.Event) error {
 		if err != nil || session.Subscription == nil {
 			return fmt.Errorf("checkout session missing Chronicle user or subscription")
 		}
-		sub, err := s.stripe.V1Subscriptions.Retrieve(ctx, session.Subscription.ID, nil)
+		sub, err := s.retrieveAuthoritativeSubscription(ctx, session.Subscription.ID)
 		if err != nil {
 			return fmt.Errorf("retrieve subscription: %w", err)
 		}
-		return s.upsertSubscription(ctx, userID, ProductSupporter, sub)
+		product := ProductSupporter
+		if metadataProduct := ProductCode(sub.Metadata["chronicle_product_code"]); metadataProduct != "" {
+			product = metadataProduct
+		}
+		return s.upsertSubscription(ctx, userID, product, sub)
 	case stripe.EventTypeCustomerSubscriptionCreated, stripe.EventTypeCustomerSubscriptionUpdated, stripe.EventTypeCustomerSubscriptionDeleted:
-		var sub stripe.Subscription
-		if err := json.Unmarshal(event.Data.Raw, &sub); err != nil {
+		var snapshot stripe.Subscription
+		if err := json.Unmarshal(event.Data.Raw, &snapshot); err != nil {
 			return fmt.Errorf("decode subscription: %w", err)
 		}
-		row, err := s.store.GetBillingSubscriptionByProviderID(ctx, database.GetBillingSubscriptionByProviderIDParams{
-			Provider:               ProviderStripe,
-			ProviderSubscriptionID: pgtype.Text{String: sub.ID, Valid: true},
-		})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
+		if snapshot.ID == "" {
+			return fmt.Errorf("subscription event missing subscription ID")
 		}
+		sub, err := s.retrieveAuthoritativeSubscription(ctx, snapshot.ID)
 		if err != nil {
-			return fmt.Errorf("find subscription owner: %w", err)
+			if event.Type == stripe.EventTypeCustomerSubscriptionDeleted && stripeResourceMissing(err) {
+				return s.markSubscriptionCanceled(ctx, snapshot.ID)
+			}
+			return fmt.Errorf("retrieve subscription %q: %w", snapshot.ID, err)
 		}
-		return s.upsertSubscription(ctx, row.UserID, ProductCode(row.ProductCode), &sub)
+		userID, product, err := s.subscriptionOwner(ctx, sub)
+		if err != nil {
+			return err
+		}
+		return s.upsertSubscription(ctx, userID, product, sub)
 	default:
 		return nil
 	}
+}
+
+func stripeResourceMissing(err error) bool {
+	var stripeErr *stripe.Error
+	return errors.As(err, &stripeErr) && stripeErr.Code == stripe.ErrorCodeResourceMissing
+}
+
+func (s *Service) subscriptionOwner(ctx context.Context, sub *stripe.Subscription) (uuid.UUID, ProductCode, error) {
+	if sub == nil || sub.ID == "" {
+		return uuid.Nil, "", fmt.Errorf("subscription is missing")
+	}
+	userID, userErr := uuid.Parse(sub.Metadata["chronicle_user_id"])
+	product := ProductCode(sub.Metadata["chronicle_product_code"])
+	if userErr == nil && ProductHasEntitlement(product, EntitlementAdFree) {
+		return userID, product, nil
+	}
+	row, err := s.store.GetBillingSubscriptionByProviderID(ctx, database.GetBillingSubscriptionByProviderIDParams{
+		Provider:               ProviderStripe,
+		ProviderSubscriptionID: pgtype.Text{String: sub.ID, Valid: true},
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, "", fmt.Errorf("subscription %q has invalid Chronicle metadata and no local row", sub.ID)
+		}
+		return uuid.Nil, "", fmt.Errorf("find subscription owner: %w", err)
+	}
+	return row.UserID, ProductCode(row.ProductCode), nil
+}
+
+func (s *Service) markSubscriptionCanceled(ctx context.Context, subscriptionID string) error {
+	row, err := s.store.GetBillingSubscriptionByProviderID(ctx, database.GetBillingSubscriptionByProviderIDParams{
+		Provider:               ProviderStripe,
+		ProviderSubscriptionID: pgtype.Text{String: subscriptionID, Valid: true},
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("find deleted subscription: %w", err)
+	}
+	_, err = s.store.UpsertBillingSubscription(ctx, database.UpsertBillingSubscriptionParams{
+		UserID:                 row.UserID,
+		Provider:               row.Provider,
+		ProviderCustomerID:     row.ProviderCustomerID,
+		ProviderSubscriptionID: row.ProviderSubscriptionID,
+		ProviderProductID:      row.ProviderProductID,
+		ProviderPriceID:        row.ProviderPriceID,
+		ProductCode:            row.ProductCode,
+		Status:                 string(stripe.SubscriptionStatusCanceled),
+		CurrentPeriodEnd:       row.CurrentPeriodEnd,
+		CancelAtPeriodEnd:      row.CancelAtPeriodEnd,
+	})
+	if err != nil {
+		return fmt.Errorf("mark deleted subscription canceled: %w", err)
+	}
+	return nil
 }
 
 type stripePurchase struct {

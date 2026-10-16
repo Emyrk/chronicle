@@ -224,6 +224,17 @@ CREATE TABLE billing_grants (
     CONSTRAINT billing_grants_months_check CHECK ((months > 0))
 );
 
+CREATE TABLE billing_reconciliation_runs (
+    id uuid NOT NULL,
+    status text NOT NULL,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    completed_at timestamp with time zone,
+    subscriptions_seen integer DEFAULT 0 NOT NULL,
+    subscriptions_changed integer DEFAULT 0 NOT NULL,
+    subscriptions_skipped_invalid integer DEFAULT 0 NOT NULL,
+    error_text text DEFAULT ''::text NOT NULL
+);
+
 CREATE TABLE billing_subscriptions (
     user_id uuid NOT NULL,
     provider_customer_id text NOT NULL,
@@ -2214,6 +2225,9 @@ ALTER TABLE ONLY authz_schema_migrations
 ALTER TABLE ONLY billing_grants
     ADD CONSTRAINT billing_grants_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY billing_reconciliation_runs
+    ADD CONSTRAINT billing_reconciliation_runs_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY billing_subscriptions
     ADD CONSTRAINT billing_subscriptions_pkey PRIMARY KEY (user_id);
 
@@ -2689,6 +2703,8 @@ ALTER TABLE ONLY wow_servers
     ADD CONSTRAINT wow_servers_pkey PRIMARY KEY (id);
 
 CREATE INDEX billing_grants_active_idx ON billing_grants USING btree (user_id, expires_at) WHERE (revoked_at IS NULL);
+
+CREATE INDEX billing_reconciliation_runs_started_at_idx ON billing_reconciliation_runs USING btree (started_at DESC);
 
 CREATE INDEX dbc_affected_aura_duration_modifiers_modifier_idx ON dbc_affected_aura_duration_modifiers USING btree (dataset_id, modifier_spell_id);
 

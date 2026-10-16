@@ -169,7 +169,7 @@ func TestHasEntitlement(t *testing.T) {
 	}{
 		{name: "role", roles: []string{string(ProductSupporter)}, subErr: pgx.ErrNoRows, want: true},
 		{name: "grant", grant: true, subErr: pgx.ErrNoRows, want: true, wantGrant: true},
-		{name: "subscription", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: string(stripe.SubscriptionStatusActive)}, want: true, wantGrant: true},
+		{name: "subscription", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: string(stripe.SubscriptionStatusActive), CurrentPeriodEnd: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}}, want: true, wantGrant: true},
 		{name: "none", subErr: pgx.ErrNoRows, want: false, wantGrant: true},
 	}
 
@@ -206,20 +206,26 @@ func TestHasEntitlement(t *testing.T) {
 func TestSubscriptionHasEntitlement(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, time.October, 13, 12, 0, 0, 0, time.UTC)
+	insideGrace := pgtype.Timestamptz{Time: now.Add(-entitlementGracePeriod + time.Second), Valid: true}
+	atGraceBoundary := pgtype.Timestamptz{Time: now.Add(-entitlementGracePeriod), Valid: true}
 	future := pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true}
-	past := pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true}
 
 	tests := []struct {
 		name string
 		sub  database.BillingSubscription
 		want bool
 	}{
-		{name: "active supporter", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "active"}, want: true},
-		{name: "trialing supporter", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "trialing"}, want: true},
-		{name: "canceled but paid through", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "canceled", CurrentPeriodEnd: future}, want: true},
-		{name: "expired cancellation", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "canceled", CurrentPeriodEnd: past}, want: false},
-		{name: "past due", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "past_due"}, want: false},
-		{name: "unknown product", sub: database.BillingSubscription{ProductCode: "unknown", Status: "active"}, want: false},
+		{name: "active bounded period", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "active", CurrentPeriodEnd: future}, want: true},
+		{name: "trialing inside grace", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "trialing", CurrentPeriodEnd: insideGrace}, want: true},
+		{name: "canceled inside grace", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "canceled", CurrentPeriodEnd: insideGrace}, want: true},
+		{name: "past due inside grace", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "past_due", CurrentPeriodEnd: insideGrace}, want: true},
+		{name: "grace boundary expired", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "active", CurrentPeriodEnd: atGraceBoundary}, want: false},
+		{name: "active missing period", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "active"}, want: false},
+		{name: "incomplete", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "incomplete", CurrentPeriodEnd: future}, want: false},
+		{name: "incomplete expired", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "incomplete_expired", CurrentPeriodEnd: future}, want: false},
+		{name: "paused", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "paused", CurrentPeriodEnd: future}, want: false},
+		{name: "unpaid", sub: database.BillingSubscription{ProductCode: string(ProductSupporter), Status: "unpaid", CurrentPeriodEnd: future}, want: false},
+		{name: "unknown product", sub: database.BillingSubscription{ProductCode: "unknown", Status: "active", CurrentPeriodEnd: future}, want: false},
 	}
 
 	for _, tt := range tests {

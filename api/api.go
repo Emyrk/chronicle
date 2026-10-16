@@ -295,6 +295,11 @@ func (api *API) Routes() chi.Router {
 				r.With(
 					httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),
 				).Get("/notices", api.AdminListTelemetryNotices)
+				if api.Opts.Billing != nil {
+					r.With(
+						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),
+					).Get("/billing/activity", api.Opts.Billing.AdminActivity)
+				}
 				r.Route("/users", func(r chi.Router) {
 					r.Use(
 						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),

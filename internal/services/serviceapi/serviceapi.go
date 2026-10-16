@@ -10,24 +10,22 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"strings"
 
 	"github.com/Emyrk/chronicle/api"
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chronauth/authkeys"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
-	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/Emyrk/chronicle/internal/itempricing"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/serviceassets"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
+	"github.com/Emyrk/chronicle/internal/services/servicebilling"
 	"github.com/Emyrk/chronicle/internal/services/servicebot"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
-	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/serviceexternalapi"
 	"github.com/Emyrk/chronicle/internal/services/servicegamedata"
 	"github.com/Emyrk/chronicle/internal/services/servicegithub"
@@ -53,40 +51,13 @@ var (
 	ga4MeasurementIDPattern = regexp.MustCompile(`^G-[A-Z0-9]+$`)
 )
 
-func (s *Service) supporterPriceIDs() []string {
-	if len(s.stripeSupporterPrices) > 0 {
-		return append([]string(nil), s.stripeSupporterPrices...)
-	}
-	if s.stripeSupporterPrice != "" {
-		return []string{s.stripeSupporterPrice}
-	}
-	return nil
-}
-
-func ConfigureDevStripeWebhookSecret(broker *services.Services, secret string) error {
-	return services.MustGet[*Service](broker).configureDevStripeWebhookSecret(secret)
-}
-
-func (s *Service) configureDevStripeWebhookSecret(secret string) error {
-	if !s.devAuth {
-		return errors.New("development Stripe listener requires dev auth")
-	}
-	if !strings.HasPrefix(s.stripeSecretKey, "sk_test_") {
-		return errors.New("development Stripe listener requires a sandbox secret key")
-	}
-	if len(s.supporterPriceIDs()) == 0 {
-		return errors.New("development Stripe listener requires at least one Supporter price ID")
-	}
-	if !strings.HasPrefix(secret, "whsec_") {
-		return errors.New("stripe CLI returned an invalid webhook signing secret")
-	}
-	s.stripeWebhookSecret = secret
-	return nil
-}
-
 func API(broker *services.Services) *api.API {
 	srv := services.MustGet[*Service](broker)
 	return srv.app
+}
+
+func DevAuth(broker *services.Services) bool {
+	return services.MustGet[*Service](broker).devAuth
 }
 
 func OnAPI() string {
@@ -109,10 +80,6 @@ type Service struct {
 	zugzugURL             string
 	zugzugSecret          string
 	zugzugInstructionsURL string
-	stripeSecretKey       string
-	stripeWebhookSecret   string
-	stripeSupporterPrice  string
-	stripeSupporterPrices []string
 	itemPricingAPIKey     string
 	itemPricingBaseURL    string
 	discordAuth           chronauth.DiscordOAuth
@@ -141,7 +108,6 @@ func (s *Service) DependsOn() []string {
 		servicelogger.OnLogger(),
 		servicestorage.OnStorage(),
 		servicebot.OnDiscordBot(),
-		servicedbstore.OnDatabaseStore(),
 		servicepgxpool.OnPGXPool(),
 		serviceriver.OnRiverQueue(),
 		servicechronicle.OnChronicle(),
@@ -176,7 +142,6 @@ func (s *Service) Start(ctx context.Context) error {
 	que := serviceriver.RiverQueue(s.broker)
 	chron := servicechronicle.Chronicle(s.broker)
 	reg := serviceprometheus.Registry(s.broker)
-	db := servicedbstore.DatabaseStore(s.broker)
 	zed := serviceauthz.Authz(s.broker)
 	pool := servicepgxpool.PGXPool(s.broker)
 	ps := servicepgxpool.Pubsub(s.broker)
@@ -246,14 +211,9 @@ func (s *Service) Start(ctx context.Context) error {
 	externalAPI := serviceexternalapi.ExternalAPI(s.broker)
 	rankings := servicerankings.Rankings(s.broker)
 	mailer := servicemail.Mailer(s.broker)
-	billingService := billing.New(billing.Options{
-		Store:         db,
-		SecretKey:     s.stripeSecretKey,
-		WebhookSecret: s.stripeWebhookSecret,
-		PriceIDs:      s.supporterPriceIDs(),
-		Roles:         zed.UserChronicleRoles,
-		AccessURL:     au,
-	})
+
+	billingService := servicebilling.Billing(s.broker)
+	billingService.SetAccessURL(au)
 
 	handler, err := api.New(ctx, api.Options{
 		Logger:                logger,
@@ -399,42 +359,6 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_NITROPAY_SITE_ID",
 			Default:     "",
 			Value:       serpent.StringOf(&s.nitroPaySiteID),
-		},
-		{
-			Name:        "Stripe Secret Key",
-			Description: "Optional Stripe secret key. Billing is enabled when this, the webhook secret, and at least one Supporter price ID are configured.",
-			Required:    false,
-			Flag:        "stripe-secret-key",
-			Env:         "CHRONICLE_STRIPE_SECRET_KEY",
-			Default:     "",
-			Value:       serpent.StringOf(&s.stripeSecretKey),
-		},
-		{
-			Name:        "Stripe Webhook Secret",
-			Description: "Optional Stripe webhook signing secret.",
-			Required:    false,
-			Flag:        "stripe-webhook-secret",
-			Env:         "CHRONICLE_STRIPE_WEBHOOK_SECRET",
-			Default:     "",
-			Value:       serpent.StringOf(&s.stripeWebhookSecret),
-		},
-		{
-			Name:        "Stripe Supporter Price IDs",
-			Description: "Optional comma-separated recurring Stripe price IDs for the ad-free Supporter tier. Prices must belong to one product and currency.",
-			Required:    false,
-			Flag:        "stripe-supporter-price-ids",
-			Env:         "CHRONICLE_STRIPE_SUPPORTER_PRICE_IDS",
-			Default:     "",
-			Value:       serpent.StringArrayOf(&s.stripeSupporterPrices),
-		},
-		{
-			Name:        "Stripe Supporter Price ID",
-			Description: "Optional single recurring Stripe price ID retained for backward compatibility.",
-			Required:    false,
-			Flag:        "stripe-supporter-price-id",
-			Env:         "CHRONICLE_STRIPE_SUPPORTER_PRICE_ID",
-			Default:     "",
-			Value:       serpent.StringOf(&s.stripeSupporterPrice),
 		},
 		{
 			Name:        "Google Analytics Measurement ID",

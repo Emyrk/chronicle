@@ -1,4 +1,4 @@
-package serviceapi
+package servicebilling
 
 import (
 	"testing"
@@ -23,21 +23,22 @@ func TestConfigureDevStripeWebhookSecret(t *testing.T) {
 		name    string
 		service Service
 		secret  string
+		devAuth bool
 		wantErr string
 	}{
 		{
-			name: "configured",
+			name:    "configured",
+			devAuth: true,
 			service: Service{
-				devAuth:              true,
 				stripeSecretKey:      "sk_test_example",
 				stripeSupporterPrice: "price_supporter",
 			},
 			secret: "whsec_example",
 		},
 		{
-			name: "configured with multiple prices",
+			name:    "configured with multiple prices",
+			devAuth: true,
 			service: Service{
-				devAuth:               true,
 				stripeSecretKey:       "sk_test_example",
 				stripeSupporterPrices: []string{"price_monthly", "price_annual"},
 			},
@@ -53,9 +54,9 @@ func TestConfigureDevStripeWebhookSecret(t *testing.T) {
 			wantErr: "requires dev auth",
 		},
 		{
-			name: "rejects live key",
+			name:    "rejects live key",
+			devAuth: true,
 			service: Service{
-				devAuth:              true,
 				stripeSecretKey:      "sk_live_example",
 				stripeSupporterPrice: "price_supporter",
 			},
@@ -63,18 +64,18 @@ func TestConfigureDevStripeWebhookSecret(t *testing.T) {
 			wantErr: "requires a sandbox secret key",
 		},
 		{
-			name: "requires price",
+			name:    "requires price",
+			devAuth: true,
 			service: Service{
-				devAuth:         true,
 				stripeSecretKey: "sk_test_example",
 			},
 			secret:  "whsec_example",
 			wantErr: "requires at least one Supporter price ID",
 		},
 		{
-			name: "rejects invalid webhook secret",
+			name:    "rejects invalid webhook secret",
+			devAuth: true,
 			service: Service{
-				devAuth:              true,
 				stripeSecretKey:      "sk_test_example",
 				stripeSupporterPrice: "price_supporter",
 			},
@@ -87,7 +88,7 @@ func TestConfigureDevStripeWebhookSecret(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			service := tt.service
-			err := service.configureDevStripeWebhookSecret(tt.secret)
+			err := service.configureDevStripeWebhookSecret(tt.secret, tt.devAuth)
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
 				return

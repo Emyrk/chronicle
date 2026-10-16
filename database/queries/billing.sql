@@ -33,6 +33,50 @@ ON CONFLICT (user_id) DO UPDATE SET
   updated_at = NOW()
 RETURNING *;
 
+-- name: UpsertBillingSubscriptionIfChanged :execrows
+INSERT INTO billing_subscriptions (
+  user_id,
+  provider,
+  provider_customer_id,
+  provider_subscription_id,
+  provider_product_id,
+  provider_price_id,
+  product_code,
+  status,
+  current_period_end,
+  cancel_at_period_end
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+ON CONFLICT (user_id) DO UPDATE SET
+  provider = EXCLUDED.provider,
+  provider_customer_id = EXCLUDED.provider_customer_id,
+  provider_subscription_id = EXCLUDED.provider_subscription_id,
+  provider_product_id = EXCLUDED.provider_product_id,
+  provider_price_id = EXCLUDED.provider_price_id,
+  product_code = EXCLUDED.product_code,
+  status = EXCLUDED.status,
+  current_period_end = EXCLUDED.current_period_end,
+  cancel_at_period_end = EXCLUDED.cancel_at_period_end,
+  updated_at = NOW()
+WHERE (billing_subscriptions.provider,
+       billing_subscriptions.provider_customer_id,
+       billing_subscriptions.provider_subscription_id,
+       billing_subscriptions.provider_product_id,
+       billing_subscriptions.provider_price_id,
+       billing_subscriptions.product_code,
+       billing_subscriptions.status,
+       billing_subscriptions.current_period_end,
+       billing_subscriptions.cancel_at_period_end)
+  IS DISTINCT FROM
+      (EXCLUDED.provider,
+       EXCLUDED.provider_customer_id,
+       EXCLUDED.provider_subscription_id,
+       EXCLUDED.provider_product_id,
+       EXCLUDED.provider_price_id,
+       EXCLUDED.product_code,
+       EXCLUDED.status,
+       EXCLUDED.current_period_end,
+       EXCLUDED.cancel_at_period_end);
+
 -- name: GetLatestActiveBillingGrantExpiry :one
 SELECT MAX(expires_at)::timestamptz
 FROM billing_grants
@@ -77,3 +121,32 @@ ON CONFLICT (stripe_event_id) DO NOTHING;
 UPDATE billing_webhook_events
 SET processed_at = NOW()
 WHERE stripe_event_id = $1;
+
+-- name: ListBillingSubscriptions :many
+SELECT * FROM billing_subscriptions
+ORDER BY updated_at DESC;
+
+-- name: ListRecentBillingWebhookEvents :many
+SELECT * FROM billing_webhook_events
+ORDER BY received_at DESC
+LIMIT $1;
+
+-- name: InsertBillingReconciliationRun :one
+INSERT INTO billing_reconciliation_runs (id, status)
+VALUES ($1, 'running')
+RETURNING *;
+
+-- name: CompleteBillingReconciliationRun :exec
+UPDATE billing_reconciliation_runs
+SET status = $2,
+    completed_at = NOW(),
+    subscriptions_seen = $3,
+    subscriptions_changed = $4,
+    subscriptions_skipped_invalid = $5,
+    error_text = $6
+WHERE id = $1;
+
+-- name: ListRecentBillingReconciliationRuns :many
+SELECT * FROM billing_reconciliation_runs
+ORDER BY started_at DESC
+LIMIT $1;

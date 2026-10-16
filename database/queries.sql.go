@@ -1099,6 +1099,38 @@ func (q *sqlQuerier) UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServ
 	return i, err
 }
 
+const completeBillingReconciliationRun = `-- name: CompleteBillingReconciliationRun :exec
+UPDATE billing_reconciliation_runs
+SET status = $2,
+    completed_at = NOW(),
+    subscriptions_seen = $3,
+    subscriptions_changed = $4,
+    subscriptions_skipped_invalid = $5,
+    error_text = $6
+WHERE id = $1
+`
+
+type CompleteBillingReconciliationRunParams struct {
+	ID                          uuid.UUID `db:"id" json:"id"`
+	Status                      string    `db:"status" json:"status"`
+	SubscriptionsSeen           int32     `db:"subscriptions_seen" json:"subscriptions_seen"`
+	SubscriptionsChanged        int32     `db:"subscriptions_changed" json:"subscriptions_changed"`
+	SubscriptionsSkippedInvalid int32     `db:"subscriptions_skipped_invalid" json:"subscriptions_skipped_invalid"`
+	ErrorText                   string    `db:"error_text" json:"error_text"`
+}
+
+func (q *sqlQuerier) CompleteBillingReconciliationRun(ctx context.Context, arg CompleteBillingReconciliationRunParams) error {
+	_, err := q.db.Exec(ctx, completeBillingReconciliationRun,
+		arg.ID,
+		arg.Status,
+		arg.SubscriptionsSeen,
+		arg.SubscriptionsChanged,
+		arg.SubscriptionsSkippedInvalid,
+		arg.ErrorText,
+	)
+	return err
+}
+
 const getBillingSubscriptionByProviderID = `-- name: GetBillingSubscriptionByProviderID :one
 SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id FROM billing_subscriptions
 WHERE provider = $1
@@ -1261,6 +1293,28 @@ func (q *sqlQuerier) InsertBillingGrant(ctx context.Context, arg InsertBillingGr
 	return i, err
 }
 
+const insertBillingReconciliationRun = `-- name: InsertBillingReconciliationRun :one
+INSERT INTO billing_reconciliation_runs (id, status)
+VALUES ($1, 'running')
+RETURNING id, status, started_at, completed_at, subscriptions_seen, subscriptions_changed, subscriptions_skipped_invalid, error_text
+`
+
+func (q *sqlQuerier) InsertBillingReconciliationRun(ctx context.Context, id uuid.UUID) (BillingReconciliationRun, error) {
+	row := q.db.QueryRow(ctx, insertBillingReconciliationRun, id)
+	var i BillingReconciliationRun
+	err := row.Scan(
+		&i.ID,
+		&i.Status,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.SubscriptionsSeen,
+		&i.SubscriptionsChanged,
+		&i.SubscriptionsSkippedInvalid,
+		&i.ErrorText,
+	)
+	return i, err
+}
+
 const insertBillingWebhookEvent = `-- name: InsertBillingWebhookEvent :execrows
 INSERT INTO billing_webhook_events (stripe_event_id, event_type)
 VALUES ($1, $2)
@@ -1278,6 +1332,109 @@ func (q *sqlQuerier) InsertBillingWebhookEvent(ctx context.Context, arg InsertBi
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const listBillingSubscriptions = `-- name: ListBillingSubscriptions :many
+SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id FROM billing_subscriptions
+ORDER BY updated_at DESC
+`
+
+func (q *sqlQuerier) ListBillingSubscriptions(ctx context.Context) ([]BillingSubscription, error) {
+	rows, err := q.db.Query(ctx, listBillingSubscriptions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BillingSubscription
+	for rows.Next() {
+		var i BillingSubscription
+		if err := rows.Scan(
+			&i.UserID,
+			&i.ProviderCustomerID,
+			&i.ProviderSubscriptionID,
+			&i.ProductCode,
+			&i.Status,
+			&i.CurrentPeriodEnd,
+			&i.CancelAtPeriodEnd,
+			&i.UpdatedAt,
+			&i.Provider,
+			&i.ProviderProductID,
+			&i.ProviderPriceID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentBillingReconciliationRuns = `-- name: ListRecentBillingReconciliationRuns :many
+SELECT id, status, started_at, completed_at, subscriptions_seen, subscriptions_changed, subscriptions_skipped_invalid, error_text FROM billing_reconciliation_runs
+ORDER BY started_at DESC
+LIMIT $1
+`
+
+func (q *sqlQuerier) ListRecentBillingReconciliationRuns(ctx context.Context, limit int32) ([]BillingReconciliationRun, error) {
+	rows, err := q.db.Query(ctx, listRecentBillingReconciliationRuns, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BillingReconciliationRun
+	for rows.Next() {
+		var i BillingReconciliationRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.Status,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.SubscriptionsSeen,
+			&i.SubscriptionsChanged,
+			&i.SubscriptionsSkippedInvalid,
+			&i.ErrorText,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentBillingWebhookEvents = `-- name: ListRecentBillingWebhookEvents :many
+SELECT stripe_event_id, event_type, received_at, processed_at FROM billing_webhook_events
+ORDER BY received_at DESC
+LIMIT $1
+`
+
+func (q *sqlQuerier) ListRecentBillingWebhookEvents(ctx context.Context, limit int32) ([]BillingWebhookEvent, error) {
+	rows, err := q.db.Query(ctx, listRecentBillingWebhookEvents, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BillingWebhookEvent
+	for rows.Next() {
+		var i BillingWebhookEvent
+		if err := rows.Scan(
+			&i.StripeEventID,
+			&i.EventType,
+			&i.ReceivedAt,
+			&i.ProcessedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const markBillingWebhookEventProcessed = `-- name: MarkBillingWebhookEventProcessed :exec
@@ -1359,6 +1516,83 @@ func (q *sqlQuerier) UpsertBillingSubscription(ctx context.Context, arg UpsertBi
 		&i.ProviderPriceID,
 	)
 	return i, err
+}
+
+const upsertBillingSubscriptionIfChanged = `-- name: UpsertBillingSubscriptionIfChanged :execrows
+INSERT INTO billing_subscriptions (
+  user_id,
+  provider,
+  provider_customer_id,
+  provider_subscription_id,
+  provider_product_id,
+  provider_price_id,
+  product_code,
+  status,
+  current_period_end,
+  cancel_at_period_end
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+ON CONFLICT (user_id) DO UPDATE SET
+  provider = EXCLUDED.provider,
+  provider_customer_id = EXCLUDED.provider_customer_id,
+  provider_subscription_id = EXCLUDED.provider_subscription_id,
+  provider_product_id = EXCLUDED.provider_product_id,
+  provider_price_id = EXCLUDED.provider_price_id,
+  product_code = EXCLUDED.product_code,
+  status = EXCLUDED.status,
+  current_period_end = EXCLUDED.current_period_end,
+  cancel_at_period_end = EXCLUDED.cancel_at_period_end,
+  updated_at = NOW()
+WHERE (billing_subscriptions.provider,
+       billing_subscriptions.provider_customer_id,
+       billing_subscriptions.provider_subscription_id,
+       billing_subscriptions.provider_product_id,
+       billing_subscriptions.provider_price_id,
+       billing_subscriptions.product_code,
+       billing_subscriptions.status,
+       billing_subscriptions.current_period_end,
+       billing_subscriptions.cancel_at_period_end)
+  IS DISTINCT FROM
+      (EXCLUDED.provider,
+       EXCLUDED.provider_customer_id,
+       EXCLUDED.provider_subscription_id,
+       EXCLUDED.provider_product_id,
+       EXCLUDED.provider_price_id,
+       EXCLUDED.product_code,
+       EXCLUDED.status,
+       EXCLUDED.current_period_end,
+       EXCLUDED.cancel_at_period_end)
+`
+
+type UpsertBillingSubscriptionIfChangedParams struct {
+	UserID                 uuid.UUID          `db:"user_id" json:"user_id"`
+	Provider               string             `db:"provider" json:"provider"`
+	ProviderCustomerID     string             `db:"provider_customer_id" json:"provider_customer_id"`
+	ProviderSubscriptionID pgtype.Text        `db:"provider_subscription_id" json:"provider_subscription_id"`
+	ProviderProductID      pgtype.Text        `db:"provider_product_id" json:"provider_product_id"`
+	ProviderPriceID        pgtype.Text        `db:"provider_price_id" json:"provider_price_id"`
+	ProductCode            string             `db:"product_code" json:"product_code"`
+	Status                 string             `db:"status" json:"status"`
+	CurrentPeriodEnd       pgtype.Timestamptz `db:"current_period_end" json:"current_period_end"`
+	CancelAtPeriodEnd      bool               `db:"cancel_at_period_end" json:"cancel_at_period_end"`
+}
+
+func (q *sqlQuerier) UpsertBillingSubscriptionIfChanged(ctx context.Context, arg UpsertBillingSubscriptionIfChangedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertBillingSubscriptionIfChanged,
+		arg.UserID,
+		arg.Provider,
+		arg.ProviderCustomerID,
+		arg.ProviderSubscriptionID,
+		arg.ProviderProductID,
+		arg.ProviderPriceID,
+		arg.ProductCode,
+		arg.Status,
+		arg.CurrentPeriodEnd,
+		arg.CancelAtPeriodEnd,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteClassBuffIgnore = `-- name: DeleteClassBuffIgnore :exec

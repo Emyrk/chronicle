@@ -22,6 +22,8 @@ const (
 )
 
 type priceRetriever func(context.Context, string, *stripe.PriceRetrieveParams) (*stripe.Price, error)
+type subscriptionRetriever func(context.Context, string, *stripe.SubscriptionRetrieveParams) (*stripe.Subscription, error)
+type subscriptionLister func(context.Context) ([]*stripe.Subscription, error)
 type RoleResolver func(context.Context, uuid.UUID) ([]string, error)
 
 type Options struct {
@@ -34,14 +36,16 @@ type Options struct {
 }
 
 type Service struct {
-	store         database.Store
-	stripe        *stripe.Client
-	webhookSecret string
-	priceIDs      []string
-	allowedPrices map[string]struct{}
-	accessURL     *url.URL
-	retrievePrice priceRetriever
-	roles         RoleResolver
+	store                database.Store
+	stripe               *stripe.Client
+	webhookSecret        string
+	priceIDs             []string
+	allowedPrices        map[string]struct{}
+	accessURL            *url.URL
+	retrievePrice        priceRetriever
+	retrieveSubscription subscriptionRetriever
+	listSubscriptions    subscriptionLister
+	roles                RoleResolver
 
 	pricesMu sync.Mutex
 	prices   []chroniclesdk.BillingPrice
@@ -50,9 +54,23 @@ type Service struct {
 func New(opts Options) *Service {
 	var client *stripe.Client
 	var retrievePrice priceRetriever
+	var retrieveSubscription subscriptionRetriever
+	var listSubscriptions subscriptionLister
 	if opts.SecretKey != "" {
 		client = stripe.NewClient(opts.SecretKey)
 		retrievePrice = client.V1Prices.Retrieve
+		retrieveSubscription = client.V1Subscriptions.Retrieve
+		listSubscriptions = func(ctx context.Context) ([]*stripe.Subscription, error) {
+			var subscriptions []*stripe.Subscription
+			params := &stripe.SubscriptionListParams{Status: stripe.String("all")}
+			for sub, err := range client.V1Subscriptions.List(ctx, params).All(ctx) {
+				if err != nil {
+					return nil, err
+				}
+				subscriptions = append(subscriptions, sub)
+			}
+			return subscriptions, nil
+		}
 	}
 	priceIDs := uniqueStrings(opts.PriceIDs)
 	allowedPrices := make(map[string]struct{}, len(priceIDs))
@@ -60,14 +78,22 @@ func New(opts Options) *Service {
 		allowedPrices[priceID] = struct{}{}
 	}
 	return &Service{
-		store:         opts.Store,
-		stripe:        client,
-		webhookSecret: opts.WebhookSecret,
-		priceIDs:      priceIDs,
-		allowedPrices: allowedPrices,
-		accessURL:     opts.AccessURL,
-		retrievePrice: retrievePrice,
-		roles:         opts.Roles,
+		store:                opts.Store,
+		stripe:               client,
+		webhookSecret:        opts.WebhookSecret,
+		priceIDs:             priceIDs,
+		allowedPrices:        allowedPrices,
+		accessURL:            opts.AccessURL,
+		retrievePrice:        retrievePrice,
+		retrieveSubscription: retrieveSubscription,
+		listSubscriptions:    listSubscriptions,
+		roles:                opts.Roles,
+	}
+}
+
+func (s *Service) SetAccessURL(accessURL *url.URL) {
+	if s != nil {
+		s.accessURL = accessURL
 	}
 }
 
