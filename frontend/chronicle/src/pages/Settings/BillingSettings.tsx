@@ -1,6 +1,7 @@
 import { useState } from "react"
-import { Check, Crown, EyeOff, HeartHandshake, Server, Sparkles } from "lucide-react"
+import { Check, Crown, Download, EyeOff, HardDrive, Lock } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
+import type { BillingPrice, BillingSummary } from "@/api/typesGenerated"
 import { useCreateBillingCheckout, useCreateBillingPortal, useBillingSummary } from "@/api/queries"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -21,52 +22,22 @@ import {
 // WoW reputation standings, in order. Free users sit at Neutral; Exalted fills the bar.
 const STANDINGS = ["Hated", "Hostile", "Unfriendly", "Neutral", "Friendly", "Honored", "Revered", "Exalted"] as const
 
-const qualityStyles: Record<BillingQuality, { text: string; border: string; glow: string; ring: string }> = {
-  uncommon: {
-    text: "text-quality-uncommon",
-    border: "border-quality-uncommon/40",
-    glow: "shadow-[0_0_24px_-6px_rgba(30,255,0,0.45)]",
-    ring: "border-quality-uncommon bg-quality-uncommon",
-  },
-  rare: {
-    text: "text-[#3d9bff]",
-    border: "border-quality-rare/50",
-    glow: "shadow-[0_0_24px_-6px_rgba(0,112,221,0.6)]",
-    ring: "border-quality-rare bg-quality-rare",
-  },
-  epic: {
-    text: "text-[#c06bff]",
-    border: "border-quality-epic/50",
-    glow: "shadow-[0_0_24px_-6px_rgba(163,53,238,0.6)]",
-    ring: "border-quality-epic bg-quality-epic",
-  },
-  legendary: {
-    text: "text-quality-legendary",
-    border: "border-quality-legendary/50",
-    glow: "shadow-[0_0_28px_-4px_rgba(255,128,0,0.6)]",
-    ring: "border-quality-legendary bg-quality-legendary",
-  },
+const qualityText: Record<BillingQuality, string> = {
+  uncommon: "text-quality-uncommon",
+  rare: "text-[#3d9bff]",
+  epic: "text-[#c06bff]",
+  legendary: "text-quality-legendary",
 }
 
 const perks: { icon: LucideIcon; title: string; body: string }[] = [
-  { icon: EyeOff, title: "No advertisements", body: "Every page of Chronicle, ad-free." },
-  { icon: Server, title: "Keep the lights on", body: "Funds log parsing, storage, and hosting." },
-  { icon: HeartHandshake, title: "Back development", body: "Helps ship new panels and features." },
+  { icon: EyeOff, title: "No advertisements", body: "Browse every page of Chronicle ad-free." },
+  { icon: HardDrive, title: "More log storage", body: "An extra 1 GB of storage for your uploads." },
+  { icon: Download, title: "Raw log downloads", body: "Download the original combat log files." },
+  { icon: Lock, title: "Private logs", body: "Keep your uploads out of public view." },
 ]
 
 export function BillingSettings() {
   const { data: billing, isLoading } = useBillingSummary()
-  const checkout = useCreateBillingCheckout()
-  const portal = useCreateBillingPortal()
-  const [selectedPriceID, setSelectedPriceID] = useState<string | null>(null)
-
-  const openBilling = async (action: () => Promise<string>) => {
-    try {
-      window.location.assign(await action())
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to open billing")
-    }
-  }
 
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">Loading billing status…</p>
@@ -82,212 +53,87 @@ export function BillingSettings() {
   }
 
   const exalted = billing.ads_free
-  const prices = billing.prices ?? []
-  const monthlyPrice = prices.find((price) => price.interval_months === 1)
-  const bestPriceID = bestValuePriceID(prices, monthlyPrice)
-  const selectedPrice =
-    prices.find((price) => price.id === (selectedPriceID ?? bestPriceID)) ?? prices[0]
-  const qualities = billingPriceQualities(prices)
 
   return (
-    <section className="max-w-5xl space-y-8">
-      <ExaltedHero
-        exalted={exalted}
-        tier={billing.tier}
-        periodEnd={billing.current_period_end}
-        cancelAtPeriodEnd={billing.cancel_at_period_end}
-        onManage={() => void openBilling(() => portal.mutateAsync())}
-        managePending={portal.isPending}
-      />
+    <section className="max-w-5xl space-y-6">
+      <StandingHeader billing={billing} />
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        {perks.map(({ icon: Icon, title, body }) => (
-          <div key={title} className="flex gap-3 rounded-xl border bg-card/40 p-4">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-amber-400/30 bg-amber-400/10 text-amber-500 dark:text-amber-300">
-              <Icon className="size-4" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold">{title}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">{body}</p>
-            </div>
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="space-y-3">
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="text-lg font-semibold">{EXALTED_TIER_NAME} rewards</h3>
+            <span className="text-xs text-muted-foreground">
+              {exalted ? "All rewards unlocked" : `Unlocked at ${EXALTED_TIER_NAME}`}
+            </span>
           </div>
-        ))}
-      </div>
-
-      {exalted ? null : (
-        <div className="space-y-5">
-          <div>
-            <h3 className="text-lg font-semibold">Choose your path to {EXALTED_TIER_NAME}</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Every option grants the same {EXALTED_TIER_NAME} standing. Longer commitments lower the monthly cost.
-            </p>
-          </div>
-
-          {prices.length > 0 ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {prices.map((price) => {
-                const selected = selectedPrice?.id === price.id
-                const discount = billingDiscountPercent(price, monthlyPrice)
-                const bestValue = price.id === bestPriceID
-                const quality = qualityStyles[qualities.get(price.id) ?? "rare"]
-                return (
-                  <button
-                    key={price.id}
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() => setSelectedPriceID(price.id)}
-                    className={cn(
-                      // Styled like an in-game item tooltip regardless of site theme.
-                      "group relative min-h-48 overflow-hidden rounded-xl border-2 bg-[#0b0e14] p-5 text-left text-zinc-100 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      quality.border,
-                      selected ? cn(quality.glow, "-translate-y-0.5") : "opacity-85 hover:-translate-y-0.5 hover:opacity-100",
-                    )}
-                  >
-                    {bestValue ? (
-                      <>
-                        <span className="legendary-shine pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-                        <span className="absolute right-3 top-3 rounded-full bg-quality-legendary px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-black">
-                          Best value
-                        </span>
-                      </>
-                    ) : null}
-                    <div className="flex items-center gap-2 pr-20">
-                      <span
-                        className={cn(
-                          "flex size-5 items-center justify-center rounded-full border",
-                          selected ? cn(quality.ring, "text-black") : "border-zinc-500",
-                        )}
-                      >
-                        {selected ? <Check className="size-3.5" strokeWidth={3} /> : null}
-                      </span>
-                      <p className={cn("font-semibold", quality.text)}>{billingPeriodLabel(price.interval_months)}</p>
-                    </div>
-                    <p className="mt-1 pl-7 text-xs text-[#ffd100]">Grants {EXALTED_TIER_NAME} standing</p>
-                    <div className="mt-4">
-                      <span className="text-3xl font-semibold tracking-tight">
-                        {formatBillingAmount(price.unit_amount, price.currency)}
-                      </span>
-                      <p className="mt-1 text-xs text-zinc-400">{billingPeriodDescription(price.interval_months)}</p>
-                    </div>
-                    <div className="mt-4 flex items-end justify-between gap-3 border-t border-white/10 pt-3">
-                      <div>
-                        <p className="text-xs text-zinc-400">Monthly cost</p>
-                        <p className="font-medium">{formatMonthlyAmount(price)}</p>
-                      </div>
-                      {discount > 0 ? (
-                        <span className="rounded-md bg-quality-uncommon/10 px-2 py-1 text-xs font-semibold text-quality-uncommon">
-                          Save {discount}%
-                        </span>
-                      ) : (
-                        <span className="text-xs text-zinc-500">Standard rate</span>
-                      )}
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-          ) : (
-            <p className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
-              {EXALTED_TIER_NAME} pricing is temporarily unavailable.
-            </p>
-          )}
-
-          <Button
-            size="lg"
-            disabled={!selectedPrice || checkout.isPending}
-            onClick={() => selectedPrice && void openBilling(() => checkout.mutateAsync(selectedPrice.id))}
-            className="gap-2 border border-amber-300/60 bg-gradient-to-b from-amber-400 to-amber-600 font-semibold text-amber-950 shadow-[0_0_20px_-4px_rgba(251,191,36,0.6)] hover:from-amber-300 hover:to-amber-500"
-          >
-            <Crown className="size-4" />
-            Become {EXALTED_TIER_NAME}
-            {selectedPrice ? ` · ${billingPeriodLabel(selectedPrice.interval_months)}` : ""}
-          </Button>
+          <ul className="divide-y rounded-lg border bg-card">
+            {perks.map(({ icon: Icon, title, body }) => (
+              <li key={title} className="flex items-center gap-4 p-4">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-accent/20 text-accent">
+                  <Icon className="size-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{title}</p>
+                  <p className="text-sm text-muted-foreground">{body}</p>
+                </div>
+                {exalted ? (
+                  <Check className="size-5 shrink-0 text-emerald-400" aria-label="Unlocked" />
+                ) : (
+                  <Lock className="size-4 shrink-0 text-muted-foreground/60" aria-label="Locked" />
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
-      )}
+
+        {exalted ? <SubscriptionPanel billing={billing} /> : <PlanPicker prices={billing.prices ?? []} />}
+      </div>
     </section>
   )
 }
 
-function ExaltedHero({
-  exalted,
-  tier,
-  periodEnd,
-  cancelAtPeriodEnd,
-  onManage,
-  managePending,
-}: {
-  exalted: boolean
-  tier: string
-  periodEnd?: string
-  cancelAtPeriodEnd?: boolean
-  onManage: () => void
-  managePending: boolean
-}) {
-  const standing = exalted ? EXALTED_TIER_NAME : billingTierLabel(tier)
+function useOpenBilling() {
+  return async (action: () => Promise<string>) => {
+    try {
+      window.location.assign(await action())
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to open billing")
+    }
+  }
+}
+
+function StandingHeader({ billing }: { billing: BillingSummary }) {
+  const exalted = billing.ads_free
+  const standing = exalted ? EXALTED_TIER_NAME : billingTierLabel(billing.tier)
   const standingIndex = Math.max(0, STANDINGS.indexOf(standing as (typeof STANDINGS)[number]))
   // Neutral shows a sliver of progress into the standing; Exalted is a full bar.
   const fill = exalted ? 100 : ((standingIndex + 0.15) / STANDINGS.length) * 100
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-amber-400/30 bg-[#0b0e14] p-6 text-zinc-100 sm:p-8">
-      <div className="pointer-events-none absolute -right-16 -top-24 size-72 rounded-full bg-amber-400/15 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-24 -left-10 size-64 rounded-full bg-quality-epic/15 blur-3xl" />
-
-      <div className="relative flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-4">
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-xl border border-amber-300/50 bg-gradient-to-br from-amber-300/25 to-amber-700/10 text-amber-300 shadow-[0_0_24px_-4px_rgba(251,191,36,0.5)]">
-            <Crown className="size-7" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-300/80">Billing</p>
-            <h2 className="mt-1 text-3xl font-bold tracking-tight">
-              {exalted ? (
-                <>
-                  You are <span className="text-amber-300">{EXALTED_TIER_NAME}</span>
-                </>
-              ) : (
-                <>
-                  Become <span className="text-amber-300">{EXALTED_TIER_NAME}</span> with Chronicle
-                </>
-              )}
-            </h2>
-            <p className="mt-2 max-w-xl text-sm text-zinc-400">
-              {exalted
-                ? "Thank you for supporting Chronicle. Your standing keeps the parsers running and the ads away."
-                : "Support Chronicle, browse without advertisements, and earn the highest standing there is."}
-            </p>
-            {exalted && periodEnd ? (
-              <p className="mt-2 text-sm text-zinc-300">
-                {cancelAtPeriodEnd ? "Standing ends" : "Renews"} {new Date(periodEnd).toLocaleDateString()}.
-              </p>
-            ) : null}
-          </div>
+    <div className="rounded-lg border bg-card p-6">
+      <div className="flex items-start gap-4">
+        <div className="flex size-12 shrink-0 items-center justify-center rounded-md bg-accent/20 text-accent">
+          <Crown className="size-6" />
         </div>
-
-        {exalted ? (
-          <div className="flex shrink-0 flex-col items-start gap-3 sm:items-end">
-            <span className="flex items-center gap-1.5 rounded-full border border-quality-uncommon/30 bg-quality-uncommon/10 px-3 py-1.5 text-sm font-medium text-quality-uncommon">
-              <Check className="size-4" /> Ad-free
-            </span>
-            <Button
-              variant="outline"
-              disabled={managePending}
-              onClick={onManage}
-              className="border-amber-300/40 bg-transparent text-amber-200 hover:bg-amber-300/10 hover:text-amber-100"
-            >
-              Manage subscription
-            </Button>
-          </div>
-        ) : null}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Billing</p>
+          <h2 className="mt-1 text-2xl font-semibold">
+            {exalted ? "You are " : "Become "}
+            <span className="font-wow text-accent">{EXALTED_TIER_NAME}</span>
+            {exalted ? "" : " with Chronicle"}
+          </h2>
+          <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+            {exalted
+              ? "Thank you for supporting Chronicle. Your standing keeps the parsers running."
+              : "Support Chronicle and unlock every reward below. One tier, no upsells."}
+          </p>
+        </div>
       </div>
 
-      <div className="relative mt-8">
+      <div className="mt-6">
         <div className="mb-1.5 flex items-baseline justify-between text-sm">
-          <span className="font-semibold text-zinc-200">Chronicle</span>
-          <span className={cn("flex items-center gap-1 font-semibold", exalted ? "text-amber-300" : "text-yellow-400")}>
-            {exalted ? <Sparkles className="size-3.5" /> : null}
-            {standing}
-          </span>
+          <span className="font-medium">Chronicle</span>
+          <span className={cn("font-semibold", exalted ? "text-teal-400" : "text-yellow-400")}>{standing}</span>
         </div>
         <div
           role="meter"
@@ -296,35 +142,24 @@ function ExaltedHero({
           aria-valuemax={100}
           aria-valuenow={Math.round(fill)}
           aria-valuetext={standing}
-          className="relative h-4 overflow-hidden rounded-sm border border-black bg-zinc-900 shadow-[inset_0_1px_3px_rgba(0,0,0,0.8)]"
+          className="relative h-3 overflow-hidden rounded-sm border bg-background"
         >
-          <div
-            className={cn(
-              "h-full",
-              exalted
-                ? "bg-gradient-to-b from-teal-300 via-teal-500 to-teal-700"
-                : "bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-700",
-            )}
-            style={{ width: `${fill}%` }}
-          />
-          {exalted ? (
-            <span className="legendary-shine pointer-events-none absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-transparent via-white/40 to-transparent" />
-          ) : null}
+          <div className={cn("h-full", exalted ? "bg-teal-500" : "bg-yellow-500")} style={{ width: `${fill}%` }} />
           {STANDINGS.slice(1).map((name, i) => (
             <span
               key={name}
-              className="absolute inset-y-0 w-px bg-black/60"
+              className="absolute inset-y-0 w-px bg-background/70"
               style={{ left: `${((i + 1) / STANDINGS.length) * 100}%` }}
             />
           ))}
         </div>
-        <div className="mt-1.5 hidden justify-between text-[10px] uppercase tracking-wider text-zinc-500 sm:flex">
+        <div className="mt-1.5 hidden justify-between text-[10px] uppercase tracking-wider text-muted-foreground sm:flex">
           {STANDINGS.map((name, i) => (
             <span
               key={name}
               className={cn(
                 "w-full text-center",
-                i === standingIndex && (exalted ? "font-semibold text-amber-300" : "font-semibold text-yellow-400"),
+                i === standingIndex && (exalted ? "font-semibold text-teal-400" : "font-semibold text-yellow-400"),
               )}
             >
               {name}
@@ -332,6 +167,137 @@ function ExaltedHero({
           ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
+  const checkout = useCreateBillingCheckout()
+  const openBilling = useOpenBilling()
+  const [selectedPriceID, setSelectedPriceID] = useState<string | null>(null)
+
+  const monthlyPrice = prices.find((price) => price.interval_months === 1)
+  const bestPriceID = bestValuePriceID(prices, monthlyPrice)
+  const selectedPrice = prices.find((price) => price.id === (selectedPriceID ?? bestPriceID)) ?? prices[0]
+  const qualities = billingPriceQualities(prices)
+  const sorted = [...prices].sort((a, b) => a.interval_months - b.interval_months)
+
+  return (
+    <div className="space-y-3 rounded-lg border bg-card p-4 lg:sticky lg:top-4">
+      <div>
+        <h3 className="font-semibold">Choose a period</h3>
+        <p className="text-xs text-muted-foreground">Same rewards on every plan. Longer periods cost less per month.</p>
+      </div>
+
+      {sorted.length > 0 ? (
+        <div role="radiogroup" aria-label="Billing period" className="space-y-2">
+          {sorted.map((price) => {
+            const selected = selectedPrice?.id === price.id
+            const discount = billingDiscountPercent(price, monthlyPrice)
+            return (
+              <button
+                key={price.id}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => setSelectedPriceID(price.id)}
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  selected ? "border-accent bg-accent/10" : "hover:border-accent/50",
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex size-4 shrink-0 items-center justify-center rounded-full border",
+                    selected ? "border-accent" : "border-muted-foreground/40",
+                  )}
+                >
+                  {selected ? <span className="size-2 rounded-full bg-accent" /> : null}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className={cn("font-medium", qualityText[qualities.get(price.id) ?? "rare"])}>
+                      {billingPeriodLabel(price.interval_months)}
+                    </span>
+                    {price.id === bestPriceID ? (
+                      <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-accent-foreground">
+                        Best value
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {formatBillingAmount(price.unit_amount, price.currency)} ·{" "}
+                    {billingPeriodDescription(price.interval_months).toLowerCase()}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="font-semibold">{formatMonthlyAmount(price)}</p>
+                  <p className={cn("text-xs", discount > 0 ? "font-medium text-emerald-400" : "text-muted-foreground")}>
+                    {discount > 0 ? `Save ${discount}%` : "per month"}
+                  </p>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      ) : (
+        <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+          {EXALTED_TIER_NAME} pricing is temporarily unavailable.
+        </p>
+      )}
+
+      <Button
+        size="lg"
+        className="w-full gap-2"
+        disabled={!selectedPrice || checkout.isPending}
+        onClick={() => selectedPrice && void openBilling(() => checkout.mutateAsync(selectedPrice.id))}
+      >
+        <Crown className="size-4" />
+        Become {EXALTED_TIER_NAME}
+      </Button>
+      {selectedPrice ? (
+        <p className="text-center text-xs text-muted-foreground">
+          {formatBillingAmount(selectedPrice.unit_amount, selectedPrice.currency)}{" "}
+          {billingPeriodDescription(selectedPrice.interval_months).toLowerCase()}. Cancel anytime.
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+function SubscriptionPanel({ billing }: { billing: BillingSummary }) {
+  const portal = useCreateBillingPortal()
+  const openBilling = useOpenBilling()
+
+  return (
+    <div className="space-y-4 rounded-lg border bg-card p-4">
+      <h3 className="font-semibold">Your subscription</h3>
+      <dl className="space-y-2 text-sm">
+        <div className="flex justify-between gap-3">
+          <dt className="text-muted-foreground">Standing</dt>
+          <dd className="font-wow text-accent">{EXALTED_TIER_NAME}</dd>
+        </div>
+        {billing.status ? (
+          <div className="flex justify-between gap-3">
+            <dt className="text-muted-foreground">Status</dt>
+            <dd className="capitalize">{billing.cancel_at_period_end ? "Canceling" : billing.status}</dd>
+          </div>
+        ) : null}
+        {billing.current_period_end ? (
+          <div className="flex justify-between gap-3">
+            <dt className="text-muted-foreground">{billing.cancel_at_period_end ? "Ends" : "Renews"}</dt>
+            <dd>{new Date(billing.current_period_end).toLocaleDateString()}</dd>
+          </div>
+        ) : null}
+      </dl>
+      <Button
+        variant="outline"
+        className="w-full"
+        disabled={portal.isPending}
+        onClick={() => void openBilling(() => portal.mutateAsync())}
+      >
+        Manage subscription
+      </Button>
     </div>
   )
 }
