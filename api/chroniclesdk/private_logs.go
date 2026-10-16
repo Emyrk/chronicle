@@ -6,6 +6,10 @@ import (
 	"github.com/google/uuid"
 )
 
+type UpdateLogPrivacyRequest struct {
+	Private bool `json:"private"`
+}
+
 type PrivateLogShareLink struct {
 	ID         uuid.UUID `json:"id"`
 	LogGroupID uuid.UUID `json:"log_group_id"`

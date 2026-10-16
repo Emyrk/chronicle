@@ -28,6 +28,8 @@ import {
   ChevronRight,
   AlertTriangle,
   Fingerprint,
+  Globe2,
+  LockKeyhole,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
@@ -45,7 +47,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { shouldShowChronicleCompanionWarning } from "@/lib/logReliability";
 import { LOG_FORMAT_OPTIONS } from "@/config/serverCapabilities";
 import { PrivateBadge, PrivateLogAccessPanel } from "./components/PrivateLogAccessPanel";
-import { PrivateLogAPIError } from "@/api/privateLogs";
+import { PrivateLogAPIError, useUpdateLogPrivacy } from "@/api/privateLogs";
 import { UploadSyncDialog } from "./components/UploadSyncDialog";
 import { 
   useLogGroup,
@@ -927,6 +929,10 @@ export interface LogDetailViewProps {
   isDeletingInstance: boolean;
   onRefresh: () => void;
   isRefreshing: boolean;
+  canMarkPrivate: boolean;
+  canMarkPublic: boolean;
+  onPrivacyChange: (privateLog: boolean) => void;
+  isUpdatingPrivacy: boolean;
   canManagePrivateAccess: boolean;
 }
 
@@ -953,6 +959,10 @@ export function LogDetailView({
   isDeletingInstance,
   onRefresh,
   isRefreshing,
+  canMarkPrivate,
+  canMarkPublic,
+  onPrivacyChange,
+  isUpdatingPrivacy,
   canManagePrivateAccess,
 }: LogDetailViewProps) {
   const location = useLocation();
@@ -1350,6 +1360,30 @@ export function LogDetailView({
             </div>
           </Card>
 
+          {((log.private && canMarkPublic) || (!log.private && canMarkPrivate)) && (
+            <Card className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="flex items-center gap-2 text-lg font-semibold">
+                  {log.private ? <LockKeyhole className="h-5 w-5 text-amber-400" /> : <Globe2 className="h-5 w-5 text-primary" />}
+                  Log visibility
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {log.private
+                    ? "Private logs are excluded from public rankings and require approved viewer access."
+                    : "Public logs are discoverable and eligible for rankings."}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                disabled={isUpdatingPrivacy}
+                onClick={() => onPrivacyChange(!log.private)}
+              >
+                {isUpdatingPrivacy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {log.private ? "Make public" : "Make private"}
+              </Button>
+            </Card>
+          )}
+
           {log.private && canManagePrivateAccess && <PrivateLogAccessPanel logId={log.id} />}
 
           {/* Parsed Instances Section - only shows for log-parse jobs with output */}
@@ -1608,6 +1642,7 @@ export function LogDetail() {
   const reparseLogGroup = useReparseLogGroup();
   const deleteLogFiles = useDeleteLogFiles();
   const deleteLogInstance = useDeleteLogInstance();
+  const updatePrivacy = useUpdateLogPrivacy(logId || "");
 
   // Check permissions
   const authzChecks = useMemo(() => ({
@@ -1615,6 +1650,8 @@ export function LogDetail() {
     deleteFiles: `raid_log:${logId}#delete_files`,
     delete: `raid_log:${logId}#delete`,
     uploadYoutube: `raid_log:${logId}#upload_youtube`,
+    markPrivate: `raid_log:${logId}#mark_private`,
+    markPublic: `raid_log:${logId}#mark_public`,
     adminLogs: "chronicle:chronicle#admin_logs",
   }), [logId]);
   const { data: authz } = useAuthorizationCheck(authzChecks, {
@@ -1625,7 +1662,16 @@ export function LogDetail() {
   const canDeleteInstance = authz?.delete ?? false;
   const canDownloadFiles = (authz?.adminLogs ?? false) || (session?.can_download_raw_logs ?? false);
   const canUploadYoutube = authz?.uploadYoutube ?? false;
+  const canMarkPrivate = authz?.markPrivate ?? false;
+  const canMarkPublic = authz?.markPublic ?? false;
   const canManagePrivateAccess = Boolean(log?.access?.can_manage || log?.access?.is_owner || (log?.owner && log.owner === session?.user_id));
+
+  const handlePrivacyChange = (privateLog: boolean) => {
+    updatePrivacy.mutate(privateLog, {
+      onSuccess: () => toast.success(`Log is now ${privateLog ? "private" : "public"}`),
+      onError: (error) => toast.error("Failed to update log visibility", { description: error.message }),
+    });
+  };
 
   const handleDelete = () => {
     if (!logId) return;
@@ -1728,6 +1774,10 @@ export function LogDetail() {
       isDeletingInstance={deleteLogInstance.isPending}
       onRefresh={handleRefresh}
       isRefreshing={isRefetching}
+      canMarkPrivate={canMarkPrivate}
+      canMarkPublic={canMarkPublic}
+      onPrivacyChange={handlePrivacyChange}
+      isUpdatingPrivacy={updatePrivacy.isPending}
       canManagePrivateAccess={canManagePrivateAccess}
     />
   );
@@ -1755,6 +1805,7 @@ export function LogDetailByHash() {
   const reparseLogGroup = useReparseLogGroup();
   const deleteLogFiles = useDeleteLogFiles();
   const deleteLogInstance = useDeleteLogInstance();
+  const updatePrivacy = useUpdateLogPrivacy(logId || "");
 
   const handleDeleteInstance = (instanceId: string, instanceName: string) => {
     if (!logId) return;
@@ -1777,6 +1828,8 @@ export function LogDetailByHash() {
     deleteFiles: `raid_log:${logId}#delete_files`,
     delete: `raid_log:${logId}#delete`,
     uploadYoutube: `raid_log:${logId}#upload_youtube`,
+    markPrivate: `raid_log:${logId}#mark_private`,
+    markPublic: `raid_log:${logId}#mark_public`,
     adminLogs: "chronicle:chronicle#admin_logs",
   }), [logId]);
   const { data: authz } = useAuthorizationCheck(authzChecks, {
@@ -1787,7 +1840,16 @@ export function LogDetailByHash() {
   const canDeleteInstance = authz?.delete ?? false;
   const canDownloadFiles = (authz?.adminLogs ?? false) || (session?.can_download_raw_logs ?? false);
   const canUploadYoutube = authz?.uploadYoutube ?? false;
+  const canMarkPrivate = authz?.markPrivate ?? false;
+  const canMarkPublic = authz?.markPublic ?? false;
   const canManagePrivateAccess = Boolean(log?.access?.can_manage || log?.access?.is_owner || (log?.owner && log.owner === session?.user_id));
+
+  const handlePrivacyChange = (privateLog: boolean) => {
+    updatePrivacy.mutate(privateLog, {
+      onSuccess: () => toast.success(`Log is now ${privateLog ? "private" : "public"}`),
+      onError: (error) => toast.error("Failed to update log visibility", { description: error.message }),
+    });
+  };
 
   const handleDelete = () => {
     if (!logId) return;
@@ -1875,6 +1937,10 @@ export function LogDetailByHash() {
       isDeletingInstance={deleteLogInstance.isPending}
       onRefresh={handleRefresh}
       isRefreshing={isRefetching}
+      canMarkPrivate={canMarkPrivate}
+      canMarkPublic={canMarkPublic}
+      onPrivacyChange={handlePrivacyChange}
+      isUpdatingPrivacy={updatePrivacy.isPending}
       canManagePrivateAccess={canManagePrivateAccess}
     />
   );

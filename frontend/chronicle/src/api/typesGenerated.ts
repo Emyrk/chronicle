@@ -4351,6 +4351,11 @@ export interface UpdateLayoutDefaultsRequest {
     readonly default_mobile_layout_id?: string;
 }
 
+// From chroniclesdk/private_logs.go
+export interface UpdateLogPrivacyRequest {
+    readonly private: boolean;
+}
+
 // From chroniclesdk/user.go
 /**
  * UpdatePreferencesRequest is the request body for updating user preferences.

@@ -234,6 +234,29 @@ func uploadPrivate(r *http.Request) (bool, error) {
 	return strconv.ParseBool(value)
 }
 
+func (api *API) authorizeUploadPrivacy(ctx context.Context, w http.ResponseWriter, private bool) bool {
+	actor, _ := authz.ActorFromContext(ctx)
+	permission := policy.New().GlobalChronicle().CanMark_log_public_User(actor)
+	visibility := "public"
+	if private {
+		permission = policy.New().GlobalChronicle().CanMark_log_private_User(actor)
+		visibility = "private"
+	}
+
+	allowed, err := api.Zed.CheckOne(ctx, nil, permission)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return false
+	}
+	if !allowed {
+		httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
+			Message: "You do not have permission to upload " + visibility + " logs.",
+		})
+		return false
+	}
+	return true
+}
+
 func (api *API) WoWLogUpload(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -297,6 +320,9 @@ func (api *API) WoWLogUpload(w http.ResponseWriter, r *http.Request) {
 	private, err := uploadPrivate(r)
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "private must be a boolean"})
+		return
+	}
+	if !api.authorizeUploadPrivacy(ctx, w, private) {
 		return
 	}
 
@@ -433,6 +459,9 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 	private, err := uploadPrivate(r)
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "private must be a boolean"})
+		return
+	}
+	if !api.authorizeUploadPrivacy(ctx, w, private) {
 		return
 	}
 	meta.Private = private

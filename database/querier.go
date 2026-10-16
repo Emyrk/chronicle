@@ -891,6 +891,7 @@ type sqlcQuerier interface {
 	// via a NULL narg to leave that column unchanged.
 	UpdateWoWLogGroupFormatFlavor(ctx context.Context, arg UpdateWoWLogGroupFormatFlavorParams) error
 	UpdateWoWLogGroupLogType(ctx context.Context, arg UpdateWoWLogGroupLogTypeParams) error
+	UpdateWoWLogGroupPrivacy(ctx context.Context, arg UpdateWoWLogGroupPrivacyParams) (WoWLogGroup, error)
 	UpdateWoWServer(ctx context.Context, arg UpdateWoWServerParams) (WowServer, error)
 	UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServerRealmParams) (WowServerRealm, error)
 	UpsertBillingEntitlement(ctx context.Context, arg UpsertBillingEntitlementParams) (BillingEntitlement, error)

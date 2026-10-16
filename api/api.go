@@ -561,6 +561,7 @@ func (api *API) Routes() chi.Router {
 									r.Post("/reparse", api.WoWLogReparse)
 									r.Delete("/delete-files", api.DeleteWoWLogFiles)
 									r.Delete("/instances/{instance_id}", api.WoWLogDeleteInstance)
+									r.Put("/privacy", api.UpdatePrivateLogVisibility)
 									r.Post("/private-share-links", api.CreatePrivateLogShareLink)
 									r.Delete("/private-share-links/{linkID}", api.RevokePrivateLogShareLink)
 									r.Get("/access-requests", api.ListPrivateLogAccessRequests)
