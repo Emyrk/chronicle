@@ -294,7 +294,9 @@ func (api *API) WoWLogUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	api.recordSidekickUpload(ctx)
+	if api.Opts.Sidekick != nil {
+		api.Opts.Sidekick.RecordUpload(ctx)
+	}
 
 	fileIDs := make([]uuid.UUID, 0, len(files))
 	for _, f := range files {
@@ -422,7 +424,9 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	api.recordSidekickUpload(ctx)
+	if api.Opts.Sidekick != nil {
+		api.Opts.Sidekick.RecordUpload(ctx)
+	}
 
 	fileIDs := make([]uuid.UUID, 0, len(files))
 	for _, f := range files {

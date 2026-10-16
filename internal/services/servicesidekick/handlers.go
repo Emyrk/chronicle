@@ -1,4 +1,4 @@
-package api
+package servicesidekick
 
 import (
 	"context"
@@ -42,15 +42,15 @@ func sidekickIssue(issue database.SidekickIssue) chroniclesdk.SidekickIssue {
 	}
 }
 
-func (a *API) sidekickInstallation(ctx context.Context, installation database.SidekickInstallation) (chroniclesdk.SidekickInstallation, error) {
-	issues, err := a.Zed.ListSidekickIssues(ctx, database.ListSidekickIssuesParams{
+func (s *Service) sidekickInstallation(ctx context.Context, installation database.SidekickInstallation) (chroniclesdk.SidekickInstallation, error) {
+	issues, err := s.zed.ListSidekickIssues(ctx, database.ListSidekickIssuesParams{
 		SidekickID: installation.ID,
 		LimitCount: sidekickIssueHistoryLimit,
 	})
 	if err != nil {
 		return chroniclesdk.SidekickInstallation{}, err
 	}
-	wowDirectories, err := a.Zed.ListSidekickWoWDirectories(ctx, installation.ID)
+	wowDirectories, err := s.zed.ListSidekickWoWDirectories(ctx, installation.ID)
 	if err != nil {
 		return chroniclesdk.SidekickInstallation{}, err
 	}
@@ -82,14 +82,14 @@ func (a *API) sidekickInstallation(ctx context.Context, installation database.Si
 	}, nil
 }
 
-func (a *API) listSidekicks(ctx context.Context, userID uuid.UUID) (chroniclesdk.ListSidekicksResponse, error) {
-	installations, err := a.Zed.ListSidekickInstallationsByUser(ctx, userID)
+func (s *Service) listSidekicks(ctx context.Context, userID uuid.UUID) (chroniclesdk.ListSidekicksResponse, error) {
+	installations, err := s.zed.ListSidekickInstallationsByUser(ctx, userID)
 	if err != nil {
 		return chroniclesdk.ListSidekicksResponse{}, err
 	}
 	response := chroniclesdk.ListSidekicksResponse{Sidekicks: make([]chroniclesdk.SidekickInstallation, len(installations))}
 	for i, installation := range installations {
-		response.Sidekicks[i], err = a.sidekickInstallation(ctx, installation)
+		response.Sidekicks[i], err = s.sidekickInstallation(ctx, installation)
 		if err != nil {
 			return chroniclesdk.ListSidekicksResponse{}, err
 		}
@@ -97,9 +97,9 @@ func (a *API) listSidekicks(ctx context.Context, userID uuid.UUID) (chroniclesdk
 	return response, nil
 }
 
-func (a *API) ListMySidekicks(w http.ResponseWriter, r *http.Request) {
+func (s *Service) ListMySidekicks(w http.ResponseWriter, r *http.Request) {
 	claims := chronauth.MustAuthenticatedClaims(r.Context())
-	response, err := a.listSidekicks(r.Context(), claims.Subject)
+	response, err := s.listSidekicks(r.Context(), claims.Subject)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -107,13 +107,13 @@ func (a *API) ListMySidekicks(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusOK, response)
 }
 
-func (a *API) AdminListUserSidekicks(w http.ResponseWriter, r *http.Request) {
+func (s *Service) AdminListUserSidekicks(w http.ResponseWriter, r *http.Request) {
 	userID, err := uuid.Parse(chi.URLParam(r, "userID"))
 	if err != nil {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid user ID."})
 		return
 	}
-	response, err := a.listSidekicks(r.Context(), userID)
+	response, err := s.listSidekicks(r.Context(), userID)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -121,7 +121,7 @@ func (a *API) AdminListUserSidekicks(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusOK, response)
 }
 
-func (a *API) RenameMySidekick(w http.ResponseWriter, r *http.Request) {
+func (s *Service) RenameMySidekick(w http.ResponseWriter, r *http.Request) {
 	claims := chronauth.MustAuthenticatedClaims(r.Context())
 	installationID, err := uuid.Parse(chi.URLParam(r, "sidekickID"))
 	if err != nil {
@@ -137,7 +137,7 @@ func (a *API) RenameMySidekick(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Sidekick name must be between 1 and 100 characters."})
 		return
 	}
-	installation, err := a.Zed.RenameSidekickInstallation(r.Context(), database.RenameSidekickInstallationParams{
+	installation, err := s.zed.RenameSidekickInstallation(r.Context(), database.RenameSidekickInstallationParams{
 		ID: installationID, UserID: claims.Subject, Name: request.Name,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -148,7 +148,7 @@ func (a *API) RenameMySidekick(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	response, err := a.sidekickInstallation(r.Context(), installation)
+	response, err := s.sidekickInstallation(r.Context(), installation)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -156,14 +156,14 @@ func (a *API) RenameMySidekick(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusOK, response)
 }
 
-func (a *API) DisconnectMySidekick(w http.ResponseWriter, r *http.Request) {
+func (s *Service) DisconnectMySidekick(w http.ResponseWriter, r *http.Request) {
 	claims := chronauth.MustAuthenticatedClaims(r.Context())
 	installationID, err := uuid.Parse(chi.URLParam(r, "sidekickID"))
 	if err != nil {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid Sidekick ID."})
 		return
 	}
-	err = a.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
+	err = s.zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
 		if _, err := tx.DisconnectSidekickInstallation(r.Context(), database.DisconnectSidekickInstallationParams{
 			ID: installationID, UserID: claims.Subject,
 		}); err != nil {
@@ -191,7 +191,7 @@ func (a *API) DisconnectMySidekick(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusNoContent, nil)
 }
 
-func (a *API) UpdateSidekickStatus(w http.ResponseWriter, r *http.Request) {
+func (s *Service) UpdateSidekickStatus(w http.ResponseWriter, r *http.Request) {
 	claims := chronauth.MustAuthenticatedClaims(r.Context())
 	installationID, ok := serviceoauth.SidekickInstallationID(r.Context())
 	if !ok {
@@ -258,7 +258,7 @@ func (a *API) UpdateSidekickStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var installation database.SidekickInstallation
-	err := a.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
+	err := s.zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
 		var err error
 		installation, err = tx.UpdateSidekickHeartbeat(r.Context(), database.UpdateSidekickHeartbeatParams{
 			ID: installationID, UserID: claims.Subject, Platform: request.Platform, Version: request.Version,
@@ -301,7 +301,7 @@ func (a *API) UpdateSidekickStatus(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	response, err := a.sidekickInstallation(r.Context(), installation)
+	response, err := s.sidekickInstallation(r.Context(), installation)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -309,15 +309,15 @@ func (a *API) UpdateSidekickStatus(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusOK, response)
 }
 
-func (a *API) recordSidekickUpload(ctx context.Context) {
+func (s *Service) RecordUpload(ctx context.Context) {
 	installationID, ok := serviceoauth.SidekickInstallationID(ctx)
 	if !ok {
 		return
 	}
 	claims := chronauth.MustAuthenticatedClaims(ctx)
-	if _, err := a.Zed.TouchSidekickUpload(ctx, database.TouchSidekickUploadParams{
+	if _, err := s.zed.TouchSidekickUpload(ctx, database.TouchSidekickUploadParams{
 		ID: installationID, UserID: claims.Subject,
 	}); err != nil {
-		a.Opts.Logger.ErrorContext(ctx, "record sidekick upload", "sidekick_id", installationID, "error", err)
+		s.logger.ErrorContext(ctx, "record sidekick upload", "sidekick_id", installationID, "error", err)
 	}
 }

@@ -13,6 +13,7 @@ const (
 	ServiceAPI         = "api"
 	ServiceExternalAPI = "external-api"
 	ServiceOAuth       = "oauth"
+	ServiceSidekick    = "sidekick"
 	ServiceAuthz       = "authz"
 	ServiceWoWDB       = "wow-db"
 	ServiceAssets      = "assets"

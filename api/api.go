@@ -53,6 +53,14 @@ type OAuthHandler interface {
 	AuthenticationMiddleware(http.Handler) http.Handler
 }
 
+// SidekickService provides Sidekick routes and upload activity tracking.
+type SidekickService interface {
+	AccountRoutes() http.Handler
+	StatusRoutes() http.Handler
+	AdminRoutes() http.Handler
+	RecordUpload(context.Context)
+}
+
 type Options struct {
 	Logger                *slog.Logger
 	Storage               storage.ObjectStorage
@@ -70,6 +78,7 @@ type Options struct {
 	InternalGameData      http.Handler
 	ExternalAPI           http.Handler
 	OAuth                 OAuthHandler
+	Sidekick              SidekickService
 	Rankings              http.Handler
 	Mailer                *chroniclemail.Mailer
 	ItemPricing           *itempricing.Service
@@ -247,10 +256,10 @@ func (api *API) Routes() chi.Router {
 				r.Post("/authcheck", api.checkAuthorization)
 				r.Post("/live-sessions", api.liveSessions.Create)
 				r.Get("/me/storage", api.GetMyStorage)
-				r.Get("/me/sidekicks", api.ListMySidekicks)
-				r.Patch("/me/sidekicks/{sidekickID}", api.RenameMySidekick)
-				r.Delete("/me/sidekicks/{sidekickID}", api.DisconnectMySidekick)
-				r.Put("/sidekick/status", api.UpdateSidekickStatus)
+				if api.Opts.Sidekick != nil {
+					r.Mount("/me/sidekicks", api.Opts.Sidekick.AccountRoutes())
+					r.Mount("/sidekick", api.Opts.Sidekick.StatusRoutes())
+				}
 				if api.Opts.Billing != nil {
 					r.Get("/me/billing", api.Opts.Billing.Summary)
 					r.Post("/me/billing/checkout", api.Opts.Billing.CreateCheckout)
@@ -326,7 +335,9 @@ func (api *API) Routes() chi.Router {
 					r.Put("/{userID}/roles", api.AdminSetUserRoles)
 					r.Put("/{userID}/retention", api.AdminSetUserRetention)
 					r.Get("/{userID}/grants", api.GetUserGrants)
-					r.Get("/{userID}/sidekicks", api.AdminListUserSidekicks)
+					if api.Opts.Sidekick != nil {
+						r.Mount("/{userID}/sidekicks", api.Opts.Sidekick.AdminRoutes())
+					}
 					r.Put("/{userID}/grants", api.UpsertUserGrant)
 					r.Delete("/{userID}/grants/{source}", api.DeleteUserGrant)
 				})
