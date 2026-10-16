@@ -147,7 +147,6 @@ function App() {
         <Route path="/armory/:realmName/:playerIdentifier/analysis" element={<ArmoryAnalysisRedirect />} />
         <Route path="/armory/:realmName/:playerIdentifier" element={<ArmoryPage />} />
         <Route path="/sim" element={<SimPage />} />
-        {/* Unlinked while in development — reachable by URL only. */}
         <Route path="/raidplanner" element={<RaidPlannerPage />} />
         <Route path="/leaderboards" element={<LegacyLeaderboardsRedirect />} />
         <Route path="/leaderboards/statistics" element={<LeaderboardsPage mode="statistics" />} />

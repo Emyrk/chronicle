@@ -1,22 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Keyboard, Loader2, Pencil } from "lucide-react";
+import { ArrowLeft, Keyboard, Loader2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import {
   useCreateRaidComposition,
   useGuildCharacters,
+  useMyFavorites,
   useRaidComposition,
   useSession,
   useUpdateRaidComposition,
 } from "@/api/queries";
-import type { GuildInfo, RaidComposition } from "@/api/typesGenerated";
+import type { RaidComposition } from "@/api/typesGenerated";
 import { serverCapabilities } from "@/config/serverCapabilities";
 import { gearClassesForFlavor } from "@/pages/Gear/classInfo";
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
-import type { Board, DragPayload, HoverTarget, SlotEntry, SlotLocation } from "./types";
-import { GROUP_SIZE, MAX_GROUPS, emptyBoard, entryName, playerEntry } from "./types";
+import type { Board, DragPayload, HoverTarget, PlannerGuild, SlotEntry, SlotLocation } from "./types";
+import { GROUP_SIZE, MAX_GROUPS, defaultPlannerGuild, emptyBoard, entryName, playerEntry } from "./types";
 import type { ParsedSignUp, RaidHelperEvent } from "./raidHelper";
 import { RaidHelperImportModal } from "./RaidHelperImportModal";
+import { RaidImportModal } from "./RaidImportModal";
+import { fetchRaidImport, type RaidImportResult } from "./raidImport";
 import { compositionToData, dataToComposition } from "./compSerde";
 import { SavedCompsList } from "./SavedCompsList";
 import { GuildSelector } from "./GuildSelector";
@@ -65,7 +68,7 @@ export function RaidPlannerPage() {
   const [phase, setPhase] = useState<Phase>("picking");
   const [pendingGroups, setPendingGroups] = useState(8);
   const [title, setTitle] = useState("");
-  const [guild, setGuild] = useState<GuildInfo | null>(null);
+  const [guild, setGuild] = useState<PlannerGuild | null>(null);
   const [comp, setComp] = useState<Composition>({ board: [], bench: [] });
   const [groupNotes, setGroupNotes] = useState<Record<number, string>>({});
   const [editing, setEditing] = useState<SlotLocation | null>(null);
@@ -82,15 +85,28 @@ export function RaidPlannerPage() {
   const dragRef = useRef<DragPayload | null>(null);
   const hoverRef = useRef<HoverTarget | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const linkedImportRef = useRef<string | null>(null);
   const pastRef = useRef<Composition[]>([]);
   const futureRef = useRef<Composition[]>([]);
 
   const classes = useMemo(() => gearClassesForFlavor(serverCapabilities.defaultFlavor), []);
-  const { data: rosterData, isLoading: rosterLoading } = useGuildCharacters(guild?.id);
   const { data: session } = useSession();
+  const { data: favorites } = useMyFavorites({ enabled: !!session });
+  const urlCompId = searchParams.get("comp");
+  const linkedRaidID = searchParams.get("raid");
+  const linkedGuildID = searchParams.get("guild");
+  const linkedGuildName = searchParams.get("guildName");
+  const linkedGuild = useMemo(
+    () => linkedGuildID && linkedGuildName ? { id: linkedGuildID, name: linkedGuildName } : null,
+    [linkedGuildID, linkedGuildName],
+  );
+  const selectedGuild = useMemo(
+    () => defaultPlannerGuild(guild ?? linkedGuild, favorites?.guilds ?? [], !!urlCompId),
+    [favorites?.guilds, guild, linkedGuild, urlCompId],
+  );
+  const { data: rosterData, isLoading: rosterLoading } = useGuildCharacters(selectedGuild?.id);
   const createCompMutation = useCreateRaidComposition();
   const updateCompMutation = useUpdateRaidComposition();
-  const urlCompId = searchParams.get("comp");
   const { data: loadedComp, error: loadCompError } = useRaidComposition(
     urlCompId && urlCompId !== hydratedCompId ? urlCompId : undefined,
   );
@@ -459,6 +475,43 @@ export function RaidPlannerPage() {
     setEditing(null);
   };
 
+  const applyRaidImport = (result: RaidImportResult, raidTitle: string, importedGuild: PlannerGuild | null) => {
+    updateComp(() => ({ board: result.board, bench: result.bench }));
+    if (importedGuild) setGuild(importedGuild);
+    setPendingGroups(result.board.length || 1);
+    setPhase("set");
+    setTitle(raidTitle);
+    setSavedComp(null);
+    setHydratedCompId(null);
+    const next = new URLSearchParams(searchParams);
+    next.delete("comp");
+    setSearchParams(next, { replace: true });
+  };
+
+  useEffect(() => {
+    if (!linkedRaidID || rosterLoading || linkedImportRef.current === linkedRaidID) return;
+    const controller = new AbortController();
+    linkedImportRef.current = linkedRaidID;
+    void fetchRaidImport(linkedRaidID, rosterData?.members ?? [], controller.signal)
+      .then((imported) => {
+        setComp({ board: imported.board, bench: imported.bench });
+        if (selectedGuild) setGuild(selectedGuild);
+        setPendingGroups(imported.board.length || 1);
+        setPhase("set");
+        setTitle(imported.title);
+        setSavedComp(null);
+        setHydratedCompId(null);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        toast.error(err instanceof Error ? err.message : "Failed to import that raid");
+      });
+    return () => {
+      controller.abort();
+      if (linkedImportRef.current === linkedRaidID) linkedImportRef.current = null;
+    };
+  }, [linkedRaidID, rosterData, rosterLoading, selectedGuild]);
+
   /**
    * Apply raid-helper sign-ups: board-bound entries fill first-empty slots
    * (building a fitting board when none exists yet), the rest join the bench.
@@ -529,6 +582,22 @@ export function RaidPlannerPage() {
     setPhase("set");
   };
 
+  const returnToSavedPlans = () => {
+    setPhase("picking");
+    setPendingGroups(8);
+    setTitle("");
+    setComp({ board: [], bench: [] });
+    setGroupNotes({});
+    setEditing(null);
+    setSelectedIds(new Set());
+    setSavedComp(null);
+    setHydratedCompId(null);
+    linkedImportRef.current = null;
+    pastRef.current = [];
+    futureRef.current = [];
+    setSearchParams({}, { replace: true });
+  };
+
   // ---------------------------------------------------------------------------
   // Saving
   // ---------------------------------------------------------------------------
@@ -542,7 +611,7 @@ export function RaidPlannerPage() {
 
     if (savedComp && ownsSaved) {
       updateCompMutation.mutate(
-        { compID: savedComp.id, request: { name, guild_id: guild?.id, data } },
+        { compID: savedComp.id, request: { name, guild_id: selectedGuild?.id, data } },
         {
           onSuccess: (saved) => {
             setSavedComp(saved);
@@ -557,7 +626,7 @@ export function RaidPlannerPage() {
 
     // First save, or saving a copy of someone else's shared composition.
     createCompMutation.mutate(
-      { name, guild_id: guild?.id, data },
+      { name, guild_id: selectedGuild?.id, data },
       {
         onSuccess: (saved) => {
           const copied = !!savedComp;
@@ -688,7 +757,17 @@ export function RaidPlannerPage() {
     <div className="w-full p-4 md:p-6 space-y-3.5">
       {/* Header bar */}
       <div className="flex flex-wrap items-center gap-3 px-4 py-3 border border-border rounded-lg bg-card">
-        {phase === "set" && <GuildSelector guild={guild} onSelect={setGuild} />}
+        {phase === "set" && (
+          <button
+            type="button"
+            onClick={returnToSavedPlans}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to saved plans
+          </button>
+        )}
+        {phase === "set" && <GuildSelector guild={selectedGuild} onSelect={setGuild} />}
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -773,7 +852,7 @@ export function RaidPlannerPage() {
                 classes={classes}
                 available={availableRoster}
                 rosterLoading={rosterLoading}
-                hasGuild={!!guild}
+                hasGuild={!!selectedGuild}
                 dragRef={dragRef}
                 hoverRef={hoverRef}
                 searchInputRef={searchInputRef}
@@ -943,12 +1022,20 @@ export function RaidPlannerPage() {
       )}
 
       <KeybindsOverlay open={keybindsOpen} onClose={() => setKeybindsOpen(false)} />
+      <RaidImportModal
+        key={importSource === "raid" ? "raid-open" : "raid-closed"}
+        open={importSource === "raid"}
+        onClose={() => setImportSource(null)}
+        guild={selectedGuild}
+        hasComposition={comp.board.length > 0 || comp.bench.length > 0}
+        onApply={applyRaidImport}
+      />
       <RaidHelperImportModal
         key={importSource ?? "closed"}
         open={importSource === "raid-helper"}
         onClose={() => setImportSource(null)}
         roster={allRosterEntries}
-        guildName={guild?.name}
+        guildName={selectedGuild?.name}
         onApply={applyRaidHelperImport}
       />
     </div>

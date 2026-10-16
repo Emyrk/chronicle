@@ -73,14 +73,23 @@ export function SizePicker({ pending, onPendingChange, onConfirm, onCancel }: Si
 
         {/* Group preview — always 8 squares; excluded groups grey out. */}
         <div className="flex justify-center gap-1 mt-3.5">
-          {Array.from({ length: MAX_GROUPS }, (_, i) => (
-            <span
-              key={i}
-              className={`w-[26px] h-[34px] rounded border transition-colors ${
-                i < pending ? "bg-primary/20 border-ring" : "bg-muted/30 border-border opacity-50"
-              }`}
-            />
-          ))}
+          {Array.from({ length: MAX_GROUPS }, (_, i) => {
+            const groups = i + 1;
+            return (
+              <button
+                key={groups}
+                type="button"
+                onClick={() => onPendingChange(groups)}
+                aria-label={`Set raid size to ${groups} ${groups === 1 ? "group" : "groups"}`}
+                aria-pressed={groups === pending}
+                className={`w-[26px] h-[34px] rounded border transition-colors hover:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  groups <= pending
+                    ? "bg-primary/20 border-ring"
+                    : "bg-muted/30 border-border opacity-50 hover:opacity-80"
+                }`}
+              />
+            );
+          })}
         </div>
 
         <button

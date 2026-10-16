@@ -11,8 +11,8 @@ interface ImportSource {
 const SOURCES: ImportSource[] = [
   {
     key: "raid",
-    title: "From a raid",
-    subtitle: "guild calendar · logs",
+    title: "From a Raid",
+    subtitle: "recent combat logs",
     icon: <Clock className="h-4 w-4" />,
   },
   {

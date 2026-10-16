@@ -3,6 +3,7 @@ import { ChevronDown, Loader2, Search, Users } from "lucide-react";
 import { useGuildSearch } from "@/api/queries";
 import type { GuildInfo } from "@/api/typesGenerated";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import type { PlannerGuild } from "./types";
 
 /**
  * Compact guild picker chip with a searchable dropdown, backed by the same
@@ -12,8 +13,8 @@ export function GuildSelector({
   guild,
   onSelect,
 }: {
-  guild: GuildInfo | null;
-  onSelect: (guild: GuildInfo) => void;
+  guild: PlannerGuild | null;
+  onSelect: (guild: PlannerGuild) => void;
 }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
