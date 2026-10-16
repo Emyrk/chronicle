@@ -47,6 +47,56 @@ func privateLogAccessRequest(row database.PrivateLogAccessRequest, requesterName
 	return out
 }
 
+func (api *API) UpdatePrivateLogVisibility(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	logGroupID := httpmw.LogID(ctx)
+
+	var req chroniclesdk.UpdateLogPrivacyRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+
+	actor, _ := authz.ActorFromContext(ctx)
+	permission := policy.New().Raid_log(logGroupID).CanMark_public_User(actor)
+	visibility := "public"
+	if req.Private {
+		permission = policy.New().Raid_log(logGroupID).CanMark_private_User(actor)
+		visibility = "private"
+	}
+	allowed, err := api.Zed.CheckOne(ctx, nil, permission)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if !allowed {
+		httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
+			Message: "You do not have permission to mark this log " + visibility + ".",
+		})
+		return
+	}
+
+	current, err := api.Zed.GetWoWLogGroupPrivacy(ctx, logGroupID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if current == req.Private {
+		httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "Log is already " + visibility + "."})
+		return
+	}
+
+	_, err = api.Zed.UpdateWoWLogGroupPrivacy(ctx, database.UpdateWoWLogGroupPrivacyParams{
+		ID:      logGroupID,
+		Private: req.Private,
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "Log is now " + visibility + "."})
+}
+
 func (api *API) CreatePrivateLogShareLink(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logGroupID := httpmw.LogID(ctx)

@@ -78,6 +78,25 @@ async function readError(response: Response, fallback: string): Promise<Error> {
   return new Error(body?.message ?? fallback);
 }
 
+export function useUpdateLogPrivacy(logId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (privateLog: boolean) => {
+      const response = await fetch(`/api/v1/raidlogs/logs/${encodeURIComponent(logId)}/privacy`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ private: privateLog }),
+      });
+      if (!response.ok) throw await readError(response, `Failed to make log ${privateLog ? "private" : "public"}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["logGroup", logId] });
+      queryClient.invalidateQueries({ queryKey: ["logGroups"] });
+      queryClient.invalidateQueries({ queryKey: ["instance"] });
+    },
+  });
+}
+
 export function useCreatePrivateLogShare() {
   return useMutation({
     mutationFn: async (logId: string) => {

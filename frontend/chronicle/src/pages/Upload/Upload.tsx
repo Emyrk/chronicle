@@ -115,6 +115,7 @@ export interface UploadViewProps {
   authLoading: boolean;
   hasUploadPermission: boolean;
   hasAdminLogs: boolean;
+  canMarkPrivate: boolean;
   combatLog: File | null;
   rawCombatLog: File | null;
   uploading: boolean;
@@ -149,6 +150,7 @@ export function UploadView({
   authLoading,
   hasUploadPermission,
   hasAdminLogs,
+  canMarkPrivate,
   combatLog,
   rawCombatLog,
   uploading,
@@ -292,7 +294,9 @@ export function UploadView({
               <button
                 type="button"
                 onClick={() => onPrivateLogChange(true)}
-                className={`flex items-start gap-3 rounded-lg border p-3 text-left transition-colors ${privateLog ? "border-amber-500/50 bg-amber-500/10" : "hover:bg-muted/50"}`}
+                disabled={!canMarkPrivate}
+                title={canMarkPrivate ? undefined : "Private log access is required"}
+                className={`flex items-start gap-3 rounded-lg border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${privateLog ? "border-amber-500/50 bg-amber-500/10" : "hover:bg-muted/50"}`}
               >
                 <LockKeyhole className="mt-0.5 h-5 w-5 text-amber-400" />
                 <span><span className="block text-sm font-medium">Private</span><span className="block text-xs text-muted-foreground">Excluded from rankings; viewers must request access.</span></span>
@@ -527,12 +531,14 @@ export function Upload() {
   const authzChecks = useMemo(() => ({ 
     upload: "chronicle:chronicle#upload_log",
     adminLogs: "chronicle:chronicle#admin_logs",
+    markPrivate: "chronicle:chronicle#mark_log_private",
   }), []);
   const { data: authz } = useAuthorizationCheck(authzChecks, {
     enabled: isAuthenticated,
   });
   const hasUploadPermission = authz?.upload ?? false;
   const hasAdminLogs = authz?.adminLogs ?? false;
+  const canMarkPrivate = authz?.markPrivate ?? false;
 
   const { data: siteConfig, isFetched: configLoaded } = useSiteConfig();
   const { data: flavorTags = [] } = useFlavors();
@@ -738,7 +744,7 @@ export function Upload() {
   }, [combatLog, rawCombatLog, useV2Upload, effectiveFormat, flavorOverride, privateLog]);
 
   if (isMultiple) {
-    return <MultiUpload format={effectiveFormat} privateLog={privateLog} onPrivateLogChange={setPrivateLog} />;
+    return <MultiUpload format={effectiveFormat} privateLog={privateLog} canMarkPrivate={canMarkPrivate} onPrivateLogChange={setPrivateLog} />;
   }
 
   if (uploadsDisabled) {
@@ -761,6 +767,7 @@ export function Upload() {
       authLoading={authLoading}
       hasUploadPermission={hasUploadPermission}
       hasAdminLogs={hasAdminLogs}
+      canMarkPrivate={canMarkPrivate}
       combatLog={combatLog}
       rawCombatLog={rawCombatLog}
       uploading={uploading}

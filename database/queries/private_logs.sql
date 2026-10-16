@@ -3,6 +3,13 @@ SELECT private
 FROM wow_log_groups
 WHERE id = $1;
 
+-- name: UpdateWoWLogGroupPrivacy :one
+UPDATE wow_log_groups
+SET private = @private,
+    updated_at = NOW()
+WHERE id = @id
+RETURNING *;
+
 -- name: CreatePrivateLogShareLink :one
 INSERT INTO private_log_share_links (id, log_group_id, code, created_by)
 VALUES (@id, @log_group_id, @code, @created_by)

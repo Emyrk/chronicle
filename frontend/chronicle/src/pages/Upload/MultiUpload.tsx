@@ -131,10 +131,11 @@ const MAX_CONCURRENT = 3;
 export interface MultiUploadProps {
   format: string;
   privateLog: boolean;
+  canMarkPrivate: boolean;
   onPrivateLogChange: (value: boolean) => void;
 }
 
-export function MultiUpload({ format, privateLog, onPrivateLogChange }: MultiUploadProps) {
+export function MultiUpload({ format, privateLog, canMarkPrivate, onPrivateLogChange }: MultiUploadProps) {
   const [entries, setEntries] = useState<UploadEntry[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -282,7 +283,7 @@ export function MultiUpload({ format, privateLog, onPrivateLogChange }: MultiUpl
             <Globe2 className="mt-0.5 h-5 w-5 text-primary" />
             <span><span className="block text-sm font-medium">Public uploads</span><span className="block text-xs text-muted-foreground">Normal visibility and public results.</span></span>
           </button>
-          <button type="button" onClick={() => onPrivateLogChange(true)} className={`flex items-start gap-3 rounded-lg border p-3 text-left ${privateLog ? "border-amber-500/50 bg-amber-500/10" : "hover:bg-muted/50"}`}>
+          <button type="button" onClick={() => onPrivateLogChange(true)} disabled={!canMarkPrivate} title={canMarkPrivate ? undefined : "Private log access is required"} className={`flex items-start gap-3 rounded-lg border p-3 text-left disabled:cursor-not-allowed disabled:opacity-50 ${privateLog ? "border-amber-500/50 bg-amber-500/10" : "hover:bg-muted/50"}`}>
             <LockKeyhole className="mt-0.5 h-5 w-5 text-amber-400" />
             <span><span className="block text-sm font-medium">Private uploads</span><span className="block text-xs text-muted-foreground">Each file requires approved viewer access.</span></span>
           </button>

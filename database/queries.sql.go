@@ -13975,6 +13975,38 @@ func (q *sqlQuerier) RevokePrivateLogShareLink(ctx context.Context, arg RevokePr
 	return result.RowsAffected(), nil
 }
 
+const updateWoWLogGroupPrivacy = `-- name: UpdateWoWLogGroupPrivacy :one
+UPDATE wow_log_groups
+SET private = $1,
+    updated_at = NOW()
+WHERE id = $2
+RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason, parse_generation, private
+`
+
+type UpdateWoWLogGroupPrivacyParams struct {
+	Private bool      `db:"private" json:"private"`
+	ID      uuid.UUID `db:"id" json:"id"`
+}
+
+func (q *sqlQuerier) UpdateWoWLogGroupPrivacy(ctx context.Context, arg UpdateWoWLogGroupPrivacyParams) (WoWLogGroup, error) {
+	row := q.db.QueryRow(ctx, updateWoWLogGroupPrivacy, arg.Private, arg.ID)
+	var i WoWLogGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Owner,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LogType,
+		&i.Format,
+		&i.Flavor,
+		&i.InvalidatedAt,
+		&i.InvalidReason,
+		&i.ParseGeneration,
+		&i.Private,
+	)
+	return i, err
+}
+
 const upsertPrivateLogAccessRequest = `-- name: UpsertPrivateLogAccessRequest :one
 INSERT INTO private_log_access_requests (
   id,

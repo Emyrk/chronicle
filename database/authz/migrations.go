@@ -6,7 +6,6 @@ import (
 
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/google/uuid"
-
 )
 
 // AuthzMigration is a numbered authz schema migration.
@@ -24,6 +23,7 @@ var migrations = []AuthzMigration{
 	{Version: 3, Run: migration003},
 	{Version: 4, Run: migration004},
 	{Version: 5, Run: noop},
+	{Version: 6, Run: migration006},
 }
 
 // RunSchemaMigrations runs any authz migrations not yet recorded in the
@@ -179,4 +179,28 @@ func migration004(ctx context.Context, az *Authz) error {
 	// TOUCH is idempotent — safe to run on every startup.
 	_, err = az.Write(ctx, *b.Txn())
 	return err
+}
+
+func migration006(ctx context.Context, az *Authz) error {
+	users, err := az.ListAllUsers(ctx)
+	if err != nil {
+		return fmt.Errorf("list users: %w", err)
+	}
+
+	const batchSize = 500
+	for start := 0; start < len(users); start += batchSize {
+		end := min(start+batchSize, len(users))
+		b := policy.New()
+		chron := b.GlobalChronicle()
+		for _, user := range users[start:end] {
+			chron.Public_log_capable(b.User(user.ChronicleUser.ID))
+		}
+
+		// TOUCH is idempotent and grants every existing user the baseline ability
+		// to keep or return their own logs to public visibility.
+		if _, err := az.Write(ctx, *b.Txn()); err != nil {
+			return err
+		}
+	}
+	return nil
 }
