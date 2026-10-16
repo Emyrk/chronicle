@@ -347,6 +347,8 @@ docker compose logs -f chronicle
 
 When `CHRONICLE_PROMETHEUS_SHARED_KEY` is set, scrapers must send `Authorization: Bearer <shared-key>`. When `CHRONICLE_PROMETHEUS_IP_ALLOW` is set, the client IP must match one of its comma-separated IPv4 or IPv6 addresses. When both are set, both checks must pass. Forwarded client IPs are trusted only when the direct peer is a private or loopback reverse proxy.
 
+For scrape configuration, Grafana queries, alert suggestions, and the complete metric reference, see [Prometheus metrics and Grafana dashboards](docs/prometheus-grafana.md).
+
 Run the image's help command for the complete configuration supported by your pinned release:
 
 ```bash
