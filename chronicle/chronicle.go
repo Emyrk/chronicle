@@ -78,12 +78,13 @@ type Chronicle struct {
 }
 
 type Options struct {
-	Storage         storage.ObjectStorage
-	Zed             *authz.Authz
-	Ps              pubsub.Pubsub
-	WoWDB           *gamedb.WoWDB
-	Registry        prometheus.Registerer
-	EmitParsingLogs bool
+	Storage          storage.ObjectStorage
+	Zed              *authz.Authz
+	Ps               pubsub.Pubsub
+	WoWDB            *gamedb.WoWDB
+	Registry         prometheus.Registerer
+	ParseProcessRole string
+	EmitParsingLogs  bool
 	// PrimaryDomain is the root domain (e.g. "chronicleclassic.com") used to
 	// build tenant upload URLs in rejection messages.
 	PrimaryDomain string
@@ -112,7 +113,7 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, er
 		logger:             logger,
 		WoWDB:              opts.WoWDB,
 		TemporaryDirectory: filepath.Join(os.TempDir(), "chronicle_uploads"),
-		metrics:            newLogParseMetrics(opts.Registry),
+		metrics:            newLogParseMetrics(opts.Registry, opts.ParseProcessRole),
 		ItemFetcher:        opts.WoWDB,
 		emitParsingLogs:    opts.EmitParsingLogs,
 		registryByFlavor:   make(map[string]*registry.Registry),

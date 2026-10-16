@@ -38,7 +38,7 @@ func parserServices(srvs *services.Services) []services.Servicer {
 		serviceauthz.New(srvs),
 		servicedataset.New(srvs),
 		servicewowdb.New(srvs),
-		servicechronicle.New(srvs),
+		servicechronicle.NewParser(srvs),
 		serviceparser.New(srvs),
 	}
 }

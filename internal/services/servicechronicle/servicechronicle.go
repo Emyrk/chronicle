@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
+	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewowdb"
@@ -33,13 +34,23 @@ func OnChronicle() string {
 type Service struct {
 	broker *services.Services
 
-	chronicle     *chronicle.Chronicle
-	emitParseLogs bool
+	chronicle        *chronicle.Chronicle
+	emitParseLogs    bool
+	parseProcessRole string
 }
 
 func New(broker *services.Services) *Service {
+	return newService(broker, chronicle.ParseProcessRoleServer)
+}
+
+func NewParser(broker *services.Services) *Service {
+	return newService(broker, chronicle.ParseProcessRoleParser)
+}
+
+func newService(broker *services.Services, parseProcessRole string) *Service {
 	return &Service{
-		broker: broker,
+		broker:           broker,
+		parseProcessRole: parseProcessRole,
 	}
 }
 
@@ -50,6 +61,7 @@ func (s *Service) Name() string {
 func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
+		serviceprometheus.OnPrometheus(),
 		serviceauthz.OnAuthz(),
 		servicestorage.OnStorage(),
 		servicewowdb.OnWoWDB(),
@@ -76,17 +88,20 @@ func (s *Service) Start(ctx context.Context) error {
 	zed := serviceauthz.Authz(s.broker)
 	wowDB := servicewowdb.WoWDB(s.broker)
 	ps := servicepgxpool.Pubsub(s.broker)
+	reg := serviceprometheus.Registry(s.broker)
 
 	tenantSvc := servicetenant.Tenant(s.broker)
 	datasetSvc := servicedataset.Dataset(s.broker)
 
 	c, err := chronicle.New(ctx, logger, chronicle.Options{
-		Storage:         st,
-		Zed:             zed,
-		Ps:              ps,
-		WoWDB:           wowDB.GameDB(),
-		EmitParsingLogs: s.emitParseLogs,
-		PrimaryDomain:   tenantSvc.PrimaryDomain(),
+		Storage:          st,
+		Zed:              zed,
+		Ps:               ps,
+		WoWDB:            wowDB.GameDB(),
+		Registry:         reg,
+		ParseProcessRole: s.parseProcessRole,
+		EmitParsingLogs:  s.emitParseLogs,
+		PrimaryDomain:    tenantSvc.PrimaryDomain(),
 		// Stamp the build-tag flavor on new log groups.
 		DefaultFlavor:    BuildTagFlavor(),
 		DefaultDatasetID: servicedataset.DefaultDatasetID,

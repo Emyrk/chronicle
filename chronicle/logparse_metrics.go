@@ -14,18 +14,28 @@ type logParseMetrics struct {
 	encountersParsed prometheus.Counter
 
 	// Stage durations
-	loadFileDuration   prometheus.Histogram
-	parseDuration      prometheus.Histogram
-	finalizeDuration   prometheus.Histogram
-	dbInsertDuration   prometheus.Histogram
+	loadFileDuration prometheus.Histogram
+	parseDuration    prometheus.Histogram
+	finalizeDuration prometheus.Histogram
+	dbInsertDuration prometheus.Histogram
 }
 
+const (
+	ParseProcessRoleServer = "server"
+	ParseProcessRoleParser = "parser"
+)
+
 // newLogParseMetrics creates metrics for log parsing with the given registerer.
-// If reg is nil, metrics are not registered (useful for testing).
-func newLogParseMetrics(reg prometheus.Registerer) *logParseMetrics {
-	if reg == nil {
-		reg = prometheus.NewRegistry() // No-op registry for testing
+// Every metric is labeled with the process role that executed the parse. If reg
+// is nil, metrics are registered with an isolated registry for testing.
+func newLogParseMetrics(reg prometheus.Registerer, processRole string) *logParseMetrics {
+	if processRole == "" {
+		processRole = ParseProcessRoleServer
 	}
+	if reg == nil {
+		reg = prometheus.NewRegistry()
+	}
+	reg = prometheus.WrapRegistererWith(prometheus.Labels{"process_role": processRole}, reg)
 	factory := promauto.With(reg)
 
 	// Buckets for job durations (1s to 10min)
