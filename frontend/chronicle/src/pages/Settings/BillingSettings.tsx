@@ -20,7 +20,7 @@ import {
 // Styling mirrors the landing site's /support page: gold Friz Quadrata headings,
 // brown framed panels, and WoW item tooltips.
 const GOLD = "#f0c060"
-const FRAME = "rounded-xl border-2 border-[#6b5320] bg-[#1e1710] shadow-xl shadow-black/30"
+const FRAME = "rounded-lg border border-border bg-card shadow-2xl shadow-black/40 ring-1 ring-white/10"
 const TOOLTIP = "rounded-lg border-2 border-[#4a4a6a] bg-[#1a1a2e] shadow-lg"
 
 // WoW reputation standings, in order. Free users sit at Friendly; Exalted fills the bar.
@@ -138,6 +138,11 @@ const COMPARISON = [
     friendly: "Uploads are publicly viewable.",
     exalted: "Keep uploads private so only you can view them.",
   },
+  {
+    feature: "Supporting Chronicle",
+    friendly: "—",
+    exalted: "Your subscription directly funds hosting and ongoing development.",
+  },
 ]
 
 /** Plain-language breakdown of what Exalted changes compared to the free tier. */
@@ -145,13 +150,13 @@ function ComparisonTable({ exalted }: { exalted: boolean }) {
   return (
     <div className={FRAME}>
       <h3
-        className="rounded-t-[10px] border-b-2 border-[#6b5320] px-4 py-2.5 text-center font-wow text-base font-bold tracking-[0.08em]"
+        className="rounded-t-lg border-b border-border bg-[oklch(0.36_0_0)] px-4 py-2 text-center font-wow text-base font-bold tracking-[0.08em]"
         style={{ color: GOLD }}
       >
         Friendly vs Exalted
       </h3>
-      <div className="overflow-hidden rounded-b-[10px] bg-[#17130f]">
-        <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)] gap-4 border-b border-[#6b5320]/60 px-5 py-2.5 font-wow text-sm sm:grid">
+      <div className="overflow-hidden rounded-b-lg">
+        <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)] gap-4 border-b border-border px-5 py-2.5 font-wow text-sm sm:grid">
           <span className="text-muted-foreground">Feature</span>
           <span className={cn(exalted ? "text-muted-foreground" : "text-[#00c000]")}>
             Friendly <span className="font-sans text-xs text-muted-foreground">(free)</span>
@@ -202,7 +207,7 @@ function Achievement({ billing }: { billing: BillingSummary }) {
   const fill = exalted ? 100 : ((standingIndex + 0.15) / STANDINGS.length) * 100
 
   return (
-    <div className={cn(FRAME, "p-4 sm:p-5", !exalted && "border-[#4a4030]")}>
+    <div className={cn(FRAME, "p-4 sm:p-5")}>
       <div className="flex items-center gap-4">
         <img
           src={iconUrl("inv_crown_01")}
@@ -252,7 +257,7 @@ function Achievement({ billing }: { billing: BillingSummary }) {
         </div>
       </div>
 
-      <p className="mt-4 border-t border-[#6b5320]/60 pt-3 text-center font-wow text-sm" style={{ color: "#ffd200" }}>
+      <p className="mt-4 border-t border-border pt-3 text-center font-wow text-sm" style={{ color: "#ffd200" }}>
         Reward: Ad-free browsing, +300 MB storage, raw log downloads, and private logs
       </p>
     </div>
@@ -318,18 +323,18 @@ function FramePanel({ title, children }: { title: string; children: React.ReactN
   return (
     <div className={cn(FRAME, "lg:sticky lg:top-4")}>
       <h3
-        className="rounded-t-[10px] border-b-2 border-[#6b5320] px-4 py-2.5 text-center font-wow text-base font-bold tracking-[0.08em]"
+        className="rounded-t-lg border-b border-border bg-[oklch(0.36_0_0)] px-4 py-2 text-center font-wow text-base font-bold tracking-[0.08em]"
         style={{ color: GOLD }}
       >
         {title}
       </h3>
-      <div className="space-y-3 rounded-b-[10px] bg-[#17130f] p-4">{children}</div>
+      <div className="space-y-3 rounded-b-lg p-4">{children}</div>
     </div>
   )
 }
 
 const GOLD_BUTTON =
-  "flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#c9a227]/70 bg-[#2a210f] px-4 py-2.5 font-wow text-base font-bold text-[#f0c060] transition-colors hover:bg-[#3a2d14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 disabled:opacity-50"
+  "flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#c9a227]/70 bg-[#f0c060]/10 px-4 py-2.5 font-wow text-base font-bold text-[#f0c060] transition-colors hover:bg-[#f0c060]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 disabled:opacity-50"
 
 function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
   const checkout = useCreateBillingCheckout()
@@ -363,7 +368,7 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
                 onClick={() => setSelectedPriceID(price.id)}
                 className={cn(
                   "flex w-full items-center gap-3 rounded-md border-2 p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300",
-                  selected ? "border-[#c9a227] bg-[#2a210f]" : "border-white/10 bg-white/[0.025] hover:border-[#6b5320]",
+                  selected ? "border-[#c9a227] bg-[#f0c060]/10" : "border-white/10 bg-white/[0.025] hover:border-[#c9a227]/50",
                 )}
               >
                 <img
@@ -403,7 +408,7 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
           })}
         </div>
       ) : (
-        <p className="rounded-md border border-dashed border-[#6b5320] p-4 text-center text-sm text-muted-foreground">
+        <p className="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
           {EXALTED_TIER_NAME} pricing is temporarily unavailable.
         </p>
       )}
