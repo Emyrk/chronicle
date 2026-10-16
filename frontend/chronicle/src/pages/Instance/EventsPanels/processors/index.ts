@@ -49,6 +49,7 @@ import { playerLifeStateProcessor } from "./playerLifeState.processor";
 import { pullsAndCleanupProcessor } from "../PullsAndCleanup/pullsAndCleanup.processor";
 import { raidCompositionProcessor } from "../RaidComposition/raidComposition.processor";
 import { friendlyClassBuffsProcessor } from "../FriendlyClassBuffs/friendlyClassBuffs.processor";
+import { raidFramesProcessor } from "../RaidFrames/raidFrames.processor";
 
 // Export individual processors
 export { damageDoneProcessor, vulnerabilityEffectProcessor, enemyDamageDoneProcessor, petDamageDoneProcessor, friendlyFireProcessor } from "../DamageDone/damageDone.processor";
@@ -96,6 +97,7 @@ export { guildsProcessor } from "../Guilds/guilds.processor";
 export { pullsAndCleanupProcessor } from "../PullsAndCleanup/pullsAndCleanup.processor";
 export { raidCompositionProcessor } from "../RaidComposition/raidComposition.processor";
 export { friendlyClassBuffsProcessor } from "../FriendlyClassBuffs/friendlyClassBuffs.processor";
+export { raidFramesProcessor } from "../RaidFrames/raidFrames.processor";
 export type { RaidCompositionResult } from "../RaidComposition/raidComposition.processor";
 export type { FriendlyClassBuffsResult } from "../FriendlyClassBuffs/friendlyClassBuffs.processor";
 
@@ -202,6 +204,7 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   rotation_timeline: rotationTimelineProcessor,
   // Replay
   map: mapProcessor,
+  raid_frames: raidFramesProcessor,
   status: statusProcessor,
   healer_casts: healerCastsProcessor,
   spell_count: spellCountProcessor,
