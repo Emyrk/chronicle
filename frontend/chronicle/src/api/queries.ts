@@ -1,4 +1,5 @@
 import { useQueries, useQuery, useMutation, useQueryClient, keepPreviousData, type UseQueryOptions } from "@tanstack/react-query";
+import { readAPIError } from "./privateLogs";
 import type { ListSidekicksResponse, RenameSidekickRequest, SidekickInstallation, WhatsNewStatus } from "./typesGenerated";
 import type { WoWSpell } from "./wowdb";
 import {
@@ -89,15 +90,20 @@ import type {
   TelemetryNoticesResponse,
 } from "./typesGenerated";
 
+export interface PrivateLogFields {
+  readonly private?: boolean;
+  readonly access?: import("./privateLogs").PrivateLogAccessContext;
+}
+
 // Re-export types for convenience
-export type WoWLogGroup = WoWLogGroupGenerated;
+export type WoWLogGroup = WoWLogGroupGenerated & PrivateLogFields;
 export type WoWLogFile = WoWLogFileGenerated;
-export type WoWLogGroupState = WoWLogGroupStateGenerated;
+export type WoWLogGroupState = WoWLogGroupStateGenerated & PrivateLogFields;
 export type JobStatus = JobStatusGenerated;
 export type RiverJobState = RiverJobStateGenerated;
 export type RiverAttemptError = RiverAttemptErrorGenerated;
 export type WoWParsedLogJobOutput = WoWParsedLogJobOutputGenerated;
-export type WoWParsedInstance = WoWParsedInstanceGenerated;
+export type WoWParsedInstance = WoWParsedInstanceGenerated & PrivateLogFields;
 export type WoWEncounter = WoWEncounterGenerated;
 export type WoWInstance = WoWInstanceGenerated;
 export type Video = VideoGenerated;
@@ -1103,7 +1109,7 @@ export function useLogGroup(logId: string, options?: Omit<UseQueryOptions<WoWLog
     retry: false,
     queryFn: async () => {
       const response = await fetch(`/api/v1/raidlogs/logs/${logId}`);
-      if (!response.ok) throw new Error("Failed to fetch log details");
+      if (!response.ok) throw await readAPIError(response, response.status === 403 ? "This is a private log. You do not have access." : "Failed to fetch log details");
       return response.json() as Promise<WoWLogGroupState>;
     },
     ...options,
@@ -1116,7 +1122,7 @@ export function useLogGroupByFileHash(fileHash: string, options?: Omit<UseQueryO
     retry: false,
     queryFn: async () => {
       const response = await fetch(`/api/v1/raidlogs/logs/by-file-hash/${fileHash}`);
-      if (!response.ok) throw new Error("Failed to fetch log details");
+      if (!response.ok) throw await readAPIError(response, response.status === 403 ? "This is a private log. You do not have access." : "Failed to fetch log details");
       return response.json() as Promise<WoWLogGroupState>;
     },
     ...options,
@@ -1281,7 +1287,7 @@ export function useInstance(instanceId: string, options?: Omit<UseQueryOptions<W
     retry: false,
     queryFn: async () => {
       const response = await fetch(`/api/v1/raidlogs/instances/${instanceId}`);
-      if (!response.ok) throw new Error("Failed to fetch instance");
+      if (!response.ok) throw await readAPIError(response, response.status === 403 ? "This is a private log. Request access from its owner to view it." : "Failed to fetch instance");
       return response.json() as Promise<WoWParsedInstance>;
     },
     ...options,

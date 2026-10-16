@@ -44,6 +44,8 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { shouldShowChronicleCompanionWarning } from "@/lib/logReliability";
 import { LOG_FORMAT_OPTIONS } from "@/config/serverCapabilities";
+import { PrivateBadge, PrivateLogAccessPanel } from "./components/PrivateLogAccessPanel";
+import { PrivateLogAPIError } from "@/api/privateLogs";
 import { UploadSyncDialog } from "./components/UploadSyncDialog";
 import { 
   useLogGroup,
@@ -925,6 +927,7 @@ export interface LogDetailViewProps {
   isDeletingInstance: boolean;
   onRefresh: () => void;
   isRefreshing: boolean;
+  canManagePrivateAccess: boolean;
 }
 
 export function LogDetailView({
@@ -950,6 +953,7 @@ export function LogDetailView({
   isDeletingInstance,
   onRefresh,
   isRefreshing,
+  canManagePrivateAccess,
 }: LogDetailViewProps) {
   const location = useLocation();
   const { data: allFlavorTags = [] } = useFlavors();
@@ -1007,6 +1011,11 @@ export function LogDetailView({
               <p className="text-muted-foreground mt-1">
                 {logError.message}
               </p>
+              {logError instanceof PrivateLogAPIError && (logError.link || logError.code) && (
+                <Button asChild className="mt-4">
+                  <Link to={logError.link ?? `/private-log-shares/${logError.code}`}>Request access</Link>
+                </Button>
+              )}
             </div>
             <Link to="/logs">
               <Button variant="outline">
@@ -1037,7 +1046,10 @@ export function LogDetailView({
           {/* Header */}
           <div className="flex items-start justify-between">
             <div>
-              <h1 className="text-2xl font-bold">Log Upload</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold">Log Upload</h1>
+                {log.private && <PrivateBadge />}
+              </div>
               <p className="text-muted-foreground mt-1">
                 Uploaded {formatDate(log.created_at)}
               </p>
@@ -1338,6 +1350,8 @@ export function LogDetailView({
             </div>
           </Card>
 
+          {log.private && canManagePrivateAccess && <PrivateLogAccessPanel logId={log.id} />}
+
           {/* Parsed Instances Section - only shows for log-parse jobs with output */}
           <ParsedInstancesSection
             log={log}
@@ -1611,6 +1625,7 @@ export function LogDetail() {
   const canDeleteInstance = authz?.delete ?? false;
   const canDownloadFiles = (authz?.adminLogs ?? false) || (session?.can_download_raw_logs ?? false);
   const canUploadYoutube = authz?.uploadYoutube ?? false;
+  const canManagePrivateAccess = Boolean(log?.access?.can_manage || log?.access?.is_owner || (log?.owner && log.owner === session?.user_id));
 
   const handleDelete = () => {
     if (!logId) return;
@@ -1713,6 +1728,7 @@ export function LogDetail() {
       isDeletingInstance={deleteLogInstance.isPending}
       onRefresh={handleRefresh}
       isRefreshing={isRefetching}
+      canManagePrivateAccess={canManagePrivateAccess}
     />
   );
 }
@@ -1771,6 +1787,7 @@ export function LogDetailByHash() {
   const canDeleteInstance = authz?.delete ?? false;
   const canDownloadFiles = (authz?.adminLogs ?? false) || (session?.can_download_raw_logs ?? false);
   const canUploadYoutube = authz?.uploadYoutube ?? false;
+  const canManagePrivateAccess = Boolean(log?.access?.can_manage || log?.access?.is_owner || (log?.owner && log.owner === session?.user_id));
 
   const handleDelete = () => {
     if (!logId) return;
@@ -1858,6 +1875,7 @@ export function LogDetailByHash() {
       isDeletingInstance={deleteLogInstance.isPending}
       onRefresh={handleRefresh}
       isRefreshing={isRefetching}
+      canManagePrivateAccess={canManagePrivateAccess}
     />
   );
 }

@@ -3,6 +3,7 @@ import { ArrowUpDown, Eye, Castle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { WoWLogGroup } from "@/api/queries";
 import type { WoWSimpleParsedInstance } from "@/api/typesGenerated";
+import { PrivateBadge } from "./PrivateLogAccessPanel";
 import { parseParsedOutput, format } from "../utils/calendarUtils";
 
 function formatBytes(bytes: number): string {
@@ -109,9 +110,12 @@ export function UploadsTable({
           return (
             <div key={log.id} className="border border-border rounded-lg p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">
-                  {uploadDate ? format(uploadDate, "MMM d, yyyy") : "Unknown"}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">
+                    {uploadDate ? format(uploadDate, "MMM d, yyyy") : "Unknown"}
+                  </span>
+                  {log.private && <PrivateBadge />}
+                </div>
                 <span className="text-xs text-muted-foreground">{realmName}</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
@@ -211,7 +215,10 @@ export function UploadsTable({
               return (
                 <tr key={log.id} className="hover:bg-muted/30 transition-colors">
                   <td className="px-4 py-3 text-sm">
-                    {uploadDate ? format(uploadDate, "MMM d, yyyy") : "Unknown"}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span>{uploadDate ? format(uploadDate, "MMM d, yyyy") : "Unknown"}</span>
+                      {log.private && <PrivateBadge />}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-sm text-muted-foreground">
                     {realmName}

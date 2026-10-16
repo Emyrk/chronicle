@@ -285,9 +285,10 @@ export interface PanelSelectorProps {
   value: EventsPanelType;
   onChange: (value: EventsPanelType) => void;
   className?: string;
+  excludedValues?: ReadonlySet<EventsPanelType>;
 }
 
-export function PanelSelector({ value, onChange, className }: PanelSelectorProps) {
+export function PanelSelector({ value, onChange, className, excludedValues }: PanelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const customRegistry = useCustomPanelRegistry(isOpen || isCustomPanelRef(value));
   const customPanels = useMemo(() => listSelectableCustomPanels(customRegistry), [customRegistry]);
@@ -300,8 +301,8 @@ export function PanelSelector({ value, onChange, className }: PanelSelectorProps
   const portalWindow = portalContainer?.ownerDocument.defaultView;
   const isDebug = searchParams.get("debug") === "true";
   const isPanelVisible = useCallback(
-    (key: EventsPanelType) => !PANELS[key].hidden || isDebug,
-    [isDebug],
+    (key: EventsPanelType) => !excludedValues?.has(key) && (!PANELS[key].hidden || isDebug),
+    [excludedValues, isDebug],
   );
   const [searchQuery, setSearchQuery] = useState("");
   // Track expanded categories by their path (e.g., "Class" or "Class/Druid")

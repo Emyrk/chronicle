@@ -8,6 +8,8 @@ import {
   X,
   Loader2,
   FolderOpen,
+  Globe2,
+  LockKeyhole,
 } from "lucide-react";
 import { compressFile } from "@/api/compress";
 import { Button } from "@/components/ui/button";
@@ -62,6 +64,7 @@ function statusLabel(status: FileStatus) {
 async function uploadSingleFile(
   file: File,
   format: string,
+  privateLog: boolean,
   onProgress: (pct: number) => void,
   onStatusChange: (status: FileStatus) => void,
 ): Promise<string> {
@@ -112,11 +115,10 @@ async function uploadSingleFile(
     });
 
     let endpoint = "/api/v1/raidlogs/logs/upload-v2";
-    if (format) {
-      const params = new URLSearchParams();
-      params.set("format", format);
-      endpoint += `?${params.toString()}`;
-    }
+    const params = new URLSearchParams();
+    params.set("private", String(privateLog));
+    if (format) params.set("format", format);
+    endpoint += `?${params.toString()}`;
 
     xhr.open("POST", endpoint);
     xhr.send(formData);
@@ -128,9 +130,11 @@ const MAX_CONCURRENT = 3;
 
 export interface MultiUploadProps {
   format: string;
+  privateLog: boolean;
+  onPrivateLogChange: (value: boolean) => void;
 }
 
-export function MultiUpload({ format }: MultiUploadProps) {
+export function MultiUpload({ format, privateLog, onPrivateLogChange }: MultiUploadProps) {
   const [entries, setEntries] = useState<UploadEntry[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -185,6 +189,7 @@ export function MultiUpload({ format }: MultiUploadProps) {
         const logId = await uploadSingleFile(
           entry.file,
           format,
+          privateLog,
           (pct) => updateEntry(entry.id, { progress: pct }),
           (status) => updateEntry(entry.id, { status }),
         );
@@ -219,7 +224,7 @@ export function MultiUpload({ format }: MultiUploadProps) {
 
     await runPool();
     setIsUploading(false);
-  }, [entries, format, updateEntry]);
+  }, [entries, format, privateLog, updateEntry]);
 
   const pendingCount = entries.filter(
     (e) => e.status === "pending" || e.status === "error",
@@ -270,6 +275,19 @@ export function MultiUpload({ format }: MultiUploadProps) {
           </Link>
         </p>
       </div>
+
+      <Card className="mb-4 p-4">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <button type="button" onClick={() => onPrivateLogChange(false)} className={`flex items-start gap-3 rounded-lg border p-3 text-left ${!privateLog ? "border-primary bg-primary/10" : "hover:bg-muted/50"}`}>
+            <Globe2 className="mt-0.5 h-5 w-5 text-primary" />
+            <span><span className="block text-sm font-medium">Public uploads</span><span className="block text-xs text-muted-foreground">Normal visibility and public results.</span></span>
+          </button>
+          <button type="button" onClick={() => onPrivateLogChange(true)} className={`flex items-start gap-3 rounded-lg border p-3 text-left ${privateLog ? "border-amber-500/50 bg-amber-500/10" : "hover:bg-muted/50"}`}>
+            <LockKeyhole className="mt-0.5 h-5 w-5 text-amber-400" />
+            <span><span className="block text-sm font-medium">Private uploads</span><span className="block text-xs text-muted-foreground">Each file requires approved viewer access.</span></span>
+          </button>
+        </div>
+      </Card>
 
       {/* Drop zone */}
       <Card
