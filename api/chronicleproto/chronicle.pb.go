@@ -981,6 +981,7 @@ type UnitPosition struct {
 	Y             float64                `protobuf:"fixed64,4,opt,name=y,proto3" json:"y,omitempty"`
 	MapId         int32                  `protobuf:"varint,5,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
 	Facing        float64                `protobuf:"fixed64,6,opt,name=facing,proto3" json:"facing,omitempty"`
+	Z             *float64               `protobuf:"fixed64,7,opt,name=z,proto3,oneof" json:"z,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1053,6 +1054,13 @@ func (x *UnitPosition) GetMapId() int32 {
 func (x *UnitPosition) GetFacing() float64 {
 	if x != nil {
 		return x.Facing
+	}
+	return 0
+}
+
+func (x *UnitPosition) GetZ() float64 {
+	if x != nil && x.Z != nil {
+		return *x.Z
 	}
 	return 0
 }
@@ -3430,14 +3438,16 @@ const file_chronicle_proto_rawDesc = "" +
 	"\aschools\x18\f \x03(\x0e2\x16.chronicleproto.SchoolR\aschoolsB\t\n" +
 	"\a_casterB\f\n" +
 	"\n" +
-	"_spellData\"\x9c\x01\n" +
+	"_spellData\"\xb5\x01\n" +
 	"\fUnitPosition\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x12\n" +
 	"\x04unit\x18\x02 \x01(\tR\x04unit\x12\f\n" +
 	"\x01x\x18\x03 \x01(\x01R\x01x\x12\f\n" +
 	"\x01y\x18\x04 \x01(\x01R\x01y\x12\x15\n" +
 	"\x06map_id\x18\x05 \x01(\x05R\x05mapId\x12\x16\n" +
-	"\x06facing\x18\x06 \x01(\x01R\x06facing\"\xf8\x03\n" +
+	"\x06facing\x18\x06 \x01(\x01R\x06facing\x12\x11\n" +
+	"\x01z\x18\a \x01(\x01H\x00R\x01z\x88\x01\x01B\x04\n" +
+	"\x02_z\"\xf8\x03\n" +
 	"\rUnitResources\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x12\n" +
 	"\x04unit\x18\x02 \x01(\tR\x04unit\x12%\n" +
@@ -3948,6 +3958,7 @@ func file_chronicle_proto_init() {
 	file_chronicle_proto_msgTypes[1].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[4].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[5].OneofWrappers = []any{}
+	file_chronicle_proto_msgTypes[6].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[7].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[8].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[9].OneofWrappers = []any{}

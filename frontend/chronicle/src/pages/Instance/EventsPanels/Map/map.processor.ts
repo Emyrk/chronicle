@@ -38,6 +38,7 @@ export interface MapPositionSample {
   timestampMs: number;
   x: number;
   y: number;
+  z?: number;
   mapId: number;
   facing: number;
 }
@@ -228,13 +229,15 @@ export const mapProcessor: PanelProcessor<MapResult, MapProcessorEvent> = {
       positions = [];
       encounter.positionsByUnit.set(event.unit, positions);
     }
-    positions.push({
+    const sample: MapPositionSample = {
       timestampMs,
       x: event.x,
       y: event.y,
       mapId: event.mapId,
       facing: event.facing,
-    });
+    };
+    if (event.z !== undefined) sample.z = event.z;
+    positions.push(sample);
   },
 };
 

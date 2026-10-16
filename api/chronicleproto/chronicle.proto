@@ -108,6 +108,7 @@ message UnitPosition {
   double y = 4;
   int32 map_id = 5;
   double facing = 6;
+  optional double z = 7;
 }
 
 message UnitResources {

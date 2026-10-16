@@ -276,10 +276,31 @@ func TestParserMessages(t *testing.T) {
 			Unit:        unit,
 			X:           12.5,
 			Y:           34.75,
+			Z:           ptr.Ref(8.25),
 			MapID:       309,
 		}, parsed[1])
 		require.True(t, parser.SawUnitResources())
 		require.True(t, parser.SawUnitPosition())
+	})
+
+	t.Run("UnitStateWithoutZ", func(t *testing.T) {
+		t.Parallel()
+
+		parser, err := New(
+			context.Background(),
+			slog.Default(),
+			strings.NewReader("1771563953000|UNIT_STATE|0x000000000001C80A|2345|3117|72|100|3|309|12.5|34.75|"),
+			&stubGameDB{},
+			nil,
+		)
+		require.NoError(t, err)
+
+		parsed, err := parser.Advance(context.Background())
+		require.NoError(t, err)
+		require.Len(t, parsed, 2)
+		position, ok := parsed[1].(*messages.UnitPosition)
+		require.True(t, ok)
+		require.Nil(t, position.Z)
 	})
 
 	t.Run("UnitStateWithoutPosition", func(t *testing.T) {

@@ -306,6 +306,7 @@ type UnitPosition struct {
 	Unit   guid.GUID
 	X      float64
 	Y      float64
+	Z      *float64
 	MapID  int32
 	Facing float64
 }
