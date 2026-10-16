@@ -1544,7 +1544,7 @@ function EncounterDetail({
 
   // Selected encounters are shown in the sidebar; only durations are surfaced here.
   const durations = (
-    <div className="flex items-center gap-4 whitespace-nowrap text-muted-foreground text-sm">
+    <div className={cn("flex items-center whitespace-nowrap text-muted-foreground", isMobile ? "gap-3 text-xs" : "gap-4 text-sm")}>
           <Tooltip>
             <TooltipTrigger asChild>
               <div className="flex items-center gap-1.5">
@@ -1593,8 +1593,8 @@ function EncounterDetail({
         setIsEntityPanelOpen(true);
       }} className="mb-3">
         <Collapsible open={isEntityPanelOpen} onOpenChange={setIsEntityPanelOpen}>
-          <Card className="p-4" data-help-entity-panel>
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <Card className={isMobile ? "p-3 gap-2" : "p-4"} data-help-entity-panel>
+            <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <TabsList>
                   <TabsTrigger value="enemies" className="gap-1.5">
@@ -1638,8 +1638,8 @@ function EncounterDetail({
                   </button>
                 )}
               </div>
-              <div className="ml-auto flex items-center gap-2">
-                {durations}
+              <div className="flex items-center gap-2">
+                {!isMobile && durations}
                 <CollapsibleTrigger asChild>
                   <button className="flex items-center px-2 py-2 -mr-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
                     <ChevronRight className="h-4 w-4 transition-transform duration-200 [[data-state=open]_&]:rotate-90" />
@@ -1648,6 +1648,7 @@ function EncounterDetail({
                 </CollapsibleTrigger>
               </div>
             </div>
+            {isMobile && durations}
 
             <CollapsibleContent>
               <div>
