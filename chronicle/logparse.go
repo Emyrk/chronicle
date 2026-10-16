@@ -66,7 +66,8 @@ type OutputLogParse struct {
 }
 
 type ArgsLogParse struct {
-	LogID uuid.UUID `json:"log_group_id"`
+	LogID      uuid.UUID `json:"log_group_id"`
+	Generation int64     `json:"parse_generation"`
 	// RealmID is optional
 	RealmID      uuid.UUID `json:"realm_id,omitempty"`
 	TenantID     uuid.UUID `json:"tenant_id,omitempty"`
@@ -138,6 +139,19 @@ func replacementParseFailureRefreshIDs(ctx context.Context, job *river.Job[ArgsL
 		return nil
 	}
 	return plan.Complete()
+}
+
+var errStaleParseGeneration = errors.New("stale parse generation")
+
+func lockParseGeneration(ctx context.Context, db database.Store, logID uuid.UUID, generation int64) error {
+	_, err := db.LockWoWLogGroupParseGeneration(ctx, database.LockWoWLogGroupParseGenerationParams{
+		ID:              logID,
+		ParseGeneration: generation,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return errStaleParseGeneration
+	}
+	return err
 }
 
 type WorkerLogParse struct {
@@ -235,6 +249,15 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	//      to wow_log_groups.flavor so subsequent reparses use the correct
 	//      value without re-resolving.
 	lg := logGroup.WoWLogGroup
+	if lg.ParseGeneration != job.Args.Generation {
+		w.parent.logger.InfoContext(ctx, "discarding stale log parse job",
+			"log_id", job.Args.LogID,
+			"job_generation", job.Args.Generation,
+			"current_generation", lg.ParseGeneration,
+		)
+		jobResult = "cancelled"
+		return nil
+	}
 	invalidLog := lg.InvalidatedAt.Valid
 	logFormat := lg.LogType.Format()
 	if lg.Format.Valid {
@@ -380,10 +403,25 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		report.Identity = buildIdentityReport(parsed.creaturesState)
 	}
 
-	err = db.InsertParsedLogGroup(ctx, job.Args.LogID)
-	if err != nil {
+	err = db.InTx(ctx, func(tx *authz.AuthzTX) error {
+		if err := lockParseGeneration(ctx, tx, job.Args.LogID, job.Args.Generation); err != nil {
+			return err
+		}
+		if err := tx.DeleteAllParsedLogsByGroupID(ctx, job.Args.LogID); err != nil {
+			return fmt.Errorf("clear prior parse attempt: %w", err)
+		}
+		return tx.StartParsedLogGroupGeneration(ctx, database.StartParsedLogGroupGenerationParams{
+			ID:              job.Args.LogID,
+			ParseGeneration: job.Args.Generation,
+		})
+	}, nil)
+	if errors.Is(err, errStaleParseGeneration) {
 		jobResult = "cancelled"
-		return river.JobCancel(fmt.Errorf("insert parsed log group: %w", err))
+		return nil
+	}
+	if err != nil {
+		jobResult = "failure"
+		return fmt.Errorf("start parsed log generation: %w", err)
 	}
 
 	// Track total finalize and DB insert durations
@@ -482,6 +520,9 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		}()
 		var dbinstance database.LogInstance
 		err = db.InTx(ctx, func(tx *authz.AuthzTX) error {
+			if err := lockParseGeneration(ctx, tx, job.Args.LogID, job.Args.Generation); err != nil {
+				return err
+			}
 			guild, err := finalized.Guilds.Insert(ctx, encountersState.Units, instanceID, realmID, resolved.DatasetID, tx)
 			if err != nil {
 				return fmt.Errorf("insert guild: %w", err)
@@ -789,6 +830,9 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			w.parent.insertParsedInstanceMu.Unlock()
 			insertLockHeld = false
 			jobResult = "cancelled"
+			if errors.Is(err, errStaleParseGeneration) {
+				return nil
+			}
 			return river.JobCancel(fmt.Errorf("insert finalized encounters: %w", err))
 		}
 
@@ -798,10 +842,19 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		rankingRunAffectedIDs := []uuid.UUID{dbinstance.ID}
 		if instanceStart.Valid {
 			dupErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
+				if err := lockParseGeneration(ctx, tx, job.Args.LogID, job.Args.Generation); err != nil {
+					return err
+				}
 				var err error
 				rankingRunAffectedIDs, err = detectAndLinkDuplicate(ctx, tx, dbinstance.ID, dbinstance.RealmID, dbinstance.Name, dbinstance.MaxPlayers, dbinstance.DynamicDifficulty, instanceStart, builder.participants)
 				return err
 			}, nil)
+			if errors.Is(dupErr, errStaleParseGeneration) {
+				jobResult = "cancelled"
+				w.parent.insertParsedInstanceMu.Unlock()
+				insertLockHeld = false
+				return nil
+			}
 			if dupErr != nil {
 				slog.WarnContext(ctx, "duplicate detection failed", slog.String("err", dupErr.Error()))
 			}
@@ -813,11 +866,18 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		// transaction so a ranking error cannot roll back the parsed instance.
 		if !invalidLog && finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil {
 			rankErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
+				if err := lockParseGeneration(ctx, tx, job.Args.LogID, job.Args.Generation); err != nil {
+					return err
+				}
 				if err := insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName, resolved.DatasetID, flavor, talentTreeData); err != nil {
 					return err
 				}
 				return tx.TouchLogInstanceRankingSource(ctx, dbinstance.ID)
 			}, nil)
+			if errors.Is(rankErr, errStaleParseGeneration) {
+				jobResult = "cancelled"
+				return nil
+			}
 			if rankErr != nil {
 				slog.WarnContext(ctx, "insert dps rankings failed",
 					slog.String("instance_id", dbinstance.ID.String()),
@@ -835,6 +895,25 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		}
 
 		metrics.encountersParsed.Add(float64(len(finalized.Encounters)))
+	}
+
+	err = db.InTx(ctx, func(tx *authz.AuthzTX) error {
+		if err := lockParseGeneration(ctx, tx, job.Args.LogID, job.Args.Generation); err != nil {
+			return err
+		}
+		_, err := tx.FinalizeParsedLogGroup(ctx, database.FinalizeParsedLogGroupParams{
+			ID:              job.Args.LogID,
+			ParseGeneration: job.Args.Generation,
+		})
+		return err
+	}, nil)
+	if errors.Is(err, errStaleParseGeneration) || errors.Is(err, pgx.ErrNoRows) {
+		jobResult = "cancelled"
+		return nil
+	}
+	if err != nil {
+		jobResult = "failure"
+		return fmt.Errorf("finalize parsed log generation: %w", err)
 	}
 
 	// Keep compact current-known cohorts synchronized after every successful
@@ -940,8 +1019,21 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 
 	jobOut.Report = report
 	jobOut.Complete = ptr.Ref(time.Now())
+	err = db.InTx(ctx, func(tx *authz.AuthzTX) error {
+		if err := lockParseGeneration(ctx, tx, job.Args.LogID, job.Args.Generation); err != nil {
+			return err
+		}
+		return river.RecordOutput(ctx, jobOut)
+	}, nil)
+	if errors.Is(err, errStaleParseGeneration) {
+		jobResult = "cancelled"
+		return nil
+	}
+	if err != nil {
+		jobResult = "failure"
+		return fmt.Errorf("record parse output: %w", err)
+	}
 	jobResult = "success"
-	_ = river.RecordOutput(ctx, jobOut)
 
 	if w.parent.queue == nil {
 		return nil
@@ -1173,9 +1265,10 @@ func buildIdentityReport(cs *creatures.Creatures) *chroniclesdk.IdentityReport {
 	return rpt
 }
 
-func newArgsLogParse(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, realmID uuid.UUID) ArgsLogParse {
+func newArgsLogParse(ctx context.Context, logID uuid.UUID, generation int64, verbose bool, identityMode bool, realmID uuid.UUID) ArgsLogParse {
 	return ArgsLogParse{
 		LogID:        logID,
+		Generation:   generation,
 		RealmID:      realmID,
 		TenantID:     servicetenant.TenantIDFromContext(ctx),
 		Verbose:      verbose,
@@ -1183,15 +1276,15 @@ func newArgsLogParse(ctx context.Context, logID uuid.UUID, verbose bool, identit
 	}
 }
 
-func newReplacementArgsLogParse(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, realmID uuid.UUID, previousRankingRunIDs []uuid.UUID) ArgsLogParse {
-	args := newArgsLogParse(ctx, logID, verbose, identityMode, realmID)
+func newReplacementArgsLogParse(ctx context.Context, logID uuid.UUID, generation int64, verbose bool, identityMode bool, realmID uuid.UUID, previousRankingRunIDs []uuid.UUID) ArgsLogParse {
+	args := newArgsLogParse(ctx, logID, generation, verbose, identityMode, realmID)
 	args.Replacement = true
 	args.PreviousRankingRunIDs = rankingargs.NormalizeIDs(previousRankingRunIDs)
 	return args
 }
 
 func (c *Chronicle) EnqueueParseLog(ctx context.Context, log database.WoWLogGroup, verbose bool, identityMode bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
-	res, err := c.queue.Insert(ctx, newArgsLogParse(ctx, log.ID, verbose, identityMode, realmID), &river.InsertOpts{
+	res, err := c.queue.Insert(ctx, newArgsLogParse(ctx, log.ID, log.ParseGeneration, verbose, identityMode, realmID), &river.InsertOpts{
 		Tags: []string{
 			fmt.Sprintf("owner_%s", log.Owner.String()),
 		},

@@ -788,6 +788,19 @@ func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) erro
 		return fmt.Errorf("load time-parse replacement log groups: %w", err)
 	}
 
+	err = c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		if _, err := tx.AdvanceWoWLogGroupParseGeneration(ctx, logID); err != nil {
+			return fmt.Errorf("advance parse generation: %w", err)
+		}
+		if err := tx.DeleteAllParsedLogsByGroupID(ctx, logID); err != nil {
+			return fmt.Errorf("delete parsed logs for prior generation: %w", err)
+		}
+		return nil
+	}, nil)
+	if err != nil {
+		return fmt.Errorf("fence log group deletion: %w", err)
+	}
+
 	err = c.RemoveWoWLogFilesFromStorage(ctx, logID)
 	if err != nil {
 		return fmt.Errorf("remove log files from storage: %w", err)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
@@ -334,36 +335,41 @@ func (w *WorkerResync) Work(ctx context.Context, job *river.Job[ArgsResync]) err
 	if w.parent.queue == nil {
 		return fmt.Errorf("isolated log-parse queue is not configured")
 	}
-	identities, err := w.parent.Zed.RankingRunIdentitiesByLogGroupID(adminCtx, logGroupID)
-	if err != nil {
-		return fmt.Errorf("load ranking run identities: %w", err)
-	}
-	previousRankingRunIDs := rankingRunLogGroupIdentitySeeds(identities)
-
 	parseCtx := ctx
 	if tenantID != uuid.Nil {
 		parseCtx = servicetenant.WithTenantID(parseCtx, tenantID)
 	}
-	parseArgs := newReplacementArgsLogParse(parseCtx, logGroupID, false, false, parseRealmID, previousRankingRunIDs)
-	insertOpts := resyncParseInsertOpts(parseArgs, w.parseQueue)
-	parseInsert, err := w.parent.queue.Insert(parseCtx, parseArgs, &insertOpts)
+	var parseInsert *rivertype.JobInsertResult
+	err = w.parent.Zed.InTx(adminCtx, func(tx *authz.AuthzTX) error {
+		identities, err := tx.RankingRunIdentitiesByLogGroupID(adminCtx, logGroupID)
+		if err != nil {
+			return fmt.Errorf("load ranking run identities: %w", err)
+		}
+		generation, err := tx.AdvanceWoWLogGroupParseGeneration(adminCtx, logGroupID)
+		if err != nil {
+			return fmt.Errorf("advance parse generation: %w", err)
+		}
+		if err := tx.DeleteAllParsedLogsByGroupID(adminCtx, logGroupID); err != nil {
+			return fmt.Errorf("delete parsed logs: %w", err)
+		}
+		parseArgs := newReplacementArgsLogParse(parseCtx, logGroupID, generation, false, false, parseRealmID, rankingRunLogGroupIdentitySeeds(identities))
+		insertOpts := resyncParseInsertOpts(parseArgs, w.parseQueue)
+		insertOpts.Pending = false
+		pgxTx, ok := tx.PGXTx()
+		if !ok {
+			return errors.New("resync transaction does not expose pgx transaction")
+		}
+		parseInsert, err = w.parent.queue.InsertTx(parseCtx, pgxTx, parseArgs, &insertOpts)
+		if err != nil {
+			return fmt.Errorf("insert isolated log-parse job: %w", err)
+		}
+		if parseInsert.UniqueSkippedAsDuplicate {
+			return fmt.Errorf("active isolated log-parse job %d already exists for log group %s", parseInsert.Job.ID, logGroupID)
+		}
+		return nil
+	}, nil)
 	if err != nil {
-		return fmt.Errorf("stage isolated log-parse job: %w", err)
-	}
-
-	if parseInsert.UniqueSkippedAsDuplicate {
-		return fmt.Errorf("active isolated log-parse job %d already exists for log group %s", parseInsert.Job.ID, logGroupID)
-	}
-
-	// Only delete parsed data after every raw file has been downloaded and a
-	// real River log-parse job has been staged successfully. The pending job
-	// cannot run until it is explicitly released below.
-	if err := w.parent.Zed.DeleteAllParsedLogsByGroupID(adminCtx, logGroupID); err != nil {
-		_, _ = w.parent.queue.JobDelete(adminCtx, parseInsert.Job.ID)
-		return fmt.Errorf("delete parsed logs: %w", err)
-	}
-	if _, err := w.parent.queue.JobRetry(parseCtx, parseInsert.Job.ID); err != nil {
-		return fmt.Errorf("release isolated log-parse job %d: %w", parseInsert.Job.ID, err)
+		return err
 	}
 
 	parseJob, err := w.waitForParse(parseCtx, parseInsert.Job.ID)

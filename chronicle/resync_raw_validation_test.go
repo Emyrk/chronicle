@@ -46,9 +46,11 @@ func TestNewArgsLogParseMatchesTenantReparse(t *testing.T) {
 	tenantID := uuid.New()
 	ctx := servicetenant.WithTenantID(t.Context(), tenantID)
 
-	got := newArgsLogParse(ctx, logID, true, true, realmID)
+	const generation = int64(7)
+	got := newArgsLogParse(ctx, logID, generation, true, true, realmID)
 	require.Equal(t, ArgsLogParse{
 		LogID:        logID,
+		Generation:   generation,
 		RealmID:      realmID,
 		TenantID:     tenantID,
 		Verbose:      true,
@@ -66,9 +68,11 @@ func TestNewReplacementArgsLogParseCarriesPreviousRankingRuns(t *testing.T) {
 	oldRunID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
 	ctx := servicetenant.WithTenantID(t.Context(), tenantID)
 
-	got := newReplacementArgsLogParse(ctx, logID, true, true, realmID, []uuid.UUID{oldRunID, oldInstanceID, oldRunID})
+	const generation = int64(8)
+	got := newReplacementArgsLogParse(ctx, logID, generation, true, true, realmID, []uuid.UUID{oldRunID, oldInstanceID, oldRunID})
 	require.Equal(t, ArgsLogParse{
 		LogID:                 logID,
+		Generation:            generation,
 		RealmID:               realmID,
 		TenantID:              tenantID,
 		Verbose:               true,

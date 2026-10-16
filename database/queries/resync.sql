@@ -15,6 +15,8 @@ SELECT DISTINCT
   li.realm_id
 FROM wow_log_groups wlg
 JOIN parsed_log_group plg ON plg.id = wlg.id
+  AND plg.finalized_at IS NOT NULL
+  AND plg.parse_generation = wlg.parse_generation
 JOIN log_instances li ON li.log_group_id = wlg.id
 WHERE EXISTS(
     SELECT 1 FROM log_file lf

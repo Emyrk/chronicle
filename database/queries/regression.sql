@@ -62,7 +62,9 @@ SELECT
   li.end_time
 FROM log_instances li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
+  AND plg.finalized_at IS NOT NULL
 JOIN wow_log_groups wlg ON wlg.id = plg.id
+  AND wlg.parse_generation = plg.parse_generation
 JOIN users u ON u.id = wlg.owner
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 WHERE (

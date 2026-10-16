@@ -60,6 +60,22 @@ SET flavor = @flavor::text[]
 WHERE id = @id
 ;
 
+-- name: LockWoWLogGroupParseGeneration :one
+SELECT parse_generation
+FROM wow_log_groups
+WHERE id = @id
+  AND parse_generation = @parse_generation
+FOR UPDATE
+;
+
+-- name: AdvanceWoWLogGroupParseGeneration :one
+UPDATE wow_log_groups
+SET parse_generation = parse_generation + 1,
+    updated_at = NOW()
+WHERE id = @id
+RETURNING parse_generation
+;
+
 -- name: GetWoWLogFilesByGroupID :many
 SELECT
   *
@@ -144,6 +160,8 @@ FROM
     ) files_agg ON true
 
     LEFT JOIN parsed_log_group plg ON plg.id = wow_log_groups.id
+      AND plg.finalized_at IS NOT NULL
+      AND plg.parse_generation = wow_log_groups.parse_generation
 
     LEFT JOIN LATERAL (
     SELECT jsonb_build_object(
@@ -247,6 +265,8 @@ FROM
     ) files_agg ON true
 
     LEFT JOIN parsed_log_group plg ON plg.id = wow_log_groups.id
+      AND plg.finalized_at IS NOT NULL
+      AND plg.parse_generation = wow_log_groups.parse_generation
 
     -- Instances from DB tables
     LEFT JOIN LATERAL (
@@ -469,6 +489,8 @@ FROM
     ) files_agg ON true
 
     LEFT JOIN parsed_log_group plg ON plg.id = wow_log_groups.id
+      AND plg.finalized_at IS NOT NULL
+      AND plg.parse_generation = wow_log_groups.parse_generation
 
     LEFT JOIN LATERAL (
     SELECT jsonb_build_object(
