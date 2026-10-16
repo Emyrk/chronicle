@@ -84,9 +84,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 	bot := servicebot.DiscordBot(s.broker)
 
-	q.AddQueue(riverqueue.QueueLogParsing, river.QueueConfig{
-		MaxWorkers: int(s.logParsingWorkers),
-	})
+	chron.RegisterParsingWorkers(q, int(s.logParsingWorkers))
 	q.AddQueue(riverqueue.QueueDiscordSync, river.QueueConfig{
 		MaxWorkers: 2,
 	})
@@ -94,9 +92,6 @@ func (s *Service) Start(ctx context.Context) error {
 		MaxWorkers: 1,
 	})
 
-	riverqueue.AddWorker(q, chron.NewWorkerLogParse())
-	riverqueue.AddWorker(q, chron.NewWorkerReLogParse())
-	riverqueue.AddWorker(q, chron.NewWorkerRegressionSnapshot())
 	if !bot.Disabled() {
 		bot.SetQueue(q)
 		riverqueue.AddWorker(q, bot.NewWorkerSyncDiscordUser())
@@ -251,13 +246,12 @@ func (s *Service) Start(ctx context.Context) error {
 		),
 	)
 
-	err = q.Start(ctx)
-	if err != nil {
+	s.Queues = q
+	chron.SetQueue(s.Queues)
+	if err := q.Start(ctx); err != nil {
 		return fmt.Errorf("starting river queues: %w", err)
 	}
 
-	s.Queues = q
-	chron.SetQueue(s.Queues)
 	return nil
 }
 

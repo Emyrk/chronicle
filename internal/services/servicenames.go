@@ -8,6 +8,7 @@ const (
 	ServicePGXPool     = "pgxpool"
 	ServiceDatabase    = "database"
 	ServiceRiverQueue  = "riverqueue"
+	ServiceParser      = "parser"
 	ServiceChronicle   = "chronicle"
 	ServiceDiscordBot  = "discordbot"
 	ServiceAPI         = "api"

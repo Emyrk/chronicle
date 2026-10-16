@@ -70,6 +70,12 @@ func (q *Queues) AddQueue(name string, config river.QueueConfig) *Queues {
 	return q
 }
 
+// RemoveQueue prevents this River client from consuming jobs from the named queue.
+func (q *Queues) RemoveQueue(name string) *Queues {
+	delete(q.queues, name)
+	return q
+}
+
 func (q *Queues) AddPeriodicJob(job *river.PeriodicJob) *Queues {
 	q.periodicJobs = append(q.periodicJobs, job)
 	return q
@@ -106,8 +112,10 @@ func (q *Queues) Start(ctx context.Context) error {
 		return err
 	}
 
-	err = riverClient.Start(ctx)
-	if err != nil {
+	// Publish the client before workers start so jobs can safely enqueue
+	// downstream work as soon as River begins polling.
+	q.Client = riverClient
+	if err := riverClient.Start(ctx); err != nil {
 		return err
 	}
 
@@ -116,7 +124,6 @@ func (q *Queues) Start(ctx context.Context) error {
 		return err
 	}
 	q.UI = riverUI
-	q.Client = riverClient
 
 	return nil
 }
