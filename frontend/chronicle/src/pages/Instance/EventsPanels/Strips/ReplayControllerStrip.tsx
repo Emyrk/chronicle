@@ -14,7 +14,7 @@ import {
 
 const SPEEDS = [0.25, 0.5, 1, 2, 4];
 
-const controlButtonClass = "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-popover text-foreground hover:bg-muted disabled:opacity-40";
+const controlButtonClass = "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-popover text-foreground hover:bg-muted disabled:opacity-40";
 
 /**
  * Replay transport over a bar chart of party damage: play, restart, speed,
@@ -91,19 +91,22 @@ export function ReplayControllerStrip({ result, context }: StripRenderProps<Repl
   };
 
   return (
-    <div className="flex h-full min-h-0 items-center gap-4 bg-card px-3">
-      <div className="flex shrink-0 items-center gap-1.5">
-        <button type="button" onClick={togglePlay} disabled={disabled} title={playing ? "Pause" : "Play"} aria-label={playing ? "Pause" : "Play"} className={controlButtonClass}>
-          {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-        </button>
-        <button type="button" onClick={restart} disabled={disabled} title="Restart" aria-label="Restart" className={controlButtonClass}>
-          <RotateCcw className="h-4 w-4" />
-        </button>
-        <span className="min-w-[4.5rem] pl-1 font-mono text-sm tabular-nums text-[var(--color-class-warrior)]">
-          {formatReplayClock(elapsedMs)}
-          <span className="text-xs text-muted-foreground"> / {formatReplayClock(durationMs)}</span>
-        </span>
-        <div className="flex gap-0.5 rounded-md border border-border bg-popover p-0.5">
+    <div className="flex h-full min-h-0 items-center gap-3 bg-card px-3">
+      {/* Stacked in a narrow column so the bars get the width: transport and clock, speeds, legend. */}
+      <div className="flex shrink-0 flex-col gap-1">
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={togglePlay} disabled={disabled} title={playing ? "Pause" : "Play"} aria-label={playing ? "Pause" : "Play"} className={controlButtonClass}>
+            {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+          </button>
+          <button type="button" onClick={restart} disabled={disabled} title="Restart" aria-label="Restart" className={controlButtonClass}>
+            <RotateCcw className="h-3.5 w-3.5" />
+          </button>
+          <span className="pl-1 font-mono text-sm tabular-nums text-[var(--color-class-warrior)]">
+            {formatReplayClock(elapsedMs)}
+            <span className="text-[10px] text-muted-foreground"> / {formatReplayClock(durationMs)}</span>
+          </span>
+        </div>
+        <div className="flex gap-px rounded-md border border-border bg-popover p-px">
           {SPEEDS.map((speed) => {
             const active = (sync?.playbackSpeed ?? 1) === speed;
             return (
@@ -113,15 +116,21 @@ export function ReplayControllerStrip({ result, context }: StripRenderProps<Repl
                 disabled={disabled}
                 onClick={() => sync?.setPlaybackSpeed(speed)}
                 aria-pressed={active}
+                aria-label={`${speed}×`}
                 className={cn(
-                  "rounded-sm px-2 py-1 font-mono text-[11px] disabled:opacity-40",
+                  "flex-1 rounded-sm px-1 py-0.5 font-mono text-[10px] disabled:opacity-40",
                   active ? "bg-primary-darker text-foreground" : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                {speed}×
+                {speed === 0.25 ? "¼" : speed === 0.5 ? "½" : speed}×
               </button>
             );
           })}
+        </div>
+        <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
+          <span className="flex items-center gap-1" title="Party damage per 2 seconds"><span className="h-1.5 w-1.5 bg-[var(--chart-3)]" />Dmg/2s</span>
+          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rotate-45 bg-[var(--color-class-enemy)]" />Boss</span>
+          <span className="flex items-center gap-1"><Skull className="h-2 w-2 text-red-400" />Death</span>
         </div>
       </div>
 
@@ -188,13 +197,6 @@ export function ReplayControllerStrip({ result, context }: StripRenderProps<Repl
             </span>
           ))}
         </div>
-      </div>
-
-      {/* Bottom-aligned so the strip's hover bar (selector, Filters, Edit) never covers it. */}
-      <div className="hidden shrink-0 flex-col gap-1 self-end pb-2 text-[11px] text-muted-foreground xl:flex">
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 bg-[var(--chart-3)]" />Party damage / 2s</span>
-        <span className="flex items-center gap-1.5"><span className="h-[7px] w-[7px] rotate-45 bg-[var(--color-class-enemy)]" />Boss cast</span>
-        <span className="flex items-center gap-1.5"><Skull className="h-2.5 w-2.5 text-red-400" />Death</span>
       </div>
     </div>
   );

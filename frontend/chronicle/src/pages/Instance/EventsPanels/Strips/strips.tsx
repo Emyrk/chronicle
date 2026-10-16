@@ -270,6 +270,7 @@ export const STRIPS: Record<StripType, StripDefinition<any, any>> = {
     supportedOrientations: HORIZONTAL_ONLY,
     defaultOrientation: "horizontal",
     size: DEFAULT_SIZE,
+    hoverChrome: "above",
     render: (props) => <ReplayControllerStrip {...props} />,
   },
   raid_durability: {

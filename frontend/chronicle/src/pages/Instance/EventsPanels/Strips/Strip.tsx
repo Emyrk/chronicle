@@ -216,7 +216,10 @@ export function Strip({
       >
         {renderedStrip}
         {!isMobile ? (
-        <div className="pointer-events-none absolute inset-x-3 top-2 z-30 flex items-center justify-between gap-2 opacity-0 transition-opacity group-hover/strip:opacity-100 group-focus-within/strip:opacity-100">
+        <div className={cn(
+          "pointer-events-none absolute inset-x-3 z-30 flex items-center justify-between gap-2 opacity-0 transition-opacity group-hover/strip:opacity-100 group-focus-within/strip:opacity-100",
+          strip.hoverChrome === "above" ? "bottom-full pb-0.5" : "top-2",
+        )}>
           <div className="pointer-events-auto flex min-w-0 items-center gap-2 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
             {customTitle ? <span className="truncate text-xs font-medium">{customTitle}</span> : null}
             {onStripTypeChange ? (

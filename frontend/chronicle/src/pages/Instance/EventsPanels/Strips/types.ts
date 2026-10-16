@@ -58,5 +58,10 @@ export interface StripDefinition<
   supportedOrientations: readonly StripOrientation[];
   defaultOrientation: StripOrientation;
   size: StripSizeProfile;
+  /**
+   * Where the hover bar (selector, Filters, Edit) appears: over the strip's
+   * top edge (default), or just above it for strips with controls up there.
+   */
+  hoverChrome?: "inside" | "above";
   render: (props: StripRenderProps<TResult>) => React.ReactNode;
 }
