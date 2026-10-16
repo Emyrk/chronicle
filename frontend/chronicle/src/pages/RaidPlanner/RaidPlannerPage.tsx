@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Keyboard, Loader2, Pencil } from "lucide-react";
+import { ArrowLeft, Keyboard, Loader2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import {
   useCreateRaidComposition,
@@ -582,6 +582,22 @@ export function RaidPlannerPage() {
     setPhase("set");
   };
 
+  const returnToSavedPlans = () => {
+    setPhase("picking");
+    setPendingGroups(8);
+    setTitle("");
+    setComp({ board: [], bench: [] });
+    setGroupNotes({});
+    setEditing(null);
+    setSelectedIds(new Set());
+    setSavedComp(null);
+    setHydratedCompId(null);
+    linkedImportRef.current = null;
+    pastRef.current = [];
+    futureRef.current = [];
+    setSearchParams({}, { replace: true });
+  };
+
   // ---------------------------------------------------------------------------
   // Saving
   // ---------------------------------------------------------------------------
@@ -741,6 +757,16 @@ export function RaidPlannerPage() {
     <div className="w-full p-4 md:p-6 space-y-3.5">
       {/* Header bar */}
       <div className="flex flex-wrap items-center gap-3 px-4 py-3 border border-border rounded-lg bg-card">
+        {phase === "set" && (
+          <button
+            type="button"
+            onClick={returnToSavedPlans}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to saved plans
+          </button>
+        )}
         {phase === "set" && <GuildSelector guild={selectedGuild} onSelect={setGuild} />}
         <input
           value={title}
