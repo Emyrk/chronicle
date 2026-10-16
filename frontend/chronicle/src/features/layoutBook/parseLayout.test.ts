@@ -30,13 +30,13 @@ describe("layout strip persistence", () => {
   });
 });
 
-describe("seamless layouts", () => {
+describe("layout appearance", () => {
   const items = [{ id: "panel-1", title: "Map", x: 0, y: 0, w: 12, h: 7 }];
 
-  it("round-trips the seamless flag", () => {
-    const serialized = serializeLayoutLab(items, { "panel-1": "map" }, undefined, undefined, true);
-    expect(JSON.parse(serialized).seamless).toBe(true);
-    expect(parseLayoutLab(serialized).seamless).toBe(true);
+  it("round-trips the seamless and fit flags", () => {
+    const serialized = serializeLayoutLab(items, { "panel-1": "map" }, undefined, undefined, { seamless: true, fit: true });
+    expect(JSON.parse(serialized)).toMatchObject({ seamless: true, fit: true });
+    expect(parseLayoutLab(serialized)).toMatchObject({ seamless: true, fit: true });
   });
 
   it("leaves it out of layouts that are not seamless", () => {

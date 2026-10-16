@@ -20,6 +20,7 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { TimeRangeProvider } from "./TimeRangeContext";
 import { TimeRangeController } from "./TimeRangeController";
 import { useTenantGate } from "./TenantGate";
+import { useFocusMode } from "@/hooks/useFocusMode";
 import { getReplayResetTimestamp, type SelectedEncounterTimes } from "./replaySelection";
 
 // Types for the Instance page
@@ -455,6 +456,7 @@ export function InstancePage() {
 
   const isLoading = instanceLoading;
   const tenantGate = useTenantGate(instance);
+  const [focused] = useFocusMode();
 
   if (isLoading) {
     return (
@@ -503,12 +505,12 @@ export function InstancePage() {
             flavor={instance.flavor ?? []}
             selectedEncounterIds={selectedEncounterIds}
           >
-            {tenantGate.banner && (
+            {tenantGate.banner && !focused && (
               <div className="w-full px-4 pt-4">
                 {tenantGate.banner}
               </div>
             )}
-            <AddonMissingBanner instance={instance} />
+            {!focused && <AddonMissingBanner instance={instance} />}
             <InstancePageInner
               instance={instance}
               selectedEncounterIds={selectedEncounterIds}

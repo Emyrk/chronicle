@@ -7,20 +7,27 @@ import { TooltipProvider } from "../ui/Tooltip/tooltip";
 import { usePageTracking } from "@/hooks/usePageTracking";
 import { usePublicTelemetryNotices } from "@/api/queries";
 import { NoticeBanner } from "../NoticeBanner/NoticeBanner";
+import { useHideSiteChrome } from "@/hooks/useFocusMode";
 
 export function Layout() {
   usePageTracking();
   const { data: noticeResponse } = usePublicTelemetryNotices();
+  // Focus mode on an instance page: only the page itself.
+  const hideChrome = useHideSiteChrome();
 
   return (
     <TooltipProvider>
-      <NoticeBanner notices={noticeResponse?.notices ?? []} />
-      <SupportBanner />
-      <NavBar />
+      {!hideChrome && (
+        <>
+          <NoticeBanner notices={noticeResponse?.notices ?? []} />
+          <SupportBanner />
+          <NavBar />
+        </>
+      )}
       <main>
         <Outlet />
       </main>
-      <Footer />
+      {!hideChrome && <Footer />}
       <Toaster />
     </TooltipProvider>
   );

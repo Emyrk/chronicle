@@ -2167,8 +2167,9 @@ export class MapScene3D {
   };
 
   // Camera keys act while the pointer is over the map, never while typing.
+  // Modified presses (e.g. Shift+F for focus mode) belong to the page.
   private readonly handleKeyDown = (event: KeyboardEvent) => {
-    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
     const target = event.target as HTMLElement | null;
     if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
     if (!this.pointerInside) return;
