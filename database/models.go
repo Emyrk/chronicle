@@ -1847,6 +1847,15 @@ type LogInstancesGuild struct {
 	Flavor                  []string           `db:"flavor" json:"flavor"`
 }
 
+type OauthDeviceSession struct {
+	DeviceSignature string             `db:"device_signature" json:"device_signature"`
+	UserSignature   string             `db:"user_signature" json:"user_signature"`
+	Request         []byte             `db:"request" json:"request"`
+	Invalidated     bool               `db:"invalidated" json:"invalidated"`
+	ExpiresAt       pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type OauthRelayCode struct {
 	CodeHash          []byte             `db:"code_hash" json:"code_hash"`
 	UserAuthSessionID uuid.UUID          `db:"user_auth_session_id" json:"user_auth_session_id"`
@@ -1856,6 +1865,22 @@ type OauthRelayCode struct {
 	RedirectPath      string             `db:"redirect_path" json:"redirect_path"`
 	ExpiresAt         pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
 	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type OauthServerSecret struct {
+	ID        bool               `db:"id" json:"id"`
+	Secret    []byte             `db:"secret" json:"secret"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type OauthTokenSession struct {
+	TokenType       string             `db:"token_type" json:"token_type"`
+	Signature       string             `db:"signature" json:"signature"`
+	RequestID       string             `db:"request_id" json:"request_id"`
+	AccessSignature string             `db:"access_signature" json:"access_signature"`
+	Request         []byte             `db:"request" json:"request"`
+	ExpiresAt       pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 type ParseScoreMembership struct {

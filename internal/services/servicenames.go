@@ -12,6 +12,7 @@ const (
 	ServiceDiscordBot  = "discordbot"
 	ServiceAPI         = "api"
 	ServiceExternalAPI = "external-api"
+	ServiceOAuth       = "oauth"
 	ServiceAuthz       = "authz"
 	ServiceWoWDB       = "wow-db"
 	ServiceAssets      = "assets"

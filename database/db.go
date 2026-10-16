@@ -66,6 +66,26 @@ func (q *sqlQuerier) SendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchR
 	return q.db.SendBatch(ctx, batch)
 }
 
+type transactionFinalizeTimeoutContextKey struct{}
+
+// WithTransactionFinalizeTimeout bounds the commit and rollback commands for
+// transactions started with InTx. The timeout is independent of cancellation
+// on ctx so a request cancellation can still cleanly release the connection.
+func WithTransactionFinalizeTimeout(ctx context.Context, timeout time.Duration) context.Context {
+	if timeout <= 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, transactionFinalizeTimeoutContextKey{}, timeout)
+}
+
+func transactionFinalizeContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	timeout, ok := ctx.Value(transactionFinalizeTimeoutContextKey{}).(time.Duration)
+	if !ok || timeout <= 0 {
+		return context.Background(), func() {}
+	}
+	return context.WithTimeout(context.WithoutCancel(ctx), timeout)
+}
+
 type registerTypes struct {
 	migrationsComplete atomic.Bool
 }
@@ -361,7 +381,9 @@ func (q *sqlQuerier) runTx(ctx context.Context, function func(Store) error, txOp
 		return xerrors.Errorf("begin transaction: %w", err)
 	}
 	defer func() {
-		rerr := transaction.Rollback(context.Background())
+		finalizeCtx, cancel := transactionFinalizeContext(ctx)
+		defer cancel()
+		rerr := transaction.Rollback(finalizeCtx)
 		if rerr == nil || errors.Is(rerr, sql.ErrTxDone) {
 			// no need to do anything, tx committed successfully
 			return
@@ -373,7 +395,9 @@ func (q *sqlQuerier) runTx(ctx context.Context, function func(Store) error, txOp
 	if err != nil {
 		return xerrors.Errorf("execute transaction: %w", err)
 	}
-	err = transaction.Commit(context.Background())
+	finalizeCtx, cancel := transactionFinalizeContext(ctx)
+	defer cancel()
+	err = transaction.Commit(finalizeCtx)
 	if err != nil {
 		return xerrors.Errorf("commit transaction: %w", err)
 	}

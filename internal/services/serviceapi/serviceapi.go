@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chronauth/authkeys"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/api/httpmw"
 	"github.com/Emyrk/chronicle/internal/itempricing"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
@@ -31,6 +32,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicegithub"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicemail"
+	"github.com/Emyrk/chronicle/internal/services/serviceoauth"
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
@@ -125,6 +127,7 @@ func (s *Service) DependsOn() []string {
 		servicedataset.OnDataset(),
 		servicegithub.OnGitHub(),
 		serviceexternalapi.OnExternalAPI(),
+		serviceoauth.OnOAuth(),
 	}
 }
 
@@ -209,6 +212,7 @@ func (s *Service) Start(ctx context.Context) error {
 	gamedata := servicegamedata.InternalGameData(s.broker)
 	githubClient := servicegithub.GitHub(s.broker).Client()
 	externalAPI := serviceexternalapi.ExternalAPI(s.broker)
+	oauthService := serviceoauth.OAuth(s.broker)
 	rankings := servicerankings.Rankings(s.broker)
 	mailer := servicemail.Mailer(s.broker)
 
@@ -232,6 +236,7 @@ func (s *Service) Start(ctx context.Context) error {
 		Assets:                assets,
 		InternalGameData:      gamedata,
 		ExternalAPI:           externalAPI,
+		OAuth:                 oauthService,
 		Rankings:              rankings,
 		Mailer:                mailer,
 		CustomPanelHTTPClient: githubClient,
@@ -260,6 +265,11 @@ func (s *Service) Start(ctx context.Context) error {
 		return fmt.Errorf("create api: %w", err)
 	}
 
+	oauthService.SetBrowserAuth(
+		httpmw.BrowserOnly(au),
+		handler.Auth.AuthenticationMiddleware,
+		handler.Auth.Authenticated(false),
+	)
 	s.httpHandler.Set(handler.Routes())
 	s.app = handler
 

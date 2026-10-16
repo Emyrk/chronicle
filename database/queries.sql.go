@@ -9420,6 +9420,255 @@ func (q *sqlQuerier) RedeemOAuthRelayCode(ctx context.Context, codeHash []byte) 
 	return i, err
 }
 
+const createOAuthDeviceSession = `-- name: CreateOAuthDeviceSession :exec
+INSERT INTO oauth_device_sessions (device_signature, user_signature, request, expires_at)
+VALUES ($1, $2, $3, $4)
+`
+
+type CreateOAuthDeviceSessionParams struct {
+	DeviceSignature string             `db:"device_signature" json:"device_signature"`
+	UserSignature   string             `db:"user_signature" json:"user_signature"`
+	Request         []byte             `db:"request" json:"request"`
+	ExpiresAt       pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+}
+
+func (q *sqlQuerier) CreateOAuthDeviceSession(ctx context.Context, arg CreateOAuthDeviceSessionParams) error {
+	_, err := q.db.Exec(ctx, createOAuthDeviceSession,
+		arg.DeviceSignature,
+		arg.UserSignature,
+		arg.Request,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const createOAuthTokenSession = `-- name: CreateOAuthTokenSession :exec
+INSERT INTO oauth_token_sessions (
+  token_type,
+  signature,
+  request_id,
+  access_signature,
+  request,
+  expires_at
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6
+)
+`
+
+type CreateOAuthTokenSessionParams struct {
+	TokenType       string             `db:"token_type" json:"token_type"`
+	Signature       string             `db:"signature" json:"signature"`
+	RequestID       string             `db:"request_id" json:"request_id"`
+	AccessSignature string             `db:"access_signature" json:"access_signature"`
+	Request         []byte             `db:"request" json:"request"`
+	ExpiresAt       pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+}
+
+func (q *sqlQuerier) CreateOAuthTokenSession(ctx context.Context, arg CreateOAuthTokenSessionParams) error {
+	_, err := q.db.Exec(ctx, createOAuthTokenSession,
+		arg.TokenType,
+		arg.Signature,
+		arg.RequestID,
+		arg.AccessSignature,
+		arg.Request,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const deleteExpiredOAuthDeviceSessions = `-- name: DeleteExpiredOAuthDeviceSessions :execrows
+DELETE FROM oauth_device_sessions
+WHERE expires_at <= NOW()
+`
+
+func (q *sqlQuerier) DeleteExpiredOAuthDeviceSessions(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredOAuthDeviceSessions)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteExpiredOAuthTokenSessions = `-- name: DeleteExpiredOAuthTokenSessions :execrows
+DELETE FROM oauth_token_sessions
+WHERE expires_at <= NOW()
+`
+
+func (q *sqlQuerier) DeleteExpiredOAuthTokenSessions(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredOAuthTokenSessions)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteOAuthTokenSession = `-- name: DeleteOAuthTokenSession :execrows
+DELETE FROM oauth_token_sessions
+WHERE token_type = $1 AND signature = $2
+`
+
+type DeleteOAuthTokenSessionParams struct {
+	TokenType string `db:"token_type" json:"token_type"`
+	Signature string `db:"signature" json:"signature"`
+}
+
+func (q *sqlQuerier) DeleteOAuthTokenSession(ctx context.Context, arg DeleteOAuthTokenSessionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOAuthTokenSession, arg.TokenType, arg.Signature)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getOAuthDeviceSession = `-- name: GetOAuthDeviceSession :one
+SELECT device_signature, user_signature, request, invalidated
+FROM oauth_device_sessions
+WHERE (device_signature = $1 OR user_signature = $1)
+  AND expires_at > NOW()
+`
+
+type GetOAuthDeviceSessionRow struct {
+	DeviceSignature string `db:"device_signature" json:"device_signature"`
+	UserSignature   string `db:"user_signature" json:"user_signature"`
+	Request         []byte `db:"request" json:"request"`
+	Invalidated     bool   `db:"invalidated" json:"invalidated"`
+}
+
+func (q *sqlQuerier) GetOAuthDeviceSession(ctx context.Context, signature string) (GetOAuthDeviceSessionRow, error) {
+	row := q.db.QueryRow(ctx, getOAuthDeviceSession, signature)
+	var i GetOAuthDeviceSessionRow
+	err := row.Scan(
+		&i.DeviceSignature,
+		&i.UserSignature,
+		&i.Request,
+		&i.Invalidated,
+	)
+	return i, err
+}
+
+const getOAuthTokenSession = `-- name: GetOAuthTokenSession :one
+SELECT request
+FROM oauth_token_sessions
+WHERE token_type = $1
+  AND signature = $2
+  AND expires_at > NOW()
+`
+
+type GetOAuthTokenSessionParams struct {
+	TokenType string `db:"token_type" json:"token_type"`
+	Signature string `db:"signature" json:"signature"`
+}
+
+func (q *sqlQuerier) GetOAuthTokenSession(ctx context.Context, arg GetOAuthTokenSessionParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getOAuthTokenSession, arg.TokenType, arg.Signature)
+	var request []byte
+	err := row.Scan(&request)
+	return request, err
+}
+
+const getOrCreateOAuthServerSecret = `-- name: GetOrCreateOAuthServerSecret :one
+INSERT INTO oauth_server_secrets (id, secret)
+VALUES (TRUE, $1)
+ON CONFLICT (id) DO UPDATE SET id = oauth_server_secrets.id
+RETURNING secret
+`
+
+func (q *sqlQuerier) GetOrCreateOAuthServerSecret(ctx context.Context, secret []byte) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getOrCreateOAuthServerSecret, secret)
+	var secret_2 []byte
+	err := row.Scan(&secret_2)
+	return secret_2, err
+}
+
+const invalidateOAuthDeviceSession = `-- name: InvalidateOAuthDeviceSession :execrows
+UPDATE oauth_device_sessions
+SET invalidated = TRUE
+WHERE device_signature = $1
+  AND NOT invalidated
+  AND expires_at > NOW()
+`
+
+func (q *sqlQuerier) InvalidateOAuthDeviceSession(ctx context.Context, deviceSignature string) (int64, error) {
+	result, err := q.db.Exec(ctx, invalidateOAuthDeviceSession, deviceSignature)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const revokeOAuthTokenSessions = `-- name: RevokeOAuthTokenSessions :execrows
+DELETE FROM oauth_token_sessions
+WHERE request_id = $1 AND token_type = $2
+`
+
+type RevokeOAuthTokenSessionsParams struct {
+	RequestID string `db:"request_id" json:"request_id"`
+	TokenType string `db:"token_type" json:"token_type"`
+}
+
+func (q *sqlQuerier) RevokeOAuthTokenSessions(ctx context.Context, arg RevokeOAuthTokenSessionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeOAuthTokenSessions, arg.RequestID, arg.TokenType)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const rotateOAuthRefreshToken = `-- name: RotateOAuthRefreshToken :one
+WITH deleted_refresh AS (
+  DELETE FROM oauth_token_sessions
+  WHERE oauth_token_sessions.request_id = $1
+    AND oauth_token_sessions.token_type = 'refresh'
+    AND oauth_token_sessions.signature = $2
+    AND expires_at > NOW()
+  RETURNING 1
+), deleted_access AS (
+  DELETE FROM oauth_token_sessions
+  WHERE oauth_token_sessions.request_id = $1
+    AND oauth_token_sessions.token_type = 'access'
+    AND EXISTS (SELECT 1 FROM deleted_refresh)
+)
+SELECT COUNT(*) FROM deleted_refresh
+`
+
+type RotateOAuthRefreshTokenParams struct {
+	RequestID        string `db:"request_id" json:"request_id"`
+	RefreshSignature string `db:"refresh_signature" json:"refresh_signature"`
+}
+
+func (q *sqlQuerier) RotateOAuthRefreshToken(ctx context.Context, arg RotateOAuthRefreshTokenParams) (int64, error) {
+	row := q.db.QueryRow(ctx, rotateOAuthRefreshToken, arg.RequestID, arg.RefreshSignature)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const updateOAuthDeviceSessionByUserSignature = `-- name: UpdateOAuthDeviceSessionByUserSignature :one
+UPDATE oauth_device_sessions
+SET request = $1
+WHERE user_signature = $2
+  AND NOT invalidated
+  AND expires_at > NOW()
+RETURNING device_signature
+`
+
+type UpdateOAuthDeviceSessionByUserSignatureParams struct {
+	Request       []byte `db:"request" json:"request"`
+	UserSignature string `db:"user_signature" json:"user_signature"`
+}
+
+func (q *sqlQuerier) UpdateOAuthDeviceSessionByUserSignature(ctx context.Context, arg UpdateOAuthDeviceSessionByUserSignatureParams) (string, error) {
+	row := q.db.QueryRow(ctx, updateOAuthDeviceSessionByUserSignature, arg.Request, arg.UserSignature)
+	var device_signature string
+	err := row.Scan(&device_signature)
+	return device_signature, err
+}
+
 const getInstanceOverviewMetrics = `-- name: GetInstanceOverviewMetrics :one
 SELECT instance_id, requirements_complete, player_deaths, wipe_count, top_incoming_damage_abilities, encounter_span_duration_ms, total_combat_duration_ms, total_boss_duration_ms, metrics_version, created_at, updated_at
 FROM instance_overview_metrics

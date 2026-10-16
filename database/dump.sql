@@ -1398,6 +1398,15 @@ CREATE VIEW log_instances_guild AS
      LEFT JOIN guilds g ON ((li.guild_id = g.id)))
      LEFT JOIN wow_log_groups wlg ON ((wlg.id = li.log_group_id)));
 
+CREATE TABLE oauth_device_sessions (
+    device_signature text NOT NULL,
+    user_signature text NOT NULL,
+    request jsonb NOT NULL,
+    invalidated boolean DEFAULT false NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE oauth_relay_codes (
     code_hash bytea NOT NULL,
     user_auth_session_id uuid NOT NULL,
@@ -1408,6 +1417,24 @@ CREATE TABLE oauth_relay_codes (
     expires_at timestamp with time zone NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT oauth_relay_codes_code_hash_length CHECK ((octet_length(code_hash) = 32))
+);
+
+CREATE TABLE oauth_server_secrets (
+    id boolean DEFAULT true NOT NULL,
+    secret bytea NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT oauth_server_secrets_id_check CHECK (id)
+);
+
+CREATE TABLE oauth_token_sessions (
+    token_type text NOT NULL,
+    signature text NOT NULL,
+    request_id text NOT NULL,
+    access_signature text DEFAULT ''::text NOT NULL,
+    request jsonb NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT oauth_token_sessions_token_type_check CHECK ((token_type = ANY (ARRAY['access'::text, 'refresh'::text, 'authorize'::text])))
 );
 
 CREATE TABLE parse_score_memberships (
@@ -2481,8 +2508,20 @@ ALTER TABLE ONLY log_instance_youtube_timestamped
 ALTER TABLE ONLY log_instances
     ADD CONSTRAINT log_instances_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY oauth_device_sessions
+    ADD CONSTRAINT oauth_device_sessions_pkey PRIMARY KEY (device_signature);
+
+ALTER TABLE ONLY oauth_device_sessions
+    ADD CONSTRAINT oauth_device_sessions_user_signature_key UNIQUE (user_signature);
+
 ALTER TABLE ONLY oauth_relay_codes
     ADD CONSTRAINT oauth_relay_codes_pkey PRIMARY KEY (code_hash);
+
+ALTER TABLE ONLY oauth_server_secrets
+    ADD CONSTRAINT oauth_server_secrets_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY oauth_token_sessions
+    ADD CONSTRAINT oauth_token_sessions_pkey PRIMARY KEY (token_type, signature);
 
 ALTER TABLE ONLY parse_score_memberships
     ADD CONSTRAINT parse_score_memberships_pkey PRIMARY KEY (id);
@@ -2902,7 +2941,13 @@ CREATE UNIQUE INDEX log_instance_youtube_timestamped_slug_idx ON log_instance_yo
 
 CREATE UNIQUE INDEX log_instances_hashed_slug_idx ON log_instances USING btree (hashed_slug) WHERE (hashed_slug IS NOT NULL);
 
+CREATE INDEX oauth_device_sessions_expires_at_idx ON oauth_device_sessions USING btree (expires_at);
+
 CREATE INDEX oauth_relay_codes_expires_at_idx ON oauth_relay_codes USING btree (expires_at);
+
+CREATE INDEX oauth_token_sessions_expires_at_idx ON oauth_token_sessions USING btree (expires_at);
+
+CREATE INDEX oauth_token_sessions_request_id_idx ON oauth_token_sessions USING btree (request_id, token_type);
 
 CREATE INDEX raid_compositions_user_tenant_idx ON raid_compositions USING btree (user_id, tenant_id);
 
