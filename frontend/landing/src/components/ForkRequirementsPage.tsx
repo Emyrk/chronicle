@@ -38,7 +38,17 @@ export function SelfHostedRequirementsPage() {
             Self Hosted Requirements
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
-            Chronicle is happy to support your community.
+            Chronicle is happy to support your community. For installation and configuration steps, read the{" "}
+            <a
+              href="https://github.com/Emyrk/chronicle/blob/main/DEPLOYING.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-[#9fc5d6] underline decoration-[#5f8fa6]/50 underline-offset-4 transition-colors hover:text-white"
+            >
+              self-hosting deployment guide
+              <ExternalLink className="ml-1 inline h-4 w-4" aria-hidden="true" />
+            </a>
+            .
           </p>
         </header>
 

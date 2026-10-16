@@ -6,7 +6,7 @@ Chronicle publishes a Docker image for AzerothCore-compatible World of Warcraft 
 emyrk/chronicled:latest
 ```
 
-Release builds are also published with their Git tag, for example `emyrk/chronicled:v1.2.3`. Pin a release tag in production so upgrades are deliberate. The historical `emyrk/chronicled:azerothcore` tag remains available as a compatibility alias for release builds.
+Release builds are also published with their Git tag, for example `emyrk/chronicled:v1.2.3`. Pin a release tag in production so upgrades are deliberate.
 
 > [!IMPORTANT]
 > Chronicle's license permits non-commercial hosting subject to the [Self Hosted Requirements](https://chronicleclassic.com/self-hosting/). Keep the required branding, linked **Powered by Chronicle** footer, and support banner intact.
