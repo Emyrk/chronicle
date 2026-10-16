@@ -2,10 +2,13 @@ import { Hono } from "hono";
 import {
   MAP_MANIFEST_FORMAT,
   MAP_MANIFEST_NAMESPACES,
+  emptyMapManifest,
   isPreviewableMapAssetPath,
   mergeMapManifests,
   parseMapLayer,
   parseMapManifest,
+  recoverMapManifestBase,
+  recoverMapManifestLayers,
   type MapLayerInstance,
   type MapLayerManifest,
   type MapManifestLayers,
@@ -81,12 +84,6 @@ async function readJSON(bucket: R2Bucket, key: string): Promise<unknown | undefi
   }
 }
 
-async function readRequiredJSON(bucket: R2Bucket, key: string): Promise<unknown> {
-  const value = await readJSON(bucket, key);
-  if (value === undefined) throw new TypeError(`${key} does not exist`);
-  return value;
-}
-
 function manualLayer(product: string, instances: MapLayerInstance[] = []): MapLayerManifest {
   return {
     format: MAP_MANIFEST_FORMAT,
@@ -122,10 +119,28 @@ async function loadOptionalLayers(bucket: R2Bucket, namespace: MapManifestNamesp
   return { styled, renders, meshes };
 }
 
+async function loadMapBase(bucket: R2Bucket, namespace: MapManifestNamespace) {
+  const originalRaw = await readJSON(bucket, manifestKey(namespace, "original"));
+  if (originalRaw !== undefined) {
+    return { original: parseMapManifest(originalRaw), originalRaw, recoveredLayers: {} as MapManifestLayers, baseSource: "original" as const };
+  }
+  const readerRaw = await readJSON(bucket, `${root(namespace)}/manifest.json`);
+  if (readerRaw !== undefined) {
+    const original = recoverMapManifestBase(readerRaw, namespace);
+    return { original, originalRaw: original, recoveredLayers: recoverMapManifestLayers(readerRaw), baseSource: "reader" as const };
+  }
+  const original = emptyMapManifest(namespace);
+  return { original, originalRaw: original, recoveredLayers: {} as MapManifestLayers, baseSource: "empty" as const };
+}
+
 async function loadState(bucket: R2Bucket, namespace: MapManifestNamespace) {
-  const originalRaw = await readRequiredJSON(bucket, manifestKey(namespace, "original"));
-  const original = parseMapManifest(originalRaw);
-  const liveLayers = await loadOptionalLayers(bucket, namespace);
+  const { original, originalRaw, recoveredLayers, baseSource } = await loadMapBase(bucket, namespace);
+  const storedLayers = await loadOptionalLayers(bucket, namespace);
+  const liveLayers: MapManifestLayers = {
+    styled: storedLayers.styled ?? recoveredLayers.styled,
+    renders: storedLayers.renders ?? recoveredLayers.renders,
+    meshes: storedLayers.meshes ?? recoveredLayers.meshes,
+  };
   const published: ManualDraft = {
     renders: (liveLayers.renders as MapLayerManifest | undefined) ?? manualLayer(original.target.product),
     meshes: (liveLayers.meshes as MapLayerManifest | undefined) ?? manualLayer(original.target.product),
@@ -146,7 +161,7 @@ async function loadState(bucket: R2Bucket, namespace: MapManifestNamespace) {
     renders: draft.renders,
     meshes: draft.meshes,
   });
-  return { original, originalRaw, liveLayers, published, draft, draftObject, preview };
+  return { original, originalRaw, baseSource, liveLayers, published, draft, draftObject, preview };
 }
 
 function jsonText(value: unknown): string {
@@ -279,6 +294,7 @@ maps.get("/internal/api/v1/maps/:namespace", async (c) => {
     const originalInstanceIDs = new Set(state.original.instances.map((instance) => instance.mapID));
     return c.json({
       namespace,
+      base_source: state.baseSource,
       target: state.original.target,
       has_draft: Boolean(state.draftObject),
       draft_version: state.draftObject?.httpEtag ?? null,
@@ -365,7 +381,7 @@ maps.put("/internal/api/v1/maps/:namespace/draft", async (c) => {
     });
     const object = await c.env.MAPS.put(draftKey(namespace), jsonText(draft), {
       ...DRAFT_HEADERS,
-      onlyIf: currentVersion === null ? { etagDoesNotMatch: "*" } : { etagMatches: currentVersion },
+      onlyIf: state.draftObject ? { etagMatches: state.draftObject.etag } : { etagDoesNotMatch: "*" },
     });
     if (!object) return c.json({ error: "Draft changed in another tab. Reload before saving." }, 409);
     return c.json({ saved: true, draft_version: object.httpEtag, draft });
@@ -457,8 +473,16 @@ maps.post("/internal/api/v1/maps/:namespace/publish", async (c) => {
       renders: state.draft.renders,
       meshes: state.draft.meshes,
     });
+    if (state.baseSource !== "original" && state.liveLayers.styled) {
+      await c.env.MAPS.put(manifestKey(namespace, "styled"), jsonText(state.liveLayers.styled), JSON_HEADERS);
+    }
     await c.env.MAPS.put(manifestKey(namespace, "renders"), jsonText(state.draft.renders), JSON_HEADERS);
     await c.env.MAPS.put(manifestKey(namespace, "meshes"), jsonText(state.draft.meshes), JSON_HEADERS);
+    if (state.baseSource !== "original") {
+      // Persist recovered source layers before making the bootstrapped original
+      // authoritative, so a failed publish can still recover from manifest.json.
+      await c.env.MAPS.put(manifestKey(namespace, "original"), jsonText(state.original), JSON_HEADERS);
+    }
     // Publish the merged reader-facing manifest last. If an earlier write fails,
     // the draft remains available and a retry reconciles all source manifests.
     await c.env.MAPS.put(`${root(namespace)}/manifest.json`, jsonText(merged), JSON_HEADERS);

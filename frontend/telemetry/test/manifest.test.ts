@@ -3,10 +3,14 @@ import test from "node:test";
 
 import {
   MAP_MANIFEST_NAMESPACES,
+  MAP_NAMESPACE_PRODUCTS,
+  emptyMapManifest,
   isPreviewableMapAssetPath,
   mergeMapManifests,
   parseMapLayer,
   parseMapManifest,
+  recoverMapManifestBase,
+  recoverMapManifestLayers,
 } from "../src/maps/manifest.ts";
 
 const target = { product: "wow_classic_beta", build: "1.2.3", region: "us", locale: "enUS" };
@@ -38,8 +42,57 @@ function layer(instance: Record<string, unknown>, layerTarget: Record<string, un
 
 test("exports the supported namespaces", () => {
   assert.deepEqual(MAP_MANIFEST_NAMESPACES, [
-    "forever", "kronos", "octowow", "turtle", "tbc", "vanillaplus", "warmane", "azerothcore",
+    "forever", "kronos", "epoch", "turtle", "tbc", "vanillaplus", "warmane", "ascension", "azerothcore",
   ]);
+});
+
+test("bootstraps every foundry namespace with its product", () => {
+  assert.equal(MAP_NAMESPACE_PRODUCTS.forever, "wow_classic_beta");
+  for (const namespace of MAP_MANIFEST_NAMESPACES) {
+    const manifest = emptyMapManifest(namespace);
+    assert.equal(manifest.target.product, MAP_NAMESPACE_PRODUCTS[namespace]);
+    assert.deepEqual(manifest.maps, []);
+    assert.deepEqual(manifest.instances, []);
+  }
+});
+
+test("recovers a v1 reader manifest as a clean v2 native base", () => {
+  const reader = {
+    ...original(),
+    format: "chronicle-wow-map-art-v1",
+    target: { ...target, product: "turtle" },
+    instances: [{
+      ...original().instances[0],
+      styled: { path: "render-styled/wc.jpeg", width: 10, height: 10, source: "manual", bounds: { minX: 0, maxX: 1, minY: 0, maxY: 1 } },
+      renders: { path: "renders/wc.png", width: 10, height: 10 },
+      mesh: mesh("3d/wc.glb"),
+    }],
+  };
+  const layers = recoverMapManifestLayers(reader);
+  assert.equal((layers.renders as { instances: { renders: { path: string } }[] }).instances[0]?.renders.path, "renders/wc.png");
+  assert.equal((layers.meshes as { instances: { mesh: { path: string } }[] }).instances[0]?.mesh.path, "3d/wc.glb");
+  assert.equal((layers.styled as { instances: { styled: { path: string } }[] }).instances[0]?.styled.path, "render-styled/wc.jpeg");
+  const recovered = recoverMapManifestBase(reader, "turtle");
+  assert.equal(recovered.format, "chronicle-wow-map-art-v2");
+  assert.equal(recovered.target.product, "turtle");
+  assert.deepEqual(recovered.instances[0], {
+    mapID: 43,
+    name: "Wailing Caverns",
+    instanceType: 1,
+    directory: "WailingCaverns",
+    floors: [],
+  });
+});
+
+test("rejects incompatible reader formats and namespace products", () => {
+  assert.throws(
+    () => recoverMapManifestBase({ ...original(), format: "chronicle-wow-map-art-v0" }, "forever"),
+    /unsupported map reader manifest format/,
+  );
+  assert.throws(
+    () => recoverMapManifestBase({ ...original(), format: "chronicle-wow-map-art-v1" }, "turtle"),
+    /does not match namespace product/,
+  );
 });
 
 test("merges layers in deterministic order and strips original artwork", () => {

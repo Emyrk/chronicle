@@ -16,11 +16,10 @@ import type { Dataset, UpsertDatasetRequest } from "@/api/typesGenerated";
 
 /** Known icon CDN base URLs. Users can also type a custom URL. */
 const KNOWN_ICON_CDNS = [
-  { url: "https://icons.chronicleclassic.com/turtle", label: "Turtle WoW" },
+  { url: "https://icons.chronicleclassic.com/turtle", label: "Turtle WoW / OctoWoW / Capy" },
   { url: "https://icons.chronicleclassic.com/azerothcore", label: "AzerothCore" },
   { url: "https://icons.chronicleclassic.com/kronos", label: "Kronos" },
   { url: "https://icons.chronicleclassic.com/epoch", label: "Epoch" },
-  { url: "https://icons.chronicleclassic.com/octowow", label: "OctoWoW" },
   { url: "https://icons.chronicleclassic.com/vanillaplus", label: "VanillaPlus" },
   { url: "https://icons.chronicleclassic.com/ascension", label: "Ascension" },
   { url: "https://icons.chronicleclassic.com/forever", label: "WoW Forever" },

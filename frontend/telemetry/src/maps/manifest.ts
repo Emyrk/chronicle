@@ -3,17 +3,31 @@ export const MAP_MANIFEST_FORMAT = "chronicle-wow-map-art-v2" as const;
 export const MAP_MANIFEST_NAMESPACES = [
   "forever",
   "kronos",
-  "octowow",
+  "epoch",
+  // OctoWoW and Capy share Turtle's icons.chronicleclassic.com namespace.
   "turtle",
   "tbc",
   "vanillaplus",
   "warmane",
+  "ascension",
   "azerothcore",
 ] as const;
 
 export const MAP_NAMESPACES = MAP_MANIFEST_NAMESPACES;
 export type MapManifestNamespace = (typeof MAP_MANIFEST_NAMESPACES)[number];
 export type MapNamespace = MapManifestNamespace;
+
+export const MAP_NAMESPACE_PRODUCTS: Record<MapManifestNamespace, string> = {
+  forever: "wow_classic_beta",
+  kronos: "kronos",
+  epoch: "epoch",
+  turtle: "turtle",
+  tbc: "tbc",
+  vanillaplus: "vanillaplus",
+  warmane: "warmane",
+  ascension: "ascension",
+  azerothcore: "azerothcore",
+};
 
 export interface MapTarget {
   product: string;
@@ -138,6 +152,65 @@ export interface MapManifest {
   target: MapTarget;
   maps: MapRecord[];
   instances: MapInstance[];
+}
+
+export function emptyMapManifest(namespace: MapManifestNamespace): MapManifest {
+  return {
+    format: MAP_MANIFEST_FORMAT,
+    target: { product: MAP_NAMESPACE_PRODUCTS[namespace], build: "", region: "", locale: "" },
+    maps: [],
+    instances: [],
+  };
+}
+
+function parseRecoverableMapManifest(value: unknown): MapManifest {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError("map reader manifest must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (input.format !== MAP_MANIFEST_FORMAT && input.format !== "chronicle-wow-map-art-v1") {
+    throw new TypeError(`unsupported map reader manifest format ${JSON.stringify(input.format)}`);
+  }
+  return parseMapManifest({ ...input, format: MAP_MANIFEST_FORMAT });
+}
+
+/**
+ * Recovers a native-art base from an older reader-facing manifest. Legacy v1
+ * data is structurally compatible after the format upgrade. Optional artwork
+ * is removed because its source manifests remain authoritative and must be
+ * able to delete or replace those fields on the next publish.
+ */
+export function recoverMapManifestBase(value: unknown, namespace: MapManifestNamespace): MapManifest {
+  if (value === undefined) return emptyMapManifest(namespace);
+  const manifest = parseRecoverableMapManifest(value);
+  const expectedProduct = MAP_NAMESPACE_PRODUCTS[namespace];
+  if (manifest.target.product !== expectedProduct) {
+    throw new TypeError(`map reader manifest product ${JSON.stringify(manifest.target.product)} does not match namespace product ${JSON.stringify(expectedProduct)}`);
+  }
+  return {
+    ...manifest,
+    instances: manifest.instances.map(({ styled: _styled, renders: _renders, mesh: _mesh, ...instance }) => instance),
+  };
+}
+
+export function recoverMapManifestLayers(value: unknown): MapManifestLayers {
+  if (value === undefined) return {};
+  const manifest = parseRecoverableMapManifest(value);
+  const target = { product: manifest.target.product, build: "", region: "", locale: "" };
+  const styled = manifest.instances.flatMap((instance) => instance.styled
+    ? [{ mapID: instance.mapID, name: instance.name, styled: instance.styled }]
+    : []);
+  const renders = manifest.instances.flatMap((instance) => instance.renders
+    ? [{ mapID: instance.mapID, name: instance.name, renders: instance.renders }]
+    : []);
+  const meshes = manifest.instances.flatMap((instance) => instance.mesh
+    ? [{ mapID: instance.mapID, name: instance.name, mesh: instance.mesh }]
+    : []);
+  return {
+    styled: styled.length > 0 ? { format: MAP_MANIFEST_FORMAT, target, instances: styled } : undefined,
+    renders: renders.length > 0 ? { format: MAP_MANIFEST_FORMAT, target, instances: renders } : undefined,
+    meshes: meshes.length > 0 ? { format: MAP_MANIFEST_FORMAT, target, instances: meshes } : undefined,
+  };
 }
 
 export interface MapLayerInstance {
