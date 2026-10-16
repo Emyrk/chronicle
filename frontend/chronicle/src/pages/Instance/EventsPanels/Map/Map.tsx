@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view components intentionally share this module. */
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Crosshair, Focus, HeartPulse, Map as MapIcon, Maximize, Route, Users } from "lucide-react";
+import { Crosshair, Focus, HeartPulse, Keyboard, Map as MapIcon, Maximize, Route, Users } from "lucide-react";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { fetchMiniatureUrls } from "./bossMinis";
@@ -19,7 +19,9 @@ import {
 } from "./mapModel";
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
 import { MapView2D, type MapViewRequest } from "./MapView2D";
+import { MapControlsSettings } from "./MapControlsSettings";
 import { RaidFrames } from "./RaidFrames";
+import { useMapKeyBindings } from "./useMapKeyBindings";
 import { useMapScene } from "./useMapScene";
 import { encounterJumps, mapPresentationForSelection } from "./wholeRun";
 
@@ -96,6 +98,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   const autoFit = ready?.autoFit ?? null;
   const defaultViewport = ready?.fitByDefault && autoFit ? autoFit : FULL_MAP_VIEWPORT;
   const [showRaidFrames, setShowRaidFrames] = useState(true);
+  const { bindings: keyBindings } = useMapKeyBindings();
   const [storedFraming, setFraming] = useState<MapFraming>(INITIAL_MAP_FRAMING);
   // A new selection or replay moving into another encounter re-frames;
   // loading states (e.g. reprocessing after a filter change) keep the framing.
@@ -194,6 +197,12 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
             <Maximize className="h-3 w-3" />
             Reset
           </button>
+          {props.flipCard && (
+            <button type="button" onClick={props.flipCard} title="Camera keybinds" className={framingButtonClass}>
+              <Keyboard className="h-3 w-3" />
+              Controls
+            </button>
+          )}
           {onExitWholeRun && (
             <button type="button" onClick={onExitWholeRun} title="Back to the 2D route overview" className={framingButtonClass}>
               <Route className="h-3 w-3" />
@@ -241,6 +250,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               onDungeonMeshState={setMeshState}
               focus={focus}
               cinematic={cinematic}
+              keyBindings={keyBindings}
             />
           </Suspense>
         )}
@@ -341,6 +351,7 @@ export function createMapPanel(): PanelDefinition<MapResult, MapProcessorEvent> 
     disableCardFlip: true,
     supportsFiltering: false,
     underConstruction: true,
+    renderCardBack: (props) => <MapControlsSettings onClose={props.onClose} />,
     render: (props) => <MapContent {...props} />,
   };
 }

@@ -270,6 +270,9 @@ export interface PanelRenderProps<TResult> {
   /** Whether user-customized filters are active on this panel. */
   hasCustomFilters?: boolean;
 
+  /** Flips the card to its back (renderCardBack), for panels with their own settings button. */
+  flipCard?: () => void;
+
 }
 
 /**

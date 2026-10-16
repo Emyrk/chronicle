@@ -20,6 +20,7 @@ import {
 } from "./MapScene3D";
 import { collectCastSpellIds, DEFAULT_EFFECT_OPTIONS, effectiveCastIconGuids, iconPreloadUrls, type CastIconMode, type EncounterEffects } from "./replayEffects";
 import type { MapViewRequest } from "./MapView2D";
+import type { MapKeyBindings } from "./mapControls";
 import type { MapSceneGround, MapSceneMarker } from "./useMapScene";
 
 export interface MapView3DProps {
@@ -53,6 +54,8 @@ export interface MapView3DProps {
    * a zoom); Follow turns it back on.
    */
   cinematic?: boolean;
+  /** Camera keybinds; the defaults (WASD, Q/E, R/F) when left out. */
+  keyBindings?: MapKeyBindings;
 }
 
 const EFFECTS_STORAGE_KEY = "chronicle.map.effects3d";
@@ -153,6 +156,7 @@ export default function MapView3D({
   onDungeonMeshState,
   focus = null,
   cinematic = false,
+  keyBindings,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<MapScene3D | null>(null);
@@ -205,6 +209,10 @@ export default function MapView3D({
   useEffect(() => {
     sceneRef.current?.setFocus(focus);
   }, [focus]);
+
+  useEffect(() => {
+    if (keyBindings) sceneRef.current?.setKeyBindings(keyBindings);
+  }, [keyBindings]);
 
   // Keyed by the boss guids' string so replay ticks never re-engage the Director.
   const bossKey = bossGuids ? [...bossGuids].join(",") : "";

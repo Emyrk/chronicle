@@ -1,5 +1,5 @@
 import { useQueries, useQuery, useMutation, useQueryClient, keepPreviousData, type UseQueryOptions } from "@tanstack/react-query";
-import type { ListSidekicksResponse, RenameSidekickRequest, SidekickInstallation, WhatsNewStatus } from "./typesGenerated";
+import type { ListSidekicksResponse, MapControls, RenameSidekickRequest, SidekickInstallation, WhatsNewStatus } from "./typesGenerated";
 import type { WoWSpell } from "./wowdb";
 import {
   recordPublicNoticeResult,
@@ -742,6 +742,49 @@ export function useUpdateActionBarSlots() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user-panel-layouts"] });
+    },
+  });
+}
+
+const MAP_CONTROLS_URL = "/api/v1/me/map-controls";
+
+/** The signed-in user's replay map keybinds; only fetched when `enabled`. */
+export function useMapControls(enabled: boolean) {
+  return useQuery({
+    queryKey: ["map-controls"],
+    enabled,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const response = await fetch(MAP_CONTROLS_URL, { credentials: "include" });
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to load map controls", error);
+      }
+      return response.json() as Promise<MapControls>;
+    },
+  });
+}
+
+/** Saves the given bindings, or with `null` reverts to the defaults. */
+export function useUpdateMapControls() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (bindings: Record<string, string> | null) => {
+      const response = await fetch(MAP_CONTROLS_URL, {
+        method: bindings ? "PUT" : "DELETE",
+        headers: bindings ? { "Content-Type": "application/json" } : undefined,
+        body: bindings ? JSON.stringify({ bindings } satisfies MapControls) : undefined,
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to save map controls", error);
+      }
+      return response.json() as Promise<MapControls>;
+    },
+    onSuccess: (controls) => {
+      queryClient.setQueryData(["map-controls"], controls);
     },
   });
 }
