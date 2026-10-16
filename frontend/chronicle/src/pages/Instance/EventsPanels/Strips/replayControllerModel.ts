@@ -18,7 +18,7 @@ export interface ReplayBar {
 }
 
 export interface ReplayMarker {
-  kind: "death" | "boss_cast";
+  kind: "death";
   /** Position along the track, 0–100. */
   left: number;
   title: string;
@@ -100,13 +100,11 @@ export function replayControllerBars(
   });
 }
 
-/** Player deaths and boss cast starts inside the bounds. */
+/** Player deaths inside the bounds. */
 export function replayControllerMarkers(
   result: ReplayControllerResult,
   bounds: ReplayBounds,
   cursorMs: number | null,
-  bossGuids: ReadonlySet<string>,
-  unitName: (guid: string) => string,
 ): ReplayMarker[] {
   const inBounds = (timestampMs: number) => timestampMs >= bounds.startMs && timestampMs <= bounds.endMs;
   const marker = (kind: ReplayMarker["kind"], timestampMs: number, label: string): ReplayMarker => ({
@@ -120,11 +118,6 @@ export function replayControllerMarkers(
     for (const death of result.timeline.playerDeaths) {
       const timestampMs = result.baseMs + death.offsetMs;
       if (inBounds(timestampMs)) markers.push(marker("death", timestampMs, `${death.playerName} died`));
-    }
-  }
-  for (const cast of result.enemyCasts) {
-    if (bossGuids.has(cast.caster) && inBounds(cast.timestampMs)) {
-      markers.push(marker("boss_cast", cast.timestampMs, `${unitName(cast.caster)} casts ${cast.spellName}`));
     }
   }
   return markers.sort((left, right) => left.left - right.left);

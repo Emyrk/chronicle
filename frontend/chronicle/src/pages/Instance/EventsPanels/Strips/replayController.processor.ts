@@ -1,8 +1,7 @@
 /**
- * Replay controller strip data: party damage in 500ms bins (the Timeline processor
- * with a fixed series), player deaths (from the same), and enemy cast starts
- * for the boss-cast markers. Times are absolute ms so the strip lines them up
- * with the replay cursor.
+ * Replay controller strip data: party damage in 500ms bins and player deaths,
+ * from the Timeline processor with a fixed series. `baseMs` turns its offsets
+ * into absolute ms so the strip lines them up with the replay cursor.
  */
 
 import type { PanelProcessor, ProcessorContext, ProcessorEvent } from "../processorTypes";
@@ -25,18 +24,10 @@ const PARTY_DAMAGE_SERIES: TimelineSeriesConfig = {
   ],
 };
 
-export interface ReplayControllerCast {
-  timestampMs: number;
-  caster: string;
-  spellName: string;
-}
-
 export interface ReplayControllerResult {
   timeline: TimelineResult;
   /** Absolute ms of global offset 0 (the first selected encounter's start), or null before any event. */
   baseMs: number | null;
-  /** Cast starts by non-player casters; the strip keeps the bosses'. */
-  enemyCasts: ReplayControllerCast[];
 }
 
 // The Timeline processor reads its series and bin size from panelContext;
@@ -61,19 +52,12 @@ function timelineContext(context: ProcessorContext): ProcessorContext {
 
 export const replayControllerProcessor: PanelProcessor<ReplayControllerResult, ProcessorEvent> = {
   id: "replay_controller",
-  streams: ["damage", "slain", "spell_start"],
+  streams: ["damage", "slain"],
   processAllEvents: true,
-  createState: () => ({ timeline: timelineProcessor.createState(), baseMs: null, enemyCasts: [] }),
+  createState: () => ({ timeline: timelineProcessor.createState(), baseMs: null }),
   processEvent: (state, event, encounterId, firstTimestamp, streamType, context) => {
     if (!context.selectedEncounterIds.has(encounterId)) return;
-    const timestampMs = firstTimestamp.getTime() + event.offsetMilli;
-    if (state.baseMs === null) state.baseMs = timestampMs - (event.globalOffsetMilli ?? event.offsetMilli);
-    if (event.type === "spell_start") {
-      if (!context.players[event.caster]) {
-        state.enemyCasts.push({ timestampMs, caster: event.caster, spellName: event.spell.name });
-      }
-      return;
-    }
+    if (state.baseMs === null) state.baseMs = firstTimestamp.getTime() + event.offsetMilli - (event.globalOffsetMilli ?? event.offsetMilli);
     timelineProcessor.processEvent(state.timeline, event, encounterId, firstTimestamp, streamType, timelineContext(context));
   },
 };

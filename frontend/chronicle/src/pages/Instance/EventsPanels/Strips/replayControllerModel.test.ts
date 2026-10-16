@@ -9,7 +9,7 @@ function result(bins: number[], overrides: Partial<ReplayControllerResult> = {})
   const timeline = timelineProcessor.createState();
   timeline.binMs = 2000;
   timeline.series.set(PARTY_DAMAGE_SERIES_ID, bins);
-  return { timeline, baseMs: START, enemyCasts: [], ...overrides };
+  return { timeline, baseMs: START, ...overrides };
 }
 
 describe("replayControllerBars", () => {
@@ -57,17 +57,15 @@ describe("bar width", () => {
 });
 
 describe("replayControllerMarkers", () => {
-  it("places deaths and boss casts, dimming those after the cursor", () => {
-    const data = result([], {
-      enemyCasts: [
-        { timestampMs: START + 1000, caster: "boss", spellName: "Sleep" },
-        { timestampMs: START + 2000, caster: "trash", spellName: "Bite" },
-      ],
-    });
-    data.timeline.playerDeaths.push({ offsetMs: 3000, playerId: "p", playerName: "Thaddeus", className: "PALADIN" });
-    const markers = replayControllerMarkers(data, { startMs: START, endMs: START + 4000 }, START + 2000, new Set(["boss"]), () => "Lord Pythas");
-    expect(markers).toEqual([
-      { kind: "boss_cast", left: 25, title: "0:01 Lord Pythas casts Sleep", past: true },
+  it("places player deaths, dimming those after the cursor", () => {
+    const data = result([]);
+    data.timeline.playerDeaths.push(
+      { offsetMs: 1000, playerId: "a", playerName: "Ladiess", className: "SHAMAN" },
+      { offsetMs: 3000, playerId: "p", playerName: "Thaddeus", className: "PALADIN" },
+      { offsetMs: 9000, playerId: "x", playerName: "Later", className: "MAGE" },
+    );
+    expect(replayControllerMarkers(data, { startMs: START, endMs: START + 4000 }, START + 2000)).toEqual([
+      { kind: "death", left: 25, title: "0:01 Ladiess died", past: true },
       { kind: "death", left: 75, title: "0:03 Thaddeus died", past: false },
     ]);
   });

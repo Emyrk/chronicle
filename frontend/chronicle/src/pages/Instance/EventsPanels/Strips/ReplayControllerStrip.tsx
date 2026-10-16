@@ -21,9 +21,9 @@ const controlButtonClass = "flex h-7 w-7 shrink-0 items-center justify-center ro
 /**
  * Replay transport over a bar chart of party damage: play, restart, speed,
  * and drag anywhere on the bars to scrub. Played bars fill in as the cursor
- * passes; deaths and boss casts mark the top.
+ * passes; player deaths mark the top.
  */
-export function ReplayControllerStrip({ result, context }: StripRenderProps<ReplayControllerResult>) {
+export function ReplayControllerStrip({ result }: StripRenderProps<ReplayControllerResult>) {
   const sync = useSyncModeContextOptional();
   const trackRef = useRef<HTMLDivElement>(null);
   const boundsDates = sync?.encounterBounds ?? null;
@@ -35,15 +35,9 @@ export function ReplayControllerStrip({ result, context }: StripRenderProps<Repl
   const youtubeActive = sync?.externalDriver === "youtube";
   const disabled = !sync || !bounds || youtubeActive;
 
-  const bossGuids = useMemo(() => new Set(context.instance.encounters
-    .flatMap((encounter) => encounter.enemies?.filter((enemy) => enemy.boss).map((enemy) => enemy.id) ?? [])),
-  [context.instance.encounters]);
   const bucketMs = bounds ? replayBucketMs(bounds.endMs - bounds.startMs) : 0;
   const bars = useMemo(() => bounds ? replayControllerBars(result, bounds, cursorMs, bucketMs) : [], [bounds, bucketMs, cursorMs, result]);
-  const markers = useMemo(() => bounds
-    ? replayControllerMarkers(result, bounds, cursorMs, bossGuids, (guid) => context.instance.units?.[guid]?.name ?? context.instance.players?.[guid]?.name ?? "Boss")
-    : [],
-  [bossGuids, bounds, context.instance.players, context.instance.units, cursorMs, result]);
+  const markers = useMemo(() => bounds ? replayControllerMarkers(result, bounds, cursorMs) : [], [bounds, cursorMs, result]);
   const ticks = useMemo(() => bounds ? replayControllerTicks(bounds) : [], [bounds]);
 
   const durationMs = bounds ? Math.max(0, bounds.endMs - bounds.startMs) : 0;
@@ -132,7 +126,6 @@ export function ReplayControllerStrip({ result, context }: StripRenderProps<Repl
         </div>
         <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
           <span className="flex items-center gap-1" title={`Party damage per ${formatBucket(bucketMs)}`}><span className="h-1.5 w-1.5 bg-[var(--chart-3)]" />Dmg/{formatBucket(bucketMs)}</span>
-          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rotate-45 bg-[var(--color-class-enemy)]" />Boss</span>
           <span className="flex items-center gap-1"><Skull className="h-2 w-2 text-red-400" />Death</span>
         </div>
       </div>
@@ -171,9 +164,7 @@ export function ReplayControllerStrip({ result, context }: StripRenderProps<Repl
               className="absolute top-0 flex h-3 -translate-x-1/2 items-center"
               style={{ left: `${marker.left}%`, opacity: marker.past ? 1 : 0.3 }}
             >
-              {marker.kind === "death"
-                ? <Skull className="h-3 w-3 text-red-400" />
-                : <span className="h-[7px] w-[7px] rotate-45 bg-[var(--color-class-enemy)] shadow-[0_0_0_1px_#000]" />}
+              <Skull className="h-3 w-3 text-red-400" />
             </div>
           ))}
           <div className="pointer-events-none absolute bottom-[16px] top-[12px] w-px bg-white/55" style={{ left: `${headPercent}%` }} />
