@@ -5,16 +5,17 @@ import { toast } from "sonner";
 import {
   useCreateRaidComposition,
   useGuildCharacters,
+  useMyFavorites,
   useRaidComposition,
   useSession,
   useUpdateRaidComposition,
 } from "@/api/queries";
-import type { GuildInfo, RaidComposition, RecentInstance } from "@/api/typesGenerated";
+import type { RaidComposition, RecentInstance } from "@/api/typesGenerated";
 import { serverCapabilities } from "@/config/serverCapabilities";
 import { gearClassesForFlavor } from "@/pages/Gear/classInfo";
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
-import type { Board, DragPayload, HoverTarget, SlotEntry, SlotLocation } from "./types";
-import { GROUP_SIZE, MAX_GROUPS, emptyBoard, entryName, playerEntry } from "./types";
+import type { Board, DragPayload, HoverTarget, PlannerGuild, SlotEntry, SlotLocation } from "./types";
+import { GROUP_SIZE, MAX_GROUPS, defaultPlannerGuild, emptyBoard, entryName, playerEntry } from "./types";
 import type { ParsedSignUp, RaidHelperEvent } from "./raidHelper";
 import { RaidHelperImportModal } from "./RaidHelperImportModal";
 import { RaidImportModal } from "./RaidImportModal";
@@ -67,7 +68,7 @@ export function RaidPlannerPage() {
   const [phase, setPhase] = useState<Phase>("picking");
   const [pendingGroups, setPendingGroups] = useState(8);
   const [title, setTitle] = useState("");
-  const [guild, setGuild] = useState<GuildInfo | null>(null);
+  const [guild, setGuild] = useState<PlannerGuild | null>(null);
   const [comp, setComp] = useState<Composition>({ board: [], bench: [] });
   const [groupNotes, setGroupNotes] = useState<Record<number, string>>({});
   const [editing, setEditing] = useState<SlotLocation | null>(null);
@@ -88,11 +89,13 @@ export function RaidPlannerPage() {
   const futureRef = useRef<Composition[]>([]);
 
   const classes = useMemo(() => gearClassesForFlavor(serverCapabilities.defaultFlavor), []);
-  const { data: rosterData, isLoading: rosterLoading } = useGuildCharacters(guild?.id);
   const { data: session } = useSession();
+  const { data: favorites } = useMyFavorites({ enabled: !!session });
+  const urlCompId = searchParams.get("comp");
+  const selectedGuild = defaultPlannerGuild(guild, favorites?.guilds ?? [], !!urlCompId);
+  const { data: rosterData, isLoading: rosterLoading } = useGuildCharacters(selectedGuild?.id);
   const createCompMutation = useCreateRaidComposition();
   const updateCompMutation = useUpdateRaidComposition();
-  const urlCompId = searchParams.get("comp");
   const { data: loadedComp, error: loadCompError } = useRaidComposition(
     urlCompId && urlCompId !== hydratedCompId ? urlCompId : undefined,
   );
@@ -556,7 +559,7 @@ export function RaidPlannerPage() {
 
     if (savedComp && ownsSaved) {
       updateCompMutation.mutate(
-        { compID: savedComp.id, request: { name, guild_id: guild?.id, data } },
+        { compID: savedComp.id, request: { name, guild_id: selectedGuild?.id, data } },
         {
           onSuccess: (saved) => {
             setSavedComp(saved);
@@ -571,7 +574,7 @@ export function RaidPlannerPage() {
 
     // First save, or saving a copy of someone else's shared composition.
     createCompMutation.mutate(
-      { name, guild_id: guild?.id, data },
+      { name, guild_id: selectedGuild?.id, data },
       {
         onSuccess: (saved) => {
           const copied = !!savedComp;
@@ -702,7 +705,7 @@ export function RaidPlannerPage() {
     <div className="w-full p-4 md:p-6 space-y-3.5">
       {/* Header bar */}
       <div className="flex flex-wrap items-center gap-3 px-4 py-3 border border-border rounded-lg bg-card">
-        {phase === "set" && <GuildSelector guild={guild} onSelect={setGuild} />}
+        {phase === "set" && <GuildSelector guild={selectedGuild} onSelect={setGuild} />}
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -787,7 +790,7 @@ export function RaidPlannerPage() {
                 classes={classes}
                 available={availableRoster}
                 rosterLoading={rosterLoading}
-                hasGuild={!!guild}
+                hasGuild={!!selectedGuild}
                 dragRef={dragRef}
                 hoverRef={hoverRef}
                 searchInputRef={searchInputRef}
@@ -970,7 +973,7 @@ export function RaidPlannerPage() {
         open={importSource === "raid-helper"}
         onClose={() => setImportSource(null)}
         roster={allRosterEntries}
-        guildName={guild?.name}
+        guildName={selectedGuild?.name}
         onApply={applyRaidHelperImport}
       />
     </div>

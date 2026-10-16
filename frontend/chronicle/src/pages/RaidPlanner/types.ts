@@ -1,5 +1,17 @@
-import type { GuildRosterCharacter } from "@/api/typesGenerated";
+import type { FavoriteGuild, GuildInfo, GuildRosterCharacter } from "@/api/typesGenerated";
 import { CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
+
+export type PlannerGuild = Pick<GuildInfo, "id" | "name">;
+
+export function defaultPlannerGuild(
+  current: PlannerGuild | null,
+  favorites: readonly FavoriteGuild[],
+  hasLoadedComposition: boolean,
+): PlannerGuild | null {
+  if (current || hasLoadedComposition) return current;
+  const favorite = favorites[0];
+  return favorite ? { id: favorite.id, name: favorite.name } : null;
+}
 
 export const GROUP_SIZE = 5;
 export const MAX_GROUPS = 8;
