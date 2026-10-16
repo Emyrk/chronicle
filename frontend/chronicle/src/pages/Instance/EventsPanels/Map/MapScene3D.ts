@@ -16,6 +16,7 @@ import {
   MAX_CINEMATIC_ELEVATION_DEG,
   MIN_FRAME_RADIUS_YARDS,
   smoothDamp,
+  snapDampedValue,
   STRAGGLER_CUTOFF_YARDS,
   STRAGGLER_RELEASE_YARDS,
   TARGET_DEAD_ZONE_FRACTION,
@@ -375,6 +376,9 @@ export class MapScene3D {
   // The springs are seeded and following; a re-engage while this is set is a
   // no-op, so the whole run's per-tick follow requests do not restart them.
   private directorRunning = false;
+  // The first valid shot after the dungeon mesh loads should be visible immediately;
+  // later Director changes keep their cinematic spring.
+  private directorSnapPending = false;
   // Springs: the aim point, the distance and the elevation above the horizon.
   private readonly directorX: DampedValue = { value: 0, velocity: 0 };
   private readonly directorZ: DampedValue = { value: 0, velocity: 0 };
@@ -749,10 +753,11 @@ export class MapScene3D {
       this.applyGroundMode();
       this.viewAnimation = null;
       this.placeCamera(this.viewport, MESH_ANGLED_OFFSET.clone().normalize());
-      // The cinematic camera takes over from the Fit the mesh lands on, so it
-      // springs down to the low shot instead of jumping there.
+      // Start on the first valid cinematic shot immediately. The mesh already
+      // had an asynchronous load; making the camera spend another few seconds
+      // springing in from the overview makes the replay feel unnecessarily slow.
       this.directorRunning = false;
-      if (this.director) this.engageDirector();
+      if (this.director) this.engageDirector(true);
       this.onDungeonMesh("ready");
     });
   }
@@ -776,6 +781,7 @@ export class MapScene3D {
     this.director = director;
     if (!director) {
       this.directorRunning = false;
+      this.directorSnapPending = false;
       return;
     }
     this.engageDirector();
@@ -783,10 +789,12 @@ export class MapScene3D {
   }
 
   // Hands the camera back to the Director, springing from wherever it is now.
+  // The first shot after an asynchronous mesh load can opt to snap into place.
   // Already following: nothing to seed, or the springs would stutter.
-  private engageDirector() {
+  private engageDirector(snap = false) {
     this.directorPaused = false;
     this.cameraMove = null;
+    if (snap) this.directorSnapPending = true;
     if (this.directorRunning) return;
     this.directorRunning = true;
     this.directorGoal.seeded = false;
@@ -1188,6 +1196,16 @@ export class MapScene3D {
       if (exceedsDeadZone(goal.distance, fitted, DISTANCE_DEAD_ZONE)) goal.distance = fitted;
     }
     const shot = this.clearShot(goal.x, goal.z, goal.distance, yaw);
+
+    if (this.directorSnapPending) {
+      this.directorSnapPending = false;
+      const x = snapDampedValue(this.directorX, goal.x);
+      const z = snapDampedValue(this.directorZ, goal.z);
+      const distance = snapDampedValue(this.directorDistance, shot.distance);
+      const elevation = snapDampedValue(this.directorElevation, shot.elevation);
+      this.placeDirectorCamera(x, z, distance, elevation, yaw);
+      return false;
+    }
 
     const x = smoothDamp(this.directorX, goal.x, TARGET_SMOOTH_SECONDS, dt);
     const z = smoothDamp(this.directorZ, goal.z, TARGET_SMOOTH_SECONDS, dt);

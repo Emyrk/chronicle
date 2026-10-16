@@ -21,7 +21,7 @@ import {
   viewportPoint,
   zoomViewportAt,
   dungeonMapPoint,
-  interpolatedPositionAt,
+  replayPositionAt,
   healthBarColor,
   latestHealthAt,
   latestPositionAt,
@@ -338,18 +338,23 @@ describe("map replay model", () => {
   });
 });
 
-describe("interpolatedPositionAt", () => {
-  it("returns null before the first sample", () => {
-    expect(interpolatedPositionAt(samples, 99)).toBeNull();
+describe("replayPositionAt", () => {
+  it("allows small first-sample timestamp skew for every unit", () => {
+    expect(replayPositionAt(samples, 89)).toBeNull();
+    expect(replayPositionAt(samples, 90)).toBe(samples[0]);
   });
 
-  it("blends position and facing between neighbouring samples", () => {
-    expect(interpolatedPositionAt(samples, 150)).toEqual({ timestampMs: 150, x: 2, y: 3, mapId: 1420, facing: 0.5 });
+  it("shows a player's first known position from the start of the replay", () => {
+    expect(replayPositionAt(samples, 0, true)).toBe(samples[0]);
+  });
+
+  it("linearly blends position and facing between neighbouring samples", () => {
+    expect(replayPositionAt(samples, 150)).toEqual({ timestampMs: 150, x: 2, y: 3, mapId: 1420, facing: 0.5 });
   });
 
   it("matches the exact sample and holds the last one", () => {
-    expect(interpolatedPositionAt(samples, 200)).toEqual({ ...samples[1] });
-    expect(interpolatedPositionAt(samples, 999)).toBe(samples[2]);
+    expect(replayPositionAt(samples, 200)).toEqual({ ...samples[1] });
+    expect(replayPositionAt(samples, 999)).toBe(samples[2]);
   });
 
   it("turns through the shortest angle", () => {
@@ -357,18 +362,18 @@ describe("interpolatedPositionAt", () => {
       { timestampMs: 0, x: 0, y: 0, mapId: 1, facing: 6.2 },
       { timestampMs: 100, x: 0, y: 0, mapId: 1, facing: 0.1 },
     ];
-    const facing = interpolatedPositionAt(wrapping, 50)!.facing;
+    const facing = replayPositionAt(wrapping, 50)!.facing;
     expect(Math.cos(facing)).toBeCloseTo(Math.cos((6.2 + 0.1 + 2 * Math.PI) / 2), 6);
   });
 
-  it("holds the latest sample across long gaps and map changes", () => {
+  it("interpolates across long gaps but never across map changes", () => {
     const gapped: MapPositionSample[] = [
       { timestampMs: 0, x: 0, y: 0, mapId: 1, facing: 0 },
       { timestampMs: 5_000, x: 10, y: 0, mapId: 1, facing: 0 },
       { timestampMs: 5_100, x: 20, y: 0, mapId: 2, facing: 0 },
     ];
-    expect(interpolatedPositionAt(gapped, 2_500)).toBe(gapped[0]);
-    expect(interpolatedPositionAt(gapped, 5_050)).toBe(gapped[1]);
+    expect(replayPositionAt(gapped, 2_500)).toEqual({ timestampMs: 2_500, x: 5, y: 0, mapId: 1, facing: 0 });
+    expect(replayPositionAt(gapped, 5_050)).toBe(gapped[1]);
   });
 });
 

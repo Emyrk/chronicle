@@ -215,6 +215,13 @@ export interface DampedValue {
   velocity: number;
 }
 
+/** Places a damped value at a goal without carrying momentum into later frames. */
+export function snapDampedValue(state: DampedValue, goal: number): number {
+  state.value = goal;
+  state.velocity = 0;
+  return goal;
+}
+
 /**
  * One step of a critically damped spring (the standard smoothDamp): `value`
  * reaches `goal` in about `smoothTime` seconds with no overshoot and no jump,

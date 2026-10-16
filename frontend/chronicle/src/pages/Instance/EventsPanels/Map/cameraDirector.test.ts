@@ -8,6 +8,7 @@ import {
   MIN_FRAME_DISTANCE_YARDS,
   MIN_FRAME_RADIUS_YARDS,
   smoothDamp,
+  snapDampedValue,
   type DirectorUnit,
 } from "./cameraDirector";
 
@@ -172,6 +173,14 @@ describe("frameDistance", () => {
   it("scales the yard limits into scene units", () => {
     expect(frameDistance(1000, { ...shot, scale: 3 })).toBe(MAX_FRAME_DISTANCE_YARDS * 3);
     expect(frameDistance(0, { ...shot, scale: 3 })).toBe(frameDistance(MIN_FRAME_RADIUS_YARDS * 3, { ...shot, scale: 3 }));
+  });
+});
+
+describe("snapDampedValue", () => {
+  it("starts a camera value at its goal without leftover momentum", () => {
+    const state = { value: 120, velocity: -45 };
+    expect(snapDampedValue(state, 18)).toBe(18);
+    expect(state).toEqual({ value: 18, velocity: 0 });
   });
 });
 
