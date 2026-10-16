@@ -2,6 +2,7 @@ package retention
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -71,6 +72,7 @@ func (w *RawLogWorker) Work(ctx context.Context, _ *river.Job[ArgsRawLogRetentio
 	}
 
 	now := time.Now()
+	var deletionErrs []error
 	var deleted int
 	for _, groupID := range groups {
 		// Fence active parsers in a short database transaction before touching
@@ -93,9 +95,15 @@ func (w *RawLogWorker) Work(ctx context.Context, _ *river.Job[ArgsRawLogRetentio
 			continue
 		}
 
-		_, _ = w.Storage.RemoveFile(ctx, "raidlogs", []string{groupID.String()})
+		if _, err := w.Storage.RemoveFile(ctx, "raidlogs", []string{groupID.String()}); err != nil {
+			wrapped := fmt.Errorf("remove raw log group %s from storage: %w", groupID, err)
+			logger.ErrorContext(ctx, "failed to remove raw log group from storage",
+				slog.String("log_group_id", groupID.String()), slog.String("error", err.Error()))
+			deletionErrs = append(deletionErrs, wrapped)
+			continue
+		}
 
-		// Soft-delete the DB records.
+		// Soft-delete the DB records only after object storage confirms deletion.
 		_, err = w.Store.DeleteWoWLogGroupFiles(ctx, database.DeleteWoWLogGroupFilesParams{
 			StorageDeletedAt: pgtype.Timestamptz{Time: now, Valid: true},
 			WowLogID:         groupID,
@@ -115,5 +123,5 @@ func (w *RawLogWorker) Work(ctx context.Context, _ *river.Job[ArgsRawLogRetentio
 		slog.Int("candidates", len(groups)),
 	)
 
-	return nil
+	return errors.Join(deletionErrs...)
 }
