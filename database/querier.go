@@ -25,8 +25,10 @@ type sqlcQuerier interface {
 	AddUserFavoriteGuild(ctx context.Context, arg AddUserFavoriteGuildParams) (pgtype.Bool, error)
 	AddUserFavoritePlayer(ctx context.Context, arg AddUserFavoritePlayerParams) error
 	AdminListOutdatedParserVersionInstances(ctx context.Context, arg AdminListOutdatedParserVersionInstancesParams) ([]AdminListOutdatedParserVersionInstancesRow, error)
+	AdvanceWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
 	AssignWorldToServer(ctx context.Context, arg AssignWorldToServerParams) error
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
+	CarryForwardFinalizedParsedLogGroup(ctx context.Context, arg CarryForwardFinalizedParsedLogGroupParams) error
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
 	ClaimDiscordAnnouncementDelivery(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error)
@@ -156,6 +158,7 @@ type sqlcQuerier interface {
 	EnsureDeploymentToken(ctx context.Context, deploymentToken pgtype.Text) (pgtype.Text, error)
 	ExpireStaleLogFileParts(ctx context.Context, arg ExpireStaleLogFilePartsParams) ([]LogFilePart, error)
 	FinalizeLogFilePart(ctx context.Context, arg FinalizeLogFilePartParams) (LogFilePart, error)
+	FinalizeParsedLogGroup(ctx context.Context, arg FinalizeParsedLogGroupParams) (pgtype.Timestamptz, error)
 	FindDuplicateInstanceCandidates(ctx context.Context, arg FindDuplicateInstanceCandidatesParams) ([]FindDuplicateInstanceCandidatesRow, error)
 	// Matches an existing log group by all available instance identity criteria:
 	// instance_token (unique per instance, immune to AzerothCore ID reuse),
@@ -318,6 +321,7 @@ type sqlcQuerier interface {
 	// Uses DISTINCT ON (run_id, encounter, player, snapshot, metric) to collapse duplicate uploads.
 	GetParseScoreResultsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ParseScoreResult, error)
 	GetParsedBytesByOwner(ctx context.Context, owner uuid.UUID) (GetParsedBytesByOwnerRow, error)
+	GetParsedLogGroupByID(ctx context.Context, id uuid.UUID) (ParsedLogGroup, error)
 	GetPlayerGearHistory(ctx context.Context, arg GetPlayerGearHistoryParams) ([]GetPlayerGearHistoryRow, error)
 	GetRaidCompositionByID(ctx context.Context, id uuid.UUID) (RaidComposition, error)
 	// Returns all realm IDs that have an applicable retention policy
@@ -469,6 +473,7 @@ type sqlcQuerier interface {
 	// Server Applications
 	InsertServerApplication(ctx context.Context, arg InsertServerApplicationParams) (ServerApplication, error)
 	InsertServerUploadMeta(ctx context.Context, arg InsertServerUploadMetaParams) error
+	InsertStagedParsedLogGroup(ctx context.Context, arg InsertStagedParsedLogGroupParams) error
 	InsertStampedYoutubeVideo(ctx context.Context, arg InsertStampedYoutubeVideoParams) error
 	InsertTelemetryNotice(ctx context.Context, arg InsertTelemetryNoticeParams) error
 	InsertTenant(ctx context.Context, arg InsertTenantParams) (Tenant, error)
@@ -509,6 +514,7 @@ type sqlcQuerier interface {
 	InvalidateWoWLogGroup(ctx context.Context, arg InvalidateWoWLogGroupParams) error
 	IsLayoutTrackedByUser(ctx context.Context, arg IsLayoutTrackedByUserParams) (bool, error)
 	IsLogInstanceInvalid(ctx context.Context, id uuid.UUID) (bool, error)
+	IsParsedLogGroupVisible(ctx context.Context, id uuid.UUID) (bool, error)
 	ListActiveAdminTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListActivePublicTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListAdminActiveCustomPanelInstallations(ctx context.Context) ([]ListAdminActiveCustomPanelInstallationsRow, error)
@@ -656,6 +662,7 @@ type sqlcQuerier interface {
 	ListWoWServersByTenantID(ctx context.Context, tenantID uuid.NullUUID) ([]WowServer, error)
 	ListWorlds(ctx context.Context) ([]World, error)
 	LockLogFilePartSequence(ctx context.Context, logFileID uuid.UUID) (uuid.UUID, error)
+	LockWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
 	MarkBillingWebhookEventProcessed(ctx context.Context, stripeEventID string) error
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
 	MarkLogFilePartFailed(ctx context.Context, arg MarkLogFilePartFailedParams) error

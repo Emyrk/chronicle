@@ -4976,6 +4976,8 @@ SELECT
 FROM log_instances li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
 LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 LEFT JOIN guilds g ON g.id = li.guild_id
@@ -5477,7 +5479,7 @@ func (q *sqlQuerier) GetWoWLogFilesByGroupID(ctx context.Context, wowLogID uuid.
 
 const getWoWLogGroupByID = `-- name: GetWoWLogGroupByID :one
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation,
   u.username AS owner_name,
   COALESCE(
       jsonb_agg(
@@ -5530,6 +5532,7 @@ func (q *sqlQuerier) GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetW
 		&i.WoWLogGroup.Flavor,
 		&i.WoWLogGroup.InvalidatedAt,
 		&i.WoWLogGroup.InvalidReason,
+		&i.WoWLogGroup.ParseGeneration,
 		&i.OwnerName,
 		&i.Files,
 	)
@@ -5538,7 +5541,7 @@ func (q *sqlQuerier) GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetW
 
 const getWoWLogGroupsByOwner = `-- name: GetWoWLogGroupsByOwner :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation,
   files_agg.files,
   instances_output.output AS processing_output,
   parsed_bytes_agg.parsed_bytes
@@ -5568,6 +5571,8 @@ FROM
     ) files_agg ON true
 
     LEFT JOIN parsed_log_group plg ON plg.id = wow_log_groups.id
+      AND plg.parse_generation = wow_log_groups.parse_generation
+      AND plg.finalized_at IS NOT NULL
 
     LEFT JOIN LATERAL (
     SELECT jsonb_build_object(
@@ -5666,6 +5671,7 @@ func (q *sqlQuerier) GetWoWLogGroupsByOwner(ctx context.Context, arg GetWoWLogGr
 			&i.WoWLogGroup.Flavor,
 			&i.WoWLogGroup.InvalidatedAt,
 			&i.WoWLogGroup.InvalidReason,
+			&i.WoWLogGroup.ParseGeneration,
 			&i.Files,
 			&i.ProcessingOutput,
 			&i.ParsedBytes,
@@ -5774,7 +5780,7 @@ VALUES
     $6,
     $7
   )
-RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason
+RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason, parse_generation
 `
 
 type InsertWoWLogGroupParams struct {
@@ -5808,6 +5814,7 @@ func (q *sqlQuerier) InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGrou
 		&i.Flavor,
 		&i.InvalidatedAt,
 		&i.InvalidReason,
+		&i.ParseGeneration,
 	)
 	return i, err
 }
@@ -5859,7 +5866,7 @@ func (q *sqlQuerier) InvalidateWoWLogGroup(ctx context.Context, arg InvalidateWo
 
 const listAllWoWLogGroupsWithOwner = `-- name: ListAllWoWLogGroupsWithOwner :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation,
   u.username AS owner_name,
   files_agg.files,
   instances_output.output AS processing_output
@@ -5889,6 +5896,8 @@ FROM
     ) files_agg ON true
 
     LEFT JOIN parsed_log_group plg ON plg.id = wow_log_groups.id
+      AND plg.parse_generation = wow_log_groups.parse_generation
+      AND plg.finalized_at IS NOT NULL
 
     LEFT JOIN LATERAL (
     SELECT jsonb_build_object(
@@ -5979,6 +5988,7 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAl
 			&i.WoWLogGroup.Flavor,
 			&i.WoWLogGroup.InvalidatedAt,
 			&i.WoWLogGroup.InvalidReason,
+			&i.WoWLogGroup.ParseGeneration,
 			&i.OwnerName,
 			&i.Files,
 			&i.ProcessingOutput,
@@ -5995,7 +6005,7 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAl
 
 const listAllWoWLogGroupsWithOwnerPaginated = `-- name: ListAllWoWLogGroupsWithOwnerPaginated :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation,
   u.username AS owner_name,
   files_agg.files,
   files_agg.total_size_bytes,
@@ -6032,6 +6042,8 @@ FROM
     ) files_agg ON true
 
     LEFT JOIN parsed_log_group plg ON plg.id = wow_log_groups.id
+      AND plg.parse_generation = wow_log_groups.parse_generation
+      AND plg.finalized_at IS NOT NULL
 
     -- Instances from DB tables
     LEFT JOIN LATERAL (
@@ -6166,6 +6178,7 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, 
 			&i.WoWLogGroup.Flavor,
 			&i.WoWLogGroup.InvalidatedAt,
 			&i.WoWLogGroup.InvalidReason,
+			&i.WoWLogGroup.ParseGeneration,
 			&i.OwnerName,
 			&i.Files,
 			&i.TotalSizeBytes,
@@ -10093,6 +10106,38 @@ func (q *sqlQuerier) UpsertInstanceOverviewMetrics(ctx context.Context, arg Upse
 	return err
 }
 
+const advanceWoWLogGroupParseGeneration = `-- name: AdvanceWoWLogGroupParseGeneration :one
+UPDATE wow_log_groups
+SET parse_generation = parse_generation + 1,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING parse_generation
+`
+
+func (q *sqlQuerier) AdvanceWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, advanceWoWLogGroupParseGeneration, id)
+	var parse_generation int64
+	err := row.Scan(&parse_generation)
+	return parse_generation, err
+}
+
+const carryForwardFinalizedParsedLogGroup = `-- name: CarryForwardFinalizedParsedLogGroup :exec
+UPDATE parsed_log_group
+SET parse_generation = $1
+WHERE id = $2
+  AND finalized_at IS NOT NULL
+`
+
+type CarryForwardFinalizedParsedLogGroupParams struct {
+	ParseGeneration int64     `db:"parse_generation" json:"parse_generation"`
+	ID              uuid.UUID `db:"id" json:"id"`
+}
+
+func (q *sqlQuerier) CarryForwardFinalizedParsedLogGroup(ctx context.Context, arg CarryForwardFinalizedParsedLogGroupParams) error {
+	_, err := q.db.Exec(ctx, carryForwardFinalizedParsedLogGroup, arg.ParseGeneration, arg.ID)
+	return err
+}
+
 const deleteAllParsedLogsByGroupID = `-- name: DeleteAllParsedLogsByGroupID :exec
 DELETE FROM
   parsed_log_group
@@ -10164,6 +10209,26 @@ func (q *sqlQuerier) EncountersByInstanceID(ctx context.Context, instanceID uuid
 		return nil, err
 	}
 	return items, nil
+}
+
+const finalizeParsedLogGroup = `-- name: FinalizeParsedLogGroup :one
+UPDATE parsed_log_group
+SET finalized_at = NOW()
+WHERE id = $1
+  AND parse_generation = $2
+RETURNING finalized_at
+`
+
+type FinalizeParsedLogGroupParams struct {
+	ID              uuid.UUID `db:"id" json:"id"`
+	ParseGeneration int64     `db:"parse_generation" json:"parse_generation"`
+}
+
+func (q *sqlQuerier) FinalizeParsedLogGroup(ctx context.Context, arg FinalizeParsedLogGroupParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, finalizeParsedLogGroup, arg.ID, arg.ParseGeneration)
+	var finalized_at pgtype.Timestamptz
+	err := row.Scan(&finalized_at)
+	return finalized_at, err
 }
 
 const findDuplicateInstanceCandidates = `-- name: FindDuplicateInstanceCandidates :many
@@ -10446,6 +10511,19 @@ func (q *sqlQuerier) GetInstancesByLogGroupID(ctx context.Context, logGroupID uu
 	return items, nil
 }
 
+const getParsedLogGroupByID = `-- name: GetParsedLogGroupByID :one
+SELECT id, parse_generation, finalized_at
+FROM parsed_log_group
+WHERE id = $1
+`
+
+func (q *sqlQuerier) GetParsedLogGroupByID(ctx context.Context, id uuid.UUID) (ParsedLogGroup, error) {
+	row := q.db.QueryRow(ctx, getParsedLogGroupByID, id)
+	var i ParsedLogGroup
+	err := row.Scan(&i.ID, &i.ParseGeneration, &i.FinalizedAt)
+	return i, err
+}
+
 const insertEncounter = `-- name: InsertEncounter :one
 INSERT INTO
   log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time)
@@ -10633,14 +10711,29 @@ func (q *sqlQuerier) InsertInstanceRaidGroupSnapshot(ctx context.Context, arg In
 }
 
 const insertParsedLogGroup = `-- name: InsertParsedLogGroup :exec
-INSERT INTO
-  parsed_log_group (id)
-VALUES
-  ($1)
+INSERT INTO parsed_log_group (id, parse_generation, finalized_at)
+SELECT wow_log_groups.id, wow_log_groups.parse_generation, NOW()
+FROM wow_log_groups
+WHERE wow_log_groups.id = $1
 `
 
 func (q *sqlQuerier) InsertParsedLogGroup(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, insertParsedLogGroup, id)
+	return err
+}
+
+const insertStagedParsedLogGroup = `-- name: InsertStagedParsedLogGroup :exec
+INSERT INTO parsed_log_group (id, parse_generation, finalized_at)
+VALUES ($1, $2, NULL)
+`
+
+type InsertStagedParsedLogGroupParams struct {
+	ID              uuid.UUID `db:"id" json:"id"`
+	ParseGeneration int64     `db:"parse_generation" json:"parse_generation"`
+}
+
+func (q *sqlQuerier) InsertStagedParsedLogGroup(ctx context.Context, arg InsertStagedParsedLogGroupParams) error {
+	_, err := q.db.Exec(ctx, insertStagedParsedLogGroup, arg.ID, arg.ParseGeneration)
 	return err
 }
 
@@ -10927,6 +11020,24 @@ func (q *sqlQuerier) InstanceUnitsByInstanceID(ctx context.Context, instanceID u
 	return items, nil
 }
 
+const isParsedLogGroupVisible = `-- name: IsParsedLogGroupVisible :one
+SELECT EXISTS(
+  SELECT 1
+  FROM parsed_log_group plg
+  JOIN wow_log_groups wlg ON wlg.id = plg.id
+  WHERE plg.id = $1
+    AND plg.parse_generation = wlg.parse_generation
+    AND plg.finalized_at IS NOT NULL
+)
+`
+
+func (q *sqlQuerier) IsParsedLogGroupVisible(ctx context.Context, id uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, isParsedLogGroupVisible, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listInstancesByDuplicateGroup = `-- name: ListInstancesByDuplicateGroup :many
 SELECT
     li.id,
@@ -10941,6 +11052,8 @@ SELECT
 FROM log_instances li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
 JOIN users u ON u.id = wlg.owner
 WHERE li.duplicate_group_id = $1
 ORDER BY li.id
@@ -11017,6 +11130,8 @@ SELECT
 FROM log_instances li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
 LEFT JOIN instance_overview_metrics iom ON iom.instance_id = li.id
 LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
 JOIN users u ON u.id = wlg.owner
@@ -11165,6 +11280,8 @@ WITH matching_runs AS (
     FROM log_instances li
     JOIN parsed_log_group plg ON plg.id = li.log_group_id
     JOIN wow_log_groups wlg ON wlg.id = plg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
     LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
     WHERE (
           (li.start_time >= $1::timestamptz AND li.start_time < $2::timestamptz)
@@ -11245,6 +11362,8 @@ instance_rows AS (
     JOIN matching_runs ON matching_runs.run_id = COALESCE(li.duplicate_group_id, li.id)
     JOIN parsed_log_group plg ON plg.id = li.log_group_id
     JOIN wow_log_groups wlg ON wlg.id = plg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
     LEFT JOIN instance_overview_metrics iom ON iom.instance_id = li.id
     LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
     JOIN users u ON u.id = wlg.owner
@@ -11454,6 +11573,8 @@ SELECT
 FROM log_instances li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
 LEFT JOIN instance_overview_metrics iom ON iom.instance_id = li.id
 LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
 JOIN users u ON u.id = wlg.owner
@@ -11617,6 +11738,8 @@ FROM log_instances li
 JOIN log_instance_players lip ON lip.instance_id = li.id
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
 LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
 JOIN users u ON u.id = wlg.owner
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
@@ -11743,6 +11866,20 @@ func (q *sqlQuerier) ListRecentInstancesByPlayer(ctx context.Context, arg ListRe
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockWoWLogGroupParseGeneration = `-- name: LockWoWLogGroupParseGeneration :one
+SELECT parse_generation
+FROM wow_log_groups
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *sqlQuerier) LockWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, lockWoWLogGroupParseGeneration, id)
+	var parse_generation int64
+	err := row.Scan(&parse_generation)
+	return parse_generation, err
 }
 
 const pruneParsedInstanceFromLogOutput = `-- name: PruneParsedInstanceFromLogOutput :exec
@@ -15967,6 +16104,8 @@ SELECT
 FROM log_instances li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
 JOIN users u ON u.id = wlg.owner
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 WHERE (
@@ -16331,6 +16470,8 @@ SELECT DISTINCT
   li.realm_id
 FROM wow_log_groups wlg
 JOIN parsed_log_group plg ON plg.id = wlg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
 JOIN log_instances li ON li.log_group_id = wlg.id
 WHERE EXISTS(
     SELECT 1 FROM log_file lf
@@ -17224,7 +17365,7 @@ func (q *sqlQuerier) UpsertPendingModificationRequest(ctx context.Context, arg U
 }
 
 const findMatchingServerUpload = `-- name: FindMatchingServerUpload :one
-SELECT wlg.id, wlg.owner, wlg.created_at, wlg.updated_at, wlg.log_type, wlg.format, wlg.flavor, wlg.invalidated_at, wlg.invalid_reason
+SELECT wlg.id, wlg.owner, wlg.created_at, wlg.updated_at, wlg.log_type, wlg.format, wlg.flavor, wlg.invalidated_at, wlg.invalid_reason, wlg.parse_generation
 FROM wow_log_groups wlg
 JOIN server_upload_meta sm ON sm.log_group_id = wlg.id
 WHERE wlg.owner = $1
@@ -17268,6 +17409,7 @@ func (q *sqlQuerier) FindMatchingServerUpload(ctx context.Context, arg FindMatch
 		&i.Flavor,
 		&i.InvalidatedAt,
 		&i.InvalidReason,
+		&i.ParseGeneration,
 	)
 	return i, err
 }

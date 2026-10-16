@@ -183,8 +183,28 @@ func (w *RealmWorker) Work(ctx context.Context, job *river.Job[ArgsRetentionReal
 	)
 
 	if !args.DryRun && len(toDelete) > 0 {
-		// Delete object storage first (we retry DB deletes).
+		// Fence active parsers in short database transactions before touching
+		// external object storage.
+		fencedGroups := make(map[uuid.UUID]struct{}, len(toDeleteGroups))
 		for _, groupID := range toDeleteGroups {
+			if _, ok := fencedGroups[groupID]; ok {
+				continue
+			}
+			fencedGroups[groupID] = struct{}{}
+			if err := w.Store.InTx(ctx, func(tx database.Store) error {
+				if _, err := tx.LockWoWLogGroupParseGeneration(ctx, groupID); err != nil {
+					return err
+				}
+				generation, err := tx.AdvanceWoWLogGroupParseGeneration(ctx, groupID)
+				if err != nil {
+					return err
+				}
+				return tx.CarryForwardFinalizedParsedLogGroup(ctx, database.CarryForwardFinalizedParsedLogGroupParams{
+					ID: groupID, ParseGeneration: generation,
+				})
+			}, nil); err != nil {
+				return fmt.Errorf("fence retention deletion for log group %s: %w", groupID, err)
+			}
 			_, _ = w.Storage.RemoveFile(ctx, "raidlogs", []string{groupID.String()})
 		}
 

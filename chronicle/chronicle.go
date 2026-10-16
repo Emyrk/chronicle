@@ -71,6 +71,7 @@ type Chronicle struct {
 	primaryDomain      string
 	defaultFlavor      database.WoWFlavor
 	defaultDatasetID   uuid.UUID
+	recordParseAbort   func(context.Context, parseGenerationAbortOutput) error
 	resolveDataset     func(ctx context.Context, realmID uuid.UUID) ResolvedDataset
 
 	mu                     sync.Mutex
@@ -788,6 +789,14 @@ func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) erro
 		return fmt.Errorf("load time-parse replacement log groups: %w", err)
 	}
 
+	err = c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		_, err := advanceParseGeneration(ctx, tx, logID, false)
+		return err
+	}, nil)
+	if err != nil {
+		return fmt.Errorf("fence log group deletion: %w", err)
+	}
+
 	err = c.RemoveWoWLogFilesFromStorage(ctx, logID)
 	if err != nil {
 		return fmt.Errorf("remove log files from storage: %w", err)
@@ -820,7 +829,15 @@ func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) erro
 }
 
 func (c *Chronicle) DeleteWoWLogGroupFiles(ctx context.Context, logID uuid.UUID) error {
-	err := c.RemoveWoWLogFilesFromStorage(ctx, logID)
+	err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		_, err := fenceParseGenerationPreservingFinalized(ctx, tx, logID)
+		return err
+	}, nil)
+	if err != nil {
+		return fmt.Errorf("fence log file deletion: %w", err)
+	}
+
+	err = c.RemoveWoWLogFilesFromStorage(ctx, logID)
 	if err != nil {
 		return fmt.Errorf("remove log files from storage: %w", err)
 	}

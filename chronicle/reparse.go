@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -20,11 +21,12 @@ import (
 const KindLogReparse = "log-reparse"
 
 type ArgsLogReparse struct {
-	LogID        uuid.UUID `json:"log_group_id"`
-	RealmID      uuid.UUID `json:"realm_id,omitempty"`
-	TenantID     uuid.UUID `json:"tenant_id,omitempty"`
-	Verbose      bool      `json:"verbose,omitempty"`
-	IdentityMode bool      `json:"identity_mode,omitempty"`
+	LogID           uuid.UUID `json:"log_group_id"`
+	ParseGeneration int64     `json:"parse_generation"`
+	RealmID         uuid.UUID `json:"realm_id,omitempty"`
+	TenantID        uuid.UUID `json:"tenant_id,omitempty"`
+	Verbose         bool      `json:"verbose,omitempty"`
+	IdentityMode    bool      `json:"identity_mode,omitempty"`
 }
 
 type logReparseMetadata struct {
@@ -66,13 +68,18 @@ func (c *Chronicle) NewWorkerReLogParse() river.Worker[ArgsLogReparse] {
 func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogReparse]) error {
 	// Clear the parsed data for the log group and re-initiate parsing
 	db := w.parent.Zed
+	parseGeneration := effectiveParseGeneration(job.Args.ParseGeneration)
 
 	logGroup, err := db.GetWoWLogGroupByID(ctx, job.Args.LogID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return river.JobCancel(fmt.Errorf("log group %s not found", job.Args.LogID))
+			return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "load_log_group", staleParseGeneration(parseGeneration, nil))
 		}
 		return fmt.Errorf("fetch log group: %w", err)
+	}
+	if !isCurrentParseGeneration(job.Args.ParseGeneration, logGroup.WoWLogGroup.ParseGeneration) {
+		current := logGroup.WoWLogGroup.ParseGeneration
+		return w.parent.abortStaleParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration, "initial_generation_check", staleParseGeneration(parseGeneration, &current))
 	}
 
 	var metadata logReparseMetadata
@@ -90,34 +97,11 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 		previousRankingRunIDs = rankingRunLogGroupIdentitySeeds(identities)
 	}
 
-	list, err := w.parent.ListLogGroupJobs(ctx, job.Args.LogID)
-	if err != nil {
-		return fmt.Errorf("list existing log group jobs: %w", err)
-	}
-
-	for _, existingJob := range list.Jobs {
-		if existingJob.ID == job.ID {
-			continue
-		}
-
-		if existingJob.State == rivertype.JobStateAvailable ||
-			existingJob.State == rivertype.JobStatePending ||
-			existingJob.State == rivertype.JobStateRunning ||
-			existingJob.State == rivertype.JobStateScheduled ||
-			existingJob.State == rivertype.JobStateRetryable {
-			// Cancel existing jobs that are not the current one
-			_, err = w.parent.queue.JobCancel(ctx, existingJob.ID)
-			if err != nil {
-				return fmt.Errorf("cancel existing job %d: %w", existingJob.ID, err)
-			}
-		}
-	}
-
 	parseCtx := ctx
 	if job.Args.TenantID != uuid.Nil {
 		parseCtx = servicetenant.WithTenantID(ctx, job.Args.TenantID)
 	}
-	parseArgs := newReplacementArgsLogParse(parseCtx, job.Args.LogID, job.Args.Verbose, job.Args.IdentityMode, job.Args.RealmID, previousRankingRunIDs)
+	parseArgs := newReplacementArgsLogParse(parseCtx, job.Args.LogID, parseGeneration, job.Args.Verbose, job.Args.IdentityMode, job.Args.RealmID, previousRankingRunIDs)
 	insertOpts := parseArgs.InsertOpts()
 	insertOpts.Pending = true
 	insertOpts.Tags = []string{fmt.Sprintf("owner_%s", logGroup.WoWLogGroup.Owner.String())}
@@ -126,10 +110,6 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 		return fmt.Errorf("stage replacement log parse job: %w", err)
 	}
 
-	if err := db.DeleteAllParsedLogsByGroupID(ctx, job.Args.LogID); err != nil {
-		_, _ = w.parent.queue.JobDelete(ctx, res.Job.ID)
-		return fmt.Errorf("delete parsed logs for group: %w", err)
-	}
 	if _, err := w.parent.queue.JobRetry(parseCtx, res.Job.ID); err != nil {
 		return fmt.Errorf("release replacement log parse job %d: %w", res.Job.ID, err)
 	}
@@ -140,18 +120,29 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 	return nil
 }
 
-type reparseMetadataStore interface {
-	RankingRunIdentitiesByLogGroupID(context.Context, uuid.UUID) ([]database.RankingRunIdentitiesByLogGroupIDRow, error)
-}
-
 func (c *Chronicle) EnqueueReParseLog(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
-	return c.enqueueReParseLog(ctx, c.Zed, nil, logID, verbose, identityMode, realmID)
+	var result *rivertype.JobInsertResult
+	err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		pgxTx, ok := tx.PGXTx()
+		if !ok {
+			return errors.New("reparse transaction does not expose pgx transaction")
+		}
+		var err error
+		result, err = c.enqueueReParseLog(ctx, tx, pgxTx, logID, verbose, identityMode, realmID)
+		return err
+	}, nil)
+	return result, err
 }
 
-func (c *Chronicle) enqueueReParseLog(ctx context.Context, db reparseMetadataStore, tx pgx.Tx, logID uuid.UUID, verbose bool, identityMode bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
+func (c *Chronicle) enqueueReParseLog(ctx context.Context, db database.Store, tx pgx.Tx, logID uuid.UUID, verbose bool, identityMode bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
 	identities, err := db.RankingRunIdentitiesByLogGroupID(ctx, logID)
 	if err != nil {
 		return nil, fmt.Errorf("load ranking run identities: %w", err)
+	}
+
+	generation, err := advanceParseGeneration(ctx, db, logID, true)
+	if err != nil {
+		return nil, fmt.Errorf("advance parse generation: %w", err)
 	}
 
 	metadata, err := json.Marshal(logReparseMetadata{
@@ -163,11 +154,12 @@ func (c *Chronicle) enqueueReParseLog(ctx context.Context, db reparseMetadataSto
 
 	t := servicetenant.TenantIDFromContext(ctx)
 	args := ArgsLogReparse{
-		LogID:        logID,
-		RealmID:      realmID,
-		TenantID:     t,
-		Verbose:      verbose,
-		IdentityMode: identityMode,
+		LogID:           logID,
+		ParseGeneration: generation,
+		RealmID:         realmID,
+		TenantID:        t,
+		Verbose:         verbose,
+		IdentityMode:    identityMode,
 	}
 	opts := &river.InsertOpts{Tags: []string{}, Metadata: metadata}
 	if tx != nil {

@@ -144,6 +144,8 @@ FROM
     ) files_agg ON true
 
     LEFT JOIN parsed_log_group plg ON plg.id = wow_log_groups.id
+      AND plg.parse_generation = wow_log_groups.parse_generation
+      AND plg.finalized_at IS NOT NULL
 
     LEFT JOIN LATERAL (
     SELECT jsonb_build_object(
@@ -247,6 +249,8 @@ FROM
     ) files_agg ON true
 
     LEFT JOIN parsed_log_group plg ON plg.id = wow_log_groups.id
+      AND plg.parse_generation = wow_log_groups.parse_generation
+      AND plg.finalized_at IS NOT NULL
 
     -- Instances from DB tables
     LEFT JOIN LATERAL (
@@ -469,6 +473,8 @@ FROM
     ) files_agg ON true
 
     LEFT JOIN parsed_log_group plg ON plg.id = wow_log_groups.id
+      AND plg.parse_generation = wow_log_groups.parse_generation
+      AND plg.finalized_at IS NOT NULL
 
     LEFT JOIN LATERAL (
     SELECT jsonb_build_object(
