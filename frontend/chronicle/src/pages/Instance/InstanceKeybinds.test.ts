@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  collapseInstanceKeybindGroups,
   removeInstanceKeybindGroup,
   setInstanceKeybindGroup,
   type InstanceKeybindGroup,
@@ -36,6 +37,20 @@ describe("instance keybind registry", () => {
     expect(setInstanceKeybindGroup(current, { ...mapGroup, keybinds: [...mapGroup.keybinds] }))
       .toBe(current);
     expect(removeInstanceKeybindGroup(current, "missing")).toBe(current);
+  });
+
+  it("lists identical shortcuts from multiple panels only once", () => {
+    const focusKeybind = { keys: "Esc", action: "Return from a focused player to the player list" };
+    const groups = collapseInstanceKeybindGroups([
+      { id: "damage", label: "Damage Done", keybinds: [focusKeybind] },
+      { id: "healing", label: "Healing Done", keybinds: [focusKeybind] },
+      { id: "map", label: "Map", keybinds: [{ keys: "W", action: "Move forward" }] },
+    ]);
+
+    expect(groups).toEqual([
+      { id: "shared-panel-keybinds", label: "Panels", keybinds: [focusKeybind] },
+      { id: "map", label: "Map", keybinds: [{ keys: "W", action: "Move forward" }] },
+    ]);
   });
 
   it("removes a source when its reporter unmounts", () => {
