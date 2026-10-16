@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapPresentationForSelection, preferredMeshState } from "./Map";
+import { createMapPanel, mapPresentationForSelection, preferredMeshState } from "./Map";
 
 describe("map presentation", () => {
   it("uses the 3D replay for exactly one selected encounter", () => {
@@ -16,6 +16,10 @@ describe("map presentation", () => {
   it("uses the 3D replay of the whole run when asked, for zero or several encounters", () => {
     expect(mapPresentationForSelection(0, true)).toBe("replay-3d");
     expect(mapPresentationForSelection(8, true)).toBe("replay-3d");
+  });
+
+  it("loads the complete encounter while replay controls the presentation cursor", () => {
+    expect(createMapPanel().syncDataMode).toBe("full");
   });
 
   it("prefers published dungeon meshes until the user explicitly chooses otherwise", () => {

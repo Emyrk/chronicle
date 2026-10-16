@@ -177,27 +177,31 @@ function latestPositionIndex(positions: readonly { timestampMs: number }[], time
   return match;
 }
 
-const MAX_INTERPOLATION_GAP_MS = 2_000;
+/** Small timestamp skew allowed when a unit's first position lands just after the replay start. */
+export const INITIAL_POSITION_LEAD_MS = 10;
 
 function lerpAngle(from: number, to: number, t: number): number {
   const delta = Math.atan2(Math.sin(to - from), Math.cos(to - from));
   return from + delta * t;
 }
 
-// Like latestPositionAt, but blends toward the next sample when both are on
-// the same map and close enough in time that the unit plausibly moved
-// between them. Longer gaps hold the latest sample, matching the 2D view.
-export function interpolatedPositionAt(
+// Like latestPositionAt, but linearly blends toward the next sample while both
+// are on the same map. Players may use their first known location before their
+// first sample so the raid is visible at 0:00; every unit gets a small allowance
+// for stream timestamp skew at the encounter boundary.
+export function replayPositionAt(
   positions: MapPositionSample[],
   timestampMs: number,
-  maxGapMs = MAX_INTERPOLATION_GAP_MS,
+  showInitialPosition = false,
 ): MapPositionSample | null {
   const index = latestPositionIndex(positions, timestampMs);
-  if (index < 0) return null;
+  if (index < 0) {
+    const first = positions[0];
+    return first && (showInitialPosition || first.timestampMs - timestampMs <= INITIAL_POSITION_LEAD_MS) ? first : null;
+  }
   const latest = positions[index];
   const next = positions[index + 1];
   if (!next || next.mapId !== latest.mapId || next.timestampMs <= latest.timestampMs) return latest;
-  if (next.timestampMs - latest.timestampMs > maxGapMs) return latest;
   const t = (timestampMs - latest.timestampMs) / (next.timestampMs - latest.timestampMs);
   return {
     timestampMs,

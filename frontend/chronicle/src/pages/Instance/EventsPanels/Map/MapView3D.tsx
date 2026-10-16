@@ -7,7 +7,7 @@ import { useSmoothReplayTime } from "../RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../RotationTimeline/useSpellMeta";
 import { miniatureUrl } from "./bossMinis";
 import type { MapPositionSample } from "./map.processor";
-import { interpolatedPositionAt, prefersReducedMotion, VIEW_TRANSITION_MS, type MapPoint, type MapViewport } from "./mapModel";
+import { prefersReducedMotion, replayPositionAt, VIEW_TRANSITION_MS, type MapPoint, type MapViewport } from "./mapModel";
 import {
   MAX_EFFECT_PRIMITIVES,
   MapScene3D,
@@ -55,7 +55,6 @@ export interface MapView3DProps {
   cinematic?: boolean;
 }
 
-const SMOOTH_STORAGE_KEY = "chronicle.map.smooth3d";
 const EFFECTS_STORAGE_KEY = "chronicle.map.effects3d";
 
 interface EffectSettings {
@@ -104,14 +103,6 @@ function readStoredEffectSettings(): EffectSettings {
 }
 
 const toggleClass = (on: boolean) => `rounded border border-white/15 px-1.5 py-0.5 font-medium ${on ? "bg-primary/30 text-foreground" : "bg-black/70 text-muted-foreground hover:text-foreground"}`;
-
-function readStoredSmooth(): boolean {
-  try {
-    return localStorage.getItem(SMOOTH_STORAGE_KEY) === "true";
-  } catch {
-    return false;
-  }
-}
 
 // three.js needs concrete colors; class colors are CSS custom properties.
 function resolveCssColor(color: string, element: Element, cache: Map<string, string>): string {
@@ -169,8 +160,7 @@ export default function MapView3D({
   const onUserViewportRef = useRef(onUserViewport);
   const onDungeonMeshStateRef = useRef(onDungeonMeshState);
   const colorCacheRef = useRef(new Map<string, string>());
-  const [smooth, setSmooth] = useState(readStoredSmooth);
-  const smoothMs = useSmoothReplayTime(cursorMs, playing && smooth, playbackSpeed);
+  const smoothMs = useSmoothReplayTime(cursorMs, playing, playbackSpeed);
   const [effectSettings, setEffectSettings] = useState(readStoredEffectSettings);
   const showBars = effectSettings.bars;
   const [effectHover, setEffectHover] = useState<MapScene3DEffectHover | null>(null);
@@ -240,8 +230,8 @@ export default function MapView3D({
     const scene = sceneRef.current;
     if (!container || !scene) return;
     const units = markers.flatMap((marker): MapScene3DUnit[] => {
-      const sample = smooth && smoothMs !== null
-        ? interpolatedPositionAt(marker.positions, smoothMs) ?? marker.sample
+      const sample = smoothMs !== null
+        ? replayPositionAt(marker.positions, smoothMs, marker.kind === "player") ?? marker.sample
         : marker.sample;
       const point = sample === marker.sample ? marker.point : projectSample(sample) ?? marker.point;
       const modelUrl = miniatureUrl(marker.entry, miniatureUrls);
@@ -258,7 +248,7 @@ export default function MapView3D({
       }];
     });
     scene.setUnits(units);
-  }, [markers, miniatureUrls, projectSample, showBars, smooth, smoothMs]);
+  }, [markers, miniatureUrls, projectSample, showBars, smoothMs]);
 
   // Selected players (the unmuted ones while a selection mutes the rest),
   // bosses and tanks; keyed by string so replay ticks don't rebuild the options.
@@ -343,16 +333,6 @@ export default function MapView3D({
     }
   };
 
-  const toggleSmooth = () => {
-    const next = !smooth;
-    setSmooth(next);
-    try {
-      localStorage.setItem(SMOOTH_STORAGE_KEY, String(next));
-    } catch {
-      // Storage may be unavailable; the toggle still applies for this session.
-    }
-  };
-
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="absolute inset-0" />
@@ -399,15 +379,6 @@ export default function MapView3D({
             Effects
           </button>
         )}
-        <button
-          type="button"
-          aria-pressed={smooth}
-          onClick={toggleSmooth}
-          title="Interpolate positions between samples during playback"
-          className={`rounded border border-white/15 px-1.5 py-0.5 font-medium ${smooth ? "bg-primary/30 text-foreground" : "bg-black/70 text-muted-foreground hover:text-foreground"}`}
-        >
-          Smooth
-        </button>
         <button
           type="button"
           onClick={() => sceneRef.current?.resetCamera(true)}

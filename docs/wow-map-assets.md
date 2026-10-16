@@ -124,21 +124,6 @@ GLBs upload with `Content-Type: model/gltf-binary` and a one-year immutable cach
 
 Dev, Storybook and production all read the GLBs from the icon CDN (`forever/maps/3d/`); nothing is copied into `public/`.
 
-### Trying a mesh before it is on the CDN (dev manifest overlay)
-
-`VITE_MAP_MANIFEST_OVERLAY` names a URL of a meshes layer in the `manifest.meshes.json` shape that the frontend merges over the fetched map manifest, client-side, with the publisher's rules: `chronicle-wow-map-art-v2`, a product-only `target` matching the manifest, one entry per `mapID` carrying only `mesh` (and `name`); an entry for an existing instance attaches the mesh, one for an unknown `mapID` creates a mesh-only instance. A bad overlay fails the manifest load with the reason, rather than being skipped. It is read only in development builds (`import.meta.env.DEV`); production never looks at it.
-
-`.env.development` sets it to `/dev-manifest/forever.meshes.json`, served from the gitignored `frontend/chronicle/public/dev-manifest/`:
-
-```bash
-cd frontend/chronicle
-mkdir -p public/dev-manifest
-cp ../imagecache/meshes/forever/manifest.meshes.json public/dev-manifest/forever.meshes.json
-HOST=https://forever.chronicleclassic.com pnpm dev
-```
-
-The live page then shows the 3D map for a Wailing Caverns or Ruins of Lordaeron log and lists the instances under Technical → Maps, with the GLBs read from the CDN. The overlay is only needed until the published `manifest.json` carries the `mesh` entries. Stories seed their manifest directly and do not use the overlay.
-
 ### CORS
 
 The icon CDN applies its CORS policy per request origin, not per object or content type: a request with an allowlisted `Origin` for any key under `forever/maps/`, including a `.glb` that does not exist yet, answers with `Access-Control-Allow-Origin` and `Vary: Origin`. Nothing extra needs to be set on the R2 bucket for meshes. The frontend still appends `?cors` to cross-origin texture and mesh URLs, because a response cached without `Origin` carries no CORS headers.

@@ -23,7 +23,7 @@ import {
   dominantMapId,
   dungeonMapPoint,
   focusCentre,
-  latestPositionAt,
+  replayPositionAt,
   projectionScale,
   renderedDungeonMapPoint,
   resolveDungeonMapCalibration,
@@ -250,7 +250,8 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const visibleUnits = useMemo(() => {
     if (!encounter || cursorMs === null) return [];
     return Array.from(encounter.positionsByUnit.entries()).flatMap(([guid, positions]) => {
-      const sample = latestPositionAt(positions, cursorMs);
+      const player = props.context.instance.players?.[guid];
+      const sample = replayPositionAt(positions, cursorMs, Boolean(player));
       if (!sample) return [];
       // Across a run, trash that died or despawned must not linger at its last position.
       if (wholeRun && !props.context.instance.players?.[guid] && isStaleRunSample(sample, cursorMs)) return [];
