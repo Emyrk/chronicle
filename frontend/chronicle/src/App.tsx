@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useLocation } from "react-router-dom"
 import { Login } from "./pages/Login/Login"
 import { Home } from "./pages/Home"
 import { Contact } from "./pages/Contact"
+import { BecomeExalted } from "./pages/BecomeExalted"
 import { Privacy } from "./pages/Privacy"
 import { Disclaimer } from "./pages/Disclaimer"
 import { SupportedInstances } from "./pages/SupportedInstances"
@@ -223,6 +224,7 @@ function App() {
           <Route path="miniatures" element={<MiniaturesPage />} />
         </Route>
         <Route path="/contact" element={<Contact />} />
+        <Route path="/exalted" element={<BecomeExalted />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/disclaimer" element={<Disclaimer />} />
         <Route path="/supported" element={<SupportedInstances />} />

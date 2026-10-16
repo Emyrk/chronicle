@@ -83,19 +83,40 @@ export function BillingSettings() {
     )
   }
 
-  const exalted = billing.ads_free
+  return (
+    <ExaltedOverview
+      billing={billing}
+      panel={billing.ads_free ? <SubscriptionPanel billing={billing} /> : <PlanPicker prices={billing.prices ?? []} />}
+    />
+  )
+}
+
+/**
+ * The full Exalted pitch: title, achievement, rewards, and comparison. Shared by
+ * the account billing page and the public /exalted page, which supply their own
+ * call-to-action panel.
+ */
+export function ExaltedOverview({ billing, panel }: { billing?: BillingSummary; panel: React.ReactNode }) {
+  const exalted = billing?.ads_free ?? false
 
   return (
     <section className="max-w-5xl space-y-8">
-      <h2 className="font-wow text-3xl leading-tight sm:text-4xl">
-        <span style={{ color: GOLD }}>{exalted ? "You are Exalted" : "Become Exalted"}</span>{" "}
-        <span className="text-white">with Chronicle</span>
-      </h2>
+      <div className="space-y-3">
+        <h2 className="font-wow text-3xl leading-tight sm:text-4xl">
+          <span style={{ color: GOLD }}>{exalted ? "You are Exalted" : "Become Exalted"}</span>{" "}
+          <span className="text-white">with Chronicle</span>
+        </h2>
+        <p className="max-w-3xl text-muted-foreground">
+          {EXALTED_TIER_NAME} is Chronicle&apos;s optional supporter subscription. It helps cover hosting and
+          development, removes ads, and adds a few extras for your own logs. Everything else on Chronicle stays free
+          for everyone.
+        </p>
+      </div>
 
       <Achievement billing={billing} />
 
       <div className="grid items-start gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
-        {exalted ? <SubscriptionPanel billing={billing} /> : <PlanPicker prices={billing.prices ?? []} />}
+        {panel}
 
         <div>
           <h3 className="font-wow text-xl font-semibold">{EXALTED_TIER_NAME} Rewards</h3>
@@ -199,9 +220,9 @@ function useOpenBilling() {
 }
 
 /** WoW achievement row: greyed out with a reputation progress bar until earned. */
-function Achievement({ billing }: { billing: BillingSummary }) {
-  const exalted = billing.ads_free
-  const standing = exalted ? EXALTED_TIER_NAME : billingTierLabel(billing.tier)
+function Achievement({ billing }: { billing?: BillingSummary }) {
+  const exalted = billing?.ads_free ?? false
+  const standing = exalted ? EXALTED_TIER_NAME : billingTierLabel(billing?.tier ?? "free")
   const standingIndex = Math.max(0, STANDINGS.indexOf(standing as (typeof STANDINGS)[number]))
   // Free users show a sliver of progress into their standing; Exalted is a full bar.
   const fill = exalted ? 100 : ((standingIndex + 0.15) / STANDINGS.length) * 100
@@ -228,7 +249,7 @@ function Achievement({ billing }: { billing: BillingSummary }) {
         </div>
         <div className="flex w-16 shrink-0 flex-col items-center gap-1">
           <PointsShield earned={exalted} />
-          {exalted && billing.current_period_end ? (
+          {exalted && billing?.current_period_end ? (
             <span className="text-[10px] text-zinc-400">
               {billing.cancel_at_period_end ? "Ends" : "Renews"}{" "}
               {new Date(billing.current_period_end).toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "2-digit" })}
@@ -319,7 +340,7 @@ function RewardTooltip({ reward, unlocked }: { reward: (typeof REWARDS)[number];
   )
 }
 
-function FramePanel({ title, children }: { title: string; children: React.ReactNode }) {
+export function FramePanel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className={cn(FRAME, "lg:sticky lg:top-4")}>
       <h3
@@ -333,7 +354,7 @@ function FramePanel({ title, children }: { title: string; children: React.ReactN
   )
 }
 
-const GOLD_BUTTON =
+export const GOLD_BUTTON =
   "flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#c9a227]/70 bg-[#f0c060]/10 px-4 py-2.5 font-wow text-base font-bold text-[#f0c060] transition-colors hover:bg-[#f0c060]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 disabled:opacity-50"
 
 function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
