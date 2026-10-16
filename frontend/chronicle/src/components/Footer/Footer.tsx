@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { Crown } from "lucide-react";
 import { DiscordIcon } from "@/components/icons/DiscordIcon";
 import { CryptoTipModal } from "./CryptoTipModal";
 import { useSiteConfig } from "@/api/queries";
@@ -98,6 +99,14 @@ export function Footer() {
                   Chronicle Discord
                 </a>
               </li>
+              {siteConfig?.billing_enabled && (
+                <li>
+                  <Link to="/revered" className="hover:text-foreground transition-colors inline-flex items-center gap-1">
+                    <Crown className="h-4 w-4 text-[#f0c060]" aria-hidden="true" />
+                    Become Revered
+                  </Link>
+                </li>
+              )}
               <li>
                 <Link to="/contact" className="hover:text-foreground transition-colors">
                   About & Contact

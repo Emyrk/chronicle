@@ -155,6 +155,42 @@ export type AdminBulkDeleteResponse = AdminBulkDeleteResponseGenerated;
 export type AdminBulkSelectedReparseResponse = AdminBulkSelectedReparseResponseGenerated;
 export type AdminBulkReparseResponse = AdminBulkReparseResponseGenerated;
 
+export function useBillingSummary() {
+  return useQuery({
+    queryKey: ["billing"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/me/billing")
+      if (!response.ok) throw new Error("Failed to fetch billing status")
+      return response.json() as Promise<import("./typesGenerated").BillingSummary>
+    },
+    retry: false,
+  })
+}
+
+async function createBillingRedirect(path: string, body?: unknown): Promise<string> {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => null)
+    throw new Error(errorBody?.message ?? "Failed to open billing")
+  }
+  const redirect = await response.json() as import("./typesGenerated").BillingCheckoutResponse
+  return redirect.url
+}
+
+export function useCreateBillingCheckout() {
+  return useMutation({
+    mutationFn: (priceID: string) => createBillingRedirect("/api/v1/me/billing/checkout", { price_id: priceID }),
+  })
+}
+
+export function useCreateBillingPortal() {
+  return useMutation({ mutationFn: () => createBillingRedirect("/api/v1/me/billing/portal") })
+}
+
 export function useSession(options?: Omit<UseQueryOptions<Session | null>, "queryKey" | "queryFn">) {
   return useQuery({
     queryKey: ["session"],

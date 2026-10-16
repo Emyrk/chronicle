@@ -34,6 +34,7 @@ type sqlcQuerier interface {
 	ClearSpellPowersForDataset(ctx context.Context, datasetID uuid.UUID) error
 	ClearSpellVariantsForDataset(ctx context.Context, datasetID uuid.UUID) error
 	ClearWoWLogGroupInvalidation(ctx context.Context, logGroupID uuid.UUID) error
+	CompleteBillingReconciliationRun(ctx context.Context, arg CompleteBillingReconciliationRunParams) error
 	CompleteDiscordMembershipGrantCheckError(ctx context.Context, arg CompleteDiscordMembershipGrantCheckErrorParams) (DiscordMembershipGrantCheck, error)
 	CompleteDiscordMembershipGrantCheckMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckMemberParams) (DiscordMembershipGrantCheck, error)
 	CompleteDiscordMembershipGrantCheckNonMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckNonMemberParams) (DiscordMembershipGrantCheck, error)
@@ -74,6 +75,7 @@ type sqlcQuerier interface {
 	DeleteAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) error
 	DeleteAllParsedLogsByGroupID(ctx context.Context, id uuid.UUID) error
 	DeleteAllTelemetryNotices(ctx context.Context) error
+	DeleteBillingEntitlementsByProviderCustomerID(ctx context.Context, arg DeleteBillingEntitlementsByProviderCustomerIDParams) error
 	DeleteClassBuffIgnore(ctx context.Context, arg DeleteClassBuffIgnoreParams) error
 	// Release representative IDs that moved to a different logical run before the
 	// state-based refresh upserts all desired rows in arbitrary UUID order.
@@ -170,6 +172,11 @@ type sqlcQuerier interface {
 	GearTrendsSlotItems(ctx context.Context, arg GearTrendsSlotItemsParams) ([]GearTrendsSlotItemsRow, error)
 	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg GetAnyParseScoreReceiptForTenantInstanceParams) (ParseScoreReceipt, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
+	GetBillingEntitlementOwnerByProviderCustomerID(ctx context.Context, arg GetBillingEntitlementOwnerByProviderCustomerIDParams) (uuid.UUID, error)
+	GetBillingSubscriptionByProviderCustomerID(ctx context.Context, arg GetBillingSubscriptionByProviderCustomerIDParams) (BillingSubscription, error)
+	GetBillingSubscriptionByProviderID(ctx context.Context, arg GetBillingSubscriptionByProviderIDParams) (BillingSubscription, error)
+	GetBillingSubscriptionByUserID(ctx context.Context, userID uuid.UUID) (BillingSubscription, error)
+	GetBillingWebhookEvent(ctx context.Context, stripeEventID string) (BillingWebhookEvent, error)
 	GetCanonicalSpellByID(ctx context.Context, arg GetCanonicalSpellByIDParams) (GetCanonicalSpellByIDRow, error)
 	GetCanonicalSpellsByName(ctx context.Context, arg GetCanonicalSpellsByNameParams) ([]GetCanonicalSpellsByNameRow, error)
 	// Per-encounter kill aggregates for one character across all time.
@@ -407,12 +414,15 @@ type sqlcQuerier interface {
 	// @best_per_player keeps only each player's single best parse so one player
 	// cannot fill the whole board.
 	GuildTopParses(ctx context.Context, arg GuildTopParsesParams) ([]GuildTopParsesRow, error)
+	HasBillingEntitlement(ctx context.Context, arg HasBillingEntitlementParams) (bool, error)
 	HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error)
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
 	InitializeUserWhatsNewState(ctx context.Context, arg InitializeUserWhatsNewStateParams) (UserWhatsNewState, error)
 	InsertAffectedAuraDurationModifiers(ctx context.Context, arg []InsertAffectedAuraDurationModifiersParams) *InsertAffectedAuraDurationModifiersBatchResults
 	InsertAffectedAuraDurations(ctx context.Context, arg []InsertAffectedAuraDurationsParams) *InsertAffectedAuraDurationsBatchResults
+	InsertBillingReconciliationRun(ctx context.Context, id uuid.UUID) (BillingReconciliationRun, error)
+	InsertBillingWebhookEvent(ctx context.Context, arg InsertBillingWebhookEventParams) (int64, error)
 	InsertCustomPanelRelease(ctx context.Context, arg InsertCustomPanelReleaseParams) (CustomPanelRelease, error)
 	InsertDataset(ctx context.Context, arg InsertDatasetParams) (Dataset, error)
 	InsertDerivedConsumableBuffs(ctx context.Context, datasetID uuid.UUID) (int64, error)
@@ -494,6 +504,9 @@ type sqlcQuerier interface {
 	ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, arg ListAllWoWLogGroupsWithOwnerPaginatedParams) ([]ListAllWoWLogGroupsWithOwnerPaginatedRow, error)
 	ListAllWoWServerRealms(ctx context.Context) ([]WowServerRealm, error)
 	ListAuraDurationModifiersForDerivation(ctx context.Context, datasetID uuid.UUID) ([]ListAuraDurationModifiersForDerivationRow, error)
+	ListBillingEntitlementsByUserID(ctx context.Context, userID uuid.UUID) ([]BillingEntitlement, error)
+	ListBillingProviderCustomersForReconciliation(ctx context.Context) ([]ListBillingProviderCustomersForReconciliationRow, error)
+	ListBillingSubscriptionsForReconciliation(ctx context.Context) ([]BillingSubscription, error)
 	ListClassBuffIgnorePolicies(ctx context.Context) ([]ListClassBuffIgnorePoliciesRow, error)
 	ListClassBuffPoliciesForDataset(ctx context.Context, datasetID uuid.UUID) ([]ListClassBuffPoliciesForDatasetRow, error)
 	ListConsumableDisambiguationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumableDisambiguationsByDatasetRow, error)
@@ -561,6 +574,9 @@ type sqlcQuerier interface {
 	// independent of snapshot membership (the instance may not be a member of the
 	// snapshot it scores against, e.g. historical canonical snapshots).
 	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ListRankingsForInstanceRow, error)
+	ListRecentBillingReconciliationRuns(ctx context.Context, limit int32) ([]BillingReconciliationRun, error)
+	ListRecentBillingSubscriptions(ctx context.Context, limit int32) ([]BillingSubscription, error)
+	ListRecentBillingWebhookEvents(ctx context.Context, limit int32) ([]BillingWebhookEvent, error)
 	// Pages logical runs, then returns every upload in each selected duplicate group.
 	// The first row for each run is its representative: most boss encounters, then
 	// most total encounters, then the duplicate-group anchor and stable tie-breakers.
@@ -620,6 +636,7 @@ type sqlcQuerier interface {
 	ListWoWServers(ctx context.Context) ([]WowServer, error)
 	ListWoWServersByTenantID(ctx context.Context, tenantID uuid.NullUUID) ([]WowServer, error)
 	ListWorlds(ctx context.Context) ([]World, error)
+	MarkBillingWebhookEventProcessed(ctx context.Context, stripeEventID string) error
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
 	MarkWhatsNewRead(ctx context.Context, arg MarkWhatsNewReadParams) (UserWhatsNewState, error)
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
@@ -833,6 +850,9 @@ type sqlcQuerier interface {
 	UpdateWoWLogGroupLogType(ctx context.Context, arg UpdateWoWLogGroupLogTypeParams) error
 	UpdateWoWServer(ctx context.Context, arg UpdateWoWServerParams) (WowServer, error)
 	UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServerRealmParams) (WowServerRealm, error)
+	UpsertBillingEntitlement(ctx context.Context, arg UpsertBillingEntitlementParams) (BillingEntitlement, error)
+	UpsertBillingSubscription(ctx context.Context, arg UpsertBillingSubscriptionParams) (BillingSubscription, error)
+	UpsertBillingSubscriptionIfChanged(ctx context.Context, arg UpsertBillingSubscriptionIfChangedParams) (int64, error)
 	UpsertClassBuffIgnore(ctx context.Context, arg UpsertClassBuffIgnoreParams) error
 	UpsertConsumableDisambiguationIfCandidate(ctx context.Context, arg UpsertConsumableDisambiguationIfCandidateParams) (UpsertConsumableDisambiguationIfCandidateRow, error)
 	// NULL ignored/hide_duration leaves that flag unchanged.

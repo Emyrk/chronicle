@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { iconListUrl } from "@/config/iconUrl";
 import { toast } from "sonner";
-import { Blocks, HardDrive, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, Monitor, Smartphone, Menu, X, User, Swords, Star } from "lucide-react";
+import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, Monitor, Smartphone, Menu, X, User, Swords, Star } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
@@ -66,6 +66,7 @@ import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
 import { FavoritesList } from "@/components/Favorites";
 
+export { BillingSettings } from "./Settings/BillingSettings";
 export { CustomPanelSettings } from "./Settings/CustomPanelSettings";
 
 const LAYOUT_LAB_INSTANCE_REFERENCE_STORAGE_KEY = "layout-lab.instance-reference";
@@ -156,6 +157,7 @@ type Tab = {
 const allTabs: Tab[] = [
   { path: "/account/settings", label: "Profile", icon: User },
   { path: "/account/characters", label: "Characters", icon: Swords },
+  { path: "/account/billing", label: "Billing", icon: CreditCard },
   { path: "/account/storage", label: "Storage", icon: HardDrive },
   // { path: "/account/notifications", label: "Notifications", icon: Bell },
   // { path: "/account/privacy", label: "Privacy", icon: Shield },
@@ -170,9 +172,11 @@ export function AccountLayout() {
   const isMobile = useIsMobile();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const { data: siteConfig } = useSiteConfig();
-  const tabs = siteConfig?.client_uploads_disabled
-    ? allTabs.filter((t) => t.path !== "/account/storage")
-    : allTabs;
+  const tabs = allTabs.filter((tab) => {
+    if (tab.path === "/account/storage" && siteConfig?.client_uploads_disabled) return false;
+    if (tab.path === "/account/billing" && !siteConfig?.billing_enabled) return false;
+    return true;
+  });
 
   const renderNavLinks = (closeOnNavigate: boolean) => (
     <ul className="space-y-1">

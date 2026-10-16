@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -29,6 +30,21 @@ func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	adsFree := false
+	canDownloadRawLogs := false
+	if a.Opts.Billing != nil {
+		adsFree, err = a.Opts.Billing.HasEntitlement(ctx, state.Claims.Subject, billing.EntitlementAdFree)
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		canDownloadRawLogs, err = a.Opts.Billing.HasEntitlement(ctx, state.Claims.Subject, billing.EntitlementDownloadRawLogs)
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+	}
+
 	sess := chroniclesdk.Session{
 		UserID:               state.Claims.Subject,
 		SessionID:            state.Claims.SessionID,
@@ -36,6 +52,8 @@ func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 		MaxStorageBytes:      user.MaxStorageBytes,
 		ConsumedStorageBytes: user.ConsumedStorageBytes,
 		Preferences:          userPreferences(user),
+		CanDownloadRawLogs:   canDownloadRawLogs,
+		AdsFree:              adsFree,
 		Email:                user.Email,
 		AuthProvider:         state.Claims.Provider,
 		CreatedAt:            user.CreatedAt.Time,

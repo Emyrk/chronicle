@@ -27,4 +27,6 @@ const (
 	ServiceGitHub      = "github"
 	ServiceCache       = "cache"
 	ServiceWhatsNew    = "whats-new"
+	ServiceBilling     = "billing"
+	ServiceStripeCLI   = "stripe-cli"
 )

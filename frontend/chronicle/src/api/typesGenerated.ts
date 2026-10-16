@@ -69,6 +69,48 @@ export interface AdminBackfillTimeParseScoresResponse {
     readonly job_state: string;
 }
 
+// From chroniclesdk/billing.go
+export interface AdminBillingActivityResponse {
+    readonly reconciliation_runs: readonly AdminBillingReconciliationRun[];
+    readonly webhook_deliveries: readonly AdminBillingWebhookDelivery[];
+    readonly subscriptions: readonly AdminBillingSubscription[];
+}
+
+// From chroniclesdk/billing.go
+export interface AdminBillingReconciliationRun {
+    readonly id: string;
+    readonly status: string;
+    readonly started_at: string;
+    readonly completed_at?: string;
+    readonly subscriptions_seen: number;
+    readonly subscriptions_changed: number;
+    readonly subscriptions_skipped_invalid: number;
+    readonly error_text?: string;
+}
+
+// From chroniclesdk/billing.go
+export interface AdminBillingSubscription {
+    readonly user_id: string;
+    readonly provider: string;
+    readonly provider_customer_id: string;
+    readonly provider_subscription_id?: string;
+    readonly provider_product_id?: string;
+    readonly provider_price_id?: string;
+    readonly product_code: string;
+    readonly status: string;
+    readonly current_period_end?: string;
+    readonly cancel_at_period_end: boolean;
+    readonly updated_at: string;
+}
+
+// From chroniclesdk/billing.go
+export interface AdminBillingWebhookDelivery {
+    readonly stripe_event_id: string;
+    readonly event_type: string;
+    readonly received_at: string;
+    readonly processed_at?: string;
+}
+
 // From chroniclesdk/user.go
 export interface AdminBulkDeleteResponse {
     readonly requested: number;
@@ -401,6 +443,35 @@ export type AuthorizationResponse = Record<string, boolean>;
 export interface AzerothCorePingResponse {
     readonly realm_name: string;
     readonly status: string;
+}
+
+// From chroniclesdk/billing.go
+export interface BillingCheckoutRequest {
+    readonly price_id: string;
+}
+
+// From chroniclesdk/billing.go
+export interface BillingCheckoutResponse {
+    readonly url: string;
+}
+
+// From chroniclesdk/billing.go
+export interface BillingPrice {
+    readonly id: string;
+    readonly currency: string;
+    readonly unit_amount: number;
+    readonly interval_months: number;
+}
+
+// From chroniclesdk/billing.go
+export interface BillingSummary {
+    readonly enabled: boolean;
+    readonly tier: string;
+    readonly ads_free: boolean;
+    readonly status?: string;
+    readonly current_period_end?: string;
+    readonly cancel_at_period_end?: boolean;
+    readonly prices?: readonly BillingPrice[];
 }
 
 // From chroniclesdk/time_parses.go
@@ -3309,6 +3380,14 @@ export interface Session {
     readonly consumed_storage_bytes: number;
     readonly preferences: Preferences;
     /**
+     * AdsFree indicates that Stripe reports an active ad-free entitlement for the user.
+     */
+    readonly ads_free: boolean;
+    /**
+     * CanDownloadRawLogs indicates that the user can download original combat log files.
+     */
+    readonly can_download_raw_logs: boolean;
+    /**
      * Email is the user's email address (if available).
      */
     readonly email: string;
@@ -3476,6 +3555,11 @@ export interface SiteConfig {
      * and client-side uploads should be hidden from the UI.
      */
     readonly client_uploads_disabled: boolean;
+    /**
+     * BillingEnabled is true when the deployment has configured its expected
+     * Stripe account ID, allowing billing links to be shown in the UI.
+     */
+    readonly billing_enabled: boolean;
     /**
      * AdsEnabled is true only when the resolved tenant or root site opted into ads
      * and the deployment configured both ads.txt and a NitroPay site ID.

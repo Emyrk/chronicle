@@ -12,6 +12,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/serviceassets"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
+	"github.com/Emyrk/chronicle/internal/services/servicebilling"
 	"github.com/Emyrk/chronicle/internal/services/servicebot"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
@@ -29,6 +30,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceretention"
 	"github.com/Emyrk/chronicle/internal/services/serviceriver"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
+	"github.com/Emyrk/chronicle/internal/services/servicestripecli"
 	"github.com/Emyrk/chronicle/internal/services/servicetelemetry"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewhatsnew"
@@ -51,6 +53,7 @@ func ServerCmd() *serpent.Command {
 		servicepgxpool.New(srvs),
 		servicetenant.New(srvs),
 		servicedbstore.New(srvs),
+		servicebilling.New(srvs),
 		serviceriver.New(srvs),
 		serviceauthz.New(srvs),
 		servicewowdb.New(srvs),
@@ -67,6 +70,7 @@ func ServerCmd() *serpent.Command {
 		servicewhatsnew.New(srvs),
 		servicegithub.New(srvs),
 		serviceexternalapi.New(srvs),
+		servicestripecli.New(srvs),
 		apiService,
 	)
 	if err != nil {

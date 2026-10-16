@@ -11,7 +11,9 @@ import (
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/chroniclebot"
+	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/internal/services/servicebilling"
 	"github.com/Emyrk/chronicle/internal/services/servicebot"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
@@ -56,6 +58,7 @@ func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
 		servicepgxpool.OnPGXPool(),
+		servicebilling.OnBilling(),
 		servicechronicle.OnChronicle(),
 		servicebot.OnDiscordBot(),
 		serviceretention.OnRetention(),
@@ -111,6 +114,19 @@ func (s *Service) Start(ctx context.Context) error {
 			),
 		)
 	}
+
+	// Register billing reconciliation before the queue starts.
+	billingService := servicebilling.BillingService(s.broker)
+	riverqueue.AddWorker(q, billingService.Worker)
+	q.AddPeriodicJob(
+		river.NewPeriodicJob(
+			river.PeriodicInterval(servicebilling.ReconciliationSchedule),
+			func() (river.JobArgs, *river.InsertOpts) {
+				return billing.ArgsReconcileSubscriptions{}, nil
+			},
+			&river.PeriodicJobOpts{ID: "billing-subscription-reconciliation", RunOnStart: true},
+		),
+	)
 
 	// Register retention workers and periodic job.
 	ret := serviceretention.RetentionService(s.broker)

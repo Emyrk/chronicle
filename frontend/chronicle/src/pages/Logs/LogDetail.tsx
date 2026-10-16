@@ -1577,7 +1577,7 @@ export function LogDetailView({
 export function LogDetail() {
   const { logId } = useParams<{ logId: string }>();
   const navigate = useNavigate();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { session, isAuthenticated, isLoading: authLoading } = useAuth();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { 
@@ -1609,7 +1609,7 @@ export function LogDetail() {
   const canReparse = authz?.reparse ?? false;
   const canDeleteFiles = authz?.deleteFiles ?? false;
   const canDeleteInstance = authz?.delete ?? false;
-  const canDownloadFiles = authz?.adminLogs ?? false;
+  const canDownloadFiles = (authz?.adminLogs ?? false) || (session?.can_download_raw_logs ?? false);
   const canUploadYoutube = authz?.uploadYoutube ?? false;
 
   const handleDelete = () => {
@@ -1720,7 +1720,7 @@ export function LogDetail() {
 export function LogDetailByHash() {
   const { fileHash } = useParams<{ fileHash: string }>();
   const navigate = useNavigate();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { session, isAuthenticated, isLoading: authLoading } = useAuth();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { 
@@ -1769,7 +1769,7 @@ export function LogDetailByHash() {
   const canReparse = authz?.reparse ?? false;
   const canDeleteFiles = authz?.deleteFiles ?? false;
   const canDeleteInstance = authz?.delete ?? false;
-  const canDownloadFiles = authz?.adminLogs ?? false;
+  const canDownloadFiles = (authz?.adminLogs ?? false) || (session?.can_download_raw_logs ?? false);
   const canUploadYoutube = authz?.uploadYoutube ?? false;
 
   const handleDelete = () => {

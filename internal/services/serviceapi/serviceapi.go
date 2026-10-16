@@ -21,11 +21,11 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/serviceassets"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
+	"github.com/Emyrk/chronicle/internal/services/servicebilling"
 	"github.com/Emyrk/chronicle/internal/services/servicebot"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
-	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/serviceexternalapi"
 	"github.com/Emyrk/chronicle/internal/services/servicegamedata"
 	"github.com/Emyrk/chronicle/internal/services/servicegithub"
@@ -54,6 +54,10 @@ var (
 func API(broker *services.Services) *api.API {
 	srv := services.MustGet[*Service](broker)
 	return srv.app
+}
+
+func DevAuth(broker *services.Services) bool {
+	return services.MustGet[*Service](broker).devAuth
 }
 
 func OnAPI() string {
@@ -104,7 +108,6 @@ func (s *Service) DependsOn() []string {
 		servicelogger.OnLogger(),
 		servicestorage.OnStorage(),
 		servicebot.OnDiscordBot(),
-		servicedbstore.OnDatabaseStore(),
 		servicepgxpool.OnPGXPool(),
 		serviceriver.OnRiverQueue(),
 		servicechronicle.OnChronicle(),
@@ -208,6 +211,10 @@ func (s *Service) Start(ctx context.Context) error {
 	externalAPI := serviceexternalapi.ExternalAPI(s.broker)
 	rankings := servicerankings.Rankings(s.broker)
 	mailer := servicemail.Mailer(s.broker)
+
+	billingService := servicebilling.Billing(s.broker)
+	billingService.SetAccessURL(au)
+
 	handler, err := api.New(ctx, api.Options{
 		Logger:                logger,
 		Storage:               st,
@@ -230,12 +237,14 @@ func (s *Service) Start(ctx context.Context) error {
 		CustomPanelHTTPClient: githubClient,
 		ItemPricing:           itempricing.New(zed, s.itemPricingAPIKey, s.itemPricingBaseURL),
 
+		Billing:               billingService,
 		AccessURL:             au,
 		AdsTxtURL:             adsTxtURL,
 		NitroPaySiteID:        s.nitroPaySiteID,
 		GA4ID:                 s.ga4MeasurementID,
 		ShortLinkDomain:       s.shortLinkDomain,
 		ClientUploadsDisabled: s.clientUploadsDisabled,
+		BillingEnabled:        servicebilling.BillingEnabled(s.broker),
 		ExternalVerification:  s.externalVerification(),
 		DevOAuth:              s.devAuth,
 		Discord:               s.discordAuth,

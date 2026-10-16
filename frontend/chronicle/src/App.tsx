@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useLocation } from "react-router-dom"
 import { Login } from "./pages/Login/Login"
 import { Home } from "./pages/Home"
 import { Contact } from "./pages/Contact"
+import { BecomeRevered } from "./pages/BecomeRevered"
 import { Privacy } from "./pages/Privacy"
 import { Disclaimer } from "./pages/Disclaimer"
 import { SupportedInstances } from "./pages/SupportedInstances"
@@ -68,6 +69,7 @@ import {
 import {
   AccountLayout,
   ProfileSettings,
+  BillingSettings,
   CharacterSettings,
   StorageSettings,
   NotificationSettings,
@@ -222,6 +224,7 @@ function App() {
           <Route path="miniatures" element={<MiniaturesPage />} />
         </Route>
         <Route path="/contact" element={<Contact />} />
+        <Route path="/revered" element={<BecomeRevered />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/disclaimer" element={<Disclaimer />} />
         <Route path="/supported" element={<SupportedInstances />} />
@@ -248,6 +251,7 @@ function App() {
         <Route path="/account" element={<AccountLayout />}>
           <Route index element={<Navigate to="/account/settings" replace />} />
           <Route path="settings" element={<ProfileSettings />} />
+          <Route path="billing" element={<BillingSettings />} />
           <Route path="characters" element={<CharacterSettings />} />
           <Route path="storage" element={<StorageSettings />} />
           <Route path="notifications" element={<NotificationSettings />} />

@@ -1,9 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Footer } from "./Footer";
 
+const mocks = vi.hoisted(() => ({
+  siteConfig: undefined as { billing_enabled: boolean } | undefined,
+}));
+
 vi.mock("@/api/queries", () => ({
-  useSiteConfig: () => ({ data: undefined }),
+  useSiteConfig: () => ({ data: mocks.siteConfig }),
 }));
 
 vi.mock("react-router-dom", () => ({
@@ -14,6 +18,11 @@ vi.mock("react-router-dom", () => ({
   ),
 }));
 
+afterEach(() => {
+  mocks.siteConfig = undefined;
+  vi.unstubAllGlobals();
+});
+
 describe("Footer", () => {
   it("uses document navigation for the separately hydrated blog", () => {
     vi.stubGlobal("document", { querySelector: () => null });
@@ -22,7 +31,25 @@ describe("Footer", () => {
 
     expect(markup).toContain('href="/blog"');
     expect(markup).not.toContain('data-router-link="true" href="/blog"');
+  });
 
-    vi.unstubAllGlobals();
+  it("hides Revered billing when billing is disabled", () => {
+    vi.stubGlobal("document", { querySelector: () => null });
+    mocks.siteConfig = { billing_enabled: false };
+
+    const markup = renderToStaticMarkup(<Footer />);
+
+    expect(markup).not.toContain("Become Revered");
+    expect(markup).not.toContain('href="/revered"');
+  });
+
+  it("shows Revered billing when billing is enabled", () => {
+    vi.stubGlobal("document", { querySelector: () => null });
+    mocks.siteConfig = { billing_enabled: true };
+
+    const markup = renderToStaticMarkup(<Footer />);
+
+    expect(markup).toContain("Become Revered");
+    expect(markup).toContain('href="/revered"');
   });
 });

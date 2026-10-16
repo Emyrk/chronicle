@@ -18,6 +18,10 @@ type Session struct {
 	MaxStorageBytes      int64       `json:"max_storage_bytes"`
 	ConsumedStorageBytes int64       `json:"consumed_storage_bytes"`
 	Preferences          Preferences `json:"preferences"`
+	// AdsFree indicates that Stripe reports an active ad-free entitlement for the user.
+	AdsFree bool `json:"ads_free"`
+	// CanDownloadRawLogs indicates that the user can download original combat log files.
+	CanDownloadRawLogs bool `json:"can_download_raw_logs"`
 	// Email is the user's email address (if available).
 	Email string `json:"email"`
 	// EmailVerified indicates whether the user's email has been verified.
@@ -195,6 +199,9 @@ type SiteConfig struct {
 	// ClientUploadsDisabled indicates that this server uses server-side logging
 	// and client-side uploads should be hidden from the UI.
 	ClientUploadsDisabled bool `json:"client_uploads_disabled"`
+	// BillingEnabled is true when the deployment has configured its expected
+	// Stripe account ID, allowing billing links to be shown in the UI.
+	BillingEnabled bool `json:"billing_enabled"`
 	// AdsEnabled is true only when the resolved tenant or root site opted into ads
 	// and the deployment configured both ads.txt and a NitroPay site ID.
 	AdsEnabled bool `json:"ads_enabled"`

@@ -807,6 +807,47 @@ type AuthzSchemaMigration struct {
 	AppliedAt pgtype.Timestamptz `db:"applied_at" json:"applied_at"`
 }
 
+type BillingEntitlement struct {
+	UserID                uuid.UUID          `db:"user_id" json:"user_id"`
+	Provider              string             `db:"provider" json:"provider"`
+	ProviderCustomerID    string             `db:"provider_customer_id" json:"provider_customer_id"`
+	ProviderEntitlementID string             `db:"provider_entitlement_id" json:"provider_entitlement_id"`
+	EntitlementKey        string             `db:"entitlement_key" json:"entitlement_key"`
+	SyncedAt              pgtype.Timestamptz `db:"synced_at" json:"synced_at"`
+}
+
+type BillingReconciliationRun struct {
+	ID                          uuid.UUID          `db:"id" json:"id"`
+	Status                      string             `db:"status" json:"status"`
+	StartedAt                   pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	CompletedAt                 pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+	SubscriptionsSeen           int32              `db:"subscriptions_seen" json:"subscriptions_seen"`
+	SubscriptionsChanged        int32              `db:"subscriptions_changed" json:"subscriptions_changed"`
+	SubscriptionsSkippedInvalid int32              `db:"subscriptions_skipped_invalid" json:"subscriptions_skipped_invalid"`
+	ErrorText                   string             `db:"error_text" json:"error_text"`
+}
+
+type BillingSubscription struct {
+	UserID                 uuid.UUID          `db:"user_id" json:"user_id"`
+	ProviderCustomerID     string             `db:"provider_customer_id" json:"provider_customer_id"`
+	ProviderSubscriptionID pgtype.Text        `db:"provider_subscription_id" json:"provider_subscription_id"`
+	ProductCode            string             `db:"product_code" json:"product_code"`
+	Status                 string             `db:"status" json:"status"`
+	CurrentPeriodEnd       pgtype.Timestamptz `db:"current_period_end" json:"current_period_end"`
+	CancelAtPeriodEnd      bool               `db:"cancel_at_period_end" json:"cancel_at_period_end"`
+	UpdatedAt              pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	Provider               string             `db:"provider" json:"provider"`
+	ProviderProductID      pgtype.Text        `db:"provider_product_id" json:"provider_product_id"`
+	ProviderPriceID        pgtype.Text        `db:"provider_price_id" json:"provider_price_id"`
+}
+
+type BillingWebhookEvent struct {
+	StripeEventID string             `db:"stripe_event_id" json:"stripe_event_id"`
+	EventType     string             `db:"event_type" json:"event_type"`
+	ReceivedAt    pgtype.Timestamptz `db:"received_at" json:"received_at"`
+	ProcessedAt   pgtype.Timestamptz `db:"processed_at" json:"processed_at"`
+}
+
 type ChronicleUser struct {
 	ID                     uuid.UUID          `db:"id" json:"id"`
 	Username               string             `db:"username" json:"username"`

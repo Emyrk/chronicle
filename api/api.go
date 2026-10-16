@@ -32,6 +32,7 @@ import (
 	"github.com/Emyrk/chronicle/database/pubsub"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/frontend"
+	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/Emyrk/chronicle/internal/itempricing"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
@@ -67,6 +68,8 @@ type Options struct {
 	ItemPricing           *itempricing.Service
 	CustomPanelHTTPClient *http.Client
 
+	Billing *billing.Service
+
 	Registry  *prometheus.Registry
 	AccessURL *url.URL
 	// AdsTxtURL is the canonical ads.txt URL. When set, /ads.txt redirects to it.
@@ -84,6 +87,8 @@ type Options struct {
 	ShortLinkDomain string
 	// ClientUploadsDisabled disables client-side log uploads (for servers using server-side logging).
 	ClientUploadsDisabled bool
+	// BillingEnabled exposes billing navigation when a Stripe account ID is configured.
+	BillingEnabled bool
 	// ExternalVerification enables the external character verification
 	// provider (e.g. zug-zug). Configured via environment variables; nil
 	// when disabled.
@@ -208,6 +213,10 @@ func (api *API) Routes() chi.Router {
 			r.Get("/notices/public", api.ListPublicTelemetryNotices)
 		})
 
+		if api.Opts.Billing != nil {
+			r.Post("/billing/webhook", api.Opts.Billing.Webhook)
+		}
+
 		r.Group(func(r chi.Router) {
 
 			r.Use(
@@ -228,6 +237,11 @@ func (api *API) Routes() chi.Router {
 				r.Post("/authcheck", api.checkAuthorization)
 				r.Post("/live-sessions", api.liveSessions.Create)
 				r.Get("/me/storage", api.GetMyStorage)
+				if api.Opts.Billing != nil {
+					r.Get("/me/billing", api.Opts.Billing.Summary)
+					r.Post("/me/billing/checkout", api.Opts.Billing.CreateCheckout)
+					r.Post("/me/billing/portal", api.Opts.Billing.CreatePortal)
+				}
 				r.Get("/me/custom-panels", api.GetMyCustomPanelSettings)
 				r.Put("/me/custom-panels", api.UpdateMyCustomPanelSettings)
 				r.Patch("/me/preferences", api.UpdateMyPreferences)
@@ -283,6 +297,11 @@ func (api *API) Routes() chi.Router {
 				r.With(
 					httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),
 				).Get("/notices", api.AdminListTelemetryNotices)
+				if api.Opts.Billing != nil {
+					r.With(
+						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),
+					).Get("/billing/activity", api.Opts.Billing.AdminActivity)
+				}
 				r.Route("/users", func(r chi.Router) {
 					r.Use(
 						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),

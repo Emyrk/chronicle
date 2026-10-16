@@ -210,6 +210,47 @@ CREATE TABLE authz_schema_migrations (
     applied_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE billing_entitlements (
+    user_id uuid NOT NULL,
+    provider text NOT NULL,
+    provider_customer_id text NOT NULL,
+    provider_entitlement_id text NOT NULL,
+    entitlement_key text NOT NULL,
+    synced_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE billing_reconciliation_runs (
+    id uuid NOT NULL,
+    status text NOT NULL,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    completed_at timestamp with time zone,
+    subscriptions_seen integer DEFAULT 0 NOT NULL,
+    subscriptions_changed integer DEFAULT 0 NOT NULL,
+    subscriptions_skipped_invalid integer DEFAULT 0 NOT NULL,
+    error_text text DEFAULT ''::text NOT NULL
+);
+
+CREATE TABLE billing_subscriptions (
+    user_id uuid NOT NULL,
+    provider_customer_id text NOT NULL,
+    provider_subscription_id text,
+    product_code text NOT NULL,
+    status text NOT NULL,
+    current_period_end timestamp with time zone,
+    cancel_at_period_end boolean DEFAULT false NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    provider text DEFAULT 'stripe'::text NOT NULL,
+    provider_product_id text,
+    provider_price_id text
+);
+
+CREATE TABLE billing_webhook_events (
+    stripe_event_id text NOT NULL,
+    event_type text NOT NULL,
+    received_at timestamp with time zone DEFAULT now() NOT NULL,
+    processed_at timestamp with time zone
+);
+
 CREATE TABLE data_grants (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
@@ -2176,6 +2217,27 @@ ALTER TABLE ONLY application_modification_requests
 ALTER TABLE ONLY authz_schema_migrations
     ADD CONSTRAINT authz_schema_migrations_pkey PRIMARY KEY (version);
 
+ALTER TABLE ONLY billing_entitlements
+    ADD CONSTRAINT billing_entitlements_pkey PRIMARY KEY (provider, provider_customer_id, entitlement_key);
+
+ALTER TABLE ONLY billing_entitlements
+    ADD CONSTRAINT billing_entitlements_provider_provider_entitlement_id_key UNIQUE (provider, provider_entitlement_id);
+
+ALTER TABLE ONLY billing_reconciliation_runs
+    ADD CONSTRAINT billing_reconciliation_runs_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY billing_subscriptions
+    ADD CONSTRAINT billing_subscriptions_pkey PRIMARY KEY (user_id);
+
+ALTER TABLE ONLY billing_subscriptions
+    ADD CONSTRAINT billing_subscriptions_provider_customer_id_key UNIQUE (provider_customer_id);
+
+ALTER TABLE ONLY billing_subscriptions
+    ADD CONSTRAINT billing_subscriptions_provider_subscription_id_key UNIQUE (provider_subscription_id);
+
+ALTER TABLE ONLY billing_webhook_events
+    ADD CONSTRAINT billing_webhook_events_pkey PRIMARY KEY (stripe_event_id);
+
 ALTER TABLE ONLY class_buff_ignores
     ADD CONSTRAINT class_buff_ignores_pkey PRIMARY KEY (dataset_id, normalized_name);
 
@@ -2638,6 +2700,10 @@ ALTER TABLE ONLY wow_server_upload_keys
 ALTER TABLE ONLY wow_servers
     ADD CONSTRAINT wow_servers_pkey PRIMARY KEY (id);
 
+CREATE INDEX billing_entitlements_user_key_idx ON billing_entitlements USING btree (user_id, entitlement_key);
+
+CREATE INDEX billing_reconciliation_runs_started_at_idx ON billing_reconciliation_runs USING btree (started_at DESC);
+
 CREATE INDEX dbc_affected_aura_duration_modifiers_modifier_idx ON dbc_affected_aura_duration_modifiers USING btree (dataset_id, modifier_spell_id);
 
 CREATE INDEX dbc_consumable_buffs_spell_idx ON dbc_consumable_buffs USING btree (dataset_id, spell_id);
@@ -2894,6 +2960,12 @@ ALTER TABLE ONLY application_modification_requests
 
 ALTER TABLE ONLY application_modification_requests
     ADD CONSTRAINT application_modification_requests_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES users(id);
+
+ALTER TABLE ONLY billing_entitlements
+    ADD CONSTRAINT billing_entitlements_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY billing_subscriptions
+    ADD CONSTRAINT billing_subscriptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY class_buff_ignores
     ADD CONSTRAINT class_buff_ignores_by_dataset_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
