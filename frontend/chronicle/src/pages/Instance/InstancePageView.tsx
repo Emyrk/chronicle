@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue, ty
 import { createPortal } from "react-dom";
 import { useSearchParams, Link } from "react-router-dom";
 import { useSession, useCreateShare, fetchSharedView, toastError, type UserPanelLayout } from "@/api/queries";
-import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, LayoutPanelTop, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown, RotateCcw, Maximize2, Minimize2 } from "lucide-react";
+import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, LayoutPanelTop, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown, RotateCcw, Maximize2, Minimize2, LockKeyhole } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -41,7 +41,7 @@ import { activePhaseForTimeRange, phaseTimeRangeSelection, phaseWidthPercent } f
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
 import type { PanelFilter } from "./EventsPanels/processors/filters";
 import { canonicalizeCustomPanelRef, isCustomPanelRef } from "./EventsPanels/custom/pluginTypes";
-import { PANELS } from "./EventsPanels/EventsPanel";
+import { PANELS, PRIVATE_LOG_RESTRICTED_PANELS } from "./EventsPanels/EventsPanel";
 import { Strip } from "./EventsPanels/Strips/Strip";
 import { STRIPS, isStripType } from "./EventsPanels/Strips/strips";
 import type { StripType } from "./EventsPanels/Strips/types";
@@ -443,6 +443,7 @@ function EncounterSidebar({
   onIncludeWipesChange,
   instanceStartTime,
   instanceId,
+  showRankings,
 }: {
   encounters: Encounter[];
   trashGroups: TrashGroup[];
@@ -458,8 +459,9 @@ function EncounterSidebar({
   onIncludeWipesChange: (value: boolean) => void;
   instanceStartTime: string;
   instanceId: string;
+  showRankings: boolean;
 }) {
-  const timeParsesQuery = useInstanceTimeParses(instanceId);
+  const timeParsesQuery = useInstanceTimeParses(showRankings ? instanceId : undefined);
   const killParses = bossKillParsesByEncounter(timeParsesQuery.data);
   const scopedKillParses = scopedKillParsesByEncounter(timeParsesQuery.data);
   const lookbackDays = timeParsesQuery.data?.lookback_days;
@@ -2291,7 +2293,7 @@ function InstancePageViewContent({
   useRegisterInstanceKeybinds("instance-page", "Instance page", INSTANCE_PAGE_KEYBINDS);
   const timeRange = useTimeRangeContextOptional();
 
-  const instanceTimeParsesQuery = useInstanceTimeParses(instance.id);
+  const instanceTimeParsesQuery = useInstanceTimeParses(instance.private ? undefined : instance.id);
   const { data: instanceSpeedrun } = useQuery({
     queryKey: ["instance-speedrun", instance.id],
     queryFn: async (): Promise<SpeedrunResult | null> => {
@@ -2301,11 +2303,12 @@ function InstancePageViewContent({
     },
     staleTime: Infinity,
     retry: false,
+    enabled: !instance.private,
   });
 
   // URL state for explainer mode (simple ?explain=panel_type)
   const [searchParams, setSearchParams] = useSearchParams();
-  const overviewEnabled = isInstanceOverviewEnabled(supportsOverview);
+  const overviewEnabled = isInstanceOverviewEnabled(supportsOverview) && !instance.private;
   const requestedViewMode = parseInstanceViewMode(searchParams.get("view"));
   const viewMode: InstanceViewMode = overviewEnabled ? requestedViewMode : "encounters";
   const isEncounterView = viewMode === "encounters";
@@ -2768,10 +2771,11 @@ function InstancePageViewContent({
       const urlType = viewState.panels[index];
       const defaultType = (defaultPanelTypesByID[item.id] ?? "empty") as EventsPanelType;
       const resolved = (urlType ?? defaultType) as EventsPanelType;
-      next[item.id] = resolved in PANELS || isCustomPanelRef(resolved) ? resolved : "empty";
+      const valid = resolved in PANELS || isCustomPanelRef(resolved);
+      next[item.id] = valid && !(instance.private && PRIVATE_LOG_RESTRICTED_PANELS.has(resolved)) ? resolved : "empty";
     });
     return next;
-  }, [activeLayoutItems, defaultPanelTypesByID, viewState.panels]);
+  }, [activeLayoutItems, defaultPanelTypesByID, instance.private, viewState.panels]);
 
   const panelOptionsByID = useMemo<Record<string, string | null>>(() => {
     const next: Record<string, string | null> = {};
@@ -3665,10 +3669,17 @@ function InstancePageViewContent({
         <div className="flex items-start justify-between gap-4 mb-1">
           <h1 className={cn("font-bold flex items-center gap-2", isMobile ? "text-xl" : "text-2xl", heroic && "drop-shadow-[0_0_8px_rgba(147,51,234,0.3)]")}>
             {instance.name}
-            <ClearParseBadge
-              parses={scopedClearParses(instanceTimeParsesQuery.data)}
-              lookbackDays={instanceTimeParsesQuery.data?.lookback_days}
-            />
+            {!instance.private && (
+              <ClearParseBadge
+                parses={scopedClearParses(instanceTimeParsesQuery.data)}
+                lookbackDays={instanceTimeParsesQuery.data?.lookback_days}
+              />
+            )}
+            {instance.private && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-300">
+                <LockKeyhole className="h-3 w-3" /> Private
+              </span>
+            )}
             {instance.invalidatedAt && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -3732,8 +3743,8 @@ function InstancePageViewContent({
                 viewMode={overviewEnabled ? viewMode : undefined}
                 onViewModeChange={overviewEnabled ? setViewMode : undefined}
                 isLoggedIn={isLoggedIn}
-                onShareWithLayout={() => { void handleShareView(); }}
-                onShareWithoutLayout={() => { void handleShareWithoutLayout(); }}
+                onShareWithLayout={instance.private ? undefined : () => { void handleShareView(); }}
+                onShareWithoutLayout={instance.private ? undefined : () => { void handleShareWithoutLayout(); }}
                 youtubeButton={youtubeButton}
                 showHints={showHints}
                 onOpenHelp={() => setHelpOpen(true)}
@@ -3829,6 +3840,7 @@ function InstancePageViewContent({
               {showLiveSessionControls && (
                 <LiveSessionButton instanceId={instance.id} canCreate={isLoggedIn} />
               )}
+              {!instance.private && (
               <DropdownMenu modal={false}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -3865,6 +3877,7 @@ function InstancePageViewContent({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              )}
               {isEncounterView && youtubeButton}
               {showHints && (
                 <>
@@ -4018,6 +4031,7 @@ function InstancePageViewContent({
             showHints={showHints}
             includeWipes={viewState.includeWipes}
             onIncludeWipesChange={setIncludeWipes}
+            showRankings={!instance.private}
             instanceStartTime={instance.startTime}
           />
         )}

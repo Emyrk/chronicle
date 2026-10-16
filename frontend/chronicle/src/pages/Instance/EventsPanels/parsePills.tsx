@@ -197,6 +197,7 @@ export function useParsePills({
     !!timeRange?.enabled && (timeRange.startOffsetMs != null || timeRange.endOffsetMs != null);
   const enemySelected = context.entitySelection.enemyIds.size > 0;
   const showParsePills =
+    !context.instance.private &&
     isPlayerSource &&
     !props.hasCustomFilters &&
     !isFocused &&
