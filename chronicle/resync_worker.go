@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"path/filepath"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 )
@@ -65,41 +67,84 @@ func (c *Chronicle) NewWorkerResync(parseQueue string) *WorkerResync {
 	return &WorkerResync{parent: c, parseQueue: parseQueue}
 }
 
-// ExpectedRawLogFiles returns the number of objects required to parse a log
-// group in the given format.
-func ExpectedRawLogFiles(logFormat database.LogFormat) int {
-	if logFormat == database.LogFormat112aSuperwowAddon {
-		return 2
+// ExpectedRawLogFiles returns the number of logical files required to parse a
+// supported log group. SuperWoW parsing has been removed.
+func ExpectedRawLogFiles(database.LogFormat) int { return 1 }
+
+const logFilePartReservationTTL = time.Hour
+
+func expireStaleLogFileParts(ctx context.Context, db database.StoreQueries, objectStorage storage.ObjectStorage, fileID uuid.UUID) error {
+	stale, err := db.ExpireStaleLogFileParts(ctx, database.ExpireStaleLogFilePartsParams{
+		LogFileID:   fileID,
+		StaleBefore: database.Timestamptz(time.Now().Add(-logFilePartReservationTTL)),
+	})
+	if err != nil {
+		return fmt.Errorf("expire stale log file parts: %w", err)
 	}
-	return 1
+	if len(stale) == 0 {
+		return nil
+	}
+	paths := make([]string, 0, len(stale))
+	for _, part := range stale {
+		paths = append(paths, part.ObjectKey)
+	}
+	if _, err := objectStorage.RemoveFile(context.WithoutCancel(ctx), BucketRaidLogs, paths); err != nil {
+		// Expiration is the correctness boundary. Object deletion is best-effort;
+		// group deletion retries cleanup for every recorded part.
+		slog.WarnContext(ctx, "failed to remove stale log file part objects", "error", err, "log_file_id", fileID)
+	}
+	return nil
+}
+
+func listReadyLogFileParts(ctx context.Context, db database.StoreQueries, objectStorage storage.ObjectStorage, fileID uuid.UUID) ([]database.LogFilePart, error) {
+	if err := expireStaleLogFileParts(ctx, db, objectStorage, fileID); err != nil {
+		return nil, err
+	}
+	parts, err := db.ListReadyLogFileParts(ctx, fileID)
+	if err != nil {
+		return nil, fmt.Errorf("list ready log file parts: %w", err)
+	}
+	return parts, nil
 }
 
 func loadRawLogFile(ctx context.Context, objectStorage storage.ObjectStorage, file database.LogFile) (io.Reader, error) {
-	fileData, err := objectStorage.DownloadFile(ctx, BucketRaidLogs, filepath.Join("logs", file.ID.String()))
-	if err != nil {
-		err = fmt.Errorf("download log file %s: %w", file.ID, err)
-		if errors.Is(err, io.ErrUnexpectedEOF) {
-			err = fmt.Errorf("download log file %s (unexpected EOF — file may be truncated): %w", file.ID, err)
-		}
-		return nil, err
-	}
+	return loadRawLogFileWithParts(ctx, objectStorage, file, nil)
+}
 
-	var reader io.Reader = bytes.NewReader(fileData)
-	if file.ContentEncoding.Valid && file.ContentEncoding.String == "gzip" {
+func loadRawLogFileWithParts(ctx context.Context, objectStorage storage.ObjectStorage, file database.LogFile, parts []database.LogFilePart) (io.Reader, error) {
+	combined := &bytes.Buffer{}
+	if err := appendRawLogObject(ctx, objectStorage, filepath.Join("logs", file.ID.String()), file.ContentEncoding, combined); err != nil {
+		return nil, fmt.Errorf("load base log file %s: %w", file.ID, err)
+	}
+	for _, part := range parts {
+		if err := appendRawLogObject(ctx, objectStorage, part.ObjectKey, part.ContentEncoding, combined); err != nil {
+			return nil, fmt.Errorf("load log file part %s: %w", part.ID, err)
+		}
+	}
+	return bytes.NewReader(combined.Bytes()), nil
+}
+
+func appendRawLogObject(ctx context.Context, objectStorage storage.ObjectStorage, objectKey string, contentEncoding pgtype.Text, dst io.Writer) error {
+	fileData, err := objectStorage.DownloadFile(ctx, BucketRaidLogs, objectKey)
+	if err != nil {
+		if errors.Is(err, io.ErrUnexpectedEOF) {
+			return fmt.Errorf("download object %s (unexpected EOF — file may be truncated): %w", objectKey, err)
+		}
+		return fmt.Errorf("download object %s: %w", objectKey, err)
+	}
+	reader := io.Reader(bytes.NewReader(fileData))
+	if contentEncoding.Valid && contentEncoding.String == "gzip" {
 		gzReader, err := gzip.NewReader(reader)
 		if err != nil {
-			return nil, fmt.Errorf("decompress log file %s: %w", file.ID, err)
+			return fmt.Errorf("decompress object %s: %w", objectKey, err)
 		}
 		defer func() { _ = gzReader.Close() }()
-
-		decompressed := &bytes.Buffer{}
-		if _, err := io.Copy(decompressed, gzReader); err != nil {
-			return nil, fmt.Errorf("read decompressed log file %s: %w", file.ID, err)
-		}
-		reader = decompressed
+		reader = gzReader
 	}
-
-	return reader, nil
+	if _, err := io.Copy(dst, reader); err != nil {
+		return fmt.Errorf("read object %s: %w", objectKey, err)
+	}
+	return nil
 }
 
 func loadRawLogFileBytes(ctx context.Context, objectStorage storage.ObjectStorage, file database.LogFile) ([]byte, error) {
@@ -132,6 +177,21 @@ func ValidateResyncRawFiles(ctx context.Context, objectStorage storage.ObjectSto
 	return validateResyncRawFiles(ctx, files, ExpectedRawLogFiles(logFormat), func(ctx context.Context, file database.LogFile) ([]byte, error) {
 		return loadRawLogFileBytes(ctx, objectStorage, file)
 	})
+}
+
+func ValidateResyncRawFilesWithParts(ctx context.Context, db database.StoreQueries, objectStorage storage.ObjectStorage, files []database.LogFile, logFormat database.LogFormat) error {
+	if logFormat == database.LogFormat112aSuperwowAddon {
+		return errors.New("SuperWoW log parsing is no longer supported")
+	}
+	if len(files) != 1 {
+		return fmt.Errorf("validate raw log files: expected 1 logical file, found %d", len(files))
+	}
+	parts, err := listReadyLogFileParts(ctx, db, objectStorage, files[0].ID)
+	if err != nil {
+		return err
+	}
+	_, err = loadRawLogFileWithParts(ctx, objectStorage, files[0], parts)
+	return err
 }
 
 func validateResyncRawFiles(
@@ -267,7 +327,7 @@ func (w *WorkerResync) Work(ctx context.Context, job *river.Job[ArgsResync]) err
 	if err != nil {
 		return fmt.Errorf("fetch raw log files for validation: %w", err)
 	}
-	if err := ValidateResyncRawFiles(adminCtx, w.parent.Storage, AvailableRawLogFiles(files), logFormat); err != nil {
+	if err := ValidateResyncRawFilesWithParts(adminCtx, w.parent.Zed, w.parent.Storage, AvailableRawLogFiles(files), logFormat); err != nil {
 		return err
 	}
 

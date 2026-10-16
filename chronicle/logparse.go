@@ -252,12 +252,11 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		return fmt.Errorf("fetch log files: %w", err)
 	}
 
-	// Validate file count based on log format. SuperWoW (1.12a) emits two
-	// files; every other format is a single file.
-	expectedFiles := 1
 	if logFormat == database.LogFormat112aSuperwowAddon {
-		expectedFiles = 2
+		jobResult = "cancelled"
+		return river.JobCancel(errors.New("SuperWoW log parsing is no longer supported"))
 	}
+	const expectedFiles = 1
 	if len(files) != expectedFiles {
 		jobResult = "cancelled"
 		return river.JobCancel(fmt.Errorf("log group (type %s) expects %d files, has %d", logGroup.WoWLogGroup.LogType, expectedFiles, len(files)))

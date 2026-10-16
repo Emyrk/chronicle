@@ -3,7 +3,6 @@ package api
 import (
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"time"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
-	"github.com/Emyrk/chronicle/chronicle"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
@@ -259,9 +257,8 @@ func (api *API) WoWLogFileDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Download from storage
-	contents, err := api.Chronicle.Storage.DownloadFile(ctx, chronicle.BucketRaidLogs,
-		filepath.Join("logs", fileID.String()))
+	// Download the base object plus finalized append parts as one logical file.
+	contents, isGzip, err := api.Chronicle.DownloadLogicalLogFile(ctx, file)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
@@ -275,7 +272,7 @@ func (api *API) WoWLogFileDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set headers for file download - serve as-is (compressed if stored compressed)
-	if file.ContentEncoding.Valid && file.ContentEncoding.String == "gzip" {
+	if isGzip {
 		w.Header().Set("Content-Type", "application/gzip")
 		w.Header().Set("Content-Disposition",
 			fmt.Sprintf("attachment; filename=\"combatlog-%s.txt.gz\"", file.ID.String()))

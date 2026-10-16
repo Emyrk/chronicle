@@ -17,19 +17,13 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/creatures"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
-	"github.com/Emyrk/chronicle/combatlog/parser/logfile"
 	"github.com/Emyrk/chronicle/combatlog/parser/reorder"
-	"github.com/Emyrk/chronicle/combatlog/parser/sorter"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
-	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/parserv2"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/internal/leveledlog"
-	"github.com/google/uuid"
 )
 
 // parseResult holds everything produced by the parse phase that the
@@ -68,7 +62,6 @@ func (w *WorkerLogParse) parseCombatLog(
 	preloadedFirst []byte,
 	preRealmName string,
 ) (*parseResult, error) {
-	logger := leveledlog.New(w.parent.logger, slog.LevelInfo)
 	logLogger := w.parent.logger
 	if !w.parent.EmitParsingLogs() {
 		logLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -135,46 +128,6 @@ func (w *WorkerLogParse) parseCombatLog(
 
 	var consumeErr error
 	switch logFormat {
-	case database.LogFormat112aSuperwowAddon:
-		loadStart := time.Now()
-		var ri *realmclock.Info
-		rdrs := make([]logfile.Reader, len(files))
-		for i, file := range files {
-			var rdr io.Reader
-			var err error
-			if i == 0 && preloadedFirst != nil {
-				rdr = bytes.NewReader(preloadedFirst)
-			} else {
-				rdr, err = w.loadFile(ctx, file)
-				if err != nil {
-					return nil, err
-				}
-			}
-			var fri *realmclock.Info
-			rdrs[i], fri, err = w.sortReader(ctx, rdr, file.ID)
-			if err != nil {
-				return nil, err
-			}
-			if ri == nil && fri != nil {
-				ri = fri
-			}
-		}
-		loadFileDuration = time.Since(loadStart)
-
-		m := vanilla.Merger(logger)
-		liner, scan, err := m.LineScanner(ctx, ri, rdrs[0], rdrs[1])
-		if err != nil {
-			return nil, fmt.Errorf("create line scanner: %w", err)
-		}
-
-		p := vanilla.NewFromScanner(ctx, logger, liner, scan, gameDB)
-		c.Advancer = p
-		consumeErr = c.ConsumeAll(ctx, p)
-		if consumeErr != nil && !errors.Is(consumeErr, io.EOF) {
-			return nil, fmt.Errorf("consume v1 log: %w", consumeErr)
-		}
-		totalLines = p.Metrics().TotalLinesParsed
-
 	case database.LogFormat112aCcAddon:
 		loadStart := time.Now()
 		rdr, err := loadFirstFile()
@@ -387,18 +340,13 @@ func (w *WorkerLogParse) loadFileBytes(ctx context.Context, file database.LogFil
 	return buf.Bytes(), nil
 }
 
-// sortReader sorts an already-loaded log reader.
-func (w *WorkerLogParse) sortReader(ctx context.Context, rdr io.Reader, fileID uuid.UUID) (logfile.Reader, *realmclock.Info, error) {
-	logger := leveledlog.New(w.parent.logger, slog.LevelInfo)
-	fileData := &bytes.Buffer{}
-	sum, ri, err := sorter.SortLogs(ctx, logger, rdr, fileData, false)
-	if err != nil {
-		return nil, ri, fmt.Errorf("sort log file %s: %w", fileID, err)
-	}
-	return logfile.New(&sum.IsRaw, fileData), ri, nil
-}
-
-// loadFile downloads and decompresses a single log file from object storage.
+// loadFile downloads and decompresses the base object plus all finalized
+// append parts. Client-sequenced parts are ordered first by source sequence;
+// legacy headerless parts follow in arrival order.
 func (w *WorkerLogParse) loadFile(ctx context.Context, file database.LogFile) (io.Reader, error) {
-	return loadRawLogFile(ctx, w.parent.Storage, file)
+	parts, err := listReadyLogFileParts(ctx, w.parent.Zed, w.parent.Storage, file.ID)
+	if err != nil {
+		return nil, err
+	}
+	return loadRawLogFileWithParts(ctx, w.parent.Storage, file, parts)
 }

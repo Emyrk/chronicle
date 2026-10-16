@@ -1178,6 +1178,25 @@ CREATE TABLE leaderboard_version_requirements (
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE log_file_parts (
+    id uuid NOT NULL,
+    log_file_id uuid NOT NULL,
+    sequence bigint NOT NULL,
+    upload_id uuid NOT NULL,
+    reservation_id uuid NOT NULL,
+    source_sequence bigint,
+    object_key text NOT NULL,
+    status text NOT NULL,
+    hash text,
+    size_bytes bigint,
+    compressed_size_bytes bigint,
+    content_encoding text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    finalized_at timestamp with time zone,
+    CONSTRAINT log_file_parts_sequence_check CHECK ((sequence > 0)),
+    CONSTRAINT log_file_parts_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'ready'::text, 'failed'::text])))
+);
+
 CREATE TABLE log_instance_encounter_damage_unit_summary (
     encounter_id uuid NOT NULL,
     unit_guid wow_guid NOT NULL,
@@ -2475,6 +2494,18 @@ ALTER TABLE ONLY item_daily_prices
 ALTER TABLE ONLY leaderboard_version_requirements
     ADD CONSTRAINT leaderboard_version_requirements_pkey PRIMARY KEY (instance_name);
 
+ALTER TABLE ONLY log_file_parts
+    ADD CONSTRAINT log_file_parts_log_file_id_sequence_key UNIQUE (log_file_id, sequence);
+
+ALTER TABLE ONLY log_file_parts
+    ADD CONSTRAINT log_file_parts_log_file_id_upload_id_key UNIQUE (log_file_id, upload_id);
+
+ALTER TABLE ONLY log_file_parts
+    ADD CONSTRAINT log_file_parts_object_key_key UNIQUE (object_key);
+
+ALTER TABLE ONLY log_file_parts
+    ADD CONSTRAINT log_file_parts_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY log_file
     ADD CONSTRAINT log_file_pkey PRIMARY KEY (id);
 
@@ -2931,6 +2962,10 @@ CREATE INDEX instance_speedruns_cohort_lookup_idx ON instance_speedruns USING bt
 
 CREATE INDEX item_daily_prices_future_lookup_idx ON item_daily_prices USING btree (realm_id, auction_house_faction, item_id, price_date) WHERE (price_copper IS NOT NULL);
 
+CREATE INDEX log_file_parts_pending_idx ON log_file_parts USING btree (log_file_id, created_at) WHERE (status = 'pending'::text);
+
+CREATE UNIQUE INDEX log_file_parts_source_sequence_idx ON log_file_parts USING btree (log_file_id, source_sequence) WHERE (source_sequence IS NOT NULL);
+
 CREATE UNIQUE INDEX log_instance_raid_group_clean_kill_idx ON log_instance_raid_group_snapshots USING btree (encounter_id) WHERE (snapshot_type = 'clean_kill'::raid_group_snapshot_type);
 
 CREATE UNIQUE INDEX log_instance_raid_group_final_idx ON log_instance_raid_group_snapshots USING btree (instance_id) WHERE (snapshot_type = 'final'::raid_group_snapshot_type);
@@ -3230,6 +3265,9 @@ ALTER TABLE ONLY item_daily_prices
 
 ALTER TABLE ONLY log_file
     ADD CONSTRAINT log_file_owner_fkey FOREIGN KEY (owner) REFERENCES users(id);
+
+ALTER TABLE ONLY log_file_parts
+    ADD CONSTRAINT log_file_parts_log_file_id_fkey FOREIGN KEY (log_file_id) REFERENCES log_file(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY log_file
     ADD CONSTRAINT log_file_wow_log_id_fkey FOREIGN KEY (wow_log_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;

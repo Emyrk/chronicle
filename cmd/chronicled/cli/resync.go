@@ -525,7 +525,7 @@ func enrichResyncGroups(
 		} else {
 			available := chronicle.AvailableRawLogFiles(files)
 			group.RawFileCount = len(available)
-			if err := chronicle.ValidateResyncRawFiles(adminCtx, objectStorage, available, group.LogFormat); err != nil {
+			if err := chronicle.ValidateResyncRawFilesWithParts(adminCtx, db, objectStorage, available, group.LogFormat); err != nil {
 				group.StorageError = err.Error()
 			} else {
 				group.StorageValid = true
