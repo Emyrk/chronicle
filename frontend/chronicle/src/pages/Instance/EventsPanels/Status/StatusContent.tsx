@@ -23,6 +23,7 @@ import {
   statusRaidHealthTimeline,
   type StatusRaidHealthModel,
 } from "./statusRaidHealth";
+import { useActualRaidDurabilityModel } from "./useRaidDurabilityModel";
 import { sortStatusSnapshotsByRole } from "./statusRoles";
 import {
   STATUS_WAVEFORM_COLORS,
@@ -265,11 +266,13 @@ function RaidHealthSummary({
   startMilli,
   endMilli,
   cursorMilli,
+  actual,
 }: {
   model: StatusRaidHealthModel;
   startMilli: number;
   endMilli: number;
   cursorMilli: number;
+  actual: boolean;
 }) {
   const buckets = useMemo(
     () => statusRaidHealthTimeline(model, startMilli, endMilli, 96),
@@ -282,15 +285,17 @@ function RaidHealthSummary({
   return (
     <section
       className="grid grid-cols-[minmax(155px,0.7fr)_minmax(190px,0.85fr)_minmax(320px,1.8fr)] items-center gap-3 border-b border-border/40 bg-black/10 px-5 py-2"
-      aria-label="Estimated raid durability timeline"
-      title="Estimated from relative deficits and deaths. Players are assumed to begin at full health; deaths count as zero."
+      aria-label={`${actual ? "Actual" : "Estimated"} raid durability timeline`}
+      title={actual
+        ? "Calculated from sampled player health in the unit-resources stream."
+        : "Estimated from relative deficits and deaths. Players are assumed to begin at full health; deaths count as zero."}
     >
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-          Estimated raid durability
+          {actual ? "Actual raid durability" : "Estimated raid durability"}
         </span>
         <span className="text-[9px] text-muted-foreground/70">
-          {current.alive}/{current.total} active · encounter estimate
+          {current.alive}/{current.total} active · {actual ? "sampled health" : "encounter estimate"}
         </span>
       </div>
       <div className="relative col-span-2 h-11 overflow-hidden border border-white/[0.07] bg-[#111316] px-1.5 pb-1 pt-1.5">
@@ -307,7 +312,7 @@ function RaidHealthSummary({
                   isFuture && "opacity-25",
                 )}
                 style={{ height: `${Math.max(2, bucket.percent)}%` }}
-                title="Estimated raid durability"
+                title={`${Math.round(bucket.percent)}% ${actual ? "actual" : "estimated"} raid durability`}
               />
             );
           })}
@@ -361,6 +366,13 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
       : [],
     lifeTransitionsByPlayer,
   ), [encounter, lifeTransitionsByPlayer]);
+  const actualRaidHealth = useActualRaidDurabilityModel(
+    context,
+    encounter?.encounterId ?? null,
+    encounter !== null,
+  );
+  const durabilityUsesActual = actualRaidHealth.supported && actualRaidHealth.available;
+  const raidDurabilityModel = durabilityUsesActual ? actualRaidHealth.model : raidHealthModel;
   const matchingUnits = useMemo(() => {
     if (!encounter) return [];
     return Array.from(encounter.units.values()).filter((unit) =>
@@ -534,12 +546,13 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
           </button>
         ) : null}
       </div>
-      {encounter && cursorMilli !== null && raidHealthModel.unitCount > 0 ? (
+      {encounter && cursorMilli !== null && raidDurabilityModel.unitCount > 0 ? (
         <RaidHealthSummary
-          model={raidHealthModel}
+          model={raidDurabilityModel}
           startMilli={encounter.startMilli}
           endMilli={encounter.endMilli}
           cursorMilli={cursorMilli}
+          actual={durabilityUsesActual}
         />
       ) : null}
       <div className="grid grid-cols-[minmax(155px,0.7fr)_minmax(190px,0.85fr)_minmax(320px,1.8fr)] items-center gap-3 border-b border-border/40 px-5 py-1.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">

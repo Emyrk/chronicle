@@ -186,6 +186,43 @@ function createUnitTrack(
   return { unitId: observation.unit.unitId, estimatedHealthPool, points };
 }
 
+export function createActualStatusRaidHealthModel(
+  resourcesByUnit: ReadonlyMap<string, readonly {
+    timestampMilli: number;
+    currentHealth: number;
+    maximumHealth: number;
+  }[]>,
+): StatusRaidHealthModel {
+  const tracks: StatusRaidHealthUnitTrack[] = [];
+  const maximumHealthValues: number[] = [];
+
+  for (const [unitId, samples] of resourcesByUnit) {
+    const points: StatusRaidHealthPoint[] = [];
+    let maximumHealth = 0;
+    for (const sample of samples) {
+      if (sample.maximumHealth <= 0) continue;
+      maximumHealth = sample.maximumHealth;
+      const fraction = clamp(sample.currentHealth / sample.maximumHealth, 0, 1);
+      const point = {
+        timestampMilli: sample.timestampMilli,
+        fraction,
+        dead: sample.currentHealth <= 0,
+      };
+      const previous = points.at(-1);
+      if (previous?.timestampMilli === point.timestampMilli) points[points.length - 1] = point;
+      else if (!previous || previous.fraction !== point.fraction || previous.dead !== point.dead) points.push(point);
+    }
+    if (maximumHealth <= 0 || points.length === 0) continue;
+    maximumHealthValues.push(maximumHealth);
+    tracks.push({ unitId, estimatedHealthPool: maximumHealth, points });
+  }
+
+  const representativeHealthPool = maximumHealthValues.length > 0
+    ? maximumHealthValues.reduce((sum, value) => sum + value, 0) / maximumHealthValues.length
+    : 0;
+  return { unitCount: tracks.length, representativeHealthPool, tracks };
+}
+
 export function createStatusRaidHealthModel(
   units: StatusUnitTimeline[],
   lifeTransitionsByPlayer?: ReadonlyMap<string, readonly PlayerLifeTransition[]>,

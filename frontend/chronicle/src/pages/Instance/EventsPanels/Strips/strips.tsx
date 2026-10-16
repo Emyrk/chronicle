@@ -20,8 +20,10 @@ import {
   statusRaidHealthAt,
   statusRaidHealthTimeline,
 } from "../Status/statusRaidHealth";
+import { useActualRaidDurabilityModel } from "../Status/useRaidDurabilityModel";
 import { selectStatusEncounter, statusCursorMilli } from "../Status/statusTimeline";
 import {
+  raidDurabilityMode,
   stripOptionValue,
   stripTitleMode,
 } from "./stripOptions";
@@ -100,13 +102,22 @@ function RaidDurabilityStrip({ result, context, panelOption }: StripRenderProps<
       playerLife.state.transitions(encounter.encounterId, playerId),
     ]));
   }, [context.instance.players, encounter, playerLife.error, playerLife.loading, playerLife.state]);
-  const model = useMemo(() => createStatusRaidHealthModel(
+  const estimatedModel = useMemo(() => createStatusRaidHealthModel(
     encounter ? Array.from(encounter.units.values()).filter((unit) => unit.kind === "player") : [],
     lifeTransitions,
   ), [encounter, lifeTransitions]);
+  const actualSupported = context.instance.capabilities?.includes("unit-resources") ?? false;
+  const mode = raidDurabilityMode(panelOption, actualSupported);
+  const actualRaidHealth = useActualRaidDurabilityModel(
+    context,
+    encounter?.encounterId ?? null,
+    mode === "actual",
+  );
+  const usesActual = mode === "actual" && actualRaidHealth.available;
+  const model = usesActual ? actualRaidHealth.model : estimatedModel;
 
   if (!encounter || model.unitCount === 0) {
-    return <StripEmpty label="Estimated raid durability" />;
+    return <StripEmpty label={`${usesActual ? "Actual" : "Estimated"} raid durability`} />;
   }
 
   const titleMode = stripTitleMode(panelOption);
@@ -125,7 +136,7 @@ function RaidDurabilityStrip({ result, context, panelOption }: StripRenderProps<
       values={buckets.map((bucket) => bucket.percent)}
       colors={buckets.map((bucket) => raidHealthColor(bucket.percent))}
       max={100}
-      title={(index) => `${Math.round(buckets[index]?.percent ?? 0)}% estimated durability`}
+      title={(index) => `${Math.round(buckets[index]?.percent ?? 0)}% ${usesActual ? "actual" : "estimated"} durability`}
       replayProgress={replayProgress}
       className="h-full"
     />
@@ -139,7 +150,7 @@ function RaidDurabilityStrip({ result, context, panelOption }: StripRenderProps<
             {title}
           </span>
           <span className="truncate text-[9px] text-muted-foreground/70">
-            {current.alive}/{current.total} active · encounter estimate
+            {current.alive}/{current.total} active · {usesActual ? "sampled health" : "encounter estimate"}
           </span>
         </div>
         {bars}

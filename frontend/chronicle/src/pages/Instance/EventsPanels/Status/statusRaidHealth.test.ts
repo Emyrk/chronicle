@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StatusTimelineEvent, StatusUnitTimeline } from "./status.processor";
 import {
+  createActualStatusRaidHealthModel,
   createStatusRaidHealthModel,
   statusRaidHealthAt,
   statusRaidHealthTimeline,
@@ -138,6 +139,38 @@ describe("Status raid health estimate", () => {
     const buckets = statusRaidHealthTimeline(model, 0, 2_000, 2);
     expect(buckets).toHaveLength(2);
     expect(buckets[0].percent).toBeLessThan(100);
+    expect(buckets[1].percent).toBe(100);
+  });
+});
+
+describe("Status raid health actual samples", () => {
+  it("uses sampled current and maximum health", () => {
+    const model = createActualStatusRaidHealthModel(new Map([
+      ["one", [
+        { timestampMilli: 0, currentHealth: 1_000, maximumHealth: 1_000 },
+        { timestampMilli: 1_000, currentHealth: 500, maximumHealth: 1_000 },
+      ]],
+      ["two", [
+        { timestampMilli: 0, currentHealth: 2_000, maximumHealth: 2_000 },
+        { timestampMilli: 1_000, currentHealth: 0, maximumHealth: 2_000 },
+      ]],
+    ]));
+
+    expect(statusRaidHealthAt(model, 0)).toEqual({ percent: 100, alive: 2, total: 2 });
+    expect(statusRaidHealthAt(model, 1_000)).toEqual({ percent: 25, alive: 1, total: 2 });
+  });
+
+  it("captures the lowest sampled health inside each bucket", () => {
+    const model = createActualStatusRaidHealthModel(new Map([
+      ["one", [
+        { timestampMilli: 0, currentHealth: 1_000, maximumHealth: 1_000 },
+        { timestampMilli: 500, currentHealth: 200, maximumHealth: 1_000 },
+        { timestampMilli: 900, currentHealth: 1_000, maximumHealth: 1_000 },
+      ]],
+    ]));
+
+    const buckets = statusRaidHealthTimeline(model, 0, 2_000, 2);
+    expect(buckets[0].percent).toBeCloseTo(20);
     expect(buckets[1].percent).toBe(100);
   });
 });

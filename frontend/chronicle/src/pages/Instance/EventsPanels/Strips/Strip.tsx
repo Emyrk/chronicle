@@ -17,8 +17,11 @@ import { usePanelAggregation } from "../usePanelAggregation";
 import { STRIPS } from "./strips";
 import {
   parseStripOptionTokens,
+  raidDurabilityMode,
   stripTitleMode,
+  updateRaidDurabilityMode,
   updateStripTitleMode,
+  type RaidDurabilityMode,
   type StripTitleMode,
 } from "./stripOptions";
 import type { StripDefinition, StripType } from "./types";
@@ -73,6 +76,8 @@ export function Strip({
   const optionTokens = useMemo(() => parseStripOptionTokens(panelOption), [panelOption]);
   const borderColor = optionValue(optionTokens, "bc:");
   const customTitle = optionValue(optionTokens, "t:");
+  const actualDurabilitySupported = context.instance.capabilities?.includes("unit-resources") ?? false;
+  const durabilityMode = raidDurabilityMode(panelOption, actualDurabilitySupported);
   const titleMode = stripTitleMode(panelOption);
   const inheritedPortalContainer = usePortalContainer();
   const [filters, setFiltersState] = useState<PanelFilter[]>(() => seedFilters ?? strip.defaultFilters ?? []);
@@ -111,6 +116,11 @@ export function Strip({
   const setCustomTitle = useCallback((title: string | null) => {
     onPanelOptionChange?.(updateOptionMeta(optionTokens, borderColor, title));
   }, [borderColor, onPanelOptionChange, optionTokens]);
+
+  const setDurabilityMode = useCallback((mode: RaidDurabilityMode) => {
+    if (mode === "actual" && !actualDurabilitySupported) return;
+    onPanelOptionChange?.(updateRaidDurabilityMode(panelOption, mode));
+  }, [actualDurabilitySupported, onPanelOptionChange, panelOption]);
 
   const setTitleMode = useCallback((mode: StripTitleMode) => {
     onPanelOptionChange?.(updateStripTitleMode(panelOption, mode));
@@ -252,6 +262,37 @@ export function Strip({
                   <div className="flex h-full min-h-0 flex-col gap-4">
                     {stripType === "raid_durability" ? (
                       <div className="rounded-md border border-border/70 bg-muted/20 px-3 py-3">
+                        <div className="mb-4">
+                          <div className="mb-2">
+                            <div className="text-sm font-medium">Durability source</div>
+                            <div className="text-xs text-muted-foreground">
+                              Use sampled player health when the log supports unit resources, or retain the encounter estimate.
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1 rounded-md bg-background/70 p-1">
+                            {(["estimate", "actual"] as RaidDurabilityMode[]).map((mode) => {
+                              const disabled = mode === "actual" && !actualDurabilitySupported;
+                              return (
+                                <button
+                                  key={mode}
+                                  type="button"
+                                  onClick={() => setDurabilityMode(mode)}
+                                  disabled={!onPanelOptionChange || disabled}
+                                  title={disabled ? "This log does not include unit-resources data" : undefined}
+                                  className={cn(
+                                    "rounded px-2 py-1.5 text-xs font-medium capitalize transition-colors",
+                                    durabilityMode === mode
+                                      ? "bg-primary text-primary-foreground"
+                                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                                    disabled && "cursor-not-allowed opacity-40 hover:bg-transparent hover:text-muted-foreground",
+                                  )}
+                                >
+                                  {mode}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
                         <div className="mb-2">
                           <div className="text-sm font-medium">Title</div>
                           <div className="text-xs text-muted-foreground">Choose how the strip title is displayed.</div>

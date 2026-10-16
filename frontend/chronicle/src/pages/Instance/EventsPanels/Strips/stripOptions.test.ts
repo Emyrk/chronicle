@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  raidDurabilityMode,
   stripTitleMode,
+  updateRaidDurabilityMode,
   updateStripTitleMode,
 } from "./stripOptions";
 
@@ -26,5 +28,21 @@ describe("strip title mode", () => {
 
   it("reads the legacy show-title token as overlay", () => {
     expect(stripTitleMode("show-title")).toBe("overlay");
+  });
+});
+
+describe("raid durability mode", () => {
+  it("defaults to actual only when the capability is supported", () => {
+    expect(raidDurabilityMode(null, true)).toBe("actual");
+    expect(raidDurabilityMode(null, false)).toBe("estimate");
+  });
+
+  it("falls back to estimate when an actual option is unsupported", () => {
+    expect(raidDurabilityMode("durability-mode:actual", false)).toBe("estimate");
+  });
+
+  it("persists the selected mode while preserving other options", () => {
+    expect(updateRaidDurabilityMode("title-mode:large,t:Custom", "estimate"))
+      .toBe("title-mode:large,t:Custom,durability-mode:estimate");
   });
 });
