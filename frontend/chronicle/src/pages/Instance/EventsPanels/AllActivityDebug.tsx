@@ -1228,6 +1228,7 @@ export const AllActivityPanel: PanelDefinition<AllActivityState, any> = {
   ...allActivityProcessor,
   label: "All Activity",
   icon: <Skull className="h-4 w-4" />,
+  keybinds: [],
   // This panel manages its own aggregation to support pagination
   selfManagesAggregation: true,
   checkboxLabel: "Encounter offset",

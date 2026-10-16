@@ -474,6 +474,7 @@ export function createRaidFramesPanel(): PanelDefinition<RaidFramesResult, RaidF
     ...raidFramesProcessor,
     label: "Raid Frames",
     icon: <Users className="h-4 w-4" />,
+    keybinds: [],
     requiredCapabilities: ["unit-resources"],
     syncDataMode: "full",
     disableCardFlip: true,

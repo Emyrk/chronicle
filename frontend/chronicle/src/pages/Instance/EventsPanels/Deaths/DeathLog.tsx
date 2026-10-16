@@ -18,6 +18,7 @@ export function createDeathLogPanel(): PanelDefinition<DeathsResult, any> {
     id: "death_log", // Override the id to differentiate from deaths panel
     label: "Death Log",
     icon: <ScrollText className="h-4 w-4" />,
+    keybinds: [],
     checkboxLabel: "Encounter offset",
     supportsFiltering: true,
     // The death list describes the whole encounter. Sync supplies only

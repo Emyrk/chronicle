@@ -77,6 +77,7 @@ export function createInnervatePanel(): PanelDefinition<InnervateResult, any> {
     ...innervateProcessor,
     label: "Innervate",
     icon: <Leaf className="h-4 w-4" />,
+    keybinds: [],
     supportsPerSecond: false,
     checkboxLabel: "Show log",
     

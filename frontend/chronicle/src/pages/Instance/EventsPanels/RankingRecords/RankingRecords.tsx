@@ -17,6 +17,7 @@ export function createRankingRecordsPanel(): PanelDefinition<RankingRecordsResul
     ...rankingRecordsProcessor,
     label: "Ranking Records",
     icon: <Database className="h-4 w-4" />,
+    keybinds: [],
     supportsPerSecond: false,
     selfManagesAggregation: true,
     syncDataMode: "full",

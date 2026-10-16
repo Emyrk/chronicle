@@ -8,6 +8,7 @@ export function createEquipmentPanel(): PanelDefinition<EquipmentResult, any> {
     ...equipmentProcessor,
     label: "Equipment",
     icon: <Shirt className="h-4 w-4" />,
+    keybinds: [],
     render: (props: PanelRenderProps<EquipmentResult>) => (
       <EquipmentContent {...props} />
     ),

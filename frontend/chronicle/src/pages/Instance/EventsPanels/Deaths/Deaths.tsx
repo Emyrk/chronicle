@@ -16,6 +16,7 @@ export function createDeathsPanel(): PanelDefinition<DeathsSummaryResult, any> {
     ...deathsSummaryProcessor,
     label: "Deaths",
     icon: <Skull className="h-4 w-4" />,
+    keybinds: [],
 
     render: (props: PanelRenderProps<DeathsSummaryResult>) => {
       return <DeathsContent {...props} />;

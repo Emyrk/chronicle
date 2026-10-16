@@ -275,6 +275,7 @@ export function createRaidCompositionPanel(): PanelDefinition<
     ...raidCompositionProcessor,
     label: "Raid Composition",
     icon: <UsersRound className="size-4" />,
+    keybinds: [{ keys: "Esc", action: "Close the selected raid group" }],
     syncDataMode: "full",
     requiredCapabilities: [REQUIRED_CAPABILITY],
     checkboxLabel: "Compact",

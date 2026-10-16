@@ -14,6 +14,7 @@ export function createInterruptsPanel(): PanelDefinition<InterruptResult, any> {
     ...interruptProcessor,
     label: "Interrupts",
     icon: <ShieldOff className="h-4 w-4" />,
+    keybinds: [{ keys: "Esc", action: "Return from a focused player to the player list" }],
     supportsPerSecond: true,
     supportsFiltering: true,
     groupingOptions: MERGED_GROUPING_OPTIONS,

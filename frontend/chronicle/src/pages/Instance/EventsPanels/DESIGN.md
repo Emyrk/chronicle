@@ -125,6 +125,7 @@ Extends processor with React-specific properties:
 interface PanelDefinition<TResult, TEvent> extends PanelProcessor<TResult, TEvent> {
   label: string;                 // Display name
   icon: React.ReactNode;         // Icon component
+  keybinds: readonly InstanceKeybind[] | "dynamic";
   
   supportsPerSecond?: boolean;   // Show per-second toggle checkbox
   checkboxLabel?: string;        // Custom checkbox label (default: "Per second")
@@ -133,6 +134,16 @@ interface PanelDefinition<TResult, TEvent> extends PanelProcessor<TResult, TEven
   render: (props: PanelRenderProps<TResult>) => React.ReactNode;
 }
 ```
+
+### Keybind reporting
+
+Every panel definition must explicitly declare its shortcut ownership:
+
+- Use `keybinds: []` when the panel has no shortcuts.
+- List static keyboard or mouse shortcuts directly in `keybinds`.
+- Use `keybinds: "dynamic"` when bindings depend on saved settings or runtime state, then call `useRegisterInstanceKeybinds()` from the rendered panel with the resolved bindings.
+
+The instance Page Guide reads the shared registry, so a new `keydown`/`keyup` listener or modifier-based mouse action must be reported through one of these paths. Configurable panels, such as Map, should report the viewer's resolved bindings rather than their defaults.
 
 ### PanelRenderProps<TResult>
 

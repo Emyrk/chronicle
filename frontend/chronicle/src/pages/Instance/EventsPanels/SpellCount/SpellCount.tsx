@@ -14,6 +14,7 @@ export function createSpellCountPanel(): PanelDefinition<SpellCountResult, Spell
     ...spellCountProcessor,
     label: "Spell Casts",
     icon: <Hash className="h-4 w-4" />,
+    keybinds: [],
     supportsFiltering: true,
     defaultFilters: [
       { type: "time_range", value: "controller", applyTo: SPELL_COUNT_STREAMS },

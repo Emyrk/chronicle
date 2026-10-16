@@ -23,7 +23,9 @@ import { MapView2D, type MapViewRequest } from "./MapView2D";
 import { MapControlsSettings } from "./MapControlsSettings";
 import { RaidFrames } from "./RaidFrames";
 import { useMapKeyBindings } from "./useMapKeyBindings";
+import { keyLabel, MAP_CONTROL_ACTIONS } from "./mapControls";
 import { useMapScene } from "./useMapScene";
+import { useRegisterInstanceKeybinds } from "../../InstanceKeybinds";
 import { encounterJumps, mapPresentationForSelection } from "./wholeRun";
 
 export { mapPresentationForSelection };
@@ -100,6 +102,15 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   const defaultViewport = ready?.fitByDefault && autoFit ? autoFit : FULL_MAP_VIEWPORT;
   const [showRaidFrames, setShowRaidFrames] = useState(true);
   const { bindings: keyBindings } = useMapKeyBindings();
+  const reportedKeybinds = useMemo(() => MAP_CONTROL_ACTIONS.map((action) => ({
+    keys: keyLabel(keyBindings[action.id]),
+    action: `${action.label} while the pointer is over the map`,
+  })), [keyBindings]);
+  useRegisterInstanceKeybinds(
+    `panel:${props.panelId ?? props.panelIndex ?? "map"}:map-controls`,
+    "Map",
+    reportedKeybinds,
+  );
   const [storedFraming, setFraming] = useState<MapFraming>(INITIAL_MAP_FRAMING);
   // A new selection or replay moving into another encounter re-frames;
   // loading states (e.g. reprocessing after a filter change) keep the framing.
@@ -345,6 +356,7 @@ export function createMapPanel(): PanelDefinition<MapResult, MapProcessorEvent> 
     ...mapProcessor,
     label: "Map",
     icon: <MapIcon className="h-4 w-4" />,
+    keybinds: "dynamic",
     requiredCapabilities: ["unit-position"],
     syncDataMode: "full",
     disableCardFlip: true,

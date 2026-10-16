@@ -1,8 +1,7 @@
+import type { InstanceKeybind } from "../../InstanceKeybinds";
+
 /** A shortcut listed in the timeline's keyboard popover. */
-export interface Keybind {
-  keys: string;
-  action: string;
-}
+export type Keybind = InstanceKeybind;
 
 /** Shortcuts the rotation timeline itself handles. */
 export const TIMELINE_KEYBINDS: Keybind[] = [

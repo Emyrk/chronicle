@@ -726,6 +726,7 @@ export function createRotationsPanel(): PanelDefinition<RotationsResult, Rotatio
     ...rotationsProcessor,
     label: "Rotations",
     icon: <RotateCcw className="h-4 w-4" />,
+    keybinds: [{ keys: "Middle-click spell", action: "Hide that spell from the rotation" }],
     supportsPerSecond: false,
     hidden: true,
     supportsFiltering: true,

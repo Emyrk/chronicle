@@ -21,6 +21,7 @@ export function createAuraUptimePanel(): PanelDefinition<AuraUptimeResult, any> 
     ...auraUptimeProcessor,
     label: "Aura Uptime",
     icon: <Sparkles className="h-4 w-4" />,
+    keybinds: [],
     checkboxLabel: "Duration",
     underConstruction: true,
 

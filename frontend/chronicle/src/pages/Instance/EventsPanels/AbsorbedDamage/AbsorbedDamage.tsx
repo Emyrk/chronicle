@@ -17,6 +17,7 @@ export function createAbsorbedDamagePanel(): PanelDefinition<AbsorbedDamageResul
     ...absorbedDamageProcessor,
     label: "Absorbed Damage",
     icon: <Shield className="h-4 w-4" />,
+    keybinds: [],
     supportsPerSecond: true,
     supportsFiltering: true,
     groupingOptions: ENTITY_GROUPING_OPTIONS,

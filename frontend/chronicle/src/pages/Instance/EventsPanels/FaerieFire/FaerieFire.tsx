@@ -36,6 +36,7 @@ export function createFaerieFirePanel(): PanelDefinition<FaerieFireResult, any> 
     ...faerieFireProcessor,
     label: "Faerie Fire",
     icon: <Leaf className="h-4 w-4" />,
+    keybinds: [],
     supportsPerSecond: false,
     checkboxLabel: "Show targets",
     render: (props) => <FaerieFireContent {...props} />,

@@ -10,6 +10,7 @@ export function createGuildsPanel(): PanelDefinition<GuildsResult, any> {
     ...guildsProcessor,
     label: "Guilds",
     icon: <Users className="h-4 w-4" />,
+    keybinds: [],
     render: (props: PanelRenderProps<GuildsResult>) => (
       <GuildsContent {...props} />
     ),

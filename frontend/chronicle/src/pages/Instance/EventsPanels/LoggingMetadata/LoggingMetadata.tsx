@@ -28,6 +28,7 @@ export function createLoggingMetadataPanel(): PanelDefinition<LoggingMetadataRes
     ...loggingMetadataProcessor,
     label: "Logging Metadata",
     icon: <FileText className="h-4 w-4" />,
+    keybinds: [],
     supportsPerSecond: false,
 
     render: (props: PanelRenderProps<LoggingMetadataResult>) => {

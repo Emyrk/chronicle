@@ -29,6 +29,7 @@ export function createLeaderboardPanel(): PanelDefinition<
     ...leaderboardProcessor,
     label: "Leaderboard",
     icon: <Trophy className="h-4 w-4" />,
+    keybinds: [],
     supportsPerSecond: false,
 
     render: (props: PanelRenderProps<LeaderboardPanelResult>) => {

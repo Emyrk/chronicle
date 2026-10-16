@@ -591,6 +591,7 @@ export function createPullsAndCleanupPanel(): PanelDefinition<
     ...pullsAndCleanupProcessor,
     label: "Pulls & Idle Time",
     icon: <Timer className="h-4 w-4" />,
+    keybinds: [],
     selfManagesAggregation: true,
     render: (props: PanelRenderProps<PullsAndCleanupResult>) => (
       <PullsAndCleanupContent context={props.context} />

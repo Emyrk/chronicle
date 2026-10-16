@@ -2,6 +2,7 @@ import { useCallback, useRef, useState, useEffect } from "react";
 import { Clock, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTimeRangeContext } from "./TimeRangeContext";
+import { useRegisterInstanceKeybinds } from "./InstanceKeybinds";
 
 function formatMs(ms: number): string {
   const totalSec = Math.round(ms / 1000);
@@ -10,11 +11,16 @@ function formatMs(ms: number): string {
   return `${min}:${sec.toString().padStart(2, "0")}`;
 }
 
+const TIME_RANGE_KEYBINDS = [
+  { keys: "Esc", action: "Close the time range controller" },
+] as const;
+
 /**
  * Floating time range controller overlay — dual-handle timeline slider.
  * Triggered from the hamburger menu. Shows selected encounter timeline.
  */
 export function TimeRangeController({ onClose }: { onClose: () => void }) {
+  useRegisterInstanceKeybinds("time-range", "Time range", TIME_RANGE_KEYBINDS);
   const timeRange = useTimeRangeContext();
   const { totalDurationMs, startOffsetMs, endOffsetMs, setRange, reset, enabled } = timeRange;
 

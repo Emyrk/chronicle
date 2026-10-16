@@ -19,6 +19,7 @@ export function createExtraAttacksPanel(): PanelDefinition<ExtraAttacksResult, a
     ...extraAttacksProcessor,
     label: "Extra Attacks",
     icon: <Zap className="h-4 w-4" />,
+    keybinds: [],
     supportsPerSecond: true,
     supportsFiltering: true,
     groupingOptions: ENTITY_GROUPING_OPTIONS,

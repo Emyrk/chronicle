@@ -28,6 +28,7 @@ export function createCompanionStatsPanel(): PanelDefinition<CompanionStatsResul
     ...companionStatsProcessor,
     label: "Addon Relay Stats",
     icon: <Radio className="h-4 w-4" />,
+    keybinds: [],
     selfManagesAggregation: true,
     supportsPerSecond: false,
 

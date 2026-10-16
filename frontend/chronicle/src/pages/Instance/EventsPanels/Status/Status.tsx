@@ -9,6 +9,7 @@ export function createStatusPanel(): PanelDefinition<StatusResult, StatusProcess
     ...statusProcessor,
     label: "Status",
     icon: <Activity className="h-4 w-4" />,
+    keybinds: [],
     syncDataMode: "full",
     supportsFiltering: true,
     underConstruction: true,

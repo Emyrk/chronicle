@@ -18,6 +18,7 @@ export function createResourceRegenPanel(): PanelDefinition<ResourceRegenResult,
     ...resourceRegenProcessor,
     label: "Resource Gains",
     icon: <Droplets className="h-4 w-4" />,
+    keybinds: [],
     supportsPerSecond: true,
     supportsFiltering: true,
     defaultFilters: [

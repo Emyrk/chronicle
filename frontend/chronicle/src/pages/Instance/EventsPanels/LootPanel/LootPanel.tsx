@@ -437,6 +437,7 @@ export function createLootPanel(): PanelDefinition<LootResult, any> {
     ...lootProcessor,
     label: "Loot",
     icon: <Package className="h-4 w-4" />,
+    keybinds: [],
     selfManagesAggregation: true,
     checkboxLabel: "Instance offset",
     render: (props: PanelRenderProps<LootResult>) => (
