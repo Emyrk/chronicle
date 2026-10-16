@@ -148,6 +148,7 @@ type sqlcQuerier interface {
 	DeleteUserCustomPanelInstallationsExcept(ctx context.Context, arg DeleteUserCustomPanelInstallationsExceptParams) error
 	DeleteUserFavoriteGuild(ctx context.Context, arg DeleteUserFavoriteGuildParams) error
 	DeleteUserFavoritePlayer(ctx context.Context, arg DeleteUserFavoritePlayerParams) error
+	DeleteUserMapControls(ctx context.Context, userID uuid.UUID) error
 	DeleteUserPanelLayoutByID(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteUserTalentBuildByID(ctx context.Context, arg DeleteUserTalentBuildByIDParams) (int64, error)
 	DeleteWoWLogGroup(ctx context.Context, id uuid.UUID) error
@@ -370,6 +371,7 @@ type sqlcQuerier interface {
 	GetUserCharacterLinks(ctx context.Context, userID uuid.UUID) ([]GetUserCharacterLinksRow, error)
 	GetUserCustomPanelSettings(ctx context.Context, userID uuid.UUID) (UserCustomPanelSetting, error)
 	GetUserDataGrants(ctx context.Context, userID uuid.UUID) ([]DataGrant, error)
+	GetUserMapControls(ctx context.Context, userID uuid.UUID) (UserMapControl, error)
 	GetUserPanelLayoutDefaults(ctx context.Context, id uuid.UUID) (GetUserPanelLayoutDefaultsRow, error)
 	GetUserPasswordByAuthID(ctx context.Context, userAuthID uuid.UUID) (UserPassword, error)
 	GetUserPasswordByResetToken(ctx context.Context, resetTokenHash pgtype.Text) (GetUserPasswordByResetTokenRow, error)
@@ -942,6 +944,7 @@ type sqlcQuerier interface {
 	UpsertUserActionBarSlots(ctx context.Context, arg UpsertUserActionBarSlotsParams) (UpsertUserActionBarSlotsRow, error)
 	UpsertUserCustomPanelInstallation(ctx context.Context, arg UpsertUserCustomPanelInstallationParams) (UserCustomPanelInstallation, error)
 	UpsertUserCustomPanelSettings(ctx context.Context, arg UpsertUserCustomPanelSettingsParams) (UserCustomPanelSetting, error)
+	UpsertUserMapControls(ctx context.Context, arg UpsertUserMapControlsParams) (UserMapControl, error)
 }
 
 var _ sqlcQuerier = (*sqlQuerier)(nil)

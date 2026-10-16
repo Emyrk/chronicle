@@ -49,6 +49,14 @@ export interface MapHealthSample {
   absorb: number;
 }
 
+export interface MapPowerSample {
+  timestampMs: number;
+  current: number;
+  max: number;
+  /** Lowercased power type, e.g. "mana", "rage", "energy". */
+  type: string;
+}
+
 export interface MapEncounterPositions {
   encounterId: string;
   startMs: number;
@@ -56,6 +64,8 @@ export interface MapEncounterPositions {
   positionsByUnit: Map<string, MapPositionSample[]>;
   /** Health changes per unit; a sample is kept only when a value changed. */
   healthByUnit: Map<string, MapHealthSample[]>;
+  /** Power (mana/rage/energy) changes per player, for the raid frames; kept only on change. */
+  powerByUnit: Map<string, MapPowerSample[]>;
   /** Combat events for the replay effects layer. */
   effects: EncounterEffects;
 }
@@ -186,7 +196,7 @@ export const mapProcessor: PanelProcessor<MapResult, MapProcessorEvent> = {
   id: "map",
   streams: ["unit_position", "unit_resources", "damage", "heal", "spell_start", "spell_go", "interrupt", "slain", "ressurection"],
   createState: () => ({ encounters: new Map() }),
-  processEvent: (state, event, encounterId, firstTimestamp) => {
+  processEvent: (state, event, encounterId, firstTimestamp, _streamType, context) => {
     const timestampMs = firstTimestamp.getTime() + event.offsetMilli;
     let encounter = state.encounters.get(encounterId);
     if (!encounter) {
@@ -196,12 +206,14 @@ export const mapProcessor: PanelProcessor<MapResult, MapProcessorEvent> = {
         endMs: timestampMs,
         positionsByUnit: new Map(),
         healthByUnit: new Map(),
+        powerByUnit: new Map(),
         effects: createEncounterEffects(),
       };
       state.encounters.set(encounterId, encounter);
     }
     if (event.type === "unit_resources") {
       addHealthSample(encounter.healthByUnit, event, timestampMs);
+      if (context.players[event.unit]) addPowerSample(encounter.powerByUnit, event, timestampMs);
       return;
     }
     if (event.type !== "unit_position") {
@@ -237,4 +249,16 @@ function addHealthSample(healthByUnit: Map<string, MapHealthSample[]>, event: Un
   const last = samples[samples.length - 1];
   if (last && last.current === event.currentHealth && last.max === event.maximumHealth && last.absorb === event.absorb) return;
   samples.push({ timestampMs, current: event.currentHealth, max: event.maximumHealth, absorb: event.absorb });
+}
+
+function addPowerSample(powerByUnit: Map<string, MapPowerSample[]>, event: UnitResourcesProcessorEvent, timestampMs: number) {
+  let samples = powerByUnit.get(event.unit);
+  if (!samples) {
+    samples = [];
+    powerByUnit.set(event.unit, samples);
+  }
+  const type = (event.powerType ?? "").toLowerCase();
+  const last = samples[samples.length - 1];
+  if (last && last.current === event.currentPower && last.max === event.maximumPower && last.type === type) return;
+  samples.push({ timestampMs, current: event.currentPower, max: event.maximumPower, type });
 }

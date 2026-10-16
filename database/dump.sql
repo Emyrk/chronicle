@@ -1993,6 +1993,12 @@ CREATE TABLE user_favorite_players (
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE user_map_controls (
+    user_id uuid NOT NULL,
+    controls jsonb NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE user_panel_layouts (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid,
@@ -2774,6 +2780,9 @@ ALTER TABLE ONLY user_favorite_guilds
 
 ALTER TABLE ONLY user_favorite_players
     ADD CONSTRAINT user_favorite_players_pkey PRIMARY KEY (user_id, character_guid, realm_id);
+
+ALTER TABLE ONLY user_map_controls
+    ADD CONSTRAINT user_map_controls_pkey PRIMARY KEY (user_id);
 
 ALTER TABLE ONLY user_panel_layouts
     ADD CONSTRAINT user_panel_layouts_code_key UNIQUE (code);
@@ -3557,6 +3566,9 @@ ALTER TABLE ONLY user_favorite_players
 
 ALTER TABLE ONLY user_favorite_players
     ADD CONSTRAINT user_favorite_players_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY user_map_controls
+    ADD CONSTRAINT user_map_controls_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY user_panel_layouts
     ADD CONSTRAINT user_panel_layouts_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;

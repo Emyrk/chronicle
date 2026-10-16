@@ -24,6 +24,7 @@ import {
   type DampedValue,
   type DirectorUnit,
 } from "./cameraDirector";
+import { defaultMapKeyBindings, MAP_CONTROL_ACTIONS, type MapControlAction, type MapKeyBindings } from "./mapControls";
 import { clampToRadius, corsAssetUrl, dungeonMeshPlacement, FloorHeightCache } from "./dungeonMeshes";
 import { FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, type MapPoint, type MapViewport } from "./mapModel";
 import {
@@ -168,6 +169,15 @@ const ORBIT_DAMPING = 0.08;
 const ORBIT_ROTATE_SPEED = 0.6;
 const ORBIT_ZOOM_SPEED = 0.9;
 const ORBIT_PAN_SPEED = 0.8;
+// Keyboard camera (mapControls): pan as a fraction of the camera distance per
+// second, so it feels the same zoomed in or out; rotate in radians per second;
+// zoom by e^(rate) per second.
+const KEY_PAN_SPEED = 0.6;
+const KEY_ROTATE_SPEED = 1.6;
+const KEY_ZOOM_SPEED = 1.2;
+// A dropped frame never jumps the camera further than this.
+const KEY_MAX_STEP_S = 0.1;
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
 // A double-click eases the camera to what was clicked over this long.
 const DOUBLE_CLICK_MS = 450;
 // It halves the distance, but never dives closer than this (yards, mesh mode).
@@ -439,6 +449,11 @@ export class MapScene3D {
   private readonly slashEffects = new Int16Array(MAX_EFFECT_PRIMITIVES);
   private readonly ringEffects = new Int16Array(MAX_EFFECT_PRIMITIVES);
   private pointerInside = false;
+  // The window the map lives in: a popped-out panel has its own.
+  private readonly keyWindow: Window;
+  private keyBindings: MapKeyBindings = defaultMapKeyBindings();
+  private readonly heldActions = new Set<MapControlAction>();
+  private keyMoveLastMs = 0;
   private hoveredEffectKey = "";
   private readonly onEffectHover: (hover: MapScene3DEffectHover | null) => void;
   private readonly combatText: CombatText[] = [];
@@ -475,6 +490,7 @@ export class MapScene3D {
     onDungeonMesh: (state: DungeonMeshState) => void = () => {},
   ) {
     this.container = container;
+    this.keyWindow = container.ownerDocument.defaultView ?? window;
     this.onContextLost = onContextLost;
     this.onEffectHover = onEffectHover;
     this.onUserViewport = onUserViewport;
@@ -488,6 +504,9 @@ export class MapScene3D {
     this.renderer.domElement.addEventListener("pointermove", this.handlePointerMove);
     this.renderer.domElement.addEventListener("pointerleave", this.handlePointerLeave);
     this.renderer.domElement.addEventListener("dblclick", this.handleDoubleClick);
+    this.keyWindow.addEventListener("keydown", this.handleKeyDown);
+    this.keyWindow.addEventListener("keyup", this.handleKeyUp);
+    this.keyWindow.addEventListener("blur", this.releaseKeys);
     container.appendChild(this.renderer.domElement);
 
     this.textureLoader.setCrossOrigin("anonymous");
@@ -574,6 +593,12 @@ export class MapScene3D {
     this.resizeObserver.observe(container);
     this.resize();
     this.resetCamera(false);
+  }
+
+  /** The camera keybinds (KeyboardEvent.code per action). */
+  setKeyBindings(bindings: MapKeyBindings) {
+    this.releaseKeys();
+    this.keyBindings = bindings;
   }
 
   setGround(ground: MapSceneGround) {
@@ -1316,6 +1341,9 @@ export class MapScene3D {
     canvas.removeEventListener("pointermove", this.handlePointerMove);
     canvas.removeEventListener("pointerleave", this.handlePointerLeave);
     canvas.removeEventListener("dblclick", this.handleDoubleClick);
+    this.keyWindow.removeEventListener("keydown", this.handleKeyDown);
+    this.keyWindow.removeEventListener("keyup", this.handleKeyUp);
+    this.keyWindow.removeEventListener("blur", this.releaseKeys);
     for (const guid of [...this.units.keys()]) this.removeUnit(guid);
     this.clearLabel();
     this.clearGround();
@@ -2138,6 +2166,75 @@ export class MapScene3D {
     this.onUserViewport(viewport);
   };
 
+  // Camera keys act while the pointer is over the map, never while typing.
+  private readonly handleKeyDown = (event: KeyboardEvent) => {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    const target = event.target as HTMLElement | null;
+    if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+    if (!this.pointerInside) return;
+    const action = MAP_CONTROL_ACTIONS.find((candidate) => this.keyBindings[candidate.id] === event.code)?.id;
+    if (!action) return;
+    event.preventDefault();
+    if (this.heldActions.has(action)) return;
+    // The first key takes the camera like a drag does: the Director pauses.
+    if (this.heldActions.size === 0) {
+      this.handleControlsStart();
+      this.keyMoveLastMs = 0;
+    }
+    this.heldActions.add(action);
+    this.requestRender();
+  };
+
+  private readonly handleKeyUp = (event: KeyboardEvent) => {
+    const action = MAP_CONTROL_ACTIONS.find((candidate) => this.keyBindings[candidate.id] === event.code)?.id;
+    if (!action || !this.heldActions.delete(action)) return;
+    if (this.heldActions.size === 0) this.handleControlsEnd();
+  };
+
+  // Focus left the window mid-press: the keyup never arrives.
+  private readonly releaseKeys = () => {
+    if (this.heldActions.size === 0) return;
+    this.heldActions.clear();
+    this.handleControlsEnd();
+  };
+
+  // Moves the camera for the held keys; true while any is held.
+  private updateKeyboardCamera(now: number): boolean {
+    if (this.heldActions.size === 0) return false;
+    const dt = this.keyMoveLastMs ? Math.min(KEY_MAX_STEP_S, (now - this.keyMoveLastMs) / 1000) : 0;
+    this.keyMoveLastMs = now;
+    if (dt <= 0) return true;
+    const held = this.heldActions;
+    const axis = (positive: MapControlAction, negative: MapControlAction) => (held.has(positive) ? 1 : 0) - (held.has(negative) ? 1 : 0);
+    const target = this.controls.target;
+    const offset = this.directorVector.copy(this.camera.position).sub(target);
+
+    const rotate = axis("rotate_left", "rotate_right");
+    if (rotate) offset.applyAxisAngle(Y_AXIS, rotate * KEY_ROTATE_SPEED * dt);
+
+    const zoom = axis("zoom_out", "zoom_in");
+    if (zoom) {
+      const distance = offset.length() * Math.exp(zoom * KEY_ZOOM_SPEED * dt);
+      offset.setLength(Math.min(this.controls.maxDistance, Math.max(this.controls.minDistance, distance)));
+    }
+
+    const forward = axis("move_forward", "move_back");
+    const strafe = axis("move_right", "move_left");
+    if (forward || strafe) {
+      // Along the ground, relative to where the camera looks.
+      const horizontal = Math.hypot(offset.x, offset.z) || 1;
+      const fx = -offset.x / horizontal;
+      const fz = -offset.z / horizontal;
+      const step = (offset.length() * KEY_PAN_SPEED * dt) / Math.hypot(forward, strafe);
+      target.x += (fx * forward - fz * strafe) * step;
+      target.z += (fz * forward + fx * strafe) * step;
+    }
+
+    this.camera.position.copy(target).add(offset);
+    this.controls.update();
+    return true;
+  }
+
   private readonly handleContextLost = (event: Event) => {
     event.preventDefault();
     this.onContextLost();
@@ -2165,10 +2262,11 @@ export class MapScene3D {
       const reframing = this.updateViewAnimation(now);
       const moving = this.updateCameraMove(now);
       const directing = this.updateDirector(now);
+      const keyMoving = this.updateKeyboardCamera(now);
       // Damping coasts the camera to a stop after a gesture; update() reports
       // whether it is still moving, so the loop idles again once it settles.
       const damping = this.controls.update();
-      const animating = this.updateEffects(now) || reframing || moving || directing || damping;
+      const animating = this.updateEffects(now) || reframing || moving || directing || keyMoving || damping;
       this.updateBars();
       this.updateEffectHover();
       this.renderer.render(this.scene, this.camera);

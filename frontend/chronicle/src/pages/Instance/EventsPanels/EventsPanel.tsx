@@ -1046,6 +1046,7 @@ function BuiltinEventsPanel({
                 panelId: effectivePanelId,
                 registerChartData,
                 hasCustomFilters,
+                flipCard,
               })}
             </div>
           </>

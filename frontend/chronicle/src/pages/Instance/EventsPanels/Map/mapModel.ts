@@ -131,7 +131,7 @@ export function healthBarColor(fraction: number): string {
 }
 
 /** The unit's latest health sample at or before `timestampMs`, or null. */
-export function latestHealthAt(samples: MapHealthSample[], timestampMs: number): MapHealthSample | null {
+export function latestHealthAt<T extends { timestampMs: number }>(samples: readonly T[], timestampMs: number): T | null {
   const index = latestPositionIndex(samples, timestampMs);
   return index >= 0 ? samples[index] : null;
 }
