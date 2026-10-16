@@ -13,6 +13,15 @@ func EffectiveDamage(msg *messages.Damage) int64 {
 	return int64(msg.Amount) + msg.Trailer.AbsorbedAmount()
 }
 
+// RankedDamage returns the encounter-adjusted damage contribution when present,
+// otherwise it preserves the legacy effective-damage calculation.
+func RankedDamage(msg *messages.Damage) int64 {
+	if msg.RankedDamage != nil {
+		return *msg.RankedDamage
+	}
+	return EffectiveDamage(msg)
+}
+
 func IsPlayerOrPlayerOwned(units *unitdb.Units, unitGUID guid.GUID) bool {
 	cls := units.Classify(unitGUID)
 	if cls.Type == unitdb.UnitTypePlayer {

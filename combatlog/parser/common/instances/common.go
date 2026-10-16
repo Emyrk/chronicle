@@ -98,6 +98,8 @@ type CommonFactory struct {
 	MapIDs               []uint32
 	Hostiles             func(flavor database.WoWFlavor) *identifier.Identifier
 	FlavoredRankings     func(flavor database.WoWFlavor) *rankings.Rankings
+	// ExtraHooks creates fresh instance-specific hooks for each parsed instance.
+	ExtraHooks func() []instancehook.Hook
 	// Preprocessors creates fresh message preprocessors for each parsed instance.
 	Preprocessors func() []instancehook.Preprocessor
 }

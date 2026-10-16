@@ -45,10 +45,11 @@ type DPSTracker struct {
 	units *unitdb.Units
 
 	// Per-encounter state, reset on FightStarted.
-	damageDone  map[guid.GUID]int64
-	damageTaken map[guid.GUID]int64
-	healingDone map[guid.GUID]int64
-	absorbDone  map[guid.GUID]int64
+	damageDone     map[guid.GUID]int64
+	damageTaken    map[guid.GUID]int64
+	healingDone    map[guid.GUID]int64
+	absorbDone     map[guid.GUID]int64
+	deferredDamage []*messages.Damage
 
 	// Results across all encounters.
 	results map[uuid.UUID]*DPSResult
@@ -58,12 +59,13 @@ type DPSTracker struct {
 // classifying GUIDs at fight end.
 func NewDPSTracker(units *unitdb.Units) *DPSTracker {
 	return &DPSTracker{
-		units:       units,
-		damageDone:  make(map[guid.GUID]int64),
-		damageTaken: make(map[guid.GUID]int64),
-		healingDone: make(map[guid.GUID]int64),
-		absorbDone:  make(map[guid.GUID]int64),
-		results:     make(map[uuid.UUID]*DPSResult),
+		units:          units,
+		damageDone:     make(map[guid.GUID]int64),
+		damageTaken:    make(map[guid.GUID]int64),
+		healingDone:    make(map[guid.GUID]int64),
+		absorbDone:     make(map[guid.GUID]int64),
+		deferredDamage: make([]*messages.Damage, 0),
+		results:        make(map[uuid.UUID]*DPSResult),
 	}
 }
 
@@ -72,6 +74,7 @@ func (t *DPSTracker) FightStarted(_ uuid.UUID, _ messages.Message) {
 	t.damageTaken = make(map[guid.GUID]int64)
 	t.healingDone = make(map[guid.GUID]int64)
 	t.absorbDone = make(map[guid.GUID]int64)
+	t.deferredDamage = t.deferredDamage[:0]
 }
 
 func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message) error {
@@ -81,55 +84,17 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 
 	switch msg := m.(type) {
 	case *messages.Damage:
-		effectiveDamage := combatmetrics.EffectiveDamage(msg)
-		if effectiveDamage <= 0 {
-			return nil
-		}
-
 		// Track damage taken by players from all sources (for role detection).
 		targetCls := t.units.Classify(msg.Target)
 		if targetCls.Type == unitdb.UnitTypePlayer {
 			t.damageTaken[msg.Target] += int64(msg.Amount)
 		}
 
-		// Only track player (or pet/totem) damage output to hostile non-player targets.
-		// Exclude player targets even if temporarily hostile (e.g., mind-controlled).
-		if msg.Caster == nil {
-			return nil // skip environmental damage for damage-done
-		}
-		// Never count damage to players or player-owned units (pets/totems).
-		if targetCls.Type == unitdb.UnitTypePlayer {
+		if msg.RankedDamagePending {
+			t.deferredDamage = append(t.deferredDamage, msg)
 			return nil
 		}
-		if targetCls.Relation.HasOwner() {
-			ownerCls := t.units.Classify(*targetCls.Relation.Owner)
-			if ownerCls.Type == unitdb.UnitTypePlayer {
-				return nil
-			}
-		}
-		caster := *msg.Caster
-		casterCls := t.units.Classify(caster)
-
-		// Determine who gets credit for this damage.
-		// - Player caster → credit to player
-		// - Pet/totem (has owner) → credit to the pet GUID (owner attribution in logparse)
-		// - Possessed creature (mind control) → credit to the controlling player
-		// - Anything else → skip
-		creditGUID := caster
-		if casterCls.Type == unitdb.UnitTypePlayer {
-			// Direct player damage — credit to player.
-		} else if casterCls.Relation.HasOwner() {
-			// Pet/totem — record under pet GUID; logparse sums into owner.
-		} else if casterCls.Possession != nil && t.units.Classify(casterCls.Possession.Controller).Type == unitdb.UnitTypePlayer {
-			// Possessed creature — credit to the controlling player directly.
-			creditGUID = casterCls.Possession.Controller
-		} else {
-			return nil // not player-attributable damage
-		}
-
-		if targetCls.Affiliation == unitdb.AffiliationHostile {
-			t.damageDone[creditGUID] += effectiveDamage
-		}
+		t.accumulateDamageDone(msg)
 
 	case *messages.Heal:
 		// Match the Healing Done panel: only count effective healing to players
@@ -156,7 +121,48 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 	return nil
 }
 
+func (t *DPSTracker) accumulateDamageDone(msg *messages.Damage) {
+	rankedDamage := combatmetrics.RankedDamage(msg)
+	if rankedDamage <= 0 || msg.Caster == nil {
+		return
+	}
+
+	// Only track player (or pet/totem) damage output to hostile non-player targets.
+	// Exclude player targets even if temporarily hostile (e.g., mind-controlled).
+	targetCls := t.units.Classify(msg.Target)
+	if targetCls.Type == unitdb.UnitTypePlayer {
+		return
+	}
+	if targetCls.Relation.HasOwner() {
+		ownerCls := t.units.Classify(*targetCls.Relation.Owner)
+		if ownerCls.Type == unitdb.UnitTypePlayer {
+			return
+		}
+	}
+
+	caster := *msg.Caster
+	casterCls := t.units.Classify(caster)
+	creditGUID := caster
+	switch {
+	case casterCls.Type == unitdb.UnitTypePlayer:
+	case casterCls.Relation.HasOwner():
+	case casterCls.Possession != nil && t.units.Classify(casterCls.Possession.Controller).Type == unitdb.UnitTypePlayer:
+		creditGUID = casterCls.Possession.Controller
+	default:
+		return
+	}
+
+	if targetCls.Affiliation == unitdb.AffiliationHostile {
+		t.damageDone[creditGUID] += rankedDamage
+	}
+}
+
 func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
+	for _, damage := range t.deferredDamage {
+		t.accumulateDamageDone(damage)
+	}
+	clear(t.deferredDamage)
+
 	// Merge all GUIDs seen across all three metric maps.
 	allGUIDs := make(map[guid.GUID]struct{})
 	for g := range t.damageDone {

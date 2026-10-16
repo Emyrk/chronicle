@@ -43,17 +43,18 @@ func SpellData(spell *chrondbc.Spell) *chronicleproto.SpellData {
 func Damage(from time.Time, idx int32, dmg *messages.Damage) *chronicleproto.Damage {
 	school := schoolWithFallback(dmg.School, dmg.SpellData)
 	return &chronicleproto.Damage{
-		Meta:       EventMeta(from, idx, dmg),
-		Caster:     OptionalGUID(dmg.Caster),
-		SourceName: dmg.SourceName(),
-		Target:     dmg.Target.String(),
-		HitType:    HitType(dmg.HitType),
-		Amount:     dmg.Amount,
-		School:     School(school),
-		Schools:    Schools(school),
-		Tailers:    slice.List(dmg.Trailer, TrailerEntry),
-		SpellData:  SpellData(dmg.SpellData),
-		Overkill:   dmg.Overkill,
+		Meta:         EventMeta(from, idx, dmg),
+		Caster:       OptionalGUID(dmg.Caster),
+		SourceName:   dmg.SourceName(),
+		Target:       dmg.Target.String(),
+		HitType:      HitType(dmg.HitType),
+		Amount:       dmg.Amount,
+		School:       School(school),
+		Schools:      Schools(school),
+		Tailers:      slice.List(dmg.Trailer, TrailerEntry),
+		SpellData:    SpellData(dmg.SpellData),
+		Overkill:     dmg.Overkill,
+		RankedDamage: dmg.RankedDamage,
 	}
 }
 
