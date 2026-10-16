@@ -10,7 +10,7 @@ const context: ProcessorContext = {
   entitySelection: { enemyIds: new Set(), playerIds: new Set() },
 };
 
-function position(unit: string, offsetMilli: number, x: number, y: number): UnitPositionProcessorEvent {
+function position(unit: string, offsetMilli: number, x: number, y: number, z?: number): UnitPositionProcessorEvent {
   return {
     type: "unit_position",
     index: offsetMilli,
@@ -18,6 +18,7 @@ function position(unit: string, offsetMilli: number, x: number, y: number): Unit
     unit,
     x,
     y,
+    ...(z === undefined ? {} : { z }),
     mapId: 533,
     facing: 1.5,
     activity: [],
@@ -31,7 +32,7 @@ describe("mapProcessor", () => {
     const state = mapProcessor.createState();
     const start = new Date("2026-10-07T20:00:00Z");
 
-    mapProcessor.processEvent(state, position("player", 100, 10, 20), "encounter", start, "unit_position", context);
+    mapProcessor.processEvent(state, position("player", 100, 10, 20, 5), "encounter", start, "unit_position", context);
     mapProcessor.processEvent(state, position("enemy", 150, 30, 40), "encounter", start, "unit_position", context);
     mapProcessor.processEvent(state, position("player", 200, 11, 22), "encounter", start, "unit_position", context);
 
@@ -39,7 +40,7 @@ describe("mapProcessor", () => {
     expect(encounter?.startMs).toBe(start.getTime());
     expect(encounter?.endMs).toBe(start.getTime() + 200);
     expect(encounter?.positionsByUnit.get("player")).toEqual([
-      { timestampMs: start.getTime() + 100, x: 10, y: 20, mapId: 533, facing: 1.5 },
+      { timestampMs: start.getTime() + 100, x: 10, y: 20, z: 5, mapId: 533, facing: 1.5 },
       { timestampMs: start.getTime() + 200, x: 11, y: 22, mapId: 533, facing: 1.5 },
     ]);
     expect(encounter?.positionsByUnit.get("enemy")).toHaveLength(1);

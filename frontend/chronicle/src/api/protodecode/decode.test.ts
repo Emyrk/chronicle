@@ -192,6 +192,7 @@ describe('unit telemetry cursors', () => {
       unit: '0xUNIT',
       x: 1751.67,
       y: 1697.84,
+      z: 42.5,
       mapId: 1420,
       facing: 4.4674,
     });
@@ -206,6 +207,7 @@ describe('unit telemetry cursors', () => {
       unit: '0xUNIT',
       x: 1751.67,
       y: 1697.84,
+      z: 42.5,
       mapId: 1420,
       facing: 4.4674,
     });

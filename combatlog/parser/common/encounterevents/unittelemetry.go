@@ -9,6 +9,8 @@ import (
 type unitPositionSnapshot struct {
 	x      float64
 	y      float64
+	z      float64
+	hasZ   bool
 	mapID  int32
 	facing float64
 }
@@ -45,6 +47,10 @@ func (d *unitTelemetryDeduplicator) duplicate(msg messages.Message) bool {
 			y:      typed.Y,
 			mapID:  typed.MapID,
 			facing: typed.Facing,
+		}
+		if typed.Z != nil {
+			snapshot.z = *typed.Z
+			snapshot.hasZ = true
 		}
 		previous, ok := d.positions[typed.Unit]
 		d.positions[typed.Unit] = snapshot

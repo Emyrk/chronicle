@@ -521,10 +521,13 @@ func (p *Parser) unitState(_ context.Context, ts time.Time, m *Matched) ([]messa
 	if err != nil {
 		return nil, err
 	}
-	// Chronicle's position event is two-dimensional. Validate z from the addon
-	// payload so malformed UNIT_STATE lines still fail consistently, then discard it.
-	if _, _, err := parseOptionalFloat64("z", zRaw); err != nil {
+	z, hasZ, err := parseOptionalFloat64("z", zRaw)
+	if err != nil {
 		return nil, err
+	}
+	var optionalZ *float64
+	if hasZ {
+		optionalZ = ptr.Ref(z)
 	}
 	if hasX && hasY {
 		result = append(result, &messages.UnitPosition{
@@ -532,6 +535,7 @@ func (p *Parser) unitState(_ context.Context, ts time.Time, m *Matched) ([]messa
 			Unit:        unit,
 			X:           x,
 			Y:           y,
+			Z:           optionalZ,
 			MapID:       mapID,
 		})
 		p.sawUnitPosition = true

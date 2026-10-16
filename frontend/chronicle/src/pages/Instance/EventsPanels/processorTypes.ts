@@ -91,6 +91,7 @@ export interface UnitPositionProcessorEvent extends EventMeta {
   unit: string;
   x: number;
   y: number;
+  z?: number;
   mapId: number;
   facing: number;
 }
