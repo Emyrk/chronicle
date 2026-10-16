@@ -1984,7 +1984,12 @@ function EncounterDetail({
             type="button"
             onClick={() => onFocusedChange(!focused)}
             title={focused ? "Exit focus (Esc)" : "Focus: hide everything but the encounters and the layout (Shift+F)"}
-            className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className={cn(
+              "ml-auto flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              focused
+                ? "text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
           >
             {focused ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             {focused ? "Exit focus" : "Focus"}
@@ -3420,7 +3425,8 @@ export function InstancePageView({
       data-live-cursor-surface="instance"
       className={cn(
         "w-full",
-        focused ? "flex h-screen flex-col overflow-hidden p-2" : "py-6",
+        // Focus mode reads as its own space: an accent line along the top and a faint tint behind the panels.
+        focused ? "flex h-screen flex-col overflow-hidden border-t-2 border-primary bg-primary/[0.06] p-2" : "py-6",
         // Mobile: minimal padding, full width
         !focused && (isMobile ? "px-2" : "px-4"),
       )}
