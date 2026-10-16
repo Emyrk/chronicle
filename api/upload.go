@@ -294,6 +294,10 @@ func (api *API) WoWLogUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if api.Opts.Sidekick != nil {
+		api.Opts.Sidekick.RecordUpload(ctx)
+	}
+
 	fileIDs := make([]uuid.UUID, 0, len(files))
 	for _, f := range files {
 		fileIDs = append(fileIDs, f.ID)
@@ -418,6 +422,10 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 			Status: http.StatusInternalServerError,
 		})
 		return
+	}
+
+	if api.Opts.Sidekick != nil {
+		api.Opts.Sidekick.RecordUpload(ctx)
 	}
 
 	fileIDs := make([]uuid.UUID, 0, len(files))

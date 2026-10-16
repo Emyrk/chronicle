@@ -1865,12 +1865,16 @@ type LogInstancesGuild struct {
 }
 
 type OauthDeviceSession struct {
-	DeviceSignature string             `db:"device_signature" json:"device_signature"`
-	UserSignature   string             `db:"user_signature" json:"user_signature"`
-	Request         []byte             `db:"request" json:"request"`
-	Invalidated     bool               `db:"invalidated" json:"invalidated"`
-	ExpiresAt       pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
-	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	DeviceSignature              string             `db:"device_signature" json:"device_signature"`
+	UserSignature                string             `db:"user_signature" json:"user_signature"`
+	Request                      []byte             `db:"request" json:"request"`
+	Invalidated                  bool               `db:"invalidated" json:"invalidated"`
+	ExpiresAt                    pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	CreatedAt                    pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	SidekickInstallationID       uuid.NullUUID      `db:"sidekick_installation_id" json:"sidekick_installation_id"`
+	SidekickInstallationName     pgtype.Text        `db:"sidekick_installation_name" json:"sidekick_installation_name"`
+	SidekickInstallationPlatform pgtype.Text        `db:"sidekick_installation_platform" json:"sidekick_installation_platform"`
+	SidekickInstallationVersion  pgtype.Text        `db:"sidekick_installation_version" json:"sidekick_installation_version"`
 }
 
 type OauthRelayCode struct {
@@ -2128,6 +2132,47 @@ type SharedView struct {
 	CreatedBy    uuid.NullUUID      `db:"created_by" json:"created_by"`
 	CreatedAt    pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	InstanceSlug string             `db:"instance_slug" json:"instance_slug"`
+}
+
+type SidekickInstallation struct {
+	ID             uuid.UUID          `db:"id" json:"id"`
+	UserID         uuid.UUID          `db:"user_id" json:"user_id"`
+	Name           string             `db:"name" json:"name"`
+	Platform       string             `db:"platform" json:"platform"`
+	Version        string             `db:"version" json:"version"`
+	LastSeenAt     pgtype.Timestamptz `db:"last_seen_at" json:"last_seen_at"`
+	LastUploadAt   pgtype.Timestamptz `db:"last_upload_at" json:"last_upload_at"`
+	DisconnectedAt pgtype.Timestamptz `db:"disconnected_at" json:"disconnected_at"`
+	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type SidekickIssue struct {
+	ID              uuid.UUID          `db:"id" json:"id"`
+	SidekickID      uuid.UUID          `db:"sidekick_id" json:"sidekick_id"`
+	Code            string             `db:"code" json:"code"`
+	Message         string             `db:"message" json:"message"`
+	Details         string             `db:"details" json:"details"`
+	FirstReportedAt pgtype.Timestamptz `db:"first_reported_at" json:"first_reported_at"`
+	LastReportedAt  pgtype.Timestamptz `db:"last_reported_at" json:"last_reported_at"`
+	ResolvedAt      pgtype.Timestamptz `db:"resolved_at" json:"resolved_at"`
+}
+
+type SidekickOauthGrant struct {
+	OauthRequestID string             `db:"oauth_request_id" json:"oauth_request_id"`
+	SidekickID     uuid.UUID          `db:"sidekick_id" json:"sidekick_id"`
+	RevokedAt      pgtype.Timestamptz `db:"revoked_at" json:"revoked_at"`
+	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type SidekickWowDirectory struct {
+	SidekickID    uuid.UUID          `db:"sidekick_id" json:"sidekick_id"`
+	Path          string             `db:"path" json:"path"`
+	TenantName    string             `db:"tenant_name" json:"tenant_name"`
+	TenantBaseUrl string             `db:"tenant_base_url" json:"tenant_base_url"`
+	Realmlist     string             `db:"realmlist" json:"realmlist"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type SiteConfig struct {

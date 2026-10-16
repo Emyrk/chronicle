@@ -72,6 +72,7 @@ import {
   BillingSettings,
   CharacterSettings,
   StorageSettings,
+  SidekickSettings,
   NotificationSettings,
   PrivacySettings,
   AppearanceSettings,
@@ -253,6 +254,7 @@ function App() {
           <Route path="billing" element={<BillingSettings />} />
           <Route path="characters" element={<CharacterSettings />} />
           <Route path="storage" element={<StorageSettings />} />
+          <Route path="sidekick" element={<SidekickSettings />} />
           <Route path="notifications" element={<NotificationSettings />} />
           <Route path="privacy" element={<PrivacySettings />} />
           <Route path="appearance" element={<AppearanceSettings />} />

@@ -5,11 +5,21 @@ ON CONFLICT (id) DO UPDATE SET id = oauth_server_secrets.id
 RETURNING secret;
 
 -- name: CreateOAuthDeviceSession :exec
-INSERT INTO oauth_device_sessions (device_signature, user_signature, request, expires_at)
-VALUES (@device_signature, @user_signature, @request, @expires_at);
+INSERT INTO oauth_device_sessions (
+  device_signature, user_signature, request, expires_at,
+  sidekick_installation_id, sidekick_installation_name,
+  sidekick_installation_platform, sidekick_installation_version
+)
+VALUES (
+  @device_signature, @user_signature, @request, @expires_at,
+  @sidekick_installation_id, @sidekick_installation_name,
+  @sidekick_installation_platform, @sidekick_installation_version
+);
 
 -- name: GetOAuthDeviceSession :one
-SELECT device_signature, user_signature, request, invalidated
+SELECT device_signature, user_signature, request, invalidated,
+  sidekick_installation_id, sidekick_installation_name,
+  sidekick_installation_platform, sidekick_installation_version
 FROM oauth_device_sessions
 WHERE (device_signature = @signature OR user_signature = @signature)
   AND expires_at > NOW();
@@ -68,6 +78,10 @@ WHERE expires_at <= NOW();
 -- name: RevokeOAuthTokenSessions :execrows
 DELETE FROM oauth_token_sessions
 WHERE request_id = @request_id AND token_type = @token_type;
+
+-- name: DeleteOAuthTokenSessionsByRequestID :execrows
+DELETE FROM oauth_token_sessions
+WHERE request_id = @request_id;
 
 -- name: RotateOAuthRefreshToken :one
 WITH deleted_refresh AS (

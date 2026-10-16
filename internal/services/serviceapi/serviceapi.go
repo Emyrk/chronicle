@@ -37,6 +37,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/Emyrk/chronicle/internal/services/serviceriver"
+	"github.com/Emyrk/chronicle/internal/services/servicesidekick"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewhatsnew"
@@ -128,6 +129,7 @@ func (s *Service) DependsOn() []string {
 		servicegithub.OnGitHub(),
 		serviceexternalapi.OnExternalAPI(),
 		serviceoauth.OnOAuth(),
+		servicesidekick.OnSidekick(),
 	}
 }
 
@@ -213,6 +215,7 @@ func (s *Service) Start(ctx context.Context) error {
 	githubClient := servicegithub.GitHub(s.broker).Client()
 	externalAPI := serviceexternalapi.ExternalAPI(s.broker)
 	oauthService := serviceoauth.OAuth(s.broker)
+	sidekickService := servicesidekick.Sidekick(s.broker)
 	rankings := servicerankings.Rankings(s.broker)
 	mailer := servicemail.Mailer(s.broker)
 
@@ -237,6 +240,7 @@ func (s *Service) Start(ctx context.Context) error {
 		InternalGameData:      gamedata,
 		ExternalAPI:           externalAPI,
 		OAuth:                 oauthService,
+		Sidekick:              sidekickService,
 		Rankings:              rankings,
 		Mailer:                mailer,
 		CustomPanelHTTPClient: githubClient,
