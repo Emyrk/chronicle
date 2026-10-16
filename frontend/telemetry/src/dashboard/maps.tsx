@@ -121,8 +121,8 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
 
         <section class="toolbar">
           <select id="namespace" aria-label="Map namespace">
-            <option>forever</option><option>kronos</option><option>octowow</option><option>turtle</option>
-            <option>tbc</option><option>vanillaplus</option><option>warmane</option><option>azerothcore</option>
+            <option>forever</option><option>kronos</option><option>epoch</option><option>turtle</option>
+            <option>tbc</option><option>vanillaplus</option><option>warmane</option><option>ascension</option><option>azerothcore</option>
           </select>
           <input id="search" type="search" aria-label="Search maps" placeholder="Search maps by name, ID, or directory" />
           <div class="toolbar-actions">
@@ -393,7 +393,12 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
             const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Load failed');
             if (request !== loadRequest || els.namespace.value !== namespace) return;
             state = result; selectedID = state.instances[0]?.mapID || null;
-            setStatus(state.has_draft ? 'Saved draft loaded. Publish when it is ready.' : 'Published manifests loaded. Changes stay private until saved and published.');
+            const bootstrap = state.base_source === 'reader'
+              ? ' Recovered native metadata from the existing reader manifest; first publish will create manifest.original.json.'
+              : state.base_source === 'empty'
+                ? ' No native manifest exists yet; add a named map ID and first publish will bootstrap manifest.original.json.'
+                : '';
+            setStatus((state.has_draft ? 'Saved draft loaded. Publish when it is ready.' : 'Published manifests loaded. Changes stay private until saved and published.') + bootstrap);
             renderList(); renderEditor();
           } catch (error) {
             if (request !== loadRequest || els.namespace.value !== namespace) return;

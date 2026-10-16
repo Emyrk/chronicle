@@ -101,14 +101,18 @@ Common live failures:
 The Access-protected map dashboard at `/internal/maps` manages manual PNG render and calibrated GLB mesh registrations for these R2 namespaces:
 
 ```text
-forever, kronos, octowow, turtle, tbc, vanillaplus, warmane, azerothcore
+forever, kronos, epoch, turtle, tbc, vanillaplus, warmane, ascension, azerothcore
 ```
+
+OctoWoW and Capy reuse the `turtle` icon CDN namespace and are managed through the Turtle entry; they do not have separate R2 prefixes.
 
 The Worker uses the `MAPS` R2 binding configured in `wrangler.toml`. The production S3-compatible endpoint
 `https://70f93c8cfa460e9932953b7fa0c9ec04.r2.cloudflarestorage.com/icons`
 identifies the Cloudflare account endpoint and the `icons` bucket, so the binding uses `bucket_name = "icons"`.
 
-Each namespace must already contain `<namespace>/maps/manifest.original.json`. The dashboard reads the existing optional layer manifests, uploads immutable assets beneath `renders/` or `3d/`, and stores private draft metadata at `<namespace>/maps/drafts/manual.json`.
+The dashboard prefers `<namespace>/maps/manifest.original.json`. For legacy namespaces that only have the older reader-facing `manifest.json`, it recovers the native map inventory and any embedded optional artwork before editing. A namespace with neither manifest starts from an empty product-specific v2 base, so operators can add named map IDs and publish manual renders or meshes. The first publish writes a reusable `manifest.original.json` bootstrap before the layer manifests and merged reader manifest. Native extraction can replace that empty bootstrap later without changing manual layer ownership.
+
+The dashboard uploads immutable assets beneath `renders/` or `3d/`, and stores private draft metadata at `<namespace>/maps/drafts/manual.json`.
 
 Selecting a map opens a draft-aware preview workbench:
 
@@ -127,7 +131,7 @@ A per-namespace R2 lock and draft ETag prevent concurrent dashboard publications
 
 Cloudflare Access must cover all `/internal/*` routes. Mutating map APIs also reject cross-site browser requests. Uploaded assets are content-addressed and intentionally retained when replaced or when a draft is discarded, matching the existing map publisher's no-delete policy.
 
-For local preview, create or populate a local Wrangler R2 bucket with at least one namespace's original manifest, then open:
+For local preview, start the Worker with a local Wrangler R2 bucket. Namespaces may contain an original manifest, a legacy reader manifest, or no manifest yet:
 
 ```text
 http://localhost:8787/internal/maps
