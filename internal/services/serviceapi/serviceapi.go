@@ -244,6 +244,7 @@ func (s *Service) Start(ctx context.Context) error {
 		GA4ID:                 s.ga4MeasurementID,
 		ShortLinkDomain:       s.shortLinkDomain,
 		ClientUploadsDisabled: s.clientUploadsDisabled,
+		BillingEnabled:        servicebilling.BillingEnabled(s.broker),
 		ExternalVerification:  s.externalVerification(),
 		DevOAuth:              s.devAuth,
 		Discord:               s.discordAuth,

@@ -828,6 +828,7 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 		SignupsEnabled:        config.SignupsEnabled,
 		ShortLinkDomain:       a.Opts.ShortLinkDomain,
 		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled || config.ClientUploadsDisabled || (t != nil && t.DisableClientUpload),
+		BillingEnabled:        a.Opts.BillingEnabled,
 		AdsEnabled:            adsEnabled,
 	}
 	if adsEnabled {
@@ -915,6 +916,7 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 		SignupsEnabled:        config.SignupsEnabled,
 		ShortLinkDomain:       a.Opts.ShortLinkDomain,
 		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled || config.ClientUploadsDisabled || (t != nil && t.DisableClientUpload),
+		BillingEnabled:        a.Opts.BillingEnabled,
 		AdsEnabled:            adsEnabled,
 		Branding:              unmarshalBranding(config.Branding),
 		Discoverable:          config.Discoverable,

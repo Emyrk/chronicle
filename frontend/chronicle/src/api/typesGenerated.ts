@@ -3567,6 +3567,11 @@ export interface SiteConfig {
      */
     readonly client_uploads_disabled: boolean;
     /**
+     * BillingEnabled is true when the deployment has configured its expected
+     * Stripe account ID, allowing billing links to be shown in the UI.
+     */
+    readonly billing_enabled: boolean;
+    /**
      * AdsEnabled is true only when the resolved tenant or root site opted into ads
      * and the deployment configured both ads.txt and a NitroPay site ID.
      */

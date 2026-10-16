@@ -1,6 +1,7 @@
 import { useState } from "react"
+import { Navigate } from "react-router-dom"
 import type { BillingPrice, BillingSummary } from "@/api/typesGenerated"
-import { useCreateBillingCheckout, useCreateBillingPortal, useBillingSummary } from "@/api/queries"
+import { useCreateBillingCheckout, useCreateBillingPortal, useBillingSummary, useSiteConfig } from "@/api/queries"
 import { iconUrl } from "@/config/iconUrl"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -69,7 +70,11 @@ const REWARDS = [
 ]
 
 export function BillingSettings() {
+  const { data: siteConfig, isLoading: isSiteConfigLoading } = useSiteConfig()
   const { data: billing, isLoading } = useBillingSummary()
+
+  if (isSiteConfigLoading) return null
+  if (!siteConfig?.billing_enabled) return <Navigate to="/account/settings" replace />
 
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">Loading billing status…</p>

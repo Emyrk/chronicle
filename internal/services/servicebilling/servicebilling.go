@@ -28,6 +28,10 @@ func BillingService(broker *services.Services) *Service {
 	return services.MustGet[*Service](broker)
 }
 
+func BillingEnabled(broker *services.Services) bool {
+	return services.MustGet[*Service](broker).BillingEnabled()
+}
+
 func OnBilling() string { return (&Service{}).Name() }
 
 func ConfigureDevStripeWebhookSecret(broker *services.Services, secret string, devAuth bool) error {
@@ -101,6 +105,10 @@ func (s *Service) supporterPriceIDs() []string {
 		return []string{s.stripeSupporterPrice}
 	}
 	return nil
+}
+
+func (s *Service) BillingEnabled() bool {
+	return s != nil && s.stripeAccountID != ""
 }
 
 func (s *Service) configureDevStripeWebhookSecret(secret string, devAuth bool) error {

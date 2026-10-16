@@ -29,6 +29,13 @@ func TestOptionsIncludeStripeAccountID(t *testing.T) {
 	require.True(t, found)
 }
 
+func TestBillingEnabledRequiresStripeAccountID(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, (&Service{}).BillingEnabled())
+	require.True(t, (&Service{stripeAccountID: "acct_expected"}).BillingEnabled())
+}
+
 func TestConfigureDevStripeWebhookSecret(t *testing.T) {
 	t.Parallel()
 

@@ -172,9 +172,11 @@ export function AccountLayout() {
   const isMobile = useIsMobile();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const { data: siteConfig } = useSiteConfig();
-  const tabs = siteConfig?.client_uploads_disabled
-    ? allTabs.filter((t) => t.path !== "/account/storage")
-    : allTabs;
+  const tabs = allTabs.filter((tab) => {
+    if (tab.path === "/account/storage" && siteConfig?.client_uploads_disabled) return false;
+    if (tab.path === "/account/billing" && !siteConfig?.billing_enabled) return false;
+    return true;
+  });
 
   const renderNavLinks = (closeOnNavigate: boolean) => (
     <ul className="space-y-1">

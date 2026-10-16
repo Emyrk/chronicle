@@ -87,6 +87,8 @@ type Options struct {
 	ShortLinkDomain string
 	// ClientUploadsDisabled disables client-side log uploads (for servers using server-side logging).
 	ClientUploadsDisabled bool
+	// BillingEnabled exposes billing navigation when a Stripe account ID is configured.
+	BillingEnabled bool
 	// ExternalVerification enables the external character verification
 	// provider (e.g. zug-zug). Configured via environment variables; nil
 	// when disabled.
