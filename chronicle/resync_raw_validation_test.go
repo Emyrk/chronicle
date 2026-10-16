@@ -35,7 +35,7 @@ func TestResyncParseInsertOpts(t *testing.T) {
 	require.True(t, opts.Pending, "parse job must be staged before parsed data is deleted")
 	require.True(t, opts.UniqueOpts.ByArgs)
 	require.True(t, opts.UniqueOpts.ByQueue, "isolated parse must not reuse a production queue job")
-	require.Equal(t, 1, opts.MaxAttempts, "isolated parse must fail after a partial write instead of retrying into duplicate keys")
+	require.Equal(t, 2, opts.MaxAttempts, "same-generation retries reset staged output before writing")
 }
 
 func TestNewArgsLogParseMatchesTenantReparse(t *testing.T) {
@@ -46,13 +46,14 @@ func TestNewArgsLogParseMatchesTenantReparse(t *testing.T) {
 	tenantID := uuid.New()
 	ctx := servicetenant.WithTenantID(t.Context(), tenantID)
 
-	got := newArgsLogParse(ctx, logID, true, true, realmID)
+	got := newArgsLogParse(ctx, logID, 7, true, true, realmID)
 	require.Equal(t, ArgsLogParse{
-		LogID:        logID,
-		RealmID:      realmID,
-		TenantID:     tenantID,
-		Verbose:      true,
-		IdentityMode: true,
+		LogID:           logID,
+		ParseGeneration: 7,
+		RealmID:         realmID,
+		TenantID:        tenantID,
+		Verbose:         true,
+		IdentityMode:    true,
 	}, got)
 }
 
@@ -66,9 +67,10 @@ func TestNewReplacementArgsLogParseCarriesPreviousRankingRuns(t *testing.T) {
 	oldRunID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
 	ctx := servicetenant.WithTenantID(t.Context(), tenantID)
 
-	got := newReplacementArgsLogParse(ctx, logID, true, true, realmID, []uuid.UUID{oldRunID, oldInstanceID, oldRunID})
+	got := newReplacementArgsLogParse(ctx, logID, 9, true, true, realmID, []uuid.UUID{oldRunID, oldInstanceID, oldRunID})
 	require.Equal(t, ArgsLogParse{
 		LogID:                 logID,
+		ParseGeneration:       9,
 		RealmID:               realmID,
 		TenantID:              tenantID,
 		Verbose:               true,

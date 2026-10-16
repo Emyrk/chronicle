@@ -66,7 +66,8 @@ type OutputLogParse struct {
 }
 
 type ArgsLogParse struct {
-	LogID uuid.UUID `json:"log_group_id"`
+	LogID           uuid.UUID `json:"log_group_id"`
+	ParseGeneration int64     `json:"parse_generation"`
 	// RealmID is optional
 	RealmID      uuid.UUID `json:"realm_id,omitempty"`
 	TenantID     uuid.UUID `json:"tenant_id,omitempty"`
@@ -221,6 +222,19 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		jobResult = "failure"
 		return fmt.Errorf("fetch log group: %w", err)
 	}
+	if logGroup.WoWLogGroup.ParseGeneration != job.Args.ParseGeneration {
+		jobResult = "cancelled"
+		return nil
+	}
+	if err := w.parent.stageParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration); err != nil {
+		if errors.Is(err, errStaleParseGeneration) {
+			jobResult = "cancelled"
+			return nil
+		}
+		jobResult = "failure"
+		return fmt.Errorf("stage parse generation: %w", err)
+	}
+
 	// ── Resolve format & flavor ─────────────────────────────────────────
 	//
 	// Format resolution:
@@ -326,10 +340,22 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	var flavorChanged bool
 	flavor, flavorChanged = resolveLogFlavor(flavor, explicitFlavor, resolved)
 	if flavorChanged {
-		_ = db.UpdateWoWLogGroupFlavor(ctx, database.UpdateWoWLogGroupFlavorParams{
-			ID:     lg.ID,
-			Flavor: flavor.Strings(),
-		})
+		err := db.InTx(ctx, func(tx *authz.AuthzTX) error {
+			if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, job.Args.ParseGeneration); err != nil {
+				return err
+			}
+			return tx.UpdateWoWLogGroupFlavor(ctx, database.UpdateWoWLogGroupFlavorParams{
+				ID:     lg.ID,
+				Flavor: flavor.Strings(),
+			})
+		}, nil)
+		if errors.Is(err, errStaleParseGeneration) {
+			jobResult = "cancelled"
+			return nil
+		}
+		if err != nil {
+			w.parent.logger.WarnContext(ctx, "persist resolved log flavor", slog.Any("error", err))
+		}
 	}
 
 	talentTreeData, talentTreeErr := gameDB.TalentTrees(ctx, resolved.DatasetID)
@@ -378,12 +404,6 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 
 	if parsed.creaturesState != nil {
 		report.Identity = buildIdentityReport(parsed.creaturesState)
-	}
-
-	err = db.InsertParsedLogGroup(ctx, job.Args.LogID)
-	if err != nil {
-		jobResult = "cancelled"
-		return river.JobCancel(fmt.Errorf("insert parsed log group: %w", err))
 	}
 
 	// Track total finalize and DB insert durations
@@ -482,6 +502,9 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		}()
 		var dbinstance database.LogInstance
 		err = db.InTx(ctx, func(tx *authz.AuthzTX) error {
+			if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, job.Args.ParseGeneration); err != nil {
+				return err
+			}
 			guild, err := finalized.Guilds.Insert(ctx, encountersState.Units, instanceID, realmID, resolved.DatasetID, tx)
 			if err != nil {
 				return fmt.Errorf("insert guild: %w", err)
@@ -789,6 +812,9 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			w.parent.insertParsedInstanceMu.Unlock()
 			insertLockHeld = false
 			jobResult = "cancelled"
+			if errors.Is(err, errStaleParseGeneration) {
+				return nil
+			}
 			return river.JobCancel(fmt.Errorf("insert finalized encounters: %w", err))
 		}
 
@@ -798,10 +824,19 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		rankingRunAffectedIDs := []uuid.UUID{dbinstance.ID}
 		if instanceStart.Valid {
 			dupErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
+				if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, job.Args.ParseGeneration); err != nil {
+					return err
+				}
 				var err error
 				rankingRunAffectedIDs, err = detectAndLinkDuplicate(ctx, tx, dbinstance.ID, dbinstance.RealmID, dbinstance.Name, dbinstance.MaxPlayers, dbinstance.DynamicDifficulty, instanceStart, builder.participants)
 				return err
 			}, nil)
+			if errors.Is(dupErr, errStaleParseGeneration) {
+				w.parent.insertParsedInstanceMu.Unlock()
+				insertLockHeld = false
+				jobResult = "cancelled"
+				return nil
+			}
 			if dupErr != nil {
 				slog.WarnContext(ctx, "duplicate detection failed", slog.String("err", dupErr.Error()))
 			}
@@ -813,11 +848,18 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		// transaction so a ranking error cannot roll back the parsed instance.
 		if !invalidLog && finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil {
 			rankErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
+				if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, job.Args.ParseGeneration); err != nil {
+					return err
+				}
 				if err := insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName, resolved.DatasetID, flavor, talentTreeData); err != nil {
 					return err
 				}
 				return tx.TouchLogInstanceRankingSource(ctx, dbinstance.ID)
 			}, nil)
+			if errors.Is(rankErr, errStaleParseGeneration) {
+				jobResult = "cancelled"
+				return nil
+			}
 			if rankErr != nil {
 				slog.WarnContext(ctx, "insert dps rankings failed",
 					slog.String("instance_id", dbinstance.ID.String()),
@@ -839,38 +881,51 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 
 	// Keep compact current-known cohorts synchronized after every successful
 	// parse so live windows immediately include late historical uploads.
-	parseMembershipsRefreshed := true
-	if result, err := db.RefreshParseScoreMembershipsForLogGroup(ctx, database.RefreshParseScoreMembershipsForLogGroupParams{
-		LogGroupID: job.Args.LogID, PolicyVersion: parsepolicy.PolicyVersion, QueryVersion: parsepolicy.QueryVersion,
-	}); err != nil {
-		parseMembershipsRefreshed = false
-		w.parent.logger.WarnContext(ctx, "failed to refresh DPS/HPS parse memberships after parse", slog.Any("error", err))
-	} else {
-		w.parent.logger.InfoContext(ctx, "refreshed DPS/HPS parse memberships after parse",
-			slog.Int64("upserted", result.UpsertedCount), slog.Int64("deleted", result.DeletedCount))
+	membershipErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
+		if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, job.Args.ParseGeneration); err != nil {
+			return err
+		}
+		if result, err := tx.RefreshParseScoreMembershipsForLogGroup(ctx, database.RefreshParseScoreMembershipsForLogGroupParams{
+			LogGroupID: job.Args.LogID, PolicyVersion: parsepolicy.PolicyVersion, QueryVersion: parsepolicy.QueryVersion,
+		}); err != nil {
+			return fmt.Errorf("refresh DPS/HPS parse memberships after parse: %w", err)
+		} else {
+			w.parent.logger.InfoContext(ctx, "refreshed DPS/HPS parse memberships after parse",
+				slog.Int64("upserted", result.UpsertedCount), slog.Int64("deleted", result.DeletedCount))
+		}
+		if result, err := tx.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, database.RefreshTimeParseClearTimeMembershipsForLogGroupParams{
+			LogGroupID: job.Args.LogID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+		}); err != nil {
+			return fmt.Errorf("refresh clear-time memberships after parse: %w", err)
+		} else {
+			w.parent.logger.InfoContext(ctx, "refreshed clear-time memberships after parse",
+				slog.Int64("upserted", result.UpsertedCount), slog.Int64("deleted", result.DeletedCount))
+		}
+		if result, err := tx.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, database.RefreshTimeParseBossKillMembershipsForLogGroupParams{
+			LogGroupID: job.Args.LogID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+		}); err != nil {
+			return fmt.Errorf("refresh boss-kill memberships after parse: %w", err)
+		} else {
+			w.parent.logger.InfoContext(ctx, "refreshed boss-kill memberships after parse",
+				slog.Int64("upserted", result.UpsertedCount), slog.Int64("deleted", result.DeletedCount))
+		}
+		return nil
+	}, nil)
+	if errors.Is(membershipErr, errStaleParseGeneration) {
+		jobResult = "cancelled"
+		return nil
 	}
-	timeParseMembershipsRefreshed := true
-	if result, err := db.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, database.RefreshTimeParseClearTimeMembershipsForLogGroupParams{
-		LogGroupID: job.Args.LogID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
-	}); err != nil {
-		timeParseMembershipsRefreshed = false
-		w.parent.logger.WarnContext(ctx, "failed to refresh clear-time memberships after parse", slog.Any("error", err))
-	} else {
-		w.parent.logger.InfoContext(ctx, "refreshed clear-time memberships after parse",
-			slog.Int64("upserted", result.UpsertedCount),
-			slog.Int64("deleted", result.DeletedCount),
-		)
+	if membershipErr != nil {
+		return fmt.Errorf("fence parse membership refresh: %w", membershipErr)
 	}
-	if result, err := db.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, database.RefreshTimeParseBossKillMembershipsForLogGroupParams{
-		LogGroupID: job.Args.LogID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
-	}); err != nil {
-		timeParseMembershipsRefreshed = false
-		w.parent.logger.WarnContext(ctx, "failed to refresh boss-kill memberships after parse", slog.Any("error", err))
-	} else {
-		w.parent.logger.InfoContext(ctx, "refreshed boss-kill memberships after parse",
-			slog.Int64("upserted", result.UpsertedCount),
-			slog.Int64("deleted", result.DeletedCount),
-		)
+
+	if err := w.parent.finalizeParseGeneration(ctx, job.Args.LogID, job.Args.ParseGeneration); err != nil {
+		if errors.Is(err, errStaleParseGeneration) {
+			jobResult = "cancelled"
+			return nil
+		}
+		jobResult = "failure"
+		return fmt.Errorf("finalize parse generation: %w", err)
 	}
 
 	if refreshIDs := rankingRunRefresh.Complete(); len(refreshIDs) > 0 {
@@ -883,31 +938,26 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	// Fire-and-forget: scoring failure doesn't fail the parse, but log errors.
 	if !invalidLog && w.parent.queue != nil {
 		for _, inst := range jobOut.Instances {
-			var enqErr error
-			if parseMembershipsRefreshed {
-				_, enqErr = w.parent.queue.Insert(ctx, parseargs.ArgsComputeParseScores{
-					InstanceID: inst.ID,
-					TenantID:   job.Args.TenantID,
-				}, nil)
-			}
+			_, enqErr := w.parent.queue.Insert(ctx, parseargs.ArgsComputeParseScores{
+				InstanceID: inst.ID,
+				TenantID:   job.Args.TenantID,
+			}, nil)
 			if enqErr != nil {
 				w.parent.logger.Error("failed to enqueue parse score computation",
 					slog.String("instance_id", inst.ID.String()),
 					slog.Any("error", enqErr),
 				)
 			}
-			if timeParseMembershipsRefreshed {
-				_, timeEnqErr := w.parent.queue.Insert(ctx, parseargs.ArgsComputeTimeParseScores{
-					InstanceID: inst.ID,
-					TenantID:   job.Args.TenantID,
-					Force:      true,
-				}, nil)
-				if timeEnqErr != nil {
-					w.parent.logger.Error("failed to enqueue time parse score computation",
-						slog.String("instance_id", inst.ID.String()),
-						slog.Any("error", timeEnqErr),
-					)
-				}
+			_, timeEnqErr := w.parent.queue.Insert(ctx, parseargs.ArgsComputeTimeParseScores{
+				InstanceID: inst.ID,
+				TenantID:   job.Args.TenantID,
+				Force:      true,
+			}, nil)
+			if timeEnqErr != nil {
+				w.parent.logger.Error("failed to enqueue time parse score computation",
+					slog.String("instance_id", inst.ID.String()),
+					slog.Any("error", timeEnqErr),
+				)
 			}
 		}
 	}
@@ -1173,25 +1223,26 @@ func buildIdentityReport(cs *creatures.Creatures) *chroniclesdk.IdentityReport {
 	return rpt
 }
 
-func newArgsLogParse(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, realmID uuid.UUID) ArgsLogParse {
+func newArgsLogParse(ctx context.Context, logID uuid.UUID, parseGeneration int64, verbose bool, identityMode bool, realmID uuid.UUID) ArgsLogParse {
 	return ArgsLogParse{
-		LogID:        logID,
-		RealmID:      realmID,
-		TenantID:     servicetenant.TenantIDFromContext(ctx),
-		Verbose:      verbose,
-		IdentityMode: identityMode,
+		LogID:           logID,
+		ParseGeneration: parseGeneration,
+		RealmID:         realmID,
+		TenantID:        servicetenant.TenantIDFromContext(ctx),
+		Verbose:         verbose,
+		IdentityMode:    identityMode,
 	}
 }
 
-func newReplacementArgsLogParse(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, realmID uuid.UUID, previousRankingRunIDs []uuid.UUID) ArgsLogParse {
-	args := newArgsLogParse(ctx, logID, verbose, identityMode, realmID)
+func newReplacementArgsLogParse(ctx context.Context, logID uuid.UUID, parseGeneration int64, verbose bool, identityMode bool, realmID uuid.UUID, previousRankingRunIDs []uuid.UUID) ArgsLogParse {
+	args := newArgsLogParse(ctx, logID, parseGeneration, verbose, identityMode, realmID)
 	args.Replacement = true
 	args.PreviousRankingRunIDs = rankingargs.NormalizeIDs(previousRankingRunIDs)
 	return args
 }
 
 func (c *Chronicle) EnqueueParseLog(ctx context.Context, log database.WoWLogGroup, verbose bool, identityMode bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
-	res, err := c.queue.Insert(ctx, newArgsLogParse(ctx, log.ID, verbose, identityMode, realmID), &river.InsertOpts{
+	res, err := c.queue.Insert(ctx, newArgsLogParse(ctx, log.ID, log.ParseGeneration, verbose, identityMode, realmID), &river.InsertOpts{
 		Tags: []string{
 			fmt.Sprintf("owner_%s", log.Owner.String()),
 		},

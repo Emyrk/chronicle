@@ -1318,6 +1318,14 @@ CREATE TABLE log_instances (
 
 COMMENT ON COLUMN log_instances.guild_id IS 'If set, that means it was a guild run.';
 
+CREATE TABLE parsed_log_group (
+    id uuid NOT NULL,
+    parse_generation bigint NOT NULL,
+    finalized_at timestamp with time zone
+);
+
+COMMENT ON TABLE parsed_log_group IS 'A parsed_log_group is a wow_log_group that has been processed and contains parsed logs. A duplicate allows deleting this one row to clear all parsed logs for a given wow_log_group.';
+
 CREATE TABLE tenants (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     slug text,
@@ -1348,7 +1356,8 @@ CREATE TABLE wow_log_groups (
     format log_format,
     flavor text[],
     invalidated_at timestamp with time zone,
-    invalid_reason text DEFAULT ''::text NOT NULL
+    invalid_reason text DEFAULT ''::text NOT NULL,
+    parse_generation bigint DEFAULT 1 NOT NULL
 );
 
 CREATE TABLE wow_server_realms (
@@ -1410,12 +1419,13 @@ CREATE VIEW log_instances_guild AS
     COALESCE(t.include_in_all, true) AS tenant_include_in_all,
     wlg.format,
     wlg.flavor
-   FROM (((((public.log_instances li
+   FROM ((((((public.log_instances li
+     JOIN wow_log_groups wlg ON ((wlg.id = li.log_group_id)))
+     JOIN parsed_log_group plg ON (((plg.id = li.log_group_id) AND (plg.parse_generation = wlg.parse_generation) AND (plg.finalized_at IS NOT NULL))))
      LEFT JOIN wow_server_realms wsr ON ((wsr.id = li.realm_id)))
      LEFT JOIN wow_servers ws ON ((wsr.server_id = ws.id)))
      LEFT JOIN tenants t ON ((ws.tenant_id = t.id)))
-     LEFT JOIN guilds g ON ((li.guild_id = g.id)))
-     LEFT JOIN wow_log_groups wlg ON ((wlg.id = li.log_group_id)));
+     LEFT JOIN guilds g ON ((li.guild_id = g.id)));
 
 CREATE TABLE oauth_device_sessions (
     device_signature text NOT NULL,
@@ -1522,12 +1532,6 @@ CREATE TABLE parse_score_results (
     player_sub_spec text DEFAULT ''::text NOT NULL,
     CONSTRAINT parse_score_results_metric_check CHECK ((metric = ANY (ARRAY['dps'::text, 'hps'::text])))
 );
-
-CREATE TABLE parsed_log_group (
-    id uuid NOT NULL
-);
-
-COMMENT ON TABLE parsed_log_group IS 'A parsed_log_group is a wow_log_group that has been processed and contains parsed logs. A duplicate allows deleting this one row to clear all parsed logs for a given wow_log_group.';
 
 CREATE TABLE raid_compositions (
     id uuid DEFAULT gen_random_uuid() NOT NULL,

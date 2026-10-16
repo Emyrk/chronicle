@@ -40,11 +40,63 @@ WHERE
   AND kind = 'log-parse'
 ;
 
+-- name: LockWoWLogGroupParseGeneration :one
+SELECT parse_generation
+FROM wow_log_groups
+WHERE id = $1
+FOR UPDATE
+;
+
+-- name: AdvanceWoWLogGroupParseGeneration :one
+UPDATE wow_log_groups
+SET parse_generation = parse_generation + 1,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING parse_generation
+;
+
+-- name: CarryForwardFinalizedParsedLogGroup :exec
+UPDATE parsed_log_group
+SET parse_generation = @parse_generation
+WHERE id = @id
+  AND finalized_at IS NOT NULL
+;
+
 -- name: InsertParsedLogGroup :exec
-INSERT INTO
-  parsed_log_group (id)
-VALUES
-  ($1)
+INSERT INTO parsed_log_group (id, parse_generation, finalized_at)
+SELECT wow_log_groups.id, wow_log_groups.parse_generation, NOW()
+FROM wow_log_groups
+WHERE wow_log_groups.id = $1
+;
+
+-- name: InsertStagedParsedLogGroup :exec
+INSERT INTO parsed_log_group (id, parse_generation)
+VALUES (@id, @parse_generation)
+;
+
+-- name: FinalizeParsedLogGroup :one
+UPDATE parsed_log_group
+SET finalized_at = NOW()
+WHERE id = @id
+  AND parse_generation = @parse_generation
+RETURNING finalized_at
+;
+
+-- name: IsParsedLogGroupVisible :one
+SELECT EXISTS(
+  SELECT 1
+  FROM parsed_log_group plg
+  JOIN wow_log_groups wlg ON wlg.id = plg.id
+  WHERE plg.id = $1
+    AND plg.parse_generation = wlg.parse_generation
+    AND plg.finalized_at IS NOT NULL
+)
+;
+
+-- name: GetParsedLogGroupByID :one
+SELECT *
+FROM parsed_log_group
+WHERE id = $1
 ;
 
 -- name: InsertInstance :one
@@ -195,6 +247,8 @@ SELECT
 FROM log_instances li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
 LEFT JOIN instance_overview_metrics iom ON iom.instance_id = li.id
 LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
 JOIN users u ON u.id = wlg.owner
@@ -268,6 +322,8 @@ SELECT
 FROM log_instances li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
 LEFT JOIN instance_overview_metrics iom ON iom.instance_id = li.id
 LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
 JOIN users u ON u.id = wlg.owner
@@ -328,6 +384,8 @@ WITH matching_runs AS (
     FROM log_instances li
     JOIN parsed_log_group plg ON plg.id = li.log_group_id
     JOIN wow_log_groups wlg ON wlg.id = plg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
     LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
     WHERE (
           (li.start_time >= @start_time::timestamptz AND li.start_time < @end_time::timestamptz)
@@ -408,6 +466,8 @@ instance_rows AS (
     JOIN matching_runs ON matching_runs.run_id = COALESCE(li.duplicate_group_id, li.id)
     JOIN parsed_log_group plg ON plg.id = li.log_group_id
     JOIN wow_log_groups wlg ON wlg.id = plg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
     LEFT JOIN instance_overview_metrics iom ON iom.instance_id = li.id
     LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
     JOIN users u ON u.id = wlg.owner
@@ -526,6 +586,8 @@ FROM log_instances li
 JOIN log_instance_players lip ON lip.instance_id = li.id
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
 LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
 JOIN users u ON u.id = wlg.owner
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
@@ -670,6 +732,8 @@ SELECT
 FROM log_instances li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
 JOIN users u ON u.id = wlg.owner
 WHERE li.duplicate_group_id = @duplicate_group_id
 ORDER BY li.id;

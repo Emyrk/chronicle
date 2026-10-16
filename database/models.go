@@ -1968,7 +1968,9 @@ type ParseScoreResult struct {
 
 // A parsed_log_group is a wow_log_group that has been processed and contains parsed logs. A duplicate allows deleting this one row to clear all parsed logs for a given wow_log_group.
 type ParsedLogGroup struct {
-	ID uuid.UUID `db:"id" json:"id"`
+	ID              uuid.UUID          `db:"id" json:"id"`
+	ParseGeneration int64              `db:"parse_generation" json:"parse_generation"`
+	FinalizedAt     pgtype.Timestamptz `db:"finalized_at" json:"finalized_at"`
 }
 
 type RaidComposition struct {
@@ -2422,15 +2424,16 @@ type UserWhatsNewState struct {
 }
 
 type WoWLogGroup struct {
-	ID            uuid.UUID          `db:"id" json:"id"`
-	Owner         uuid.UUID          `db:"owner" json:"owner"`
-	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	LogType       LogType            `db:"log_type" json:"log_type"`
-	Format        NullLogFormat      `db:"format" json:"format"`
-	Flavor        []string           `db:"flavor" json:"flavor"`
-	InvalidatedAt pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
-	InvalidReason string             `db:"invalid_reason" json:"invalid_reason"`
+	ID              uuid.UUID          `db:"id" json:"id"`
+	Owner           uuid.UUID          `db:"owner" json:"owner"`
+	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	LogType         LogType            `db:"log_type" json:"log_type"`
+	Format          NullLogFormat      `db:"format" json:"format"`
+	Flavor          []string           `db:"flavor" json:"flavor"`
+	InvalidatedAt   pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
+	InvalidReason   string             `db:"invalid_reason" json:"invalid_reason"`
+	ParseGeneration int64              `db:"parse_generation" json:"parse_generation"`
 }
 
 type World struct {
