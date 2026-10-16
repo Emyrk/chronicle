@@ -50,7 +50,7 @@ export const EXALTED_TIER_NAME = "Exalted"
 // The backend product code stays "supporter"; users see it as the Exalted tier.
 export function billingTierLabel(tier: string): string {
   if (tier === "supporter") return EXALTED_TIER_NAME
-  if (tier === "free") return "Neutral"
+  if (tier === "free") return "Friendly"
   return tier.charAt(0).toUpperCase() + tier.slice(1)
 }
 

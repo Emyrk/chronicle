@@ -1,9 +1,7 @@
 import { useState } from "react"
-import { Check, Crown, Download, EyeOff, HardDrive, Lock } from "lucide-react"
-import type { LucideIcon } from "lucide-react"
 import type { BillingPrice, BillingSummary } from "@/api/typesGenerated"
 import { useCreateBillingCheckout, useCreateBillingPortal, useBillingSummary } from "@/api/queries"
-import { Button } from "@/components/ui/button"
+import { iconUrl } from "@/config/iconUrl"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
@@ -19,21 +17,62 @@ import {
   formatMonthlyAmount,
 } from "./billingPricing"
 
-// WoW reputation standings, in order. Free users sit at Neutral; Exalted fills the bar.
+// Styling mirrors the landing site's /support page: gold Friz Quadrata headings,
+// brown framed panels, and WoW item tooltips.
+const GOLD = "#f0c060"
+const FRAME = "rounded-xl border-2 border-[#6b5320] bg-[#1e1710] shadow-xl shadow-black/30"
+const TOOLTIP = "rounded-lg border-2 border-[#4a4a6a] bg-[#1a1a2e] shadow-lg"
+
+// WoW reputation standings, in order. Free users sit at Friendly; Exalted fills the bar.
 const STANDINGS = ["Hated", "Hostile", "Unfriendly", "Neutral", "Friendly", "Honored", "Revered", "Exalted"] as const
 
-const qualityText: Record<BillingQuality, string> = {
-  uncommon: "text-quality-uncommon",
-  rare: "text-[#3d9bff]",
-  epic: "text-[#c06bff]",
-  legendary: "text-quality-legendary",
+const QUALITY_COLOR: Record<BillingQuality, string> = {
+  uncommon: "#1eff00",
+  rare: "#0070dd",
+  epic: "#a335ee",
+  legendary: "#ff8000",
 }
 
-const perks: { icon: LucideIcon; title: string; body: string }[] = [
-  { icon: EyeOff, title: "No advertisements", body: "Browse every page of Chronicle ad-free." },
-  { icon: HardDrive, title: "More log storage", body: "An extra 1 GB of storage for your uploads." },
-  { icon: Download, title: "Raw log downloads", body: "Download the original combat log files." },
-  { icon: Lock, title: "Private logs", body: "Keep your uploads out of public view." },
+const QUALITY_ICON: Record<BillingQuality, string> = {
+  uncommon: "inv_misc_coin_01",
+  rare: "inv_misc_token_argentdawn",
+  epic: "inv_jewelry_talisman_07",
+  legendary: "inv_crown_02",
+}
+
+const REWARDS = [
+  {
+    title: "Ad-Free Browsing",
+    icon: "inv_misc_eye_01",
+    slot: "Trinket",
+    subtype: "Aura",
+    effects: ["Equip: Removes all advertisements from Chronicle."],
+    flavor: "Clear line of sight to every pull.",
+  },
+  {
+    title: "Expanded Log Storage",
+    icon: "inv_misc_bag_10",
+    slot: "Bag",
+    subtype: "Container",
+    effects: ["Equip: Increases your log storage by 1 GB."],
+    flavor: "Holds a whole season of wipes.",
+  },
+  {
+    title: "Raw Log Downloads",
+    icon: "inv_scroll_03",
+    slot: "Scroll",
+    subtype: "Reusable",
+    effects: ["Use: Download the original combat log file behind any of your uploads."],
+    flavor: "Every swing, every wipe, unabridged.",
+  },
+  {
+    title: "Private Logs",
+    icon: "ability_stealth",
+    slot: "Cloak",
+    subtype: "Stealth",
+    effects: ["Equip: Keeps your uploads out of public view."],
+    flavor: "What happens in progression stays in progression.",
+  },
 ]
 
 export function BillingSettings() {
@@ -55,35 +94,22 @@ export function BillingSettings() {
   const exalted = billing.ads_free
 
   return (
-    <section className="max-w-5xl space-y-6">
-      <StandingHeader billing={billing} />
+    <section className="max-w-5xl space-y-8">
+      <h2 className="font-wow text-3xl leading-tight sm:text-4xl">
+        <span style={{ color: GOLD }}>{exalted ? "You are Exalted" : "Become Exalted"}</span>{" "}
+        <span className="text-white">with Chronicle</span>
+      </h2>
+
+      <Achievement billing={billing} />
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="space-y-3">
-          <div className="flex items-baseline justify-between gap-3">
-            <h3 className="text-lg font-semibold">{EXALTED_TIER_NAME} rewards</h3>
-            <span className="text-xs text-muted-foreground">
-              {exalted ? "All rewards unlocked" : `Unlocked at ${EXALTED_TIER_NAME}`}
-            </span>
-          </div>
-          <ul className="divide-y rounded-lg border bg-card">
-            {perks.map(({ icon: Icon, title, body }) => (
-              <li key={title} className="flex items-center gap-4 p-4">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-accent/20 text-accent">
-                  <Icon className="size-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium">{title}</p>
-                  <p className="text-sm text-muted-foreground">{body}</p>
-                </div>
-                {exalted ? (
-                  <Check className="size-5 shrink-0 text-emerald-400" aria-label="Unlocked" />
-                ) : (
-                  <Lock className="size-4 shrink-0 text-muted-foreground/60" aria-label="Locked" />
-                )}
-              </li>
+        <div>
+          <h3 className="font-wow text-xl font-semibold">{EXALTED_TIER_NAME} Rewards</h3>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            {REWARDS.map((reward) => (
+              <RewardTooltip key={reward.title} reward={reward} unlocked={exalted} />
             ))}
-          </ul>
+          </div>
         </div>
 
         {exalted ? <SubscriptionPanel billing={billing} /> : <PlanPicker prices={billing.prices ?? []} />}
@@ -102,39 +128,46 @@ function useOpenBilling() {
   }
 }
 
-function StandingHeader({ billing }: { billing: BillingSummary }) {
+/** WoW achievement row: greyed out with a reputation progress bar until earned. */
+function Achievement({ billing }: { billing: BillingSummary }) {
   const exalted = billing.ads_free
   const standing = exalted ? EXALTED_TIER_NAME : billingTierLabel(billing.tier)
   const standingIndex = Math.max(0, STANDINGS.indexOf(standing as (typeof STANDINGS)[number]))
-  // Neutral shows a sliver of progress into the standing; Exalted is a full bar.
+  // Free users show a sliver of progress into their standing; Exalted is a full bar.
   const fill = exalted ? 100 : ((standingIndex + 0.15) / STANDINGS.length) * 100
 
   return (
-    <div className="rounded-lg border bg-card p-6">
-      <div className="flex items-start gap-4">
-        <div className="flex size-12 shrink-0 items-center justify-center rounded-md bg-accent/20 text-accent">
-          <Crown className="size-6" />
-        </div>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Billing</p>
-          <h2 className="mt-1 text-2xl font-semibold">
-            {exalted ? "You are " : "Become "}
-            <span className="font-wow text-accent">{EXALTED_TIER_NAME}</span>
-            {exalted ? "" : " with Chronicle"}
-          </h2>
-          <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            {exalted
-              ? "Thank you for supporting Chronicle. Your standing keeps the parsers running."
-              : "Support Chronicle and unlock every reward below. One tier, no upsells."}
+    <div className={cn(FRAME, "p-4 sm:p-5", !exalted && "border-[#4a4030]")}>
+      <div className="flex items-center gap-4">
+        <img
+          src={iconUrl("inv_crown_01")}
+          alt=""
+          aria-hidden="true"
+          width={64}
+          height={64}
+          className={cn(
+            "size-14 shrink-0 rounded border-2 sm:size-16",
+            exalted ? "border-[#c9a227]" : "border-zinc-600 opacity-60 grayscale",
+          )}
+        />
+        <div className="min-w-0 flex-1 text-center">
+          <p className="font-wow text-xl font-bold sm:text-2xl" style={{ color: exalted ? GOLD : "#a1a1aa" }}>
+            {EXALTED_TIER_NAME}
           </p>
+          <p className="mt-0.5 text-sm text-zinc-300">Raise your reputation with Chronicle to Exalted.</p>
+        </div>
+        <div className="flex w-16 shrink-0 flex-col items-center gap-1">
+          <PointsShield earned={exalted} />
+          {exalted && billing.current_period_end ? (
+            <span className="text-[10px] text-zinc-400">
+              {billing.cancel_at_period_end ? "Ends" : "Renews"}{" "}
+              {new Date(billing.current_period_end).toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "2-digit" })}
+            </span>
+          ) : null}
         </div>
       </div>
 
-      <div className="mt-6">
-        <div className="mb-1.5 flex items-baseline justify-between text-sm">
-          <span className="font-medium">Chronicle</span>
-          <span className={cn("font-semibold", exalted ? "text-teal-400" : "text-yellow-400")}>{standing}</span>
-        </div>
+      <div className="mx-auto mt-4 max-w-2xl">
         <div
           role="meter"
           aria-label="Reputation with Chronicle"
@@ -142,34 +175,100 @@ function StandingHeader({ billing }: { billing: BillingSummary }) {
           aria-valuemax={100}
           aria-valuenow={Math.round(fill)}
           aria-valuetext={standing}
-          className="relative h-3 overflow-hidden rounded-sm border bg-background"
+          className="relative h-5 overflow-hidden rounded-sm border border-black bg-black/60"
         >
-          <div className={cn("h-full", exalted ? "bg-teal-500" : "bg-yellow-500")} style={{ width: `${fill}%` }} />
-          {STANDINGS.slice(1).map((name, i) => (
-            <span
-              key={name}
-              className="absolute inset-y-0 w-px bg-background/70"
-              style={{ left: `${((i + 1) / STANDINGS.length) * 100}%` }}
-            />
-          ))}
-        </div>
-        <div className="mt-1.5 hidden justify-between text-[10px] uppercase tracking-wider text-muted-foreground sm:flex">
-          {STANDINGS.map((name, i) => (
-            <span
-              key={name}
-              className={cn(
-                "w-full text-center",
-                i === standingIndex && (exalted ? "font-semibold text-teal-400" : "font-semibold text-yellow-400"),
-              )}
-            >
-              {name}
-            </span>
-          ))}
+          <div
+            className={cn("h-full", exalted ? "bg-[#00aa88]" : "bg-[#00a000]")}
+            style={{ width: `${fill}%` }}
+          />
+          <span className="absolute inset-0 flex items-center justify-center font-wow text-xs text-white [text-shadow:1px_1px_1px_#000]">
+            Chronicle – {standing}
+          </span>
         </div>
       </div>
+
+      <p className="mt-4 border-t border-[#6b5320]/60 pt-3 text-center font-wow text-sm" style={{ color: "#ffd200" }}>
+        Reward: Ad-free browsing, +1 GB storage, raw log downloads, and private logs
+      </p>
     </div>
   )
 }
+
+function PointsShield({ earned }: { earned: boolean }) {
+  return (
+    <svg viewBox="0 0 40 46" className="h-12 w-11" aria-label="10 points">
+      <path
+        d="M20 2 L37 8 V22 C37 33 29 40 20 44 C11 40 3 33 3 22 V8 Z"
+        fill={earned ? "#8a6a1a" : "#3f3f46"}
+        stroke={earned ? "#e8c45a" : "#71717a"}
+        strokeWidth="2.5"
+      />
+      <text
+        x="20"
+        y="28"
+        textAnchor="middle"
+        fontSize="15"
+        fontWeight="bold"
+        fill={earned ? "#fff" : "#a1a1aa"}
+        style={{ textShadow: "1px 1px 1px #000" }}
+      >
+        10
+      </text>
+    </svg>
+  )
+}
+
+/** Reward styled like the /support page's item tooltips. Red requirement lines mean "not yet earned". */
+function RewardTooltip({ reward, unlocked }: { reward: (typeof REWARDS)[number]; unlocked: boolean }) {
+  return (
+    <article className={cn(TOOLTIP, "p-3 text-xs leading-snug")}>
+      <div className="flex items-center gap-3">
+        <img
+          src={iconUrl(reward.icon)}
+          alt=""
+          aria-hidden="true"
+          width={44}
+          height={44}
+          className={cn("shrink-0 rounded border-2 border-yellow-600/60", !unlocked && "opacity-80")}
+        />
+        <h4 className="text-sm font-medium leading-tight" style={{ color: QUALITY_COLOR.epic }}>
+          {reward.title}
+        </h4>
+      </div>
+      <div className="mt-2 space-y-0.5">
+        <div className="text-white">Binds when Exalted</div>
+        <div className="flex justify-between text-white">
+          <span>{reward.slot}</span>
+          <span>{reward.subtype}</span>
+        </div>
+        <div style={{ color: unlocked ? "#ffffff" : "#ff2020" }}>Requires Chronicle – Exalted</div>
+        {reward.effects.map((line) => (
+          <div key={line} style={{ color: QUALITY_COLOR.uncommon }}>
+            {line}
+          </div>
+        ))}
+        <div className="pt-1 text-[#ffd200]">&ldquo;{reward.flavor}&rdquo;</div>
+      </div>
+    </article>
+  )
+}
+
+function FramePanel({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className={cn(FRAME, "lg:sticky lg:top-4")}>
+      <h3
+        className="rounded-t-[10px] border-b-2 border-[#6b5320] px-4 py-2.5 text-center font-wow text-base font-bold tracking-[0.08em]"
+        style={{ color: GOLD }}
+      >
+        {title}
+      </h3>
+      <div className="space-y-3 rounded-b-[10px] bg-[#17130f] p-4">{children}</div>
+    </div>
+  )
+}
+
+const GOLD_BUTTON =
+  "flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#c9a227]/70 bg-[#2a210f] px-4 py-2.5 font-wow text-base font-bold text-[#f0c060] transition-colors hover:bg-[#3a2d14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 disabled:opacity-50"
 
 function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
   const checkout = useCreateBillingCheckout()
@@ -180,20 +279,20 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
   const bestPriceID = bestValuePriceID(prices, monthlyPrice)
   const selectedPrice = prices.find((price) => price.id === (selectedPriceID ?? bestPriceID)) ?? prices[0]
   const qualities = billingPriceQualities(prices)
-  const sorted = [...prices].sort((a, b) => a.interval_months - b.interval_months)
+  const sorted = [...prices].sort((a, b) => b.interval_months - a.interval_months)
 
   return (
-    <div className="space-y-3 rounded-lg border bg-card p-4 lg:sticky lg:top-4">
-      <div>
-        <h3 className="font-semibold">Choose a period</h3>
-        <p className="text-xs text-muted-foreground">Same rewards on every plan. Longer periods cost less per month.</p>
-      </div>
+    <FramePanel title="Choose Your Path">
+      <p className="text-center text-xs text-muted-foreground">
+        Every plan grants the same rewards. Longer paths cost less per month.
+      </p>
 
       {sorted.length > 0 ? (
         <div role="radiogroup" aria-label="Billing period" className="space-y-2">
           {sorted.map((price) => {
             const selected = selectedPrice?.id === price.id
             const discount = billingDiscountPercent(price, monthlyPrice)
+            const quality = qualities.get(price.id) ?? "rare"
             return (
               <button
                 key={price.id}
@@ -202,66 +301,67 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
                 aria-checked={selected}
                 onClick={() => setSelectedPriceID(price.id)}
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  selected ? "border-accent bg-accent/10" : "hover:border-accent/50",
+                  "flex w-full items-center gap-3 rounded-md border-2 p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300",
+                  selected ? "border-[#c9a227] bg-[#2a210f]" : "border-white/10 bg-white/[0.025] hover:border-[#6b5320]",
                 )}
               >
-                <span
-                  className={cn(
-                    "flex size-4 shrink-0 items-center justify-center rounded-full border",
-                    selected ? "border-accent" : "border-muted-foreground/40",
-                  )}
-                >
-                  {selected ? <span className="size-2 rounded-full bg-accent" /> : null}
-                </span>
+                <img
+                  src={iconUrl(QUALITY_ICON[quality])}
+                  alt=""
+                  aria-hidden="true"
+                  width={36}
+                  height={36}
+                  className="size-9 shrink-0 rounded border-2"
+                  style={{ borderColor: QUALITY_COLOR[quality] }}
+                />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className={cn("font-medium", qualityText[qualities.get(price.id) ?? "rare"])}>
+                    <span className="font-wow text-sm font-bold" style={{ color: QUALITY_COLOR[quality] }}>
                       {billingPeriodLabel(price.interval_months)}
                     </span>
                     {price.id === bestPriceID ? (
-                      <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-accent-foreground">
+                      <span className="rounded bg-[#ff8000]/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#ff8000]">
                         Best value
                       </span>
                     ) : null}
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-[11px] text-muted-foreground">
                     {formatBillingAmount(price.unit_amount, price.currency)} ·{" "}
                     {billingPeriodDescription(price.interval_months).toLowerCase()}
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="font-semibold">{formatMonthlyAmount(price)}</p>
-                  <p className={cn("text-xs", discount > 0 ? "font-medium text-emerald-400" : "text-muted-foreground")}>
-                    {discount > 0 ? `Save ${discount}%` : "per month"}
+                  <p className="text-sm font-semibold text-white">
+                    {formatMonthlyAmount(price)}
+                    <span className="text-[10px] font-normal text-muted-foreground">/mo</span>
                   </p>
+                  {discount > 0 ? <p className="text-[11px] font-medium text-[#1eff00]">Save {discount}%</p> : null}
                 </div>
               </button>
             )
           })}
         </div>
       ) : (
-        <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+        <p className="rounded-md border border-dashed border-[#6b5320] p-4 text-center text-sm text-muted-foreground">
           {EXALTED_TIER_NAME} pricing is temporarily unavailable.
         </p>
       )}
 
-      <Button
-        size="lg"
-        className="w-full gap-2"
+      <button
+        type="button"
+        className={GOLD_BUTTON}
         disabled={!selectedPrice || checkout.isPending}
         onClick={() => selectedPrice && void openBilling(() => checkout.mutateAsync(selectedPrice.id))}
       >
-        <Crown className="size-4" />
         Become {EXALTED_TIER_NAME}
-      </Button>
+      </button>
       {selectedPrice ? (
         <p className="text-center text-xs text-muted-foreground">
           {formatBillingAmount(selectedPrice.unit_amount, selectedPrice.currency)}{" "}
           {billingPeriodDescription(selectedPrice.interval_months).toLowerCase()}. Cancel anytime.
         </p>
       ) : null}
-    </div>
+    </FramePanel>
   )
 }
 
@@ -270,34 +370,35 @@ function SubscriptionPanel({ billing }: { billing: BillingSummary }) {
   const openBilling = useOpenBilling()
 
   return (
-    <div className="space-y-4 rounded-lg border bg-card p-4">
-      <h3 className="font-semibold">Your subscription</h3>
+    <FramePanel title="Your Standing">
       <dl className="space-y-2 text-sm">
         <div className="flex justify-between gap-3">
-          <dt className="text-muted-foreground">Standing</dt>
-          <dd className="font-wow text-accent">{EXALTED_TIER_NAME}</dd>
+          <dt className="text-muted-foreground">Reputation</dt>
+          <dd className="font-wow" style={{ color: GOLD }}>
+            {EXALTED_TIER_NAME}
+          </dd>
         </div>
         {billing.status ? (
           <div className="flex justify-between gap-3">
             <dt className="text-muted-foreground">Status</dt>
-            <dd className="capitalize">{billing.cancel_at_period_end ? "Canceling" : billing.status}</dd>
+            <dd className="capitalize text-white">{billing.cancel_at_period_end ? "Canceling" : billing.status}</dd>
           </div>
         ) : null}
         {billing.current_period_end ? (
           <div className="flex justify-between gap-3">
             <dt className="text-muted-foreground">{billing.cancel_at_period_end ? "Ends" : "Renews"}</dt>
-            <dd>{new Date(billing.current_period_end).toLocaleDateString()}</dd>
+            <dd className="text-white">{new Date(billing.current_period_end).toLocaleDateString()}</dd>
           </div>
         ) : null}
       </dl>
-      <Button
-        variant="outline"
-        className="w-full"
+      <button
+        type="button"
+        className={GOLD_BUTTON}
         disabled={portal.isPending}
         onClick={() => void openBilling(() => portal.mutateAsync())}
       >
-        Manage subscription
-      </Button>
-    </div>
+        Manage Subscription
+      </button>
+    </FramePanel>
   )
 }
