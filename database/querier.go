@@ -604,6 +604,7 @@ type sqlcQuerier interface {
 	ListRegressionFixtures(ctx context.Context) ([]ListRegressionFixturesRow, error)
 	ListRegressionSnapshots(ctx context.Context, arg ListRegressionSnapshotsParams) ([]ListRegressionSnapshotsRow, error)
 	ListResolvedItemPrices(ctx context.Context, arg ListResolvedItemPricesParams) ([]ListResolvedItemPricesRow, error)
+	ListRiverQueueMetrics(ctx context.Context) ([]ListRiverQueueMetricsRow, error)
 	ListServerApplications(ctx context.Context) ([]ListServerApplicationsRow, error)
 	// Canonical database-backed spell lookups. Each base spell row carries its
 	// independently ordered normalized components without multiplying child rows.

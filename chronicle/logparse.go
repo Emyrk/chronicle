@@ -372,6 +372,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		report.ConsumerTimes = make(map[string]chroniclesdk.Duration, len(parsed.report.consumerTimes))
 		for k, v := range parsed.report.consumerTimes {
 			report.ConsumerTimes[k] = chroniclesdk.DurationFrom(v)
+			metrics.consumerDuration.WithLabelValues(k).Observe(v.Seconds())
 		}
 	}
 	report.MissedSpells = parsed.report.missedSpells
@@ -411,6 +412,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 
 		if err != nil {
 			jobOut.InstanceFailures[fmt.Sprintf("%s_%d", inst.Name(), i)] = err.Error()
+			metrics.instanceFailures.Inc()
 			report.Instances = append(report.Instances, instReport)
 			continue
 		}
@@ -445,6 +447,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		keep, failureMsg := w.validateRealmTenant(ctx, db, realm, job.Args.TenantID, lg.Format.LogFormat, job.Args.LogID)
 		if !keep {
 			jobOut.InstanceFailures[fmt.Sprintf("%s_%d", inst.Name(), i)] = failureMsg
+			metrics.instanceFailures.Inc()
 			report.Instances = append(report.Instances, instReport)
 			continue
 		}
