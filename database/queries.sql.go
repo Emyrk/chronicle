@@ -5479,7 +5479,7 @@ func (q *sqlQuerier) GetWoWLogFilesByGroupID(ctx context.Context, wowLogID uuid.
 
 const getWoWLogGroupByID = `-- name: GetWoWLogGroupByID :one
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.private,
   u.username AS owner_name,
   COALESCE(
       jsonb_agg(
@@ -5533,6 +5533,7 @@ func (q *sqlQuerier) GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetW
 		&i.WoWLogGroup.InvalidatedAt,
 		&i.WoWLogGroup.InvalidReason,
 		&i.WoWLogGroup.ParseGeneration,
+		&i.WoWLogGroup.Private,
 		&i.OwnerName,
 		&i.Files,
 	)
@@ -5541,7 +5542,7 @@ func (q *sqlQuerier) GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetW
 
 const getWoWLogGroupsByOwner = `-- name: GetWoWLogGroupsByOwner :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.private,
   files_agg.files,
   instances_output.output AS processing_output,
   parsed_bytes_agg.parsed_bytes
@@ -5672,6 +5673,7 @@ func (q *sqlQuerier) GetWoWLogGroupsByOwner(ctx context.Context, arg GetWoWLogGr
 			&i.WoWLogGroup.InvalidatedAt,
 			&i.WoWLogGroup.InvalidReason,
 			&i.WoWLogGroup.ParseGeneration,
+			&i.WoWLogGroup.Private,
 			&i.Files,
 			&i.ProcessingOutput,
 			&i.ParsedBytes,
@@ -5767,6 +5769,7 @@ INSERT INTO
     log_type,
     format,
     flavor,
+    private,
     created_at,
     updated_at
   )
@@ -5778,9 +5781,10 @@ VALUES
     $4,
     $5,
     $6,
-    $7
+    $7,
+    $8
   )
-RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason, parse_generation
+RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason, parse_generation, private
 `
 
 type InsertWoWLogGroupParams struct {
@@ -5789,6 +5793,7 @@ type InsertWoWLogGroupParams struct {
 	LogType   LogType            `db:"log_type" json:"log_type"`
 	Format    NullLogFormat      `db:"format" json:"format"`
 	Flavor    []string           `db:"flavor" json:"flavor"`
+	Private   bool               `db:"private" json:"private"`
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
@@ -5800,6 +5805,7 @@ func (q *sqlQuerier) InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGrou
 		arg.LogType,
 		arg.Format,
 		arg.Flavor,
+		arg.Private,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -5815,6 +5821,7 @@ func (q *sqlQuerier) InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGrou
 		&i.InvalidatedAt,
 		&i.InvalidReason,
 		&i.ParseGeneration,
+		&i.Private,
 	)
 	return i, err
 }
@@ -5866,7 +5873,7 @@ func (q *sqlQuerier) InvalidateWoWLogGroup(ctx context.Context, arg InvalidateWo
 
 const listAllWoWLogGroupsWithOwner = `-- name: ListAllWoWLogGroupsWithOwner :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.private,
   u.username AS owner_name,
   files_agg.files,
   instances_output.output AS processing_output
@@ -5989,6 +5996,7 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAl
 			&i.WoWLogGroup.InvalidatedAt,
 			&i.WoWLogGroup.InvalidReason,
 			&i.WoWLogGroup.ParseGeneration,
+			&i.WoWLogGroup.Private,
 			&i.OwnerName,
 			&i.Files,
 			&i.ProcessingOutput,
@@ -6005,7 +6013,7 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAl
 
 const listAllWoWLogGroupsWithOwnerPaginated = `-- name: ListAllWoWLogGroupsWithOwnerPaginated :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.private,
   u.username AS owner_name,
   files_agg.files,
   files_agg.total_size_bytes,
@@ -6179,6 +6187,7 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, 
 			&i.WoWLogGroup.InvalidatedAt,
 			&i.WoWLogGroup.InvalidReason,
 			&i.WoWLogGroup.ParseGeneration,
+			&i.WoWLogGroup.Private,
 			&i.OwnerName,
 			&i.Files,
 			&i.TotalSizeBytes,
@@ -13495,6 +13504,370 @@ func (q *sqlQuerier) ListRankingsForInstance(ctx context.Context, instanceID uui
 	return items, nil
 }
 
+const approvePrivateLogAccessRequest = `-- name: ApprovePrivateLogAccessRequest :one
+UPDATE private_log_access_requests
+SET
+  status = 'approved',
+  updated_at = NOW(),
+  decided_by = $1,
+  decided_at = NOW()
+WHERE id = $2
+  AND log_group_id = $3
+RETURNING id, log_group_id, share_link_id, requester_id, status, created_at, updated_at, decided_by, decided_at
+`
+
+type ApprovePrivateLogAccessRequestParams struct {
+	DecidedBy  uuid.NullUUID `db:"decided_by" json:"decided_by"`
+	ID         uuid.UUID     `db:"id" json:"id"`
+	LogGroupID uuid.UUID     `db:"log_group_id" json:"log_group_id"`
+}
+
+func (q *sqlQuerier) ApprovePrivateLogAccessRequest(ctx context.Context, arg ApprovePrivateLogAccessRequestParams) (PrivateLogAccessRequest, error) {
+	row := q.db.QueryRow(ctx, approvePrivateLogAccessRequest, arg.DecidedBy, arg.ID, arg.LogGroupID)
+	var i PrivateLogAccessRequest
+	err := row.Scan(
+		&i.ID,
+		&i.LogGroupID,
+		&i.ShareLinkID,
+		&i.RequesterID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DecidedBy,
+		&i.DecidedAt,
+	)
+	return i, err
+}
+
+const createPrivateLogShareLink = `-- name: CreatePrivateLogShareLink :one
+INSERT INTO private_log_share_links (id, log_group_id, code, created_by)
+VALUES ($1, $2, $3, $4)
+RETURNING id, log_group_id, code, created_by, created_at, revoked_at
+`
+
+type CreatePrivateLogShareLinkParams struct {
+	ID         uuid.UUID `db:"id" json:"id"`
+	LogGroupID uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	Code       string    `db:"code" json:"code"`
+	CreatedBy  uuid.UUID `db:"created_by" json:"created_by"`
+}
+
+func (q *sqlQuerier) CreatePrivateLogShareLink(ctx context.Context, arg CreatePrivateLogShareLinkParams) (PrivateLogShareLink, error) {
+	row := q.db.QueryRow(ctx, createPrivateLogShareLink,
+		arg.ID,
+		arg.LogGroupID,
+		arg.Code,
+		arg.CreatedBy,
+	)
+	var i PrivateLogShareLink
+	err := row.Scan(
+		&i.ID,
+		&i.LogGroupID,
+		&i.Code,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const denyPrivateLogAccessRequest = `-- name: DenyPrivateLogAccessRequest :one
+UPDATE private_log_access_requests
+SET
+  status = 'denied',
+  updated_at = NOW(),
+  decided_by = $1,
+  decided_at = NOW()
+WHERE id = $2
+  AND log_group_id = $3
+  AND status <> 'approved'
+RETURNING id, log_group_id, share_link_id, requester_id, status, created_at, updated_at, decided_by, decided_at
+`
+
+type DenyPrivateLogAccessRequestParams struct {
+	DecidedBy  uuid.NullUUID `db:"decided_by" json:"decided_by"`
+	ID         uuid.UUID     `db:"id" json:"id"`
+	LogGroupID uuid.UUID     `db:"log_group_id" json:"log_group_id"`
+}
+
+func (q *sqlQuerier) DenyPrivateLogAccessRequest(ctx context.Context, arg DenyPrivateLogAccessRequestParams) (PrivateLogAccessRequest, error) {
+	row := q.db.QueryRow(ctx, denyPrivateLogAccessRequest, arg.DecidedBy, arg.ID, arg.LogGroupID)
+	var i PrivateLogAccessRequest
+	err := row.Scan(
+		&i.ID,
+		&i.LogGroupID,
+		&i.ShareLinkID,
+		&i.RequesterID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DecidedBy,
+		&i.DecidedAt,
+	)
+	return i, err
+}
+
+const getActivePrivateLogShareLinkByCode = `-- name: GetActivePrivateLogShareLinkByCode :one
+SELECT
+  private_log_share_links.id, private_log_share_links.log_group_id, private_log_share_links.code, private_log_share_links.created_by, private_log_share_links.created_at, private_log_share_links.revoked_at,
+  wlg.private,
+  wlg.owner,
+  u.username AS owner_name
+FROM private_log_share_links
+JOIN wow_log_groups wlg ON wlg.id = private_log_share_links.log_group_id
+JOIN users u ON u.id = wlg.owner
+WHERE private_log_share_links.code = $1
+  AND private_log_share_links.revoked_at IS NULL
+`
+
+type GetActivePrivateLogShareLinkByCodeRow struct {
+	PrivateLogShareLink PrivateLogShareLink `db:"private_log_share_link" json:"private_log_share_link"`
+	Private             bool                `db:"private" json:"private"`
+	Owner               uuid.UUID           `db:"owner" json:"owner"`
+	OwnerName           string              `db:"owner_name" json:"owner_name"`
+}
+
+func (q *sqlQuerier) GetActivePrivateLogShareLinkByCode(ctx context.Context, code string) (GetActivePrivateLogShareLinkByCodeRow, error) {
+	row := q.db.QueryRow(ctx, getActivePrivateLogShareLinkByCode, code)
+	var i GetActivePrivateLogShareLinkByCodeRow
+	err := row.Scan(
+		&i.PrivateLogShareLink.ID,
+		&i.PrivateLogShareLink.LogGroupID,
+		&i.PrivateLogShareLink.Code,
+		&i.PrivateLogShareLink.CreatedBy,
+		&i.PrivateLogShareLink.CreatedAt,
+		&i.PrivateLogShareLink.RevokedAt,
+		&i.Private,
+		&i.Owner,
+		&i.OwnerName,
+	)
+	return i, err
+}
+
+const getPrivateLogAccessRequestByID = `-- name: GetPrivateLogAccessRequestByID :one
+SELECT id, log_group_id, share_link_id, requester_id, status, created_at, updated_at, decided_by, decided_at
+FROM private_log_access_requests
+WHERE id = $1
+`
+
+func (q *sqlQuerier) GetPrivateLogAccessRequestByID(ctx context.Context, id uuid.UUID) (PrivateLogAccessRequest, error) {
+	row := q.db.QueryRow(ctx, getPrivateLogAccessRequestByID, id)
+	var i PrivateLogAccessRequest
+	err := row.Scan(
+		&i.ID,
+		&i.LogGroupID,
+		&i.ShareLinkID,
+		&i.RequesterID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DecidedBy,
+		&i.DecidedAt,
+	)
+	return i, err
+}
+
+const getPrivateLogAccessRequestForUser = `-- name: GetPrivateLogAccessRequestForUser :one
+SELECT id, log_group_id, share_link_id, requester_id, status, created_at, updated_at, decided_by, decided_at
+FROM private_log_access_requests
+WHERE log_group_id = $1
+  AND requester_id = $2
+`
+
+type GetPrivateLogAccessRequestForUserParams struct {
+	LogGroupID  uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	RequesterID uuid.UUID `db:"requester_id" json:"requester_id"`
+}
+
+func (q *sqlQuerier) GetPrivateLogAccessRequestForUser(ctx context.Context, arg GetPrivateLogAccessRequestForUserParams) (PrivateLogAccessRequest, error) {
+	row := q.db.QueryRow(ctx, getPrivateLogAccessRequestForUser, arg.LogGroupID, arg.RequesterID)
+	var i PrivateLogAccessRequest
+	err := row.Scan(
+		&i.ID,
+		&i.LogGroupID,
+		&i.ShareLinkID,
+		&i.RequesterID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DecidedBy,
+		&i.DecidedAt,
+	)
+	return i, err
+}
+
+const getWoWLogGroupPrivacy = `-- name: GetWoWLogGroupPrivacy :one
+SELECT private
+FROM wow_log_groups
+WHERE id = $1
+`
+
+func (q *sqlQuerier) GetWoWLogGroupPrivacy(ctx context.Context, id uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, getWoWLogGroupPrivacy, id)
+	var private bool
+	err := row.Scan(&private)
+	return private, err
+}
+
+const listPrivateLogAccessRequests = `-- name: ListPrivateLogAccessRequests :many
+SELECT
+  private_log_access_requests.id, private_log_access_requests.log_group_id, private_log_access_requests.share_link_id, private_log_access_requests.requester_id, private_log_access_requests.status, private_log_access_requests.created_at, private_log_access_requests.updated_at, private_log_access_requests.decided_by, private_log_access_requests.decided_at,
+  u.username AS requester_name
+FROM private_log_access_requests
+JOIN users u ON u.id = private_log_access_requests.requester_id
+WHERE private_log_access_requests.log_group_id = $1
+ORDER BY private_log_access_requests.created_at ASC
+`
+
+type ListPrivateLogAccessRequestsRow struct {
+	PrivateLogAccessRequest PrivateLogAccessRequest `db:"private_log_access_request" json:"private_log_access_request"`
+	RequesterName           string                  `db:"requester_name" json:"requester_name"`
+}
+
+func (q *sqlQuerier) ListPrivateLogAccessRequests(ctx context.Context, logGroupID uuid.UUID) ([]ListPrivateLogAccessRequestsRow, error) {
+	rows, err := q.db.Query(ctx, listPrivateLogAccessRequests, logGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPrivateLogAccessRequestsRow
+	for rows.Next() {
+		var i ListPrivateLogAccessRequestsRow
+		if err := rows.Scan(
+			&i.PrivateLogAccessRequest.ID,
+			&i.PrivateLogAccessRequest.LogGroupID,
+			&i.PrivateLogAccessRequest.ShareLinkID,
+			&i.PrivateLogAccessRequest.RequesterID,
+			&i.PrivateLogAccessRequest.Status,
+			&i.PrivateLogAccessRequest.CreatedAt,
+			&i.PrivateLogAccessRequest.UpdatedAt,
+			&i.PrivateLogAccessRequest.DecidedBy,
+			&i.PrivateLogAccessRequest.DecidedAt,
+			&i.RequesterName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokePrivateLogAccessRequest = `-- name: RevokePrivateLogAccessRequest :one
+UPDATE private_log_access_requests
+SET
+  status = 'revoked',
+  updated_at = NOW(),
+  decided_by = $1,
+  decided_at = NOW()
+WHERE id = $2
+  AND log_group_id = $3
+  AND status = 'approved'
+RETURNING id, log_group_id, share_link_id, requester_id, status, created_at, updated_at, decided_by, decided_at
+`
+
+type RevokePrivateLogAccessRequestParams struct {
+	DecidedBy  uuid.NullUUID `db:"decided_by" json:"decided_by"`
+	ID         uuid.UUID     `db:"id" json:"id"`
+	LogGroupID uuid.UUID     `db:"log_group_id" json:"log_group_id"`
+}
+
+func (q *sqlQuerier) RevokePrivateLogAccessRequest(ctx context.Context, arg RevokePrivateLogAccessRequestParams) (PrivateLogAccessRequest, error) {
+	row := q.db.QueryRow(ctx, revokePrivateLogAccessRequest, arg.DecidedBy, arg.ID, arg.LogGroupID)
+	var i PrivateLogAccessRequest
+	err := row.Scan(
+		&i.ID,
+		&i.LogGroupID,
+		&i.ShareLinkID,
+		&i.RequesterID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DecidedBy,
+		&i.DecidedAt,
+	)
+	return i, err
+}
+
+const revokePrivateLogShareLink = `-- name: RevokePrivateLogShareLink :execrows
+UPDATE private_log_share_links
+SET revoked_at = NOW()
+WHERE id = $1
+  AND log_group_id = $2
+  AND revoked_at IS NULL
+`
+
+type RevokePrivateLogShareLinkParams struct {
+	ID         uuid.UUID `db:"id" json:"id"`
+	LogGroupID uuid.UUID `db:"log_group_id" json:"log_group_id"`
+}
+
+func (q *sqlQuerier) RevokePrivateLogShareLink(ctx context.Context, arg RevokePrivateLogShareLinkParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokePrivateLogShareLink, arg.ID, arg.LogGroupID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const upsertPrivateLogAccessRequest = `-- name: UpsertPrivateLogAccessRequest :one
+INSERT INTO private_log_access_requests (
+  id,
+  log_group_id,
+  share_link_id,
+  requester_id
+)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (log_group_id, requester_id) DO UPDATE
+SET
+  share_link_id = EXCLUDED.share_link_id,
+  status = CASE
+    WHEN private_log_access_requests.status = 'approved' THEN 'approved'
+    ELSE 'pending'
+  END,
+  updated_at = NOW(),
+  decided_by = CASE
+    WHEN private_log_access_requests.status = 'approved' THEN private_log_access_requests.decided_by
+    ELSE NULL
+  END,
+  decided_at = CASE
+    WHEN private_log_access_requests.status = 'approved' THEN private_log_access_requests.decided_at
+    ELSE NULL
+  END
+RETURNING id, log_group_id, share_link_id, requester_id, status, created_at, updated_at, decided_by, decided_at
+`
+
+type UpsertPrivateLogAccessRequestParams struct {
+	ID          uuid.UUID `db:"id" json:"id"`
+	LogGroupID  uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	ShareLinkID uuid.UUID `db:"share_link_id" json:"share_link_id"`
+	RequesterID uuid.UUID `db:"requester_id" json:"requester_id"`
+}
+
+func (q *sqlQuerier) UpsertPrivateLogAccessRequest(ctx context.Context, arg UpsertPrivateLogAccessRequestParams) (PrivateLogAccessRequest, error) {
+	row := q.db.QueryRow(ctx, upsertPrivateLogAccessRequest,
+		arg.ID,
+		arg.LogGroupID,
+		arg.ShareLinkID,
+		arg.RequesterID,
+	)
+	var i PrivateLogAccessRequest
+	err := row.Scan(
+		&i.ID,
+		&i.LogGroupID,
+		&i.ShareLinkID,
+		&i.RequesterID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DecidedBy,
+		&i.DecidedAt,
+	)
+	return i, err
+}
+
 const countRaidCompositionsByUser = `-- name: CountRaidCompositionsByUser :one
 SELECT COUNT(*)
 FROM raid_compositions
@@ -17405,7 +17778,7 @@ func (q *sqlQuerier) UpsertPendingModificationRequest(ctx context.Context, arg U
 }
 
 const findMatchingServerUpload = `-- name: FindMatchingServerUpload :one
-SELECT wlg.id, wlg.owner, wlg.created_at, wlg.updated_at, wlg.log_type, wlg.format, wlg.flavor, wlg.invalidated_at, wlg.invalid_reason, wlg.parse_generation
+SELECT wlg.id, wlg.owner, wlg.created_at, wlg.updated_at, wlg.log_type, wlg.format, wlg.flavor, wlg.invalidated_at, wlg.invalid_reason, wlg.parse_generation, wlg.private
 FROM wow_log_groups wlg
 JOIN server_upload_meta sm ON sm.log_group_id = wlg.id
 WHERE wlg.owner = $1
@@ -17450,6 +17823,7 @@ func (q *sqlQuerier) FindMatchingServerUpload(ctx context.Context, arg FindMatch
 		&i.InvalidatedAt,
 		&i.InvalidReason,
 		&i.ParseGeneration,
+		&i.Private,
 	)
 	return i, err
 }

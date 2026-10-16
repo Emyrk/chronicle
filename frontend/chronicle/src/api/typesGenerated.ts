@@ -2861,6 +2861,36 @@ export type PricingAuctionHouse = "merged" | "split";
 
 export const PricingAuctionHouses: PricingAuctionHouse[] = ["merged", "split"];
 
+// From chroniclesdk/private_logs.go
+export interface PrivateLogAccessRequest {
+    readonly id: string;
+    readonly log_group_id: string;
+    readonly requester_id: string;
+    readonly requester_name?: string;
+    readonly status: string;
+    readonly created_at: string;
+    readonly updated_at: string;
+    readonly decided_by?: string;
+    readonly decided_at?: string;
+}
+
+// From chroniclesdk/private_logs.go
+export interface PrivateLogShareLink {
+    readonly id: string;
+    readonly log_group_id: string;
+    readonly code: string;
+    readonly url: string;
+    readonly created_at: string;
+}
+
+// From chroniclesdk/private_logs.go
+export interface PrivateLogShareResolution {
+    readonly log_group_id: string;
+    readonly owner_name: string;
+    readonly private: boolean;
+    readonly access_status?: string;
+}
+
 // From chroniclesdk/raid_compositions.go
 /**
  * RaidCompData is the typed payload of a saved raid composition. The board
@@ -4851,6 +4881,7 @@ export interface WoWLogGroup {
     readonly log_type: string;
     readonly format?: string;
     readonly flavor?: readonly string[];
+    readonly private: boolean;
     readonly invalidated_at?: string;
     readonly invalid_reason?: string;
     readonly files: readonly WoWLogFile[];
