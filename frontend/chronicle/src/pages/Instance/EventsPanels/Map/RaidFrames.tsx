@@ -22,7 +22,8 @@ function NameplateBar({ color, current, max, absorb = 0, height }: { color: stri
   const fill = percent(current, max);
   const shield = Math.min(percent(absorb, max), 100 - fill);
   return (
-    <div className={`relative ${height} overflow-hidden rounded-sm border border-black bg-black/70`}>
+    // The empty track is a dim tint of the bar colour so the fill's end reads against the dark tooltip.
+    <div className={`relative ${height} overflow-hidden rounded-sm border border-white/25`} style={{ background: `color-mix(in srgb, ${color} 22%, #27272a)` }}>
       <div className="absolute inset-y-0 left-0" style={{ width: `${fill}%`, background: color }} />
       {shield > 0 && <div className="absolute inset-y-0 bg-white/50" style={{ left: `${fill}%`, width: `${shield}%` }} />}
       <span className="absolute inset-0 flex items-center justify-center font-mono font-semibold tabular-nums text-white [text-shadow:0_0_2px_#000,0_0_2px_#000,0_0_2px_#000]">
