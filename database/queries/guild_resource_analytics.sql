@@ -124,7 +124,7 @@ LEFT JOIN log_instances AS group_instance
 LEFT JOIN wow_log_groups AS log_group
     ON log_group.id = instance.log_group_id
 WHERE stats.guild_id = @guild_id
-  AND (stats.resource_kind NOT IN ('instance', 'instance_member') OR log_group.private = false)
+  AND (stats.resource_kind NOT IN ('instance', 'instance_member') OR COALESCE(log_group.private, false) = false)
   AND stats.viewed_on > (now() AT TIME ZONE 'UTC')::date - @lookback_days::int
 ORDER BY stats.viewed_on ASC, stats.resource_kind ASC, resource_name ASC;
 

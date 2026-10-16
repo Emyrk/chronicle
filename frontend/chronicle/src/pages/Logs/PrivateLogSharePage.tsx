@@ -14,13 +14,9 @@ export function PrivateLogSharePage() {
   const share = usePrivateLogShare(code, { enabled: Boolean(code) });
   const requestAccess = useRequestPrivateLogAccess(code);
   const metadata = share.data;
-  const accessStatus = metadata?.access_status ?? metadata?.request_status ?? metadata?.access?.access_status ?? metadata?.access?.request_status ?? "none";
-  const approved = metadata?.has_access || accessStatus === "approved";
-  const destination = metadata?.instance_slug || metadata?.instance_id
-    ? `/instances/${metadata.instance_slug ?? metadata.instance_id}`
-    : metadata?.log_id
-      ? `/logs/${metadata.log_id}`
-      : null;
+  const accessStatus = metadata?.access_status ?? "none";
+  const approved = accessStatus === "approved" || accessStatus === "owner";
+  const destination = metadata?.log_group_id ? `/logs/${metadata.log_group_id}` : null;
 
   useEffect(() => {
     if (approved && destination) navigate(destination, { replace: true });
@@ -53,7 +49,7 @@ export function PrivateLogSharePage() {
     );
   }
 
-  const title = metadata.instance_name ?? metadata.log_name ?? "Private raid log";
+  const title = "Private raid log";
 
   return (
     <div className="mx-auto max-w-xl p-6 md:p-10">

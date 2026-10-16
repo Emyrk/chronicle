@@ -90,8 +90,10 @@ func (api *API) InstanceEvents(w http.ResponseWriter, r *http.Request) {
 
 	// The conversion to another type is pretty expensive, just use the type as is
 	w.Header().Set("Content-Type", "application/octet-stream")
-	if httpmw.InstanceByID(ctx) {
-		// Instance IDs are uuids
+	if httpmw.InstancePrivate(ctx) {
+		w.Header().Set("Cache-Control", "private, no-store")
+	} else if httpmw.InstanceByID(ctx) {
+		// Public instance IDs are immutable UUIDs.
 		w.Header().Set("Cache-Control", "public, max-age=315360000")
 	}
 	w.WriteHeader(http.StatusOK)
@@ -116,6 +118,7 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	setDataset := func(out *chroniclesdk.WoWInstance) {
+		out.Private = httpmw.InstancePrivate(ctx)
 		datasetID, ok := api.Opts.Dataset.LookupDatasetForRealm(ctx, inst.RealmID)
 		if !ok {
 			return

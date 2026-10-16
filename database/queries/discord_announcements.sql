@@ -114,7 +114,7 @@ ORDER BY created_at, log_group_id, instance_ordinal;
 -- name: GetLogGroupInstanceIDByOrdinal :one
 SELECT li.id
 FROM log_instances li
-JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.private AND NOT wlg.private
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.private
 WHERE li.log_group_id = @log_group_id
 ORDER BY li.start_time ASC NULLS LAST, li.id ASC
 LIMIT 1 OFFSET @instance_ordinal;

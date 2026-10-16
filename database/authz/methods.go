@@ -99,7 +99,7 @@ func (z *interceptor) InsertEncounterCharacterFights(ctx context.Context, arg []
 }
 
 func (z *interceptor) InsertInstance(ctx context.Context, arg database.InsertInstanceParams) (database.LogInstance, error) {
-	private, err := z.Store.GetWoWLogGroupPrivacy(ctx, arg.LogGroupID)
+	private, err := z.GetWoWLogGroupPrivacy(ctx, arg.LogGroupID)
 	if err != nil {
 		return database.LogInstance{}, fmt.Errorf("get log group privacy: %w", err)
 	}
