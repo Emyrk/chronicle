@@ -38,6 +38,7 @@ type Service struct {
 	broker *services.Services
 
 	stripeSecretKey       string
+	stripeAccountID       string
 	stripeWebhookSecret   string
 	stripeSupporterPrice  string
 	stripeSupporterPrices []string
@@ -61,7 +62,7 @@ func (s *Service) DependsOn() []string {
 
 func (s *Service) Configures() []string { return []string{} }
 
-func (s *Service) Start(context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	var accessURL *url.URL
 	if configuredAccessURL := serviceaccessurl.AccessURL(s.broker); configuredAccessURL != "" {
 		parsed, err := url.Parse(configuredAccessURL)
@@ -79,6 +80,9 @@ func (s *Service) Start(context.Context) error {
 		Roles:         serviceauthz.Authz(s.broker).UserChronicleRoles,
 		AccessURL:     accessURL,
 	})
+	if err := s.Billing.ValidateAccount(ctx, s.stripeAccountID); err != nil {
+		return err
+	}
 	s.Worker = &billing.ReconciliationWorker{
 		Billing: s.Billing,
 		Store:   store,
@@ -125,6 +129,14 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_STRIPE_SECRET_KEY",
 			Default:     "",
 			Value:       serpent.StringOf(&s.stripeSecretKey),
+		},
+		{
+			Name:        "Stripe Account ID",
+			Description: "Expected Stripe account ID for the configured secret key. Required when a Stripe secret key is configured.",
+			Flag:        "stripe-account-id",
+			Env:         "CHRONICLE_STRIPE_ACCOUNT_ID",
+			Default:     "",
+			Value:       serpent.StringOf(&s.stripeAccountID),
 		},
 		{
 			Name:        "Stripe Webhook Secret",

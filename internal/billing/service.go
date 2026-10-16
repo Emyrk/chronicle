@@ -21,6 +21,7 @@ const (
 	ProviderStripe = "stripe"
 )
 
+type accountRetriever func(context.Context, *stripe.AccountRetrieveParams) (*stripe.Account, error)
 type priceRetriever func(context.Context, string, *stripe.PriceRetrieveParams) (*stripe.Price, error)
 type subscriptionRetriever func(context.Context, string, *stripe.SubscriptionRetrieveParams) (*stripe.Subscription, error)
 type subscriptionLister func(context.Context) ([]*stripe.Subscription, error)
@@ -42,6 +43,7 @@ type Service struct {
 	priceIDs             []string
 	allowedPrices        map[string]struct{}
 	accessURL            *url.URL
+	retrieveAccount      accountRetriever
 	retrievePrice        priceRetriever
 	retrieveSubscription subscriptionRetriever
 	listSubscriptions    subscriptionLister
@@ -53,11 +55,13 @@ type Service struct {
 
 func New(opts Options) *Service {
 	var client *stripe.Client
+	var retrieveAccount accountRetriever
 	var retrievePrice priceRetriever
 	var retrieveSubscription subscriptionRetriever
 	var listSubscriptions subscriptionLister
 	if opts.SecretKey != "" {
 		client = stripe.NewClient(opts.SecretKey)
+		retrieveAccount = client.V1Accounts.Retrieve
 		retrievePrice = client.V1Prices.Retrieve
 		retrieveSubscription = client.V1Subscriptions.Retrieve
 		listSubscriptions = func(ctx context.Context) ([]*stripe.Subscription, error) {
@@ -84,6 +88,7 @@ func New(opts Options) *Service {
 		priceIDs:             priceIDs,
 		allowedPrices:        allowedPrices,
 		accessURL:            opts.AccessURL,
+		retrieveAccount:      retrieveAccount,
 		retrievePrice:        retrievePrice,
 		retrieveSubscription: retrieveSubscription,
 		listSubscriptions:    listSubscriptions,
@@ -95,6 +100,26 @@ func (s *Service) SetAccessURL(accessURL *url.URL) {
 	if s != nil {
 		s.accessURL = accessURL
 	}
+}
+
+func (s *Service) ValidateAccount(ctx context.Context, expectedAccountID string) error {
+	if s == nil || s.retrieveAccount == nil {
+		return nil
+	}
+	if expectedAccountID == "" {
+		return fmt.Errorf("stripe account ID is required when a secret key is configured")
+	}
+	account, err := s.retrieveAccount(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("retrieve Stripe account: %w", err)
+	}
+	if account == nil || account.ID == "" {
+		return fmt.Errorf("stripe account response is missing an ID")
+	}
+	if account.ID != expectedAccountID {
+		return fmt.Errorf("stripe account mismatch: configured %q, authenticated as %q", expectedAccountID, account.ID)
+	}
+	return nil
 }
 
 func (s *Service) Enabled() bool {

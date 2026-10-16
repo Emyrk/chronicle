@@ -16,6 +16,19 @@ func TestSupporterPriceIDsPrefersPluralConfiguration(t *testing.T) {
 	require.Equal(t, []string{"price_monthly", "price_annual"}, s.supporterPriceIDs())
 }
 
+func TestOptionsIncludeStripeAccountID(t *testing.T) {
+	t.Parallel()
+
+	var found bool
+	for _, option := range (&Service{}).Options() {
+		if option.Env == "CHRONICLE_STRIPE_ACCOUNT_ID" {
+			found = true
+			break
+		}
+	}
+	require.True(t, found)
+}
+
 func TestConfigureDevStripeWebhookSecret(t *testing.T) {
 	t.Parallel()
 

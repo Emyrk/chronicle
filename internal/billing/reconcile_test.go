@@ -128,10 +128,21 @@ func TestReconciliationCountsChangedNoopAndInvalidMetadata(t *testing.T) {
 	invalid.Customer = &stripe.Customer{ID: "cus_invalid"}
 	invalid.Metadata = map[string]string{"chronicle_user_id": "not-a-uuid", "chronicle_product_code": string(ProductSupporter)}
 
-	store := &reconciliationStore{providerErr: pgx.ErrNoRows, changedRows: []int64{1, 0}}
+	store := &reconciliationStore{
+		providerErr: pgx.ErrNoRows,
+		changedRows: []int64{1, 0},
+		localSubscriptions: []database.BillingSubscription{
+			{Provider: ProviderStripe, ProviderSubscriptionID: text(validChanged.ID)},
+			{Provider: ProviderStripe, ProviderSubscriptionID: text(validNoop.ID)},
+		},
+	}
 	svc := New(Options{Store: store, PriceIDs: []string{"price_monthly"}})
 	svc.listSubscriptions = func(context.Context) ([]*stripe.Subscription, error) {
 		return []*stripe.Subscription{validChanged, validNoop, invalid}, nil
+	}
+	svc.retrieveSubscription = func(_ context.Context, id string, _ *stripe.SubscriptionRetrieveParams) (*stripe.Subscription, error) {
+		require.Equal(t, invalid.ID, id)
+		return invalid, nil
 	}
 	worker := &ReconciliationWorker{Billing: svc, Store: store}
 	require.NoError(t, worker.Work(context.Background(), &river.Job[ArgsReconcileSubscriptions]{}))
@@ -140,6 +151,41 @@ func TestReconciliationCountsChangedNoopAndInvalidMetadata(t *testing.T) {
 	require.Equal(t, int32(3), store.completion.SubscriptionsSeen)
 	require.Equal(t, int32(1), store.completion.SubscriptionsChanged)
 	require.Equal(t, int32(1), store.completion.SubscriptionsSkippedInvalid)
+}
+
+func TestReconciliationRetrievesLocalSubscriptionMissingFromList(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	local := database.BillingSubscription{
+		UserID:                 userID,
+		Provider:               ProviderStripe,
+		ProviderSubscriptionID: text("sub_existing"),
+		ProductCode:            string(ProductSupporter),
+	}
+	authoritative := testStripeSubscription("prod_supporter", "price_monthly", time.Now().Add(time.Hour))
+	authoritative.ID = local.ProviderSubscriptionID.String
+	authoritative.Customer = &stripe.Customer{ID: "cus_existing"}
+	authoritative.Metadata = map[string]string{
+		"chronicle_user_id":      userID.String(),
+		"chronicle_product_code": string(ProductSupporter),
+	}
+	store := &reconciliationStore{
+		localSubscriptions: []database.BillingSubscription{local},
+		changedRows:        []int64{1},
+	}
+	svc := New(Options{Store: store, PriceIDs: []string{"price_monthly"}})
+	svc.listSubscriptions = func(context.Context) ([]*stripe.Subscription, error) { return nil, nil }
+	svc.retrieveSubscription = func(_ context.Context, id string, _ *stripe.SubscriptionRetrieveParams) (*stripe.Subscription, error) {
+		require.Equal(t, local.ProviderSubscriptionID.String, id)
+		return authoritative, nil
+	}
+
+	err := (&ReconciliationWorker{Billing: svc, Store: store}).Work(context.Background(), &river.Job[ArgsReconcileSubscriptions]{})
+	require.NoError(t, err)
+	require.Equal(t, int32(1), store.completion.SubscriptionsChanged)
+	require.Len(t, store.conditionalUpserts, 1)
+	require.NotEqual(t, string(stripe.SubscriptionStatusCanceled), store.conditionalUpserts[0].Status)
 }
 
 func TestReconciliationCancelsLocalSubscriptionMissingFromStripe(t *testing.T) {
@@ -162,6 +208,10 @@ func TestReconciliationCancelsLocalSubscriptionMissingFromStripe(t *testing.T) {
 	}
 	svc := New(Options{Store: store, PriceIDs: []string{"price_monthly"}})
 	svc.listSubscriptions = func(context.Context) ([]*stripe.Subscription, error) { return nil, nil }
+	svc.retrieveSubscription = func(_ context.Context, id string, _ *stripe.SubscriptionRetrieveParams) (*stripe.Subscription, error) {
+		require.Equal(t, local.ProviderSubscriptionID.String, id)
+		return nil, &stripe.Error{Code: stripe.ErrorCodeResourceMissing}
+	}
 
 	err := (&ReconciliationWorker{Billing: svc, Store: store}).Work(context.Background(), &river.Job[ArgsReconcileSubscriptions]{})
 	require.NoError(t, err)

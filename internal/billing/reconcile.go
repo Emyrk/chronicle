@@ -81,6 +81,17 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 		}
 	}()
 
+	localSubscriptions, err := w.Store.ListBillingSubscriptionsForReconciliation(ctx)
+	if err != nil {
+		return fmt.Errorf("list local billing subscriptions: %w", err)
+	}
+	localByProviderID := make(map[string]database.BillingSubscription, len(localSubscriptions))
+	for _, sub := range localSubscriptions {
+		if sub.Provider == ProviderStripe && sub.ProviderSubscriptionID.Valid {
+			localByProviderID[sub.ProviderSubscriptionID.String] = sub
+		}
+	}
+
 	subscriptions, err := w.Billing.listSubscriptions(ctx)
 	if err != nil {
 		return fmt.Errorf("list Stripe subscriptions: %w", err)
@@ -93,6 +104,17 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 			continue
 		}
 		seen[sub.ID] = struct{}{}
+		if _, existsLocally := localByProviderID[sub.ID]; !existsLocally {
+			subscriptionID := sub.ID
+			sub, err = w.Billing.retrieveAuthoritativeSubscription(ctx, subscriptionID)
+			if err != nil {
+				if stripeResourceMissing(err) {
+					counts.invalid++
+					continue
+				}
+				return fmt.Errorf("retrieve discovered Stripe subscription %q: %w", subscriptionID, err)
+			}
+		}
 		userID, product, err := w.Billing.subscriptionOwner(ctx, sub)
 		if err != nil {
 			counts.invalid++
@@ -107,20 +129,27 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 		}
 	}
 
-	localSubscriptions, err := w.Store.ListBillingSubscriptionsForReconciliation(ctx)
-	if err != nil {
-		return fmt.Errorf("list local billing subscriptions: %w", err)
-	}
-	for _, sub := range localSubscriptions {
-		if sub.Provider != ProviderStripe || !sub.ProviderSubscriptionID.Valid {
+	for subscriptionID, local := range localByProviderID {
+		if _, ok := seen[subscriptionID]; ok {
 			continue
 		}
-		if _, ok := seen[sub.ProviderSubscriptionID.String]; ok {
-			continue
-		}
-		changed, err := w.Billing.cancelSubscriptionIfChanged(ctx, sub)
+		sub, err := w.Billing.retrieveAuthoritativeSubscription(ctx, subscriptionID)
 		if err != nil {
-			return fmt.Errorf("cancel missing Stripe subscription %q: %w", sub.ProviderSubscriptionID.String, err)
+			if !stripeResourceMissing(err) {
+				return fmt.Errorf("retrieve locally missing Stripe subscription %q: %w", subscriptionID, err)
+			}
+			changed, cancelErr := w.Billing.cancelSubscriptionIfChanged(ctx, local)
+			if cancelErr != nil {
+				return fmt.Errorf("cancel deleted Stripe subscription %q: %w", subscriptionID, cancelErr)
+			}
+			if changed {
+				counts.changed++
+			}
+			continue
+		}
+		changed, err := w.Billing.reconcileSubscription(ctx, sub)
+		if err != nil {
+			return fmt.Errorf("reconcile locally missing Stripe subscription %q: %w", subscriptionID, err)
 		}
 		if changed {
 			counts.changed++
@@ -134,6 +163,14 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 		)
 	}
 	return nil
+}
+
+func (s *Service) reconcileSubscription(ctx context.Context, sub *stripe.Subscription) (bool, error) {
+	userID, product, err := s.subscriptionOwner(ctx, sub)
+	if err != nil {
+		return false, err
+	}
+	return s.upsertSubscriptionIfChanged(ctx, userID, product, sub)
 }
 
 func (s *Service) upsertSubscriptionIfChanged(ctx context.Context, userID uuid.UUID, product ProductCode, sub *stripe.Subscription) (bool, error) {

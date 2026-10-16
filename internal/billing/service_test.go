@@ -19,6 +19,39 @@ func TestPublicTierName(t *testing.T) {
 	require.Equal(t, "supporter", string(ProductSupporter))
 }
 
+func TestValidateAccount(t *testing.T) {
+	t.Parallel()
+
+	t.Run("matches", func(t *testing.T) {
+		t.Parallel()
+		s := &Service{retrieveAccount: func(context.Context, *stripe.AccountRetrieveParams) (*stripe.Account, error) {
+			return &stripe.Account{ID: "acct_expected"}, nil
+		}}
+		require.NoError(t, s.ValidateAccount(context.Background(), "acct_expected"))
+	})
+
+	t.Run("requires configured ID", func(t *testing.T) {
+		t.Parallel()
+		s := &Service{retrieveAccount: func(context.Context, *stripe.AccountRetrieveParams) (*stripe.Account, error) {
+			return &stripe.Account{ID: "acct_actual"}, nil
+		}}
+		require.ErrorContains(t, s.ValidateAccount(context.Background(), ""), "account ID is required")
+	})
+
+	t.Run("rejects mismatch", func(t *testing.T) {
+		t.Parallel()
+		s := &Service{retrieveAccount: func(context.Context, *stripe.AccountRetrieveParams) (*stripe.Account, error) {
+			return &stripe.Account{ID: "acct_actual"}, nil
+		}}
+		require.ErrorContains(t, s.ValidateAccount(context.Background(), "acct_expected"), "account mismatch")
+	})
+
+	t.Run("disabled without Stripe client", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, (&Service{}).ValidateAccount(context.Background(), ""))
+	})
+}
+
 func TestSupporterPrices(t *testing.T) {
 	t.Parallel()
 
