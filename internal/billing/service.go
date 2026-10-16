@@ -131,7 +131,7 @@ func (s *Service) validateSubscriptionPurchase(product ProductCode, purchase str
 		return fmt.Errorf("unknown billing product %q", product)
 	}
 	if !s.priceAllowed(purchase.priceID) {
-		return fmt.Errorf("Stripe price %q is not configured for product %q", purchase.priceID, product)
+		return fmt.Errorf("stripe price %q is not configured for product %q", purchase.priceID, product)
 	}
 	return nil
 }
