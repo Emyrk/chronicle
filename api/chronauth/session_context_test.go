@@ -6,7 +6,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Emyrk/chronicle/api/chronauth/claims"
+	"github.com/google/uuid"
 	"github.com/gorilla/sessions"
+	"github.com/stretchr/testify/require"
 )
 
 type sessionContextKey struct{}
@@ -63,4 +66,25 @@ func TestSessionRegistryFollowsRequestContextClone(t *testing.T) {
 	if got := second.Values["marker"]; got != "retained" {
 		t.Fatalf("session value = %v, want retained", got)
 	}
+}
+
+func TestAuthenticationMiddlewarePreservesExistingClaims(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	service := &Service{}
+	handler := service.AuthenticationMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got, ok := AuthenticatedClaims(r.Context())
+		require.True(t, ok)
+		require.Equal(t, userID, got.Subject)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "https://example.com/api/v1/raidlogs/logs/upload-v2", nil)
+	req.Header.Set("Authorization", "Bearer oauth-access-token")
+	req = req.WithContext(WithClaims(req.Context(), &claims.Claims{Subject: userID}))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusNoContent, rec.Code)
 }

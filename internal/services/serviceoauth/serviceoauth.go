@@ -28,9 +28,10 @@ import (
 )
 
 const (
-	ClientID        = "chronicle-sidekick"
-	ScopeAll        = "all"
-	deviceGrantType = "urn:ietf:params:oauth:grant-type:device_code"
+	ClientID          = "chronicle-sidekick"
+	ScopeAll          = "all"
+	accessTokenPrefix = "ory_at_"
+	deviceGrantType   = "urn:ietf:params:oauth:grant-type:device_code"
 )
 
 var compiledClient = &fosite.DefaultClient{
@@ -263,9 +264,21 @@ func (s *Service) browserApprovalHandler(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// BearerAuthenticated validates a Fosite access token and establishes both
-// Chronicle authentication claims and the database authorization actor. It is
-// intentionally not mounted on existing API routes in this change.
+// AuthenticationMiddleware establishes Chronicle authentication for valid OAuth
+// access tokens. Requests without a valid OAuth token continue to the next
+// authentication middleware, which preserves support for Chronicle session JWTs.
+func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx, ok := s.authenticateBearer(r)
+		if ok {
+			r = r.WithContext(ctx)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// BearerAuthenticated requires a valid Fosite access token and establishes both
+// Chronicle authentication claims and the database authorization actor.
 func (s *Service) BearerAuthenticated(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := r.Header.Get("Authorization")
@@ -274,18 +287,29 @@ func (s *Service) BearerAuthenticated(next http.Handler) http.Handler {
 			httpapi.Write(r.Context(), w, http.StatusUnauthorized, chroniclesdk.Response{Message: "Missing OAuth bearer token."})
 			return
 		}
-		_, request, err := s.provider.IntrospectToken(r.Context(), parts[1], fosite.AccessToken, &fosite.DefaultSession{}, ScopeAll)
-		if err != nil {
+		ctx, ok := s.authenticateBearer(r)
+		if !ok {
 			httpapi.Write(r.Context(), w, http.StatusUnauthorized, chroniclesdk.Response{Message: "Invalid OAuth bearer token."})
 			return
 		}
-		userID, err := uuid.Parse(request.GetSession().GetSubject())
-		if err != nil {
-			httpapi.Write(r.Context(), w, http.StatusUnauthorized, chroniclesdk.Response{Message: "Invalid OAuth subject."})
-			return
-		}
-		ctx := chronauth.WithClaims(r.Context(), &claims.Claims{Subject: userID})
-		ctx = authz.AsUser(ctx, userID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (s *Service) authenticateBearer(r *http.Request) (context.Context, bool) {
+	header := r.Header.Get("Authorization")
+	parts := strings.Fields(header)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || !strings.HasPrefix(parts[1], accessTokenPrefix) {
+		return r.Context(), false
+	}
+	_, request, err := s.provider.IntrospectToken(r.Context(), parts[1], fosite.AccessToken, &fosite.DefaultSession{}, ScopeAll)
+	if err != nil {
+		return r.Context(), false
+	}
+	userID, err := uuid.Parse(request.GetSession().GetSubject())
+	if err != nil {
+		return r.Context(), false
+	}
+	ctx := chronauth.WithClaims(r.Context(), &claims.Claims{Subject: userID})
+	return authz.AsUser(ctx, userID), true
 }

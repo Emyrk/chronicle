@@ -47,6 +47,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// OAuthHandler serves the OAuth endpoints and authenticates OAuth bearer tokens.
+type OAuthHandler interface {
+	http.Handler
+	AuthenticationMiddleware(http.Handler) http.Handler
+}
+
 type Options struct {
 	Logger                *slog.Logger
 	Storage               storage.ObjectStorage
@@ -63,7 +69,7 @@ type Options struct {
 	Assets                http.Handler
 	InternalGameData      http.Handler
 	ExternalAPI           http.Handler
-	OAuth                 http.Handler
+	OAuth                 OAuthHandler
 	Rankings              http.Handler
 	Mailer                *chroniclemail.Mailer
 	ItemPricing           *itempricing.Service
@@ -222,11 +228,11 @@ func (api *API) Routes() chi.Router {
 		}
 
 		r.Group(func(r chi.Router) {
-
-			r.Use(
-				httpmw.BrowserOnly(api.Opts.AccessURL, discordInstallCallbackPath),
-				api.Auth.AuthenticationMiddleware,
-			)
+			r.Use(httpmw.BrowserOnly(api.Opts.AccessURL, discordInstallCallbackPath))
+			if api.Opts.OAuth != nil {
+				r.Use(api.Opts.OAuth.AuthenticationMiddleware)
+			}
+			r.Use(api.Auth.AuthenticationMiddleware)
 
 			r.Get("/discord-integration/callback", api.CompleteGuildDiscordInstall)
 			r.Post("/live-sessions/{code}/join", api.liveSessions.Join)
