@@ -1,13 +1,13 @@
 /**
  * Announcement: focus mode.
  *
- * A mock instance page in a browser window. Shift+F folds the site chrome
+ * A mock instance page (Player Timeline) in a browser window. Shift+F folds the site chrome
  * away so only the encounters, presets and layout remain; Ctrl+Shift+F also
  * takes the browser fullscreen; Exit focus (or Esc) brings it all back.
  * 630 frames @ 30fps, 1280x720.
  */
 import type { ReactNode } from "react";
-import { CheckCircle, Maximize2, Minimize2, Pause, RotateCcw, Skull, Users } from "lucide-react";
+import { CheckCircle, Maximize2, Minimize2, Skull, Users } from "lucide-react";
 import { interpolate, Sequence, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { clamp, entranceEasing, INTRO_FRAMES } from "@/pages/Instance/PanelExplainer/videos/animation";
 import { Cursor, LessonIntro, StepCaption, VideoStage } from "@/pages/Instance/PanelExplainer/videos/shared";
@@ -181,7 +181,7 @@ function MockPage({ focus, height, frame }: { focus: number; height: number; fra
               </div>
             </Folding>
             <PresetRow focused={focus > 0.5} />
-            <MapLayout frame={frame} />
+            <PlayerTimelineLayout frame={frame} />
           </div>
         </div>
       </div>
@@ -224,7 +224,7 @@ function PresetRow({ focused }: { focused: boolean }) {
   return (
     <div className="mb-2 flex shrink-0 items-center gap-1 text-[11px]" style={{ height: PRESET_ROW }}>
       {["Summary", "Damage", "Healing", "Deaths", "Player Timeline", "Map", "Loot"].map((label) => (
-        <span key={label} className={`rounded px-2 py-1 ${label === "Map" ? "bg-primary text-primary-foreground" : "text-zinc-400"}`}>{label}</span>
+        <span key={label} className={`rounded px-2 py-1 ${label === "Player Timeline" ? "bg-primary text-primary-foreground" : "text-zinc-400"}`}>{label}</span>
       ))}
       <span className={`ml-auto flex items-center gap-1 rounded px-2 py-1 font-medium ${focused ? "text-red-400" : "text-zinc-400"}`}>
         {focused ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
@@ -234,53 +234,104 @@ function PresetRow({ focused }: { focused: boolean }) {
   );
 }
 
-// Deterministic party-damage bars for the replay strip.
-const BARS = Array.from({ length: 64 }, (_, index) => 25 + ((index * 37) % 61) + (index % 7 === 0 ? 10 : 0));
-const UNITS = [
-  [46, 44, "#C79C6E"], [50, 49, "#F58CBA"], [44, 52, "#0070DE"], [53, 41, "#69CCF0"],
-  [48, 56, "#ABD473"], [55, 50, "#FFF569"], [42, 47, "#FF7D0A"], [51, 45, "#9482C9"],
+// A rough Player Timeline: DPS overview, time ruler, and per-player lanes of
+// casts, buffs and cooldowns, all deterministic so every render matches.
+const TIMELINE_SECONDS = 80;
+const PLAYERS = [
+  { name: "Gogus", spec: "Frost Mage", color: "#69CCF0", schools: ["var(--color-school-frost)", "var(--color-school-arcane)", "var(--color-school-fire)"], seed: 3 },
+  { name: "Welf", spec: "Fury Warrior", color: "#C79C6E", schools: ["var(--color-school-physical)", "var(--color-school-physical)", "var(--color-school-fire)"], seed: 7 },
 ] as const;
 
-function MapLayout({ frame }: { frame: number }) {
-  const progress = ((frame * 0.004) % 1) * 100;
+function casts(seed: number) {
+  const out: { start: number; width: number; school: number }[] = [];
+  let at = 0.5;
+  for (let index = 0; at < TIMELINE_SECONDS - 1; index++) {
+    const width = 1 + ((index * seed) % 3) * 0.6;
+    out.push({ start: at, width, school: (index * seed + seed) % 3 });
+    // An occasional idle gap reads as the timeline's empty space.
+    at += width + (index % 9 === seed % 9 ? 3 : 0.35);
+  }
+  return out;
+}
+
+function dpsLine(seed: number): string {
+  return Array.from({ length: 41 }, (_, index) => {
+    const x = (index / 40) * 100;
+    const y = 70 - (Math.sin(index * 0.45 + seed) * 18 + Math.sin(index * 1.3 + seed * 2) * 9 + 22);
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  }).join(" ");
+}
+
+const PLAYER_CASTS = PLAYERS.map((player) => casts(player.seed));
+const PLAYER_LINES = PLAYERS.map((player) => dpsLine(player.seed));
+
+function PlayerTimelineLayout({ frame }: { frame: number }) {
+  const cursor = ((frame * 0.0035) % 1) * 100;
+  const pct = (seconds: number) => `${(seconds / TIMELINE_SECONDS) * 100}%`;
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="relative min-h-0 flex-1 overflow-hidden border border-zinc-800 bg-[radial-gradient(ellipse_at_50%_55%,#5b4a26,#2a2414_55%,#121009)]">
-        <div className="absolute left-3 top-2 text-[11px] font-medium text-zinc-300">Map</div>
-        <div className="absolute inset-[18%] rounded-[40%] bg-[radial-gradient(ellipse,#4d6b2b_0%,#3a4f22_45%,transparent_70%)] opacity-80" />
-        <div className="absolute left-3 top-7 grid grid-cols-2 gap-0.5">
-          {UNITS.slice(0, 6).map(([, , color], index) => (
-            <div key={index} className="h-3 w-16 rounded-sm bg-black/70">
-              <div className="h-full rounded-sm" style={{ width: `${60 + ((index * 23) % 40)}%`, background: color }} />
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-zinc-800 bg-[#0d0d10]">
+      <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-3 py-1.5 text-[11px]">
+        <span className="flex items-center gap-2">
+          <span style={{ color: PLAYERS[0].color }}>{PLAYERS[0].name}</span>
+          <span className="text-zinc-500">vs</span>
+          <span style={{ color: PLAYERS[1].color }}>{PLAYERS[1].name}</span>
+        </span>
+        <span className="flex items-center gap-2 text-zinc-400">
+          <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-zinc-100">DPS</span>
+          <span>HPS</span>
+          <span className="font-mono text-[var(--color-class-warrior)]">{formatClock((cursor / 100) * TIMELINE_SECONDS)}</span>
+        </span>
+      </div>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {/* DPS overview */}
+        <div className="relative ml-[104px] shrink-0 basis-[28%] border-b border-zinc-800">
+          <svg viewBox="0 0 100 70" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
+            {PLAYER_LINES.map((points, index) => (
+              <polyline key={index} points={points} fill="none" stroke={PLAYERS[index].color} strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
+            ))}
+          </svg>
+        </div>
+        {/* Ruler */}
+        <div className="relative ml-[104px] h-4 shrink-0 border-b border-zinc-800 font-mono text-[9px] text-zinc-500">
+          {[0, 20, 40, 60, 80].map((seconds) => (
+            <span key={seconds} className="absolute top-0.5 -translate-x-1/2" style={{ left: pct(seconds) }}>{formatClock(seconds)}</span>
+          ))}
+        </div>
+        {/* Player lanes */}
+        <div className="flex min-h-0 flex-1 flex-col gap-5 pt-3">
+          {PLAYERS.map((player, playerIndex) => (
+            <div key={player.name} className="flex items-center">
+              <div className="w-[104px] shrink-0 px-3">
+                <p className="truncate text-[11px] font-semibold" style={{ color: player.color }}>{player.name}</p>
+                <p className="truncate text-[9px] text-zinc-500">{player.spec}</p>
+              </div>
+              <div className="relative flex-1 space-y-1">
+                <div className="relative h-4">
+                  {PLAYER_CASTS[playerIndex].map((cast, index) => (
+                    <span
+                      key={index}
+                      className="absolute top-0 h-full rounded-[2px]"
+                      style={{ left: pct(cast.start), width: pct(cast.width), background: player.schools[cast.school], opacity: (cast.start / TIMELINE_SECONDS) * 100 <= cursor ? 1 : 0.45 }}
+                    />
+                  ))}
+                </div>
+                <div className="relative h-1.5">
+                  <span className="absolute h-full rounded-sm bg-emerald-500/60" style={{ left: pct(4 + playerIndex * 6), width: pct(22) }} />
+                  <span className="absolute h-full rounded-sm bg-amber-400/60" style={{ left: pct(38), width: pct(15) }} />
+                  <span className="absolute h-full rounded-sm bg-violet-400/60" style={{ left: pct(60 - playerIndex * 4), width: pct(12) }} />
+                </div>
+                <div className="relative h-2">
+                  {[8 + playerIndex * 5, 36, 66].map((seconds) => (
+                    <span key={seconds} className="absolute top-0 h-2 w-2 -translate-x-1/2 rotate-45 bg-[#ffd100]" style={{ left: pct(seconds) }} />
+                  ))}
+                </div>
+              </div>
             </div>
           ))}
         </div>
-        {UNITS.map(([x, y, color], index) => (
-          <span
-            key={index}
-            className="absolute h-2.5 w-2.5 rounded-full border border-black/70"
-            style={{ left: `${x + Math.sin((frame + index * 9) / 18) * 1.2}%`, top: `${y + Math.cos((frame + index * 7) / 22) * 1.2}%`, background: color }}
-          />
-        ))}
-        <span className="absolute h-4 w-4 rounded-full border-2 border-black/70 bg-[var(--color-class-enemy)]" style={{ left: "49%", top: "47%" }} />
-      </div>
-      <div className="flex h-[54px] shrink-0 items-center gap-2 border-x border-b border-zinc-800 bg-card px-2">
-        <span className="grid h-6 w-6 place-items-center rounded border border-zinc-700"><Pause className="h-3 w-3" /></span>
-        <span className="grid h-6 w-6 place-items-center rounded border border-zinc-700"><RotateCcw className="h-3 w-3" /></span>
-        <span className="font-mono text-[11px] text-[var(--color-class-warrior)]">{formatClock(progress * 0.8)}</span>
-        <div className="relative h-9 flex-1">
-          <div className="absolute inset-x-0 bottom-2 top-0 flex items-end gap-px">
-            {BARS.map((height, index) => (
-              <span
-                key={index}
-                className="flex-1 rounded-t-[1px]"
-                style={{ height: `${height}%`, background: (index + 0.5) / BARS.length * 100 <= progress ? "var(--chart-3)" : "rgba(255,255,255,.08)" }}
-              />
-            ))}
-          </div>
-          <div className="absolute inset-x-0 bottom-0 h-1 rounded-sm bg-[#3a3a3a]">
-            <div className="h-full rounded-sm bg-[var(--color-class-warrior)]" style={{ width: `${progress}%` }} />
-          </div>
+        {/* Cursor across the chart and lanes */}
+        <div className="pointer-events-none absolute bottom-0 left-[104px] right-0 top-0">
+          <span className="absolute bottom-0 top-0 w-px bg-[#ffd100] shadow-[0_0_8px_rgba(255,209,0,0.75)]" style={{ left: `${cursor}%` }} />
         </div>
       </div>
     </div>

@@ -282,6 +282,35 @@ export function CooldownUsagePost({ post }: PostProps) {
   );
 }
 
+export function FocusModePost({ post }: PostProps) {
+  return (
+    <ShortPost post={post}>
+      <p>
+        <strong>Focus mode</strong> clears everything off the raid page except the encounter list, the layout presets,
+        and your panels. The navbar, banners, raid header, enemy and player filters, and footer all step aside so the
+        panels get the whole screen.
+      </p>
+      <ul>
+        <li>
+          Press <kbd>Shift</kbd> + <kbd>F</kbd>, or click <strong>Focus</strong> at the end of the preset bar, to toggle
+          focus mode
+        </li>
+        <li>
+          Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd> (<kbd>Cmd</kbd> on a Mac) to go browser fullscreen too
+        </li>
+        <li>
+          Press <kbd>Esc</kbd> or click the red <strong>Exit focus</strong> to bring everything back
+        </li>
+      </ul>
+      <p>
+        Focus mode lives in the page link, so it survives a refresh and a shared link opens straight into it. The new{" "}
+        <strong>Map</strong> preset stretches to fill the screen in focus mode, with the replay controller pinned
+        underneath: a good fit for a second monitor or a stream.
+      </p>
+    </ShortPost>
+  );
+}
+
 export function PlayerTimelinePost({ post }: PostProps) {
   return (
     <ShortPost post={post}>
