@@ -25,6 +25,7 @@ import {
   type StripTitleMode,
 } from "./stripOptions";
 import type { StripDefinition, StripType } from "./types";
+import { useSeamlessLayout } from "../SeamlessLayoutContext";
 
 function optionValue(tokens: string[], prefix: string): string | null {
   const token = tokens.find((candidate) => candidate.startsWith(prefix));
@@ -72,6 +73,7 @@ export function Strip({
   onFiltersChange,
 }: StripProps) {
   const isMobile = useIsMobile();
+  const seamless = useSeamlessLayout();
   const strip = STRIPS[stripType];
   const optionTokens = useMemo(() => parseStripOptionTokens(panelOption), [panelOption]);
   const borderColor = optionValue(optionTokens, "bc:");
@@ -203,7 +205,7 @@ export function Strip({
   return (
     <PortalContainerProvider container={popup?.container ?? inheritedPortalContainer}>
       <div
-        className="group/strip relative h-full min-h-0 overflow-visible rounded-md border border-border/70 bg-card"
+        className={cn("group/strip relative h-full min-h-0 overflow-visible border border-border/70 bg-card", seamless ? "rounded-none" : "rounded-md")}
         style={borderColor ? { borderColor } : undefined}
         onMouseDown={(event) => {
           if (!isMobile && event.shiftKey && event.button === 0) {

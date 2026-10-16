@@ -34,6 +34,8 @@ export interface PanelPresetLayout extends PresetLayoutBase {
   panelTypes: Record<string, EventsPanelType>;
   panelOptions: Record<string, string>;
   panelFilters: Record<string, PanelFilter[]>;
+  /** Butt panels and strips together with no gaps or rounding (guild pages' "Seamless"). */
+  seamless?: boolean;
 }
 
 export type PresetLayout = PagePresetLayout | PanelPresetLayout;
@@ -234,6 +236,22 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
     pageType: "player_timeline",
   },
   {
+    id: "map",
+    label: "Map",
+    kind: "panels",
+    seamless: true,
+    layoutItems: [
+      { id: "panel-1", title: "Map", x: 0, y: 0, w: 12, h: 7, minW: 4 },
+      { id: "strip-1", title: "Replay Controller", kind: "strip", stripType: "replay_controller", orientation: "horizontal", x: 0, y: 7, w: 12, h: 1, minW: 6, minH: 1, maxH: 2 },
+    ],
+    panelTypes: {
+      "panel-1": "map",
+    },
+    panelOptions: {},
+    panelFilters: {},
+    requiredCapabilities: ["unit-position"],
+  },
+  {
     id: "loot",
     label: "Loot",
     kind: "panels",
@@ -288,3 +306,9 @@ export const PRESET_LAYOUTS_BY_ID = Object.fromEntries(
 ) as Record<string, PresetLayout>;
 
 export const DEFAULT_PRESET_ID = "summary";
+
+/** Whether the preset lays its panels out seamlessly (no gaps or rounding). */
+export function isSeamlessPreset(presetId: string | null): boolean {
+  const preset = presetId ? PRESET_LAYOUTS_BY_ID[presetId] : undefined;
+  return Boolean(preset && isPanelPresetLayout(preset) && preset.seamless);
+}

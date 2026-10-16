@@ -1,6 +1,7 @@
 import type { MouseEventHandler, ReactNode } from "react";
 import { Card } from "@/components/ui/Card/Card";
 import { cn } from "@/lib/utils";
+import { useSeamlessLayout } from "./SeamlessLayoutContext";
 
 interface PanelCardProps {
   flipped: boolean;
@@ -13,6 +14,7 @@ interface PanelCardProps {
 }
 
 export function PanelCard({ flipped, onMouseDown, underConstruction, borderColor, front, back }: PanelCardProps) {
+  const seamless = useSeamlessLayout();
   return (
     <div className="h-full [perspective:1400px]" onMouseDown={onMouseDown}>
       <div
@@ -28,6 +30,7 @@ export function PanelCard({ flipped, onMouseDown, underConstruction, borderColor
             "absolute inset-0 p-2 sm:p-4 gap-2 h-full mb-0 flex flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(0deg)]",
             underConstruction && "border-yellow-500/50",
             flipped && "pointer-events-none",
+            seamless && "rounded-none shadow-none",
           )}
           style={borderColor ? { borderColor } : undefined}
         >
@@ -36,6 +39,7 @@ export function PanelCard({ flipped, onMouseDown, underConstruction, borderColor
         <Card className={cn(
           "absolute inset-0 p-2 sm:p-4 gap-2 h-full mb-0 flex flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)]",
           !flipped && "pointer-events-none",
+          seamless && "rounded-none shadow-none",
         )}>
           {back}
         </Card>

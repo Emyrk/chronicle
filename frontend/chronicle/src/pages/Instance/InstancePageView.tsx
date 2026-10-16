@@ -33,6 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 import { cn } from "@/lib/utils";
+import { SeamlessLayoutContext } from "./EventsPanels/SeamlessLayoutContext";
 import type { Instance, Encounter, EncounterPhase, EnemyUnit } from "./InstancePage";
 import { activePhaseForTimeRange, phaseTimeRangeSelection, phaseWidthPercent } from "./phaseTimeRange";
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
@@ -89,6 +90,7 @@ import {
   isPanelPresetLayout,
   PRESET_LAYOUTS,
   PRESET_LAYOUTS_BY_ID,
+  isSeamlessPreset,
   DEFAULT_PRESET_ID,
   type InstancePageType,
   type PresetLayout,
@@ -1053,6 +1055,8 @@ interface EventsPanelGridProps {
   onPanelOptionChange: (itemID: string, option: string | null) => void;
   onPanelFiltersChange: (itemID: string, filters: PanelFilter[]) => void;
   onExplainerClick: (panelType: EventsPanelType) => void;
+  /** No gaps or rounding between items (the preset's `seamless`). */
+  seamless?: boolean;
 }
 
 function EventsPanelGrid({
@@ -1070,10 +1074,12 @@ function EventsPanelGrid({
   onPanelOptionChange,
   onPanelFiltersChange,
   onExplainerClick,
+  seamless = false,
 }: EventsPanelGridProps) {
   return (
+    <SeamlessLayoutContext.Provider value={seamless}>
     <div
-      className="grid gap-3 grid-cols-1 sm:grid-cols-12"
+      className={cn("grid grid-cols-1 sm:grid-cols-12", seamless ? "gap-0" : "gap-3")}
       style={{ gridAutoRows: `${PANEL_ROW_HEIGHT_PX}px` }}
     >
       {layoutItems.map((item, index) => {
@@ -1128,6 +1134,7 @@ function EventsPanelGrid({
         );
       })}
     </div>
+    </SeamlessLayoutContext.Provider>
   );
 }
 
@@ -1310,6 +1317,7 @@ function PoppedOutLayoutContent({
                 onPanelOptionChange={handlePanelOptionChange}
                 onPanelFiltersChange={handlePanelFiltersChange}
                 onExplainerClick={onExplainerClick}
+                seamless={isSeamlessPreset(activePresetId)}
               />
             </ChartDataRegistryProvider>
           </PanelTimingProvider>
@@ -1961,6 +1969,7 @@ function EncounterDetail({
                 onPanelOptionChange={onPanelOptionChange}
                 onPanelFiltersChange={onPanelFiltersChange}
                 onExplainerClick={onExplainerClick}
+                seamless={isSeamlessPreset(activePresetId)}
               />
             </PortalContainerProvider>
           </ChartDataRegistryProvider>
