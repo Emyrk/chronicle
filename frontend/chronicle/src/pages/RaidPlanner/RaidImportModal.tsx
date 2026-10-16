@@ -1,20 +1,22 @@
 import { useEffect, useState } from "react";
 import { CalendarDays, Loader2, Users, X } from "lucide-react";
+import { useGuildCharacters } from "@/api/queries";
 import type {
-  GuildRosterCharacter,
   InstanceRaidGroupResponse,
   RecentInstance,
   RecentInstancesResponse,
   WoWAttendanceInstance,
 } from "@/api/typesGenerated";
+import { GuildSelector } from "./GuildSelector";
 import { buildRaidImport, type RaidImportResult } from "./raidImport";
+import type { PlannerGuild } from "./types";
 
 interface RaidImportModalProps {
   open: boolean;
   onClose: () => void;
-  roster: readonly GuildRosterCharacter[];
+  guild: PlannerGuild | null;
   hasComposition: boolean;
-  onApply: (result: RaidImportResult, raid: RecentInstance) => void;
+  onApply: (result: RaidImportResult, raid: RecentInstance, guild: PlannerGuild) => void;
 }
 
 function raidDate(raid: RecentInstance): string {
@@ -28,23 +30,27 @@ function raidDate(raid: RecentInstance): string {
 export function RaidImportModal({
   open,
   onClose,
-  roster,
+  guild,
   hasComposition,
   onApply,
 }: RaidImportModalProps) {
+  const [selectedGuild, setSelectedGuild] = useState<PlannerGuild | null>(guild);
   const [raids, setRaids] = useState<readonly RecentInstance[]>([]);
   const [loading, setLoading] = useState(false);
   const [importingID, setImportingID] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const { data: rosterData, isLoading: rosterLoading } = useGuildCharacters(selectedGuild?.id);
+
   useEffect(() => {
-    if (!open) return;
+    if (!open || !selectedGuild) return;
     const controller = new AbortController();
     const load = async () => {
       setLoading(true);
       setError(null);
       try {
         const params = new URLSearchParams({ days: "30", limit: "50" });
+        params.set("guild_id", selectedGuild.id);
         const response = await fetch(`/api/v1/raidlogs/recent?${params}`, {
           signal: controller.signal,
         });
@@ -60,7 +66,7 @@ export function RaidImportModal({
     };
     void load();
     return () => controller.abort();
-  }, [open]);
+  }, [open, selectedGuild]);
 
   if (!open) return null;
 
@@ -77,7 +83,8 @@ export function RaidImportModal({
       const raidGroup = raidGroupResponse.ok
         ? ((await raidGroupResponse.json()) as InstanceRaidGroupResponse)
         : null;
-      onApply(buildRaidImport(instance, raidGroup, roster), raid);
+      if (!selectedGuild) throw new Error("Choose a guild before importing a raid");
+      onApply(buildRaidImport(instance, raidGroup, rosterData?.members ?? []), raid, selectedGuild);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to import that raid");
@@ -102,7 +109,7 @@ export function RaidImportModal({
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-semibold text-foreground">Import from a raid</p>
             <p className="mt-px text-[10px] text-muted-foreground">
-              Choose a combat log from the last 30 days.
+              Choose a guild, then import one of its combat logs from the last 30 days.
             </p>
           </div>
           <button
@@ -114,6 +121,11 @@ export function RaidImportModal({
           </button>
         </div>
 
+        <div className="mt-3 flex items-center gap-2">
+          <span className="text-[11px] text-muted-foreground">Guild</span>
+          <GuildSelector guild={selectedGuild} onSelect={setSelectedGuild} />
+        </div>
+
         {hasComposition && (
           <p className="mt-3 rounded-md border border-amber-500/20 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-200">
             Importing replaces the current board and bench. You can undo the import afterward.
@@ -121,16 +133,23 @@ export function RaidImportModal({
         )}
 
         <div className="styled-scrollbar mt-3 max-h-80 space-y-1 overflow-y-auto">
-          {loading && (
+          {(loading || rosterLoading) && (
             <div className="flex items-center justify-center gap-2 py-10 text-xs text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Loading recent raids…
+              Loading guild raids…
             </div>
           )}
-          {!loading && raids.length === 0 && !error && (
-            <p className="py-10 text-center text-xs text-muted-foreground">No recent raids found.</p>
+          {!selectedGuild && (
+            <p className="py-10 text-center text-xs text-muted-foreground">
+              Search for a guild to see its recent raids.
+            </p>
           )}
-          {raids.map((raid) => (
+          {selectedGuild && !loading && !rosterLoading && raids.length === 0 && !error && (
+            <p className="py-10 text-center text-xs text-muted-foreground">
+              No recent raids found for {selectedGuild.name}.
+            </p>
+          )}
+          {selectedGuild && !loading && !rosterLoading && raids.map((raid) => (
             <button
               key={raid.id}
               onClick={() => void importRaid(raid)}

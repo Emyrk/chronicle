@@ -464,8 +464,9 @@ export function RaidPlannerPage() {
     setEditing(null);
   };
 
-  const applyRaidImport = (result: RaidImportResult, raid: RecentInstance) => {
+  const applyRaidImport = (result: RaidImportResult, raid: RecentInstance, importedGuild: PlannerGuild) => {
     updateComp(() => ({ board: result.board, bench: result.bench }));
+    setGuild(importedGuild);
     setPendingGroups(result.board.length || 1);
     setPhase("set");
     setTitle(raid.name);
@@ -964,7 +965,7 @@ export function RaidPlannerPage() {
         key={importSource === "raid" ? "raid-open" : "raid-closed"}
         open={importSource === "raid"}
         onClose={() => setImportSource(null)}
-        roster={rosterData?.members ?? []}
+        guild={selectedGuild}
         hasComposition={comp.board.length > 0 || comp.bench.length > 0}
         onApply={applyRaidImport}
       />
