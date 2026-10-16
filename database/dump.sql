@@ -1178,6 +1178,12 @@ CREATE TABLE leaderboard_version_requirements (
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE log_group_sources (
+    log_group_id uuid NOT NULL,
+    owner uuid NOT NULL,
+    source_id text NOT NULL
+);
+
 CREATE TABLE log_instance_encounter_damage_unit_summary (
     encounter_id uuid NOT NULL,
     unit_guid wow_guid NOT NULL,
@@ -2478,6 +2484,9 @@ ALTER TABLE ONLY leaderboard_version_requirements
 ALTER TABLE ONLY log_file
     ADD CONSTRAINT log_file_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY log_group_sources
+    ADD CONSTRAINT log_group_sources_pkey PRIMARY KEY (log_group_id);
+
 ALTER TABLE ONLY log_instance_encounter_damage_unit_summary
     ADD CONSTRAINT log_instance_encounter_damage_unit_summary_pkey PRIMARY KEY (encounter_id, unit_guid);
 
@@ -2931,6 +2940,8 @@ CREATE INDEX instance_speedruns_cohort_lookup_idx ON instance_speedruns USING bt
 
 CREATE INDEX item_daily_prices_future_lookup_idx ON item_daily_prices USING btree (realm_id, auction_house_faction, item_id, price_date) WHERE (price_copper IS NOT NULL);
 
+CREATE UNIQUE INDEX log_group_sources_owner_source_id ON log_group_sources USING btree (owner, source_id);
+
 CREATE UNIQUE INDEX log_instance_raid_group_clean_kill_idx ON log_instance_raid_group_snapshots USING btree (encounter_id) WHERE (snapshot_type = 'clean_kill'::raid_group_snapshot_type);
 
 CREATE UNIQUE INDEX log_instance_raid_group_final_idx ON log_instance_raid_group_snapshots USING btree (instance_id) WHERE (snapshot_type = 'final'::raid_group_snapshot_type);
@@ -3233,6 +3244,12 @@ ALTER TABLE ONLY log_file
 
 ALTER TABLE ONLY log_file
     ADD CONSTRAINT log_file_wow_log_id_fkey FOREIGN KEY (wow_log_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY log_group_sources
+    ADD CONSTRAINT log_group_sources_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY log_group_sources
+    ADD CONSTRAINT log_group_sources_owner_fkey FOREIGN KEY (owner) REFERENCES users(id);
 
 ALTER TABLE ONLY log_instance_encounter_damage_unit_summary
     ADD CONSTRAINT log_instance_encounter_damage_unit_summary_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES log_instance_encounters(id) ON DELETE CASCADE;

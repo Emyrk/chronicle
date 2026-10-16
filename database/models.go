@@ -1702,6 +1702,12 @@ type LogFile struct {
 	ContentEncoding pgtype.Text `db:"content_encoding" json:"content_encoding"`
 }
 
+type LogGroupSource struct {
+	LogGroupID uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	Owner      uuid.UUID `db:"owner" json:"owner"`
+	SourceID   string    `db:"source_id" json:"source_id"`
+}
+
 type LogInstance struct {
 	ID         uuid.UUID   `db:"id" json:"id"`
 	RealmID    uuid.UUID   `db:"realm_id" json:"realm_id"`
