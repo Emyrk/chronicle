@@ -307,6 +307,23 @@ function InstancePageInner({
     previousEncounterTimesRef.current = selectedEncounterTimes;
   }, [selectedEncounterTimes, setEncounterBounds, setTimestamp, syncEnabled]);
   
+  // Replay is desktop-only. Shown in the header, and beside Exit focus in focus mode.
+  const replayButton = showReplayControls && (
+    <Button
+      variant={showReplayPanel || syncEnabled ? "default" : "outline"}
+      size="sm"
+      className={cn("gap-1.5", replayJiggle && "animate-button-jiggle")}
+      onClick={() => {
+        setShowReplayPanel((prev) => !prev);
+        setReplayJiggle(true);
+      }}
+      onAnimationEnd={() => setReplayJiggle(false)}
+    >
+      <Timer className="h-4 w-4" />
+      Replay
+    </Button>
+  );
+
   return (
     <InstanceKeybindProvider>
       <InstancePageView
@@ -320,24 +337,10 @@ function InstancePageInner({
         onOpenTimeRange={() => setShowTimeRange(true)}
         suppressActionBar={replayPanelVisible && replayPosition === "bottom"}
         supportsOverview
+        focusActions={replayButton}
         youtubeButton={
           <div className="flex gap-1.5">
-            {/* Replay is desktop-only. */}
-            {showReplayControls && (
-              <Button
-                variant={showReplayPanel || syncEnabled ? "default" : "outline"}
-                size="sm"
-                className={cn("gap-1.5", replayJiggle && "animate-button-jiggle")}
-                onClick={() => {
-                  setShowReplayPanel((prev) => !prev);
-                  setReplayJiggle(true);
-                }}
-                onAnimationEnd={() => setReplayJiggle(false)}
-              >
-                <Timer className="h-4 w-4" />
-                Replay
-              </Button>
-            )}
+            {replayButton}
             {/* YouTube button - only if video available */}
             {youtubeData?.url && (
               <Button

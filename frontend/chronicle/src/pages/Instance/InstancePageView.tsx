@@ -1389,6 +1389,8 @@ interface EncounterDetailProps {
   /** Focus mode: only the preset row and the layout, filling the screen. */
   focused: boolean;
   onFocusedChange: (focused: boolean) => void;
+  /** Extra actions shown left of Exit focus while focused. */
+  focusActions?: React.ReactNode;
   /** Reopen the encounter sidebar without reserving a layout column. */
   onShowSidebar?: () => void;
   /** Full-page content owned by the active layout, or null for a panel grid. */
@@ -1430,6 +1432,7 @@ function EncounterDetail({
   layoutAppearance,
   focused,
   onFocusedChange,
+  focusActions,
   onShowSidebar,
   pageType,
   pageState,
@@ -2007,12 +2010,14 @@ function EncounterDetail({
         ))}
         {pageType && <PageModeIndicator presets={availablePresetLayouts} onPresetChange={onPresetChange} />}
         {!isMobile && (
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          {focused && focusActions}
           <button
             type="button"
             onClick={() => onFocusedChange(!focused)}
             title={focused ? "Exit focus (Esc)" : "Focus: hide everything but the encounters and the layout (Shift+F; Ctrl+Shift+F for fullscreen too)"}
             className={cn(
-              "ml-auto flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              "flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
               focused
                 ? "text-red-400 hover:bg-red-500/10 hover:text-red-300"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -2021,6 +2026,7 @@ function EncounterDetail({
             {focused ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             {focused ? "Exit focus" : "Focus"}
           </button>
+          </div>
         )}
       </div>
 
@@ -2091,6 +2097,8 @@ export interface InstancePageViewProps {
   onSelectEncounters?: (encounterIds: string[]) => void;
   /** Optional button to show YouTube video overlay */
   youtubeButton?: React.ReactNode;
+  /** Extra actions shown left of Exit focus while in focus mode */
+  focusActions?: React.ReactNode;
   /** URL to log detail page (shown only if user can manage the log, desktop only) */
   logDetailUrl?: string;
   /** Callback to open the time range controller overlay */
@@ -2130,6 +2138,7 @@ function InstancePageViewContent({
   selectedEncounterIds: _selectedEncounterIds,
   onSelectEncounters,
   youtubeButton,
+  focusActions,
   logDetailUrl,
   onOpenTimeRange,
   canAdminLogs,
@@ -3909,6 +3918,7 @@ function InstancePageViewContent({
             layoutAppearance={layoutAppearance}
             focused={focused}
             onFocusedChange={setFocused}
+            focusActions={focusActions}
             onShowSidebar={!sidebarOpen && !isMobile ? () => setSidebarOpen(true) : undefined}
             pageType={activePageType}
             pageState={pageStateBinding}
