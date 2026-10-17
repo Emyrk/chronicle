@@ -162,15 +162,18 @@ func resolveLogFlavor(current database.WoWFlavor, explicit bool, resolved Resolv
 	return merged, !slices.Equal(current, merged)
 }
 
-func slugCollisionFromLookup(err error) (bool, error) {
-	switch {
-	case err == nil:
-		return true, nil
-	case errors.Is(err, pgx.ErrNoRows):
-		return false, nil
-	default:
-		return false, fmt.Errorf("check colliding slug: %w", err)
+func insertInstanceWithSlugFallback(
+	ctx context.Context,
+	insert func(context.Context, database.InsertInstanceParams) (database.LogInstance, error),
+	params database.InsertInstanceParams,
+) (database.LogInstance, error) {
+	instance, err := insert(ctx, params)
+	if !errors.Is(err, pgx.ErrNoRows) || !params.HashedSlug.Valid {
+		return instance, err
 	}
+
+	params.HashedSlug = pgtype.Text{Valid: false}
+	return insert(ctx, params)
 }
 
 func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse]) error {
@@ -565,19 +568,10 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				InvalidReason:           lg.InvalidReason,
 			}
 
-			// Handling colliding slugs. Only a missing row is safe to ignore. A
-			// PostgreSQL error aborts the transaction and must be returned before
-			// another statement masks it with SQLSTATE 25P02.
-			_, err = tx.InstanceBySlug(ctx, insertInstanceParams.HashedSlug)
-			slugCollision, err := slugCollisionFromLookup(err)
-			if err != nil {
-				return err
-			}
-			if slugCollision {
-				insertInstanceParams.HashedSlug = pgtype.Text{Valid: false}
-			}
-
-			dbinstance, err = tx.InsertInstance(ctx, insertInstanceParams)
+			// InsertInstance atomically declines a colliding non-null slug. Retry
+			// without a slug so concurrent parsers in different processes cannot
+			// fail the entire log on the unique index.
+			dbinstance, err = insertInstanceWithSlugFallback(ctx, tx.InsertInstance, insertInstanceParams)
 			if err != nil {
 				return fmt.Errorf("insert instance: %w", err)
 			}
