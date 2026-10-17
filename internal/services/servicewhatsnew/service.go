@@ -25,6 +25,7 @@ func OnWhatsNew() string { return (&Service{}).Name() }
 var releaseIDs = []string{
 	"custom-panels",
 	"player-timeline",
+	"focus-mode",
 }
 
 func CurrentID() string {

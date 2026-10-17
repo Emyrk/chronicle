@@ -9,6 +9,7 @@ import {
   CooldownUsagePost,
   CustomPanelsPost,
   FavoritesPost,
+  FocusModePost,
   GearProgressionPost,
   GuildPagesPost,
   HistoricalPerformancePost,
@@ -56,6 +57,18 @@ function remotionVideo(load: LessonVideo["load"], durationInFrames: number): Les
 }
 
 export const BLOG_POSTS: readonly BlogPostDefinition[] = [
+  {
+    id: "focus-mode",
+    title: "Focus mode",
+    description: "Hide everything but the encounters, presets, and your layout. Shift+F to toggle, Ctrl+Shift+F for fullscreen too.",
+    publishedAt: "2026-10-16",
+    rarity: "uncommon",
+    tag: "Feature",
+    icon: "spell_holy_mindvision",
+    flavor: "Nothing but the fight.",
+    video: remotionVideo(() => import("@/pages/Instance/videos/FocusMode.video"), 630),
+    component: FocusModePost,
+  },
   {
     id: "player-timeline",
     title: "Player Timeline is here",
