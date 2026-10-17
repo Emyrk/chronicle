@@ -18,11 +18,8 @@ export interface UseEmbeddedPanelOptions<TResult> {
   enabled?: boolean;
 }
 
-/**
- * Draws the processed panel, optionally with a render-only panel option (e.g.
- * Unit Auras' `u:<guid>`) and its checkbox switched (e.g. Unit Auras' "Detailed").
- */
-export type EmbeddedPanelRender = (panelOption?: string | null, checkbox?: boolean) => ReactNode;
+/** Draws the processed panel, optionally with a render-only panel option (e.g. Unit Auras' `u:<guid>`). */
+export type EmbeddedPanelRender = (panelOption?: string | null) => ReactNode;
 
 /**
  * Processes a panel once (its processor, fixed and default filters, as its
@@ -59,15 +56,15 @@ export function useEmbeddedPanel<TResult>({
       : durationMs);
 
   const active = enabled && available;
-  return useCallback((panelOption?: string | null, checkbox = perSecond) => {
+  return useCallback((panelOption?: string | null) => {
     if (!active) return null;
     return (
       <PanelVariantContext.Provider value={variant}>
         {panel.render({
           ...aggregation,
           durationMs: effectiveDurationMs,
-          perSecond: checkbox,
-          checkboxChecked: checkbox,
+          perSecond,
+          checkboxChecked: perSecond,
           context,
           panelContext,
           panelOption: panelOption ?? null,

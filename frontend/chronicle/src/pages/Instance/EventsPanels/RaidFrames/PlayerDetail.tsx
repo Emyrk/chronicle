@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip";
 import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
@@ -6,8 +6,6 @@ import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
 import { cn } from "@/lib/utils";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
-import { createDamageDonePanel } from "../DamageDone/DamageDone";
-import { createHealingDonePanel } from "../HealingDone/HealingDone";
 import { useInferredRoles } from "../Roles/useInferredRoles";
 import { createUnitAurasPanel } from "../UnitAuras/UnitAuras";
 import type { PanelContext, PanelRenderProps } from "../types";
@@ -22,19 +20,10 @@ import type {
 import { POWER_COLORS, percent, useDisplayTimestamp } from "./raidFrameShared";
 
 const UNIT_AURAS_PANEL = createUnitAurasPanel();
-const DAMAGE_DONE_PANEL = createDamageDonePanel("players");
-const HEALING_DONE_PANEL = createHealingDonePanel("players");
 
 const ROLE_LABELS = { tank: "TANK", healer: "HEAL", dps: "DPS" } as const;
 // A health drop of at least this share of maximum health between samples is marked on the health graph.
 const SPIKE_SHARE = 0.2;
-
-type Tab = "overview" | "abilities" | "auras";
-const TABS: { id: Tab; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "abilities", label: "Abilities" },
-  { id: "auras", label: "Auras" },
-];
 
 function formatClock(ms: number): string {
   const seconds = Math.max(0, Math.floor(ms / 1000));
@@ -196,8 +185,8 @@ export interface PlayerDetailProps {
 
 /**
  * One player up close (Raid Frames with a single `u:<guid>`): health, power
- * and cast now, then tabs drawn from other panels — Unit Auras and Damage /
- * Healing Done's ability breakdown — so they match those panels exactly.
+ * and cast now, health over the fight, and auras from the Unit Auras panel
+ * (so they match it exactly).
  */
 export function PlayerDetail({
   guid,
@@ -212,8 +201,6 @@ export function PlayerDetail({
 }: PlayerDetailProps) {
   const { context, durationMs, result } = props;
   const sync = useSyncModeContextOptional();
-  const [tab, setTab] = useState<Tab>("overview");
-  const [abilityMode, setAbilityMode] = useState<"damage" | "healing" | null>(null);
 
   const player = context.instance.players?.[guid];
   const name = player?.name ?? context.instance.units?.[guid]?.name ?? guid;
@@ -221,8 +208,7 @@ export function PlayerDetail({
   const specialization = usePlayerSpecializations().get(guid);
   const group = result.composition.groups.findIndex((members) => members.includes(guid));
 
-  // The source panels span the whole raid; entity selection would narrow them
-  // (Healing Done's default filter keeps heals *on* selected players).
+  // Role inference spans the whole raid, independent of entity selection.
   const encounterIdsKey = context.selectedEncounterIds.join(",");
   const raidContext = useMemo<PanelContext>(() => ({
     instance: context.instance,
@@ -234,25 +220,7 @@ export function PlayerDetail({
   const inferred = useInferredRoles(raidContext);
   const role = inferred.roles.get(guid)?.role;
 
-  const healingMode = (abilityMode ?? (role === "healer" ? "healing" : "damage")) === "healing";
-  const auras = useEmbeddedPanel({
-    panel: UNIT_AURAS_PANEL,
-    context: raidContext,
-    durationMs,
-    enabled: tab === "overview" || tab === "auras",
-  });
-  const damageAbilities = useEmbeddedPanel({
-    panel: DAMAGE_DONE_PANEL,
-    context: raidContext,
-    durationMs,
-    enabled: tab === "abilities" && !healingMode,
-  });
-  const healingAbilities = useEmbeddedPanel({
-    panel: HEALING_DONE_PANEL,
-    context: raidContext,
-    durationMs,
-    enabled: tab === "abilities" && healingMode,
-  });
+  const auras = useEmbeddedPanel({ panel: UNIT_AURAS_PANEL, context: raidContext, durationMs });
 
   const dead = sample?.currentHealth === 0 && (sample?.maximumHealth ?? 0) > 0;
   const pendingHeal = dead ? 0 : incomingHeals.reduce((total, heal) => total + heal.amount, 0);
@@ -340,58 +308,19 @@ export function PlayerDetail({
         <CastRow cast={dead ? null : cast} timestampMs={timestampMs} />
       </div>
 
-      <div className="flex shrink-0 border-b border-border px-2">
-        {TABS.map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={cn(
-              "-mb-px border-b-2 px-2 py-1.5 text-[11px] font-medium",
-              tab === id ? "border-[var(--color-class-warrior)] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <div className="styled-scrollbar min-h-0 flex-1 overflow-auto">
-        {tab === "overview" && (
-          <div className="flex flex-col gap-2 px-3 py-2">
-            <HealthGraph
-              samples={encounter.resourcesByUnit.get(guid) ?? []}
-              encounter={encounter}
-              color={color}
-              cursorMs={sync?.enabled ? timestampMs : null}
-            />
-            <div className="flex flex-col gap-1.5">
-              <SectionLabel><span>Auras</span></SectionLabel>
-              {auras(`u:${guid}`)}
-            </div>
+      <div className="styled-scrollbar min-h-0 flex-1 overflow-auto border-t border-border">
+        <div className="flex flex-col gap-2 px-3 py-2">
+          <HealthGraph
+            samples={encounter.resourcesByUnit.get(guid) ?? []}
+            encounter={encounter}
+            color={color}
+            cursorMs={sync?.enabled ? timestampMs : null}
+          />
+          <div className="flex flex-col gap-1.5">
+            <SectionLabel><span>Auras</span></SectionLabel>
+            {auras(`u:${guid}`)}
           </div>
-        )}
-        {tab === "abilities" && (
-          <div className="flex flex-col gap-2 px-3 py-2">
-            <div className="flex gap-0.5 rounded border border-border bg-popover p-0.5">
-              {(["damage", "healing"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setAbilityMode(mode)}
-                  className={cn(
-                    "flex-1 rounded-sm py-1 text-[11px]",
-                    (mode === "healing") === healingMode ? "bg-primary-darker text-foreground" : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {mode === "damage" ? "Damage done" : "Healing done"}
-                </button>
-              ))}
-            </div>
-            {healingMode ? healingAbilities(`f:${guid}`) : damageAbilities(`f:${guid}`)}
-          </div>
-        )}
-        {tab === "auras" && auras(`u:${guid}`, true)}
+        </div>
       </div>
     </div>
   );
