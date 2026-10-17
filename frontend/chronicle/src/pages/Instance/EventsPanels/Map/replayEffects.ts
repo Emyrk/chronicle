@@ -673,6 +673,35 @@ function castEndedBy(events: readonly ReplayEffectEvent[], index: number, end: n
   return null;
 }
 
+/** A cast bar in progress: how far along (0-1) and its school (for colour). */
+export interface UnitCast {
+  progress: number;
+  school: number;
+  spellName: string;
+}
+
+/** The longest cast bar UnitCasts looks back for. */
+const UNIT_CAST_MAX_MS = 10_000;
+
+/**
+ * Each unit's cast bar at the cursor, for the map's unit tokens: the newest
+ * cast_start with a cast time that has not yet gone off, been replaced or
+ * been cut (interrupt or death). Fills and returns `out`.
+ */
+export function deriveUnitCasts(fx: EncounterEffects, cursorMs: number, out: Map<string, UnitCast> = new Map()): Map<string, UnitCast> {
+  out.clear();
+  const events = fx.events;
+  const [start, end] = eventWindow(events, cursorMs - UNIT_CAST_MAX_MS, cursorMs);
+  for (let index = end - 1; index >= start; index--) {
+    const event = events[index];
+    if (event.kind !== "cast_start" || event.castTimeMs <= 0 || out.has(event.source) || isBasicAttack(event)) continue;
+    const ageMs = cursorMs - event.timestampMs;
+    if (ageMs >= event.castTimeMs || castEndedBy(events, index, end)) continue;
+    out.set(event.source, { progress: ageMs / event.castTimeMs, school: event.school, spellName: event.spellName });
+  }
+  return out;
+}
+
 /**
  * Spell icons above `sources` while they cast, newest first: a cast with a
  * cast time shows from its start until it goes off or is replaced (at most

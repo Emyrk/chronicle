@@ -23,6 +23,7 @@ import {
   dominantMapId,
   dungeonMapPoint,
   focusCentre,
+  latestHealthAt,
   replayPositionAt,
   projectionScale,
   renderedDungeonMapPoint,
@@ -114,6 +115,10 @@ export interface MapSceneMarker {
   health: MapUnitHealth | null;
   /** Creature entry used by the shared miniature registry (hostiles, pets, totems, etc.). */
   entry?: number;
+  /** The 3D token's icon: a player's class icon, or null. */
+  icon: string | null;
+  /** Health at the cursor (0-1) for every unit with health data, or null. */
+  healthFraction: number | null;
 }
 
 export interface MapSceneGround {
@@ -344,10 +349,14 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       name: player?.name ?? metadata?.name ?? guid,
       health: null,
       entry: metadata?.entry,
+      icon: player ? `/c/icons/class_${player.class.toLowerCase().replace(/\s+/g, "")}.png` : null,
+      healthFraction: null,
     }];
   });
   const bars = selectHealthBars(markers.map((marker) => marker.guid), encounter.healthByUnit, cursorMs, bossGuids, selectedPlayers);
   for (const marker of markers) {
+    const latest = latestHealthAt(encounter.healthByUnit.get(marker.guid) ?? [], cursorMs);
+    if (latest && latest.max > 0) marker.healthFraction = Math.min(1, Math.max(0, latest.current / latest.max));
     const sample = bars.get(marker.guid);
     if (sample) {
       marker.health = {

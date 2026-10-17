@@ -2,7 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import { Footprints, Scan, X } from "lucide-react";
 import { Switch } from "@/components/ui/Switch/Switch";
 import { cn } from "@/lib/utils";
-import { CAST_MODES, DENSITY_OPTIONS, type EffectSettings } from "./mapViewSettings";
+import { ABOVE_DISC_MODES, CAST_MODES, DENSITY_OPTIONS, type EffectSettings } from "./mapViewSettings";
 
 export interface MapSettingsOverlayProps {
   onClose: () => void;
@@ -86,6 +86,12 @@ export function MapSettingsOverlay({
               detail="Over bosses, selected players and recently damaged units"
               checked={effectSettings.bars}
               onChange={(bars) => onEffectSettings({ bars })}
+            />
+            <Choice
+              label="Above the token"
+              value={effectSettings.aboveDisc}
+              options={ABOVE_DISC_MODES}
+              onChange={(aboveDisc) => onEffectSettings({ aboveDisc })}
             />
           </Section>
         )}
