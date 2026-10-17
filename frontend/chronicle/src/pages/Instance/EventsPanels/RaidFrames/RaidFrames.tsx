@@ -1,14 +1,18 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view helpers intentionally share this module. */
 import { useEffect, useState, type ReactNode } from "react";
 import { RadioTower, Users } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
+import { parseSelectedUnits } from "../UnitAuras/unitSelection";
+import { useUnitInspect } from "../UnitInspectContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import {
   activeCastAt,
   incomingHealsAt,
+  enemyFrameUnits,
   latestResourceAt,
+  orderRaidFramePlayers,
   raidFramesProcessor,
   type RaidFrameCast,
   type RaidFrameHeal,
@@ -220,6 +224,7 @@ function RaidFrameTooltip({
   spellNames,
   timestampMs,
   dead,
+  nameplate = false,
 }: {
   name: string;
   classColor: string;
@@ -230,6 +235,8 @@ function RaidFrameTooltip({
   spellNames: ReadonlyMap<number, string>;
   timestampMs: number;
   dead: boolean;
+  /** Health and power as nameplate bars with their values on them, instead of rows. */
+  nameplate?: boolean;
 }) {
   const sync = useSyncModeContextOptional();
   const displayMs = useInterpolatedTimestamp(
@@ -244,11 +251,23 @@ function RaidFrameTooltip({
   const hasPower = sample !== null && sample.maximumPower > 0;
 
   return (
-    <div className="flex min-w-52 flex-col gap-1.5 text-xs">
+    <div className={`flex flex-col gap-1.5 text-xs ${nameplate ? "w-60" : "min-w-52"}`}>
       <div className="flex items-baseline justify-between gap-3">
         <span className="font-semibold" style={{ color: classColor }}>{name}</span>
         {dead && <span className="text-2xs uppercase tracking-wide text-red-400">Dead</span>}
       </div>
+      {nameplate ? (
+        <div className="flex flex-col gap-1">
+          {hasHealth ? (
+            <NameplateBar color={classColor} current={sample.currentHealth} max={sample.maximumHealth} absorb={sample.absorb} height="h-6 text-xs" />
+          ) : (
+            <div className="text-zinc-500">No health data yet</div>
+          )}
+          {hasPower && (
+            <NameplateBar color={POWER_COLORS[powerType] ?? "#767676"} current={sample.currentPower} max={sample.maximumPower} height="h-4 text-[10px]" />
+          )}
+        </div>
+      ) : (
       <div className="flex flex-col gap-0.5">
         <StatRow
           label="Health"
@@ -266,6 +285,7 @@ function RaidFrameTooltip({
           detail={hasPower ? `${Math.round(percent(sample.currentPower, sample.maximumPower))}%` : undefined}
         />
       </div>
+      )}
       {cast && (
         <div className="flex items-baseline justify-between gap-3 border-t border-white/10 pt-1.5">
           <span className="min-w-0 truncate text-amber-200">
@@ -409,10 +429,189 @@ function RaidFrame({
   );
 }
 
+// A nameplate-sized bar with its values written on it.
+function NameplateBar({ color, current, max, absorb = 0, height }: { color: string; current: number; max: number; absorb?: number; height: string }) {
+  const fill = percent(current, max);
+  const shield = Math.min(percent(absorb, max), 100 - fill);
+  return (
+    // The empty track is a dim tint of the bar colour so the fill's end reads against the dark tooltip.
+    <div className={`relative ${height} overflow-hidden rounded-sm border border-white/25`} style={{ background: `color-mix(in srgb, ${color} 22%, #27272a)` }}>
+      <div className="absolute inset-y-0 left-0" style={{ width: `${fill}%`, background: color }} />
+      {shield > 0 && <div className="absolute inset-y-0 bg-white/50" style={{ left: `${fill}%`, width: `${shield}%` }} />}
+      <span className="absolute inset-0 flex items-center justify-center font-mono font-semibold tabular-nums text-white [text-shadow:0_0_2px_#000,0_0_2px_#000,0_0_2px_#000]">
+        {current.toLocaleString()} / {max.toLocaleString()}
+        {absorb > 0 && <span className="ml-1 text-white/80">+{absorb.toLocaleString()}</span>}
+      </span>
+    </div>
+  );
+}
+
+// The overlay frame (over the map): a solid class-coloured health bar with the
+// name on it and a thin power bar, plus the card frame's casts, absorbs and
+// incoming heals.
+function OverlayRaidFrame({
+  guid,
+  name,
+  className,
+  sample,
+  cast,
+  incomingHeals,
+  spellNames,
+  timestampMs,
+}: {
+  guid?: string;
+  name: string;
+  className: string;
+  sample: RaidFrameResourceSample | null;
+  cast: RaidFrameCast | null;
+  incomingHeals: readonly RaidFrameHeal[];
+  spellNames: ReadonlyMap<number, string>;
+  timestampMs: number;
+}) {
+  const [hoveredHeal, setHoveredHeal] = useState<RaidFrameHeal | null>(null);
+  const inspect = useUnitInspect();
+  const inspected = Boolean(guid && inspect?.inspected.has(guid));
+  const dead = sample?.currentHealth === 0 && (sample?.maximumHealth ?? 0) > 0;
+  const healthWidth = sample && !dead ? percent(sample.currentHealth, sample.maximumHealth) : 0;
+  const absorbWidth = sample && !dead ? Math.min(percent(sample.absorb, sample.maximumHealth), 100 - healthWidth) : 0;
+  const classColor = getClassColorVar(className || "unknown");
+  const powerType = sample?.powerType ?? "";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          className={`pointer-events-auto flex w-20 flex-col overflow-hidden rounded-sm border bg-black/80 ${inspected ? "border-white ring-1 ring-white/70" : "border-black/80"} ${dead ? "opacity-60" : ""} ${inspect && guid ? "cursor-pointer" : ""}`}
+          onClick={inspect && guid ? () => inspect.toggle(guid) : undefined}
+        >
+          <div className="relative h-4">
+            <div className="absolute inset-y-0 left-0" style={{ width: `${healthWidth}%`, background: classColor }} />
+            {absorbWidth > 0 && (
+              <div className="absolute inset-y-0 bg-white/50" style={{ left: `${healthWidth}%`, width: `${absorbWidth}%` }} />
+            )}
+            {sample && sample.maximumHealth > 0 && incomingHeals.length > 0 && !dead && (
+              <IncomingHeals
+                heals={incomingHeals}
+                maximumHealth={sample.maximumHealth}
+                startPercent={healthWidth + absorbWidth}
+                timestampMs={timestampMs}
+                onHoverHeal={setHoveredHeal}
+              />
+            )}
+            <span className="pointer-events-none absolute inset-0 truncate px-1 text-[9px] font-semibold leading-4 text-white [text-shadow:0_0_2px_#000,0_0_2px_#000]">
+              {dead ? `☠ ${name}` : name}
+            </span>
+          </div>
+          {cast && !dead && <OverlayCastLine cast={cast} timestampMs={timestampMs} />}
+          <div className="h-1 bg-black/60">
+            {sample && sample.maximumPower > 0 && !dead && (
+              <div className="h-full" style={{ width: `${percent(sample.currentPower, sample.maximumPower)}%`, background: POWER_COLORS[powerType] ?? "#767676" }} />
+            )}
+          </div>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="right" align="start" sideOffset={6}>
+        <RaidFrameTooltip
+          name={name}
+          classColor={classColor}
+          sample={sample}
+          cast={cast}
+          incomingHeals={incomingHeals}
+          hoveredHeal={hoveredHeal}
+          spellNames={spellNames}
+          timestampMs={timestampMs}
+          dead={dead}
+          nameplate
+        />
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// A thin amber progress line while casting (channels drain), under the health bar.
+function OverlayCastLine({ cast, timestampMs }: { cast: RaidFrameCast; timestampMs: number }) {
+  const sync = useSyncModeContextOptional();
+  const displayMs = useInterpolatedTimestamp(
+    timestampMs,
+    Boolean(sync?.enabled && sync.isPlaying),
+    sync?.playbackSpeed ?? 1,
+  );
+  const durationMs = Math.max(1, cast.endMs - cast.startMs);
+  const progress = percent(Math.min(durationMs, Math.max(0, displayMs - cast.startMs)), durationMs);
+  return (
+    <div className="h-0.5 bg-black/60">
+      <div className="h-full bg-amber-400" style={{ width: `${cast.channel ? 100 - progress : progress}%` }} />
+    </div>
+  );
+}
+
+// One unit up close: name, health and power with their values, and the cast in progress.
+function InspectFrame({
+  guid,
+  context,
+  sample,
+  cast,
+  timestampMs,
+}: {
+  guid: string;
+  context: PanelRenderProps<RaidFramesResult>["context"];
+  sample: RaidFrameResourceSample | null;
+  cast: RaidFrameCast | null;
+  timestampMs: number;
+}) {
+  const player = context.instance.players?.[guid];
+  const name = player?.name ?? context.instance.units?.[guid]?.name ?? guid;
+  const color = player ? getClassColorVar(player.class) : "var(--color-class-enemy)";
+  const dead = sample?.currentHealth === 0 && (sample?.maximumHealth ?? 0) > 0;
+  const powerType = sample?.powerType ?? "";
+  return (
+    <div className={`flex flex-col gap-0.5 ${dead ? "opacity-60" : ""}`}>
+      <div className="flex items-baseline gap-2 pr-4 text-[11px] leading-tight">
+        <span className="truncate font-semibold" style={{ color }}>{name}</span>
+        {dead && <span className="text-2xs uppercase tracking-wide text-red-400">Dead</span>}
+      </div>
+      {sample && sample.maximumHealth > 0 ? (
+        <NameplateBar color={color} current={sample.currentHealth} max={sample.maximumHealth} absorb={sample.absorb} height="h-4 text-[10px]" />
+      ) : (
+        <div className="text-2xs text-zinc-500">No health data yet</div>
+      )}
+      {sample && sample.maximumPower > 0 && (
+        <NameplateBar color={POWER_COLORS[powerType] ?? "#767676"} current={sample.currentPower} max={sample.maximumPower} height="h-3 text-[8px]" />
+      )}
+      {cast && !dead && <InspectCastBar cast={cast} timestampMs={timestampMs} />}
+    </div>
+  );
+}
+
+function InspectCastBar({ cast, timestampMs }: { cast: RaidFrameCast; timestampMs: number }) {
+  const sync = useSyncModeContextOptional();
+  const displayMs = useInterpolatedTimestamp(
+    timestampMs,
+    Boolean(sync?.enabled && sync.isPlaying),
+    sync?.playbackSpeed ?? 1,
+  );
+  const durationMs = Math.max(1, cast.endMs - cast.startMs);
+  const progress = percent(Math.min(durationMs, Math.max(0, displayMs - cast.startMs)), durationMs);
+  return (
+    <div className="relative h-3.5 overflow-hidden rounded-sm border border-amber-500/40 bg-black/60">
+      <div className="absolute inset-y-0 left-0 bg-amber-500/45" style={{ width: `${cast.channel ? 100 - progress : progress}%` }} />
+      <span className="absolute inset-0 flex items-center justify-between gap-2 px-1 text-[9px] leading-none text-amber-100 [text-shadow:0_0_2px_#000]">
+        <span className="truncate">{cast.spellName}</span>
+        <span className="shrink-0 font-mono tabular-nums">{(Math.max(0, cast.endMs - displayMs) / 1000).toFixed(1)}s</span>
+      </span>
+    </div>
+  );
+}
+
+/** Panel option token for enemy raid frames. */
+const ENEMIES_OPTION = "enemies";
+
 function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
   const sync = useSyncModeContextOptional();
+  const overlay = props.variant === "overlay";
   const capabilities = props.context.instance.capabilities ?? [];
-  if (!capabilities.includes("unit-resources")) return <UnsupportedMessage />;
+  if (!capabilities.includes("unit-resources")) return overlay ? null : <UnsupportedMessage />;
+  // An overlay shows frames or nothing; the host has no room for messages.
+  if (overlay && (props.loading || props.error)) return null;
   if (props.loading) {
     return <PanelMessage title="Loading raid frames" detail="Reading health, resource, and cast telemetry…" />;
   }
@@ -429,27 +628,96 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
     syncTimestampMs,
   );
   if (!encounter) {
-    return <PanelMessage title="No unit resources" detail="The selected encounter has no unit-resource samples." />;
+    return overlay ? null : <PanelMessage title="No unit resources" detail="The selected encounter has no unit-resource samples." />;
   }
 
   const timestampMs = syncTimestampMs ?? encounter.endMs;
-  const players = Object.entries(props.context.instance.players ?? {})
-    .sort(([, left], [, right]) => left.class.localeCompare(right.class) || left.name.localeCompare(right.name));
+
+  // Inspect mode (`u:<guid>` in the panel option): a larger frame for each
+  // listed unit, players or enemies.
+  const inspectGuids = parseSelectedUnits(props.panelOption);
+  if (inspectGuids.length > 0) {
+    return (
+      <div className="flex flex-col gap-1">
+        {inspectGuids.map((guid) => (
+          <InspectFrame
+            key={guid}
+            guid={guid}
+            context={props.context}
+            sample={latestResourceAt(encounter.resourcesByUnit.get(guid) ?? [], timestampMs)}
+            cast={activeCastAt(encounter.castsByUnit.get(guid) ?? [], timestampMs)}
+            timestampMs={timestampMs}
+          />
+        ))}
+      </div>
+    );
+  }
+  // Enemies mode (`enemies` in the panel option): the encounter's enemies
+  // instead of the players, coloured as enemies.
+  const enemiesMode = (props.panelOption ?? "").split(",").includes(ENEMIES_OPTION);
+  const instancePlayers = props.context.instance.players ?? {};
+  const units = props.context.instance.units ?? {};
+  // The encounter's own enemy list: who counts, and who is a boss.
+  const encounterEnemies = props.context.instance.encounters.find((candidate) => candidate.id === encounter.encounterId)?.enemies ?? [];
+  const bossGuids = new Set(encounterEnemies.filter((enemy) => enemy.boss).map((enemy) => enemy.id));
+  const encounterEnemyGuids = new Set(encounterEnemies.map((enemy) => enemy.id));
+  const players: (readonly [string, { name: string; class: string }])[] = enemiesMode
+    ? enemyFrameUnits(
+        encounter,
+        (guid) => Boolean(instancePlayers[guid]),
+        (guid) => units[guid]?.owner?.toString() ?? null,
+        (guid) => units[guid]?.name ?? guid,
+        bossGuids,
+        encounterEnemyGuids,
+      ).map(({ guid, name }) => [guid, { name, class: "enemy" }] as const)
+    : Object.entries(instancePlayers)
+      .sort(([, left], [, right]) => left.class.localeCompare(right.class) || left.name.localeCompare(right.name));
   if (players.length === 0) {
-    return <PanelMessage title="No players" detail="This log does not list any players for the selected encounter." />;
+    return overlay ? null : enemiesMode
+      ? <PanelMessage title="No enemies" detail="The selected encounter has no enemy health data." />
+      : <PanelMessage title="No players" detail="This log does not list any players for the selected encounter." />;
+  }
+
+  // Raid groups (the Raid Composition panel's layout) when the log has them;
+  // null entries pad a group so the next starts its own column.
+  const ordered = enemiesMode ? players : orderRaidFramePlayers(players, props.result.composition.groups);
+  const frameData = ordered.map((entry) => entry && ({
+    guid: entry[0],
+    player: entry[1],
+    sample: latestResourceAt(encounter.resourcesByUnit.get(entry[0]) ?? [], timestampMs),
+    cast: activeCastAt(encounter.castsByUnit.get(entry[0]) ?? [], timestampMs),
+    incomingHeals: incomingHealsAt(encounter.healsByUnit.get(entry[0]) ?? [], timestampMs, INCOMING_HEAL_WINDOW_MS),
+  }));
+
+  if (overlay) {
+    // Columns of five like the in-game raid frames; the host positions it.
+    return (
+      <TooltipProvider>
+        <div aria-label={enemiesMode ? "Enemy frames" : "Raid frames"} className="pointer-events-none grid grid-flow-col grid-rows-[repeat(5,auto)] gap-0.5">
+          {frameData.map((frame, index) => frame === null ? <div key={`empty-${index}`} aria-hidden /> : (
+            <OverlayRaidFrame
+              key={frame.guid}
+              guid={frame.guid}
+              name={frame.player.name}
+              className={frame.player.class}
+              sample={frame.sample}
+              cast={frame.cast}
+              incomingHeals={frame.incomingHeals}
+              spellNames={props.result.spellNames}
+              timestampMs={timestampMs}
+            />
+          ))}
+        </div>
+      </TooltipProvider>
+    );
   }
 
   return (
     <div className="styled-scrollbar h-full min-h-0 overflow-auto p-1">
       <div className="grid min-w-max grid-flow-col grid-rows-[repeat(5,minmax(0,1fr))] auto-cols-[minmax(7.5rem,1fr)] gap-1">
-        {players.map(([guid, player]) => {
-          const sample = latestResourceAt(encounter.resourcesByUnit.get(guid) ?? [], timestampMs);
-          const cast = activeCastAt(encounter.castsByUnit.get(guid) ?? [], timestampMs);
-          const incomingHeals = incomingHealsAt(
-            encounter.healsByUnit.get(guid) ?? [],
-            timestampMs,
-            INCOMING_HEAL_WINDOW_MS,
-          );
+        {frameData.map((frame, index) => {
+          if (frame === null) return <div key={`empty-${index}`} aria-hidden />;
+          const { guid, player, sample, cast, incomingHeals } = frame;
           return (
             <RaidFrame
               key={guid}

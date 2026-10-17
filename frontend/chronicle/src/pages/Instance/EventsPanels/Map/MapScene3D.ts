@@ -36,6 +36,7 @@ import {
   INTERRUPTED_ICON_MS,
   INTERRUPTED_PLAYER_ICON_MS,
   isDeadAt,
+  MAX_EFFECT_PRIMITIVES,
   type ActiveEffect,
   type CastIcon,
   type CombatText,
@@ -50,7 +51,7 @@ export const GROUND_WIDTH = 100;
 const MUTED_OPACITY = 0.28;
 const LABEL_HEIGHT = 5;
 /** Primitive pool size for each effect kind; also the derivation cap's ceiling. */
-export const MAX_EFFECT_PRIMITIVES = 64;
+export { MAX_EFFECT_PRIMITIVES };
 // Never run the effect clock further ahead of the last replay tick (real time).
 const MAX_EXTRAPOLATE_MS = 250;
 const BEAM_HEIGHT = 1.5;
@@ -178,6 +179,10 @@ const KEY_ZOOM_SPEED = 1.2;
 // A dropped frame never jumps the camera further than this.
 const KEY_MAX_STEP_S = 0.1;
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
+// A click inspects a unit unless the pointer moved this far (a drag) or a
+// double-click follows within this long.
+const UNIT_CLICK_SLOP_PX = 5;
+const UNIT_CLICK_DELAY_MS = 250;
 // A double-click eases the camera to what was clicked over this long.
 const DOUBLE_CLICK_MS = 450;
 // It halves the distance, but never dives closer than this (yards, mesh mode).
@@ -363,6 +368,10 @@ export class MapScene3D {
   private constraining = false;
   private label: THREE.Sprite | null = null;
   private hoveredGuid: string | null = null;
+  // A click on a unit (inspect it); held briefly so a double-click (zoom) cancels it.
+  private onUnitClick: ((guid: string) => void) | null = null;
+  private pointerDownAt: { x: number; y: number } | null = null;
+  private unitClickTimer = 0;
   private groundKey = "";
   private aspect = 1;
   private viewport: MapViewport = FULL_MAP_VIEWPORT;
@@ -503,6 +512,8 @@ export class MapScene3D {
     this.renderer.domElement.addEventListener("pointermove", this.handlePointerMove);
     this.renderer.domElement.addEventListener("pointerleave", this.handlePointerLeave);
     this.renderer.domElement.addEventListener("dblclick", this.handleDoubleClick);
+    this.renderer.domElement.addEventListener("pointerdown", this.handlePointerDown);
+    this.renderer.domElement.addEventListener("pointerup", this.handlePointerUp);
     this.keyWindow.addEventListener("keydown", this.handleKeyDown);
     this.keyWindow.addEventListener("keyup", this.handleKeyUp);
     this.keyWindow.addEventListener("blur", this.releaseKeys);
@@ -866,6 +877,13 @@ export class MapScene3D {
   /** Re-frames the current viewport straight down (`topDown`) or angled. */
   resetCamera(topDown: boolean) {
     this.viewAnimation = null;
+    // Asking for top-down takes the camera from the Director, as a drag does;
+    // Follow (a new viewport request) hands it back.
+    if (topDown) {
+      this.directorPaused = true;
+      this.directorRunning = false;
+      this.cameraMove = null;
+    }
     this.placeCamera(this.viewport, (topDown ? TOP_DOWN_OFFSET : ANGLED_OFFSET).clone().normalize());
   }
 
@@ -1292,6 +1310,7 @@ export class MapScene3D {
    * back instead, and empty sky does nothing.
    */
   private readonly handleDoubleClick = (event: MouseEvent) => {
+    clearTimeout(this.unitClickTimer);
     const hit = this.pickScenePoint(event);
     if (!hit) return;
     event.preventDefault();
@@ -1334,6 +1353,9 @@ export class MapScene3D {
     canvas.removeEventListener("pointermove", this.handlePointerMove);
     canvas.removeEventListener("pointerleave", this.handlePointerLeave);
     canvas.removeEventListener("dblclick", this.handleDoubleClick);
+    canvas.removeEventListener("pointerdown", this.handlePointerDown);
+    canvas.removeEventListener("pointerup", this.handlePointerUp);
+    clearTimeout(this.unitClickTimer);
     this.keyWindow.removeEventListener("keydown", this.handleKeyDown);
     this.keyWindow.removeEventListener("keyup", this.handleKeyUp);
     this.keyWindow.removeEventListener("blur", this.releaseKeys);
@@ -2118,6 +2140,27 @@ export class MapScene3D {
     this.renderer.domElement.style.cursor = guid ? "pointer" : "";
     this.updateLabel();
     this.requestRender();
+  };
+
+  /** Called with a unit's guid when it is clicked (not dragged, not double-clicked). */
+  setOnUnitClick(callback: ((guid: string) => void) | null) {
+    this.onUnitClick = callback;
+  }
+
+  private readonly handlePointerDown = (event: PointerEvent) => {
+    this.pointerDownAt = event.button === 0 ? { x: event.clientX, y: event.clientY } : null;
+  };
+
+  // A press and release without moving (a drag orbits or pans) on a unit.
+  private readonly handlePointerUp = (event: PointerEvent) => {
+    const down = this.pointerDownAt;
+    this.pointerDownAt = null;
+    if (!down || event.button !== 0 || !this.onUnitClick) return;
+    if (Math.hypot(event.clientX - down.x, event.clientY - down.y) > UNIT_CLICK_SLOP_PX) return;
+    const guid = this.pickScenePoint(event)?.guid;
+    clearTimeout(this.unitClickTimer);
+    if (!guid) return;
+    this.unitClickTimer = window.setTimeout(() => this.onUnitClick?.(guid), UNIT_CLICK_DELAY_MS);
   };
 
   private readonly handlePointerLeave = () => {

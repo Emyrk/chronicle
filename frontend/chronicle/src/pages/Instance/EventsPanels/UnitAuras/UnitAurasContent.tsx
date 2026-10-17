@@ -1,11 +1,11 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Search, Sparkles, X } from "lucide-react";
 import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip";
 import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
-import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
+import { HintTooltip, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { cn } from "@/lib/utils";
@@ -199,12 +199,15 @@ function CompactAuraTile({
   players,
   units,
   showUptime,
+  dense = false,
 }: {
   row: AuraRow;
   durationMs: number;
   players: PanelRenderProps<UnitAurasResult>["context"]["instance"]["players"];
   units: PanelRenderProps<UnitAurasResult>["context"]["instance"]["units"];
   showUptime: boolean;
+  /** Overlay size (map inspect cards): a small icon tile. */
+  dense?: boolean;
 }) {
   const percent = compactAuraPercent(row.totalUptimeMs, durationMs);
   const colors = compactAuraColors(percent);
@@ -238,7 +241,8 @@ function CompactAuraTile({
   return (
     <div
       className={cn(
-        "group relative size-12 shrink-0 rounded-[10px] p-[3px] transition-transform hover:z-10 hover:scale-105",
+        "group pointer-events-auto relative shrink-0 transition-transform hover:z-10 hover:scale-105",
+        dense ? "size-5 rounded-[4px] p-px" : "size-12 rounded-[10px] p-[3px]",
         !showUptime && row.replayState === "active" && "animate-replay-pop",
       )}
       style={{
@@ -248,7 +252,7 @@ function CompactAuraTile({
       }}
     >
       <div
-        className="relative flex size-full items-center justify-center overflow-hidden rounded-[7px] border border-black/30 shadow-inner"
+        className={cn("relative flex size-full items-center justify-center overflow-hidden border border-black/30 shadow-inner", dense ? "rounded-[3px]" : "rounded-[7px]")}
         style={{
           backgroundColor: showUptime
             ? colors.surface
@@ -257,11 +261,11 @@ function CompactAuraTile({
               : fullUptimeColors.surface,
         }}
       >
-        <Sparkles className="absolute size-4 text-foreground/50" />
+        <Sparkles className={cn("absolute text-foreground/50", dense ? "size-2.5" : "size-4")} />
         <SpellIdTooltip
           spellId={row.spellId}
           name={row.spellName}
-          size={40}
+          size={dense ? 18 : 40}
           tooltipFooter={tooltipFooter}
           className={cn(
             "relative z-10 flex size-full items-center justify-center overflow-hidden text-[0px]",
@@ -274,13 +278,14 @@ function CompactAuraTile({
       {!row.isBuff && (
         <span
           aria-label="Debuff"
-          className="absolute -left-1 -top-1 z-20 size-3 rounded-full border-2 border-card bg-rose-500 shadow-sm"
+          className={cn("absolute z-20 rounded-full border-card bg-rose-500 shadow-sm", dense ? "-left-px -top-px size-1.5" : "-left-1 -top-1 size-3 border-2")}
         />
       )}
       {(showUptime || countdownMs !== null) && (
         <span
           className={cn(
-            "absolute -bottom-1 -right-1 z-20 rounded-[3px] px-1 py-0.5 font-mono text-[9px] font-bold leading-none tabular-nums shadow-sm",
+            "absolute z-20 rounded-[3px] font-mono font-bold leading-none tabular-nums shadow-sm",
+            dense ? "-bottom-1 -right-1.5 px-px py-px text-[6px]" : "-bottom-1 -right-1 px-1 py-0.5 text-[9px]",
             showUptime ? "text-slate-950" : "bg-zinc-950/90 text-zinc-100",
           )}
           style={showUptime ? { backgroundColor: colors.badge } : undefined}
@@ -300,15 +305,21 @@ function CompactAuraGrid({
   players,
   units,
   showUptime,
+  dense = false,
+  leading,
 }: {
   rows: AuraRow[];
   durationMs: number;
   players: PanelRenderProps<UnitAurasResult>["context"]["instance"]["players"];
   units: PanelRenderProps<UnitAurasResult>["context"]["instance"]["units"];
   showUptime: boolean;
+  dense?: boolean;
+  /** Drawn before the tiles, in the same wrapping row. */
+  leading?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap content-start gap-3 p-3">
+    <div className={cn("flex flex-wrap content-start", dense ? "gap-1" : "gap-3 p-3")}>
+      {leading}
       {rows.map((row) => (
         <CompactAuraTile
           key={`${row.auraKey}:${row.replayState ?? "recorded"}`}
@@ -317,9 +328,39 @@ function CompactAuraGrid({
           players={players}
           units={units}
           showUptime={showUptime}
+          dense={dense}
         />
       ))}
     </div>
+  );
+}
+
+/** Share of a unit's fight a buff must cover to count as a whole-fight buff. */
+const WHOLE_FIGHT_UPTIME = 0.95;
+
+// Whole-fight buffs as one small "+N" tile; hovering lists them.
+function WholeFightBuffsTile({ rows }: { rows: AuraRow[] }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          className="pointer-events-auto grid size-5 shrink-0 cursor-default place-items-center rounded-[4px] border border-emerald-400/60 bg-emerald-900/60 font-mono text-[9px] font-bold leading-none text-emerald-100"
+          aria-label={`${rows.length} whole-fight buffs`}
+        >
+          +{rows.length}
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="right" align="start" className="max-w-64 px-2.5 py-2">
+        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Whole-fight buffs</div>
+        <div className="flex flex-col gap-1">
+          {rows.map((row) => (
+            <div key={row.auraKey} className="text-xs text-zinc-100">
+              <SpellIdTooltip spellId={row.spellId} name={row.spellName} size={16} />
+            </div>
+          ))}
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -626,6 +667,39 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
   const setAuraSearchQuery = (query: string) => {
     setPanelOption?.(serializeUnitAuraOptions(selectedGuids, query));
   };
+
+  if (props.variant === "overlay") {
+    // Embedded (map inspect cards): just each listed unit's auras as small icons.
+    return (
+      <div className="flex flex-col gap-1.5">
+        {selectedGuids.map((guid) => {
+          const rows = rowsByUnit.get(guid);
+          const all = rows ? activeAurasBeforeUpcoming([...rows.buffs, ...rows.debuffs]) : [];
+          if (all.length === 0) return <div key={guid} className="text-2xs text-zinc-500">{emptyAuraMessage}</div>;
+          // Buffs up for (nearly) the whole fight fold into one "+N" tile.
+          const fightMs = unitAuraUptimeDurationMs(result, guid, encounterEndOffsets);
+          const wholeFight = allByUnit.get(guid);
+          const isWholeFight = (row: AuraRow) => row.isBuff && row.replayState !== "upcoming" && fightMs > 0
+            && (wholeFight?.auras.get(row.auraKey)?.totalUptimeMs ?? 0) >= WHOLE_FIGHT_UPTIME * fightMs;
+          const persistent = all.filter(isWholeFight);
+          // Upcoming auras are left out: the card only shows what is up now.
+          const rest = all.filter((row) => !isWholeFight(row) && row.replayState !== "upcoming");
+          return (
+            <CompactAuraGrid
+              key={guid}
+              rows={rest}
+              durationMs={uptimeDurationByUnit.get(guid) ?? durationMs}
+              players={context.instance.players}
+              units={context.instance.units}
+              showUptime={showUptime}
+              dense
+              leading={persistent.length > 0 ? <WholeFightBuffsTile rows={persistent} /> : undefined}
+            />
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <GenericPanel {...props}>

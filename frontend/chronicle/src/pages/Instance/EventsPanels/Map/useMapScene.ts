@@ -28,7 +28,6 @@ import {
   renderedDungeonMapPoint,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
-  latestHealthAt,
   selectHealthBars,
   selectMapEncounter,
   unitFocusBounds,
@@ -115,17 +114,6 @@ export interface MapSceneMarker {
   health: MapUnitHealth | null;
   /** Creature entry used by the shared miniature registry (hostiles, pets, totems, etc.). */
   entry?: number;
-}
-
-export interface MapRaidFrame {
-  guid: string;
-  name: string;
-  class: string;
-  color: string;
-  tank: boolean;
-  dead: boolean;
-  health: { current: number; max: number; absorb: number } | null;
-  power: { current: number; max: number; type: string } | null;
 }
 
 export interface MapSceneGround {
@@ -219,8 +207,6 @@ export type MapScene =
     bossGuids: ReadonlySet<string>;
     /** Players inferRoles takes for tanks; their heals get priority and numbers. */
     tankGuids: ReadonlySet<string>;
-    /** Every player with health telemetry in the encounter, at the cursor: tanks first, then by class and name. */
-    raidFrames: MapRaidFrame[];
   };
 
 export interface MapSceneOptions {
@@ -413,25 +399,6 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   }
 
   const tankGuids = cachedTankGuids(encounter.effects, props.context.instance.players ?? {});
-  const raidFrames = Object.entries(props.context.instance.players ?? {})
-    .filter(([guid]) => encounter.healthByUnit.has(guid))
-    .map(([guid, player]): MapRaidFrame => {
-      const health = latestHealthAt(encounter.healthByUnit.get(guid) ?? [], cursorMs);
-      const power = latestHealthAt(encounter.powerByUnit.get(guid) ?? [], cursorMs);
-      return {
-        guid,
-        name: player.name,
-        class: player.class,
-        color: getClassColorVar(player.class),
-        tank: tankGuids.has(guid),
-        dead: isDeadAt(encounter.effects, guid, cursorMs),
-        health: health && { current: health.current, max: health.max, absorb: health.absorb },
-        power: power && power.max > 0 ? { current: power.current, max: power.max, type: power.type } : null,
-      };
-    })
-    .sort((left, right) => Number(right.tank) - Number(left.tank)
-      || left.class.localeCompare(right.class)
-      || left.name.localeCompare(right.name));
 
   return {
     status: "ready",
@@ -467,7 +434,6 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     effects: encounter.effects,
     bossGuids,
     tankGuids,
-    raidFrames,
   };
 }
 

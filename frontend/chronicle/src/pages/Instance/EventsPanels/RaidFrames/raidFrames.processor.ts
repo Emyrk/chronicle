@@ -1,6 +1,8 @@
+import { raidCompositionProcessor, type RaidCompositionResult } from "../RaidComposition/raidComposition.processor";
 import type {
   HealProcessorEvent,
   PanelProcessor,
+  RaidGroupProcessorEvent,
   SpellFailProcessorEvent,
   SpellGoProcessorEvent,
   SpellStartProcessorEvent,
@@ -47,6 +49,8 @@ export interface RaidFramesResult {
   encounters: Map<string, RaidFramesEncounter>;
   /** Spell names seen on casts, used to label heal events (which only carry IDs). */
   spellNames: Map<number, string>;
+  /** The Raid Composition panel's group layout, for ordering frames by group (empty without group data). */
+  composition: RaidCompositionResult;
 }
 
 export type RaidFramesProcessorEvent =
@@ -54,7 +58,8 @@ export type RaidFramesProcessorEvent =
   | SpellStartProcessorEvent
   | SpellGoProcessorEvent
   | SpellFailProcessorEvent
-  | HealProcessorEvent;
+  | HealProcessorEvent
+  | RaidGroupProcessorEvent;
 
 function encounterFor(
   state: RaidFramesResult,
@@ -157,21 +162,27 @@ function finishCast(
 
 export const raidFramesProcessor: PanelProcessor<RaidFramesResult, RaidFramesProcessorEvent> = {
   id: "raid_frames",
-  streams: ["unit_resources", "spell_start", "spell_go", "spell_fail", "heal"],
-  createState: () => ({ encounters: new Map(), spellNames: new Map() }),
-  processEvent(state, event, encounterId, firstTimestamp, _streamType, context) {
+  streams: ["unit_resources", "spell_start", "spell_go", "spell_fail", "heal", "raid_group"],
+  createState: () => ({ encounters: new Map(), spellNames: new Map(), composition: raidCompositionProcessor.createState() }),
+  // Every unit is recorded (enemies included) so inspect views can show any
+  // unit; the raid frame grid itself shows players.
+  processEvent(state, event, encounterId, firstTimestamp, streamType, context) {
     if (!context.selectedEncounterIds.has(encounterId)) return;
+    if (event.type === "raid_group") {
+      raidCompositionProcessor.processEvent(state.composition, event, encounterId, firstTimestamp, streamType, context);
+      return;
+    }
 
     const timestampMs = firstTimestamp.getTime() + event.offsetMilli;
     const encounter = encounterFor(state, encounterId, firstTimestamp, timestampMs);
 
     switch (event.type) {
       case "unit_resources":
-        if (context.players[event.unit]) addResourceSample(encounter, event, timestampMs);
+        addResourceSample(encounter, event, timestampMs);
         return;
       case "spell_start":
         state.spellNames.set(event.spell.id, event.spell.name);
-        if (context.players[event.caster]) addCast(encounter, event, timestampMs);
+        addCast(encounter, event, timestampMs);
         return;
       case "spell_go":
         state.spellNames.set(event.spell.id, event.spell.name);
@@ -181,7 +192,7 @@ export const raidFramesProcessor: PanelProcessor<RaidFramesResult, RaidFramesPro
         finishCast(encounter, event.caster, event.spell.id, timestampMs, true);
         return;
       case "heal":
-        if (context.players[event.target] && event.amount > 0) addHeal(encounter, event, timestampMs);
+        if (event.amount > 0) addHeal(encounter, event, timestampMs);
         return;
     }
   },
@@ -255,4 +266,66 @@ export function activeCastAt(
     if (cast.startMs <= timestampMs && timestampMs < cast.endMs) return cast;
   }
   return null;
+}
+
+const RAID_GROUP_SIZE = 5;
+
+/**
+ * Raid frame order: with group data, each group's members in slot order,
+ * padded to a full group (null) so every group starts its own column of five,
+ * then anyone not in a group; without it, `fallback` as given.
+ */
+export function orderRaidFramePlayers<T>(
+  fallback: readonly (readonly [string, T])[],
+  groups: readonly (readonly string[])[],
+): (readonly [string, T] | null)[] {
+  const byGuid = new Map(fallback);
+  const ordered: (readonly [string, T] | null)[] = [];
+  const placed = new Set<string>();
+  for (const group of groups) {
+    const members = group.filter((guid) => guid && byGuid.has(guid) && !placed.has(guid));
+    if (members.length === 0) continue;
+    for (const guid of members) {
+      ordered.push([guid, byGuid.get(guid)!]);
+      placed.add(guid);
+    }
+    for (let slot = members.length; slot < RAID_GROUP_SIZE; slot += 1) ordered.push(null);
+  }
+  if (placed.size === 0) return [...fallback];
+  for (const entry of fallback) {
+    if (!placed.has(entry[0])) ordered.push(entry);
+  }
+  return ordered;
+}
+
+/**
+ * The encounter's enemies for enemy raid frames: units with health data that
+ * are neither players nor players' pets, and, when the encounter lists its
+ * enemies (`allowed`), on that list (logs record health for every unit in
+ * sight, not only the fight's). Bosses first, then the largest maximum
+ * health, then name.
+ */
+export function enemyFrameUnits(
+  encounter: RaidFramesEncounter,
+  isPlayer: (guid: string) => boolean,
+  ownerOf: (guid: string) => string | null | undefined,
+  nameOf: (guid: string) => string,
+  bossGuids: ReadonlySet<string>,
+  allowed?: ReadonlySet<string>,
+): { guid: string; name: string }[] {
+  const enemies: { guid: string; name: string; maxHealth: number; boss: boolean }[] = [];
+  for (const [guid, samples] of encounter.resourcesByUnit) {
+    if (isPlayer(guid)) continue;
+    if (allowed && allowed.size > 0 && !allowed.has(guid)) continue;
+    const owner = ownerOf(guid);
+    if (owner && isPlayer(owner)) continue;
+    const maxHealth = samples.reduce((max, sample) => Math.max(max, sample.maximumHealth), 0);
+    if (maxHealth <= 0) continue;
+    enemies.push({ guid, name: nameOf(guid), maxHealth, boss: bossGuids.has(guid) });
+  }
+  return enemies
+    .sort((left, right) => Number(right.boss) - Number(left.boss)
+      || right.maxHealth - left.maxHealth
+      || left.name.localeCompare(right.name))
+    .map(({ guid, name }) => ({ guid, name }));
 }

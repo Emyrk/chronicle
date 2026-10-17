@@ -15,6 +15,7 @@ import { playerClassLabel } from '@/components/ui/BreakoutPanel/playerClassLabel
 import { usePortalContainer } from '@/components/ui/PortalContainerContext';
 import { X, GripHorizontal } from 'lucide-react';
 import { usePlayerSpecializations } from './PlayerSpecializationContext';
+import { usePanelVariant } from '@/pages/Instance/EventsPanels/PanelVariantContext';
 import {
   createPlayerMetricChartModel,
   type PlayerMetricChartData,
@@ -122,6 +123,8 @@ export function PlayerMetricChart({
   ...divProps
 }: PlayerMetricChartProps) {
   void _dir;
+  // Embedded as an overlay (a meter over the map): dense rows, no icons or pills.
+  const dense = usePanelVariant() === 'overlay';
   const playerSpecializations = usePlayerSpecializations();
   const enrichedData = useMemo(
     () => data.map((player) => {
@@ -163,17 +166,22 @@ export function PlayerMetricChart({
     <ScrollArea
       style={style}
       className={cn("h-full min-h-0 flex-1", className)}
+      data-player-metric-chart
       {...divProps}
     >
       <div
-        style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '4px' }}
+        style={{ display: 'flex', flexDirection: 'column', gap: dense ? '1px' : '2px', padding: dense ? '0' : '4px' }}
         data-lesson-target="read-chart"
       >
+        {dense && chartData.length === 0 && (
+          <span style={{ padding: '4px', fontSize: '11px', opacity: 0.6 }}>Nothing yet</span>
+        )}
         {chartData.map((player, index) => {
           return <PlayerMetricRow 
             key={player.playerID}
             player={player} 
-            rowHeight={rowHeight}
+            rowHeight={dense ? 18 : rowHeight}
+            dense={dense}
             maximumValue={maximumValue}
             summedValue={summedValue}
             showRank={type === 'damage' || type === 'healing' || type === 'taken' || type === 'mitigation'}
@@ -190,7 +198,7 @@ export function PlayerMetricChart({
             stackedLabel={stackedLabel}
             isFirstRow={index === 0}
             onCtrlClick={onRowCtrlClick ? (e) => onRowCtrlClick(player.playerID, e) : undefined}
-            parsePill={parsePills?.get(player.playerID)}
+            parsePill={dense ? undefined : parsePills?.get(player.playerID)}
             classIconBasePath={classIconBasePath}
             animateValues={animateValues}
           />
@@ -226,6 +234,8 @@ export interface PlayerMetricRowProps {
   parsePill?: ParsePillData
   classIconBasePath?: string
   animateValues?: boolean
+  /** Meter-style row: small text, no icon, compact value. */
+  dense?: boolean
 }
 
 // Draggable pinned tooltip component
@@ -414,6 +424,7 @@ export function PlayerMetricRow({
   classIconBasePath = '/c/icons',
   animateValues = true,
   hideZeroValue = false,
+  dense = false,
 }: PlayerMetricRowProps) {
   const { ref, x, y } = useMouse<HTMLDivElement>();
   const rowRef = useRef<HTMLDivElement>(null)
@@ -541,7 +552,7 @@ export function PlayerMetricRow({
         alignItems: 'center',
         height: rowHeight,
         position: 'relative',
-        borderRadius: 'var(--radius)',
+        borderRadius: dense ? '1px' : 'var(--radius)',
         overflow: 'hidden',
         color: 'var(--color-class-foreground)',//'oklch(0.985 0 0)',
         opacity: isDimmed ? 0.35 : 1,
@@ -642,7 +653,7 @@ export function PlayerMetricRow({
           display: 'flex',
           alignItems: 'center',
           width: '100%',
-          padding: '0 12px',
+          padding: dense ? '0 4px' : '0 12px',
           zIndex: 1,
         }}
       >
@@ -650,17 +661,17 @@ export function PlayerMetricRow({
       {/* Rank */}
       {showRank && (<span
           style={{
-            width: '32px',
-            fontSize: '13px',
+            width: dense ? '18px' : '32px',
+            fontSize: dense ? '10px' : '13px',
             fontWeight: 500,
           }}
         >
-          #{player.rank}
+          {dense ? `${player.rank}.` : `#${player.rank}`}
         </span>
         )}
 
         {/* Specialization icon, falling back to class when talents are unavailable. */}
-        <img
+        {!dense && <img
           src={player.specializationIconUrl ?? `${classIconBasePath}/class_${player.className.toLowerCase()}.png`}
           alt={player.specialization || player.className}
           data-player-icon={player.specializationIconUrl ? "specialization" : "class"}
@@ -686,7 +697,7 @@ export function PlayerMetricRow({
               target.style.display = 'none';
             }
           }}
-        />
+        />}
 
         {/* Spec name */}
         <span
@@ -694,7 +705,7 @@ export function PlayerMetricRow({
           style={{
             flex: '0 1 auto',
             minWidth: 0,
-            fontSize: '13px',
+            fontSize: dense ? '11px' : '13px',
             fontWeight: 500,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
@@ -719,25 +730,25 @@ export function PlayerMetricRow({
         <span ref={valuesRef} style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
         {/* DPS value */}
         {(!hideZeroValue || player.displayValue !== 0)
-          ? formatValue(type, player, suffix, decimals)
+          ? formatValue(type, player, suffix, decimals, dense)
           : null}
 
         {/* Percentage */}
         <span
-          className='text-xs tabular-nums'
+          className={dense ? 'text-[10px] tabular-nums' : 'text-xs tabular-nums'}
           style={{
-            width: '50px',
+            width: dense ? '38px' : '50px',
             textAlign: 'right',
             fontWeight: 500,
             color: 'var(--color-class-muted-foreground)',
             fontFamily: 'var(--font-mono)',
           }}
         >
-          {((player.value/summedValue)*100).toFixed(2)}%
+          {((player.value/summedValue)*100).toFixed(dense ? 1 : 2)}%
         </span>
 
         {/* Stacked percentage - shown when stackedValue exists */}
-        {player.stackedValue !== undefined && player.stackedValue > 0 && (() => {
+        {!dense && player.stackedValue !== undefined && player.stackedValue > 0 && (() => {
           const totalWithStacked = player.value + player.stackedValue;
           const stackedPct = totalWithStacked > 0 ? (player.stackedValue / totalWithStacked) * 100 : 0;
           return (
@@ -821,7 +832,15 @@ export function PlayerMetricRow({
 )
 }
 
-function formatValue(type: ChartType, player: PlayerMetricChartRow, suffix?: string, decimals: number = 1) {
+function formatValue(type: ChartType, player: PlayerMetricChartRow, suffix?: string, decimals: number = 1, dense = false) {
+  if (dense) {
+    // Meter-style: compact (12.3K), no badge.
+    return (
+      <span className='text-[11px] tabular-nums' style={{ fontWeight: 600, fontFamily: 'var(--font-mono)', marginRight: '4px' }}>
+        {compactNumber(player.displayValue)}{suffix}
+      </span>
+    )
+  }
   const styles: React.CSSProperties = {
     fontWeight: 600,
     // color: 'oklch(0.985 0 0)',
@@ -861,4 +880,11 @@ function formatValue(type: ChartType, player: PlayerMetricChartRow, suffix?: str
         })}{suffix}
       </span>)
   }
+}
+
+function compactNumber(value: number): string {
+  const abs = Math.abs(value)
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`
+  if (abs >= 10_000) return `${(value / 1_000).toFixed(1)}K`
+  return Math.round(value).toLocaleString()
 }

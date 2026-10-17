@@ -8,6 +8,8 @@ import type {
   UnitResourcesProcessorEvent,
 } from "../processorTypes";
 import {
+  enemyFrameUnits,
+  orderRaidFramePlayers,
   activeCastAt,
   incomingHealsAt,
   latestResourceAt,
@@ -135,6 +137,8 @@ describe("raidFramesProcessor", () => {
     expect(samples[0]).toMatchObject({ currentHealth: 3_500, powerType: "mana" });
     expect(latestResourceAt(samples, FIRST_TIMESTAMP.getTime() + 1_999)?.currentHealth).toBe(3_500);
     expect(latestResourceAt(samples, FIRST_TIMESTAMP.getTime() + 2_000)?.currentPower).toBe(1_500);
+    // Enemies are recorded too, for inspecting them.
+    expect(state.encounters.get(ENCOUNTER)?.resourcesByUnit.get("enemy")).toHaveLength(1);
   });
 
   it("tracks active, completed, and failed casts", () => {
@@ -174,7 +178,7 @@ describe("raidFramesProcessor", () => {
     expect(incomingHealsAt(heals, base + 1_000, 1_500).map((h) => h.amount)).toEqual([800]);
     expect(incomingHealsAt(heals, base + 500, 1_500).map((h) => h.amount)).toEqual([1_200, 800]);
     expect(incomingHealsAt(heals, base + 2_000, 1_500)).toEqual([]);
-    expect(state.encounters.get(ENCOUNTER)?.healsByUnit.has("enemy")).toBe(false);
+    expect(state.encounters.get(ENCOUNTER)?.healsByUnit.get("enemy")).toHaveLength(1);
     expect(heals[0]).toMatchObject({ spellId: 2061, sourceName: "Mage", overheal: 0 });
   });
 
@@ -183,4 +187,60 @@ describe("raidFramesProcessor", () => {
     raidFramesProcessor.processEvent(state, resources(), "other", FIRST_TIMESTAMP, "unit_resources", context());
     expect(state.encounters.size).toBe(0);
   });
+
+  it("keeps the Raid Composition group layout", () => {
+    const state = raidFramesProcessor.createState();
+    const groupMemberGuids = Array<string>(40).fill("");
+    groupMemberGuids[0] = OTHER_PLAYER;
+    groupMemberGuids[5] = PLAYER;
+    raidFramesProcessor.processEvent(state, { ...meta, type: "raid_group", groupMemberGuids }, ENCOUNTER, FIRST_TIMESTAMP, "raid_group", context());
+    expect(state.composition.groups[0][0]).toBe(OTHER_PLAYER);
+    expect(state.composition.groups[1][0]).toBe(PLAYER);
+  });
 });
+
+describe("orderRaidFramePlayers", () => {
+  const players = [["a", "A"], ["b", "B"], ["c", "C"], ["d", "D"]] as const;
+
+  it("keeps the fallback order without group data", () => {
+    expect(orderRaidFramePlayers(players, [["", "", "", "", ""]])).toEqual(players);
+  });
+
+  it("orders by group, pads each group to five, then appends the ungrouped", () => {
+    const ordered = orderRaidFramePlayers(players, [["c", "", "a", "", ""], ["", "", "", "", ""], ["b", "", "", "", ""]]);
+    expect(ordered.map((entry) => entry?.[0] ?? null)).toEqual([
+      "c", "a", null, null, null,
+      "b", null, null, null, null,
+      "d",
+    ]);
+  });
+});
+
+describe("enemyFrameUnits", () => {
+  it("lists non-player, non-pet units with health, bosses first then by maximum health", () => {
+    const sample = (maximumHealth: number) => ({ timestampMs: 0, currentHealth: maximumHealth, maximumHealth, absorb: 0, powerType: "mana", currentPower: 0, maximumPower: 0 });
+    const encounter = {
+      encounterId: ENCOUNTER, startMs: 0, endMs: 0, castsByUnit: new Map(), healsByUnit: new Map(),
+      resourcesByUnit: new Map([
+        [PLAYER, [sample(4_000)]],
+        ["pet", [sample(1_000)]],
+        ["add-small", [sample(5_000)]],
+        ["add-big", [sample(20_000)]],
+        ["boss", [sample(10_000)]],
+        ["no-health", [sample(0)]],
+      ]),
+    };
+    const units = enemyFrameUnits(
+      encounter,
+      (guid) => guid === PLAYER,
+      (guid) => (guid === "pet" ? PLAYER : null),
+      (guid) => guid,
+      new Set(["boss"]),
+    );
+    expect(units.map((unit) => unit.guid)).toEqual(["boss", "add-big", "add-small"]);
+    // With the encounter's enemy list, units outside it are left out.
+    expect(enemyFrameUnits(encounter, (guid) => guid === PLAYER, () => null, (guid) => guid, new Set(), new Set(["add-small"]))
+      .map((unit) => unit.guid)).toEqual(["add-small"]);
+  });
+});
+

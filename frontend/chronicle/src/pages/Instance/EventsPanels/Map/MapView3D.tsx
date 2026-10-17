@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Scan } from "lucide-react";
 import { useSpell } from "@/api/queries";
 import { useDatasetId } from "@/hooks/useDatasetId";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
@@ -9,7 +8,6 @@ import { miniatureUrl } from "./bossMinis";
 import type { MapPositionSample } from "./map.processor";
 import { prefersReducedMotion, replayPositionAt, VIEW_TRANSITION_MS, type MapPoint, type MapViewport } from "./mapModel";
 import {
-  MAX_EFFECT_PRIMITIVES,
   MapScene3D,
   type DungeonMeshRequest,
   type DungeonMeshState,
@@ -18,9 +16,10 @@ import {
   type MapSceneDirector,
   type MapSceneFocus,
 } from "./MapScene3D";
-import { collectCastSpellIds, DEFAULT_EFFECT_OPTIONS, effectiveCastIconGuids, iconPreloadUrls, type CastIconMode, type EncounterEffects } from "./replayEffects";
+import { collectCastSpellIds, DEFAULT_EFFECT_OPTIONS, effectiveCastIconGuids, iconPreloadUrls, type EncounterEffects } from "./replayEffects";
 import type { MapViewRequest } from "./MapView2D";
 import type { MapSceneGround, MapSceneMarker } from "./useMapScene";
+import { DEFAULT_EFFECT_SETTINGS, type EffectSettings } from "./mapViewSettings";
 
 export interface MapView3DProps {
   ground: MapSceneGround;
@@ -53,56 +52,13 @@ export interface MapView3DProps {
    * a zoom); Follow turns it back on.
    */
   cinematic?: boolean;
+  /** Called with a unit's guid when it is clicked on the map. */
+  onUnitClick?: (guid: string) => void;
+  /** Display settings (effects, bars); the defaults when left out. */
+  effectSettings?: EffectSettings;
+  /** Bump to ask for the top-down camera view. */
+  topDownKey?: number;
 }
-
-const EFFECTS_STORAGE_KEY = "chronicle.map.effects3d";
-
-interface EffectSettings {
-  enabled: boolean;
-  heals: boolean;
-  overheal: boolean;
-  periodic: boolean;
-  onlySelected: boolean;
-  maxEffects: number;
-  bars: boolean;
-  /** Legacy boolean from before castMode; false migrates to "off". */
-  casts?: boolean;
-  castMode: CastIconMode;
-}
-
-const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
-  enabled: true,
-  heals: DEFAULT_EFFECT_OPTIONS.showHeals,
-  overheal: DEFAULT_EFFECT_OPTIONS.showOverheal,
-  periodic: DEFAULT_EFFECT_OPTIONS.showPeriodic,
-  onlySelected: false,
-  maxEffects: MAX_EFFECT_PRIMITIVES,
-  bars: true,
-  castMode: "selected",
-};
-
-const CAST_MODES: { value: CastIconMode; label: string; title: string }[] = [
-  { value: "off", label: "Off", title: "No cast icons" },
-  { value: "selected", label: "Selected", title: "Cast icons over selected players and bosses; with nothing selected, over everyone in groups of 10 or fewer" },
-  { value: "all", label: "All", title: "Cast icons over every player and boss" },
-];
-
-const DENSITY_OPTIONS = [16, 32, MAX_EFFECT_PRIMITIVES];
-
-function readStoredEffectSettings(): EffectSettings {
-  try {
-    const stored = JSON.parse(localStorage.getItem(EFFECTS_STORAGE_KEY) ?? "{}") as Partial<EffectSettings>;
-    const settings = { ...DEFAULT_EFFECT_SETTINGS, ...stored };
-    if (!stored.castMode && stored.casts === false) settings.castMode = "off";
-    if (!CAST_MODES.some((mode) => mode.value === settings.castMode)) settings.castMode = "selected";
-    if (!DENSITY_OPTIONS.includes(settings.maxEffects)) settings.maxEffects = MAX_EFFECT_PRIMITIVES;
-    return settings;
-  } catch {
-    return DEFAULT_EFFECT_SETTINGS;
-  }
-}
-
-const toggleClass = (on: boolean) => `rounded border border-white/15 px-1.5 py-0.5 font-medium ${on ? "bg-primary/30 text-foreground" : "bg-black/70 text-muted-foreground hover:text-foreground"}`;
 
 // three.js needs concrete colors; class colors are CSS custom properties.
 function resolveCssColor(color: string, element: Element, cache: Map<string, string>): string {
@@ -153,6 +109,9 @@ export default function MapView3D({
   onDungeonMeshState,
   focus = null,
   cinematic = false,
+  onUnitClick,
+  effectSettings: effectSettingsProp,
+  topDownKey = 0,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<MapScene3D | null>(null);
@@ -161,7 +120,7 @@ export default function MapView3D({
   const onDungeonMeshStateRef = useRef(onDungeonMeshState);
   const colorCacheRef = useRef(new Map<string, string>());
   const smoothMs = useSmoothReplayTime(cursorMs, playing, playbackSpeed);
-  const [effectSettings, setEffectSettings] = useState(readStoredEffectSettings);
+  const effectSettings = effectSettingsProp ?? DEFAULT_EFFECT_SETTINGS;
   const showBars = effectSettings.bars;
   const [effectHover, setEffectHover] = useState<MapScene3DEffectHover | null>(null);
 
@@ -205,6 +164,10 @@ export default function MapView3D({
   useEffect(() => {
     sceneRef.current?.setFocus(focus);
   }, [focus]);
+
+  useEffect(() => {
+    sceneRef.current?.setOnUnitClick(onUnitClick ?? null);
+  }, [onUnitClick]);
 
   // Keyed by the boss guids' string so replay ticks never re-engage the Director.
   const bossKey = bossGuids ? [...bossGuids].join(",") : "";
@@ -323,72 +286,15 @@ export default function MapView3D({
     sceneRef.current?.setEffectClock(cursorMs, playing, playbackSpeed);
   }, [cursorMs, playbackSpeed, playing]);
 
-  const updateEffectSettings = (patch: Partial<EffectSettings>) => {
-    const next = { ...effectSettings, ...patch };
-    setEffectSettings(next);
-    try {
-      localStorage.setItem(EFFECTS_STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // Storage may be unavailable; the settings still apply for this session.
-    }
-  };
+  // Each new key (after the first) asks for the top-down view.
+  useEffect(() => {
+    if (topDownKey > 0) sceneRef.current?.resetCamera(true);
+  }, [topDownKey]);
 
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="absolute inset-0" />
       {effectHover && <EffectTooltip hover={effectHover} />}
-      <div className="absolute right-2 top-2 flex flex-wrap justify-end gap-1 text-[10px]">
-        {effects && effectSettings.enabled && (
-          <>
-            <button type="button" aria-pressed={effectSettings.heals} onClick={() => updateEffectSettings({ heals: !effectSettings.heals })} title="Show heal beams, pulses and numbers" className={toggleClass(effectSettings.heals)}>
-              Heals
-            </button>
-            <button type="button" aria-pressed={effectSettings.overheal} onClick={() => updateEffectSettings({ overheal: !effectSettings.overheal })} title="Also show heals that restored no health (grey)" className={toggleClass(effectSettings.overheal)}>
-              Overheal
-            </button>
-            <button type="button" aria-pressed={effectSettings.periodic} onClick={() => updateEffectSettings({ periodic: !effectSettings.periodic })} title="Show damage and heal-over-time ticks" className={toggleClass(effectSettings.periodic)}>
-              DoT ticks
-            </button>
-            <button type="button" aria-pressed={effectSettings.onlySelected} onClick={() => updateEffectSettings({ onlySelected: !effectSettings.onlySelected })} title="Only show effects involving the selected players" className={toggleClass(effectSettings.onlySelected)}>
-              Only selected
-            </button>
-            <span role="group" aria-label="Cast icons" className="flex items-center gap-0.5">
-              <span className="text-muted-foreground">Casts</span>
-              {CAST_MODES.map((mode) => (
-                <button key={mode.value} type="button" aria-pressed={effectSettings.castMode === mode.value} onClick={() => updateEffectSettings({ castMode: mode.value })} title={mode.title} className={toggleClass(effectSettings.castMode === mode.value)}>
-                  {mode.label}
-                </button>
-              ))}
-            </span>
-            <select
-              aria-label="Effect density"
-              title="Maximum effects drawn at once"
-              value={effectSettings.maxEffects}
-              onChange={(event) => updateEffectSettings({ maxEffects: Number(event.target.value) })}
-              className="rounded border border-white/15 bg-black/70 px-1 py-0.5 text-muted-foreground [color-scheme:dark]"
-            >
-              {DENSITY_OPTIONS.map((option) => <option key={option} value={option}>{option} fx</option>)}
-            </select>
-          </>
-        )}
-        <button type="button" aria-pressed={showBars} onClick={() => updateEffectSettings({ bars: !showBars })} title="Health bars for bosses, selected players and recently damaged units" className={toggleClass(showBars)}>
-          Bars
-        </button>
-        {effects && (
-          <button type="button" aria-pressed={effectSettings.enabled} onClick={() => updateEffectSettings({ enabled: !effectSettings.enabled })} title="Hit wobble, spell beams, cast rings and deaths" className={toggleClass(effectSettings.enabled)}>
-            Effects
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => sceneRef.current?.resetCamera(true)}
-          title="Top-down view"
-          className="flex items-center gap-1 rounded border border-white/15 bg-black/70 px-1.5 py-0.5 font-medium text-muted-foreground hover:text-foreground"
-        >
-          <Scan className="h-3 w-3" />
-          Top-down
-        </button>
-      </div>
     </div>
   );
 }

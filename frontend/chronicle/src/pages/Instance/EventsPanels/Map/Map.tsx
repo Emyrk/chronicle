@@ -2,7 +2,7 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Crosshair, Focus, HeartPulse, Map as MapIcon, Maximize, Route, Users } from "lucide-react";
+import { Crosshair, Focus, HeartPulse, Map as MapIcon, Maximize, Route, Settings2, Skull, Users, X } from "lucide-react";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { fetchMiniatureUrls } from "./bossMinis";
@@ -20,14 +20,23 @@ import {
 } from "./mapModel";
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
 import { MapView2D, type MapViewRequest } from "./MapView2D";
-import { RaidFrames } from "./RaidFrames";
+import { useEmbeddedPanel } from "../useEmbeddedPanel";
+import { UnitInspectContext, type UnitInspectSelection } from "../UnitInspectContext";
+import { InspectCards } from "./InspectCards";
+import { createRaidFramesPanel } from "../RaidFrames/RaidFrames";
 import { MAP_CONTROL_KEYBINDS } from "./mapControls";
+import { MeterWindows } from "./MeterWindows";
+import { useMeterWindows } from "./meterWindowsState";
+import { MapSettingsOverlay } from "./MapSettingsOverlay";
+import { useEffectSettings } from "./mapViewSettings";
 import { useMapScene } from "./useMapScene";
 import { encounterJumps, mapPresentationForSelection } from "./wholeRun";
 
 export { mapPresentationForSelection };
 
 const MapView3D = lazy(() => import("./MapView3D"));
+
+const RAID_FRAMES_PANEL = createRaidFramesPanel();
 
 const MESH_STORAGE_KEY = "chronicle.map.mesh";
 
@@ -42,6 +51,25 @@ function readStoredMesh(): boolean | null {
 
 export function preferredMeshState(stored: boolean | null): boolean {
   return stored ?? true;
+}
+
+const RAID_FRAMES_STORAGE_KEY = "chronicle.map.raidFrames";
+const ENEMY_FRAMES_STORAGE_KEY = "chronicle.map.enemyFrames";
+
+function readStoredShown(key: string): boolean {
+  try {
+    return localStorage.getItem(key) !== "hidden";
+  } catch {
+    return true;
+  }
+}
+
+function storeShown(key: string, shown: boolean) {
+  try {
+    localStorage.setItem(key, shown ? "shown" : "hidden");
+  } catch {
+    // Storage may be unavailable; the choice still applies for this session.
+  }
 }
 
 function storeMesh(on: boolean) {
@@ -97,7 +125,34 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   [fitZoom, focusCentre]);
   const autoFit = ready?.autoFit ?? null;
   const defaultViewport = ready?.fitByDefault && autoFit ? autoFit : FULL_MAP_VIEWPORT;
-  const [showRaidFrames, setShowRaidFrames] = useState(true);
+  const [showRaidFrames, setShowRaidFramesState] = useState(() => readStoredShown(RAID_FRAMES_STORAGE_KEY));
+  const setShowRaidFrames = (shown: boolean) => {
+    setShowRaidFramesState(shown);
+    storeShown(RAID_FRAMES_STORAGE_KEY, shown);
+  };
+  const [showEnemyFrames, setShowEnemyFramesState] = useState(() => readStoredShown(ENEMY_FRAMES_STORAGE_KEY));
+  const setShowEnemyFrames = (shown: boolean) => {
+    setShowEnemyFramesState(shown);
+    storeShown(ENEMY_FRAMES_STORAGE_KEY, shown);
+  };
+  const [meterWindows, setMeterWindows] = useMeterWindows();
+  // Display settings and the settings overlay that sets them (all kept in local storage).
+  const [effectSettings, updateEffectSettings] = useEffectSettings();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [topDownKey, setTopDownKey] = useState(0);
+  // Units picked for a closer look: click them on the map or in the raid frames.
+  const [inspected, setInspected] = useState<string[]>([]);
+  const toggleInspected = useCallback((guid: string) => {
+    setInspected((current) => current.includes(guid) ? current.filter((other) => other !== guid) : [...current, guid]);
+  }, []);
+  const inspectSelection = useMemo((): UnitInspectSelection => ({ inspected: new Set(inspected), toggle: toggleInspected }), [inspected, toggleInspected]);
+  // One Raid Frames run draws both the grid and the inspect frames.
+  const raidFrames = useEmbeddedPanel({
+    panel: RAID_FRAMES_PANEL,
+    context: props.context,
+    durationMs: props.durationMs,
+    enabled: showRaidFrames || showEnemyFrames || inspected.length > 0,
+  });
   const [storedFraming, setFraming] = useState<MapFraming>(INITIAL_MAP_FRAMING);
   // A new selection or replay moving into another encounter re-frames;
   // loading states (e.g. reprocessing after a filter change) keep the framing.
@@ -141,16 +196,6 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
     <div className="flex min-w-0 shrink-0 items-center gap-2 text-[10px] text-muted-foreground">
       {!scene.overlayAvailable && <span className="text-amber-300/80">position overlay unavailable</span>}
       <span className="flex items-center gap-1"><Users className="h-3 w-3" />{scene.markers.length}</span>
-      {scene.floors.length > 1 && (
-        <select
-          aria-label="Map floor"
-          value={scene.selectedFloorNumber ?? ""}
-          onChange={(event) => scene.setFloorNumber(Number(event.target.value))}
-          className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground [color-scheme:dark]"
-        >
-          {scene.floors.map((floor) => <option key={floor} value={floor}>Floor {floor}</option>)}
-        </select>
-      )}
       {canFollow ? (
         <button
           type="button"
@@ -175,16 +220,6 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
           Fit
         </button>
       )}
-      <button
-        type="button"
-        aria-pressed={showRaidFrames}
-        onClick={() => setShowRaidFrames(!showRaidFrames)}
-        title="Show every player's health and power"
-        className={`${framingButtonClass} ${showRaidFrames ? "bg-primary/20 text-foreground" : ""}`}
-      >
-        <HeartPulse className="h-3 w-3" />
-        Raid
-      </button>
       <button type="button" onClick={() => applyFraming(FULL_MAP_VIEWPORT)} title="Show the full map" className={framingButtonClass}>
         <Maximize className="h-3 w-3" />
         Reset
@@ -193,21 +228,6 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
         <button type="button" onClick={onExitWholeRun} title="Back to the 2D route overview" className={framingButtonClass}>
           <Route className="h-3 w-3" />
           Overview
-        </button>
-      )}
-      {show3D && meshUrl && (
-        <button
-          type="button"
-          aria-pressed={meshWanted}
-          disabled={meshOnly}
-          onClick={toggleMesh}
-          title={meshOnly
-            ? "This instance has no map artwork; the real dungeon mesh is all there is to show"
-            : "Stand the units on the real dungeon mesh instead of the map tiles"}
-          className={`${framingButtonClass} ${meshWanted ? "bg-primary/20 text-foreground disabled:opacity-100" : ""}`}
-        >
-          3D map
-          {dungeonMesh && meshState === "loading" && <span className="font-normal text-muted-foreground">loading cave…</span>}
         </button>
       )}
     </div>
@@ -240,10 +260,103 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               onDungeonMeshState={setMeshState}
               focus={focus}
               cinematic={cinematic}
+              onUnitClick={toggleInspected}
+              effectSettings={effectSettings}
+              topDownKey={topDownKey}
             />
           </Suspense>
         )}
-        {showRaidFrames && <RaidFrames frames={scene.raidFrames} />}
+        {/* Top-left: the Raid Frames panel itself, drawn as an overlay (one
+            implementation for the map and the panel). The inspect frame below moves freely. */}
+        <UnitInspectContext.Provider value={inspectSelection}>
+          <div className="pointer-events-none absolute bottom-2 left-2 top-2 z-30 flex max-w-[calc(100%-1rem)] flex-col items-start gap-1.5">
+            {showRaidFrames ? (
+              <div className="group/raid flex max-w-full shrink-0 items-start gap-0.5">
+                <div className="min-w-0 overflow-hidden">{raidFrames()}</div>
+                <button
+                  type="button"
+                  onClick={() => setShowRaidFrames(false)}
+                  title="Hide raid frames"
+                  aria-label="Hide raid frames"
+                  className="pointer-events-auto grid h-4 w-4 shrink-0 place-items-center rounded-sm bg-black/75 text-white/60 opacity-0 transition-opacity hover:text-white focus-visible:opacity-100 group-hover/raid:opacity-100"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ) : (
+              // Hidden: a button in their corner brings them back.
+              <button
+                type="button"
+                onClick={() => setShowRaidFrames(true)}
+                title="Show raid frames"
+                aria-label="Show raid frames"
+                className="pointer-events-auto grid h-7 w-7 shrink-0 place-items-center rounded-sm border border-black/80 bg-black/75 text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-white"
+              >
+                <HeartPulse className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          {/* Top-right, left of the settings button: the same panel's enemy frames. */}
+          <div className="pointer-events-none absolute right-11 top-2 z-30 flex max-w-[calc(100%-4rem)] justify-end">
+            {showEnemyFrames ? (
+              <div className="group/enemy flex max-w-full items-start gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => setShowEnemyFrames(false)}
+                  title="Hide enemy frames"
+                  aria-label="Hide enemy frames"
+                  className="pointer-events-auto grid h-4 w-4 shrink-0 place-items-center rounded-sm bg-black/75 text-white/60 opacity-0 transition-opacity hover:text-white focus-visible:opacity-100 group-hover/enemy:opacity-100"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+                <div className="min-w-0 overflow-hidden">{raidFrames("enemies")}</div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowEnemyFrames(true)}
+                title="Show enemy frames"
+                aria-label="Show enemy frames"
+                className="pointer-events-auto grid h-7 w-7 place-items-center rounded-sm border border-black/80 bg-black/75 text-red-300/80 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-red-200"
+              >
+                <Skull className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </UnitInspectContext.Provider>
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(true)}
+          title="Map settings"
+          aria-label="Map settings"
+          className="absolute right-2 top-2 z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 bg-black/75 text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-white"
+        >
+          <Settings2 className="h-4 w-4" />
+        </button>
+        {settingsOpen && (
+          <MapSettingsOverlay
+            onClose={() => setSettingsOpen(false)}
+            effectSettings={effectSettings}
+            onEffectSettings={updateEffectSettings}
+            show3D={show3D}
+            hasEffects={Boolean(scene.effects)}
+            raidFrames={showRaidFrames}
+            onRaidFrames={setShowRaidFrames}
+            enemyFrames={showEnemyFrames}
+            onEnemyFrames={setShowEnemyFrames}
+            mesh={show3D && meshUrl ? { on: meshWanted, locked: meshOnly, loading: Boolean(dungeonMesh) && meshState === "loading", onToggle: toggleMesh } : null}
+            floors={scene.floors.length > 1 ? { list: scene.floors, value: scene.selectedFloorNumber, onChange: scene.setFloorNumber } : null}
+            onTopDown={() => setTopDownKey((key) => key + 1)}
+          />
+        )}
+        <InspectCards
+          guids={inspected}
+          onRemove={toggleInspected}
+          raidFrames={raidFrames}
+          context={props.context}
+          durationMs={props.durationMs}
+        />
+        <MeterWindows windows={meterWindows} onChange={setMeterWindows} context={props.context} durationMs={props.durationMs} />
       </div>
       {jumps.length > 0 && scene.runStartMs !== null && (
         <div className="flex flex-col gap-1 px-1">
