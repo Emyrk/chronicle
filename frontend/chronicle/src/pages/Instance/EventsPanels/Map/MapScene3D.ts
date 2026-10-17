@@ -190,11 +190,11 @@ const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
 // --- Walk mode ("join the fight"): a WoW-style character on the mesh floor ---
 // Speeds and sizes in yards (seconds), scaled by the mesh's scene units per yard.
-const WALK_RUN_YPS = 7;
-const WALK_BACK_YPS = 4.5;
+const WALK_RUN_YPS = 14;
+const WALK_BACK_YPS = 9;
 const WALK_TURN_RADIANS_PER_S = Math.PI;
 const WALK_JUMP_YPS = 8;
-const WALK_FLY_YPS = 7;
+const WALK_FLY_YPS = 14;
 const WALK_GRAVITY_YPS2 = 19.3;
 /** The floor is looked for from this far above the feet, so steps and ramps are climbed and walls walked through. */
 const WALK_STEP_YARDS = 1.2;
