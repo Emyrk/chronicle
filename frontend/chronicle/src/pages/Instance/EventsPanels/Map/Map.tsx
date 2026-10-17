@@ -187,6 +187,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   const [topDownKey, setTopDownKey] = useState(0);
   // Walk mode ("join the fight"): your own character on the dungeon mesh.
   const [walkWanted, setWalking] = useState(false);
+  const [followGuid, setFollowGuid] = useState<string | null>(null);
   const [adStrafe, setAdStrafeState] = useState(readStoredAdStrafe);
   // Live session: everyone sees each other's camera, or character while walking.
   const liveSession = useLiveSessionOptional();
@@ -261,6 +262,16 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   const canFollow = ready.wholeRun || (show3D && meshWanted && meshState === "ready");
   const following = canFollow && cinematic;
   const canWalk = show3D && meshWanted && meshState === "ready";
+  // A unit frame's Follow: the cinematic camera on that unit (resumed if the
+  // user had pinned a framing); again, or taking the camera, stops it.
+  const followUnit = (guid: string) => {
+    if (followGuid === guid) {
+      setFollowGuid(null);
+      return;
+    }
+    if (!cinematic) followGroup();
+    setFollowGuid(guid);
+  };
   const walking = walkWanted && canWalk;
   const jumps = ready.wholeRun && ready.runStartMs !== null && ready.runEndMs !== null
     ? encounterJumps(props.context.instance.encounters, props.result.encounters, ready.runStartMs, ready.runEndMs)
@@ -352,6 +363,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               unitRoles={unitRoles}
               frozen={reloading}
               debuffSpellIds={ready.debuffSpellIds}
+              followGuid={followGuid}
+              onFollowChange={setFollowGuid}
             />
           </Suspense>
         )}
@@ -478,6 +491,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
           auras={auras}
           onPin={pin}
           onClear={() => setTarget(null)}
+          followGuid={followGuid}
+          onFollow={canWalk ? followUnit : undefined}
         />
         <InspectCards guids={pinned} onRemove={unpin} raidFrames={raidFrames} auras={auras} />
         <MeterWindows windows={meterWindows} onChange={setMeterWindows} context={props.context} durationMs={props.durationMs} />

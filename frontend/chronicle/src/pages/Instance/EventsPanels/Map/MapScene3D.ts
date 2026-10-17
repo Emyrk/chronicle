@@ -599,8 +599,18 @@ export class MapScene3D {
   // The user took the camera; a viewport request (Follow, encounter jump,
   // selection) hands it back.
   private directorPaused = false;
-  // A double-clicked unit the shot follows instead of the group.
-  private directorSubject: string | null = null;
+  // The unit the shot follows instead of the group (double-clicked, or a
+  // unit frame's Follow); changes are reported through onFollowChange.
+  private subject: string | null = null;
+  private onFollowChange: (guid: string | null) => void = () => {};
+  private get directorSubject(): string | null {
+    return this.subject;
+  }
+  private set directorSubject(guid: string | null) {
+    if (guid === this.subject) return;
+    this.subject = guid;
+    this.onFollowChange(guid);
+  }
   // The springs are seeded and following; a re-engage while this is set is a
   // no-op, so the whole run's per-tick follow requests do not restart them.
   private directorRunning = false;
@@ -2995,6 +3005,27 @@ export class MapScene3D {
     object.cameraGeometry.dispose();
     object.label.material.map?.dispose();
     object.label.material.dispose();
+  }
+
+  /** Called when the followed unit changes: Follow, a double-click, or the user taking the camera (null). */
+  setOnFollowChange(callback: ((guid: string | null) => void) | null) {
+    this.onFollowChange = callback ?? (() => {});
+  }
+
+  /**
+   * The cinematic camera follows `guid` (null: back to the group). Needs the
+   * dungeon mesh and the Director; leaves walk mode.
+   */
+  followUnit(guid: string | null) {
+    if (guid === this.subject) return;
+    if (guid && (!this.director || !this.dungeonMesh || !this.units.has(guid))) {
+      this.onFollowChange(this.subject);
+      return;
+    }
+    if (guid && this.walk) this.stopWalk();
+    this.directorSubject = guid;
+    this.engageDirector();
+    this.requestRender();
   }
 
   /** A/D strafe and Q/E turn instead of the other way round. */

@@ -73,6 +73,10 @@ export interface MapView3DProps {
   livePresence?: MapLivePresence | null;
   /** The target frames' units: halos for the selected chain and pins, and target lines. */
   unitRoles?: MapUnitRoles | null;
+  /** The unit the cinematic camera follows (a unit frame's Follow), or null for the group. */
+  followGuid?: string | null;
+  /** Called when the followed unit changes, including when the user takes the camera (null). */
+  onFollowChange?: (guid: string | null) => void;
   /** Every debuff spell on a player in the encounter: their dispel types tint the tokens. */
   debuffSpellIds?: readonly number[];
   /**
@@ -153,6 +157,8 @@ export default function MapView3D({
   unitRoles = null,
   frozen = false,
   debuffSpellIds = NO_DEBUFFS,
+  followGuid = null,
+  onFollowChange,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<MapScene3D | null>(null);
@@ -366,6 +372,16 @@ export default function MapView3D({
   useEffect(() => {
     sceneRef.current?.setAdStrafe(adStrafe);
   }, [adStrafe]);
+
+  useEffect(() => {
+    sceneRef.current?.setOnFollowChange(onFollowChange ?? null);
+  }, [onFollowChange]);
+
+  // After the Director and view effects above, so a framing reset in the
+  // same commit (resuming the cinematic camera) does not cancel the follow.
+  useEffect(() => {
+    sceneRef.current?.followUnit(followGuid);
+  }, [followGuid]);
 
   useEffect(() => {
     const scene = sceneRef.current;

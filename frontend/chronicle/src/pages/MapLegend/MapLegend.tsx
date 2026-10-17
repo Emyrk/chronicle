@@ -372,6 +372,7 @@ export function MapLegend() {
           <li><strong className="text-foreground">Target</strong>, right of centre: whoever the selected unit last started a spell on.</li>
           <li><strong className="text-foreground">Target&apos;s target</strong>, a small frame off the Target&apos;s right, without auras.</li>
           <li>The pin on a frame keeps it as a box you can drag anywhere; the X clears the selection.</li>
+          <li>The camera button follows that unit with the camera (on the 3D map); press it again, or drag the camera, to stop. Double-clicking a unit does the same.</li>
         </ul>
       </Section>
 

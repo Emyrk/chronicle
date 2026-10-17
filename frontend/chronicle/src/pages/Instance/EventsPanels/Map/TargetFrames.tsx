@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Pin, X } from "lucide-react";
+import { Pin, Video, X } from "lucide-react";
 import type { EmbeddedPanelRender } from "../useEmbeddedPanel";
 
 const FRAME_WIDTH = 176;
@@ -21,6 +21,10 @@ interface TargetFramesProps {
   /** Turns a frame into a movable inspect box. */
   onPin: (guid: string) => void;
   onClear: () => void;
+  /** The unit the camera follows, if any. */
+  followGuid?: string | null;
+  /** Follows a frame's unit with the camera (again to stop); absent when the map cannot follow (no 3D map). */
+  onFollow?: (guid: string) => void;
 }
 
 /**
@@ -31,8 +35,9 @@ interface TargetFramesProps {
  * frame over Unit Auras) but on the map itself, with no box behind them.
  * The pin turns one into a movable inspect box.
  */
-export function TargetFrames({ target, targetOfTarget, targetsTarget, raidFrames, auras, onPin, onClear }: TargetFramesProps) {
+export function TargetFrames({ target, targetOfTarget, targetsTarget, raidFrames, auras, onPin, onClear, followGuid = null, onFollow }: TargetFramesProps) {
   if (!target) return null;
+  const follow = (guid: string) => onFollow ? { on: followGuid === guid, toggle: () => onFollow(guid) } : undefined;
   return (
     <>
       <TargetFrame
@@ -40,6 +45,7 @@ export function TargetFrames({ target, targetOfTarget, targetsTarget, raidFrames
         className="right-1/2 top-[65%] z-30 mr-20 -translate-y-1/2"
         width={FRAME_WIDTH}
         onPin={() => onPin(target)}
+        follow={follow(target)}
         onClear={onClear}
       >
         {raidFrames(`u:${target}`)}
@@ -51,6 +57,7 @@ export function TargetFrames({ target, targetOfTarget, targetsTarget, raidFrames
           className="left-1/2 top-[65%] z-30 ml-20 -translate-y-1/2"
           width={FRAME_WIDTH}
           onPin={() => onPin(targetOfTarget)}
+          follow={follow(targetOfTarget)}
         >
           {raidFrames(`u:${targetOfTarget}`)}
           {auras(`u:${targetOfTarget}`)}
@@ -60,6 +67,7 @@ export function TargetFrames({ target, targetOfTarget, targetsTarget, raidFrames
               className="left-full top-6 ml-2"
               width={TARGETS_TARGET_WIDTH}
               onPin={() => onPin(targetsTarget)}
+              follow={follow(targetsTarget)}
             >
               {raidFrames(`u:${targetsTarget}`)}
             </TargetFrame>
@@ -75,6 +83,7 @@ function TargetFrame({
   className,
   width,
   onPin,
+  follow,
   onClear,
   children,
 }: {
@@ -83,6 +92,7 @@ function TargetFrame({
   className: string;
   width: number;
   onPin: () => void;
+  follow?: { on: boolean; toggle: () => void };
   onClear?: () => void;
   children: ReactNode;
 }) {
@@ -103,6 +113,18 @@ function TargetFrame({
         >
           <Pin className="h-3 w-3" />
         </button>
+        {follow && (
+          <button
+            type="button"
+            onClick={follow.toggle}
+            aria-pressed={follow.on}
+            title={follow.on ? "Stop following (back to the group)" : "Follow: keep the camera on this unit"}
+            aria-label={`Follow ${label.toLowerCase()}`}
+            className={`rounded p-0.5 ${follow.on ? "text-sky-300" : "text-white/60 hover:text-sky-300"}`}
+          >
+            <Video className="h-3 w-3" />
+          </button>
+        )}
         {onClear && (
           <button type="button" onClick={onClear} title="Clear selection" aria-label="Clear selection" className="rounded p-0.5 text-white/60 hover:text-red-300">
             <X className="h-3 w-3" />
