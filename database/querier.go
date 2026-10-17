@@ -508,6 +508,7 @@ type sqlcQuerier interface {
 	Instance(ctx context.Context, id uuid.UUID) (LogInstancesGuild, error)
 	InstanceAnalyticsGroupKey(ctx context.Context, instanceID uuid.UUID) (string, error)
 	InstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (LogInstancesGuild, error)
+	InstanceBySlugWithPrivacy(ctx context.Context, hashedSlug pgtype.Text) (InstanceBySlugWithPrivacyRow, error)
 	InstanceEvent(ctx context.Context, arg InstanceEventParams) (LogInstanceEvent, error)
 	InstancePlayerGUIDsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]guid.GUID, error)
 	InstancePlayerSpecs(ctx context.Context, instanceID uuid.UUID) ([]InstancePlayerSpecsRow, error)
@@ -522,6 +523,7 @@ type sqlcQuerier interface {
 	// realm, or guild. Duplicate uploads are collapsed without reducing to one run per guild.
 	InstanceSpeedrunCohort(ctx context.Context, arg InstanceSpeedrunCohortParams) ([]InstanceSpeedrunCohortRow, error)
 	InstanceUnitsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceUnit, error)
+	InstanceWithPrivacy(ctx context.Context, id uuid.UUID) (InstanceWithPrivacyRow, error)
 	InvalidateOAuthDeviceSession(ctx context.Context, deviceSignature string) (int64, error)
 	InvalidateWoWLogGroup(ctx context.Context, arg InvalidateWoWLogGroupParams) error
 	IsLayoutTrackedByUser(ctx context.Context, arg IsLayoutTrackedByUserParams) (bool, error)

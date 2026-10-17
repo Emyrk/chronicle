@@ -584,34 +584,39 @@ func (api *API) Routes() chi.Router {
 								r.Use(
 									httpmw.InstanceIDMiddleware(api.Opts.Zed),
 									api.Auth.Authenticated(true),
-									httpmw.InstanceViewMiddleware(api.Opts.Zed),
 								)
+								// Event streams are immutable, unlisted blobs. Possession of the
+								// instance UUID is sufficient to fetch and cache them, even if the
+								// containing log is private.
 								r.Get("/events/{type}", api.InstanceEvents)
-								r.With(api.trackGuildInstanceView).Get("/", api.Instance)
-
-								r.Get("/youtube", api.GetInstanceYoutube)
-								r.Get("/loot", api.GetInstanceLoot)
-								r.Get("/raid-group", api.InstanceRaidGroup)
-								r.Post("/item-prices", api.InstanceItemPrices)
-								r.Get("/overview", api.InstanceOverviewMetrics)
-								r.Get("/ranking-records", api.InstanceRankingRecords)
-								r.Get("/speedrun", api.InstanceSpeedrun)
-								r.Get("/speedrun/cohort", api.InstanceSpeedrunCohort)
-								r.Get("/duplicates", api.ListDuplicateInstances)
-
 								r.Group(func(r chi.Router) {
-									r.Use(
-										api.Auth.Authenticated(false),
-									)
-									r.Post("/youtube", api.PostInstanceYoutube)
-								})
+									r.Use(httpmw.InstanceViewMiddleware(api.Opts.Zed))
+									r.With(api.trackGuildInstanceView).Get("/", api.Instance)
 
-								r.Group(func(r chi.Router) {
-									r.Use(
-										api.Auth.Authenticated(false),
-										httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_logs_User),
-									)
-									r.Delete("/duplicate-group", api.UngroupInstance)
+									r.Get("/youtube", api.GetInstanceYoutube)
+									r.Get("/loot", api.GetInstanceLoot)
+									r.Get("/raid-group", api.InstanceRaidGroup)
+									r.Post("/item-prices", api.InstanceItemPrices)
+									r.Get("/overview", api.InstanceOverviewMetrics)
+									r.Get("/ranking-records", api.InstanceRankingRecords)
+									r.Get("/speedrun", api.InstanceSpeedrun)
+									r.Get("/speedrun/cohort", api.InstanceSpeedrunCohort)
+									r.Get("/duplicates", api.ListDuplicateInstances)
+
+									r.Group(func(r chi.Router) {
+										r.Use(
+											api.Auth.Authenticated(false),
+										)
+										r.Post("/youtube", api.PostInstanceYoutube)
+									})
+
+									r.Group(func(r chi.Router) {
+										r.Use(
+											api.Auth.Authenticated(false),
+											httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_logs_User),
+										)
+										r.Delete("/duplicate-group", api.UngroupInstance)
+									})
 								})
 							})
 						})

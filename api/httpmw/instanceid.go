@@ -34,13 +34,14 @@ func InstanceIDMiddleware(db *authz.Authz) func(next http.Handler) http.Handler 
 			instanceIDStr := chi.URLParam(r, "instance_id")
 			instanceID, err := uuid.Parse(instanceIDStr)
 			var inst database.LogInstancesGuild
+			var private bool
 			if err != nil {
-				inst, err = db.InstanceBySlug(r.Context(), pgtype.Text{
+				row, lookupErr := db.InstanceBySlugWithPrivacy(r.Context(), pgtype.Text{
 					String: instanceIDStr,
 					Valid:  true,
 				})
-				if err != nil {
-					httpapi.HandleResponseError(r.Context(), w, err, httpapi.APIError{
+				if lookupErr != nil {
+					httpapi.HandleResponseError(r.Context(), w, lookupErr, httpapi.APIError{
 						Response: chroniclesdk.Response{
 							Message: "Could not find instance",
 						},
@@ -49,11 +50,13 @@ func InstanceIDMiddleware(db *authz.Authz) func(next http.Handler) http.Handler 
 					})
 					return
 				}
+				inst = row.LogInstancesGuild
+				private = row.Private
 			} else {
 				r = r.WithContext(context.WithValue(r.Context(), instanceByIDKey{}, true))
-				inst, err = db.Instance(r.Context(), instanceID)
-				if err != nil {
-					httpapi.HandleResponseError(r.Context(), w, err, httpapi.APIError{
+				row, lookupErr := db.InstanceWithPrivacy(r.Context(), instanceID)
+				if lookupErr != nil {
+					httpapi.HandleResponseError(r.Context(), w, lookupErr, httpapi.APIError{
 						Response: chroniclesdk.Response{
 							Message: "Could not find instance by id",
 						},
@@ -62,9 +65,13 @@ func InstanceIDMiddleware(db *authz.Authz) func(next http.Handler) http.Handler 
 					})
 					return
 				}
+				inst = row.LogInstancesGuild
+				private = row.Private
 			}
 
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), instanceIDKey{}, inst)))
+			ctx := context.WithValue(r.Context(), instanceIDKey{}, inst)
+			ctx = context.WithValue(ctx, instancePrivateKey{}, private)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
@@ -79,25 +86,21 @@ func InstancePrivate(ctx context.Context) bool {
 func InstanceViewMiddleware(db *authz.Authz) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			inst := Instance(r.Context())
-			private, err := db.GetWoWLogGroupPrivacy(r.Context(), inst.LogGroupID)
-			if err != nil {
-				httpapi.InternalServerError(w, err)
-				return
-			}
-			r = r.WithContext(context.WithValue(r.Context(), instancePrivateKey{}, private))
-			if !private {
+			if !InstancePrivate(r.Context()) {
 				next.ServeHTTP(w, r)
 				return
 			}
 
+			inst := Instance(r.Context())
 			actor, ok := authz.ActorFromContext(r.Context())
 			if !ok {
 				httpapi.Forbidden(w, nil)
 				return
 			}
+			// Authorize against the parent log directly. A stale instance public
+			// wildcard can never grant access after the log becomes private.
 			canView, err := db.CheckOne(r.Context(), nil, rel.Relationship{
-				ResourceType: "instance", ResourceID: inst.ID.String(), ResourceRelation: "view",
+				ResourceType: "raid_log", ResourceID: inst.LogGroupID.String(), ResourceRelation: "view",
 				SubjectType: "user", SubjectID: actor.Object().ID,
 			})
 			if err != nil {

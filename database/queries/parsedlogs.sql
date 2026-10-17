@@ -133,6 +133,12 @@ WHERE
   log_instances_guild.id = $1
 ;
 
+-- name: InstanceWithPrivacy :one
+SELECT sqlc.embed(log_instances_guild), wow_log_groups.private
+FROM log_instances_guild
+JOIN wow_log_groups ON wow_log_groups.id = log_instances_guild.log_group_id
+WHERE log_instances_guild.id = $1;
+
 -- name: PublicInstance :one
 SELECT log_instances_guild.*
 FROM log_instances_guild
@@ -153,6 +159,13 @@ FROM
 WHERE
   hashed_slug = $1 AND hashed_slug != ''
 ;
+
+-- name: InstanceBySlugWithPrivacy :one
+SELECT sqlc.embed(log_instances_guild), wow_log_groups.private
+FROM log_instances_guild
+JOIN wow_log_groups ON wow_log_groups.id = log_instances_guild.log_group_id
+WHERE log_instances_guild.hashed_slug = $1
+  AND log_instances_guild.hashed_slug != '';
 
 -- name: EncountersByInstanceID :many
 SELECT
