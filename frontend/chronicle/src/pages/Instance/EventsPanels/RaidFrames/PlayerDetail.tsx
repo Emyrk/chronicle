@@ -318,7 +318,7 @@ export function PlayerDetail({
           />
           <div className="flex flex-col gap-1.5">
             <SectionLabel><span>Auras</span></SectionLabel>
-            {auras(`u:${guid}`)}
+            {auras(`u:${guid},lg`)}
           </div>
         </div>
       </div>
