@@ -22493,50 +22493,6 @@ func (q *sqlQuerier) UpdateUserPanelLayoutDefaults(ctx context.Context, arg Upda
 	return i, err
 }
 
-const deleteUserMapControls = `-- name: DeleteUserMapControls :exec
-DELETE FROM user_map_controls
-WHERE user_id = $1
-`
-
-func (q *sqlQuerier) DeleteUserMapControls(ctx context.Context, userID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteUserMapControls, userID)
-	return err
-}
-
-const getUserMapControls = `-- name: GetUserMapControls :one
-SELECT user_id, controls, updated_at
-FROM user_map_controls
-WHERE user_id = $1
-`
-
-func (q *sqlQuerier) GetUserMapControls(ctx context.Context, userID uuid.UUID) (UserMapControl, error) {
-	row := q.db.QueryRow(ctx, getUserMapControls, userID)
-	var i UserMapControl
-	err := row.Scan(&i.UserID, &i.Controls, &i.UpdatedAt)
-	return i, err
-}
-
-const upsertUserMapControls = `-- name: UpsertUserMapControls :one
-INSERT INTO user_map_controls (user_id, controls)
-VALUES ($1, $2::jsonb)
-ON CONFLICT (user_id) DO UPDATE
-SET controls = EXCLUDED.controls,
-    updated_at = NOW()
-RETURNING user_id, controls, updated_at
-`
-
-type UpsertUserMapControlsParams struct {
-	UserID   uuid.UUID `db:"user_id" json:"user_id"`
-	Controls []byte    `db:"controls" json:"controls"`
-}
-
-func (q *sqlQuerier) UpsertUserMapControls(ctx context.Context, arg UpsertUserMapControlsParams) (UserMapControl, error) {
-	row := q.db.QueryRow(ctx, upsertUserMapControls, arg.UserID, arg.Controls)
-	var i UserMapControl
-	err := row.Scan(&i.UserID, &i.Controls, &i.UpdatedAt)
-	return i, err
-}
-
 const countUserPanelLayoutsTotal = `-- name: CountUserPanelLayoutsTotal :one
 SELECT
   (SELECT COUNT(*) FROM user_panel_layouts upl WHERE upl.user_id = $1) +

@@ -268,9 +268,6 @@ func (api *API) Routes() chi.Router {
 				r.Get("/me/custom-panels", api.GetMyCustomPanelSettings)
 				r.Put("/me/custom-panels", api.UpdateMyCustomPanelSettings)
 				r.Patch("/me/preferences", api.UpdateMyPreferences)
-				r.Get("/me/map-controls", api.GetMyMapControls)
-				r.Put("/me/map-controls", api.UpdateMyMapControls)
-				r.Delete("/me/map-controls", api.ResetMyMapControls)
 				r.Get("/me/whats-new", api.GetMyWhatsNewStatus)
 				r.Put("/me/whats-new/read", api.MarkMyWhatsNewRead)
 

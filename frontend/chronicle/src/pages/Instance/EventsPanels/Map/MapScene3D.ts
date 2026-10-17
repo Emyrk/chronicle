@@ -24,7 +24,7 @@ import {
   type DampedValue,
   type DirectorUnit,
 } from "./cameraDirector";
-import { defaultMapKeyBindings, MAP_CONTROL_ACTIONS, type MapControlAction, type MapKeyBindings } from "./mapControls";
+import { MAP_CONTROL_ACTIONS, type MapControlAction } from "./mapControls";
 import { clampToRadius, corsAssetUrl, dungeonMeshPlacement, FloorHeightCache } from "./dungeonMeshes";
 import { FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, type MapPoint, type MapViewport } from "./mapModel";
 import {
@@ -451,7 +451,6 @@ export class MapScene3D {
   private pointerInside = false;
   // The window the map lives in: a popped-out panel has its own.
   private readonly keyWindow: Window;
-  private keyBindings: MapKeyBindings = defaultMapKeyBindings();
   private readonly heldActions = new Set<MapControlAction>();
   private keyMoveLastMs = 0;
   private hoveredEffectKey = "";
@@ -593,12 +592,6 @@ export class MapScene3D {
     this.resizeObserver.observe(container);
     this.resize();
     this.resetCamera(false);
-  }
-
-  /** The camera keybinds (KeyboardEvent.code per action). */
-  setKeyBindings(bindings: MapKeyBindings) {
-    this.releaseKeys();
-    this.keyBindings = bindings;
   }
 
   setGround(ground: MapSceneGround) {
@@ -2173,7 +2166,7 @@ export class MapScene3D {
     const target = event.target as HTMLElement | null;
     if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
     if (!this.pointerInside) return;
-    const action = MAP_CONTROL_ACTIONS.find((candidate) => this.keyBindings[candidate.id] === event.code)?.id;
+    const action = MAP_CONTROL_ACTIONS.find((candidate) => candidate.defaultKey === event.code)?.id;
     if (!action) return;
     event.preventDefault();
     if (this.heldActions.has(action)) return;
@@ -2187,7 +2180,7 @@ export class MapScene3D {
   };
 
   private readonly handleKeyUp = (event: KeyboardEvent) => {
-    const action = MAP_CONTROL_ACTIONS.find((candidate) => this.keyBindings[candidate.id] === event.code)?.id;
+    const action = MAP_CONTROL_ACTIONS.find((candidate) => candidate.defaultKey === event.code)?.id;
     if (!action || !this.heldActions.delete(action)) return;
     if (this.heldActions.size === 0) this.handleControlsEnd();
   };
