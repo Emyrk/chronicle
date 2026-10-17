@@ -2,7 +2,7 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Crosshair, Focus, HeartPulse, Map as MapIcon, Maximize, Route, Users } from "lucide-react";
+import { Crosshair, Focus, HeartPulse, Map as MapIcon, Maximize, Route, Users, X } from "lucide-react";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { fetchMiniatureUrls } from "./bossMinis";
@@ -47,6 +47,24 @@ function readStoredMesh(): boolean | null {
 
 export function preferredMeshState(stored: boolean | null): boolean {
   return stored ?? true;
+}
+
+const RAID_FRAMES_STORAGE_KEY = "chronicle.map.raidFrames";
+
+function readStoredRaidFrames(): boolean {
+  try {
+    return localStorage.getItem(RAID_FRAMES_STORAGE_KEY) !== "hidden";
+  } catch {
+    return true;
+  }
+}
+
+function storeRaidFrames(shown: boolean) {
+  try {
+    localStorage.setItem(RAID_FRAMES_STORAGE_KEY, shown ? "shown" : "hidden");
+  } catch {
+    // Storage may be unavailable; the choice still applies for this session.
+  }
 }
 
 function storeMesh(on: boolean) {
@@ -102,7 +120,11 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   [fitZoom, focusCentre]);
   const autoFit = ready?.autoFit ?? null;
   const defaultViewport = ready?.fitByDefault && autoFit ? autoFit : FULL_MAP_VIEWPORT;
-  const [showRaidFrames, setShowRaidFrames] = useState(true);
+  const [showRaidFrames, setShowRaidFramesState] = useState(readStoredRaidFrames);
+  const setShowRaidFrames = (shown: boolean) => {
+    setShowRaidFramesState(shown);
+    storeRaidFrames(shown);
+  };
   const [meterWindows, setMeterWindows] = useMeterWindows();
   const [storedFraming, setFraming] = useState<MapFraming>(INITIAL_MAP_FRAMING);
   // A new selection or replay moving into another encounter re-frames;
@@ -181,16 +203,6 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
           Fit
         </button>
       )}
-      <button
-        type="button"
-        aria-pressed={showRaidFrames}
-        onClick={() => setShowRaidFrames(!showRaidFrames)}
-        title="Show every player's health and power"
-        className={`${framingButtonClass} ${showRaidFrames ? "bg-primary/20 text-foreground" : ""}`}
-      >
-        <HeartPulse className="h-3 w-3" />
-        Raid
-      </button>
       <button type="button" onClick={() => applyFraming(FULL_MAP_VIEWPORT)} title="Show the full map" className={framingButtonClass}>
         <Maximize className="h-3 w-3" />
         Reset
@@ -250,9 +262,33 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
           </Suspense>
         )}
         {/* The Raid Frames panel itself, drawn as an overlay: one implementation for the map and the panel. */}
-        <div className="pointer-events-none absolute left-2 top-2 z-30 max-w-[calc(100%-1rem)] overflow-hidden">
-          <EmbeddedPanel panel={RAID_FRAMES_PANEL} context={props.context} durationMs={props.durationMs} enabled={showRaidFrames} />
-        </div>
+        {showRaidFrames ? (
+          <div className="group/raid pointer-events-none absolute left-2 top-2 z-30 flex max-w-[calc(100%-1rem)] items-start gap-0.5">
+            <div className="min-w-0 overflow-hidden">
+              <EmbeddedPanel panel={RAID_FRAMES_PANEL} context={props.context} durationMs={props.durationMs} />
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowRaidFrames(false)}
+              title="Hide raid frames"
+              aria-label="Hide raid frames"
+              className="pointer-events-auto grid h-4 w-4 shrink-0 place-items-center rounded-sm bg-black/75 text-white/60 opacity-0 transition-opacity hover:text-white focus-visible:opacity-100 group-hover/raid:opacity-100"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ) : (
+          // Hidden: a button in their corner brings them back.
+          <button
+            type="button"
+            onClick={() => setShowRaidFrames(true)}
+            title="Show raid frames"
+            aria-label="Show raid frames"
+            className="absolute left-2 top-2 z-30 grid h-7 w-7 place-items-center rounded-sm border border-black/80 bg-black/75 text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-white"
+          >
+            <HeartPulse className="h-4 w-4" />
+          </button>
+        )}
         <MeterWindows windows={meterWindows} onChange={setMeterWindows} context={props.context} durationMs={props.durationMs} />
       </div>
       {jumps.length > 0 && scene.runStartMs !== null && (
