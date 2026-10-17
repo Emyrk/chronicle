@@ -157,17 +157,35 @@ export function directorFrame(
     ? nearest
     : null;
 
-  // No boss in sight: the whole group is the shot.
-  if (!boss) return { ...centre, guids: players.map((unit) => unit.guid) };
+  // The players within the straggler cutoff of `anchor` (the release distance
+  // for those already shown), topped up to `minGroupFraction` of the alive
+  // players, nearest first.
+  const framedAround = (anchor: { x: number; z: number }): DirectorUnit[] => {
+    const byDistance = [...players].sort((left, right) =>
+      distance(anchor.x, anchor.z, left.x, left.z) - distance(anchor.x, anchor.z, right.x, right.z));
+    const near = byDistance.filter((player) =>
+      distance(anchor.x, anchor.z, player.x, player.z) <= (inFrame.has(player.guid) ? stragglerRelease : stragglerCutoff));
+    const required = Math.ceil(minGroupFraction * players.length);
+    return near.length >= required ? near : byDistance.slice(0, required);
+  };
 
-  const byDistance = [...players].sort((left, right) =>
-    distance(boss.x, boss.z, left.x, left.z) - distance(boss.x, boss.z, right.x, right.z));
-  const near = byDistance.filter((player) =>
-    distance(boss.x, boss.z, player.x, player.z) <= (inFrame.has(player.guid) ? stragglerRelease : stragglerCutoff));
-  const required = Math.ceil(minGroupFraction * players.length);
-  const framed = near.length >= required ? near : byDistance.slice(0, required);
+  // No boss in sight: the group is the shot, measured from its median point so
+  // a straggler (a ghost running back across a terrain map) is left out as in
+  // a boss fight instead of pulling the frame off the group.
+  if (!boss) {
+    const framed = framedAround({ x: median(players.map((unit) => unit.x)), z: median(players.map((unit) => unit.z)) });
+    return { ...boundingCircle(framed), guids: framed.map((player) => player.guid) };
+  }
+
+  const framed = framedAround(boss);
   const circle = boundingCircle([boss, ...framed]);
   return { ...circle, guids: [boss.guid, ...framed.map((player) => player.guid)] };
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = sorted.length >> 1;
+  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
 export interface FrameDistanceOptions {

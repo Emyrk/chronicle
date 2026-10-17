@@ -25,7 +25,15 @@ import {
   type DirectorUnit,
 } from "./cameraDirector";
 import { MAP_CONTROL_ACTIONS, type MapControlAction } from "./mapControls";
-import { clampToRadius, corsAssetUrl, dungeonMeshPlacement, FloorHeightCache } from "./dungeonMeshes";
+import {
+  clampToRadius,
+  corsAssetUrl,
+  dungeonMeshPlacement,
+  floorBelow,
+  FloorHeightCache,
+  LOGGED_Z_CLEARANCE_YARDS,
+  medianHeight,
+} from "./dungeonMeshes";
 import { FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, type MapPoint, type MapViewport } from "./mapModel";
 import {
   DEFAULT_EFFECT_OPTIONS,
@@ -250,6 +258,8 @@ export interface MapScene3DUnit {
   health: MapUnitHealth | null;
   /** Published model URL from the shared miniature manifest. */
   miniatureUrl: string | undefined;
+  /** Logged world height (yards), when the log has one; picks the floor on the mesh. */
+  z?: number;
 }
 
 interface BossMini {
@@ -278,6 +288,8 @@ interface UnitObject {
   dead: boolean;
   /** Replayed position; lunges offset `group.position` from it. */
   base: THREE.Vector3;
+  /** Logged world height (yards), or undefined when the log has none. */
+  loggedZ: number | undefined;
   health: MapUnitHealth | null;
   /** Published miniature URL; the primitive shows until it loads. */
   miniatureUrl: string | undefined;
@@ -363,7 +375,7 @@ export class MapScene3D {
   private focus: MapSceneFocus | null = null;
   // Scene point of `focus` at its floor height while the mesh is on.
   private focusCentre: THREE.Vector3 | null = null;
-  private readonly floorHeights = new FloorHeightCache((x, z) => this.sampleFloor(x, z));
+  private readonly floorHeights = new FloorHeightCache((x, z, ceiling) => this.sampleFloor(x, z, ceiling));
   private readonly floorRay = new THREE.Ray();
   private constraining = false;
   private label: THREE.Sprite | null = null;
@@ -702,8 +714,9 @@ export class MapScene3D {
       object.name = unit.name;
       object.color = unit.color;
       object.health = unit.health;
+      object.loggedZ = unit.z;
       const { x, z } = mapPointToScene(unit.point, this.aspect, GROUND_WIDTH);
-      object.base.set(x, this.baseHeight(unit.guid, x, z), z);
+      object.base.set(x, this.baseHeight(unit.guid, x, z, unit.z), z);
       object.group.position.copy(object.base);
       object.group.rotation.y = unit.facing;
       object.group.scale.setScalar(this.scaleOf(object));
@@ -895,7 +908,7 @@ export class MapScene3D {
       this.aspect,
       GROUND_WIDTH,
     );
-    this.controls.target.set(x, this.floorHeights.heightAt("camera-target", x, z), z);
+    this.controls.target.set(x, this.floorHeights.heightAt("camera-target", x, z, this.cameraCeiling()), z);
     this.camera.position.copy(direction).multiplyScalar(this.baseDistance() / viewport.zoom).add(this.controls.target);
     this.controls.update();
     this.updateUnitScale();
@@ -950,18 +963,46 @@ export class MapScene3D {
   }
 
   // The ground height under a unit: the mesh floor while it shows, else 0.
-  private baseHeight(guid: string, x: number, z: number): number {
-    return this.dungeonMesh ? this.floorHeights.heightAt(guid, x, z) : 0;
+  // A logged height (`loggedZ`, yards) picks the floor nearest below it.
+  private baseHeight(guid: string, x: number, z: number, loggedZ: number | undefined): number {
+    const mesh = this.dungeonMesh;
+    return mesh ? this.floorHeights.heightAt(guid, x, z, this.probeCeiling(loggedZ, mesh.scale)) : 0;
   }
 
-  // The highest cave surface straight below (x, z) in scene units, or null
-  // when the probe misses the mesh (or the tiles show).
-  private sampleFloor(x: number, z: number): number | null {
+  // Where a probe for a logged height starts (scene units): just above the
+  // unit's feet, so the roof or canopy over it is not hit.
+  private probeCeiling(loggedZ: number | undefined, scale: number): number | undefined {
+    return loggedZ === undefined ? undefined : (loggedZ + LOGGED_Z_CLEARANCE_YARDS) * scale;
+  }
+
+  // The probe start for the camera's aim point: from the median logged height
+  // of the units the Director frames (every unit otherwise), so the camera
+  // does not aim at a canopy above the party. Undefined without logged heights.
+  private cameraCeiling(): number | undefined {
+    const mesh = this.dungeonMesh;
+    if (!mesh) return undefined;
+    const framed = this.directing() && this.directorInFrame.size > 0 ? this.directorInFrame : null;
+    const heights: (number | undefined)[] = [];
+    for (const [guid, object] of this.units) {
+      if (!framed || framed.has(guid)) heights.push(object.loggedZ);
+    }
+    return this.probeCeiling(medianHeight(heights), mesh.scale);
+  }
+
+  // The cave floor below (x, z) in scene units: the first surface below
+  // `ceiling` when given and hit, else the highest; null when every probe
+  // misses the mesh (or the tiles show).
+  private sampleFloor(x: number, z: number, ceiling: number | undefined): number | null {
+    return floorBelow((fromY) => this.castFloor(x, z, fromY), FLOOR_PROBE_HEIGHT, ceiling);
+  }
+
+  // The highest cave surface below (x, fromY, z), or null for none.
+  private castFloor(x: number, z: number, fromY: number): number | null {
     const mesh = this.dungeonMesh;
     if (!mesh) return null;
     let best: number | null = null;
     for (const cave of mesh.caves) {
-      this.floorRay.origin.set(x, FLOOR_PROBE_HEIGHT, z);
+      this.floorRay.origin.set(x, fromY, z);
       this.floorRay.direction.set(0, -1, 0);
       this.floorRay.applyMatrix4(cave.inverse);
       const hit = cave.bvh.raycastFirst(this.floorRay, THREE.FrontSide);
@@ -1026,7 +1067,7 @@ export class MapScene3D {
     this.meshLight.visible = mesh;
     this.floorHeights.clear();
     for (const [guid, object] of this.units) {
-      object.base.y = this.baseHeight(guid, object.base.x, object.base.z);
+      object.base.y = this.baseHeight(guid, object.base.x, object.base.z, object.loggedZ);
       object.group.position.copy(object.base);
     }
     this.updateCameraLimits();
@@ -1077,7 +1118,7 @@ export class MapScene3D {
         moved = true;
       }
     }
-    const floor = this.floorHeights.heightAt("camera-target", target.x, target.z);
+    const floor = this.floorHeights.heightAt("camera-target", target.x, target.z, this.cameraCeiling());
     if (floor !== target.y) {
       position.y += floor - target.y;
       target.y = floor;
@@ -1110,7 +1151,7 @@ export class MapScene3D {
   // Puts the camera `distance` from (x, z) on the floor, `elevationDeg` above
   // the horizon along `yaw`, and re-applies the mesh's floor and pan limits.
   private placeDirectorCamera(x: number, z: number, distance: number, elevationDeg: number, yaw: number) {
-    const floor = this.floorHeights.heightAt("camera-target", x, z);
+    const floor = this.floorHeights.heightAt("camera-target", x, z, this.cameraCeiling());
     this.controls.target.set(x, floor, z);
     const elevation = (elevationDeg * Math.PI) / 180;
     this.camera.position.set(
@@ -1145,7 +1186,7 @@ export class MapScene3D {
   // one is blocked.
   private clearShot(x: number, z: number, distance: number, yaw: number): { elevation: number; distance: number } {
     const mesh = this.dungeonMesh;
-    const floor = this.floorHeights.heightAt("director-shot", x, z);
+    const floor = this.floorHeights.heightAt("director-shot", x, z, this.cameraCeiling());
     // From the fight's own height, not the floor the ray would graze.
     const from = this.directorAim.set(x, floor + MESH_PLAYER_HEIGHT_YARDS * (mesh?.scale ?? 1), z);
     for (let elevationDeg = CINEMATIC_ELEVATION_DEG; ; elevationDeg += CINEMATIC_ELEVATION_STEP_DEG) {
@@ -1412,6 +1453,7 @@ export class MapScene3D {
       textured: false,
       dead: false,
       base: new THREE.Vector3(),
+      loggedZ: unit.z,
       health: unit.health,
       miniatureUrl: unit.miniatureUrl,
       barHeight: BAR_HEIGHT,

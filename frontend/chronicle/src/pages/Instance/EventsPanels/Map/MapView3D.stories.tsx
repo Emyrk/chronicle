@@ -11,7 +11,7 @@ import type { PanelContext } from "../types";
 import { fetchMiniatureUrls } from "./bossMinis";
 import { dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
 import type { MapHealthSample, MapPositionSample, MapResult } from "./map.processor";
-import { clampViewport, fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt, selectHealthBars, unitFocusBounds, type MapPoint } from "./mapModel";
+import { clampViewport, fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt, renderedDungeonMapPoint, selectHealthBars, unitFocusBounds, type MapPoint } from "./mapModel";
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
 import MapView3D from "./MapView3D";
 import type { MapViewRequest } from "./MapView2D";
@@ -1087,6 +1087,92 @@ function MeshFightReplay({ players, fight }: { players: number; fight: MeshFight
   );
 }
 
+// --- Logged z on a terrain mesh: Zul'Gurub (map 309, turtle). ---
+
+// `instances[].mesh` for Zul'Gurub as the turtle manifest publishes it.
+const ZG_MESH: WowMapMeshInstance = {
+  path: "3d/309-a5ca5828ca9b1161-zul-gurub-v002-open-top.glb",
+  bounds: { minX: -12600, maxX: -11266.67, minY: -2166.67, maxY: -833.33 },
+  zMin: -21.8485,
+  zMax: 292.936,
+  frame: "wow-yup-mirrored-x",
+};
+const ZG_ICON_BASE_URL = "https://icons.chronicleclassic.com/turtle";
+const ZG_GROUND: MapSceneGround = {
+  iconBaseUrl: ZG_ICON_BASE_URL,
+  canvas: {
+    floor: 0,
+    width: ZG_MESH.bounds.maxY - ZG_MESH.bounds.minY,
+    height: ZG_MESH.bounds.maxX - ZG_MESH.bounds.minX,
+    tileWidth: 0,
+    tileHeight: 0,
+    bounds: ZG_MESH.bounds,
+    tiles: [],
+  },
+};
+const ZG_MESH_REQUEST: DungeonMeshRequest = { url: dungeonMeshUrl(ZG_MESH, ZG_ICON_BASE_URL), bounds: ZG_MESH.bounds, liquid: null };
+
+/** A spot where a walkable floor lies under a higher surface: the surface heights read off the GLB. */
+interface LoggedZSite {
+  x: number;
+  y: number;
+  /** The floor the raid walked on. */
+  floor: number;
+  /** The highest surface above it (deck, roof). */
+  top: number;
+  /** Viewport zoom that shows both heights. */
+  zoom: number;
+}
+
+const ZG_SITES = {
+  // The bridge over the Razzashi Adder path: the raid walks under its deck.
+  bridge: { x: -11732, y: -1333, floor: 63.79, top: 96.49, zoom: 12 },
+  // A troll hut ~19 yd from the entrance pull: floor inside, roof above.
+  hut: { x: -11829, y: -1321, floor: 67.38, top: 77.46, zoom: 30 },
+} satisfies Record<string, LoggedZSite>;
+
+const LOGGED_Z_MS = 10_000;
+
+function LoggedZReplay({ site }: { site: keyof typeof ZG_SITES }) {
+  const { x, y, floor, top, zoom } = ZG_SITES[site];
+  const project = (sample: MapPositionSample) => renderedDungeonMapPoint(sample, ZG_MESH.bounds);
+  // Two units on the same spot: one carries the logged z of the floor, one
+  // (like every pre-#1156 log) has none and stands on the highest surface.
+  const markers = [
+    { guid: "Player-logged", name: `Logged z ${floor}`, color: "#22c55e", z: floor },
+    { guid: "Player-no-z", name: `No z (top ${top})`, color: "#ef4444", z: undefined },
+  ].map(({ guid, name, color, z }): MapSceneMarker => {
+    const positions = [0, LOGGED_Z_MS].map((timestampMs): MapPositionSample => ({ timestampMs, x, y, mapId: 309, facing: 0, ...(z === undefined ? {} : { z }) }));
+    return { guid, name, color, kind: "player", muted: false, sample: positions[0], positions, point: project(positions[0])!, health: null };
+  });
+  const centre = markers[0].point;
+  const view = { viewport: clampViewport({ centerX: centre.leftPercent / 100, centerY: centre.topPercent / 100, zoom }), key: site };
+  const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
+  return (
+    <div style={{ width: 800, height: 520 }} className="relative overflow-hidden rounded-md border border-white/10 bg-black/70">
+      <MapView3D
+        ground={ZG_GROUND}
+        markers={markers}
+        projectSample={project}
+        cursorMs={LOGGED_Z_MS / 2}
+        playing={false}
+        playbackSpeed={1}
+        view={view}
+        onUnavailable={() => console.warn("WebGL unavailable")}
+        dungeonMesh={ZG_MESH_REQUEST}
+        onDungeonMeshState={setMeshState}
+        focus={{ centre, zoom }}
+      />
+      <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-white/80">
+        <span className="text-green-400">green: logged z {floor}, stands on the floor</span>
+        {" · "}
+        <span className="text-red-400">red: no z, on the top surface ({top})</span>
+        {meshState !== "ready" && <span className="ml-1.5 text-amber-200/80">mesh {meshState}</span>}
+      </div>
+    </div>
+  );
+}
+
 // --- Cast icon phases on an 8 s loop. ---
 
 const CASTS_MS = 8_000;
@@ -1303,6 +1389,21 @@ export const KreshRealMesh: Story = {
 export const RuinsMesh: Story = {
   args: { players: 10, playbackSpeed: 1 },
   render: ({ players }) => <MeshFightReplay players={players} fight={RUINS_FIGHT} />,
+};
+
+/**
+ * Logged z on Zul'Gurub's terrain mesh (turtle CDN): a unit with a logged
+ * height stands on the floor nearest below it, here the path under the
+ * Razzashi bridge; one without z keeps the highest-surface probe and stands
+ * on the deck 33 yd above. Orbit low to see under the deck.
+ */
+export const ZulGurubLoggedZBridge: Story = {
+  render: () => <LoggedZReplay site="bridge" />,
+};
+
+/** As ZulGurubLoggedZBridge, inside a troll hut by the entrance: floor vs roof, 10 yd apart. */
+export const ZulGurubLoggedZHut: Story = {
+  render: () => <LoggedZReplay site="hut" />,
 };
 
 /**
