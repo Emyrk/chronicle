@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSpell } from "@/api/queries";
+import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 import { useDatasetId } from "@/hooks/useDatasetId";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
 import type { LiveMapPresence } from "../../liveSessionProtocol";
@@ -151,6 +152,8 @@ export default function MapView3D({
   const effectSettings = effectSettingsProp ?? DEFAULT_EFFECT_SETTINGS;
   const showBars = effectSettings.bars;
   const [effectHover, setEffectHover] = useState<MapScene3DEffectHover | null>(null);
+  // A player's token shows their spec's icon when their talents give one, else their class's.
+  const specializations = usePlayerSpecializations();
 
   useEffect(() => {
     onUnavailableRef.current = onUnavailable;
@@ -237,13 +240,13 @@ export default function MapView3D({
         health: showBars ? marker.health : null,
         miniatureUrl: modelUrl,
         z: sample.z,
-        icon: marker.icon,
+        icon: specializations.get(marker.guid)?.iconUrl ?? marker.icon,
         boss: bossGuids?.has(marker.guid) ?? false,
         healthFraction: marker.healthFraction,
       }];
     });
     scene.setUnits(units);
-  }, [bossGuids, markers, miniatureUrls, projectSample, showBars, smoothMs]);
+  }, [bossGuids, markers, miniatureUrls, projectSample, showBars, smoothMs, specializations]);
 
   useEffect(() => {
     sceneRef.current?.setUnitRoles(unitRoles ?? NO_ROLES);
