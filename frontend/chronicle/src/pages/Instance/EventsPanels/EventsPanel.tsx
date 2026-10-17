@@ -82,6 +82,7 @@ import { createRaidCompositionPanel } from "./RaidComposition/RaidComposition";
 import { createMapPanel } from "./Map/Map";
 import { createFriendlyClassBuffsPanel } from "./FriendlyClassBuffs/FriendlyClassBuffs";
 import { createRaidFramesPanel } from "./RaidFrames/RaidFrames";
+import { createActivityLogPanel } from "./ActivityLog/ActivityLog";
 
 import { createDispelsDonePanel, createDispelsReceivedPanel } from "./Dispel/Dispel";
 import { createInterruptsPanel } from "./Interrupt/Interrupt";
@@ -145,6 +146,7 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   // Replay
   map: createMapPanel(),
   raid_frames: createRaidFramesPanel(),
+  activity_log: createActivityLogPanel(),
   status: createStatusPanel(),
   healer_casts: createHealerCastsPanel(),
   spell_count: createSpellCountPanel(),

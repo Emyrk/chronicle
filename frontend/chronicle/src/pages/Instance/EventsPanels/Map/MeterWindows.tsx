@@ -184,15 +184,17 @@ function MeterWindowFrame({
         </DropdownMenu>
         {/* The empty stretch of the title bar is the drag handle. */}
         <span className="h-full flex-1" />
-        <button
-          type="button"
-          aria-pressed={window.perSecond}
-          onClick={() => onPatch({ perSecond: !window.perSecond })}
-          title="Per second"
-          className={cn("rounded px-1 font-mono text-[10px]", window.perSecond ? "bg-white/15 text-white" : "text-white/50 hover:text-white")}
-        >
-          /s
-        </button>
+        {meter.panel.supportsPerSecond && (
+          <button
+            type="button"
+            aria-pressed={window.perSecond}
+            onClick={() => onPatch({ perSecond: !window.perSecond })}
+            title="Per second"
+            className={cn("rounded px-1 font-mono text-[10px]", window.perSecond ? "bg-white/15 text-white" : "text-white/50 hover:text-white")}
+          >
+            /s
+          </button>
+        )}
         <button type="button" onClick={onSpawn} title="Open another meter" aria-label="Open another meter" className="rounded p-0.5 text-white/50 hover:text-white">
           <Plus className="h-3 w-3" />
         </button>

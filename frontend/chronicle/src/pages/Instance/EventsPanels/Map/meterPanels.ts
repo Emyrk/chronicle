@@ -1,3 +1,4 @@
+import { createActivityLogPanel } from "../ActivityLog/ActivityLog";
 import { createDamageDonePanel } from "../DamageDone/DamageDone";
 import { createDamageTakenPanel } from "../DamageTaken/DamageTaken";
 import { createDeathsPanel } from "../Deaths/Deaths";
@@ -9,8 +10,8 @@ import type { PanelDefinition } from "../types";
 
 /**
  * Panels a map meter window can show: the bar-chart (PlayerMetricChart)
- * panels, built from their own factories so a meter runs the same processor
- * and filters as the panel's card.
+ * panels and the Activity Log, built from their own factories so a window
+ * runs the same processor and filters as the panel's card.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- meters hold panels of every result type
 type AnyPanel = PanelDefinition<any, any>;
@@ -35,6 +36,7 @@ export const METER_PANELS = {
   deaths: meter("Deaths", createDeathsPanel()),
   dispels_done: meter("Dispels", createDispelsDonePanel()),
   interrupts: meter("Interrupts", createInterruptsPanel(), ["interrupt"]),
+  activity_log: meter("Activity Log", createActivityLogPanel()),
 };
 
 export type MeterPanelKey = keyof typeof METER_PANELS;

@@ -52,6 +52,7 @@ import { pullsAndCleanupProcessor } from "../PullsAndCleanup/pullsAndCleanup.pro
 import { raidCompositionProcessor } from "../RaidComposition/raidComposition.processor";
 import { friendlyClassBuffsProcessor } from "../FriendlyClassBuffs/friendlyClassBuffs.processor";
 import { raidFramesProcessor } from "../RaidFrames/raidFrames.processor";
+import { activityLogProcessor } from "../ActivityLog/activityLog.processor";
 
 // Export individual processors
 export { damageDoneProcessor, vulnerabilityEffectProcessor, enemyDamageDoneProcessor, petDamageDoneProcessor, friendlyFireProcessor } from "../DamageDone/damageDone.processor";
@@ -101,6 +102,7 @@ export { pullsAndCleanupProcessor } from "../PullsAndCleanup/pullsAndCleanup.pro
 export { raidCompositionProcessor } from "../RaidComposition/raidComposition.processor";
 export { friendlyClassBuffsProcessor } from "../FriendlyClassBuffs/friendlyClassBuffs.processor";
 export { raidFramesProcessor } from "../RaidFrames/raidFrames.processor";
+export { activityLogProcessor } from "../ActivityLog/activityLog.processor";
 export type { RaidCompositionResult } from "../RaidComposition/raidComposition.processor";
 export type { FriendlyClassBuffsResult } from "../FriendlyClassBuffs/friendlyClassBuffs.processor";
 
@@ -208,6 +210,7 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   // Replay
   map: mapProcessor,
   raid_frames: raidFramesProcessor,
+  activity_log: activityLogProcessor,
   actual_raid_health: actualRaidHealthProcessor,
   status: statusProcessor,
   healer_casts: healerCastsProcessor,
