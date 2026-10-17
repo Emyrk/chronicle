@@ -135,6 +135,8 @@ describe("raidFramesProcessor", () => {
     expect(samples[0]).toMatchObject({ currentHealth: 3_500, powerType: "mana" });
     expect(latestResourceAt(samples, FIRST_TIMESTAMP.getTime() + 1_999)?.currentHealth).toBe(3_500);
     expect(latestResourceAt(samples, FIRST_TIMESTAMP.getTime() + 2_000)?.currentPower).toBe(1_500);
+    // Enemies are recorded too, for inspecting them.
+    expect(state.encounters.get(ENCOUNTER)?.resourcesByUnit.get("enemy")).toHaveLength(1);
   });
 
   it("tracks active, completed, and failed casts", () => {
@@ -174,7 +176,7 @@ describe("raidFramesProcessor", () => {
     expect(incomingHealsAt(heals, base + 1_000, 1_500).map((h) => h.amount)).toEqual([800]);
     expect(incomingHealsAt(heals, base + 500, 1_500).map((h) => h.amount)).toEqual([1_200, 800]);
     expect(incomingHealsAt(heals, base + 2_000, 1_500)).toEqual([]);
-    expect(state.encounters.get(ENCOUNTER)?.healsByUnit.has("enemy")).toBe(false);
+    expect(state.encounters.get(ENCOUNTER)?.healsByUnit.get("enemy")).toHaveLength(1);
     expect(heals[0]).toMatchObject({ spellId: 2061, sourceName: "Mage", overheal: 0 });
   });
 

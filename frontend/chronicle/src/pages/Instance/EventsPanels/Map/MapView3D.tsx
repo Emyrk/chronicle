@@ -53,6 +53,8 @@ export interface MapView3DProps {
    * a zoom); Follow turns it back on.
    */
   cinematic?: boolean;
+  /** Called with a unit's guid when it is clicked on the map. */
+  onUnitClick?: (guid: string) => void;
 }
 
 const EFFECTS_STORAGE_KEY = "chronicle.map.effects3d";
@@ -153,6 +155,7 @@ export default function MapView3D({
   onDungeonMeshState,
   focus = null,
   cinematic = false,
+  onUnitClick,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<MapScene3D | null>(null);
@@ -205,6 +208,10 @@ export default function MapView3D({
   useEffect(() => {
     sceneRef.current?.setFocus(focus);
   }, [focus]);
+
+  useEffect(() => {
+    sceneRef.current?.setOnUnitClick(onUnitClick ?? null);
+  }, [onUnitClick]);
 
   // Keyed by the boss guids' string so replay ticks never re-engage the Director.
   const bossKey = bossGuids ? [...bossGuids].join(",") : "";

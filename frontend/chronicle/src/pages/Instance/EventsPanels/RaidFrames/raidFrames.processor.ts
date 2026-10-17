@@ -159,6 +159,8 @@ export const raidFramesProcessor: PanelProcessor<RaidFramesResult, RaidFramesPro
   id: "raid_frames",
   streams: ["unit_resources", "spell_start", "spell_go", "spell_fail", "heal"],
   createState: () => ({ encounters: new Map(), spellNames: new Map() }),
+  // Every unit is recorded (enemies included) so inspect views can show any
+  // unit; the raid frame grid itself shows players.
   processEvent(state, event, encounterId, firstTimestamp, _streamType, context) {
     if (!context.selectedEncounterIds.has(encounterId)) return;
 
@@ -167,11 +169,11 @@ export const raidFramesProcessor: PanelProcessor<RaidFramesResult, RaidFramesPro
 
     switch (event.type) {
       case "unit_resources":
-        if (context.players[event.unit]) addResourceSample(encounter, event, timestampMs);
+        addResourceSample(encounter, event, timestampMs);
         return;
       case "spell_start":
         state.spellNames.set(event.spell.id, event.spell.name);
-        if (context.players[event.caster]) addCast(encounter, event, timestampMs);
+        addCast(encounter, event, timestampMs);
         return;
       case "spell_go":
         state.spellNames.set(event.spell.id, event.spell.name);
@@ -181,7 +183,7 @@ export const raidFramesProcessor: PanelProcessor<RaidFramesResult, RaidFramesPro
         finishCast(encounter, event.caster, event.spell.id, timestampMs, true);
         return;
       case "heal":
-        if (context.players[event.target] && event.amount > 0) addHeal(encounter, event, timestampMs);
+        if (event.amount > 0) addHeal(encounter, event, timestampMs);
         return;
     }
   },

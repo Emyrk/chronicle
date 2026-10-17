@@ -4,6 +4,8 @@ import { RadioTower, Users } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
+import { parseSelectedUnits } from "../UnitAuras/unitSelection";
+import { useUnitInspect } from "../UnitInspectContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import {
   activeCastAt,
@@ -446,6 +448,7 @@ function NameplateBar({ color, current, max, absorb = 0, height }: { color: stri
 // name on it and a thin power bar, plus the card frame's casts, absorbs and
 // incoming heals.
 function OverlayRaidFrame({
+  guid,
   name,
   className,
   sample,
@@ -454,6 +457,7 @@ function OverlayRaidFrame({
   spellNames,
   timestampMs,
 }: {
+  guid?: string;
   name: string;
   className: string;
   sample: RaidFrameResourceSample | null;
@@ -463,6 +467,8 @@ function OverlayRaidFrame({
   timestampMs: number;
 }) {
   const [hoveredHeal, setHoveredHeal] = useState<RaidFrameHeal | null>(null);
+  const inspect = useUnitInspect();
+  const inspected = Boolean(guid && inspect?.inspected.has(guid));
   const dead = sample?.currentHealth === 0 && (sample?.maximumHealth ?? 0) > 0;
   const healthWidth = sample && !dead ? percent(sample.currentHealth, sample.maximumHealth) : 0;
   const absorbWidth = sample && !dead ? Math.min(percent(sample.absorb, sample.maximumHealth), 100 - healthWidth) : 0;
@@ -471,7 +477,10 @@ function OverlayRaidFrame({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className={`pointer-events-auto flex w-20 flex-col overflow-hidden rounded-sm border border-black/80 bg-black/80 ${dead ? "opacity-60" : ""}`}>
+        <div
+          className={`pointer-events-auto flex w-20 flex-col overflow-hidden rounded-sm border bg-black/80 ${inspected ? "border-white ring-1 ring-white/70" : "border-black/80"} ${dead ? "opacity-60" : ""} ${inspect && guid ? "cursor-pointer" : ""}`}
+          onClick={inspect && guid ? () => inspect.toggle(guid) : undefined}
+        >
           <div className="relative h-4">
             <div className="absolute inset-y-0 left-0" style={{ width: `${healthWidth}%`, background: classColor }} />
             {absorbWidth > 0 && (
@@ -533,6 +542,64 @@ function OverlayCastLine({ cast, timestampMs }: { cast: RaidFrameCast; timestamp
   );
 }
 
+// One unit up close: name, health and power with their values, and the cast in progress.
+function InspectFrame({
+  guid,
+  context,
+  sample,
+  cast,
+  timestampMs,
+}: {
+  guid: string;
+  context: PanelRenderProps<RaidFramesResult>["context"];
+  sample: RaidFrameResourceSample | null;
+  cast: RaidFrameCast | null;
+  timestampMs: number;
+}) {
+  const player = context.instance.players?.[guid];
+  const name = player?.name ?? context.instance.units?.[guid]?.name ?? guid;
+  const color = player ? getClassColorVar(player.class) : "var(--color-class-enemy)";
+  const dead = sample?.currentHealth === 0 && (sample?.maximumHealth ?? 0) > 0;
+  const powerType = sample?.powerType ?? "";
+  return (
+    <div className={`flex flex-col gap-1 ${dead ? "opacity-60" : ""}`}>
+      <div className="flex items-baseline gap-2 text-xs">
+        <span className="truncate font-semibold" style={{ color }}>{name}</span>
+        {dead && <span className="text-2xs uppercase tracking-wide text-red-400">Dead</span>}
+      </div>
+      {sample && sample.maximumHealth > 0 ? (
+        <NameplateBar color={color} current={sample.currentHealth} max={sample.maximumHealth} absorb={sample.absorb} height="h-5 text-[11px]" />
+      ) : (
+        <div className="text-2xs text-zinc-500">No health data yet</div>
+      )}
+      {sample && sample.maximumPower > 0 && (
+        <NameplateBar color={POWER_COLORS[powerType] ?? "#767676"} current={sample.currentPower} max={sample.maximumPower} height="h-3.5 text-[9px]" />
+      )}
+      {cast && !dead && <InspectCastBar cast={cast} timestampMs={timestampMs} />}
+    </div>
+  );
+}
+
+function InspectCastBar({ cast, timestampMs }: { cast: RaidFrameCast; timestampMs: number }) {
+  const sync = useSyncModeContextOptional();
+  const displayMs = useInterpolatedTimestamp(
+    timestampMs,
+    Boolean(sync?.enabled && sync.isPlaying),
+    sync?.playbackSpeed ?? 1,
+  );
+  const durationMs = Math.max(1, cast.endMs - cast.startMs);
+  const progress = percent(Math.min(durationMs, Math.max(0, displayMs - cast.startMs)), durationMs);
+  return (
+    <div className="relative h-4 overflow-hidden rounded-sm border border-amber-500/40 bg-black/60">
+      <div className="absolute inset-y-0 left-0 bg-amber-500/45" style={{ width: `${cast.channel ? 100 - progress : progress}%` }} />
+      <span className="absolute inset-0 flex items-center justify-between gap-2 px-1.5 text-[10px] text-amber-100 [text-shadow:0_0_2px_#000]">
+        <span className="truncate">{cast.spellName}</span>
+        <span className="shrink-0 font-mono tabular-nums">{(Math.max(0, cast.endMs - displayMs) / 1000).toFixed(1)}s</span>
+      </span>
+    </div>
+  );
+}
+
 function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
   const sync = useSyncModeContextOptional();
   const overlay = props.variant === "overlay";
@@ -560,6 +627,26 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
   }
 
   const timestampMs = syncTimestampMs ?? encounter.endMs;
+
+  // Inspect mode (`u:<guid>` in the panel option): a larger frame for each
+  // listed unit, players or enemies.
+  const inspectGuids = parseSelectedUnits(props.panelOption);
+  if (inspectGuids.length > 0) {
+    return (
+      <div className="flex flex-col gap-1">
+        {inspectGuids.map((guid) => (
+          <InspectFrame
+            key={guid}
+            guid={guid}
+            context={props.context}
+            sample={latestResourceAt(encounter.resourcesByUnit.get(guid) ?? [], timestampMs)}
+            cast={activeCastAt(encounter.castsByUnit.get(guid) ?? [], timestampMs)}
+            timestampMs={timestampMs}
+          />
+        ))}
+      </div>
+    );
+  }
   const players = Object.entries(props.context.instance.players ?? {})
     .sort(([, left], [, right]) => left.class.localeCompare(right.class) || left.name.localeCompare(right.name));
   if (players.length === 0) {
@@ -582,6 +669,7 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
           {frameData.map(({ guid, player, sample, cast, incomingHeals }) => (
             <OverlayRaidFrame
               key={guid}
+              guid={guid}
               name={player.name}
               className={player.class}
               sample={sample}

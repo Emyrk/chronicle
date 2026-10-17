@@ -20,7 +20,9 @@ import {
 } from "./mapModel";
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
 import { MapView2D, type MapViewRequest } from "./MapView2D";
-import { EmbeddedPanel } from "../EmbeddedPanel";
+import { useEmbeddedPanel } from "../useEmbeddedPanel";
+import { UnitInspectContext, type UnitInspectSelection } from "../UnitInspectContext";
+import { InspectCards } from "./InspectCards";
 import { createRaidFramesPanel } from "../RaidFrames/RaidFrames";
 import { MAP_CONTROL_KEYBINDS } from "./mapControls";
 import { MeterWindows } from "./MeterWindows";
@@ -126,6 +128,19 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
     storeRaidFrames(shown);
   };
   const [meterWindows, setMeterWindows] = useMeterWindows();
+  // Units picked for a closer look: click them on the map or in the raid frames.
+  const [inspected, setInspected] = useState<string[]>([]);
+  const toggleInspected = useCallback((guid: string) => {
+    setInspected((current) => current.includes(guid) ? current.filter((other) => other !== guid) : [...current, guid]);
+  }, []);
+  const inspectSelection = useMemo((): UnitInspectSelection => ({ inspected: new Set(inspected), toggle: toggleInspected }), [inspected, toggleInspected]);
+  // One Raid Frames run draws both the grid and the inspect frames.
+  const raidFrames = useEmbeddedPanel({
+    panel: RAID_FRAMES_PANEL,
+    context: props.context,
+    durationMs: props.durationMs,
+    enabled: showRaidFrames || inspected.length > 0,
+  });
   const [storedFraming, setFraming] = useState<MapFraming>(INITIAL_MAP_FRAMING);
   // A new selection or replay moving into another encounter re-frames;
   // loading states (e.g. reprocessing after a filter change) keep the framing.
@@ -258,37 +273,48 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               onDungeonMeshState={setMeshState}
               focus={focus}
               cinematic={cinematic}
+              onUnitClick={toggleInspected}
             />
           </Suspense>
         )}
-        {/* The Raid Frames panel itself, drawn as an overlay: one implementation for the map and the panel. */}
-        {showRaidFrames ? (
-          <div className="group/raid pointer-events-none absolute left-2 top-2 z-30 flex max-w-[calc(100%-1rem)] items-start gap-0.5">
-            <div className="min-w-0 overflow-hidden">
-              <EmbeddedPanel panel={RAID_FRAMES_PANEL} context={props.context} durationMs={props.durationMs} />
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowRaidFrames(false)}
-              title="Hide raid frames"
-              aria-label="Hide raid frames"
-              className="pointer-events-auto grid h-4 w-4 shrink-0 place-items-center rounded-sm bg-black/75 text-white/60 opacity-0 transition-opacity hover:text-white focus-visible:opacity-100 group-hover/raid:opacity-100"
-            >
-              <X className="h-3 w-3" />
-            </button>
+        {/* Top-left: the Raid Frames panel itself, drawn as an overlay (one
+            implementation for the map and the panel), then the inspect cards. */}
+        <UnitInspectContext.Provider value={inspectSelection}>
+          <div className="pointer-events-none absolute bottom-2 left-2 top-2 z-30 flex max-w-[calc(100%-1rem)] flex-col items-start gap-1.5">
+            {showRaidFrames ? (
+              <div className="group/raid flex max-w-full shrink-0 items-start gap-0.5">
+                <div className="min-w-0 overflow-hidden">{raidFrames()}</div>
+                <button
+                  type="button"
+                  onClick={() => setShowRaidFrames(false)}
+                  title="Hide raid frames"
+                  aria-label="Hide raid frames"
+                  className="pointer-events-auto grid h-4 w-4 shrink-0 place-items-center rounded-sm bg-black/75 text-white/60 opacity-0 transition-opacity hover:text-white focus-visible:opacity-100 group-hover/raid:opacity-100"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ) : (
+              // Hidden: a button in their corner brings them back.
+              <button
+                type="button"
+                onClick={() => setShowRaidFrames(true)}
+                title="Show raid frames"
+                aria-label="Show raid frames"
+                className="pointer-events-auto grid h-7 w-7 shrink-0 place-items-center rounded-sm border border-black/80 bg-black/75 text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-white"
+              >
+                <HeartPulse className="h-4 w-4" />
+              </button>
+            )}
+            <InspectCards
+              guids={inspected}
+              onRemove={toggleInspected}
+              raidFrames={raidFrames}
+              context={props.context}
+              durationMs={props.durationMs}
+            />
           </div>
-        ) : (
-          // Hidden: a button in their corner brings them back.
-          <button
-            type="button"
-            onClick={() => setShowRaidFrames(true)}
-            title="Show raid frames"
-            aria-label="Show raid frames"
-            className="absolute left-2 top-2 z-30 grid h-7 w-7 place-items-center rounded-sm border border-black/80 bg-black/75 text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-white"
-          >
-            <HeartPulse className="h-4 w-4" />
-          </button>
-        )}
+        </UnitInspectContext.Provider>
         <MeterWindows windows={meterWindows} onChange={setMeterWindows} context={props.context} durationMs={props.durationMs} />
       </div>
       {jumps.length > 0 && scene.runStartMs !== null && (

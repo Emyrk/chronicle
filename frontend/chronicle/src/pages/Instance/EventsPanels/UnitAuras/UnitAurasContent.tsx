@@ -199,12 +199,15 @@ function CompactAuraTile({
   players,
   units,
   showUptime,
+  dense = false,
 }: {
   row: AuraRow;
   durationMs: number;
   players: PanelRenderProps<UnitAurasResult>["context"]["instance"]["players"];
   units: PanelRenderProps<UnitAurasResult>["context"]["instance"]["units"];
   showUptime: boolean;
+  /** Overlay size (map inspect cards): a small icon tile. */
+  dense?: boolean;
 }) {
   const percent = compactAuraPercent(row.totalUptimeMs, durationMs);
   const colors = compactAuraColors(percent);
@@ -238,7 +241,8 @@ function CompactAuraTile({
   return (
     <div
       className={cn(
-        "group relative size-12 shrink-0 rounded-[10px] p-[3px] transition-transform hover:z-10 hover:scale-105",
+        "group pointer-events-auto relative shrink-0 transition-transform hover:z-10 hover:scale-105",
+        dense ? "size-7 rounded-md p-[2px]" : "size-12 rounded-[10px] p-[3px]",
         !showUptime && row.replayState === "active" && "animate-replay-pop",
       )}
       style={{
@@ -248,7 +252,7 @@ function CompactAuraTile({
       }}
     >
       <div
-        className="relative flex size-full items-center justify-center overflow-hidden rounded-[7px] border border-black/30 shadow-inner"
+        className={cn("relative flex size-full items-center justify-center overflow-hidden border border-black/30 shadow-inner", dense ? "rounded-[4px]" : "rounded-[7px]")}
         style={{
           backgroundColor: showUptime
             ? colors.surface
@@ -261,7 +265,7 @@ function CompactAuraTile({
         <SpellIdTooltip
           spellId={row.spellId}
           name={row.spellName}
-          size={40}
+          size={dense ? 24 : 40}
           tooltipFooter={tooltipFooter}
           className={cn(
             "relative z-10 flex size-full items-center justify-center overflow-hidden text-[0px]",
@@ -274,13 +278,14 @@ function CompactAuraTile({
       {!row.isBuff && (
         <span
           aria-label="Debuff"
-          className="absolute -left-1 -top-1 z-20 size-3 rounded-full border-2 border-card bg-rose-500 shadow-sm"
+          className={cn("absolute z-20 rounded-full border-card bg-rose-500 shadow-sm", dense ? "-left-0.5 -top-0.5 size-2 border" : "-left-1 -top-1 size-3 border-2")}
         />
       )}
       {(showUptime || countdownMs !== null) && (
         <span
           className={cn(
-            "absolute -bottom-1 -right-1 z-20 rounded-[3px] px-1 py-0.5 font-mono text-[9px] font-bold leading-none tabular-nums shadow-sm",
+            "absolute -bottom-1 -right-1 z-20 rounded-[3px] px-1 py-0.5 font-mono font-bold leading-none tabular-nums shadow-sm",
+            dense ? "text-[7px]" : "text-[9px]",
             showUptime ? "text-slate-950" : "bg-zinc-950/90 text-zinc-100",
           )}
           style={showUptime ? { backgroundColor: colors.badge } : undefined}
@@ -300,15 +305,17 @@ function CompactAuraGrid({
   players,
   units,
   showUptime,
+  dense = false,
 }: {
   rows: AuraRow[];
   durationMs: number;
   players: PanelRenderProps<UnitAurasResult>["context"]["instance"]["players"];
   units: PanelRenderProps<UnitAurasResult>["context"]["instance"]["units"];
   showUptime: boolean;
+  dense?: boolean;
 }) {
   return (
-    <div className="flex flex-wrap content-start gap-3 p-3">
+    <div className={cn("flex flex-wrap content-start", dense ? "gap-1.5" : "gap-3 p-3")}>
       {rows.map((row) => (
         <CompactAuraTile
           key={`${row.auraKey}:${row.replayState ?? "recorded"}`}
@@ -317,6 +324,7 @@ function CompactAuraGrid({
           players={players}
           units={units}
           showUptime={showUptime}
+          dense={dense}
         />
       ))}
     </div>
@@ -626,6 +634,31 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
   const setAuraSearchQuery = (query: string) => {
     setPanelOption?.(serializeUnitAuraOptions(selectedGuids, query));
   };
+
+  if (props.variant === "overlay") {
+    // Embedded (map inspect cards): just each listed unit's auras as small icons.
+    return (
+      <div className="flex flex-col gap-1.5">
+        {selectedGuids.map((guid) => {
+          const rows = rowsByUnit.get(guid);
+          const all = rows ? activeAurasBeforeUpcoming([...rows.buffs, ...rows.debuffs]) : [];
+          return all.length > 0 ? (
+            <CompactAuraGrid
+              key={guid}
+              rows={all}
+              durationMs={uptimeDurationByUnit.get(guid) ?? durationMs}
+              players={context.instance.players}
+              units={context.instance.units}
+              showUptime={showUptime}
+              dense
+            />
+          ) : (
+            <div key={guid} className="text-2xs text-zinc-500">{emptyAuraMessage}</div>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <GenericPanel {...props}>
