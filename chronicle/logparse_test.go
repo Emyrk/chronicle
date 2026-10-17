@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/require"
@@ -204,30 +205,54 @@ func TestInferTalentSubSpec(t *testing.T) {
 	}
 }
 
-func TestSlugCollisionFromLookup(t *testing.T) {
+func TestInsertInstanceWithSlugFallback(t *testing.T) {
 	t.Parallel()
 
-	t.Run("existing slug collides", func(t *testing.T) {
+	t.Run("slug collision retries without slug", func(t *testing.T) {
 		t.Parallel()
-		collides, err := slugCollisionFromLookup(nil)
+
+		calls := 0
+		instanceID := uuid.New()
+		instance, err := insertInstanceWithSlugFallback(t.Context(), func(_ context.Context, params database.InsertInstanceParams) (database.LogInstance, error) {
+			calls++
+			if calls == 1 {
+				require.True(t, params.HashedSlug.Valid)
+				return database.LogInstance{}, pgx.ErrNoRows
+			}
+			require.False(t, params.HashedSlug.Valid)
+			return database.LogInstance{ID: instanceID}, nil
+		}, database.InsertInstanceParams{HashedSlug: pgtype.Text{String: "collision", Valid: true}})
+
 		require.NoError(t, err)
-		require.True(t, collides)
+		require.Equal(t, instanceID, instance.ID)
+		require.Equal(t, 2, calls)
 	})
 
-	t.Run("missing slug does not collide", func(t *testing.T) {
+	t.Run("non-collision errors are not retried", func(t *testing.T) {
 		t.Parallel()
-		collides, err := slugCollisionFromLookup(pgx.ErrNoRows)
-		require.NoError(t, err)
-		require.False(t, collides)
+
+		calls := 0
+		insertErr := errors.New("insert failed")
+		_, err := insertInstanceWithSlugFallback(t.Context(), func(context.Context, database.InsertInstanceParams) (database.LogInstance, error) {
+			calls++
+			return database.LogInstance{}, insertErr
+		}, database.InsertInstanceParams{HashedSlug: pgtype.Text{String: "slug", Valid: true}})
+
+		require.ErrorIs(t, err, insertErr)
+		require.Equal(t, 1, calls)
 	})
 
-	t.Run("database errors are not swallowed", func(t *testing.T) {
+	t.Run("missing slug is not retried", func(t *testing.T) {
 		t.Parallel()
-		lookupErr := errors.New("lookup failed")
-		collides, err := slugCollisionFromLookup(lookupErr)
-		require.False(t, collides)
-		require.ErrorIs(t, err, lookupErr)
-		require.ErrorContains(t, err, "check colliding slug")
+
+		calls := 0
+		_, err := insertInstanceWithSlugFallback(t.Context(), func(context.Context, database.InsertInstanceParams) (database.LogInstance, error) {
+			calls++
+			return database.LogInstance{}, pgx.ErrNoRows
+		}, database.InsertInstanceParams{})
+
+		require.ErrorIs(t, err, pgx.ErrNoRows)
+		require.Equal(t, 1, calls)
 	})
 }
 
