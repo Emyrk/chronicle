@@ -117,6 +117,7 @@ type sqlcQuerier interface {
 	DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
 	DeleteModificationRequest(ctx context.Context, id uuid.UUID) error
 	DeleteOAuthTokenSession(ctx context.Context, arg DeleteOAuthTokenSessionParams) (int64, error)
+	DeleteOAuthTokenSessionsByRequestID(ctx context.Context, requestID string) (int64, error)
 	DeleteObsoleteRankingRuns(ctx context.Context, arg DeleteObsoleteRankingRunsParams) ([]uuid.UUID, error)
 	DeleteOrphanCustomPanelReleases(ctx context.Context) (int64, error)
 	DeleteParseScoreMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error
@@ -130,6 +131,7 @@ type sqlcQuerier interface {
 	DeleteRegressionSnapshot(ctx context.Context, id uuid.UUID) error
 	DeleteRetentionPolicy(ctx context.Context, id uuid.UUID) error
 	DeleteRetentionRule(ctx context.Context, id uuid.UUID) error
+	DeleteSidekickWoWDirectoriesExcept(ctx context.Context, arg DeleteSidekickWoWDirectoriesExceptParams) (int64, error)
 	DeleteTenant(ctx context.Context, id uuid.UUID) error
 	DeleteTimeParseBossKillMembershipSeries(ctx context.Context, arg DeleteTimeParseBossKillMembershipSeriesParams) error
 	DeleteTimeParseBossKillMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error
@@ -157,6 +159,7 @@ type sqlcQuerier interface {
 	DeleteWorld(ctx context.Context, id uuid.UUID) error
 	DeleteYoutubeVideoByInstanceOrSlug(ctx context.Context, arg DeleteYoutubeVideoByInstanceOrSlugParams) error
 	DenyPrivateLogAccessRequest(ctx context.Context, arg DenyPrivateLogAccessRequestParams) (PrivateLogAccessRequest, error)
+	DisconnectSidekickInstallation(ctx context.Context, arg DisconnectSidekickInstallationParams) (SidekickInstallation, error)
 	EncountersByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounter, error)
 	EnsureDeploymentToken(ctx context.Context, deploymentToken pgtype.Text) (pgtype.Text, error)
 	ExpireStaleLogFileParts(ctx context.Context, arg ExpireStaleLogFilePartsParams) ([]LogFilePart, error)
@@ -347,6 +350,7 @@ type sqlcQuerier interface {
 	GetServersForWorld(ctx context.Context, worldID uuid.UUID) ([]WowServer, error)
 	GetSharedViewByCode(ctx context.Context, code string) (SharedView, error)
 	GetSharedViewByInstanceAndHash(ctx context.Context, arg GetSharedViewByInstanceAndHashParams) (SharedView, error)
+	GetSidekickInstallationForOAuthRequest(ctx context.Context, arg GetSidekickInstallationForOAuthRequestParams) (uuid.UUID, error)
 	GetSiteConfig(ctx context.Context) (SiteConfig, error)
 	GetSpellItemEnchantmentByID(ctx context.Context, arg GetSpellItemEnchantmentByIDParams) (DbcSpellItemEnchantment, error)
 	GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, error)
@@ -480,6 +484,7 @@ type sqlcQuerier interface {
 	// Server Applications
 	InsertServerApplication(ctx context.Context, arg InsertServerApplicationParams) (ServerApplication, error)
 	InsertServerUploadMeta(ctx context.Context, arg InsertServerUploadMetaParams) error
+	InsertSidekickOAuthGrant(ctx context.Context, arg InsertSidekickOAuthGrantParams) error
 	InsertStagedParsedLogGroup(ctx context.Context, arg InsertStagedParsedLogGroupParams) error
 	InsertStampedYoutubeVideo(ctx context.Context, arg InsertStampedYoutubeVideoParams) error
 	InsertTelemetryNotice(ctx context.Context, arg InsertTelemetryNoticeParams) error
@@ -620,6 +625,9 @@ type sqlcQuerier interface {
 	ListResolvedItemPrices(ctx context.Context, arg ListResolvedItemPricesParams) ([]ListResolvedItemPricesRow, error)
 	ListRiverQueueMetrics(ctx context.Context) ([]ListRiverQueueMetricsRow, error)
 	ListServerApplications(ctx context.Context) ([]ListServerApplicationsRow, error)
+	ListSidekickInstallationsByUser(ctx context.Context, userID uuid.UUID) ([]SidekickInstallation, error)
+	ListSidekickIssues(ctx context.Context, arg ListSidekickIssuesParams) ([]SidekickIssue, error)
+	ListSidekickWoWDirectories(ctx context.Context, sidekickID uuid.UUID) ([]SidekickWowDirectory, error)
 	// Canonical database-backed spell lookups. Each base spell row carries its
 	// independently ordered normalized components without multiplying child rows.
 	ListSpellCastTimesByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellCastTime, error)
@@ -757,6 +765,7 @@ type sqlcQuerier interface {
 	RefreshTimeParseBossKillMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseBossKillMembershipsForLogGroupParams) (RefreshTimeParseBossKillMembershipsForLogGroupRow, error)
 	RefreshTimeParseClearTimeMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseClearTimeMembershipsForLogGroupParams) (RefreshTimeParseClearTimeMembershipsForLogGroupRow, error)
 	ReleaseAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)
+	RenameSidekickInstallation(ctx context.Context, arg RenameSidekickInstallationParams) (SidekickInstallation, error)
 	RepairDiscordMembershipGrantChecks(ctx context.Context, arg RepairDiscordMembershipGrantChecksParams) ([]DiscordMembershipGrantCheck, error)
 	ReserveLogFilePart(ctx context.Context, arg ReserveLogFilePartParams) (LogFilePart, error)
 	// Resolves the dataset for a realm. Precedence:
@@ -771,11 +780,13 @@ type sqlcQuerier interface {
 	ResolveDatasetWithFlavorByRealm(ctx context.Context, id uuid.UUID) (ResolveDatasetWithFlavorByRealmRow, error)
 	ResolveExternalAPIRealm(ctx context.Context, arg ResolveExternalAPIRealmParams) (ResolveExternalAPIRealmRow, error)
 	ResolveExternalAPIServer(ctx context.Context, server string) (ResolveExternalAPIServerRow, error)
+	ResolveSidekickIssuesExcept(ctx context.Context, arg ResolveSidekickIssuesExceptParams) (int64, error)
 	// Returns log groups that have been parsed and still have raw files on storage.
 	// Filtering by parser version is done in Go using semverenc for full
 	// major.minor.patch comparison. The caller deduplicates rows by log group and
 	// applies its own distinct log-group limit.
 	ResyncCandidateLogGroups(ctx context.Context) ([]ResyncCandidateLogGroupsRow, error)
+	RevokeActiveSidekickOAuthGrants(ctx context.Context, sidekickID uuid.UUID) ([]string, error)
 	RevokeOAuthTokenSessions(ctx context.Context, arg RevokeOAuthTokenSessionsParams) (int64, error)
 	RevokePrivateLogAccessRequest(ctx context.Context, arg RevokePrivateLogAccessRequestParams) (PrivateLogAccessRequest, error)
 	RevokePrivateLogShareLink(ctx context.Context, arg RevokePrivateLogShareLinkParams) (int64, error)
@@ -848,6 +859,7 @@ type sqlcQuerier interface {
 	// time window. Used by the discovery endpoint to surface activity metrics.
 	TenantDiscoveryStats(ctx context.Context, since pgtype.Timestamptz) ([]TenantDiscoveryStatsRow, error)
 	TouchLogInstanceRankingSource(ctx context.Context, instanceID uuid.UUID) error
+	TouchSidekickUpload(ctx context.Context, arg TouchSidekickUploadParams) (int64, error)
 	TouchUploadKeyLastUsed(ctx context.Context, id uuid.UUID) error
 	TrackUserPanelLayout(ctx context.Context, arg TrackUserPanelLayoutParams) (UserTrackedLayout, error)
 	TryAcquireAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)
@@ -874,6 +886,7 @@ type sqlcQuerier interface {
 	UpdateRaidCompositionSharing(ctx context.Context, arg UpdateRaidCompositionSharingParams) (RaidComposition, error)
 	UpdateRegressionFixtureNote(ctx context.Context, arg UpdateRegressionFixtureNoteParams) error
 	UpdateRetentionPolicyStats(ctx context.Context, arg UpdateRetentionPolicyStatsParams) error
+	UpdateSidekickHeartbeat(ctx context.Context, arg UpdateSidekickHeartbeatParams) (SidekickInstallation, error)
 	UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigParams) (SiteConfig, error)
 	UpdateTelemetryHeartbeat(ctx context.Context) error
 	// Only non-null params are applied; NULL means "keep existing value".
@@ -894,6 +907,7 @@ type sqlcQuerier interface {
 	UpdateWoWLogGroupPrivacy(ctx context.Context, arg UpdateWoWLogGroupPrivacyParams) (WoWLogGroup, error)
 	UpdateWoWServer(ctx context.Context, arg UpdateWoWServerParams) (WowServer, error)
 	UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServerRealmParams) (WowServerRealm, error)
+	UpsertActiveSidekickIssue(ctx context.Context, arg UpsertActiveSidekickIssueParams) (SidekickIssue, error)
 	UpsertBillingEntitlement(ctx context.Context, arg UpsertBillingEntitlementParams) (BillingEntitlement, error)
 	UpsertBillingSubscription(ctx context.Context, arg UpsertBillingSubscriptionParams) (BillingSubscription, error)
 	UpsertBillingSubscriptionIfChanged(ctx context.Context, arg UpsertBillingSubscriptionIfChangedParams) (int64, error)
@@ -934,6 +948,8 @@ type sqlcQuerier interface {
 	UpsertRetentionPolicy(ctx context.Context, arg UpsertRetentionPolicyParams) (RetentionPolicy, error)
 	UpsertRetentionPolicyByRealm(ctx context.Context, arg UpsertRetentionPolicyByRealmParams) (RetentionPolicy, error)
 	UpsertRetentionRule(ctx context.Context, arg UpsertRetentionRuleParams) (RetentionRule, error)
+	UpsertSidekickInstallation(ctx context.Context, arg UpsertSidekickInstallationParams) (SidekickInstallation, error)
+	UpsertSidekickWoWDirectory(ctx context.Context, arg UpsertSidekickWoWDirectoryParams) error
 	// Insert a unique talent build, returning its ID. If the build already exists,
 	// return the existing row's ID.
 	UpsertTalentBuild(ctx context.Context, arg UpsertTalentBuildParams) (uuid.UUID, error)
