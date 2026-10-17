@@ -209,7 +209,10 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   const targetEncounter = target && raidFramesResult
     ? selectRaidFramesEncounter(raidFramesResult.encounters, props.context.selectedEncounterIds, cursorMs)
     : null;
-  const targetOfTarget = target && targetEncounter ? lastTargetAt(targetEncounter, target, cursorMs ?? targetEncounter.endMs) : null;
+  // Who the selected unit is targeting, and who that one is (WoW's target's target).
+  const targetAtMs = targetEncounter ? cursorMs ?? targetEncounter.endMs : 0;
+  const targetOfTarget = target && targetEncounter ? lastTargetAt(targetEncounter, target, targetAtMs) : null;
+  const targetsTarget = targetOfTarget && targetEncounter ? lastTargetAt(targetEncounter, targetOfTarget, targetAtMs) : null;
   const [storedFraming, setFraming] = useState<MapFraming>(INITIAL_MAP_FRAMING);
   // A new selection or replay moving into another encounter re-frames;
   // loading states (e.g. reprocessing after a filter change) keep the framing.
@@ -441,6 +444,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
         <TargetFrames
           target={target}
           targetOfTarget={targetOfTarget}
+          targetsTarget={targetsTarget}
           raidFrames={raidFrames}
           auras={auras}
           onPin={pin}
