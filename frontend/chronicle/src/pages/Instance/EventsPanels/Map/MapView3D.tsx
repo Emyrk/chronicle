@@ -58,6 +58,10 @@ export interface MapView3DProps {
   effectSettings?: EffectSettings;
   /** Bump to ask for the top-down camera view. */
   topDownKey?: number;
+  /** Walk mode: a character of your own on the mesh floor (needs the dungeon mesh). */
+  walking?: boolean;
+  /** Called when walk mode starts or ends, including from the keyboard (G, Esc). */
+  onWalkingChange?: (walking: boolean) => void;
 }
 
 // three.js needs concrete colors; class colors are CSS custom properties.
@@ -112,6 +116,8 @@ export default function MapView3D({
   onUnitClick,
   effectSettings: effectSettingsProp,
   topDownKey = 0,
+  walking = false,
+  onWalkingChange,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<MapScene3D | null>(null);
@@ -291,6 +297,14 @@ export default function MapView3D({
   useEffect(() => {
     if (topDownKey > 0) sceneRef.current?.resetCamera(true);
   }, [topDownKey]);
+
+  useEffect(() => {
+    sceneRef.current?.setOnWalkChange(onWalkingChange ?? null);
+  }, [onWalkingChange]);
+
+  useEffect(() => {
+    sceneRef.current?.setWalking(walking);
+  }, [walking]);
 
   return (
     <div className="relative h-full w-full">

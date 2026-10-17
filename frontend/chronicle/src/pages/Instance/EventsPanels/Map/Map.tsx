@@ -2,7 +2,8 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Crosshair, Focus, HeartPulse, Map as MapIcon, Maximize, Route, Settings2, Skull, Users, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Crosshair, Focus, Footprints, HeartPulse, Map as MapIcon, Maximize, Route, Settings2, Skull, Users, X } from "lucide-react";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { fetchMiniatureUrls } from "./bossMinis";
@@ -140,6 +141,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   const [effectSettings, updateEffectSettings] = useEffectSettings();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [topDownKey, setTopDownKey] = useState(0);
+  // Walk mode ("join the fight"): your own character on the dungeon mesh.
+  const [walkWanted, setWalking] = useState(false);
   // Units picked for a closer look: click them on the map or in the raid frames.
   const [inspected, setInspected] = useState<string[]>([]);
   const toggleInspected = useCallback((guid: string) => {
@@ -180,6 +183,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   // the mesh, where the Director frames the boss and the group itself.
   const canFollow = scene.wholeRun || (show3D && meshWanted && meshState === "ready");
   const following = canFollow && cinematic;
+  const canWalk = show3D && meshWanted && meshState === "ready";
+  const walking = walkWanted && canWalk;
   const jumps = scene.wholeRun && scene.runStartMs !== null && scene.runEndMs !== null
     ? encounterJumps(props.context.instance.encounters, props.result.encounters, scene.runStartMs, scene.runEndMs)
     : [];
@@ -263,6 +268,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               onUnitClick={toggleInspected}
               effectSettings={effectSettings}
               topDownKey={topDownKey}
+              walking={walking}
+              onWalkingChange={setWalking}
             />
           </Suspense>
         )}
@@ -333,6 +340,29 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
         >
           <Settings2 className="h-4 w-4" />
         </button>
+        {show3D && (
+          <button
+            type="button"
+            onClick={() => setWalking(!walking)}
+            disabled={!canWalk}
+            aria-pressed={walking}
+            title={canWalk
+              ? walking ? "Leave walk mode (G or Esc)" : "Walk mode (G): join the fight with a character of your own"
+              : "Walk mode needs the 3D map (Map settings → 3D map)"}
+            aria-label="Walk mode"
+            className={cn(
+              "absolute right-2 top-10 z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 shadow-[0_4px_16px_rgba(0,0,0,.5)] disabled:opacity-40",
+              walking ? "bg-amber-400/90 text-black hover:bg-amber-300" : "bg-black/75 text-white/70 enabled:hover:bg-black/90 enabled:hover:text-white",
+            )}
+          >
+            <Footprints className="h-4 w-4" />
+          </button>
+        )}
+        {walking && (
+          <div className="pointer-events-none absolute bottom-2 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-sm bg-black/75 px-2 py-1 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
+            <span className="font-semibold text-amber-300">Walking</span> · W/S move · A/D turn · Q/E strafe · Space jump (hold to fly) · X down · drag to look · wheel zoom · G or Esc to leave
+          </div>
+        )}
         {settingsOpen && (
           <MapSettingsOverlay
             onClose={() => setSettingsOpen(false)}
@@ -347,6 +377,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
             mesh={show3D && meshUrl ? { on: meshWanted, locked: meshOnly, loading: Boolean(dungeonMesh) && meshState === "loading", onToggle: toggleMesh } : null}
             floors={scene.floors.length > 1 ? { list: scene.floors, value: scene.selectedFloorNumber, onChange: scene.setFloorNumber } : null}
             onTopDown={() => setTopDownKey((key) => key + 1)}
+            walk={canWalk ? { on: walking, onToggle: () => setWalking(!walking) } : null}
           />
         )}
         <InspectCards
