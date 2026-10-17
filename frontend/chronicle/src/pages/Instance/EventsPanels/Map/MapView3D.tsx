@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSpell } from "@/api/queries";
 import { useDatasetId } from "@/hooks/useDatasetId";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
+import type { LiveMapPresence } from "../../liveSessionProtocol";
+import type { MapPresenceListener } from "../../LiveSessionContext";
 import { useSmoothReplayTime } from "../RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../RotationTimeline/useSpellMeta";
 import { miniatureUrl } from "./bossMinis";
@@ -64,7 +66,17 @@ export interface MapView3DProps {
   onWalkingChange?: (walking: boolean) => void;
   /** A/D strafe and Q/E turn (a saved map setting, on by default). */
   adStrafe?: boolean;
+  /** In a live session: share your camera / character and draw everyone else's. */
+  livePresence?: MapLivePresence | null;
 }
+
+export interface MapLivePresence {
+  publish: (presence: LiveMapPresence | null) => void;
+  subscribe: (listener: MapPresenceListener) => () => void;
+}
+
+// Resent this often even when still, so others can tell you are there.
+const PRESENCE_HEARTBEAT_MS = 2000;
 
 // three.js needs concrete colors; class colors are CSS custom properties.
 function resolveCssColor(color: string, element: Element, cache: Map<string, string>): string {
@@ -121,6 +133,7 @@ export default function MapView3D({
   walking = false,
   onWalkingChange,
   adStrafe = true,
+  livePresence = null,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<MapScene3D | null>(null);
@@ -312,6 +325,21 @@ export default function MapView3D({
   useEffect(() => {
     sceneRef.current?.setAdStrafe(adStrafe);
   }, [adStrafe]);
+
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene || !livePresence) return;
+    scene.setOnPresence(livePresence.publish);
+    const unsubscribe = livePresence.subscribe((presences) => scene.setRemotePresences(presences));
+    const heartbeat = window.setInterval(() => scene.emitPresence(true), PRESENCE_HEARTBEAT_MS);
+    return () => {
+      window.clearInterval(heartbeat);
+      unsubscribe();
+      scene.setOnPresence(null);
+      scene.setRemotePresences(new Map());
+      livePresence.publish(null);
+    };
+  }, [livePresence]);
 
   return (
     <div className="relative h-full w-full">

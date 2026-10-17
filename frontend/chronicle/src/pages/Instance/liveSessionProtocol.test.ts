@@ -3,6 +3,8 @@ import {
   cursorScreenPosition,
   cursorSurfaceOffset,
   liveSessionInviteURL,
+  parseMapPresence,
+  participantColor,
   shouldPublishParticipantReplay,
   websocketURL,
   type LiveReplayState,
@@ -74,5 +76,28 @@ describe("shouldPublishParticipantReplay", () => {
   it("does not echo locally advancing timestamps while following playback", () => {
     const playing = { ...paused(1000), isPlaying: true };
     expect(shouldPublishParticipantReplay(playing, { ...playing, timestampMs: 1100 })).toBe(false);
+  });
+});
+
+describe("parseMapPresence", () => {
+  const presence = { ground: "https://maps/zg.glb", mode: "walk", position: [1, 2, 3], target: [1, 2, 2] };
+
+  it("accepts a camera or a walking character", () => {
+    expect(parseMapPresence(presence)).toEqual(presence);
+    expect(parseMapPresence({ ...presence, mode: "camera" })?.mode).toBe("camera");
+  });
+
+  it("rejects malformed presences", () => {
+    expect(parseMapPresence(null)).toBeNull();
+    expect(parseMapPresence({ ...presence, mode: "fly" })).toBeNull();
+    expect(parseMapPresence({ ...presence, ground: "" })).toBeNull();
+    expect(parseMapPresence({ ...presence, position: [1, 2] })).toBeNull();
+    expect(parseMapPresence({ ...presence, target: [1, Number.NaN, 2] })).toBeNull();
+    expect(parseMapPresence({ ...presence, position: ["1", 2, 3] })).toBeNull();
+  });
+
+  it("colours a participant the same every time", () => {
+    expect(participantColor("abc123")).toBe(participantColor("abc123"));
+    expect(participantColor("leader")).toMatch(/^hsl\(\d+ 80% 60%\)$/);
   });
 });

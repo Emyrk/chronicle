@@ -4,11 +4,13 @@ import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Crosshair, Focus, Footprints, HeartPulse, Map as MapIcon, Maximize, Route, Settings2, Skull, Users, X } from "lucide-react";
+import { useLiveSessionOptional } from "../../LiveSessionContext";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { fetchMiniatureUrls } from "./bossMinis";
 import { dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
 import { mapProcessor, type MapProcessorEvent, type MapResult } from "./map.processor";
+import type { MapLivePresence } from "./MapView3D";
 import { MapOverview2D } from "./MapOverview2D";
 import {
   FULL_MAP_VIEWPORT,
@@ -163,6 +165,14 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   // Walk mode ("join the fight"): your own character on the dungeon mesh.
   const [walkWanted, setWalking] = useState(false);
   const [adStrafe, setAdStrafeState] = useState(readStoredAdStrafe);
+  // Live session: everyone sees each other's camera, or character while walking.
+  const liveSession = useLiveSessionOptional();
+  const liveOn = liveSession?.status === "live";
+  const publishPresence = liveSession?.publishMapPresence;
+  const subscribePresence = liveSession?.subscribeMapPresence;
+  const livePresence = useMemo((): MapLivePresence | null =>
+    liveOn && publishPresence && subscribePresence ? { publish: publishPresence, subscribe: subscribePresence } : null,
+  [liveOn, publishPresence, subscribePresence]);
   const setAdStrafe = (on: boolean) => {
     setAdStrafeState(on);
     storeAdStrafe(on);
@@ -295,6 +305,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               walking={walking}
               onWalkingChange={setWalking}
               adStrafe={adStrafe}
+              livePresence={livePresence}
             />
           </Suspense>
         )}
