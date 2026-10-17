@@ -18,6 +18,7 @@ import { LiveSessionProvider } from "./LiveSessionContext";
 import { ReplayControlOverlay, useReplayPosition } from "./ReplayControlOverlay";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { TimeRangeProvider } from "./TimeRangeContext";
+import { InstanceKeybindProvider } from "./InstanceKeybinds";
 import { TimeRangeController } from "./TimeRangeController";
 import { useTenantGate } from "./TenantGate";
 import { useFocusMode } from "@/hooks/useFocusMode";
@@ -307,7 +308,7 @@ function InstancePageInner({
   }, [selectedEncounterTimes, setEncounterBounds, setTimestamp, syncEnabled]);
   
   return (
-    <>
+    <InstanceKeybindProvider>
       <InstancePageView
         instance={instance}
         selectedEncounterIds={selectedEncounterIds}
@@ -371,7 +372,7 @@ function InstancePageInner({
           onEncounterChange={(id) => onSelectEncounters([id])}
         />
       )}
-    </>
+    </InstanceKeybindProvider>
   );
 }
 

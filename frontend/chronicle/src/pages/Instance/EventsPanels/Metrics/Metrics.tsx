@@ -136,6 +136,7 @@ export function createMetricsPanel(): PanelDefinition<MetricsResult, any> {
     ...metricsProcessor,
     label: "Metrics",
     icon: <Activity className="h-4 w-4" />,
+    keybinds: [],
     selfManagesAggregation: true,
     render: () => <MetricsContent />,
   };

@@ -12,6 +12,7 @@ export function createHealerCastsPanel(): PanelDefinition<HealerCastsResult, Hea
     ...healerCastsProcessor,
     label: "Healer Casts",
     icon: <HeartPulse className="h-4 w-4" />,
+    keybinds: [],
     syncDataMode: "full",
     underConstruction: true,
     render: (props: PanelRenderProps<HealerCastsResult>) => <HealerCastsContent {...props} />,

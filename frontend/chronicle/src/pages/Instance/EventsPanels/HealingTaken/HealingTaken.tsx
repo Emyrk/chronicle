@@ -52,6 +52,7 @@ export function createHealingTakenPanel(
     id: "healing_taken", // Override processor id to match registry key
     label: config.label,
     icon: config.icon,
+    keybinds: [{ keys: "Esc", action: "Return from a focused player to the player list" }],
     supportsPerSecond: true,
     supportsFiltering: true,
     groupingOptions: [

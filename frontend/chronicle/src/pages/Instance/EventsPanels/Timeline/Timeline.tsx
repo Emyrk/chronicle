@@ -47,6 +47,7 @@ export function createTimelinePanel(): PanelDefinition<TimelineResult> {
     ...timelineProcessor,
     label: "Line Chart",
     icon: <TrendingUp className="h-4 w-4" />,
+    keybinds: [],
     supportsPerSecond: false,
     supportsFiltering: false, // filters are per-series on card back
 
@@ -116,6 +117,7 @@ const TIMELINE_DURABILITY_PANEL: PanelDefinition<StatusResult, StatusProcessorEv
   ...statusProcessor,
   label: "Raid Durability Background",
   icon: null,
+  keybinds: [],
   syncDataMode: "full",
   render: () => null,
 };

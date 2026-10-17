@@ -16,6 +16,7 @@ export function createDispelLogPanel(): PanelDefinition<DispelResult, any> {
     id: "dispel_log",
     label: "Dispel Log",
     icon: <ScrollText className="h-4 w-4" />,
+    keybinds: [],
     checkboxLabel: "Encounter offset",
     groupingOptions: ENTITY_GROUPING_OPTIONS,
     petOptions: PET_MODE_OPTIONS,

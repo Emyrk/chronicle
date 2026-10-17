@@ -60,6 +60,7 @@ const ROTATION_TIMELINE_PANEL: PanelDefinition<RotationTimelineResult, RotationT
   ...rotationTimelineProcessor,
   label: "Player Timeline",
   icon: null,
+  keybinds: "dynamic",
   syncDataMode: "full",
   render: () => null,
 };

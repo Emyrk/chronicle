@@ -9,6 +9,7 @@ import type { ProcessorContext, ProcessorEvent, ProcessorPagination } from "./pr
 import type { ReusableDamage } from "@/api/protodecode/decode";
 import type { PanelFilter } from "./processors/filters";
 import type { GroupingOption } from "./processors/resolveEntity";
+import type { InstanceKeybind } from "../InstanceKeybinds";
 export type { GroupingOption };
 
 /**
@@ -78,6 +79,13 @@ export interface PanelDefinition<TResult, TEvent extends ProcessorEvent = Proces
   
   /** Icon component */
   icon: React.ReactNode;
+
+  /**
+   * Shortcuts owned by this panel. Use `"dynamic"` when the rendered panel
+   * reports configurable or state-dependent bindings with
+   * useRegisterInstanceKeybinds(). Every panel must make this choice explicitly.
+   */
+  keybinds: readonly InstanceKeybind[] | "dynamic";
   
   /** Which streams this panel needs */
   streams: StreamType[];

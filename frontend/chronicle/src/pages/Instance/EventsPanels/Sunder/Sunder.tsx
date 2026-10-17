@@ -68,6 +68,7 @@ export function createSunderPanel(): PanelDefinition<SunderResult, any> {
     ...sunderProcessor,
     label: "Sunder Armor",
     icon: <Sword className="h-4 w-4" />,
+    keybinds: [],
     supportsPerSecond: false,
     checkboxLabel: "Show targets",
     

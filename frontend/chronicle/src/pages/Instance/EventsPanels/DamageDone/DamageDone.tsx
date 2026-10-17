@@ -104,6 +104,7 @@ export function createDamageDonePanel(
     ...config.processor,
     label: config.label,
     icon: config.icon,
+    keybinds: [{ keys: "Esc", action: "Return from a focused player to the player list" }],
     supportsPerSecond: true,
     supportsFiltering: true,
     fixedFilters,

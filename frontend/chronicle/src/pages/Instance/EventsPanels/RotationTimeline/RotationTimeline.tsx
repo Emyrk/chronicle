@@ -43,6 +43,7 @@ import {
 import { IndicatorLine } from "./IndicatorLine";
 import { KeybindsButton } from "./KeybindsButton";
 import { TIMELINE_KEYBINDS, type Keybind } from "./keybinds";
+import { useRegisterInstanceKeybinds } from "../../InstanceKeybinds";
 import { COOLDOWN_COLORS, LABEL_WIDTH, laneLayout, type LaneLayout } from "./laneLayout";
 import { clusterRailEvents, MAX_STACKED_ICONS, type RailCluster, type RailEvent } from "./railClusters";
 import { RotationOverview } from "./RotationOverview";
@@ -151,6 +152,8 @@ function SlotBadge({ slot }: { slot: number }) {
   );
 }
 
+const NO_EXTRA_KEYBINDS: readonly Keybind[] = [];
+
 export function RotationTimeline({
   players,
   view,
@@ -161,10 +164,15 @@ export function RotationTimeline({
   headerStart,
   showOverview = true,
   idleThresholdMs = DEFAULT_IDLE_THRESHOLD_MS,
-  extraKeybinds = [],
+  extraKeybinds = NO_EXTRA_KEYBINDS,
   swingHandKnown = false,
   children,
 }: RotationTimelineProps) {
+  const reportedKeybinds = useMemo(
+    () => [...TIMELINE_KEYBINDS, ...extraKeybinds],
+    [extraKeybinds],
+  );
+  useRegisterInstanceKeybinds("player-timeline", "Player timeline", reportedKeybinds);
   const [trackRef, trackWidth, trackEl] = useElementWidth<HTMLDivElement>();
   const rootRef = useRef<HTMLDivElement>(null);
   // Latest values for the native wheel listener below.
@@ -417,7 +425,7 @@ export function RotationTimeline({
           ))}
         </div>
         <span data-help="keybinds" className="flex">
-          <KeybindsButton keybinds={[...TIMELINE_KEYBINDS, ...extraKeybinds]} />
+          <KeybindsButton keybinds={reportedKeybinds} />
         </span>
       </div>
 

@@ -333,6 +333,7 @@ export function createVehiclePanel(): PanelDefinition<VehicleResult, any> {
     ...vehicleProcessor,
     label: "Vehicles",
     icon: <CarFront className="h-4 w-4" />,
+    keybinds: [],
     syncDataMode: "full",
     render: (props: PanelRenderProps<VehicleResult>) => <VehiclePanelContent {...props} />,
   };

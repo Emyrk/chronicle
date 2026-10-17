@@ -14,6 +14,7 @@ export function createResistsPanel(): PanelDefinition<ResistsResult, DamageProce
     ...resistsProcessor,
     label: "Resists",
     icon: <ShieldAlert className="h-4 w-4" />,
+    keybinds: [{ keys: "Esc", action: "Return from a focused player to the player list" }],
     supportsPerSecond: false,
     underConstruction: true,
     supportsFiltering: true,

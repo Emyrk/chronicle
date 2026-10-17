@@ -35,6 +35,7 @@ import type { PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/Pl
 import { useChartDataActions } from "./ChartDataRegistry";
 import { openPanelPopup, syncPopupAppearance, type PanelPopup } from "./panelPopup";
 import { hasRequiredPanelCapabilities } from "./panelAvailability";
+import { useRegisterInstanceKeybinds, type InstanceKeybind } from "../InstanceKeybinds";
 
 import { isCustomPanelRef, type CustomPanelRef } from "./custom/pluginTypes";
 
@@ -93,6 +94,8 @@ import { createCompanionStatsPanel } from "./CompanionStats/CompanionStats";
 import { createPullsAndCleanupPanel } from "./PullsAndCleanup/PullsAndCleanup";
 // TODO: Avoidance panel requires spell school data which isn't available yet
 // import { createAvoidancePanel } from "./Avoidance/Avoidance";
+
+const NO_KEYBINDS: readonly InstanceKeybind[] = [];
 
 // Registry of all available panels
 // Using `any` here to allow different result types per panel.
@@ -461,6 +464,11 @@ function BuiltinEventsPanel({
       defaultFilters: [...existing],
     };
   }, [rawPanel]);
+  useRegisterInstanceKeybinds(
+    `panel:${panelId ?? panelIndex}`,
+    panel.label,
+    panel.keybinds === "dynamic" ? NO_KEYBINDS : panel.keybinds,
+  );
   const panelAvailable = hasRequiredPanelCapabilities(
     panel,
     context.instance.capabilities ?? [],

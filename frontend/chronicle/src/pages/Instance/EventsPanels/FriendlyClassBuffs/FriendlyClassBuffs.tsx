@@ -12,6 +12,7 @@ export function createFriendlyClassBuffsPanel(): PanelDefinition<FriendlyClassBu
     ...friendlyClassBuffsProcessor,
     label: "Friendly Class Buffs",
     icon: <ShieldCheck className="h-4 w-4" />,
+    keybinds: [],
     underConstruction: true,
     syncDataMode: "full",
     renderOnlyOptionTokens: ["v:", "c:"],

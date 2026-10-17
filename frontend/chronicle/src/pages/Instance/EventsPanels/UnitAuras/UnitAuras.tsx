@@ -9,6 +9,7 @@ export function createUnitAurasPanel(): PanelDefinition<UnitAurasResult, any> {
     ...unitAurasProcessor,
     label: "Unit Auras",
     icon: <ScanSearch className="h-4 w-4" />,
+    keybinds: [],
     syncDataMode: "full",
     supportsPerSecond: true,
     checkboxLabel: "Detailed",

@@ -15,6 +15,7 @@ const ACTUAL_RAID_HEALTH_PANEL: PanelDefinition<ActualRaidHealthResult, UnitReso
   ...actualRaidHealthProcessor,
   label: "Actual Raid Durability",
   icon: null,
+  keybinds: [],
   syncDataMode: "full",
   render: () => null,
 };

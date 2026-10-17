@@ -29,6 +29,7 @@ export function createUnitLookupPanel(): PanelDefinition<UnitLookupResult, any> 
     ...unitLookupProcessor,
     label: "Unit Lookup",
     icon: <Search className="h-4 w-4" />,
+    keybinds: [],
     supportsPerSecond: false,
 
     render: (props: PanelRenderProps<UnitLookupResult>) => (

@@ -26,6 +26,7 @@ export function createRolesPanel(): PanelDefinition<any, any> {
     id: "roles",
     label: "Roles",
     icon: <Users className="h-4 w-4" />,
+    keybinds: [],
     selfManagesAggregation: true,
     syncDataMode: "full",
     

@@ -134,6 +134,7 @@ export function createJudgementPanel(): PanelDefinition<JudgementResult, any> {
     ...judgementProcessor,
     label: "Judgement",
     icon: <Scale className="h-4 w-4" />,
+    keybinds: [],
     supportsPerSecond: false,
 
     render: (props: PanelRenderProps<JudgementResult>) => {
@@ -174,6 +175,7 @@ const healingPanel = {
   id: "healing_done",  // Override to match registry key
   label: "Healing",
   icon: null,
+  keybinds: [],
   render: () => null,
 };
 

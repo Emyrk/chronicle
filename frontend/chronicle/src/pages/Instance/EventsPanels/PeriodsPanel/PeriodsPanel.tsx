@@ -267,6 +267,7 @@ export const PeriodsPanel: PanelDefinition<PeriodsState, any> = {
   processEvent: () => {},  // No-op
   label: "Periods",
   icon: <Clock className="h-4 w-4" />,
+  keybinds: [],
   selfManagesAggregation: true,  // Don't use worker - data from context
   render: (props: PanelRenderProps<PeriodsState>) => <PeriodsTimeline context={props.context} />,
 };

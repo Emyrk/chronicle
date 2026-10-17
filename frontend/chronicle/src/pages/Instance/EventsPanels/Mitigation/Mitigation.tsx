@@ -19,6 +19,7 @@ export function createMitigationPanel(): PanelDefinition<MitigationResult, Damag
     ...mitigationProcessor,
     label: "Mitigation",
     icon: <ShieldCheck className="h-4 w-4" />,
+    keybinds: [],
     
     render: (props: PanelRenderProps<MitigationResult>) => {
       return <MitigationContent {...props} />;

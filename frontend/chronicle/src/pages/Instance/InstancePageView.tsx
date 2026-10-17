@@ -96,6 +96,7 @@ import {
   type PresetLayout,
 } from "./presetLayouts";
 import { openLayoutPopup, syncPopupAppearance, type LayoutPopup } from "./EventsPanels/panelPopup";
+import { InstanceKeybindProvider, useRegisterInstanceKeybinds } from "./InstanceKeybinds";
 
 // ============================================================================
 // Encounter selector localStorage helpers (7-day expiry)
@@ -2080,7 +2081,25 @@ export interface InstancePageViewProps {
   supportsOverview?: boolean;
 }
 
-export function InstancePageView({
+const INSTANCE_PAGE_KEYBINDS = [
+  { keys: "0–9", action: "Apply the layout assigned to that action bar slot" },
+  { keys: "Shift + F", action: "Toggle focus mode" },
+  { keys: "Ctrl/Cmd + Shift + F", action: "Toggle focus mode with browser fullscreen" },
+  { keys: "Esc", action: "Leave focus mode when no dialog or menu is open" },
+  { keys: "Shift + click panel", action: "Edit that panel's options" },
+  { keys: "Click metric row", action: "Open its breakout" },
+  { keys: "Ctrl/Cmd + click metric row", action: "Open its actions menu" },
+] as const;
+
+export function InstancePageView(props: InstancePageViewProps) {
+  return (
+    <InstanceKeybindProvider>
+      <InstancePageViewContent {...props} />
+    </InstanceKeybindProvider>
+  );
+}
+
+function InstancePageViewContent({
   instance,
   selectedEncounterIds: _selectedEncounterIds,
   onSelectEncounters,
@@ -2093,6 +2112,7 @@ export function InstancePageView({
   suppressActionBar,
   supportsOverview = false,
 }: InstancePageViewProps) {
+  useRegisterInstanceKeybinds("instance-page", "Instance page", INSTANCE_PAGE_KEYBINDS);
   const timeRange = useTimeRangeContextOptional();
 
   const instanceTimeParsesQuery = useInstanceTimeParses(instance.id);

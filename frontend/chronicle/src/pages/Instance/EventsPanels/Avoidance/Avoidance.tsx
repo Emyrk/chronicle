@@ -16,6 +16,7 @@ export function createAvoidancePanel(): PanelDefinition<AvoidanceResult, DamageP
     ...avoidanceProcessor,
     label: "Physical Avoidance",
     icon: <BicepsFlexed className="h-4 w-4" />,
+    keybinds: [],
     
     render: (props: PanelRenderProps<AvoidanceResult>) => {
       return <AvoidanceContent {...props} />;

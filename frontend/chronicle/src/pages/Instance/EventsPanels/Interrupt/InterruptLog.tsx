@@ -16,6 +16,7 @@ export function createInterruptLogPanel(): PanelDefinition<InterruptResult, any>
     id: "interrupt_log",
     label: "Interrupt Log",
     icon: <ScrollText className="h-4 w-4" />,
+    keybinds: [],
     checkboxLabel: "Encounter offset",
     groupingOptions: ENTITY_GROUPING_OPTIONS,
     petOptions: PET_MODE_OPTIONS,

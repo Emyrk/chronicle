@@ -17,6 +17,7 @@ export function createConsumablesPanel(): PanelDefinition<ConsumablesResult, any
     ...consumablesProcessor,
     label: "Consumables Log",
     icon: <FlaskConical className="h-4 w-4" />,
+    keybinds: [],
     checkboxLabel: "Encounter offset",
     supportsFiltering: true,
     // Timing badges only change which completed uses are rendered.

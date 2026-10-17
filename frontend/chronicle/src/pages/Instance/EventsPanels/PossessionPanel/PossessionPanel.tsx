@@ -217,6 +217,7 @@ export function createPossessionPanel(): PanelDefinition<PossessionResult, any> 
     ...possessionProcessor,
     label: "Possession",
     icon: <Brain className="h-4 w-4" />,
+    keybinds: [],
     render: (props: PanelRenderProps<PossessionResult>) => <PossessionTimeline {...props} />,
   };
 }

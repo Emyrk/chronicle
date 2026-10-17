@@ -18,6 +18,7 @@ export function createEmptyPanel(): PanelDefinition<EmptyResult, any> {
     ...emptyProcessor,
     label: "Empty",
     icon: <Square className="h-4 w-4" />,
+    keybinds: [],
     supportsPerSecond: false,
     
     render: (props: PanelRenderProps<EmptyResult>) => {
