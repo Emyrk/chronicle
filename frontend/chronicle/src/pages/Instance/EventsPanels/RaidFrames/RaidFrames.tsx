@@ -1,10 +1,12 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view helpers intentionally share this module. */
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { RadioTower, Users } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { parseSelectedUnits } from "../UnitAuras/unitSelection";
+import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
+import { PlayerDetail } from "./PlayerDetail";
 import { useUnitInspect } from "../UnitInspectContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import {
@@ -21,24 +23,7 @@ import {
   type RaidFramesProcessorEvent,
   type RaidFramesResult,
 } from "./raidFrames.processor";
-
-const POWER_COLORS: Record<string, string> = {
-  mana: "#3187e8",
-  rage: "#d94a4a",
-  energy: "#e8c83a",
-  focus: "#e88731",
-  runicpower: "#32c8d9",
-  lunar: "#62a7ff",
-  insanity: "#8f57d9",
-  maelstrom: "#315bd9",
-  fury: "#b23bd9",
-  pain: "#d98b31",
-};
-
-function percent(current: number, maximum: number): number {
-  if (maximum <= 0) return 0;
-  return Math.min(100, Math.max(0, (current / maximum) * 100));
-}
+import { INCOMING_HEAL_WINDOW_MS, POWER_COLORS, percent, useDisplayTimestamp } from "./raidFrameShared";
 
 export function selectRaidFramesEncounter(
   encounters: ReadonlyMap<string, RaidFramesEncounter>,
@@ -80,41 +65,13 @@ function PanelMessage({ title, detail }: { title: string; detail: string }) {
   );
 }
 
-// Sync playback only advances the timestamp every ~100ms, so extrapolate
-// between ticks to keep cast bars moving smoothly.
-const MAX_EXTRAPOLATION_MS = 500;
-
-function useInterpolatedTimestamp(timestampMs: number, playing: boolean, speed: number): number {
-  const [frame, setFrame] = useState<{ baseMs: number; valueMs: number } | null>(null);
-
-  useEffect(() => {
-    if (!playing) return;
-    const anchoredAt = performance.now();
-    let handle = 0;
-    const tick = () => {
-      const advancedMs = Math.min(MAX_EXTRAPOLATION_MS, (performance.now() - anchoredAt) * speed);
-      setFrame({ baseMs: timestampMs, valueMs: timestampMs + advancedMs });
-      handle = requestAnimationFrame(tick);
-    };
-    handle = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(handle);
-  }, [timestampMs, playing, speed]);
-
-  return playing && frame?.baseMs === timestampMs ? frame.valueMs : timestampMs;
-}
-
 function CastBar({ cast, timestampMs }: { cast: RaidFrameCast | null; timestampMs: number }) {
   if (!cast) return <div className="h-3 bg-background/40" />;
   return <ActiveCastBar cast={cast} timestampMs={timestampMs} />;
 }
 
 function ActiveCastBar({ cast, timestampMs }: { cast: RaidFrameCast; timestampMs: number }) {
-  const sync = useSyncModeContextOptional();
-  const displayMs = useInterpolatedTimestamp(
-    timestampMs,
-    Boolean(sync?.enabled && sync.isPlaying),
-    sync?.playbackSpeed ?? 1,
-  );
+  const displayMs = useDisplayTimestamp(timestampMs);
   const durationMs = Math.max(1, cast.endMs - cast.startMs);
   const elapsed = Math.min(durationMs, Math.max(0, displayMs - cast.startMs));
   const progress = percent(elapsed, durationMs);
@@ -145,8 +102,6 @@ function ResourceBar({ sample }: { sample: RaidFrameResourceSample | null }) {
   );
 }
 
-const INCOMING_HEAL_WINDOW_MS = 1_500;
-
 // Light green segments after the health (and absorb) fill for heals landing
 // within the window; each fades in as its landing time approaches. Details
 // live in the frame tooltip, which highlights the hovered segment's heal.
@@ -163,12 +118,7 @@ function IncomingHeals({
   timestampMs: number;
   onHoverHeal: (heal: RaidFrameHeal | null) => void;
 }) {
-  const sync = useSyncModeContextOptional();
-  const displayMs = useInterpolatedTimestamp(
-    timestampMs,
-    Boolean(sync?.enabled && sync.isPlaying),
-    sync?.playbackSpeed ?? 1,
-  );
+  const displayMs = useDisplayTimestamp(timestampMs);
 
   const segments: ReactNode[] = [];
   let left = startPercent;
@@ -238,12 +188,7 @@ function RaidFrameTooltip({
   /** Health and power as nameplate bars with their values on them, instead of rows. */
   nameplate?: boolean;
 }) {
-  const sync = useSyncModeContextOptional();
-  const displayMs = useInterpolatedTimestamp(
-    timestampMs,
-    Boolean(sync?.enabled && sync.isPlaying),
-    sync?.playbackSpeed ?? 1,
-  );
+  const displayMs = useDisplayTimestamp(timestampMs);
   const pending = dead ? [] : incomingHeals.filter((heal) => heal.landMs > displayMs);
   const powerType = sample?.powerType ?? "";
   const powerLabel = powerType ? `${powerType.charAt(0).toUpperCase()}${powerType.slice(1)}` : "Resource";
@@ -345,6 +290,8 @@ function RaidFrame({
   spellNames,
   timestampMs,
   showValues,
+  selected = false,
+  onClick,
 }: {
   name: string;
   className: string;
@@ -354,6 +301,9 @@ function RaidFrame({
   spellNames: ReadonlyMap<number, string>;
   timestampMs: number;
   showValues: boolean;
+  /** This frame's player has a breakout open. */
+  selected?: boolean;
+  onClick?: (target: HTMLElement) => void;
 }) {
   const [hoveredHeal, setHoveredHeal] = useState<RaidFrameHeal | null>(null);
   const healthWidth = sample ? percent(sample.currentHealth, sample.maximumHealth) : 0;
@@ -372,7 +322,9 @@ function RaidFrame({
     <Tooltip>
       <TooltipTrigger asChild>
         <div
-          className={`min-w-0 overflow-hidden rounded-sm border border-border/60 bg-muted/30 ${dead ? "opacity-50 grayscale" : ""}`}
+          className={`min-w-0 overflow-hidden rounded-sm border border-border/60 bg-muted/30 ${dead ? "opacity-50 grayscale" : ""} ${onClick ? "cursor-pointer hover:border-foreground/40" : ""} ${selected ? "ring-2 ring-inset" : ""}`}
+          style={selected ? { "--tw-ring-color": classColor } as CSSProperties : undefined}
+          onClick={onClick && ((event) => onClick(event.currentTarget))}
         >
           <CastBar cast={cast} timestampMs={timestampMs} />
           <div className="relative h-8 overflow-hidden">
@@ -529,12 +481,7 @@ function OverlayRaidFrame({
 
 // A thin amber progress line while casting (channels drain), under the health bar.
 function OverlayCastLine({ cast, timestampMs }: { cast: RaidFrameCast; timestampMs: number }) {
-  const sync = useSyncModeContextOptional();
-  const displayMs = useInterpolatedTimestamp(
-    timestampMs,
-    Boolean(sync?.enabled && sync.isPlaying),
-    sync?.playbackSpeed ?? 1,
-  );
+  const displayMs = useDisplayTimestamp(timestampMs);
   const durationMs = Math.max(1, cast.endMs - cast.startMs);
   const progress = percent(Math.min(durationMs, Math.max(0, displayMs - cast.startMs)), durationMs);
   return (
@@ -583,12 +530,7 @@ function InspectFrame({
 }
 
 function InspectCastBar({ cast, timestampMs }: { cast: RaidFrameCast; timestampMs: number }) {
-  const sync = useSyncModeContextOptional();
-  const displayMs = useInterpolatedTimestamp(
-    timestampMs,
-    Boolean(sync?.enabled && sync.isPlaying),
-    sync?.playbackSpeed ?? 1,
-  );
+  const displayMs = useDisplayTimestamp(timestampMs);
   const durationMs = Math.max(1, cast.endMs - cast.startMs);
   const progress = percent(Math.min(durationMs, Math.max(0, displayMs - cast.startMs)), durationMs);
   return (
@@ -605,8 +547,17 @@ function InspectCastBar({ cast, timestampMs }: { cast: RaidFrameCast; timestampM
 /** Panel option token for enemy raid frames. */
 const ENEMIES_OPTION = "enemies";
 
+const BREAKOUT_WIDTH = 400;
+
+interface PlayerBreakout {
+  guid: string;
+  initialPosition: { x: number; y: number };
+}
+
 function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
   const sync = useSyncModeContextOptional();
+  // Clicked players' detail breakouts; several can be open at once.
+  const [breakouts, setBreakouts] = useState<PlayerBreakout[]>([]);
   const overlay = props.variant === "overlay";
   const capabilities = props.context.instance.capabilities ?? [];
   if (!capabilities.includes("unit-resources")) return overlay ? null : <UnsupportedMessage />;
@@ -712,6 +663,22 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
     );
   }
 
+  const toggleBreakout = (guid: string, target: HTMLElement) => {
+    const rect = target.getBoundingClientRect();
+    const view = target.ownerDocument.defaultView;
+    const x = Math.max(8, Math.min(rect.right + 8, (view?.innerWidth ?? 640) - BREAKOUT_WIDTH - 8));
+    const y = Math.max(8, Math.min(rect.top, (view?.innerHeight ?? 480) - 420));
+    setBreakouts((previous) => previous.some((breakout) => breakout.guid === guid)
+      ? previous.filter((breakout) => breakout.guid !== guid)
+      : [...previous, { guid, initialPosition: { x, y } }]);
+  };
+  const closeBreakout = (guid: string) => setBreakouts((previous) => previous.filter((breakout) => breakout.guid !== guid));
+  // Previous / next moves a breakout to another player, closing any other breakout already on them.
+  const moveBreakout = (from: string, to: string) => setBreakouts((previous) => previous
+    .filter((breakout) => breakout.guid !== to)
+    .map((breakout) => breakout.guid === from ? { ...breakout, guid: to } : breakout));
+  const playerOrder = frameData.flatMap((frame) => frame ? [frame.guid] : []);
+
   return (
     <div className="styled-scrollbar h-full min-h-0 overflow-auto p-1">
       <div className="grid min-w-max grid-flow-col grid-rows-[repeat(5,minmax(0,1fr))] auto-cols-[minmax(7.5rem,1fr)] gap-1">
@@ -729,10 +696,33 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
               spellNames={props.result.spellNames}
               timestampMs={timestampMs}
               showValues={props.checkboxChecked}
+              selected={breakouts.some((breakout) => breakout.guid === guid)}
+              onClick={enemiesMode ? undefined : (target) => toggleBreakout(guid, target)}
             />
           );
         })}
       </div>
+      {breakouts.map((breakout) => (
+        <FloatingIncomingEventsBreakout
+          key={breakout.guid}
+          initialPosition={breakout.initialPosition}
+          onClose={() => closeBreakout(breakout.guid)}
+        >
+          <TooltipProvider>
+            <PlayerDetail
+              guid={breakout.guid}
+              props={props}
+              encounter={encounter}
+              timestampMs={timestampMs}
+              sample={latestResourceAt(encounter.resourcesByUnit.get(breakout.guid) ?? [], timestampMs)}
+              cast={activeCastAt(encounter.castsByUnit.get(breakout.guid) ?? [], timestampMs)}
+              incomingHeals={incomingHealsAt(encounter.healsByUnit.get(breakout.guid) ?? [], timestampMs, INCOMING_HEAL_WINDOW_MS)}
+              playerOrder={playerOrder}
+              onSelect={(guid) => guid ? moveBreakout(breakout.guid, guid) : closeBreakout(breakout.guid)}
+            />
+          </TooltipProvider>
+        </FloatingIncomingEventsBreakout>
+      ))}
     </div>
   );
 }

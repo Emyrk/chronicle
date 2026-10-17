@@ -200,6 +200,7 @@ function CompactAuraTile({
   units,
   showUptime,
   dense = false,
+  large = false,
 }: {
   row: AuraRow;
   durationMs: number;
@@ -208,6 +209,8 @@ function CompactAuraTile({
   showUptime: boolean;
   /** Overlay size (map inspect cards): a small icon tile. */
   dense?: boolean;
+  /** With dense: a somewhat larger tile (raid frames' player detail). */
+  large?: boolean;
 }) {
   const percent = compactAuraPercent(row.totalUptimeMs, durationMs);
   const colors = compactAuraColors(percent);
@@ -242,7 +245,7 @@ function CompactAuraTile({
     <div
       className={cn(
         "group pointer-events-auto relative shrink-0 transition-transform hover:z-10 hover:scale-105",
-        dense ? "size-5 rounded-[4px] p-px" : "size-12 rounded-[10px] p-[3px]",
+        dense ? cn(large ? "size-7" : "size-5", "rounded-[4px] p-px") : "size-12 rounded-[10px] p-[3px]",
         !showUptime && row.replayState === "active" && "animate-replay-pop",
       )}
       style={{
@@ -265,7 +268,7 @@ function CompactAuraTile({
         <SpellIdTooltip
           spellId={row.spellId}
           name={row.spellName}
-          size={dense ? 18 : 40}
+          size={dense ? (large ? 26 : 18) : 40}
           tooltipFooter={tooltipFooter}
           className={cn(
             "relative z-10 flex size-full items-center justify-center overflow-hidden text-[0px]",
@@ -278,14 +281,14 @@ function CompactAuraTile({
       {!row.isBuff && (
         <span
           aria-label="Debuff"
-          className={cn("absolute z-20 rounded-full border-card bg-rose-500 shadow-sm", dense ? "-left-px -top-px size-1.5" : "-left-1 -top-1 size-3 border-2")}
+          className={cn("absolute z-20 rounded-full border-card bg-rose-500 shadow-sm", dense ? cn("-left-px -top-px", large ? "size-2" : "size-1.5") : "-left-1 -top-1 size-3 border-2")}
         />
       )}
       {(showUptime || countdownMs !== null) && (
         <span
           className={cn(
             "absolute z-20 rounded-[3px] font-mono font-bold leading-none tabular-nums shadow-sm",
-            dense ? "-bottom-1 -right-1.5 px-px py-px text-[6px]" : "-bottom-1 -right-1 px-1 py-0.5 text-[9px]",
+            dense ? cn("-bottom-1 -right-1.5 px-px py-px", large ? "text-[8px]" : "text-[6px]") : "-bottom-1 -right-1 px-1 py-0.5 text-[9px]",
             showUptime ? "text-slate-950" : "bg-zinc-950/90 text-zinc-100",
           )}
           style={showUptime ? { backgroundColor: colors.badge } : undefined}
@@ -306,6 +309,7 @@ function CompactAuraGrid({
   units,
   showUptime,
   dense = false,
+  large = false,
   leading,
 }: {
   rows: AuraRow[];
@@ -314,6 +318,7 @@ function CompactAuraGrid({
   units: PanelRenderProps<UnitAurasResult>["context"]["instance"]["units"];
   showUptime: boolean;
   dense?: boolean;
+  large?: boolean;
   /** Drawn before the tiles, in the same wrapping row. */
   leading?: ReactNode;
 }) {
@@ -329,22 +334,26 @@ function CompactAuraGrid({
           units={units}
           showUptime={showUptime}
           dense={dense}
+          large={large}
         />
       ))}
     </div>
   );
 }
 
+/** Render-only panel option token: larger overlay icons. */
+export const LARGE_ICONS_OPTION = "lg";
+
 /** Share of a unit's fight a buff must cover to count as a whole-fight buff. */
 const WHOLE_FIGHT_UPTIME = 0.95;
 
 // Whole-fight buffs as one small "+N" tile; hovering lists them.
-function WholeFightBuffsTile({ rows }: { rows: AuraRow[] }) {
+function WholeFightBuffsTile({ rows, large = false }: { rows: AuraRow[]; large?: boolean }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <div
-          className="pointer-events-auto grid size-5 shrink-0 cursor-default place-items-center rounded-[4px] border border-emerald-400/60 bg-emerald-900/60 font-mono text-[9px] font-bold leading-none text-emerald-100"
+          className={cn("pointer-events-auto grid shrink-0 cursor-default place-items-center rounded-[4px] border border-emerald-400/60 bg-emerald-900/60 font-mono font-bold leading-none text-emerald-100", large ? "size-7 text-[11px]" : "size-5 text-[9px]")}
           aria-label={`${rows.length} whole-fight buffs`}
         >
           +{rows.length}
@@ -669,7 +678,9 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
   };
 
   if (props.variant === "overlay") {
-    // Embedded (map inspect cards): just each listed unit's auras as small icons.
+    // Embedded (map inspect cards): just each listed unit's auras as small
+    // icons, somewhat larger with the `lg` option.
+    const large = (panelOption ?? "").split(",").includes(LARGE_ICONS_OPTION);
     return (
       <div className="flex flex-col gap-1.5">
         {selectedGuids.map((guid) => {
@@ -693,7 +704,8 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
               units={context.instance.units}
               showUptime={showUptime}
               dense
-              leading={persistent.length > 0 ? <WholeFightBuffsTile rows={persistent} /> : undefined}
+              large={large}
+              leading={persistent.length > 0 ? <WholeFightBuffsTile rows={persistent} large={large} /> : undefined}
             />
           );
         })}

@@ -13,7 +13,7 @@ export function createUnitAurasPanel(): PanelDefinition<UnitAurasResult, any> {
     syncDataMode: "full",
     supportsPerSecond: true,
     checkboxLabel: "Detailed",
-    renderOnlyOptionTokens: ["u:", "q:"],
+    renderOnlyOptionTokens: ["u:", "q:", "lg"],
     render: (props: PanelRenderProps<UnitAurasResult>) => <UnitAurasContent {...props} />,
   };
 }

@@ -12,6 +12,7 @@ import {
   orderRaidFramePlayers,
   activeCastAt,
   incomingHealsAt,
+  recentInstantAt,
   latestResourceAt,
   raidFramesProcessor,
 } from "./raidFrames.processor";
@@ -162,6 +163,35 @@ describe("raidFramesProcessor", () => {
     expect(activeCastAt(casts, FIRST_TIMESTAMP.getTime() + 3_500)).toBeNull();
   });
 
+  it("records zero-cast-time spell_starts as instant casts, not lone spell_gos (procs)", () => {
+    const state = raidFramesProcessor.createState();
+    const ctx = context();
+    const at = (offset: number) => FIRST_TIMESTAMP.getTime() + offset;
+    const renew = { id: 6077, name: "Renew" };
+    const process = (event: SpellStartProcessorEvent | SpellGoProcessorEvent | SpellFailProcessorEvent) =>
+      raidFramesProcessor.processEvent(state, event, ENCOUNTER, FIRST_TIMESTAMP, event.type, ctx);
+
+    // A timed cast finishing a little late still ends that cast.
+    process(spellStart());
+    process(spellGo({ offsetMilli: 2_700 }));
+    // A proc: spell_go with no spell_start.
+    process(spellGo({ offsetMilli: 3_000, spell: { id: 12536, name: "Clearcasting" } }));
+    // An instant: spell_start with no cast time, then spell_go.
+    process(spellStart({ offsetMilli: 4_000, spell: renew, castTimeMilli: 0 }));
+    process(spellGo({ offsetMilli: 4_001, spell: renew }));
+    // An instant that failed.
+    process(spellStart({ offsetMilli: 6_000, spell: renew, castTimeMilli: 0 }));
+    process(spellFail({ offsetMilli: 6_001, spell: renew }));
+
+    const encounter = state.encounters.get(ENCOUNTER)!;
+    expect(encounter.castsByUnit.get(PLAYER)?.[0].endMs).toBe(at(2_700));
+    const instants = encounter.instantsByUnit.get(PLAYER) ?? [];
+    expect(instants).toEqual([{ atMs: at(4_000), spellId: 6077, spellName: "Renew" }]);
+    expect(recentInstantAt(instants, at(3_999), 1_000)).toBeNull();
+    expect(recentInstantAt(instants, at(4_500), 1_000)?.spellName).toBe("Renew");
+    expect(recentInstantAt(instants, at(5_000), 1_000)).toBeNull();
+  });
+
   it("finds player heals landing inside the incoming window", () => {
     const state = raidFramesProcessor.createState();
     const ctx = context();
@@ -220,7 +250,8 @@ describe("enemyFrameUnits", () => {
   it("lists non-player, non-pet units with health, bosses first then by maximum health", () => {
     const sample = (maximumHealth: number) => ({ timestampMs: 0, currentHealth: maximumHealth, maximumHealth, absorb: 0, powerType: "mana", currentPower: 0, maximumPower: 0 });
     const encounter = {
-      encounterId: ENCOUNTER, startMs: 0, endMs: 0, castsByUnit: new Map(), healsByUnit: new Map(),
+      encounterId: ENCOUNTER, startMs: 0, endMs: 0, castsByUnit: new Map(),
+      instantsByUnit: new Map(), healsByUnit: new Map(),
       resourcesByUnit: new Map([
         [PLAYER, [sample(4_000)]],
         ["pet", [sample(1_000)]],
