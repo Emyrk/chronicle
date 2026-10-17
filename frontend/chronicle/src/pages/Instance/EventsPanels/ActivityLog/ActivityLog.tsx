@@ -167,7 +167,7 @@ function ActivityRow({
             {heal ? "+" : ""}{line.amount.toLocaleString()}
           </span>
           {heal && line.overheal > 0 && (
-            <span style={{ color: OVERHEAL_COLOR }}> ({line.overheal.toLocaleString()} oh)</span>
+            <span style={{ color: OVERHEAL_COLOR }}> ({line.overheal.toLocaleString()})</span>
           )}
         </span>
       );
