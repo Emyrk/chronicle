@@ -2,7 +2,7 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Crosshair, Focus, HeartPulse, Map as MapIcon, Maximize, Route, Users } from "lucide-react";
+import { BarChart3, Crosshair, Focus, HeartPulse, Map as MapIcon, Maximize, Route, Users } from "lucide-react";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { fetchMiniatureUrls } from "./bossMinis";
@@ -23,6 +23,8 @@ import { MapView2D, type MapViewRequest } from "./MapView2D";
 import { EmbeddedPanel } from "../EmbeddedPanel";
 import { createRaidFramesPanel } from "../RaidFrames/RaidFrames";
 import { MAP_CONTROL_KEYBINDS } from "./mapControls";
+import { MeterWindows } from "./MeterWindows";
+import { spawnMeterWindow, useMeterWindows } from "./meterWindowsState";
 import { useMapScene } from "./useMapScene";
 import { encounterJumps, mapPresentationForSelection } from "./wholeRun";
 
@@ -101,6 +103,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   const autoFit = ready?.autoFit ?? null;
   const defaultViewport = ready?.fitByDefault && autoFit ? autoFit : FULL_MAP_VIEWPORT;
   const [showRaidFrames, setShowRaidFrames] = useState(true);
+  const [meterWindows, setMeterWindows] = useMeterWindows();
   const [storedFraming, setFraming] = useState<MapFraming>(INITIAL_MAP_FRAMING);
   // A new selection or replay moving into another encounter re-frames;
   // loading states (e.g. reprocessing after a filter change) keep the framing.
@@ -180,6 +183,15 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
       )}
       <button
         type="button"
+        onClick={() => setMeterWindows((current) => [...current, spawnMeterWindow(current, props.context.instance.capabilities ?? [])])}
+        title="Open a meter window (Damage Done, Healing Done, …)"
+        className={framingButtonClass}
+      >
+        <BarChart3 className="h-3 w-3" />
+        Meter
+      </button>
+      <button
+        type="button"
         aria-pressed={showRaidFrames}
         onClick={() => setShowRaidFrames(!showRaidFrames)}
         title="Show every player's health and power"
@@ -250,6 +262,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
         <div className="pointer-events-none absolute left-2 top-2 z-30 max-w-[calc(100%-1rem)] overflow-hidden">
           <EmbeddedPanel panel={RAID_FRAMES_PANEL} context={props.context} durationMs={props.durationMs} enabled={showRaidFrames} />
         </div>
+        <MeterWindows windows={meterWindows} onChange={setMeterWindows} context={props.context} durationMs={props.durationMs} />
       </div>
       {jumps.length > 0 && scene.runStartMs !== null && (
         <div className="flex flex-col gap-1 px-1">

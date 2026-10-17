@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { PanelRenderProps } from "./types";
 import { formatNumber } from "@/lib/format";
 import { shouldShowInitialPanelState } from "./genericPanelState";
+import { usePanelVariant } from "./PanelVariantContext";
 
 export function GenericPanel<TResult>({
   loading,
@@ -11,6 +12,7 @@ export function GenericPanel<TResult>({
   totalEvents,
   processingTimeMs,
 }: PanelRenderProps<TResult> & { children: ReactNode }) {
+  const overlay = usePanelVariant() === "overlay";
   if (error) {
     return (
       <div className="h-full min-h-0 text-xs text-destructive flex items-center justify-center">
@@ -33,6 +35,18 @@ export function GenericPanel<TResult>({
     return (
       <div className="h-full min-h-0 text-xs text-muted-foreground flex items-center justify-center">
         Processing...
+      </div>
+    );
+  }
+
+  if (overlay) {
+    // Embedded as an overlay (a meter over the map): only the chart. Every
+    // panel's own toolbar (totals, toggles) is a sibling of its chart, so
+    // when there is a chart, children that neither are nor contain one are
+    // hidden. Without a chart the panel's own message shows.
+    return (
+      <div className="flex h-full min-h-0 flex-col overflow-hidden text-[11px] text-white/60 [&:has([data-player-metric-chart])>:not([data-player-metric-chart]):not(:has([data-player-metric-chart]))]:hidden">
+        {children}
       </div>
     );
   }
