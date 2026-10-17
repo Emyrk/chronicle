@@ -2,6 +2,7 @@ import { ExternalLink } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
 import type { KillTimeLeaderboardEntry } from "@/api/typesGenerated"
 import { RankingsLoadingState } from "./RankingsLoadingState"
+import { navigateWithModifiers } from "@/lib/navigation"
 
 const MEDAL_ICONS: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" }
 
@@ -95,11 +96,13 @@ export function KillTimeTable({ entries, loading = false }: KillTimeTableProps) 
                 className={`cursor-pointer border-b last:border-b-0 transition-colors hover:bg-muted/40 ${
                   i % 2 === 1 ? "bg-muted/20" : ""
                 }`}
-                onClick={() => navigate(`/instances/${entry.log_hashed_slug}`)}
+                onClick={(event) => {
+                  navigateWithModifiers(`/instances/${entry.log_hashed_slug}`, event, navigate)
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault()
-                    navigate(`/instances/${entry.log_hashed_slug}`)
+                    navigateWithModifiers(`/instances/${entry.log_hashed_slug}`, event, navigate)
                   }
                 }}
                 role="link"

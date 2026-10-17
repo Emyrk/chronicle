@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom"
 import type { RankingsEntry } from "@/api/typesGenerated"
 import { RankingsLoadingState } from "./RankingsLoadingState"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "./classDisplay"
+import { navigateWithModifiers } from "@/lib/navigation"
 
 const MEDAL_ICONS: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" }
 
@@ -118,11 +119,13 @@ export function RankingsTable({ entries, loading = false, metric = "dps" }: Rank
                 className={`cursor-pointer border-b last:border-b-0 transition-colors hover:bg-muted/40 ${
                   i % 2 === 1 ? "bg-muted/20" : ""
                 }`}
-                onClick={() => navigate(`/instances/${entry.log_hashed_slug}`)}
+                onClick={(event) => {
+                  navigateWithModifiers(`/instances/${entry.log_hashed_slug}`, event, navigate)
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault()
-                    navigate(`/instances/${entry.log_hashed_slug}`)
+                    navigateWithModifiers(`/instances/${entry.log_hashed_slug}`, event, navigate)
                   }
                 }}
                 role="link"
