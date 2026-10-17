@@ -24,6 +24,8 @@ const (
 	maxMessageBytes     = 64 << 10
 	joinReservationTTL  = 2 * time.Minute
 	unstartedRoomTTL    = 10 * time.Minute
+	heartbeatInterval   = 30 * time.Second
+	heartbeatTimeout    = 5 * time.Second
 	leaderID            = "leader"
 	writeTimeout        = 5 * time.Second
 )
