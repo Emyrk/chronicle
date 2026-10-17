@@ -5,16 +5,23 @@ import {
   statusWaveformBarOpacity,
   statusWaveformBarWidth,
   statusWaveformEvents,
+  statusWaveformEventsAround,
   statusWaveformPosition,
   statusWaveformScale,
+  statusWaveformTimestampAtPointer,
   statusWaveformScaleSummary,
 } from "./statusWaveform";
 
-function event(kind: StatusTimelineEvent["kind"], amount: number): StatusTimelineEvent {
+function event(
+  kind: StatusTimelineEvent["kind"],
+  amount: number,
+  timestampMilli = 0,
+  eventIndex = 0,
+): StatusTimelineEvent {
   return {
-    timestampMilli: 0,
-    offsetMilli: 0,
-    eventIndex: 0,
+    timestampMilli,
+    offsetMilli: timestampMilli,
+    eventIndex,
     kind,
     amount,
     spellId: null,
@@ -88,5 +95,23 @@ describe("Status signed waveform", () => {
     expect(statusWaveformPosition(50, 0, 100)).toBe(50);
     expect(statusWaveformPosition(100, 0, 100)).toBe(99.7);
     expect(statusWaveformPosition(200, 0, 100)).toBe(99.7);
+  });
+
+  it("maps pointer position into the timeline window", () => {
+    expect(statusWaveformTimestampAtPointer(0, 200, 10_000, 20_000)).toBe(10_000);
+    expect(statusWaveformTimestampAtPointer(100, 200, 10_000, 20_000)).toBe(20_000);
+    expect(statusWaveformTimestampAtPointer(250, 200, 10_000, 20_000)).toBe(30_000);
+  });
+
+  it("selects and orders health events within one second of the hover point", () => {
+    const events = statusWaveformEvents([
+      event("damage", 300, 8_999, 1),
+      event("heal", 500, 9_000, 2),
+      event("absorbed", 200, 10_500, 4),
+      event("damage", 700, 11_000, 3),
+      event("heal", 900, 11_001, 5),
+    ]);
+
+    expect(statusWaveformEventsAround(events, 10_000).map((item) => item.eventIndex)).toEqual([2, 4, 3]);
   });
 });

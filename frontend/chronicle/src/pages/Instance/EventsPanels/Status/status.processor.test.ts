@@ -4,6 +4,7 @@ import type {
   HealProcessorEvent,
   ProcessorContext,
   SpellStartProcessorEvent,
+  UnitResourcesProcessorEvent,
 } from "../processorTypes";
 import { statusProcessor } from "./status.processor";
 
@@ -64,6 +65,30 @@ function heal(overrides: Partial<HealProcessorEvent> = {}): HealProcessorEvent {
   };
 }
 
+function unitResources(overrides: Partial<UnitResourcesProcessorEvent> = {}): UnitResourcesProcessorEvent {
+  return {
+    type: "unit_resources",
+    index: 3,
+    offsetMilli: 2_500,
+    activity: [],
+    activityCount: 0,
+    isSynthetic: false,
+    unit: PLAYER,
+    currentHealth: 7_500,
+    maximumHealth: 10_000,
+    absorb: 0,
+    powerType: "rage",
+    currentPower: 0,
+    maximumPower: 100,
+    attackPower: 0,
+    spellPower: 0,
+    unitLevel: 60,
+    averageItemLevel: null,
+    armor: 0,
+    ...overrides,
+  };
+}
+
 function spellStart(overrides: Partial<SpellStartProcessorEvent> = {}): SpellStartProcessorEvent {
   return {
     type: "spell_start",
@@ -106,6 +131,29 @@ describe("statusProcessor", () => {
     expect(unit?.events.map((event) => event.kind)).toEqual(["damage", "heal", "cast_start"]);
     expect(unit?.events[1]).toMatchObject({ amount: 250, overheal: 50 });
     expect(unit?.events[2]).toMatchObject({ label: "Shield Slam", durationMilli: 1_500 });
+  });
+
+  it("adds exact health samples from unit resources", () => {
+    const state = statusProcessor.createState();
+    const firstTimestamp = new Date("2026-01-01T00:00:00Z");
+
+    statusProcessor.processEvent(
+      state,
+      unitResources(),
+      "encounter-1",
+      firstTimestamp,
+      "unit_resources",
+      context(),
+    );
+
+    expect(statusProcessor.streams).toContain("unit_resources");
+    expect(state.encounters.get("encounter-1")?.units.get(PLAYER)?.events).toContainEqual(
+      expect.objectContaining({
+        kind: "health",
+        currentHealth: 7_500,
+        maximumHealth: 10_000,
+      }),
+    );
   });
 
   it("keeps encounters independent", () => {

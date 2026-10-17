@@ -1,7 +1,12 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Activity, Crown, Heart, Minus, Plus, Shield, Skull } from "lucide-react";
+import { useSpell } from "@/api/queries";
+import { iconUrl } from "@/config/iconUrl";
+import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
+import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { RelativeHealthBar } from "@/components/ui/RelativeHealthBar/RelativeHealthBar";
 import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
 import {
@@ -15,6 +20,7 @@ import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { usePlayerLifeState } from "../usePlayerLifeState";
 import { useInferredRoles } from "../Roles/useInferredRoles";
 import type { StatusResult, StatusTimelineEvent, StatusUnitKind } from "./status.processor";
+import { statusIncomingHealthPreview } from "./statusIncomingHealth";
 import { parseStatusFocuses, STATUS_FOCUS_PREFIX, updateStatusFocuses } from "./statusFocus";
 import { sortStatusEnemySnapshots, statusEnemyRowOpacity } from "./statusEnemies";
 import {
@@ -32,6 +38,8 @@ import {
   statusWaveformBarWidth,
   statusWaveformEvents,
   statusWaveformPosition,
+  statusWaveformTimestampAtPointer,
+  statusWaveformEventsAround,
   statusWaveformScale,
   statusWaveformScaleSummary,
   type StatusWaveformEvent,
@@ -147,8 +155,31 @@ function ActivityLane({
     (transition) => transition.timestampMilli >= startMilli && transition.timestampMilli <= endMilli,
   );
 
+  const [hoverTimestampMilli, setHoverTimestampMilli] = useState<number | null>(null);
+  const hoverEvents = hoverTimestampMilli === null
+    ? []
+    : statusWaveformEventsAround(events, hoverTimestampMilli);
+  const hoverPercent = hoverTimestampMilli === null
+    ? null
+    : statusWaveformPosition(hoverTimestampMilli, startMilli, laneWindowMilli);
+
   return (
-    <div className="relative h-[22px] overflow-hidden rounded-[1px] bg-[rgba(255,255,255,0.022)]">
+    <Tooltip open={hoverTimestampMilli !== null}>
+      <TooltipTrigger asChild>
+        <div
+          className="relative h-[22px] cursor-crosshair overflow-hidden rounded-[1px] bg-[rgba(255,255,255,0.022)]"
+          onPointerMove={(pointerEvent) => {
+            const rect = pointerEvent.currentTarget.getBoundingClientRect();
+            setHoverTimestampMilli(statusWaveformTimestampAtPointer(
+              pointerEvent.clientX - rect.left,
+              rect.width,
+              startMilli,
+              laneWindowMilli,
+            ));
+          }}
+          onPointerLeave={() => setHoverTimestampMilli(null)}
+          data-status-activity-lane
+        >
       {lifeStateSpans.map((span, index) => {
         const left = statusWaveformPosition(span.startMilli, startMilli, laneWindowMilli);
         const right = statusWaveformPosition(span.endMilli, startMilli, laneWindowMilli);
@@ -193,6 +224,13 @@ function ActivityLane({
           />
         );
       })}
+      {hoverPercent !== null && (
+        <span
+          className="pointer-events-none absolute inset-y-0 z-40 w-px bg-cyan-100/90 shadow-[0_0_4px_rgba(207,250,254,.75)]"
+          style={{ left: `${hoverPercent}%` }}
+          data-status-hover-cursor
+        />
+      )}
       {visibleTransitions.map((transition) => (
         <span
           key={`${transition.eventIndex}:${transition.timestampMilli}:${transition.alive ? "revived" : "death"}`}
@@ -208,29 +246,177 @@ function ActivityLane({
           title={transition.alive ? "Revived" : "Died"}
         />
       ))}
+        </div>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        sideOffset={4}
+        className="pointer-events-none w-72 animate-none p-0 data-[state=closed]:animate-none"
+      >
+        <StatusEventTooltipBody
+          title="Nearby"
+          meta={hoverTimestampMilli !== null
+            ? formatSignedSeconds(hoverTimestampMilli - cursorMilli)
+            : null}
+          events={hoverEvents}
+          relativeToMilli={hoverTimestampMilli ?? cursorMilli}
+          emptyLabel="No health events near this point."
+        />
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function formatSignedSeconds(milli: number): string {
+  const seconds = milli / 1000;
+  return `${seconds >= 0 ? "+" : "−"}${Math.abs(seconds).toFixed(1)}s`;
+}
+
+const STATUS_TOOLTIP_EVENT_STYLE = {
+  damage: { sign: "−", edge: "border-red-400/70", text: "text-red-200" },
+  heal: { sign: "+", edge: "border-green-400/70", text: "text-green-200" },
+  absorbed: { sign: "◇", edge: "border-sky-400/70", text: "text-sky-200" },
+} as const;
+
+function StatusEventTooltipBody({
+  title,
+  meta,
+  events,
+  relativeToMilli,
+  emptyLabel,
+}: {
+  title: string;
+  meta: ReactNode;
+  events: readonly StatusTimelineEvent[];
+  relativeToMilli: number;
+  emptyLabel: string;
+}) {
+  return (
+    <div className="text-2xs">
+      <div className="flex items-center justify-between gap-2 border-b border-white/10 px-2 py-1 text-[9px] uppercase tracking-wide text-muted-foreground">
+        <span>
+          {title}
+          {events.length > 0 ? <span className="ml-1 text-muted-foreground/60">{events.length}</span> : null}
+        </span>
+        <span className="font-mono normal-case tracking-normal tabular-nums text-cyan-100">{meta}</span>
+      </div>
+      {events.length === 0 ? (
+        <div className="px-2 py-1 text-muted-foreground">{emptyLabel}</div>
+      ) : (
+        <div className="styled-scrollbar max-h-48 overflow-y-auto py-0.5">
+          {events.map((event) => {
+            const style = STATUS_TOOLTIP_EVENT_STYLE[event.kind as keyof typeof STATUS_TOOLTIP_EVENT_STYLE]
+              ?? STATUS_TOOLTIP_EVENT_STYLE.absorbed;
+            const overheal = event.kind === "heal" ? Math.min(event.amount, event.overheal ?? 0) : 0;
+            return (
+              <div
+                key={`${event.eventIndex}:${event.timestampMilli}:${event.kind}`}
+                className={cn(
+                  "grid grid-cols-[2.25rem_10px_minmax(0,1fr)_auto] items-center gap-x-1.5 border-l-2 px-1.5 leading-4 hover:bg-white/5",
+                  style.edge,
+                )}
+              >
+                <span className="text-right font-mono text-[9px] tabular-nums text-muted-foreground">
+                  {formatSignedSeconds(event.timestampMilli - relativeToMilli)}
+                </span>
+                <StatusEventSpellIcon spellId={event.spellId} />
+                <span className="min-w-0 truncate">
+                  <span className={cn("font-medium", style.text)}>{event.label}</span>
+                  <span className="ml-1 text-[9px] text-muted-foreground/70">{event.sourceName || "Unknown"}</span>
+                </span>
+                <span className="font-mono tabular-nums text-foreground">
+                  {style.sign}{formatNumber(event.amount - overheal)}
+                  {overheal > 0 ? (
+                    <span className="ml-0.5 text-[9px] text-muted-foreground/60">({formatNumber(overheal)})</span>
+                  ) : null}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
-function RelativeChange({ snapshot, density }: { snapshot: StatusUnitSnapshot; density: StatusDensity }) {
+function StatusEventSpellIcon({ spellId }: { spellId: number | null }) {
+  const datasetId = useDatasetId();
+  const iconBaseUrl = useIconBaseUrl();
+  const { data: spell } = useSpell(spellId?.toString() ?? "", datasetId, {
+    enabled: spellId != null && spellId > 0,
+  });
+
+  if (spell) {
+    return <SpellIconWithTooltip spell={spell} size={10} showTooltip={false} className="size-2.5 rounded-[1px]" />;
+  }
+
   return (
-    <div className="relative">
-      <RelativeHealthBar
-        messages={snapshot.relativeHealthMessages}
-        state={snapshot.relativeHealthState}
-        bounds={snapshot.relativeHealthBounds}
-        zeroPercent={68}
-        className={cn("[&>div:last-child]:hidden", density === 0 ? "[&>div:first-child]:h-4" : density === 1 ? "[&>div:first-child]:h-5" : "[&>div:first-child]:h-6")}
-      />
-      {snapshot.dead ? (
-        <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center gap-1 text-[9px] text-red-300">
-          <Skull className="h-3 w-3" /> dead
-        </span>
-      ) : null}
-      <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center font-mono text-[9px] text-foreground/80">
-        {formatDelta(snapshot.netChange)}
-      </span>
-    </div>
+    <img
+      src={iconUrl("inv_misc_questionmark", iconBaseUrl)}
+      alt=""
+      width={10}
+      height={10}
+      className="size-2.5 shrink-0 rounded-[1px] border border-white/10"
+    />
+  );
+}
+
+function RelativeChange({
+  snapshot,
+  density,
+  cursorMilli,
+}: {
+  snapshot: StatusUnitSnapshot;
+  density: StatusDensity;
+  cursorMilli: number;
+}) {
+  const {
+    events: incoming,
+    damage: incomingDamage,
+    healing: incomingHealing,
+  } = statusIncomingHealthPreview(snapshot.incoming, cursorMilli);
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="relative cursor-help" data-status-health-preview>
+          <RelativeHealthBar
+            messages={snapshot.relativeHealthMessages}
+            state={snapshot.relativeHealthState}
+            bounds={snapshot.relativeHealthBounds}
+            zeroPercent={68}
+            incomingDamage={incomingDamage}
+            incomingHealing={incomingHealing}
+            className={cn("[&>div:last-child]:hidden", density === 0 ? "[&>div:first-child]:h-4" : density === 1 ? "[&>div:first-child]:h-5" : "[&>div:first-child]:h-6")}
+          />
+          {snapshot.dead ? (
+            <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center gap-1 text-[9px] text-red-300">
+              <Skull className="h-3 w-3" /> dead
+            </span>
+          ) : null}
+          <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center font-mono text-[9px] text-foreground/80">
+            {snapshot.relativeHealthState.actualHealth && snapshot.relativeHealthState.maximumHealth != null
+              ? `${formatNumber(snapshot.relativeHealthState.current)} / ${formatNumber(snapshot.relativeHealthState.maximumHealth)}`
+              : formatDelta(snapshot.netChange)}
+          </span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="w-72 p-0">
+        <StatusEventTooltipBody
+          title="Incoming"
+          meta={(
+            <>
+              <span className="text-red-300">−{formatNumber(incomingDamage)}</span>
+              <span className="px-1 text-muted-foreground/40">·</span>
+              <span className="text-green-300">+{formatNumber(incomingHealing)}</span>
+            </>
+          )}
+          events={incoming}
+          relativeToMilli={cursorMilli}
+          emptyLabel="No imminent damage or healing."
+        />
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -240,13 +426,20 @@ interface FloatingStatusBreakout {
 }
 
 function toIncomingEvent(event: StatusTimelineEvent): IncomingEventDisplay | null {
-  if (event.kind !== "damage" && event.kind !== "heal" && event.kind !== "absorbed") return null;
+  if (
+    event.kind !== "damage"
+    && event.kind !== "heal"
+    && event.kind !== "absorbed"
+    && event.kind !== "health"
+  ) return null;
   return {
     offsetMilli: event.offsetMilli,
     eventIndex: event.eventIndex,
-    type: event.kind,
+    type: event.kind === "health" ? "unit_resources" : event.kind,
     amount: event.amount,
     overheal: event.overheal,
+    currentHealth: event.currentHealth,
+    maximumHealth: event.maximumHealth,
     sourceName: event.label,
     casterName: event.sourceName,
     spellId: event.spellId,
@@ -557,7 +750,7 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
       ) : null}
       <div className="grid grid-cols-[minmax(155px,0.7fr)_minmax(190px,0.85fr)_minmax(320px,1.8fr)] items-center gap-3 border-b border-border/40 px-5 py-1.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
         <span>Unit</span>
-        <span>Relative health change</span>
+        <span>Health</span>
         <span className="flex items-center gap-2">
           <select
             value={windowPreset.id}
@@ -652,7 +845,7 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
                     </span>
                   ) : null}
                 </span>
-                <RelativeChange snapshot={snapshot} density={density} />
+                <RelativeChange snapshot={snapshot} density={density} cursorMilli={cursorMilli!} />
                 <ActivityLane
                   waveform={waveform}
                   cursorMilli={cursorMilli!}

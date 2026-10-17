@@ -4,6 +4,7 @@ import {
   incomingEventsWindowMilli,
   relativeCursorForFightOffset,
   relativeHealthAtCursor,
+  relativeHealthMessagesAtCursor,
   syncCursorForDeath,
   timeAtTimelineY,
   timelineYForTime,
@@ -85,6 +86,44 @@ describe("incoming events timeline", () => {
       prevented: 3_000,
       overhealing: 3_000,
     });
+  });
+
+  it("uses unit-resource samples for health without adding timeline rows", () => {
+    const events = [
+      event({
+        offsetMilli: 80_000,
+        eventIndex: 1,
+        type: "unit_resources",
+        amount: 8_000,
+        currentHealth: 8_000,
+        maximumHealth: 10_000,
+      }),
+      event({ offsetMilli: 90_000, eventIndex: 2, type: "damage", amount: 2_000 }),
+    ];
+
+    expect(visibleIncomingEvents(events, 100_000, 30_000)).toEqual([events[1]]);
+    expect(relativeHealthMessagesAtCursor(events, 100_000, 30_000, 0)).toContainEqual(
+      expect.objectContaining({ kind: "health", currentHealth: 8_000, maximumHealth: 10_000 }),
+    );
+  });
+
+  it("keeps the latest health sample even when it predates the visible window", () => {
+    const events = [
+      event({
+        offsetMilli: 60_000,
+        eventIndex: 1,
+        type: "unit_resources",
+        amount: 9_000,
+        currentHealth: 9_000,
+        maximumHealth: 10_000,
+      }),
+      event({ offsetMilli: 90_000, eventIndex: 2, type: "damage", amount: 2_000 }),
+    ];
+
+    expect(relativeHealthMessagesAtCursor(events, 100_000, 30_000, 0)).toEqual([
+      expect.objectContaining({ kind: "health", currentHealth: 9_000 }),
+      expect.objectContaining({ kind: "damage", amount: 2_000 }),
+    ]);
   });
 
   it("syncs death breakouts by fight offset instead of time before death", () => {

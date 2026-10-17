@@ -115,6 +115,15 @@ function healthMessage(event: StatusTimelineEvent): RelativeHealthMessage | null
   if (event.kind === "damage") return { ...common, kind: "damage", amount: event.amount };
   if (event.kind === "heal") return { ...common, kind: "healing", amount: event.amount, overheal: event.overheal };
   if (event.kind === "absorbed") return { ...common, kind: "prevented", amount: event.amount };
+  if (event.kind === "health") {
+    return {
+      ...common,
+      kind: "health",
+      amount: event.currentHealth ?? event.amount,
+      currentHealth: event.currentHealth ?? event.amount,
+      maximumHealth: event.maximumHealth,
+    };
+  }
   return null;
 }
 
@@ -320,7 +329,9 @@ export function snapshotStatusUnit(
 
   return {
     unit,
-    deficit: Math.max(0, -health.current),
+    deficit: health.actualHealth && health.maximumHealth != null
+      ? Math.max(0, health.maximumHealth - health.current)
+      : Math.max(0, -health.current),
     netChange: health.current,
     relativeHealthState,
     relativeHealthBounds,

@@ -93,6 +93,27 @@ describe("snapshotStatusUnit", () => {
     expect(late.relativeHealthBounds).toEqual(early.relativeHealthBounds);
   });
 
+  it("uses sampled unit health and maximum HP when available", () => {
+    const snapshot = snapshotStatusUnit(unit([
+      event({
+        timestampMilli: 1_000,
+        eventIndex: 1,
+        kind: "health",
+        amount: 8_000,
+        currentHealth: 8_000,
+        maximumHealth: 10_000,
+      }),
+      event({ timestampMilli: 2_000, eventIndex: 2, kind: "damage", amount: 1_500 }),
+    ]), 2_000);
+
+    expect(snapshot.relativeHealthState).toMatchObject({
+      actualHealth: true,
+      current: 6_500,
+      maximumHealth: 10_000,
+    });
+    expect(snapshot.deficit).toBe(3_500);
+  });
+
   it("finds an active cast and cancels it when a matching completion arrives", () => {
     const start = event({
       timestampMilli: 4_000,

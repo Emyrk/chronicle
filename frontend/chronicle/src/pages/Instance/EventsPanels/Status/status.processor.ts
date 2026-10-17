@@ -7,13 +7,14 @@ import type {
   ProcessorContext,
   ResourceChangeProcessorEvent,
   SlainProcessorEvent,
+  UnitResourcesProcessorEvent,
   SpellFailProcessorEvent,
   SpellGoProcessorEvent,
   SpellStartProcessorEvent,
 } from "../processorTypes";
 
 export type StatusUnitKind = "player" | "pet" | "unit";
-export type StatusEventKind = "damage" | "heal" | "absorbed" | "death" | "cast_start" | "cast" | "cast_fail";
+export type StatusEventKind = "damage" | "heal" | "absorbed" | "health" | "death" | "cast_start" | "cast" | "cast_fail";
 
 export interface StatusTimelineEvent {
   timestampMilli: number;
@@ -28,6 +29,8 @@ export interface StatusTimelineEvent {
   sourceName: string;
   targetId: string;
   durationMilli?: number;
+  currentHealth?: number;
+  maximumHealth?: number;
 }
 
 export interface StatusUnitTimeline {
@@ -54,6 +57,7 @@ export type StatusProcessorEvent =
   | DamageProcessorEvent
   | HealProcessorEvent
   | ResourceChangeProcessorEvent
+  | UnitResourcesProcessorEvent
   | AbsorbedProcessorEvent
   | SlainProcessorEvent
   | SpellStartProcessorEvent
@@ -130,7 +134,7 @@ function baseEvent(
 
 export const statusProcessor: PanelProcessor<StatusResult, StatusProcessorEvent> = {
   id: "status",
-  streams: ["damage", "heal", "resource_change", "absorbed", "slain", "spell_start", "spell_go", "spell_fail"] as StreamType[],
+  streams: ["damage", "heal", "resource_change", "unit_resources", "absorbed", "slain", "spell_start", "spell_go", "spell_fail"] as StreamType[],
   createState: () => ({ encounters: new Map() }),
   processEvent(state, event, encounterId, firstTimestamp, _streamType, context) {
     if (!context.selectedEncounterIds.has(encounterId)) return;
@@ -173,6 +177,20 @@ export const statusProcessor: PanelProcessor<StatusResult, StatusProcessorEvent>
           sourceId: event.caster,
           sourceName: context.players[event.caster]?.name || context.units?.[event.caster]?.name || event.sourceName,
           targetId: event.target,
+        }, context);
+        return;
+      case "unit_resources":
+        pushEvent(state, encounterId, firstTimestamp, event.unit, {
+          ...base,
+          kind: "health",
+          amount: Math.max(0, event.currentHealth),
+          currentHealth: Math.max(0, event.currentHealth),
+          maximumHealth: Math.max(0, event.maximumHealth),
+          spellId: null,
+          label: "Health sample",
+          sourceId: event.unit,
+          sourceName: context.players[event.unit]?.name || context.units?.[event.unit]?.name || shortGuid(event.unit),
+          targetId: event.unit,
         }, context);
         return;
       case "absorbed":
