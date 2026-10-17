@@ -1,14 +1,14 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view components intentionally share this module. */
-import { lazy, Suspense, useCallback, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { Crosshair, Focus, Footprints, HeartPulse, Map as MapIcon, Maximize, Route, Settings2, Skull, Users, X } from "lucide-react";
+import { Crosshair, Focus, Footprints, HeartPulse, Loader2, Map as MapIcon, Maximize, Route, Settings2, Skull, Users, X } from "lucide-react";
 import { useLiveSessionOptional } from "../../LiveSessionContext";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { fetchMiniatureUrls } from "./bossMinis";
-import { dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
+import { dungeonMeshBytes, dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
 import { mapProcessor, type MapProcessorEvent, type MapResult } from "./map.processor";
 import type { MapLivePresence } from "./MapView3D";
 import { MapOverview2D } from "./MapOverview2D";
@@ -131,7 +131,19 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
   const meshOn = preferredMeshState(storedMesh);
   const scene = useMapScene(props, { rawDungeonProjection: show3D && meshOn && meshState === "ready", wholeRun });
-  const ready = scene.status === "ready" ? scene : null;
+  // While the panel reprocesses (a new encounter, a filter change) the scene
+  // reports "loading": keep the last ready one on screen, the 3D view frozen
+  // on it, rather than unmounting the view and rebuilding it (renderer, mesh
+  // parse, collision tree) once the new data arrives. Re-held only when what
+  // it shows changes (the frozen view ignores the held copy's per-tick data).
+  const liveScene = scene.status === "ready" ? scene : null;
+  const [heldScene, setHeldScene] = useState<typeof liveScene>(null);
+  if (liveScene && (!heldScene || heldScene.encounterId !== liveScene.encounterId || heldScene.mapName !== liveScene.mapName
+    || heldScene.selectedFloorNumber !== liveScene.selectedFloorNumber || heldScene.mesh !== liveScene.mesh)) {
+    setHeldScene(liveScene);
+  }
+  const reloading = !liveScene && (props.loading || props.processing) && heldScene !== null;
+  const ready = liveScene ?? (reloading ? heldScene : null);
   // A mesh-only instance (no map artwork) has nothing but the mesh to show:
   // the switch is on and stays on.
   const meshOnly = ready?.meshOnly ?? false;
@@ -141,6 +153,13 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   // per render) keys the request: a changed entry re-requests the mesh.
   const mesh = ready?.mesh ?? null;
   const meshUrl = mesh && iconBaseUrl ? dungeonMeshUrl(mesh, iconBaseUrl) : null;
+  // Start the mesh's (large) download as soon as the map knows it: before the
+  // encounter finishes processing and before the 3D renderer has loaded.
+  const prefetchMesh = mesh ?? (scene.status === "message" ? scene.meshHint ?? null : null);
+  const prefetchUrl = show3D && (meshOn || meshOnly) && prefetchMesh && iconBaseUrl ? dungeonMeshUrl(prefetchMesh, iconBaseUrl) : null;
+  useEffect(() => {
+    if (prefetchUrl) dungeonMeshBytes(prefetchUrl).catch(() => {});
+  }, [prefetchUrl]);
   const dungeonMesh = useMemo((): DungeonMeshRequest | null =>
     meshWanted && mesh && meshUrl ? { url: meshUrl, bounds: mesh.bounds, liquid: dungeonMeshLiquid(mesh) } : null,
   [mesh, meshUrl, meshWanted]);
@@ -231,7 +250,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
     setFraming((current) => manualMapFraming(current, viewport));
   }, []);
 
-  if (scene.status === "message") return <MapMessage title={scene.title} detail={scene.detail} />;
+  if (!ready) return scene.status === "message" ? <MapMessage title={scene.title} detail={scene.detail} /> : null;
 
   const applyFraming = (viewport: MapViewport) => setFraming(pinMapFraming(framing, viewport));
   // Back to the default framing: the cinematic camera on the mesh, the
@@ -239,12 +258,12 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   const followGroup = () => setFraming({ ...framing, viewport: null, manual: false, revision: framing.revision + 1 });
   // Follow stands in for Fit while the camera can follow: across a run, and on
   // the mesh, where the Director frames the boss and the group itself.
-  const canFollow = scene.wholeRun || (show3D && meshWanted && meshState === "ready");
+  const canFollow = ready.wholeRun || (show3D && meshWanted && meshState === "ready");
   const following = canFollow && cinematic;
   const canWalk = show3D && meshWanted && meshState === "ready";
   const walking = walkWanted && canWalk;
-  const jumps = scene.wholeRun && scene.runStartMs !== null && scene.runEndMs !== null
-    ? encounterJumps(props.context.instance.encounters, props.result.encounters, scene.runStartMs, scene.runEndMs)
+  const jumps = ready.wholeRun && ready.runStartMs !== null && ready.runEndMs !== null
+    ? encounterJumps(props.context.instance.encounters, props.result.encounters, ready.runStartMs, ready.runEndMs)
     : [];
   const jumpTo = (timestampMs: number) => sync?.setTimestamp(new Date(timestampMs));
   const toggleMesh = () => {
@@ -252,19 +271,19 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
     setStoredMesh(next);
     storeMesh(next);
   };
-  const view2D = <MapView2D ground={scene.ground} markers={scene.markers} view={view} onUserViewport={handleUserViewport} />;
+  const view2D = <MapView2D ground={ready.ground} markers={ready.markers} view={view} onUserViewport={handleUserViewport} />;
 
   // In the card's title row when the host offers one, so the map gets the height.
   const headerControls = (
     <div className="flex min-w-0 shrink-0 items-center gap-2 text-[10px] text-muted-foreground">
-      {!scene.overlayAvailable && <span className="text-amber-300/80">position overlay unavailable</span>}
-      <span className="flex items-center gap-1"><Users className="h-3 w-3" />{scene.markers.length}</span>
+      {!ready.overlayAvailable && <span className="text-amber-300/80">position overlay unavailable</span>}
+      <span className="flex items-center gap-1"><Users className="h-3 w-3" />{ready.markers.length}</span>
       {canFollow ? (
         <button
           type="button"
           aria-pressed={following}
           onClick={followGroup}
-          disabled={scene.wholeRun && !autoFit}
+          disabled={ready.wholeRun && !autoFit}
           title="Keep the camera on the boss and the group"
           className={`${framingButtonClass} ${following ? "bg-primary/20 text-foreground" : ""}`}
         >
@@ -301,22 +320,22 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
       {props.headerSlot ? createPortal(headerControls, props.headerSlot) : <div className="flex justify-end px-1">{headerControls}</div>}
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-md border border-white/10 bg-black/70">
         {!show3D ? (meshOnly
-          ? <MapMessage title="No map artwork for this instance" detail={`${scene.mapName} has no 2D map; it is 3D only, and this browser could not provide WebGL.`} />
+          ? <MapMessage title="No map artwork for this instance" detail={`${ready.mapName} has no 2D map; it is 3D only, and this browser could not provide WebGL.`} />
           : view2D
         ) : (
           <Suspense fallback={<MapMessage title="Loading 3D view" detail="Fetching the 3D renderer…" />}>
             <MapView3D
-              ground={scene.ground}
-              markers={scene.markers}
-              projectSample={scene.projectSample}
-              cursorMs={scene.cursorMs}
-              playing={scene.playing}
-              playbackSpeed={scene.playbackSpeed}
+              ground={ready.ground}
+              markers={ready.markers}
+              projectSample={ready.projectSample}
+              cursorMs={ready.cursorMs}
+              playing={ready.playing}
+              playbackSpeed={ready.playbackSpeed}
               view={view}
               onUserViewport={handleUserViewport}
-              effects={scene.effects}
-              bossGuids={scene.bossGuids}
-              tankGuids={scene.tankGuids}
+              effects={ready.effects}
+              bossGuids={ready.bossGuids}
+              tankGuids={ready.tankGuids}
               miniatureUrls={miniatureQuery.data}
               onUnavailable={() => setWebglUnavailable(true)}
               dungeonMesh={dungeonMesh}
@@ -331,8 +350,15 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               adStrafe={adStrafe}
               livePresence={livePresence}
               unitRoles={unitRoles}
+              frozen={reloading}
             />
           </Suspense>
+        )}
+        {reloading && (
+          <div className="pointer-events-none absolute left-1/2 top-2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-sm bg-black/75 px-2 py-0.5 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Loading the encounter…
+          </div>
         )}
         {/* Top-left: the Raid Frames panel itself, drawn as an overlay (one
             implementation for the map and the panel). The inspect frame below moves freely. */}
@@ -430,13 +456,13 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
             effectSettings={effectSettings}
             onEffectSettings={updateEffectSettings}
             show3D={show3D}
-            hasEffects={Boolean(scene.effects)}
+            hasEffects={Boolean(ready.effects)}
             raidFrames={showRaidFrames}
             onRaidFrames={setShowRaidFrames}
             enemyFrames={showEnemyFrames}
             onEnemyFrames={setShowEnemyFrames}
             mesh={show3D && meshUrl ? { on: meshWanted, locked: meshOnly, loading: Boolean(dungeonMesh) && meshState === "loading", onToggle: toggleMesh } : null}
-            floors={scene.floors.length > 1 ? { list: scene.floors, value: scene.selectedFloorNumber, onChange: scene.setFloorNumber } : null}
+            floors={ready.floors.length > 1 ? { list: ready.floors, value: ready.selectedFloorNumber, onChange: ready.setFloorNumber } : null}
             onTopDown={() => setTopDownKey((key) => key + 1)}
             walk={canWalk ? { on: walking, onToggle: () => setWalking(!walking) } : null}
             adStrafe={adStrafe}
@@ -455,16 +481,16 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
         <InspectCards guids={pinned} onRemove={unpin} raidFrames={raidFrames} auras={auras} />
         <MeterWindows windows={meterWindows} onChange={setMeterWindows} context={props.context} durationMs={props.durationMs} />
       </div>
-      {jumps.length > 0 && scene.runStartMs !== null && (
+      {jumps.length > 0 && ready.runStartMs !== null && (
         <div className="flex flex-col gap-1 px-1">
           <div className="relative h-1.5 rounded bg-white/10" aria-hidden>
             {jumps.map((jump) => (
               <span key={jump.id} className="absolute top-0 h-full w-0.5 bg-amber-300/80" style={{ left: `${jump.fraction * 100}%` }} />
             ))}
-            {scene.syncEnabled && scene.runEndMs !== null && (
+            {ready.syncEnabled && ready.runEndMs !== null && (
               <span
                 className="absolute top-[-1px] h-2 w-0.5 bg-foreground"
-                style={{ left: `${Math.min(100, Math.max(0, ((scene.cursorMs - scene.runStartMs) / Math.max(1, scene.runEndMs - scene.runStartMs)) * 100))}%` }}
+                style={{ left: `${Math.min(100, Math.max(0, ((ready.cursorMs - ready.runStartMs) / Math.max(1, ready.runEndMs - ready.runStartMs)) * 100))}%` }}
               />
             )}
           </div>
@@ -474,8 +500,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
                 key={jump.id}
                 type="button"
                 onClick={() => jumpTo(jump.timestampMs)}
-                disabled={!scene.syncEnabled}
-                title={scene.syncEnabled ? `Jump to ${jump.name}` : "Enable Replay to jump between encounters"}
+                disabled={!ready.syncEnabled}
+                title={ready.syncEnabled ? `Jump to ${jump.name}` : "Enable Replay to jump between encounters"}
                 className={framingButtonClass}
               >
                 {jump.name}
@@ -487,9 +513,9 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
       {webglUnavailable && (
         <p className="px-1 text-[9px] text-amber-300/80">3D view needs WebGL, which this browser could not provide. Showing the replay map in 2D instead.</p>
       )}
-      {!scene.overlayAvailable ? (
+      {!ready.overlayAvailable ? (
         <p className="px-1 text-[9px] text-amber-300/80">No compatible world-coordinate mapping is available for this floor, so unit markers are hidden.</p>
-      ) : !scene.syncEnabled ? (
+      ) : !ready.syncEnabled ? (
         <p className="px-1 text-[9px] text-muted-foreground">Showing the final position snapshot. Enable Replay to watch units move.</p>
       ) : null}
     </div>

@@ -72,6 +72,11 @@ export interface MapView3DProps {
   livePresence?: MapLivePresence | null;
   /** The target frames' units: halos for the selected chain and pins, and target lines. */
   unitRoles?: MapUnitRoles | null;
+  /**
+   * The next fight is loading: keep drawing the last one (units, effects,
+   * mesh) as it was instead of tearing the scene down, until fresh props arrive.
+   */
+  frozen?: boolean;
 }
 
 const NO_ROLES: MapUnitRoles = { selected: null, target: null, targetsTarget: null, pinned: new Set() };
@@ -141,6 +146,7 @@ export default function MapView3D({
   adStrafe = true,
   livePresence = null,
   unitRoles = null,
+  frozen = false,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<MapScene3D | null>(null);
@@ -185,16 +191,16 @@ export default function MapView3D({
   }, []);
 
   useEffect(() => {
-    sceneRef.current?.setGround(ground);
-  }, [ground]);
+    if (!frozen) sceneRef.current?.setGround(ground);
+  }, [frozen, ground]);
 
   useEffect(() => {
-    sceneRef.current?.setDungeonMesh(dungeonMesh);
-  }, [dungeonMesh]);
+    if (!frozen) sceneRef.current?.setDungeonMesh(dungeonMesh);
+  }, [dungeonMesh, frozen]);
 
   useEffect(() => {
-    sceneRef.current?.setFocus(focus);
-  }, [focus]);
+    if (!frozen) sceneRef.current?.setFocus(focus);
+  }, [focus, frozen]);
 
   useEffect(() => {
     sceneRef.current?.setOnUnitClick(onUnitClick ?? null);
@@ -222,7 +228,7 @@ export default function MapView3D({
   useEffect(() => {
     const container = containerRef.current;
     const scene = sceneRef.current;
-    if (!container || !scene) return;
+    if (!container || !scene || frozen) return;
     const units = markers.flatMap((marker): MapScene3DUnit[] => {
       const sample = smoothMs !== null
         ? replayPositionAt(marker.positions, smoothMs, marker.kind === "player") ?? marker.sample
@@ -246,7 +252,7 @@ export default function MapView3D({
       }];
     });
     scene.setUnits(units);
-  }, [bossGuids, markers, miniatureUrls, projectSample, showBars, smoothMs, specializations]);
+  }, [bossGuids, frozen, markers, miniatureUrls, projectSample, showBars, smoothMs, specializations]);
 
   useEffect(() => {
     sceneRef.current?.setUnitRoles(unitRoles ?? NO_ROLES);
@@ -304,7 +310,7 @@ export default function MapView3D({
   useEffect(() => {
     const container = containerRef.current;
     const scene = sceneRef.current;
-    if (!container || !scene) return;
+    if (!container || !scene || frozen) return;
     scene.setEffects(effectSettings.enabled && effects ? {
       fx: effects,
       options: effectOptions,
@@ -323,11 +329,11 @@ export default function MapView3D({
       // Heal amounts float for heals cast by or landing on selected players and tanks.
       healTextGuids: effectOptions.healText,
     } : null);
-  }, [castGuids, effectOptions, effectSettings.enabled, effects, spellMeta]);
+  }, [castGuids, effectOptions, effectSettings.enabled, effects, frozen, spellMeta]);
 
   useEffect(() => {
-    sceneRef.current?.setEffectClock(cursorMs, playing, playbackSpeed);
-  }, [cursorMs, playbackSpeed, playing]);
+    if (!frozen) sceneRef.current?.setEffectClock(cursorMs, playing, playbackSpeed);
+  }, [cursorMs, frozen, playbackSpeed, playing]);
 
   // Each new key (after the first) asks for the top-down view.
   useEffect(() => {

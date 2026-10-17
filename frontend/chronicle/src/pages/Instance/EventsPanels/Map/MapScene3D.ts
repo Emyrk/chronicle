@@ -32,8 +32,10 @@ import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, CAST_ARC_OPACITY, CUT_A
 import {
   clampToRadius,
   corsAssetUrl,
+  dungeonMeshBytes,
   dungeonMeshPlacement,
   floorBelow,
+  releaseDungeonMeshBytes,
   FloorHeightCache,
   LOGGED_Z_CLEARANCE_YARDS,
   medianHeight,
@@ -548,7 +550,6 @@ export class MapScene3D {
   private readonly textureLoader = new THREE.TextureLoader();
   // Unit miniatures by candidate-URL key: null while loading or after all candidates fail.
   private readonly bossMinis = new Map<string, BossMini | null>();
-  private gltfLoader: Promise<GLTFLoader> | null = null;
   // The real dungeon mesh while "3D map" is on; `dungeonMeshRequest` is the
   // load in flight (a later request or toggle-off abandons it).
   private dungeonMesh: DungeonMesh | null = null;
@@ -983,7 +984,7 @@ export class MapScene3D {
     this.directorRunning = false;
     this.directorSubject = null;
     if (this.dungeonMesh) {
-      disposeDungeonMesh(this.dungeonMesh);
+      // The parsed mesh is shared with other scenes (see parsedDungeonMesh): just let go of this copy.
       this.scene.remove(this.dungeonMesh.group);
       this.dungeonMesh = null;
     }
@@ -997,10 +998,7 @@ export class MapScene3D {
     this.dungeonMeshRequest = pending;
     this.onDungeonMesh("loading");
     void this.loadDungeonMesh(request).then((mesh) => {
-      if (this.disposed || this.dungeonMeshRequest !== pending) {
-        if (mesh) disposeDungeonMesh(mesh);
-        return;
-      }
+      if (this.disposed || this.dungeonMeshRequest !== pending) return;
       this.dungeonMeshRequest = null;
       if (!mesh) {
         this.onDungeonMesh("failed");
@@ -1238,47 +1236,12 @@ export class MapScene3D {
   // Loads the mesh, zeroes its centring node translations so it sits in raw
   // WoW coordinates, places it under the artwork projection and builds a BVH
   // per cave mesh for floor probes. Resolves null on any failure.
+  // The parsed mesh is shared (see parsedDungeonMesh); this scene draws its own
+  // copy of the node tree, which shares the parsed geometry and materials.
   private async loadDungeonMesh(request: DungeonMeshRequest): Promise<DungeonMesh | null> {
-    try {
-      this.gltfLoader ??= createGltfLoader();
-      const [loader, { MeshBVH }] = await Promise.all([this.gltfLoader, import("three-mesh-bvh")]);
-      const gltf = await loader.loadAsync(corsAssetUrl(request.url));
-      for (const node of gltf.scene.children) node.position.set(0, 0, 0);
-      const placement = dungeonMeshPlacement(request.bounds, GROUND_WIDTH);
-      const group = new THREE.Group();
-      group.rotation.y = placement.rotationY;
-      group.scale.setScalar(placement.scale);
-      group.position.set(placement.x, 0, placement.z);
-      group.add(gltf.scene);
-      group.updateMatrixWorld(true);
-      const caves: DungeonMeshCave[] = [];
-      gltf.scene.traverse((child) => {
-        const mesh = child as THREE.Mesh;
-        if (!mesh.isMesh) return;
-        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        if (isLiquid(mesh, gltf.scene)) {
-          // Water planes: translucent, drawn after the cave without writing
-          // depth; tinted when the entry says the liquid is not water.
-          for (const material of materials) {
-            material.transparent = true;
-            material.depthWrite = false;
-            if (request.liquid && "color" in material && material.color instanceof THREE.Color) {
-              material.color.set(request.liquid.color);
-              material.opacity = request.liquid.opacity;
-            }
-          }
-          mesh.renderOrder = 1;
-          return;
-        }
-        caves.push({ mesh, bvh: new MeshBVH(mesh.geometry), inverse: mesh.matrixWorld.clone().invert() });
-      });
-      if (caves.length === 0) return null;
-      const radius = new THREE.Box3().setFromObject(group).getBoundingSphere(new THREE.Sphere()).radius;
-      return { url: request.url, group, caves, scale: placement.scale, radius };
-    } catch (error) {
-      console.warn("Dungeon mesh unavailable, keeping the map tiles", request.url, error);
-      return null;
-    }
+    const parsed = await parsedDungeonMesh(request);
+    if (!parsed) return null;
+    return { url: request.url, group: parsed.template.clone(), caves: parsed.caves, scale: parsed.scale, radius: parsed.radius };
   }
 
   // Shows the mesh or the tiles, re-grounds every unit and re-applies the
@@ -1643,7 +1606,7 @@ export class MapScene3D {
     this.clearLabel();
     this.clearGround();
     this.dungeonMeshRequest = null;
-    if (this.dungeonMesh) disposeDungeonMesh(this.dungeonMesh);
+    // The renderer's disposal frees this scene's GPU copy of the (shared) mesh.
     this.dungeonMesh = null;
     for (const geometry of Object.values(this.geometries)) geometry.dispose();
     for (const mini of this.bossMinis.values()) {
@@ -1794,8 +1757,7 @@ export class MapScene3D {
   // turned to face -z, keeping its material only if it has a base-colour texture.
   private async loadBossMiniCandidate(url: string): Promise<BossMini | null> {
     try {
-      this.gltfLoader ??= createGltfLoader();
-      const gltf = await (await this.gltfLoader).loadAsync(url);
+      const gltf = await (await gltfLoader()).loadAsync(url);
       gltf.scene.updateMatrixWorld(true);
       let geometry: THREE.BufferGeometry | null = null;
       let material: THREE.MeshStandardMaterial | null = null;
@@ -3179,6 +3141,88 @@ function setBodyColor(object: UnitObject) {
 
 // Loaded on first use so the glTF loader and meshopt decoder stay out of the
 // 3D chunk until a boss mini is needed. The minis use EXT_meshopt_compression.
+// One glTF loader (and meshopt decoder) for every scene.
+let sharedGltfLoader: Promise<GLTFLoader> | null = null;
+function gltfLoader(): Promise<GLTFLoader> {
+  sharedGltfLoader ??= createGltfLoader();
+  return sharedGltfLoader;
+}
+
+// A dungeon mesh parsed and placed once, with its floor-probe trees: scenes
+// clone `template` (sharing geometry and materials), so a remounted view (a
+// layout change, focus mode, the panel's help page) skips the download, the
+// parse and the BVH build. Never disposed by a scene; a scene's renderer
+// frees its own GPU copies when it is disposed.
+interface ParsedDungeonMesh {
+  template: THREE.Group;
+  caves: DungeonMeshCave[];
+  scale: number;
+  radius: number;
+}
+const parsedDungeonMeshes = new Map<string, Promise<ParsedDungeonMesh | null>>();
+const MAX_PARSED_DUNGEON_MESHES = 2;
+
+function parsedDungeonMesh(request: DungeonMeshRequest): Promise<ParsedDungeonMesh | null> {
+  let parsed = parsedDungeonMeshes.get(request.url);
+  if (!parsed) {
+    parsed = parseDungeonMesh(request);
+    parsedDungeonMeshes.set(request.url, parsed);
+    void parsed.then((result) => {
+      if (!result) parsedDungeonMeshes.delete(request.url);
+    });
+    for (const oldest of parsedDungeonMeshes.keys()) {
+      if (parsedDungeonMeshes.size <= MAX_PARSED_DUNGEON_MESHES) break;
+      parsedDungeonMeshes.delete(oldest);
+    }
+  }
+  return parsed;
+}
+
+async function parseDungeonMesh(request: DungeonMeshRequest): Promise<ParsedDungeonMesh | null> {
+  try {
+    // The bytes may already be on their way: the map prefetches them while the encounter processes.
+    const [loader, { MeshBVH }, bytes] = await Promise.all([gltfLoader(), import("three-mesh-bvh"), dungeonMeshBytes(request.url)]);
+    const gltf = await loader.parseAsync(bytes, THREE.LoaderUtils.extractUrlBase(corsAssetUrl(request.url)));
+    releaseDungeonMeshBytes(request.url);
+    for (const node of gltf.scene.children) node.position.set(0, 0, 0);
+    const placement = dungeonMeshPlacement(request.bounds, GROUND_WIDTH);
+    const template = new THREE.Group();
+    template.rotation.y = placement.rotationY;
+    template.scale.setScalar(placement.scale);
+    template.position.set(placement.x, 0, placement.z);
+    template.add(gltf.scene);
+    template.updateMatrixWorld(true);
+    const caves: DungeonMeshCave[] = [];
+    gltf.scene.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      if (isLiquid(mesh, gltf.scene)) {
+        // Water planes: translucent, drawn after the cave without writing
+        // depth; tinted when the entry says the liquid is not water.
+        for (const material of materials) {
+          material.transparent = true;
+          material.depthWrite = false;
+          if (request.liquid && "color" in material && material.color instanceof THREE.Color) {
+            material.color.set(request.liquid.color);
+            material.opacity = request.liquid.opacity;
+          }
+        }
+        mesh.renderOrder = 1;
+        return;
+      }
+      // Probes use the template's fixed transforms, which every clone shares.
+      caves.push({ mesh, bvh: new MeshBVH(mesh.geometry), inverse: mesh.matrixWorld.clone().invert() });
+    });
+    if (caves.length === 0) return null;
+    const radius = new THREE.Box3().setFromObject(template).getBoundingSphere(new THREE.Sphere()).radius;
+    return { template, caves, scale: placement.scale, radius };
+  } catch (error) {
+    console.warn("Dungeon mesh unavailable, keeping the map tiles", request.url, error);
+    return null;
+  }
+}
+
 async function createGltfLoader(): Promise<GLTFLoader> {
   const [{ GLTFLoader }, { MeshoptDecoder }] = await Promise.all([
     import("three/examples/jsm/loaders/GLTFLoader.js"),
@@ -3221,23 +3265,6 @@ function isLiquid(object: THREE.Object3D, root: THREE.Object3D): boolean {
     if (/^liquid/i.test(node.name)) return true;
   }
   return false;
-}
-
-function disposeDungeonMesh(mesh: DungeonMesh) {
-  mesh.group.traverse((child) => {
-    const object = child as THREE.Mesh;
-    if (!object.isMesh) return;
-    object.geometry.dispose();
-    for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
-      const textured = material as THREE.MeshStandardMaterial;
-      textured.map?.dispose();
-      textured.normalMap?.dispose();
-      textured.roughnessMap?.dispose();
-      textured.metalnessMap?.dispose();
-      textured.emissiveMap?.dispose();
-      material.dispose();
-    }
-  });
 }
 
 function createLabelSprite(text: string): THREE.Sprite {

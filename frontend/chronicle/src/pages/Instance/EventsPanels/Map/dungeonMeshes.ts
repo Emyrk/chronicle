@@ -74,6 +74,38 @@ export function corsAssetUrl(url: string, origin: string | undefined = globalThi
   return `${url}${url.includes("?") ? "&" : "?"}cors`;
 }
 
+// Mesh files are large (tens of MB); their bytes are fetched once, as early
+// as the map knows which mesh it wants, and handed to the scene's parser.
+const meshBytes = new Map<string, Promise<ArrayBuffer>>();
+const MAX_MESH_BYTES = 2;
+
+/**
+ * The mesh file's bytes, fetched (once, with CORS) on first call: the map
+ * calls this to prefetch while the encounter still processes and the 3D
+ * renderer still loads, and the scene awaits the same promise to parse.
+ */
+export function dungeonMeshBytes(url: string): Promise<ArrayBuffer> {
+  let bytes = meshBytes.get(url);
+  if (!bytes) {
+    bytes = fetch(corsAssetUrl(url), { mode: "cors" }).then((response) => {
+      if (!response.ok) throw new Error(`Dungeon mesh ${response.status}: ${url}`);
+      return response.arrayBuffer();
+    });
+    bytes.catch(() => meshBytes.delete(url));
+    meshBytes.set(url, bytes);
+    for (const oldest of meshBytes.keys()) {
+      if (meshBytes.size <= MAX_MESH_BYTES) break;
+      meshBytes.delete(oldest);
+    }
+  }
+  return bytes;
+}
+
+/** Drops a mesh's bytes once they are parsed (the scene keeps the parsed mesh). */
+export function releaseDungeonMeshBytes(url: string) {
+  meshBytes.delete(url);
+}
+
 /**
  * How a mesh in raw WoW coordinates (`DUNGEON_MESH_FRAME`) lands in the
  * scene. `bounds` are the mesh entry's world-axis bounds, which also form the

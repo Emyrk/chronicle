@@ -93,6 +93,15 @@ them when the map's version changes:
 - **Combat text**: `CombatTextDemo`, following `deriveCombatText`.
 - **Health bars**: `HealthBar` in the page, following `MapScene3D.updateBars`.
 
+## Loading (keep the 3D view alive)
+
+- `Map.tsx` holds the last ready scene while the panel reprocesses (`props.loading` / `processing`)
+  and passes `frozen` to `MapView3D`, so an encounter switch never unmounts the WebGL view.
+  Don't add early returns that unmount `MapView3D` while data reloads.
+- The dungeon mesh's bytes are prefetched (`dungeonMeshBytes`) as soon as `useMapScene` knows the
+  mesh (its loading `meshHint`), and the parsed mesh + BVH are cached across scenes (`parsedDungeonMesh`).
+  Scenes clone the cached template and must not dispose it.
+
 ## Checklist for a map change
 
 1. Make the change in the map (scene, art, effects, settings or controls).

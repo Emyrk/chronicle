@@ -172,7 +172,13 @@ function cachedTankGuids(fx: EncounterEffects, players: Record<string, { name: s
 }
 
 export type MapScene =
-  | { status: "message"; title: string; detail: string }
+  | {
+    status: "message";
+    title: string;
+    detail: string;
+    /** While loading: the selected encounter's dungeon mesh, when the manifest has one, so it can be fetched early. */
+    meshHint?: WowMapMeshInstance | null;
+  }
   | {
     status: "ready";
     /** The scene replays the whole run: `autoFit` / `focusCentre` follow the party. */
@@ -277,7 +283,14 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const [floorNumber, setFloorNumber] = useState<number | null>(null);
 
   if (!iconBaseUrl) return { status: "message", title: "Map artwork unavailable", detail: "This instance's dataset has no icon base URL." };
-  if (manifestQuery.isLoading || props.loading) return { status: "message", title: "Loading map", detail: "Fetching artwork and position telemetry…" };
+  if (manifestQuery.isLoading || props.loading) {
+    // The selected encounter's map is known before its telemetry is processed:
+    // name its mesh so the (large) download can start now.
+    const selectedMapId = props.context.instance.encounters.find((candidate) => candidate.id === props.context.selectedEncounterIds[0])?.mapId;
+    const hintArtwork = manifestQuery.data && selectedMapId ? resolveMapArtwork(manifestQuery.data, selectedMapId, undefined, props.context.instance.name) : null;
+    const meshHint = hintArtwork?.kind === "instance" ? placeableDungeonMesh(hintArtwork.instance.mesh) : null;
+    return { status: "message", title: "Loading map", detail: "Fetching artwork and position telemetry…", meshHint };
+  }
   if (manifestQuery.error) return { status: "message", title: "Map artwork unavailable", detail: manifestQuery.error.message };
   if (!encounter || visibleUnits.length === 0 || mapId === null || cursorMs === null) {
     return { status: "message", title: "No position telemetry", detail: "This encounter does not contain unit-position data." };
