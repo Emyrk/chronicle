@@ -27,7 +27,6 @@ function mapEncounter(
     endMs,
     positionsByUnit,
     healthByUnit: new Map(),
-    powerByUnit: new Map(),
     effects: createEncounterEffects(),
   };
 }

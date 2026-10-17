@@ -223,6 +223,8 @@ export interface CardBackProps {
   setPanelOption?: (option: string | null) => void;
 }
 
+export type PanelRenderVariant = "card" | "overlay";
+
 export interface PanelRenderProps<TResult> {
   /** The aggregated state */
   result: TResult;
@@ -287,6 +289,14 @@ export interface PanelRenderProps<TResult> {
    * and in hosts without a title row.
    */
   headerSlot?: HTMLElement | null;
+
+  /**
+   * Where the panel is drawn: "card" (the default) in a panel card, or
+   * "overlay" embedded in another panel (EmbeddedPanel), e.g. raid frames over
+   * the map. Overlay renders should be compact, draw no messages, and leave
+   * positioning to the host.
+   */
+  variant?: PanelRenderVariant;
 
 }
 

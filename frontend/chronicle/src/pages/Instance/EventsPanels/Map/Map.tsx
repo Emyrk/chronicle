@@ -20,7 +20,8 @@ import {
 } from "./mapModel";
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
 import { MapView2D, type MapViewRequest } from "./MapView2D";
-import { RaidFrames } from "./RaidFrames";
+import { EmbeddedPanel } from "../EmbeddedPanel";
+import { createRaidFramesPanel } from "../RaidFrames/RaidFrames";
 import { MAP_CONTROL_KEYBINDS } from "./mapControls";
 import { useMapScene } from "./useMapScene";
 import { encounterJumps, mapPresentationForSelection } from "./wholeRun";
@@ -28,6 +29,8 @@ import { encounterJumps, mapPresentationForSelection } from "./wholeRun";
 export { mapPresentationForSelection };
 
 const MapView3D = lazy(() => import("./MapView3D"));
+
+const RAID_FRAMES_PANEL = createRaidFramesPanel();
 
 const MESH_STORAGE_KEY = "chronicle.map.mesh";
 
@@ -243,7 +246,10 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
             />
           </Suspense>
         )}
-        {showRaidFrames && <RaidFrames frames={scene.raidFrames} />}
+        {/* The Raid Frames panel itself, drawn as an overlay: one implementation for the map and the panel. */}
+        <div className="pointer-events-none absolute left-2 top-2 z-30 max-w-[calc(100%-1rem)] overflow-hidden">
+          <EmbeddedPanel panel={RAID_FRAMES_PANEL} context={props.context} durationMs={props.durationMs} enabled={showRaidFrames} />
+        </div>
       </div>
       {jumps.length > 0 && scene.runStartMs !== null && (
         <div className="flex flex-col gap-1 px-1">

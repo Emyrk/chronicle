@@ -15,7 +15,6 @@ import { clampViewport, fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
 import MapView3D from "./MapView3D";
 import type { MapViewRequest } from "./MapView2D";
-import { RaidFrames } from "./RaidFrames";
 import { addEffectEvent, createEncounterEffects, isDeadAt, type EncounterEffects, type ReplayEffectEvent } from "./replayEffects";
 import { useMapScene, type MapMarkerKind, type MapSceneGround, type MapSceneMarker } from "./useMapScene";
 
@@ -904,7 +903,6 @@ function FixturePlayer({ fixture, mesh = false }: { fixture: LoadedMapFixture; m
       ) : (
         <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{scene.title}: {scene.detail}</div>
       )}
-      {scene.status === "ready" && <RaidFrames frames={scene.raidFrames} />}
       <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-white/80">
         {instance.encounters[0]?.name} {elapsed.toFixed(1)}s
         {dungeonMesh && meshState !== "ready" && <span className="ml-1.5 text-amber-200/80">cave {meshState}</span>}
@@ -1018,7 +1016,6 @@ function meshFightFixture(players: number, { instance, world, encounterId }: Mes
       endMs,
       positionsByUnit: new Map(units.map((unit) => [unit.guid, shift(unit.positions)])),
       healthByUnit: new Map([...bossFightHealth(players)].map(([guid, samples]) => [guid, shift(samples)])),
-      powerByUnit: new Map(),
       effects,
     }]]),
   };
