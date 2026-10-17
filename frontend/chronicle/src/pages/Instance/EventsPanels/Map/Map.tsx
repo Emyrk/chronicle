@@ -2,7 +2,7 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Crosshair, Focus, HeartPulse, Keyboard, Map as MapIcon, Maximize, Route, Users } from "lucide-react";
+import { Crosshair, Focus, HeartPulse, Map as MapIcon, Maximize, Route, Users } from "lucide-react";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { fetchMiniatureUrls } from "./bossMinis";
@@ -20,12 +20,9 @@ import {
 } from "./mapModel";
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
 import { MapView2D, type MapViewRequest } from "./MapView2D";
-import { MapControlsSettings } from "./MapControlsSettings";
 import { RaidFrames } from "./RaidFrames";
-import { useMapKeyBindings } from "./useMapKeyBindings";
-import { keyLabel, MAP_CONTROL_ACTIONS } from "./mapControls";
+import { MAP_CONTROL_KEYBINDS } from "./mapControls";
 import { useMapScene } from "./useMapScene";
-import { useRegisterInstanceKeybinds } from "../../InstanceKeybinds";
 import { encounterJumps, mapPresentationForSelection } from "./wholeRun";
 
 export { mapPresentationForSelection };
@@ -101,16 +98,6 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   const autoFit = ready?.autoFit ?? null;
   const defaultViewport = ready?.fitByDefault && autoFit ? autoFit : FULL_MAP_VIEWPORT;
   const [showRaidFrames, setShowRaidFrames] = useState(true);
-  const { bindings: keyBindings } = useMapKeyBindings();
-  const reportedKeybinds = useMemo(() => MAP_CONTROL_ACTIONS.map((action) => ({
-    keys: keyLabel(keyBindings[action.id]),
-    action: `${action.label} while the pointer is over the map`,
-  })), [keyBindings]);
-  useRegisterInstanceKeybinds(
-    `panel:${props.panelId ?? props.panelIndex ?? "map"}:map-controls`,
-    "Map",
-    reportedKeybinds,
-  );
   const [storedFraming, setFraming] = useState<MapFraming>(INITIAL_MAP_FRAMING);
   // A new selection or replay moving into another encounter re-frames;
   // loading states (e.g. reprocessing after a filter change) keep the framing.
@@ -202,12 +189,6 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
         <Maximize className="h-3 w-3" />
         Reset
       </button>
-      {props.flipCard && (
-        <button type="button" onClick={props.flipCard} title="Camera keybinds" className={framingButtonClass}>
-          <Keyboard className="h-3 w-3" />
-          Controls
-        </button>
-      )}
       {onExitWholeRun && (
         <button type="button" onClick={onExitWholeRun} title="Back to the 2D route overview" className={framingButtonClass}>
           <Route className="h-3 w-3" />
@@ -259,7 +240,6 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               onDungeonMeshState={setMeshState}
               focus={focus}
               cinematic={cinematic}
-              keyBindings={keyBindings}
             />
           </Suspense>
         )}
@@ -356,13 +336,12 @@ export function createMapPanel(): PanelDefinition<MapResult, MapProcessorEvent> 
     ...mapProcessor,
     label: "Map",
     icon: <MapIcon className="h-4 w-4" />,
-    keybinds: "dynamic",
+    keybinds: MAP_CONTROL_KEYBINDS,
     requiredCapabilities: ["unit-position"],
     syncDataMode: "full",
     disableCardFlip: true,
     supportsFiltering: false,
     underConstruction: true,
-    renderCardBack: (props) => <MapControlsSettings onClose={props.onClose} />,
     render: (props) => <MapContent {...props} />,
   };
 }

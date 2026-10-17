@@ -141,9 +141,9 @@ Every panel definition must explicitly declare its shortcut ownership:
 
 - Use `keybinds: []` when the panel has no shortcuts.
 - List static keyboard or mouse shortcuts directly in `keybinds`.
-- Use `keybinds: "dynamic"` when bindings depend on saved settings or runtime state, then call `useRegisterInstanceKeybinds()` from the rendered panel with the resolved bindings.
+- Use `keybinds: "dynamic"` when bindings depend on runtime state, then call `useRegisterInstanceKeybinds()` from the rendered panel with the active bindings.
 
-The instance Page Guide reads the shared registry, so a new `keydown`/`keyup` listener or modifier-based mouse action must be reported through one of these paths. Configurable panels, such as Map, should report the viewer's resolved bindings rather than their defaults.
+The instance Page Guide reads the shared registry, so a new `keydown`/`keyup` listener or modifier-based mouse action must be reported through one of these paths.
 
 ### PanelRenderProps<TResult>
 

@@ -22,6 +22,13 @@ describe("map presentation", () => {
     expect(createMapPanel().syncDataMode).toBe("full");
   });
 
+  it("exposes fixed camera shortcuts without a settings card", () => {
+    const panel = createMapPanel();
+    expect(panel.keybinds).not.toBe("dynamic");
+    expect(panel.keybinds).toHaveLength(8);
+    expect(panel.renderCardBack).toBeUndefined();
+  });
+
   it("prefers published dungeon meshes until the user explicitly chooses otherwise", () => {
     expect(preferredMeshState(null)).toBe(true);
     expect(preferredMeshState(true)).toBe(true);
