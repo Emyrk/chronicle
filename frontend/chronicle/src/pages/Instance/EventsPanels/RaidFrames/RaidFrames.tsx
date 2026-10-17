@@ -433,7 +433,7 @@ function OverlayRaidFrame({
       <TooltipTrigger asChild>
         <div
           className={`pointer-events-auto flex w-20 flex-col overflow-hidden rounded-sm border bg-black/80 ${inspected ? "border-white ring-1 ring-white/70" : "border-black/80"} ${dead ? "opacity-60" : ""} ${inspect && guid ? "cursor-pointer" : ""}`}
-          onClick={inspect && guid ? () => inspect.toggle(guid) : undefined}
+          onClick={inspect && guid ? () => inspect.select(guid) : undefined}
         >
           <div className="relative h-4">
             <div className="absolute inset-y-0 left-0" style={{ width: `${healthWidth}%`, background: classColor }} />

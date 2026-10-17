@@ -1,11 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createUnitAurasPanel } from "../UnitAuras/UnitAuras";
-import type { PanelContext } from "../types";
-import { useEmbeddedPanel, type EmbeddedPanelRender } from "../useEmbeddedPanel";
-
-const UNIT_AURAS_PANEL = createUnitAurasPanel();
+import type { EmbeddedPanelRender } from "../useEmbeddedPanel";
 const BOX_WIDTH = 176;
 const GAP = 8;
 // New boxes line up under the raid frames (five rows of frames plus margin), four to a row.
@@ -34,8 +30,8 @@ interface InspectCardsProps {
   onRemove: (guid: string) => void;
   /** The map's Raid Frames render (shared with its grid): health, power and casts. */
   raidFrames: EmbeddedPanelRender;
-  context: PanelContext;
-  durationMs: number;
+  /** The map's Unit Auras render (shared with its target frames). */
+  auras: EmbeddedPanelRender;
 }
 
 /**
@@ -44,8 +40,7 @@ interface InspectCardsProps {
  * over the Unit Auras panel's icons, drawn for `u:<guid>` from one run of each
  * panel.
  */
-export function InspectCards({ guids, onRemove, raidFrames, context, durationMs }: InspectCardsProps) {
-  const auras = useEmbeddedPanel({ panel: UNIT_AURAS_PANEL, context, durationMs, enabled: guids.length > 0 });
+export function InspectCards({ guids, onRemove, raidFrames, auras }: InspectCardsProps) {
   const layerRef = useRef<HTMLDivElement>(null);
   // Where each box was dragged to; the rest take their slot in the line-up.
   const [moved, setMoved] = useState<ReadonlyMap<string, Position>>(new Map());
