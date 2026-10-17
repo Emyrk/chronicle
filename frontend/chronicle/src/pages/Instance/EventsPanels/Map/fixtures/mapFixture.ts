@@ -1,4 +1,5 @@
-import type { InstancePlayer, InstanceUnit, KillType, WoWHeroClasses } from "@/api/typesGenerated";
+import type { InstancePlayer, KillType, WoWHeroClasses } from "@/api/typesGenerated";
+import type { ResolvedInstanceUnit } from "@/pages/Instance/instanceUnits";
 import type { WowMapManifest } from "@/pages/Technical/mapGallery";
 import type { StreamType } from "@/hooks/instanceEvents";
 import type { Instance } from "../../../InstancePage";
@@ -123,7 +124,7 @@ export function loadMapFixture(fixture: MapFixture, options: { selectPlayers?: b
     capabilities: fixture.instance.capabilities,
     players,
     // Owners stay the wire strings the API sends.
-    units: fixture.units as unknown as Record<string, InstanceUnit>,
+    units: fixture.units as unknown as Record<string, ResolvedInstanceUnit>,
     encounters: [{
       id: encounterId,
       name: fixture.encounter.name,

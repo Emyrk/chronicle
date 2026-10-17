@@ -2,6 +2,7 @@ package db2sdk
 
 import (
 	"encoding/json"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -272,6 +273,70 @@ func WoWInstance(instance database.LogInstancesGuild) chroniclesdk.WoWInstance {
 	return ret
 }
 
+func InstanceUnits(units []database.LogInstanceUnit) (
+	map[chroniclesdk.GUIDString]chroniclesdk.InstanceUnit,
+	map[uint32]string,
+	map[chroniclesdk.GUIDString][]chroniclesdk.GUIDString,
+) {
+	type entryName struct {
+		name     string
+		count    int
+		conflict bool
+	}
+
+	entryNames := make(map[uint32]entryName)
+	for _, unit := range units {
+		entry := uint32(unit.Entry)
+		if entry == 0 || unit.Name == "" {
+			continue
+		}
+		candidate, ok := entryNames[entry]
+		if !ok {
+			entryNames[entry] = entryName{name: unit.Name, count: 1}
+			continue
+		}
+		candidate.count++
+		candidate.conflict = candidate.conflict || candidate.name != unit.Name
+		entryNames[entry] = candidate
+	}
+
+	var namesByEntry map[uint32]string
+	for entry, candidate := range entryNames {
+		if candidate.count < 2 || candidate.conflict {
+			continue
+		}
+		if namesByEntry == nil {
+			namesByEntry = make(map[uint32]string)
+		}
+		namesByEntry[entry] = candidate.name
+	}
+
+	instanceUnits := make(map[chroniclesdk.GUIDString]chroniclesdk.InstanceUnit, len(units))
+	var summonsByOwner map[chroniclesdk.GUIDString][]chroniclesdk.GUIDString
+	for _, unit := range units {
+		entry := uint32(unit.Entry)
+		name := unit.Name
+		if sharedName, ok := namesByEntry[entry]; ok && sharedName == name {
+			name = ""
+		}
+		instanceUnits[unit.UnitGuid] = chroniclesdk.InstanceUnit{
+			Name:  name,
+			Entry: entry,
+		}
+		if unit.OwnerGuid != nil {
+			if summonsByOwner == nil {
+				summonsByOwner = make(map[chroniclesdk.GUIDString][]chroniclesdk.GUIDString)
+			}
+			summonsByOwner[*unit.OwnerGuid] = append(summonsByOwner[*unit.OwnerGuid], unit.UnitGuid)
+		}
+	}
+	for owner := range summonsByOwner {
+		slices.Sort(summonsByOwner[owner])
+	}
+
+	return instanceUnits, namesByEntry, summonsByOwner
+}
+
 func WowDecoratedInstance(instance database.LogInstancesGuild,
 	units []database.LogInstanceUnit,
 	players []database.LogInstancePlayer,
@@ -279,18 +344,15 @@ func WowDecoratedInstance(instance database.LogInstancesGuild,
 	fights []database.LogInstanceEncounterHostile,
 	phases []database.LogInstanceEncounterPhase,
 ) chroniclesdk.WoWParsedInstance {
+	instanceUnits, namesByEntry, summonsByOwner := InstanceUnits(units)
 	ret := chroniclesdk.WoWParsedInstance{
-		WoWInstance: WoWInstance(instance),
-		RealmName:   instance.RealmName,
-		Encounters:  WoWEncountersWithHostiles(encounters, fights, phases),
-		Units: maps.MapFromSlice(units, func(u database.LogInstanceUnit) guid.GUID { return u.UnitGuid }, func(u database.LogInstanceUnit) chroniclesdk.InstanceUnit {
-			return chroniclesdk.InstanceUnit{
-				Name:  u.Name,
-				Owner: u.OwnerGuid,
-				Entry: uint32(u.Entry),
-			}
-		}),
-		Players: InstancePlayers(players),
+		WoWInstance:    WoWInstance(instance),
+		RealmName:      instance.RealmName,
+		Encounters:     WoWEncountersWithHostiles(encounters, fights, phases),
+		Units:          instanceUnits,
+		NamesByEntry:   namesByEntry,
+		SummonsByOwner: summonsByOwner,
+		Players:        InstancePlayers(players),
 	}
 	return ret
 }

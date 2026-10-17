@@ -1,9 +1,10 @@
 package unitname
 
 import (
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/totems"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/traps"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/warlockdemon"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
 // ByEntry is a static list of some unit names by their entry ID. Helps when
@@ -19,6 +20,10 @@ func ByGUID(id guid.GUID) string {
 
 	if totem, ok := totems.IsTotem(id); ok {
 		return totem.Name
+	}
+
+	if trap, ok := traps.IsTrap(id); ok {
+		return trap.Name
 	}
 
 	entry, ok := id.GetEntry()

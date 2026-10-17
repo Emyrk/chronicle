@@ -1130,7 +1130,9 @@ export interface DuplicateInstance {
 }
 
 // From chroniclesdk/log.go
-export type Duration = number;
+export type Duration = 180000000000;
+
+export const Durations: Duration[] = [180000000000];
 
 // From chroniclesdk/gamedata.go
 /**
@@ -2125,7 +2127,7 @@ export interface InstanceTimeParsesResponse {
 
 // From chroniclesdk/log.go
 export interface InstanceUnit {
-    readonly name: string;
+    readonly name?: string;
     readonly owner?: GUID;
     readonly entry: number;
 }
@@ -4871,6 +4873,8 @@ export interface WoWParsedInstance extends WoWInstance {
     readonly realm_name?: string;
     readonly encounters: readonly WoWEncounterWithHostiles[];
     readonly units: Record<string, InstanceUnit>;
+    readonly names_by_entry?: Record<number, string>;
+    readonly summons_by_owner?: Record<string, string[]>;
     readonly players: Record<string, InstancePlayer>;
 }
 

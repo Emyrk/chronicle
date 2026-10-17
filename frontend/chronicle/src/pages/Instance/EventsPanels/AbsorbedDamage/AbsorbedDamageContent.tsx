@@ -6,7 +6,7 @@ import type { PanelRenderProps } from "../types";
 import type { AbsorbedDamageResult } from "./absorbedDamage.processor";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { formatNumber } from "@/lib/format";
-import type { InstanceUnit } from "@/api/typesGenerated";
+import type { ResolvedInstanceUnit } from "@/pages/Instance/instanceUnits";
 import { useAbsorbedDamageBreakout } from "./AbsorbedDamageBreakout";
 
 /**
@@ -16,7 +16,7 @@ function aggregateForEncounters(
   result: AbsorbedDamageResult,
   selectedTargets: Set<string>,
   selectedEncounterIds: string[],
-  instanceUnits: Record<string, InstanceUnit>,
+  instanceUnits: Record<string, ResolvedInstanceUnit>,
 ): PlayerMetricChartData[] {
   const aggregated = new Map<string, PlayerMetricChartData>();
 
