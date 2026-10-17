@@ -128,9 +128,11 @@ export const DeathRecap = ({ recap, outgoingRecap, deathOffsetMilli }: DeathReca
 
   const merged = useMemo(() => mergeRecaps(recap, outgoingRecap), [recap, outgoingRecap]);
 
-  const activeEntries = tab === "incoming" ? recap : tab === "outgoing" ? outgoingRecap : merged;
+  const activeEntries = (tab === "incoming" ? recap : tab === "outgoing" ? outgoingRecap : merged)
+    .filter((entry) => entry.type !== "unit_resources");
   const showTarget = tab !== "incoming";
-  const isEmpty = recap.length === 0 && outgoingRecap.length === 0;
+  const isEmpty = !recap.some((entry) => entry.type !== "unit_resources")
+    && !outgoingRecap.some((entry) => entry.type !== "unit_resources");
 
   if (isEmpty) {
     return (

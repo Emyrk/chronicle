@@ -22,6 +22,35 @@ describe("RelativeHealthBar", () => {
     expect(markup).toContain("deficit −10");
   });
 
+  it("renders sampled current and maximum HP when unit resources are available", () => {
+    const markup = renderToStaticMarkup(
+      <RelativeHealthBar messages={[
+        { id: "health", timestamp: 1, sequence: 1, kind: "health", amount: 7_500, currentHealth: 7_500, maximumHealth: 10_000 },
+      ]} />,
+    );
+
+    expect(markup).toContain("7,500 / 10,000 HP");
+    expect(markup).toContain("max HP");
+    expect(markup).toContain('style="left:75%"');
+  });
+
+  it("renders faded incoming damage and healing projections", () => {
+    const markup = renderToStaticMarkup(
+      <RelativeHealthBar
+        messages={[
+          { id: "health", timestamp: 1, sequence: 1, kind: "health", amount: 7_500, currentHealth: 7_500, maximumHealth: 10_000 },
+        ]}
+        incomingDamage={2_000}
+        incomingHealing={1_000}
+      />,
+    );
+
+    expect(markup).toContain("data-incoming-damage-range");
+    expect(markup).toContain("data-incoming-healing-range");
+    expect(markup).toContain('left:55%');
+    expect(markup).toContain('left:75%');
+  });
+
   it("uses supplied encounter bounds for static extrema markers", () => {
     const markup = renderToStaticMarkup(
       <RelativeHealthBar

@@ -1,4 +1,4 @@
-export type RelativeHealthMessageKind = "damage" | "healing" | "prevented";
+export type RelativeHealthMessageKind = "damage" | "healing" | "prevented" | "health";
 
 export interface RelativeHealthMessage {
   id: string;
@@ -11,6 +11,9 @@ export interface RelativeHealthMessage {
   overheal?: number;
   /** Damage prevented by absorbs or other mitigation. */
   prevented?: number;
+  /** Exact health values sampled from the unit-resources stream. */
+  currentHealth?: number;
+  maximumHealth?: number;
 }
 
 export interface RelativeHealthTransition {
@@ -31,6 +34,10 @@ export interface RelativeHealthState {
   prevented: number;
   overhealing: number;
   lastTransition: RelativeHealthTransition | null;
+  /** True once an exact unit-resources health sample has anchored the state. */
+  actualHealth?: boolean;
+  /** Latest sampled maximum health, when actualHealth is true. */
+  maximumHealth?: number | null;
 }
 
 export function calculateRelativeHealth(messages: RelativeHealthMessage[]): RelativeHealthState {
@@ -46,16 +53,37 @@ export function calculateRelativeHealth(messages: RelativeHealthMessage[]): Rela
   let prevented = 0;
   let overhealing = 0;
   let lastTransition: RelativeHealthTransition | null = null;
+  let actualHealth = false;
+  let maximumHealth: number | null = null;
 
   for (const message of ordered) {
     const amount = Math.max(0, message.amount);
     const messagePrevented = Math.max(0, message.prevented ?? 0);
 
-    if (message.kind === "damage") {
+    if (message.kind === "health") {
+      const sampledCurrent = Math.max(0, message.currentHealth ?? amount);
+      const sampledMaximum = Math.max(sampledCurrent, message.maximumHealth ?? sampledCurrent);
+      const correction = sampledCurrent - current;
+      current = sampledCurrent;
+      maximumHealth = sampledMaximum;
+      if (!actualHealth) {
+        minimum = sampledCurrent;
+        maximum = sampledCurrent;
+        actualHealth = true;
+      }
+      const transition = lastTransition as RelativeHealthTransition | null;
+      if (transition && correction !== 0) {
+        lastTransition = {
+          ...transition,
+          from: transition.from + correction,
+          to: transition.to + correction,
+        };
+      }
+    } else if (message.kind === "damage") {
       // Combat-log damage amounts are health actually lost. Prevented damage is
       // contextual information and must not be subtracted from the movement.
       const from = current;
-      current -= amount;
+      current = actualHealth ? Math.max(0, current - amount) : current - amount;
       damage += amount;
       prevented += messagePrevented;
       if (amount > 0 || messagePrevented > 0) {
@@ -72,7 +100,9 @@ export function calculateRelativeHealth(messages: RelativeHealthMessage[]): Rela
       const messageOverheal = Math.min(amount, Math.max(0, message.overheal ?? 0));
       const healing = Math.max(0, amount - messageOverheal);
       const from = current;
-      current += healing;
+      current = actualHealth && maximumHealth !== null
+        ? Math.min(maximumHealth, current + healing)
+        : current + healing;
       effectiveHealing += healing;
       overhealing += messageOverheal;
       if (healing > 0 || messageOverheal > 0) {
@@ -102,5 +132,7 @@ export function calculateRelativeHealth(messages: RelativeHealthMessage[]): Rela
     prevented,
     overhealing,
     lastTransition,
+    actualHealth,
+    maximumHealth,
   };
 }

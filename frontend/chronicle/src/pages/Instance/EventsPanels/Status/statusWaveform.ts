@@ -95,6 +95,27 @@ export function statusWaveformBarWidth(historyMilli: number, futureMilli: number
   return historyMilli + futureMilli <= 10_000 ? 3 : 2;
 }
 
+export function statusWaveformTimestampAtPointer(
+  pointerX: number,
+  width: number,
+  windowStartMilli: number,
+  windowMilli: number,
+): number {
+  if (width <= 0 || windowMilli <= 0) return windowStartMilli;
+  const fraction = Math.max(0, Math.min(1, pointerX / width));
+  return windowStartMilli + fraction * windowMilli;
+}
+
+export function statusWaveformEventsAround(
+  events: readonly StatusWaveformEvent[],
+  timestampMilli: number,
+  radiusMilli = 1_000,
+): StatusWaveformEvent[] {
+  return events
+    .filter((event) => Math.abs(event.timestampMilli - timestampMilli) <= radiusMilli)
+    .sort((a, b) => a.timestampMilli - b.timestampMilli || a.eventIndex - b.eventIndex);
+}
+
 export function statusWaveformPosition(
   timestampMilli: number,
   windowStartMilli: number,

@@ -53,6 +53,33 @@ describe("calculateRelativeHealth", () => {
     });
   });
 
+  it("anchors health to unit-resource samples and applies later events", () => {
+    const state = calculateRelativeHealth([
+      message({ id: "sample", timestamp: 1, kind: "health", amount: 800, currentHealth: 800, maximumHealth: 1_000 }),
+      message({ id: "damage", timestamp: 2, kind: "damage", amount: 250 }),
+      message({ id: "heal", timestamp: 3, kind: "healing", amount: 100 }),
+    ]);
+
+    expect(state.actualHealth).toBe(true);
+    expect(state.maximumHealth).toBe(1_000);
+    expect(state.current).toBe(650);
+    expect(state.minimum).toBe(550);
+    expect(state.maximum).toBe(800);
+    expect(state.lastTransition).toMatchObject({ kind: "healing", from: 550, to: 650 });
+  });
+
+  it("clamps inferred movement to sampled health bounds", () => {
+    const state = calculateRelativeHealth([
+      message({ id: "sample", timestamp: 1, kind: "health", amount: 100, currentHealth: 100, maximumHealth: 1_000 }),
+      message({ id: "damage", timestamp: 2, kind: "damage", amount: 500 }),
+      message({ id: "heal", timestamp: 3, kind: "healing", amount: 2_000 }),
+    ]);
+
+    expect(state.current).toBe(1_000);
+    expect(state.minimum).toBe(0);
+    expect(state.maximum).toBe(1_000);
+  });
+
   it("does not move health for standalone prevented-damage messages", () => {
     const state = calculateRelativeHealth([
       message({ kind: "prevented", amount: 500 }),

@@ -258,8 +258,12 @@ export function IncomingEventsBreakout({
 
       <div className="border-b border-white/5 bg-white/[0.015] px-3 py-2">
         <div className="mb-1.5 flex items-baseline gap-2">
-          <span className="text-2xs uppercase tracking-widest text-muted-foreground">Relative health change</span>
-          <span className="text-[9px] text-muted-foreground/60">not actual health · max HP unknown</span>
+          <span className="text-2xs uppercase tracking-widest text-muted-foreground">
+            {healthState.actualHealth ? "Health" : "Relative health change"}
+          </span>
+          <span className="text-[9px] text-muted-foreground/60">
+            {healthState.actualHealth ? "actual HP from unit resources" : "not actual health · max HP unknown"}
+          </span>
           <div className="flex-1" />
         </div>
         <RelativeHealthBar messages={healthMessages} state={healthState} />

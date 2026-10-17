@@ -10,11 +10,13 @@ const MIN_WINDOW_MILLI = 1;
 export interface IncomingTimelineEvent {
   offsetMilli: number;
   eventIndex: number;
-  type: "damage" | "heal" | "absorbed" | "resource_change" | "aura_cast";
+  type: "damage" | "heal" | "absorbed" | "resource_change" | "unit_resources" | "aura_cast";
   amount: number;
   overheal?: number;
   blocked?: number;
   absorbed?: number;
+  currentHealth?: number;
+  maximumHealth?: number;
 }
 
 export interface RelativeHealthSnapshot {
@@ -57,7 +59,11 @@ export function visibleIncomingEvents<T extends IncomingTimelineEvent>(
 ): T[] {
   const cutoff = anchorOffsetMilli - windowMilli;
   return events
-    .filter((event) => event.offsetMilli >= cutoff && event.offsetMilli <= anchorOffsetMilli)
+    .filter((event) =>
+      event.type !== "unit_resources"
+      && event.offsetMilli >= cutoff
+      && event.offsetMilli <= anchorOffsetMilli
+    )
     .sort(compareIncomingEventsNewestFirst);
 }
 
@@ -114,8 +120,14 @@ export function relativeHealthMessagesAtCursor<T extends IncomingTimelineEvent>(
 ): RelativeHealthMessage[] {
   const cursorOffset = anchorOffsetMilli + Math.max(-windowMilli, Math.min(0, cursorRelativeMilli));
   const cutoff = anchorOffsetMilli - windowMilli;
+  const latestHealthSample = events
+    .filter((event) => event.type === "unit_resources" && event.offsetMilli <= cursorOffset)
+    .sort((a, b) => b.offsetMilli - a.offsetMilli || b.eventIndex - a.eventIndex)[0];
+  // A sample just before the visible window still anchors actual HP. Only
+  // replay events after the latest sample because it supersedes earlier deltas.
+  const healthStartOffset = latestHealthSample?.offsetMilli ?? cutoff;
   const includedEvents = events.filter(
-    (event) => event.offsetMilli >= cutoff && event.offsetMilli <= cursorOffset,
+    (event) => event.offsetMilli >= healthStartOffset && event.offsetMilli <= cursorOffset,
   );
   const attachedAbsorbs = new Set(
     includedEvents
@@ -152,6 +164,17 @@ export function relativeHealthMessagesAtCursor<T extends IncomingTimelineEvent>(
         sequence: event.eventIndex,
         kind: "healing",
         amount: Math.max(0, event.amount),
+      }];
+    }
+    if (event.type === "unit_resources") {
+      return [{
+        id,
+        timestamp: event.offsetMilli,
+        sequence: event.eventIndex,
+        kind: "health",
+        amount: Math.max(0, event.currentHealth ?? event.amount),
+        currentHealth: event.currentHealth ?? event.amount,
+        maximumHealth: event.maximumHealth,
       }];
     }
     if (

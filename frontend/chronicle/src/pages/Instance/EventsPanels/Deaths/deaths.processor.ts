@@ -2,7 +2,7 @@
  * Deaths processor - aggregates player and enemy deaths from slain events (pure TS, worker-safe)
  */
 
-import type { SlainProcessorEvent, ResurrectionProcessorEvent, DamageProcessorEvent, HealProcessorEvent, ResourceChangeProcessorEvent, AbsorbedProcessorEvent, AuraCastProcessorEvent, PanelProcessor, ProcessorContext, ProcessorEvent } from "../processorTypes";
+import type { SlainProcessorEvent, ResurrectionProcessorEvent, DamageProcessorEvent, HealProcessorEvent, ResourceChangeProcessorEvent, UnitResourcesProcessorEvent, AbsorbedProcessorEvent, AuraCastProcessorEvent, PanelProcessor, ProcessorContext, ProcessorEvent } from "../processorTypes";
 import type { StreamType } from "@/hooks/instanceEvents";
 import { createGuidCache, getCachedGuid, isPlayerGuidFast, type GuidCache } from "../processors/guidCache";
 import { hasHitType, HitTypePartialResist, HitTypeFullResist, HitTypePartialAbsorb, HitTypeFullAbsorb, HitTypePartialBlock, HitTypeFullBlock } from "@/lib/hittype/hittype";
@@ -33,9 +33,11 @@ export interface DeathRecapEntry {
   school: number;
   hitType: number;
   spellId: number | null;    // spell ID for icon/tooltip lookup
-  type: "damage" | "heal" | "absorbed" | "resource_change" | "aura_cast";
+  type: "damage" | "heal" | "absorbed" | "resource_change" | "unit_resources" | "aura_cast";
   casterClass: string | null; // WoW class name if caster is a player, null if hostile/unknown
   overheal?: number;
+  currentHealth?: number;
+  maximumHealth?: number;
   overkill?: number;
   absorbSpellName?: string;  // for absorbed events
   absorbSpellId?: number | null; // spell ID of the absorb shield
@@ -49,8 +51,9 @@ export interface DeathRecapEntry {
  * Data for a single death event
  */
 export interface DeathEvent {
-  dateMilli: number;  // Absolute timestamp 
+  dateMilli: number;  // Absolute timestamp
   offsetMilli: number;     // Time offset from encounter start
+  eventIndex: number;      // Combat-log ordering relative to same-timestamp events
   playerID: string;        // GUID of the player who died
   playerName: string;
   className: string;
@@ -161,12 +164,42 @@ function pushToBuffer(bufferMap: Map<string, Map<string, DeathRecapEntry[]>>, en
   arr.push(entry);
 }
 
+function appendToSameTimestampDeath(
+  deaths: DeathEvent[],
+  encounterID: string,
+  targetGUID: string,
+  entry: DeathRecapEntry,
+  outgoing: boolean,
+): void {
+  const death = [...deaths].reverse().find((candidate) =>
+    candidate.encounterID === encounterID
+    && candidate.playerID === targetGUID
+    && candidate.offsetMilli === entry.offsetMilli
+    && candidate.eventIndex < entry.eventIndex,
+  );
+  if (!death) return;
+
+  const recap = outgoing ? death.outgoingRecap : death.recap;
+  if (recap.some((candidate) =>
+    candidate.eventIndex === entry.eventIndex
+    && candidate.offsetMilli === entry.offsetMilli
+    && candidate.type === entry.type
+  )) return;
+  recap.push(entry);
+  recap.sort((a, b) => a.offsetMilli - b.offsetMilli || a.eventIndex - b.eventIndex);
+}
+
 /** Push an entry into the incoming buffer (by target) and outgoing buffer (self-targeted only: source = me AND target = me) */
 function pushBuffer(state: DeathsResult, encounterID: string, targetGUID: string, casterGUID: string, entry: DeathRecapEntry) {
   pushToBuffer(state._incomingBuffer, encounterID, targetGUID, entry);
+  appendToSameTimestampDeath(state.DeathEvents, encounterID, targetGUID, entry, false);
+  appendToSameTimestampDeath(state.EnemyDeathEvents, encounterID, targetGUID, entry, false);
+
   // Outgoing buffer: only self-targeted events (caster === target)
   if (casterGUID && casterGUID === targetGUID) {
     pushToBuffer(state._outgoingBuffer, encounterID, casterGUID, entry);
+    appendToSameTimestampDeath(state.DeathEvents, encounterID, casterGUID, entry, true);
+    appendToSameTimestampDeath(state.EnemyDeathEvents, encounterID, casterGUID, entry, true);
   }
 }
 
@@ -193,7 +226,7 @@ function buildRecapFromBuffer(bufferMap: Map<string, Map<string, DeathRecapEntry
 export function createDeathsProcessor(): PanelProcessor<DeathsResult, ProcessorEvent> {
   return {
     id: "deaths",
-    streams: ["slain", "ressurection", "damage", "heal", "resource_change", "absorbed", "aura_cast"],
+    streams: ["slain", "ressurection", "damage", "heal", "resource_change", "unit_resources", "absorbed", "aura_cast"],
 
     createState: () => ({
       EncounterDeaths: new Map<string, UnitDeaths>(),
@@ -340,6 +373,31 @@ export function createDeathsProcessor(): PanelProcessor<DeathsResult, ProcessorE
         return;
       }
 
+      // Buffer exact unit health samples for the relative-health visualization.
+      if (streamType === "unit_resources") {
+        const resources = event as UnitResourcesProcessorEvent;
+        if (!resources.unit) return;
+        pushBuffer(state, encounterID, resources.unit, resources.unit, {
+          offsetMilli: resources.offsetMilli,
+          eventIndex: resources.index,
+          sourceName: "Health sample",
+          casterName: resolveUnitName(resources.unit, context, guidCache),
+          casterID: resources.unit,
+          targetName: resolveUnitName(resources.unit, context, guidCache),
+          targetID: resources.unit,
+          targetClass: resolveCasterClass(resources.unit, context, guidCache),
+          amount: Math.max(0, resources.currentHealth),
+          currentHealth: Math.max(0, resources.currentHealth),
+          maximumHealth: Math.max(0, resources.maximumHealth),
+          school: 0,
+          hitType: 0,
+          spellId: null,
+          type: "unit_resources",
+          casterClass: resolveCasterClass(resources.unit, context, guidCache),
+        });
+        return;
+      }
+
       // Buffer aura_cast events (outgoing only — self-casts: source = me AND target = me)
       if (streamType === "aura_cast") {
         const ac = event as AuraCastProcessorEvent;
@@ -461,6 +519,7 @@ export function createDeathsProcessor(): PanelProcessor<DeathsResult, ProcessorE
       deathEventsList.push({
         dateMilli: firstTimestamp.getTime() + slain.offsetMilli,
         offsetMilli: slain.offsetMilli,
+        eventIndex: slain.index,
         playerID: victimID,
         playerName: victimName,
         className: victimClass,

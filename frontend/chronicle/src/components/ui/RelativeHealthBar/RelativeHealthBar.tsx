@@ -17,6 +17,8 @@ interface RelativeHealthBarProps {
   state?: RelativeHealthState;
   bounds?: RelativeHealthBounds;
   zeroPercent?: number;
+  incomingDamage?: number;
+  incomingHealing?: number;
 }
 
 function segmentStyle(from: number, to: number, toPercent: (value: number) => number) {
@@ -39,14 +41,17 @@ export function RelativeHealthBar({
   state: suppliedState,
   bounds,
   zeroPercent = 50,
+  incomingDamage = 0,
+  incomingHealing = 0,
 }: RelativeHealthBarProps) {
   const state = useMemo(
     () => suppliedState ?? calculateRelativeHealth(messages),
     [messages, suppliedState],
   );
-  const minimum = bounds?.minimum ?? state.minimum;
-  const maximum = bounds?.maximum ?? state.maximum;
-  const baselinePercent = Math.max(10, Math.min(90, zeroPercent));
+  const actualMaximumHealth = state.actualHealth ? Math.max(1, state.maximumHealth ?? state.maximum) : null;
+  const minimum = actualMaximumHealth !== null ? 0 : bounds?.minimum ?? state.minimum;
+  const maximum = actualMaximumHealth ?? bounds?.maximum ?? state.maximum;
+  const baselinePercent = actualMaximumHealth !== null ? 0 : Math.max(10, Math.min(90, zeroPercent));
   const transition = state.lastTransition;
   const overhealEnd = transition?.kind === "healing"
     ? transition.to + transition.overheal
@@ -62,16 +67,27 @@ export function RelativeHealthBar({
     maximum,
     ...(bounds ? [] : [Math.max(0, overhealEnd), Math.max(0, unpreventedEnd)]),
   );
-  // Use one unit-per-pixel scale on both sides of zero. The larger extent
-  // determines the scale while zeroPercent reserves more room for deficits.
-  const unitsPerPercent = Math.max(
-    negativeExtent / baselinePercent,
-    positiveExtent / (100 - baselinePercent),
-    1 / Math.max(baselinePercent, 100 - baselinePercent),
-  ) * 1.08;
-  const toPercent = (value: number) => baselinePercent + value / unitsPerPercent;
-  const currentColor = state.current < 0 ? "bg-red-500/55" : "bg-green-500/50";
+  // Use one unit-per-pixel scale on both sides of zero for inferred health.
+  // Exact unit-resource health instead maps directly from 0 to maximum HP.
+  const unitsPerPercent = actualMaximumHealth !== null
+    ? actualMaximumHealth / 100
+    : Math.max(
+        negativeExtent / baselinePercent,
+        positiveExtent / (100 - baselinePercent),
+        1 / Math.max(baselinePercent, 100 - baselinePercent),
+      ) * 1.08;
+  const toPercent = (value: number) => {
+    const percent = baselinePercent + value / unitsPerPercent;
+    return actualMaximumHealth !== null ? Math.max(0, Math.min(100, percent)) : percent;
+  };
+  const currentColor = actualMaximumHealth !== null || state.current >= 0 ? "bg-green-500/50" : "bg-red-500/55";
   const transitionColor = transition?.kind === "damage" ? "bg-red-300" : "bg-green-300";
+  const projectedDamageEnd = actualMaximumHealth !== null
+    ? Math.max(0, state.current - Math.max(0, incomingDamage))
+    : state.current - Math.max(0, incomingDamage);
+  const projectedHealingEnd = actualMaximumHealth !== null
+    ? Math.min(actualMaximumHealth, state.current + Math.max(0, incomingHealing))
+    : state.current + Math.max(0, incomingHealing);
 
   return (
     <div className={cn("space-y-1", className)} data-relative-health-bar data-lesson-target="health-bar">
@@ -82,6 +98,22 @@ export function RelativeHealthBar({
             className={cn("absolute bottom-1 top-1 rounded-[1px]", currentColor)}
             style={segmentStyle(0, state.current, toPercent)}
             data-current-range
+          />
+        )}
+
+        {/* Future damage and healing projected from the current position. */}
+        {incomingDamage > 0 && projectedDamageEnd !== state.current && (
+          <div
+            className="pointer-events-none absolute bottom-1 top-1 border-x border-red-200/25 bg-[repeating-linear-gradient(115deg,rgba(248,113,113,.34)_0_3px,rgba(248,113,113,.10)_3px_6px)]"
+            style={segmentStyle(projectedDamageEnd, state.current, toPercent)}
+            data-incoming-damage-range
+          />
+        )}
+        {incomingHealing > 0 && projectedHealingEnd !== state.current && (
+          <div
+            className="pointer-events-none absolute bottom-1 top-1 border-x border-green-200/25 bg-[repeating-linear-gradient(115deg,rgba(74,222,128,.30)_0_3px,rgba(74,222,128,.08)_3px_6px)]"
+            style={segmentStyle(state.current, projectedHealingEnd, toPercent)}
+            data-incoming-healing-range
           />
         )}
 
@@ -149,17 +181,31 @@ export function RelativeHealthBar({
         <div
           className="absolute bottom-0 top-0 w-0.5 -translate-x-1/2 bg-white shadow-[0_0_5px_rgba(255,255,255,.7)]"
           style={{ left: `${toPercent(state.current)}%` }}
-          title={`Current ${formatSigned(state.current)}`}
+          title={actualMaximumHealth !== null
+            ? `Current ${Math.round(state.current).toLocaleString()} / ${Math.round(actualMaximumHealth).toLocaleString()} HP`
+            : `Current ${formatSigned(state.current)}`}
           data-current-marker
         />
       </div>
 
       <div className="flex items-center font-mono text-[9px] text-muted-foreground">
-        <span className="text-red-300/80">min {formatSigned(minimum)}</span>
-        <span className="mx-auto text-foreground/75">
-          {state.current < 0 ? "deficit" : state.current > 0 ? "surplus" : "baseline"} {formatSigned(state.current)}
-        </span>
-        <span className="text-green-300/80">max {formatSigned(maximum)}</span>
+        {actualMaximumHealth !== null ? (
+          <>
+            <span className="text-red-300/80">0 HP</span>
+            <span className="mx-auto text-foreground/75">
+              {Math.round(state.current).toLocaleString()} / {Math.round(actualMaximumHealth).toLocaleString()} HP
+            </span>
+            <span className="text-green-300/80">max HP</span>
+          </>
+        ) : (
+          <>
+            <span className="text-red-300/80">min {formatSigned(minimum)}</span>
+            <span className="mx-auto text-foreground/75">
+              {state.current < 0 ? "deficit" : state.current > 0 ? "surplus" : "baseline"} {formatSigned(state.current)}
+            </span>
+            <span className="text-green-300/80">max {formatSigned(maximum)}</span>
+          </>
+        )}
       </div>
     </div>
   );
