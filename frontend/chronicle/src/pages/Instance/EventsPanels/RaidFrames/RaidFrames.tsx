@@ -5,6 +5,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { parseSelectedUnits } from "../UnitAuras/unitSelection";
+import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
 import { PlayerDetail } from "./PlayerDetail";
 import { useUnitInspect } from "../UnitInspectContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
@@ -289,6 +290,7 @@ function RaidFrame({
   spellNames,
   timestampMs,
   showValues,
+  selected = false,
   onClick,
 }: {
   name: string;
@@ -299,7 +301,9 @@ function RaidFrame({
   spellNames: ReadonlyMap<number, string>;
   timestampMs: number;
   showValues: boolean;
-  onClick?: () => void;
+  /** This frame's player has a breakout open. */
+  selected?: boolean;
+  onClick?: (target: HTMLElement) => void;
 }) {
   const [hoveredHeal, setHoveredHeal] = useState<RaidFrameHeal | null>(null);
   const healthWidth = sample ? percent(sample.currentHealth, sample.maximumHealth) : 0;
@@ -318,8 +322,8 @@ function RaidFrame({
     <Tooltip>
       <TooltipTrigger asChild>
         <div
-          className={`min-w-0 overflow-hidden rounded-sm border border-border/60 bg-muted/30 ${dead ? "opacity-50 grayscale" : ""} ${onClick ? "cursor-pointer hover:border-foreground/40" : ""}`}
-          onClick={onClick}
+          className={`min-w-0 overflow-hidden rounded-sm border border-border/60 bg-muted/30 ${dead ? "opacity-50 grayscale" : ""} ${onClick ? "cursor-pointer hover:border-foreground/40" : ""} ${selected ? "border-foreground/60 ring-1 ring-foreground/30" : ""}`}
+          onClick={onClick && ((event) => onClick(event.currentTarget))}
         >
           <CastBar cast={cast} timestampMs={timestampMs} />
           <div className="relative h-8 overflow-hidden">
@@ -542,15 +546,17 @@ function InspectCastBar({ cast, timestampMs }: { cast: RaidFrameCast; timestampM
 /** Panel option token for enemy raid frames. */
 const ENEMIES_OPTION = "enemies";
 
-/** The panel option with its `u:` tokens replaced by `guid` (none when null), other tokens kept. */
-export function withSelectedUnit(panelOption: string | null | undefined, guid: string | null): string | null {
-  const parts = (panelOption ?? "").split(",").filter((part) => part && !part.startsWith("u:"));
-  if (guid) parts.push(`u:${guid}`);
-  return parts.length > 0 ? parts.join(",") : null;
+const BREAKOUT_WIDTH = 400;
+
+interface PlayerBreakout {
+  guid: string;
+  initialPosition: { x: number; y: number };
 }
 
 function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
   const sync = useSyncModeContextOptional();
+  // Clicked players' detail breakouts; several can be open at once.
+  const [breakouts, setBreakouts] = useState<PlayerBreakout[]>([]);
   const overlay = props.variant === "overlay";
   const capabilities = props.context.instance.capabilities ?? [];
   if (!capabilities.includes("unit-resources")) return overlay ? null : <UnsupportedMessage />;
@@ -578,11 +584,9 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
   const timestampMs = syncTimestampMs ?? encounter.endMs;
 
   // Inspect mode (`u:<guid>` in the panel option): a larger frame for each
-  // listed unit, players or enemies. A card with one selected unit shows
-  // that unit's detail view instead (below, once frame order is known).
+  // listed unit, players or enemies.
   const inspectGuids = parseSelectedUnits(props.panelOption);
-  const detailGuid = !overlay && inspectGuids.length === 1 ? inspectGuids[0] : null;
-  if (inspectGuids.length > 0 && !detailGuid) {
+  if (inspectGuids.length > 0) {
     return (
       <div className="flex flex-col gap-1">
         {inspectGuids.map((guid) => (
@@ -635,29 +639,6 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
     incomingHeals: incomingHealsAt(encounter.healsByUnit.get(entry[0]) ?? [], timestampMs, INCOMING_HEAL_WINDOW_MS),
   }));
 
-  // Selecting a frame (card only) swaps the grid for that unit's detail view.
-  const setPanelOption = props.setPanelOption;
-  const selectUnit = setPanelOption && !enemiesMode
-    ? (guid: string | null) => setPanelOption(withSelectedUnit(props.panelOption, guid))
-    : undefined;
-  if (detailGuid) {
-    return (
-      <TooltipProvider>
-        <PlayerDetail
-          guid={detailGuid}
-          props={props}
-          encounter={encounter}
-          timestampMs={timestampMs}
-          sample={latestResourceAt(encounter.resourcesByUnit.get(detailGuid) ?? [], timestampMs)}
-          cast={activeCastAt(encounter.castsByUnit.get(detailGuid) ?? [], timestampMs)}
-          incomingHeals={incomingHealsAt(encounter.healsByUnit.get(detailGuid) ?? [], timestampMs, INCOMING_HEAL_WINDOW_MS)}
-          playerOrder={frameData.flatMap((frame) => frame ? [frame.guid] : [])}
-          onSelect={(guid) => setPanelOption?.(withSelectedUnit(props.panelOption, guid))}
-        />
-      </TooltipProvider>
-    );
-  }
-
   if (overlay) {
     // Columns of five like the in-game raid frames; the host positions it.
     return (
@@ -681,6 +662,22 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
     );
   }
 
+  const toggleBreakout = (guid: string, target: HTMLElement) => {
+    const rect = target.getBoundingClientRect();
+    const view = target.ownerDocument.defaultView;
+    const x = Math.max(8, Math.min(rect.right + 8, (view?.innerWidth ?? 640) - BREAKOUT_WIDTH - 8));
+    const y = Math.max(8, Math.min(rect.top, (view?.innerHeight ?? 480) - 420));
+    setBreakouts((previous) => previous.some((breakout) => breakout.guid === guid)
+      ? previous.filter((breakout) => breakout.guid !== guid)
+      : [...previous, { guid, initialPosition: { x, y } }]);
+  };
+  const closeBreakout = (guid: string) => setBreakouts((previous) => previous.filter((breakout) => breakout.guid !== guid));
+  // Previous / next moves a breakout to another player, closing any other breakout already on them.
+  const moveBreakout = (from: string, to: string) => setBreakouts((previous) => previous
+    .filter((breakout) => breakout.guid !== to)
+    .map((breakout) => breakout.guid === from ? { ...breakout, guid: to } : breakout));
+  const playerOrder = frameData.flatMap((frame) => frame ? [frame.guid] : []);
+
   return (
     <div className="styled-scrollbar h-full min-h-0 overflow-auto p-1">
       <div className="grid min-w-max grid-flow-col grid-rows-[repeat(5,minmax(0,1fr))] auto-cols-[minmax(7.5rem,1fr)] gap-1">
@@ -698,11 +695,33 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
               spellNames={props.result.spellNames}
               timestampMs={timestampMs}
               showValues={props.checkboxChecked}
-              onClick={selectUnit && (() => selectUnit(guid))}
+              selected={breakouts.some((breakout) => breakout.guid === guid)}
+              onClick={enemiesMode ? undefined : (target) => toggleBreakout(guid, target)}
             />
           );
         })}
       </div>
+      {breakouts.map((breakout) => (
+        <FloatingIncomingEventsBreakout
+          key={breakout.guid}
+          initialPosition={breakout.initialPosition}
+          onClose={() => closeBreakout(breakout.guid)}
+        >
+          <TooltipProvider>
+            <PlayerDetail
+              guid={breakout.guid}
+              props={props}
+              encounter={encounter}
+              timestampMs={timestampMs}
+              sample={latestResourceAt(encounter.resourcesByUnit.get(breakout.guid) ?? [], timestampMs)}
+              cast={activeCastAt(encounter.castsByUnit.get(breakout.guid) ?? [], timestampMs)}
+              incomingHeals={incomingHealsAt(encounter.healsByUnit.get(breakout.guid) ?? [], timestampMs, INCOMING_HEAL_WINDOW_MS)}
+              playerOrder={playerOrder}
+              onSelect={(guid) => guid ? moveBreakout(breakout.guid, guid) : closeBreakout(breakout.guid)}
+            />
+          </TooltipProvider>
+        </FloatingIncomingEventsBreakout>
+      ))}
     </div>
   );
 }
@@ -718,7 +737,7 @@ export function createRaidFramesPanel(): PanelDefinition<RaidFramesResult, RaidF
     disableCardFlip: true,
     supportsFiltering: false,
     checkboxLabel: "Values",
-    renderOnlyOptionTokens: ["cb", "u:"],
+    renderOnlyOptionTokens: ["cb"],
     render: (props) => <RaidFramesContent {...props} />,
   };
 }

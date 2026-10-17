@@ -184,9 +184,9 @@ export interface PlayerDetailProps {
 }
 
 /**
- * One player up close (Raid Frames with a single `u:<guid>`): health, power
- * and cast now, health over the fight, and auras from the Unit Auras panel
- * (so they match it exactly).
+ * One player up close, in a breakout opened by clicking their raid frame:
+ * health, power and cast now, health over the fight, and auras from the Unit
+ * Auras panel (so they match it exactly).
  */
 export function PlayerDetail({
   guid,
@@ -233,8 +233,8 @@ export function PlayerDetail({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center gap-2.5 border-b border-border px-3 py-2">
+    <div className="flex w-[400px] max-w-full flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
+      <div className="flex shrink-0 cursor-grab items-center gap-2.5 border-b border-border bg-muted/30 px-3 py-2" data-drag-handle>
         <img
           src={specialization?.iconUrl ?? `/c/icons/class_${(player?.class ?? "unknown").toLowerCase()}.png`}
           alt=""
@@ -264,7 +264,7 @@ export function PlayerDetail({
           {[
             { label: "Previous player", icon: <ChevronLeft className="size-3.5" />, onClick: () => step(-1) },
             { label: "Next player", icon: <ChevronRight className="size-3.5" />, onClick: () => step(1) },
-            { label: "Back to raid frames", icon: <X className="size-3.5" />, onClick: () => onSelect(null) },
+            { label: "Close", icon: <X className="size-3.5" />, onClick: () => onSelect(null) },
           ].map((button) => (
             <button
               key={button.label}
@@ -308,7 +308,7 @@ export function PlayerDetail({
         <CastRow cast={dead ? null : cast} timestampMs={timestampMs} />
       </div>
 
-      <div className="styled-scrollbar min-h-0 flex-1 overflow-auto border-t border-border">
+      <div className="styled-scrollbar max-h-[var(--incoming-events-body-height)] overflow-y-auto border-t border-border">
         <div className="flex flex-col gap-2 px-3 py-2">
           <HealthGraph
             samples={encounter.resourcesByUnit.get(guid) ?? []}
