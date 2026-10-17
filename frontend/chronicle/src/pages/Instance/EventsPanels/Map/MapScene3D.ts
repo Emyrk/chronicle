@@ -47,6 +47,7 @@ import {
   deriveCastIcons,
   deriveCombatText,
   deriveRecentHealGain,
+  deriveLastHitTargets,
   deriveUnitCasts,
   INTERRUPTED_ICON_MS,
   INTERRUPTED_PLAYER_ICON_MS,
@@ -393,6 +394,10 @@ interface UnitObject {
   mini: boolean;
   healthFraction: number | null;
   owner: string | undefined;
+  /** The log records which way it faces; otherwise enemies face whoever they last hit. */
+  loggedFacing: boolean;
+  /** An enemy's facing toward the unit it last hit, while the log has none. */
+  hitFacing: number | undefined;
   kind: MapMarkerKind;
   name: string;
   color: string;
@@ -672,6 +677,14 @@ export class MapScene3D {
   private aboveDisc: AboveDiscMode = "cast";
   private roles: MapUnitRoles = { selected: null, target: null, targetsTarget: null, pinned: new Set() };
   private readonly unitCasts = new Map<string, UnitCast>();
+  private readonly lastHitTargets = new Map<string, string>();
+  // Enemies on the map without a logged facing.
+  private readonly hitFacingSources = {
+    has: (guid: string) => {
+      const object = this.units.get(guid);
+      return object !== undefined && object.kind === "hostile" && !object.loggedFacing;
+    },
+  };
   private readonly targetLines: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[] = [];
   // Owner lines (guardian -> owner), one segment each, rewritten every frame.
   private readonly ownerLinePositions = new Float32Array(MAX_OWNER_LINES * 6);
@@ -951,14 +964,9 @@ export class MapScene3D {
       const { x, z } = mapPointToScene(unit.point, this.aspect, GROUND_WIDTH);
       object.base.set(x, this.baseHeight(unit.guid, x, z, unit.z), z);
       object.group.position.copy(object.base);
-      const facing = unit.facing ?? 0;
-      object.group.rotation.y = facing;
-      // The disc's icon and the cast arc keep north up; the notch turns, and
-      // shows only when the log says which way the unit faces.
-      if (!object.mini) object.body.rotation.y = -facing;
-      object.token.arc.rotation.y = -facing;
-      object.token.pin.rotation.y = -facing;
-      object.cone.visible = unit.facing !== undefined && (object.boss || !object.mini);
+      object.loggedFacing = unit.facing !== undefined;
+      // Without a logged facing an enemy keeps facing whoever it last hit (updateTokens).
+      this.applyFacing(object, unit.facing ?? (unit.kind === "hostile" ? object.hitFacing : undefined));
       object.group.scale.setScalar(this.scaleOf(object));
       const opacity = unit.muted ? MUTED_OPACITY : 1;
       for (const material of [object.bodyMaterial, object.coneMaterial]) {
@@ -1718,6 +1726,8 @@ export class MapScene3D {
       mini: false,
       healthFraction: unit.healthFraction ?? null,
       owner: unit.owner,
+      loggedFacing: unit.facing !== undefined,
+      hitFacing: undefined,
       kind: unit.kind,
       name: unit.name,
       color: unit.color,
@@ -1739,6 +1749,37 @@ export class MapScene3D {
       if (mini) this.applyBossMini(object, mini);
     }
     return object;
+  }
+
+  // Turns the unit (`facing` radians, or undefined for no known facing). The
+  // disc's icon and the cast arc keep north up; the notch turns, and shows
+  // only when the facing is known.
+  private applyFacing(object: UnitObject, facing: number | undefined) {
+    const angle = facing ?? 0;
+    object.group.rotation.y = angle;
+    if (!object.mini) object.body.rotation.y = -angle;
+    object.token.arc.rotation.y = -angle;
+    object.token.pin.rotation.y = -angle;
+    object.cone.visible = facing !== undefined && (object.boss || !object.mini);
+  }
+
+  // Enemies with no logged facing turn toward whoever they last hit (kept
+  // after the hit, so they do not snap back to north).
+  private updateHitFacings() {
+    const fx = this.effects?.fx;
+    if (!fx) return;
+    deriveLastHitTargets(fx, this.effectCursorMs, this.hitFacingSources, this.lastHitTargets);
+    for (const [guid, targetGuid] of this.lastHitTargets) {
+      const object = this.units.get(guid);
+      const target = this.units.get(targetGuid);
+      if (!object || !target || object.loggedFacing || object.dead) continue;
+      const dx = target.base.x - object.base.x;
+      const dz = target.base.z - object.base.z;
+      if (dx * dx + dz * dz < 1e-8) continue;
+      // Rotating -z (the notch) by θ about y gives (-sin θ, 0, -cos θ).
+      object.hitFacing = Math.atan2(-dx, -dz);
+      this.applyFacing(object, object.hitFacing);
+    }
   }
 
   // The disc's face and the notch for the unit's colour, icon and death.
@@ -1921,6 +1962,7 @@ export class MapScene3D {
     }
     if (fx) deriveUnitCasts(fx, cursorMs, this.unitCasts);
     else this.unitCasts.clear();
+    this.updateHitFacings();
 
     let beamCount = 0;
     let ringCount = 0;

@@ -12,6 +12,7 @@ import {
   DEFAULT_EFFECT_OPTIONS,
   deriveActiveEffects,
   deriveCastIcons,
+  deriveLastHitTargets,
   deriveUnitCasts,
   deriveCombatText,
   deriveRecentHealGain,
@@ -319,6 +320,22 @@ describe("heals", () => {
     frame(3_000);
     const backward = [1_600, 1_450, 1_250, 1_100].map(frame).reverse();
     expect(backward).toEqual(forward);
+  });
+});
+
+describe("deriveLastHitTargets", () => {
+  it("finds each source's latest damage target within the lookback", () => {
+    const fx = effects(
+      event(1_000, "damage", "boss", "tank"),
+      event(2_000, "damage", "boss", "mage"),
+      event(2_500, "heal", "boss", "boss"),
+      event(3_000, "damage", "add", "add"),
+      event(3_000, "damage", "mage", "boss"),
+    );
+    const enemies = new Set(["boss", "add"]);
+    expect(deriveLastHitTargets(fx, 1_500, enemies)).toEqual(new Map([["boss", "tank"]]));
+    expect(deriveLastHitTargets(fx, 3_000, enemies)).toEqual(new Map([["boss", "mage"]]));
+    expect(deriveLastHitTargets(fx, 20_000, enemies).size).toBe(0);
   });
 });
 

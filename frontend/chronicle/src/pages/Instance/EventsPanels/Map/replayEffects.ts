@@ -660,6 +660,31 @@ function castEndedBy(events: readonly ReplayEffectEvent[], index: number, end: n
   return null;
 }
 
+/** How far back deriveLastHitTargets looks for a unit's latest hit. */
+export const LAST_HIT_LOOKBACK_MS = 10_000;
+
+/**
+ * Who each of `sources` last damaged, at or before the cursor (within
+ * LAST_HIT_LOOKBACK_MS): the map turns an enemy with no logged facing toward
+ * it. Fills and returns `out`.
+ */
+export function deriveLastHitTargets(
+  fx: EncounterEffects,
+  cursorMs: number,
+  sources: { has: (guid: string) => boolean },
+  out: Map<string, string> = new Map(),
+): Map<string, string> {
+  out.clear();
+  const events = fx.events;
+  const [start, end] = eventWindow(events, cursorMs - LAST_HIT_LOOKBACK_MS, cursorMs);
+  for (let index = end - 1; index >= start; index--) {
+    const event = events[index];
+    if (event.kind !== "damage" || !event.target || event.target === event.source || out.has(event.source) || !sources.has(event.source)) continue;
+    out.set(event.source, event.target);
+  }
+  return out;
+}
+
 /** A cast bar in progress: how far along (0-1) and its school (for colour). */
 export interface UnitCast {
   progress: number;

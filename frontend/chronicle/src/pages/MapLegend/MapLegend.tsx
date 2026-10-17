@@ -170,7 +170,7 @@ export function MapLegend() {
             Enemy red, with a dark red well instead of an icon. Units with a 3D model show the model instead.
           </Card>
           <Card title="Facing" demo={<Ground><At x={50} y={55}><Token {...MAGE} facing={(seconds * 40) % 360} /></At></Ground>}>
-            The notch on the ring points where the unit faces and turns on the ground. Logs that don&apos;t record facing show no notch.
+            The notch on the ring points where the unit faces and turns on the ground. When the log doesn&apos;t record facing, enemies face whoever they last hit and everyone else shows no notch.
           </Card>
           <Card title="Casting" demo={<Ground><At x={50} y={55}><Token {...SHAMAN} cast={{ fraction: cycle(seconds, 3), color: nature }} /></At></Ground>}>
             An arc fills clockwise round the ring in the spell school&apos;s colour as the cast bar runs.
