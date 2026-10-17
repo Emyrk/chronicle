@@ -93,5 +93,10 @@ export interface PanelExplainer<TResult = unknown, TCaps = unknown> {
   tips: string[];
   /** Full lesson content; only panels with authored lessons define this. */
   lessonSet?: LessonSet<TResult, TCaps>;
+  /**
+   * A reference guide shown under the tips (e.g. the Map panel's legend), with
+   * a link to the same guide's own page in Tools & FAQ.
+   */
+  guide?: { title: string; href: string; render: () => ReactNode };
 }
 

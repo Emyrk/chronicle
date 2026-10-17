@@ -513,6 +513,23 @@ function FallbackExplainer({
             </ul>
           </CardContent>
         </Card>
+
+        {explainer.guide && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between gap-2 text-base">
+                <span className="flex items-center gap-2">
+                  <BookOpen className="h-4 w-4" />
+                  {explainer.guide.title}
+                </span>
+                <Link to={explainer.guide.href} className="text-xs font-normal text-muted-foreground hover:text-foreground">
+                  Open in Tools &amp; FAQ
+                </Link>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>{explainer.guide.render()}</CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

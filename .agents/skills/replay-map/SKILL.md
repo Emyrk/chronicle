@@ -12,8 +12,10 @@ advertise: true
 
 # Replay map
 
-The Map panel draws a fight in 3D with three.js. `/map-legend` (Tools & FAQ →
-"Replay map legend") explains every visual on it. **Any change to what the map
+The Map panel draws a fight in 3D with three.js. The map legend explains every
+visual on it, and is shown in two places from one component (`MapLegend`):
+the `/map-legend` page (Tools & FAQ → "Replay map legend") and the Map panel's
+`?` explainer (`Map/Map.explainer.tsx`, under the summary and tips). **Any change to what the map
 draws, how it animates, or how it is controlled must update the legend in the
 same change.** A change is not done until the legend matches it.
 
@@ -34,8 +36,12 @@ frontend/chronicle/src/pages/Instance/EventsPanels/Map/
 ├── MapSettingsOverlay.tsx# The settings overlay
 └── TargetFrames.tsx      # Selected / Target / Target's target frames
 
+frontend/chronicle/src/pages/Instance/EventsPanels/Map/Map.explainer.tsx
+                          # The panel's "?": summary, tips, and the legend as its guide
+
 frontend/chronicle/src/pages/MapLegend/
-├── MapLegendPage.tsx     # The legend: sections, captions, controls table
+├── MapLegend.tsx         # The legend: sections, captions, controls table (shown in both places)
+├── MapLegendPage.tsx     # /map-legend: back link, title, intro, then MapLegend
 ├── legendArt.tsx         # Token, BossToken, Ground: draws with unitTokenArt
 └── legendEffects.tsx     # Effect demos (SVG/CSS) timed from replayEffects
 ```
@@ -91,7 +97,8 @@ them when the map's version changes:
 
 1. Make the change in the map (scene, art, effects, settings or controls).
 2. If it is a new visual or constant, put it in a three-free module and import it from both sides.
-3. Update `/map-legend`: the section's demo, caption, and any new settings or keys.
+3. Update the legend (`MapLegend.tsx`): the section's demo, caption, and any new settings or keys.
+   If the panel's purpose or main interactions change, update the summary and tips in `Map.explainer.tsx`.
    A new effect kind in `ActiveEffectType` needs a new demo card.
 4. Run `npx tsc -b`, `npx eslint` on `src/pages/Instance/EventsPanels/Map src/pages/MapLegend`,
    and `npx vitest run src/pages/Instance/EventsPanels/Map`.

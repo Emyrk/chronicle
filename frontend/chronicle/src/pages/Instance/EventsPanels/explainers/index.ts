@@ -24,6 +24,7 @@ import { leaderboardExplainer } from "../LeaderboardPanel/explain";
 import { vulnerabilityEffectExplainer } from "../VulnerabilityEffect/explain";
 import { comparisonExplainer } from "../ComparisonPanel/explain";
 import { consumablesLedgerExplainer } from "../Consumables/explain";
+import { mapExplainer } from "../Map/Map.explainer";
 
 /**
  * Map of panel types to their explainer configurations.
@@ -51,6 +52,7 @@ export const PANEL_EXPLAINERS: Partial<
   vulnerability_effect: vulnerabilityEffectExplainer,
   comparison: comparisonExplainer,
   consumables_ledger: consumablesLedgerExplainer,
+  map: mapExplainer,
 };
 
 /**
