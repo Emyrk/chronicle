@@ -13,6 +13,21 @@ func ByEntry(entry uint32) string {
 	return ""
 }
 
+// Canonicalize returns a stable display name for units whose runtime names can
+// vary. Totem entry IDs already encode the rank, so their registry name omits
+// redundant suffixes such as " III" or " IV".
+func Canonicalize(id guid.GUID, name string) string {
+	if totem, ok := totems.IsTotem(id); ok {
+		return totem.Name
+	}
+	if name == "Unknown" && !id.IsPlayer() {
+		if known := ByGUID(id); known != "" {
+			return known
+		}
+	}
+	return name
+}
+
 func ByGUID(id guid.GUID) string {
 	if name, ok := warlockdemon.IsWarlockDemon(id); ok {
 		return name
