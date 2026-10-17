@@ -1642,6 +1642,17 @@ function EncounterDetail({
           <Card className={isMobile ? "p-3 gap-2" : "p-4"} data-help-entity-panel>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
+                {!focused && onShowSidebar && (
+                  <button
+                    type="button"
+                    onClick={onShowSidebar}
+                    title="Show sidebar"
+                    className="flex shrink-0 items-center rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <PanelLeft className="h-4 w-4" />
+                    <span className="sr-only">Show sidebar</span>
+                  </button>
+                )}
                 <TabsList>
                   <TabsTrigger value="enemies" className="gap-1.5">
                     <Skull className="h-4 w-4" />
@@ -3664,17 +3675,6 @@ function InstancePageViewContent({
           )}
           {!isMobile && (
             <div className="flex items-center gap-2 shrink-0">
-              {isEncounterView && !sidebarOpen && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSidebarOpen(true)}
-                  title="Show sidebar"
-                >
-                  <PanelLeft className="h-4 w-4" />
-                  <span className="sr-only">Show sidebar</span>
-                </Button>
-              )}
               {showLiveSessionControls && (
                 <LiveSessionButton instanceId={instance.id} canCreate={isLoggedIn} />
               )}
