@@ -107,10 +107,12 @@ function MapMarker({ marker, viewport }: { marker: MapSceneMarker; viewport: Map
           className="absolute h-3.5 w-3.5 rounded-full border-2 border-black/80 shadow-[0_0_8px_rgba(0,0,0,.9)]"
           style={{ backgroundColor: marker.color }}
         />
-        <Navigation
-          className="absolute h-3 w-3 fill-black/65 text-black/80"
-          style={{ transform: `rotate(${sample.facing}rad)` }}
-        />
+        {sample.facing !== undefined && (
+          <Navigation
+            className="absolute h-3 w-3 fill-black/65 text-black/80"
+            style={{ transform: `rotate(${sample.facing}rad)` }}
+          />
+        )}
         {marker.kind === "pet" && <PawPrint className="absolute -bottom-1.5 -right-1.5 h-2.5 w-2.5 rounded-full bg-black/80 p-0.5 text-cyan-200" />}
         {marker.kind === "hostile" && <Skull className="absolute -bottom-1.5 -right-1.5 h-2.5 w-2.5 rounded-full bg-black/80 p-0.5 text-rose-200" />}
       </div>

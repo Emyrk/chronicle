@@ -208,8 +208,10 @@ export function replayPositionAt(
     x: latest.x + (next.x - latest.x) * t,
     y: latest.y + (next.y - latest.y) * t,
     mapId: latest.mapId,
-    facing: lerpAngle(latest.facing, next.facing, t),
   };
+  // Facing blends when both samples have it, else holds the earlier one's (if any).
+  if (latest.facing !== undefined && next.facing !== undefined) sample.facing = lerpAngle(latest.facing, next.facing, t);
+  else if (latest.facing !== undefined) sample.facing = latest.facing;
   // A logged height blends like x/y; with only one side logged it holds that sample's.
   if (latest.z !== undefined && next.z !== undefined) sample.z = latest.z + (next.z - latest.z) * t;
   else if (latest.z !== undefined) sample.z = latest.z;
@@ -283,7 +285,6 @@ export function encounterRouteSamples(
         x: median(mapSamples.map((sample) => sample.x)),
         y: median(mapSamples.map((sample) => sample.y)),
         mapId: mapId!,
-        facing: 0,
       };
     });
 }

@@ -40,7 +40,8 @@ export interface MapPositionSample {
   y: number;
   z?: number;
   mapId: number;
-  facing: number;
+  /** Radians, when the log records it (an optional proto field); no facing is drawn without it. */
+  facing?: number;
 }
 
 export interface MapHealthSample {
@@ -222,9 +223,9 @@ export const mapProcessor: PanelProcessor<MapResult, MapProcessorEvent> = {
       x: event.x,
       y: event.y,
       mapId: event.mapId,
-      facing: event.facing ?? 0,
     };
     if (event.z !== undefined) sample.z = event.z;
+    if (event.facing !== undefined) sample.facing = event.facing;
     positions.push(sample);
   },
 };

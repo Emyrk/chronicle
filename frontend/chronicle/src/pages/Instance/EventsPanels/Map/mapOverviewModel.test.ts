@@ -77,8 +77,8 @@ describe("map route overview model", () => {
     ]));
 
     expect(encounterRouteSamples(encounter, (guid) => guid.startsWith("player"))).toEqual([
-      { timestampMs: 750, x: 12, y: 22, mapId: 43, facing: 0 },
-      { timestampMs: 2_750, x: 32, y: 42, mapId: 43, facing: 0 },
+      { timestampMs: 750, x: 12, y: 22, mapId: 43 },
+      { timestampMs: 2_750, x: 32, y: 42, mapId: 43 },
     ]);
   });
 
@@ -91,7 +91,7 @@ describe("map route overview model", () => {
       mapEncounter("one", 100, 300, new Map([["unit", samples]])),
       () => false,
       100,
-    )).toEqual(samples.map((sample) => ({ ...sample, facing: 0 })));
+    )).toEqual(samples.map(({ timestampMs, x, y, mapId }) => ({ timestampMs, x, y, mapId })));
   });
 
   it("fits and remaps routes into a padded viewport", () => {

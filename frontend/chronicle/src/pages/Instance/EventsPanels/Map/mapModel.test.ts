@@ -373,8 +373,21 @@ describe("replayPositionAt", () => {
       { timestampMs: 0, x: 0, y: 0, mapId: 1, facing: 6.2 },
       { timestampMs: 100, x: 0, y: 0, mapId: 1, facing: 0.1 },
     ];
-    const facing = replayPositionAt(wrapping, 50)!.facing;
+    const facing = replayPositionAt(wrapping, 50)!.facing!;
     expect(Math.cos(facing)).toBeCloseTo(Math.cos((6.2 + 0.1 + 2 * Math.PI) / 2), 6);
+  });
+
+  it("leaves facing out when the log has none, and holds a one-sided facing", () => {
+    const unfaced: MapPositionSample[] = [
+      { timestampMs: 0, x: 0, y: 0, mapId: 1 },
+      { timestampMs: 100, x: 10, y: 0, mapId: 1 },
+    ];
+    expect(replayPositionAt(unfaced, 50)).not.toHaveProperty("facing");
+    const halfFaced: MapPositionSample[] = [
+      { timestampMs: 0, x: 0, y: 0, mapId: 1, facing: 1.2 },
+      { timestampMs: 100, x: 10, y: 0, mapId: 1 },
+    ];
+    expect(replayPositionAt(halfFaced, 50)!.facing).toBe(1.2);
   });
 
   it("interpolates across long gaps but never across map changes", () => {

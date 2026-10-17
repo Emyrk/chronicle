@@ -311,7 +311,8 @@ interface DungeonMesh {
 export interface MapScene3DUnit {
   guid: string;
   point: MapPoint;
-  facing: number;
+  /** Radians; undefined when the log does not record facing (no notch is drawn). */
+  facing?: number;
   color: string;
   kind: MapMarkerKind;
   muted: boolean;
@@ -929,11 +930,14 @@ export class MapScene3D {
       const { x, z } = mapPointToScene(unit.point, this.aspect, GROUND_WIDTH);
       object.base.set(x, this.baseHeight(unit.guid, x, z, unit.z), z);
       object.group.position.copy(object.base);
-      object.group.rotation.y = unit.facing;
-      // The disc's icon and the cast arc keep north up; the notch turns.
-      if (!object.mini) object.body.rotation.y = -unit.facing;
-      object.token.arc.rotation.y = -unit.facing;
-      object.token.pin.rotation.y = -unit.facing;
+      const facing = unit.facing ?? 0;
+      object.group.rotation.y = facing;
+      // The disc's icon and the cast arc keep north up; the notch turns, and
+      // shows only when the log says which way the unit faces.
+      if (!object.mini) object.body.rotation.y = -facing;
+      object.token.arc.rotation.y = -facing;
+      object.token.pin.rotation.y = -facing;
+      object.cone.visible = unit.facing !== undefined && (object.boss || !object.mini);
       object.group.scale.setScalar(this.scaleOf(object));
       const opacity = unit.muted ? MUTED_OPACITY : 1;
       for (const material of [object.bodyMaterial, object.coneMaterial]) {

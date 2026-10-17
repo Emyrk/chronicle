@@ -46,6 +46,13 @@ describe("mapProcessor", () => {
     expect(encounter?.positionsByUnit.get("enemy")).toHaveLength(1);
   });
 
+  it("keeps facing out of samples whose event has none", () => {
+    const state = mapProcessor.createState();
+    const start = new Date("2026-10-07T20:00:00Z");
+    mapProcessor.processEvent(state, { ...position("player", 100, 10, 20), facing: undefined }, "encounter", start, "unit_position", context);
+    expect(state.encounters.get("encounter")?.positionsByUnit.get("player")?.[0]).not.toHaveProperty("facing");
+  });
+
   it("retains unselected encounters for travel between selected fights", () => {
     const state = mapProcessor.createState();
     mapProcessor.processEvent(
