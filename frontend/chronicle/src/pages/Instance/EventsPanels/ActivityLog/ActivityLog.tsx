@@ -167,7 +167,7 @@ function ActivityRow({
             // Crits in yellow; a heal that restored nothing in grey.
             style={{ color: line.crit ? CRIT_COLOR : heal && line.amount === 0 ? OVERHEAL_COLOR : heal ? HEAL_COLOR : undefined }}
           >
-            {heal ? "+" : ""}{line.amount.toLocaleString()}{line.crit ? "*" : ""}
+            {heal ? "+" : ""}{line.amount.toLocaleString()}
           </span>
           {heal && line.overheal > 0 && (
             <span style={{ color: OVERHEAL_COLOR }}> ({line.overheal.toLocaleString()} oh)</span>
