@@ -372,11 +372,11 @@ interface WalkState {
   avatar: THREE.Group;
 }
 
-// You, in walk mode: a gold player capsule with its facing cone.
+// You, in walk mode: a gold player capsule (no facing cone; the camera shows the way).
 function createAvatar(geometries: Record<MapMarkerKind | "cone", THREE.BufferGeometry>): THREE.Group {
   const material = new THREE.MeshStandardMaterial({ color: 0xffd100, emissive: 0x3a2a00, roughness: 0.5 });
   const group = new THREE.Group();
-  group.add(new THREE.Mesh(geometries.player, material), new THREE.Mesh(geometries.cone, material));
+  group.add(new THREE.Mesh(geometries.player, material));
   return group;
 }
 
@@ -519,7 +519,7 @@ export class MapScene3D {
   private readonly keyWindow: Window;
   private readonly heldActions = new Set<MapControlAction>();
   private walk: WalkState | null = null;
-  private adStrafe = false;
+  private adStrafe = true;
   private onWalkChange: (walking: boolean) => void = () => {};
   private readonly walkHead = new THREE.Vector3();
   private keyMoveLastMs = 0;
