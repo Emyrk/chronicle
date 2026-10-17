@@ -23,10 +23,13 @@ import {
 } from "./mapModel";
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
 import { MapView2D, type MapViewRequest } from "./MapView2D";
-import { useEmbeddedPanel } from "../useEmbeddedPanel";
+import { useEmbeddedPanel, useEmbeddedPanelWithResult } from "../useEmbeddedPanel";
 import { UnitInspectContext, type UnitInspectSelection } from "../UnitInspectContext";
 import { InspectCards } from "./InspectCards";
-import { createRaidFramesPanel } from "../RaidFrames/RaidFrames";
+import { createRaidFramesPanel, selectRaidFramesEncounter } from "../RaidFrames/RaidFrames";
+import { lastTargetAt } from "../RaidFrames/raidFrames.processor";
+import { createUnitAurasPanel } from "../UnitAuras/UnitAuras";
+import { TargetFrames } from "./TargetFrames";
 import { MAP_CONTROL_KEYBINDS } from "./mapControls";
 import { MeterWindows } from "./MeterWindows";
 import { useMeterWindows } from "./meterWindowsState";
@@ -40,6 +43,7 @@ export { mapPresentationForSelection };
 const MapView3D = lazy(() => import("./MapView3D"));
 
 const RAID_FRAMES_PANEL = createRaidFramesPanel();
+const UNIT_AURAS_PANEL = createUnitAurasPanel();
 
 const MESH_STORAGE_KEY = "chronicle.map.mesh";
 
@@ -177,19 +181,35 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
     setAdStrafeState(on);
     storeAdStrafe(on);
   };
-  // Units picked for a closer look: click them on the map or in the raid frames.
-  const [inspected, setInspected] = useState<string[]>([]);
-  const toggleInspected = useCallback((guid: string) => {
-    setInspected((current) => current.includes(guid) ? current.filter((other) => other !== guid) : [...current, guid]);
+  // WoW-style targeting: clicking a unit (on the map or a raid frame) makes it
+  // the target, shown at centre left with its own target at centre right.
+  // Pinning a frame keeps it as a movable inspect box.
+  const [target, setTarget] = useState<string | null>(null);
+  const [pinned, setPinned] = useState<string[]>([]);
+  const pin = useCallback((guid: string) => {
+    setPinned((current) => current.includes(guid) ? current : [...current, guid]);
+    setTarget((current) => current === guid ? null : current);
   }, []);
-  const inspectSelection = useMemo((): UnitInspectSelection => ({ inspected: new Set(inspected), toggle: toggleInspected }), [inspected, toggleInspected]);
-  // One Raid Frames run draws both the grid and the inspect frames.
-  const raidFrames = useEmbeddedPanel({
+  const unpin = useCallback((guid: string) => setPinned((current) => current.filter((other) => other !== guid)), []);
+  const inspectSelection = useMemo((): UnitInspectSelection => ({
+    inspected: new Set(target ? [...pinned, target] : pinned),
+    select: setTarget,
+  }), [pinned, target]);
+  const framesWanted = pinned.length > 0 || target !== null;
+  // One Raid Frames run draws the grid, the target frames and the inspect boxes
+  // (and says who the target is targeting); one Unit Auras run their auras.
+  const { render: raidFrames, result: raidFramesResult } = useEmbeddedPanelWithResult({
     panel: RAID_FRAMES_PANEL,
     context: props.context,
     durationMs: props.durationMs,
-    enabled: showRaidFrames || showEnemyFrames || inspected.length > 0,
+    enabled: showRaidFrames || showEnemyFrames || framesWanted,
   });
+  const auras = useEmbeddedPanel({ panel: UNIT_AURAS_PANEL, context: props.context, durationMs: props.durationMs, enabled: framesWanted });
+  const cursorMs = sync?.enabled && sync.currentTimestamp ? sync.currentTimestamp.getTime() : null;
+  const targetEncounter = target && raidFramesResult
+    ? selectRaidFramesEncounter(raidFramesResult.encounters, props.context.selectedEncounterIds, cursorMs)
+    : null;
+  const targetOfTarget = target && targetEncounter ? lastTargetAt(targetEncounter, target, cursorMs ?? targetEncounter.endMs) : null;
   const [storedFraming, setFraming] = useState<MapFraming>(INITIAL_MAP_FRAMING);
   // A new selection or replay moving into another encounter re-frames;
   // loading states (e.g. reprocessing after a filter change) keep the framing.
@@ -299,7 +319,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               onDungeonMeshState={setMeshState}
               focus={focus}
               cinematic={cinematic}
-              onUnitClick={toggleInspected}
+              onUnitClick={setTarget}
               effectSettings={effectSettings}
               topDownKey={topDownKey}
               walking={walking}
@@ -418,13 +438,15 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
             onAdStrafe={setAdStrafe}
           />
         )}
-        <InspectCards
-          guids={inspected}
-          onRemove={toggleInspected}
+        <TargetFrames
+          target={target}
+          targetOfTarget={targetOfTarget}
           raidFrames={raidFrames}
-          context={props.context}
-          durationMs={props.durationMs}
+          auras={auras}
+          onPin={pin}
+          onClear={() => setTarget(null)}
         />
+        <InspectCards guids={pinned} onRemove={unpin} raidFrames={raidFrames} auras={auras} />
         <MeterWindows windows={meterWindows} onChange={setMeterWindows} context={props.context} durationMs={props.durationMs} />
       </div>
       {jumps.length > 0 && scene.runStartMs !== null && (

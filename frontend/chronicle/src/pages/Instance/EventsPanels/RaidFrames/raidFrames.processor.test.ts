@@ -11,6 +11,7 @@ import {
   enemyFrameUnits,
   orderRaidFramePlayers,
   activeCastAt,
+  lastTargetAt,
   incomingHealsAt,
   latestResourceAt,
   raidFramesProcessor,
@@ -162,6 +163,23 @@ describe("raidFramesProcessor", () => {
     expect(activeCastAt(casts, FIRST_TIMESTAMP.getTime() + 3_500)).toBeNull();
   });
 
+  it("tracks each unit's last spell_start target", () => {
+    const state = raidFramesProcessor.createState();
+    const ctx = context();
+    const at = (offsetMilli: number) => FIRST_TIMESTAMP.getTime() + offsetMilli;
+
+    raidFramesProcessor.processEvent(state, spellStart({ offsetMilli: 1_000, target: OTHER_PLAYER }), ENCOUNTER, FIRST_TIMESTAMP, "spell_start", ctx);
+    raidFramesProcessor.processEvent(state, spellStart({ offsetMilli: 2_000, target: PLAYER }), ENCOUNTER, FIRST_TIMESTAMP, "spell_start", ctx);
+    raidFramesProcessor.processEvent(state, spellStart({ offsetMilli: 3_000, target: "enemy", castTimeMilli: 0 }), ENCOUNTER, FIRST_TIMESTAMP, "spell_start", ctx);
+    const encounter = state.encounters.get(ENCOUNTER)!;
+    expect(lastTargetAt(encounter, PLAYER, at(500))).toBeNull();
+    expect(lastTargetAt(encounter, PLAYER, at(1_000))).toBe(OTHER_PLAYER);
+    // A self-cast keeps the previous target; an instant (no cast bar) still counts.
+    expect(lastTargetAt(encounter, PLAYER, at(2_500))).toBe(OTHER_PLAYER);
+    expect(lastTargetAt(encounter, PLAYER, at(9_000))).toBe("enemy");
+    expect(lastTargetAt(encounter, OTHER_PLAYER, at(9_000))).toBeNull();
+  });
+
   it("finds player heals landing inside the incoming window", () => {
     const state = raidFramesProcessor.createState();
     const ctx = context();
@@ -220,7 +238,7 @@ describe("enemyFrameUnits", () => {
   it("lists non-player, non-pet units with health, bosses first then by maximum health", () => {
     const sample = (maximumHealth: number) => ({ timestampMs: 0, currentHealth: maximumHealth, maximumHealth, absorb: 0, powerType: "mana", currentPower: 0, maximumPower: 0 });
     const encounter = {
-      encounterId: ENCOUNTER, startMs: 0, endMs: 0, castsByUnit: new Map(), healsByUnit: new Map(),
+      encounterId: ENCOUNTER, startMs: 0, endMs: 0, castsByUnit: new Map(), healsByUnit: new Map(), targetsByUnit: new Map(),
       resourcesByUnit: new Map([
         [PLAYER, [sample(4_000)]],
         ["pet", [sample(1_000)]],
