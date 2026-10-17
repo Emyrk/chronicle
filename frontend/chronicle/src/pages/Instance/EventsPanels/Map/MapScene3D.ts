@@ -26,7 +26,7 @@ import {
 } from "./cameraDirector";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
-import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, ENEMY_RED, HALO_COLORS, MARKS_SCALE, TARGET_LINE, TOKEN_LAYOUT, type HaloKind } from "./unitTokenArt";
+import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, ENEMY_RED, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, CAST_ARC_OPACITY, CUT_ARC_COLOR, CUT_TICK_COLOR, DEAD_COLOR, INTERRUPT_LABEL_COLOR, WALK_AVATAR_COLOR, WALK_AVATAR_EMISSIVE } from "./mapPalette";
 import {
@@ -219,6 +219,7 @@ const BOSS_PIN_SIZE = TOKEN_LAYOUT.bossPinSize;
 const TARGET_LINE_WIDTH = TARGET_LINE.width;
 const TARGETS_TARGET_LINE_WIDTH = TARGET_LINE.targetsTargetWidth;
 const TARGET_LINE_LIFT = 0.25;
+const MAX_OWNER_LINES = 256;
 const TARGET_LINE_DASH = TARGET_LINE.dash;
 const TARGET_LINE_SPEED = TARGET_LINE.speed;
 
@@ -329,6 +330,8 @@ export interface MapScene3DUnit {
   boss?: boolean;
   /** Health at the cursor (0-1), for the health column above the disc; null when unknown. */
   healthFraction?: number | null;
+  /** A guardian's owning player: an owner line runs between them. */
+  owner?: string;
 }
 
 /** The one live value drawn as a column above each token. */
@@ -389,6 +392,7 @@ interface UnitObject {
   /** The body shows a loaded model rather than the flat disc. */
   mini: boolean;
   healthFraction: number | null;
+  owner: string | undefined;
   kind: MapMarkerKind;
   name: string;
   color: string;
@@ -669,6 +673,10 @@ export class MapScene3D {
   private roles: MapUnitRoles = { selected: null, target: null, targetsTarget: null, pinned: new Set() };
   private readonly unitCasts = new Map<string, UnitCast>();
   private readonly targetLines: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[] = [];
+  // Owner lines (guardian -> owner), one segment each, rewritten every frame.
+  private readonly ownerLinePositions = new Float32Array(MAX_OWNER_LINES * 6);
+  private readonly ownerLineColors = new Float32Array(MAX_OWNER_LINES * 6);
+  private readonly ownerLines: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   private tokenAt = 0;
   private onPresence: ((presence: LiveMapPresence | null) => void) | null = null;
   private lastPresence: { json: string; at: number } | null = null;
@@ -759,6 +767,18 @@ export class MapScene3D {
       depthWrite: false,
     }));
     this.beams.frustumCulled = false;
+    const ownerGeometry = new THREE.BufferGeometry();
+    ownerGeometry.setAttribute("position", new THREE.BufferAttribute(this.ownerLinePositions, 3).setUsage(THREE.DynamicDrawUsage));
+    ownerGeometry.setAttribute("color", new THREE.BufferAttribute(this.ownerLineColors, 3).setUsage(THREE.DynamicDrawUsage));
+    ownerGeometry.setDrawRange(0, 0);
+    this.ownerLines = new THREE.LineSegments(ownerGeometry, new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: OWNER_LINE.opacity,
+      depthWrite: false,
+    }));
+    this.ownerLines.frustumCulled = false;
+    this.scene.add(this.ownerLines);
     const glow = () => new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
     this.rings = this.createPool(new THREE.RingGeometry(0.85, 1, 40).rotateX(-Math.PI / 2), glow(), MAX_EFFECT_PRIMITIVES);
     // Spell bolts: unit boxes stretched along the source -> target segment.
@@ -922,6 +942,7 @@ export class MapScene3D {
       object.health = unit.health;
       object.loggedZ = unit.z;
       object.healthFraction = unit.healthFraction ?? null;
+      object.owner = unit.owner;
       if (object.color !== unit.color || object.icon !== (unit.icon ?? null)) {
         object.color = unit.color;
         object.icon = unit.icon ?? null;
@@ -1620,6 +1641,8 @@ export class MapScene3D {
     }
     this.beams.geometry.dispose();
     this.beams.material.dispose();
+    this.ownerLines.geometry.dispose();
+    this.ownerLines.material.dispose();
     for (const pool of [this.rings, this.bolts, this.slashes, this.bars]) {
       pool.geometry.dispose();
       pool.material.dispose();
@@ -1694,6 +1717,7 @@ export class MapScene3D {
       boss,
       mini: false,
       healthFraction: unit.healthFraction ?? null,
+      owner: unit.owner,
       kind: unit.kind,
       name: unit.name,
       color: unit.color,
@@ -2829,6 +2853,33 @@ export class MapScene3D {
       if (token.bossPin) token.bossPin.material.color.setHex(object.dead ? 0x777777 : 0xffffff);
     }
     this.updateTargetLines(dt);
+    this.updateOwnerLines();
+  }
+
+  // A thin line from each guardian to its owner, in the owner's colour: dim,
+  // bright when either end is selected, a target in the chain, or pinned.
+  private updateOwnerLines() {
+    const { roles } = this;
+    const lit = (guid: string) => guid === roles.selected || guid === roles.target || guid === roles.targetsTarget || roles.pinned.has(guid);
+    let count = 0;
+    const lift = OWNER_LINE.lift * this.unitScale;
+    for (const [guid, guardian] of this.units) {
+      if (!guardian.owner || count >= MAX_OWNER_LINES) continue;
+      const owner = this.units.get(guardian.owner);
+      if (!owner || owner.dead || guardian.dead) continue;
+      const offset = count * 6;
+      const from = guardian.group.position;
+      const to = owner.group.position;
+      this.ownerLinePositions.set([from.x, from.y + lift, from.z, to.x, to.y + lift, to.z], offset);
+      const brightness = lit(guid) || lit(guardian.owner) ? 1 : OWNER_LINE.dim;
+      this.color.set(owner.color).multiplyScalar(brightness);
+      this.ownerLineColors.set([this.color.r, this.color.g, this.color.b, this.color.r, this.color.g, this.color.b], offset);
+      count++;
+    }
+    const geometry = this.ownerLines.geometry;
+    geometry.setDrawRange(0, count * 2);
+    geometry.attributes.position.needsUpdate = count > 0;
+    geometry.attributes.color.needsUpdate = count > 0;
   }
 
   // Selected -> its target (dashes in the cast's school colour while casting,

@@ -62,6 +62,19 @@ export const TARGET_LINE = {
   targetsTargetOpacity: 0.75,
 } as const;
 
+/**
+ * Owner lines: a thin line from every guardian (pet, summon, totem) to the
+ * player who owns it, in the owner's colour; dim, and bright while the owner
+ * or the guardian is selected, targeted or pinned.
+ */
+export const OWNER_LINE = {
+  opacity: 0.85,
+  /** The owner's colour is scaled by this for a line nobody is looking at. */
+  dim: 0.35,
+  /** Height above the floor (geometry units). */
+  lift: 0.35,
+} as const;
+
 // A small skull, as the design's death marker (12×12 path units).
 function drawSkull(context: CanvasRenderingContext2D, centre: number, size: number) {
   context.save();

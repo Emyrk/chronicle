@@ -249,6 +249,7 @@ export default function MapView3D({
         icon: specializations.get(marker.guid)?.iconUrl ?? marker.icon,
         boss: bossGuids?.has(marker.guid) ?? false,
         healthFraction: marker.healthFraction,
+        owner: marker.owner,
       }];
     });
     scene.setUnits(units);

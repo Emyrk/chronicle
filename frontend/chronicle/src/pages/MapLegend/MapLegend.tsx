@@ -4,7 +4,7 @@ import { healthBarColor, MAX_HEALTH_BARS, RECENT_HEALTH_MS } from "@/pages/Insta
 import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, hexCss, WALK_AVATAR_COLOR } from "@/pages/Instance/EventsPanels/Map/mapPalette";
 import { ABOVE_DISC_MODES, CAST_MODES } from "@/pages/Instance/EventsPanels/Map/mapViewSettings";
 import { HEAL_COLOR, HEAL_CRIT_COLOR, OVERHEAL_COLOR, SCHOOL_TOKENS, schoolColor } from "@/pages/Instance/EventsPanels/Map/replayEffects";
-import { DASH_ART_SIZE, HALO_COLORS, TARGET_LINE, TOKEN_LAYOUT, type HaloKind } from "@/pages/Instance/EventsPanels/Map/unitTokenArt";
+import { DASH_ART_SIZE, HALO_COLORS, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, type HaloKind } from "@/pages/Instance/EventsPanels/Map/unitTokenArt";
 import { participantColor } from "@/pages/Instance/liveSessionProtocol";
 import { At, BossToken, Ground, Token, useClock } from "./legendArt";
 import {
@@ -88,6 +88,23 @@ function TargetLine({ from, to, color, dotted, seconds }: { from: { x: number; y
       strokeLinecap="round"
       vectorEffect="non-scaling-stroke"
       opacity={dotted ? TARGET_LINE.targetsTargetOpacity : TARGET_LINE.opacity}
+    />
+  );
+}
+
+// An owner line as the map draws it: thin, the owner's colour, dimmed unless lit.
+function OwnerLine({ from, to, color, lit = false }: { from: { x: number; y: number }; to: { x: number; y: number }; color: string; lit?: boolean }) {
+  return (
+    <line
+      x1={from.x}
+      y1={from.y}
+      x2={to.x}
+      y2={to.y}
+      stroke={color}
+      strokeWidth={1}
+      vectorEffect="non-scaling-stroke"
+      opacity={OWNER_LINE.opacity}
+      style={lit ? undefined : { filter: `brightness(${OWNER_LINE.dim})` }}
     />
   );
 }
@@ -201,7 +218,7 @@ export function MapLegend() {
         </Grid>
       </Section>
 
-      <Section id="lines" title="Target lines" note="Drawn only along the selected chain, never from pinned units. The dashes run toward the target.">
+      <Section id="lines" title="Lines" note="Target lines run only along the selected chain, never from pinned units; their dashes run toward the target. Owner lines tie every guardian to its player.">
         <Grid min={300}>
           <Card title="Selected → target" demo={
             <Ground height={150}>
@@ -220,6 +237,20 @@ export function MapLegend() {
             </Ground>
           }>
             The second hop: a thinner purple dotted line.
+          </Card>
+          <Card title="Guardian → owner" demo={
+            <Ground height={150}>
+              <Lines>
+                <OwnerLine from={{ x: 16, y: 72 }} to={{ x: 34, y: 42 }} color="var(--color-class-hunter)" />
+                <OwnerLine from={{ x: 64, y: 74 }} to={{ x: 82, y: 40 }} color="var(--color-class-warlock)" lit />
+              </Lines>
+              <At x={16} y={72}><Token kind="pet" ring="#67e8f9" facing={30} /></At>
+              <At x={34} y={42}><Token {...HUNTER} facing={150} /></At>
+              <At x={64} y={74}><Token kind="pet" ring="#67e8f9" facing={30} /></At>
+              <At x={82} y={40}><Token ring="var(--color-class-warlock)" icon="/c/icons/class_warlock.png" halo="selected" facing={200} /></At>
+            </Ground>
+          }>
+            A thin line in the owner&apos;s colour from each pet, summon or totem to its player: faint, and bright while either one is selected, a target or pinned.
           </Card>
         </Grid>
       </Section>

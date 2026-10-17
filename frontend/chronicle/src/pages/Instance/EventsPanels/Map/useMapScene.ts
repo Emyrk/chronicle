@@ -119,6 +119,8 @@ export interface MapSceneMarker {
   icon: string | null;
   /** Health at the cursor (0-1) for every unit with health data, or null. */
   healthFraction: number | null;
+  /** A guardian's (pet, summon, totem) owning player. */
+  owner?: string;
 }
 
 export interface MapSceneGround {
@@ -362,6 +364,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       name: player?.name ?? metadata?.name ?? guid,
       health: null,
       entry: metadata?.entry,
+      ...(kind === "pet" && ownerGuid ? { owner: ownerGuid } : {}),
       icon: player ? `/c/icons/class_${player.class.toLowerCase().replace(/\s+/g, "")}.png` : null,
       healthFraction: null,
     }];

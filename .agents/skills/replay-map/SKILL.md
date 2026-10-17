@@ -54,7 +54,7 @@ through on their own:
 | Legend shows | Comes from |
 |---|---|
 | Token discs, notch, halos, pins, cast arc, sigil, ticks, boss pin, dashes | `unitTokenArt.ts` draw functions (same pixels as the map) |
-| Token sizes, halo/arc/shadow plane sizes, column size, muted opacity, sigil spin, line widths and dash | `TOKEN_LAYOUT`, `TARGET_LINE`, `MARKS_SCALE` in `unitTokenArt.ts` |
+| Token sizes, halo/arc/shadow plane sizes, column size, muted opacity, sigil spin, line widths and dash, owner line opacity and dimming | `TOKEN_LAYOUT`, `TARGET_LINE`, `OWNER_LINE`, `MARKS_SCALE` in `unitTokenArt.ts` |
 | Halo colours | `HALO_COLORS` |
 | Effect durations, heal/overheal/crit/ranged/interrupt colours, school colours, heal number format | `replayEffects.ts` |
 | Health bar colours and rules | `healthBarColor`, `MAX_HEALTH_BARS`, `RECENT_HEALTH_MS`, `mapPalette.ts` |
