@@ -1389,6 +1389,8 @@ interface EncounterDetailProps {
   /** Focus mode: only the preset row and the layout, filling the screen. */
   focused: boolean;
   onFocusedChange: (focused: boolean) => void;
+  /** Reopen the encounter sidebar without reserving a layout column. */
+  onShowSidebar?: () => void;
   /** Full-page content owned by the active layout, or null for a panel grid. */
   pageType: InstancePageType | null;
   /** Share-link state binding for the active page; the key remounts it on import. */
@@ -1428,6 +1430,7 @@ function EncounterDetail({
   layoutAppearance,
   focused,
   onFocusedChange,
+  onShowSidebar,
   pageType,
   pageState,
   onPresetChange,
@@ -1964,6 +1967,17 @@ function EncounterDetail({
 
       {/* Preset layout tabs */}
       <div className={cn("flex shrink-0 gap-1 overflow-x-auto pb-1 pt-1 styled-scrollbar", focused ? "mb-2" : "mb-3")}>
+        {focused && onShowSidebar && (
+          <button
+            type="button"
+            onClick={onShowSidebar}
+            title="Show sidebar"
+            className="flex shrink-0 items-center rounded-md px-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <PanelLeft className="h-4 w-4" />
+            <span className="sr-only">Show sidebar</span>
+          </button>
+        )}
         {availablePresetLayouts.map((preset) => (
           <button
             key={preset.id}
@@ -3650,6 +3664,17 @@ function InstancePageViewContent({
           )}
           {!isMobile && (
             <div className="flex items-center gap-2 shrink-0">
+              {isEncounterView && !sidebarOpen && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSidebarOpen(true)}
+                  title="Show sidebar"
+                >
+                  <PanelLeft className="h-4 w-4" />
+                  <span className="sr-only">Show sidebar</span>
+                </Button>
+              )}
               {showLiveSessionControls && (
                 <LiveSessionButton instanceId={instance.id} canCreate={isLoggedIn} />
               )}
@@ -3846,19 +3871,6 @@ function InstancePageViewContent({
           />
         )}
         
-        {/* Desktop: inline toggle when sidebar closed */}
-        {!sidebarOpen && !isMobile && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setSidebarOpen(true)}
-            className="shrink-0"
-            title="Show sidebar"
-          >
-            <PanelLeft className="h-4 w-4" />
-          </Button>
-        )}
-        
         {instance.encounters.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
             <Card className="max-w-xl p-6 text-center">
@@ -3896,6 +3908,7 @@ function InstancePageViewContent({
             layoutAppearance={layoutAppearance}
             focused={focused}
             onFocusedChange={setFocused}
+            onShowSidebar={!sidebarOpen && !isMobile ? () => setSidebarOpen(true) : undefined}
             pageType={activePageType}
             pageState={pageStateBinding}
             layoutPopup={layoutPopup}
