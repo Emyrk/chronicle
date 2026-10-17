@@ -27,14 +27,23 @@ export type EmbeddedPanelRender = (panelOption?: string | null) => ReactNode;
  * render-only panel options draws the same result several ways, e.g. one
  * inspect card per unit from a single Unit Auras run.
  */
-export function useEmbeddedPanel<TResult>({
+export function useEmbeddedPanel<TResult>(options: UseEmbeddedPanelOptions<TResult>): EmbeddedPanelRender {
+  return useEmbeddedPanelWithResult(options).render;
+}
+
+/**
+ * useEmbeddedPanel, plus the processed result (null while off), for a host
+ * that reads the panel's data as well as drawing it: e.g. the map finding a
+ * target's target in the Raid Frames run it already draws.
+ */
+export function useEmbeddedPanelWithResult<TResult>({
   panel,
   context,
   durationMs,
   variant = "overlay",
   perSecond = false,
   enabled = true,
-}: UseEmbeddedPanelOptions<TResult>): EmbeddedPanelRender {
+}: UseEmbeddedPanelOptions<TResult>): { render: EmbeddedPanelRender; result: TResult | null } {
   const sync = useSyncModeContextOptional();
   const timeRange = useTimeRangeContextOptional();
   const capabilities = context.instance.capabilities ?? [];
@@ -56,7 +65,7 @@ export function useEmbeddedPanel<TResult>({
       : durationMs);
 
   const active = enabled && available;
-  return useCallback((panelOption?: string | null) => {
+  const render = useCallback((panelOption?: string | null) => {
     if (!active) return null;
     return (
       <PanelVariantContext.Provider value={variant}>
@@ -73,4 +82,5 @@ export function useEmbeddedPanel<TResult>({
       </PanelVariantContext.Provider>
     );
   }, [active, aggregation, context, effectiveDurationMs, panel, panelContext, perSecond, variant]);
+  return { render, result: active ? aggregation.result : null };
 }

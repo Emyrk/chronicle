@@ -1,8 +1,8 @@
 import { useEffect, type ReactNode } from "react";
-import { Scan, X } from "lucide-react";
+import { Footprints, Scan, X } from "lucide-react";
 import { Switch } from "@/components/ui/Switch/Switch";
 import { cn } from "@/lib/utils";
-import { CAST_MODES, DENSITY_OPTIONS, type EffectSettings } from "./mapViewSettings";
+import { ABOVE_DISC_MODES, CAST_MODES, DENSITY_OPTIONS, type EffectSettings } from "./mapViewSettings";
 
 export interface MapSettingsOverlayProps {
   onClose: () => void;
@@ -20,6 +20,10 @@ export interface MapSettingsOverlayProps {
   mesh: { on: boolean; locked: boolean; loading: boolean; onToggle: () => void } | null;
   floors: { list: number[]; value: number | null; onChange: (floor: number) => void } | null;
   onTopDown: () => void;
+  /** Walk mode, when the dungeon mesh is up to walk on. */
+  walk: { on: boolean; onToggle: () => void } | null;
+  adStrafe: boolean;
+  onAdStrafe: (on: boolean) => void;
 }
 
 /**
@@ -39,6 +43,9 @@ export function MapSettingsOverlay({
   mesh,
   floors,
   onTopDown,
+  walk,
+  adStrafe,
+  onAdStrafe,
 }: MapSettingsOverlayProps) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -79,6 +86,12 @@ export function MapSettingsOverlay({
               detail="Over bosses, selected players and recently damaged units"
               checked={effectSettings.bars}
               onChange={(bars) => onEffectSettings({ bars })}
+            />
+            <Choice
+              label="Above the token"
+              value={effectSettings.aboveDisc}
+              options={ABOVE_DISC_MODES}
+              onChange={(aboveDisc) => onEffectSettings({ aboveDisc })}
             />
           </Section>
         )}
@@ -146,6 +159,23 @@ export function MapSettingsOverlay({
               <Scan className="h-3.5 w-3.5" />
               Top-down view
             </button>
+            <Toggle
+              label="A/D strafe"
+              detail="A and D strafe and Q and E turn, instead of the other way round"
+              checked={adStrafe}
+              onChange={onAdStrafe}
+            />
+            {walk && (
+              <button
+                type="button"
+                onClick={() => { walk.onToggle(); onClose(); }}
+                title="WASD to move, Space to jump (hold to fly), G or Esc to leave"
+                className="flex items-center gap-2 rounded border border-white/15 px-2 py-1.5 text-xs hover:bg-white/10"
+              >
+                <Footprints className="h-3.5 w-3.5" />
+                {walk.on ? "Leave walk mode" : "Walk mode (G)"}
+              </button>
+            )}
           </Section>
         )}
 

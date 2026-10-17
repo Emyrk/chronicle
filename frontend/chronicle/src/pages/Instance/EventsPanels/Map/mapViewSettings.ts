@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import type { AboveDiscMode } from "./MapScene3D";
 import { DEFAULT_EFFECT_OPTIONS, MAX_EFFECT_PRIMITIVES, type CastIconMode } from "./replayEffects";
 
 /** The 3D map's display settings, set from the map's settings overlay and kept in local storage. */
@@ -13,6 +14,8 @@ export interface EffectSettings {
   /** Legacy boolean from before castMode; false migrates to "off". */
   casts?: boolean;
   castMode: CastIconMode;
+  /** The live value drawn as a column above each unit token. */
+  aboveDisc: AboveDiscMode;
 }
 
 export const EFFECTS_STORAGE_KEY = "chronicle.map.effects3d";
@@ -26,7 +29,14 @@ export const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
   maxEffects: MAX_EFFECT_PRIMITIVES,
   bars: true,
   castMode: "selected",
+  aboveDisc: "cast",
 };
+
+export const ABOVE_DISC_MODES: { value: AboveDiscMode; label: string; title: string }[] = [
+  { value: "none", label: "None", title: "Nothing above the tokens" },
+  { value: "health", label: "Health", title: "A column as tall as the unit's health, green to red" },
+  { value: "cast", label: "Cast", title: "A column rising in the spell school's colour while the unit casts" },
+];
 
 export const CAST_MODES: { value: CastIconMode; label: string; title: string }[] = [
   { value: "off", label: "Off", title: "No cast icons" },
@@ -43,6 +53,7 @@ export function readStoredEffectSettings(): EffectSettings {
     if (!stored.castMode && stored.casts === false) settings.castMode = "off";
     if (!CAST_MODES.some((mode) => mode.value === settings.castMode)) settings.castMode = "selected";
     if (!DENSITY_OPTIONS.includes(settings.maxEffects)) settings.maxEffects = MAX_EFFECT_PRIMITIVES;
+    if (!ABOVE_DISC_MODES.some((mode) => mode.value === settings.aboveDisc)) settings.aboveDisc = DEFAULT_EFFECT_SETTINGS.aboveDisc;
     return settings;
   } catch {
     return DEFAULT_EFFECT_SETTINGS;

@@ -24,7 +24,9 @@ import {
   type DampedValue,
   type DirectorUnit,
 } from "./cameraDirector";
-import { MAP_CONTROL_ACTIONS, type MapControlAction } from "./mapControls";
+import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
+import { actionForKey, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
+import { CAST_ARC_TEXTURE_STEPS, HALO_COLORS, MARKS_SCALE, UnitTokenTextures, type HaloKind } from "./unitTokens";
 import {
   clampToRadius,
   corsAssetUrl,
@@ -41,16 +43,19 @@ import {
   deriveCastIcons,
   deriveCombatText,
   deriveRecentHealGain,
+  deriveUnitCasts,
   INTERRUPTED_ICON_MS,
   INTERRUPTED_PLAYER_ICON_MS,
   isDeadAt,
   MAX_EFFECT_PRIMITIVES,
+  schoolColor,
   type ActiveEffect,
   type CastIcon,
   type CombatText,
   type DeriveEffectsOptions,
   type EncounterEffects,
   type ReplayEffectKind,
+  type UnitCast,
 } from "./replayEffects";
 import type { MapMarkerKind, MapSceneGround, MapUnitHealth } from "./useMapScene";
 
@@ -187,6 +192,77 @@ const KEY_ZOOM_SPEED = 1.2;
 // A dropped frame never jumps the camera further than this.
 const KEY_MAX_STEP_S = 0.1;
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
+
+// --- Live session presence: everyone's camera or walking character ---
+/** Your presence goes out at most this often while it changes... */
+const PRESENCE_SEND_MS = 100;
+/** ...and others' ease toward each update at this rate (per second). */
+const PRESENCE_EASE_PER_S = 12;
+/** A camera glyph is this long next to a player (geometry units, as PLAYER_GEOMETRY_HEIGHT). */
+const PRESENCE_CAMERA_LENGTH = 3;
+/** Name tags keep one size on screen (their height, in view heights), near or far. */
+const PRESENCE_LABEL_HEIGHT = 0.03;
+
+// --- Unit tokens: flat discs on the ground (geometry units, as PLAYER_GEOMETRY_HEIGHT) ---
+const TOKEN_RADIUS: Record<MapMarkerKind, number> = { player: 1.25, pet: 0.85, hostile: 1.25 };
+const BOSS_TOKEN_RADIUS = 2;
+/** A model's halos and arc sit around this radius. */
+const MINI_TOKEN_RADIUS = 1.2;
+// Heights above the floor, layered so they do not fight each other (or the mesh).
+// Heights: the shadow and the disc's underside sit just off the floor; the
+// rest stack above the disc's face (its underside plus its thickness).
+const TOKEN_GROUND = { shadow: 0.12, underside: 0.15 };
+const TOKEN_LIFT = { marks: 0.02, arc: 0.05, halo: 0.07 };
+/** A disc's edge, like a coin's, as a fraction of its radius (about 12% of the diameter). */
+const TOKEN_THICKNESS = 0.24;
+/** A boss sigil lies flat, at the height a player's disc face would be. */
+const SIGIL_FACE = 0.45;
+/** Plane half-sizes per radius: each texture's ring falls where the design puts it. */
+const TOKEN_PLANE = { shadow: 1.45, halo: 1.9, pin: 2.25, arc: 1.32, ticks: 1, sigil: 1.5 };
+/** The column above the disc: its width and full height, per radius. */
+const COLUMN_WIDTH = 0.26;
+const COLUMN_HEIGHT = 3.2;
+const COLUMN_TRACK_OPACITY = 0.08;
+/** The boss sigil's tick ring turns this fast (radians per second). */
+const SIGIL_SPIN = 0.14;
+/** A boss without a model: its hexagon pin stands this high (per radius) over the sigil. */
+const BOSS_PIN_HEIGHT = 1.9;
+const BOSS_PIN_SIZE = 1.15;
+const PET_ICON = "/c/icons/ability_hunter_beasttaming.png";
+// Target lines: ribbon width (geometry units), lift above the floor, and dash period and speed.
+const TARGET_LINE_WIDTH = 0.32;
+const TARGETS_TARGET_LINE_WIDTH = 0.22;
+const TARGET_LINE_LIFT = 0.25;
+const TARGET_LINE_DASH = 1.6;
+const TARGET_LINE_SPEED = 1.2;
+
+const ORBIT_NEAR = 0.5;
+const ORBIT_FAR = 2000;
+
+// --- Walk mode ("join the fight"): a WoW-style character on the mesh floor ---
+// Speeds and sizes in yards (seconds), scaled by the mesh's scene units per yard.
+const WALK_RUN_YPS = 14;
+const WALK_BACK_YPS = 9;
+const WALK_TURN_RADIANS_PER_S = Math.PI;
+const WALK_JUMP_YPS = 8;
+const WALK_FLY_YPS = 14;
+const WALK_GRAVITY_YPS2 = 19.3;
+/** The floor is looked for from this far above the feet, so steps and ramps are climbed and walls walked through. */
+const WALK_STEP_YARDS = 1.2;
+const WALK_EYE_YARDS = 1.7;
+const WALK_START_DISTANCE_YARDS = 10;
+const WALK_MAX_DISTANCE_YARDS = 45;
+/** Zoomed in closer than this, the camera is the character's eyes. */
+const WALK_FIRST_PERSON_YARDS = 0.8;
+const WALK_LOOK_RADIANS_PER_PX = 0.006;
+const WALK_PITCH_LIMIT = 1.35;
+const WALK_START_PITCH = 0.35;
+const WALK_EXIT_DISTANCE_YARDS = 30;
+// The orbit camera's near plane (0.5 scene units, several yards on the mesh)
+// would clip the floor at your feet, leaving the bottom of the view black, so
+// walking pulls it in close and the far plane with it, for depth precision.
+const WALK_NEAR_YARDS = 0.1;
+const WALK_FAR_YARDS = 3000;
 // A click inspects a unit unless the pointer moved this far (a drag) or a
 // double-click follows within this long.
 const UNIT_CLICK_SLOP_PX = 5;
@@ -260,6 +336,43 @@ export interface MapScene3DUnit {
   miniatureUrl: string | undefined;
   /** Logged world height (yards), when the log has one; picks the floor on the mesh. */
   z?: number;
+  /** The token's icon (a player's class, a pet's paw), or null for none. */
+  icon?: string | null;
+  /** A boss: a sigil instead of a disc. */
+  boss?: boolean;
+  /** Health at the cursor (0-1), for the health column above the disc; null when unknown. */
+  healthFraction?: number | null;
+}
+
+/** The one live value drawn as a column above each token. */
+export type AboveDiscMode = "none" | "health" | "cast";
+
+/** Who the map's target frames show, for the token halos and target lines. */
+export interface MapUnitRoles {
+  selected: string | null;
+  target: string | null;
+  targetsTarget: string | null;
+  pinned: ReadonlySet<string>;
+}
+
+// The flat token parts around a unit's body (the disc itself, until a model replaces it).
+interface UnitToken {
+  /** Disc radius in geometry units (PLAYER_GEOMETRY_HEIGHT is a player's height). */
+  radius: number;
+  /** Height of the disc's face (or the sigil) above the floor. */
+  face: number;
+  /** The disc's edge: its ring colour, darkening toward the ground. */
+  edge: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  shadow: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  halo: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  pin: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  arc: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  column: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  columnTrack: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  /** Bosses: the turning tick ring, the sigil under a model, and the pin while there is none. */
+  ticks: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
+  sigil: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
+  bossPin: THREE.Sprite | null;
 }
 
 interface BossMini {
@@ -280,8 +393,15 @@ interface UnitObject {
   // Lambert with the unit's tint, or a textured mini's cloned material.
   bodyMaterial: THREE.MeshLambertMaterial | THREE.MeshStandardMaterial;
   textured: boolean;
-  coneMaterial: THREE.MeshLambertMaterial;
+  /** The facing notch (diamonds too, for bosses), turning with the unit. */
+  coneMaterial: THREE.MeshBasicMaterial;
   cone: THREE.Mesh;
+  token: UnitToken;
+  icon: string | null;
+  boss: boolean;
+  /** The body shows a loaded model rather than the flat disc. */
+  mini: boolean;
+  healthFraction: number | null;
   kind: MapMarkerKind;
   name: string;
   color: string;
@@ -335,6 +455,84 @@ export interface MapScene3DEffectHover {
   y: number;
 }
 
+interface RemotePresence {
+  presence: LiveMapPresence;
+  seeded: boolean;
+  /** Eased toward the goal each frame. */
+  position: THREE.Vector3;
+  target: THREE.Vector3;
+  goalPosition: THREE.Vector3;
+  goalTarget: THREE.Vector3;
+  group: THREE.Group;
+  /** Placed and turned as a whole; holds the walker and the camera glyph. */
+  body: THREE.Group;
+  walker: THREE.Mesh;
+  camera: THREE.Mesh;
+  cameraGeometry: THREE.BufferGeometry;
+  material: THREE.MeshBasicMaterial;
+  label: THREE.Sprite;
+}
+
+// Someone else in the live session: a capsule in their colour while they
+// walk, a camera (a four-sided cone opening toward what it looks at) while
+// they orbit, and their name above.
+function createRemotePresence(participantId: string, playerGeometry: THREE.BufferGeometry): RemotePresence {
+  const material = new THREE.MeshBasicMaterial({ color: new THREE.Color().setHSL(participantHue(participantId) / 360, 0.8, 0.6), transparent: true, opacity: 0.9 });
+  const walker = new THREE.Mesh(playerGeometry, material);
+  // Apex at the camera, opening along +z, which lookAt turns toward the target.
+  const cameraGeometry = new THREE.ConeGeometry(PRESENCE_CAMERA_LENGTH * 0.45, PRESENCE_CAMERA_LENGTH, 4)
+    .rotateX(-Math.PI / 2)
+    .translate(0, 0, PRESENCE_CAMERA_LENGTH / 2);
+  const camera = new THREE.Mesh(cameraGeometry, material);
+  const body = new THREE.Group();
+  body.add(walker, camera);
+  const label = createLabelSprite(participantLabel(participantId));
+  label.material.sizeAttenuation = false;
+  label.scale.multiplyScalar(PRESENCE_LABEL_HEIGHT / label.scale.y);
+  const group = new THREE.Group();
+  group.add(body, label);
+  return {
+    presence: { ground: "", mode: "camera", position: [0, 0, 0], target: [0, 0, 1] },
+    seeded: false,
+    position: new THREE.Vector3(),
+    target: new THREE.Vector3(),
+    goalPosition: new THREE.Vector3(),
+    goalTarget: new THREE.Vector3(),
+    group,
+    body,
+    walker,
+    camera,
+    cameraGeometry,
+    material,
+    label,
+  };
+}
+
+interface WalkState {
+  /** Feet, in scene units. */
+  position: THREE.Vector3;
+  /** The character's facing (rotation about y; -z is ahead at 0). */
+  yaw: number;
+  vy: number;
+  grounded: boolean;
+  camYaw: number;
+  /** Camera elevation above the head, radians. */
+  camPitch: number;
+  /** Camera distance from the head, yards; 0 is first person. */
+  camDistance: number;
+  lastMs: number;
+  drag: { button: number; x: number; y: number } | null;
+  avatar: THREE.Group;
+}
+
+// You, in walk mode: a gold player capsule (no facing cone; the camera shows the way).
+function createAvatar(geometries: Record<MapMarkerKind | "cone", THREE.BufferGeometry>): THREE.Group {
+  const material = new THREE.MeshStandardMaterial({ color: 0xffd100, emissive: 0x3a2a00, roughness: 0.5 });
+  const group = new THREE.Group();
+  group.add(new THREE.Mesh(geometries.player, material));
+  return group;
+}
+
 function createUnitGeometries(): Record<MapMarkerKind | "cone", THREE.BufferGeometry> {
   // Bodies stand on the ground plane; the cone sits in front of the body and
   // points along -z, which a rotation of `facing` about y turns to the unit's
@@ -354,7 +552,7 @@ function createUnitGeometries(): Record<MapMarkerKind | "cone", THREE.BufferGeom
 export class MapScene3D {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
-  private readonly camera = new THREE.PerspectiveCamera(45, 1, 0.5, 2000);
+  private readonly camera = new THREE.PerspectiveCamera(45, 1, ORBIT_NEAR, ORBIT_FAR);
   private readonly controls: OrbitControls;
   private readonly resizeObserver: ResizeObserver;
   private readonly raycaster = new THREE.Raycaster();
@@ -473,6 +671,26 @@ export class MapScene3D {
   // The window the map lives in: a popped-out panel has its own.
   private readonly keyWindow: Window;
   private readonly heldActions = new Set<MapControlAction>();
+  private walk: WalkState | null = null;
+  private adStrafe = true;
+  private readonly tokenTextures = new UnitTokenTextures(() => this.requestRender());
+  // A flat plane (radius 1) lying on the ground, shared by every token part.
+  private readonly tokenPlane = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
+  private readonly columnBox = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+  // An open cylinder (radius 1, height 1) hanging below y = 0: a disc's edge.
+  private readonly tokenEdge = new THREE.CylinderGeometry(1, 1, 1, 40, 1, true).translate(0, -0.5, 0);
+  private aboveDisc: AboveDiscMode = "cast";
+  private roles: MapUnitRoles = { selected: null, target: null, targetsTarget: null, pinned: new Set() };
+  private readonly unitCasts = new Map<string, UnitCast>();
+  private readonly targetLines: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[] = [];
+  private tokenAt = 0;
+  private onPresence: ((presence: LiveMapPresence | null) => void) | null = null;
+  private lastPresence: { json: string; at: number } | null = null;
+  private presenceTimer = 0;
+  private readonly remotePresences = new Map<string, RemotePresence>();
+  private presenceAt = 0;
+  private onWalkChange: (walking: boolean) => void = () => {};
+  private readonly walkHead = new THREE.Vector3();
   private keyMoveLastMs = 0;
   private hoveredEffectKey = "";
   private readonly onEffectHover: (hover: MapScene3DEffectHover | null) => void;
@@ -526,7 +744,10 @@ export class MapScene3D {
     this.renderer.domElement.addEventListener("dblclick", this.handleDoubleClick);
     this.renderer.domElement.addEventListener("pointerdown", this.handlePointerDown);
     this.renderer.domElement.addEventListener("pointerup", this.handlePointerUp);
-    this.keyWindow.addEventListener("keydown", this.handleKeyDown);
+    this.renderer.domElement.addEventListener("wheel", this.handleWalkWheel, { passive: false });
+    this.renderer.domElement.addEventListener("contextmenu", this.handleWalkContextMenu);
+    // Capture, so walk mode's Esc is handled before the page's own Esc (focus mode) sees it.
+    this.keyWindow.addEventListener("keydown", this.handleKeyDown, { capture: true });
     this.keyWindow.addEventListener("keyup", this.handleKeyUp);
     this.keyWindow.addEventListener("blur", this.releaseKeys);
     container.appendChild(this.renderer.domElement);
@@ -712,19 +933,30 @@ export class MapScene3D {
       }
       if (!object) object = this.addUnit(unit);
       object.name = unit.name;
-      object.color = unit.color;
       object.health = unit.health;
       object.loggedZ = unit.z;
+      object.healthFraction = unit.healthFraction ?? null;
+      if (object.color !== unit.color || object.icon !== (unit.icon ?? null)) {
+        object.color = unit.color;
+        object.icon = unit.icon ?? null;
+        this.applyTokenFace(object);
+      }
       const { x, z } = mapPointToScene(unit.point, this.aspect, GROUND_WIDTH);
       object.base.set(x, this.baseHeight(unit.guid, x, z, unit.z), z);
       object.group.position.copy(object.base);
       object.group.rotation.y = unit.facing;
+      // The disc's icon and the cast arc keep north up; the notch turns.
+      if (!object.mini) object.body.rotation.y = -unit.facing;
+      object.token.arc.rotation.y = -unit.facing;
+      object.token.pin.rotation.y = -unit.facing;
       object.group.scale.setScalar(this.scaleOf(object));
       const opacity = unit.muted ? MUTED_OPACITY : 1;
       for (const material of [object.bodyMaterial, object.coneMaterial]) {
         material.opacity = opacity;
-        material.depthWrite = !unit.muted;
+        material.depthWrite = !unit.muted && material === object.bodyMaterial && object.mini;
       }
+      object.token.shadow.material.opacity = opacity;
+      object.token.edge.material.opacity = opacity;
       setBodyColor(object);
     }
     for (const guid of [...this.units.keys()]) {
@@ -855,7 +1087,7 @@ export class MapScene3D {
 
   /** Whether the Director is the one moving the camera right now. */
   private directing(): boolean {
-    return this.director !== null && this.dungeonMesh !== null && !this.directorPaused && this.cameraMove === null;
+    return this.director !== null && this.dungeonMesh !== null && !this.directorPaused && this.cameraMove === null && this.walk === null;
   }
 
   /**
@@ -865,6 +1097,11 @@ export class MapScene3D {
    * and a new selection all come through here.
    */
   setViewport(viewport: MapViewport, durationMs = 0) {
+    // Walking, the character has the camera; the framing waits for orbit mode.
+    if (this.walk) {
+      this.viewport = viewport;
+      return;
+    }
     if (this.director && this.dungeonMesh) {
       this.viewport = viewport;
       this.viewAnimation = null;
@@ -889,6 +1126,7 @@ export class MapScene3D {
 
   /** Re-frames the current viewport straight down (`topDown`) or angled. */
   resetCamera(topDown: boolean) {
+    if (this.walk) this.stopWalk();
     this.viewAnimation = null;
     // Asking for top-down takes the camera from the Director, as a drag does;
     // Follow (a new viewport request) hands it back.
@@ -1104,7 +1342,7 @@ export class MapScene3D {
   // with the target so the view does not swing.
   private constrainCamera() {
     const mesh = this.dungeonMesh;
-    if (!mesh || this.constraining) return;
+    if (!mesh || this.constraining || this.walk) return;
     const { target } = this.controls;
     const { position } = this.camera;
     let moved = false;
@@ -1351,6 +1589,7 @@ export class MapScene3D {
    * back instead, and empty sky does nothing.
    */
   private readonly handleDoubleClick = (event: MouseEvent) => {
+    if (this.walk) return;
     clearTimeout(this.unitClickTimer);
     const hit = this.pickScenePoint(event);
     if (!hit) return;
@@ -1396,8 +1635,24 @@ export class MapScene3D {
     canvas.removeEventListener("dblclick", this.handleDoubleClick);
     canvas.removeEventListener("pointerdown", this.handlePointerDown);
     canvas.removeEventListener("pointerup", this.handlePointerUp);
+    canvas.removeEventListener("wheel", this.handleWalkWheel);
+    canvas.removeEventListener("contextmenu", this.handleWalkContextMenu);
+    if (this.walk) this.disposeAvatar(this.walk.avatar);
+    this.walk = null;
+    clearTimeout(this.presenceTimer);
+    for (const line of this.targetLines) {
+      line.geometry.dispose();
+      line.material.map?.dispose();
+      line.material.dispose();
+    }
+    this.tokenTextures.dispose();
+    this.tokenPlane.dispose();
+    this.columnBox.dispose();
+    this.tokenEdge.dispose();
+    for (const presence of this.remotePresences.values()) this.disposeRemotePresence(presence);
+    this.remotePresences.clear();
     clearTimeout(this.unitClickTimer);
-    this.keyWindow.removeEventListener("keydown", this.handleKeyDown);
+    this.keyWindow.removeEventListener("keydown", this.handleKeyDown, { capture: true });
     this.keyWindow.removeEventListener("keyup", this.handleKeyUp);
     this.keyWindow.removeEventListener("blur", this.releaseKeys);
     for (const guid of [...this.units.keys()]) this.removeUnit(guid);
@@ -1432,14 +1687,50 @@ export class MapScene3D {
   }
 
   private addUnit(unit: MapScene3DUnit): UnitObject {
-    const bodyMaterial = new THREE.MeshLambertMaterial({ transparent: true });
-    const coneMaterial = new THREE.MeshLambertMaterial({ color: 0xf5f5f4, transparent: true });
-    const body = new THREE.Mesh(this.geometries[unit.kind], bodyMaterial);
-    const cone = new THREE.Mesh(this.geometries.cone, coneMaterial);
+    const boss = unit.boss === true;
+    const radius = boss ? BOSS_TOKEN_RADIUS : TOKEN_RADIUS[unit.kind];
+    const overlay = (map: THREE.Texture | null, size: number, lift: number, opacity = 1) => {
+      const mesh = new THREE.Mesh(this.tokenPlane, new THREE.MeshBasicMaterial({
+        map, transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+      }));
+      mesh.scale.setScalar(size);
+      mesh.position.y = lift;
+      return mesh;
+    };
+    // The body is the disc (a flat plane) until a model loads into it.
+    const bodyMaterial = new THREE.MeshLambertMaterial({ transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    const body = new THREE.Mesh(this.tokenPlane, bodyMaterial);
+    body.scale.setScalar(boss ? radius * TOKEN_PLANE.sigil : radius);
+    const face = boss ? SIGIL_FACE : TOKEN_GROUND.underside + radius * TOKEN_THICKNESS;
+    body.position.y = face;
+    const edge = new THREE.Mesh(this.tokenEdge, new THREE.MeshBasicMaterial({ map: this.tokenTextures.edge(), transparent: true }));
+    edge.scale.set(radius, face - TOKEN_GROUND.underside, radius);
+    edge.position.y = face;
+    edge.visible = !boss;
+    const cone = overlay(null, radius * MARKS_SCALE, face + TOKEN_LIFT.marks);
+    const coneMaterial = cone.material;
+    const shadow = overlay(this.tokenTextures.shadow(), radius * TOKEN_PLANE.shadow, TOKEN_GROUND.shadow);
+    const halo = overlay(null, radius * TOKEN_PLANE.halo, face + TOKEN_LIFT.halo);
+    const pin = overlay(this.tokenTextures.halo("pinned"), radius * TOKEN_PLANE.pin, face + TOKEN_LIFT.halo);
+    pin.material.color.setHex(HALO_COLORS.pinned);
+    const arc = overlay(null, radius * TOKEN_PLANE.arc, face + TOKEN_LIFT.arc);
+    const columnTrack = new THREE.Mesh(this.columnBox, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: COLUMN_TRACK_OPACITY, depthWrite: false }));
+    const column = new THREE.Mesh(this.columnBox, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.92 }));
+    for (const part of [column, columnTrack]) part.scale.set(radius * COLUMN_WIDTH, radius * COLUMN_HEIGHT, radius * COLUMN_WIDTH);
+    const ticks = boss ? overlay(this.tokenTextures.sigilTicks(), radius * TOKEN_PLANE.ticks * TOKEN_PLANE.sigil, face + TOKEN_LIFT.marks) : null;
+    let bossPin: THREE.Sprite | null = null;
+    if (boss) {
+      bossPin = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tokenTextures.bossPin(), transparent: true }));
+      bossPin.center.set(0.5, 0);
+      bossPin.scale.setScalar(radius * BOSS_PIN_SIZE);
+      bossPin.position.y = radius * BOSS_PIN_HEIGHT;
+    }
     const group = new THREE.Group();
     group.userData.guid = unit.guid;
     body.userData.guid = unit.guid;
-    group.add(body, cone);
+    group.add(shadow, edge, body, cone, arc, halo, pin, columnTrack, column);
+    if (ticks) group.add(ticks);
+    if (bossPin) group.add(bossPin);
     this.unitsGroup.add(group);
     const object: UnitObject = {
       group,
@@ -1447,6 +1738,11 @@ export class MapScene3D {
       bodyMaterial,
       coneMaterial,
       cone,
+      token: { radius, face, edge, shadow, halo, pin, arc, column, columnTrack, ticks, sigil: null, bossPin },
+      icon: unit.icon ?? null,
+      boss,
+      mini: false,
+      healthFraction: unit.healthFraction ?? null,
       kind: unit.kind,
       name: unit.name,
       color: unit.color,
@@ -1460,6 +1756,7 @@ export class MapScene3D {
       labelHeight: LABEL_HEIGHT,
       deadLift: DEAD_LIFT,
     };
+    this.applyTokenFace(object);
     group.scale.setScalar(this.scaleOf(object));
     this.units.set(unit.guid, object);
     if (object.miniatureUrl) {
@@ -1467,6 +1764,24 @@ export class MapScene3D {
       if (mini) this.applyBossMini(object, mini);
     }
     return object;
+  }
+
+  // The disc's face and the notch for the unit's colour, icon and death.
+  private applyTokenFace(object: UnitObject) {
+    const ring = object.dead ? "#5a5a5a" : object.color;
+    object.coneMaterial.map = this.tokenTextures.facingMarks(object.boss ? "#ef4444" : ring, object.boss);
+    object.coneMaterial.color.setHex(object.dead && object.boss ? 0x777777 : 0xffffff);
+    object.coneMaterial.needsUpdate = true;
+    object.token.edge.material.color.set(ring);
+    if (object.mini) return;
+    const map = object.boss
+      ? this.tokenTextures.sigil()
+      : this.tokenTextures.disc(object.icon ?? (object.kind === "pet" ? PET_ICON : null), ring, object.dead, object.kind === "hostile");
+    if (object.bodyMaterial.map !== map) {
+      object.bodyMaterial.map = map;
+      object.bodyMaterial.needsUpdate = true;
+    }
+    object.bodyMaterial.color.setHex(object.boss && object.dead ? 0x777777 : 0xffffff);
   }
 
   // Returns the published miniature if loaded, starting its load on first use.
@@ -1537,7 +1852,43 @@ export class MapScene3D {
   }
 
   private applyBossMini(object: UnitObject, mini: BossMini) {
+    object.mini = true;
     object.body.geometry = mini.geometry;
+    object.body.scale.setScalar(1);
+    object.body.position.y = 0;
+    object.body.rotation.set(0, 0, 0);
+    const bodyMaterial = object.bodyMaterial;
+    bodyMaterial.map = null;
+    bodyMaterial.depthWrite = bodyMaterial.opacity >= 1;
+    bodyMaterial.polygonOffset = false;
+    bodyMaterial.needsUpdate = true;
+    const { token } = object;
+    token.radius = MINI_TOKEN_RADIUS;
+    token.edge.visible = false;
+    // A model stands on the floor; its rings lie there too.
+    token.face = TOKEN_GROUND.underside;
+    token.halo.position.y = token.pin.position.y = token.face + TOKEN_LIFT.halo;
+    token.arc.position.y = token.face + TOKEN_LIFT.arc;
+    object.cone.position.y = token.face + TOKEN_LIFT.marks;
+    if (token.ticks) token.ticks.position.y = token.face + TOKEN_LIFT.marks;
+    for (const [part, size] of [[token.halo, TOKEN_PLANE.halo], [token.pin, TOKEN_PLANE.pin], [token.arc, TOKEN_PLANE.arc], [token.shadow, TOKEN_PLANE.shadow]] as const) {
+      part.scale.setScalar(MINI_TOKEN_RADIUS * size);
+    }
+    for (const part of [token.column, token.columnTrack]) part.scale.set(MINI_TOKEN_RADIUS * COLUMN_WIDTH, MINI_TOKEN_RADIUS * COLUMN_HEIGHT, MINI_TOKEN_RADIUS * COLUMN_WIDTH);
+    if (token.bossPin) token.bossPin.visible = false;
+    if (object.boss && !token.sigil) {
+      // The model stands on the sigil.
+      token.sigil = new THREE.Mesh(this.tokenPlane, new THREE.MeshBasicMaterial({
+        map: this.tokenTextures.sigil(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+      }));
+      token.sigil.scale.setScalar(MINI_TOKEN_RADIUS * TOKEN_PLANE.sigil);
+      token.sigil.position.y = token.face;
+      token.ticks?.scale.setScalar(MINI_TOKEN_RADIUS * TOKEN_PLANE.sigil);
+      object.group.add(token.sigil);
+    }
+    if (object.boss) object.cone.scale.setScalar(MINI_TOKEN_RADIUS * MARKS_SCALE);
+    else object.cone.visible = false;
+    setBodyColor(object);
     if (mini.material) {
       // Keep the texture: the per-unit clone carries opacity, the hit flash
       // (emissive) and the death grey (colour multiply).
@@ -1563,6 +1914,9 @@ export class MapScene3D {
     this.unitsGroup.remove(object.group);
     object.bodyMaterial.dispose();
     object.coneMaterial.dispose();
+    const { token } = object;
+    for (const part of [token.shadow, token.edge, token.halo, token.pin, token.arc, token.column, token.columnTrack, token.ticks, token.sigil]) part?.material.dispose();
+    token.bossPin?.material.dispose();
     this.units.delete(guid);
     this.floorHeights.delete(guid);
     const wobbling = this.wobbling.indexOf(object);
@@ -1591,6 +1945,8 @@ export class MapScene3D {
       const guid = object.group.userData.guid as string;
       this.setDead(object, fx !== null && isDeadAt(fx, guid, cursorMs));
     }
+    if (fx) deriveUnitCasts(fx, cursorMs, this.unitCasts);
+    else this.unitCasts.clear();
 
     let beamCount = 0;
     let ringCount = 0;
@@ -2109,13 +2465,16 @@ export class MapScene3D {
   }
 
   // Slain units lie down, grey, until resurrected.
+  // Slain units: a model lies down, grey; a disc greys with a skull. Until resurrected.
   private setDead(object: UnitObject, dead: boolean) {
     if (object.dead === dead) return;
     object.dead = dead;
-    object.body.rotation.x = dead ? -Math.PI / 2 : 0;
-    object.body.position.y = dead ? object.deadLift : 0;
-    object.cone.visible = !dead;
-    setBodyColor(object);
+    if (object.mini) {
+      object.body.rotation.x = dead ? -Math.PI / 2 : 0;
+      object.body.position.y = dead ? object.deadLift : 0;
+      setBodyColor(object);
+    }
+    this.applyTokenFace(object);
   }
 
   private effectColor(css: string): THREE.Color {
@@ -2166,6 +2525,16 @@ export class MapScene3D {
   }
 
   private readonly handlePointerMove = (event: PointerEvent) => {
+    const drag = this.walk?.drag;
+    if (this.walk && drag) {
+      // Drag looks around the character; right-drag also turns it to face the view.
+      this.walk.camYaw -= (event.clientX - drag.x) * WALK_LOOK_RADIANS_PER_PX;
+      this.walk.camPitch = Math.max(-WALK_PITCH_LIMIT, Math.min(WALK_PITCH_LIMIT, this.walk.camPitch + (event.clientY - drag.y) * WALK_LOOK_RADIANS_PER_PX));
+      if (drag.button === 2) this.walk.yaw = this.walk.camYaw;
+      drag.x = event.clientX;
+      drag.y = event.clientY;
+      this.requestRender();
+    }
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.pointer.set(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
@@ -2191,10 +2560,15 @@ export class MapScene3D {
 
   private readonly handlePointerDown = (event: PointerEvent) => {
     this.pointerDownAt = event.button === 0 ? { x: event.clientX, y: event.clientY } : null;
+    if (this.walk && (event.button === 0 || event.button === 2)) {
+      this.walk.drag = { button: event.button, x: event.clientX, y: event.clientY };
+      this.renderer.domElement.setPointerCapture(event.pointerId);
+    }
   };
 
   // A press and release without moving (a drag orbits or pans) on a unit.
   private readonly handlePointerUp = (event: PointerEvent) => {
+    if (this.walk?.drag && this.walk.drag.button === event.button) this.walk.drag = null;
     const down = this.pointerDownAt;
     this.pointerDownAt = null;
     if (!down || event.button !== 0 || !this.onUnitClick) return;
@@ -2244,19 +2618,30 @@ export class MapScene3D {
     this.onUserViewport(viewport);
   };
 
-  // Camera keys act while the pointer is over the map, never while typing.
-  // Modified presses (e.g. Shift+F for focus mode) belong to the page.
+  // Map keys act while the pointer is over the map (or while walking), never
+  // while typing. Modified presses (e.g. Shift+F for focus mode) belong to the page.
   private readonly handleKeyDown = (event: KeyboardEvent) => {
     if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
     const target = event.target as HTMLElement | null;
     if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
-    if (!this.pointerInside) return;
-    const action = MAP_CONTROL_ACTIONS.find((candidate) => candidate.defaultKey === event.code)?.id;
+    if (event.code === WALK_TOGGLE_KEY && (this.pointerInside || this.walk)) {
+      event.preventDefault();
+      if (!event.repeat) this.setWalking(!this.walk);
+      return;
+    }
+    if (event.key === "Escape" && this.walk) {
+      // Handled here, so focus mode's Esc (which skips handled presses) stays put.
+      event.preventDefault();
+      this.setWalking(false);
+      return;
+    }
+    if (!this.pointerInside && !this.walk) return;
+    const action = actionForKey(event.code, this.adStrafe);
     if (!action) return;
     event.preventDefault();
     if (this.heldActions.has(action)) return;
-    // The first key takes the camera like a drag does: the Director pauses.
-    if (this.heldActions.size === 0) {
+    // The first orbit key takes the camera like a drag does: the Director pauses.
+    if (!this.walk && this.heldActions.size === 0) {
       this.handleControlsStart();
       this.keyMoveLastMs = 0;
     }
@@ -2265,21 +2650,21 @@ export class MapScene3D {
   };
 
   private readonly handleKeyUp = (event: KeyboardEvent) => {
-    const action = MAP_CONTROL_ACTIONS.find((candidate) => candidate.defaultKey === event.code)?.id;
+    const action = actionForKey(event.code, this.adStrafe);
     if (!action || !this.heldActions.delete(action)) return;
-    if (this.heldActions.size === 0) this.handleControlsEnd();
+    if (!this.walk && this.heldActions.size === 0) this.handleControlsEnd();
   };
 
   // Focus left the window mid-press: the keyup never arrives.
   private readonly releaseKeys = () => {
     if (this.heldActions.size === 0) return;
     this.heldActions.clear();
-    this.handleControlsEnd();
+    if (!this.walk) this.handleControlsEnd();
   };
 
   // Moves the camera for the held keys; true while any is held.
   private updateKeyboardCamera(now: number): boolean {
-    if (this.heldActions.size === 0) return false;
+    if (this.walk || this.heldActions.size === 0) return false;
     const dt = this.keyMoveLastMs ? Math.min(KEY_MAX_STEP_S, (now - this.keyMoveLastMs) / 1000) : 0;
     this.keyMoveLastMs = now;
     if (dt <= 0) return true;
@@ -2288,17 +2673,18 @@ export class MapScene3D {
     const target = this.controls.target;
     const offset = this.directorVector.copy(this.camera.position).sub(target);
 
-    const rotate = axis("rotate_left", "rotate_right");
+    const rotate = axis("turn_left", "turn_right");
     if (rotate) offset.applyAxisAngle(Y_AXIS, rotate * KEY_ROTATE_SPEED * dt);
 
-    const zoom = axis("zoom_out", "zoom_in");
+    // Space rises (zooms out), X lowers (zooms in).
+    const zoom = axis("up", "down");
     if (zoom) {
       const distance = offset.length() * Math.exp(zoom * KEY_ZOOM_SPEED * dt);
       offset.setLength(Math.min(this.controls.maxDistance, Math.max(this.controls.minDistance, distance)));
     }
 
-    const forward = axis("move_forward", "move_back");
-    const strafe = axis("move_right", "move_left");
+    const forward = axis("forward", "back");
+    const strafe = axis("strafe_right", "strafe_left");
     if (forward || strafe) {
       // Along the ground, relative to where the camera looks.
       const horizontal = Math.hypot(offset.x, offset.z) || 1;
@@ -2313,6 +2699,448 @@ export class MapScene3D {
     this.controls.update();
     return true;
   }
+
+  /** The live value drawn as a column above each token. */
+  setAboveDisc(mode: AboveDiscMode) {
+    this.aboveDisc = mode;
+    this.requestRender();
+  }
+
+  /** The target frames' units: halos for the selected chain and pins, and the chain's target lines. */
+  setUnitRoles(roles: MapUnitRoles) {
+    this.roles = roles;
+    this.requestRender();
+  }
+
+  /** Called with where you are on the mesh (throttled), for a live session; null once you are not. */
+  setOnPresence(callback: ((presence: LiveMapPresence | null) => void) | null) {
+    this.onPresence = callback;
+    this.lastPresence = null;
+    if (callback) this.emitPresence(true);
+  }
+
+  // Your camera, or your character while walking; null off the mesh.
+  private currentPresence(): LiveMapPresence | null {
+    const mesh = this.dungeonMesh;
+    if (!mesh) return null;
+    const round = (value: number) => Math.round(value * 1000) / 1000;
+    const vector = (value: THREE.Vector3): [number, number, number] => [round(value.x), round(value.y), round(value.z)];
+    const walk = this.walk;
+    if (walk) {
+      const ahead = walk.position.clone().add(new THREE.Vector3(-Math.sin(walk.yaw), 0, -Math.cos(walk.yaw)).multiplyScalar(mesh.scale));
+      return { ground: mesh.url, mode: "walk", position: vector(walk.position), target: vector(ahead) };
+    }
+    return { ground: mesh.url, mode: "camera", position: vector(this.camera.position), target: vector(this.controls.target) };
+  }
+
+  /**
+   * Sends your presence when it changed (at most every PRESENCE_SEND_MS, the
+   * last change always going out), or regardless with `force` (the heartbeat).
+   */
+  emitPresence(force = false) {
+    const send = this.onPresence;
+    if (!send || this.disposed) return;
+    const presence = this.currentPresence();
+    const json = JSON.stringify(presence);
+    const last = this.lastPresence;
+    const now = performance.now();
+    if (!force && last) {
+      if (json === last.json) return;
+      const wait = PRESENCE_SEND_MS - (now - last.at);
+      if (wait > 0) {
+        if (!this.presenceTimer) {
+          this.presenceTimer = window.setTimeout(() => {
+            this.presenceTimer = 0;
+            this.emitPresence();
+          }, wait);
+        }
+        return;
+      }
+    }
+    clearTimeout(this.presenceTimer);
+    this.presenceTimer = 0;
+    this.lastPresence = { json, at: now };
+    send(presence);
+  }
+
+  /** Everyone else's presence in the live session, drawn where it is on the same mesh. */
+  setRemotePresences(presences: ReadonlyMap<string, LiveMapPresence>) {
+    for (const [participantId, object] of this.remotePresences) {
+      if (presences.has(participantId)) continue;
+      this.disposeRemotePresence(object);
+      this.remotePresences.delete(participantId);
+    }
+    for (const [participantId, presence] of presences) {
+      let object = this.remotePresences.get(participantId);
+      if (!object) {
+        object = createRemotePresence(participantId, this.geometries.player);
+        this.scene.add(object.group);
+        this.remotePresences.set(participantId, object);
+      }
+      // A change of mode jumps rather than gliding from the sky to the floor.
+      const jump = !object.seeded || object.presence.mode !== presence.mode;
+      object.presence = presence;
+      object.goalPosition.fromArray(presence.position);
+      object.goalTarget.fromArray(presence.target);
+      if (jump) {
+        object.position.copy(object.goalPosition);
+        object.target.copy(object.goalTarget);
+        object.seeded = true;
+      }
+    }
+    this.requestRender();
+  }
+
+  // Eases others' presences toward their latest update; true while any moves.
+  private updateRemotePresences(now: number): boolean {
+    const dt = this.presenceAt ? Math.min(KEY_MAX_STEP_S, (now - this.presenceAt) / 1000) : 0;
+    this.presenceAt = now;
+    if (this.remotePresences.size === 0) return false;
+    const mesh = this.dungeonMesh;
+    const ease = 1 - Math.exp(-PRESENCE_EASE_PER_S * dt);
+    let moving = false;
+    for (const object of this.remotePresences.values()) {
+      const shown = mesh !== null && object.presence.ground === mesh.url;
+      object.group.visible = shown;
+      if (!shown) continue;
+      object.position.lerp(object.goalPosition, ease);
+      object.target.lerp(object.goalTarget, ease);
+      const settle = 1e-4;
+      if (object.position.distanceToSquared(object.goalPosition) > settle * settle
+        || object.target.distanceToSquared(object.goalTarget) > settle * settle) {
+        moving = true;
+      }
+      const walking = object.presence.mode === "walk";
+      object.walker.visible = walking;
+      object.camera.visible = !walking;
+      object.body.position.copy(object.position);
+      object.body.scale.setScalar(this.unitScale);
+      if (walking) {
+        object.body.rotation.set(0, Math.atan2(object.position.x - object.target.x, object.position.z - object.target.z), 0);
+      } else {
+        object.body.lookAt(object.target);
+      }
+      const labelHeight = walking ? PLAYER_GEOMETRY_HEIGHT + 0.2 : 1.6;
+      object.label.position.set(object.position.x, object.position.y + labelHeight * this.unitScale, object.position.z);
+    }
+    return moving;
+  }
+
+  // The token parts that follow the replay: cast arcs, the column above the
+  // disc, halos for the selected chain and pins, the boss sigils' turn, and
+  // the chain's target lines.
+  private updateTokens(now: number) {
+    const dt = this.tokenAt ? Math.min(KEY_MAX_STEP_S, (now - this.tokenAt) / 1000) : 0;
+    this.tokenAt = now;
+    const { roles } = this;
+    for (const [guid, object] of this.units) {
+      const { token } = object;
+      const cast = object.dead ? undefined : this.unitCasts.get(guid);
+      const castColor = cast ? this.effectColor(schoolColor(cast.school)) : null;
+      token.arc.visible = Boolean(cast);
+      if (cast && castColor) {
+        const map = this.tokenTextures.castArc(Math.min(CAST_ARC_TEXTURE_STEPS, Math.floor(cast.progress * CAST_ARC_TEXTURE_STEPS)));
+        if (token.arc.material.map !== map) {
+          token.arc.material.map = map;
+          token.arc.material.needsUpdate = true;
+        }
+        token.arc.material.color.copy(castColor);
+      }
+      // The column: health (green to red) or the cast bar rising in its school colour.
+      let value: number | null = null;
+      if (!object.dead && this.aboveDisc === "health" && object.healthFraction !== null) {
+        value = object.healthFraction;
+        token.column.material.color.setStyle(healthBarColor(value));
+      } else if (this.aboveDisc === "cast" && cast && castColor) {
+        value = cast.progress;
+        token.column.material.color.copy(castColor);
+      }
+      token.column.visible = value !== null && value > 0;
+      token.columnTrack.visible = value !== null;
+      if (value !== null) {
+        const full = token.radius * COLUMN_HEIGHT;
+        token.column.scale.y = Math.max(0.02, full * value);
+        token.column.position.y = token.face;
+        token.columnTrack.position.y = token.face;
+      }
+      const kind: HaloKind | null = guid === roles.selected ? "selected"
+        : guid === roles.target ? "target"
+          : guid === roles.targetsTarget ? "targetsTarget" : null;
+      token.halo.visible = kind !== null;
+      if (kind) {
+        const map = this.tokenTextures.halo(kind);
+        if (token.halo.material.map !== map) {
+          token.halo.material.map = map;
+          token.halo.material.needsUpdate = true;
+        }
+        token.halo.material.color.setHex(HALO_COLORS[kind]);
+      }
+      token.pin.visible = roles.pinned.has(guid);
+      if (token.ticks) token.ticks.rotation.y = (now / 1000) * SIGIL_SPIN - object.group.rotation.y;
+      if (token.bossPin) token.bossPin.material.color.setHex(object.dead ? 0x777777 : 0xffffff);
+    }
+    this.updateTargetLines(dt);
+  }
+
+  // Selected -> its target (dashes in the cast's school colour while casting,
+  // the unit's colour otherwise) and target -> target's target (purple dots).
+  private updateTargetLines(dt: number) {
+    const { roles } = this;
+    const selected = roles.selected ? this.units.get(roles.selected) : undefined;
+    const target = roles.target ? this.units.get(roles.target) : undefined;
+    const targetsTarget = roles.targetsTarget ? this.units.get(roles.targetsTarget) : undefined;
+    const cast = roles.selected && selected && !selected.dead ? this.unitCasts.get(roles.selected) : undefined;
+    const lines: [UnitObject | undefined, UnitObject | undefined, THREE.Color, boolean][] = [
+      [selected && !selected.dead ? selected : undefined, target, cast ? this.effectColor(schoolColor(cast.school)) : this.color.set(selected?.color ?? "#ffffff").clone(), false],
+      [target, targetsTarget && roles.targetsTarget !== roles.selected ? targetsTarget : undefined, new THREE.Color(HALO_COLORS.targetsTarget), true],
+    ];
+    lines.forEach(([from, to, color, dotted], index) => {
+      let line = this.targetLines[index];
+      if (!line) {
+        const map = this.tokenTextures.dash(dotted).clone();
+        map.needsUpdate = true;
+        line = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+        line.renderOrder = 5;
+        this.targetLines[index] = line;
+        this.scene.add(line);
+      }
+      line.visible = Boolean(from && to);
+      if (!from || !to) return;
+      const lift = TARGET_LINE_LIFT * this.unitScale;
+      const start = this.vector.copy(from.group.position).setY(from.group.position.y + lift);
+      const end = this.vectorB.copy(to.group.position).setY(to.group.position.y + lift);
+      const along = end.clone().sub(start);
+      const length = along.length();
+      if (length < 1e-6) {
+        line.visible = false;
+        return;
+      }
+      along.divideScalar(length);
+      // A ribbon along the line, turned to face the camera about its own axis.
+      const toCamera = this.camera.position.clone().sub(start);
+      const normal = toCamera.sub(along.clone().multiplyScalar(toCamera.dot(along))).normalize();
+      const side = new THREE.Vector3().crossVectors(normal, along).normalize();
+      this.matrix.makeBasis(along, side, normal);
+      line.quaternion.setFromRotationMatrix(this.matrix);
+      line.position.copy(start).add(end).multiplyScalar(0.5);
+      const width = (dotted ? TARGETS_TARGET_LINE_WIDTH : TARGET_LINE_WIDTH) * this.unitScale;
+      line.scale.set(length, width, 1);
+      const map = line.material.map!;
+      const period = TARGET_LINE_DASH * this.unitScale * (dotted ? 0.6 : 1);
+      map.repeat.x = length / period;
+      map.offset.x -= (dt * TARGET_LINE_SPEED) / (dotted ? 0.6 : 1);
+      line.material.color.copy(color);
+      line.material.opacity = dotted ? 0.75 : 0.9;
+    });
+  }
+
+  private disposeRemotePresence(object: RemotePresence) {
+    this.scene.remove(object.group);
+    object.material.dispose();
+    object.cameraGeometry.dispose();
+    object.label.material.map?.dispose();
+    object.label.material.dispose();
+  }
+
+  /** A/D strafe and Q/E turn instead of the other way round. */
+  setAdStrafe(on: boolean) {
+    if (on === this.adStrafe) return;
+    // A held key would be released as the other action.
+    this.releaseKeys();
+    this.adStrafe = on;
+  }
+
+  /** Called when walk mode starts or ends (G, Esc, the button, or losing the mesh). */
+  setOnWalkChange(callback: ((walking: boolean) => void) | null) {
+    this.onWalkChange = callback ?? (() => {});
+  }
+
+  /** Walk mode needs the dungeon mesh: its floor and its yards. */
+  canWalk(): boolean {
+    return this.dungeonMesh !== null;
+  }
+
+  setWalking(on: boolean) {
+    if (on === (this.walk !== null)) return;
+    if (on) this.startWalk();
+    else this.stopWalk();
+  }
+
+  // The character starts where the camera looks, facing away from it.
+  private startWalk() {
+    const mesh = this.dungeonMesh;
+    if (!mesh) {
+      this.onWalkChange(false);
+      return;
+    }
+    this.releaseKeys();
+    this.viewAnimation = null;
+    this.cameraMove = null;
+    this.directorPaused = true;
+    this.directorRunning = false;
+    this.directorSubject = null;
+    const target = this.controls.target;
+    const offset = new THREE.Vector3().copy(this.camera.position).sub(target);
+    const position = target.clone();
+    position.y = this.castFloor(position.x, position.z, position.y + WALK_STEP_YARDS * mesh.scale) ?? position.y;
+    const camYaw = Math.abs(offset.x) + Math.abs(offset.z) < 1e-6 ? 0 : Math.atan2(offset.x, offset.z);
+    const avatar = createAvatar(this.geometries);
+    avatar.scale.setScalar((MESH_PLAYER_HEIGHT_YARDS * mesh.scale) / PLAYER_GEOMETRY_HEIGHT);
+    this.scene.add(avatar);
+    this.walk = {
+      position,
+      yaw: camYaw,
+      vy: 0,
+      grounded: true,
+      camYaw,
+      camPitch: WALK_START_PITCH,
+      camDistance: WALK_START_DISTANCE_YARDS,
+      lastMs: 0,
+      drag: null,
+      avatar,
+    };
+    this.controls.enabled = false;
+    this.camera.near = WALK_NEAR_YARDS * mesh.scale;
+    this.camera.far = WALK_FAR_YARDS * mesh.scale;
+    this.camera.updateProjectionMatrix();
+    this.onWalkChange(true);
+    this.requestRender();
+  }
+
+  // Back to the orbit camera, centred where the character stood.
+  private stopWalk() {
+    const walk = this.walk;
+    if (!walk) return;
+    this.walk = null;
+    this.heldActions.clear();
+    this.disposeAvatar(walk.avatar);
+    // The orbit camera picks up behind and above where the character stood.
+    const distance = Math.max(walk.camDistance, WALK_EXIT_DISTANCE_YARDS) * (this.dungeonMesh?.scale ?? 1);
+    const pitch = Math.max(walk.camPitch, WALK_START_PITCH);
+    this.controls.target.copy(walk.position);
+    this.camera.position.set(
+      walk.position.x + Math.sin(walk.camYaw) * Math.cos(pitch) * distance,
+      walk.position.y + Math.sin(pitch) * distance,
+      walk.position.z + Math.cos(walk.camYaw) * Math.cos(pitch) * distance,
+    );
+    this.controls.enabled = true;
+    this.camera.near = ORBIT_NEAR;
+    this.camera.far = ORBIT_FAR;
+    this.camera.updateProjectionMatrix();
+    this.controls.update();
+    this.constrainCamera();
+    this.updateUnitScale();
+    this.onWalkChange(false);
+    this.requestRender();
+  }
+
+  private disposeAvatar(avatar: THREE.Group) {
+    this.scene.remove(avatar);
+    avatar.traverse((child) => {
+      const material = (child as THREE.Mesh).material as THREE.Material | undefined;
+      material?.dispose();
+    });
+  }
+
+  // Moves the character for the held keys, applies gravity or flight and the
+  // floor, and puts the camera behind it; true while walking.
+  private updateWalk(now: number): boolean {
+    const walk = this.walk;
+    if (!walk) return false;
+    const mesh = this.dungeonMesh;
+    if (!mesh) {
+      this.stopWalk();
+      return false;
+    }
+    const dt = walk.lastMs ? Math.min(KEY_MAX_STEP_S, (now - walk.lastMs) / 1000) : 0;
+    walk.lastMs = now;
+    const scale = mesh.scale;
+    const held = this.heldActions;
+    const axis = (positive: MapControlAction, negative: MapControlAction) => (held.has(positive) ? 1 : 0) - (held.has(negative) ? 1 : 0);
+
+    const turn = axis("turn_left", "turn_right");
+    if (turn) {
+      const delta = turn * WALK_TURN_RADIANS_PER_S * dt;
+      walk.yaw += delta;
+      walk.camYaw += delta;
+    }
+    const forward = axis("forward", "back");
+    const strafe = axis("strafe_right", "strafe_left");
+    if (forward || strafe) {
+      // Facing (yaw) points along -z turned by yaw, as a unit's facing cone does.
+      const step = ((forward < 0 ? WALK_BACK_YPS : WALK_RUN_YPS) * scale * dt) / Math.hypot(forward, strafe);
+      const sin = Math.sin(walk.yaw);
+      const cos = Math.cos(walk.yaw);
+      walk.position.x += (-sin * forward + cos * strafe) * step;
+      walk.position.z += (-cos * forward - sin * strafe) * step;
+    }
+
+    // Space jumps from the ground and, held, keeps flying up; X flies down.
+    if (held.has("up")) {
+      walk.vy = walk.grounded ? WALK_JUMP_YPS * scale : Math.max(walk.vy, WALK_FLY_YPS * scale);
+      walk.grounded = false;
+    } else if (held.has("down") && !walk.grounded) {
+      walk.vy = Math.min(walk.vy, -WALK_FLY_YPS * scale);
+    }
+    if (!walk.grounded) walk.vy -= WALK_GRAVITY_YPS2 * scale * dt;
+    const ceiling = walk.position.y + WALK_STEP_YARDS * scale;
+    walk.position.y += walk.vy * dt;
+    const floor = this.castFloor(walk.position.x, walk.position.z, ceiling);
+    if (floor !== null) {
+      const stepping = walk.grounded && walk.vy <= 0 && walk.position.y - floor <= WALK_STEP_YARDS * scale;
+      if (walk.position.y <= floor || stepping) {
+        walk.position.y = floor;
+        walk.vy = 0;
+        walk.grounded = true;
+      } else {
+        walk.grounded = false;
+      }
+    } else if (walk.grounded) {
+      // Off the mesh: stay level rather than fall forever.
+      walk.vy = 0;
+    }
+
+    walk.avatar.position.copy(walk.position);
+    walk.avatar.rotation.y = walk.yaw;
+    const head = this.walkHead.set(walk.position.x, walk.position.y + WALK_EYE_YARDS * scale, walk.position.z);
+    const firstPerson = walk.camDistance <= WALK_FIRST_PERSON_YARDS;
+    walk.avatar.visible = !firstPerson;
+    const pitchCos = Math.cos(walk.camPitch);
+    const pitchSin = Math.sin(walk.camPitch);
+    const yawSin = Math.sin(walk.camYaw);
+    const yawCos = Math.cos(walk.camYaw);
+    if (firstPerson) {
+      this.camera.position.copy(head);
+      this.camera.lookAt(head.x - yawSin * pitchCos, head.y - pitchSin, head.z - yawCos * pitchCos);
+    } else {
+      const distance = walk.camDistance * scale;
+      this.camera.position.set(head.x + yawSin * pitchCos * distance, head.y + pitchSin * distance, head.z + yawCos * pitchCos * distance);
+      this.camera.lookAt(head);
+    }
+    this.controls.target.copy(head);
+    this.updateUnitScale();
+    return true;
+  }
+
+  // While walking the wheel zooms the camera around the character, down to first person.
+  private readonly handleWalkWheel = (event: WheelEvent) => {
+    const walk = this.walk;
+    if (!walk) return;
+    event.preventDefault();
+    const zoomingIn = event.deltaY < 0;
+    if (walk.camDistance === 0 && !zoomingIn) {
+      walk.camDistance = WALK_FIRST_PERSON_YARDS * 1.5;
+    } else {
+      const next = walk.camDistance * Math.exp(event.deltaY * 0.0015);
+      walk.camDistance = zoomingIn && next <= WALK_FIRST_PERSON_YARDS ? 0 : Math.min(WALK_MAX_DISTANCE_YARDS, next);
+    }
+    this.requestRender();
+  };
+
+  // Right-drag turns the character, so no context menu while walking.
+  private readonly handleWalkContextMenu = (event: MouseEvent) => {
+    if (this.walk) event.preventDefault();
+  };
 
   private readonly handleContextLost = (event: Event) => {
     event.preventDefault();
@@ -2342,13 +3170,18 @@ export class MapScene3D {
       const moving = this.updateCameraMove(now);
       const directing = this.updateDirector(now);
       const keyMoving = this.updateKeyboardCamera(now);
+      const walking = this.updateWalk(now);
+      const presencesMoving = this.updateRemotePresences(now);
       // Damping coasts the camera to a stop after a gesture; update() reports
       // whether it is still moving, so the loop idles again once it settles.
-      const damping = this.controls.update();
-      const animating = this.updateEffects(now) || reframing || moving || directing || keyMoving || damping;
+      // Walking, the character places the camera; OrbitControls would clamp it back.
+      const damping = !walking && this.controls.update();
+      const animating = this.updateEffects(now) || reframing || moving || directing || keyMoving || walking || presencesMoving || damping;
+      this.updateTokens(now);
       this.updateBars();
       this.updateEffectHover();
       this.renderer.render(this.scene, this.camera);
+      this.emitPresence();
       if (animating) this.requestRender();
     });
   };
@@ -2357,6 +3190,7 @@ export class MapScene3D {
 // Untextured bodies take the unit's colour; textured minis keep their texture
 // (white multiply). Both turn grey when dead.
 function setBodyColor(object: UnitObject) {
+  if (!object.mini) return;
   object.bodyMaterial.color.set(object.dead ? DEAD_COLOR : object.textured ? 0xffffff : object.color);
 }
 

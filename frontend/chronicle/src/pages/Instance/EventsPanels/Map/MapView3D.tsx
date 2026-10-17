@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSpell } from "@/api/queries";
+import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 import { useDatasetId } from "@/hooks/useDatasetId";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
+import type { LiveMapPresence } from "../../liveSessionProtocol";
+import type { MapPresenceListener } from "../../LiveSessionContext";
 import { useSmoothReplayTime } from "../RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../RotationTimeline/useSpellMeta";
 import { miniatureUrl } from "./bossMinis";
@@ -15,6 +18,7 @@ import {
   type MapScene3DUnit,
   type MapSceneDirector,
   type MapSceneFocus,
+  type MapUnitRoles,
 } from "./MapScene3D";
 import { collectCastSpellIds, DEFAULT_EFFECT_OPTIONS, effectiveCastIconGuids, iconPreloadUrls, type EncounterEffects } from "./replayEffects";
 import type { MapViewRequest } from "./MapView2D";
@@ -58,7 +62,27 @@ export interface MapView3DProps {
   effectSettings?: EffectSettings;
   /** Bump to ask for the top-down camera view. */
   topDownKey?: number;
+  /** Walk mode: a character of your own on the mesh floor (needs the dungeon mesh). */
+  walking?: boolean;
+  /** Called when walk mode starts or ends, including from the keyboard (G, Esc). */
+  onWalkingChange?: (walking: boolean) => void;
+  /** A/D strafe and Q/E turn (a saved map setting, on by default). */
+  adStrafe?: boolean;
+  /** In a live session: share your camera / character and draw everyone else's. */
+  livePresence?: MapLivePresence | null;
+  /** The target frames' units: halos for the selected chain and pins, and target lines. */
+  unitRoles?: MapUnitRoles | null;
 }
+
+const NO_ROLES: MapUnitRoles = { selected: null, target: null, targetsTarget: null, pinned: new Set() };
+
+export interface MapLivePresence {
+  publish: (presence: LiveMapPresence | null) => void;
+  subscribe: (listener: MapPresenceListener) => () => void;
+}
+
+// Resent this often even when still, so others can tell you are there.
+const PRESENCE_HEARTBEAT_MS = 2000;
 
 // three.js needs concrete colors; class colors are CSS custom properties.
 function resolveCssColor(color: string, element: Element, cache: Map<string, string>): string {
@@ -112,6 +136,11 @@ export default function MapView3D({
   onUnitClick,
   effectSettings: effectSettingsProp,
   topDownKey = 0,
+  walking = false,
+  onWalkingChange,
+  adStrafe = true,
+  livePresence = null,
+  unitRoles = null,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<MapScene3D | null>(null);
@@ -123,6 +152,8 @@ export default function MapView3D({
   const effectSettings = effectSettingsProp ?? DEFAULT_EFFECT_SETTINGS;
   const showBars = effectSettings.bars;
   const [effectHover, setEffectHover] = useState<MapScene3DEffectHover | null>(null);
+  // A player's token shows their spec's icon when their talents give one, else their class's.
+  const specializations = usePlayerSpecializations();
 
   useEffect(() => {
     onUnavailableRef.current = onUnavailable;
@@ -209,10 +240,21 @@ export default function MapView3D({
         health: showBars ? marker.health : null,
         miniatureUrl: modelUrl,
         z: sample.z,
+        icon: specializations.get(marker.guid)?.iconUrl ?? marker.icon,
+        boss: bossGuids?.has(marker.guid) ?? false,
+        healthFraction: marker.healthFraction,
       }];
     });
     scene.setUnits(units);
-  }, [markers, miniatureUrls, projectSample, showBars, smoothMs]);
+  }, [bossGuids, markers, miniatureUrls, projectSample, showBars, smoothMs, specializations]);
+
+  useEffect(() => {
+    sceneRef.current?.setUnitRoles(unitRoles ?? NO_ROLES);
+  }, [unitRoles]);
+
+  useEffect(() => {
+    sceneRef.current?.setAboveDisc(effectSettings.aboveDisc);
+  }, [effectSettings.aboveDisc]);
 
   // Selected players (the unmuted ones while a selection mutes the rest),
   // bosses and tanks; keyed by string so replay ticks don't rebuild the options.
@@ -291,6 +333,33 @@ export default function MapView3D({
   useEffect(() => {
     if (topDownKey > 0) sceneRef.current?.resetCamera(true);
   }, [topDownKey]);
+
+  useEffect(() => {
+    sceneRef.current?.setOnWalkChange(onWalkingChange ?? null);
+  }, [onWalkingChange]);
+
+  useEffect(() => {
+    sceneRef.current?.setWalking(walking);
+  }, [walking]);
+
+  useEffect(() => {
+    sceneRef.current?.setAdStrafe(adStrafe);
+  }, [adStrafe]);
+
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene || !livePresence) return;
+    scene.setOnPresence(livePresence.publish);
+    const unsubscribe = livePresence.subscribe((presences) => scene.setRemotePresences(presences));
+    const heartbeat = window.setInterval(() => scene.emitPresence(true), PRESENCE_HEARTBEAT_MS);
+    return () => {
+      window.clearInterval(heartbeat);
+      unsubscribe();
+      scene.setOnPresence(null);
+      scene.setRemotePresences(new Map());
+      livePresence.publish(null);
+    };
+  }, [livePresence]);
 
   return (
     <div className="relative h-full w-full">

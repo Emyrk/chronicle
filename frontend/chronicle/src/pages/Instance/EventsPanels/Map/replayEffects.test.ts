@@ -12,6 +12,7 @@ import {
   DEFAULT_EFFECT_OPTIONS,
   deriveActiveEffects,
   deriveCastIcons,
+  deriveUnitCasts,
   deriveCombatText,
   deriveRecentHealGain,
   formatHealAmount,
@@ -326,6 +327,25 @@ describe("heals", () => {
     frame(3_000);
     const backward = [1_600, 1_450, 1_250, 1_100].map(frame).reverse();
     expect(backward).toEqual(forward);
+  });
+});
+
+describe("deriveUnitCasts", () => {
+  it("reports a cast bar until it goes off, is interrupted or the caster dies", () => {
+    const fx = effects(
+      event(1_000, "cast_start", "mage", "boss", { castTimeMs: 2_000, school: 4 }),
+      event(3_000, "cast_go", "mage", "boss"),
+      event(4_000, "cast_start", "priest", "tank", { castTimeMs: 2_500 }),
+      event(4_500, "interrupt", "boss", "priest"),
+      event(5_000, "cast_start", "boss", "tank", { castTimeMs: 2_000 }),
+      event(6_500, "slain", "mage", "boss"),
+    );
+    expect(deriveUnitCasts(fx, 2_000).get("mage")).toEqual({ progress: 0.5, school: 4, spellName: "Fireball" });
+    expect(deriveUnitCasts(fx, 3_000).has("mage")).toBe(false);
+    expect(deriveUnitCasts(fx, 4_400).get("priest")?.progress).toBeCloseTo(0.16);
+    expect(deriveUnitCasts(fx, 4_600).has("priest")).toBe(false);
+    expect(deriveUnitCasts(fx, 6_000).get("boss")?.progress).toBe(0.5);
+    expect(deriveUnitCasts(fx, 6_600).has("boss")).toBe(false);
   });
 });
 

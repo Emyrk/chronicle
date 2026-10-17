@@ -686,7 +686,8 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
         {selectedGuids.map((guid) => {
           const rows = rowsByUnit.get(guid);
           const all = rows ? activeAurasBeforeUpcoming([...rows.buffs, ...rows.debuffs]) : [];
-          if (all.length === 0) return <div key={guid} className="text-2xs text-zinc-500">{emptyAuraMessage}</div>;
+          // Nothing up: draw nothing, the card needs no "no auras" line.
+          if (all.length === 0) return null;
           // Buffs up for (nearly) the whole fight fold into one "+N" tile.
           const fightMs = unitAuraUptimeDurationMs(result, guid, encounterEndOffsets);
           const wholeFight = allByUnit.get(guid);
@@ -695,6 +696,7 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
           const persistent = all.filter(isWholeFight);
           // Upcoming auras are left out: the card only shows what is up now.
           const rest = all.filter((row) => !isWholeFight(row) && row.replayState !== "upcoming");
+          if (rest.length === 0 && persistent.length === 0) return null;
           return (
             <CompactAuraGrid
               key={guid}

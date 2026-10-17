@@ -2,12 +2,15 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Crosshair, Focus, HeartPulse, Map as MapIcon, Maximize, Route, Settings2, Skull, Users, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Crosshair, Focus, Footprints, HeartPulse, Map as MapIcon, Maximize, Route, Settings2, Skull, Users, X } from "lucide-react";
+import { useLiveSessionOptional } from "../../LiveSessionContext";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { fetchMiniatureUrls } from "./bossMinis";
 import { dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
 import { mapProcessor, type MapProcessorEvent, type MapResult } from "./map.processor";
+import type { MapLivePresence } from "./MapView3D";
 import { MapOverview2D } from "./MapOverview2D";
 import {
   FULL_MAP_VIEWPORT,
@@ -18,12 +21,15 @@ import {
   type MapFraming,
   type MapViewport,
 } from "./mapModel";
-import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
+import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus, MapUnitRoles } from "./MapScene3D";
 import { MapView2D, type MapViewRequest } from "./MapView2D";
-import { useEmbeddedPanel } from "../useEmbeddedPanel";
+import { useEmbeddedPanel, useEmbeddedPanelWithResult } from "../useEmbeddedPanel";
 import { UnitInspectContext, type UnitInspectSelection } from "../UnitInspectContext";
 import { InspectCards } from "./InspectCards";
-import { createRaidFramesPanel } from "../RaidFrames/RaidFrames";
+import { createRaidFramesPanel, selectRaidFramesEncounter } from "../RaidFrames/RaidFrames";
+import { lastTargetAt } from "../RaidFrames/raidFrames.processor";
+import { createUnitAurasPanel } from "../UnitAuras/UnitAuras";
+import { TargetFrames } from "./TargetFrames";
 import { MAP_CONTROL_KEYBINDS } from "./mapControls";
 import { MeterWindows } from "./MeterWindows";
 import { useMeterWindows } from "./meterWindowsState";
@@ -37,6 +43,7 @@ export { mapPresentationForSelection };
 const MapView3D = lazy(() => import("./MapView3D"));
 
 const RAID_FRAMES_PANEL = createRaidFramesPanel();
+const UNIT_AURAS_PANEL = createUnitAurasPanel();
 
 const MESH_STORAGE_KEY = "chronicle.map.mesh";
 
@@ -55,6 +62,25 @@ export function preferredMeshState(stored: boolean | null): boolean {
 
 const RAID_FRAMES_STORAGE_KEY = "chronicle.map.raidFrames";
 const ENEMY_FRAMES_STORAGE_KEY = "chronicle.map.enemyFrames";
+
+// A/D strafe (Q/E turn), the default; "turn" swaps them back.
+const AD_STRAFE_STORAGE_KEY = "chronicle.map.adStrafe";
+
+function readStoredAdStrafe(): boolean {
+  try {
+    return localStorage.getItem(AD_STRAFE_STORAGE_KEY) !== "turn";
+  } catch {
+    return true;
+  }
+}
+
+function storeAdStrafe(on: boolean) {
+  try {
+    localStorage.setItem(AD_STRAFE_STORAGE_KEY, on ? "strafe" : "turn");
+  } catch {
+    // Storage may be unavailable; the choice still applies for this session.
+  }
+}
 
 function readStoredShown(key: string): boolean {
   try {
@@ -140,19 +166,54 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   const [effectSettings, updateEffectSettings] = useEffectSettings();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [topDownKey, setTopDownKey] = useState(0);
-  // Units picked for a closer look: click them on the map or in the raid frames.
-  const [inspected, setInspected] = useState<string[]>([]);
-  const toggleInspected = useCallback((guid: string) => {
-    setInspected((current) => current.includes(guid) ? current.filter((other) => other !== guid) : [...current, guid]);
+  // Walk mode ("join the fight"): your own character on the dungeon mesh.
+  const [walkWanted, setWalking] = useState(false);
+  const [adStrafe, setAdStrafeState] = useState(readStoredAdStrafe);
+  // Live session: everyone sees each other's camera, or character while walking.
+  const liveSession = useLiveSessionOptional();
+  const liveOn = liveSession?.status === "live";
+  const publishPresence = liveSession?.publishMapPresence;
+  const subscribePresence = liveSession?.subscribeMapPresence;
+  const livePresence = useMemo((): MapLivePresence | null =>
+    liveOn && publishPresence && subscribePresence ? { publish: publishPresence, subscribe: subscribePresence } : null,
+  [liveOn, publishPresence, subscribePresence]);
+  const setAdStrafe = (on: boolean) => {
+    setAdStrafeState(on);
+    storeAdStrafe(on);
+  };
+  // WoW-style targeting: clicking a unit (on the map or a raid frame) makes it
+  // the target, shown at centre left with its own target at centre right.
+  // Pinning a frame keeps it as a movable inspect box.
+  const [target, setTarget] = useState<string | null>(null);
+  const [pinned, setPinned] = useState<string[]>([]);
+  const pin = useCallback((guid: string) => {
+    setPinned((current) => current.includes(guid) ? current : [...current, guid]);
+    setTarget((current) => current === guid ? null : current);
   }, []);
-  const inspectSelection = useMemo((): UnitInspectSelection => ({ inspected: new Set(inspected), toggle: toggleInspected }), [inspected, toggleInspected]);
-  // One Raid Frames run draws both the grid and the inspect frames.
-  const raidFrames = useEmbeddedPanel({
+  const unpin = useCallback((guid: string) => setPinned((current) => current.filter((other) => other !== guid)), []);
+  const inspectSelection = useMemo((): UnitInspectSelection => ({
+    inspected: new Set(target ? [...pinned, target] : pinned),
+    select: setTarget,
+  }), [pinned, target]);
+  const framesWanted = pinned.length > 0 || target !== null;
+  // One Raid Frames run draws the grid, the target frames and the inspect boxes
+  // (and says who the target is targeting); one Unit Auras run their auras.
+  const { render: raidFrames, result: raidFramesResult } = useEmbeddedPanelWithResult({
     panel: RAID_FRAMES_PANEL,
     context: props.context,
     durationMs: props.durationMs,
-    enabled: showRaidFrames || showEnemyFrames || inspected.length > 0,
+    enabled: showRaidFrames || showEnemyFrames || framesWanted,
   });
+  const auras = useEmbeddedPanel({ panel: UNIT_AURAS_PANEL, context: props.context, durationMs: props.durationMs, enabled: framesWanted });
+  const cursorMs = sync?.enabled && sync.currentTimestamp ? sync.currentTimestamp.getTime() : null;
+  const targetEncounter = target && raidFramesResult
+    ? selectRaidFramesEncounter(raidFramesResult.encounters, props.context.selectedEncounterIds, cursorMs)
+    : null;
+  // Who the selected unit is targeting, and who that one is (WoW's target's target).
+  const targetAtMs = targetEncounter ? cursorMs ?? targetEncounter.endMs : 0;
+  const targetOfTarget = target && targetEncounter ? lastTargetAt(targetEncounter, target, targetAtMs) : null;
+  const targetsTarget = targetOfTarget && targetEncounter ? lastTargetAt(targetEncounter, targetOfTarget, targetAtMs) : null;
+  const unitRoles = useMemo((): MapUnitRoles => ({ selected: target, target: targetOfTarget, targetsTarget, pinned: new Set(pinned) }), [pinned, target, targetOfTarget, targetsTarget]);
   const [storedFraming, setFraming] = useState<MapFraming>(INITIAL_MAP_FRAMING);
   // A new selection or replay moving into another encounter re-frames;
   // loading states (e.g. reprocessing after a filter change) keep the framing.
@@ -180,6 +241,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   // the mesh, where the Director frames the boss and the group itself.
   const canFollow = scene.wholeRun || (show3D && meshWanted && meshState === "ready");
   const following = canFollow && cinematic;
+  const canWalk = show3D && meshWanted && meshState === "ready";
+  const walking = walkWanted && canWalk;
   const jumps = scene.wholeRun && scene.runStartMs !== null && scene.runEndMs !== null
     ? encounterJumps(props.context.instance.encounters, props.result.encounters, scene.runStartMs, scene.runEndMs)
     : [];
@@ -260,9 +323,14 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               onDungeonMeshState={setMeshState}
               focus={focus}
               cinematic={cinematic}
-              onUnitClick={toggleInspected}
+              onUnitClick={setTarget}
               effectSettings={effectSettings}
               topDownKey={topDownKey}
+              walking={walking}
+              onWalkingChange={setWalking}
+              adStrafe={adStrafe}
+              livePresence={livePresence}
+              unitRoles={unitRoles}
             />
           </Suspense>
         )}
@@ -333,6 +401,29 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
         >
           <Settings2 className="h-4 w-4" />
         </button>
+        {show3D && (
+          <button
+            type="button"
+            onClick={() => setWalking(!walking)}
+            disabled={!canWalk}
+            aria-pressed={walking}
+            title={canWalk
+              ? walking ? "Leave walk mode (G or Esc)" : "Walk mode (G): join the fight with a character of your own"
+              : "Walk mode needs the 3D map (Map settings → 3D map)"}
+            aria-label="Walk mode"
+            className={cn(
+              "absolute right-2 top-10 z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 shadow-[0_4px_16px_rgba(0,0,0,.5)] disabled:opacity-40",
+              walking ? "bg-amber-400/90 text-black hover:bg-amber-300" : "bg-black/75 text-white/70 enabled:hover:bg-black/90 enabled:hover:text-white",
+            )}
+          >
+            <Footprints className="h-4 w-4" />
+          </button>
+        )}
+        {walking && (
+          <div className="pointer-events-none absolute bottom-2 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-sm bg-black/75 px-2 py-1 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
+            <span className="font-semibold text-amber-300">Walking</span> · W/S move · {adStrafe ? "A/D strafe · Q/E turn" : "A/D turn · Q/E strafe"} · Space jump (hold to fly) · X down · drag to look · wheel zoom · G or Esc to leave
+          </div>
+        )}
         {settingsOpen && (
           <MapSettingsOverlay
             onClose={() => setSettingsOpen(false)}
@@ -347,15 +438,21 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
             mesh={show3D && meshUrl ? { on: meshWanted, locked: meshOnly, loading: Boolean(dungeonMesh) && meshState === "loading", onToggle: toggleMesh } : null}
             floors={scene.floors.length > 1 ? { list: scene.floors, value: scene.selectedFloorNumber, onChange: scene.setFloorNumber } : null}
             onTopDown={() => setTopDownKey((key) => key + 1)}
+            walk={canWalk ? { on: walking, onToggle: () => setWalking(!walking) } : null}
+            adStrafe={adStrafe}
+            onAdStrafe={setAdStrafe}
           />
         )}
-        <InspectCards
-          guids={inspected}
-          onRemove={toggleInspected}
+        <TargetFrames
+          target={target}
+          targetOfTarget={targetOfTarget}
+          targetsTarget={targetsTarget}
           raidFrames={raidFrames}
-          context={props.context}
-          durationMs={props.durationMs}
+          auras={auras}
+          onPin={pin}
+          onClear={() => setTarget(null)}
         />
+        <InspectCards guids={pinned} onRemove={unpin} raidFrames={raidFrames} auras={auras} />
         <MeterWindows windows={meterWindows} onChange={setMeterWindows} context={props.context} durationMs={props.durationMs} />
       </div>
       {jumps.length > 0 && scene.runStartMs !== null && (

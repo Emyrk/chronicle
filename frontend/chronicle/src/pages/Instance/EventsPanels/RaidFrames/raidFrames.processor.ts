@@ -46,6 +46,12 @@ export interface RaidFrameHeal {
   sourceName: string;
 }
 
+/** A cast started on another unit: the caster's target from then on (WoW's target of target). */
+export interface RaidFrameTarget {
+  timestampMs: number;
+  target: string;
+}
+
 export interface RaidFramesEncounter {
   encounterId: string;
   startMs: number;
@@ -54,6 +60,8 @@ export interface RaidFramesEncounter {
   castsByUnit: Map<string, RaidFrameCast[]>;
   instantsByUnit: Map<string, RaidFrameInstantCast[]>;
   healsByUnit: Map<string, RaidFrameHeal[]>;
+  /** Each unit's spell_start targets, in time order (self-casts left out). */
+  targetsByUnit: Map<string, RaidFrameTarget[]>;
 }
 
 export interface RaidFramesResult {
@@ -88,6 +96,7 @@ function encounterFor(
       castsByUnit: new Map(),
       instantsByUnit: new Map(),
       healsByUnit: new Map(),
+      targetsByUnit: new Map(),
     };
     state.encounters.set(encounterId, encounter);
   }
@@ -214,6 +223,7 @@ export const raidFramesProcessor: PanelProcessor<RaidFramesResult, RaidFramesPro
       case "spell_start":
         state.spellNames.set(event.spell.id, event.spell.name);
         addCast(encounter, event, timestampMs);
+        addTarget(encounter, event, timestampMs);
         return;
       case "spell_go":
         state.spellNames.set(event.spell.id, event.spell.name);
@@ -229,6 +239,39 @@ export const raidFramesProcessor: PanelProcessor<RaidFramesResult, RaidFramesPro
     }
   },
 };
+
+function addTarget(
+  encounter: RaidFramesEncounter,
+  event: SpellStartProcessorEvent,
+  timestampMs: number,
+): void {
+  if (!event.target || event.target === event.caster) return;
+  let targets = encounter.targetsByUnit.get(event.caster);
+  if (!targets) {
+    targets = [];
+    encounter.targetsByUnit.set(event.caster, targets);
+  }
+  if (targets[targets.length - 1]?.target === event.target) return;
+  targets.push({ timestampMs, target: event.target });
+}
+
+/** The unit `guid` last started a spell on at or before `timestampMs` (its target), or null. */
+export function lastTargetAt(
+  encounter: RaidFramesEncounter,
+  guid: string,
+  timestampMs: number,
+): string | null {
+  const targets = encounter.targetsByUnit.get(guid);
+  if (!targets) return null;
+  let low = 0;
+  let high = targets.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (targets[middle].timestampMs <= timestampMs) low = middle + 1;
+    else high = middle;
+  }
+  return low > 0 ? targets[low - 1].target : null;
+}
 
 function addHeal(
   encounter: RaidFramesEncounter,

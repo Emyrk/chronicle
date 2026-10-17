@@ -11,6 +11,7 @@ import {
   enemyFrameUnits,
   orderRaidFramePlayers,
   activeCastAt,
+  lastTargetAt,
   incomingHealsAt,
   recentInstantAt,
   latestResourceAt,
