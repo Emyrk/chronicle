@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue, ty
 import { createPortal } from "react-dom";
 import { useSearchParams, Link } from "react-router-dom";
 import { useSession, useCreateShare, fetchSharedView, toastError, type UserPanelLayout } from "@/api/queries";
-import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown, RotateCcw, Maximize2, Minimize2 } from "lucide-react";
+import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, LayoutPanelTop, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown, RotateCcw, Maximize2, Minimize2 } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -13,6 +13,7 @@ import { useInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
 import { type LayoutType, type PanelType } from "@/hooks/useUrlState";
 import { useTimeRangeContextOptional } from "./TimeRangeContext";
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
+import { buildLayoutSections, normalizeGroupedLayoutItems, type LayoutSection } from "@/components/layout/layoutGroups";
 import type { ActionBarSlotsResponse, ActivityPeriod, InstancePlayer, SpeedrunResult } from "@/api/typesGenerated";
 import { PeriodMomentDisplay } from "@/components/PeriodMomentDisplay";
 import { Card } from "@/components/ui/Card/Card";
@@ -975,17 +976,18 @@ function orderLayoutItems(items: GridEditorItem[]): GridEditorItem[] {
 }
 
 function normalizeLayoutItems(items: GridEditorItem[]): GridEditorItem[] {
-  const normalized = items.map((item) => {
+  const normalizedWithGroups = items.map((item) => {
     const isStrip = item.kind === "strip";
-    const minW = item.minW ?? (isStrip ? 1 : 4);
-    const minH = item.minH ?? (isStrip ? 1 : 4);
-    const w = Math.max(minW, Math.min(item.w, GRID_COLS));
+    const isGroup = item.kind === "group";
+    const minW = isGroup ? GRID_COLS : item.minW ?? (isStrip ? 1 : 4);
+    const minH = isGroup ? item.minH ?? 1 : item.minH ?? (isStrip ? 1 : 4);
+    const w = isGroup ? GRID_COLS : Math.max(minW, Math.min(item.w, GRID_COLS));
     const h = Math.max(minH, item.h);
-    const x = Math.max(0, Math.min(item.x, GRID_COLS - w));
+    const x = isGroup ? 0 : Math.max(0, Math.min(item.x, GRID_COLS - w));
     const y = Math.max(0, item.y);
     return {
       ...item,
-      kind: isStrip ? "strip" as const : "panel" as const,
+      kind: isGroup ? "group" as const : isStrip ? "strip" as const : "panel" as const,
       ...(isStrip ? { orientation: item.orientation ?? "horizontal" as const } : {}),
       x,
       y,
@@ -993,38 +995,47 @@ function normalizeLayoutItems(items: GridEditorItem[]): GridEditorItem[] {
       h,
       minW,
       minH,
-      maxW: item.maxW ?? GRID_COLS,
-      maxH: item.maxH ?? 20,
+      maxW: isGroup ? GRID_COLS : item.maxW ?? GRID_COLS,
+      maxH: isGroup ? item.maxH ?? h : item.maxH ?? 20,
     };
   });
 
-  // simple collision resolution: push items down until free
-  const occupied = new Set<string>();
-  const out: GridEditorItem[] = [];
+  const normalized = normalizeGroupedLayoutItems(normalizedWithGroups);
 
-  for (const item of orderLayoutItems(normalized)) {
-    let y = item.y;
-    while (true) {
-      let overlaps = false;
-      for (let dx = 0; dx < item.w && !overlaps; dx++) {
-        for (let dy = 0; dy < item.h; dy++) {
-          if (occupied.has(`${item.x + dx}:${y + dy}`)) {
-            overlaps = true;
-            break;
+  // Resolve collisions independently in the outer grid and in each nested group.
+  const scopes = new Map<string, GridEditorItem[]>();
+  for (const item of normalized) {
+    const scope = item.groupId ?? "__outer";
+    scopes.set(scope, [...(scopes.get(scope) ?? []), item]);
+  }
+
+  const out: GridEditorItem[] = [];
+  for (const scopedItems of scopes.values()) {
+    const occupied = new Set<string>();
+    for (const item of orderLayoutItems(scopedItems)) {
+      let y = item.y;
+      while (true) {
+        let overlaps = false;
+        for (let dx = 0; dx < item.w && !overlaps; dx++) {
+          for (let dy = 0; dy < item.h; dy++) {
+            if (occupied.has(`${item.x + dx}:${y + dy}`)) {
+              overlaps = true;
+              break;
+            }
           }
         }
+        if (!overlaps) break;
+        y += 1;
       }
-      if (!overlaps) break;
-      y += 1;
-    }
 
-    for (let dx = 0; dx < item.w; dx++) {
-      for (let dy = 0; dy < item.h; dy++) {
-        occupied.add(`${item.x + dx}:${y + dy}`);
+      for (let dx = 0; dx < item.w; dx++) {
+        for (let dy = 0; dy < item.h; dy++) {
+          occupied.add(`${item.x + dx}:${y + dy}`);
+        }
       }
-    }
 
-    out.push({ ...item, y });
+      out.push({ ...item, y });
+    }
   }
 
   return orderLayoutItems(out);
@@ -1065,6 +1076,12 @@ interface EventsPanelGridProps {
   seamless?: boolean;
   /** Fill the container's height: panel rows stretch, strip-only rows keep their size (the layout's `fit`, in focus mode). */
   fit?: boolean;
+  /** Stable timing slots when the grid is split into grouped sections. */
+  panelIndexById?: ReadonlyMap<string, number>;
+}
+
+function renderableLayoutItems(items: readonly GridEditorItem[]): GridEditorItem[] {
+  return items.filter((item) => item.kind !== "group");
 }
 
 /**
@@ -1098,7 +1115,131 @@ function EventsPanelGrid({
   onExplainerClick,
   seamless = false,
   fit = false,
+  panelIndexById,
 }: EventsPanelGridProps) {
+  const sections = useMemo(() => buildLayoutSections(layoutItems), [layoutItems]);
+  const groupSignature = useMemo(
+    () => layoutItems
+      .filter((item) => item.kind === "group")
+      .map((item) => `${item.id}:${item.title}:${item.collapsedByDefault === true}`)
+      .join("|"),
+    [layoutItems],
+  );
+  const [groupState, setGroupState] = useState<{
+    signature: string;
+    open: Record<string, boolean>;
+    opened: Record<string, boolean>;
+  }>({ signature: "", open: {}, opened: {} });
+  const activeGroupState = groupState.signature === groupSignature
+    ? groupState
+    : { signature: groupSignature, open: {}, opened: {} };
+  const stablePanelIndexes = useMemo(
+    () => panelIndexById ?? new Map(renderableLayoutItems(layoutItems).map((item, index) => [item.id, index])),
+    [layoutItems, panelIndexById],
+  );
+
+  if (sections.some((section) => section.group)) {
+    return (
+      <SeamlessLayoutContext.Provider value={seamless}>
+        <div className={cn(
+          fit && !isMobile ? "flex h-full flex-col gap-3" : "space-y-3",
+          seamless && (fit && !isMobile ? "gap-0" : "space-y-0"),
+        )}>
+          {sections.map((section: LayoutSection) => {
+            const group = section.group;
+            const sectionHasPanel = section.items.some((item) => item.kind !== "strip");
+            if (!group) {
+              return (
+                <div key={section.id} className={cn(fit && !isMobile && sectionHasPanel && "min-h-0 flex-1")}>
+                  <EventsPanelGrid
+                    layoutItems={section.items}
+                    panelTypesById={panelTypesById}
+                    panelOptionsById={panelOptionsById}
+                    seedFiltersByID={seedFiltersByID}
+                    seedFiltersVersion={seedFiltersVersion}
+                    durationMs={durationMs}
+                    context={context}
+                    showHints={showHints}
+                    isMobile={isMobile}
+                    onPanelTypeChange={onPanelTypeChange}
+                    onStripTypeChange={onStripTypeChange}
+                    onPanelOptionChange={onPanelOptionChange}
+                    onPanelFiltersChange={onPanelFiltersChange}
+                    onExplainerClick={onExplainerClick}
+                    seamless={seamless}
+                    fit={fit && sectionHasPanel}
+                    panelIndexById={stablePanelIndexes}
+                  />
+                </div>
+              );
+            }
+
+            const isOpen = activeGroupState.open[group.id] ?? !group.collapsedByDefault;
+            const hasOpened = activeGroupState.opened[group.id] ?? !group.collapsedByDefault;
+            return (
+              <section key={section.id} className={cn(
+                "overflow-hidden border border-border bg-card/40",
+                seamless ? "rounded-none" : "rounded-lg",
+                fit && !isMobile && sectionHasPanel && "min-h-0 flex flex-1 flex-col",
+              )}>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
+                  aria-expanded={isOpen}
+                  onClick={() => {
+                    setGroupState((previous) => {
+                      const current = previous.signature === groupSignature
+                        ? previous
+                        : { signature: groupSignature, open: {}, opened: {} };
+                      return {
+                        signature: groupSignature,
+                        open: { ...current.open, [group.id]: !isOpen },
+                        opened: { ...current.opened, [group.id]: true },
+                      };
+                    });
+                  }}
+                >
+                  {isOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+                  <LayoutPanelTop className="size-3.5" />
+                  <span className="font-medium text-foreground">{group.title}</span>
+                  {group.description ? <span className="min-w-0 truncate">{group.description}</span> : null}
+                  <span className="ml-auto shrink-0">{section.items.length} item{section.items.length === 1 ? "" : "s"}</span>
+                </button>
+                {hasOpened ? (
+                  <div className={cn(
+                    seamless ? "" : "border-t border-border p-3",
+                    !isOpen && "hidden",
+                    fit && !isMobile && sectionHasPanel && "min-h-0 flex-1",
+                  )}>
+                    <EventsPanelGrid
+                      layoutItems={section.items}
+                      panelTypesById={panelTypesById}
+                      panelOptionsById={panelOptionsById}
+                      seedFiltersByID={seedFiltersByID}
+                      seedFiltersVersion={seedFiltersVersion}
+                      durationMs={durationMs}
+                      context={context}
+                      showHints={showHints}
+                      isMobile={isMobile}
+                      onPanelTypeChange={onPanelTypeChange}
+                      onStripTypeChange={onStripTypeChange}
+                      onPanelOptionChange={onPanelOptionChange}
+                      onPanelFiltersChange={onPanelFiltersChange}
+                      onExplainerClick={onExplainerClick}
+                      seamless={seamless}
+                      fit={fit && sectionHasPanel}
+                      panelIndexById={stablePanelIndexes}
+                    />
+                  </div>
+                ) : null}
+              </section>
+            );
+          })}
+        </div>
+      </SeamlessLayoutContext.Provider>
+    );
+  }
+
   const fitRows = fit && !isMobile ? fitGridRows(layoutItems) : null;
   return (
     <SeamlessLayoutContext.Provider value={seamless}>
@@ -1128,7 +1269,7 @@ function EventsPanelGrid({
                 orientation={item.orientation ?? "horizontal"}
                 durationMs={durationMs}
                 context={context}
-                stripIndex={index}
+                stripIndex={stablePanelIndexes.get(item.id) ?? index}
                 stripId={item.id}
                 onStripTypeChange={(nextType) => onStripTypeChange(item.id, nextType)}
                 panelOption={panelOptionsById[item.id] ?? null}
@@ -1143,7 +1284,7 @@ function EventsPanelGrid({
                 onPanelTypeChange={(nextType) => onPanelTypeChange(item.id, nextType)}
                 durationMs={durationMs}
                 context={context}
-                panelIndex={index}
+                panelIndex={stablePanelIndexes.get(item.id) ?? index}
                 panelId={item.id}
                 onExplainerClick={onExplainerClick}
                 showHints={showHints}
@@ -1327,7 +1468,7 @@ function PoppedOutLayoutContent({
         {popupPageType ? (
           <InstanceContentPage pageType={popupPageType} context={context} durationMs={durationMs} pageState={popupPageState} />
         ) : (
-          <PanelTimingProvider panelCount={layoutItems.length}>
+          <PanelTimingProvider panelCount={renderableLayoutItems(layoutItems).length}>
             <ChartDataRegistryProvider>
               <EventsPanelGrid
                 layoutItems={layoutItems}
@@ -2033,7 +2174,7 @@ function EncounterDetail({
       {pageType ? (
         <InstanceContentPage key={pageState.key} pageType={pageType} context={panelContext} durationMs={totalDurationMs} pageState={pageState} />
       ) : (
-        <PanelTimingProvider panelCount={layoutItems.length}>
+        <PanelTimingProvider panelCount={renderableLayoutItems(layoutItems).length}>
           <PanelTimingResetter encounters={encounters} />
 
           <ChartDataRegistryProvider>

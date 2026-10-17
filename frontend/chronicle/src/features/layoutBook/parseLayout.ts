@@ -1,5 +1,6 @@
 import type { UserPanelLayout } from "@/api/queries";
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
+import { normalizeGroupedLayoutItems } from "@/components/layout/layoutGroups";
 import type { EventsPanelType } from "@/pages/Instance/EventsPanels";
 import type { PanelFilter } from "@/pages/Instance/EventsPanels/processors/filters";
 import {
@@ -52,7 +53,7 @@ export function serializeLayoutLab(
 
   const payload: LayoutLabExportV1 = {
     version: 1,
-    items,
+    items: normalizeGroupedLayoutItems(items),
     panelTypesById,
     ...(filteredPanelOptions && Object.keys(filteredPanelOptions).length > 0
       ? { panelOptionsById: filteredPanelOptions }
@@ -76,7 +77,7 @@ export function parseLayoutLab(raw: string): LayoutLabExportV1 {
 
   return {
     version: 1,
-    items: parsed.items,
+    items: normalizeGroupedLayoutItems(parsed.items),
     panelTypesById: parsed.panelTypesById as Record<string, EventsPanelType>,
     panelOptionsById: parsed.panelOptionsById && typeof parsed.panelOptionsById === "object"
       ? parsed.panelOptionsById as Record<string, string>
