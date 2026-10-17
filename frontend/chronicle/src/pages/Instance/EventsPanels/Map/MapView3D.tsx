@@ -62,6 +62,8 @@ export interface MapView3DProps {
   walking?: boolean;
   /** Called when walk mode starts or ends, including from the keyboard (G, Esc). */
   onWalkingChange?: (walking: boolean) => void;
+  /** A/D strafe and Q/E turn (a saved map setting). */
+  adStrafe?: boolean;
 }
 
 // three.js needs concrete colors; class colors are CSS custom properties.
@@ -118,6 +120,7 @@ export default function MapView3D({
   topDownKey = 0,
   walking = false,
   onWalkingChange,
+  adStrafe = false,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<MapScene3D | null>(null);
@@ -305,6 +308,10 @@ export default function MapView3D({
   useEffect(() => {
     sceneRef.current?.setWalking(walking);
   }, [walking]);
+
+  useEffect(() => {
+    sceneRef.current?.setAdStrafe(adStrafe);
+  }, [adStrafe]);
 
   return (
     <div className="relative h-full w-full">

@@ -17,6 +17,20 @@ export const MAP_CONTROL_ACTIONS = [
 
 export type MapControlAction = (typeof MAP_CONTROL_ACTIONS)[number]["id"];
 
+// With A/D strafe (a saved map setting), A/D and Q/E trade places.
+const STRAFE_SWAP: Partial<Record<MapControlAction, MapControlAction>> = {
+  turn_left: "strafe_left",
+  turn_right: "strafe_right",
+  strafe_left: "turn_left",
+  strafe_right: "turn_right",
+};
+
+/** The action a key drives, with A/D turning (the default) or strafing. */
+export function actionForKey(code: string, adStrafe: boolean): MapControlAction | undefined {
+  const action = MAP_CONTROL_ACTIONS.find((candidate) => candidate.defaultKey === code)?.id;
+  return action && adStrafe ? STRAFE_SWAP[action] ?? action : action;
+}
+
 /** Toggles walk mode while the pointer is over the map (or while walking). */
 export const WALK_TOGGLE_KEY = "KeyG";
 
@@ -32,8 +46,8 @@ export function keyLabel(code: string): string {
 /** For the instance page's keybind help. */
 export const MAP_CONTROL_KEYBINDS = [
   { keys: "W / S", action: "Move forward / back (pointer over the map, or while walking)" },
-  { keys: "A / D", action: "Turn left / right" },
-  { keys: "Q / E", action: "Strafe left / right" },
+  { keys: "A / D", action: "Turn left / right (strafe with \"A/D strafe\" in Map settings)" },
+  { keys: "Q / E", action: "Strafe left / right (turn with \"A/D strafe\")" },
   { keys: "Space / X", action: "Zoom out / in; while walking: jump (hold to fly up) / fly down" },
   { keys: keyLabel(WALK_TOGGLE_KEY), action: "Walk mode on / off: join the fight on the ground" },
   { keys: "Esc", action: "Leave walk mode" },

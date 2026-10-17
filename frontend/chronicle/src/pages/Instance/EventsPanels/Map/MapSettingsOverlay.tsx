@@ -22,6 +22,8 @@ export interface MapSettingsOverlayProps {
   onTopDown: () => void;
   /** Walk mode, when the dungeon mesh is up to walk on. */
   walk: { on: boolean; onToggle: () => void } | null;
+  adStrafe: boolean;
+  onAdStrafe: (on: boolean) => void;
 }
 
 /**
@@ -42,6 +44,8 @@ export function MapSettingsOverlay({
   floors,
   onTopDown,
   walk,
+  adStrafe,
+  onAdStrafe,
 }: MapSettingsOverlayProps) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -149,6 +153,12 @@ export function MapSettingsOverlay({
               <Scan className="h-3.5 w-3.5" />
               Top-down view
             </button>
+            <Toggle
+              label="A/D strafe"
+              detail="A and D strafe and Q and E turn, instead of the other way round"
+              checked={adStrafe}
+              onChange={onAdStrafe}
+            />
             {walk && (
               <button
                 type="button"

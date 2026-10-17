@@ -57,6 +57,25 @@ export function preferredMeshState(stored: boolean | null): boolean {
 const RAID_FRAMES_STORAGE_KEY = "chronicle.map.raidFrames";
 const ENEMY_FRAMES_STORAGE_KEY = "chronicle.map.enemyFrames";
 
+// A/D strafe (Q/E turn) instead of A/D turn; off unless chosen.
+const AD_STRAFE_STORAGE_KEY = "chronicle.map.adStrafe";
+
+function readStoredAdStrafe(): boolean {
+  try {
+    return localStorage.getItem(AD_STRAFE_STORAGE_KEY) === "strafe";
+  } catch {
+    return false;
+  }
+}
+
+function storeAdStrafe(on: boolean) {
+  try {
+    localStorage.setItem(AD_STRAFE_STORAGE_KEY, on ? "strafe" : "turn");
+  } catch {
+    // Storage may be unavailable; the choice still applies for this session.
+  }
+}
+
 function readStoredShown(key: string): boolean {
   try {
     return localStorage.getItem(key) !== "hidden";
@@ -143,6 +162,11 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   const [topDownKey, setTopDownKey] = useState(0);
   // Walk mode ("join the fight"): your own character on the dungeon mesh.
   const [walkWanted, setWalking] = useState(false);
+  const [adStrafe, setAdStrafeState] = useState(readStoredAdStrafe);
+  const setAdStrafe = (on: boolean) => {
+    setAdStrafeState(on);
+    storeAdStrafe(on);
+  };
   // Units picked for a closer look: click them on the map or in the raid frames.
   const [inspected, setInspected] = useState<string[]>([]);
   const toggleInspected = useCallback((guid: string) => {
@@ -270,6 +294,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               topDownKey={topDownKey}
               walking={walking}
               onWalkingChange={setWalking}
+              adStrafe={adStrafe}
             />
           </Suspense>
         )}
@@ -360,7 +385,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
         )}
         {walking && (
           <div className="pointer-events-none absolute bottom-2 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-sm bg-black/75 px-2 py-1 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
-            <span className="font-semibold text-amber-300">Walking</span> · W/S move · A/D turn · Q/E strafe · Space jump (hold to fly) · X down · drag to look · wheel zoom · G or Esc to leave
+            <span className="font-semibold text-amber-300">Walking</span> · W/S move · {adStrafe ? "A/D strafe · Q/E turn" : "A/D turn · Q/E strafe"} · Space jump (hold to fly) · X down · drag to look · wheel zoom · G or Esc to leave
           </div>
         )}
         {settingsOpen && (
@@ -378,6 +403,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
             floors={scene.floors.length > 1 ? { list: scene.floors, value: scene.selectedFloorNumber, onChange: scene.setFloorNumber } : null}
             onTopDown={() => setTopDownKey((key) => key + 1)}
             walk={canWalk ? { on: walking, onToggle: () => setWalking(!walking) } : null}
+            adStrafe={adStrafe}
+            onAdStrafe={setAdStrafe}
           />
         )}
         <InspectCards
