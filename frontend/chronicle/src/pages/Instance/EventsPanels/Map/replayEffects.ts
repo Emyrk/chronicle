@@ -59,10 +59,10 @@ export interface EncounterEffects {
  * "beam": a spell bolt between units; "streak": a thin ranged auto shot;
  * "lunge": the attacker stepping toward its target; "slash": an arc at the
  * target of a melee hit; "impact": a small burst for melee abilities;
- * "hit": wobble and flash; "ring": an AoE pulse; "cast": a closing cast ring;
- * "heal": a ring rising at a healed target.
+ * "hit": wobble and flash; "ring": an AoE pulse; "heal": a ring rising at a
+ * healed target. (A cast in progress is the token's cast arc, not an effect.)
  */
-export type ActiveEffectType = "beam" | "streak" | "lunge" | "slash" | "impact" | "hit" | "ring" | "cast" | "heal";
+export type ActiveEffectType = "beam" | "streak" | "lunge" | "slash" | "impact" | "hit" | "ring" | "heal";
 
 export interface ActiveEffect {
   type: ActiveEffectType;
@@ -276,8 +276,6 @@ export function isDeadAt(fx: EncounterEffects, guid: string, cursorMs: number): 
   return resurrect < 0 || resurrects![resurrect] < deaths[death];
 }
 
-// Reused across calls so a frame's derivation allocates nothing once warm.
-const castEnded = new Set<string>();
 
 /**
  * The effects visible at `cursorMs`, newest first, at most `maxEffects`.
@@ -352,27 +350,15 @@ export function deriveActiveEffects(
   };
 
   const events = fx.events;
-  const [start, end] = eventWindow(events, cursorMs - Math.max(options.lookbackMs, CAST_RING_MAX_MS), cursorMs);
-  castEnded.clear();
+  const [start, end] = eventWindow(events, cursorMs - options.lookbackMs, cursorMs);
   for (let index = end - 1; index >= start; index--) {
     const event = events[index];
     const ageMs = cursorMs - event.timestampMs;
     eventMs = event.timestampMs;
     origin = event;
     amount = event.kind === "heal" ? event.effective : event.amount;
-    // A cast bar ends at the caster's next cast start, cast go or interrupt.
-    if (event.kind === "cast_start") {
-      const wasEnded = castEnded.has(event.source);
-      castEnded.add(event.source);
-      if (wasEnded || event.castTimeMs <= 0) continue;
-      const durationMs = Math.min(event.castTimeMs, CAST_RING_MAX_MS);
-      if (ageMs >= durationMs || !visible(event.source)) continue;
-      if (filterGuids && !filterGuids.has(event.source) && !filterGuids.has(event.target)) continue;
-      emit("cast", undefined, event.source, ageMs / durationMs, schoolColor(event.school), 1);
-      continue;
-    }
-    if (event.kind === "cast_go") castEnded.add(event.source);
-    if (event.kind === "interrupt") castEnded.add(event.target);
+    // Cast bars draw as the token's cast arc (deriveUnitCasts), not an effect.
+    if (event.kind === "cast_start") continue;
     // Heal-over-time ticks stay around a little longer to merge into a newer pulse.
     const hotTick = event.kind === "heal" && event.periodic && ageMs <= HEAL_PULSE_MS + HOT_MERGE_MS;
     if (ageMs > options.lookbackMs && !hotTick) continue;

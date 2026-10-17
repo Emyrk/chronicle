@@ -3,7 +3,6 @@ import {
   AOE_RING_MS,
   BEAM_MS,
   CAST_ICON_MS,
-  CAST_RING_MAX_MS,
   COMBAT_TEXT_MS,
   HEAL_COLOR,
   HEAL_CRIT_COLOR,
@@ -150,18 +149,16 @@ export function HitDemo({ seconds, interrupt = false }: { seconds: number; inter
   );
 }
 
-/** Rings on the ground: an AoE pulse widening from its caster, or a cast closing in on it. */
-export function RingDemo({ seconds, cast = false }: { seconds: number; cast?: boolean }) {
-  // A two-second cast shown in real time; the AoE ring slowed like the rest.
-  const durationMs = cast ? Math.min(2000, CAST_RING_MAX_MS) / DEMO_SLOWDOWN : AOE_RING_MS;
-  const p = phase(seconds, durationMs, cast ? -0.3 : 0);
-  const color = cast ? schoolColor(6) : schoolColor(4);
-  const radius = p === null ? 0 : cast ? 4 - 2.5 * p : 1.5 + 6 * p;
-  const brightness = p === null ? 0 : cast ? 0.35 + 0.5 * p : 1 - p;
+/** An AoE pulse: a ring widening across the ground from its caster. */
+export function RingDemo({ seconds }: { seconds: number }) {
+  const p = phase(seconds, AOE_RING_MS);
+  const color = schoolColor(4);
+  const radius = p === null ? 0 : 1.5 + 6 * p;
+  const brightness = p === null ? 0 : 1 - p;
   return (
     <Ground height={130}>
       <At x={50} y={58}>
-        <Token ring={cast ? "var(--color-class-mage)" : "var(--color-class-warlock)"} icon={cast ? "/c/icons/spec_mage_frost.png" : "/c/icons/class_warlock.png"} />
+        <Token ring="var(--color-class-warlock)" icon="/c/icons/class_warlock.png" />
       </At>
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
         {p !== null && (
@@ -282,7 +279,6 @@ export const EFFECT_TIMINGS = {
   hit: HIT_WOBBLE_MS,
   meleeFlash: MELEE_FLASH_MS,
   aoe: AOE_RING_MS,
-  castRing: CAST_RING_MAX_MS,
   heal: HEAL_PULSE_MS,
   interrupt: INTERRUPT_MS,
   combatText: COMBAT_TEXT_MS,

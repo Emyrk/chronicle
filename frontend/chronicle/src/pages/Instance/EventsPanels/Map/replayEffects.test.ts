@@ -171,22 +171,14 @@ describe("deriveActiveEffects", () => {
     expect(deriveActiveEffects(fx, 1_450, DEFAULT_EFFECT_OPTIONS, out).map((effect) => ({ ...effect }))).toEqual(forward);
   });
 
-  it("draws cast rings until the cast goes off or is interrupted", () => {
+  it("draws no effect for a cast in progress (the token's cast arc shows it), only its interrupt", () => {
     const fx = effects(
       event(1_000, "cast_start", "priest", "", { castTimeMs: 2_000 }),
       event(2_000, "cast_start", "mage", "", { castTimeMs: 2_000 }),
       event(2_500, "interrupt", "rogue", "mage"),
-      event(3_000, "cast_go", "priest", ""),
     );
-    expect(derive(fx, 2_000)).toEqual([
-      expect.objectContaining({ type: "cast", target: "mage", progress: 0 }),
-      expect.objectContaining({ type: "cast", target: "priest", progress: 0.5 }),
-    ]);
-    expect(derive(fx, 2_600)).toEqual([
-      expect.objectContaining({ type: "hit", target: "mage", color: INTERRUPT_COLOR }),
-      expect.objectContaining({ type: "cast", target: "priest" }),
-    ]);
-    expect(derive(fx, 3_010)).toEqual([]);
+    expect(derive(fx, 2_000)).toEqual([]);
+    expect(derive(fx, 2_600)).toEqual([expect.objectContaining({ type: "hit", target: "mage", color: INTERRUPT_COLOR })]);
   });
 
   it("pulses a ring for AoE casts", () => {

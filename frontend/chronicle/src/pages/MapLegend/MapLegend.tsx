@@ -266,9 +266,6 @@ export function MapLegend() {
           <Card title="Area spell" timing={ms(EFFECT_TIMINGS.aoe)} demo={<RingDemo seconds={seconds} />}>
             A ring widens across the ground from the caster.
           </Card>
-          <Card title="Cast ring" timing={`up to ${ms(EFFECT_TIMINGS.castRing)}`} demo={<RingDemo seconds={seconds} cast />}>
-            A ring closes in on the caster, brightening, as a cast nears completion.
-          </Card>
           <Card title="Heal" timing={ms(EFFECT_TIMINGS.heal)} demo={<HealDemo seconds={seconds} />}>
             A green bolt to the target and a ring rising up it, bigger for bigger heals.
           </Card>

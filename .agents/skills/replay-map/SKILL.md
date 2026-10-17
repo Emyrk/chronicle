@@ -84,7 +84,7 @@ them when the map's version changes:
   `drawEdge`: 65% at the face to 35% at the floor).
 - **The boss model**: a placeholder shape in `BossToken`.
 - **Combat effects** in `legendEffects.tsx`: bolt and streak (head/tail
-  travel), lunge, slash, impact, hit shake, AoE ring, cast ring, heal bolt and
+  travel), lunge, slash, impact, hit shake, AoE ring, heal bolt and
   rising pulse, interrupt flash. Their shapes and motion follow
   `MapScene3D.updateEffects`; their timings come from `replayEffects`. They play
   at `1 / DEMO_SLOWDOWN` speed, and the page says so.

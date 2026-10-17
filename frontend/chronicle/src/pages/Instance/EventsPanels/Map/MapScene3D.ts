@@ -2015,15 +2015,14 @@ export class MapScene3D {
         target.bodyMaterial.emissive.copy(color).multiplyScalar(fade * 0.6 * Math.min(2, effect.intensity));
         if (!this.wobbling.includes(target)) this.wobbling.push(target);
       } else if (ringCount < MAX_EFFECT_PRIMITIVES) {
-        // "ring": an AoE pulse expanding from the caster; "cast": a ring that
-        // closes in on the caster as the cast completes; "impact": a small
+        // "ring": an AoE pulse expanding from the caster; "impact": a small
         // quick burst under a melee ability's target; "heal": a ring rising
         // up the healed target, sized by the healing (bigger and gold on crits).
         const radius = (effect.type === "ring"
           ? 1.5 + 6 * effect.progress
           : effect.type === "heal" ? (0.9 + 0.4 * effect.progress) * (0.5 + 0.5 * effect.intensity)
-            : effect.type === "impact" ? 0.6 + 1.8 * effect.progress : 4 - 2.5 * effect.progress) * this.unitScale;
-        const brightness = effect.type === "cast" ? 0.35 + 0.5 * effect.progress : fade * (effect.type === "impact" ? 1.2 : 1);
+            : 0.6 + 1.8 * effect.progress) * this.unitScale;
+        const brightness = fade * (effect.type === "impact" ? 1.2 : 1);
         const position = target.base;
         const y = position.y + (effect.type === "heal" ? (0.2 + 2.4 * effect.progress) * this.unitScale : 0.05);
         this.matrix.makeScale(radius, 1, radius).setPosition(position.x, y, position.z);
