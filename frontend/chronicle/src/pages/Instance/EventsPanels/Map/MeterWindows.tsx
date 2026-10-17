@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { GripHorizontal, Plus, X } from "lucide-react";
+import { ChevronDown, GripHorizontal, Plus, X } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/DropdownMenu/DropdownMenu";
 import { cn } from "@/lib/utils";
 import { EmbeddedPanel } from "../EmbeddedPanel";
 import type { PanelContext } from "../types";
@@ -58,7 +65,10 @@ function MeterWindowFrame({
   const [active, setActive] = useState<"move" | "resize" | null>(null);
 
   const begin = (kind: "move" | "resize") => (event: ReactPointerEvent<HTMLElement>) => {
-    if (event.button !== 0 || (event.target as HTMLElement).closest("button, select")) return;
+    // React bubbles events from portals (the meter menu) through this bar; only
+    // presses on the bar itself start a drag.
+    if (!event.currentTarget.contains(event.target as Node)) return;
+    if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     gesture.current = { kind, x: event.clientX, y: event.clientY, start: window };
@@ -137,16 +147,28 @@ function MeterWindowFrame({
         >
           <GripHorizontal className="h-3 w-3 -rotate-45" />
         </span>
-        <select
-          aria-label="Meter"
-          value={window.meter}
-          onChange={(event) => isMeterPanelKey(event.target.value) && onPatch({ meter: event.target.value })}
-          className="min-w-0 max-w-[60%] cursor-pointer truncate bg-transparent text-[11px] font-semibold text-white outline-none [color-scheme:dark]"
-        >
-          {Object.entries(METER_PANELS)
-            .filter(([key, option]) => key === window.meter || meterAvailable(option, context.instance.capabilities ?? []))
-            .map(([key, option]) => <option key={key} value={key}>{option.label}</option>)}
-        </select>
+        {/* The app's dark menu: a native <select> list renders white in some browsers. */}
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="Meter"
+              className="flex min-w-0 max-w-[60%] items-center gap-1 truncate rounded px-1 text-[11px] font-semibold text-white hover:bg-white/10"
+            >
+              <span className="truncate">{meter.label}</span>
+              <ChevronDown className="h-3 w-3 shrink-0 text-white/60" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-40">
+            <DropdownMenuRadioGroup value={window.meter} onValueChange={(value) => isMeterPanelKey(value) && onPatch({ meter: value })}>
+              {Object.entries(METER_PANELS)
+                .filter(([key, option]) => key === window.meter || meterAvailable(option, context.instance.capabilities ?? []))
+                .map(([key, option]) => (
+                  <DropdownMenuRadioItem key={key} value={key} className="text-xs">{option.label}</DropdownMenuRadioItem>
+                ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {/* The empty stretch of the title bar is the drag handle. */}
         <span className="h-full flex-1" />
         <button
