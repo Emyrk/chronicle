@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router-dom"
 import { Users } from "lucide-react"
 import type { SpeedrunLeaderboardEntry } from "../../api/typesGenerated"
+import { navigateWithModifiers } from "@/lib/navigation"
 
 function formatDuration(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000)
@@ -95,7 +96,9 @@ export function LeaderboardTable({ entries, startRank, className }: LeaderboardT
                   className={`border-b last:border-b-0 hover:bg-muted/40 transition-colors cursor-pointer ${
                     i % 2 === 1 ? "bg-muted/20" : ""
                   }`}
-                  onClick={() => navigate(`/instances/${entry.slug || entry.instance_id}`)}
+                  onClick={(event) => {
+                    navigateWithModifiers(`/instances/${entry.slug || entry.instance_id}`, event, navigate)
+                  }}
                 >
                   <td className="px-4 py-3 text-center font-medium">
                     {MEDAL_ICONS[rank] ?? (
