@@ -59,7 +59,7 @@ function TargetFrame({
     <div
       role="region"
       aria-label={label}
-      className={`absolute top-1/2 z-30 flex -translate-y-1/2 flex-col gap-1 text-white [text-shadow:0_0_2px_#000,0_0_3px_#000,0_1px_2px_#000] ${className}`}
+      className={`absolute top-[65%] z-30 flex -translate-y-1/2 flex-col gap-1 text-white [text-shadow:0_0_2px_#000,0_0_3px_#000,0_1px_2px_#000] ${className}`}
       style={{ width: FRAME_WIDTH }}
     >
       <div className="absolute right-0 top-0 z-10 flex gap-0.5">
