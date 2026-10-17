@@ -17,8 +17,6 @@ const RING_WIDTH = 0.2;
 export const CAST_ARC_TEXTURE_STEPS = 48;
 export const DEAD_RING = "#5a5a5a";
 export const ENEMY_RED = "#ef4444";
-/** A pet's token icon (players show their spec's icon, else their class's). */
-export const PET_ICON = "/c/icons/ability_hunter_beasttaming.png";
 
 export type HaloKind = "selected" | "target" | "targetsTarget" | "pinned";
 
@@ -84,15 +82,29 @@ export interface DiscArt {
   image: CanvasImageSource | null;
   ring: string;
   dead: boolean;
-  /** No icon: a dark red well instead. */
-  enemy: boolean;
+  /** What fills the disc without an icon: an enemy's dark red well, or a guardian's paw (pets, summons, totems). */
+  well: "enemy" | "guardian" | null;
+}
+
+// A paw print (one pad, four toes) filling a disc of `radius` around `centre`:
+// a guardian's mark, so it never reads as a class or spec icon.
+function drawPaw(context: CanvasRenderingContext2D, centre: number, radius: number, color: string) {
+  context.fillStyle = color;
+  context.beginPath();
+  context.ellipse(centre, centre + radius * 0.24, radius * 0.34, radius * 0.28, 0, 0, Math.PI * 2);
+  context.fill();
+  for (const [dx, dy, size] of [[-0.46, -0.06, 0.14], [-0.17, -0.36, 0.15], [0.17, -0.36, 0.15], [0.46, -0.06, 0.14]]) {
+    context.beginPath();
+    context.ellipse(centre + dx * radius, centre + dy * radius, size * radius, size * radius * 1.25, dx * 0.6, 0, Math.PI * 2);
+    context.fill();
+  }
 }
 
 /**
- * A token's face: the ring (grey when dead) around the icon (or, for enemies
- * without one, a dark red well), with a skull when dead.
+ * A token's face: the ring (grey when dead) around the icon (or, without one,
+ * an enemy's dark red well or a guardian's paw), with a skull when dead.
  */
-export function drawDisc(context: CanvasRenderingContext2D, { image, ring, dead, enemy }: DiscArt) {
+export function drawDisc(context: CanvasRenderingContext2D, { image, ring, dead, well }: DiscArt) {
   const size = TOKEN_ART_SIZE;
   const half = size / 2;
   const radius = half - 2;
@@ -117,12 +129,14 @@ export function drawDisc(context: CanvasRenderingContext2D, { image, ring, dead,
     const crop = inner * 2.25;
     context.drawImage(image, half - crop / 2, half - crop / 2, crop, crop);
     context.filter = "none";
-  } else if (enemy) {
-    const well = context.createRadialGradient(half, half, 0, half, half, inner);
-    well.addColorStop(0, dead ? "rgba(90,90,90,.5)" : "rgba(239,68,68,.45)");
-    well.addColorStop(1, "rgba(20,20,20,1)");
-    context.fillStyle = well;
+  } else if (well === "enemy") {
+    const gradient = context.createRadialGradient(half, half, 0, half, half, inner);
+    gradient.addColorStop(0, dead ? "rgba(90,90,90,.5)" : "rgba(239,68,68,.45)");
+    gradient.addColorStop(1, "rgba(20,20,20,1)");
+    context.fillStyle = gradient;
     context.fillRect(0, 0, size, size);
+  } else if (well === "guardian") {
+    drawPaw(context, half, inner * 1.45, dead ? "#8a8a8a" : ring);
   }
   // Inner shade: darker toward the bottom edge, as if lit from above.
   const shade = context.createLinearGradient(0, half - inner, 0, half + inner);

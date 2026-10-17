@@ -14,6 +14,7 @@ import {
   drawShadow,
   drawSigil,
   drawSigilTicks,
+  type DiscArt,
   type HaloKind,
 } from "./unitTokenArt";
 
@@ -49,7 +50,7 @@ interface DiscEntry {
   icon: string | null;
   ring: string;
   dead: boolean;
-  enemy: boolean;
+  well: DiscArt["well"];
   drawn: boolean;
 }
 
@@ -97,12 +98,12 @@ export class UnitTokenTextures {
   }
 
   /** A token's face (see drawDisc), redrawn once its icon loads. */
-  disc(icon: string | null, ring: string, dead: boolean, enemy: boolean): THREE.CanvasTexture {
-    const key = `${icon}|${ring}|${dead}|${enemy}`;
+  disc(icon: string | null, ring: string, dead: boolean, well: DiscArt["well"]): THREE.CanvasTexture {
+    const key = `${icon}|${ring}|${dead}|${well}`;
     let disc = this.discs.get(key);
     if (!disc) {
       const [element, context] = canvas();
-      disc = { texture: texture(element), context, icon, ring, dead, enemy, drawn: false };
+      disc = { texture: texture(element), context, icon, ring, dead, well, drawn: false };
       this.discs.set(key, disc);
       this.drawDisc(disc);
     }
@@ -111,7 +112,7 @@ export class UnitTokenTextures {
 
   private drawDisc(disc: DiscEntry) {
     const image = disc.icon ? this.image(disc.icon) : null;
-    drawDisc(disc.context, { image, ring: disc.ring, dead: disc.dead, enemy: disc.enemy });
+    drawDisc(disc.context, { image, ring: disc.ring, dead: disc.dead, well: disc.well });
     disc.drawn = !disc.icon || image !== null;
     disc.texture.needsUpdate = true;
   }

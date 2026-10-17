@@ -26,7 +26,7 @@ import {
 } from "./cameraDirector";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
-import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, ENEMY_RED, HALO_COLORS, MARKS_SCALE, PET_ICON, TARGET_LINE, TOKEN_LAYOUT, type HaloKind } from "./unitTokenArt";
+import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, ENEMY_RED, HALO_COLORS, MARKS_SCALE, TARGET_LINE, TOKEN_LAYOUT, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, CAST_ARC_OPACITY, CUT_ARC_COLOR, CUT_TICK_COLOR, DEAD_COLOR, INTERRUPT_LABEL_COLOR, WALK_AVATAR_COLOR, WALK_AVATAR_EMISSIVE } from "./mapPalette";
 import {
@@ -1727,7 +1727,7 @@ export class MapScene3D {
     if (object.mini) return;
     const map = object.boss
       ? this.tokenTextures.sigil()
-      : this.tokenTextures.disc(object.icon ?? (object.kind === "pet" ? PET_ICON : null), ring, object.dead, object.kind === "hostile");
+      : this.tokenTextures.disc(object.icon, ring, object.dead, object.kind === "hostile" ? "enemy" : object.kind === "pet" ? "guardian" : null);
     if (object.bodyMaterial.map !== map) {
       object.bodyMaterial.map = map;
       object.bodyMaterial.needsUpdate = true;

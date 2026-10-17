@@ -5,7 +5,6 @@ import {
   ENEMY_RED,
   HALO_COLORS,
   MARKS_SCALE,
-  PET_ICON,
   TOKEN_ART_SIZE,
   TOKEN_LAYOUT,
   drawBossPin,
@@ -128,7 +127,7 @@ export function Token({
   const radius = TOKEN_LAYOUT.radius[kind] * scale;
   const ringColor = useCssColor(ring);
   const castColor = useCssColor(cast?.color ?? "#fff");
-  const image = useImage(icon ?? (kind === "pet" ? PET_ICON : null));
+  const image = useImage(icon);
   const plane = TOKEN_LAYOUT.plane;
   const shownRing = dead ? DEAD_RING : ringColor;
   const thickness = Math.max(2, Math.round(radius * 2 * TOKEN_LAYOUT.thickness));
@@ -150,7 +149,7 @@ export function Token({
           />
         ))}
         <div style={{ position: "absolute", transform: `translateZ(${thickness}px)`, transformStyle: "preserve-3d" }}>
-          <ArtCanvas key={`${image?.src}|${shownRing}|${dead}`} draw={(context) => drawDisc(context, { image, ring: ringColor, dead, enemy: kind === "hostile" })} style={layer(radius, 1)} />
+          <ArtCanvas key={`${image?.src}|${shownRing}|${dead}`} draw={(context) => drawDisc(context, { image, ring: ringColor, dead, well: kind === "hostile" ? "enemy" : kind === "pet" ? "guardian" : null })} style={layer(radius, 1)} />
           <ArtCanvas
             key={`marks|${shownRing}`}
             draw={(context) => drawFacingMarks(context, shownRing, false)}
