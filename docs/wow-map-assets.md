@@ -81,7 +81,13 @@ Do not copy mesh bounds from examples or the 2D PNG: derive and verify them from
 
 ### Terrain meshes
 
-Ruins of Lordaeron (map 2999, Forever) is a terrain mesh: open sky over a ~570 × 530 yd walled city, exported with `--kind terrain` and published as a floorless instance. The manifest `bounds` are the exact POSITION extent of the GLB and roofs are kept (nothing is ceiling-culled), so a unit standing inside a building is probed onto its roof.
+Ruins of Lordaeron (map 2999, Forever) is a terrain mesh: open sky over a ~570 × 530 yd walled city, exported with `--kind terrain` and published as a floorless instance. The manifest `bounds` are the exact POSITION extent of the GLB and roofs are kept (nothing is ceiling-culled), so without a logged height (see [Unit heights](#unit-heights)) a unit standing inside a building is probed onto its roof.
+
+Zul'Gurub (map 309) is a terrain mesh in the **turtle** namespace, which OctoWoW and Cappy logs read as well as Turtle's: the 1.12 terrain (~1,333 yd square) with its WMOs kept whole (city walls, bridges, huts, the ziggurat), no M2 doodads (trees, small props). Its entry sits on the native instance next to the floor artwork and a calibrated `renders` PNG; bounds x −12600..−11266.67, y −2166.67..−833.33, z −21.85..292.94. The GLB is 38 MB (about half WebP textures, half geometry). Bridges and roofs stand up to ~33 yd over the paths beneath them, so on logs without z, units walking under them are drawn on top. Turtle's own ZG has not been checked against the 1.12 model.
+
+### Unit heights
+
+A unit stands on the mesh at a probed floor height. When its position samples carry a logged height (`MapPositionSample.z`, from 1.12a logs parsed with #1156 or later; interpolated between samples like x and y), the probe starts 2.5 yd above that height and takes the first surface below it, so a unit under a bridge, a roof or a ziggurat tier stands where it was logged. Without z, or when that probe misses the mesh, the probe drops from above the whole mesh and takes the highest surface. The probes only hit upward-facing surfaces, so the underside of a platform is never a floor. The camera's aim point uses the same rule with the median logged height of the units it frames (every unit outside the cinematic camera).
 
 ### Liquid colour
 

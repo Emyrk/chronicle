@@ -86,6 +86,20 @@ describe("directorFrame", () => {
     expect(frame!.radius).toBeCloseTo(5);
   });
 
+  it("leaves a straggler out of the group's frame when no boss is up", () => {
+    // A whole run on a terrain map: one player 170 yd behind the group.
+    const frame = directorFrame([
+      unit("a", 0, 0),
+      unit("b", 6, 0),
+      unit("c", 0, 6),
+      unit("d", 6, 6),
+      unit("far", 170, 0),
+    ]);
+    expect(frame!.guids).not.toContain("far");
+    expect(frame!.radius).toBeLessThan(5);
+    expect(Math.hypot(frame!.x - 3, frame!.z - 3)).toBeLessThan(1);
+  });
+
   it("frames a lone player", () => {
     const frame = directorFrame([unit("solo", 7, -3)]);
     expect(frame).toEqual({ x: 7, z: -3, radius: 0, guids: ["solo"] });

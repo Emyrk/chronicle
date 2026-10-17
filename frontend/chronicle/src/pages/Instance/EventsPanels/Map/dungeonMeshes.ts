@@ -120,35 +120,71 @@ export function clampToRadius<T extends GroundPoint>(point: T, centre: GroundPoi
   return { x: centre.x + dx * factor, z: centre.z + dz * factor };
 }
 
+/** A logged-height probe starts this far (yards) above the unit's feet. */
+export const LOGGED_Z_CLEARANCE_YARDS = 2.5;
+
+/**
+ * The floor under a point, from `cast` (the highest surface below a start
+ * height, null for a miss). With a logged height (`ceiling`, the probe start
+ * just above the unit's feet) it is the first surface below it, so a unit
+ * under a canopy, a roof or a bridge stands on the ground it was logged on.
+ * A miss there, or no logged height, falls back to the highest surface below
+ * `top`.
+ */
+export function floorBelow(
+  cast: (fromY: number) => number | null,
+  top: number,
+  ceiling: number | undefined,
+): number | null {
+  if (ceiling !== undefined) {
+    const hit = cast(ceiling);
+    if (hit !== null) return hit;
+  }
+  return cast(top);
+}
+
+/** The median of the defined heights, or undefined when there are none. */
+export function medianHeight(heights: Iterable<number | undefined>): number | undefined {
+  const values: number[] = [];
+  for (const height of heights) if (height !== undefined) values.push(height);
+  if (values.length === 0) return undefined;
+  values.sort((a, b) => a - b);
+  const middle = values.length >> 1;
+  return values.length % 2 === 1 ? values[middle] : (values[middle - 1] + values[middle]) / 2;
+}
+
 interface FloorHeightEntry {
   x: number;
   z: number;
+  ceiling: number | undefined;
   y: number;
 }
 
 /**
  * Floor heights under the units, from a downward probe (`sample`, null for no
- * hit) that is only re-run when a unit's ground position changes. Where there
- * is no floor the unit keeps its last height, or 0 if it never had one.
+ * hit) that is only re-run when a unit's ground position or probe start
+ * (`ceiling`, from its logged height) changes. Where there is no floor the
+ * unit keeps its last height, or 0 if it never had one.
  */
 export class FloorHeightCache {
   private readonly entries = new Map<string, FloorHeightEntry>();
-  private readonly sample: (x: number, z: number) => number | null;
+  private readonly sample: (x: number, z: number, ceiling: number | undefined) => number | null;
 
-  constructor(sample: (x: number, z: number) => number | null) {
+  constructor(sample: (x: number, z: number, ceiling: number | undefined) => number | null) {
     this.sample = sample;
   }
 
-  heightAt(key: string, x: number, z: number): number {
+  heightAt(key: string, x: number, z: number, ceiling?: number): number {
     const entry = this.entries.get(key);
-    if (entry && entry.x === x && entry.z === z) return entry.y;
-    const y = this.sample(x, z) ?? entry?.y ?? 0;
+    if (entry && entry.x === x && entry.z === z && entry.ceiling === ceiling) return entry.y;
+    const y = this.sample(x, z, ceiling) ?? entry?.y ?? 0;
     if (entry) {
       entry.x = x;
       entry.z = z;
+      entry.ceiling = ceiling;
       entry.y = y;
     } else {
-      this.entries.set(key, { x, z, y });
+      this.entries.set(key, { x, z, ceiling, y });
     }
     return y;
   }

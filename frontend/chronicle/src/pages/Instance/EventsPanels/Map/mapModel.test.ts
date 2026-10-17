@@ -356,6 +356,17 @@ describe("replayPositionAt", () => {
     expect(replayPositionAt(samples, 150)).toEqual({ timestampMs: 150, x: 2, y: 3, mapId: 1420, facing: 0.5 });
   });
 
+  it("blends a logged height like x/y and leaves it out when the log has none", () => {
+    const logged: MapPositionSample[] = [
+      { timestampMs: 0, x: 0, y: 0, z: 10, mapId: 1, facing: 0 },
+      { timestampMs: 100, x: 10, y: 0, z: 30, mapId: 1, facing: 0 },
+      { timestampMs: 200, x: 20, y: 0, mapId: 1, facing: 0 },
+    ];
+    expect(replayPositionAt(logged, 25)).toEqual({ timestampMs: 25, x: 2.5, y: 0, z: 15, mapId: 1, facing: 0 });
+    expect(replayPositionAt(logged, 150)!.z).toBe(30);
+    expect(replayPositionAt(samples, 150)).not.toHaveProperty("z");
+  });
+
   it("matches the exact sample and holds the last one", () => {
     expect(replayPositionAt(samples, 200)).toEqual({ ...samples[1] });
     expect(replayPositionAt(samples, 999)).toBe(samples[2]);

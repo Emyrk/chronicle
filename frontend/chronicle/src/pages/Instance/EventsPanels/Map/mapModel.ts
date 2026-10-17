@@ -203,13 +203,17 @@ export function replayPositionAt(
   const next = positions[index + 1];
   if (!next || next.mapId !== latest.mapId || next.timestampMs <= latest.timestampMs) return latest;
   const t = (timestampMs - latest.timestampMs) / (next.timestampMs - latest.timestampMs);
-  return {
+  const sample: MapPositionSample = {
     timestampMs,
     x: latest.x + (next.x - latest.x) * t,
     y: latest.y + (next.y - latest.y) * t,
     mapId: latest.mapId,
     facing: lerpAngle(latest.facing, next.facing, t),
   };
+  // A logged height blends like x/y; with only one side logged it holds that sample's.
+  if (latest.z !== undefined && next.z !== undefined) sample.z = latest.z + (next.z - latest.z) * t;
+  else if (latest.z !== undefined) sample.z = latest.z;
+  return sample;
 }
 
 export function selectMapEncounter(

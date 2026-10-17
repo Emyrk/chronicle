@@ -7,8 +7,10 @@ import {
   dungeonMeshLiquid,
   dungeonMeshPlacement,
   dungeonMeshUrl,
+  floorBelow,
   FloorHeightCache,
   isMeshOnlyInstance,
+  medianHeight,
   placeableDungeonMesh,
 } from "./dungeonMeshes";
 import { mapPointToScene, renderedDungeonMapPoint } from "./mapModel";
@@ -175,6 +177,48 @@ describe("clampToRadius", () => {
   });
 });
 
+describe("floorBelow", () => {
+  // A path under a canopy: ground at 0, a bridge deck at 6, the canopy at 20.
+  const surfaces = [0, 6, 20];
+  const cast = (fromY: number) => {
+    const below = surfaces.filter((y) => y <= fromY);
+    return below.length > 0 ? Math.max(...below) : null;
+  };
+  const TOP = 100;
+
+  it("stands a unit with a logged height on the first surface below it, not the roof above", () => {
+    expect(floorBelow(cast, TOP, 0 + 2.5)).toBe(0);
+    expect(floorBelow(cast, TOP, 6 + 2.5)).toBe(6);
+    expect(floorBelow(cast, TOP, 20 + 2.5)).toBe(20);
+  });
+
+  it("falls back to the highest surface when the logged probe misses", () => {
+    const probe = vi.fn(cast);
+    expect(floorBelow(probe, TOP, -10)).toBe(20);
+    expect(probe.mock.calls).toEqual([[-10], [TOP]]);
+  });
+
+  it("keeps the highest surface without a logged height", () => {
+    const probe = vi.fn(cast);
+    expect(floorBelow(probe, TOP, undefined)).toBe(20);
+    expect(probe.mock.calls).toEqual([[TOP]]);
+  });
+
+  it("misses when nothing lies below the top", () => {
+    expect(floorBelow(() => null, TOP, 3)).toBeNull();
+    expect(floorBelow(() => null, TOP, undefined)).toBeNull();
+  });
+});
+
+describe("medianHeight", () => {
+  it("takes the median of the logged heights and ignores units without one", () => {
+    expect(medianHeight([])).toBeUndefined();
+    expect(medianHeight([undefined, undefined])).toBeUndefined();
+    expect(medianHeight([5, undefined, 1, 40])).toBe(5);
+    expect(medianHeight([1, 3, undefined])).toBe(2);
+  });
+});
+
 describe("FloorHeightCache", () => {
   it("probes once per position and keeps the hit", () => {
     const sample = vi.fn((x: number, z: number) => (x > 0 ? x + z : null));
@@ -195,6 +239,17 @@ describe("FloorHeightCache", () => {
     expect(cache.heightAt("a", -1, 0)).toBe(3);
     expect(cache.heightAt("a", -1, 0)).toBe(3);
     expect(sample).toHaveBeenCalledTimes(3);
+  });
+
+  it("re-probes when the probe start changes at the same position", () => {
+    const sample = vi.fn((_x: number, _z: number, ceiling: number | undefined) => (ceiling === undefined ? 20 : Math.min(ceiling, 6)));
+    const cache = new FloorHeightCache(sample);
+    expect(cache.heightAt("a", 1, 1)).toBe(20);
+    expect(cache.heightAt("a", 1, 1, 3)).toBe(3);
+    expect(cache.heightAt("a", 1, 1, 3)).toBe(3);
+    expect(cache.heightAt("a", 1, 1, 8)).toBe(6);
+    expect(cache.heightAt("a", 1, 1)).toBe(20);
+    expect(sample.mock.calls).toEqual([[1, 1, undefined], [1, 1, 3], [1, 1, 8], [1, 1, undefined]]);
   });
 
   it("keeps units apart and forgets removed ones", () => {

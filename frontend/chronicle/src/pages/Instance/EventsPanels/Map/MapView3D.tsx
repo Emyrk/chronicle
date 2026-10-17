@@ -245,6 +245,7 @@ export default function MapView3D({
         name: marker.name,
         health: showBars ? marker.health : null,
         miniatureUrl: modelUrl,
+        z: sample.z,
       }];
     });
     scene.setUnits(units);
