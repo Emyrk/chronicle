@@ -23,15 +23,15 @@ export function InspectCards({ guids, onRemove, raidFrames, context, durationMs 
   const auras = useEmbeddedPanel({ panel: UNIT_AURAS_PANEL, context, durationMs, enabled: guids.length > 0 });
   if (guids.length === 0) return null;
   return (
-    <div aria-label="Inspected units" className="styled-scrollbar flex min-h-0 flex-col gap-1.5 overflow-y-auto">
+    <div aria-label="Inspected units" className="styled-scrollbar flex min-h-0 flex-col gap-1 overflow-y-auto">
       {guids.map((guid) => (
-        <div key={guid} className="pointer-events-auto relative flex w-60 shrink-0 flex-col gap-1.5 rounded-sm border border-black/80 bg-black/75 p-2 pr-6 text-white shadow-[0_4px_16px_rgba(0,0,0,.5)]">
+        <div key={guid} className="pointer-events-auto relative flex w-44 shrink-0 flex-col gap-1 rounded-sm border border-black/80 bg-black/75 p-1.5 text-white shadow-[0_4px_16px_rgba(0,0,0,.5)]">
           <button
             type="button"
             onClick={() => onRemove(guid)}
             title="Stop inspecting"
             aria-label="Stop inspecting"
-            className="absolute right-1 top-1 rounded p-0.5 text-white/50 hover:text-red-300"
+            className="absolute right-0.5 top-0.5 rounded p-0.5 text-white/50 hover:text-red-300"
           >
             <X className="h-3 w-3" />
           </button>

@@ -563,18 +563,18 @@ function InspectFrame({
   const dead = sample?.currentHealth === 0 && (sample?.maximumHealth ?? 0) > 0;
   const powerType = sample?.powerType ?? "";
   return (
-    <div className={`flex flex-col gap-1 ${dead ? "opacity-60" : ""}`}>
-      <div className="flex items-baseline gap-2 text-xs">
+    <div className={`flex flex-col gap-0.5 ${dead ? "opacity-60" : ""}`}>
+      <div className="flex items-baseline gap-2 pr-4 text-[11px] leading-tight">
         <span className="truncate font-semibold" style={{ color }}>{name}</span>
         {dead && <span className="text-2xs uppercase tracking-wide text-red-400">Dead</span>}
       </div>
       {sample && sample.maximumHealth > 0 ? (
-        <NameplateBar color={color} current={sample.currentHealth} max={sample.maximumHealth} absorb={sample.absorb} height="h-5 text-[11px]" />
+        <NameplateBar color={color} current={sample.currentHealth} max={sample.maximumHealth} absorb={sample.absorb} height="h-4 text-[10px]" />
       ) : (
         <div className="text-2xs text-zinc-500">No health data yet</div>
       )}
       {sample && sample.maximumPower > 0 && (
-        <NameplateBar color={POWER_COLORS[powerType] ?? "#767676"} current={sample.currentPower} max={sample.maximumPower} height="h-3.5 text-[9px]" />
+        <NameplateBar color={POWER_COLORS[powerType] ?? "#767676"} current={sample.currentPower} max={sample.maximumPower} height="h-3 text-[8px]" />
       )}
       {cast && !dead && <InspectCastBar cast={cast} timestampMs={timestampMs} />}
     </div>
@@ -591,9 +591,9 @@ function InspectCastBar({ cast, timestampMs }: { cast: RaidFrameCast; timestampM
   const durationMs = Math.max(1, cast.endMs - cast.startMs);
   const progress = percent(Math.min(durationMs, Math.max(0, displayMs - cast.startMs)), durationMs);
   return (
-    <div className="relative h-4 overflow-hidden rounded-sm border border-amber-500/40 bg-black/60">
+    <div className="relative h-3.5 overflow-hidden rounded-sm border border-amber-500/40 bg-black/60">
       <div className="absolute inset-y-0 left-0 bg-amber-500/45" style={{ width: `${cast.channel ? 100 - progress : progress}%` }} />
-      <span className="absolute inset-0 flex items-center justify-between gap-2 px-1.5 text-[10px] text-amber-100 [text-shadow:0_0_2px_#000]">
+      <span className="absolute inset-0 flex items-center justify-between gap-2 px-1 text-[9px] leading-none text-amber-100 [text-shadow:0_0_2px_#000]">
         <span className="truncate">{cast.spellName}</span>
         <span className="shrink-0 font-mono tabular-nums">{(Math.max(0, cast.endMs - displayMs) / 1000).toFixed(1)}s</span>
       </span>
