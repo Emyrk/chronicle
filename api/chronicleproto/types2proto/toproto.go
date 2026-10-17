@@ -75,13 +75,17 @@ func Heal(from time.Time, idx int32, heal *messages.Heal) *chronicleproto.Heal {
 }
 
 func UnitPosition(from time.Time, idx int32, position *messages.UnitPosition) *chronicleproto.UnitPosition {
+	var facing *float64
+	if position.HasFacing || position.Facing != 0 {
+		facing = ptr.Ref(position.Facing)
+	}
 	return &chronicleproto.UnitPosition{
 		Meta:   EventMeta(from, idx, position),
 		Unit:   position.Unit.String(),
 		X:      position.X,
 		Y:      position.Y,
 		MapId:  position.MapID,
-		Facing: position.Facing,
+		Facing: facing,
 		Z:      position.Z,
 	}
 }

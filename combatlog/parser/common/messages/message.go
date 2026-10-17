@@ -303,12 +303,13 @@ func (*Clock) isMessage()            {}
 
 type UnitPosition struct {
 	MessageBase
-	Unit   guid.GUID
-	X      float64
-	Y      float64
-	Z      *float64
-	MapID  int32
-	Facing float64
+	Unit      guid.GUID
+	X         float64
+	Y         float64
+	Z         *float64
+	MapID     int32
+	Facing    float64
+	HasFacing bool
 }
 
 func (u UnitPosition) Affects() []guid.GUID { return []guid.GUID{u.Unit} }

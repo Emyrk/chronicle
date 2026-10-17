@@ -5767,7 +5767,7 @@ export interface ReusableUnitPosition {
   y: number;
   z?: number;
   mapId: number;
-  facing: number;
+  facing?: number;
   activity: ReusableActivityEntry[];
   activityCount: number;
   isSynthetic: boolean;

@@ -91,6 +91,7 @@ describe("allActivityProcessor", () => {
       unit: "player",
       x: 1751.67,
       y: 1697.84,
+      z: -72.125,
       mapId: 1420,
       facing: 4.4674,
       activity: [],
@@ -105,7 +106,41 @@ describe("allActivityProcessor", () => {
       casterName: "Sathite",
       sourceName: "Unit Position",
       amount: 0,
-      extra: "map 1420 · (1751.67, 1697.84) · facing 4.467",
+      extra: "map 1420 · (1751.67, 1697.84, -72.13) · facing 4.467",
+      details: [
+        { label: "Map", value: "1420" },
+        { label: "X", value: "1751.67" },
+        { label: "Y", value: "1697.84" },
+        { label: "Z", value: "-72.125" },
+        { label: "Facing", value: "4.4674" },
+      ],
+    });
+  });
+
+  it("omits unavailable coordinates and facing from position snapshots", () => {
+    const state = allActivityProcessor.createState();
+    const event: UnitPositionProcessorEvent = {
+      type: "unit_position",
+      index: 1,
+      offsetMilli: 500,
+      unit: "player",
+      x: 1751.67,
+      y: 1697.84,
+      mapId: 1420,
+      activity: [],
+      activityCount: 0,
+      isSynthetic: false,
+    };
+
+    allActivityProcessor.processEvent(state, event, "encounter", new Date("2026-07-14T17:41:42.709Z"), "unit_position", createContext());
+
+    expect(state.rawEventsByStream.unit_position[0]).toMatchObject({
+      extra: "map 1420 · (1751.67, 1697.84)",
+      details: [
+        { label: "Map", value: "1420" },
+        { label: "X", value: "1751.67" },
+        { label: "Y", value: "1697.84" },
+      ],
     });
   });
 

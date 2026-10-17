@@ -7,12 +7,13 @@ import (
 )
 
 type unitPositionSnapshot struct {
-	x      float64
-	y      float64
-	z      float64
-	hasZ   bool
-	mapID  int32
-	facing float64
+	x         float64
+	y         float64
+	z         float64
+	hasZ      bool
+	mapID     int32
+	facing    float64
+	hasFacing bool
 }
 
 type unitResourcesSnapshot struct {
@@ -43,10 +44,11 @@ func (d *unitTelemetryDeduplicator) duplicate(msg messages.Message) bool {
 	switch typed := msg.(type) {
 	case *messages.UnitPosition:
 		snapshot := unitPositionSnapshot{
-			x:      typed.X,
-			y:      typed.Y,
-			mapID:  typed.MapID,
-			facing: typed.Facing,
+			x:         typed.X,
+			y:         typed.Y,
+			mapID:     typed.MapID,
+			facing:    typed.Facing,
+			hasFacing: typed.HasFacing,
 		}
 		if typed.Z != nil {
 			snapshot.z = *typed.Z
