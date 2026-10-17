@@ -7,10 +7,54 @@ export interface LiveReplayState {
   playbackSpeed: number;
 }
 
+/**
+ * Where someone is on the 3D map: their orbit camera (`position` is the
+ * camera, `target` what it looks at) or, in walk mode, their character
+ * (`position` is the feet, `target` a point ahead of it). Scene coordinates,
+ * shared only between views on the same `ground` (the dungeon mesh).
+ */
+export interface LiveMapPresence {
+  ground: string;
+  mode: "camera" | "walk";
+  position: [number, number, number];
+  target: [number, number, number];
+}
+
 export type LiveSessionDataMessage<TView = unknown> =
   | { type: "view"; view: TView }
   | { type: "replay"; replay: LiveReplayState }
-  | { type: "pointer"; participantId?: string; surfaceId?: string; x: number; y: number };
+  | { type: "pointer"; participantId?: string; surfaceId?: string; x: number; y: number }
+  | { type: "presence"; participantId?: string; presence: LiveMapPresence | null };
+
+function isVector3(value: unknown): value is [number, number, number] {
+  return Array.isArray(value) && value.length === 3 && value.every((part) => typeof part === "number" && Number.isFinite(part));
+}
+
+/** A peer's presence, or null when it is malformed (or cleared). */
+export function parseMapPresence(value: unknown): LiveMapPresence | null {
+  if (!value || typeof value !== "object") return null;
+  const { ground, mode, position, target } = value as Partial<LiveMapPresence>;
+  if (typeof ground !== "string" || ground.length === 0 || ground.length > 2048) return null;
+  if (mode !== "camera" && mode !== "walk") return null;
+  if (!isVector3(position) || !isVector3(target)) return null;
+  return { ground, mode, position: [...position], target: [...target] };
+}
+
+/** A participant's hue (degrees), shared by their cursor and their map presence. */
+export function participantHue(participantId: string): number {
+  let hash = 0;
+  for (const char of participantId) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
+  return Math.abs(hash) % 360;
+}
+
+export function participantColor(participantId: string): string {
+  return `hsl(${participantHue(participantId)} 80% 60%)`;
+}
+
+/** A participant's short name, as their cursor shows it. */
+export function participantLabel(participantId: string): string {
+  return participantId === "leader" ? "Leader" : participantId.slice(0, 6);
+}
 
 export type LiveSessionSignalPayload =
   | { description: RTCSessionDescriptionInit }

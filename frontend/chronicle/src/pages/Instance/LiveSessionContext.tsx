@@ -16,8 +16,12 @@ import {
   cursorScreenPosition,
   cursorSurfaceOffset,
   liveSessionInviteURL,
+  parseMapPresence,
+  participantColor,
+  participantLabel,
   shouldPublishParticipantReplay,
   websocketURL,
+  type LiveMapPresence,
   type LiveReplayState,
   type LiveSessionDataMessage,
   type LiveSessionServerMessage,
@@ -26,6 +30,9 @@ import {
 
 const liveSessionLeaderID = "leader";
 const MAX_SIGNAL_BYTES = 64 * 1024;
+// Peers resend their map presence every couple of seconds; one silent for
+// longer than this has left the map (or lost the connection).
+const PRESENCE_STALE_MS = 6000;
 const PEER_CONNECTION_CONFIG: RTCConfiguration = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
 };
@@ -52,7 +59,16 @@ interface LiveSessionContextValue {
   leave: () => void;
   publishView: (view: unknown) => void;
   registerViewApplier: (apply: ((view: unknown) => void) | null) => void;
+  /** Shares where you are on the 3D map with everyone else (null: not on it). */
+  publishMapPresence: (presence: LiveMapPresence | null) => void;
+  /**
+   * Everyone else's map presence, by participant, pushed on every change
+   * (without re-rendering the page). Returns the unsubscribe.
+   */
+  subscribeMapPresence: (listener: MapPresenceListener) => () => void;
 }
+
+export type MapPresenceListener = (presences: ReadonlyMap<string, LiveMapPresence>) => void;
 
 const LiveSessionContext = createContext<LiveSessionContextValue | null>(null);
 
@@ -88,12 +104,6 @@ function pointerScreenPosition(pointer: RemotePointer): { x: number; y: number }
   return cursorScreenPosition(pointer.x, pointer.y, surface.getBoundingClientRect());
 }
 
-function pointerColor(participantId: string): string {
-  let hash = 0;
-  for (const char of participantId) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
-  return `hsl(${Math.abs(hash) % 360} 80% 60%)`;
-}
-
 function RemoteCursor({ pointer, layoutVersion }: { pointer: RemotePointer; layoutVersion: number }) {
   const position = pointerScreenPosition(pointer);
   return (
@@ -104,13 +114,13 @@ function RemoteCursor({ pointer, layoutVersion }: { pointer: RemotePointer; layo
     >
       <div
         className="h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-tl-full rounded-tr-full rounded-bl-full shadow-lg"
-        style={{ backgroundColor: pointerColor(pointer.participantId) }}
+        style={{ backgroundColor: participantColor(pointer.participantId) }}
       />
       <span
         className="ml-2 rounded px-1.5 py-0.5 text-[10px] font-medium text-black shadow"
-        style={{ backgroundColor: pointerColor(pointer.participantId) }}
+        style={{ backgroundColor: participantColor(pointer.participantId) }}
       >
-        {pointer.participantId === "leader" ? "Leader" : pointer.participantId.slice(0, 6)}
+        {participantLabel(pointer.participantId)}
       </span>
     </div>
   );
@@ -153,6 +163,20 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
   const remoteViewJSONRef = useRef<string | null>(null);
   const previousReplayRef = useRef<LiveReplayState | null>(null);
   const remoteReplayJSONRef = useRef<string | null>(null);
+  const presencesRef = useRef(new Map<string, { presence: LiveMapPresence; at: number }>());
+  const presenceListenersRef = useRef(new Set<MapPresenceListener>());
+
+  const notifyPresence = useCallback(() => {
+    const presences = new Map<string, LiveMapPresence>();
+    for (const [participantId, entry] of presencesRef.current) presences.set(participantId, entry.presence);
+    for (const listener of presenceListenersRef.current) listener(presences);
+  }, []);
+
+  const setRemotePresence = useCallback((participantId: string, presence: LiveMapPresence | null) => {
+    if (presence) presencesRef.current.set(participantId, { presence, at: performance.now() });
+    else if (!presencesRef.current.delete(participantId)) return;
+    notifyPresence();
+  }, [notifyPresence]);
 
   const replayState = useMemo<LiveReplayState>(() => ({
     enabled: replayEnabled,
@@ -220,6 +244,15 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
           sendData({ type: "pointer", ...pointer }, senderID);
         }
         return;
+      } else if (message.type === "presence") {
+        const participantId = senderID ?? message.participantId;
+        if (!participantId) return;
+        const presence = parseMapPresence(message.presence);
+        setRemotePresence(participantId, presence);
+        if (currentRoleRef.current === "leader") {
+          sendData({ type: "presence", participantId, presence }, senderID);
+        }
+        return;
       } else {
         return;
       }
@@ -227,7 +260,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     } catch {
       // Ignore malformed peer messages in the proof of concept.
     }
-  }, [applyRemoteReplay, sendData]);
+  }, [applyRemoteReplay, sendData, setRemotePresence]);
 
   const configureChannel = useCallback((channel: RTCDataChannel, participantID?: string) => {
     channel.onopen = () => {
@@ -291,7 +324,11 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     pendingCandidatesRef.current.clear();
     setParticipantCount(0);
     setRemotePointers({});
-  }, []);
+    if (presencesRef.current.size > 0) {
+      presencesRef.current.clear();
+      notifyPresence();
+    }
+  }, [notifyPresence]);
 
   const connectSocket = useCallback((roomCode: string, token: string, nextRole: LiveSessionRole) => {
     closeTransport();
@@ -329,6 +366,9 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
           return next;
         });
         setParticipantCount((count) => Math.max(0, count - 1));
+        setRemotePresence(message.participant_id, null);
+        // Tell everyone else they are gone too.
+        sendData({ type: "presence", participantId: message.participant_id, presence: null });
       } else if (message.type === "session_ended") {
         pauseReplay();
         closeTransport();
@@ -379,7 +419,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
       setError("Could not connect to the live session");
       setStatus("error");
     };
-  }, [closeTransport, createLeaderPeer, ensureParticipantPeer, pauseReplay, sendSignal, setSearchParams]);
+  }, [closeTransport, createLeaderPeer, ensureParticipantPeer, pauseReplay, sendData, sendSignal, setRemotePresence, setSearchParams]);
 
   const create = useCallback(async (instanceId: string, password?: string) => {
     const response = await fetch("/api/v1/live-sessions", {
@@ -461,6 +501,35 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     applyViewRef.current = apply;
   }, []);
 
+  const publishMapPresence = useCallback((presence: LiveMapPresence | null) => {
+    if (status !== "live") return;
+    sendData({ type: "presence", ...(role === "leader" ? { participantId: liveSessionLeaderID } : {}), presence });
+  }, [role, sendData, status]);
+
+  const subscribeMapPresence = useCallback((listener: MapPresenceListener) => {
+    presenceListenersRef.current.add(listener);
+    if (presencesRef.current.size > 0) notifyPresence();
+    return () => {
+      presenceListenersRef.current.delete(listener);
+    };
+  }, [notifyPresence]);
+
+  // Drop presences that stopped arriving (their heartbeat is a couple of seconds).
+  useEffect(() => {
+    if (status !== "live") return;
+    const interval = window.setInterval(() => {
+      const now = performance.now();
+      let changed = false;
+      for (const [participantId, entry] of presencesRef.current) {
+        if (now - entry.at < PRESENCE_STALE_MS) continue;
+        presencesRef.current.delete(participantId);
+        changed = true;
+      }
+      if (changed) notifyPresence();
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [notifyPresence, status]);
+
   useEffect(() => {
     const encoded = JSON.stringify(replayState);
     if (remoteReplayJSONRef.current === encoded) {
@@ -526,7 +595,9 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     leave,
     publishView,
     registerViewApplier,
-  }), [code, create, error, inviteURL, join, leave, participantCount, publishView, registerViewApplier, role, status]);
+    publishMapPresence,
+    subscribeMapPresence,
+  }), [code, create, error, inviteURL, join, leave, participantCount, publishMapPresence, publishView, registerViewApplier, role, status, subscribeMapPresence]);
 
   return (
     <LiveSessionContext.Provider value={value}>
@@ -543,6 +614,11 @@ export function useLiveSession(): LiveSessionContextValue {
   const context = useContext(LiveSessionContext);
   if (!context) throw new Error("useLiveSession must be used within LiveSessionProvider");
   return context;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useLiveSessionOptional(): LiveSessionContextValue | null {
+  return useContext(LiveSessionContext);
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
