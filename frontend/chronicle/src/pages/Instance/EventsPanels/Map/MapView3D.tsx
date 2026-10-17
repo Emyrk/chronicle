@@ -62,7 +62,7 @@ export interface MapView3DProps {
   walking?: boolean;
   /** Called when walk mode starts or ends, including from the keyboard (G, Esc). */
   onWalkingChange?: (walking: boolean) => void;
-  /** A/D strafe and Q/E turn (a saved map setting). */
+  /** A/D strafe and Q/E turn (a saved map setting, on by default). */
   adStrafe?: boolean;
 }
 
@@ -120,7 +120,7 @@ export default function MapView3D({
   topDownKey = 0,
   walking = false,
   onWalkingChange,
-  adStrafe = false,
+  adStrafe = true,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<MapScene3D | null>(null);

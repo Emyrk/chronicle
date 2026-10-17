@@ -57,14 +57,14 @@ export function preferredMeshState(stored: boolean | null): boolean {
 const RAID_FRAMES_STORAGE_KEY = "chronicle.map.raidFrames";
 const ENEMY_FRAMES_STORAGE_KEY = "chronicle.map.enemyFrames";
 
-// A/D strafe (Q/E turn) instead of A/D turn; off unless chosen.
+// A/D strafe (Q/E turn), the default; "turn" swaps them back.
 const AD_STRAFE_STORAGE_KEY = "chronicle.map.adStrafe";
 
 function readStoredAdStrafe(): boolean {
   try {
-    return localStorage.getItem(AD_STRAFE_STORAGE_KEY) === "strafe";
+    return localStorage.getItem(AD_STRAFE_STORAGE_KEY) !== "turn";
   } catch {
-    return false;
+    return true;
   }
 }
 
