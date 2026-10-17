@@ -7,14 +7,11 @@ import { CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
 import { cn } from "@/lib/utils";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { createDamageDonePanel } from "../DamageDone/DamageDone";
-import { createDeathsPanel } from "../Deaths/Deaths";
-import type { DeathsSummaryResult } from "../Deaths/deathsSummary.processor";
 import { createHealingDonePanel } from "../HealingDone/HealingDone";
 import { useInferredRoles } from "../Roles/useInferredRoles";
 import { createUnitAurasPanel } from "../UnitAuras/UnitAuras";
 import type { PanelContext, PanelRenderProps } from "../types";
 import { useEmbeddedPanel } from "../useEmbeddedPanel";
-import { usePanelAggregation } from "../usePanelAggregation";
 import type {
   RaidFrameCast,
   RaidFrameHeal,
@@ -27,7 +24,6 @@ import { POWER_COLORS, percent, useDisplayTimestamp } from "./raidFrameShared";
 const UNIT_AURAS_PANEL = createUnitAurasPanel();
 const DAMAGE_DONE_PANEL = createDamageDonePanel("players");
 const HEALING_DONE_PANEL = createHealingDonePanel("players");
-const DEATHS_PANEL = createDeathsPanel();
 
 const ROLE_LABELS = { tank: "TANK", healer: "HEAL", dps: "DPS" } as const;
 // A health drop of at least this share of maximum health between samples is marked on the health graph.
@@ -39,10 +35,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "abilities", label: "Abilities" },
   { id: "auras", label: "Auras" },
 ];
-
-function formatAmount(amount: number): string {
-  return amount >= 10_000 ? `${(amount / 1000).toFixed(1)}k` : Math.round(amount).toLocaleString();
-}
 
 function formatClock(ms: number): string {
   const seconds = Math.max(0, Math.floor(ms / 1000));
@@ -189,19 +181,6 @@ function HealthGraph({
   );
 }
 
-function StatTiles({ stats }: { stats: { label: string; value: string; color?: string }[] }) {
-  return (
-    <div className="grid grid-cols-4 gap-px overflow-hidden rounded border border-border bg-border">
-      {stats.map((stat) => (
-        <div key={stat.label} className="flex flex-col gap-px bg-card px-2 py-1.5">
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{stat.label}</span>
-          <span className="font-mono text-[13px] tabular-nums" style={{ color: stat.color }}>{stat.value}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export interface PlayerDetailProps {
   guid: string;
   props: PanelRenderProps<RaidFramesResult>;
@@ -217,9 +196,8 @@ export interface PlayerDetailProps {
 
 /**
  * One player up close (Raid Frames with a single `u:<guid>`): health, power
- * and cast now, then tabs drawn from other panels — the Roles panel's totals,
- * Unit Auras, and Damage / Healing Done's ability breakdown — so they match
- * those panels exactly.
+ * and cast now, then tabs drawn from other panels — Unit Auras and Damage /
+ * Healing Done's ability breakdown — so they match those panels exactly.
  */
 export function PlayerDetail({
   guid,
@@ -255,11 +233,6 @@ export function PlayerDetail({
 
   const inferred = useInferredRoles(raidContext);
   const role = inferred.roles.get(guid)?.role;
-  const deaths = usePanelAggregation<DeathsSummaryResult>({ panel: DEATHS_PANEL, context: raidContext });
-  const deathCount = context.selectedEncounterIds.reduce(
-    (total, encounterId) => total + (deaths.result.EncounterDeaths.get(encounterId)?.get(guid)?.deathCount ?? 0),
-    0,
-  );
 
   const healingMode = (abilityMode ?? (role === "healer" ? "healing" : "damage")) === "healing";
   const auras = useEmbeddedPanel({
@@ -284,16 +257,6 @@ export function PlayerDetail({
   const dead = sample?.currentHealth === 0 && (sample?.maximumHealth ?? 0) > 0;
   const pendingHeal = dead ? 0 : incomingHeals.reduce((total, heal) => total + heal.amount, 0);
   const powerType = sample?.powerType ?? "";
-  const seconds = Math.max(1, durationMs / 1000);
-  const statsLoading = inferred.loading || inferred.processing;
-  const damage = inferred.totals.damageDone.get(guid) ?? 0;
-  const healing = inferred.totals.healingDone.get(guid) ?? 0;
-  const stats = [
-    { label: "DPS", value: statsLoading ? "…" : (damage / seconds).toFixed(1) },
-    { label: "HPS", value: statsLoading ? "…" : (healing / seconds).toFixed(1), color: healing > 0 ? "var(--color-school-nature)" : "var(--muted-foreground)" },
-    { label: "Taken", value: statsLoading ? "…" : formatAmount(inferred.totals.damageTaken.get(guid) ?? 0) },
-    { label: "Deaths", value: deaths.loading ? "…" : String(deathCount), color: deathCount > 0 ? "var(--destructive)" : undefined },
-  ];
 
   const orderIndex = playerOrder.indexOf(guid);
   const step = (delta: number) => {
@@ -396,7 +359,6 @@ export function PlayerDetail({
       <div className="styled-scrollbar min-h-0 flex-1 overflow-auto">
         {tab === "overview" && (
           <div className="flex flex-col gap-2 px-3 py-2">
-            <StatTiles stats={stats} />
             <HealthGraph
               samples={encounter.resourcesByUnit.get(guid) ?? []}
               encounter={encounter}

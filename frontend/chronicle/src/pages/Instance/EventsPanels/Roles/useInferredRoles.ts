@@ -135,8 +135,6 @@ export function useInferredRoles(context: PanelContext) {
     roles: inferred.roles,
     summary: getRoleSummary(inferred.roles),
     debug: inferred.debug,
-    /** The totals roles are inferred from, per player over the selected encounters. */
-    totals: { damageDone, healingDone, damageTaken },
     loading: damageTakenAgg.loading || healingDoneAgg.loading || damageDoneAgg.loading,
     processing: damageTakenAgg.processing || healingDoneAgg.processing || damageDoneAgg.processing,
     error: damageTakenAgg.error || healingDoneAgg.error || damageDoneAgg.error,
