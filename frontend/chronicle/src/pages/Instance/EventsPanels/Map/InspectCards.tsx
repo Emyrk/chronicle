@@ -1,36 +1,28 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { GripHorizontal, X } from "lucide-react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createUnitAurasPanel } from "../UnitAuras/UnitAuras";
 import type { PanelContext } from "../types";
 import { useEmbeddedPanel, type EmbeddedPanelRender } from "../useEmbeddedPanel";
 
 const UNIT_AURAS_PANEL = createUnitAurasPanel();
-const POSITION_STORAGE_KEY = "chronicle.map.inspect";
-// Starts under the raid frames (five rows of frames plus their margin).
-const DEFAULT_POSITION = { left: 8, top: 124 };
-const FRAME_WIDTH = 176;
+const BOX_WIDTH = 176;
+const GAP = 8;
+// New boxes line up under the raid frames (five rows of frames plus margin), four to a row.
+const FIRST_TOP = 124;
+const PER_ROW = 4;
+const ROW_HEIGHT = 140;
 
 interface Position {
   left: number;
   top: number;
 }
 
-function readStoredPosition(): Position {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(POSITION_STORAGE_KEY) ?? "null") as Position | null;
-    return parsed && typeof parsed.left === "number" && typeof parsed.top === "number" ? parsed : DEFAULT_POSITION;
-  } catch {
-    return DEFAULT_POSITION;
-  }
-}
-
-function storePosition(position: Position) {
-  try {
-    localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(position));
-  } catch {
-    // Storage may be unavailable; the frame still moves for this session.
-  }
+function defaultPosition(index: number): Position {
+  return {
+    left: GAP + (index % PER_ROW) * (BOX_WIDTH + GAP),
+    top: FIRST_TOP + Math.floor(index / PER_ROW) * ROW_HEIGHT,
+  };
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -40,7 +32,6 @@ function clamp(value: number, min: number, max: number): number {
 interface InspectCardsProps {
   guids: readonly string[];
   onRemove: (guid: string) => void;
-  onClear: () => void;
   /** The map's Raid Frames render (shared with its grid): health, power and casts. */
   raidFrames: EmbeddedPanelRender;
   context: PanelContext;
@@ -48,26 +39,60 @@ interface InspectCardsProps {
 }
 
 /**
- * A movable frame of inspect cards, laid over the map container (which must
- * be `relative`). Each card is the Raid Frames panel's inspect frame (health,
- * power, cast) over the Unit Auras panel's icons, drawn for `u:<guid>` from
- * one run of each panel.
+ * A movable box per inspected unit, laid over the map container (which must
+ * be `relative`): the Raid Frames panel's inspect frame (health, power, cast)
+ * over the Unit Auras panel's icons, drawn for `u:<guid>` from one run of each
+ * panel.
  */
-export function InspectCards({ guids, onRemove, onClear, raidFrames, context, durationMs }: InspectCardsProps) {
+export function InspectCards({ guids, onRemove, raidFrames, context, durationMs }: InspectCardsProps) {
   const auras = useEmbeddedPanel({ panel: UNIT_AURAS_PANEL, context, durationMs, enabled: guids.length > 0 });
   const layerRef = useRef<HTMLDivElement>(null);
-  const frameRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState(readStoredPosition);
-  const [dragging, setDragging] = useState(false);
+  // Where each box was dragged to; the rest take their slot in the line-up.
+  const [moved, setMoved] = useState<ReadonlyMap<string, Position>>(new Map());
+  if (guids.length === 0) return null;
+  return (
+    <div ref={layerRef} className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
+      {guids.map((guid, index) => (
+        <InspectBox
+          key={guid}
+          layerRef={layerRef}
+          position={moved.get(guid) ?? defaultPosition(index)}
+          onMove={(position) => setMoved((current) => new Map(current).set(guid, position))}
+          onRemove={() => onRemove(guid)}
+        >
+          {raidFrames(`u:${guid}`)}
+          {auras(`u:${guid}`)}
+        </InspectBox>
+      ))}
+    </div>
+  );
+}
+
+function InspectBox({
+  layerRef,
+  position,
+  onMove,
+  onRemove,
+  children,
+}: {
+  layerRef: RefObject<HTMLDivElement | null>;
+  position: Position;
+  onMove: (position: Position) => void;
+  onRemove: () => void;
+  children: ReactNode;
+}) {
+  const boxRef = useRef<HTMLDivElement>(null);
   const gesture = useRef<{ x: number; y: number; start: Position } | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   const clampToLayer = (next: Position): Position => {
     const layer = layerRef.current?.getBoundingClientRect();
-    const frame = frameRef.current?.getBoundingClientRect();
-    if (!layer || !frame) return next;
-    return { left: clamp(next.left, 0, layer.width - frame.width), top: clamp(next.top, 0, layer.height - Math.min(frame.height, 40)) };
+    const box = boxRef.current?.getBoundingClientRect();
+    if (!layer || !box) return next;
+    return { left: clamp(next.left, 0, layer.width - box.width), top: clamp(next.top, 0, layer.height - box.height) };
   };
 
+  // Press anywhere on the box (but its button) to drag it.
   const begin = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
     event.preventDefault();
@@ -78,71 +103,50 @@ export function InspectCards({ guids, onRemove, onClear, raidFrames, context, du
   const move = (event: ReactPointerEvent<HTMLDivElement>) => {
     const current = gesture.current;
     if (!current) return;
-    setPosition(clampToLayer({ left: current.start.left + event.clientX - current.x, top: current.start.top + event.clientY - current.y }));
+    onMove(clampToLayer({ left: current.start.left + event.clientX - current.x, top: current.start.top + event.clientY - current.y }));
   };
   const end = () => {
-    if (!gesture.current) return;
     gesture.current = null;
     setDragging(false);
-    setPosition((current) => {
-      storePosition(current);
-      return current;
-    });
   };
 
-  // Keep the frame on the map when the map shrinks.
+  // Keep the box on the map when the map shrinks.
   useEffect(() => {
     const layer = layerRef.current;
     if (!layer) return;
-    const observer = new ResizeObserver(() => setPosition((current) => {
-      const next = clampToLayer(current);
-      return next.left === current.left && next.top === current.top ? current : next;
-    }));
+    const observer = new ResizeObserver(() => {
+      const next = clampToLayer(position);
+      if (next.left !== position.left || next.top !== position.top) onMove(next);
+    });
     observer.observe(layer);
     return () => observer.disconnect();
-  }, []);
+  });
 
-  if (guids.length === 0) return null;
   return (
-    <div ref={layerRef} className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
-      <div
-        ref={frameRef}
-        role="dialog"
-        aria-label="Inspected units"
-        className="pointer-events-auto absolute flex flex-col overflow-hidden rounded-sm border border-black/80 bg-black/75 text-white shadow-[0_4px_16px_rgba(0,0,0,.5)]"
-        style={{ left: position.left, top: position.top, width: FRAME_WIDTH, maxHeight: `calc(100% - ${position.top + 8}px)` }}
+    <div
+      ref={boxRef}
+      role="dialog"
+      aria-label="Inspected unit"
+      className={cn(
+        "pointer-events-auto absolute flex flex-col gap-1 rounded-sm border border-black/80 bg-black/75 p-1.5 text-white shadow-[0_4px_16px_rgba(0,0,0,.5)]",
+        dragging ? "cursor-grabbing select-none" : "cursor-grab",
+      )}
+      style={{ left: position.left, top: position.top, width: BOX_WIDTH }}
+      onPointerDown={begin}
+      onPointerMove={move}
+      onPointerUp={end}
+      onPointerCancel={end}
+    >
+      <button
+        type="button"
+        onClick={onRemove}
+        title="Stop inspecting"
+        aria-label="Stop inspecting"
+        className="absolute right-0.5 top-0.5 z-10 rounded p-0.5 text-white/50 hover:text-red-300"
       >
-        <div
-          className={cn("flex h-5 shrink-0 items-center gap-1 border-b border-white/10 bg-white/[0.06] px-1 text-[10px] font-semibold text-white/80", dragging ? "cursor-grabbing select-none" : "cursor-grab")}
-          onPointerDown={begin}
-          onPointerMove={move}
-          onPointerUp={end}
-          onPointerCancel={end}
-        >
-          <GripHorizontal className="h-3 w-3 shrink-0 text-white/40" />
-          <span className="flex-1 truncate">Inspecting {guids.length}</span>
-          <button type="button" onClick={onClear} title="Stop inspecting all" aria-label="Stop inspecting all" className="rounded p-0.5 text-white/50 hover:text-red-300">
-            <X className="h-3 w-3" />
-          </button>
-        </div>
-        <div className="styled-scrollbar flex min-h-0 flex-col divide-y divide-white/10 overflow-y-auto">
-          {guids.map((guid) => (
-            <div key={guid} className="relative flex shrink-0 flex-col gap-1 p-1.5">
-              <button
-                type="button"
-                onClick={() => onRemove(guid)}
-                title="Stop inspecting"
-                aria-label="Stop inspecting"
-                className="absolute right-0.5 top-0.5 rounded p-0.5 text-white/50 hover:text-red-300"
-              >
-                <X className="h-3 w-3" />
-              </button>
-              {raidFrames(`u:${guid}`)}
-              {auras(`u:${guid}`)}
-            </div>
-          ))}
-        </div>
-      </div>
+        <X className="h-3 w-3" />
+      </button>
+      {children}
     </div>
   );
 }

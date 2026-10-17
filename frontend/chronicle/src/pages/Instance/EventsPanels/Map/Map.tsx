@@ -311,7 +311,6 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
         <InspectCards
           guids={inspected}
           onRemove={toggleInspected}
-          onClear={() => setInspected([])}
           raidFrames={raidFrames}
           context={props.context}
           durationMs={props.durationMs}
