@@ -234,7 +234,7 @@ export const mapProcessor: PanelProcessor<MapResult, MapProcessorEvent> = {
       x: event.x,
       y: event.y,
       mapId: event.mapId,
-      facing: event.facing,
+      facing: event.facing ?? 0,
     };
     if (event.z !== undefined) sample.z = event.z;
     positions.push(sample);

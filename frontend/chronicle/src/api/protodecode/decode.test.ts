@@ -213,6 +213,25 @@ describe('unit telemetry cursors', () => {
     });
   });
 
+  it('preserves missing optional position fields', () => {
+    const message = create(UnitPositionSchema, {
+      meta: create(EventMetaSchema, { index: 2, offsetMilli: 500n }),
+      unit: '0xUNIT',
+      x: 1751.67,
+      y: 1697.84,
+      mapId: 1420,
+    });
+    const encoded = toBinary(UnitPositionSchema, message);
+    const messageData = new Uint8Array([...encodeVarint(encoded.length), ...encoded]);
+    const payload = buildPayload('encounter', 1706000000000n, 1, messageData.length, messageData);
+
+    expect(new FastUnitPositionCursor(payload).next()).toMatchObject({
+      type: 'unit_position',
+      facing: undefined,
+      z: undefined,
+    });
+  });
+
   it('decodes unit resource snapshots', () => {
     const message = create(UnitResourcesSchema, {
       meta: create(EventMetaSchema, { index: 3, offsetMilli: 500n }),

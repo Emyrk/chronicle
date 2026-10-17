@@ -301,6 +301,7 @@ func TestParserMessages(t *testing.T) {
 		position, ok := parsed[1].(*messages.UnitPosition)
 		require.True(t, ok)
 		require.Nil(t, position.Z)
+		require.False(t, position.HasFacing)
 	})
 
 	t.Run("UnitStateWithoutPosition", func(t *testing.T) {

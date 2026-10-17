@@ -107,7 +107,7 @@ message UnitPosition {
   double x = 3;
   double y = 4;
   int32 map_id = 5;
-  double facing = 6;
+  optional double facing = 6;
   optional double z = 7;
 }
 

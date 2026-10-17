@@ -177,15 +177,19 @@ func TestUnitTelemetry(t *testing.T) {
 		Z:           &z,
 		MapID:       1420,
 		Facing:      3.14,
+		HasFacing:   true,
 	})
 	require.Equal(t, unit.String(), position.Unit)
 	require.Equal(t, 1.25, position.X)
 	require.Equal(t, -2.5, position.Y)
 	require.Equal(t, 8.25, position.GetZ())
 	require.Equal(t, int32(1420), position.MapId)
-	require.Equal(t, 3.14, position.Facing)
+	require.Equal(t, 3.14, position.GetFacing())
+	require.NotNil(t, position.Facing)
 	require.Equal(t, int32(3), position.Meta.Index)
-	require.Nil(t, UnitPosition(ts, 4, &messages.UnitPosition{MessageBase: messages.Base(ts), Unit: unit}).Z)
+	positionWithoutOptionals := UnitPosition(ts, 4, &messages.UnitPosition{MessageBase: messages.Base(ts), Unit: unit})
+	require.Nil(t, positionWithoutOptionals.Facing)
+	require.Nil(t, positionWithoutOptionals.Z)
 
 	unitLevel := int32(22)
 	resources := UnitResources(ts, 4, &messages.UnitResources{

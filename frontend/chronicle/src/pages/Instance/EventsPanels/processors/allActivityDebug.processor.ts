@@ -540,12 +540,18 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       rawEvent.extra = `${amount} populated players`;
     } else if (streamType === "unit_position") {
       const positionEvent = event as UnitPositionProcessorEvent;
-      rawEvent.extra = `map ${positionEvent.mapId} · (${positionEvent.x.toFixed(2)}, ${positionEvent.y.toFixed(2)}) · facing ${positionEvent.facing.toFixed(3)}`;
+      const coordinates = [positionEvent.x, positionEvent.y, positionEvent.z]
+        .filter((coordinate): coordinate is number => coordinate !== undefined)
+        .map((coordinate) => coordinate.toFixed(2))
+        .join(", ");
+      const facing = positionEvent.facing === undefined ? "" : ` · facing ${positionEvent.facing.toFixed(3)}`;
+      rawEvent.extra = `map ${positionEvent.mapId} · (${coordinates})${facing}`;
       rawEvent.details = [
         { label: "Map", value: positionEvent.mapId.toString() },
         { label: "X", value: positionEvent.x.toString() },
         { label: "Y", value: positionEvent.y.toString() },
-        { label: "Facing", value: positionEvent.facing.toString() },
+        ...(positionEvent.z === undefined ? [] : [{ label: "Z", value: positionEvent.z.toString() }]),
+        ...(positionEvent.facing === undefined ? [] : [{ label: "Facing", value: positionEvent.facing.toString() }]),
       ];
     } else if (streamType === "unit_resources") {
       const resourcesEvent = event as UnitResourcesProcessorEvent;

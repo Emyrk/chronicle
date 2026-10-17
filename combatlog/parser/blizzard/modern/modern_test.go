@@ -390,6 +390,7 @@ func TestParseV22UnitTelemetry(t *testing.T) {
 	assert.Equal(t, 1697.84, position.Y)
 	assert.Equal(t, int32(1420), position.MapID)
 	assert.Equal(t, 4.4674, position.Facing)
+	assert.True(t, position.HasFacing)
 	require.NotNil(t, resources)
 	assert.Equal(t, int64(18), resources.CurrentHealth)
 	assert.Equal(t, int64(42), resources.MaximumHealth)

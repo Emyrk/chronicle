@@ -93,7 +93,7 @@ export interface UnitPositionProcessorEvent extends EventMeta {
   y: number;
   z?: number;
   mapId: number;
-  facing: number;
+  facing?: number;
 }
 
 export interface UnitResourcesProcessorEvent extends EventMeta {

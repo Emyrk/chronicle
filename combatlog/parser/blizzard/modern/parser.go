@@ -230,6 +230,7 @@ func (p *Parser) unitPosition(ts time.Time, m *wotlk.Matched, _ string) ([]messa
 		Y:           y,
 		MapID:       mapID,
 		Facing:      facing,
+		HasFacing:   true,
 	}}, nil
 }
 
