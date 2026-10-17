@@ -74,6 +74,72 @@ func TestKologarnObservedAuraCleanupMarksDefeatAsSlain(t *testing.T) {
 	require.Equal(t, cleanupAt, kologarn.Periods()[0].End.Timestamp.Date())
 }
 
+func TestKologarnArmsweepStalkerIsNamedPersistentGuardian(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name         string
+		stalkerFirst bool
+	}{
+		{name: "boss first"},
+		{name: "stalker first", stalkerFirst: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			all := newKologarnTestCharacters()
+			kologarnID := kologarnVehicleGUID(32930)
+			stalkerID := creatureGUID(kologarnArmsweepStalkerEntry)
+			seen := time.Date(2026, time.June, 13, 17, 33, 52, 522000000, time.UTC)
+
+			if tc.stalkerFirst {
+				_, added := all.Add(stalkerID, seen)
+				require.True(t, added)
+				_, added = all.Add(kologarnID, seen)
+				require.True(t, added)
+			} else {
+				_, added := all.Add(kologarnID, seen)
+				require.True(t, added)
+				_, added = all.Add(stalkerID, seen)
+				require.True(t, added)
+			}
+
+			stalker, ok := all.Get(stalkerID)
+			require.True(t, ok)
+			require.IsType(t, characters.NeverActive{}, stalker)
+			require.False(t, stalker.IsActive())
+			require.Empty(t, stalker.Periods())
+
+			persist, ok := stalker.(characters.InstanceUnitPersister)
+			require.True(t, ok)
+			require.True(t, persist.PersistInInstance())
+
+			player := guid.GUID(1)
+			_, err := all.Process(&messages.Damage{
+				MessageBase: messages.Base(seen.Add(time.Second)),
+				Caster:      &stalkerID,
+				Target:      player,
+				Amount:      1,
+				HitType:     types.HitTypeHit,
+			})
+			require.NoError(t, err)
+			require.False(t, stalker.IsActive())
+			require.Empty(t, stalker.Periods())
+
+			kologarn, ok := all.Get(kologarnID)
+			require.True(t, ok)
+			require.False(t, kologarn.IsActive())
+			require.Empty(t, kologarn.Periods())
+
+			info, ok := all.DB().Get(stalkerID)
+			require.True(t, ok)
+			require.Equal(t, "Armsweep Stalker Kologarn", info.Name)
+			require.NotNil(t, info.Owner)
+			require.Equal(t, kologarnID, *info.Owner)
+		})
+	}
+}
+
 func TestKologarnAuraCleanupBelowThresholdDoesNotMarkDefeat(t *testing.T) {
 	t.Parallel()
 
@@ -116,6 +182,10 @@ func TestKologarnEncounterFactoryAcceptsVehicleEntries(t *testing.T) {
 		require.True(t, ok)
 		require.IsType(t, &kologarnCharacter{}, character)
 	}
+
+	stalker, ok := NewKologarnEncounterCharacter(creatureGUID(kologarnArmsweepStalkerEntry), all)
+	require.True(t, ok)
+	require.IsType(t, characters.NeverActive{}, stalker)
 
 	character, ok := NewKologarnEncounterCharacter(kologarnVehicleGUID(32845), all)
 	require.False(t, ok)
