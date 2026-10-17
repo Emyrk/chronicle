@@ -193,6 +193,23 @@ describe("raidFramesProcessor", () => {
     expect(recentInstantAt(instants, at(5_000), 1_000)).toBeNull();
   });
 
+  it("tracks each caster's latest non-self target", () => {
+    const state = raidFramesProcessor.createState();
+    const ctx = context();
+    const base = FIRST_TIMESTAMP.getTime();
+
+    raidFramesProcessor.processEvent(state, spellStart(), ENCOUNTER, FIRST_TIMESTAMP, "spell_start", ctx);
+    raidFramesProcessor.processEvent(state, spellStart({ offsetMilli: 2_000 }), ENCOUNTER, FIRST_TIMESTAMP, "spell_start", ctx);
+    raidFramesProcessor.processEvent(state, spellStart({ offsetMilli: 3_000, target: "enemy" }), ENCOUNTER, FIRST_TIMESTAMP, "spell_start", ctx);
+    raidFramesProcessor.processEvent(state, spellStart({ offsetMilli: 4_000, target: PLAYER }), ENCOUNTER, FIRST_TIMESTAMP, "spell_start", ctx);
+
+    const encounter = state.encounters.get(ENCOUNTER)!;
+    expect(encounter.targetsByUnit.get(PLAYER)).toHaveLength(2);
+    expect(lastTargetAt(encounter, PLAYER, base + 999)).toBeNull();
+    expect(lastTargetAt(encounter, PLAYER, base + 2_999)).toBe(OTHER_PLAYER);
+    expect(lastTargetAt(encounter, PLAYER, base + 4_000)).toBe("enemy");
+  });
+
   it("finds player heals landing inside the incoming window", () => {
     const state = raidFramesProcessor.createState();
     const ctx = context();
@@ -252,7 +269,7 @@ describe("enemyFrameUnits", () => {
     const sample = (maximumHealth: number) => ({ timestampMs: 0, currentHealth: maximumHealth, maximumHealth, absorb: 0, powerType: "mana", currentPower: 0, maximumPower: 0 });
     const encounter = {
       encounterId: ENCOUNTER, startMs: 0, endMs: 0, castsByUnit: new Map(),
-      instantsByUnit: new Map(), healsByUnit: new Map(),
+      instantsByUnit: new Map(), healsByUnit: new Map(), targetsByUnit: new Map(),
       resourcesByUnit: new Map([
         [PLAYER, [sample(4_000)]],
         ["pet", [sample(1_000)]],
