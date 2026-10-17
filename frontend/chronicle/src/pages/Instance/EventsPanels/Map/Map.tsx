@@ -2,7 +2,7 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Crosshair, Focus, HeartPulse, Map as MapIcon, Maximize, Route, Users } from "lucide-react";
+import { Crosshair, Focus, HeartPulse, Map as MapIcon, Maximize, Route, Users } from "lucide-react";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { fetchMiniatureUrls } from "./bossMinis";
@@ -24,7 +24,7 @@ import { EmbeddedPanel } from "../EmbeddedPanel";
 import { createRaidFramesPanel } from "../RaidFrames/RaidFrames";
 import { MAP_CONTROL_KEYBINDS } from "./mapControls";
 import { MeterWindows } from "./MeterWindows";
-import { spawnMeterWindow, useMeterWindows } from "./meterWindowsState";
+import { useMeterWindows } from "./meterWindowsState";
 import { useMapScene } from "./useMapScene";
 import { encounterJumps, mapPresentationForSelection } from "./wholeRun";
 
@@ -181,15 +181,6 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
           Fit
         </button>
       )}
-      <button
-        type="button"
-        onClick={() => setMeterWindows((current) => [...current, spawnMeterWindow(current, props.context.instance.capabilities ?? [])])}
-        title="Open a meter window (Damage Done, Healing Done, …)"
-        className={framingButtonClass}
-      >
-        <BarChart3 className="h-3 w-3" />
-        Meter
-      </button>
       <button
         type="button"
         aria-pressed={showRaidFrames}

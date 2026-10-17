@@ -28,6 +28,18 @@ export function MeterWindows({ windows, onChange, context, durationMs }: MeterWi
   }, [onChange]);
   return (
     <div ref={containerRef} className="pointer-events-none absolute inset-0 z-40 overflow-hidden">
+      {/* With no meters open, a "+" in the corner the first one opens in. */}
+      {windows.length === 0 && (
+        <button
+          type="button"
+          onClick={() => onChange((current) => [...current, spawnMeterWindow(current, context.instance.capabilities ?? [])])}
+          title="Open a meter (Damage Done, Healing Done, …)"
+          aria-label="Open a meter"
+          className="pointer-events-auto absolute bottom-2 right-2 grid h-7 w-7 place-items-center rounded-sm border border-black/80 bg-black/75 text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-white"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+      )}
       {windows.map((window) => (
         <MeterWindowFrame
           key={window.id}
