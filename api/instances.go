@@ -88,13 +88,15 @@ func (api *API) InstanceEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The conversion to another type is pretty expensive, just use the type as is
+	// The conversion to another type is pretty expensive, just use the type as is.
 	w.Header().Set("Content-Type", "application/octet-stream")
-	if httpmw.InstancePrivate(ctx) {
-		w.Header().Set("Cache-Control", "private, no-store")
-	} else if httpmw.InstanceByID(ctx) {
-		// Public instance IDs are immutable UUIDs.
-		w.Header().Set("Cache-Control", "public, max-age=315360000")
+	if httpmw.InstanceByID(ctx) {
+		// UUID event URLs are immutable, unlisted cache keys. Their response is
+		// intentionally public even when the containing log is private.
+		w.Header().Set("Cache-Control", "public, max-age=15552000") // 180 days
+	} else {
+		// Slugs are not stable cache keys.
+		w.Header().Set("Cache-Control", "no-store")
 	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(evts.Events)

@@ -10908,6 +10908,57 @@ func (q *sqlQuerier) InstanceBySlug(ctx context.Context, hashedSlug pgtype.Text)
 	return i, err
 }
 
+const instanceBySlugWithPrivacy = `-- name: InstanceBySlugWithPrivacy :one
+SELECT log_instances_guild.id, log_instances_guild.realm_id, log_instances_guild.log_group_id, log_instances_guild.name, log_instances_guild.hashed_slug, log_instances_guild.guild_id, log_instances_guild.capabilities, log_instances_guild.versions, log_instances_guild.recorder_name, log_instances_guild.recorder_guid, log_instances_guild.duplicate_group_id, log_instances_guild.start_time, log_instances_guild.end_time, log_instances_guild.difficulty_name, log_instances_guild.max_players, log_instances_guild.dynamic_difficulty, log_instances_guild.vehicle_control_intervals, log_instances_guild.invalidated_at, log_instances_guild.invalid_reason, log_instances_guild.realm_name, log_instances_guild.guild_name, log_instances_guild.guild_realm_id, log_instances_guild.guild_created_at, log_instances_guild.server_name, log_instances_guild.tenant_name, log_instances_guild.tenant_slug, log_instances_guild.tenant_include_in_all, log_instances_guild.format, log_instances_guild.flavor, wow_log_groups.private
+FROM log_instances_guild
+JOIN wow_log_groups ON wow_log_groups.id = log_instances_guild.log_group_id
+WHERE log_instances_guild.hashed_slug = $1
+  AND log_instances_guild.hashed_slug != ''
+`
+
+type InstanceBySlugWithPrivacyRow struct {
+	LogInstancesGuild LogInstancesGuild `db:"log_instances_guild" json:"log_instances_guild"`
+	Private           bool              `db:"private" json:"private"`
+}
+
+func (q *sqlQuerier) InstanceBySlugWithPrivacy(ctx context.Context, hashedSlug pgtype.Text) (InstanceBySlugWithPrivacyRow, error) {
+	row := q.db.QueryRow(ctx, instanceBySlugWithPrivacy, hashedSlug)
+	var i InstanceBySlugWithPrivacyRow
+	err := row.Scan(
+		&i.LogInstancesGuild.ID,
+		&i.LogInstancesGuild.RealmID,
+		&i.LogInstancesGuild.LogGroupID,
+		&i.LogInstancesGuild.Name,
+		&i.LogInstancesGuild.HashedSlug,
+		&i.LogInstancesGuild.GuildID,
+		&i.LogInstancesGuild.Capabilities,
+		&i.LogInstancesGuild.Versions,
+		&i.LogInstancesGuild.RecorderName,
+		&i.LogInstancesGuild.RecorderGuid,
+		&i.LogInstancesGuild.DuplicateGroupID,
+		&i.LogInstancesGuild.StartTime,
+		&i.LogInstancesGuild.EndTime,
+		&i.LogInstancesGuild.DifficultyName,
+		&i.LogInstancesGuild.MaxPlayers,
+		&i.LogInstancesGuild.DynamicDifficulty,
+		&i.LogInstancesGuild.VehicleControlIntervals,
+		&i.LogInstancesGuild.InvalidatedAt,
+		&i.LogInstancesGuild.InvalidReason,
+		&i.LogInstancesGuild.RealmName,
+		&i.LogInstancesGuild.GuildName,
+		&i.LogInstancesGuild.GuildRealmID,
+		&i.LogInstancesGuild.GuildCreatedAt,
+		&i.LogInstancesGuild.ServerName,
+		&i.LogInstancesGuild.TenantName,
+		&i.LogInstancesGuild.TenantSlug,
+		&i.LogInstancesGuild.TenantIncludeInAll,
+		&i.LogInstancesGuild.Format,
+		&i.LogInstancesGuild.Flavor,
+		&i.Private,
+	)
+	return i, err
+}
+
 const instancePlayerGUIDsByInstanceID = `-- name: InstancePlayerGUIDsByInstanceID :many
 SELECT unit_guid FROM log_instance_players WHERE instance_id = $1
 `
@@ -11097,6 +11148,56 @@ func (q *sqlQuerier) InstanceUnitsByInstanceID(ctx context.Context, instanceID u
 		return nil, err
 	}
 	return items, nil
+}
+
+const instanceWithPrivacy = `-- name: InstanceWithPrivacy :one
+SELECT log_instances_guild.id, log_instances_guild.realm_id, log_instances_guild.log_group_id, log_instances_guild.name, log_instances_guild.hashed_slug, log_instances_guild.guild_id, log_instances_guild.capabilities, log_instances_guild.versions, log_instances_guild.recorder_name, log_instances_guild.recorder_guid, log_instances_guild.duplicate_group_id, log_instances_guild.start_time, log_instances_guild.end_time, log_instances_guild.difficulty_name, log_instances_guild.max_players, log_instances_guild.dynamic_difficulty, log_instances_guild.vehicle_control_intervals, log_instances_guild.invalidated_at, log_instances_guild.invalid_reason, log_instances_guild.realm_name, log_instances_guild.guild_name, log_instances_guild.guild_realm_id, log_instances_guild.guild_created_at, log_instances_guild.server_name, log_instances_guild.tenant_name, log_instances_guild.tenant_slug, log_instances_guild.tenant_include_in_all, log_instances_guild.format, log_instances_guild.flavor, wow_log_groups.private
+FROM log_instances_guild
+JOIN wow_log_groups ON wow_log_groups.id = log_instances_guild.log_group_id
+WHERE log_instances_guild.id = $1
+`
+
+type InstanceWithPrivacyRow struct {
+	LogInstancesGuild LogInstancesGuild `db:"log_instances_guild" json:"log_instances_guild"`
+	Private           bool              `db:"private" json:"private"`
+}
+
+func (q *sqlQuerier) InstanceWithPrivacy(ctx context.Context, id uuid.UUID) (InstanceWithPrivacyRow, error) {
+	row := q.db.QueryRow(ctx, instanceWithPrivacy, id)
+	var i InstanceWithPrivacyRow
+	err := row.Scan(
+		&i.LogInstancesGuild.ID,
+		&i.LogInstancesGuild.RealmID,
+		&i.LogInstancesGuild.LogGroupID,
+		&i.LogInstancesGuild.Name,
+		&i.LogInstancesGuild.HashedSlug,
+		&i.LogInstancesGuild.GuildID,
+		&i.LogInstancesGuild.Capabilities,
+		&i.LogInstancesGuild.Versions,
+		&i.LogInstancesGuild.RecorderName,
+		&i.LogInstancesGuild.RecorderGuid,
+		&i.LogInstancesGuild.DuplicateGroupID,
+		&i.LogInstancesGuild.StartTime,
+		&i.LogInstancesGuild.EndTime,
+		&i.LogInstancesGuild.DifficultyName,
+		&i.LogInstancesGuild.MaxPlayers,
+		&i.LogInstancesGuild.DynamicDifficulty,
+		&i.LogInstancesGuild.VehicleControlIntervals,
+		&i.LogInstancesGuild.InvalidatedAt,
+		&i.LogInstancesGuild.InvalidReason,
+		&i.LogInstancesGuild.RealmName,
+		&i.LogInstancesGuild.GuildName,
+		&i.LogInstancesGuild.GuildRealmID,
+		&i.LogInstancesGuild.GuildCreatedAt,
+		&i.LogInstancesGuild.ServerName,
+		&i.LogInstancesGuild.TenantName,
+		&i.LogInstancesGuild.TenantSlug,
+		&i.LogInstancesGuild.TenantIncludeInAll,
+		&i.LogInstancesGuild.Format,
+		&i.LogInstancesGuild.Flavor,
+		&i.Private,
+	)
+	return i, err
 }
 
 const isParsedLogGroupVisible = `-- name: IsParsedLogGroupVisible :one
