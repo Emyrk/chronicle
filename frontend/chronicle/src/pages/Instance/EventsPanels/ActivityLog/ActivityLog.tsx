@@ -29,6 +29,8 @@ const FILTERS: { value: ActivityFilter; label: string; title: string }[] = [
 ];
 const FILTER_PREFIX = "f:";
 const HEAL_COLOR = "var(--color-school-nature)";
+const CRIT_COLOR = "#facc15";
+const OVERHEAL_COLOR = "#71717a";
 
 function parseFilter(panelOption: string | null | undefined): ActivityFilter | null {
   const token = (panelOption ?? "").split(",").find((part) => part.startsWith(FILTER_PREFIX))?.slice(FILTER_PREFIX.length);
@@ -159,8 +161,17 @@ function ActivityRow({
     case "heal":
       what = <>{source}{spell}<Arrow />{target}</>;
       amount = (
-        <span className={cn("shrink-0 tabular-nums", line.crit && "font-bold")} style={{ color: heal ? HEAL_COLOR : undefined }}>
-          {heal ? "+" : ""}{line.amount.toLocaleString()}{line.crit ? "*" : ""}
+        <span className="shrink-0 tabular-nums">
+          <span
+            className={cn(line.crit && "font-bold")}
+            // Crits in yellow; a heal that restored nothing in grey.
+            style={{ color: line.crit ? CRIT_COLOR : heal && line.amount === 0 ? OVERHEAL_COLOR : heal ? HEAL_COLOR : undefined }}
+          >
+            {heal ? "+" : ""}{line.amount.toLocaleString()}{line.crit ? "*" : ""}
+          </span>
+          {heal && line.overheal > 0 && (
+            <span style={{ color: OVERHEAL_COLOR }}> ({line.overheal.toLocaleString()} oh)</span>
+          )}
         </span>
       );
       break;
