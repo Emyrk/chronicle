@@ -50,17 +50,13 @@ describe("activity filters", () => {
   const line = (overrides: Partial<ActivityEntry>): ActivityEntry => ({
     timestampMs: 0, kind: "damage", source: PLAYER, target: BOSS, spellId: null, spellName: "", amount: 1, overheal: 0, crit: false, school: 0, isBuff: false, ...overrides,
   });
-  const isPlayer = (guid: string) => guid === PLAYER;
 
-  it("highlights crits, deaths, interrupts, resurrects and enemy casts", () => {
-    expect(activityMatches(line({ crit: true }), "highlights", isPlayer)).toBe(true);
-    expect(activityMatches(line({}), "highlights", isPlayer)).toBe(false);
-    expect(activityMatches(line({ kind: "death" }), "highlights", isPlayer)).toBe(true);
-    expect(activityMatches(line({ kind: "cast", source: BOSS }), "highlights", isPlayer)).toBe(true);
-    expect(activityMatches(line({ kind: "cast", source: PLAYER }), "highlights", isPlayer)).toBe(false);
-    expect(activityMatches(line({ kind: "aura_fade" }), "auras", isPlayer)).toBe(true);
-    // A pet is friendly: its casts are not enemy casts.
-    expect(activityMatches(line({ kind: "cast", source: "pet" }), "highlights", (guid) => guid === PLAYER || guid === "pet")).toBe(false);
+  it("matches entries to their tab", () => {
+    expect(activityMatches(line({}), "all")).toBe(true);
+    expect(activityMatches(line({}), "damage")).toBe(true);
+    expect(activityMatches(line({}), "healing")).toBe(false);
+    expect(activityMatches(line({ kind: "aura_fade" }), "auras")).toBe(true);
+    expect(activityMatches(line({ kind: "cast" }), "casts")).toBe(true);
   });
 
   it("returns the newest matching entries at or before the cursor, newest first", () => {

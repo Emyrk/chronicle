@@ -20,7 +20,6 @@ import {
 } from "./activityLog.processor";
 
 const FILTERS: { value: ActivityFilter; label: string; title: string }[] = [
-  { value: "highlights", label: "Highlights", title: "Crits, deaths, interrupts, resurrects and enemy casts" },
   { value: "all", label: "All", title: "Everything" },
   { value: "damage", label: "Damage", title: "Damage that landed" },
   { value: "healing", label: "Healing", title: "Heals" },
@@ -60,7 +59,7 @@ function formatClock(ms: number): string {
 function ActivityLogContent(props: PanelRenderProps<ActivityLogResult>) {
   const overlay = props.variant === "overlay";
   const sync = useSyncModeContextOptional();
-  const [filter, setFilterState] = useState<ActivityFilter>(() => parseFilter(props.panelOption) ?? "highlights");
+  const [filter, setFilterState] = useState<ActivityFilter>(() => parseFilter(props.panelOption) ?? "all");
   const setFilter = (next: ActivityFilter) => {
     setFilterState(next);
     props.setPanelOption?.(`${FILTER_PREFIX}${next}`);
@@ -71,10 +70,8 @@ function ActivityLogContent(props: PanelRenderProps<ActivityLogResult>) {
   const players = props.context.instance.players ?? {};
   const units = props.context.instance.units ?? {};
   const ownerOf = (guid: string) => units[guid]?.owner?.toString();
-  // Players and their pets: not enemies.
-  const isFriendly = (guid: string) => Boolean(players[guid]) || Boolean(players[ownerOf(guid) ?? ""]);
   const rows = encounter
-    ? recentActivity(encounter.entries, cursorMs ?? encounter.endMs, overlay ? 40 : 150, (line) => activityMatches(line, filter, isFriendly))
+    ? recentActivity(encounter.entries, cursorMs ?? encounter.endMs, overlay ? 40 : 150, (line) => activityMatches(line, filter))
     : [];
 
   const nameOf = (guid: string) => players[guid]?.name ?? units[guid]?.name ?? (guid ? "Unknown" : "");

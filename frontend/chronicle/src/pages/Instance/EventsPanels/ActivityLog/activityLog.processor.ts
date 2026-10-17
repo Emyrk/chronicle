@@ -138,23 +138,16 @@ export const activityLogProcessor: PanelProcessor<ActivityLogResult, ActivityLog
   },
 };
 
-export type ActivityFilter = "highlights" | "all" | "damage" | "healing" | "auras" | "casts";
+export type ActivityFilter = "all" | "damage" | "healing" | "auras" | "casts";
 
-/**
- * Whether an entry belongs under a tab. Highlights are what a viewer wants to
- * notice: crits, deaths, resurrects, interrupts and enemy casts (`isFriendly`:
- * players and their pets are not enemies).
- */
-export function activityMatches(line: ActivityEntry, filter: ActivityFilter, isFriendly: (guid: string) => boolean): boolean {
+/** Whether an entry belongs under a tab. */
+export function activityMatches(line: ActivityEntry, filter: ActivityFilter): boolean {
   switch (filter) {
     case "all": return true;
     case "damage": return line.kind === "damage";
     case "healing": return line.kind === "heal";
     case "auras": return line.kind === "aura_gain" || line.kind === "aura_fade";
     case "casts": return line.kind === "cast";
-    case "highlights":
-      return line.crit || line.kind === "death" || line.kind === "resurrect" || line.kind === "interrupt"
-        || (line.kind === "cast" && line.source !== "" && !isFriendly(line.source));
   }
 }
 
