@@ -1637,22 +1637,23 @@ function EncounterDetail({
       <Tabs value={activeTab} onValueChange={(v) => {
         setActiveTab(v as 'enemies' | 'players');
         setIsEntityPanelOpen(true);
-      }} className="mb-3">
-        <Collapsible open={isEntityPanelOpen} onOpenChange={setIsEntityPanelOpen}>
+      }} className="mb-3 flex items-stretch gap-3">
+        {!focused && onShowSidebar && (
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={onShowSidebar}
+            title="Show encounter sidebar"
+            aria-label="Show encounter sidebar"
+            className="h-auto w-11 shrink-0 self-stretch border-primary/30 bg-card text-primary shadow-sm hover:border-primary/60 hover:bg-primary/5 hover:text-primary"
+          >
+            <PanelLeft className="h-5 w-5" />
+          </Button>
+        )}
+        <Collapsible className="min-w-0 flex-1" open={isEntityPanelOpen} onOpenChange={setIsEntityPanelOpen}>
           <Card className={isMobile ? "p-3 gap-2" : "p-4"} data-help-entity-panel>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                {!focused && onShowSidebar && (
-                  <button
-                    type="button"
-                    onClick={onShowSidebar}
-                    title="Show sidebar"
-                    className="flex shrink-0 items-center rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  >
-                    <PanelLeft className="h-4 w-4" />
-                    <span className="sr-only">Show sidebar</span>
-                  </button>
-                )}
                 <TabsList>
                   <TabsTrigger value="enemies" className="gap-1.5">
                     <Skull className="h-4 w-4" />
