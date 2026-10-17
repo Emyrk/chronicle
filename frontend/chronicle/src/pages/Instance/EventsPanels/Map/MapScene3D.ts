@@ -188,6 +188,9 @@ const KEY_ZOOM_SPEED = 1.2;
 const KEY_MAX_STEP_S = 0.1;
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
+const ORBIT_NEAR = 0.5;
+const ORBIT_FAR = 2000;
+
 // --- Walk mode ("join the fight"): a WoW-style character on the mesh floor ---
 // Speeds and sizes in yards (seconds), scaled by the mesh's scene units per yard.
 const WALK_RUN_YPS = 14;
@@ -207,6 +210,11 @@ const WALK_LOOK_RADIANS_PER_PX = 0.006;
 const WALK_PITCH_LIMIT = 1.35;
 const WALK_START_PITCH = 0.35;
 const WALK_EXIT_DISTANCE_YARDS = 30;
+// The orbit camera's near plane (0.5 scene units, several yards on the mesh)
+// would clip the floor at your feet, leaving the bottom of the view black, so
+// walking pulls it in close and the far plane with it, for depth precision.
+const WALK_NEAR_YARDS = 0.1;
+const WALK_FAR_YARDS = 3000;
 // A click inspects a unit unless the pointer moved this far (a drag) or a
 // double-click follows within this long.
 const UNIT_CLICK_SLOP_PX = 5;
@@ -399,7 +407,7 @@ function createUnitGeometries(): Record<MapMarkerKind | "cone", THREE.BufferGeom
 export class MapScene3D {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
-  private readonly camera = new THREE.PerspectiveCamera(45, 1, 0.5, 2000);
+  private readonly camera = new THREE.PerspectiveCamera(45, 1, ORBIT_NEAR, ORBIT_FAR);
   private readonly controls: OrbitControls;
   private readonly resizeObserver: ResizeObserver;
   private readonly raycaster = new THREE.Raycaster();
@@ -2462,6 +2470,9 @@ export class MapScene3D {
       avatar,
     };
     this.controls.enabled = false;
+    this.camera.near = WALK_NEAR_YARDS * mesh.scale;
+    this.camera.far = WALK_FAR_YARDS * mesh.scale;
+    this.camera.updateProjectionMatrix();
     this.onWalkChange(true);
     this.requestRender();
   }
@@ -2483,6 +2494,9 @@ export class MapScene3D {
       walk.position.z + Math.cos(walk.camYaw) * Math.cos(pitch) * distance,
     );
     this.controls.enabled = true;
+    this.camera.near = ORBIT_NEAR;
+    this.camera.far = ORBIT_FAR;
+    this.camera.updateProjectionMatrix();
     this.controls.update();
     this.constrainCamera();
     this.updateUnitScale();
