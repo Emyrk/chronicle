@@ -160,13 +160,11 @@ function HealthGraph({
     const x = (ms: number) => ((ms - encounter.startMs) / spanMs) * 300;
     const y = (share: number) => 62 - share * 58;
     let line = "";
-    let lowest = 1;
     const spikes: { left: number; title: string }[] = [];
     let previous: RaidFrameResourceSample | null = null;
     for (const sample of samples) {
       if (sample.maximumHealth <= 0) continue;
       const share = sample.currentHealth / sample.maximumHealth;
-      lowest = Math.min(lowest, share);
       line += line ? ` H${x(sample.timestampMs).toFixed(1)} V${y(share).toFixed(1)}` : `M0 ${y(share).toFixed(1)}`;
       const drop = previous ? previous.currentHealth - sample.currentHealth : 0;
       if (drop >= SPIKE_SHARE * sample.maximumHealth) {
@@ -179,7 +177,7 @@ function HealthGraph({
       previous = sample;
     }
     if (line) line += " H300";
-    return { line, area: line ? `${line} V64 H0 Z` : "", lowest, spikes };
+    return { line, area: line ? `${line} V64 H0 Z` : "", spikes };
   }, [samples, encounter.startMs, spanMs]);
 
   const cursorShare = cursorMs === null ? null : percent(cursorMs - encounter.startMs, spanMs);
@@ -187,7 +185,6 @@ function HealthGraph({
     <div className="flex flex-col gap-1.5">
       <SectionLabel>
         <span>Health over fight</span>
-        {graph.line && <span className="font-mono tracking-normal">low {Math.round(graph.lowest * 100)}%</span>}
       </SectionLabel>
       <div className="relative h-9 overflow-hidden rounded-sm bg-[#1d1d1d]">
         <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-white/[.08]" />
