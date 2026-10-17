@@ -49,7 +49,7 @@ func TestParseUnitInfo(t *testing.T) {
 				Seen:         time.Date(2026, 1, 17, 19, 54, 44, 0, time.UTC),
 				Guid:         0xF130001CF827932C,
 				IsPlayer:     false,
-				Name:         "Mana Spring Totem IV",
+				Name:         "Mana Spring Totem",
 				CanCooperate: true,
 				Owner:        ptr.Ref(guid.GUID(0x000000000007C4E9)),
 				Buffs: []unitinfo.Buff{

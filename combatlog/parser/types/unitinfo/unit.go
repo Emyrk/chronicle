@@ -98,13 +98,9 @@ func ParseUnitInfo(ri *realmclock.Info, content string) (Info, error) {
 		ownerID = &id
 	}
 
-	// This feels a bit jank, but the WoW `UnitName` function can return "Unknown".
-	// Unsure why, but when it does that name will be propagated up. In some cases,
-	// if we know it is not a player, and it has an entry ID, we can fix the name
-	// here. Maintaining a list of seen "unknowns" hopefully does not get that large.
-	if name == "Unknown" && !gid.IsPlayer() && unitname.ByGUID(gid) != "" {
-		name = unitname.ByGUID(gid)
-	}
+	// UnitName can return "Unknown", and totem names can include redundant rank
+	// suffixes even though the rank is already represented by the entry ID.
+	name = unitname.Canonicalize(gid, name)
 
 	info := Info{
 		Seen:         seen,

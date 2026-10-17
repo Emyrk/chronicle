@@ -30,6 +30,10 @@ func creatureGUID(entry uint32, seed uint32) guid.GUID {
 	return guid.GUID(0xF130000000000000 | uint64(entry&0xFFFFFF)<<24 | uint64(seed&0xFFFFFF))
 }
 
+func objectGUID(entry uint32, seed uint32) guid.GUID {
+	return guid.GUID(0xF110000000000000 | uint64(entry&0xFFFFFF)<<24 | uint64(seed&0xFFFFFF))
+}
+
 const finalizeTestBossEntry uint32 = 900001
 
 type finalizeLifecycleHook struct {
@@ -296,20 +300,25 @@ func TestFinalizeIncludesNamedNeverActiveUnitsForPersistence(t *testing.T) {
 	require.Equal(t, []guid.GUID{sifID}, result.PersistedUnits)
 }
 
-func TestFinalizePersistsUnitInfoPetsWithoutChangingCharacterFallback(t *testing.T) {
+func TestFinalizePersistsOwnedUnitInfoWithoutChangingCharacterFallback(t *testing.T) {
 	t.Parallel()
 
 	db := unitdb.New()
 	idf := identifier.NewIdentifier(map[uint32]identifier.Identity{})
 	chars := characters.NewCharacters(db, nil, idf)
 	petID := guid.GUID(0xF1400234DC000005)
+	totemID := creatureGUID(7424, 1)
+	trapID := objectGUID(164839, 1)
+	unownedID := creatureGUID(12345, 1)
 	ownerID := guid.GUID(0x000000003B9BC56F)
-	db.Update(unitinfo.Info{
-		Guid:         petID,
-		Name:         "Sproutling",
-		CanCooperate: true,
-		Owner:        &ownerID,
-	})
+	for _, info := range []unitinfo.Info{
+		{Guid: petID, Name: "Sproutling", CanCooperate: true, Owner: &ownerID},
+		{Guid: totemID, Name: "Fire Resistance Totem", CanCooperate: true, Owner: &ownerID},
+		{Guid: trapID, Name: "Explosive Trap", CanCooperate: true, Owner: &ownerID},
+		{Guid: unownedID, Name: "Unowned Creature"},
+	} {
+		db.Update(info)
+	}
 
 	char, added := chars.Add(petID, time.Time{})
 	require.True(t, added)
@@ -322,7 +331,7 @@ func TestFinalizePersistsUnitInfoPetsWithoutChangingCharacterFallback(t *testing
 	}
 	result, err := h.Finalize(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, []guid.GUID{petID}, result.PersistedUnits)
+	require.Equal(t, []guid.GUID{trapID, totemID, petID}, result.PersistedUnits)
 	require.False(t, char.IsActive())
 }
 
