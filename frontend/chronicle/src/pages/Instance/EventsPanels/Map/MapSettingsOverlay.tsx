@@ -14,6 +14,8 @@ export interface MapSettingsOverlayProps {
   hasEffects: boolean;
   raidFrames: boolean;
   onRaidFrames: (shown: boolean) => void;
+  enemyFrames: boolean;
+  onEnemyFrames: (shown: boolean) => void;
   /** The "3D map" dungeon mesh, when the instance has one. */
   mesh: { on: boolean; locked: boolean; loading: boolean; onToggle: () => void } | null;
   floors: { list: number[]; value: number | null; onChange: (floor: number) => void } | null;
@@ -32,6 +34,8 @@ export function MapSettingsOverlay({
   hasEffects,
   raidFrames,
   onRaidFrames,
+  enemyFrames,
+  onEnemyFrames,
   mesh,
   floors,
   onTopDown,
@@ -65,6 +69,7 @@ export function MapSettingsOverlay({
 
         <Section title="Overlays">
           <Toggle label="Raid frames" detail="Every player's health, power and casts" checked={raidFrames} onChange={onRaidFrames} />
+          <Toggle label="Enemy frames" detail="Every enemy in the encounter, bosses first" checked={enemyFrames} onChange={onEnemyFrames} />
         </Section>
 
         {show3D && (

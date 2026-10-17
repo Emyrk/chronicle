@@ -2,7 +2,7 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Crosshair, Focus, HeartPulse, Map as MapIcon, Maximize, Route, Settings2, Users, X } from "lucide-react";
+import { Crosshair, Focus, HeartPulse, Map as MapIcon, Maximize, Route, Settings2, Skull, Users, X } from "lucide-react";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { fetchMiniatureUrls } from "./bossMinis";
@@ -54,18 +54,19 @@ export function preferredMeshState(stored: boolean | null): boolean {
 }
 
 const RAID_FRAMES_STORAGE_KEY = "chronicle.map.raidFrames";
+const ENEMY_FRAMES_STORAGE_KEY = "chronicle.map.enemyFrames";
 
-function readStoredRaidFrames(): boolean {
+function readStoredShown(key: string): boolean {
   try {
-    return localStorage.getItem(RAID_FRAMES_STORAGE_KEY) !== "hidden";
+    return localStorage.getItem(key) !== "hidden";
   } catch {
     return true;
   }
 }
 
-function storeRaidFrames(shown: boolean) {
+function storeShown(key: string, shown: boolean) {
   try {
-    localStorage.setItem(RAID_FRAMES_STORAGE_KEY, shown ? "shown" : "hidden");
+    localStorage.setItem(key, shown ? "shown" : "hidden");
   } catch {
     // Storage may be unavailable; the choice still applies for this session.
   }
@@ -124,10 +125,15 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   [fitZoom, focusCentre]);
   const autoFit = ready?.autoFit ?? null;
   const defaultViewport = ready?.fitByDefault && autoFit ? autoFit : FULL_MAP_VIEWPORT;
-  const [showRaidFrames, setShowRaidFramesState] = useState(readStoredRaidFrames);
+  const [showRaidFrames, setShowRaidFramesState] = useState(() => readStoredShown(RAID_FRAMES_STORAGE_KEY));
   const setShowRaidFrames = (shown: boolean) => {
     setShowRaidFramesState(shown);
-    storeRaidFrames(shown);
+    storeShown(RAID_FRAMES_STORAGE_KEY, shown);
+  };
+  const [showEnemyFrames, setShowEnemyFramesState] = useState(() => readStoredShown(ENEMY_FRAMES_STORAGE_KEY));
+  const setShowEnemyFrames = (shown: boolean) => {
+    setShowEnemyFramesState(shown);
+    storeShown(ENEMY_FRAMES_STORAGE_KEY, shown);
   };
   const [meterWindows, setMeterWindows] = useMeterWindows();
   // Display settings and the settings overlay that sets them (all kept in local storage).
@@ -145,7 +151,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
     panel: RAID_FRAMES_PANEL,
     context: props.context,
     durationMs: props.durationMs,
-    enabled: showRaidFrames || inspected.length > 0,
+    enabled: showRaidFrames || showEnemyFrames || inspected.length > 0,
   });
   const [storedFraming, setFraming] = useState<MapFraming>(INITIAL_MAP_FRAMING);
   // A new selection or replay moving into another encounter re-frames;
@@ -290,6 +296,33 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               </button>
             )}
           </div>
+          {/* Top-right, left of the settings button: the same panel's enemy frames. */}
+          <div className="pointer-events-none absolute right-11 top-2 z-30 flex max-w-[calc(100%-4rem)] justify-end">
+            {showEnemyFrames ? (
+              <div className="group/enemy flex max-w-full items-start gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => setShowEnemyFrames(false)}
+                  title="Hide enemy frames"
+                  aria-label="Hide enemy frames"
+                  className="pointer-events-auto grid h-4 w-4 shrink-0 place-items-center rounded-sm bg-black/75 text-white/60 opacity-0 transition-opacity hover:text-white focus-visible:opacity-100 group-hover/enemy:opacity-100"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+                <div className="min-w-0 overflow-hidden">{raidFrames("enemies")}</div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowEnemyFrames(true)}
+                title="Show enemy frames"
+                aria-label="Show enemy frames"
+                className="pointer-events-auto grid h-7 w-7 place-items-center rounded-sm border border-black/80 bg-black/75 text-red-300/80 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-red-200"
+              >
+                <Skull className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </UnitInspectContext.Provider>
         <button
           type="button"
@@ -309,6 +342,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
             hasEffects={Boolean(scene.effects)}
             raidFrames={showRaidFrames}
             onRaidFrames={setShowRaidFrames}
+            enemyFrames={showEnemyFrames}
+            onEnemyFrames={setShowEnemyFrames}
             mesh={show3D && meshUrl ? { on: meshWanted, locked: meshOnly, loading: Boolean(dungeonMesh) && meshState === "loading", onToggle: toggleMesh } : null}
             floors={scene.floors.length > 1 ? { list: scene.floors, value: scene.selectedFloorNumber, onChange: scene.setFloorNumber } : null}
             onTopDown={() => setTopDownKey((key) => key + 1)}

@@ -10,6 +10,7 @@ import type { PanelDefinition, PanelRenderProps } from "../types";
 import {
   activeCastAt,
   incomingHealsAt,
+  enemyFrameUnits,
   latestResourceAt,
   orderRaidFramePlayers,
   raidFramesProcessor,
@@ -601,6 +602,9 @@ function InspectCastBar({ cast, timestampMs }: { cast: RaidFrameCast; timestampM
   );
 }
 
+/** Panel option token for enemy raid frames. */
+const ENEMIES_OPTION = "enemies";
+
 function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
   const sync = useSyncModeContextOptional();
   const overlay = props.variant === "overlay";
@@ -648,15 +652,36 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
       </div>
     );
   }
-  const players = Object.entries(props.context.instance.players ?? {})
-    .sort(([, left], [, right]) => left.class.localeCompare(right.class) || left.name.localeCompare(right.name));
+  // Enemies mode (`enemies` in the panel option): the encounter's enemies
+  // instead of the players, coloured as enemies.
+  const enemiesMode = (props.panelOption ?? "").split(",").includes(ENEMIES_OPTION);
+  const instancePlayers = props.context.instance.players ?? {};
+  const units = props.context.instance.units ?? {};
+  // The encounter's own enemy list: who counts, and who is a boss.
+  const encounterEnemies = props.context.instance.encounters.find((candidate) => candidate.id === encounter.encounterId)?.enemies ?? [];
+  const bossGuids = new Set(encounterEnemies.filter((enemy) => enemy.boss).map((enemy) => enemy.id));
+  const encounterEnemyGuids = new Set(encounterEnemies.map((enemy) => enemy.id));
+  const players: (readonly [string, { name: string; class: string }])[] = enemiesMode
+    ? enemyFrameUnits(
+        encounter,
+        (guid) => Boolean(instancePlayers[guid]),
+        (guid) => units[guid]?.owner?.toString() ?? null,
+        (guid) => units[guid]?.name ?? guid,
+        bossGuids,
+        encounterEnemyGuids,
+      ).map(({ guid, name }) => [guid, { name, class: "enemy" }] as const)
+    : Object.entries(instancePlayers)
+      .sort(([, left], [, right]) => left.class.localeCompare(right.class) || left.name.localeCompare(right.name));
   if (players.length === 0) {
-    return overlay ? null : <PanelMessage title="No players" detail="This log does not list any players for the selected encounter." />;
+    return overlay ? null : enemiesMode
+      ? <PanelMessage title="No enemies" detail="The selected encounter has no enemy health data." />
+      : <PanelMessage title="No players" detail="This log does not list any players for the selected encounter." />;
   }
 
   // Raid groups (the Raid Composition panel's layout) when the log has them;
   // null entries pad a group so the next starts its own column.
-  const frameData = orderRaidFramePlayers(players, props.result.composition.groups).map((entry) => entry && ({
+  const ordered = enemiesMode ? players : orderRaidFramePlayers(players, props.result.composition.groups);
+  const frameData = ordered.map((entry) => entry && ({
     guid: entry[0],
     player: entry[1],
     sample: latestResourceAt(encounter.resourcesByUnit.get(entry[0]) ?? [], timestampMs),
@@ -668,7 +693,7 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
     // Columns of five like the in-game raid frames; the host positions it.
     return (
       <TooltipProvider>
-        <div aria-label="Raid frames" className="pointer-events-none grid grid-flow-col grid-rows-[repeat(5,auto)] gap-0.5">
+        <div aria-label={enemiesMode ? "Enemy frames" : "Raid frames"} className="pointer-events-none grid grid-flow-col grid-rows-[repeat(5,auto)] gap-0.5">
           {frameData.map((frame, index) => frame === null ? <div key={`empty-${index}`} aria-hidden /> : (
             <OverlayRaidFrame
               key={frame.guid}

@@ -297,3 +297,35 @@ export function orderRaidFramePlayers<T>(
   }
   return ordered;
 }
+
+/**
+ * The encounter's enemies for enemy raid frames: units with health data that
+ * are neither players nor players' pets, and, when the encounter lists its
+ * enemies (`allowed`), on that list (logs record health for every unit in
+ * sight, not only the fight's). Bosses first, then the largest maximum
+ * health, then name.
+ */
+export function enemyFrameUnits(
+  encounter: RaidFramesEncounter,
+  isPlayer: (guid: string) => boolean,
+  ownerOf: (guid: string) => string | null | undefined,
+  nameOf: (guid: string) => string,
+  bossGuids: ReadonlySet<string>,
+  allowed?: ReadonlySet<string>,
+): { guid: string; name: string }[] {
+  const enemies: { guid: string; name: string; maxHealth: number; boss: boolean }[] = [];
+  for (const [guid, samples] of encounter.resourcesByUnit) {
+    if (isPlayer(guid)) continue;
+    if (allowed && allowed.size > 0 && !allowed.has(guid)) continue;
+    const owner = ownerOf(guid);
+    if (owner && isPlayer(owner)) continue;
+    const maxHealth = samples.reduce((max, sample) => Math.max(max, sample.maximumHealth), 0);
+    if (maxHealth <= 0) continue;
+    enemies.push({ guid, name: nameOf(guid), maxHealth, boss: bossGuids.has(guid) });
+  }
+  return enemies
+    .sort((left, right) => Number(right.boss) - Number(left.boss)
+      || right.maxHealth - left.maxHealth
+      || left.name.localeCompare(right.name))
+    .map(({ guid, name }) => ({ guid, name }));
+}

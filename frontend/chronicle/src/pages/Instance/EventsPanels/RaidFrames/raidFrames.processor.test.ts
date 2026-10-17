@@ -8,6 +8,7 @@ import type {
   UnitResourcesProcessorEvent,
 } from "../processorTypes";
 import {
+  enemyFrameUnits,
   orderRaidFramePlayers,
   activeCastAt,
   incomingHealsAt,
@@ -214,3 +215,32 @@ describe("orderRaidFramePlayers", () => {
     ]);
   });
 });
+
+describe("enemyFrameUnits", () => {
+  it("lists non-player, non-pet units with health, bosses first then by maximum health", () => {
+    const sample = (maximumHealth: number) => ({ timestampMs: 0, currentHealth: maximumHealth, maximumHealth, absorb: 0, powerType: "mana", currentPower: 0, maximumPower: 0 });
+    const encounter = {
+      encounterId: ENCOUNTER, startMs: 0, endMs: 0, castsByUnit: new Map(), healsByUnit: new Map(),
+      resourcesByUnit: new Map([
+        [PLAYER, [sample(4_000)]],
+        ["pet", [sample(1_000)]],
+        ["add-small", [sample(5_000)]],
+        ["add-big", [sample(20_000)]],
+        ["boss", [sample(10_000)]],
+        ["no-health", [sample(0)]],
+      ]),
+    };
+    const units = enemyFrameUnits(
+      encounter,
+      (guid) => guid === PLAYER,
+      (guid) => (guid === "pet" ? PLAYER : null),
+      (guid) => guid,
+      new Set(["boss"]),
+    );
+    expect(units.map((unit) => unit.guid)).toEqual(["boss", "add-big", "add-small"]);
+    // With the encounter's enemy list, units outside it are left out.
+    expect(enemyFrameUnits(encounter, (guid) => guid === PLAYER, () => null, (guid) => guid, new Set(), new Set(["add-small"]))
+      .map((unit) => unit.guid)).toEqual(["add-small"]);
+  });
+});
+
