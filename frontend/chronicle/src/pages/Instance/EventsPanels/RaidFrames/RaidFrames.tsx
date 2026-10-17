@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view helpers intentionally share this module. */
-import { useState, type ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { RadioTower, Users } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
@@ -322,7 +322,8 @@ function RaidFrame({
     <Tooltip>
       <TooltipTrigger asChild>
         <div
-          className={`min-w-0 overflow-hidden rounded-sm border border-border/60 bg-muted/30 ${dead ? "opacity-50 grayscale" : ""} ${onClick ? "cursor-pointer hover:border-foreground/40" : ""} ${selected ? "border-foreground/60 ring-1 ring-foreground/30" : ""}`}
+          className={`min-w-0 overflow-hidden rounded-sm border border-border/60 bg-muted/30 ${dead ? "opacity-50 grayscale" : ""} ${onClick ? "cursor-pointer hover:border-foreground/40" : ""} ${selected ? "ring-2 ring-inset" : ""}`}
+          style={selected ? { "--tw-ring-color": classColor } as CSSProperties : undefined}
           onClick={onClick && ((event) => onClick(event.currentTarget))}
         >
           <CastBar cast={cast} timestampMs={timestampMs} />

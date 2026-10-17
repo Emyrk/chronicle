@@ -10,12 +10,14 @@ import { useInferredRoles } from "../Roles/useInferredRoles";
 import { createUnitAurasPanel } from "../UnitAuras/UnitAuras";
 import type { PanelContext, PanelRenderProps } from "../types";
 import { useEmbeddedPanel } from "../useEmbeddedPanel";
-import type {
-  RaidFrameCast,
-  RaidFrameHeal,
-  RaidFrameResourceSample,
-  RaidFramesEncounter,
-  RaidFramesResult,
+import {
+  recentInstantAt,
+  type RaidFrameCast,
+  type RaidFrameHeal,
+  type RaidFrameInstantCast,
+  type RaidFrameResourceSample,
+  type RaidFramesEncounter,
+  type RaidFramesResult,
 } from "./raidFrames.processor";
 import { POWER_COLORS, percent, useDisplayTimestamp } from "./raidFrameShared";
 
@@ -74,30 +76,67 @@ function ValueBar({
   );
 }
 
-function CastRow({ cast, timestampMs }: { cast: RaidFrameCast | null; timestampMs: number }) {
+// How long an instant cast stays in the cast row, flashing then fading out.
+const INSTANT_FADE_MS = 1_200;
+const INSTANT_FLASH_MS = 250;
+
+function CastRow({
+  cast,
+  instants,
+  timestampMs,
+}: {
+  cast: RaidFrameCast | null;
+  instants: readonly RaidFrameInstantCast[];
+  timestampMs: number;
+}) {
   const displayMs = useDisplayTimestamp(timestampMs);
   const durationMs = cast ? Math.max(1, cast.endMs - cast.startMs) : 1;
   const progress = cast ? percent(Math.min(durationMs, Math.max(0, displayMs - cast.startMs)), durationMs) : 0;
+  // With no cast in progress, the latest instant cast flashes in and fades away.
+  const instant = cast ? null : recentInstantAt(instants, displayMs, INSTANT_FADE_MS);
+  const instantAgeMs = instant ? displayMs - instant.atMs : 0;
+  const instantOpacity = instant ? 1 - instantAgeMs / INSTANT_FADE_MS : 0;
+  const flashOpacity = instant ? Math.max(0, 1 - instantAgeMs / INSTANT_FLASH_MS) : 0;
+  const spellId = cast?.spellId ?? instant?.spellId ?? null;
   return (
-    <div className="flex h-[30px] items-center gap-2 rounded border border-border bg-popover pl-1 pr-2">
-      {cast ? (
-        <SpellIdTooltip spellId={cast.spellId} name="" size={22} loadOnHover className="shrink-0" />
-      ) : (
-        <div className="size-[22px] shrink-0 rounded-sm bg-[#141414]" />
+    <div className="relative flex h-[30px] items-center gap-2 overflow-hidden rounded border border-border bg-popover pl-1 pr-2">
+      {flashOpacity > 0 && (
+        <div className="pointer-events-none absolute inset-0 bg-amber-200" style={{ opacity: 0.35 * flashOpacity }} />
       )}
+      <div className="size-[22px] shrink-0 rounded-sm bg-[#141414]">
+        {spellId !== null && (
+          <div style={{ opacity: instant ? instantOpacity : 1 }}>
+            <SpellIdTooltip spellId={spellId} name="" size={22} loadOnHover className="shrink-0" />
+          </div>
+        )}
+      </div>
       <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
         <div className="flex min-w-0 justify-between gap-2 text-[11px]">
-          <span className={cn("truncate", cast ? "text-amber-200" : "text-muted-foreground")}>
-            {cast ? `${cast.channel ? "Channeling" : "Casting"} ${cast.spellName}` : "Not casting"}
-          </span>
+          {instant ? (
+            <span className="truncate text-amber-200" style={{ opacity: instantOpacity }}>{instant.spellName}</span>
+          ) : (
+            <span className={cn("truncate", cast ? "text-amber-200" : "text-muted-foreground")}>
+              {cast ? `${cast.channel ? "Channeling" : "Casting"} ${cast.spellName}` : "Not casting"}
+            </span>
+          )}
           {cast && (
             <span className="shrink-0 font-mono tabular-nums text-muted-foreground">
               {(Math.max(0, cast.endMs - displayMs) / 1000).toFixed(1)}s
             </span>
           )}
+          {instant && (
+            <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground" style={{ opacity: instantOpacity }}>
+              Instant
+            </span>
+          )}
         </div>
         <div className="h-[3px] overflow-hidden rounded-sm bg-[#141414]">
-          <div className="h-full bg-amber-400" style={{ width: `${cast?.channel ? 100 - progress : progress}%` }} />
+          <div
+            className="h-full bg-amber-400"
+            style={instant
+              ? { width: "100%", opacity: instantOpacity }
+              : { width: `${cast?.channel ? 100 - progress : progress}%` }}
+          />
         </div>
       </div>
     </div>
@@ -233,7 +272,10 @@ export function PlayerDetail({
   };
 
   return (
-    <div className="flex w-[400px] max-w-full flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
+    <div
+      className="flex w-[400px] max-w-full flex-col overflow-hidden rounded-lg border-2 bg-card shadow-[0_8px_32px_rgba(0,0,0,.6)]"
+      style={{ borderColor: color }}
+    >
       <div className="flex shrink-0 cursor-grab items-center gap-2.5 border-b border-border bg-muted/30 px-3 py-2" data-drag-handle>
         <img
           src={specialization?.iconUrl ?? `/c/icons/class_${(player?.class ?? "unknown").toLowerCase()}.png`}
@@ -305,7 +347,7 @@ export function PlayerDetail({
             />
           )}
         </div>
-        <CastRow cast={dead ? null : cast} timestampMs={timestampMs} />
+        <CastRow cast={dead ? null : cast} instants={dead ? [] : encounter.instantsByUnit.get(guid) ?? []} timestampMs={timestampMs} />
       </div>
 
       <div className="styled-scrollbar max-h-[var(--incoming-events-body-height)] overflow-y-auto border-t border-border">
