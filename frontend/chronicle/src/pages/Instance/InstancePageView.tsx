@@ -1637,7 +1637,7 @@ function EncounterDetail({
       <Tabs value={activeTab} onValueChange={(v) => {
         setActiveTab(v as 'enemies' | 'players');
         setIsEntityPanelOpen(true);
-      }} className="mb-3 flex items-stretch gap-3">
+      }} className="mb-3 flex-row items-start gap-3">
         {!focused && onShowSidebar && (
           <Button
             variant="outline"
@@ -1645,7 +1645,7 @@ function EncounterDetail({
             onClick={onShowSidebar}
             title="Show encounter sidebar"
             aria-label="Show encounter sidebar"
-            className="h-auto w-11 shrink-0 self-stretch border-primary/30 bg-card text-primary shadow-sm hover:border-primary/60 hover:bg-primary/5 hover:text-primary"
+            className={cn("shrink-0 bg-card text-foreground shadow-sm hover:text-foreground", isMobile ? "mt-[13px]" : "mt-[17px]")}
           >
             <PanelLeft className="h-5 w-5" />
           </Button>
