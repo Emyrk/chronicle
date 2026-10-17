@@ -36,6 +36,7 @@ import {
   INTERRUPTED_ICON_MS,
   INTERRUPTED_PLAYER_ICON_MS,
   isDeadAt,
+  MAX_EFFECT_PRIMITIVES,
   type ActiveEffect,
   type CastIcon,
   type CombatText,
@@ -50,7 +51,7 @@ export const GROUND_WIDTH = 100;
 const MUTED_OPACITY = 0.28;
 const LABEL_HEIGHT = 5;
 /** Primitive pool size for each effect kind; also the derivation cap's ceiling. */
-export const MAX_EFFECT_PRIMITIVES = 64;
+export { MAX_EFFECT_PRIMITIVES };
 // Never run the effect clock further ahead of the last replay tick (real time).
 const MAX_EXTRAPOLATE_MS = 250;
 const BEAM_HEIGHT = 1.5;
@@ -876,6 +877,13 @@ export class MapScene3D {
   /** Re-frames the current viewport straight down (`topDown`) or angled. */
   resetCamera(topDown: boolean) {
     this.viewAnimation = null;
+    // Asking for top-down takes the camera from the Director, as a drag does;
+    // Follow (a new viewport request) hands it back.
+    if (topDown) {
+      this.directorPaused = true;
+      this.directorRunning = false;
+      this.cameraMove = null;
+    }
     this.placeCamera(this.viewport, (topDown ? TOP_DOWN_OFFSET : ANGLED_OFFSET).clone().normalize());
   }
 

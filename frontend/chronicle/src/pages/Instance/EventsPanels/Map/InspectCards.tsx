@@ -125,7 +125,7 @@ function InspectBox({
   return (
     <div
       ref={boxRef}
-      role="dialog"
+      role="region"
       aria-label="Inspected unit"
       className={cn(
         "pointer-events-auto absolute flex flex-col gap-1 rounded-sm border border-black/80 bg-black/75 p-1.5 text-white shadow-[0_4px_16px_rgba(0,0,0,.5)]",

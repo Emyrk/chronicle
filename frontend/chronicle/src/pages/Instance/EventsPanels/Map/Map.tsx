@@ -2,7 +2,7 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Crosshair, Focus, HeartPulse, Map as MapIcon, Maximize, Route, Users, X } from "lucide-react";
+import { Crosshair, Focus, HeartPulse, Map as MapIcon, Maximize, Route, Settings2, Users, X } from "lucide-react";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { fetchMiniatureUrls } from "./bossMinis";
@@ -27,6 +27,8 @@ import { createRaidFramesPanel } from "../RaidFrames/RaidFrames";
 import { MAP_CONTROL_KEYBINDS } from "./mapControls";
 import { MeterWindows } from "./MeterWindows";
 import { useMeterWindows } from "./meterWindowsState";
+import { MapSettingsOverlay } from "./MapSettingsOverlay";
+import { useEffectSettings } from "./mapViewSettings";
 import { useMapScene } from "./useMapScene";
 import { encounterJumps, mapPresentationForSelection } from "./wholeRun";
 
@@ -128,6 +130,10 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
     storeRaidFrames(shown);
   };
   const [meterWindows, setMeterWindows] = useMeterWindows();
+  // Display settings and the settings overlay that sets them (all kept in local storage).
+  const [effectSettings, updateEffectSettings] = useEffectSettings();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [topDownKey, setTopDownKey] = useState(0);
   // Units picked for a closer look: click them on the map or in the raid frames.
   const [inspected, setInspected] = useState<string[]>([]);
   const toggleInspected = useCallback((guid: string) => {
@@ -184,16 +190,6 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
     <div className="flex min-w-0 shrink-0 items-center gap-2 text-[10px] text-muted-foreground">
       {!scene.overlayAvailable && <span className="text-amber-300/80">position overlay unavailable</span>}
       <span className="flex items-center gap-1"><Users className="h-3 w-3" />{scene.markers.length}</span>
-      {scene.floors.length > 1 && (
-        <select
-          aria-label="Map floor"
-          value={scene.selectedFloorNumber ?? ""}
-          onChange={(event) => scene.setFloorNumber(Number(event.target.value))}
-          className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground [color-scheme:dark]"
-        >
-          {scene.floors.map((floor) => <option key={floor} value={floor}>Floor {floor}</option>)}
-        </select>
-      )}
       {canFollow ? (
         <button
           type="button"
@@ -228,21 +224,6 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
           Overview
         </button>
       )}
-      {show3D && meshUrl && (
-        <button
-          type="button"
-          aria-pressed={meshWanted}
-          disabled={meshOnly}
-          onClick={toggleMesh}
-          title={meshOnly
-            ? "This instance has no map artwork; the real dungeon mesh is all there is to show"
-            : "Stand the units on the real dungeon mesh instead of the map tiles"}
-          className={`${framingButtonClass} ${meshWanted ? "bg-primary/20 text-foreground disabled:opacity-100" : ""}`}
-        >
-          3D map
-          {dungeonMesh && meshState === "loading" && <span className="font-normal text-muted-foreground">loading cave…</span>}
-        </button>
-      )}
     </div>
   );
 
@@ -274,6 +255,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               focus={focus}
               cinematic={cinematic}
               onUnitClick={toggleInspected}
+              effectSettings={effectSettings}
+              topDownKey={topDownKey}
             />
           </Suspense>
         )}
@@ -308,6 +291,29 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
             )}
           </div>
         </UnitInspectContext.Provider>
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(true)}
+          title="Map settings"
+          aria-label="Map settings"
+          className="absolute right-2 top-2 z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 bg-black/75 text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-white"
+        >
+          <Settings2 className="h-4 w-4" />
+        </button>
+        {settingsOpen && (
+          <MapSettingsOverlay
+            onClose={() => setSettingsOpen(false)}
+            effectSettings={effectSettings}
+            onEffectSettings={updateEffectSettings}
+            show3D={show3D}
+            hasEffects={Boolean(scene.effects)}
+            raidFrames={showRaidFrames}
+            onRaidFrames={setShowRaidFrames}
+            mesh={show3D && meshUrl ? { on: meshWanted, locked: meshOnly, loading: Boolean(dungeonMesh) && meshState === "loading", onToggle: toggleMesh } : null}
+            floors={scene.floors.length > 1 ? { list: scene.floors, value: scene.selectedFloorNumber, onChange: scene.setFloorNumber } : null}
+            onTopDown={() => setTopDownKey((key) => key + 1)}
+          />
+        )}
         <InspectCards
           guids={inspected}
           onRemove={toggleInspected}

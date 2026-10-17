@@ -134,7 +134,8 @@ function MeterWindowFrame({
   const meter = METER_PANELS[window.meter];
   return (
     <div
-      role="dialog"
+      // A floating panel, not a modal dialog (focus mode's Esc ignores open dialogs).
+      role="region"
       aria-label={`${meter.label} meter`}
       className={cn(
         "pointer-events-auto absolute flex flex-col overflow-hidden rounded-sm border border-black/80 bg-black/75 text-white shadow-[0_4px_16px_rgba(0,0,0,.5)] backdrop-blur-[2px]",

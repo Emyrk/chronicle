@@ -5,6 +5,13 @@
  * re-derives the same frame and never leaves stale effects behind.
  */
 
+/**
+ * Most effect primitives (beams, bolts, slashes, rings) the 3D scene draws at
+ * once; also the top "density" setting. Here, not in MapScene3D, so settings
+ * code can use it without loading three.js.
+ */
+export const MAX_EFFECT_PRIMITIVES = 64;
+
 export type ReplayEffectKind = "damage" | "heal" | "cast_start" | "cast_go" | "interrupt" | "slain" | "resurrect";
 
 /**
