@@ -1,5 +1,6 @@
 import type { UserPanelLayout } from "@/api/queries";
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
+import { normalizeGroupedLayoutItems } from "@/components/layout/layoutGroups";
 import type { EventsPanelType } from "@/pages/Instance/EventsPanels";
 import type { PanelFilter } from "@/pages/Instance/EventsPanels/processors/filters";
 import {
@@ -7,10 +8,7 @@ import {
   DEFAULT_INSTANCE_PANEL_TYPES,
 } from "@/pages/Instance/viewDefaults";
 
-/**
- * How a layout is laid out, stored as top-level flags in the layout JSON. Not
- * offered in the UI yet; set by presets or by hand in the JSON.
- */
+/** Appearance options stored as top-level flags in the layout JSON. */
 export interface LayoutAppearance {
   /** Butt panels and strips together with no gaps or rounding. */
   seamless?: boolean;
@@ -52,7 +50,7 @@ export function serializeLayoutLab(
 
   const payload: LayoutLabExportV1 = {
     version: 1,
-    items,
+    items: normalizeGroupedLayoutItems(items),
     panelTypesById,
     ...(filteredPanelOptions && Object.keys(filteredPanelOptions).length > 0
       ? { panelOptionsById: filteredPanelOptions }
@@ -76,7 +74,7 @@ export function parseLayoutLab(raw: string): LayoutLabExportV1 {
 
   return {
     version: 1,
-    items: parsed.items,
+    items: normalizeGroupedLayoutItems(parsed.items),
     panelTypesById: parsed.panelTypesById as Record<string, EventsPanelType>,
     panelOptionsById: parsed.panelOptionsById && typeof parsed.panelOptionsById === "object"
       ? parsed.panelOptionsById as Record<string, string>
