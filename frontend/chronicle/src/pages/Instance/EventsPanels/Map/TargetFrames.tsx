@@ -3,6 +3,9 @@ import { Pin, X } from "lucide-react";
 import type { EmbeddedPanelRender } from "../useEmbeddedPanel";
 
 const FRAME_WIDTH = 176;
+// The target's target hangs off the target frame's right, a little lower,
+// smaller and without auras, as WoW draws it.
+const TARGET_OF_TARGET_WIDTH = 120;
 
 interface TargetFramesProps {
   /** The clicked unit (WoW's target), or null. */
@@ -19,38 +22,50 @@ interface TargetFramesProps {
 }
 
 /**
- * WoW-style target frames over the map: the target fixed just left of centre and
- * its target just right of it (a gap for the fight between), drawn by the same panels as the inspect boxes
- * (Raid Frames' inspect frame over Unit Auras) but on the map itself, with no
+ * WoW-style target frames over the map: the target fixed just left of
+ * centre, below the middle, and its target hanging off its right, drawn by
+ * the same panels as the inspect boxes (Raid Frames' inspect frame over Unit
+ * Auras; the target's target without auras) but on the map itself, with no
  * box behind them. The pin turns one into a movable inspect box.
  */
 export function TargetFrames({ target, targetOfTarget, raidFrames, auras, onPin, onClear }: TargetFramesProps) {
   if (!target) return null;
   return (
-    <>
-      <TargetFrame label="Target" className="right-1/2 mr-20" onPin={() => onPin(target)} onClear={onClear}>
-        {raidFrames(`u:${target}`)}
-        {auras(`u:${target}`)}
-      </TargetFrame>
+    <TargetFrame
+      label="Target"
+      className="right-1/2 top-[65%] z-30 mr-20 -translate-y-1/2"
+      width={FRAME_WIDTH}
+      onPin={() => onPin(target)}
+      onClear={onClear}
+    >
+      {raidFrames(`u:${target}`)}
+      {auras(`u:${target}`)}
       {targetOfTarget && (
-        <TargetFrame label="Target's target" className="left-1/2 ml-20" onPin={() => onPin(targetOfTarget)}>
+        <TargetFrame
+          label="Target's target"
+          className="left-full top-6 ml-2"
+          width={TARGET_OF_TARGET_WIDTH}
+          onPin={() => onPin(targetOfTarget)}
+        >
           {raidFrames(`u:${targetOfTarget}`)}
-          {auras(`u:${targetOfTarget}`)}
         </TargetFrame>
       )}
-    </>
+    </TargetFrame>
   );
 }
 
 function TargetFrame({
   label,
   className,
+  width,
   onPin,
   onClear,
   children,
 }: {
   label: string;
+  /** Where the frame sits (it is absolutely positioned). */
   className: string;
+  width: number;
   onPin: () => void;
   onClear?: () => void;
   children: ReactNode;
@@ -59,8 +74,8 @@ function TargetFrame({
     <div
       role="region"
       aria-label={label}
-      className={`absolute top-[65%] z-30 flex -translate-y-1/2 flex-col gap-1 text-white [text-shadow:0_0_2px_#000,0_0_3px_#000,0_1px_2px_#000] ${className}`}
-      style={{ width: FRAME_WIDTH }}
+      className={`absolute flex flex-col gap-1 text-white [text-shadow:0_0_2px_#000,0_0_3px_#000,0_1px_2px_#000] ${className}`}
+      style={{ width }}
     >
       <div className="absolute right-0 top-0 z-10 flex gap-0.5">
         <button
