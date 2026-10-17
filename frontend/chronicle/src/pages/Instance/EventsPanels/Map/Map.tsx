@@ -351,6 +351,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               livePresence={livePresence}
               unitRoles={unitRoles}
               frozen={reloading}
+              debuffSpellIds={ready.debuffSpellIds}
             />
           </Suspense>
         )}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSpell } from "@/api/queries";
 import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 import { useDatasetId } from "@/hooks/useDatasetId";
@@ -9,6 +9,7 @@ import { useSmoothReplayTime } from "../RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../RotationTimeline/useSpellMeta";
 import { miniatureUrl } from "./bossMinis";
 import type { MapPositionSample } from "./map.processor";
+import { DISPEL_KINDS, DISPEL_ORDER, type DispelKind } from "./unitTokenArt";
 import { prefersReducedMotion, replayPositionAt, VIEW_TRANSITION_MS, type MapPoint, type MapViewport } from "./mapModel";
 import {
   MapScene3D,
@@ -72,12 +73,16 @@ export interface MapView3DProps {
   livePresence?: MapLivePresence | null;
   /** The target frames' units: halos for the selected chain and pins, and target lines. */
   unitRoles?: MapUnitRoles | null;
+  /** Every debuff spell on a player in the encounter: their dispel types tint the tokens. */
+  debuffSpellIds?: readonly number[];
   /**
    * The next fight is loading: keep drawing the last one (units, effects,
    * mesh) as it was instead of tearing the scene down, until fresh props arrive.
    */
   frozen?: boolean;
 }
+
+const NO_DEBUFFS: readonly number[] = [];
 
 const NO_ROLES: MapUnitRoles = { selected: null, target: null, targetsTarget: null, pinned: new Set() };
 
@@ -147,6 +152,7 @@ export default function MapView3D({
   livePresence = null,
   unitRoles = null,
   frozen = false,
+  debuffSpellIds = NO_DEBUFFS,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<MapScene3D | null>(null);
@@ -160,6 +166,13 @@ export default function MapView3D({
   const [effectHover, setEffectHover] = useState<MapScene3DEffectHover | null>(null);
   // A player's token shows their spec's icon when their talents give one, else their class's.
   const specializations = usePlayerSpecializations();
+  // The dispel type of each debuff (from its spell data), to tint debuffed players.
+  const { meta: debuffMeta } = useSpellMeta(debuffSpellIds);
+  const dispelOf = useCallback((spellIds: readonly number[] | undefined): DispelKind | null => {
+    if (!spellIds || spellIds.length === 0) return null;
+    const kinds = new Set(spellIds.map((id) => DISPEL_KINDS[debuffMeta(id).spell?.dispel_type?.value ?? 0]));
+    return DISPEL_ORDER.find((kind) => kinds.has(kind)) ?? null;
+  }, [debuffMeta]);
 
   useEffect(() => {
     onUnavailableRef.current = onUnavailable;
@@ -250,10 +263,11 @@ export default function MapView3D({
         boss: bossGuids?.has(marker.guid) ?? false,
         healthFraction: marker.healthFraction,
         owner: marker.owner,
+        dispel: dispelOf(marker.debuffs),
       }];
     });
     scene.setUnits(units);
-  }, [bossGuids, frozen, markers, miniatureUrls, projectSample, showBars, smoothMs, specializations]);
+  }, [bossGuids, dispelOf, frozen, markers, miniatureUrls, projectSample, showBars, smoothMs, specializations]);
 
   useEffect(() => {
     sceneRef.current?.setUnitRoles(unitRoles ?? NO_ROLES);

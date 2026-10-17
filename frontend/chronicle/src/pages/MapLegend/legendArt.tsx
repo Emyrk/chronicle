@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   DEAD_RING,
+  DEBUFF_PLANE,
+  DISPEL_COLORS,
   ENEMY_RED,
   HALO_COLORS,
   MARKS_SCALE,
@@ -9,12 +11,14 @@ import {
   TOKEN_LAYOUT,
   drawBossPin,
   drawCastArc,
+  drawDebuffTint,
   drawDisc,
   drawFacingMarks,
   drawHalo,
   drawShadow,
   drawSigil,
   drawSigilTicks,
+  type DispelKind,
   type HaloKind,
 } from "@/pages/Instance/EventsPanels/Map/unitTokenArt";
 import { hexCss } from "@/pages/Instance/EventsPanels/Map/mapPalette";
@@ -100,6 +104,8 @@ export interface TokenProps {
   pinned?: boolean;
   /** Cast progress (0-1) and its school colour, or null when idle. */
   cast?: { fraction: number; color: string } | null;
+  /** A debuff's dispel type, tinting the token. */
+  dispel?: DispelKind | null;
   /** Above the token: a column this full (0-1) in this colour. */
   column?: { value: number; color: string } | null;
   muted?: boolean;
@@ -120,6 +126,7 @@ export function Token({
   pinned = false,
   cast = null,
   column = null,
+  dispel = null,
   muted = false,
   scale = 22,
   tilt = 58,
@@ -155,6 +162,9 @@ export function Token({
             draw={(context) => drawFacingMarks(context, shownRing, false)}
             style={layer(radius, MARKS_SCALE, { transform: `rotate(${facing}deg)` })}
           />
+          {dispel && !dead && (
+            <ArtCanvas key={`debuff|${dispel}`} draw={(context) => drawDebuffTint(context, DISPEL_COLORS[dispel])} style={layer(radius, DEBUFF_PLANE)} />
+          )}
           {cast && (
             <ArtCanvas key={`arc|${castStep.toFixed(2)}|${castColor}`} draw={(context) => drawCastArc(context, castStep, castColor)} style={layer(radius, plane.arc)} />
           )}

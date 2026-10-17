@@ -1,4 +1,4 @@
-import type { MapEncounterPositions, MapHealthSample, MapPositionSample } from "./map.processor";
+import type { MapDebuff, MapEncounterPositions, MapHealthSample, MapPositionSample } from "./map.processor";
 import type { MapPoint } from "./mapModel";
 import { createEncounterEffects, type ReplayEffectEvent } from "./replayEffects";
 
@@ -49,6 +49,7 @@ export function mergeRunEncounters(encounters: Map<string, MapEncounterPositions
   const effects = createEncounterEffects();
   const events: ReplayEffectEvent[] = [];
   const heals = new Map<string, ReplayEffectEvent[]>();
+  const debuffsByUnit = new Map<string, MapDebuff[]>();
   for (const encounter of ordered) {
     appendAll(positionsByUnit, encounter.positionsByUnit);
     appendAll(healthByUnit, encounter.healthByUnit);
@@ -56,7 +57,9 @@ export function mergeRunEncounters(encounters: Map<string, MapEncounterPositions
     appendAll(effects.deathsByUnit, encounter.effects.deathsByUnit);
     appendAll(effects.resurrectsByUnit, encounter.effects.resurrectsByUnit);
     appendAll(heals, encounter.effects.healsByUnit);
+    appendAll(debuffsByUnit, encounter.debuffsByUnit);
   }
+  for (const [guid, list] of debuffsByUnit) debuffsByUnit.set(guid, sortedByTime(list, (debuff) => debuff.startMs));
   for (const [guid, samples] of positionsByUnit) positionsByUnit.set(guid, sortedByTime(samples, (sample) => sample.timestampMs));
   for (const [guid, samples] of healthByUnit) healthByUnit.set(guid, sortedByTime(samples, (sample) => sample.timestampMs));
   effects.events = sortedByTime(events, (event) => event.timestampMs);
@@ -70,6 +73,7 @@ export function mergeRunEncounters(encounters: Map<string, MapEncounterPositions
     positionsByUnit,
     healthByUnit,
     effects,
+    debuffsByUnit,
   };
 }
 

@@ -13,17 +13,19 @@ import {
   HitTypePeriodic,
   HitTypeReflect,
 } from "@/lib/hittype/hittype";
-import type {
-  DamageProcessorEvent,
-  HealProcessorEvent,
-  InterruptProcessorEvent,
-  PanelProcessor,
-  ResurrectionProcessorEvent,
-  SlainProcessorEvent,
-  SpellGoProcessorEvent,
-  SpellStartProcessorEvent,
-  UnitPositionProcessorEvent,
-  UnitResourcesProcessorEvent,
+import {
+  AuraState,
+  type AuraProcessorEvent,
+  type DamageProcessorEvent,
+  type HealProcessorEvent,
+  type InterruptProcessorEvent,
+  type PanelProcessor,
+  type ResurrectionProcessorEvent,
+  type SlainProcessorEvent,
+  type SpellGoProcessorEvent,
+  type SpellStartProcessorEvent,
+  type UnitPositionProcessorEvent,
+  type UnitResourcesProcessorEvent,
 } from "../processorTypes";
 import { latestPositionAt } from "./mapModel";
 import {
@@ -51,6 +53,13 @@ export interface MapHealthSample {
   absorb: number;
 }
 
+/** A debuff on a player, from its application until it fades (Infinity while still on at the log's end). */
+export interface MapDebuff {
+  spellId: number;
+  startMs: number;
+  endMs: number;
+}
+
 export interface MapEncounterPositions {
   encounterId: string;
   startMs: number;
@@ -60,6 +69,8 @@ export interface MapEncounterPositions {
   healthByUnit: Map<string, MapHealthSample[]>;
   /** Combat events for the replay effects layer. */
   effects: EncounterEffects;
+  /** Debuffs on players, by player, in application order: the map tints them by dispel type. */
+  debuffsByUnit: Map<string, MapDebuff[]>;
 }
 
 export interface MapResult {
@@ -75,7 +86,8 @@ export type MapProcessorEvent =
   | SpellGoProcessorEvent
   | InterruptProcessorEvent
   | SlainProcessorEvent
-  | ResurrectionProcessorEvent;
+  | ResurrectionProcessorEvent
+  | AuraProcessorEvent;
 
 // Same id the Rotation Timeline uses for auto attacks.
 const AUTO_ATTACK_SPELL_ID = 6603;
@@ -186,9 +198,9 @@ function toEffectEvent(event: MapProcessorEvent, timestampMs: number, encounter:
 
 export const mapProcessor: PanelProcessor<MapResult, MapProcessorEvent> = {
   id: "map",
-  streams: ["unit_position", "unit_resources", "damage", "heal", "spell_start", "spell_go", "interrupt", "slain", "ressurection"],
+  streams: ["unit_position", "unit_resources", "damage", "heal", "spell_start", "spell_go", "interrupt", "slain", "ressurection", "aura"],
   createState: () => ({ encounters: new Map() }),
-  processEvent: (state, event, encounterId, firstTimestamp) => {
+  processEvent: (state, event, encounterId, firstTimestamp, _streamType, context) => {
     const timestampMs = firstTimestamp.getTime() + event.offsetMilli;
     let encounter = state.encounters.get(encounterId);
     if (!encounter) {
@@ -199,8 +211,13 @@ export const mapProcessor: PanelProcessor<MapResult, MapProcessorEvent> = {
         positionsByUnit: new Map(),
         healthByUnit: new Map(),
         effects: createEncounterEffects(),
+        debuffsByUnit: new Map(),
       };
       state.encounters.set(encounterId, encounter);
+    }
+    if (event.type === "aura") {
+      if (!event.isBuff && event.spellId && context.players[event.target]) addDebuff(encounter.debuffsByUnit, event, timestampMs);
+      return;
     }
     if (event.type === "unit_resources") {
       addHealthSample(encounter.healthByUnit, event, timestampMs);
@@ -229,6 +246,38 @@ export const mapProcessor: PanelProcessor<MapResult, MapProcessorEvent> = {
     positions.push(sample);
   },
 };
+
+// Opens a debuff when applied (a refresh keeps the open one) and closes it
+// when it fades (removed, or modified down to no stacks).
+function addDebuff(debuffsByUnit: Map<string, MapDebuff[]>, event: AuraProcessorEvent, timestampMs: number) {
+  const spellId = event.spellId!;
+  let debuffs = debuffsByUnit.get(event.target);
+  let open: MapDebuff | undefined;
+  for (let index = (debuffs?.length ?? 0) - 1; index >= 0 && !open; index--) {
+    if (debuffs![index].spellId === spellId && debuffs![index].endMs === Infinity) open = debuffs![index];
+  }
+  const fades = event.state === AuraState.Removed || (event.state === AuraState.Modified && event.amount === 0);
+  if (fades) {
+    if (open) open.endMs = timestampMs;
+    return;
+  }
+  if (open || event.state !== AuraState.Added) return;
+  if (!debuffs) {
+    debuffs = [];
+    debuffsByUnit.set(event.target, debuffs);
+  }
+  debuffs.push({ spellId, startMs: timestampMs, endMs: Infinity });
+}
+
+/** The spell ids of `debuffs` on at `timestampMs`. */
+export function activeDebuffsAt(debuffs: readonly MapDebuff[], timestampMs: number): number[] {
+  const active: number[] = [];
+  for (const debuff of debuffs) {
+    if (debuff.startMs > timestampMs) break;
+    if (timestampMs < debuff.endMs && !active.includes(debuff.spellId)) active.push(debuff.spellId);
+  }
+  return active;
+}
 
 function addHealthSample(healthByUnit: Map<string, MapHealthSample[]>, event: UnitResourcesProcessorEvent, timestampMs: number) {
   let samples = healthByUnit.get(event.unit);

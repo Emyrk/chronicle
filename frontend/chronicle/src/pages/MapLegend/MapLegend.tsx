@@ -4,7 +4,7 @@ import { healthBarColor, MAX_HEALTH_BARS, RECENT_HEALTH_MS } from "@/pages/Insta
 import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, hexCss, WALK_AVATAR_COLOR } from "@/pages/Instance/EventsPanels/Map/mapPalette";
 import { ABOVE_DISC_MODES, CAST_MODES } from "@/pages/Instance/EventsPanels/Map/mapViewSettings";
 import { HEAL_COLOR, HEAL_CRIT_COLOR, OVERHEAL_COLOR, SCHOOL_TOKENS, schoolColor } from "@/pages/Instance/EventsPanels/Map/replayEffects";
-import { DASH_ART_SIZE, HALO_COLORS, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, type HaloKind } from "@/pages/Instance/EventsPanels/Map/unitTokenArt";
+import { DASH_ART_SIZE, DISPEL_COLORS, DISPEL_ORDER, HALO_COLORS, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, type HaloKind } from "@/pages/Instance/EventsPanels/Map/unitTokenArt";
 import { participantColor } from "@/pages/Instance/liveSessionProtocol";
 import { At, BossToken, Ground, Token, useClock } from "./legendArt";
 import {
@@ -181,6 +181,16 @@ export function MapLegend() {
           <Card title="Muted" demo={<Ground><At x={35} y={55}><Token {...MAGE} /></At><At x={68} y={55}><Token {...PALADIN} muted /></At></Ground>}>
             While players are selected in the page&apos;s filter, everyone else fades to {Math.round(TOKEN_LAYOUT.mutedOpacity * 100)}%.
           </Card>
+        </Grid>
+      </Section>
+
+      <Section id="debuffs" title="Debuffs" note={`A player with a dispellable debuff takes its colour: a wash over the icon and a glow round the ring. With several, the first of ${DISPEL_ORDER.join(", ")} shows.`}>
+        <Grid min={170}>
+          {DISPEL_ORDER.map((kind) => (
+            <Card key={kind} title={kind[0].toUpperCase() + kind.slice(1)} demo={<Ground height={120}><At x={50} y={55}><Token {...[MAGE, PALADIN, HUNTER, SHAMAN][DISPEL_ORDER.indexOf(kind)]} dispel={kind} /></At></Ground>}>
+              <Swatch color={DISPEL_COLORS[kind]} label={DISPEL_COLORS[kind]} />
+            </Card>
+          ))}
         </Grid>
       </Section>
 

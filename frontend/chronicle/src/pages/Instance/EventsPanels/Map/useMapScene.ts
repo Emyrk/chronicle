@@ -13,7 +13,7 @@ import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelRenderProps } from "../types";
 import { isMeshOnlyInstance, placeableDungeonMesh } from "./dungeonMeshes";
 import { groupCentre, isStaleRunSample, mergeRunEncounters, runSignature } from "./wholeRun";
-import type { MapEncounterPositions, MapPositionSample, MapResult } from "./map.processor";
+import { activeDebuffsAt, type MapDebuff, type MapEncounterPositions, type MapPositionSample, type MapResult } from "./map.processor";
 import { inferRoles } from "../Roles/roles.processor";
 import { deriveRecentHealGain, isDeadAt, type EncounterEffects } from "./replayEffects";
 import {
@@ -121,6 +121,8 @@ export interface MapSceneMarker {
   healthFraction: number | null;
   /** A guardian's (pet, summon, totem) owning player. */
   owner?: string;
+  /** Spell ids of the debuffs on this player at the cursor (the map tints it by their dispel type). */
+  debuffs?: number[];
 }
 
 export interface MapSceneGround {
@@ -173,6 +175,22 @@ function cachedTankGuids(fx: EncounterEffects, players: Record<string, { name: s
   return tanks;
 }
 
+const debuffSpellIdCache = new WeakMap<Map<string, MapDebuff[]>, { count: number; ids: number[] }>();
+
+// The distinct debuff spell ids in an encounter, cached (and kept the same
+// array) until more debuffs stream in.
+function encounterDebuffSpellIds(debuffsByUnit: Map<string, MapDebuff[]>): number[] {
+  let count = 0;
+  for (const debuffs of debuffsByUnit.values()) count += debuffs.length;
+  const cached = debuffSpellIdCache.get(debuffsByUnit);
+  if (cached && cached.count === count) return cached.ids;
+  const ids = new Set<number>();
+  for (const debuffs of debuffsByUnit.values()) for (const debuff of debuffs) ids.add(debuff.spellId);
+  const result = [...ids].sort((left, right) => left - right);
+  debuffSpellIdCache.set(debuffsByUnit, { count, ids: result });
+  return result;
+}
+
 export type MapScene =
   | {
     status: "message";
@@ -198,6 +216,8 @@ export type MapScene =
     cursorMs: number;
     ground: MapSceneGround;
     markers: MapSceneMarker[];
+    /** Every debuff spell seen on a player in the encounter (stable per encounter), to look up dispel types. */
+    debuffSpellIds: number[];
     /** Projects a sample onto the artwork with the same mapping as `markers`. */
     projectSample: (sample: MapPositionSample) => MapPoint | null;
     /** Boss-area bounds of the encounter's whole unit track; stable across replay ticks. */
@@ -371,6 +391,8 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   });
   const bars = selectHealthBars(markers.map((marker) => marker.guid), encounter.healthByUnit, cursorMs, bossGuids, selectedPlayers);
   for (const marker of markers) {
+    const debuffs = encounter.debuffsByUnit.get(marker.guid);
+    if (debuffs) marker.debuffs = activeDebuffsAt(debuffs, cursorMs);
     const latest = latestHealthAt(encounter.healthByUnit.get(marker.guid) ?? [], cursorMs);
     if (latest && latest.max > 0) marker.healthFraction = Math.min(1, Math.max(0, latest.current / latest.max));
     const sample = bars.get(marker.guid);
@@ -445,6 +467,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       overlays: artwork.kind === "zone" ? zoneSelection?.art.overlays : undefined,
     },
     markers,
+    debuffSpellIds: encounterDebuffSpellIds(encounter.debuffsByUnit),
     projectSample,
     focusBounds: focus?.bounds ?? null,
     autoFit: wholeRun ? followViewport : focus?.autoFit ?? null,

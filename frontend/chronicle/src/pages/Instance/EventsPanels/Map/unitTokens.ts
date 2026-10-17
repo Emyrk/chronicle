@@ -7,6 +7,7 @@ import {
   drawBossPin,
   drawCastArc,
   drawDash,
+  drawDebuffTint,
   drawDisc,
   drawEdge,
   drawFacingMarks,
@@ -152,6 +153,10 @@ export class UnitTokenTextures {
       this.arcs[step] = result;
     }
     return result;
+  }
+
+  debuffTint(): THREE.CanvasTexture {
+    return this.single("debuff", (context) => drawDebuffTint(context));
   }
 
   sigil(): THREE.CanvasTexture {

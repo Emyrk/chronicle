@@ -26,7 +26,7 @@ import {
 } from "./cameraDirector";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
-import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, ENEMY_RED, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, type HaloKind } from "./unitTokenArt";
+import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, ENEMY_RED, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, CAST_ARC_OPACITY, CUT_ARC_COLOR, CUT_TICK_COLOR, DEAD_COLOR, INTERRUPT_LABEL_COLOR, WALK_AVATAR_COLOR, WALK_AVATAR_EMISSIVE } from "./mapPalette";
 import {
@@ -205,7 +205,7 @@ const MINI_TOKEN_RADIUS = TOKEN_LAYOUT.miniRadius;
 // Heights: the shadow and the disc's underside sit just off the floor; the
 // rest stack above the disc's face (its underside plus its thickness).
 const TOKEN_GROUND = { shadow: 0.12, underside: 0.15 };
-const TOKEN_LIFT = { marks: 0.02, arc: 0.05, halo: 0.07 };
+const TOKEN_LIFT = { marks: 0.02, debuff: 0.035, arc: 0.05, halo: 0.07 };
 const TOKEN_THICKNESS = TOKEN_LAYOUT.thickness;
 /** A boss sigil lies flat, at the height a player's disc face would be. */
 const SIGIL_FACE = 0.45;
@@ -333,6 +333,8 @@ export interface MapScene3DUnit {
   healthFraction?: number | null;
   /** A guardian's owning player: an owner line runs between them. */
   owner?: string;
+  /** A debuffed player's dispel type (magic, curse, disease, poison), tinting its token. */
+  dispel?: DispelKind | null;
 }
 
 /** The one live value drawn as a column above each token. */
@@ -358,6 +360,8 @@ interface UnitToken {
   halo: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   pin: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   arc: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  /** A debuffed player's tint and glow, in the dispel type's colour. */
+  debuff: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   column: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   columnTrack: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   /** Bosses: the turning tick ring, the sigil under a model, and the pin while there is none. */
@@ -965,6 +969,9 @@ export class MapScene3D {
       object.base.set(x, this.baseHeight(unit.guid, x, z, unit.z), z);
       object.group.position.copy(object.base);
       object.loggedFacing = unit.facing !== undefined;
+      const dispel = object.dead ? null : unit.dispel ?? null;
+      object.token.debuff.visible = dispel !== null;
+      if (dispel) object.token.debuff.material.color.set(DISPEL_COLORS[dispel]);
       // Without a logged facing an enemy keeps facing whoever it last hit (updateTokens).
       this.applyFacing(object, unit.facing ?? (unit.kind === "hostile" ? object.hitFacing : undefined));
       object.group.scale.setScalar(this.scaleOf(object));
@@ -1696,6 +1703,8 @@ export class MapScene3D {
     const pin = overlay(this.tokenTextures.halo("pinned"), radius * TOKEN_PLANE.pin, face + TOKEN_LIFT.halo);
     pin.material.color.setHex(HALO_COLORS.pinned);
     const arc = overlay(null, radius * TOKEN_PLANE.arc, face + TOKEN_LIFT.arc);
+    const debuff = overlay(this.tokenTextures.debuffTint(), radius * DEBUFF_PLANE, face + TOKEN_LIFT.debuff);
+    debuff.visible = false;
     const columnTrack = new THREE.Mesh(this.columnBox, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: COLUMN_TRACK_OPACITY, depthWrite: false }));
     const column = new THREE.Mesh(this.columnBox, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.92 }));
     for (const part of [column, columnTrack]) part.scale.set(radius * COLUMN_WIDTH, radius * COLUMN_HEIGHT, radius * COLUMN_WIDTH);
@@ -1710,7 +1719,7 @@ export class MapScene3D {
     const group = new THREE.Group();
     group.userData.guid = unit.guid;
     body.userData.guid = unit.guid;
-    group.add(shadow, edge, body, cone, arc, halo, pin, columnTrack, column);
+    group.add(shadow, edge, body, cone, debuff, arc, halo, pin, columnTrack, column);
     if (ticks) group.add(ticks);
     if (bossPin) group.add(bossPin);
     this.unitsGroup.add(group);
@@ -1720,7 +1729,7 @@ export class MapScene3D {
       bodyMaterial,
       coneMaterial,
       cone,
-      token: { radius, face, edge, shadow, halo, pin, arc, column, columnTrack, ticks, sigil: null, bossPin },
+      token: { radius, face, edge, shadow, halo, pin, arc, debuff, column, columnTrack, ticks, sigil: null, bossPin },
       icon: unit.icon ?? null,
       boss,
       mini: false,
@@ -1884,6 +1893,8 @@ export class MapScene3D {
     token.face = TOKEN_GROUND.underside;
     token.halo.position.y = token.pin.position.y = token.face + TOKEN_LIFT.halo;
     token.arc.position.y = token.face + TOKEN_LIFT.arc;
+    token.debuff.position.y = token.face + TOKEN_LIFT.debuff;
+    token.debuff.scale.setScalar(MINI_TOKEN_RADIUS * DEBUFF_PLANE);
     object.cone.position.y = token.face + TOKEN_LIFT.marks;
     if (token.ticks) token.ticks.position.y = token.face + TOKEN_LIFT.marks;
     for (const [part, size] of [[token.halo, TOKEN_PLANE.halo], [token.pin, TOKEN_PLANE.pin], [token.arc, TOKEN_PLANE.arc], [token.shadow, TOKEN_PLANE.shadow]] as const) {
@@ -1930,7 +1941,7 @@ export class MapScene3D {
     object.bodyMaterial.dispose();
     object.coneMaterial.dispose();
     const { token } = object;
-    for (const part of [token.shadow, token.edge, token.halo, token.pin, token.arc, token.column, token.columnTrack, token.ticks, token.sigil]) part?.material.dispose();
+    for (const part of [token.shadow, token.edge, token.halo, token.pin, token.arc, token.debuff, token.column, token.columnTrack, token.ticks, token.sigil]) part?.material.dispose();
     token.bossPin?.material.dispose();
     this.units.delete(guid);
     this.floorHeights.delete(guid);

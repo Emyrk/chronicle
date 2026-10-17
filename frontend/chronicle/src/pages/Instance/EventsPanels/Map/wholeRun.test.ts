@@ -22,6 +22,7 @@ function encounter(encounterId: string, startMs: number, endMs: number, units: R
     endMs,
     positionsByUnit: new Map(Object.entries(units).map(([guid, times]) => [guid, times.map((time) => sample(time))])),
     healthByUnit: new Map(),
+    debuffsByUnit: new Map(),
     effects: createEncounterEffects(),
   };
 }

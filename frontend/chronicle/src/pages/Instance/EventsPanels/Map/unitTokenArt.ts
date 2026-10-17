@@ -62,6 +62,20 @@ export const TARGET_LINE = {
   targetsTargetOpacity: 0.75,
 } as const;
 
+/** A debuff's dispel type, by the spell's `dispel_type` value (1 magic … 4 poison). */
+export type DispelKind = "magic" | "curse" | "disease" | "poison";
+export const DISPEL_KINDS: Record<number, DispelKind> = { 1: "magic", 2: "curse", 3: "disease", 4: "poison" };
+/** WoW's debuff type colours; a player with several shows the first in this order. */
+export const DISPEL_COLORS: Record<DispelKind, string> = {
+  magic: "#3399ff",
+  curse: "#9900ff",
+  disease: "#996600",
+  poison: "#009900",
+};
+export const DISPEL_ORDER: readonly DispelKind[] = ["magic", "curse", "disease", "poison"];
+/** The debuff tint's plane, per disc radius (the glow reaches past the ring). */
+export const DEBUFF_PLANE = 1.55;
+
 /**
  * Owner lines: a thin line from every guardian (pet, summon, totem) to the
  * player who owns it, in the owner's colour; dim, and bright while the owner
@@ -252,6 +266,28 @@ export function drawHalo(context: CanvasRenderingContext2D, kind: HaloKind, colo
     context.closePath();
     context.fill();
   }
+}
+
+/**
+ * A debuffed player's mark, white (tinted by the dispel colour) on a plane
+ * DEBUFF_PLANE times the disc: a wash over the icon and a glow round the ring.
+ */
+export function drawDebuffTint(context: CanvasRenderingContext2D, color = "#fff") {
+  const half = TOKEN_ART_SIZE / 2;
+  const disc = half / DEBUFF_PLANE;
+  context.fillStyle = color;
+  context.globalAlpha = 0.32;
+  context.beginPath();
+  context.arc(half, half, disc * 0.82, 0, Math.PI * 2);
+  context.fill();
+  context.globalAlpha = 1;
+  context.strokeStyle = color;
+  context.shadowColor = color;
+  context.shadowBlur = 12;
+  context.lineWidth = disc * 0.16;
+  context.beginPath();
+  context.arc(half, half, disc * 1.04, 0, Math.PI * 2);
+  context.stroke();
 }
 
 /** The cast arc `fraction` of the way round from the top, clockwise, over a faint track, in `color`. */

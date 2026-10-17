@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { HitTypeCrit, HitTypeHit, HitTypeMainHand, HitTypeMiss, HitTypePeriodic } from "@/lib/hittype/hittype";
-import type { DamageProcessorEvent, ProcessorContext, UnitPositionProcessorEvent, UnitResourcesProcessorEvent } from "../processorTypes";
-import { mapProcessor, type MapProcessorEvent } from "./map.processor";
+import { AuraState, AuraTransition, type AuraProcessorEvent, type DamageProcessorEvent, type ProcessorContext, type UnitPositionProcessorEvent, type UnitResourcesProcessorEvent } from "../processorTypes";
+import { activeDebuffsAt, mapProcessor, type MapProcessorEvent } from "./map.processor";
 
 const context: ProcessorContext = {
   players: {},
@@ -260,5 +260,44 @@ describe("mapProcessor", () => {
       expect(encounter.healthByUnit.get("boss")).toHaveLength(1);
       expect(encounter.effects.events).toEqual([]);
     });
+  });
+
+  it("records players' debuffs from application to fade", () => {
+    const state = mapProcessor.createState();
+    const start = new Date("2026-10-07T20:00:00Z");
+    const playerContext = { ...context, players: { player: { name: "Mage", class: "Mage" } } } as unknown as ProcessorContext;
+    const aura = (offsetMilli: number, extra: Partial<AuraProcessorEvent>): AuraProcessorEvent => ({
+      type: "aura",
+      index: offsetMilli,
+      offsetMilli,
+      target: "player",
+      caster: "boss",
+      spellName: "Corrupted Blood",
+      spellId: 100,
+      spellAttackOutcome: null,
+      amount: 1,
+      application: 0,
+      state: AuraState.Added,
+      transition: AuraTransition.Applied,
+      isBuff: false,
+      ...extra,
+    } as AuraProcessorEvent);
+    const send = (event: AuraProcessorEvent) => mapProcessor.processEvent(state, event, "encounter", start, "aura", playerContext);
+    send(aura(100, {}));
+    send(aura(200, { transition: AuraTransition.Refreshed }));
+    send(aura(300, { spellId: 200 }));
+    send(aura(400, { state: AuraState.Modified, amount: 0 }));
+    send(aura(500, { spellId: 300, isBuff: true }));
+    send(aura(600, { target: "boss" }));
+    const debuffs = state.encounters.get("encounter")!.debuffsByUnit;
+    const at = start.getTime();
+    expect(debuffs.get("player")).toEqual([
+      { spellId: 100, startMs: at + 100, endMs: at + 400 },
+      { spellId: 200, startMs: at + 300, endMs: Infinity },
+    ]);
+    expect(debuffs.has("boss")).toBe(false);
+    expect(activeDebuffsAt(debuffs.get("player")!, at + 350)).toEqual([100, 200]);
+    expect(activeDebuffsAt(debuffs.get("player")!, at + 400)).toEqual([200]);
+    expect(activeDebuffsAt(debuffs.get("player")!, at + 50)).toEqual([]);
   });
 });
