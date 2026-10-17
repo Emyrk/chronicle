@@ -26,6 +26,7 @@ import {
 } from "./cameraDirector";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
+import { CAST_ARC_TEXTURE_STEPS, HALO_COLORS, MARKS_SCALE, UnitTokenTextures, type HaloKind } from "./unitTokens";
 import {
   clampToRadius,
   corsAssetUrl,
@@ -42,16 +43,19 @@ import {
   deriveCastIcons,
   deriveCombatText,
   deriveRecentHealGain,
+  deriveUnitCasts,
   INTERRUPTED_ICON_MS,
   INTERRUPTED_PLAYER_ICON_MS,
   isDeadAt,
   MAX_EFFECT_PRIMITIVES,
+  schoolColor,
   type ActiveEffect,
   type CastIcon,
   type CombatText,
   type DeriveEffectsOptions,
   type EncounterEffects,
   type ReplayEffectKind,
+  type UnitCast,
 } from "./replayEffects";
 import type { MapMarkerKind, MapSceneGround, MapUnitHealth } from "./useMapScene";
 
@@ -199,6 +203,32 @@ const PRESENCE_CAMERA_LENGTH = 3;
 /** Name tags keep one size on screen (their height, in view heights), near or far. */
 const PRESENCE_LABEL_HEIGHT = 0.03;
 
+// --- Unit tokens: flat discs on the ground (geometry units, as PLAYER_GEOMETRY_HEIGHT) ---
+const TOKEN_RADIUS: Record<MapMarkerKind, number> = { player: 1.25, pet: 0.85, hostile: 1.25 };
+const BOSS_TOKEN_RADIUS = 2;
+/** A model's halos and arc sit around this radius. */
+const MINI_TOKEN_RADIUS = 1.2;
+// Heights above the floor, layered so they do not fight each other (or the mesh).
+const TOKEN_LIFT = { shadow: 0.36, disc: 0.45, marks: 0.47, arc: 0.5, halo: 0.52 };
+/** Plane half-sizes per radius: each texture's ring falls where the design puts it. */
+const TOKEN_PLANE = { shadow: 1.45, halo: 1.9, pin: 2.25, arc: 1.32, ticks: 1, sigil: 1.5 };
+/** The column above the disc: its width and full height, per radius. */
+const COLUMN_WIDTH = 0.26;
+const COLUMN_HEIGHT = 3.2;
+const COLUMN_TRACK_OPACITY = 0.08;
+/** The boss sigil's tick ring turns this fast (radians per second). */
+const SIGIL_SPIN = 0.14;
+/** A boss without a model: its hexagon pin stands this high (per radius) over the sigil. */
+const BOSS_PIN_HEIGHT = 1.9;
+const BOSS_PIN_SIZE = 1.15;
+const PET_ICON = "/c/icons/ability_hunter_beasttaming.png";
+// Target lines: ribbon width (geometry units), lift above the floor, and dash period and speed.
+const TARGET_LINE_WIDTH = 0.32;
+const TARGETS_TARGET_LINE_WIDTH = 0.22;
+const TARGET_LINE_LIFT = 0.25;
+const TARGET_LINE_DASH = 1.6;
+const TARGET_LINE_SPEED = 1.2;
+
 const ORBIT_NEAR = 0.5;
 const ORBIT_FAR = 2000;
 
@@ -299,6 +329,39 @@ export interface MapScene3DUnit {
   miniatureUrl: string | undefined;
   /** Logged world height (yards), when the log has one; picks the floor on the mesh. */
   z?: number;
+  /** The token's icon (a player's class, a pet's paw), or null for none. */
+  icon?: string | null;
+  /** A boss: a sigil instead of a disc. */
+  boss?: boolean;
+  /** Health at the cursor (0-1), for the health column above the disc; null when unknown. */
+  healthFraction?: number | null;
+}
+
+/** The one live value drawn as a column above each token. */
+export type AboveDiscMode = "none" | "health" | "cast";
+
+/** Who the map's target frames show, for the token halos and target lines. */
+export interface MapUnitRoles {
+  selected: string | null;
+  target: string | null;
+  targetsTarget: string | null;
+  pinned: ReadonlySet<string>;
+}
+
+// The flat token parts around a unit's body (the disc itself, until a model replaces it).
+interface UnitToken {
+  /** Disc radius in geometry units (PLAYER_GEOMETRY_HEIGHT is a player's height). */
+  radius: number;
+  shadow: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  halo: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  pin: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  arc: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  column: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  columnTrack: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  /** Bosses: the turning tick ring, the sigil under a model, and the pin while there is none. */
+  ticks: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
+  sigil: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
+  bossPin: THREE.Sprite | null;
 }
 
 interface BossMini {
@@ -319,8 +382,15 @@ interface UnitObject {
   // Lambert with the unit's tint, or a textured mini's cloned material.
   bodyMaterial: THREE.MeshLambertMaterial | THREE.MeshStandardMaterial;
   textured: boolean;
-  coneMaterial: THREE.MeshLambertMaterial;
+  /** The facing notch (diamonds too, for bosses), turning with the unit. */
+  coneMaterial: THREE.MeshBasicMaterial;
   cone: THREE.Mesh;
+  token: UnitToken;
+  icon: string | null;
+  boss: boolean;
+  /** The body shows a loaded model rather than the flat disc. */
+  mini: boolean;
+  healthFraction: number | null;
   kind: MapMarkerKind;
   name: string;
   color: string;
@@ -592,6 +662,15 @@ export class MapScene3D {
   private readonly heldActions = new Set<MapControlAction>();
   private walk: WalkState | null = null;
   private adStrafe = true;
+  private readonly tokenTextures = new UnitTokenTextures(() => this.requestRender());
+  // A flat plane (radius 1) lying on the ground, shared by every token part.
+  private readonly tokenPlane = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
+  private readonly columnBox = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+  private aboveDisc: AboveDiscMode = "cast";
+  private roles: MapUnitRoles = { selected: null, target: null, targetsTarget: null, pinned: new Set() };
+  private readonly unitCasts = new Map<string, UnitCast>();
+  private readonly targetLines: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[] = [];
+  private tokenAt = 0;
   private onPresence: ((presence: LiveMapPresence | null) => void) | null = null;
   private lastPresence: { json: string; at: number } | null = null;
   private presenceTimer = 0;
@@ -841,19 +920,29 @@ export class MapScene3D {
       }
       if (!object) object = this.addUnit(unit);
       object.name = unit.name;
-      object.color = unit.color;
       object.health = unit.health;
       object.loggedZ = unit.z;
+      object.healthFraction = unit.healthFraction ?? null;
+      if (object.color !== unit.color || object.icon !== (unit.icon ?? null)) {
+        object.color = unit.color;
+        object.icon = unit.icon ?? null;
+        this.applyTokenFace(object);
+      }
       const { x, z } = mapPointToScene(unit.point, this.aspect, GROUND_WIDTH);
       object.base.set(x, this.baseHeight(unit.guid, x, z, unit.z), z);
       object.group.position.copy(object.base);
       object.group.rotation.y = unit.facing;
+      // The disc's icon and the cast arc keep north up; the notch turns.
+      if (!object.mini) object.body.rotation.y = -unit.facing;
+      object.token.arc.rotation.y = -unit.facing;
+      object.token.pin.rotation.y = -unit.facing;
       object.group.scale.setScalar(this.scaleOf(object));
       const opacity = unit.muted ? MUTED_OPACITY : 1;
       for (const material of [object.bodyMaterial, object.coneMaterial]) {
         material.opacity = opacity;
-        material.depthWrite = !unit.muted;
+        material.depthWrite = !unit.muted && material === object.bodyMaterial && object.mini;
       }
+      object.token.shadow.material.opacity = opacity;
       setBodyColor(object);
     }
     for (const guid of [...this.units.keys()]) {
@@ -1537,6 +1626,14 @@ export class MapScene3D {
     if (this.walk) this.disposeAvatar(this.walk.avatar);
     this.walk = null;
     clearTimeout(this.presenceTimer);
+    for (const line of this.targetLines) {
+      line.geometry.dispose();
+      line.material.map?.dispose();
+      line.material.dispose();
+    }
+    this.tokenTextures.dispose();
+    this.tokenPlane.dispose();
+    this.columnBox.dispose();
     for (const presence of this.remotePresences.values()) this.disposeRemotePresence(presence);
     this.remotePresences.clear();
     clearTimeout(this.unitClickTimer);
@@ -1575,14 +1672,45 @@ export class MapScene3D {
   }
 
   private addUnit(unit: MapScene3DUnit): UnitObject {
-    const bodyMaterial = new THREE.MeshLambertMaterial({ transparent: true });
-    const coneMaterial = new THREE.MeshLambertMaterial({ color: 0xf5f5f4, transparent: true });
-    const body = new THREE.Mesh(this.geometries[unit.kind], bodyMaterial);
-    const cone = new THREE.Mesh(this.geometries.cone, coneMaterial);
+    const boss = unit.boss === true;
+    const radius = boss ? BOSS_TOKEN_RADIUS : TOKEN_RADIUS[unit.kind];
+    const overlay = (map: THREE.Texture | null, size: number, lift: number, opacity = 1) => {
+      const mesh = new THREE.Mesh(this.tokenPlane, new THREE.MeshBasicMaterial({
+        map, transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+      }));
+      mesh.scale.setScalar(size);
+      mesh.position.y = lift;
+      return mesh;
+    };
+    // The body is the disc (a flat plane) until a model loads into it.
+    const bodyMaterial = new THREE.MeshLambertMaterial({ transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    const body = new THREE.Mesh(this.tokenPlane, bodyMaterial);
+    body.scale.setScalar(boss ? radius * TOKEN_PLANE.sigil : radius);
+    body.position.y = TOKEN_LIFT.disc;
+    const cone = overlay(null, radius * MARKS_SCALE, TOKEN_LIFT.marks);
+    const coneMaterial = cone.material;
+    const shadow = overlay(this.tokenTextures.shadow(), radius * TOKEN_PLANE.shadow, TOKEN_LIFT.shadow);
+    const halo = overlay(null, radius * TOKEN_PLANE.halo, TOKEN_LIFT.halo);
+    const pin = overlay(this.tokenTextures.halo("pinned"), radius * TOKEN_PLANE.pin, TOKEN_LIFT.halo);
+    pin.material.color.setHex(HALO_COLORS.pinned);
+    const arc = overlay(null, radius * TOKEN_PLANE.arc, TOKEN_LIFT.arc);
+    const columnTrack = new THREE.Mesh(this.columnBox, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: COLUMN_TRACK_OPACITY, depthWrite: false }));
+    const column = new THREE.Mesh(this.columnBox, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.92 }));
+    for (const part of [column, columnTrack]) part.scale.set(radius * COLUMN_WIDTH, radius * COLUMN_HEIGHT, radius * COLUMN_WIDTH);
+    const ticks = boss ? overlay(this.tokenTextures.sigilTicks(), radius * TOKEN_PLANE.ticks * TOKEN_PLANE.sigil, TOKEN_LIFT.marks) : null;
+    let bossPin: THREE.Sprite | null = null;
+    if (boss) {
+      bossPin = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tokenTextures.bossPin(), transparent: true }));
+      bossPin.center.set(0.5, 0);
+      bossPin.scale.setScalar(radius * BOSS_PIN_SIZE);
+      bossPin.position.y = radius * BOSS_PIN_HEIGHT;
+    }
     const group = new THREE.Group();
     group.userData.guid = unit.guid;
     body.userData.guid = unit.guid;
-    group.add(body, cone);
+    group.add(shadow, body, cone, arc, halo, pin, columnTrack, column);
+    if (ticks) group.add(ticks);
+    if (bossPin) group.add(bossPin);
     this.unitsGroup.add(group);
     const object: UnitObject = {
       group,
@@ -1590,6 +1718,11 @@ export class MapScene3D {
       bodyMaterial,
       coneMaterial,
       cone,
+      token: { radius, shadow, halo, pin, arc, column, columnTrack, ticks, sigil: null, bossPin },
+      icon: unit.icon ?? null,
+      boss,
+      mini: false,
+      healthFraction: unit.healthFraction ?? null,
       kind: unit.kind,
       name: unit.name,
       color: unit.color,
@@ -1603,6 +1736,7 @@ export class MapScene3D {
       labelHeight: LABEL_HEIGHT,
       deadLift: DEAD_LIFT,
     };
+    this.applyTokenFace(object);
     group.scale.setScalar(this.scaleOf(object));
     this.units.set(unit.guid, object);
     if (object.miniatureUrl) {
@@ -1610,6 +1744,23 @@ export class MapScene3D {
       if (mini) this.applyBossMini(object, mini);
     }
     return object;
+  }
+
+  // The disc's face and the notch for the unit's colour, icon and death.
+  private applyTokenFace(object: UnitObject) {
+    const ring = object.dead ? "#5a5a5a" : object.color;
+    object.coneMaterial.map = this.tokenTextures.facingMarks(object.boss ? "#ef4444" : ring, object.boss);
+    object.coneMaterial.color.setHex(object.dead && object.boss ? 0x777777 : 0xffffff);
+    object.coneMaterial.needsUpdate = true;
+    if (object.mini) return;
+    const map = object.boss
+      ? this.tokenTextures.sigil()
+      : this.tokenTextures.disc(object.icon ?? (object.kind === "pet" ? PET_ICON : null), ring, object.dead, object.kind === "hostile");
+    if (object.bodyMaterial.map !== map) {
+      object.bodyMaterial.map = map;
+      object.bodyMaterial.needsUpdate = true;
+    }
+    object.bodyMaterial.color.setHex(object.boss && object.dead ? 0x777777 : 0xffffff);
   }
 
   // Returns the published miniature if loaded, starting its load on first use.
@@ -1680,7 +1831,36 @@ export class MapScene3D {
   }
 
   private applyBossMini(object: UnitObject, mini: BossMini) {
+    object.mini = true;
     object.body.geometry = mini.geometry;
+    object.body.scale.setScalar(1);
+    object.body.position.y = 0;
+    object.body.rotation.set(0, 0, 0);
+    const bodyMaterial = object.bodyMaterial;
+    bodyMaterial.map = null;
+    bodyMaterial.depthWrite = bodyMaterial.opacity >= 1;
+    bodyMaterial.polygonOffset = false;
+    bodyMaterial.needsUpdate = true;
+    const { token } = object;
+    token.radius = MINI_TOKEN_RADIUS;
+    for (const [part, size] of [[token.halo, TOKEN_PLANE.halo], [token.pin, TOKEN_PLANE.pin], [token.arc, TOKEN_PLANE.arc], [token.shadow, TOKEN_PLANE.shadow]] as const) {
+      part.scale.setScalar(MINI_TOKEN_RADIUS * size);
+    }
+    for (const part of [token.column, token.columnTrack]) part.scale.set(MINI_TOKEN_RADIUS * COLUMN_WIDTH, MINI_TOKEN_RADIUS * COLUMN_HEIGHT, MINI_TOKEN_RADIUS * COLUMN_WIDTH);
+    if (token.bossPin) token.bossPin.visible = false;
+    if (object.boss && !token.sigil) {
+      // The model stands on the sigil.
+      token.sigil = new THREE.Mesh(this.tokenPlane, new THREE.MeshBasicMaterial({
+        map: this.tokenTextures.sigil(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+      }));
+      token.sigil.scale.setScalar(MINI_TOKEN_RADIUS * TOKEN_PLANE.sigil);
+      token.sigil.position.y = TOKEN_LIFT.disc;
+      token.ticks?.scale.setScalar(MINI_TOKEN_RADIUS * TOKEN_PLANE.sigil);
+      object.group.add(token.sigil);
+    }
+    if (object.boss) object.cone.scale.setScalar(MINI_TOKEN_RADIUS * MARKS_SCALE);
+    else object.cone.visible = false;
+    setBodyColor(object);
     if (mini.material) {
       // Keep the texture: the per-unit clone carries opacity, the hit flash
       // (emissive) and the death grey (colour multiply).
@@ -1706,6 +1886,9 @@ export class MapScene3D {
     this.unitsGroup.remove(object.group);
     object.bodyMaterial.dispose();
     object.coneMaterial.dispose();
+    const { token } = object;
+    for (const part of [token.shadow, token.halo, token.pin, token.arc, token.column, token.columnTrack, token.ticks, token.sigil]) part?.material.dispose();
+    token.bossPin?.material.dispose();
     this.units.delete(guid);
     this.floorHeights.delete(guid);
     const wobbling = this.wobbling.indexOf(object);
@@ -1734,6 +1917,8 @@ export class MapScene3D {
       const guid = object.group.userData.guid as string;
       this.setDead(object, fx !== null && isDeadAt(fx, guid, cursorMs));
     }
+    if (fx) deriveUnitCasts(fx, cursorMs, this.unitCasts);
+    else this.unitCasts.clear();
 
     let beamCount = 0;
     let ringCount = 0;
@@ -2252,13 +2437,16 @@ export class MapScene3D {
   }
 
   // Slain units lie down, grey, until resurrected.
+  // Slain units: a model lies down, grey; a disc greys with a skull. Until resurrected.
   private setDead(object: UnitObject, dead: boolean) {
     if (object.dead === dead) return;
     object.dead = dead;
-    object.body.rotation.x = dead ? -Math.PI / 2 : 0;
-    object.body.position.y = dead ? object.deadLift : 0;
-    object.cone.visible = !dead;
-    setBodyColor(object);
+    if (object.mini) {
+      object.body.rotation.x = dead ? -Math.PI / 2 : 0;
+      object.body.position.y = dead ? object.deadLift : 0;
+      setBodyColor(object);
+    }
+    this.applyTokenFace(object);
   }
 
   private effectColor(css: string): THREE.Color {
@@ -2484,6 +2672,18 @@ export class MapScene3D {
     return true;
   }
 
+  /** The live value drawn as a column above each token. */
+  setAboveDisc(mode: AboveDiscMode) {
+    this.aboveDisc = mode;
+    this.requestRender();
+  }
+
+  /** The target frames' units: halos for the selected chain and pins, and the chain's target lines. */
+  setUnitRoles(roles: MapUnitRoles) {
+    this.roles = roles;
+    this.requestRender();
+  }
+
   /** Called with where you are on the mesh (throttled), for a live session; null once you are not. */
   setOnPresence(callback: ((presence: LiveMapPresence | null) => void) | null) {
     this.onPresence = callback;
@@ -2596,6 +2796,114 @@ export class MapScene3D {
       object.label.position.set(object.position.x, object.position.y + labelHeight * this.unitScale, object.position.z);
     }
     return moving;
+  }
+
+  // The token parts that follow the replay: cast arcs, the column above the
+  // disc, halos for the selected chain and pins, the boss sigils' turn, and
+  // the chain's target lines.
+  private updateTokens(now: number) {
+    const dt = this.tokenAt ? Math.min(KEY_MAX_STEP_S, (now - this.tokenAt) / 1000) : 0;
+    this.tokenAt = now;
+    const { roles } = this;
+    for (const [guid, object] of this.units) {
+      const { token } = object;
+      const cast = object.dead ? undefined : this.unitCasts.get(guid);
+      const castColor = cast ? this.effectColor(schoolColor(cast.school)) : null;
+      token.arc.visible = Boolean(cast);
+      if (cast && castColor) {
+        const map = this.tokenTextures.castArc(Math.min(CAST_ARC_TEXTURE_STEPS, Math.floor(cast.progress * CAST_ARC_TEXTURE_STEPS)));
+        if (token.arc.material.map !== map) {
+          token.arc.material.map = map;
+          token.arc.material.needsUpdate = true;
+        }
+        token.arc.material.color.copy(castColor);
+      }
+      // The column: health (green to red) or the cast bar rising in its school colour.
+      let value: number | null = null;
+      if (!object.dead && this.aboveDisc === "health" && object.healthFraction !== null) {
+        value = object.healthFraction;
+        token.column.material.color.setStyle(healthBarColor(value));
+      } else if (this.aboveDisc === "cast" && cast && castColor) {
+        value = cast.progress;
+        token.column.material.color.copy(castColor);
+      }
+      token.column.visible = value !== null && value > 0;
+      token.columnTrack.visible = value !== null;
+      if (value !== null) {
+        const full = token.radius * COLUMN_HEIGHT;
+        token.column.scale.y = Math.max(0.02, full * value);
+        token.column.position.y = TOKEN_LIFT.disc;
+        token.columnTrack.position.y = TOKEN_LIFT.disc;
+      }
+      const kind: HaloKind | null = guid === roles.selected ? "selected"
+        : guid === roles.target ? "target"
+          : guid === roles.targetsTarget ? "targetsTarget" : null;
+      token.halo.visible = kind !== null;
+      if (kind) {
+        const map = this.tokenTextures.halo(kind);
+        if (token.halo.material.map !== map) {
+          token.halo.material.map = map;
+          token.halo.material.needsUpdate = true;
+        }
+        token.halo.material.color.setHex(HALO_COLORS[kind]);
+      }
+      token.pin.visible = roles.pinned.has(guid);
+      if (token.ticks) token.ticks.rotation.y = (now / 1000) * SIGIL_SPIN - object.group.rotation.y;
+      if (token.bossPin) token.bossPin.material.color.setHex(object.dead ? 0x777777 : 0xffffff);
+    }
+    this.updateTargetLines(dt);
+  }
+
+  // Selected -> its target (dashes in the cast's school colour while casting,
+  // the unit's colour otherwise) and target -> target's target (purple dots).
+  private updateTargetLines(dt: number) {
+    const { roles } = this;
+    const selected = roles.selected ? this.units.get(roles.selected) : undefined;
+    const target = roles.target ? this.units.get(roles.target) : undefined;
+    const targetsTarget = roles.targetsTarget ? this.units.get(roles.targetsTarget) : undefined;
+    const cast = roles.selected && selected && !selected.dead ? this.unitCasts.get(roles.selected) : undefined;
+    const lines: [UnitObject | undefined, UnitObject | undefined, THREE.Color, boolean][] = [
+      [selected && !selected.dead ? selected : undefined, target, cast ? this.effectColor(schoolColor(cast.school)) : this.color.set(selected?.color ?? "#ffffff").clone(), false],
+      [target, targetsTarget && roles.targetsTarget !== roles.selected ? targetsTarget : undefined, new THREE.Color(HALO_COLORS.targetsTarget), true],
+    ];
+    lines.forEach(([from, to, color, dotted], index) => {
+      let line = this.targetLines[index];
+      if (!line) {
+        const map = this.tokenTextures.dash(dotted).clone();
+        map.needsUpdate = true;
+        line = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+        line.renderOrder = 5;
+        this.targetLines[index] = line;
+        this.scene.add(line);
+      }
+      line.visible = Boolean(from && to);
+      if (!from || !to) return;
+      const lift = TARGET_LINE_LIFT * this.unitScale;
+      const start = this.vector.copy(from.group.position).setY(from.group.position.y + lift);
+      const end = this.vectorB.copy(to.group.position).setY(to.group.position.y + lift);
+      const along = end.clone().sub(start);
+      const length = along.length();
+      if (length < 1e-6) {
+        line.visible = false;
+        return;
+      }
+      along.divideScalar(length);
+      // A ribbon along the line, turned to face the camera about its own axis.
+      const toCamera = this.camera.position.clone().sub(start);
+      const normal = toCamera.sub(along.clone().multiplyScalar(toCamera.dot(along))).normalize();
+      const side = new THREE.Vector3().crossVectors(normal, along).normalize();
+      this.matrix.makeBasis(along, side, normal);
+      line.quaternion.setFromRotationMatrix(this.matrix);
+      line.position.copy(start).add(end).multiplyScalar(0.5);
+      const width = (dotted ? TARGETS_TARGET_LINE_WIDTH : TARGET_LINE_WIDTH) * this.unitScale;
+      line.scale.set(length, width, 1);
+      const map = line.material.map!;
+      const period = TARGET_LINE_DASH * this.unitScale * (dotted ? 0.6 : 1);
+      map.repeat.x = length / period;
+      map.offset.x -= (dt * TARGET_LINE_SPEED) / (dotted ? 0.6 : 1);
+      line.material.color.copy(color);
+      line.material.opacity = dotted ? 0.75 : 0.9;
+    });
   }
 
   private disposeRemotePresence(object: RemotePresence) {
@@ -2841,6 +3149,7 @@ export class MapScene3D {
       // Walking, the character places the camera; OrbitControls would clamp it back.
       const damping = !walking && this.controls.update();
       const animating = this.updateEffects(now) || reframing || moving || directing || keyMoving || walking || presencesMoving || damping;
+      this.updateTokens(now);
       this.updateBars();
       this.updateEffectHover();
       this.renderer.render(this.scene, this.camera);
@@ -2853,6 +3162,7 @@ export class MapScene3D {
 // Untextured bodies take the unit's colour; textured minis keep their texture
 // (white multiply). Both turn grey when dead.
 function setBodyColor(object: UnitObject) {
+  if (!object.mini) return;
   object.bodyMaterial.color.set(object.dead ? DEAD_COLOR : object.textured ? 0xffffff : object.color);
 }
 

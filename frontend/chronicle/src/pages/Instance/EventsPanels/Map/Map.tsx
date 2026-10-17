@@ -21,7 +21,7 @@ import {
   type MapFraming,
   type MapViewport,
 } from "./mapModel";
-import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
+import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus, MapUnitRoles } from "./MapScene3D";
 import { MapView2D, type MapViewRequest } from "./MapView2D";
 import { useEmbeddedPanel, useEmbeddedPanelWithResult } from "../useEmbeddedPanel";
 import { UnitInspectContext, type UnitInspectSelection } from "../UnitInspectContext";
@@ -213,6 +213,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   const targetAtMs = targetEncounter ? cursorMs ?? targetEncounter.endMs : 0;
   const targetOfTarget = target && targetEncounter ? lastTargetAt(targetEncounter, target, targetAtMs) : null;
   const targetsTarget = targetOfTarget && targetEncounter ? lastTargetAt(targetEncounter, targetOfTarget, targetAtMs) : null;
+  const unitRoles = useMemo((): MapUnitRoles => ({ selected: target, target: targetOfTarget, targetsTarget, pinned: new Set(pinned) }), [pinned, target, targetOfTarget, targetsTarget]);
   const [storedFraming, setFraming] = useState<MapFraming>(INITIAL_MAP_FRAMING);
   // A new selection or replay moving into another encounter re-frames;
   // loading states (e.g. reprocessing after a filter change) keep the framing.
@@ -329,6 +330,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               onWalkingChange={setWalking}
               adStrafe={adStrafe}
               livePresence={livePresence}
+              unitRoles={unitRoles}
             />
           </Suspense>
         )}

@@ -17,6 +17,7 @@ import {
   type MapScene3DUnit,
   type MapSceneDirector,
   type MapSceneFocus,
+  type MapUnitRoles,
 } from "./MapScene3D";
 import { collectCastSpellIds, DEFAULT_EFFECT_OPTIONS, effectiveCastIconGuids, iconPreloadUrls, type EncounterEffects } from "./replayEffects";
 import type { MapViewRequest } from "./MapView2D";
@@ -68,7 +69,11 @@ export interface MapView3DProps {
   adStrafe?: boolean;
   /** In a live session: share your camera / character and draw everyone else's. */
   livePresence?: MapLivePresence | null;
+  /** The target frames' units: halos for the selected chain and pins, and target lines. */
+  unitRoles?: MapUnitRoles | null;
 }
+
+const NO_ROLES: MapUnitRoles = { selected: null, target: null, targetsTarget: null, pinned: new Set() };
 
 export interface MapLivePresence {
   publish: (presence: LiveMapPresence | null) => void;
@@ -134,6 +139,7 @@ export default function MapView3D({
   onWalkingChange,
   adStrafe = true,
   livePresence = null,
+  unitRoles = null,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<MapScene3D | null>(null);
@@ -231,10 +237,21 @@ export default function MapView3D({
         health: showBars ? marker.health : null,
         miniatureUrl: modelUrl,
         z: sample.z,
+        icon: marker.icon,
+        boss: bossGuids?.has(marker.guid) ?? false,
+        healthFraction: marker.healthFraction,
       }];
     });
     scene.setUnits(units);
-  }, [markers, miniatureUrls, projectSample, showBars, smoothMs]);
+  }, [bossGuids, markers, miniatureUrls, projectSample, showBars, smoothMs]);
+
+  useEffect(() => {
+    sceneRef.current?.setUnitRoles(unitRoles ?? NO_ROLES);
+  }, [unitRoles]);
+
+  useEffect(() => {
+    sceneRef.current?.setAboveDisc(effectSettings.aboveDisc);
+  }, [effectSettings.aboveDisc]);
 
   // Selected players (the unmuted ones while a selection mutes the rest),
   // bosses and tanks; keyed by string so replay ticks don't rebuild the options.
