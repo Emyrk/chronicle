@@ -24,7 +24,7 @@ import {
   type DampedValue,
   type DirectorUnit,
 } from "./cameraDirector";
-import { MAP_CONTROL_ACTIONS, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
+import { actionForKey, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
 import {
   clampToRadius,
   corsAssetUrl,
@@ -519,6 +519,7 @@ export class MapScene3D {
   private readonly keyWindow: Window;
   private readonly heldActions = new Set<MapControlAction>();
   private walk: WalkState | null = null;
+  private adStrafe = false;
   private onWalkChange: (walking: boolean) => void = () => {};
   private readonly walkHead = new THREE.Vector3();
   private keyMoveLastMs = 0;
@@ -2339,7 +2340,7 @@ export class MapScene3D {
       return;
     }
     if (!this.pointerInside && !this.walk) return;
-    const action = MAP_CONTROL_ACTIONS.find((candidate) => candidate.defaultKey === event.code)?.id;
+    const action = actionForKey(event.code, this.adStrafe);
     if (!action) return;
     event.preventDefault();
     if (this.heldActions.has(action)) return;
@@ -2353,7 +2354,7 @@ export class MapScene3D {
   };
 
   private readonly handleKeyUp = (event: KeyboardEvent) => {
-    const action = MAP_CONTROL_ACTIONS.find((candidate) => candidate.defaultKey === event.code)?.id;
+    const action = actionForKey(event.code, this.adStrafe);
     if (!action || !this.heldActions.delete(action)) return;
     if (!this.walk && this.heldActions.size === 0) this.handleControlsEnd();
   };
@@ -2401,6 +2402,14 @@ export class MapScene3D {
     this.camera.position.copy(target).add(offset);
     this.controls.update();
     return true;
+  }
+
+  /** A/D strafe and Q/E turn instead of the other way round. */
+  setAdStrafe(on: boolean) {
+    if (on === this.adStrafe) return;
+    // A held key would be released as the other action.
+    this.releaseKeys();
+    this.adStrafe = on;
   }
 
   /** Called when walk mode starts or ends (G, Esc, the button, or losing the mesh). */
