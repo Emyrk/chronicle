@@ -28,6 +28,7 @@ import { participantHue, participantLabel, type LiveMapPresence } from "../../li
 import { actionForKey, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
 import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, ENEMY_RED, HALO_COLORS, MARKS_SCALE, PET_ICON, TARGET_LINE, TOKEN_LAYOUT, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
+import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, CAST_ARC_OPACITY, CUT_ARC_COLOR, CUT_TICK_COLOR, DEAD_COLOR, INTERRUPT_LABEL_COLOR, WALK_AVATAR_COLOR, WALK_AVATAR_EMISSIVE } from "./mapPalette";
 import {
   clampToRadius,
   corsAssetUrl,
@@ -79,17 +80,11 @@ const BAR_HEIGHT = 3.9;
 const BAR_WIDTH = 2.6;
 const BAR_THICKNESS = 0.36;
 const BAR_PADDING = 0.14;
-const BAR_BACKGROUND = 0x0c0a09;
-const BAR_DEAD = 0x57534e;
-const BAR_ABSORB = 0xe7e5e4;
-// Recent healing at the end of the fill (tailwind green-200).
-const BAR_HEAL = 0xbbf7d0;
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 const MAX_COMBAT_TEXT = 8;
 const COMBAT_TEXT_HEIGHT = 1.8;
 // Rendered label textures kept for reuse (spell name + colour).
 const MAX_LABEL_TEXTURES = 128;
-const DEAD_COLOR = 0x57534e;
 // Spell icons above casters: pooled sprites over the bars and combat text.
 const MAX_CAST_ICONS = 12;
 // About 26 px at the constant on-screen size.
@@ -122,15 +117,10 @@ const INTERRUPT_WIGGLE = (8 * Math.PI) / 180;
 const INTERRUPT_FADE_MS = 300;
 const INTERRUPT_SHRINK = 0.85;
 const INTERRUPT_LABEL_MS = 550;
-const INTERRUPT_LABEL_COLOR = "#c2847e";
 const INTERRUPT_LABEL_HEIGHT = 1.6;
-// The frozen outline of a cut cast, with a red tick where it was cut.
-const CUT_ARC_COLOR = "#78716c";
-const CUT_TICK_COLOR = "#ef4444";
 // The cast progress outline around an icon, in 5 % steps.
 const CAST_ARC_STEPS = 20;
 const CAST_ARC_SIZE = 1.25;
-const CAST_ARC_OPACITY = 0.7;
 // Loaded icon textures kept for reuse, keyed by URL.
 const MAX_ICON_TEXTURES = 128;
 // A failed icon load is retried after this long (real time).
@@ -521,7 +511,7 @@ interface WalkState {
 
 // You, in walk mode: a gold player capsule (no facing cone; the camera shows the way).
 function createAvatar(geometries: Record<MapMarkerKind | "cone", THREE.BufferGeometry>): THREE.Group {
-  const material = new THREE.MeshStandardMaterial({ color: 0xffd100, emissive: 0x3a2a00, roughness: 0.5 });
+  const material = new THREE.MeshStandardMaterial({ color: WALK_AVATAR_COLOR, emissive: WALK_AVATAR_EMISSIVE, roughness: 0.5 });
   const group = new THREE.Group();
   group.add(new THREE.Mesh(geometries.player, material));
   return group;

@@ -137,7 +137,8 @@ export const RANGED_AUTO_COLOR = "#f5f5f4";
 export const HEAL_COLOR = "#4ade80";
 export const HEAL_CRIT_COLOR = "#facc15";
 export const OVERHEAL_COLOR = "#a8a29e";
-const SCHOOL_TOKENS: Record<number, string> = {
+/** Spell schools by chronicleproto School value, as `--color-school-<name>` tokens (anything else draws as physical). */
+export const SCHOOL_TOKENS: Readonly<Record<number, string>> = {
   2: "physical",
   3: "holy",
   4: "fire",

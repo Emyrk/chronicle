@@ -100,6 +100,7 @@ import { APIExplorer } from "./pages/APIExplorer/APIExplorer"
 import { CustomPanelsPage } from "./pages/Tools/CustomPanelsPage"
 import { ToolsPage } from "./pages/Tools/ToolsPage"
 import { SpeedrunningPage } from "./pages/Speedrunning/SpeedrunningPage"
+import { MapLegendPage } from "./pages/MapLegend/MapLegendPage"
 import { ClassDetailsPage } from "./pages/ClassDetails/ClassDetailsPage"
 import { SubspecsPage } from "./pages/Subspecs/SubspecsPage"
 import { NitroPayRuntime } from "./components/Ads/NitroPayRuntime"
@@ -232,6 +233,7 @@ function App() {
         <Route path="/parsing" element={<ParsingPage />} />
         <Route path="/parsing/cohorts" element={<CohortViewerPage />} />
         <Route path="/speedrunning" element={<SpeedrunningPage />} />
+        <Route path="/map-legend" element={<MapLegendPage />} />
         <Route path="/subspecs" element={<SubspecsPage />} />
         <Route path="/class-details" element={<ClassDetailsPage />} />
         <Route path="/g/:guildId" element={<GuildPage />} />

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { Swords, FileText, Youtube, Code, Shirt, Users, Timer, BookOpen, GitBranch, ChartNoAxesCombined, Blocks } from "lucide-react"
+import { Swords, FileText, Youtube, Code, Shirt, Users, Timer, BookOpen, GitBranch, ChartNoAxesCombined, Blocks, Map } from "lucide-react"
 
 const faq = [
   {
@@ -19,6 +19,12 @@ const faq = [
     description: "See how talent builds are divided into specialized ranking and parse cohorts.",
     to: "/subspecs",
     icon: <GitBranch className="h-6 w-6" />,
+  },
+  {
+    name: "Replay map legend",
+    description: "What the 3D replay map's tokens, halos, lines and effects mean.",
+    to: "/map-legend",
+    icon: <Map className="h-6 w-6" />,
   },
   {
     name: "Class details",

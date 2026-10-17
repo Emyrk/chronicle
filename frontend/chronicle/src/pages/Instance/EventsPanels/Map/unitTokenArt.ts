@@ -29,11 +29,6 @@ export const HALO_COLORS: Record<HaloKind, number> = {
   pinned: 0xffd100,
 };
 
-/** "#rrggbb" for a HALO_COLORS entry. */
-export function haloCss(kind: HaloKind): string {
-  return `#${HALO_COLORS[kind].toString(16).padStart(6, "0")}`;
-}
-
 /**
  * Token sizes in geometry units, where a player stands PLAYER_GEOMETRY_HEIGHT
  * (3) tall; the plane sizes are half-widths per disc radius.
