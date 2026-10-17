@@ -278,7 +278,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
           </Suspense>
         )}
         {/* Top-left: the Raid Frames panel itself, drawn as an overlay (one
-            implementation for the map and the panel), then the inspect cards. */}
+            implementation for the map and the panel). The inspect frame below moves freely. */}
         <UnitInspectContext.Provider value={inspectSelection}>
           <div className="pointer-events-none absolute bottom-2 left-2 top-2 z-30 flex max-w-[calc(100%-1rem)] flex-col items-start gap-1.5">
             {showRaidFrames ? (
@@ -306,15 +306,16 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
                 <HeartPulse className="h-4 w-4" />
               </button>
             )}
-            <InspectCards
-              guids={inspected}
-              onRemove={toggleInspected}
-              raidFrames={raidFrames}
-              context={props.context}
-              durationMs={props.durationMs}
-            />
           </div>
         </UnitInspectContext.Provider>
+        <InspectCards
+          guids={inspected}
+          onRemove={toggleInspected}
+          onClear={() => setInspected([])}
+          raidFrames={raidFrames}
+          context={props.context}
+          durationMs={props.durationMs}
+        />
         <MeterWindows windows={meterWindows} onChange={setMeterWindows} context={props.context} durationMs={props.durationMs} />
       </div>
       {jumps.length > 0 && scene.runStartMs !== null && (
