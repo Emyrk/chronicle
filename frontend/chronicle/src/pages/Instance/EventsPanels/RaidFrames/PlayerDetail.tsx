@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip";
 import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
@@ -11,6 +11,7 @@ import { createUnitAurasPanel } from "../UnitAuras/UnitAuras";
 import type { PanelContext, PanelRenderProps } from "../types";
 import { useEmbeddedPanel } from "../useEmbeddedPanel";
 import {
+  latestResourceAt,
   recentInstantAt,
   type RaidFrameCast,
   type RaidFrameHeal,
@@ -160,7 +161,7 @@ function HealthGraph({
     const x = (ms: number) => ((ms - encounter.startMs) / spanMs) * 300;
     const y = (share: number) => 62 - share * 58;
     let line = "";
-    const spikes: { left: number; title: string }[] = [];
+    const spikes: number[] = [];
     let previous: RaidFrameResourceSample | null = null;
     for (const sample of samples) {
       if (sample.maximumHealth <= 0) continue;
@@ -168,11 +169,7 @@ function HealthGraph({
       line += line ? ` H${x(sample.timestampMs).toFixed(1)} V${y(share).toFixed(1)}` : `M0 ${y(share).toFixed(1)}`;
       const drop = previous ? previous.currentHealth - sample.currentHealth : 0;
       if (drop >= SPIKE_SHARE * sample.maximumHealth) {
-        const atMs = sample.timestampMs - encounter.startMs;
-        spikes.push({
-          left: (atMs / spanMs) * 100,
-          title: `${formatClock(atMs)} −${drop.toLocaleString()}${sample.currentHealth === 0 ? " (died)" : ""}`,
-        });
+        spikes.push(((sample.timestampMs - encounter.startMs) / spanMs) * 100);
       }
       previous = sample;
     }
@@ -181,26 +178,55 @@ function HealthGraph({
   }, [samples, encounter.startMs, spanMs]);
 
   const cursorShare = cursorMs === null ? null : percent(cursorMs - encounter.startMs, spanMs);
+  // Where the pointer is over the graph, as a share of its width (0-100).
+  const [hoverShare, setHoverShare] = useState<number | null>(null);
+  const hoverMs = hoverShare === null ? null : encounter.startMs + (hoverShare / 100) * spanMs;
+  const hoverSample = hoverMs === null ? null : latestResourceAt(samples, hoverMs);
   return (
     <div className="flex flex-col gap-1.5">
       <SectionLabel>
         <span>Health over fight</span>
       </SectionLabel>
-      <div className="relative h-9 overflow-hidden rounded-sm bg-[#1d1d1d]">
-        <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-white/[.08]" />
-        <svg viewBox="0 0 300 64" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
-          <path d={graph.area} fill={color} fillOpacity={0.18} />
-          <path d={graph.line} fill="none" stroke={color} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
-        </svg>
-        {graph.spikes.map((spike, index) => (
-          <div key={index} title={spike.title} className="absolute inset-y-0 w-px bg-destructive/70" style={{ left: `${spike.left}%` }} />
-        ))}
-        {cursorShare !== null && <div className="absolute inset-y-0 w-px bg-foreground" style={{ left: `${cursorShare}%` }} />}
-        <div className="pointer-events-none absolute inset-x-1 bottom-0.5 flex justify-between font-mono text-[9px] text-muted-foreground">
-          <span>0:00</span>
-          {cursorMs !== null && <span>{formatClock(cursorMs - encounter.startMs)}</span>}
-          <span>{formatClock(spanMs)}</span>
+      <div className="relative">
+        <div
+          className="relative h-9 cursor-crosshair overflow-hidden rounded-sm bg-[#1d1d1d]"
+          onPointerMove={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect();
+            setHoverShare(percent(event.clientX - rect.left, rect.width));
+          }}
+          onPointerLeave={() => setHoverShare(null)}
+        >
+          <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-white/[.08]" />
+          <svg viewBox="0 0 300 64" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
+            <path d={graph.area} fill={color} fillOpacity={0.18} />
+            <path d={graph.line} fill="none" stroke={color} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+          </svg>
+          {graph.spikes.map((left, index) => (
+            <div key={index} className="absolute inset-y-0 w-px bg-destructive/70" style={{ left: `${left}%` }} />
+          ))}
+          {cursorShare !== null && <div className="absolute inset-y-0 w-px bg-foreground" style={{ left: `${cursorShare}%` }} />}
+          <div className="pointer-events-none absolute inset-x-1 bottom-0.5 flex justify-between font-mono text-[9px] text-muted-foreground">
+            <span>0:00</span>
+            {cursorMs !== null && <span>{formatClock(cursorMs - encounter.startMs)}</span>}
+            <span>{formatClock(spanMs)}</span>
+          </div>
+          {hoverShare !== null && <div className="pointer-events-none absolute inset-y-0 w-px bg-white/60" style={{ left: `${hoverShare}%` }} />}
         </div>
+        {hoverShare !== null && hoverMs !== null && (
+          <div
+            className="pointer-events-none absolute bottom-full z-10 mb-1 whitespace-nowrap rounded border border-white/15 bg-zinc-950/95 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-zinc-100 shadow"
+            style={{
+              left: `${hoverShare}%`,
+              // Keep the tooltip inside the graph's width near either edge.
+              transform: `translateX(${hoverShare < 20 ? "0" : hoverShare > 80 ? "-100%" : "-50%"})`,
+            }}
+          >
+            <span className="text-zinc-400">{formatClock(hoverMs - encounter.startMs)}</span>{" "}
+            {hoverSample && hoverSample.maximumHealth > 0
+              ? `${hoverSample.currentHealth.toLocaleString()} / ${hoverSample.maximumHealth.toLocaleString()} (${Math.round(percent(hoverSample.currentHealth, hoverSample.maximumHealth))}%)`
+              : "No data"}
+          </div>
+        )}
       </div>
     </div>
   );
