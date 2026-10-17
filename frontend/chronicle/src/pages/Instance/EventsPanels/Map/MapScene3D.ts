@@ -26,7 +26,8 @@ import {
 } from "./cameraDirector";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
-import { CAST_ARC_TEXTURE_STEPS, HALO_COLORS, MARKS_SCALE, UnitTokenTextures, type HaloKind } from "./unitTokens";
+import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, ENEMY_RED, HALO_COLORS, MARKS_SCALE, PET_ICON, TARGET_LINE, TOKEN_LAYOUT, type HaloKind } from "./unitTokenArt";
+import { UnitTokenTextures } from "./unitTokens";
 import {
   clampToRadius,
   corsAssetUrl,
@@ -61,7 +62,7 @@ import type { MapMarkerKind, MapSceneGround, MapUnitHealth } from "./useMapScene
 
 /** Ground plane width in scene units; depth follows the artwork's aspect. */
 export const GROUND_WIDTH = 100;
-const MUTED_OPACITY = 0.28;
+const MUTED_OPACITY = TOKEN_LAYOUT.mutedOpacity;
 const LABEL_HEIGHT = 5;
 /** Primitive pool size for each effect kind; also the derivation cap's ceiling. */
 export { MAX_EFFECT_PRIMITIVES };
@@ -204,37 +205,30 @@ const PRESENCE_CAMERA_LENGTH = 3;
 const PRESENCE_LABEL_HEIGHT = 0.03;
 
 // --- Unit tokens: flat discs on the ground (geometry units, as PLAYER_GEOMETRY_HEIGHT) ---
-const TOKEN_RADIUS: Record<MapMarkerKind, number> = { player: 1.25, pet: 0.85, hostile: 1.25 };
-const BOSS_TOKEN_RADIUS = 2;
-/** A model's halos and arc sit around this radius. */
-const MINI_TOKEN_RADIUS = 1.2;
-// Heights above the floor, layered so they do not fight each other (or the mesh).
+// Sizes come from unitTokenArt, which the map legend page lays its art out with too.
+const TOKEN_RADIUS: Record<MapMarkerKind, number> = TOKEN_LAYOUT.radius;
+const BOSS_TOKEN_RADIUS = TOKEN_LAYOUT.bossRadius;
+const MINI_TOKEN_RADIUS = TOKEN_LAYOUT.miniRadius;
 // Heights: the shadow and the disc's underside sit just off the floor; the
 // rest stack above the disc's face (its underside plus its thickness).
 const TOKEN_GROUND = { shadow: 0.12, underside: 0.15 };
 const TOKEN_LIFT = { marks: 0.02, arc: 0.05, halo: 0.07 };
-/** A disc's edge, like a coin's, as a fraction of its radius (about 12% of the diameter). */
-const TOKEN_THICKNESS = 0.24;
+const TOKEN_THICKNESS = TOKEN_LAYOUT.thickness;
 /** A boss sigil lies flat, at the height a player's disc face would be. */
 const SIGIL_FACE = 0.45;
-/** Plane half-sizes per radius: each texture's ring falls where the design puts it. */
-const TOKEN_PLANE = { shadow: 1.45, halo: 1.9, pin: 2.25, arc: 1.32, ticks: 1, sigil: 1.5 };
-/** The column above the disc: its width and full height, per radius. */
-const COLUMN_WIDTH = 0.26;
-const COLUMN_HEIGHT = 3.2;
-const COLUMN_TRACK_OPACITY = 0.08;
-/** The boss sigil's tick ring turns this fast (radians per second). */
-const SIGIL_SPIN = 0.14;
-/** A boss without a model: its hexagon pin stands this high (per radius) over the sigil. */
-const BOSS_PIN_HEIGHT = 1.9;
-const BOSS_PIN_SIZE = 1.15;
-const PET_ICON = "/c/icons/ability_hunter_beasttaming.png";
+const TOKEN_PLANE = TOKEN_LAYOUT.plane;
+const COLUMN_WIDTH = TOKEN_LAYOUT.columnWidth;
+const COLUMN_HEIGHT = TOKEN_LAYOUT.columnHeight;
+const COLUMN_TRACK_OPACITY = TOKEN_LAYOUT.columnTrackOpacity;
+const SIGIL_SPIN = TOKEN_LAYOUT.sigilSpin;
+const BOSS_PIN_HEIGHT = TOKEN_LAYOUT.bossPinHeight;
+const BOSS_PIN_SIZE = TOKEN_LAYOUT.bossPinSize;
 // Target lines: ribbon width (geometry units), lift above the floor, and dash period and speed.
-const TARGET_LINE_WIDTH = 0.32;
-const TARGETS_TARGET_LINE_WIDTH = 0.22;
+const TARGET_LINE_WIDTH = TARGET_LINE.width;
+const TARGETS_TARGET_LINE_WIDTH = TARGET_LINE.targetsTargetWidth;
 const TARGET_LINE_LIFT = 0.25;
-const TARGET_LINE_DASH = 1.6;
-const TARGET_LINE_SPEED = 1.2;
+const TARGET_LINE_DASH = TARGET_LINE.dash;
+const TARGET_LINE_SPEED = TARGET_LINE.speed;
 
 const ORBIT_NEAR = 0.5;
 const ORBIT_FAR = 2000;
@@ -1768,8 +1762,8 @@ export class MapScene3D {
 
   // The disc's face and the notch for the unit's colour, icon and death.
   private applyTokenFace(object: UnitObject) {
-    const ring = object.dead ? "#5a5a5a" : object.color;
-    object.coneMaterial.map = this.tokenTextures.facingMarks(object.boss ? "#ef4444" : ring, object.boss);
+    const ring = object.dead ? DEAD_RING : object.color;
+    object.coneMaterial.map = this.tokenTextures.facingMarks(object.boss ? ENEMY_RED : ring, object.boss);
     object.coneMaterial.color.setHex(object.dead && object.boss ? 0x777777 : 0xffffff);
     object.coneMaterial.needsUpdate = true;
     object.token.edge.material.color.set(ring);
@@ -2930,7 +2924,7 @@ export class MapScene3D {
       map.repeat.x = length / period;
       map.offset.x -= (dt * TARGET_LINE_SPEED) / (dotted ? 0.6 : 1);
       line.material.color.copy(color);
-      line.material.opacity = dotted ? 0.75 : 0.9;
+      line.material.opacity = dotted ? TARGET_LINE.targetsTargetOpacity : TARGET_LINE.opacity;
     });
   }
 
