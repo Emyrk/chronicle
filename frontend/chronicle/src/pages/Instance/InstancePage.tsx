@@ -7,6 +7,7 @@ import { InstanceEventsProvider } from "@/hooks/instanceEvents";
 import { DatasetProvider } from "@/hooks/useDatasetId";
 import { PlayerSpecializationProvider } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 import type { ActivityPeriod, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles, KillType, VehicleControlMetadata } from "@/api/typesGenerated";
+import { resolveInstanceUnits, type ResolvedInstanceUnit } from "./instanceUnits";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -78,8 +79,8 @@ export interface Instance {
   encounters: Encounter[];
   // GUID -> player info lookup
   players?: Record<string, InstancePlayer>;
-  // GUID -> unit info lookup (creatures, pets, etc.)
-  units?: Record<string, InstanceUnit>;
+  // GUID -> resolved unit info lookup (creatures, pets, etc.)
+  units?: Record<string, ResolvedInstanceUnit>;
   // Server-computed feature flags for this instance
   capabilities: readonly string[];
   // Parse format and server-mechanics flavor of the source log group
@@ -107,7 +108,7 @@ export interface Instance {
 }
 
 // Helper to get unit name from lookup, with fallback
-function getUnitName(guidStr: string, units: Record<string, InstanceUnit>): string {
+function getUnitName(guidStr: string, units: Record<string, ResolvedInstanceUnit>): string {
   const unit = units[guidStr];
   if (unit) {
     return unit.name;
@@ -140,6 +141,8 @@ function transformToInstance(
     encounters: readonly WoWEncounterWithHostiles[] | null;
     players: Record<string, InstancePlayer> | null;
     units: Record<string, InstanceUnit> | null;
+    names_by_entry?: Record<number, string>;
+    summons_by_owner?: Record<string, readonly string[]>;
     capabilities?: readonly string[];
     format?: string;
     flavor?: readonly string[];
@@ -159,7 +162,11 @@ function transformToInstance(
   },
 ): Instance {
   const players = normalizeRecord(apiInstance.players);
-  const units = normalizeRecord(apiInstance.units);
+  const units = resolveInstanceUnits(
+    apiInstance.units,
+    apiInstance.names_by_entry,
+    apiInstance.summons_by_owner,
+  );
   const apiEncounters = normalizeArray(apiInstance.encounters);
 
   // Map encounters

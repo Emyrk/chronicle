@@ -1232,11 +1232,12 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 			return nil
 		})
 	}
-	// UNIT_INFO pets should be available to metadata consumers such as Unit
-	// Lookup regardless of whether their Character implementation became active.
-	// This intentionally does not alter character factory selection or activity.
-	for id := range h.units.Info {
-		if id.IsPet() {
+	// Owned UNIT_INFO units should be available to metadata consumers such as
+	// Unit Lookup regardless of GUID type or whether they became active. This
+	// includes pets, creature-based totems, and object-based traps. This
+	// intentionally does not alter character factory selection or activity.
+	for id, info := range h.units.Info {
+		if info.Owner != nil {
 			persistedUnitSet[id] = struct{}{}
 		}
 	}

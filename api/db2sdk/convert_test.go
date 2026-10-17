@@ -51,6 +51,34 @@ func TestWoWEncounterIncludesMapID(t *testing.T) {
 	require.Equal(t, 43, WoWEncounter(database.LogInstanceEncounter{MapID: 43}).MapID)
 }
 
+func TestInstanceUnitsCompactsNamesAndOwners(t *testing.T) {
+	t.Parallel()
+
+	owner := guid.GUID(0x0000000000000001)
+	firstTotem := guid.GUID(0xF130001D00000002)
+	secondTotem := guid.GUID(0xF130001D00000001)
+	boss := guid.GUID(0xF13000007B000001)
+	conflictA := guid.GUID(0xF130000009000001)
+	conflictB := guid.GUID(0xF130000009000002)
+
+	converted, namesByEntry, summonsByOwner := InstanceUnits([]database.LogInstanceUnit{
+		{UnitGuid: firstTotem, Name: "Fire Resistance Totem", Entry: 7424, OwnerGuid: &owner},
+		{UnitGuid: secondTotem, Name: "Fire Resistance Totem", Entry: 7424, OwnerGuid: &owner},
+		{UnitGuid: boss, Name: "Boss", Entry: 123},
+		{UnitGuid: conflictA, Name: "First Name", Entry: 9},
+		{UnitGuid: conflictB, Name: "Second Name", Entry: 9},
+	})
+
+	require.Equal(t, map[uint32]string{7424: "Fire Resistance Totem"}, namesByEntry)
+	require.Empty(t, converted[firstTotem].Name)
+	require.Empty(t, converted[secondTotem].Name)
+	require.Equal(t, "Boss", converted[boss].Name)
+	require.Equal(t, "First Name", converted[conflictA].Name)
+	require.Equal(t, "Second Name", converted[conflictB].Name)
+	require.Nil(t, converted[firstTotem].Owner)
+	require.Equal(t, []guid.GUID{secondTotem, firstTotem}, summonsByOwner[owner])
+}
+
 func TestVehicleControlMetadata(t *testing.T) {
 	t.Parallel()
 

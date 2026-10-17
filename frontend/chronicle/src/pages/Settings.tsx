@@ -46,6 +46,7 @@ import { STRIPS, isStripType } from "@/pages/Instance/EventsPanels/Strips/strips
 import { resolveStripSize, type StripType } from "@/pages/Instance/EventsPanels/Strips/types";
 import type { PanelContext } from "@/pages/Instance/EventsPanels/types";
 import type { PanelFilter } from "@/pages/Instance/EventsPanels/processors/filters";
+import { resolveInstanceUnits, type ResolvedInstanceUnit } from "@/pages/Instance/instanceUnits";
 import type { Instance } from "@/pages/Instance/InstancePage";
 import { PanelTimingProvider } from "@/pages/Instance/EventsPanels/PanelTimingContext";
 import { ChartDataRegistryProvider } from "@/pages/Instance/EventsPanels/ChartDataRegistry";
@@ -1018,7 +1019,7 @@ function extractInstanceId(reference: string): string | null {
   }
 }
 
-function getUnitName(guidStr: string, units: Record<string, InstanceUnit>): string {
+function getUnitName(guidStr: string, units: Record<string, ResolvedInstanceUnit>): string {
   const unit = units[guidStr];
   if (unit) return unit.name;
   return `Enemy ${guidStr}`;
@@ -1033,9 +1034,16 @@ function transformToInstance(
     encounters: readonly WoWEncounterWithHostiles[];
     players: Record<string, InstancePlayer>;
     units: Record<string, InstanceUnit>;
+    names_by_entry?: Record<number, string>;
+    summons_by_owner?: Record<string, readonly string[]>;
   },
 ): Instance {
-  const { players, units } = apiInstance;
+  const players = apiInstance.players;
+  const units = resolveInstanceUnits(
+    apiInstance.units,
+    apiInstance.names_by_entry,
+    apiInstance.summons_by_owner,
+  );
 
   const encounters = apiInstance.encounters.map((enc) => ({
     id: enc.id,

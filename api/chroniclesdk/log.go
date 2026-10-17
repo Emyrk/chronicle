@@ -296,7 +296,7 @@ type WoWSimpleParsedInstance struct {
 }
 
 type InstanceUnit struct {
-	Name  string     `json:"name"`
+	Name  string     `json:"name,omitempty"`
 	Owner *guid.GUID `json:"owner,omitempty"`
 	Entry uint32     `json:"entry"`
 }
@@ -318,10 +318,12 @@ type WoWAttendanceInstance struct {
 
 type WoWParsedInstance struct {
 	WoWInstance
-	RealmName  string                        `json:"realm_name,omitempty"`
-	Encounters []WoWEncounterWithHostiles    `json:"encounters"`
-	Units      map[GUIDString]InstanceUnit   `json:"units"`
-	Players    map[GUIDString]InstancePlayer `json:"players"`
+	RealmName      string                        `json:"realm_name,omitempty"`
+	Encounters     []WoWEncounterWithHostiles    `json:"encounters"`
+	Units          map[GUIDString]InstanceUnit   `json:"units"`
+	NamesByEntry   map[uint32]string             `json:"names_by_entry,omitempty"`
+	SummonsByOwner map[GUIDString][]GUIDString   `json:"summons_by_owner,omitempty"`
+	Players        map[GUIDString]InstancePlayer `json:"players"`
 }
 
 // SpeedrunRequirement describes one rule for a valid speedrun.

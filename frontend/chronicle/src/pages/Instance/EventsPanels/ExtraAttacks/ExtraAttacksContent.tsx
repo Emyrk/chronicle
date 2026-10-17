@@ -6,7 +6,7 @@ import type { ExtraAttacksResult } from "./extraAttacks.processor";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { formatNumber } from "@/lib/format";
 import { useExtraAttacksBreakout } from "./ExtraAttacksBreakout";
-import type { InstanceUnit } from "@/api/typesGenerated";
+import type { ResolvedInstanceUnit } from "@/pages/Instance/instanceUnits";
 
 /**
  * Aggregate extra attacks data across selected encounters.
@@ -15,7 +15,7 @@ function aggregateForEncounters(
   result: ExtraAttacksResult,
   selectedTargets: Set<string>,
   selectedEncounterIds: string[],
-  instanceUnits: Record<string, InstanceUnit>,
+  instanceUnits: Record<string, ResolvedInstanceUnit>,
 ): PlayerMetricChartData[] {
   const aggregated = new Map<string, PlayerMetricChartData>();
   
@@ -63,7 +63,7 @@ export const ExtraAttacksContent = (props: ExtraAttacksContentProps) => {
   const extraAttacksData = useMemo(() => {
     if (!cachedResult) return [];
     return aggregateForEncounters(cachedResult, context.entitySelection.playerIds, context.selectedEncounterIds, context.instance.units ?? {});
-  }, [cachedResult, context.entitySelection.playerIds, context.selectedEncounterIds]);
+  }, [cachedResult, context.entitySelection.playerIds, context.selectedEncounterIds, context.instance.units]);
 
   // Register chart data for cross-panel comparison
   const { registerChartData } = props;

@@ -20,10 +20,12 @@ import (
 
 type InstanceResponse struct {
 	chroniclesdk.WoWInstance
-	RealmName  string                                    `json:"realm_name,omitempty"`
-	Encounters []InstanceEncounter                       `json:"encounters"`
-	Units      map[guid.GUID]chroniclesdk.InstanceUnit   `json:"units"`
-	Players    map[guid.GUID]chroniclesdk.InstancePlayer `json:"players"`
+	RealmName      string                                    `json:"realm_name,omitempty"`
+	Encounters     []InstanceEncounter                       `json:"encounters"`
+	Units          map[guid.GUID]chroniclesdk.InstanceUnit   `json:"units"`
+	NamesByEntry   map[uint32]string                         `json:"names_by_entry,omitempty"`
+	SummonsByOwner map[guid.GUID][]guid.GUID                 `json:"summons_by_owner,omitempty"`
+	Players        map[guid.GUID]chroniclesdk.InstancePlayer `json:"players"`
 }
 
 type AttendanceInstanceResponse struct {
@@ -143,11 +145,13 @@ func (s *Service) getInstanceBySlug(w http.ResponseWriter, r *http.Request) {
 
 	decorated := db2sdk.WowDecoratedInstance(instance, units, players, encounters, hostiles, phases)
 	response := InstanceResponse{
-		WoWInstance: wowInstance,
-		RealmName:   decorated.RealmName,
-		Encounters:  compactInstanceEncounters(decorated.Encounters),
-		Units:       decorated.Units,
-		Players:     decorated.Players,
+		WoWInstance:    wowInstance,
+		RealmName:      decorated.RealmName,
+		Encounters:     compactInstanceEncounters(decorated.Encounters),
+		Units:          decorated.Units,
+		NamesByEntry:   decorated.NamesByEntry,
+		SummonsByOwner: decorated.SummonsByOwner,
+		Players:        decorated.Players,
 	}
 	httpapi.Write(ctx, w, http.StatusOK, response)
 }

@@ -31,6 +31,10 @@ func TestInstanceUnitOwnerJSON(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{"name":"Boss","entry":1}`, string(withoutOwner))
 
+	withoutName, err := json.Marshal(InstanceUnit{Entry: 1})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"entry":1}`, string(withoutName))
+
 	owner := guid.GUID(0xF140000000000001)
 	withOwner, err := json.Marshal(InstanceUnit{Name: "Pet", Owner: &owner, Entry: 2})
 	require.NoError(t, err)
