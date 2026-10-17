@@ -11,6 +11,7 @@ import {
   activeCastAt,
   incomingHealsAt,
   latestResourceAt,
+  orderRaidFramePlayers,
   raidFramesProcessor,
   type RaidFrameCast,
   type RaidFrameHeal,
@@ -653,12 +654,14 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
     return overlay ? null : <PanelMessage title="No players" detail="This log does not list any players for the selected encounter." />;
   }
 
-  const frameData = players.map(([guid, player]) => ({
-    guid,
-    player,
-    sample: latestResourceAt(encounter.resourcesByUnit.get(guid) ?? [], timestampMs),
-    cast: activeCastAt(encounter.castsByUnit.get(guid) ?? [], timestampMs),
-    incomingHeals: incomingHealsAt(encounter.healsByUnit.get(guid) ?? [], timestampMs, INCOMING_HEAL_WINDOW_MS),
+  // Raid groups (the Raid Composition panel's layout) when the log has them;
+  // null entries pad a group so the next starts its own column.
+  const frameData = orderRaidFramePlayers(players, props.result.composition.groups).map((entry) => entry && ({
+    guid: entry[0],
+    player: entry[1],
+    sample: latestResourceAt(encounter.resourcesByUnit.get(entry[0]) ?? [], timestampMs),
+    cast: activeCastAt(encounter.castsByUnit.get(entry[0]) ?? [], timestampMs),
+    incomingHeals: incomingHealsAt(encounter.healsByUnit.get(entry[0]) ?? [], timestampMs, INCOMING_HEAL_WINDOW_MS),
   }));
 
   if (overlay) {
@@ -666,15 +669,15 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
     return (
       <TooltipProvider>
         <div aria-label="Raid frames" className="pointer-events-none grid grid-flow-col grid-rows-[repeat(5,auto)] gap-0.5">
-          {frameData.map(({ guid, player, sample, cast, incomingHeals }) => (
+          {frameData.map((frame, index) => frame === null ? <div key={`empty-${index}`} aria-hidden /> : (
             <OverlayRaidFrame
-              key={guid}
-              guid={guid}
-              name={player.name}
-              className={player.class}
-              sample={sample}
-              cast={cast}
-              incomingHeals={incomingHeals}
+              key={frame.guid}
+              guid={frame.guid}
+              name={frame.player.name}
+              className={frame.player.class}
+              sample={frame.sample}
+              cast={frame.cast}
+              incomingHeals={frame.incomingHeals}
               spellNames={props.result.spellNames}
               timestampMs={timestampMs}
             />
@@ -687,7 +690,9 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
   return (
     <div className="styled-scrollbar h-full min-h-0 overflow-auto p-1">
       <div className="grid min-w-max grid-flow-col grid-rows-[repeat(5,minmax(0,1fr))] auto-cols-[minmax(7.5rem,1fr)] gap-1">
-        {frameData.map(({ guid, player, sample, cast, incomingHeals }) => {
+        {frameData.map((frame, index) => {
+          if (frame === null) return <div key={`empty-${index}`} aria-hidden />;
+          const { guid, player, sample, cast, incomingHeals } = frame;
           return (
             <RaidFrame
               key={guid}

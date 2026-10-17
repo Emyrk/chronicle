@@ -8,6 +8,7 @@ import type {
   UnitResourcesProcessorEvent,
 } from "../processorTypes";
 import {
+  orderRaidFramePlayers,
   activeCastAt,
   incomingHealsAt,
   latestResourceAt,
@@ -184,5 +185,32 @@ describe("raidFramesProcessor", () => {
     const state = raidFramesProcessor.createState();
     raidFramesProcessor.processEvent(state, resources(), "other", FIRST_TIMESTAMP, "unit_resources", context());
     expect(state.encounters.size).toBe(0);
+  });
+
+  it("keeps the Raid Composition group layout", () => {
+    const state = raidFramesProcessor.createState();
+    const groupMemberGuids = Array<string>(40).fill("");
+    groupMemberGuids[0] = OTHER_PLAYER;
+    groupMemberGuids[5] = PLAYER;
+    raidFramesProcessor.processEvent(state, { ...meta, type: "raid_group", groupMemberGuids }, ENCOUNTER, FIRST_TIMESTAMP, "raid_group", context());
+    expect(state.composition.groups[0][0]).toBe(OTHER_PLAYER);
+    expect(state.composition.groups[1][0]).toBe(PLAYER);
+  });
+});
+
+describe("orderRaidFramePlayers", () => {
+  const players = [["a", "A"], ["b", "B"], ["c", "C"], ["d", "D"]] as const;
+
+  it("keeps the fallback order without group data", () => {
+    expect(orderRaidFramePlayers(players, [["", "", "", "", ""]])).toEqual(players);
+  });
+
+  it("orders by group, pads each group to five, then appends the ungrouped", () => {
+    const ordered = orderRaidFramePlayers(players, [["c", "", "a", "", ""], ["", "", "", "", ""], ["b", "", "", "", ""]]);
+    expect(ordered.map((entry) => entry?.[0] ?? null)).toEqual([
+      "c", "a", null, null, null,
+      "b", null, null, null, null,
+      "d",
+    ]);
   });
 });
