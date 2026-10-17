@@ -100,7 +100,7 @@ export function MapSettingsOverlay({
           <Section title="Effects">
             <Toggle
               label="Combat effects"
-              detail="Hit wobble, spell beams, cast rings and deaths"
+              detail="Hit wobble, spell beams, area rings and heal pulses"
               checked={effectsOn}
               onChange={(enabled) => onEffectSettings({ enabled })}
             />
