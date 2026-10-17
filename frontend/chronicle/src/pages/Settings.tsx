@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { cn } from "@/lib/utils";
 import { iconListUrl } from "@/config/iconUrl";
 import { toast } from "sonner";
-import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, Monitor, Smartphone, Menu, X, User, Swords, Star } from "lucide-react";
+import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
@@ -32,12 +33,14 @@ import {
 } from "@/api/queries";
 import type { CreateUserPanelLayoutRequest, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles } from "@/api/typesGenerated";
 import { GridLayoutEditor, type GridEditorItem } from "@/components/layout/GridLayoutEditor";
+import { groupEditorHeightRows, placeLayoutItem } from "@/components/layout/layoutGroups";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { InstanceEventsProvider } from "@/hooks/instanceEvents";
 import { DatasetProvider, useTenantDatasetScope } from "@/hooks/useDatasetId";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
+import { SeamlessLayoutContext } from "@/pages/Instance/EventsPanels/SeamlessLayoutContext";
 import { EventsPanel, type EventsPanelType } from "@/pages/Instance/EventsPanels";
 import { isCustomPanelRef } from "@/pages/Instance/EventsPanels/custom/pluginTypes";
 import { PANELS } from "@/pages/Instance/EventsPanels/EventsPanel";
@@ -1213,8 +1216,99 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
   const [instanceReferenceInput, setInstanceReferenceInput] = useState<string>(() => getStoredLayoutLabInstanceReference());
   const [instanceReference, setInstanceReference] = useState<string>(() => normalizeInstanceReference(getStoredLayoutLabInstanceReference()));
   const [hasDismissedResizeHint, setHasDismissedResizeHint] = useState<boolean>(() => getStoredLayoutLabResizeHintDismissed());
+  const [activeDropGroupId, setActiveDropGroupId] = useState<string | null>(null);
   const [importText, setImportText] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
+
+  const panelItemCount = items.filter((item) => item.kind !== "group").length;
+
+  const outerLayoutItems = items
+    .filter((item) => !item.groupId)
+    .map((item) => {
+      if (item.kind !== "group") return item;
+      const requiredHeight = groupEditorHeightRows(items.filter((candidate) => candidate.groupId === item.id));
+      return {
+        ...item,
+        h: requiredHeight,
+        minH: requiredHeight,
+        maxH: requiredHeight,
+      };
+    });
+
+  const mergePositionedItems = (positionedItems: GridEditorItem[]) => {
+    const byId = new Map(positionedItems.map((item) => [item.id, item]));
+    setItems((previous) => previous.map((item) => byId.get(item.id) ?? item));
+  };
+
+  const groupDropTargetAtEvent = (event: Event): HTMLElement | null => {
+    if (!("clientX" in event) || !("clientY" in event)) return null;
+    for (const element of document.elementsFromPoint(event.clientX as number, event.clientY as number)) {
+      const target = element.closest<HTMLElement>("[data-layout-group-drop-id]");
+      if (target) return target;
+    }
+    return null;
+  };
+
+  const localPositionForGroupDrop = (target: HTMLElement, event: Event) => {
+    const rect = target.getBoundingClientRect();
+    const clientX = "clientX" in event ? event.clientX as number : rect.left;
+    const clientY = "clientY" in event ? event.clientY as number : rect.top;
+    const gridMargin = 10;
+    const columnStride = (rect.width + gridMargin) / 12;
+    const rowStride = 96 + gridMargin;
+    return {
+      x: Math.floor((clientX - rect.left + target.scrollLeft) / columnStride),
+      y: Math.floor((clientY - rect.top + target.scrollTop) / rowStride),
+    };
+  };
+
+  const handleLayoutItemDrag = (_item: GridEditorItem, event: Event) => {
+    setActiveDropGroupId(groupDropTargetAtEvent(event)?.dataset.layoutGroupDropId ?? null);
+  };
+
+  const handleLayoutItemDragStop = (item: GridEditorItem, event: Event) => {
+    const target = groupDropTargetAtEvent(event);
+    const nextGroupId = target?.dataset.layoutGroupDropId;
+    setActiveDropGroupId(null);
+
+    if (nextGroupId && nextGroupId === item.groupId) return;
+
+    if (nextGroupId && item.kind !== "group") {
+      const desired = localPositionForGroupDrop(target, event);
+      // Let the source grid finish its drag cleanup before moving the item into
+      // another GridLayout. Synchronous cross-grid remounting leaves RGL's drag
+      // transform attached to the newly mounted item.
+      requestAnimationFrame(() => {
+        setItems((previous) => {
+          const position = placeLayoutItem(
+            item,
+            previous.filter((candidate) => candidate.groupId === nextGroupId && candidate.id !== item.id),
+            desired,
+          );
+          return previous.map((candidate) =>
+            candidate.id === item.id ? { ...candidate, groupId: nextGroupId, ...position } : candidate,
+          );
+        });
+        toast.success(`${item.title} added to group`);
+      });
+      return;
+    }
+
+    if (item.groupId) {
+      requestAnimationFrame(() => {
+        setItems((previous) => {
+          const outerItems = previous.filter((candidate) => !candidate.groupId && candidate.id !== item.id);
+          const nextY = outerItems.reduce((max, candidate) => Math.max(max, candidate.y + candidate.h), 0);
+          return previous.map((candidate) =>
+            candidate.id === item.id
+              ? { ...candidate, groupId: undefined, x: 0, y: nextY }
+              : candidate,
+          );
+        });
+        toast.success(`${item.title} removed from group`);
+      });
+    }
+  };
 
   const filteredIcons = useMemo(() => {
     const source = iconOptions.length > 0 ? iconOptions : [metaIcon];
@@ -1469,7 +1563,21 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
 
   const handleRemovePanel = (itemId: string) => {
     if (readOnly) return;
-    setItems((prev) => prev.filter((item) => item.id !== itemId));
+    setItems((previous) => {
+      const removed = previous.find((item) => item.id === itemId);
+      const remaining = previous.filter((item) => item.id !== itemId);
+      if (removed?.kind !== "group") return remaining;
+
+      let nextY = remaining
+        .filter((item) => !item.groupId)
+        .reduce((max, item) => Math.max(max, item.y + item.h), 0);
+      return remaining.map((item) => {
+        if (item.groupId !== itemId) return item;
+        const next = { ...item, groupId: undefined, x: 0, y: nextY };
+        nextY += item.h;
+        return next;
+      });
+    });
     setPanelTypesById((prev) => {
       const next = { ...prev };
       delete next[itemId];
@@ -1487,9 +1595,13 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
     });
   };
 
+  const announceAddedLayoutItem = (label: string) => {
+    toast.success(`${label} added below`);
+  };
+
   const handleAddPanel = () => {
     if (readOnly) return;
-    if (items.length >= MAX_PANELS) return;
+    if (panelItemCount >= MAX_PANELS) return;
     const nextIndex = items.reduce((max, item) => {
       const match = item.id.match(/^panel-(\d+)$/);
       const n = match ? Number(match[1]) : 0;
@@ -1515,10 +1627,11 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
     ]);
     setPanelTypesById((prev) => ({ ...prev, [newId]: newType }));
     setPanelOptionsById((prev) => ({ ...prev, [newId]: null }));
+    announceAddedLayoutItem("Panel");
   };
 
   const handleAddStrip = () => {
-    if (readOnly || items.length >= MAX_PANELS) return;
+    if (readOnly || panelItemCount >= MAX_PANELS) return;
     const nextIndex = items.reduce((max, item) => {
       const match = item.id.match(/^strip-(\d+)$/);
       return Math.max(max, match ? Number(match[1]) : 0);
@@ -1528,11 +1641,12 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
     const orientation = definition.defaultOrientation;
     const size = resolveStripSize(definition.size, orientation);
     const maxY = items.reduce((max, item) => Math.max(max, item.y + item.h), 0);
+    const newId = `strip-${nextIndex}`;
 
     setItems((prev) => [
       ...prev,
       {
-        id: `strip-${nextIndex}`,
+        id: newId,
         kind: "strip",
         stripType,
         orientation,
@@ -1547,6 +1661,34 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
         maxH: size.maxH,
       },
     ]);
+    announceAddedLayoutItem("Strip");
+  };
+
+  const handleAddGroup = () => {
+    if (readOnly) return;
+
+    const nextIndex = items.reduce((max, item) => {
+      const match = item.id.match(/^group-(\d+)$/);
+      return Math.max(max, match ? Number(match[1]) : 0);
+    }, 0) + 1;
+    const maxY = items.reduce((max, item) => Math.max(max, item.y + item.h), 0);
+    const newId = `group-${nextIndex}`;
+
+    setItems((previous) => [...previous, {
+      id: newId,
+      kind: "group",
+      title: "Panels",
+      description: "Drag panels and strips into this group.",
+      x: 0,
+      y: maxY,
+      w: 12,
+      h: 4,
+      minW: 12,
+      maxW: 12,
+      minH: 4,
+      maxH: 4,
+    }]);
+    announceAddedLayoutItem("Group row");
   };
 
   const handlePanelOptionChange = (itemId: string, option: string | null) => {
@@ -1583,6 +1725,57 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
     } catch (error) {
       setImportError(error instanceof Error ? error.message : "Invalid layout JSON");
     }
+  };
+
+  const renderLayoutPanel = (item: GridEditorItem) => {
+    const panelType = panelTypesById[item.id] ?? "damage_done";
+    return (
+      <div className="group relative h-full">
+        <LivePanelTile
+          item={item}
+          panelType={panelType}
+          panelOption={panelOptionsById[item.id] ?? null}
+          context={context!}
+          durationMs={durationMs}
+          onPanelTypeChange={(next) => handlePanelTypeChange(item.id, next)}
+          onStripTypeChange={(next) => handleStripTypeChange(item.id, next)}
+          onPanelOptionChange={(option) => handlePanelOptionChange(item.id, option)}
+          seedFilters={seedFiltersById[item.id]}
+          seedFiltersVersion={seedFiltersVersion}
+          onFiltersChange={(filters) => {
+            setPanelFiltersById((previous) => {
+              if (filters.length === 0) {
+                const next = { ...previous };
+                delete next[item.id];
+                return next;
+              }
+              return { ...previous, [item.id]: filters };
+            });
+          }}
+        />
+
+        {!readOnly ? (
+          <>
+            <div className="pointer-events-none absolute inset-0 z-20 rounded-md bg-background/20 opacity-0 transition-opacity group-hover:opacity-100" />
+            <div className="pointer-events-none absolute right-2 top-2 z-30 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                className="pointer-events-auto h-8 px-2"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  handleRemovePanel(item.id);
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </>
+        ) : null}
+      </div>
+    );
   };
 
   if (!session?.user_id && !isSharedMode) {
@@ -1686,50 +1879,6 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
                 <div>Saved by {activeLayoutOtherTrackerCount} other users</div>
               </div>
             ) : null}
-
-            <div className="flex items-center gap-2 pt-1">
-              {readOnly ? (
-                <>
-                  <Button
-                    type="button"
-                    variant={activeLayout.is_tracked ? "destructive" : "default"}
-                    onClick={() => void handleTrack()}
-                    className="gap-1.5"
-                    disabled={trackLayout.isPending || untrackLayout.isPending || !isLoggedIn}
-                  >
-                    {activeLayout.is_tracked ? "Remove from Book" : "Save to Book"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void handleSaveCopy()}
-                    className="gap-1.5"
-                    disabled={createLayout.isPending || !isLoggedIn}
-                  >
-                    <Copy className="h-4 w-4" />
-                    Save a Copy
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    {!isLoggedIn ? "Must be logged in to save" : "Viewing shared layout"}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Button
-                    type="button"
-                    onClick={() => void handleSave()}
-                    className="gap-1.5"
-                    disabled={updateLayout.isPending || !isLoggedIn}
-                  >
-                    <Save className="h-4 w-4" />
-                    Save
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    {!isLoggedIn ? "Must be logged in to save" : `Editing: ${activeLayout.title}`}
-                  </span>
-                </>
-              )}
-            </div>
           </div>
 
           <div className="space-y-2">
@@ -1796,6 +1945,104 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
             </div>
           </div>
         </div>
+
+        <div className="space-y-3 border-t border-border/60 pt-3">
+          <div>
+            <h3 className="text-sm font-medium">Panel layout</h3>
+            <p className="text-xs text-muted-foreground">Choose how panels and strips connect in this layout.</p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {([
+              { value: false, label: "Cards", description: "Spaced with rounded corners" },
+              { value: true, label: "Seamless", description: "Joined with sharp edges" },
+            ] as const).map((option) => {
+              const selected = (appearance.seamless === true) === option.value;
+              return (
+                <button
+                  key={option.label}
+                  type="button"
+                  disabled={readOnly}
+                  aria-pressed={selected}
+                  onClick={() => setAppearance((previous) => ({
+                    ...previous,
+                    seamless: option.value ? true : undefined,
+                  }))}
+                  className={cn(
+                    "flex items-center gap-3 border p-3 text-left transition-colors disabled:cursor-default disabled:opacity-80",
+                    selected ? "border-primary bg-primary/10" : "border-border hover:bg-muted/50",
+                    option.value ? "rounded-sm" : "rounded-lg",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "grid h-9 w-11 shrink-0 grid-cols-2 border border-border bg-background",
+                      option.value ? "gap-0 rounded-none" : "gap-1 rounded-md p-1",
+                    )}
+                    aria-hidden="true"
+                  >
+                    {[0, 1, 2, 3].map((cell) => (
+                      <span
+                        key={cell}
+                        className={cn(
+                          "bg-muted-foreground/40",
+                          option.value ? "border border-background/60" : "rounded-[2px]",
+                        )}
+                      />
+                    ))}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">{option.label}</span>
+                    <span className="block text-xs text-muted-foreground">{option.description}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            {readOnly ? (
+              <>
+                <Button
+                  type="button"
+                  variant={activeLayout.is_tracked ? "destructive" : "default"}
+                  onClick={() => void handleTrack()}
+                  className="gap-1.5"
+                  disabled={trackLayout.isPending || untrackLayout.isPending || !isLoggedIn}
+                >
+                  {activeLayout.is_tracked ? "Remove from Book" : "Save to Book"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleSaveCopy()}
+                  className="gap-1.5"
+                  disabled={createLayout.isPending || !isLoggedIn}
+                >
+                  <Copy className="h-4 w-4" />
+                  Save a Copy
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  {!isLoggedIn ? "Must be logged in to save" : "Viewing shared layout"}
+                </span>
+              </>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  onClick={() => void handleSave()}
+                  className="gap-1.5"
+                  disabled={updateLayout.isPending || !isLoggedIn}
+                >
+                  <Save className="h-4 w-4" />
+                  Save
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  {!isLoggedIn ? "Must be logged in to save" : `Editing: ${activeLayout.title}`}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {isMobile ? (
@@ -1852,7 +2099,7 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
                   variant="outline"
                   onClick={handleAddPanel}
                   className="gap-1.5"
-                  disabled={readOnly || items.length >= MAX_PANELS}
+                  disabled={readOnly || panelItemCount >= MAX_PANELS}
                 >
                   <Plus className="h-4 w-4" />
                   Add panel
@@ -1862,12 +2109,21 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
                   variant="outline"
                   onClick={handleAddStrip}
                   className="gap-1.5"
-                  disabled={readOnly || items.length >= MAX_PANELS}
+                  disabled={readOnly || panelItemCount >= MAX_PANELS}
                 >
                   <Plus className="h-4 w-4" />
                   Add strip
                 </Button>
-                <span className="text-xs text-muted-foreground">Panels: {items.length} / {MAX_PANELS}</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleAddGroup}
+                  className="gap-1.5"
+                >
+                  <LayoutPanelTop className="h-4 w-4" />
+                  Add group row
+                </Button>
+                <span className="text-xs text-muted-foreground">Panels: {panelItemCount} / {MAX_PANELS}</span>
               </div>
             ) : <div />}
 
@@ -1978,68 +2234,115 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
           </div>
         ) : (
           <InstanceEventsProvider instanceId={instance.id}>
-            <PanelTimingProvider panelCount={items.length}>
+            <PanelTimingProvider panelCount={items.filter((item) => item.kind !== "group").length}>
             <ChartDataRegistryProvider>
+              <SeamlessLayoutContext.Provider value={appearance.seamless === true}>
               <GridLayoutEditor
                 cols={12}
                 rowHeight={96}
-                items={items}
-                onItemsChange={setItems}
+                items={outerLayoutItems}
+                onItemsChange={mergePositionedItems}
                 showItemHeader={false}
                 editable={!readOnly}
+                seamless={appearance.seamless === true}
                 pulseFirstResizeHandle={!readOnly && !hasDismissedResizeHint}
                 onResizeStop={handleResizeStop}
+                onItemDrag={handleLayoutItemDrag}
+                onItemDragStop={handleLayoutItemDragStop}
                 renderItem={(item) => {
-                  const panelType = panelTypesById[item.id] ?? "damage_done";
-                  return (
-                    <div className="group relative h-full">
-                      <LivePanelTile
-                        item={item}
-                        panelType={panelType}
-                        panelOption={panelOptionsById[item.id] ?? null}
-                        context={context}
-                        durationMs={durationMs}
-                        onPanelTypeChange={(next) => handlePanelTypeChange(item.id, next)}
-                        onStripTypeChange={(next) => handleStripTypeChange(item.id, next)}
-                        onPanelOptionChange={(option) => handlePanelOptionChange(item.id, option)}
-                        seedFilters={seedFiltersById[item.id]}
-                        seedFiltersVersion={seedFiltersVersion}
-                        onFiltersChange={(filters) => {
-                          setPanelFiltersById((prev) => {
-                            if (filters.length === 0) {
-                              const next = { ...prev };
-                              delete next[item.id];
-                              return next;
-                            }
-                            return { ...prev, [item.id]: filters };
-                          });
-                        }}
-                      />
+                  if (item.kind !== "group") return renderLayoutPanel(item);
 
-                      {!readOnly ? (
-                        <>
-                          <div className="pointer-events-none absolute inset-0 z-20 rounded-md bg-background/20 opacity-0 transition-opacity group-hover:opacity-100" />
-                          <div className="pointer-events-none absolute right-2 top-2 z-30 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-                            <Button
-                              type="button"
-                              variant="destructive"
-                              size="sm"
-                              className="pointer-events-auto h-8 px-2"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                handleRemovePanel(item.id);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                  const groupedItems = items.filter((candidate) => candidate.groupId === item.id);
+                  const isDropTarget = activeDropGroupId === item.id;
+                  return (
+                    <div
+                      className={cn(
+                        "flex h-full flex-col bg-card/40 transition-colors",
+                        isDropTarget && "bg-primary/10 ring-2 ring-inset ring-primary",
+                      )}
+                    >
+                      <div className="flex shrink-0 items-center gap-3 border-b border-border px-3 py-2 pl-12">
+                        <LayoutPanelTop className="h-5 w-5 shrink-0 text-muted-foreground" />
+                        <div className="grid min-w-0 flex-1 gap-2 md:grid-cols-2">
+                          <Input
+                            aria-label="Group title"
+                            value={item.title}
+                            disabled={readOnly}
+                            onChange={(event) => setItems((previous) => previous.map((candidate) =>
+                              candidate.id === item.id ? { ...candidate, title: event.target.value } : candidate,
+                            ))}
+                            className="h-9 bg-background/80 font-medium"
+                          />
+                          <Input
+                            aria-label="Group description"
+                            value={item.description ?? ""}
+                            placeholder="Description"
+                            disabled={readOnly}
+                            onChange={(event) => setItems((previous) => previous.map((candidate) =>
+                              candidate.id === item.id ? { ...candidate, description: event.target.value } : candidate,
+                            ))}
+                            className="h-9 bg-background/80 text-muted-foreground"
+                          />
+                        </div>
+                        <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={item.collapsedByDefault === true}
+                            disabled={readOnly}
+                            onChange={(event) => setItems((previous) => previous.map((candidate) =>
+                              candidate.id === item.id
+                                ? { ...candidate, collapsedByDefault: event.target.checked }
+                                : candidate,
+                            ))}
+                          />
+                          Start collapsed
+                        </label>
+                        {!readOnly ? (
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            className="h-8 shrink-0 px-2"
+                            onClick={() => handleRemovePanel(item.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        ) : null}
+                      </div>
+                      <div
+                        data-layout-group-drop-id={item.id}
+                        data-layout-group-content
+                        className="min-h-0 flex-1 overflow-auto p-3 styled-scrollbar"
+                      >
+                        {groupedItems.length === 0 ? (
+                          <div className={cn(
+                            "flex h-full min-h-40 items-center justify-center rounded-md border border-dashed border-border text-sm text-muted-foreground",
+                            isDropTarget && "border-primary text-foreground",
+                          )}>
+                            Drag panels or strips here to add them to this group.
                           </div>
-                        </>
-                      ) : null}
+                        ) : (
+                          <GridLayoutEditor
+                            cols={12}
+                            rowHeight={96}
+                            items={groupedItems}
+                            onItemsChange={mergePositionedItems}
+                            showItemHeader={false}
+                            editable={!readOnly}
+                            seamless={appearance.seamless === true}
+                            onResizeStop={handleResizeStop}
+                            preservePositions
+                            onItemDrag={handleLayoutItemDrag}
+                            onItemDragStop={handleLayoutItemDragStop}
+                            renderItem={renderLayoutPanel}
+                          />
+                        )}
+                      </div>
                     </div>
                   );
                 }}
               />
+              </SeamlessLayoutContext.Provider>
             </ChartDataRegistryProvider>
             </PanelTimingProvider>
           </InstanceEventsProvider>
