@@ -1119,9 +1119,11 @@ export class MapScene3D {
    * and a new selection all come through here.
    */
   setViewport(viewport: MapViewport, durationMs = 0) {
-    // Walking, the character has the camera; the framing waits for orbit mode.
+    // Walking, the character has the camera: a new framing (another
+    // encounter, Follow) moves the character to its centre instead.
     if (this.walk) {
       this.viewport = viewport;
+      this.moveWalkTo(viewport);
       return;
     }
     if (this.director && this.dungeonMesh) {
@@ -3057,6 +3059,21 @@ export class MapScene3D {
     this.camera.far = WALK_FAR_YARDS * mesh.scale;
     this.camera.updateProjectionMatrix();
     this.onWalkChange(true);
+    this.requestRender();
+  }
+
+  // Puts the character down at the centre of `viewport` (the new fight's
+  // framing), on the floor there, keeping the camera's angle and zoom.
+  private moveWalkTo(viewport: MapViewport) {
+    const walk = this.walk;
+    if (!walk || !this.dungeonMesh) return;
+    // The full map's centre is nowhere in particular: then the fight's focus.
+    const whole = viewport.zoom <= FULL_MAP_VIEWPORT.zoom && this.focus;
+    const point = whole && this.focus ? this.focus.centre : { leftPercent: viewport.centerX * 100, topPercent: viewport.centerY * 100 };
+    const { x, z } = mapPointToScene(point, this.aspect, GROUND_WIDTH);
+    walk.position.set(x, this.floorHeights.heightAt("walk", x, z, this.cameraCeiling()), z);
+    walk.vy = 0;
+    walk.grounded = true;
     this.requestRender();
   }
 
