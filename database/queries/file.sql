@@ -36,6 +36,7 @@ INSERT INTO
     log_type,
     format,
     flavor,
+    private,
     created_at,
     updated_at
   )
@@ -47,7 +48,8 @@ VALUES
     $4,
     $5,
     $6,
-    $7
+    $7,
+    $8
   )
 RETURNING *
 ;

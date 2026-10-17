@@ -99,12 +99,18 @@ func (z *interceptor) InsertEncounterCharacterFights(ctx context.Context, arg []
 }
 
 func (z *interceptor) InsertInstance(ctx context.Context, arg database.InsertInstanceParams) (database.LogInstance, error) {
-	b := policy.New()
-	b.Instance(arg.ID).
-		PublicWildcard().
-		Raid_log(b.Raid_log(arg.LogGroupID))
+	private, err := z.GetWoWLogGroupPrivacy(ctx, arg.LogGroupID)
+	if err != nil {
+		return database.LogInstance{}, fmt.Errorf("get log group privacy: %w", err)
+	}
 
-	_, err := z.Write(ctx, *b.Txn())
+	b := policy.New()
+	instance := b.Instance(arg.ID).Raid_log(b.Raid_log(arg.LogGroupID))
+	if !private {
+		instance.PublicWildcard()
+	}
+
+	_, err = z.Write(ctx, *b.Txn())
 	if err != nil {
 		return database.LogInstance{}, err
 	}
@@ -122,6 +128,75 @@ func (z *interceptor) InsertWoWLogGroup(ctx context.Context, arg database.Insert
 		return database.WoWLogGroup{}, err
 	}
 	return z.Store.InsertWoWLogGroup(ctx, arg)
+}
+
+func (z *interceptor) UpdateWoWLogGroupPrivacy(ctx context.Context, arg database.UpdateWoWLogGroupPrivacyParams) (database.WoWLogGroup, error) {
+	currentPrivate, err := z.GetWoWLogGroupPrivacy(ctx, arg.ID)
+	if err != nil {
+		return database.WoWLogGroup{}, fmt.Errorf("get current log privacy: %w", err)
+	}
+	instances, err := z.GetInstancesByLogGroupID(ctx, arg.ID)
+	if err != nil {
+		return database.WoWLogGroup{}, fmt.Errorf("list log instances: %w", err)
+	}
+
+	group, err := z.Store.UpdateWoWLogGroupPrivacy(ctx, arg)
+	if err != nil {
+		return database.WoWLogGroup{}, err
+	}
+
+	if len(instances) == 0 {
+		return group, nil
+	}
+
+	b := policy.New()
+	for _, instance := range instances {
+		obj := b.Instance(instance.ID)
+		if arg.Private {
+			obj.Delete().PublicWildcard()
+		} else {
+			obj.PublicWildcard()
+		}
+	}
+	if _, err := z.Write(ctx, *b.Txn()); err != nil {
+		_, rollbackErr := z.Store.UpdateWoWLogGroupPrivacy(ctx, database.UpdateWoWLogGroupPrivacyParams{
+			ID:      arg.ID,
+			Private: currentPrivate,
+		})
+		if rollbackErr != nil {
+			return database.WoWLogGroup{}, fmt.Errorf("update instance visibility relations: %w (database rollback failed: %v)", err, rollbackErr)
+		}
+		return database.WoWLogGroup{}, fmt.Errorf("update instance visibility relations: %w", err)
+	}
+	return group, nil
+}
+
+func (z *interceptor) ApprovePrivateLogAccessRequest(ctx context.Context, arg database.ApprovePrivateLogAccessRequestParams) (database.PrivateLogAccessRequest, error) {
+	request, err := z.Store.ApprovePrivateLogAccessRequest(ctx, arg)
+	if err != nil {
+		return database.PrivateLogAccessRequest{}, err
+	}
+
+	b := policy.New()
+	b.Raid_log(request.LogGroupID).Approved_viewer(b.User(request.RequesterID))
+	if _, err := z.Write(ctx, *b.Txn()); err != nil {
+		return database.PrivateLogAccessRequest{}, fmt.Errorf("write approved viewer relation: %w", err)
+	}
+	return request, nil
+}
+
+func (z *interceptor) RevokePrivateLogAccessRequest(ctx context.Context, arg database.RevokePrivateLogAccessRequestParams) (database.PrivateLogAccessRequest, error) {
+	request, err := z.Store.RevokePrivateLogAccessRequest(ctx, arg)
+	if err != nil {
+		return database.PrivateLogAccessRequest{}, err
+	}
+
+	b := policy.New()
+	b.Raid_log(request.LogGroupID).Delete().Approved_viewer(b.User(request.RequesterID))
+	if _, err := z.Write(ctx, *b.Txn()); err != nil {
+		return database.PrivateLogAccessRequest{}, fmt.Errorf("delete approved viewer relation: %w", err)
+	}
+	return request, nil
 }
 
 func (z *interceptor) CreateUserPanelLayout(ctx context.Context, arg database.CreateUserPanelLayoutParams) (database.UserPanelLayout, error) {
@@ -357,8 +432,8 @@ func (z *interceptor) InsertUserAuthSession(ctx context.Context, arg database.In
 	b := policy.New()
 	usr := b.User(arg.UserID)
 
-	// Every user gets chronicle_member
-	b.GlobalChronicle().Chronicle_member(usr)
+	// Every user gets the baseline member and public-log roles.
+	b.GlobalChronicle().Chronicle_member(usr).Public_log_capable(usr)
 
 	// First user auth link = first real signup → technical_admin
 	count, err := z.CountUserAuthLinks(ctx)

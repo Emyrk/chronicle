@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"mime/multipart"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -222,6 +223,40 @@ func (api *API) clientUploadsDisabled(ctx context.Context) bool {
 	return false
 }
 
+func uploadPrivate(r *http.Request) (bool, error) {
+	value := r.FormValue("private")
+	if value == "" {
+		value = r.URL.Query().Get("private")
+	}
+	if value == "" {
+		return false, nil
+	}
+	return strconv.ParseBool(value)
+}
+
+func (api *API) authorizeUploadPrivacy(ctx context.Context, w http.ResponseWriter, private bool) bool {
+	actor, _ := authz.ActorFromContext(ctx)
+	permission := policy.New().GlobalChronicle().CanMark_log_public_User(actor)
+	visibility := "public"
+	if private {
+		permission = policy.New().GlobalChronicle().CanMark_log_private_User(actor)
+		visibility = "private"
+	}
+
+	allowed, err := api.Zed.CheckOne(ctx, nil, permission)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return false
+	}
+	if !allowed {
+		httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
+			Message: "You do not have permission to upload " + visibility + " logs.",
+		})
+		return false
+	}
+	return true
+}
+
 func (api *API) WoWLogUpload(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -282,7 +317,16 @@ func (api *API) WoWLogUpload(w http.ResponseWriter, r *http.Request) {
 		IsGzipped: isGzipped(secondHeader),
 	}
 
-	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{firstInput, secondInput}, database.LogTypeV1, uuid.Nil, chronicle.UploadMeta{})
+	private, err := uploadPrivate(r)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "private must be a boolean"})
+		return
+	}
+	if !api.authorizeUploadPrivacy(ctx, w, private) {
+		return
+	}
+
+	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{firstInput, secondInput}, database.LogTypeV1, uuid.Nil, chronicle.UploadMeta{Private: private})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
@@ -411,6 +455,16 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 			meta.Format = t.DefaultFormat.LogFormat
 		}
 	}
+
+	private, err := uploadPrivate(r)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "private must be a boolean"})
+		return
+	}
+	if !api.authorizeUploadPrivacy(ctx, w, private) {
+		return
+	}
+	meta.Private = private
 
 	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{input}, logType, uuid.Nil, meta)
 	if err != nil {

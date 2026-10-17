@@ -1977,6 +1977,27 @@ type ParsedLogGroup struct {
 	FinalizedAt     pgtype.Timestamptz `db:"finalized_at" json:"finalized_at"`
 }
 
+type PrivateLogAccessRequest struct {
+	ID          uuid.UUID          `db:"id" json:"id"`
+	LogGroupID  uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	ShareLinkID uuid.UUID          `db:"share_link_id" json:"share_link_id"`
+	RequesterID uuid.UUID          `db:"requester_id" json:"requester_id"`
+	Status      string             `db:"status" json:"status"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	DecidedBy   uuid.NullUUID      `db:"decided_by" json:"decided_by"`
+	DecidedAt   pgtype.Timestamptz `db:"decided_at" json:"decided_at"`
+}
+
+type PrivateLogShareLink struct {
+	ID         uuid.UUID          `db:"id" json:"id"`
+	LogGroupID uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	Code       string             `db:"code" json:"code"`
+	CreatedBy  uuid.UUID          `db:"created_by" json:"created_by"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	RevokedAt  pgtype.Timestamptz `db:"revoked_at" json:"revoked_at"`
+}
+
 type RaidComposition struct {
 	ID         uuid.UUID          `db:"id" json:"id"`
 	UserID     uuid.UUID          `db:"user_id" json:"user_id"`
@@ -2485,6 +2506,7 @@ type WoWLogGroup struct {
 	InvalidatedAt   pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
 	InvalidReason   string             `db:"invalid_reason" json:"invalid_reason"`
 	ParseGeneration int64              `db:"parse_generation" json:"parse_generation"`
+	Private         bool               `db:"private" json:"private"`
 }
 
 type World struct {

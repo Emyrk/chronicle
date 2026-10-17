@@ -44,6 +44,7 @@ type WoWLogGroup struct {
 	LogType   string             `json:"log_type"`
 	Format    string             `json:"format,omitempty"`
 	Flavor    []string           `json:"flavor,omitempty"`
+	Private   bool               `json:"private"`
 
 	InvalidatedAt *time.Time `json:"invalidated_at,omitempty"`
 	InvalidReason string     `json:"invalid_reason,omitempty"`
@@ -125,6 +126,7 @@ type WoWInstance struct {
 	TenantSlug              string                  `json:"tenant_slug,omitempty"`
 	TenantIncludeAll        bool                    `json:"tenant_include_in_all,omitempty"`
 	LogGroupID              uuid.UUID               `json:"log_group_id"`
+	Private                 bool                    `json:"private"`
 	Name                    string                  `json:"name"`
 	Slug                    string                  `json:"slug"`
 	StartTime               *time.Time              `json:"start_time,omitempty"`

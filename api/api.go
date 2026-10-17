@@ -533,6 +533,9 @@ func (api *API) Routes() chi.Router {
 			r.Get("/census", api.Census)
 
 			// Public site-wide statistics
+			r.Get("/private-log-shares/{code}", api.ResolvePrivateLogShareLink)
+			r.With(api.Auth.Authenticated(false)).Post("/private-log-shares/{code}/request", api.RequestPrivateLogAccess)
+
 			r.Get("/stats", api.SiteStats)
 
 			r.Group(func(r chi.Router) {
@@ -558,6 +561,13 @@ func (api *API) Routes() chi.Router {
 									r.Post("/reparse", api.WoWLogReparse)
 									r.Delete("/delete-files", api.DeleteWoWLogFiles)
 									r.Delete("/instances/{instance_id}", api.WoWLogDeleteInstance)
+									r.Put("/privacy", api.UpdatePrivateLogVisibility)
+									r.Post("/private-share-links", api.CreatePrivateLogShareLink)
+									r.Delete("/private-share-links/{linkID}", api.RevokePrivateLogShareLink)
+									r.Get("/access-requests", api.ListPrivateLogAccessRequests)
+									r.Post("/access-requests/{requestID}/approve", api.ApprovePrivateLogAccessRequest)
+									r.Post("/access-requests/{requestID}/deny", api.DenyPrivateLogAccessRequest)
+									r.Post("/access-requests/{requestID}/revoke", api.RevokePrivateLogAccessRequest)
 								})
 								r.Get("/", api.WoWLogGroup)
 								r.Get("/files/{fileID}/download", api.WoWLogFileDownload)
@@ -571,33 +581,42 @@ func (api *API) Routes() chi.Router {
 					r.Group(func(r chi.Router) {
 						r.Route("/instances", func(r chi.Router) {
 							r.Route("/{instance_id}", func(r chi.Router) {
-								r.Use(httpmw.InstanceIDMiddleware(api.Opts.Zed))
+								r.Use(
+									httpmw.InstanceIDMiddleware(api.Opts.Zed),
+									api.Auth.Authenticated(true),
+								)
+								// Event streams are immutable, unlisted blobs. Possession of the
+								// instance UUID is sufficient to fetch and cache them, even if the
+								// containing log is private.
 								r.Get("/events/{type}", api.InstanceEvents)
-								r.With(api.trackGuildInstanceView).Get("/", api.Instance)
-
-								r.Get("/youtube", api.GetInstanceYoutube)
-								r.Get("/loot", api.GetInstanceLoot)
-								r.Get("/raid-group", api.InstanceRaidGroup)
-								r.Post("/item-prices", api.InstanceItemPrices)
-								r.Get("/overview", api.InstanceOverviewMetrics)
-								r.Get("/ranking-records", api.InstanceRankingRecords)
-								r.Get("/speedrun", api.InstanceSpeedrun)
-								r.Get("/speedrun/cohort", api.InstanceSpeedrunCohort)
-								r.Get("/duplicates", api.ListDuplicateInstances)
-
 								r.Group(func(r chi.Router) {
-									r.Use(
-										api.Auth.Authenticated(false),
-									)
-									r.Post("/youtube", api.PostInstanceYoutube)
-								})
+									r.Use(httpmw.InstanceViewMiddleware(api.Opts.Zed))
+									r.With(api.trackGuildInstanceView).Get("/", api.Instance)
 
-								r.Group(func(r chi.Router) {
-									r.Use(
-										api.Auth.Authenticated(false),
-										httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_logs_User),
-									)
-									r.Delete("/duplicate-group", api.UngroupInstance)
+									r.Get("/youtube", api.GetInstanceYoutube)
+									r.Get("/loot", api.GetInstanceLoot)
+									r.Get("/raid-group", api.InstanceRaidGroup)
+									r.Post("/item-prices", api.InstanceItemPrices)
+									r.Get("/overview", api.InstanceOverviewMetrics)
+									r.Get("/ranking-records", api.InstanceRankingRecords)
+									r.Get("/speedrun", api.InstanceSpeedrun)
+									r.Get("/speedrun/cohort", api.InstanceSpeedrunCohort)
+									r.Get("/duplicates", api.ListDuplicateInstances)
+
+									r.Group(func(r chi.Router) {
+										r.Use(
+											api.Auth.Authenticated(false),
+										)
+										r.Post("/youtube", api.PostInstanceYoutube)
+									})
+
+									r.Group(func(r chi.Router) {
+										r.Use(
+											api.Auth.Authenticated(false),
+											httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_logs_User),
+										)
+										r.Delete("/duplicate-group", api.UngroupInstance)
+									})
 								})
 							})
 						})

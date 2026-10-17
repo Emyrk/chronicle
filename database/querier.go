@@ -26,6 +26,7 @@ type sqlcQuerier interface {
 	AddUserFavoritePlayer(ctx context.Context, arg AddUserFavoritePlayerParams) error
 	AdminListOutdatedParserVersionInstances(ctx context.Context, arg AdminListOutdatedParserVersionInstancesParams) ([]AdminListOutdatedParserVersionInstancesRow, error)
 	AdvanceWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
+	ApprovePrivateLogAccessRequest(ctx context.Context, arg ApprovePrivateLogAccessRequestParams) (PrivateLogAccessRequest, error)
 	AssignWorldToServer(ctx context.Context, arg AssignWorldToServerParams) error
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
 	CarryForwardFinalizedParsedLogGroup(ctx context.Context, arg CarryForwardFinalizedParsedLogGroupParams) error
@@ -76,6 +77,7 @@ type sqlcQuerier interface {
 	CreateGuildJoinRequest(ctx context.Context, arg CreateGuildJoinRequestParams) (GuildJoinRequest, error)
 	CreateOAuthDeviceSession(ctx context.Context, arg CreateOAuthDeviceSessionParams) error
 	CreateOAuthTokenSession(ctx context.Context, arg CreateOAuthTokenSessionParams) error
+	CreatePrivateLogShareLink(ctx context.Context, arg CreatePrivateLogShareLinkParams) (PrivateLogShareLink, error)
 	CreateRaidComposition(ctx context.Context, arg CreateRaidCompositionParams) (RaidComposition, error)
 	CreateSharedView(ctx context.Context, arg CreateSharedViewParams) (SharedView, error)
 	CreateUserPanelLayout(ctx context.Context, arg CreateUserPanelLayoutParams) (UserPanelLayout, error)
@@ -156,6 +158,7 @@ type sqlcQuerier interface {
 	DeleteWoWServerRealm(ctx context.Context, id uuid.UUID) error
 	DeleteWorld(ctx context.Context, id uuid.UUID) error
 	DeleteYoutubeVideoByInstanceOrSlug(ctx context.Context, arg DeleteYoutubeVideoByInstanceOrSlugParams) error
+	DenyPrivateLogAccessRequest(ctx context.Context, arg DenyPrivateLogAccessRequestParams) (PrivateLogAccessRequest, error)
 	DisconnectSidekickInstallation(ctx context.Context, arg DisconnectSidekickInstallationParams) (SidekickInstallation, error)
 	EncountersByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounter, error)
 	EnsureDeploymentToken(ctx context.Context, deploymentToken pgtype.Text) (pgtype.Text, error)
@@ -187,6 +190,7 @@ type sqlcQuerier interface {
 	// Item name/quality/icon/level are read from the snapshot jsonb itself,
 	// so results are self-contained.
 	GearTrendsSlotItems(ctx context.Context, arg GearTrendsSlotItemsParams) ([]GearTrendsSlotItemsRow, error)
+	GetActivePrivateLogShareLinkByCode(ctx context.Context, code string) (GetActivePrivateLogShareLinkByCodeRow, error)
 	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg GetAnyParseScoreReceiptForTenantInstanceParams) (ParseScoreReceipt, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
 	GetBillingEntitlementOwnerByProviderCustomerID(ctx context.Context, arg GetBillingEntitlementOwnerByProviderCustomerIDParams) (uuid.UUID, error)
@@ -326,6 +330,8 @@ type sqlcQuerier interface {
 	GetParsedBytesByOwner(ctx context.Context, owner uuid.UUID) (GetParsedBytesByOwnerRow, error)
 	GetParsedLogGroupByID(ctx context.Context, id uuid.UUID) (ParsedLogGroup, error)
 	GetPlayerGearHistory(ctx context.Context, arg GetPlayerGearHistoryParams) ([]GetPlayerGearHistoryRow, error)
+	GetPrivateLogAccessRequestByID(ctx context.Context, id uuid.UUID) (PrivateLogAccessRequest, error)
+	GetPrivateLogAccessRequestForUser(ctx context.Context, arg GetPrivateLogAccessRequestForUserParams) (PrivateLogAccessRequest, error)
 	GetRaidCompositionByID(ctx context.Context, id uuid.UUID) (RaidComposition, error)
 	// Returns all realm IDs that have an applicable retention policy
 	// (either directly or through their server).
@@ -379,6 +385,7 @@ type sqlcQuerier interface {
 	GetUsersByIDs(ctx context.Context, ids []uuid.UUID) ([]ChronicleUser, error)
 	GetWoWLogFilesByGroupID(ctx context.Context, wowLogID uuid.UUID) ([]LogFile, error)
 	GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetWoWLogGroupByIDRow, error)
+	GetWoWLogGroupPrivacy(ctx context.Context, id uuid.UUID) (bool, error)
 	GetWoWLogGroupsByOwner(ctx context.Context, arg GetWoWLogGroupsByOwnerParams) ([]GetWoWLogGroupsByOwnerRow, error)
 	GetWoWServer(ctx context.Context, id uuid.UUID) (WowServer, error)
 	GetWoWServerByName(ctx context.Context, name string) (WowServer, error)
@@ -501,6 +508,7 @@ type sqlcQuerier interface {
 	Instance(ctx context.Context, id uuid.UUID) (LogInstancesGuild, error)
 	InstanceAnalyticsGroupKey(ctx context.Context, instanceID uuid.UUID) (string, error)
 	InstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (LogInstancesGuild, error)
+	InstanceBySlugWithPrivacy(ctx context.Context, hashedSlug pgtype.Text) (InstanceBySlugWithPrivacyRow, error)
 	InstanceEvent(ctx context.Context, arg InstanceEventParams) (LogInstanceEvent, error)
 	InstancePlayerGUIDsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]guid.GUID, error)
 	InstancePlayerSpecs(ctx context.Context, instanceID uuid.UUID) ([]InstancePlayerSpecsRow, error)
@@ -515,6 +523,7 @@ type sqlcQuerier interface {
 	// realm, or guild. Duplicate uploads are collapsed without reducing to one run per guild.
 	InstanceSpeedrunCohort(ctx context.Context, arg InstanceSpeedrunCohortParams) ([]InstanceSpeedrunCohortRow, error)
 	InstanceUnitsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceUnit, error)
+	InstanceWithPrivacy(ctx context.Context, id uuid.UUID) (InstanceWithPrivacyRow, error)
 	InvalidateOAuthDeviceSession(ctx context.Context, deviceSignature string) (int64, error)
 	InvalidateWoWLogGroup(ctx context.Context, arg InvalidateWoWLogGroupParams) error
 	IsLayoutTrackedByUser(ctx context.Context, arg IsLayoutTrackedByUserParams) (bool, error)
@@ -596,6 +605,7 @@ type sqlcQuerier interface {
 	// Receipt-less results are authoritative historical data. Read them without
 	// joining snapshot tables or score memberships so they can never be recomputed.
 	ListPersistedParseScoreResultsForInstance(ctx context.Context, arg ListPersistedParseScoreResultsForInstanceParams) ([]ParseScoreResult, error)
+	ListPrivateLogAccessRequests(ctx context.Context, logGroupID uuid.UUID) ([]ListPrivateLogAccessRequestsRow, error)
 	ListRaidCompositionsByUser(ctx context.Context, arg ListRaidCompositionsByUserParams) ([]RaidComposition, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
 	// Used by the parses handler to get the viewed instance's own metric values
@@ -680,6 +690,8 @@ type sqlcQuerier interface {
 	// Removes summary cards whose instance/difficulty/player-count combination no
 	// longer has any ranking rows visible to the current tenant context.
 	PruneStaleRankingsInstanceSummaries(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	PublicInstance(ctx context.Context, id uuid.UUID) (LogInstancesGuild, error)
+	PublicInstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (LogInstancesGuild, error)
 	RankingRunByID(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	RankingRunIdentitiesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]RankingRunIdentitiesByInstanceIDsRow, error)
 	RankingRunIdentitiesByLogGroupID(ctx context.Context, logGroupID uuid.UUID) ([]RankingRunIdentitiesByLogGroupIDRow, error)
@@ -778,6 +790,8 @@ type sqlcQuerier interface {
 	ResyncCandidateLogGroups(ctx context.Context) ([]ResyncCandidateLogGroupsRow, error)
 	RevokeActiveSidekickOAuthGrants(ctx context.Context, sidekickID uuid.UUID) ([]string, error)
 	RevokeOAuthTokenSessions(ctx context.Context, arg RevokeOAuthTokenSessionsParams) (int64, error)
+	RevokePrivateLogAccessRequest(ctx context.Context, arg RevokePrivateLogAccessRequestParams) (PrivateLogAccessRequest, error)
+	RevokePrivateLogShareLink(ctx context.Context, arg RevokePrivateLogShareLinkParams) (int64, error)
 	RotateOAuthRefreshToken(ctx context.Context, arg RotateOAuthRefreshTokenParams) (int64, error)
 	SearchCreatureTemplates(ctx context.Context, arg SearchCreatureTemplatesParams) ([]SearchCreatureTemplatesRow, error)
 	SearchGamePlayers(ctx context.Context, arg SearchGamePlayersParams) ([]SearchGamePlayersRow, error)
@@ -892,6 +906,7 @@ type sqlcQuerier interface {
 	// via a NULL narg to leave that column unchanged.
 	UpdateWoWLogGroupFormatFlavor(ctx context.Context, arg UpdateWoWLogGroupFormatFlavorParams) error
 	UpdateWoWLogGroupLogType(ctx context.Context, arg UpdateWoWLogGroupLogTypeParams) error
+	UpdateWoWLogGroupPrivacy(ctx context.Context, arg UpdateWoWLogGroupPrivacyParams) (WoWLogGroup, error)
 	UpdateWoWServer(ctx context.Context, arg UpdateWoWServerParams) (WowServer, error)
 	UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServerRealmParams) (WowServerRealm, error)
 	UpsertActiveSidekickIssue(ctx context.Context, arg UpsertActiveSidekickIssueParams) (SidekickIssue, error)
@@ -923,6 +938,7 @@ type sqlcQuerier interface {
 	UpsertPendingModificationRequest(ctx context.Context, arg UpsertPendingModificationRequestParams) (ApplicationModificationRequest, error)
 	UpsertPlayerGearHistory(ctx context.Context, arg []UpsertPlayerGearHistoryParams) *UpsertPlayerGearHistoryBatchResults
 	UpsertPlayers(ctx context.Context, arg []UpsertPlayersParams) *UpsertPlayersBatchResults
+	UpsertPrivateLogAccessRequest(ctx context.Context, arg UpsertPrivateLogAccessRequestParams) (PrivateLogAccessRequest, error)
 	UpsertRankingRun(ctx context.Context, arg UpsertRankingRunParams) (bool, error)
 	// Recompute and upsert the rankings summary for a single
 	// (instance, difficulty, max_players, tenant) combo.

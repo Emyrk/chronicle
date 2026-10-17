@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Upload as UploadIcon, FileText, Info, LogIn, AlertCircle, CheckCircle, FolderOpen, AlertTriangle, ArrowRight } from "lucide-react";
+import { Upload as UploadIcon, FileText, Info, LogIn, AlertCircle, CheckCircle, FolderOpen, AlertTriangle, ArrowRight, Globe2, LockKeyhole } from "lucide-react";
 import { compressFile } from "@/api/compress";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
@@ -115,6 +115,7 @@ export interface UploadViewProps {
   authLoading: boolean;
   hasUploadPermission: boolean;
   hasAdminLogs: boolean;
+  canMarkPrivate: boolean;
   combatLog: File | null;
   rawCombatLog: File | null;
   uploading: boolean;
@@ -140,6 +141,8 @@ export interface UploadViewProps {
   selectedFormat: string;
   /** Callback when the user picks a format. */
   onFormatSelect: (value: string) => void;
+  privateLog: boolean;
+  onPrivateLogChange: (value: boolean) => void;
 }
 
 export function UploadView({
@@ -147,6 +150,7 @@ export function UploadView({
   authLoading,
   hasUploadPermission,
   hasAdminLogs,
+  canMarkPrivate,
   combatLog,
   rawCombatLog,
   uploading,
@@ -166,6 +170,8 @@ export function UploadView({
   selectedFormat,
   onFormatSelect,
   configLoaded,
+  privateLog,
+  onPrivateLogChange,
 }: UploadViewProps) {
   return (
     <div className="max-w-4xl mx-auto p-8 space-y-8">
@@ -270,6 +276,33 @@ export function UploadView({
               </AlertDescription>
             </Alert>
           )}
+
+          <Card className="p-4">
+            <div className="mb-3">
+              <h2 className="text-sm font-semibold">Visibility</h2>
+              <p className="mt-1 text-xs text-muted-foreground">Private logs require owner approval before another user can view combat data.</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => onPrivateLogChange(false)}
+                className={`flex items-start gap-3 rounded-lg border p-3 text-left transition-colors ${!privateLog ? "border-primary bg-primary/10" : "hover:bg-muted/50"}`}
+              >
+                <Globe2 className="mt-0.5 h-5 w-5 text-primary" />
+                <span><span className="block text-sm font-medium">Public</span><span className="block text-xs text-muted-foreground">Visible normally and eligible for public results.</span></span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onPrivateLogChange(true)}
+                disabled={!canMarkPrivate}
+                title={canMarkPrivate ? undefined : "Private log access is required"}
+                className={`flex items-start gap-3 rounded-lg border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${privateLog ? "border-amber-500/50 bg-amber-500/10" : "hover:bg-muted/50"}`}
+              >
+                <LockKeyhole className="mt-0.5 h-5 w-5 text-amber-400" />
+                <span><span className="block text-sm font-medium">Private</span><span className="block text-xs text-muted-foreground">Excluded from rankings; viewers must request access.</span></span>
+              </button>
+            </div>
+          </Card>
 
           {/* Format selector — visible to everyone when >1 available, or always for admins */}
           {(availableFormats.length > 1 || hasAdminLogs) && (
@@ -498,12 +531,14 @@ export function Upload() {
   const authzChecks = useMemo(() => ({ 
     upload: "chronicle:chronicle#upload_log",
     adminLogs: "chronicle:chronicle#admin_logs",
+    markPrivate: "chronicle:chronicle#mark_log_private",
   }), []);
   const { data: authz } = useAuthorizationCheck(authzChecks, {
     enabled: isAuthenticated,
   });
   const hasUploadPermission = authz?.upload ?? false;
   const hasAdminLogs = authz?.adminLogs ?? false;
+  const canMarkPrivate = authz?.markPrivate ?? false;
 
   const { data: siteConfig, isFetched: configLoaded } = useSiteConfig();
   const { data: flavorTags = [] } = useFlavors();
@@ -557,6 +592,7 @@ export function Upload() {
   const [searchParams] = useSearchParams();
   const isMultiple = searchParams.get("multiple") === "true";
   const showLegacy = searchParams.get("debug") === "true";
+  const [privateLog, setPrivateLog] = useState(false);
   const [useV2Upload, setUseV2Upload] = useState(true);
 
   const handleToggleV2Upload = useCallback((checked: boolean) => {
@@ -688,13 +724,14 @@ export function Upload() {
       let endpoint = useV2Upload
         ? "/api/v1/raidlogs/logs/upload-v2"
         : "/api/v1/raidlogs/logs/upload";
+      const params = new URLSearchParams();
+      params.set("private", String(privateLog));
       if (useV2Upload) {
         // Send the resolved format and any admin flavor override.
-        const params = new URLSearchParams();
         if (effectiveFormat) params.set("format", effectiveFormat);
         if (flavorOverride) params.set("flavor", flavorOverride);
-        endpoint += `?${params.toString()}`;
       }
+      endpoint += `?${params.toString()}`;
       xhr.open("POST", endpoint);
       xhr.send(formData);
     } catch (err) {
@@ -704,10 +741,10 @@ export function Upload() {
         detail: err instanceof Error ? err.message : String(err),
       });
     }
-  }, [combatLog, rawCombatLog, useV2Upload, effectiveFormat, flavorOverride]);
+  }, [combatLog, rawCombatLog, useV2Upload, effectiveFormat, flavorOverride, privateLog]);
 
   if (isMultiple) {
-    return <MultiUpload format={effectiveFormat} />;
+    return <MultiUpload format={effectiveFormat} privateLog={privateLog} canMarkPrivate={canMarkPrivate} onPrivateLogChange={setPrivateLog} />;
   }
 
   if (uploadsDisabled) {
@@ -730,6 +767,7 @@ export function Upload() {
       authLoading={authLoading}
       hasUploadPermission={hasUploadPermission}
       hasAdminLogs={hasAdminLogs}
+      canMarkPrivate={canMarkPrivate}
       combatLog={combatLog}
       rawCombatLog={rawCombatLog}
       uploading={uploading}
@@ -749,6 +787,8 @@ export function Upload() {
       selectedFormat={selectedFormat}
       onFormatSelect={handleFormatSelect}
       configLoaded={configLoaded}
+      privateLog={privateLog}
+      onPrivateLogChange={setPrivateLog}
     />
   );
 }
