@@ -12,6 +12,7 @@ import {
   orderRaidFramePlayers,
   activeCastAt,
   incomingHealsAt,
+  recentInstantAt,
   latestResourceAt,
   raidFramesProcessor,
 } from "./raidFrames.processor";
@@ -162,6 +163,25 @@ describe("raidFramesProcessor", () => {
     expect(activeCastAt(casts, FIRST_TIMESTAMP.getTime() + 3_500)).toBeNull();
   });
 
+  it("records spell_go without a cast in progress as an instant cast", () => {
+    const state = raidFramesProcessor.createState();
+    const ctx = context();
+    const at = (offset: number) => FIRST_TIMESTAMP.getTime() + offset;
+
+    // A timed cast finishing a little late is not an instant.
+    raidFramesProcessor.processEvent(state, spellStart(), ENCOUNTER, FIRST_TIMESTAMP, "spell_start", ctx);
+    raidFramesProcessor.processEvent(state, spellGo({ offsetMilli: 2_700 }), ENCOUNTER, FIRST_TIMESTAMP, "spell_go", ctx);
+    raidFramesProcessor.processEvent(state, spellGo({ offsetMilli: 4_000, spell: { id: 10060, name: "Power Infusion" } }), ENCOUNTER, FIRST_TIMESTAMP, "spell_go", ctx);
+
+    const encounter = state.encounters.get(ENCOUNTER)!;
+    expect(encounter.castsByUnit.get(PLAYER)?.[0].endMs).toBe(at(2_700));
+    const instants = encounter.instantsByUnit.get(PLAYER) ?? [];
+    expect(instants).toEqual([{ atMs: at(4_000), spellId: 10060, spellName: "Power Infusion" }]);
+    expect(recentInstantAt(instants, at(3_999), 1_000)).toBeNull();
+    expect(recentInstantAt(instants, at(4_500), 1_000)?.spellName).toBe("Power Infusion");
+    expect(recentInstantAt(instants, at(5_000), 1_000)).toBeNull();
+  });
+
   it("finds player heals landing inside the incoming window", () => {
     const state = raidFramesProcessor.createState();
     const ctx = context();
@@ -220,7 +240,8 @@ describe("enemyFrameUnits", () => {
   it("lists non-player, non-pet units with health, bosses first then by maximum health", () => {
     const sample = (maximumHealth: number) => ({ timestampMs: 0, currentHealth: maximumHealth, maximumHealth, absorb: 0, powerType: "mana", currentPower: 0, maximumPower: 0 });
     const encounter = {
-      encounterId: ENCOUNTER, startMs: 0, endMs: 0, castsByUnit: new Map(), healsByUnit: new Map(),
+      encounterId: ENCOUNTER, startMs: 0, endMs: 0, castsByUnit: new Map(),
+      instantsByUnit: new Map(), healsByUnit: new Map(),
       resourcesByUnit: new Map([
         [PLAYER, [sample(4_000)]],
         ["pet", [sample(1_000)]],

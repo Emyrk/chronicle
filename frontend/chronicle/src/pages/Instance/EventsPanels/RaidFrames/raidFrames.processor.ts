@@ -28,6 +28,13 @@ export interface RaidFrameCast {
   failed: boolean;
 }
 
+/** A cast with no cast time (its spell_go had no cast in progress to finish). */
+export interface RaidFrameInstantCast {
+  atMs: number;
+  spellId: number;
+  spellName: string;
+}
+
 export interface RaidFrameHeal {
   landMs: number;
   amount: number;
@@ -42,6 +49,7 @@ export interface RaidFramesEncounter {
   endMs: number;
   resourcesByUnit: Map<string, RaidFrameResourceSample[]>;
   castsByUnit: Map<string, RaidFrameCast[]>;
+  instantsByUnit: Map<string, RaidFrameInstantCast[]>;
   healsByUnit: Map<string, RaidFrameHeal[]>;
 }
 
@@ -75,6 +83,7 @@ function encounterFor(
       endMs: timestampMs,
       resourcesByUnit: new Map(),
       castsByUnit: new Map(),
+      instantsByUnit: new Map(),
       healsByUnit: new Map(),
     };
     state.encounters.set(encounterId, encounter);
@@ -141,23 +150,41 @@ function addCast(
   });
 }
 
+// A cast's spell_go can land a little after its nominal cast time (latency, haste).
+const LATE_FINISH_MS = 500;
+
+/** Ends the caster's cast of the spell in progress; false when there is none. */
 function finishCast(
   encounter: RaidFramesEncounter,
   caster: string,
   spellId: number,
   timestampMs: number,
   failed: boolean,
-): void {
+): boolean {
   const casts = encounter.castsByUnit.get(caster);
-  if (!casts) return;
+  if (!casts) return false;
 
   for (let index = casts.length - 1; index >= 0; index -= 1) {
     const cast = casts[index];
-    if (cast.spellId !== spellId || timestampMs < cast.startMs || timestampMs > cast.endMs) continue;
+    if (cast.spellId !== spellId || timestampMs < cast.startMs || timestampMs > cast.endMs + LATE_FINISH_MS) continue;
     cast.endMs = timestampMs;
     cast.failed = failed;
-    return;
+    return true;
   }
+  return false;
+}
+
+function addInstant(
+  encounter: RaidFramesEncounter,
+  event: SpellGoProcessorEvent,
+  timestampMs: number,
+): void {
+  let instants = encounter.instantsByUnit.get(event.caster);
+  if (!instants) {
+    instants = [];
+    encounter.instantsByUnit.set(event.caster, instants);
+  }
+  instants.push({ atMs: timestampMs, spellId: event.spell.id, spellName: event.spell.name });
 }
 
 export const raidFramesProcessor: PanelProcessor<RaidFramesResult, RaidFramesProcessorEvent> = {
@@ -186,7 +213,9 @@ export const raidFramesProcessor: PanelProcessor<RaidFramesResult, RaidFramesPro
         return;
       case "spell_go":
         state.spellNames.set(event.spell.id, event.spell.name);
-        finishCast(encounter, event.caster, event.spell.id, timestampMs, false);
+        if (!finishCast(encounter, event.caster, event.spell.id, timestampMs, false)) {
+          addInstant(encounter, event, timestampMs);
+        }
         return;
       case "spell_fail":
         finishCast(encounter, event.caster, event.spell.id, timestampMs, true);
@@ -255,6 +284,23 @@ export function latestResourceAt(
     }
   }
   return latest;
+}
+
+/** The latest instant cast at or before timestampMs, if within windowMs of it. */
+export function recentInstantAt(
+  instants: readonly RaidFrameInstantCast[],
+  timestampMs: number,
+  windowMs: number,
+): RaidFrameInstantCast | null {
+  let low = 0;
+  let high = instants.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (instants[middle].atMs <= timestampMs) low = middle + 1;
+    else high = middle;
+  }
+  const latest = instants[low - 1];
+  return latest && timestampMs - latest.atMs < windowMs ? latest : null;
 }
 
 export function activeCastAt(
