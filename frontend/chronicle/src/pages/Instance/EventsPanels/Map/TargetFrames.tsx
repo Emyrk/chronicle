@@ -19,8 +19,8 @@ interface TargetFramesProps {
 }
 
 /**
- * WoW-style target frames over the map: the target fixed at centre left and
- * its target at centre right, drawn by the same panels as the inspect boxes
+ * WoW-style target frames over the map: the target fixed just left of centre and
+ * its target just right of it (a gap for the fight between), drawn by the same panels as the inspect boxes
  * (Raid Frames' inspect frame over Unit Auras) but on the map itself, with no
  * box behind them. The pin turns one into a movable inspect box.
  */
@@ -28,12 +28,12 @@ export function TargetFrames({ target, targetOfTarget, raidFrames, auras, onPin,
   if (!target) return null;
   return (
     <>
-      <TargetFrame label="Target" className="left-2" onPin={() => onPin(target)} onClear={onClear}>
+      <TargetFrame label="Target" className="right-1/2 mr-20" onPin={() => onPin(target)} onClear={onClear}>
         {raidFrames(`u:${target}`)}
         {auras(`u:${target}`)}
       </TargetFrame>
       {targetOfTarget && (
-        <TargetFrame label="Target's target" className="right-2" onPin={() => onPin(targetOfTarget)}>
+        <TargetFrame label="Target's target" className="left-1/2 ml-20" onPin={() => onPin(targetOfTarget)}>
           {raidFrames(`u:${targetOfTarget}`)}
           {auras(`u:${targetOfTarget}`)}
         </TargetFrame>
