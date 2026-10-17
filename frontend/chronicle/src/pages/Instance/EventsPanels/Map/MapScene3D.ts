@@ -209,7 +209,14 @@ const BOSS_TOKEN_RADIUS = 2;
 /** A model's halos and arc sit around this radius. */
 const MINI_TOKEN_RADIUS = 1.2;
 // Heights above the floor, layered so they do not fight each other (or the mesh).
-const TOKEN_LIFT = { shadow: 0.36, disc: 0.45, marks: 0.47, arc: 0.5, halo: 0.52 };
+// Heights: the shadow and the disc's underside sit just off the floor; the
+// rest stack above the disc's face (its underside plus its thickness).
+const TOKEN_GROUND = { shadow: 0.12, underside: 0.15 };
+const TOKEN_LIFT = { marks: 0.02, arc: 0.05, halo: 0.07 };
+/** A disc's edge, like a coin's, as a fraction of its radius (about 12% of the diameter). */
+const TOKEN_THICKNESS = 0.24;
+/** A boss sigil lies flat, at the height a player's disc face would be. */
+const SIGIL_FACE = 0.45;
 /** Plane half-sizes per radius: each texture's ring falls where the design puts it. */
 const TOKEN_PLANE = { shadow: 1.45, halo: 1.9, pin: 2.25, arc: 1.32, ticks: 1, sigil: 1.5 };
 /** The column above the disc: its width and full height, per radius. */
@@ -352,6 +359,10 @@ export interface MapUnitRoles {
 interface UnitToken {
   /** Disc radius in geometry units (PLAYER_GEOMETRY_HEIGHT is a player's height). */
   radius: number;
+  /** Height of the disc's face (or the sigil) above the floor. */
+  face: number;
+  /** The disc's edge: its ring colour, darkening toward the ground. */
+  edge: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   shadow: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   halo: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   pin: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
@@ -666,6 +677,8 @@ export class MapScene3D {
   // A flat plane (radius 1) lying on the ground, shared by every token part.
   private readonly tokenPlane = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
   private readonly columnBox = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+  // An open cylinder (radius 1, height 1) hanging below y = 0: a disc's edge.
+  private readonly tokenEdge = new THREE.CylinderGeometry(1, 1, 1, 40, 1, true).translate(0, -0.5, 0);
   private aboveDisc: AboveDiscMode = "cast";
   private roles: MapUnitRoles = { selected: null, target: null, targetsTarget: null, pinned: new Set() };
   private readonly unitCasts = new Map<string, UnitCast>();
@@ -943,6 +956,7 @@ export class MapScene3D {
         material.depthWrite = !unit.muted && material === object.bodyMaterial && object.mini;
       }
       object.token.shadow.material.opacity = opacity;
+      object.token.edge.material.opacity = opacity;
       setBodyColor(object);
     }
     for (const guid of [...this.units.keys()]) {
@@ -1634,6 +1648,7 @@ export class MapScene3D {
     this.tokenTextures.dispose();
     this.tokenPlane.dispose();
     this.columnBox.dispose();
+    this.tokenEdge.dispose();
     for (const presence of this.remotePresences.values()) this.disposeRemotePresence(presence);
     this.remotePresences.clear();
     clearTimeout(this.unitClickTimer);
@@ -1686,18 +1701,23 @@ export class MapScene3D {
     const bodyMaterial = new THREE.MeshLambertMaterial({ transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
     const body = new THREE.Mesh(this.tokenPlane, bodyMaterial);
     body.scale.setScalar(boss ? radius * TOKEN_PLANE.sigil : radius);
-    body.position.y = TOKEN_LIFT.disc;
-    const cone = overlay(null, radius * MARKS_SCALE, TOKEN_LIFT.marks);
+    const face = boss ? SIGIL_FACE : TOKEN_GROUND.underside + radius * TOKEN_THICKNESS;
+    body.position.y = face;
+    const edge = new THREE.Mesh(this.tokenEdge, new THREE.MeshBasicMaterial({ map: this.tokenTextures.edge(), transparent: true }));
+    edge.scale.set(radius, face - TOKEN_GROUND.underside, radius);
+    edge.position.y = face;
+    edge.visible = !boss;
+    const cone = overlay(null, radius * MARKS_SCALE, face + TOKEN_LIFT.marks);
     const coneMaterial = cone.material;
-    const shadow = overlay(this.tokenTextures.shadow(), radius * TOKEN_PLANE.shadow, TOKEN_LIFT.shadow);
-    const halo = overlay(null, radius * TOKEN_PLANE.halo, TOKEN_LIFT.halo);
-    const pin = overlay(this.tokenTextures.halo("pinned"), radius * TOKEN_PLANE.pin, TOKEN_LIFT.halo);
+    const shadow = overlay(this.tokenTextures.shadow(), radius * TOKEN_PLANE.shadow, TOKEN_GROUND.shadow);
+    const halo = overlay(null, radius * TOKEN_PLANE.halo, face + TOKEN_LIFT.halo);
+    const pin = overlay(this.tokenTextures.halo("pinned"), radius * TOKEN_PLANE.pin, face + TOKEN_LIFT.halo);
     pin.material.color.setHex(HALO_COLORS.pinned);
-    const arc = overlay(null, radius * TOKEN_PLANE.arc, TOKEN_LIFT.arc);
+    const arc = overlay(null, radius * TOKEN_PLANE.arc, face + TOKEN_LIFT.arc);
     const columnTrack = new THREE.Mesh(this.columnBox, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: COLUMN_TRACK_OPACITY, depthWrite: false }));
     const column = new THREE.Mesh(this.columnBox, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.92 }));
     for (const part of [column, columnTrack]) part.scale.set(radius * COLUMN_WIDTH, radius * COLUMN_HEIGHT, radius * COLUMN_WIDTH);
-    const ticks = boss ? overlay(this.tokenTextures.sigilTicks(), radius * TOKEN_PLANE.ticks * TOKEN_PLANE.sigil, TOKEN_LIFT.marks) : null;
+    const ticks = boss ? overlay(this.tokenTextures.sigilTicks(), radius * TOKEN_PLANE.ticks * TOKEN_PLANE.sigil, face + TOKEN_LIFT.marks) : null;
     let bossPin: THREE.Sprite | null = null;
     if (boss) {
       bossPin = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tokenTextures.bossPin(), transparent: true }));
@@ -1708,7 +1728,7 @@ export class MapScene3D {
     const group = new THREE.Group();
     group.userData.guid = unit.guid;
     body.userData.guid = unit.guid;
-    group.add(shadow, body, cone, arc, halo, pin, columnTrack, column);
+    group.add(shadow, edge, body, cone, arc, halo, pin, columnTrack, column);
     if (ticks) group.add(ticks);
     if (bossPin) group.add(bossPin);
     this.unitsGroup.add(group);
@@ -1718,7 +1738,7 @@ export class MapScene3D {
       bodyMaterial,
       coneMaterial,
       cone,
-      token: { radius, shadow, halo, pin, arc, column, columnTrack, ticks, sigil: null, bossPin },
+      token: { radius, face, edge, shadow, halo, pin, arc, column, columnTrack, ticks, sigil: null, bossPin },
       icon: unit.icon ?? null,
       boss,
       mini: false,
@@ -1752,6 +1772,7 @@ export class MapScene3D {
     object.coneMaterial.map = this.tokenTextures.facingMarks(object.boss ? "#ef4444" : ring, object.boss);
     object.coneMaterial.color.setHex(object.dead && object.boss ? 0x777777 : 0xffffff);
     object.coneMaterial.needsUpdate = true;
+    object.token.edge.material.color.set(ring);
     if (object.mini) return;
     const map = object.boss
       ? this.tokenTextures.sigil()
@@ -1843,6 +1864,13 @@ export class MapScene3D {
     bodyMaterial.needsUpdate = true;
     const { token } = object;
     token.radius = MINI_TOKEN_RADIUS;
+    token.edge.visible = false;
+    // A model stands on the floor; its rings lie there too.
+    token.face = TOKEN_GROUND.underside;
+    token.halo.position.y = token.pin.position.y = token.face + TOKEN_LIFT.halo;
+    token.arc.position.y = token.face + TOKEN_LIFT.arc;
+    object.cone.position.y = token.face + TOKEN_LIFT.marks;
+    if (token.ticks) token.ticks.position.y = token.face + TOKEN_LIFT.marks;
     for (const [part, size] of [[token.halo, TOKEN_PLANE.halo], [token.pin, TOKEN_PLANE.pin], [token.arc, TOKEN_PLANE.arc], [token.shadow, TOKEN_PLANE.shadow]] as const) {
       part.scale.setScalar(MINI_TOKEN_RADIUS * size);
     }
@@ -1854,7 +1882,7 @@ export class MapScene3D {
         map: this.tokenTextures.sigil(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
       }));
       token.sigil.scale.setScalar(MINI_TOKEN_RADIUS * TOKEN_PLANE.sigil);
-      token.sigil.position.y = TOKEN_LIFT.disc;
+      token.sigil.position.y = token.face;
       token.ticks?.scale.setScalar(MINI_TOKEN_RADIUS * TOKEN_PLANE.sigil);
       object.group.add(token.sigil);
     }
@@ -1887,7 +1915,7 @@ export class MapScene3D {
     object.bodyMaterial.dispose();
     object.coneMaterial.dispose();
     const { token } = object;
-    for (const part of [token.shadow, token.halo, token.pin, token.arc, token.column, token.columnTrack, token.ticks, token.sigil]) part?.material.dispose();
+    for (const part of [token.shadow, token.edge, token.halo, token.pin, token.arc, token.column, token.columnTrack, token.ticks, token.sigil]) part?.material.dispose();
     token.bossPin?.material.dispose();
     this.units.delete(guid);
     this.floorHeights.delete(guid);
@@ -2832,8 +2860,8 @@ export class MapScene3D {
       if (value !== null) {
         const full = token.radius * COLUMN_HEIGHT;
         token.column.scale.y = Math.max(0.02, full * value);
-        token.column.position.y = TOKEN_LIFT.disc;
-        token.columnTrack.position.y = TOKEN_LIFT.disc;
+        token.column.position.y = token.face;
+        token.columnTrack.position.y = token.face;
       }
       const kind: HaloKind | null = guid === roles.selected ? "selected"
         : guid === roles.target ? "target"

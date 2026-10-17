@@ -63,6 +63,7 @@ export class UnitTokenTextures {
   private sigilTexture: THREE.CanvasTexture | null = null;
   private ticksTexture: THREE.CanvasTexture | null = null;
   private pinTexture: THREE.CanvasTexture | null = null;
+  private edgeTexture: THREE.CanvasTexture | null = null;
   private readonly dashes = new Map<string, THREE.CanvasTexture>();
 
   private readonly onChange: () => void;
@@ -194,6 +195,26 @@ export class UnitTokenTextures {
       this.marks.set(key, result);
     }
     return result;
+  }
+
+  /**
+   * A disc's edge, wrapped round an open cylinder (v = 1 at the face): the
+   * ring colour (the material's) shaded from 65% at the face to 35% at the floor.
+   */
+  edge(): THREE.CanvasTexture {
+    if (!this.edgeTexture) {
+      const [element, context] = canvas(4, 32);
+      const gradient = context.createLinearGradient(0, 0, 0, 32);
+      gradient.addColorStop(0, "rgb(166,166,166)");
+      gradient.addColorStop(1, "rgb(89,89,89)");
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, 4, 32);
+      // A dark line where the face meets the edge, as the design's outline.
+      context.fillStyle = "rgb(20,20,20)";
+      context.fillRect(0, 0, 4, 2);
+      this.edgeTexture = texture(element);
+    }
+    return this.edgeTexture;
   }
 
   /** The soft shadow under a token. */
@@ -373,6 +394,7 @@ export class UnitTokenTextures {
     this.sigilTexture?.dispose();
     this.ticksTexture?.dispose();
     this.pinTexture?.dispose();
+    this.edgeTexture?.dispose();
     this.discs.clear();
     this.marks.clear();
     this.halos.clear();
