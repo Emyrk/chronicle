@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
@@ -13,6 +14,32 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
+
+type heartbeatConnection interface {
+	Ping(context.Context) error
+}
+
+func runHeartbeat(ctx context.Context, conn heartbeatConnection, interval, timeout time.Duration) error {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			pingCtx, cancel := context.WithTimeout(ctx, timeout)
+			err := conn.Ping(pingCtx)
+			cancel()
+			if err != nil {
+				if ctx.Err() != nil {
+					return nil
+				}
+				return err
+			}
+		}
+	}
+}
 
 // Create creates an ephemeral room for an authenticated leader.
 func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
@@ -103,6 +130,14 @@ func (s *Service) WebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer s.disconnect(connection)
+
+	heartbeatCtx, stopHeartbeat := context.WithCancel(r.Context())
+	defer stopHeartbeat()
+	go func() {
+		if err := runHeartbeat(heartbeatCtx, conn, heartbeatInterval, heartbeatTimeout); err != nil {
+			_ = conn.CloseNow()
+		}
+	}()
 
 	if connection.role == leaderID {
 		for _, guest := range notifyPeers {

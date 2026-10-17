@@ -3,6 +3,7 @@ package servicelivesession
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -17,6 +18,65 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
+
+type fakeHeartbeatConnection struct {
+	pinged chan struct{}
+	err    error
+}
+
+func (c *fakeHeartbeatConnection) Ping(context.Context) error {
+	select {
+	case c.pinged <- struct{}{}:
+	default:
+	}
+	return c.err
+}
+
+func TestRunHeartbeat(t *testing.T) {
+	t.Parallel()
+
+	t.Run("stops when canceled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		conn := &fakeHeartbeatConnection{pinged: make(chan struct{}, 1)}
+		done := make(chan error, 1)
+		go func() {
+			done <- runHeartbeat(ctx, conn, time.Millisecond, time.Second)
+		}()
+
+		select {
+		case <-conn.pinged:
+		case <-time.After(time.Second):
+			t.Fatal("heartbeat did not ping")
+		}
+		cancel()
+
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("heartbeat did not stop after cancellation")
+		}
+	})
+
+	t.Run("returns ping errors", func(t *testing.T) {
+		expectedErr := errors.New("ping failed")
+		conn := &fakeHeartbeatConnection{
+			pinged: make(chan struct{}, 1),
+			err:    expectedErr,
+		}
+		done := make(chan error, 1)
+		go func() {
+			done <- runHeartbeat(context.Background(), conn, time.Millisecond, time.Second)
+		}()
+
+		select {
+		case err := <-done:
+			require.ErrorIs(t, err, expectedErr)
+		case <-time.After(time.Second):
+			t.Fatal("heartbeat did not return the ping error")
+		}
+	})
+}
 
 func TestLiveSessionHubPasswordCapacityAndLifecycle(t *testing.T) {
 	t.Parallel()
