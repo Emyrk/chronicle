@@ -1,10 +1,11 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view helpers intentionally share this module. */
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { RadioTower, Users } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { parseSelectedUnits } from "../UnitAuras/unitSelection";
+import { PlayerDetail } from "./PlayerDetail";
 import { useUnitInspect } from "../UnitInspectContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import {
@@ -21,24 +22,7 @@ import {
   type RaidFramesProcessorEvent,
   type RaidFramesResult,
 } from "./raidFrames.processor";
-
-const POWER_COLORS: Record<string, string> = {
-  mana: "#3187e8",
-  rage: "#d94a4a",
-  energy: "#e8c83a",
-  focus: "#e88731",
-  runicpower: "#32c8d9",
-  lunar: "#62a7ff",
-  insanity: "#8f57d9",
-  maelstrom: "#315bd9",
-  fury: "#b23bd9",
-  pain: "#d98b31",
-};
-
-function percent(current: number, maximum: number): number {
-  if (maximum <= 0) return 0;
-  return Math.min(100, Math.max(0, (current / maximum) * 100));
-}
+import { INCOMING_HEAL_WINDOW_MS, POWER_COLORS, percent, useDisplayTimestamp } from "./raidFrameShared";
 
 export function selectRaidFramesEncounter(
   encounters: ReadonlyMap<string, RaidFramesEncounter>,
@@ -80,41 +64,13 @@ function PanelMessage({ title, detail }: { title: string; detail: string }) {
   );
 }
 
-// Sync playback only advances the timestamp every ~100ms, so extrapolate
-// between ticks to keep cast bars moving smoothly.
-const MAX_EXTRAPOLATION_MS = 500;
-
-function useInterpolatedTimestamp(timestampMs: number, playing: boolean, speed: number): number {
-  const [frame, setFrame] = useState<{ baseMs: number; valueMs: number } | null>(null);
-
-  useEffect(() => {
-    if (!playing) return;
-    const anchoredAt = performance.now();
-    let handle = 0;
-    const tick = () => {
-      const advancedMs = Math.min(MAX_EXTRAPOLATION_MS, (performance.now() - anchoredAt) * speed);
-      setFrame({ baseMs: timestampMs, valueMs: timestampMs + advancedMs });
-      handle = requestAnimationFrame(tick);
-    };
-    handle = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(handle);
-  }, [timestampMs, playing, speed]);
-
-  return playing && frame?.baseMs === timestampMs ? frame.valueMs : timestampMs;
-}
-
 function CastBar({ cast, timestampMs }: { cast: RaidFrameCast | null; timestampMs: number }) {
   if (!cast) return <div className="h-3 bg-background/40" />;
   return <ActiveCastBar cast={cast} timestampMs={timestampMs} />;
 }
 
 function ActiveCastBar({ cast, timestampMs }: { cast: RaidFrameCast; timestampMs: number }) {
-  const sync = useSyncModeContextOptional();
-  const displayMs = useInterpolatedTimestamp(
-    timestampMs,
-    Boolean(sync?.enabled && sync.isPlaying),
-    sync?.playbackSpeed ?? 1,
-  );
+  const displayMs = useDisplayTimestamp(timestampMs);
   const durationMs = Math.max(1, cast.endMs - cast.startMs);
   const elapsed = Math.min(durationMs, Math.max(0, displayMs - cast.startMs));
   const progress = percent(elapsed, durationMs);
@@ -145,8 +101,6 @@ function ResourceBar({ sample }: { sample: RaidFrameResourceSample | null }) {
   );
 }
 
-const INCOMING_HEAL_WINDOW_MS = 1_500;
-
 // Light green segments after the health (and absorb) fill for heals landing
 // within the window; each fades in as its landing time approaches. Details
 // live in the frame tooltip, which highlights the hovered segment's heal.
@@ -163,12 +117,7 @@ function IncomingHeals({
   timestampMs: number;
   onHoverHeal: (heal: RaidFrameHeal | null) => void;
 }) {
-  const sync = useSyncModeContextOptional();
-  const displayMs = useInterpolatedTimestamp(
-    timestampMs,
-    Boolean(sync?.enabled && sync.isPlaying),
-    sync?.playbackSpeed ?? 1,
-  );
+  const displayMs = useDisplayTimestamp(timestampMs);
 
   const segments: ReactNode[] = [];
   let left = startPercent;
@@ -238,12 +187,7 @@ function RaidFrameTooltip({
   /** Health and power as nameplate bars with their values on them, instead of rows. */
   nameplate?: boolean;
 }) {
-  const sync = useSyncModeContextOptional();
-  const displayMs = useInterpolatedTimestamp(
-    timestampMs,
-    Boolean(sync?.enabled && sync.isPlaying),
-    sync?.playbackSpeed ?? 1,
-  );
+  const displayMs = useDisplayTimestamp(timestampMs);
   const pending = dead ? [] : incomingHeals.filter((heal) => heal.landMs > displayMs);
   const powerType = sample?.powerType ?? "";
   const powerLabel = powerType ? `${powerType.charAt(0).toUpperCase()}${powerType.slice(1)}` : "Resource";
@@ -345,6 +289,7 @@ function RaidFrame({
   spellNames,
   timestampMs,
   showValues,
+  onClick,
 }: {
   name: string;
   className: string;
@@ -354,6 +299,7 @@ function RaidFrame({
   spellNames: ReadonlyMap<number, string>;
   timestampMs: number;
   showValues: boolean;
+  onClick?: () => void;
 }) {
   const [hoveredHeal, setHoveredHeal] = useState<RaidFrameHeal | null>(null);
   const healthWidth = sample ? percent(sample.currentHealth, sample.maximumHealth) : 0;
@@ -372,7 +318,8 @@ function RaidFrame({
     <Tooltip>
       <TooltipTrigger asChild>
         <div
-          className={`min-w-0 overflow-hidden rounded-sm border border-border/60 bg-muted/30 ${dead ? "opacity-50 grayscale" : ""}`}
+          className={`min-w-0 overflow-hidden rounded-sm border border-border/60 bg-muted/30 ${dead ? "opacity-50 grayscale" : ""} ${onClick ? "cursor-pointer hover:border-foreground/40" : ""}`}
+          onClick={onClick}
         >
           <CastBar cast={cast} timestampMs={timestampMs} />
           <div className="relative h-8 overflow-hidden">
@@ -529,12 +476,7 @@ function OverlayRaidFrame({
 
 // A thin amber progress line while casting (channels drain), under the health bar.
 function OverlayCastLine({ cast, timestampMs }: { cast: RaidFrameCast; timestampMs: number }) {
-  const sync = useSyncModeContextOptional();
-  const displayMs = useInterpolatedTimestamp(
-    timestampMs,
-    Boolean(sync?.enabled && sync.isPlaying),
-    sync?.playbackSpeed ?? 1,
-  );
+  const displayMs = useDisplayTimestamp(timestampMs);
   const durationMs = Math.max(1, cast.endMs - cast.startMs);
   const progress = percent(Math.min(durationMs, Math.max(0, displayMs - cast.startMs)), durationMs);
   return (
@@ -583,12 +525,7 @@ function InspectFrame({
 }
 
 function InspectCastBar({ cast, timestampMs }: { cast: RaidFrameCast; timestampMs: number }) {
-  const sync = useSyncModeContextOptional();
-  const displayMs = useInterpolatedTimestamp(
-    timestampMs,
-    Boolean(sync?.enabled && sync.isPlaying),
-    sync?.playbackSpeed ?? 1,
-  );
+  const displayMs = useDisplayTimestamp(timestampMs);
   const durationMs = Math.max(1, cast.endMs - cast.startMs);
   const progress = percent(Math.min(durationMs, Math.max(0, displayMs - cast.startMs)), durationMs);
   return (
@@ -604,6 +541,13 @@ function InspectCastBar({ cast, timestampMs }: { cast: RaidFrameCast; timestampM
 
 /** Panel option token for enemy raid frames. */
 const ENEMIES_OPTION = "enemies";
+
+/** The panel option with its `u:` tokens replaced by `guid` (none when null), other tokens kept. */
+export function withSelectedUnit(panelOption: string | null | undefined, guid: string | null): string | null {
+  const parts = (panelOption ?? "").split(",").filter((part) => part && !part.startsWith("u:"));
+  if (guid) parts.push(`u:${guid}`);
+  return parts.length > 0 ? parts.join(",") : null;
+}
 
 function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
   const sync = useSyncModeContextOptional();
@@ -634,9 +578,11 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
   const timestampMs = syncTimestampMs ?? encounter.endMs;
 
   // Inspect mode (`u:<guid>` in the panel option): a larger frame for each
-  // listed unit, players or enemies.
+  // listed unit, players or enemies. A card with one selected unit shows
+  // that unit's detail view instead (below, once frame order is known).
   const inspectGuids = parseSelectedUnits(props.panelOption);
-  if (inspectGuids.length > 0) {
+  const detailGuid = !overlay && inspectGuids.length === 1 ? inspectGuids[0] : null;
+  if (inspectGuids.length > 0 && !detailGuid) {
     return (
       <div className="flex flex-col gap-1">
         {inspectGuids.map((guid) => (
@@ -689,6 +635,29 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
     incomingHeals: incomingHealsAt(encounter.healsByUnit.get(entry[0]) ?? [], timestampMs, INCOMING_HEAL_WINDOW_MS),
   }));
 
+  // Selecting a frame (card only) swaps the grid for that unit's detail view.
+  const setPanelOption = props.setPanelOption;
+  const selectUnit = setPanelOption && !enemiesMode
+    ? (guid: string | null) => setPanelOption(withSelectedUnit(props.panelOption, guid))
+    : undefined;
+  if (detailGuid) {
+    return (
+      <TooltipProvider>
+        <PlayerDetail
+          guid={detailGuid}
+          props={props}
+          encounter={encounter}
+          timestampMs={timestampMs}
+          sample={latestResourceAt(encounter.resourcesByUnit.get(detailGuid) ?? [], timestampMs)}
+          cast={activeCastAt(encounter.castsByUnit.get(detailGuid) ?? [], timestampMs)}
+          incomingHeals={incomingHealsAt(encounter.healsByUnit.get(detailGuid) ?? [], timestampMs, INCOMING_HEAL_WINDOW_MS)}
+          playerOrder={frameData.flatMap((frame) => frame ? [frame.guid] : [])}
+          onSelect={(guid) => setPanelOption?.(withSelectedUnit(props.panelOption, guid))}
+        />
+      </TooltipProvider>
+    );
+  }
+
   if (overlay) {
     // Columns of five like the in-game raid frames; the host positions it.
     return (
@@ -729,6 +698,7 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
               spellNames={props.result.spellNames}
               timestampMs={timestampMs}
               showValues={props.checkboxChecked}
+              onClick={selectUnit && (() => selectUnit(guid))}
             />
           );
         })}
@@ -748,7 +718,7 @@ export function createRaidFramesPanel(): PanelDefinition<RaidFramesResult, RaidF
     disableCardFlip: true,
     supportsFiltering: false,
     checkboxLabel: "Values",
-    renderOnlyOptionTokens: ["cb"],
+    renderOnlyOptionTokens: ["cb", "u:"],
     render: (props) => <RaidFramesContent {...props} />,
   };
 }

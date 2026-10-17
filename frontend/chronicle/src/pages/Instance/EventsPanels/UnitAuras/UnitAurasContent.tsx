@@ -668,6 +668,38 @@ export function UnitAurasContent(props: PanelRenderProps<UnitAurasResult>) {
     setPanelOption?.(serializeUnitAuraOptions(selectedGuids, query));
   };
 
+  if (props.variant === "overlay" && checkboxChecked) {
+    // Embedded and detailed (raid frames' player detail): each listed unit's
+    // buff and debuff tables, without the unit and aura pickers.
+    return (
+      <div className="flex flex-col">
+        {selectedGuids.map((guid) => {
+          const rows = rowsByUnit.get(guid);
+          if (!rows || rows.buffs.length + rows.debuffs.length === 0) {
+            return <div key={guid} className="px-3 py-5 text-center text-xs text-muted-foreground">{emptyAuraMessage}</div>;
+          }
+          return (
+            <div key={guid} className="min-w-0">
+              {(["Buffs", "Debuffs"] as const).map((title) => (
+                <AuraSection
+                  key={title}
+                  title={title}
+                  rows={title === "Buffs" ? rows.buffs : rows.debuffs}
+                  uptimeDurationMs={uptimeDurationByUnit.get(guid) ?? durationMs}
+                  timelineDurationMs={durationMs}
+                  players={context.instance.players}
+                  units={context.instance.units}
+                  encounterNames={encounterNames}
+                  showUptime={showUptime}
+                />
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   if (props.variant === "overlay") {
     // Embedded (map inspect cards): just each listed unit's auras as small icons.
     return (
