@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { Pause, Play } from "lucide-react";
 import { REPLAY_TOGGLE_EVENT, type ReplayToggle } from "./replayToggleKey";
 
 const FLASH_MS = 650;
 
 /**
- * A big play or pause icon that pops in the middle of the screen and fades
- * when X toggles the replay, like a video player's. Mount once per page.
+ * A big play or pause icon that pops up and fades when X toggles the replay,
+ * like a video player's. It fills and centres on its positioned parent: the
+ * Map panel mounts it over the map.
  */
 export function ReplayToggleFlash() {
   const [flash, setFlash] = useState<{ action: ReplayToggle; id: number } | null>(null);
@@ -40,14 +40,12 @@ export function ReplayToggleFlash() {
 
   if (!flash) return null;
   const Icon = flash.action === "play" ? Play : Pause;
-  // On <body>, so a transformed ancestor on the page can't pull it off the screen's centre.
-  return createPortal(
-    <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center" aria-hidden>
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[45] flex items-center justify-center" aria-hidden>
       <div ref={ref} className="flex h-24 w-24 items-center justify-center rounded-full bg-black/65 text-white shadow-2xl backdrop-blur-sm">
         {/* The play triangle's weight sits left of its box; nudge it to look centred. */}
         <Icon className={flash.action === "play" ? "ml-1 h-11 w-11" : "h-11 w-11"} fill="currentColor" />
       </div>
-    </div>,
-    document.body,
+    </div>
   );
 }

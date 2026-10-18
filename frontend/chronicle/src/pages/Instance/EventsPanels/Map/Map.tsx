@@ -8,6 +8,7 @@ import { parseLivePresenceSurface } from "../../liveSessionProtocol";
 import { LivePresenceIndicator } from "../../LivePresenceIndicator";
 import { useLiveSessionOptional } from "../../LiveSessionContext";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
+import { ReplayToggleFlash } from "../../ReplayToggleFlash";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { fetchMiniatureUrls } from "./bossMinis";
 import { dungeonMeshBytes, dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
@@ -602,6 +603,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
             }}
           />
         )}
+        {/* X toggles the replay: flash play or pause over the map, like a video player. */}
+        <ReplayToggleFlash />
         {reloading && (
           <div className="pointer-events-none absolute left-1/2 top-2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-sm bg-black/75 px-2 py-0.5 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
             <Loader2 className="h-3 w-3 animate-spin" />
