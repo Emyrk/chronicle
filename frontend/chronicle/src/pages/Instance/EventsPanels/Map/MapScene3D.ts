@@ -317,6 +317,8 @@ interface DungeonMesh {
   group: THREE.Group;
   /** The walkable geometry (everything but the water planes). */
   caves: DungeonMeshCave[];
+  /** Water (and other liquid) planes: units stand on them, but they never block the camera. */
+  liquids: DungeonMeshCave[];
   /** Scene units per yard. */
   scale: number;
   /** Bounding-sphere radius, for the full-map zoom limit. */
@@ -1340,22 +1342,28 @@ export class MapScene3D {
     return floorBelow((fromY) => this.castFloor(x, z, fromY), FLOOR_PROBE_HEIGHT, ceiling);
   }
 
-  // The highest cave surface below (x, fromY, z), or null for none.
+  // The highest cave or water surface below (x, fromY, z), or null for none:
+  // a unit swimming near the surface stands on the water, not the lake bed.
   private castFloor(x: number, z: number, fromY: number): number | null {
     const mesh = this.dungeonMesh;
     // The flat artwork is the floor everywhere.
     if (!mesh) return 0;
     let best: number | null = null;
-    for (const cave of mesh.caves) {
-      this.floorRay.origin.set(x, fromY, z);
-      this.floorRay.direction.set(0, -1, 0);
-      this.floorRay.applyMatrix4(cave.inverse);
-      const hit = cave.bvh.raycastFirst(this.floorRay, THREE.FrontSide);
-      if (!hit) continue;
-      const y = this.vector.copy(hit.point).applyMatrix4(cave.mesh.matrixWorld).y;
-      if (best === null || y > best) best = y;
-    }
+    for (const cave of mesh.caves) best = this.highestHit(cave, x, z, fromY, THREE.FrontSide, best);
+    // Liquid planes may be wound either way up.
+    for (const liquid of mesh.liquids) best = this.highestHit(liquid, x, z, fromY, THREE.DoubleSide, best);
     return best;
+  }
+
+  // The higher of `best` and the surface a downward probe from (x, fromY, z) hits on `cave`.
+  private highestHit(cave: DungeonMeshCave, x: number, z: number, fromY: number, side: THREE.Side, best: number | null): number | null {
+    this.floorRay.origin.set(x, fromY, z);
+    this.floorRay.direction.set(0, -1, 0);
+    this.floorRay.applyMatrix4(cave.inverse);
+    const hit = cave.bvh.raycastFirst(this.floorRay, side);
+    if (!hit) return best;
+    const y = this.vector.copy(hit.point).applyMatrix4(cave.mesh.matrixWorld).y;
+    return best === null || y > best ? y : best;
   }
 
   // Loads the mesh, zeroes its centring node translations so it sits in raw
@@ -1366,7 +1374,7 @@ export class MapScene3D {
   private async loadDungeonMesh(request: DungeonMeshRequest): Promise<DungeonMesh | null> {
     const parsed = await parsedDungeonMesh(request);
     if (!parsed) return null;
-    return { url: request.url, bounds: request.bounds, group: parsed.template.clone(), caves: parsed.caves, scale: parsed.scale, radius: parsed.radius };
+    return { url: request.url, bounds: request.bounds, group: parsed.template.clone(), caves: parsed.caves, liquids: parsed.liquids, scale: parsed.scale, radius: parsed.radius };
   }
 
   // Shows the mesh or the tiles, re-grounds every unit and re-applies the
@@ -3576,6 +3584,8 @@ function gltfLoader(): Promise<GLTFLoader> {
 interface ParsedDungeonMesh {
   template: THREE.Group;
   caves: DungeonMeshCave[];
+  /** Water (and other liquid) planes: units stand on them, but they never block the camera. */
+  liquids: DungeonMeshCave[];
   scale: number;
   radius: number;
 }
@@ -3613,6 +3623,7 @@ async function parseDungeonMesh(request: DungeonMeshRequest): Promise<ParsedDung
     template.add(gltf.scene);
     template.updateMatrixWorld(true);
     const caves: DungeonMeshCave[] = [];
+    const liquids: DungeonMeshCave[] = [];
     gltf.scene.traverse((child) => {
       const mesh = child as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -3629,6 +3640,7 @@ async function parseDungeonMesh(request: DungeonMeshRequest): Promise<ParsedDung
           }
         }
         mesh.renderOrder = 1;
+        liquids.push({ mesh, bvh: new MeshBVH(mesh.geometry), inverse: mesh.matrixWorld.clone().invert() });
         return;
       }
       // Probes use the template's fixed transforms, which every clone shares.
@@ -3636,7 +3648,7 @@ async function parseDungeonMesh(request: DungeonMeshRequest): Promise<ParsedDung
     });
     if (caves.length === 0) return null;
     const radius = new THREE.Box3().setFromObject(template).getBoundingSphere(new THREE.Sphere()).radius;
-    return { template, caves, scale: placement.scale, radius };
+    return { template, caves, liquids, scale: placement.scale, radius };
   } catch (error) {
     console.warn("Dungeon mesh unavailable, keeping the map tiles", request.url, error);
     return null;
