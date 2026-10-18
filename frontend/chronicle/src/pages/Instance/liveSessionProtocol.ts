@@ -29,15 +29,20 @@ export function parseLivePresenceSurface(value: unknown): string | undefined {
 
 export interface LiveViewDelivery<TView = unknown> {
   applier: ((view: TView) => void) | null;
-  pending: { view: TView } | null;
+  pending: { view: TView; onApplied?: () => void } | null;
 }
 
-export function receiveLiveView<TView>(delivery: LiveViewDelivery<TView>, view: TView): void {
+export function receiveLiveView<TView>(
+  delivery: LiveViewDelivery<TView>,
+  view: TView,
+  onApplied?: () => void,
+): void {
   if (delivery.applier) {
     delivery.applier(view);
+    onApplied?.();
     return;
   }
-  delivery.pending = { view };
+  delivery.pending = { view, onApplied };
 }
 
 export function setLiveViewApplier<TView>(
@@ -46,13 +51,23 @@ export function setLiveViewApplier<TView>(
 ): void {
   delivery.applier = applier;
   if (!applier || !delivery.pending) return;
-  const { view } = delivery.pending;
+  const { view, onApplied } = delivery.pending;
   delivery.pending = null;
   applier(view);
+  onApplied?.();
+}
+
+export function liveSnapshotMatchesRequest(
+  pendingRequestId: string | null,
+  responseRequestId: string | undefined,
+): boolean {
+  return pendingRequestId !== null && responseRequestId === pendingRequestId;
 }
 
 export type LiveSessionDataMessage<TView = unknown> =
-  | { type: "view"; view: TView }
+  | { type: "view_request"; requestId: string }
+  | { type: "view"; view: TView; requestId?: string }
+  | { type: "view_ack"; requestId: string }
   | { type: "replay"; replay: LiveReplayState }
   | { type: "pointer"; participantId?: string; surfaceId?: string; presenceSurface?: string; x: number; y: number }
   | { type: "presence"; participantId?: string; presence: LiveMapPresence | null };

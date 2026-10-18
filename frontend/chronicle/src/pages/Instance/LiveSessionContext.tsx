@@ -17,6 +17,7 @@ import {
   cursorScreenPosition,
   cursorSurfaceOffset,
   liveSessionInviteURL,
+  liveSnapshotMatchesRequest,
   parseLivePresenceSurface,
   parseMapPresence,
   participantColor,
@@ -30,6 +31,7 @@ import {
   type LiveSessionDataMessage,
   type LiveSessionServerMessage,
   type LiveSessionSignalPayload,
+  type LiveViewDelivery,
 } from "./liveSessionProtocol";
 
 import {
@@ -39,6 +41,7 @@ import {
 
 const liveSessionLeaderID = "leader";
 const MAX_SIGNAL_BYTES = 64 * 1024;
+const SNAPSHOT_RETRY_MS = 1500;
 // Peers resend their map presence every couple of seconds; one silent for
 // longer than this has left the map (or lost the connection).
 const PRESENCE_STALE_MS = 6000;
@@ -63,10 +66,12 @@ interface LiveSessionContextValue {
   code: string | null;
   inviteURL: string | null;
   participantCount: number;
+  viewSynchronized: boolean;
   error: string | null;
   create: (instanceId: string, password?: string) => Promise<string>;
   join: (code: string, instanceId: string, password?: string) => Promise<void>;
   leave: () => void;
+  resyncView: () => void;
   publishView: (view: unknown) => void;
   registerViewApplier: (apply: ((view: unknown) => void) | null) => void;
   /** Shares where you are on the 3D map with everyone else (null: not on it). */
@@ -159,6 +164,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
   const [code, setCode] = useState<string | null>(requestedCode);
   const [inviteURL, setInviteURL] = useState<string | null>(null);
   const [participantCount, setParticipantCount] = useState(0);
+  const [viewSynchronized, setViewSynchronized] = useState(false);
   const [remotePointers, setRemotePointers] = useState<Record<string, RemotePointer>>({});
   const [presenceSurfaceParticipants, setPresenceSurfaceParticipants] = useState<LivePresenceSurfaceParticipants>({});
   const [cursorLayoutVersion, setCursorLayoutVersion] = useState(0);
@@ -173,10 +179,10 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
   const closingSocketRef = useRef(false);
   const currentRoleRef = useRef<LiveSessionRole | null>(null);
   const currentViewRef = useRef<unknown>(null);
-  const viewDeliveryRef = useRef({
-    applier: null as ((view: unknown) => void) | null,
-    pending: null as { view: unknown } | null,
-  });
+  const viewDeliveryRef = useRef<LiveViewDelivery>({ applier: null, pending: null });
+  const pendingSnapshotRequestIdRef = useRef<string | null>(null);
+  const snapshotRetryTimerRef = useRef<number | null>(null);
+  const participantSnapshotRequestsRef = useRef(new Map<string, string>());
   const remoteViewJSONRef = useRef<string | null>(null);
   // A participant must first adopt the leader's view. Otherwise its local default
   // can win the data-channel startup race and reset the layout for every peer.
@@ -237,6 +243,44 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     if (channel?.readyState === "open") channel.send(encoded);
   }, []);
 
+  const clearSnapshotRetry = useCallback(() => {
+    if (snapshotRetryTimerRef.current !== null) {
+      window.clearTimeout(snapshotRetryTimerRef.current);
+      snapshotRetryTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleSnapshotRetry = useCallback((requestId: string) => {
+    clearSnapshotRetry();
+    const retry = () => {
+      if (
+        currentRoleRef.current !== "participant"
+        || pendingSnapshotRequestIdRef.current !== requestId
+      ) return;
+      const channel = participantChannelRef.current;
+      if (channel?.readyState === "open") {
+        channel.send(JSON.stringify({ type: "view_request", requestId } satisfies LiveSessionDataMessage));
+      }
+      snapshotRetryTimerRef.current = window.setTimeout(retry, SNAPSHOT_RETRY_MS);
+    };
+    snapshotRetryTimerRef.current = window.setTimeout(retry, SNAPSHOT_RETRY_MS);
+  }, [clearSnapshotRetry]);
+
+  const resyncView = useCallback(() => {
+    if (currentRoleRef.current !== "participant") return;
+    const channel = participantChannelRef.current;
+    if (channel?.readyState !== "open") return;
+    const requestId = typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    pendingSnapshotRequestIdRef.current = requestId;
+    hasReceivedInitialViewRef.current = false;
+    viewDeliveryRef.current.pending = null;
+    setViewSynchronized(false);
+    channel.send(JSON.stringify({ type: "view_request", requestId } satisfies LiveSessionDataMessage));
+    scheduleSnapshotRetry(requestId);
+  }, [scheduleSnapshotRetry]);
+
   const applyRemoteReplay = useCallback((next: LiveReplayState) => {
     remoteReplayJSONRef.current = JSON.stringify(next);
     if (!next.enabled) {
@@ -254,12 +298,60 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     if (raw.length > MAX_SIGNAL_BYTES) return;
     try {
       const message = JSON.parse(raw) as LiveSessionDataMessage;
+      if (message.type === "view_request") {
+        if (
+          currentRoleRef.current !== "leader"
+          || !senderID
+          || typeof message.requestId !== "string"
+          || message.requestId.length === 0
+          || currentViewRef.current === null
+        ) return;
+        const channel = channelsRef.current.get(senderID);
+        if (channel?.readyState !== "open") return;
+        participantSnapshotRequestsRef.current.set(senderID, message.requestId);
+        channel.send(JSON.stringify({
+          type: "view",
+          view: currentViewRef.current,
+          requestId: message.requestId,
+        } satisfies LiveSessionDataMessage));
+        return;
+      }
+      if (message.type === "view_ack") {
+        if (
+          currentRoleRef.current === "leader"
+          && senderID
+          && participantSnapshotRequestsRef.current.get(senderID) === message.requestId
+        ) {
+          participantSnapshotRequestsRef.current.delete(senderID);
+        }
+        return;
+      }
       if (message.type === "view") {
+        if (currentRoleRef.current === "participant") {
+          const pendingRequestId = pendingSnapshotRequestIdRef.current;
+          if (message.requestId !== undefined && !liveSnapshotMatchesRequest(pendingRequestId, message.requestId)) return;
+          const snapshotRequestId = liveSnapshotMatchesRequest(pendingRequestId, message.requestId)
+            ? pendingRequestId
+            : null;
+          currentViewRef.current = message.view;
+          remoteViewJSONRef.current = JSON.stringify(message.view);
+          receiveLiveView(viewDeliveryRef.current, message.view, snapshotRequestId ? () => {
+            if (pendingSnapshotRequestIdRef.current !== snapshotRequestId) return;
+            clearSnapshotRetry();
+            pendingSnapshotRequestIdRef.current = null;
+            hasReceivedInitialViewRef.current = true;
+            setViewSynchronized(true);
+            sendData({ type: "view_ack", requestId: snapshotRequestId });
+          } : undefined);
+          return;
+        }
         currentViewRef.current = message.view;
         remoteViewJSONRef.current = JSON.stringify(message.view);
-        if (currentRoleRef.current === "participant") hasReceivedInitialViewRef.current = true;
         receiveLiveView(viewDeliveryRef.current, message.view);
-      } else if (message.type === "replay") {
+        if (currentRoleRef.current === "leader") sendData(message, senderID);
+        return;
+      }
+      if (message.type === "replay") {
         applyRemoteReplay(message.replay);
       } else if (message.type === "pointer") {
         const participantId = senderID ?? message.participantId;
@@ -294,14 +386,15 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     } catch {
       // Ignore malformed peer messages in the proof of concept.
     }
-  }, [applyRemoteReplay, sendData, setRemotePointerSurface, setRemotePresence]);
+  }, [applyRemoteReplay, clearSnapshotRetry, sendData, setRemotePointerSurface, setRemotePresence]);
 
   const configureChannel = useCallback((channel: RTCDataChannel, participantID?: string) => {
     channel.onopen = () => {
       setStatus("live");
       if (currentRoleRef.current === "leader") {
-        if (currentViewRef.current) channel.send(JSON.stringify({ type: "view", view: currentViewRef.current } satisfies LiveSessionDataMessage));
         channel.send(JSON.stringify({ type: "replay", replay: replayStateRef.current } satisfies LiveSessionDataMessage));
+      } else {
+        resyncView();
       }
     };
     channel.onmessage = (event) => {
@@ -309,11 +402,15 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     };
     channel.onclose = () => {
       if (currentRoleRef.current === "participant") {
+        clearSnapshotRetry();
+        pendingSnapshotRequestIdRef.current = null;
+        hasReceivedInitialViewRef.current = false;
+        setViewSynchronized(false);
         pauseReplay();
         setStatus("ended");
       }
     };
-  }, [handleDataMessage, pauseReplay]);
+  }, [clearSnapshotRetry, handleDataMessage, pauseReplay, resyncView]);
 
   const createLeaderPeer = useCallback(async (participantID: string) => {
     const peer = new RTCPeerConnection(PEER_CONNECTION_CONFIG);
@@ -356,8 +453,12 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     participantPeerRef.current?.close();
     participantPeerRef.current = null;
     pendingCandidatesRef.current.clear();
+    clearSnapshotRetry();
+    pendingSnapshotRequestIdRef.current = null;
+    participantSnapshotRequestsRef.current.clear();
     hasReceivedInitialViewRef.current = false;
     viewDeliveryRef.current.pending = null;
+    setViewSynchronized(false);
     setParticipantCount(0);
     setRemotePointers({});
     pointerSurfacesRef.current.clear();
@@ -366,13 +467,14 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
       presencesRef.current.clear();
       notifyPresence();
     }
-  }, [notifyPresence]);
+  }, [clearSnapshotRetry, notifyPresence]);
 
   const connectSocket = useCallback((roomCode: string, token: string, nextRole: LiveSessionRole) => {
     closeTransport();
     closingSocketRef.current = false;
     currentRoleRef.current = nextRole;
     setRole(nextRole);
+    setViewSynchronized(nextRole === "leader");
     setCode(roomCode);
     setStatus("connecting");
     setError(null);
@@ -398,6 +500,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
         peersRef.current.get(message.participant_id)?.close();
         peersRef.current.delete(message.participant_id);
         pendingCandidatesRef.current.delete(message.participant_id);
+        participantSnapshotRequestsRef.current.delete(message.participant_id);
         setRemotePointers((previous) => {
           const next = { ...previous };
           delete next[message.participant_id];
@@ -637,16 +740,18 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     code,
     inviteURL,
     participantCount,
+    viewSynchronized,
     error,
     create,
     join,
     leave,
+    resyncView,
     publishView,
     registerViewApplier,
     publishMapPresence,
     subscribeMapPresence,
     presenceSurfaceParticipants,
-  }), [code, create, error, inviteURL, join, leave, participantCount, presenceSurfaceParticipants, publishMapPresence, publishView, registerViewApplier, role, status, subscribeMapPresence]);
+  }), [code, create, error, inviteURL, join, leave, participantCount, presenceSurfaceParticipants, publishMapPresence, publishView, registerViewApplier, resyncView, role, status, subscribeMapPresence, viewSynchronized]);
 
   return (
     <LiveSessionContext.Provider value={value}>

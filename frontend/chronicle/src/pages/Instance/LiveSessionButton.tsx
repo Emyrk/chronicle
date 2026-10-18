@@ -1,4 +1,4 @@
-import { Loader2, Radio, Unplug, Users } from "lucide-react";
+import { Loader2, Radio, RefreshCw, Unplug, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
@@ -43,6 +43,11 @@ export function LiveSessionButton({ instanceId, canCreate }: { instanceId: strin
     if (!session.inviteURL) return;
     await navigator.clipboard.writeText(session.inviteURL);
     toast.success("Invite link copied");
+  };
+
+  const resync = () => {
+    session.resyncView();
+    toast.info("Requesting the leader's latest view");
   };
 
   if (session.status === "needs_password") {
@@ -108,7 +113,7 @@ export function LiveSessionButton({ instanceId, canCreate }: { instanceId: strin
           {session.status === "live"
             ? session.role === "leader"
               ? `Live · ${session.participantCount + 1}`
-              : "Following live"
+              : session.viewSynchronized ? "Following live" : "Syncing live"
             : "Live session"}
         </Button>
       </DropdownMenuTrigger>
@@ -130,6 +135,12 @@ export function LiveSessionButton({ instanceId, canCreate }: { instanceId: strin
             {session.role === "leader" && session.inviteURL && (
               <DropdownMenuItem onClick={() => { void copyInvite(); }}>
                 Copy invite link
+              </DropdownMenuItem>
+            )}
+            {session.role === "participant" && (
+              <DropdownMenuItem onClick={resync}>
+                <RefreshCw className={session.viewSynchronized ? "h-4 w-4" : "h-4 w-4 animate-spin"} />
+                Resync with leader
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />

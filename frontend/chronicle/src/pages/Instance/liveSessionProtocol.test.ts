@@ -4,6 +4,7 @@ import {
   cursorScreenPosition,
   cursorSurfaceOffset,
   liveSessionInviteURL,
+  liveSnapshotMatchesRequest,
   parseLivePresenceSurface,
   parseMapPresence,
   participantColor,
@@ -96,12 +97,15 @@ describe("live view delivery", () => {
   it("applies a view buffered before the page registers its applier", () => {
     const delivery: LiveViewDelivery<{ page: string }> = { applier: null, pending: null };
     const applied: Array<{ page: string }> = [];
+    let acknowledged = false;
 
-    receiveLiveView(delivery, { page: "timeline" });
+    receiveLiveView(delivery, { page: "timeline" }, () => { acknowledged = true; });
     expect(applied).toEqual([]);
+    expect(acknowledged).toBe(false);
 
     setLiveViewApplier(delivery, (view) => applied.push(view));
     expect(applied).toEqual([{ page: "timeline" }]);
+    expect(acknowledged).toBe(true);
     expect(delivery.pending).toBeNull();
   });
 
@@ -116,6 +120,19 @@ describe("live view delivery", () => {
     setLiveViewApplier(delivery, (view) => applied.push(view));
 
     expect(applied).toEqual([1, 2]);
+  });
+});
+
+describe("live snapshot requests", () => {
+  it("accepts only the response correlated to the pending request", () => {
+    expect(liveSnapshotMatchesRequest("request-1", "request-1")).toBe(true);
+  });
+
+  it("rejects stale, unsolicited, and uncorrelated snapshots", () => {
+    expect(liveSnapshotMatchesRequest("request-2", "request-1")).toBe(false);
+    expect(liveSnapshotMatchesRequest("request-1", undefined)).toBe(false);
+    expect(liveSnapshotMatchesRequest(null, "request-1")).toBe(false);
+    expect(liveSnapshotMatchesRequest(null, undefined)).toBe(false);
   });
 });
 
