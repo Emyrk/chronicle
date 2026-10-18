@@ -510,7 +510,7 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
           )}
         </div>
       </div>}
-      <div ref={mapShellRef} className="relative min-h-0 flex-1 overflow-hidden bg-[#11100d]">
+      <div ref={mapShellRef} className={`relative min-h-0 flex-1 overflow-hidden bg-[#11100d] ${mini ? "" : "mx-1 rounded-sm border border-white/15"}`}>
         <div
           ref={mapFrameRef}
           className={`absolute touch-none overflow-hidden bg-[#11100d] select-none ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}

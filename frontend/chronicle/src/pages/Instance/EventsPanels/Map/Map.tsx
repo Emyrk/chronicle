@@ -3,7 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { Crosshair, Focus, Footprints, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Maximize2, Route, Settings2, Skull, Users, X } from "lucide-react";
+import { Crosshair, Focus, Footprints, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Maximize2, Route, Settings2, Skull, X } from "lucide-react";
 import { MINI_MAP_PANEL_OPTION } from "../../viewDefaults";
 import { PANEL_CARD_BLEED } from "../PanelCard";
 import { parseLivePresenceSurface } from "../../liveSessionProtocol";
@@ -341,7 +341,6 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     <div className="flex min-w-0 shrink-0 items-center gap-2 text-[10px] text-muted-foreground">
       {!ready.overlayAvailable && <span className="text-amber-300/80">position overlay unavailable</span>}
       <LivePresenceIndicator surface={presenceSurface} />
-      <span className="flex items-center gap-1"><Users className="h-3 w-3" />{ready.markers.length}</span>
       {onExitWholeRun && (
         <button type="button" onClick={onExitWholeRun} title="Back to the 2D route overview" className={framingButtonClass}>
           <Route className="h-3 w-3" />
@@ -391,10 +390,10 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   );
 
   return (
-    <div className={cn("flex h-full min-h-0 flex-col", PANEL_CARD_BLEED)}>
+    <div className={cn("flex h-full min-h-0 flex-col", PANEL_CARD_BLEED, !mini && "p-1")}>
       {props.headerSlot ? createPortal(headerControls, props.headerSlot) : <div className="flex justify-end px-1">{headerControls}</div>}
-      {/* The map runs to the card's edges (PANEL_CARD_BLEED), so it has no frame of its own. */}
-      <div className="relative min-h-0 flex-1 overflow-hidden bg-black/70">
+      {/* Runs to the card's edges (PANEL_CARD_BLEED); the full map keeps a thin window frame, the mini map none. */}
+      <div className={cn("relative min-h-0 flex-1 overflow-hidden bg-black/70", !mini && "rounded-sm border border-white/15")}>
         {!show3D ? (meshOnly
           ? <MapMessage title="No map artwork for this instance" detail={`${ready.mapName} has no 2D map; it is 3D only, and this browser could not provide WebGL.`} />
           : view2D
