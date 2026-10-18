@@ -113,6 +113,7 @@ function storeMesh(on: boolean) {
   }
 }
 
+const mapFramingButtonClass = "pointer-events-auto flex items-center gap-1 rounded-sm border border-black/80 bg-black/75 px-2 py-1 text-[10px] font-medium text-white/75 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-white disabled:opacity-40 disabled:hover:text-white/75";
 const framingButtonClass = "flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:hover:text-muted-foreground";
 
 interface ReplayMapProps extends PanelRenderProps<MapResult> {
@@ -321,6 +322,17 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
       {!ready.overlayAvailable && <span className="text-amber-300/80">position overlay unavailable</span>}
       <LivePresenceIndicator surface={presenceSurface} />
       <span className="flex items-center gap-1"><Users className="h-3 w-3" />{ready.markers.length}</span>
+      {onExitWholeRun && (
+        <button type="button" onClick={onExitWholeRun} title="Back to the 2D route overview" className={framingButtonClass}>
+          <Route className="h-3 w-3" />
+          Overview
+        </button>
+      )}
+    </div>
+  );
+
+  const framingControls = (
+    <div className="absolute bottom-2 right-2 z-40 flex items-center gap-1">
       {canFollow ? (
         <button
           type="button"
@@ -328,7 +340,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
           onClick={followGroup}
           disabled={ready.wholeRun && !autoFit}
           title="Keep the camera on the boss and the group"
-          className={`${framingButtonClass} ${following ? "bg-primary/20 text-foreground" : ""}`}
+          className={cn(mapFramingButtonClass, following && "border-primary/60 bg-primary/80 text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground")}
         >
           <Crosshair className="h-3 w-3" />
           Follow
@@ -339,22 +351,21 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
           onClick={() => autoFit && applyFraming(autoFit)}
           disabled={!autoFit}
           title="Zoom to the boss area"
-          className={framingButtonClass}
+          className={mapFramingButtonClass}
         >
           <Focus className="h-3 w-3" />
           Fit
         </button>
       )}
-      <button type="button" onClick={() => applyFraming(FULL_MAP_VIEWPORT)} title="Show the full map" className={framingButtonClass}>
+      <button
+        type="button"
+        onClick={() => applyFraming(FULL_MAP_VIEWPORT)}
+        title="Show the full map"
+        className={mapFramingButtonClass}
+      >
         <Maximize className="h-3 w-3" />
         Reset
       </button>
-      {onExitWholeRun && (
-        <button type="button" onClick={onExitWholeRun} title="Back to the 2D route overview" className={framingButtonClass}>
-          <Route className="h-3 w-3" />
-          Overview
-        </button>
-      )}
     </div>
   );
 
@@ -404,6 +415,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
             />
           </Suspense>
         )}
+        {framingControls}
         {reloading && (
           <div className="pointer-events-none absolute left-1/2 top-2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-sm bg-black/75 px-2 py-0.5 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
             <Loader2 className="h-3 w-3 animate-spin" />
