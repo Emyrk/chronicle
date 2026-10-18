@@ -6,7 +6,11 @@ import {
   AUTO_FIT_MIN_SPAN_YARDS,
   autoFitViewport,
   calibratedDungeonMapPoint,
+  clampFreeMapCamera,
   clampViewport,
+  containScaleForCover,
+  coverMapCanvasRect,
+  zoomFreeMapCamera,
   focusCentre,
   INITIAL_MAP_FRAMING,
   interpolateViewport,
@@ -607,5 +611,38 @@ describe("map framing", () => {
     expect(reconcileMapFraming(manual, "mutanus|mutanus", fitted)).toMatchObject({ revision: 2, viewport: null, manual: false });
     expect(pinMapFraming(manual, fitted)).toMatchObject({ revision: 2, viewport: fitted, manual: false });
     expect(pinMapFraming(manual, FULL_MAP_VIEWPORT)).toMatchObject({ revision: 2, viewport: FULL_MAP_VIEWPORT, manual: false });
+  });
+});
+
+describe("free overview camera", () => {
+  // A square map in a wide shell: covering it overflows top and bottom.
+  const shell = { width: 400, height: 200 };
+  const canvas = { width: 100, height: 100 };
+  const rect = coverMapCanvasRect(shell, canvas);
+
+  it("covers the shell with no bars, centred", () => {
+    expect(rect).toEqual({ left: 0, top: -100, width: 400, height: 400 });
+    // Zooming out to 0.5 fits the whole map.
+    expect(containScaleForCover(shell, canvas)).toBe(0.5);
+  });
+
+  it("lets the map be dragged mostly off screen, keeping a sliver visible", () => {
+    const farRight = clampFreeMapCamera({ scale: 1, x: 10_000, y: 0 }, rect, shell, 0.5);
+    expect(farRight.x).toBe(shell.width - 48);
+    const farUp = clampFreeMapCamera({ scale: 1, x: 0, y: -10_000 }, rect, shell, 0.5);
+    // Its bottom edge stays 48px inside the top of the shell.
+    expect(rect.top + farUp.y + rect.height).toBe(48);
+  });
+
+  it("zooms between the fit-whole scale and 5 about the focal point", () => {
+    expect(clampFreeMapCamera({ scale: 0.1, x: 0, y: 0 }, rect, shell, 0.5).scale).toBe(0.5);
+    expect(clampFreeMapCamera({ scale: 9, x: 0, y: 0 }, rect, shell, 0.5).scale).toBe(5);
+    // The map point under the cursor stays under it.
+    const focal = { x: 100, y: 50 };
+    const zoomed = zoomFreeMapCamera({ scale: 1, x: 0, y: 0 }, 2, focal, rect, shell, 0.5);
+    const mapX = (focal.x - rect.left - zoomed.x) / zoomed.scale;
+    const mapY = (focal.y - rect.top - zoomed.y) / zoomed.scale;
+    expect(mapX).toBeCloseTo(focal.x - rect.left);
+    expect(mapY).toBeCloseTo(focal.y - rect.top);
   });
 });

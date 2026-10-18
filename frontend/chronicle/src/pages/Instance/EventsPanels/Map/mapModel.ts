@@ -43,6 +43,77 @@ export function fitMapCanvasRect(container: MapCameraBounds, canvas: MapCameraBo
   };
 }
 
+/** The canvas scaled to cover the container (no bars) and centred, overflowing on one axis. */
+export function coverMapCanvasRect(container: MapCameraBounds, canvas: MapCameraBounds): MapCanvasRect {
+  if (container.width <= 0 || container.height <= 0 || canvas.width <= 0 || canvas.height <= 0) {
+    return { left: 0, top: 0, width: 0, height: 0 };
+  }
+  const scale = Math.max(container.width / canvas.width, container.height / canvas.height);
+  const width = canvas.width * scale;
+  const height = canvas.height * scale;
+  return {
+    left: (container.width - width) / 2,
+    top: (container.height - height) / 2,
+    width,
+    height,
+  };
+}
+
+/** The zoom at which a covering canvas shrinks to fit the container whole (≤ 1). */
+export function containScaleForCover(container: MapCameraBounds, canvas: MapCameraBounds): number {
+  if (container.width <= 0 || container.height <= 0 || canvas.width <= 0 || canvas.height <= 0) return 1;
+  const contain = Math.min(container.width / canvas.width, container.height / canvas.height);
+  const cover = Math.max(container.width / canvas.width, container.height / canvas.height);
+  return contain / cover;
+}
+
+const MAX_MAP_SCALE = 5;
+
+/**
+ * A free camera over a canvas laid out at `rect` inside `viewport`: zoom between
+ * `minScale` and 5, and pan anywhere that leaves `keepVisible` px of the map on
+ * screen (the rest clips at the viewport). Camera x/y are offsets from the rect.
+ */
+export function clampFreeMapCamera(
+  camera: MapCamera,
+  rect: MapCanvasRect,
+  viewport: MapCameraBounds,
+  minScale: number,
+  keepVisible = 48,
+): MapCamera {
+  const scale = Math.max(minScale, Math.min(MAX_MAP_SCALE, camera.scale));
+  if (rect.width <= 0 || rect.height <= 0) return { scale, x: 0, y: 0 };
+  const width = rect.width * scale;
+  const height = rect.height * scale;
+  const keepX = Math.min(keepVisible, width, viewport.width);
+  const keepY = Math.min(keepVisible, height, viewport.height);
+  return {
+    scale,
+    x: Math.max(keepX - rect.left - width, Math.min(viewport.width - keepX - rect.left, camera.x)),
+    y: Math.max(keepY - rect.top - height, Math.min(viewport.height - keepY - rect.top, camera.y)),
+  };
+}
+
+/** Zoom a free camera about a point given in viewport coordinates. */
+export function zoomFreeMapCamera(
+  camera: MapCamera,
+  nextScale: number,
+  focalPoint: { x: number; y: number },
+  rect: MapCanvasRect,
+  viewport: MapCameraBounds,
+  minScale: number,
+): MapCamera {
+  const scale = Math.max(minScale, Math.min(MAX_MAP_SCALE, nextScale));
+  const ratio = scale / camera.scale;
+  const focusX = focalPoint.x - rect.left;
+  const focusY = focalPoint.y - rect.top;
+  return clampFreeMapCamera({
+    scale,
+    x: focusX - (focusX - camera.x) * ratio,
+    y: focusY - (focusY - camera.y) * ratio,
+  }, rect, viewport, minScale);
+}
+
 export function clampMapCamera(camera: MapCamera, bounds: MapCameraBounds): MapCamera {
   const scale = Math.max(1, Math.min(5, camera.scale));
   if (bounds.width <= 0 || bounds.height <= 0 || scale === 1) return { scale, x: 0, y: 0 };
