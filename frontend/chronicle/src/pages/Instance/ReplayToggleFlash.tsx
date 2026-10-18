@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Pause, Play } from "lucide-react";
 import { REPLAY_TOGGLE_EVENT, type ReplayToggle } from "./replayToggleKey";
 
@@ -39,11 +40,14 @@ export function ReplayToggleFlash() {
 
   if (!flash) return null;
   const Icon = flash.action === "play" ? Play : Pause;
-  return (
+  // On <body>, so a transformed ancestor on the page can't pull it off the screen's centre.
+  return createPortal(
     <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center" aria-hidden>
       <div ref={ref} className="flex h-24 w-24 items-center justify-center rounded-full bg-black/65 text-white shadow-2xl backdrop-blur-sm">
-        <Icon className="h-11 w-11" fill="currentColor" />
+        {/* The play triangle's weight sits left of its box; nudge it to look centred. */}
+        <Icon className={flash.action === "play" ? "ml-1 h-11 w-11" : "h-11 w-11"} fill="currentColor" />
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
