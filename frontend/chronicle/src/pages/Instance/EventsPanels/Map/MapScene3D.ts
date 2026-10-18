@@ -39,6 +39,7 @@ import {
   floorBelow,
   releaseDungeonMeshBytes,
   FloorHeightCache,
+  AIRBORNE_YARDS,
   LOGGED_Z_CLEARANCE_YARDS,
   medianHeight,
 } from "./dungeonMeshes";
@@ -1308,11 +1309,16 @@ export class MapScene3D {
     return this.dungeonMesh && object.miniatureUrl ? this.unitScale * MESH_BOSS_SCALE : this.unitScale;
   }
 
-  // The ground height under a unit: the mesh floor while it shows, else 0.
-  // A logged height (`loggedZ`, yards) picks the floor nearest below it.
+  // The height a unit stands at: the mesh floor while it shows, else 0. A
+  // logged height (`loggedZ`, yards) picks the floor nearest below it, and
+  // lifts the unit off it when well above (a knock-up, a fall).
   private baseHeight(guid: string, x: number, z: number, loggedZ: number | undefined): number {
     const mesh = this.dungeonMesh;
-    return mesh ? this.floorHeights.heightAt(guid, x, z, this.probeCeiling(loggedZ, mesh.scale)) : 0;
+    if (!mesh) return 0;
+    const floor = this.floorHeights.heightAt(guid, x, z, this.probeCeiling(loggedZ, mesh.scale));
+    if (loggedZ === undefined) return floor;
+    const logged = loggedZ * mesh.scale;
+    return logged - floor > AIRBORNE_YARDS * mesh.scale ? logged : floor;
   }
 
   // Where a probe for a logged height starts (scene units): just above the

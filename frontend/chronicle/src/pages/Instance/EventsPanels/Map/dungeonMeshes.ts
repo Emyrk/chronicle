@@ -156,6 +156,13 @@ export function clampToRadius<T extends GroundPoint>(point: T, centre: GroundPoi
 export const LOGGED_Z_CLEARANCE_YARDS = 2.5;
 
 /**
+ * A unit logged more than this far (yards) above the floor under it is in the
+ * air (knocked up, falling, flying) and is drawn at its logged height; closer
+ * than that it stands on the floor, so small log/mesh mismatches never float it.
+ */
+export const AIRBORNE_YARDS = 2;
+
+/**
  * The floor under a point, from `cast` (the highest surface below a start
  * height, null for a miss). With a logged height (`ceiling`, the probe start
  * just above the unit's feet) it is the first surface below it, so a unit
