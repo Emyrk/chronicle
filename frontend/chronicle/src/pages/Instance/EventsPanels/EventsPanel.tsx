@@ -5,6 +5,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import ReactDOM from "react-dom";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { cn } from "@/lib/utils";
 import { HelpCircle, Construction, Filter, EllipsisVertical, Copy, ClipboardPaste, ExternalLink, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -907,15 +908,24 @@ function BuiltinEventsPanel({
     userFilters,
   ]);
 
+  // Full-bleed panels (the mini map) float their title row over the content, shown on hover.
+  const hoverHeader = panel.hoverHeader?.(effectivePanelOption) ?? false;
+
   const renderedPanel = (
       <PanelCard
         flipped={flipped}
         onMouseDown={onPanelMouseDown}
         underConstruction={panel.underConstruction}
         borderColor={borderColor}
+        bleed={hoverHeader}
         front={(
           <>
-            <div className="flex items-center justify-between mb-1">
+            <div className={cn(
+              "flex items-center justify-between",
+              hoverHeader
+                ? "absolute inset-x-0 top-0 z-50 bg-gradient-to-b from-black/85 via-black/55 to-transparent px-3 pb-4 pt-2 opacity-0 transition-opacity group-hover/panel:opacity-100 group-focus-within/panel:opacity-100"
+                : "mb-1",
+            )}>
               <h3 className="text-sm font-medium flex items-center gap-2">
                 {customTitle ? (
                   <>

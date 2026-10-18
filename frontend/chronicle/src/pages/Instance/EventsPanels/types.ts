@@ -138,6 +138,13 @@ export interface PanelDefinition<TResult, TEvent extends ProcessorEvent = Proces
   /** If true, the panel card cannot be flipped open through Shift-click or filter controls. */
   disableCardFlip?: boolean;
 
+  /**
+   * Content fills the whole card and the title row floats over its top,
+   * shown only while the cursor is on the card (like a strip's hover bar).
+   * For full-bleed visuals such as the mini map; per panel option.
+   */
+  hoverHeader?: (panelOption: string | null | undefined) => boolean;
+
   /** Whether this panel supports the filter-builder UI on the card back. */
   supportsFiltering?: boolean;
 

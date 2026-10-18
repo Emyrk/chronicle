@@ -463,9 +463,9 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   );
 
   return (
-    <div className={cn("flex h-full min-h-0 flex-col", PANEL_CARD_BLEED, !mini && "p-1")}>
+    <div className={cn("flex h-full min-h-0 flex-col", !mini && [PANEL_CARD_BLEED, "p-1"])}>
       {props.headerSlot ? createPortal(headerControls, props.headerSlot) : <div className="flex justify-end px-1">{headerControls}</div>}
-      {/* Runs to the card's edges (PANEL_CARD_BLEED); the full map keeps a thin window frame, the mini map none. */}
+      {/* The full map runs to the card's edges (PANEL_CARD_BLEED) with a thin window frame; the mini map fills a padless card (hoverHeader). */}
       <div className={cn("relative min-h-0 flex-1 overflow-hidden bg-black/70", !mini && "rounded-sm border border-white/15")}>
         {!show3D ? (meshOnly
           ? <MapMessage title="No map artwork for this instance" detail={`${ready.mapName} has no 2D map; it is 3D only, and this browser could not provide WebGL.`} />
@@ -515,7 +515,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
           <>
             {/* Replay is off: a greyed preview, with the way to the real Replay controls. */}
             <div className="pointer-events-none absolute inset-0 z-30 bg-slate-900/25 backdrop-saturate-50" aria-hidden />
-            <div className="absolute left-2 top-2 z-40 flex items-center gap-1">
+            {/* Slides below the card's title row while it shows on hover (hoverHeader). */}
+            <div className="absolute left-2 top-2 z-40 flex items-center gap-1 transition-transform group-hover/panel:translate-y-9">
               <span className="pointer-events-none rounded-sm bg-black/75 px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/70">Preview</span>
               {props.context.onOpenReplay && (
                 <button
@@ -804,7 +805,7 @@ function MapContent(props: PanelRenderProps<MapResult>) {
     </div>
   );
   return (
-    <div className={cn("flex h-full min-h-0 flex-col", PANEL_CARD_BLEED)}>
+    <div className={cn("flex h-full min-h-0 flex-col", !mini && PANEL_CARD_BLEED)}>
       {props.headerSlot ? createPortal(wholeRunButton, props.headerSlot) : <div className="flex justify-end px-3 pt-2">{wholeRunButton}</div>}
       <div className="relative min-h-0 flex-1">
         <MapOverview2D {...props} mini={mini} />
@@ -844,6 +845,7 @@ export function createMapPanel(): PanelDefinition<MapResult, MapProcessorEvent> 
     requiredCapabilities: ["unit-position"],
     syncDataMode: "full",
     disableCardFlip: true,
+    hoverHeader: isMiniMapOption,
     supportsFiltering: false,
     underConstruction: true,
     render: (props) => <MapContent {...props} />,
