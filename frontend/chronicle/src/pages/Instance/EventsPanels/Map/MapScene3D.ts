@@ -28,6 +28,8 @@ import { participantHue, participantLabel, type LiveMapPresence } from "../../li
 import { actionForKey, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
 import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, ENEMY_RED, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
+import type { PlanInput, PlanItem, PlanPoint } from "./plan/mapPlan";
+import { PlanLayer, type PlanSurface } from "./plan/planLayer";
 import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, CAST_ARC_OPACITY, CUT_ARC_COLOR, CUT_TICK_COLOR, DEAD_COLOR, INTERRUPT_LABEL_COLOR, WALK_AVATAR_COLOR, WALK_AVATAR_EMISSIVE } from "./mapPalette";
 import {
   clampToRadius,
@@ -301,6 +303,8 @@ interface DungeonMeshCave {
 
 interface DungeonMesh {
   url: string;
+  /** The entry's world bounds: the plan layer's world <-> scene transform. */
+  bounds: WowMapFloorBounds;
   group: THREE.Group;
   /** The walkable geometry (everything but the water planes). */
   caves: DungeonMeshCave[];
@@ -717,6 +721,13 @@ export class MapScene3D {
   private walk: WalkState | null = null;
   private adStrafe = true;
   private readonly tokenTextures = new UnitTokenTextures(() => this.requestRender());
+  // The raid plan drawn on the floor (see plan/), and the drawing input while a tool is active.
+  private readonly planLayer = new PlanLayer(this.tokenTextures);
+  private planItems: readonly PlanItem[] = [];
+  private planSelected: string | null = null;
+  private planSurface: PlanSurface | null = null;
+  private planInput: PlanInput | null = null;
+  private planPointer: number | null = null;
   // A flat plane (radius 1) lying on the ground, shared by every token part.
   private readonly tokenPlane = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
   private readonly columnBox = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
@@ -815,7 +826,7 @@ export class MapScene3D {
     // Lifts the cave's albedo textures (roughness 1, no vertex colour) while the mesh is on.
     this.meshLight.visible = false;
     this.scene.add(this.meshLight);
-    this.scene.add(this.groundGroup, this.unitsGroup);
+    this.scene.add(this.groundGroup, this.unitsGroup, this.planLayer.group);
 
     const beamGeometry = new THREE.BufferGeometry();
     beamGeometry.setAttribute("position", new THREE.BufferAttribute(this.beamPositions, 3).setUsage(THREE.DynamicDrawUsage));
@@ -985,7 +996,11 @@ export class MapScene3D {
         }
       }
     }
-    if (aspectChanged) this.setViewport(this.viewport);
+    if (aspectChanged) {
+      this.setViewport(this.viewport);
+      // The plan's world <-> scene transform uses the aspect.
+      this.updatePlanSurface();
+    }
     this.requestRender();
   }
 
@@ -1261,6 +1276,7 @@ export class MapScene3D {
     if (scale === this.unitScale && !force) return;
     this.unitScale = scale;
     for (const object of this.units.values()) object.group.scale.setScalar(this.scaleOf(object));
+    this.planLayer.setUnitScale(scale);
     this.updateLabel();
   }
 
@@ -1328,12 +1344,13 @@ export class MapScene3D {
   private async loadDungeonMesh(request: DungeonMeshRequest): Promise<DungeonMesh | null> {
     const parsed = await parsedDungeonMesh(request);
     if (!parsed) return null;
-    return { url: request.url, group: parsed.template.clone(), caves: parsed.caves, scale: parsed.scale, radius: parsed.radius };
+    return { url: request.url, bounds: request.bounds, group: parsed.template.clone(), caves: parsed.caves, scale: parsed.scale, radius: parsed.radius };
   }
 
   // Shows the mesh or the tiles, re-grounds every unit and re-applies the
   // scale and camera limits for the mode.
   private applyGroundMode() {
+    this.updatePlanSurface();
     const mesh = this.dungeonMesh !== null;
     this.groundGroup.visible = !mesh;
     this.meshLight.visible = mesh;
@@ -1679,6 +1696,7 @@ export class MapScene3D {
       line.material.map?.dispose();
       line.material.dispose();
     }
+    this.planLayer.dispose();
     this.tokenTextures.dispose();
     this.tokenPlane.dispose();
     this.columnBox.dispose();
@@ -2609,6 +2627,7 @@ export class MapScene3D {
   }
 
   private readonly handlePointerMove = (event: PointerEvent) => {
+    if (this.planInput && !this.walk) this.planInput.move(this.planPointAt(event), event, this.planPointer === event.pointerId);
     const drag = this.walk?.drag;
     if (this.walk && drag) {
       // Drag looks around the character; right-drag also turns it to face the view.
@@ -2643,6 +2662,14 @@ export class MapScene3D {
   }
 
   private readonly handlePointerDown = (event: PointerEvent) => {
+    if (this.planInput && event.button === 0 && !this.walk) {
+      // A drawing tool has the left button (the camera keeps right-drag and the wheel).
+      this.pointerDownAt = null;
+      this.planPointer = event.pointerId;
+      this.renderer.domElement.setPointerCapture(event.pointerId);
+      this.planInput.down(this.planPointAt(event), event);
+      return;
+    }
     this.pointerDownAt = event.button === 0 ? { x: event.clientX, y: event.clientY } : null;
     if (this.walk && (event.button === 0 || event.button === 2)) {
       this.walk.drag = { button: event.button, x: event.clientX, y: event.clientY };
@@ -2652,6 +2679,11 @@ export class MapScene3D {
 
   // A press and release without moving (a drag orbits or pans) on a unit.
   private readonly handlePointerUp = (event: PointerEvent) => {
+    if (this.planInput && this.planPointer === event.pointerId) {
+      this.planPointer = null;
+      this.planInput.up(this.planPointAt(event), event);
+      return;
+    }
     if (this.walk?.drag && this.walk.drag.button === event.button) this.walk.drag = null;
     const down = this.pointerDownAt;
     this.pointerDownAt = null;
@@ -3054,6 +3086,74 @@ export class MapScene3D {
     object.cameraGeometry.dispose();
     object.label.material.map?.dispose();
     object.label.material.dispose();
+  }
+
+  /** The plan items to draw (the current step's, plus any being drawn), and the selected one. */
+  setPlanItems(items: readonly PlanItem[], selectedId: string | null) {
+    this.planItems = items;
+    this.planSelected = selectedId;
+    this.planLayer.setItems(items, selectedId, this.planSurface);
+    this.requestRender();
+  }
+
+  /**
+   * A drawing tool's pointer handlers (null: none). While set, the left
+   * button draws instead of orbiting; points are world plan points on the
+   * dungeon floor (null off the mesh).
+   */
+  setPlanInput(input: PlanInput | null) {
+    this.planInput = input;
+    this.planPointer = null;
+    this.controls.mouseButtons.LEFT = input ? null : THREE.MOUSE.ROTATE;
+    this.renderer.domElement.style.cursor = input ? "crosshair" : "";
+  }
+
+  /** Whether plans can be drawn: they need the dungeon mesh's floor. */
+  canPlan(): boolean {
+    return this.planSurface !== null;
+  }
+
+  // The dungeon floor under the pointer, as a world plan point.
+  private planPointAt(event: MouseEvent): PlanPoint | null {
+    const mesh = this.dungeonMesh;
+    if (!mesh) return null;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const hit = this.raycaster.intersectObject(mesh.group, true)[0];
+    return hit ? this.sceneToPlan(hit.point) : null;
+  }
+
+  // World (yards) <-> scene on the mesh: the projection markers use there
+  // (renderedDungeonMapPoint), with heights in yards above the mesh origin.
+  private sceneToPlan(point: THREE.Vector3): PlanPoint {
+    const { bounds, scale } = this.dungeonMesh!;
+    const left = point.x / GROUND_WIDTH + 0.5;
+    const top = point.z / (GROUND_WIDTH * this.aspect) + 0.5;
+    return {
+      x: bounds.maxX - top * (bounds.maxX - bounds.minX),
+      y: bounds.maxY - left * (bounds.maxY - bounds.minY),
+      z: point.y / scale,
+    };
+  }
+
+  private planToScene(point: PlanPoint): { x: number; z: number } {
+    const { bounds } = this.dungeonMesh!;
+    return mapPointToScene({
+      leftPercent: ((bounds.maxY - point.y) / (bounds.maxY - bounds.minY)) * 100,
+      topPercent: ((bounds.maxX - point.x) / (bounds.maxX - bounds.minX)) * 100,
+    }, this.aspect, GROUND_WIDTH);
+  }
+
+  // The plan layer's surface for the loaded mesh (rebuilt per mesh), or null without one.
+  private updatePlanSurface() {
+    const mesh = this.dungeonMesh;
+    this.planSurface = mesh ? {
+      scale: mesh.scale,
+      toScene: (point) => this.planToScene(point),
+      floorAt: (x, z, hintY) => this.castFloor(x, z, (hintY ?? this.cameraCeiling() ?? 1e4) + WALK_STEP_YARDS * mesh.scale) ?? hintY ?? 0,
+    } : null;
+    this.planLayer.setItems(this.planItems, this.planSelected, this.planSurface);
   }
 
   /** Called when the followed unit changes: Follow, a double-click, or the user taking the camera (null). */

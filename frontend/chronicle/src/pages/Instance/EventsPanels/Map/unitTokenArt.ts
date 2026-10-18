@@ -94,7 +94,7 @@ export const OWNER_LINE = {
 } as const;
 
 // A small skull, as the design's death marker (12×12 path units).
-function drawSkull(context: CanvasRenderingContext2D, centre: number, size: number) {
+export function drawSkull(context: CanvasRenderingContext2D, centre: number, size: number) {
   context.save();
   context.translate(centre - size / 2, centre - size / 2);
   context.scale(size / 12, size / 12);
