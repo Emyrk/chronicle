@@ -207,7 +207,7 @@ func (api *API) ResolvePrivateLogShareLink(w http.ResponseWriter, r *http.Reques
 		Private:    link.Private,
 	}
 	if claims, ok := chronauth.AuthenticatedClaims(ctx); ok {
-		actor, _ := authz.ActorFromContext(ctx)
+		actor := policy.New().User(claims.Subject)
 		canView, checkErr := api.Zed.CheckOne(ctx, nil, policy.New().Raid_log(link.PrivateLogShareLink.LogGroupID).CanView_User(actor))
 		if checkErr != nil {
 			httpapi.InternalServerError(w, checkErr)
@@ -248,7 +248,7 @@ func (api *API) RequestPrivateLogAccess(w http.ResponseWriter, r *http.Request) 
 		httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{Message: "log is public"})
 		return
 	}
-	actor, _ := authz.ActorFromContext(ctx)
+	actor := policy.New().User(claims.Subject)
 	canView, err := api.Zed.CheckOne(ctx, nil, policy.New().Raid_log(link.PrivateLogShareLink.LogGroupID).CanView_User(actor))
 	if err != nil {
 		httpapi.InternalServerError(w, err)
