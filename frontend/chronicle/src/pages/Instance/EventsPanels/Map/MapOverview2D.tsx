@@ -477,8 +477,8 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
   const displayedMapId = artwork.kind === "instance" ? artwork.instance.mapID : mapId;
 
   return (
-    <div className={`flex h-full min-h-0 flex-col ${mini ? "" : "gap-2 p-2"}`}>
-      {!mini && <div className="flex items-center justify-between gap-2 px-1 text-[10px] text-muted-foreground">
+    <div className="flex h-full min-h-0 flex-col">
+      {!mini && <div className="flex items-center justify-between gap-2 px-3 py-1.5 text-[10px] text-muted-foreground">
         <div className="min-w-0 truncate">
           <span className="font-semibold text-foreground">{mapName}</span>
           <span className="ml-1.5 font-mono">world {displayedMapId}</span>
@@ -510,7 +510,7 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
           )}
         </div>
       </div>}
-      <div ref={mapShellRef} className={`relative min-h-0 flex-1 overflow-hidden bg-[#11100d] ${mini ? "" : "rounded-md border border-white/10"}`}>
+      <div ref={mapShellRef} className="relative min-h-0 flex-1 overflow-hidden bg-[#11100d]">
         <div
           ref={mapFrameRef}
           className={`absolute touch-none overflow-hidden bg-[#11100d] select-none ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}
@@ -627,7 +627,7 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
           onFocusEncounter={focusEncounter}
         />}
       </div>
-      {!mini && <p className="px-1 text-[9px] text-muted-foreground">
+      {!mini && <p className="px-3 py-1.5 text-[9px] text-muted-foreground">
         {routes.length > 0
           ? "Colored lines show selected encounters. Muted gray lines and small dots retain unselected fights. Dashed lines mark remaining telemetry gaps."
           : !dungeonBounds && imageProjection

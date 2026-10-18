@@ -391,10 +391,10 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   );
 
   return (
-    <div className={cn("flex h-full min-h-0 flex-col", mini ? PANEL_CARD_BLEED : "gap-2 p-2")}>
+    <div className={cn("flex h-full min-h-0 flex-col", PANEL_CARD_BLEED)}>
       {props.headerSlot ? createPortal(headerControls, props.headerSlot) : <div className="flex justify-end px-1">{headerControls}</div>}
-      {/* The mini map runs to the card's edges, so it drops its own frame. */}
-      <div className={cn("relative min-h-0 flex-1 overflow-hidden bg-black/70", !mini && "rounded-md border border-white/10")}>
+      {/* The map runs to the card's edges (PANEL_CARD_BLEED), so it has no frame of its own. */}
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-black/70">
         {!show3D ? (meshOnly
           ? <MapMessage title="No map artwork for this instance" detail={`${ready.mapName} has no 2D map; it is 3D only, and this browser could not provide WebGL.`} />
           : view2D
@@ -599,7 +599,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
         </>)}
       </div>
       {!mini && jumps.length > 0 && ready.runStartMs !== null && (
-        <div className="flex flex-col gap-1 px-1">
+        <div className="flex flex-col gap-1 px-3 py-2">
           <div className="relative h-1.5 rounded bg-white/10" aria-hidden>
             {jumps.map((jump) => (
               <span key={jump.id} className="absolute top-0 h-full w-0.5 bg-amber-300/80" style={{ left: `${jump.fraction * 100}%` }} />
@@ -628,10 +628,10 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
         </div>
       )}
       {!mini && webglUnavailable && (
-        <p className="px-1 text-[9px] text-amber-300/80">3D view needs WebGL, which this browser could not provide. Showing the replay map in 2D instead.</p>
+        <p className="px-3 py-1 text-[9px] text-amber-300/80">3D view needs WebGL, which this browser could not provide. Showing the replay map in 2D instead.</p>
       )}
       {!mini && !ready.overlayAvailable && (
-        <p className="px-1 text-[9px] text-amber-300/80">No compatible world-coordinate mapping is available for this floor, so unit markers are hidden.</p>
+        <p className="px-3 py-1 text-[9px] text-amber-300/80">No compatible world-coordinate mapping is available for this floor, so unit markers are hidden.</p>
       )}
     </div>
   );
@@ -667,7 +667,7 @@ function MapContent(props: PanelRenderProps<MapResult>) {
     </div>
   );
   return (
-    <div className={cn("flex h-full min-h-0 flex-col", mini && PANEL_CARD_BLEED)}>
+    <div className={cn("flex h-full min-h-0 flex-col", PANEL_CARD_BLEED)}>
       {props.headerSlot ? createPortal(wholeRunButton, props.headerSlot) : <div className="flex justify-end px-3 pt-2">{wholeRunButton}</div>}
       <div className="min-h-0 flex-1">
         <MapOverview2D {...props} mini={mini} />
