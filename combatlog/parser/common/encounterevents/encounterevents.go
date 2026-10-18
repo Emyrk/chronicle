@@ -18,7 +18,7 @@ type EncounterEvents struct {
 	verbose        bool
 	Damage         *Builder[*messages.Damage, *chronicleproto.Damage]
 	Heal           *Builder[*messages.Heal, *chronicleproto.Heal]
-	UnitPosition   *Builder[*messages.UnitPosition, *chronicleproto.UnitPosition]
+	UnitPosition   *PositionBuilder
 	UnitResources  *Builder[*messages.UnitResources, *chronicleproto.UnitResources]
 	ResourceChange *Builder[*messages.ResourceChange, *chronicleproto.ResourceChange]
 	ExtraAttack    *Builder[*messages.ExtraAttack, *chronicleproto.ExtraAttack]
@@ -49,7 +49,7 @@ func New(verbose bool) *EncounterEventsInProgress {
 		verbose:        verbose,
 		Damage:         NewBuilder[*messages.Damage, *chronicleproto.Damage](),
 		Heal:           NewBuilder[*messages.Heal, *chronicleproto.Heal](),
-		UnitPosition:   NewBuilder[*messages.UnitPosition, *chronicleproto.UnitPosition](),
+		UnitPosition:   NewPositionBuilder(),
 		UnitResources:  NewBuilder[*messages.UnitResources, *chronicleproto.UnitResources](),
 		ResourceChange: NewBuilder[*messages.ResourceChange, *chronicleproto.ResourceChange](),
 		ExtraAttack:    NewBuilder[*messages.ExtraAttack, *chronicleproto.ExtraAttack](),
@@ -228,10 +228,7 @@ func (e *EncounterEventsInProgress) Process(m messages.Message) error {
 			return fmt.Errorf("heal proto: %w", err)
 		}
 	case *messages.UnitPosition:
-		if e.unitTelemetry.duplicate(ty) {
-			return nil
-		}
-		err := AddToBuilder(e.UnitPosition, ty, e.nextIndex(), types2proto.UnitPosition)
+		err := e.UnitPosition.Add(ty, e.nextIndex())
 		if err != nil {
 			return fmt.Errorf("unit position proto: %w", err)
 		}
