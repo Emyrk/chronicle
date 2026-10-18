@@ -10,7 +10,8 @@ and this doc records the deviation.
 
 A first-class full-page view on `/instances/:id` that compares the rotation of
 two players (A and B) on one shared, zoomable timeline: casts, idle time, auto
-attacks, cooldowns, buff uptime, and debuffs on a chosen target.
+attacks, cooldowns, buffs and debuffs active on the players, and debuffs they
+applied to a chosen target.
 
 It is the first `kind: "page"` preset (see `presetLayouts.ts`). A page, not a
 panel, because section heights grow and shrink with expand/collapse toggles,
@@ -36,8 +37,8 @@ split below.
   (main/off hand, outcome colors), cooldown lane.
 - Cast tooltip: spell, time, cast time, damage, crit, target, active buffs.
 - Collapsible "Buffs & debuffs": key buffs, "Other buffs" (sorted by A/B
-  uptime gap, pin/unpin), target picker, target strip, key debuffs on target,
-  "Other debuffs".
+  uptime gap, pin/unpin), debuffs active on players A/B, target picker, target
+  strip, key debuffs applied by A/B to that target, and "Other debuffs".
 - Ctrl+click a spell to ignore it everywhere on the page.
 - Page state survives share links.
 
@@ -111,8 +112,8 @@ Per player per encounter:
 - `swings`: auto attacks (`spellId === 6603`), with `offHand = hitType & 0x1`
   and outcome from `lib/hittype`. Heroic Strike/Cleave are flagged in derive.
 - `auras`: segments `{ spellId, name, isBuff, casterGuid, targetGuid, startMs, endMs, maxStacks }`
-  for auras **on** the player (buffs) and auras **cast by** the player on
-  any unit (debuffs), using `processors/auraProcessor.ts`. Close open auras
+  for auras **on** the player (buffs and debuffs) and auras **cast by** the
+  player on any unit (debuffs), using `processors/auraProcessor.ts`. Close open auras
   at encounter end, as `materializeActiveAuraUptime` does.
 - `targetWindows`: per enemy, when the player was dealing damage to it.
 

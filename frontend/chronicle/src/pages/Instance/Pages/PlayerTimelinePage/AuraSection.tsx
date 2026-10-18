@@ -90,6 +90,13 @@ function classifyRows(
   return out;
 }
 
+/** Incoming debuffs are always relevant to the compared players, regardless of spell class metadata. */
+function classifyPlayerDebuffRows(rows: readonly AuraRow[]): ClassifiedRows {
+  const out: ClassifiedRows = { consumes: [], key: [], other: [], flat: [] };
+  for (const row of rows) (isFlat(row) ? out.flat : out.key).push(row);
+  return out;
+}
+
 function buildRows(perSlot: readonly (readonly TimelineAuraSegment[])[], durationMs: number): AuraRow[] {
   const rows = new Map<string, AuraRow>();
   perSlot.forEach((segments, slot) => {
@@ -191,6 +198,10 @@ export function AuraSection({
     () => classifyRows(buildRows(players.map((p) => p.data.aurasOn.filter((a) => a.isBuff)), durationMs), players, spellMeta, adminIgnored),
     [players, durationMs, spellMeta, adminIgnored],
   );
+  const playerDebuffs = useMemo(
+    () => classifyPlayerDebuffRows(buildRows(players.map((p) => p.data.aurasOn.filter((a) => !a.isBuff)), durationMs)),
+    [players, durationMs],
+  );
 
   // Debuff targets: units A or B debuffed, ranked by damage they took from A and B.
   const targets = useMemo(() => {
@@ -259,6 +270,12 @@ export function AuraSection({
             rows={buffs}
             isRaised={isRaised}
             onToggleRaised={onToggleRaised}
+            {...groupProps}
+          />
+          <AuraGroup
+            title="Debuffs on players"
+            otherLabel="Other debuffs on players"
+            rows={playerDebuffs}
             {...groupProps}
           />
           <div
