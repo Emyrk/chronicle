@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Map, Maximize2, Search } from "lucide-react";
+import { ArrowLeft, Box, Image, Map, Maximize2, Search } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useDatasets } from "@/api/queries";
 import { Card } from "@/components/ui/Card/Card";
@@ -12,6 +12,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
+import { placeableDungeonMesh } from "@/pages/Instance/EventsPanels/Map/dungeonMeshes";
+import { mapDebugOverlays } from "@/pages/Instance/EventsPanels/Map/mapDebugOverlays";
 import {
   mapAssetUrl,
   mapGalleryItems,
@@ -24,6 +26,8 @@ import {
 import { GalleryPagination } from "./GalleryPagination";
 import { galleryPage } from "./galleryPage";
 import { fetchMapManifest } from "./mapManifest";
+
+const MapGallery3D = lazy(() => import("./MapGallery3D"));
 
 // A mesh-only instance has no image; its card and modal show the mesh's
 // world extent in yards (width along world Y, height along world X, as the
@@ -166,6 +170,7 @@ function MapCard({
         <div className="shrink-0 text-right font-mono text-[9px] uppercase leading-4 tracking-wider text-muted-foreground">
           <div>{canvas.width}×{canvas.height}{item.kind === "mesh" ? " yd" : ""}</div>
           {item.kind === "mesh" && <div>3D mesh only</div>}
+          {item.kind !== "zone" && placeableDungeonMesh(item.instance.mesh) && <div className="text-amber-300/65">3D available</div>}
           {item.kind === "zone" && (item.art.phaseID !== 0 || item.layer.index !== 0) && (
             <div>phase {item.art.phaseID} · layer {item.layer.index}</div>
           )}
@@ -187,8 +192,13 @@ function MapModal({
   iconBaseUrl: string | undefined;
   onOpenChange: (open: boolean) => void;
 }) {
+  const [viewMode, setViewMode] = useState<"art" | "3d">(() => item?.kind === "mesh" ? "3d" : "art");
+
   if (!item || !iconBaseUrl) return null;
 
+  const instance = item.kind === "zone" ? null : item.instance;
+  const mesh = placeableDungeonMesh(instance?.mesh);
+  const debugOverlays = instance ? mapDebugOverlays(instance.mapID) : [];
   const name = item.kind === "zone" ? (item.map.name || `Map ${item.map.id}`) : item.instance.name;
   const canvas = galleryCanvasSize(item);
   const description = item.kind === "zone"
@@ -207,10 +217,37 @@ function MapModal({
           <DialogDescription className="font-mono text-[10px] uppercase tracking-[0.14em] text-amber-200/50">
             {description} · {canvas.width}×{canvas.height}{item.kind === "mesh" ? " yd" : ""}
           </DialogDescription>
+          {mesh && (
+            <div className="mt-2 flex w-fit rounded-md border border-amber-900/50 bg-black/30 p-0.5" role="group" aria-label="Map render mode">
+              {item.kind !== "mesh" && (
+                <button
+                  type="button"
+                  onClick={() => setViewMode("art")}
+                  className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs transition-colors ${viewMode === "art" ? "bg-amber-200/15 text-amber-50" : "text-muted-foreground hover:text-amber-100"}`}
+                >
+                  <Image className="h-3.5 w-3.5" /> Artwork
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setViewMode("3d")}
+                className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs transition-colors ${viewMode === "3d" ? "bg-amber-200/15 text-amber-50" : "text-muted-foreground hover:text-amber-100"}`}
+              >
+                <Box className="h-3.5 w-3.5" /> 3D mesh
+                {debugOverlays.length > 0 && <span className="text-[9px] uppercase tracking-wider text-orange-300/70">+ debug</span>}
+              </button>
+            </div>
+          )}
         </DialogHeader>
         <div className="styled-scrollbar max-h-[calc(94vh-5rem)] overflow-auto bg-black/70 p-2 sm:p-4">
           <div className="mx-auto overflow-hidden rounded-md border border-white/10 bg-black shadow-2xl">
-            <MapArtwork item={item} iconBaseUrl={iconBaseUrl} />
+            {viewMode === "3d" && mesh && instance ? (
+              <Suspense fallback={<div className="flex h-[min(72vh,900px)] min-h-[420px] items-center justify-center font-mono text-xs uppercase tracking-widest text-amber-100/50">Loading 3D renderer…</div>}>
+                <MapGallery3D key={item.key} instance={instance} iconBaseUrl={iconBaseUrl} overlays={debugOverlays} />
+              </Suspense>
+            ) : (
+              <MapArtwork item={item} iconBaseUrl={iconBaseUrl} />
+            )}
           </div>
         </div>
       </DialogContent>
@@ -387,6 +424,7 @@ export function MapGalleryPage() {
       </div>
 
       <MapModal
+        key={selectedMap?.key ?? "closed"}
         item={selectedMap}
         iconBaseUrl={iconBaseUrl}
         onOpenChange={(open) => {

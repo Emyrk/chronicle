@@ -1,3 +1,5 @@
+import { deepBreathLaneForSpell } from "./deepBreathLanes";
+
 /**
  * Replay Map effects (hit wobble, beams, heals, deaths) derived
  * purely from the replay cursor. Worker-safe: no three.js, no React. Every
@@ -52,6 +54,16 @@ export interface EncounterEffects {
   resurrectsByUnit: Map<string, number[]>;
   /** Time-sorted heals with effective healing, per target. */
   healsByUnit: Map<string, ReplayEffectEvent[]>;
+}
+
+export interface ActiveDeepBreath {
+  source: string;
+  /** First spell in the Breath sequence, encoding the fixed footprint and direction. */
+  routeSpellId: number;
+  /** 0 when Heated Ground fires, approaching 1 as the breath crosses the room. */
+  progress: number;
+  startMs: number;
+  endMs: number;
 }
 
 /**
@@ -127,6 +139,10 @@ export const HEAL_PULSE_MS = 500;
 export const HOT_MERGE_MS = 500;
 /** How long healing lingers as a pale chunk on the health bar. */
 export const HEAL_CHUNK_MS = 600;
+/** Onyxia's Heated Ground volley starts a Deep Breath crossing that lasts about five seconds. */
+export const DEEP_BREATH_MS = 5_250;
+/** One canonical spell from the simultaneous Heated Ground 22191-22202 volley. */
+export const DEEP_BREATH_TRIGGER_SPELL_ID = 22_191;
 const MAX_INTENSITY = 3;
 
 export const INTERRUPT_COLOR = "#ffffff";
@@ -251,6 +267,48 @@ export function eventWindow(events: readonly ReplayEffectEvent[], fromMs: number
   let end = lowerBound(events, toMs);
   while (end < events.length && events[end].timestampMs === toMs) end++;
   return [start, Math.max(start, end)];
+}
+
+function deepBreathRouteSpellId(events: readonly ReplayEffectEvent[], triggerIndex: number): number | null {
+  const triggerMs = events[triggerIndex].timestampMs;
+  for (let index = triggerIndex + 1; index < events.length; index++) {
+    const event = events[index];
+    if (event.timestampMs > triggerMs + 750) break;
+    if (event.kind === "cast_go" && event.spellId !== null && deepBreathLaneForSpell(event.spellId)) return event.spellId;
+  }
+  return null;
+}
+
+/**
+ * Active Onyxia Deep Breath crossings at `cursorMs`. The combat log emits a
+ * simultaneous Heated Ground volley when the room sweep begins; spell 22191
+ * is a stable representative of that volley, so one crossing produces one
+ * visual instead of twelve.
+ */
+export function deriveActiveDeepBreaths(
+  fx: EncounterEffects,
+  cursorMs: number,
+  out: ActiveDeepBreath[] = [],
+): ActiveDeepBreath[] {
+  let count = 0;
+  const [start, end] = eventWindow(fx.events, cursorMs - DEEP_BREATH_MS, cursorMs);
+  for (let index = end - 1; index >= start; index--) {
+    const event = fx.events[index];
+    if (event.kind !== "cast_go" || event.spellId !== DEEP_BREATH_TRIGGER_SPELL_ID || !event.source) continue;
+    const endMs = event.timestampMs + DEEP_BREATH_MS;
+    if (cursorMs >= endMs) continue;
+    const routeSpellId = deepBreathRouteSpellId(fx.events, index);
+    if (routeSpellId === null) continue;
+    const breath = out[count] ?? (out[count] = { source: "", routeSpellId: 0, progress: 0, startMs: 0, endMs: 0 });
+    breath.source = event.source;
+    breath.routeSpellId = routeSpellId;
+    breath.progress = (cursorMs - event.timestampMs) / DEEP_BREATH_MS;
+    breath.startMs = event.timestampMs;
+    breath.endMs = endMs;
+    count++;
+  }
+  out.length = count;
+  return out;
 }
 
 /**

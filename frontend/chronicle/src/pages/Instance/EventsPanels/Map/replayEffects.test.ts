@@ -11,6 +11,8 @@ import {
   COMBAT_TEXT_MS,
   createEncounterEffects,
   DEFAULT_EFFECT_OPTIONS,
+  DEEP_BREATH_MS,
+  deriveActiveDeepBreaths,
   deriveActiveEffects,
   deriveCastIcons,
   deriveLastHitTargets,
@@ -181,6 +183,38 @@ describe("deriveActiveEffects", () => {
     );
     expect(derive(fx, 2_000)).toEqual([]);
     expect(derive(fx, 2_600)).toEqual([expect.objectContaining({ type: "hit", target: "mage", color: INTERRUPT_COLOR })]);
+  });
+});
+
+describe("deriveActiveDeepBreaths", () => {
+  const heatedGround = (timestampMs: number, spellId: number) => event(timestampMs, "cast_go", "onyxia", "", {
+    spellId,
+    spellName: "Heated Ground",
+  });
+
+  it("groups the Heated Ground volley into one timed room crossing", () => {
+    const fx = effects(
+      ...Array.from({ length: 12 }, (_, index) => heatedGround(1_000, 22_191 + index)),
+      event(1_050, "cast_go", "onyxia", "", { spellId: 17_086, spellName: "Breath" }),
+    );
+
+    expect(deriveActiveDeepBreaths(fx, 999)).toEqual([]);
+    expect(deriveActiveDeepBreaths(fx, 1_000 + DEEP_BREATH_MS / 2)).toEqual([{
+      source: "onyxia",
+      routeSpellId: 17_086,
+      progress: 0.5,
+      startMs: 1_000,
+      endMs: 1_000 + DEEP_BREATH_MS,
+    }]);
+    expect(deriveActiveDeepBreaths(fx, 1_000 + DEEP_BREATH_MS)).toEqual([]);
+  });
+
+  it("ignores ordinary Breath and non-canonical Heated Ground segments", () => {
+    const fx = effects(
+      heatedGround(1_000, 22_192),
+      event(1_100, "cast_go", "onyxia", "", { spellId: 17_086, spellName: "Breath" }),
+    );
+    expect(deriveActiveDeepBreaths(fx, 1_200)).toEqual([]);
   });
 });
 

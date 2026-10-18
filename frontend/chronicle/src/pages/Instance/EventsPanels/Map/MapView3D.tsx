@@ -322,6 +322,8 @@ export default function MapView3D({
         guid: marker.guid,
         point,
         facing: sample.facing,
+        worldX: sample.x,
+        worldY: sample.y,
         color: resolveCssColor(marker.color, container, colorCacheRef.current),
         kind: marker.kind,
         muted: marker.muted,

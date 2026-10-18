@@ -47,8 +47,11 @@ import {
 } from "./dungeonMeshes";
 import { MAP_CURSOR, MAP_HOSTILE_CURSOR, MAP_UNIT_CURSOR } from "./mapCursors";
 import { FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, type MapPoint, type MapViewport } from "./mapModel";
+import { deepBreathLaneForSpell, extendedDeepBreathLane } from "./deepBreathLanes";
+import { projectMapDebugPath, type MapDebugOverlay } from "./mapDebugOverlays";
 import {
   DEFAULT_EFFECT_OPTIONS,
+  deriveActiveDeepBreaths,
   deriveActiveEffects,
   deriveCastIcons,
   deriveCombatText,
@@ -60,6 +63,7 @@ import {
   INTERRUPTED_PLAYER_ICON_MS,
   MAX_EFFECT_PRIMITIVES,
   schoolColor,
+  type ActiveDeepBreath,
   type ActiveEffect,
   type CastIcon,
   type CombatText,
@@ -84,6 +88,9 @@ export { MAX_EFFECT_PRIMITIVES };
 const MAX_EXTRAPOLATE_MS = 250;
 const BEAM_HEIGHT = 1.5;
 const BOLT_WIDTH = 0.18;
+const DEBUG_PATH_SEGMENT_YARDS = 4;
+const DEEP_BREATH_WIDTH_YARDS = 18;
+const DEEP_BREATH_GROUND_LIFT = 0.12;
 // How far a melee attacker steps toward its target, at most.
 const LUNGE_DISTANCE = 1.2;
 const SLASH_HEIGHT = 1.2;
@@ -343,6 +350,9 @@ export interface MapScene3DUnit {
   point: MapPoint;
   /** Radians; undefined when the log does not record facing (no notch is drawn). */
   facing?: number;
+  /** Original world coordinates, used to choose fixed encounter geometry. */
+  worldX: number;
+  worldY: number;
   color: string;
   kind: MapMarkerKind;
   muted: boolean;
@@ -457,6 +467,9 @@ interface UnitObject {
   floorY: number;
   /** In the air: the line from the token down to its shadow on the floor (null until first airborne). */
   drop: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
+  /** Logged world position, retained for encounter-specific fixed geometry. */
+  worldX: number;
+  worldY: number;
   /** Logged world height (yards), or undefined when the log has none. */
   loggedZ: number | undefined;
   health: MapUnitHealth | null;
@@ -718,6 +731,8 @@ export class MapScene3D {
   private readonly pointer = new THREE.Vector2();
   private readonly geometries = createUnitGeometries();
   private readonly groundGroup = new THREE.Group();
+  private readonly debugOverlayGroup = new THREE.Group();
+  private debugOverlays: readonly MapDebugOverlay[] = [];
   private readonly unitsGroup = new THREE.Group();
   private readonly units = new Map<string, UnitObject>();
   private readonly textureLoader = new THREE.TextureLoader();
@@ -818,6 +833,11 @@ export class MapScene3D {
   // The effect clock's time at the last updateEffects, for the bars' heal chunk.
   private effectCursorMs = 0;
   private readonly activeEffects: ActiveEffect[] = [];
+  private readonly activeDeepBreaths: ActiveDeepBreath[] = [];
+  // The lane of the breath being drawn, fixed when it starts: Onyxia keeps
+  // flying and turning afterwards, but the fire stays where she breathed.
+  private deepBreathLaneLock: { routeSpellId: number; startMs: number; dx: number; dz: number; laneX: number; laneZ: number; length: number; floorY: number } | null = null;
+  private readonly deepBreathLane: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   private readonly effectOptions: DeriveEffectsOptions = { ...DEFAULT_EFFECT_OPTIONS };
   private readonly visibleUnits = { has: (guid: string) => this.units.has(guid) };
   private readonly effectColors = new Map<string, THREE.Color>();
@@ -960,7 +980,7 @@ export class MapScene3D {
     // Lifts the cave's albedo textures (roughness 1, no vertex colour) while the mesh is on.
     this.meshLight.visible = false;
     this.scene.add(this.meshLight);
-    this.scene.add(this.groundGroup, this.unitsGroup, this.planLayer.group);
+    this.scene.add(this.groundGroup, this.debugOverlayGroup, this.unitsGroup, this.planLayer.group);
 
     const beamGeometry = new THREE.BufferGeometry();
     beamGeometry.setAttribute("position", new THREE.BufferAttribute(this.beamPositions, 3).setUsage(THREE.DynamicDrawUsage));
@@ -1002,6 +1022,19 @@ export class MapScene3D {
       glow(),
       MAX_EFFECT_PRIMITIVES,
     );
+    const breathMaterial = new THREE.MeshBasicMaterial({
+      color: 0xff6a00,
+      transparent: true,
+      opacity: 0.55,
+      blending: THREE.AdditiveBlending,
+      depthTest: false,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    this.deepBreathLane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), breathMaterial);
+    this.deepBreathLane.visible = false;
+    this.deepBreathLane.frustumCulled = false;
+    this.deepBreathLane.renderOrder = 2;
     // Health bars: camera-facing quads drawn over everything, in instance order.
     this.bars = this.createPool(
       new THREE.PlaneGeometry(1, 1),
@@ -1009,7 +1042,14 @@ export class MapScene3D {
       MAX_HEALTH_BARS * 4,
     );
     this.bars.renderOrder = 9;
-    this.scene.add(this.beams, this.rings, this.bolts, this.slashes, this.bars);
+    this.scene.add(
+      this.beams,
+      this.rings,
+      this.bolts,
+      this.slashes,
+      this.deepBreathLane,
+      this.bars,
+    );
     for (let index = 0; index < MAX_COMBAT_TEXT; index++) {
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, transparent: true }));
       sprite.center.set(0.5, 0);
@@ -1160,6 +1200,8 @@ export class MapScene3D {
       if (!object) object = this.addUnit(unit);
       object.name = unit.name;
       object.health = unit.health;
+      object.worldX = unit.worldX;
+      object.worldY = unit.worldY;
       object.loggedZ = unit.z;
       object.healthFraction = unit.healthFraction ?? null;
       object.powerLevel = unit.power ?? null;
@@ -1203,6 +1245,61 @@ export class MapScene3D {
     if (this.effects) Object.assign(this.effectOptions, this.effects.options, { visibleGuids: this.visibleUnits });
     this.effectColors.clear();
     this.requestRender();
+  }
+
+  /** Persistent map diagnostics, independent of replay combat effects. */
+  setDebugOverlays(overlays: readonly MapDebugOverlay[]) {
+    this.debugOverlays = overlays;
+    this.rebuildDebugOverlays();
+    this.requestRender();
+  }
+
+  private clearDebugOverlays() {
+    for (const child of [...this.debugOverlayGroup.children]) {
+      this.debugOverlayGroup.remove(child);
+      const mesh = child as THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
+      mesh.geometry?.dispose();
+      if (Array.isArray(mesh.material)) for (const material of mesh.material) material.dispose();
+      else mesh.material?.dispose();
+    }
+  }
+
+  private rebuildDebugOverlays() {
+    this.clearDebugOverlays();
+    const dungeon = this.dungeonMesh;
+    if (!dungeon) return;
+    for (const overlay of this.debugOverlays) {
+      if (overlay.kind !== "path") continue;
+      const projected = projectMapDebugPath(overlay, dungeon.bounds, this.aspect, GROUND_WIDTH);
+      if (!projected) continue;
+      // A single room-sized plane disappears below Onyxia's uneven floor except
+      // near its centre. Build short independently height-probed strips so the
+      // fixed footprint follows the mesh and remains visible end to end.
+      const segmentCount = Math.max(1, Math.ceil(projected.length / (DEBUG_PATH_SEGMENT_YARDS * dungeon.scale)));
+      const segmentLength = projected.length / segmentCount;
+      const yaw = Math.atan2(-projected.direction.x, -projected.direction.z);
+      for (let index = 0; index < segmentCount; index++) {
+        const distance = segmentLength * (index + 0.5);
+        const x = projected.from.x + projected.direction.x * distance;
+        const z = projected.from.z + projected.direction.z * distance;
+        const floor = this.floorHeights.heightAt(`debug-overlay-${overlay.id}-${index}`, x, z);
+        const material = new THREE.MeshBasicMaterial({
+          color: overlay.color,
+          transparent: true,
+          opacity: overlay.opacity,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        });
+        const path = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), material);
+        path.position.set(x, floor + DEEP_BREATH_GROUND_LIFT * dungeon.scale, z);
+        path.rotation.y = yaw;
+        path.scale.set(overlay.widthYards * dungeon.scale, 1, segmentLength * 1.05);
+        path.renderOrder = 2;
+        path.userData.debugOverlayId = overlay.id;
+        this.debugOverlayGroup.add(path);
+      }
+    }
   }
 
   /**
@@ -1546,6 +1643,7 @@ export class MapScene3D {
     for (const [guid, object] of this.units) this.placeUnit(guid, object, object.base.x, object.base.z);
     this.updateCameraLimits();
     this.updateUnitScale(true);
+    this.rebuildDebugOverlays();
     this.requestRender();
   }
 
@@ -1897,6 +1995,7 @@ export class MapScene3D {
     this.keyWindow.removeEventListener("keyup", this.handleKeyUp);
     this.keyWindow.removeEventListener("blur", this.releaseKeys);
     for (const guid of [...this.units.keys()]) this.removeUnit(guid);
+    this.clearDebugOverlays();
     this.clearLabel();
     this.clearGround();
     this.dungeonMeshRequest = null;
@@ -1914,6 +2013,8 @@ export class MapScene3D {
     this.ownerLines.material.dispose();
     this.trailLines.geometry.dispose();
     this.trailLines.material.dispose();
+    this.deepBreathLane.geometry.dispose();
+    this.deepBreathLane.material.dispose();
     for (const pool of [this.rings, this.bolts, this.slashes, this.bars]) {
       pool.geometry.dispose();
       pool.material.dispose();
@@ -2009,6 +2110,8 @@ export class MapScene3D {
       base: new THREE.Vector3(),
       floorY: 0,
       drop: null,
+      worldX: unit.worldX,
+      worldY: unit.worldY,
       loggedZ: unit.z,
       health: unit.health,
       miniatureUrl: unit.miniatureUrl,
@@ -2282,6 +2385,71 @@ export class MapScene3D {
     }
   }
 
+  private hideDeepBreath() {
+    this.deepBreathLane.visible = false;
+    this.deepBreathLaneLock = null;
+  }
+
+  // Resolves the fixed room-space footprint from the Breath spell sequence;
+  // Onyxia's current position and facing never alter the geometry.
+  private deepBreathLaneFrom(routeSpellId: number) {
+    const mesh = this.dungeonMesh;
+    const selected = deepBreathLaneForSpell(routeSpellId);
+    if (!mesh || !selected) return null;
+    const [from, to] = extendedDeepBreathLane(selected.from, selected.to);
+    const projected = projectMapDebugPath({
+      kind: "path",
+      id: `onyxia-deep-breath-${selected.lane.id}`,
+      mapId: 249,
+      label: "Onyxia Deep Breath",
+      points: [from, to],
+      widthYards: DEEP_BREATH_WIDTH_YARDS,
+      color: "#ff6a00",
+      opacity: 1,
+    }, mesh.bounds, this.aspect, GROUND_WIDTH);
+    if (!projected) return null;
+    return {
+      dx: projected.direction.x,
+      dz: projected.direction.z,
+      laneX: projected.centre.x,
+      laneZ: projected.centre.z,
+      length: projected.length,
+      floorY: this.floorHeights.heightAt(`deep-breath-${selected.lane.id}`, projected.centre.x, projected.centre.z),
+    };
+  }
+
+  /**
+   * Lights the entire fixed Deep Breath footprint for the event's duration.
+   * The first Breath spell in the sequence selects the room-space lane;
+   * Onyxia's position, facing, and later movement never affect its geometry.
+   */
+  private updateDeepBreath(fx: EncounterEffects | null, cursorMs: number) {
+    const breaths = fx ? deriveActiveDeepBreaths(fx, cursorMs, this.activeDeepBreaths) : this.activeDeepBreaths;
+    if (!fx) breaths.length = 0;
+    const breath = breaths[0];
+    const yardScale = this.yardScale();
+    if (!breath || yardScale === null) {
+      this.hideDeepBreath();
+      return;
+    }
+
+    let lock = this.deepBreathLaneLock;
+    if (!lock || lock.routeSpellId !== breath.routeSpellId || lock.startMs !== breath.startMs) {
+      const lane = this.deepBreathLaneFrom(breath.routeSpellId);
+      if (!lane) {
+        this.hideDeepBreath();
+        return;
+      }
+      lock = this.deepBreathLaneLock = { routeSpellId: breath.routeSpellId, startMs: breath.startMs, ...lane };
+    }
+    const { dx, dz, laneX, laneZ, length } = lock;
+    const floorY = lock.floorY + DEEP_BREATH_GROUND_LIFT * yardScale;
+    this.deepBreathLane.position.set(laneX, floorY, laneZ);
+    this.deepBreathLane.rotation.set(0, Math.atan2(-dx, -dz), 0);
+    this.deepBreathLane.scale.set(DEEP_BREATH_WIDTH_YARDS * yardScale, 1, length);
+    this.deepBreathLane.visible = true;
+  }
+
   // Applies the effects at the effect clock's current time. Returns whether
   // another frame is needed to keep them animating.
   private updateEffects(now: number): boolean {
@@ -2306,6 +2474,7 @@ export class MapScene3D {
     if (fx) deriveUnitCasts(fx, cursorMs, this.unitCasts);
     else this.unitCasts.clear();
     this.updateHitFacings();
+    this.updateDeepBreath(fx, cursorMs);
 
     let beamCount = 0;
     let ringCount = 0;
