@@ -6,16 +6,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 )
 
-type unitPositionSnapshot struct {
-	x         float64
-	y         float64
-	z         float64
-	hasZ      bool
-	mapID     int32
-	facing    float64
-	hasFacing bool
-}
-
 type unitResourcesSnapshot struct {
 	currentHealth int64
 	maximumHealth int64
@@ -29,13 +19,11 @@ type unitResourcesSnapshot struct {
 }
 
 type unitTelemetryDeduplicator struct {
-	positions map[guid.GUID]unitPositionSnapshot
 	resources map[guid.GUID]unitResourcesSnapshot
 }
 
 func newUnitTelemetryDeduplicator() *unitTelemetryDeduplicator {
 	return &unitTelemetryDeduplicator{
-		positions: make(map[guid.GUID]unitPositionSnapshot),
 		resources: make(map[guid.GUID]unitResourcesSnapshot),
 	}
 }
@@ -43,21 +31,7 @@ func newUnitTelemetryDeduplicator() *unitTelemetryDeduplicator {
 func (d *unitTelemetryDeduplicator) duplicate(msg messages.Message) bool {
 	switch typed := msg.(type) {
 	case *messages.UnitPosition:
-		return false // tracking all for now
-		//snapshot := unitPositionSnapshot{
-		//	x:         typed.X,
-		//	y:         typed.Y,
-		//	mapID:     typed.MapID,
-		//	facing:    typed.Facing,
-		//	hasFacing: typed.HasFacing,
-		//}
-		//if typed.Z != nil {
-		//	snapshot.z = *typed.Z
-		//	snapshot.hasZ = true
-		//}
-		//previous, ok := d.positions[typed.Unit]
-		//d.positions[typed.Unit] = snapshot
-		//return ok && previous == snapshot
+		return false
 	case *messages.UnitResources:
 		snapshot := unitResourcesSnapshot{
 			currentHealth: typed.CurrentHealth,

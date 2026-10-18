@@ -108,7 +108,7 @@ func TestUnitTelemetryDeduplicationIsEncounterScoped(t *testing.T) {
 		SpellPower:    resources.SpellPower,
 		Armor:         resources.Armor,
 	}))
-	require.Equal(t, int64(2), firstEncounter.UnitPosition.Count)
+	require.Equal(t, int64(3), firstEncounter.UnitPosition.Count)
 	require.Equal(t, int64(2), firstEncounter.UnitResources.Count)
 
 	secondEncounter := encounterevents.New(false)
@@ -118,7 +118,7 @@ func TestUnitTelemetryDeduplicationIsEncounterScoped(t *testing.T) {
 	require.Equal(t, int64(1), secondEncounter.UnitResources.Count)
 }
 
-func TestUnitPositionDeduplicationIncludesOptionalZ(t *testing.T) {
+func TestUnitPositionsAreNotDeduplicated(t *testing.T) {
 	t.Parallel()
 
 	ts := time.Date(2026, time.October, 16, 12, 0, 0, 0, time.UTC)
@@ -138,7 +138,7 @@ func TestUnitPositionDeduplicationIncludesOptionalZ(t *testing.T) {
 		}))
 	}
 
-	require.Equal(t, int64(3), events.UnitPosition.Count)
+	require.Equal(t, int64(4), events.UnitPosition.Count)
 }
 
 func TestFirstEventEstablishesZero(t *testing.T) {
