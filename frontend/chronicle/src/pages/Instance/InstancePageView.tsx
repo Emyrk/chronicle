@@ -57,6 +57,7 @@ import { ENCOUNTER_TIPS, ENTITY_TIPS, CLASS_TOGGLE_TIPS } from "@/constants/tips
 import { InstanceMenu } from "./InstanceMenu";
 import { InstanceContentPage, type PageStateBinding } from "./Pages/InstanceContentPage";
 import {
+  readSharedFocus,
   readSharedPageLayout,
   readSharedTimeRange,
   sameEncounterSelection,
@@ -963,6 +964,8 @@ export interface SharedViewPayload {
     players?: number[];
     panelOptions?: Record<string, unknown>;
     panelFilters?: Record<string, PanelFilter[]>;
+    /** Logical presentation focus; browser fullscreen remains local. */
+    focused?: boolean;
     includeWipes?: boolean;
     /** Time range selection in ms offsets from encounter start. */
     timeRange?: { startMs: number; endMs: number };
@@ -3119,6 +3122,9 @@ function InstancePageViewContent({
     const sharedPageLayout = readSharedPageLayout(payload);
     const sharedPageType = sharedPageLayout?.pageType ?? null;
 
+    const sharedFocus = readSharedFocus(payload);
+    if (sharedFocus !== undefined) setFocused(sharedFocus);
+
     let orderedItems: GridEditorItem[] = [];
     let orderedPanels: PanelType[] = [];
     let orderedOptions: Array<string | null> = [];
@@ -3234,7 +3240,7 @@ function InstancePageViewContent({
     if (!sharedTimeRange) {
       timeRange?.reset();
     }
-  }, [allMergedEnemies, instance.encounters, instance.players, onSelectEncounters, setViewState, timeRange]);
+  }, [allMergedEnemies, instance.encounters, instance.players, onSelectEncounters, setFocused, setViewState, timeRange]);
 
   const handleExportLayout = useCallback(() => {
     const payload = {
@@ -3336,6 +3342,7 @@ function InstancePageViewContent({
       players: Array.from(viewState.players)
         .map((id) => Object.keys(instance.players ?? {}).sort().indexOf(id))
         .filter((idx) => idx >= 0),
+      focused: focusParam,
       ...(viewState.includeWipes ? { includeWipes: true } : {}),
       ...(timeRange?.enabled && timeRange.startOffsetMs != null && timeRange.endOffsetMs != null
         ? { timeRange: { startMs: timeRange.startOffsetMs, endMs: timeRange.endOffsetMs } }
@@ -3375,7 +3382,7 @@ function InstancePageViewContent({
         ...(Object.keys(panelFiltersByID).length > 0 ? { panelFilters: panelFiltersByID } : {}),
       },
     };
-  }, [activeLayoutId, activeLayoutItems, activePageType, activePresetId, layoutAppearance, allMergedEnemies, instance.encounters, instance.players, pageState, panelFiltersByID, panelOptionsByID, panelTypesByID, timeRange?.enabled, timeRange?.startOffsetMs, timeRange?.endOffsetMs, viewState.encounters, viewState.enemies, viewState.includeWipes, viewState.players]);
+  }, [activeLayoutId, activeLayoutItems, activePageType, activePresetId, layoutAppearance, allMergedEnemies, focusParam, instance.encounters, instance.players, pageState, panelFiltersByID, panelOptionsByID, panelTypesByID, timeRange?.enabled, timeRange?.startOffsetMs, timeRange?.endOffsetMs, viewState.encounters, viewState.enemies, viewState.includeWipes, viewState.players]);
 
   useEffect(() => {
     liveSession.registerViewApplier((view) => {

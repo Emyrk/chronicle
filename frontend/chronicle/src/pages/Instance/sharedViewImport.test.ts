@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  readSharedFocus,
   readSharedPageLayout,
   readSharedTimeRange,
   sameEncounterSelection,
@@ -52,6 +53,18 @@ describe("readSharedPageLayout", () => {
     expect(() => readSharedPageLayout({
       layout: { kind: "page", pageType: "unknown" },
     })).toThrow("Shared view has an unsupported page type");
+  });
+});
+
+describe("readSharedFocus", () => {
+  it("reads explicit logical focus state", () => {
+    expect(readSharedFocus({ view: { focused: true } })).toBe(true);
+    expect(readSharedFocus({ view: { focused: false } })).toBe(false);
+  });
+
+  it("ignores missing or malformed focus state", () => {
+    expect(readSharedFocus({ view: {} })).toBeUndefined();
+    expect(readSharedFocus({ view: { focused: "true" } })).toBeUndefined();
   });
 });
 

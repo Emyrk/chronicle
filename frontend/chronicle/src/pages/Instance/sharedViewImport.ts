@@ -31,6 +31,14 @@ export function readSharedPageLayout(payload: unknown): SharedPageLayout | null 
   };
 }
 
+export function readSharedFocus(payload: unknown): boolean | undefined {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return undefined;
+  const view = (payload as { view?: unknown }).view;
+  if (typeof view !== "object" || view === null || Array.isArray(view)) return undefined;
+  const focused = (view as { focused?: unknown }).focused;
+  return typeof focused === "boolean" ? focused : undefined;
+}
+
 export interface SharedTimeRange {
   startMs: number;
   endMs: number;
