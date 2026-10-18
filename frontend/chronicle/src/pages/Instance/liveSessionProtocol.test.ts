@@ -8,9 +8,12 @@ import {
   parseMapPresence,
   participantColor,
   participantLabel,
+  receiveLiveView,
+  setLiveViewApplier,
   shouldPublishParticipantReplay,
   websocketURL,
   type LiveReplayState,
+  type LiveViewDelivery,
 } from "./liveSessionProtocol";
 
 const paused = (timestampMs: number): LiveReplayState => ({
@@ -86,6 +89,33 @@ describe("canPublishLiveView", () => {
   it("waits for the leader's initial view before a participant publishes", () => {
     expect(canPublishLiveView("participant", false)).toBe(false);
     expect(canPublishLiveView("participant", true)).toBe(true);
+  });
+});
+
+describe("live view delivery", () => {
+  it("applies a view buffered before the page registers its applier", () => {
+    const delivery: LiveViewDelivery<{ page: string }> = { applier: null, pending: null };
+    const applied: Array<{ page: string }> = [];
+
+    receiveLiveView(delivery, { page: "timeline" });
+    expect(applied).toEqual([]);
+
+    setLiveViewApplier(delivery, (view) => applied.push(view));
+    expect(applied).toEqual([{ page: "timeline" }]);
+    expect(delivery.pending).toBeNull();
+  });
+
+  it("delivers subsequent views immediately without replaying the buffered view", () => {
+    const delivery: LiveViewDelivery<number> = { applier: null, pending: null };
+    const applied: number[] = [];
+
+    receiveLiveView(delivery, 1);
+    setLiveViewApplier(delivery, (view) => applied.push(view));
+    receiveLiveView(delivery, 2);
+    setLiveViewApplier(delivery, null);
+    setLiveViewApplier(delivery, (view) => applied.push(view));
+
+    expect(applied).toEqual([1, 2]);
   });
 });
 

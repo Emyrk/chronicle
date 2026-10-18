@@ -27,6 +27,30 @@ export function parseLivePresenceSurface(value: unknown): string | undefined {
   return typeof value === "string" && LIVE_PRESENCE_SURFACE_PATTERN.test(value) ? value : undefined;
 }
 
+export interface LiveViewDelivery<TView = unknown> {
+  applier: ((view: TView) => void) | null;
+  pending: { view: TView } | null;
+}
+
+export function receiveLiveView<TView>(delivery: LiveViewDelivery<TView>, view: TView): void {
+  if (delivery.applier) {
+    delivery.applier(view);
+    return;
+  }
+  delivery.pending = { view };
+}
+
+export function setLiveViewApplier<TView>(
+  delivery: LiveViewDelivery<TView>,
+  applier: ((view: TView) => void) | null,
+): void {
+  delivery.applier = applier;
+  if (!applier || !delivery.pending) return;
+  const { view } = delivery.pending;
+  delivery.pending = null;
+  applier(view);
+}
+
 export type LiveSessionDataMessage<TView = unknown> =
   | { type: "view"; view: TView }
   | { type: "replay"; replay: LiveReplayState }

@@ -21,6 +21,8 @@ import {
   parseMapPresence,
   participantColor,
   participantLabel,
+  receiveLiveView,
+  setLiveViewApplier,
   shouldPublishParticipantReplay,
   websocketURL,
   type LiveMapPresence,
@@ -171,7 +173,10 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
   const closingSocketRef = useRef(false);
   const currentRoleRef = useRef<LiveSessionRole | null>(null);
   const currentViewRef = useRef<unknown>(null);
-  const applyViewRef = useRef<((view: unknown) => void) | null>(null);
+  const viewDeliveryRef = useRef({
+    applier: null as ((view: unknown) => void) | null,
+    pending: null as { view: unknown } | null,
+  });
   const remoteViewJSONRef = useRef<string | null>(null);
   // A participant must first adopt the leader's view. Otherwise its local default
   // can win the data-channel startup race and reset the layout for every peer.
@@ -253,7 +258,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
         currentViewRef.current = message.view;
         remoteViewJSONRef.current = JSON.stringify(message.view);
         if (currentRoleRef.current === "participant") hasReceivedInitialViewRef.current = true;
-        applyViewRef.current?.(message.view);
+        receiveLiveView(viewDeliveryRef.current, message.view);
       } else if (message.type === "replay") {
         applyRemoteReplay(message.replay);
       } else if (message.type === "pointer") {
@@ -352,6 +357,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     participantPeerRef.current = null;
     pendingCandidatesRef.current.clear();
     hasReceivedInitialViewRef.current = false;
+    viewDeliveryRef.current.pending = null;
     setParticipantCount(0);
     setRemotePointers({});
     pointerSurfacesRef.current.clear();
@@ -536,7 +542,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
   }, [sendData, status]);
 
   const registerViewApplier = useCallback((apply: ((view: unknown) => void) | null) => {
-    applyViewRef.current = apply;
+    setLiveViewApplier(viewDeliveryRef.current, apply);
   }, []);
 
   const publishMapPresence = useCallback((presence: LiveMapPresence | null) => {

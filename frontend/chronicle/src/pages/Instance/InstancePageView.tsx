@@ -2598,12 +2598,12 @@ function InstancePageViewContent({
   const activePreset = activePresetId ? PRESET_LAYOUTS_BY_ID[activePresetId] : null;
   const activePageType = activePreset?.kind === "page" ? activePreset.pageType : null;
 
-  // Page view state for share links: the page reports it here (a ref, so no
-  // re-render), and an imported share link remounts the page with its state.
-  const pageStateRef = useRef<unknown>(undefined);
+  // Page view state for share links and live sessions. State changes must
+  // re-render this component so the shared-view publisher runs immediately.
+  const [pageState, setPageState] = useState<unknown>(undefined);
   const [importedPageState, setImportedPageState] = useState<{ key: number; state: unknown }>({ key: 0, state: undefined });
   const onPageStateChange = useCallback((state: unknown) => {
-    pageStateRef.current = state;
+    setPageState(state);
   }, []);
   const pageStateBinding = useMemo(
     () => ({ key: importedPageState.key, initial: importedPageState.state, onChange: onPageStateChange }),
@@ -2849,7 +2849,7 @@ function InstancePageViewContent({
         panelFiltersById: structuredClone(panelFiltersByID),
         activePresetId,
         appearance: layoutAppearance,
-        pageState: activePageType ? pageStateRef.current : undefined,
+        pageState: activePageType ? pageState : undefined,
       },
     };
     layoutPopupRef.current = session;
@@ -2865,6 +2865,7 @@ function InstancePageViewContent({
     panelOptionsByID,
     panelTypesByID,
     activePageType,
+    pageState,
   ]);
 
   // Use URL state if present, otherwise default to all encounters
@@ -3209,8 +3210,10 @@ function InstancePageViewContent({
       const pagePreset = requestedPreset?.kind === "page" && requestedPreset.pageType === sharedPageType
         ? requestedPreset
         : PRESET_LAYOUTS.find((preset) => preset.kind === "page" && preset.pageType === sharedPageType);
+      const sharedPageState = sharedPageLayout?.pageState;
       setActivePresetId(pagePreset?.id ?? DEFAULT_PRESET_ID);
-      setImportedPageState((prev) => ({ key: prev.key + 1, state: sharedPageLayout?.pageState }));
+      setPageState(sharedPageState);
+      setImportedPageState((prev) => ({ key: prev.key + 1, state: sharedPageState }));
     }
 
     // Restore per-panel filters if present in the payload.
@@ -3346,7 +3349,7 @@ function InstancePageViewContent({
           kind: "page",
           presetId: activePresetId ?? undefined,
           pageType: activePageType,
-          ...(pageStateRef.current !== undefined ? { pageState: pageStateRef.current } : {}),
+          ...(pageState !== undefined ? { pageState } : {}),
         },
         view,
       };
@@ -3372,7 +3375,7 @@ function InstancePageViewContent({
         ...(Object.keys(panelFiltersByID).length > 0 ? { panelFilters: panelFiltersByID } : {}),
       },
     };
-  }, [activeLayoutId, activeLayoutItems, activePageType, activePresetId, layoutAppearance, allMergedEnemies, instance.encounters, instance.players, panelFiltersByID, panelOptionsByID, panelTypesByID, timeRange?.enabled, timeRange?.startOffsetMs, timeRange?.endOffsetMs, viewState.encounters, viewState.enemies, viewState.includeWipes, viewState.players]);
+  }, [activeLayoutId, activeLayoutItems, activePageType, activePresetId, layoutAppearance, allMergedEnemies, instance.encounters, instance.players, pageState, panelFiltersByID, panelOptionsByID, panelTypesByID, timeRange?.enabled, timeRange?.startOffsetMs, timeRange?.endOffsetMs, viewState.encounters, viewState.enemies, viewState.includeWipes, viewState.players]);
 
   useEffect(() => {
     liveSession.registerViewApplier((view) => {
