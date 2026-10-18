@@ -70,9 +70,12 @@ var (
 		ZoneNames: []string{"scarlet monastery graveyard", "血色修道院-墓地"},
 		Hostiles:  FromMapFunc(SMGraveyardHostiles),
 		DerivedName: func(flavor database.WoWFlavor) *MultiInstanceZone {
+			if !flavor.Has(database.FlavorWrath) {
+				return nil
+			}
 			return NewMultiInstanceZone(map[string][]uint32{
 				"Headless Horseman": {
-					23682, // Headless Horesman
+					23682,
 				},
 			})
 		},
