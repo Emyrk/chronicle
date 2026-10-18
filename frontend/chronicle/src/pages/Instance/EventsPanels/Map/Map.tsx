@@ -427,7 +427,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   );
 
   const framingControls = (
-    <div className="absolute bottom-2 right-2 z-40 flex items-center gap-1">
+    <div className="absolute bottom-2 left-2 z-40 flex items-center gap-1">
       {canFollow ? (
         <button
           type="button"
