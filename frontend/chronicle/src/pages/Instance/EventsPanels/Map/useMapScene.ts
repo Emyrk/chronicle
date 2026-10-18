@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import type {
+  WowMapInstance,
   WowMapInstanceFloor,
   WowMapLayer,
   WowMapMeshInstance,
@@ -150,6 +151,17 @@ function dungeonMeshCanvas(mesh: WowMapMeshInstance): WowMapInstanceFloor {
     bounds: mesh.bounds,
     tiles: [],
   };
+}
+
+/**
+ * The 2D ground when the floor art has no world bounds (Zul'Gurub): the
+ * instance's top-down render, if it has bounds, as one image. Projected like
+ * the mesh (`renderedDungeonMapPoint`), the same as the route overview.
+ */
+function boundedRenderCanvas(instance: WowMapInstance): WowMapRenderedInstance | null {
+  const render = instance.renders;
+  if (!render?.bounds || render.width <= 0 || render.height <= 0) return null;
+  return { path: render.path, width: render.width, height: render.height, bounds: render.bounds, source: "renders" };
 }
 // Tanks by inferRoles over the encounter's own damage and heal events,
 // recomputed only when more events have streamed in.
@@ -341,11 +353,12 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const meshOnly = artwork.kind === "instance" && (isMeshOnlyInstance(artwork.instance) || (!selectedFloor && mesh !== null));
   const rawProjection = (Boolean(options.rawDungeonProjection) || meshOnly) && mesh !== null;
   const meshCanvas = rawProjection && mesh ? dungeonMeshCanvas(mesh) : null;
-  const canvas = artwork.kind === "zone" ? zoneSelection?.layer : meshCanvas ?? selectedFloor;
+  const renderCanvas = artwork.kind === "instance" && !meshCanvas && !selectedFloor?.bounds ? boundedRenderCanvas(artwork.instance) : null;
+  const canvas = artwork.kind === "zone" ? zoneSelection?.layer : meshCanvas ?? renderCanvas ?? selectedFloor;
   if (!canvas) return { status: "message", title: "Map artwork unavailable", detail: "No renderable map layer was published." };
 
-  const dungeonBounds = artwork.kind === "instance" ? meshCanvas?.bounds ?? selectedFloor?.bounds ?? null : null;
-  const dungeonCalibration = artwork.kind === "instance" && encounter && !rawProjection
+  const dungeonBounds = artwork.kind === "instance" ? meshCanvas?.bounds ?? renderCanvas?.bounds ?? selectedFloor?.bounds ?? null : null;
+  const dungeonCalibration = artwork.kind === "instance" && encounter && !rawProjection && !renderCanvas
     ? resolveDungeonMapCalibration(
       artwork.instance.mapID,
       encounter,
@@ -353,11 +366,11 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     )
     : null;
   const overlayAvailable = Boolean(dungeonBounds)
-    && (artwork.kind !== "instance" || artwork.instance.mapID !== 43 || rawProjection || dungeonCalibration !== null);
+    && (artwork.kind !== "instance" || artwork.instance.mapID !== 43 || rawProjection || renderCanvas !== null || dungeonCalibration !== null);
   const projectSample = (sample: MapPositionSample): MapPoint | null => artwork.kind === "zone"
     ? zoneMapPoint(sample, artwork.assignment)
     : dungeonBounds && overlayAvailable
-      ? meshCanvas
+      ? meshCanvas || renderCanvas
         ? renderedDungeonMapPoint(sample, dungeonBounds)
         : dungeonCalibration
           ? calibratedDungeonMapPoint(sample, dungeonBounds, dungeonCalibration)
@@ -414,7 +427,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   }
   const projectionKey = artwork.kind === "zone"
     ? `zone:${artwork.map.id}:${artwork.assignment.id}`
-    : `instance:${artwork.instance.mapID}:${selectedFloorNumber}:${overlayAvailable}:${meshCanvas ? "mesh" : "calibrated"}`;
+    : `instance:${artwork.instance.mapID}:${selectedFloorNumber}:${overlayAvailable}:${meshCanvas ? "mesh" : renderCanvas ? "render" : "calibrated"}`;
   // The run's camera follows the party, so the bounds scan of the whole run is skipped.
   const focus = wholeRun ? null : cachedFocusBounds(
     encounter.positionsByUnit,
