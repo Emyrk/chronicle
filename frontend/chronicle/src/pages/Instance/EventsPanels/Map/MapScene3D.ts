@@ -28,7 +28,7 @@ import {
 } from "./cameraDirector";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
-import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, ENEMY_RED, HALO_COLORS, DROP_LINE, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
+import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanPoint } from "./plan/mapPlan";
 import { PlanLayer, type PlanSurface } from "./plan/planLayer";
@@ -173,7 +173,7 @@ const MESH_MIN_SCREEN_SCALE = 0.5;
 const MESH_BOSS_SCALE = 2.5;
 // A guardian's model is grown to at least this tall (geometry units; a
 // player capsule is 3), so a totem published at its true, tiny size reads.
-const MIN_GUARDIAN_MODEL_HEIGHT = 2.6;
+const MIN_GUARDIAN_MODEL_HEIGHT = 2;
 // With a fight focused, the camera can back off to this multiple of the Fit
 // distance, and the target can pan this far (yards) from the focus centre.
 const MESH_MAX_DISTANCE_FACTOR = 2.5;
@@ -2025,7 +2025,7 @@ export class MapScene3D {
     object.coneMaterial.needsUpdate = true;
     object.token.edge.material.color.set(ring);
     if (object.token.chip) {
-      const chipMap = this.tokenTextures.disc(null, ring, object.dead, "guardian");
+      const chipMap = this.tokenTextures.disc(null, ring, object.dead, guardianWell(object.name));
       if (object.token.chip.material.map !== chipMap) {
         object.token.chip.material.map = chipMap;
         object.token.chip.material.needsUpdate = true;
@@ -2034,7 +2034,7 @@ export class MapScene3D {
     if (object.mini) return;
     const map = object.boss
       ? this.tokenTextures.sigil()
-      : this.tokenTextures.disc(object.icon, ring, object.dead, object.kind === "hostile" ? "enemy" : object.kind === "pet" ? "guardian" : null);
+      : this.tokenTextures.disc(object.icon, ring, object.dead, object.kind === "hostile" ? "enemy" : object.kind === "pet" ? guardianWell(object.name) : null);
     if (object.bodyMaterial.map !== map) {
       object.bodyMaterial.map = map;
       object.bodyMaterial.needsUpdate = true;
