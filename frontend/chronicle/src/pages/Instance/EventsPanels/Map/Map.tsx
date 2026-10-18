@@ -3,7 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { Crosshair, Focus, Footprints, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Maximize2, Route, Settings2, Skull, X } from "lucide-react";
+import { Crosshair, Focus, Footprints, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Maximize2, Pause, Play, Route, Settings2, Skull, X } from "lucide-react";
 import { MINI_MAP_PANEL_OPTION } from "../../viewDefaults";
 import { PANEL_CARD_BLEED } from "../PanelCard";
 import { parseLivePresenceSurface } from "../../liveSessionProtocol";
@@ -55,6 +55,9 @@ const RAID_FRAMES_PANEL = createRaidFramesPanel();
 const UNIT_AURAS_PANEL = createUnitAurasPanel();
 
 const MESH_STORAGE_KEY = "chronicle.map.mesh";
+
+/** How often the mini map's preview clock ticks; the 3D view extrapolates between ticks. */
+const PREVIEW_TICK_MS = 250;
 
 function readStoredMesh(): boolean | null {
   try {
@@ -158,7 +161,32 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   const [storedMesh, setStoredMesh] = useState(readStoredMesh);
   const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
   const meshOn = preferredMeshState(storedMesh);
-  const scene = useMapScene(props, { rawDungeonProjection: show3D && meshOn && meshState === "ready", wholeRun });
+  // Mini map preview: with the page's Replay off, the mini plays the fight on a
+  // loop by its own clock, so the Summary shows what the map does.
+  const previewOn = mini && !sync?.enabled;
+  const [previewPlaying, setPreviewPlaying] = useState(true);
+  const [previewElapsedMs, setPreviewElapsedMs] = useState(0);
+  useEffect(() => {
+    if (!previewOn || !previewPlaying) return;
+    let last = performance.now();
+    const timer = window.setInterval(() => {
+      const now = performance.now();
+      setPreviewElapsedMs((elapsed) => elapsed + (now - last));
+      last = now;
+    }, PREVIEW_TICK_MS);
+    return () => window.clearInterval(timer);
+  }, [previewOn, previewPlaying]);
+  const preview = useMemo(
+    () => previewOn ? { elapsedMs: previewElapsedMs, playing: previewPlaying } : null,
+    [previewElapsedMs, previewOn, previewPlaying],
+  );
+  const scene = useMapScene(props, { rawDungeonProjection: show3D && meshOn && meshState === "ready", wholeRun, preview });
+  // A new encounter starts its preview from the beginning.
+  const [previewEncounterId, setPreviewEncounterId] = useState<string | null>(null);
+  if (scene.status === "ready" && scene.encounterId !== previewEncounterId) {
+    setPreviewEncounterId(scene.encounterId);
+    setPreviewElapsedMs(0);
+  }
   // While the panel reprocesses (a new encounter, a filter change) the scene
   // reports "loading": keep the last ready one on screen, the 3D view frozen
   // on it, rather than unmounting the view and rebuilding it (renderer, mesh
@@ -437,6 +465,29 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
           </Suspense>
         )}
         {framingControls}
+        {previewOn && (
+          <>
+            <div className="absolute bottom-2 left-2 z-40 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setPreviewPlaying(!previewPlaying)}
+                title={previewPlaying ? "Pause the preview" : "Play the preview"}
+                aria-label={previewPlaying ? "Pause the preview" : "Play the preview"}
+                className={mapFramingButtonClass}
+              >
+                {previewPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+              </button>
+              <span className="pointer-events-none rounded-sm bg-black/75 px-1.5 py-1 text-[10px] font-medium text-white/70">{ready.playbackSpeed}×</span>
+            </div>
+            {/* How far the preview is through the fight. */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 h-0.5 bg-white/10" aria-hidden>
+              <div
+                className="h-full bg-primary/80"
+                style={{ width: `${Math.min(100, Math.max(0, ((ready.cursorMs - ready.encounterStartMs) / Math.max(1, ready.encounterEndMs - ready.encounterStartMs)) * 100))}%` }}
+              />
+            </div>
+          </>
+        )}
         {reloading && (
           <div className="pointer-events-none absolute left-1/2 top-2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-sm bg-black/75 px-2 py-0.5 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -668,8 +719,20 @@ function MapContent(props: PanelRenderProps<MapResult>) {
   return (
     <div className={cn("flex h-full min-h-0 flex-col", PANEL_CARD_BLEED)}>
       {props.headerSlot ? createPortal(wholeRunButton, props.headerSlot) : <div className="flex justify-end px-3 pt-2">{wholeRunButton}</div>}
-      <div className="min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1">
         <MapOverview2D {...props} mini={mini} />
+        {/* The mini map's way into the 3D replay: the whole run, playing on its own. */}
+        {mini && (
+          <button
+            type="button"
+            onClick={startWholeRun}
+            title="Watch the whole run in 3D"
+            className="absolute bottom-8 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-black/60 bg-primary/90 px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-[0_4px_16px_rgba(0,0,0,.6)] hover:bg-primary"
+          >
+            <Play className="h-3.5 w-3.5" />
+            Watch the run
+          </button>
+        )}
       </div>
     </div>
   );

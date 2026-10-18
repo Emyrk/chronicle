@@ -229,6 +229,9 @@ export type MapScene =
     playing: boolean;
     playbackSpeed: number;
     cursorMs: number;
+    /** The replayed encounter's span (the merged run's, across a whole run). */
+    encounterStartMs: number;
+    encounterEndMs: number;
     ground: MapSceneGround;
     markers: MapSceneMarker[];
     /** Every debuff spell seen on a player in the encounter (stable per encounter), to look up dispel types. */
@@ -274,6 +277,26 @@ export interface MapSceneOptions {
    * stopped reporting drop off the map.
    */
   wholeRun?: boolean;
+  /**
+   * A clock of the scene's own for when the page's Replay is off (the mini
+   * map's preview): `elapsedMs` of real time loops the encounter at
+   * `previewSpeed(span)`. Ignored while Replay is on.
+   */
+  preview?: { elapsedMs: number; playing: boolean } | null;
+}
+
+/** How long one preview loop takes, whatever the fight's length. */
+const PREVIEW_LOOP_MS = 90_000;
+
+/** The preview's playback speed: a loop takes about PREVIEW_LOOP_MS, never slower than real time. */
+export function previewSpeed(spanMs: number): number {
+  return Math.max(1, Math.min(32, Math.round(spanMs / PREVIEW_LOOP_MS)));
+}
+
+/** Where the preview is in the encounter after `elapsedMs` of real time, looping. */
+export function previewCursorMs(startMs: number, endMs: number, elapsedMs: number): number {
+  const span = Math.max(1, endMs - startMs);
+  return startMs + ((elapsedMs * previewSpeed(span)) % span);
 }
 
 /**
@@ -296,7 +319,10 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [props.context.selectedEncounterIds, props.result.encounters, timestampMs, wholeRun, resultSignature],
   );
-  const cursorMs = timestampMs ?? encounter?.endMs ?? null;
+  const preview = !sync?.enabled ? options.preview ?? null : null;
+  const cursorMs = timestampMs
+    ?? (preview && encounter ? previewCursorMs(encounter.startMs, encounter.endMs, preview.elapsedMs) : encounter?.endMs)
+    ?? null;
   const visibleUnits = useMemo(() => {
     if (!encounter || cursorMs === null) return [];
     return Array.from(encounter.positionsByUnit.entries()).flatMap(([guid, positions]) => {
@@ -479,9 +505,11 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     setFloorNumber,
     overlayAvailable: artwork.kind !== "instance" || overlayAvailable,
     syncEnabled: Boolean(sync?.enabled),
-    playing: Boolean(sync?.enabled && sync.isPlaying),
-    playbackSpeed: sync?.playbackSpeed ?? 1,
+    playing: preview ? preview.playing : Boolean(sync?.enabled && sync.isPlaying),
+    playbackSpeed: preview ? previewSpeed(encounter.endMs - encounter.startMs) : sync?.playbackSpeed ?? 1,
     cursorMs,
+    encounterStartMs: encounter.startMs,
+    encounterEndMs: encounter.endMs,
     ground: {
       iconBaseUrl,
       canvas,
