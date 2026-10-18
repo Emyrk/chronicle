@@ -9,7 +9,7 @@ interface VisibilityPickerProps {
 /** Public/private selector shown to every uploader; private is locked without permission. */
 export function VisibilityPicker({ privateLog, canMarkPrivate, onChange }: VisibilityPickerProps) {
   const optionClass = (selected: boolean) =>
-    `relative flex items-start gap-3 rounded-lg border p-3 text-left transition-colors ${
+    `relative flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-left transition-colors ${
       selected ? "border-primary bg-primary/10" : "border-border hover:bg-muted/50"
     }`;
 
