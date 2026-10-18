@@ -46,7 +46,7 @@ export function keyLabel(code: string): string {
 /** For the instance page's keybind help. */
 export const MAP_CONTROL_KEYBINDS = [
   { keys: "W / S", action: "Move forward / back (pointer over the map, or while walking)" },
-  { keys: "A / D", action: "Strafe left / right (turn with \"A/D strafe\" off in Map settings)" },
+  { keys: "A / D", action: "Strafe left / right (turn with \"A/D strafe\" off in Map settings → Controls)" },
   { keys: "Q / E", action: "Turn left / right (strafe with \"A/D strafe\" off)" },
   { keys: "Space / X", action: "Zoom out / in; while walking: jump (hold to fly up) / fly down" },
   { keys: keyLabel(WALK_TOGGLE_KEY), action: "Walk mode on / off: join the fight on the ground" },

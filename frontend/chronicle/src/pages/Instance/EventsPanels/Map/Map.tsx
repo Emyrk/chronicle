@@ -499,7 +499,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
             }}
             disabled={!canWalk}
             aria-pressed={planOpen}
-            title={canWalk ? planOpen ? "Close planning" : "Plan: draw markers, arrows, ranges and player spots on the floor" : "Planning needs the 3D map (Map settings → 3D map)"}
+            title={canWalk ? planOpen ? "Close planning" : "Plan: draw markers, arrows, ranges and player spots on the floor" : "Planning needs the 3D map (Map settings → World → 3D map)"}
             aria-label="Plan"
             className={cn(
               "absolute right-2 top-[4.5rem] z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 shadow-[0_4px_16px_rgba(0,0,0,.5)] disabled:opacity-40",

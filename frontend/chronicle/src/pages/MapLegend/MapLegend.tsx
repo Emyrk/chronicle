@@ -266,7 +266,7 @@ export function MapLegend() {
         </Grid>
       </Section>
 
-      <Section id="above" title="Above the token" note={<>Optionally, health rises as a column from every player's token, with power (mana, rage, energy) in a thinner, shorter one beside it (off by default). Turn it on in Map settings → Units → <em>Above the token</em>.</>}>
+      <Section id="above" title="Above the token" note={<>Optionally, health rises as a column from every player's token, with power (mana, rage, energy) in a thinner, shorter one beside it (off by default). Turn it on in Map settings → Display → <em>Above the token</em>.</>}>
         <Grid min={240}>
           {ABOVE_DISC_MODES.map((mode) => (
             <Card key={mode.value} title={mode.label} demo={
@@ -341,7 +341,7 @@ export function MapLegend() {
         </Grid>
       </Section>
 
-      <Section id="bars" title="Health bars" note={`Over bosses, selected players and units whose health changed in the last ${ms(RECENT_HEALTH_MS)}, up to ${MAX_HEALTH_BARS} at once. Toggle them in Map settings → Units.`}>
+      <Section id="bars" title="Health bars" note={`Over bosses, selected players and units whose health changed in the last ${ms(RECENT_HEALTH_MS)}, up to ${MAX_HEALTH_BARS} at once. Toggle them in Map settings → Display.`}>
         <div className="grid gap-3 sm:grid-cols-2">
           {[
             { label: "Healthy", bar: <HealthBar fraction={0.95} /> },
