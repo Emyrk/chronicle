@@ -39,6 +39,31 @@ export function updateRaidDurabilityMode(
   return tokens.join(",");
 }
 
+/** The Replay strip's look: durability or damage bars to scrub on, or the plain slider. */
+export type ReplayStripVariant = "durability" | "damage" | "slider";
+
+export const REPLAY_STRIP_VARIANTS: { value: ReplayStripVariant; label: string; description: string }[] = [
+  { value: "durability", label: "Durability", description: "Bars of the raid's lowest durability; drag them to scrub" },
+  { value: "damage", label: "Damage", description: "Bars of party damage; drag them to scrub" },
+  { value: "slider", label: "Slider", description: "A plain slider with death markers" },
+];
+
+export const REPLAY_STRIP_VARIANT_PREFIX = "variant:";
+
+export function replayStripVariant(option: string | null | undefined): ReplayStripVariant {
+  const value = stripOptionValue(option, REPLAY_STRIP_VARIANT_PREFIX);
+  return REPLAY_STRIP_VARIANTS.find((variant) => variant.value === value)?.value ?? "durability";
+}
+
+export function updateReplayStripVariant(
+  option: string | null | undefined,
+  variant: ReplayStripVariant,
+): string | null {
+  const tokens = parseStripOptionTokens(option).filter((token) => !token.startsWith(REPLAY_STRIP_VARIANT_PREFIX));
+  if (variant !== "durability") tokens.push(`${REPLAY_STRIP_VARIANT_PREFIX}${variant}`);
+  return tokens.length > 0 ? tokens.join(",") : null;
+}
+
 export function stripTitleMode(option: string | null | undefined): StripTitleMode {
   const value = stripOptionValue(option, STRIP_TITLE_MODE_PREFIX);
   if (value === "overlay" || value === "large" || value === "none") return value;

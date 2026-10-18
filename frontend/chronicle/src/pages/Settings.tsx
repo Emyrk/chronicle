@@ -45,7 +45,7 @@ import { EventsPanel, type EventsPanelType } from "@/pages/Instance/EventsPanels
 import { isCustomPanelRef } from "@/pages/Instance/EventsPanels/custom/pluginTypes";
 import { PANELS } from "@/pages/Instance/EventsPanels/EventsPanel";
 import { Strip } from "@/pages/Instance/EventsPanels/Strips/Strip";
-import { STRIPS, isStripType } from "@/pages/Instance/EventsPanels/Strips/strips";
+import { STRIPS, resolveStripType } from "@/pages/Instance/EventsPanels/Strips/strips";
 import { resolveStripSize, type StripType } from "@/pages/Instance/EventsPanels/Strips/types";
 import type { PanelContext } from "@/pages/Instance/EventsPanels/types";
 import type { PanelFilter } from "@/pages/Instance/EventsPanels/processors/filters";
@@ -1110,10 +1110,11 @@ function LivePanelTile({
   seedFiltersVersion?: number;
   onFiltersChange?: (filters: PanelFilter[]) => void;
 }) {
-  if (item.kind === "strip" && isStripType(item.stripType)) {
+  const stripType = item.kind === "strip" ? resolveStripType(item.stripType) : null;
+  if (stripType) {
     return (
       <Strip
-        stripType={item.stripType}
+        stripType={stripType}
         orientation={item.orientation ?? "horizontal"}
         durationMs={durationMs}
         context={context}

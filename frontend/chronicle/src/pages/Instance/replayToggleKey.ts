@@ -23,7 +23,7 @@ export function isReplayToggleKey(
 
 /**
  * K toggles replay play/pause while the calling control is mounted (the Replay
- * overlay, a Replay Controller panel). `toggle` returns false when it could
+ * overlay, a Replay strip). `toggle` returns false when it could
  * not act (e.g. YouTube drives playback). A handled press is marked handled,
  * so with several controls mounted K still toggles once.
  */

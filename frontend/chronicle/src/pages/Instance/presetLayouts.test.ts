@@ -68,7 +68,7 @@ describe("preset layout availability", () => {
 });
 
 describe("Map preset", () => {
-  it("follows Player Timeline and stacks the map on the replay controller seamlessly", () => {
+  it("follows Player Timeline and stacks the map on the replay strip seamlessly", () => {
     const ids = PRESET_LAYOUTS.map((preset) => preset.id);
     expect(ids.indexOf("map")).toBe(ids.indexOf("player_timeline") + 1);
     const preset = PRESET_LAYOUTS_BY_ID.map;
@@ -76,7 +76,7 @@ describe("Map preset", () => {
     expect(preset.seamless).toBe(true);
     const [map, strip] = preset.layoutItems;
     expect(preset.panelTypes[map.id]).toBe("map");
-    expect(strip).toMatchObject({ kind: "strip", stripType: "replay_controller", y: map.y + map.h, w: map.w });
+    expect(strip).toMatchObject({ kind: "strip", stripType: "replay", y: map.y + map.h, w: map.w });
   });
 
   it("needs unit positions", () => {

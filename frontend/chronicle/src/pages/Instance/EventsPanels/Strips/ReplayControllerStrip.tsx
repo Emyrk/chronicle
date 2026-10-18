@@ -18,6 +18,7 @@ import {
   replayBucketMs,
   replayControllerMarkers,
   replayControllerTicks,
+  replayDamageBars,
   replayDurabilityBars,
   type ReplayBounds,
 } from "./replayControllerModel";
@@ -26,7 +27,7 @@ const SPEEDS = [0.25, 0.5, 1, 2, 4];
 
 const DURABILITY_PANEL: PanelDefinition<StatusResult, StatusProcessorEvent> = {
   ...statusProcessor,
-  label: "Replay Controller Durability",
+  label: "Replay Durability",
   icon: null,
   keybinds: [],
   syncDataMode: "full",
@@ -39,8 +40,8 @@ const DURABILITY_PANEL: PanelDefinition<StatusResult, StatusProcessorEvent> = {
  * the Raid Durability strip does; several use each encounter's estimate.
  * Null outside every selected encounter.
  */
-function useReplayDurability(context: PanelContext): (timestampMs: number) => number | null {
-  const status = usePanelAggregation<StatusResult>({ panel: DURABILITY_PANEL, context, enabled: true });
+function useReplayDurability(context: PanelContext, enabled: boolean): (timestampMs: number) => number | null {
+  const status = usePanelAggregation<StatusResult>({ panel: DURABILITY_PANEL, context, enabled });
   const playerLife = usePlayerLifeState(context);
   const encounters = useMemo(() => context.selectedEncounterIds
     .flatMap((id) => {
@@ -70,11 +71,13 @@ function useReplayDurability(context: PanelContext): (timestampMs: number) => nu
 const controlButtonClass = "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-popover text-foreground hover:bg-muted disabled:opacity-40";
 
 /**
- * Replay transport over a bar chart of raid durability: play, restart, speed,
- * disable, and drag anywhere on the bars to scrub. Played bars colour in as
- * the cursor passes; player deaths mark the top.
+ * Replay transport over a bar chart of raid durability or party damage (the
+ * Replay strip's variants): play, restart, speed, disable, and drag anywhere
+ * on the bars to scrub. Played bars colour in as the cursor passes; player
+ * deaths mark the top.
  */
-export function ReplayControllerStrip({ result, context }: StripRenderProps<ReplayControllerResult>) {
+export function ReplayControllerStrip({ result, context, bars: barKind }: StripRenderProps<ReplayControllerResult> & { bars: "durability" | "damage" }) {
+  const damage = barKind === "damage";
   const sync = useSyncModeContextOptional();
   const trackRef = useRef<HTMLDivElement>(null);
   const boundsDates = sync?.encounterBounds ?? null;
@@ -87,8 +90,11 @@ export function ReplayControllerStrip({ result, context }: StripRenderProps<Repl
   const disabled = !sync || !bounds || youtubeActive;
 
   const bucketMs = bounds ? replayBucketMs(bounds.endMs - bounds.startMs) : 0;
-  const durabilityAt = useReplayDurability(context);
-  const bars = useMemo(() => bounds ? replayDurabilityBars(durabilityAt, bounds, cursorMs, bucketMs) : [], [bounds, bucketMs, cursorMs, durabilityAt]);
+  const durabilityAt = useReplayDurability(context, !damage);
+  const bars = useMemo(() => {
+    if (!bounds) return [];
+    return damage ? replayDamageBars(result, bounds, cursorMs, bucketMs) : replayDurabilityBars(durabilityAt, bounds, cursorMs, bucketMs);
+  }, [bounds, bucketMs, cursorMs, damage, durabilityAt, result]);
   const markers = useMemo(() => bounds ? replayControllerMarkers(result, bounds, cursorMs) : [], [bounds, cursorMs, result]);
   const ticks = useMemo(() => bounds ? replayControllerTicks(bounds) : [], [bounds]);
 
@@ -196,7 +202,11 @@ export function ReplayControllerStrip({ result, context }: StripRenderProps<Repl
           })}
         </div>
         <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
-          <span className="flex items-center gap-1" title={`Lowest raid durability per ${formatBucket(bucketMs)}`}><span className="h-1.5 w-1.5 bg-emerald-500/60" />Durability</span>
+          {damage ? (
+            <span className="flex items-center gap-1" title={`Party damage per ${formatBucket(bucketMs)}`}><span className="h-1.5 w-1.5 bg-[var(--chart-3)]" />Dmg/{formatBucket(bucketMs)}</span>
+          ) : (
+            <span className="flex items-center gap-1" title={`Lowest raid durability per ${formatBucket(bucketMs)}`}><span className="h-1.5 w-1.5 bg-emerald-500/60" />Durability</span>
+          )}
           <span className="flex items-center gap-1"><Skull className="h-2 w-2 text-red-400" />Death</span>
         </div>
       </div>
@@ -216,15 +226,30 @@ export function ReplayControllerStrip({ result, context }: StripRenderProps<Repl
         >
           <div className="absolute inset-x-0 bottom-[18px] top-[14px] flex items-stretch gap-px">
             {bars.map((bar) => (
-              <div key={bar.startMs} className="relative min-w-0 flex-1" title={`${formatReplayClock(bar.startMs - (bounds?.startMs ?? 0))} · ${Math.round(bar.value)}% durability`}>
+              <div
+                key={bar.startMs}
+                className="relative min-w-0 flex-1"
+                title={`${formatReplayClock(bar.startMs - (bounds?.startMs ?? 0))} · ${damage ? `${Math.round(bar.value).toLocaleString()} damage` : `${Math.round(bar.value)}% durability`}`}
+              >
+                {/* The unplayed outline; for damage also the current bar's rest. */}
                 <div
                   className="absolute inset-x-0 bottom-0 rounded-t-[1px]"
-                  style={{ height: `${bar.height}%`, background: bar.state === "future" ? "rgba(255,255,255,.08)" : "transparent" }}
+                  style={{
+                    height: `${bar.height}%`,
+                    background: bar.state === "future" ? "rgba(255,255,255,.08)" : damage && bar.state === "current" ? "rgba(255,255,255,.22)" : "transparent",
+                  }}
                 />
-                <div
-                  className={cn("absolute inset-x-0 bottom-0 rounded-t-[1px]", raidHealthColor(bar.value), bar.state === "current" && "brightness-150")}
-                  style={{ height: `${bar.fill}%` }}
-                />
+                {damage ? (
+                  <div
+                    className="absolute inset-x-0 bottom-0 rounded-t-[1px]"
+                    style={{ height: `${bar.fill}%`, background: bar.state === "current" ? "var(--chart-5)" : "var(--chart-3)" }}
+                  />
+                ) : (
+                  <div
+                    className={cn("absolute inset-x-0 bottom-0 rounded-t-[1px]", raidHealthColor(bar.value), bar.state === "current" && "brightness-150")}
+                    style={{ height: `${bar.fill}%` }}
+                  />
+                )}
               </div>
             ))}
           </div>

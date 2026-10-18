@@ -1,13 +1,41 @@
 import { describe, expect, it } from "vitest";
 import { timelineProcessor } from "../Timeline/timeline.processor";
-import type { ReplayControllerResult } from "./replayController.processor";
-import { formatBucket, formatReplayClock, replayBucketMs, replayControllerMarkers, replayControllerTicks, replayDurabilityBars } from "./replayControllerModel";
+import { PARTY_DAMAGE_SERIES_ID, type ReplayControllerResult } from "./replayController.processor";
+import { formatBucket, formatReplayClock, replayBucketMs, replayControllerMarkers, replayControllerTicks, replayDamageBars, replayDurabilityBars } from "./replayControllerModel";
 
 const START = 1_000_000;
 
 function result(overrides: Partial<ReplayControllerResult> = {}): ReplayControllerResult {
   return { timeline: timelineProcessor.createState(), baseMs: START, ...overrides };
 }
+
+// Party damage in 2s bins from START.
+function damage(bins: number[], binMs = 2000): ReplayControllerResult {
+  const data = result();
+  data.timeline.binMs = binMs;
+  data.timeline.series.set(PARTY_DAMAGE_SERIES_ID, bins);
+  return data;
+}
+
+describe("replayDamageBars", () => {
+  const bounds = { startMs: START, endMs: START + 6000 };
+
+  it("fills played bars, partly fills the current one and ghosts the rest", () => {
+    const bars = replayDamageBars(damage([100, 200, 50]), bounds, START + 3000, 2000);
+    expect(bars.map((bar) => bar.state)).toEqual(["past", "current", "future"]);
+    expect(bars.map((bar) => bar.height)).toEqual([50, 100, 25]);
+    expect(bars.map((bar) => bar.fill)).toEqual([50, 50, 0]);
+  });
+
+  it("shows every bar as played with replay off", () => {
+    expect(replayDamageBars(damage([100, 200, 50]), bounds, null, 2000).every((bar) => bar.state === "past")).toBe(true);
+  });
+
+  it("sums fine bins into each bar and lines them up with later bounds", () => {
+    expect(replayDamageBars(damage([10, 30, 20, 40], 500), { startMs: START, endMs: START + 2000 }, null, 1000).map((bar) => bar.value)).toEqual([40, 60]);
+    expect(replayDamageBars(damage([1, 2, 3, 4]), { startMs: START + 4000, endMs: START + 8000 }, null, 2000).map((bar) => bar.value)).toEqual([3, 4]);
+  });
+});
 
 describe("replayDurabilityBars", () => {
   const bounds = { startMs: START, endMs: START + 6000 };

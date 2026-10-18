@@ -18,10 +18,14 @@ import { STRIPS } from "./strips";
 import {
   parseStripOptionTokens,
   raidDurabilityMode,
+  REPLAY_STRIP_VARIANTS,
+  replayStripVariant,
   stripTitleMode,
   updateRaidDurabilityMode,
+  updateReplayStripVariant,
   updateStripTitleMode,
   type RaidDurabilityMode,
+  type ReplayStripVariant,
   type StripTitleMode,
 } from "./stripOptions";
 import type { StripDefinition, StripType } from "./types";
@@ -81,6 +85,7 @@ export function Strip({
   const actualDurabilitySupported = context.instance.capabilities?.includes("unit-resources") ?? false;
   const durabilityMode = raidDurabilityMode(panelOption, actualDurabilitySupported);
   const titleMode = stripTitleMode(panelOption);
+  const replayVariant = replayStripVariant(panelOption);
   const inheritedPortalContainer = usePortalContainer();
   const [filters, setFiltersState] = useState<PanelFilter[]>(() => seedFilters ?? strip.defaultFilters ?? []);
   const [popup, setPopup] = useState<PanelPopup | null>(null);
@@ -265,6 +270,26 @@ export function Strip({
                 <Card className="relative mb-0 overflow-hidden p-0">{renderedStrip}</Card>
                 <Card className="mb-0 min-h-0 overflow-auto p-4 styled-scrollbar">
                   <div className="flex h-full min-h-0 flex-col gap-4">
+                    {stripType === "replay" ? (
+                      <label className="flex flex-col gap-2 rounded-md border border-border/70 bg-muted/20 px-3 py-3">
+                        <span>
+                          <span className="block text-sm font-medium">Variant</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {REPLAY_STRIP_VARIANTS.find((option) => option.value === replayVariant)?.description}
+                          </span>
+                        </span>
+                        <select
+                          value={replayVariant}
+                          onChange={(event) => onPanelOptionChange?.(updateReplayStripVariant(panelOption, event.target.value as ReplayStripVariant))}
+                          disabled={!onPanelOptionChange}
+                          className="h-8 rounded-md border border-border bg-background px-2 text-sm"
+                        >
+                          {REPLAY_STRIP_VARIANTS.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
                     {stripType === "raid_durability" ? (
                       <div className="rounded-md border border-border/70 bg-muted/20 px-3 py-3">
                         <div className="mb-4">

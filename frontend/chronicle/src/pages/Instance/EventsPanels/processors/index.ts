@@ -216,9 +216,8 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   healer_casts: healerCastsProcessor,
   spell_count: spellCountProcessor,
   cooldown_usage: cooldownUsageProcessor,
-  replay_strip: { ...emptyProcessor, id: "replay_strip" },
+  replay_strip: { ...replayControllerProcessor, id: "replay_strip" },
   raid_durability_strip: { ...statusProcessor, id: "raid_durability_strip" },
-  replay_controller_strip: { ...replayControllerProcessor, id: "replay_controller_strip" },
   // Rotations
   rotations: rotationsProcessor,
   // Control timelines

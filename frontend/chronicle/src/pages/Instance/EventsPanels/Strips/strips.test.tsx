@@ -1,12 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { isStripType, STRIPS } from "./strips";
+import { isStripType, resolveStripType, STRIPS } from "./strips";
 
 describe("strip registration", () => {
-  it("recognizes replay layouts and uses the no-op replay processor", () => {
+  it("recognizes replay layouts and uses the replay controller's processor", () => {
     expect(isStripType("replay")).toBe(true);
     expect(STRIPS.replay.id).toBe("replay_strip");
-    expect(STRIPS.replay.streams).toEqual([]);
+    expect(STRIPS.replay.streams).toEqual(["damage", "slain"]);
     expect(STRIPS.replay.supportedOrientations).toEqual(["horizontal"]);
+  });
+
+  it("loads saved Replay Controller strips as the Replay strip", () => {
+    expect(isStripType("replay_controller")).toBe(false);
+    expect(resolveStripType("replay_controller")).toBe("replay");
+    expect(resolveStripType("replay")).toBe("replay");
+    expect(resolveStripType("nope")).toBeNull();
+    expect(resolveStripType(undefined)).toBeNull();
   });
 
   it("reuses the Consumes Used processor for the raid consume cost strip", () => {

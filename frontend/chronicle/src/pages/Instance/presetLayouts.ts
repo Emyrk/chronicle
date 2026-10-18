@@ -265,7 +265,7 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
     fit: true,
     layoutItems: [
       { id: "panel-1", title: "Map", x: 0, y: 0, w: 12, h: 9, minW: 4 },
-      { id: "strip-1", title: "Replay Controller", kind: "strip", stripType: "replay_controller", orientation: "horizontal", x: 0, y: 9, w: 12, h: 1, minW: 6, minH: 1, maxH: 2 },
+      { id: "strip-1", title: "Replay", kind: "strip", stripType: "replay", orientation: "horizontal", x: 0, y: 9, w: 12, h: 1, minW: 6, minH: 1, maxH: 2 },
     ],
     panelTypes: {
       "panel-1": "map",

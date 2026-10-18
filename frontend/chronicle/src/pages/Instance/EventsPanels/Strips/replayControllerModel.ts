@@ -1,4 +1,4 @@
-import type { ReplayControllerResult } from "./replayController.processor";
+import { PARTY_DAMAGE_SERIES_ID, REPLAY_CONTROLLER_BIN_MS, type ReplayControllerResult } from "./replayController.processor";
 
 export interface ReplayBounds {
   startMs: number;
@@ -8,13 +8,13 @@ export interface ReplayBounds {
 export type ReplayBarState = "past" | "current" | "future";
 
 export interface ReplayBar {
-  /** Full bar height: the bar's raid durability, 0–100. */
+  /** Full bar height, 0–100: the raid's durability, or its damage as a % of the busiest bar. */
   height: number;
-  /** Played part: all of a played or current bar, none of a future one. */
+  /** Played part, 0–100: none of a future bar; for damage, the current bar's damage so far. */
   fill: number;
   state: ReplayBarState;
   startMs: number;
-  /** Raid durability %, the lowest in the bar. */
+  /** The raid's lowest durability % in the bar, or its party damage. */
   value: number;
 }
 
@@ -59,6 +59,47 @@ export function formatBucket(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60_000) return `${ms / 1000}s`;
   return `${ms / 60_000}m`;
+}
+
+/**
+ * The Damage variant: one bar per `bucketMs` of the replay bounds, its party
+ * damage summed from the processor's fine bins, as a % of the busiest bar.
+ * The current bar fills by the damage done before the cursor. With no cursor
+ * (replay off) every bar reads as played.
+ */
+export function replayDamageBars(
+  result: ReplayControllerResult,
+  bounds: ReplayBounds,
+  cursorMs: number | null,
+  bucketMs = replayBucketMs(bounds.endMs - bounds.startMs),
+): ReplayBar[] {
+  const bins = result.timeline.series.get(PARTY_DAMAGE_SERIES_ID) ?? [];
+  const binMs = result.timeline.binMs || REPLAY_CONTROLLER_BIN_MS;
+  const baseMs = result.baseMs;
+  // Damage in [fromMs, toMs), with a partly covered bin counted pro rata.
+  const damageBetween = (fromMs: number, toMs: number) => {
+    if (baseMs === null || toMs <= fromMs) return 0;
+    let total = 0;
+    for (let bin = Math.max(0, Math.floor((fromMs - baseMs) / binMs)); bin * binMs + baseMs < toMs && bin < bins.length; bin++) {
+      const binStart = baseMs + bin * binMs;
+      const overlap = Math.min(toMs, binStart + binMs) - Math.max(fromMs, binStart);
+      if (overlap > 0) total += (bins[bin] ?? 0) * (overlap / binMs);
+    }
+    return total;
+  };
+  const count = Math.max(0, Math.ceil((bounds.endMs - bounds.startMs) / bucketMs));
+  const values = Array.from({ length: count }, (_, index) => {
+    const startMs = bounds.startMs + index * bucketMs;
+    return damageBetween(startMs, startMs + bucketMs);
+  });
+  const max = Math.max(1, ...values);
+  return values.map((value, index): ReplayBar => {
+    const startMs = bounds.startMs + index * bucketMs;
+    const height = (value / max) * 100;
+    if (cursorMs === null || cursorMs >= startMs + bucketMs) return { height, fill: height, state: "past", startMs, value };
+    if (cursorMs < startMs) return { height, fill: 0, state: "future", startMs, value };
+    return { height, fill: (damageBetween(startMs, cursorMs) / max) * 100, state: "current", startMs, value };
+  });
 }
 
 /** Points sampled per bar when looking for its lowest durability. */

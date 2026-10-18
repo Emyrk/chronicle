@@ -43,7 +43,7 @@ import type { PanelFilter } from "./EventsPanels/processors/filters";
 import { canonicalizeCustomPanelRef, isCustomPanelRef } from "./EventsPanels/custom/pluginTypes";
 import { PANELS } from "./EventsPanels/EventsPanel";
 import { Strip } from "./EventsPanels/Strips/Strip";
-import { STRIPS, isStripType } from "./EventsPanels/Strips/strips";
+import { STRIPS, resolveStripType } from "./EventsPanels/Strips/strips";
 import type { StripType } from "./EventsPanels/Strips/types";
 import { PanelTimingProvider, PanelTimingDisplay, PanelTimingResetter } from "./EventsPanels/PanelTimingContext";
 import { ChartDataRegistryProvider } from "./EventsPanels/ChartDataRegistry";
@@ -1250,7 +1250,7 @@ function EventsPanelGrid({
     >
       {layoutItems.map((item, index) => {
         const panelType = panelTypesById[item.id] ?? "empty";
-        const stripType = item.kind === "strip" && isStripType(item.stripType) ? item.stripType : null;
+        const stripType = item.kind === "strip" ? resolveStripType(item.stripType) : null;
         const isStrip = stripType !== null;
         return (
           <div

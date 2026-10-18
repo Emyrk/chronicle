@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- strip definitions and their renderers are intentionally colocated */
-import { Activity, Coins, SlidersHorizontal, Timer } from "lucide-react";
+import { Activity, Coins, Timer } from "lucide-react";
 import { useMemo } from "react";
 import { useConsumableDisambiguations } from "@/api/queries";
 import type { ConsumableDisambiguation } from "@/api/typesGenerated";
@@ -7,13 +7,13 @@ import { cn } from "@/lib/utils";
 import { useDatasetId } from "@/hooks/useDatasetId";
 import { ReplayTransportBar, usePlayerDeathTimes } from "../../ReplayControlOverlay";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
+import { useReplayToggleKey } from "../../replayToggleKey";
 import { usePlayerLifeState } from "../usePlayerLifeState";
 import { CoinAmount } from "../Consumables/CoinAmount";
 import { buildConsumableDisambiguationMap, resolveConsumableUse } from "../Consumables/consumableDisambiguation";
 import { consumablesLedgerProcessor, type ConsumablesResult } from "../Consumables/consumables.processor";
 import { aggregateConsumablesLedger, ledgerCoverage } from "../Consumables/consumablesLedgerLogic";
 import { useConsumablePrices } from "../Consumables/useConsumablePrices";
-import { emptyProcessor } from "../Empty/empty.processor";
 import { statusProcessor, type StatusResult } from "../Status/status.processor";
 import {
   createStatusRaidHealthModel,
@@ -24,11 +24,12 @@ import { useActualRaidDurabilityModel } from "../Status/useRaidDurabilityModel";
 import { selectStatusEncounter, statusCursorMilli } from "../Status/statusTimeline";
 import {
   raidDurabilityMode,
+  replayStripVariant,
   stripOptionValue,
   stripTitleMode,
 } from "./stripOptions";
 import { raidHealthColor } from "./raidHealthColor";
-import { replayControllerProcessor } from "./replayController.processor";
+import { replayControllerProcessor, type ReplayControllerResult } from "./replayController.processor";
 import { ReplayControllerStrip } from "./ReplayControllerStrip";
 import { stripReplayProgress } from "./stripReplay";
 import type { StripDefinition, StripRenderProps, StripType } from "./types";
@@ -42,10 +43,23 @@ const DEFAULT_SIZE = {
   maxThickness: 2,
 };
 
-function ReplayStrip() {
+/** The Replay strip's Slider variant: the floating overlay's transport bar. */
+function ReplaySliderStrip() {
+  const sync = useSyncModeContextOptional();
   const deaths = usePlayerDeathTimes();
+  useReplayToggleKey(() => {
+    if (!sync?.enabled || sync.externalDriver !== "none") return false;
+    if (sync.isPlaying) sync.pause();
+    else sync.play();
+    return true;
+  });
 
   return <ReplayTransportBar deaths={deaths} />;
+}
+
+function ReplayStrip(props: StripRenderProps<ReplayControllerResult>) {
+  const variant = replayStripVariant(props.panelOption);
+  return variant === "slider" ? <ReplaySliderStrip /> : <ReplayControllerStrip {...props} bars={variant} />;
 }
 
 function ConsumablesCostStrip({ result, context, loading, panelOption }: StripRenderProps<ConsumablesResult>) {
@@ -246,7 +260,7 @@ function StripBars({
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const STRIPS: Record<StripType, StripDefinition<any, any>> = {
   replay: {
-    ...emptyProcessor,
+    ...replayControllerProcessor,
     id: "replay_strip",
     label: "Replay",
     icon: <Timer className="h-4 w-4" />,
@@ -255,20 +269,8 @@ export const STRIPS: Record<StripType, StripDefinition<any, any>> = {
     supportedOrientations: HORIZONTAL_ONLY,
     defaultOrientation: "horizontal",
     size: DEFAULT_SIZE,
-    render: () => <ReplayStrip />,
-  },
-  replay_controller: {
-    ...replayControllerProcessor,
-    id: "replay_controller_strip",
-    label: "Replay Controller",
-    icon: <SlidersHorizontal className="h-4 w-4" />,
-    keybinds: [],
-    syncDataMode: "full",
-    supportedOrientations: HORIZONTAL_ONLY,
-    defaultOrientation: "horizontal",
-    size: DEFAULT_SIZE,
     hoverChrome: "above",
-    render: (props) => <ReplayControllerStrip {...props} />,
+    render: (props) => <ReplayStrip {...props} />,
   },
   raid_durability: {
     ...statusProcessor,
@@ -300,4 +302,16 @@ export const STRIPS: Record<StripType, StripDefinition<any, any>> = {
 
 export function isStripType(value: string | undefined): value is StripType {
   return Boolean(value && value in STRIPS);
+}
+
+// Saved layouts may name strips that became variants of another.
+const LEGACY_STRIP_TYPES: Record<string, StripType> = {
+  // The Replay strip's Durability variant (its default).
+  replay_controller: "replay",
+};
+
+/** A saved layout's strip type, mapping retired types to their replacement; null when unknown. */
+export function resolveStripType(value: string | undefined): StripType | null {
+  if (isStripType(value)) return value;
+  return value ? LEGACY_STRIP_TYPES[value] ?? null : null;
 }

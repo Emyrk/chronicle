@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   raidDurabilityMode,
+  replayStripVariant,
   stripTitleMode,
   updateRaidDurabilityMode,
+  updateReplayStripVariant,
   updateStripTitleMode,
 } from "./stripOptions";
 
@@ -44,5 +46,19 @@ describe("raid durability mode", () => {
   it("persists the selected mode while preserving other options", () => {
     expect(updateRaidDurabilityMode("title-mode:large,t:Custom", "estimate"))
       .toBe("title-mode:large,t:Custom,durability-mode:estimate");
+  });
+});
+
+describe("replay strip variant", () => {
+  it("defaults to durability, also for unknown values", () => {
+    expect(replayStripVariant(null)).toBe("durability");
+    expect(replayStripVariant("variant:nope")).toBe("durability");
+    expect(replayStripVariant("bc:#ef4444,variant:damage")).toBe("damage");
+  });
+
+  it("stores only a non-default variant, keeping other options", () => {
+    expect(updateReplayStripVariant("bc:#ef4444", "slider")).toBe("bc:#ef4444,variant:slider");
+    expect(updateReplayStripVariant("bc:#ef4444,variant:slider", "damage")).toBe("bc:#ef4444,variant:damage");
+    expect(updateReplayStripVariant("variant:damage", "durability")).toBeNull();
   });
 });

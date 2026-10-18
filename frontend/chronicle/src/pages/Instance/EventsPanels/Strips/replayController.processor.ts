@@ -1,14 +1,30 @@
 /**
- * Replay controller strip data: player deaths, from the Timeline processor
- * with no series. `baseMs` turns its offsets into absolute ms so the strip
- * lines them up with the replay cursor. (The bars, raid durability, come from
- * the Status processor in the strip.)
+ * Replay strip data: party damage in 500ms bins (the Damage variant's bars)
+ * and player deaths, from the Timeline processor with a fixed series.
+ * `baseMs` turns its offsets into absolute ms so the strip lines them up with
+ * the replay cursor. (The Durability variant's bars come from the Status
+ * processor in the strip.)
  */
 
 import type { PanelProcessor, ProcessorContext, ProcessorEvent } from "../processorTypes";
 import { timelineProcessor, type TimelineResult } from "../Timeline/timeline.processor";
+import type { TimelineSeriesConfig } from "../Timeline/timelineTypes";
 
-const REPLAY_CONTROLLER_BIN_MS = 500;
+// Fine bins; the strip groups them into bars sized to the fight (replayBucketMs).
+export const REPLAY_CONTROLLER_BIN_MS = 500;
+export const PARTY_DAMAGE_SERIES_ID = "party_damage";
+
+const PARTY_DAMAGE_SERIES: TimelineSeriesConfig = {
+  id: PARTY_DAMAGE_SERIES_ID,
+  name: "Party damage",
+  stream: "damage",
+  aggregation: "sum",
+  color: "#3b82f6",
+  filters: [
+    { type: "source_type", value: ["pet", "player"], applyTo: ["damage"] },
+    { type: "target_type", value: ["enemy_pet", "enemy"], combinator: "and", applyTo: ["damage"] },
+  ],
+};
 
 export interface ReplayControllerResult {
   timeline: TimelineResult;
@@ -27,7 +43,7 @@ function timelineContext(context: ProcessorContext): ProcessorContext {
       ...context,
       panelContext: {
         ...context.panelContext,
-        timelineSeries: [],
+        timelineSeries: [PARTY_DAMAGE_SERIES],
         timelineSettings: { binMs: REPLAY_CONTROLLER_BIN_MS },
       },
     };
@@ -38,7 +54,7 @@ function timelineContext(context: ProcessorContext): ProcessorContext {
 
 export const replayControllerProcessor: PanelProcessor<ReplayControllerResult, ProcessorEvent> = {
   id: "replay_controller",
-  streams: ["slain"],
+  streams: ["damage", "slain"],
   processAllEvents: true,
   createState: () => ({ timeline: timelineProcessor.createState(), baseMs: null }),
   processEvent: (state, event, encounterId, firstTimestamp, streamType, context) => {
