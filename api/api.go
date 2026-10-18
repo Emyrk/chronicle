@@ -274,6 +274,7 @@ func (api *API) Routes() chi.Router {
 					r.Get("/me/billing", api.Opts.Billing.Summary)
 					r.Post("/me/billing/checkout", api.Opts.Billing.CreateCheckout)
 					r.Post("/me/billing/portal", api.Opts.Billing.CreatePortal)
+					r.Post("/me/billing/cancel", api.Opts.Billing.CreateCancelPortal)
 				}
 				r.Get("/me/custom-panels", api.GetMyCustomPanelSettings)
 				r.Put("/me/custom-panels", api.UpdateMyCustomPanelSettings)

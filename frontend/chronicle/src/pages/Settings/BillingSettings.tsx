@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { Link, Navigate } from "react-router-dom"
 import type { BillingPrice, BillingSummary } from "@/api/typesGenerated"
-import { useCreateBillingCheckout, useCreateBillingPortal, useBillingSummary, useSiteConfig } from "@/api/queries"
+import { useCreateBillingCancel, useCreateBillingCheckout, useCreateBillingPortal, useBillingSummary, useSiteConfig } from "@/api/queries"
 import { iconUrl } from "@/config/iconUrl"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/useAuth"
@@ -604,6 +604,7 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
 
 function ReveredSubscriptionSettings({ billing }: { billing: BillingSummary }) {
   const portal = useCreateBillingPortal()
+  const cancel = useCreateBillingCancel()
   const openBilling = useOpenBilling()
   const periodEnd = billing.current_period_end ? new Date(billing.current_period_end).toLocaleDateString() : null
   const {
@@ -680,11 +681,10 @@ function ReveredSubscriptionSettings({ billing }: { billing: BillingSummary }) {
                 Your subscription will not renew. Your Revered rewards remain available until{periodEnd ? ` ${periodEnd}` : " the end of your billing period"}.
               </p>
             ) : (
-              <ol className="mt-1.5 list-decimal space-y-0.5 pl-4 text-xs leading-5 text-muted-foreground">
-                <li>Open the secure Stripe billing portal.</li>
-                <li>Select your Chronicle subscription.</li>
-                <li>Choose cancel and confirm the cancellation.</li>
-              </ol>
+              <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+                Update your payment method or view invoices in the Stripe billing portal. If you cancel, your Revered
+                rewards stay active until{periodEnd ? ` ${periodEnd}` : " the end of your billing period"}.
+              </p>
             )}
           </div>
 
@@ -700,6 +700,16 @@ function ReveredSubscriptionSettings({ billing }: { billing: BillingSummary }) {
                 ? "View Stripe Billing History"
                 : "Open Stripe Billing Portal"}
           </button>
+          {!subscriptionEnded && !cancellationScheduled ? (
+            <button
+              type="button"
+              className="w-full rounded-md border border-red-500/40 px-4 py-2 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50"
+              disabled={cancel.isPending}
+              onClick={() => void openBilling(() => cancel.mutateAsync())}
+            >
+              {cancel.isPending ? "Opening Stripe…" : "Cancel Subscription"}
+            </button>
+          ) : null}
         </FramePanel>
 
         <div>
