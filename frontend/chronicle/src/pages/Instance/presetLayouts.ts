@@ -45,6 +45,8 @@ export interface PanelPresetLayout extends PresetLayoutBase {
   /** A different grid for logs that have these capabilities (e.g. Summary's mini map for position logs). */
   capabilityVariant?: {
     requiredCapabilities: string[];
+    /** Not on mobile (e.g. no 3D mini map on a phone). */
+    desktopOnly?: boolean;
     layoutItems: GridEditorItem[];
     panelTypes: Record<string, EventsPanelType>;
     /** Merged over the base preset's options. */
@@ -138,6 +140,7 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
     panelFilters: DEFAULT_INSTANCE_PANEL_FILTERS,
     capabilityVariant: {
       requiredCapabilities: [POSITION_SUMMARY_CAPABILITY],
+      desktopOnly: true,
       layoutItems: POSITION_SUMMARY_LAYOUT_ITEMS,
       panelTypes: POSITION_SUMMARY_PANEL_TYPES,
       panelOptions: { "panel-6": MINI_MAP_PANEL_OPTION },
@@ -321,10 +324,10 @@ function hasCapabilities(required: readonly string[] | undefined, capabilities: 
 }
 
 /** The preset as a log with these capabilities sees it: its capability variant applied when it qualifies. */
-export function resolvePresetLayout(preset: PresetLayout, capabilities: readonly string[]): PresetLayout {
+export function resolvePresetLayout(preset: PresetLayout, capabilities: readonly string[], mobile = false): PresetLayout {
   if (!isPanelPresetLayout(preset) || !preset.capabilityVariant) return preset;
   const variant = preset.capabilityVariant;
-  if (!hasCapabilities(variant.requiredCapabilities, capabilities)) return preset;
+  if (!hasCapabilities(variant.requiredCapabilities, capabilities) || (variant.desktopOnly && mobile)) return preset;
   return {
     ...preset,
     layoutItems: variant.layoutItems,
@@ -333,10 +336,10 @@ export function resolvePresetLayout(preset: PresetLayout, capabilities: readonly
   };
 }
 
-export function getAvailablePresetLayouts(capabilities: readonly string[]): PresetLayout[] {
+export function getAvailablePresetLayouts(capabilities: readonly string[], mobile = false): PresetLayout[] {
   return PRESET_LAYOUTS
     .filter((preset) => hasCapabilities(preset.requiredCapabilities, capabilities))
-    .map((preset) => resolvePresetLayout(preset, capabilities));
+    .map((preset) => resolvePresetLayout(preset, capabilities, mobile));
 }
 
 export const PRESET_LAYOUTS_BY_ID = Object.fromEntries(
@@ -344,9 +347,9 @@ export const PRESET_LAYOUTS_BY_ID = Object.fromEntries(
 ) as Record<string, PresetLayout>;
 
 /** A preset by id, resolved for the log's capabilities (use this to apply a preset). */
-export function presetLayoutById(presetId: string, capabilities: readonly string[]): PresetLayout | undefined {
+export function presetLayoutById(presetId: string, capabilities: readonly string[], mobile = false): PresetLayout | undefined {
   const preset = PRESET_LAYOUTS_BY_ID[presetId];
-  return preset ? resolvePresetLayout(preset, capabilities) : undefined;
+  return preset ? resolvePresetLayout(preset, capabilities, mobile) : undefined;
 }
 
 export const DEFAULT_PRESET_ID = "summary";

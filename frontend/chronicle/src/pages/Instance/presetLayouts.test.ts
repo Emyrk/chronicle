@@ -102,6 +102,15 @@ describe("Summary mini map", () => {
     expect(summary.panelOptions["panel-1"]).toBe(panelsPreset([]).panelOptions["panel-1"]);
   });
 
+  it("leaves Summary unchanged on mobile", () => {
+    const summary = presetLayoutById("summary", ["unit-position"], true);
+    expect(summary).toBe(PRESET_LAYOUTS_BY_ID.summary);
+    const mobile = defaultInstanceLayout(["unit-position"], true);
+    expect(mobile.items.some((item) => mobile.panelTypes[item.id] === "map")).toBe(false);
+    // The Map tab itself stays available on mobile.
+    expect(getAvailablePresetLayouts(["unit-position"], true).map((preset) => preset.id)).toContain("map");
+  });
+
   it("leaves Summary unchanged for logs without positions", () => {
     expect(Object.values(panelsPreset([]).panelTypes)).not.toContain("map");
     expect(getAvailablePresetLayouts([]).find((preset) => preset.id === "summary")).toBe(PRESET_LAYOUTS_BY_ID.summary);

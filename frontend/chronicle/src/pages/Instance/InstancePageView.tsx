@@ -1584,7 +1584,7 @@ function EncounterDetail({
   actionBarSlots,
   layouts,
 }: EncounterDetailProps) {
-  const availablePresetLayouts = getAvailablePresetLayouts(instance.capabilities ?? []);
+  const availablePresetLayouts = getAvailablePresetLayouts(instance.capabilities ?? [], isMobile);
   // Active tab and collapsible state
   const [activeTab, setActiveTab] = useState<'enemies' | 'players'>('enemies');
   const [isEntityPanelOpen, setIsEntityPanelOpen] = useState(false);
@@ -2441,7 +2441,7 @@ function InstancePageViewContent({
     : instanceDefaults?.default_desktop_layout?.id ?? null;
 
   // A user's saved default layout wins; otherwise the built-in one for this log.
-  const builtInDefaultLayout = useMemo(() => defaultInstanceLayout(instance.capabilities ?? []), [instance.capabilities]);
+  const builtInDefaultLayout = useMemo(() => defaultInstanceLayout(instance.capabilities ?? [], isMobile), [instance.capabilities, isMobile]);
 
   const standardOrderedLayoutItems = useMemo(
     () => orderLayoutItems(normalizeLayoutItems(cachedDefaultLayout?.items ?? builtInDefaultLayout.items)),
@@ -2603,7 +2603,7 @@ function InstancePageViewContent({
   );
 
   const applyPreset = useCallback((presetId: string) => {
-    const preset = presetLayoutById(presetId, instance.capabilities ?? []);
+    const preset = presetLayoutById(presetId, instance.capabilities ?? [], isMobile);
     if (!preset) return;
 
     if (!isPanelPresetLayout(preset)) {
@@ -2629,7 +2629,7 @@ function InstancePageViewContent({
     setSeedFiltersVersion((v) => v + 1);
     setPanelFiltersByID(preset.panelFilters);
     setActivePresetId(presetId);
-  }, [instance.capabilities]);
+  }, [instance.capabilities, isMobile]);
 
   useEffect(() => {
     if (!layoutPopup) return;
