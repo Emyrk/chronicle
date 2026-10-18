@@ -39,6 +39,7 @@ import { MeterWindows } from "./MeterWindows";
 import { useMeterWindows } from "./meterWindowsState";
 import { MapSettingsOverlay } from "./MapSettingsOverlay";
 import { useEffectSettings } from "./mapViewSettings";
+import { readStoredWalkAvatar, storeWalkAvatar } from "./walkAvatars";
 import { useMapScene } from "./useMapScene";
 import { encounterJumps, mapPresentationForSelection } from "./wholeRun";
 import { PlanControls } from "./plan/PlanControls";
@@ -305,6 +306,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   const [walkWanted, setWalking] = useState(false);
   const [followGuid, setFollowGuid] = useState<string | null>(null);
   const [adStrafe, setAdStrafeState] = useState(readStoredAdStrafe);
+  const [walkAvatar, setWalkAvatarState] = useState(readStoredWalkAvatar);
   const presenceSurface = parseLivePresenceSurface(`panel:${props.panelId ?? "map"}`) ?? "map";
   // Live session: everyone sees each other's camera, or character while walking.
   const liveSession = useLiveSessionOptional();
@@ -317,6 +319,10 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   const setAdStrafe = (on: boolean) => {
     setAdStrafeState(on);
     storeAdStrafe(on);
+  };
+  const setWalkAvatar = (id: string) => {
+    setWalkAvatarState(id);
+    storeWalkAvatar(id);
   };
   // WoW-style targeting: clicking a unit (on the map or a raid frame) makes it
   // the target, shown at centre left with its own target at centre right.
@@ -490,6 +496,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               walking={walking}
               onWalkingChange={setWalking}
               adStrafe={adStrafe}
+              walkAvatar={walkAvatar}
               livePresence={livePresence}
               presenceSurface={presenceSurface}
               unitRoles={unitRoles}
@@ -709,6 +716,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               walk={canWalk ? { on: walking, onToggle: () => setWalking(!walking) } : null}
               adStrafe={adStrafe}
               onAdStrafe={setAdStrafe}
+              walkAvatar={walkAvatar}
+              onWalkAvatar={setWalkAvatar}
             />
           )}
           <TargetFrames

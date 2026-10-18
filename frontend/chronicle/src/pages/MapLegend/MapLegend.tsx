@@ -165,8 +165,8 @@ export function MapLegend() {
           <Card title="Player" demo={<Ground><At x={50} y={55}><Token {...MAGE} facing={20} /></At></Ground>}>
             A ring in their class colour around their spec&apos;s icon (their class icon when the spec is unknown), with a coin-like edge and a shadow.
           </Card>
-          <Card title="Guardian" demo={<Ground><At x={50} y={55}><Token kind="pet" ring="#67e8f9" facing={20} /></At></Ground>}>
-            Anything a player owns (pets, summons, totems): a smaller disc with a paw.
+          <Card title="Guardian" demo={<Ground><At x={35} y={55}><Token kind="pet" ring="#67e8f9" facing={20} /></At><At x={68} y={55}><Token kind="pet" ring="#67e8f9" totem /></At></Ground>}>
+            Anything a player owns (pets, summons, totems): a smaller disc with a paw, or a totem pole for totems. One with a 3D model (a totem) stands on that disc, grown so even small ones read.
           </Card>
           <Card title="Enemy" demo={<Ground><At x={50} y={55}><Token kind="hostile" ring="#fb7185" facing={200} /></At></Ground>}>
             Enemy red, with a dark red well instead of an icon. Units with a 3D model show the model instead.
@@ -381,7 +381,8 @@ export function MapLegend() {
         <div className="grid gap-4 text-sm text-muted-foreground sm:grid-cols-2">
           <p>
             <Swatch color={hexCss(WALK_AVATAR_COLOR)} label={<strong className="text-foreground">Walk mode</strong>} /> (press G over the map, or the footprints button)
-            puts you on the ground as a gold figure to join the fight; zoom all the way in for first person.
+            puts you on the ground to join the fight, as a creature from Azeroth you choose in Map settings → Character (it stands, walks and runs
+            as you move) or the classic gold figure; zoom all the way in for first person.
           </p>
           <p>
             <span className="inline-flex gap-1 align-middle">

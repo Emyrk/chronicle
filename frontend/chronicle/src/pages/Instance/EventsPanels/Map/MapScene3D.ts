@@ -1,8 +1,10 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import type { MeshBVH } from "three-mesh-bvh";
 import { mapAssetUrl, type WowMapFloorBounds, type WowMapLayer, type WowMapMeshLiquid } from "@/pages/Technical/mapGallery";
+import { CAPSULE_AVATAR, WALK_AVATAR_CLIPS, walkAvatarUrl, type WalkAvatarState } from "./walkAvatars";
 import {
   AIM_AHEAD_FRACTION,
   BOSS_ENGAGE_YARDS,
@@ -26,7 +28,7 @@ import {
 } from "./cameraDirector";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
-import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, ENEMY_RED, HALO_COLORS, DROP_LINE, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
+import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanPoint } from "./plan/mapPlan";
 import { PlanLayer, type PlanSurface } from "./plan/planLayer";
@@ -166,8 +168,12 @@ const PLAYER_GEOMETRY_HEIGHT = 3;
 // at Fit.
 const MESH_MIN_SCREEN_SCALE = 0.5;
 // Boss minis are this many times a player's true scale on the mesh, so Kresh
-// (a 2.6-unit footprint) comes out around 4.5 yd across.
+// (a 2.6-unit footprint) comes out around 4.5 yd across. Guardians (pets,
+// totems) keep a player's scale: they stand on their own small chip.
 const MESH_BOSS_SCALE = 2.5;
+// A guardian's model is grown to at least this tall (geometry units; a
+// player capsule is 3), so a totem published at its true, tiny size reads.
+const MIN_GUARDIAN_MODEL_HEIGHT = 1.2;
 // With a fight focused, the camera can back off to this multiple of the Fit
 // distance, and the target can pan this far (yards) from the focus centre.
 const MESH_MAX_DISTANCE_FACTOR = 2.5;
@@ -389,6 +395,8 @@ interface UnitToken {
   /** Bosses: the turning tick ring, the sigil under a model, and the pin while there is none. */
   ticks: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
   sigil: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
+  /** A guardian with a model stands on this: its disc's face (paw, ring). */
+  chip: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
   bossPin: THREE.Sprite | null;
 }
 
@@ -443,6 +451,8 @@ interface UnitObject {
   barHeight: number;
   labelHeight: number;
   deadLift: number;
+  /** Height the model stands at: the floor, or a guardian's chip. */
+  modelBase: number;
 }
 
 export interface MapScene3DEffects {
@@ -577,6 +587,9 @@ interface WalkState {
   lastMs: number;
   drag: { button: number; x: number; y: number } | null;
   avatar: THREE.Group;
+  /** The gold capsule: shown while the chosen monster loads, or for good without one. */
+  capsule: THREE.Mesh;
+  model: WalkAvatarModel | null;
 }
 
 // You, in walk mode: a gold player capsule (no facing cone; the camera shows the way).
@@ -585,6 +598,73 @@ function createAvatar(geometries: Record<MapMarkerKind | "cone", THREE.BufferGeo
   const group = new THREE.Group();
   group.add(new THREE.Mesh(geometries.player, material));
   return group;
+}
+
+/** Seconds to cross-fade between a monster's idle, walk, run and in-air clips. */
+const WALK_AVATAR_FADE_S = 0.2;
+
+// A chosen monster in walk mode: its clone of the loaded model, and its clips.
+interface WalkAvatarModel {
+  root: THREE.Object3D;
+  mixer: THREE.AnimationMixer;
+  actions: Record<WalkAvatarState, THREE.AnimationAction | null>;
+  state: WalkAvatarState | null;
+}
+
+interface WalkAvatarTemplate {
+  scene: THREE.Group;
+  clips: THREE.AnimationClip[];
+}
+
+/** A creature keeps its own height in yards, within these (a chicken stays visible, a gryphon out of the camera). */
+const WALK_AVATAR_MIN_YARDS = 1.5;
+const WALK_AVATAR_MAX_YARDS = 3.5;
+
+// Each creature's glTF, loaded once and cloned for every walk. Never disposed
+// (like the dungeon meshes); a failed load is forgotten so it can be retried.
+const walkAvatarTemplates = new Map<string, Promise<WalkAvatarTemplate>>();
+function loadWalkAvatar(url: string): Promise<WalkAvatarTemplate> {
+  let template = walkAvatarTemplates.get(url);
+  if (!template) {
+    template = gltfLoader().then((loader) => loader.loadAsync(corsAssetUrl(url))).then((gltf) => {
+      // Feet on the ground at the creature's height in yards (the avatar group's
+      // PLAYER_GEOMETRY_HEIGHT is a MESH_PLAYER_HEIGHT_YARDS tall player), turned
+      // to face -z (glTF models face +z).
+      const height = new THREE.Box3().setFromObject(gltf.scene).max.y;
+      const yards = Math.min(WALK_AVATAR_MAX_YARDS, Math.max(WALK_AVATAR_MIN_YARDS, height));
+      if (height > 0) gltf.scene.scale.multiplyScalar((yards * PLAYER_GEOMETRY_HEIGHT) / (MESH_PLAYER_HEIGHT_YARDS * height));
+      gltf.scene.rotation.y = Math.PI;
+      return { scene: gltf.scene, clips: gltf.animations };
+    });
+    template.catch(() => walkAvatarTemplates.delete(url));
+    walkAvatarTemplates.set(url, template);
+  }
+  return template;
+}
+
+function createWalkAvatarModel(template: WalkAvatarTemplate): WalkAvatarModel {
+  const root = cloneSkinned(template.scene);
+  // Geometry and materials are the template's: disposeAvatar leaves them be.
+  root.traverse((child) => { child.userData.sharedAsset = true; });
+  const mixer = new THREE.AnimationMixer(root);
+  const clipFor = (names: readonly string[]) => names.map((name) => template.clips.find((clip) => clip.name === name)).find((clip) => clip) ?? null;
+  const actions = {} as Record<WalkAvatarState, THREE.AnimationAction | null>;
+  for (const state of Object.keys(WALK_AVATAR_CLIPS) as WalkAvatarState[]) {
+    const clip = clipFor(WALK_AVATAR_CLIPS[state]);
+    actions[state] = clip ? mixer.clipAction(clip) : null;
+  }
+  return { root, mixer, actions, state: null };
+}
+
+function playWalkAvatarState(model: WalkAvatarModel, state: WalkAvatarState) {
+  if (model.state === state) return;
+  const previous = model.state ? model.actions[model.state] : null;
+  const next = model.actions[state];
+  model.state = state;
+  // States can share a clip (a blob runs with its walk).
+  if (!next || next === previous) return;
+  next.reset().setEffectiveWeight(1).fadeIn(WALK_AVATAR_FADE_S).play();
+  previous?.fadeOut(WALK_AVATAR_FADE_S);
 }
 
 function createUnitGeometries(): Record<MapMarkerKind | "cone", THREE.BufferGeometry> {
@@ -741,6 +821,7 @@ export class MapScene3D {
   private readonly keyWindow: Window;
   private readonly heldActions = new Set<MapControlAction>();
   private walk: WalkState | null = null;
+  private walkAvatarId = CAPSULE_AVATAR;
   private adStrafe = true;
   private readonly tokenTextures = new UnitTokenTextures(() => this.requestRender());
   // The raid plan drawn on the floor (see plan/), and the drawing input while a tool is active.
@@ -1311,9 +1392,10 @@ export class MapScene3D {
     this.updateLabel();
   }
 
-  // Bosses stand larger than players on the mesh; everything else shares unitScale.
+  // Models (bosses, adds) stand larger than players on the mesh; guardians'
+  // models stand on their chip at a player's scale, like everything else.
   private scaleOf(object: UnitObject): number {
-    return this.dungeonMesh && object.miniatureUrl ? this.unitScale * MESH_BOSS_SCALE : this.unitScale;
+    return this.dungeonMesh && object.miniatureUrl && object.kind !== "pet" ? this.unitScale * MESH_BOSS_SCALE : this.unitScale;
   }
 
   // Puts the unit at (x, z) on the mesh floor while it shows, else at 0. A
@@ -1869,7 +1951,7 @@ export class MapScene3D {
       bodyMaterial,
       coneMaterial,
       cone,
-      token: { radius, face, edge, shadow, halo, pin, arc, debuff, columns, column, columnTrack, power, powerTrack, ticks, sigil: null, bossPin },
+      token: { radius, face, edge, shadow, halo, pin, arc, debuff, columns, column, columnTrack, power, powerTrack, ticks, sigil: null, chip: null, bossPin },
       icon: unit.icon ?? null,
       boss,
       mini: false,
@@ -1892,6 +1974,7 @@ export class MapScene3D {
       barHeight: BAR_HEIGHT,
       labelHeight: LABEL_HEIGHT,
       deadLift: DEAD_LIFT,
+      modelBase: 0,
     };
     this.applyTokenFace(object);
     group.scale.setScalar(this.scaleOf(object));
@@ -1941,10 +2024,17 @@ export class MapScene3D {
     object.coneMaterial.color.setHex(object.dead && object.boss ? 0x777777 : 0xffffff);
     object.coneMaterial.needsUpdate = true;
     object.token.edge.material.color.set(ring);
+    if (object.token.chip) {
+      const chipMap = this.tokenTextures.disc(null, ring, object.dead, guardianWell(object.name));
+      if (object.token.chip.material.map !== chipMap) {
+        object.token.chip.material.map = chipMap;
+        object.token.chip.material.needsUpdate = true;
+      }
+    }
     if (object.mini) return;
     const map = object.boss
       ? this.tokenTextures.sigil()
-      : this.tokenTextures.disc(object.icon, ring, object.dead, object.kind === "hostile" ? "enemy" : object.kind === "pet" ? "guardian" : null);
+      : this.tokenTextures.disc(object.icon, ring, object.dead, object.kind === "hostile" ? "enemy" : object.kind === "pet" ? guardianWell(object.name) : null);
     if (object.bodyMaterial.map !== map) {
       object.bodyMaterial.map = map;
       object.bodyMaterial.needsUpdate = true;
@@ -2019,6 +2109,10 @@ export class MapScene3D {
   }
 
   private applyBossMini(object: UnitObject, mini: BossMini) {
+    if (!object.boss && object.kind === "pet") {
+      this.applyGuardianMini(object, mini);
+      return;
+    }
     object.mini = true;
     object.body.geometry = mini.geometry;
     object.body.scale.setScalar(1);
@@ -2075,7 +2169,52 @@ export class MapScene3D {
     object.barHeight = mini.barHeight;
     object.labelHeight = mini.labelHeight;
     object.deadLift = mini.deadLift;
+    object.modelBase = 0;
     if (object.dead) object.body.position.y = mini.deadLift;
+  }
+
+  // A guardian's model (a totem, a pet) keeps the guardian's disc as a chip
+  // to stand on, with its ring, facing notch, halos and shadow at disc size;
+  // a tiny model is grown to MIN_GUARDIAN_MODEL_HEIGHT.
+  private applyGuardianMini(object: UnitObject, mini: BossMini) {
+    const { token } = object;
+    const box = mini.geometry.boundingBox!;
+    const scale = Math.max(1, MIN_GUARDIAN_MODEL_HEIGHT / Math.max(1e-3, box.max.y - box.min.y));
+    if (!token.chip) {
+      token.chip = new THREE.Mesh(this.tokenPlane, new THREE.MeshBasicMaterial({
+        transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
+      }));
+      token.chip.scale.setScalar(token.radius);
+      token.chip.position.y = token.face;
+      object.group.add(token.chip);
+    }
+    object.mini = true;
+    object.body.geometry = mini.geometry;
+    object.body.scale.setScalar(scale);
+    object.body.rotation.set(0, 0, 0);
+    object.modelBase = token.face;
+    object.deadLift = token.face + mini.deadLift * scale;
+    object.body.position.y = object.dead ? object.deadLift : object.modelBase;
+    if (object.dead) object.body.rotation.x = -Math.PI / 2;
+    const bodyMaterial = object.bodyMaterial;
+    bodyMaterial.map = null;
+    bodyMaterial.depthWrite = bodyMaterial.opacity >= 1;
+    bodyMaterial.polygonOffset = false;
+    bodyMaterial.needsUpdate = true;
+    if (mini.material) {
+      const material = mini.material.clone();
+      material.transparent = true;
+      material.opacity = bodyMaterial.opacity;
+      material.depthWrite = bodyMaterial.depthWrite;
+      bodyMaterial.dispose();
+      object.body.material = material;
+      object.bodyMaterial = material;
+      object.textured = true;
+    }
+    setBodyColor(object);
+    this.applyTokenFace(object);
+    object.barHeight = Math.max(BAR_HEIGHT, token.face + box.max.y * scale + BOSS_MINI_BAR_GAP);
+    object.labelHeight = object.barHeight + LABEL_HEIGHT - BAR_HEIGHT;
   }
 
   private removeUnit(guid: string) {
@@ -2085,7 +2224,7 @@ export class MapScene3D {
     object.bodyMaterial.dispose();
     object.coneMaterial.dispose();
     const { token } = object;
-    for (const part of [token.shadow, token.edge, token.halo, token.pin, token.arc, token.debuff, token.column, token.columnTrack, token.power, token.powerTrack, token.ticks, token.sigil]) part?.material.dispose();
+    for (const part of [token.shadow, token.edge, token.halo, token.pin, token.arc, token.debuff, token.column, token.columnTrack, token.power, token.powerTrack, token.ticks, token.sigil, token.chip]) part?.material.dispose();
     token.bossPin?.material.dispose();
     object.drop?.material.dispose();
     this.units.delete(guid);
@@ -2644,7 +2783,7 @@ export class MapScene3D {
     object.dead = dead;
     if (object.mini) {
       object.body.rotation.x = dead ? -Math.PI / 2 : 0;
-      object.body.position.y = dead ? object.deadLift : 0;
+      object.body.position.y = dead ? object.deadLift : object.modelBase;
       setBodyColor(object);
     }
     this.applyTokenFace(object);
@@ -3377,7 +3516,10 @@ export class MapScene3D {
       lastMs: 0,
       drag: null,
       avatar,
+      capsule: avatar.children[0] as THREE.Mesh,
+      model: null,
     };
+    this.dressAvatar(this.walk);
     this.controls.enabled = false;
     this.camera.near = WALK_NEAR_YARDS * scale;
     this.camera.far = WALK_FAR_YARDS * scale;
@@ -3408,6 +3550,7 @@ export class MapScene3D {
     this.walk = null;
     this.heldActions.clear();
     this.unlockPointer();
+    walk.model?.mixer.stopAllAction();
     this.disposeAvatar(walk.avatar);
     // The orbit camera picks up behind and above where the character stood.
     const distance = Math.max(walk.camDistance, WALK_EXIT_DISTANCE_YARDS) * (this.yardScale() ?? 1);
@@ -3429,9 +3572,38 @@ export class MapScene3D {
     this.requestRender();
   }
 
+  /** The character to walk as: "capsule" or a monster from walkAvatars. */
+  setWalkAvatar(id: string) {
+    if (id === this.walkAvatarId) return;
+    this.walkAvatarId = id;
+    if (this.walk) this.dressAvatar(this.walk);
+  }
+
+  // Swaps the walking character's model for the chosen one. The capsule
+  // stands in while it loads, and stays if it fails to.
+  private dressAvatar(walk: WalkState) {
+    if (walk.model) {
+      walk.model.mixer.stopAllAction();
+      walk.avatar.remove(walk.model.root);
+      walk.model = null;
+    }
+    walk.capsule.visible = true;
+    const id = this.walkAvatarId;
+    const url = walkAvatarUrl(id);
+    if (!url) return;
+    loadWalkAvatar(url).then((template) => {
+      if (this.disposed || this.walk !== walk || this.walkAvatarId !== id || walk.model) return;
+      walk.model = createWalkAvatarModel(template);
+      walk.avatar.add(walk.model.root);
+      walk.capsule.visible = false;
+      this.requestRender();
+    }).catch(() => {});
+  }
+
   private disposeAvatar(avatar: THREE.Group) {
     this.scene.remove(avatar);
     avatar.traverse((child) => {
+      if (child.userData.sharedAsset) return;
       const material = (child as THREE.Mesh).material as THREE.Material | undefined;
       material?.dispose();
     });
@@ -3499,6 +3671,10 @@ export class MapScene3D {
       walk.vy = 0;
     }
 
+    if (walk.model) {
+      playWalkAvatarState(walk.model, !walk.grounded ? "air" : !forward && !strafe ? "idle" : forward < 0 ? "walk" : "run");
+      walk.model.mixer.update(dt);
+    }
     walk.avatar.position.copy(walk.position);
     walk.avatar.rotation.y = walk.yaw;
     const head = this.walkHead.set(walk.position.x, walk.position.y + WALK_EYE_YARDS * scale, walk.position.z);

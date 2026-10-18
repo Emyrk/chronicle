@@ -5,8 +5,9 @@ description: >
   target frames, walk mode, live-session presence) and its public legend page
   at /map-legend. Use when: changing anything the map draws or how it looks
   (tokens, halos, target lines, effects, cast icons, combat text, health bars,
-  colours, timings), its controls or settings, or the unit frames, so the
-  legend page stays in parity with the code.
+  colours, timings), its controls or settings tabs, the unit frames, or
+  walk mode's WoW creature characters (adding models with extract-models),
+  so the legend page stays in parity with the code.
 advertise: true
 ---
 
@@ -33,8 +34,12 @@ frontend/chronicle/src/pages/Instance/EventsPanels/Map/
 ├── mapModel.ts           # healthBarColor, MAX_HEALTH_BARS, RECENT_HEALTH_MS, projection
 ├── mapControls.ts        # Keys and MAP_CONTROL_KEYBINDS (help text)
 ├── mapViewSettings.ts    # Saved display settings: CAST_MODES, ABOVE_DISC_MODES, defaults
-├── MapSettingsOverlay.tsx# The settings overlay
+├── MapSettingsOverlay.tsx# The settings dialog: tabs (Display, Effects, World, Controls, Character)
+├── walkAvatars.ts        # Walk-mode characters: creature roster, CDN URL, clip names
 └── TargetFrames.tsx      # Selected / Target / Target's target frames
+
+scripts/dbcdata/cli/extractmodels.go
+                          # `extract-models`: vanilla M2 creatures -> animated .glb
 
 frontend/chronicle/src/pages/Instance/EventsPanels/Map/Map.explainer.tsx
                           # The panel's "?": summary, tips, and the legend as its guide
@@ -101,6 +106,58 @@ them when the map's version changes:
 - The dungeon mesh's bytes are prefetched (`dungeonMeshBytes`) as soon as `useMapScene` knows the
   mesh (its loading `meshHint`), and the parsed mesh + BVH are cached across scenes (`parsedDungeonMesh`).
   Scenes clone the cached template and must not dispose it.
+
+## Settings tabs
+
+`MapSettingsOverlay` builds its tabs from a list of `{ id, label, icon, content }`.
+A new settings surface is one more entry; a tab whose `content` is `null` is
+hidden (e.g. Effects without combat events). The last tab is remembered in
+local storage.
+
+## Walk-mode characters (WoW creatures)
+
+In walk mode you walk as a WoW creature picked in Map settings → Character, or
+the classic gold capsule (`CAPSULE_AVATAR`, also the fallback while a model
+loads or if it fails). The creatures are real client models converted to
+animated `.glb` files and served from the icon CDN at
+`https://icons.chronicleclassic.com/game/models/<file>.glb` (`WALK_AVATAR_BASE_URL`).
+They never enter Git.
+
+- **Roster:** `GROUPS` in `walkAvatars.ts` (Critters, Beasts, Monsters, Bosses,
+  Flyers). An entry is the file name, or `[file, label]` when the name reads
+  badly (`["prariedog", "Prairie Dog"]`).
+- **Size:** a creature keeps its own height in yards, clamped to
+  `WALK_AVATAR_MIN_YARDS`..`WALK_AVATAR_MAX_YARDS` in `MapScene3D.ts`.
+- **Animation:** `WALK_AVATAR_CLIPS` maps idle / walk (backwards) / run / air
+  to the extractor's clip names (Stand, WalkBackwards, Walk, Run, Fall, Jump).
+  Vanilla creatures have no fly animation; some (Ragnaros, Snowman) only Stand.
+
+### Adding a creature
+
+```bash
+# Every creature model in the client that has a display (and so a skin):
+go run ./scripts/dbcdata extract-models --dbc ~/Games/OctoWoW --list
+
+# Convert (repeat --model; output is the model name, lower case: cow.glb).
+# Append ="Creature\X\Skin.blp" to override the main skin.
+go run ./scripts/dbcdata extract-models --dbc ~/Games/OctoWoW \
+  --out /tmp/models --model 'Creature\Cow\Cow.m2'
+```
+
+1. Check the converter's line for the model: it prints bones, vertices and the
+   animations it exported. Skip models with only `Stand` unless that is the
+   joke, and mounts (they are static).
+2. Upload the `.glb` to `game/models/` on the icon CDN.
+3. Add the file name to its group in `GROUPS`.
+4. Look at it in Storybook: **Instance/Map/MapView3D → KreshRealWalkAvatar**,
+   pick it, hover the map and press G. It should face away from the camera and
+   animate when you move.
+
+The converter handles vanilla (M2 version 256, `MD20`) models only, read from
+an MPQ client (OctoWoW). WoW Forever's client has the same art in the modern
+split format (`.m2` + `.skin` + `.anim` in CASC), which it does not read.
+Creature skins come from `CreatureDisplayInfo` (the model's first display);
+player races are not supported (they need geosets and composited skins).
 
 ## Checklist for a map change
 

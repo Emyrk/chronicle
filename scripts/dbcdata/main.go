@@ -31,6 +31,7 @@ func rootCmd() *serpent.Command {
 		cli.SpellTestDataCmd(),
 		cli.ExtractDBCCmd(),
 		cli.ExtractIconsCmd(),
+		cli.ExtractModelsCmd(),
 		cli.ExtractWowdataIconsCmd(),
 		cli.ExtractWowdataMapsCmd(),
 		cli.RenderWowdataMapsCmd(),
