@@ -15,6 +15,8 @@ import (
 	"github.com/Emyrk/chronicle/api/panellayoutapi"
 	"github.com/Emyrk/chronicle/api/shortcode"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/authzed/gochugaru/rel"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -90,6 +92,24 @@ func (api *API) CreateShare(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.Payload) > 10*1024 {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "payload exceeds 10KB"})
+		return
+	}
+
+	actor, ok := authz.ActorFromContext(ctx)
+	if !ok {
+		httpapi.Forbidden(w, nil)
+		return
+	}
+	canView, err := api.Zed.CheckOne(ctx, nil, rel.Relationship{
+		ResourceType: "instance", ResourceID: req.InstanceID.String(), ResourceRelation: "view",
+		SubjectType: "user", SubjectID: actor.Object().ID,
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if !canView {
+		httpapi.Forbidden(w, nil)
 		return
 	}
 

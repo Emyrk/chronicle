@@ -4,6 +4,7 @@
 SELECT
     (SELECT COUNT(*)
        FROM log_instances li
+       JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
        JOIN wow_server_realms wsr ON wsr.id = li.realm_id)::bigint AS logs_parsed,
     (SELECT COUNT(*)
        FROM game_players gp
@@ -14,6 +15,7 @@ SELECT
     (SELECT COUNT(*)
        FROM log_instance_encounters lie
        JOIN log_instances li ON li.id = lie.instance_id
+       JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
        JOIN wow_server_realms wsr ON wsr.id = li.realm_id
       WHERE lie.boss = true
         AND lie.kill_type IN ('clean', 'partial'))::bigint AS boss_kills;

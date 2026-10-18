@@ -1,10 +1,9 @@
 import { useState, useMemo, useRef } from "react";
-import { Link, useParams, useNavigate, useLocation } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { 
   FileText, 
   Clock, 
-  LogIn, 
   Loader2, 
   ArrowLeft,
   CheckCircle,
@@ -28,6 +27,7 @@ import {
   ChevronRight,
   AlertTriangle,
   Fingerprint,
+  LockKeyhole,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,10 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { shouldShowChronicleCompanionWarning } from "@/lib/logReliability";
 import { LOG_FORMAT_OPTIONS } from "@/config/serverCapabilities";
+import { useMarkLogUnlisted } from "@/api/unlistedLogs";
 import { UploadSyncDialog } from "./components/UploadSyncDialog";
+import { UnlistedConfirmationDialog } from "./components/UnlistedConfirmationDialog";
+import { UnlistedBadge } from "./components/UnlistedBadge";
 import { 
   useLogGroup,
   useLogGroupByFileHash,
@@ -63,6 +66,7 @@ import {
   type Video,
 } from "@/api/queries";
 import type { WoWSimpleParsedInstance, LogParseReport, IdentityReport, Duration } from "@/api/typesGenerated";
+
 
 function formatDate(timestamp: unknown): string {
   if (!timestamp) return "Unknown";
@@ -903,8 +907,6 @@ function ParsedInstancesSection({
 }
 
 export interface LogDetailViewProps {
-  isAuthenticated: boolean;
-  authLoading: boolean;
   log: WoWLogGroupState | undefined;
   logLoading: boolean;
   logError: Error | null;
@@ -925,11 +927,12 @@ export interface LogDetailViewProps {
   isDeletingInstance: boolean;
   onRefresh: () => void;
   isRefreshing: boolean;
+  canMarkUnlisted: boolean;
+  onMarkUnlisted: () => void;
+  isMarkingUnlisted: boolean;
 }
 
 export function LogDetailView({
-  isAuthenticated,
-  authLoading,
   log,
   logLoading,
   logError,
@@ -950,8 +953,10 @@ export function LogDetailView({
   isDeletingInstance,
   onRefresh,
   isRefreshing,
+  canMarkUnlisted,
+  onMarkUnlisted,
+  isMarkingUnlisted,
 }: LogDetailViewProps) {
-  const location = useLocation();
   const { data: allFlavorTags = [] } = useFlavors();
   const [showReparseAxis, setShowReparseAxis] = useState(false);
   const [reparseFormat, setReparseFormat] = useState("");
@@ -973,25 +978,7 @@ export function LogDetailView({
         Back to Logs
       </Link>
 
-      {/* Auth Check */}
-      {!authLoading && !isAuthenticated ? (
-        <Card className="p-6">
-          <div className="flex flex-col items-center gap-4 text-center">
-            <div>
-              <h2 className="font-semibold text-lg">Authentication Required</h2>
-              <p className="text-muted-foreground mt-1">
-                You must be logged in to view log details.
-              </p>
-            </div>
-            <Link to={`/login?from=${encodeURIComponent(location.pathname)}`}>
-              <Button>
-                <LogIn className="h-4 w-4 mr-2" />
-                Sign In
-              </Button>
-            </Link>
-          </div>
-        </Card>
-      ) : logLoading ? (
+      {logLoading ? (
         <Card className="p-6">
           <div className="flex flex-col items-center gap-4 text-center">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -1022,7 +1009,7 @@ export function LogDetailView({
             <div>
               <h2 className="font-semibold text-lg">Log Not Found</h2>
               <p className="text-muted-foreground mt-1">
-                This log doesn't exist or you don't have access to it.
+                This log doesn't exist.
               </p>
             </div>
             <Link to="/logs">
@@ -1037,7 +1024,10 @@ export function LogDetailView({
           {/* Header */}
           <div className="flex items-start justify-between">
             <div>
-              <h1 className="text-2xl font-bold">Log Upload</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold">Log Upload</h1>
+                {log.unlisted && <UnlistedBadge />}
+              </div>
               <p className="text-muted-foreground mt-1">
                 Uploaded {formatDate(log.created_at)}
               </p>
@@ -1338,6 +1328,25 @@ export function LogDetailView({
             </div>
           </Card>
 
+          {!log.unlisted && canMarkUnlisted && (
+            <Card className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="flex items-center gap-2 text-lg font-semibold">
+                  <LockKeyhole className="h-5 w-5 text-amber-400" />
+                  Make log unlisted
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Unlisted logs are excluded from rankings and public discovery. Anyone with the link can view them, and this change cannot be reversed.
+                </p>
+              </div>
+              <UnlistedConfirmationDialog
+                disabled={isMarkingUnlisted}
+                isPending={isMarkingUnlisted}
+                onConfirm={onMarkUnlisted}
+              />
+            </Card>
+          )}
+
           {/* Parsed Instances Section - only shows for log-parse jobs with output */}
           <ParsedInstancesSection
             log={log}
@@ -1519,55 +1528,57 @@ export function LogDetailView({
           })()}
 
           {/* Delete Section */}
-          <Card className="p-6 border-destructive/50">
-            <h2 className="font-semibold text-lg mb-4 text-destructive">Danger Zone</h2>
-            {showDeleteConfirm ? (
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Are you sure you want to delete this log? This action cannot be undone.
-                </p>
-                <div className="flex gap-2">
-                  <Button 
-                    variant="destructive" 
-                    onClick={onDelete}
-                    disabled={isDeleting}
+          {canDeleteInstance && (
+            <Card className="p-6 border-destructive/50">
+              <h2 className="font-semibold text-lg mb-4 text-destructive">Danger Zone</h2>
+              {showDeleteConfirm ? (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Are you sure you want to delete this log? This action cannot be undone.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="destructive"
+                      onClick={onDelete}
+                      disabled={isDeleting}
+                    >
+                      {isDeleting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Deleting...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Yes, Delete
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowDeleteConfirm(false)}
+                      disabled={isDeleting}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Permanently delete this log and all associated files.
+                  </p>
+                  <Button
+                    variant="destructive"
+                    onClick={() => setShowDeleteConfirm(true)}
                   >
-                    {isDeleting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Deleting...
-                      </>
-                    ) : (
-                      <>
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Yes, Delete
-                      </>
-                    )}
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setShowDeleteConfirm(false)}
-                    disabled={isDeleting}
-                  >
-                    Cancel
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Log
                   </Button>
                 </div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">
-                  Permanently delete this log and all associated files.
-                </p>
-                <Button 
-                  variant="destructive" 
-                  onClick={() => setShowDeleteConfirm(true)}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Log
-                </Button>
-              </div>
-            )}
-          </Card>
+              )}
+            </Card>
+          )}
         </>
       )}
     </div>
@@ -1577,7 +1588,7 @@ export function LogDetailView({
 export function LogDetail() {
   const { logId } = useParams<{ logId: string }>();
   const navigate = useNavigate();
-  const { session, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { session, isAuthenticated } = useAuth();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { 
@@ -1587,13 +1598,14 @@ export function LogDetail() {
     refetch,
     isRefetching,
   } = useLogGroup(logId || "", {
-    enabled: isAuthenticated && !!logId,
+    enabled: !!logId,
   });
 
   const deleteLogGroup = useDeleteLogGroup();
   const reparseLogGroup = useReparseLogGroup();
   const deleteLogFiles = useDeleteLogFiles();
   const deleteLogInstance = useDeleteLogInstance();
+  const markUnlisted = useMarkLogUnlisted(logId || "");
 
   // Check permissions
   const authzChecks = useMemo(() => ({
@@ -1601,6 +1613,7 @@ export function LogDetail() {
     deleteFiles: `raid_log:${logId}#delete_files`,
     delete: `raid_log:${logId}#delete`,
     uploadYoutube: `raid_log:${logId}#upload_youtube`,
+    markUnlisted: `raid_log:${logId}#mark_unlisted`,
     adminLogs: "chronicle:chronicle#admin_logs",
   }), [logId]);
   const { data: authz } = useAuthorizationCheck(authzChecks, {
@@ -1611,6 +1624,14 @@ export function LogDetail() {
   const canDeleteInstance = authz?.delete ?? false;
   const canDownloadFiles = (authz?.adminLogs ?? false) || (session?.can_download_raw_logs ?? false);
   const canUploadYoutube = authz?.uploadYoutube ?? false;
+  const canMarkUnlisted = authz?.markUnlisted ?? false;
+
+  const handleMarkUnlisted = () => {
+    markUnlisted.mutate(undefined, {
+      onSuccess: () => toast.success("Log is now unlisted"),
+      onError: (error) => toast.error("Failed to make log unlisted", { description: error.message }),
+    });
+  };
 
   const handleDelete = () => {
     if (!logId) return;
@@ -1691,8 +1712,6 @@ export function LogDetail() {
 
   return (
     <LogDetailView
-      isAuthenticated={isAuthenticated}
-      authLoading={authLoading}
       log={log}
       logLoading={logLoading}
       logError={logError}
@@ -1713,6 +1732,9 @@ export function LogDetail() {
       isDeletingInstance={deleteLogInstance.isPending}
       onRefresh={handleRefresh}
       isRefreshing={isRefetching}
+      canMarkUnlisted={canMarkUnlisted}
+      onMarkUnlisted={handleMarkUnlisted}
+      isMarkingUnlisted={markUnlisted.isPending}
     />
   );
 }
@@ -1720,7 +1742,7 @@ export function LogDetail() {
 export function LogDetailByHash() {
   const { fileHash } = useParams<{ fileHash: string }>();
   const navigate = useNavigate();
-  const { session, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { session, isAuthenticated } = useAuth();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { 
@@ -1730,7 +1752,7 @@ export function LogDetailByHash() {
     refetch,
     isRefetching,
   } = useLogGroupByFileHash(fileHash || "", {
-    enabled: isAuthenticated && !!fileHash,
+    enabled: !!fileHash,
   });
 
   const logId = log?.id;
@@ -1739,6 +1761,7 @@ export function LogDetailByHash() {
   const reparseLogGroup = useReparseLogGroup();
   const deleteLogFiles = useDeleteLogFiles();
   const deleteLogInstance = useDeleteLogInstance();
+  const markUnlisted = useMarkLogUnlisted(logId || "");
 
   const handleDeleteInstance = (instanceId: string, instanceName: string) => {
     if (!logId) return;
@@ -1761,6 +1784,7 @@ export function LogDetailByHash() {
     deleteFiles: `raid_log:${logId}#delete_files`,
     delete: `raid_log:${logId}#delete`,
     uploadYoutube: `raid_log:${logId}#upload_youtube`,
+    markUnlisted: `raid_log:${logId}#mark_unlisted`,
     adminLogs: "chronicle:chronicle#admin_logs",
   }), [logId]);
   const { data: authz } = useAuthorizationCheck(authzChecks, {
@@ -1771,6 +1795,14 @@ export function LogDetailByHash() {
   const canDeleteInstance = authz?.delete ?? false;
   const canDownloadFiles = (authz?.adminLogs ?? false) || (session?.can_download_raw_logs ?? false);
   const canUploadYoutube = authz?.uploadYoutube ?? false;
+  const canMarkUnlisted = authz?.markUnlisted ?? false;
+
+  const handleMarkUnlisted = () => {
+    markUnlisted.mutate(undefined, {
+      onSuccess: () => toast.success("Log is now unlisted"),
+      onError: (error) => toast.error("Failed to make log unlisted", { description: error.message }),
+    });
+  };
 
   const handleDelete = () => {
     if (!logId) return;
@@ -1836,8 +1868,6 @@ export function LogDetailByHash() {
 
   return (
     <LogDetailView
-      isAuthenticated={isAuthenticated}
-      authLoading={authLoading}
       log={log}
       logLoading={logLoading}
       logError={logError}
@@ -1858,6 +1888,9 @@ export function LogDetailByHash() {
       isDeletingInstance={deleteLogInstance.isPending}
       onRefresh={handleRefresh}
       isRefreshing={isRefetching}
+      canMarkUnlisted={canMarkUnlisted}
+      onMarkUnlisted={handleMarkUnlisted}
+      isMarkingUnlisted={markUnlisted.isPending}
     />
   );
 }

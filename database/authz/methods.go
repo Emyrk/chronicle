@@ -101,8 +101,8 @@ func (z *interceptor) InsertEncounterCharacterFights(ctx context.Context, arg []
 func (z *interceptor) InsertInstance(ctx context.Context, arg database.InsertInstanceParams) (database.LogInstance, error) {
 	b := policy.New()
 	b.Instance(arg.ID).
-		PublicWildcard().
-		Raid_log(b.Raid_log(arg.LogGroupID))
+		Raid_log(b.Raid_log(arg.LogGroupID)).
+		PublicWildcard()
 
 	_, err := z.Write(ctx, *b.Txn())
 	if err != nil {
@@ -357,7 +357,7 @@ func (z *interceptor) InsertUserAuthSession(ctx context.Context, arg database.In
 	b := policy.New()
 	usr := b.User(arg.UserID)
 
-	// Every user gets chronicle_member
+	// Every user gets the baseline Chronicle member role.
 	b.GlobalChronicle().Chronicle_member(usr)
 
 	// First user auth link = first real signup → technical_admin

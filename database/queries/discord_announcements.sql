@@ -114,12 +114,16 @@ ORDER BY created_at, log_group_id, instance_ordinal;
 -- name: GetLogGroupInstanceIDByOrdinal :one
 SELECT li.id
 FROM log_instances li
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 WHERE li.log_group_id = @log_group_id
 ORDER BY li.start_time ASC NULLS LAST, li.id ASC
 LIMIT 1 OFFSET @instance_ordinal;
 
 -- name: GetLogInstanceForDiscordAnnouncement :one
-SELECT * FROM log_instances WHERE id = @id;
+SELECT li.*
+FROM log_instances li
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+WHERE li.id = @id;
 
 -- name: ListInstancesForDiscordAnnouncement :many
 SELECT
@@ -148,7 +152,7 @@ SELECT
   COALESCE(guild_average.avg_duration_ms, 0)::bigint AS guild_avg_duration_ms,
   (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = li.id)::int AS player_count
 FROM log_instances li
-JOIN wow_log_groups wlg ON wlg.id = li.log_group_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 JOIN users u ON u.id = wlg.owner
 LEFT JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 LEFT JOIN wow_servers ws ON ws.id = wsr.server_id
@@ -162,6 +166,7 @@ LEFT JOIN LATERAL (
       (EXTRACT(EPOCH FROM (previous_li.end_time - previous_li.start_time)) * 1000)::bigint AS duration_ms
     FROM instance_speedruns previous_sr
     JOIN log_instances previous_li ON previous_li.id = previous_sr.instance_id
+    JOIN wow_log_groups previous_group ON previous_group.id = previous_li.log_group_id AND NOT previous_group.unlisted
     WHERE previous_sr.guild_id = li.guild_id
       AND previous_sr.instance_name = li.name
       AND previous_li.difficulty_name = li.difficulty_name

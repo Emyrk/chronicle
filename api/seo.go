@@ -11,6 +11,8 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const defaultSEODescription = "Chronicle provides combat log analysis for World of Warcraft communities. Upload combat logs to explore encounters, rankings, and performance insights."
@@ -60,11 +62,29 @@ func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
 		resolved.Description = defaultSEODescription
 	}
 
-	if !discoverable || !pathHasPrefix(r.URL.Path, indexablePrefixes) || pathHasPrefix(r.URL.Path, noIndexPrefixes) || isPrivateGuildPath(r.URL.Path) {
+	if !discoverable || !pathHasPrefix(r.URL.Path, indexablePrefixes) || pathHasPrefix(r.URL.Path, noIndexPrefixes) || isPrivateGuildPath(r.URL.Path) || api.isUnlistedInstancePath(r) {
 		resolved.Robots = "noindex, nofollow"
 	}
 	resolved.JSONLD = websiteJSONLD(resolved.SiteName, resolved.Description, resolved.CanonicalURL, resolved.ImageURL)
 	return resolved
+}
+
+func (api *API) isUnlistedInstancePath(r *http.Request) bool {
+	if api.Zed == nil {
+		return false
+	}
+
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) != 2 || parts[0] != "instances" || parts[1] == "" {
+		return false
+	}
+
+	if id, err := uuid.Parse(parts[1]); err == nil {
+		instance, err := api.Zed.InstanceWithUnlisted(r.Context(), id)
+		return err == nil && instance.Unlisted
+	}
+	instance, err := api.Zed.InstanceBySlugWithUnlisted(r.Context(), pgtype.Text{String: parts[1], Valid: true})
+	return err == nil && instance.Unlisted
 }
 
 func canonicalRequestURL(api *API, r *http.Request) string {

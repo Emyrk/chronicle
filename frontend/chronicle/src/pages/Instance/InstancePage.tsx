@@ -83,6 +83,8 @@ export interface Instance {
   units?: Record<string, ResolvedInstanceUnit>;
   // Server-computed feature flags for this instance
   capabilities: readonly string[];
+  // Unlisted logs preserve combat analysis for authorized users but omit public ranking features.
+  unlisted?: boolean;
   // Parse format and server-mechanics flavor of the source log group
   format?: string;
   flavor?: readonly string[];
@@ -144,6 +146,7 @@ function transformToInstance(
     names_by_entry?: Record<number, string>;
     summons_by_owner?: Record<string, readonly string[]>;
     capabilities?: readonly string[];
+    unlisted?: boolean;
     format?: string;
     flavor?: readonly string[];
     versions?: Record<string, string>;
@@ -233,6 +236,7 @@ function transformToInstance(
     players,
     units,
     capabilities: apiInstance.capabilities ?? [],
+    unlisted: apiInstance.unlisted,
     format: apiInstance.format,
     flavor: apiInstance.flavor,
     versions: apiInstance.versions,
@@ -493,7 +497,7 @@ export function InstancePage() {
           Back to Logs
         </Link>
         <Card className="p-6">
-          <p className="text-destructive">
+          <p className="font-medium text-destructive">
             {instanceError?.message || "Failed to load instance"}
           </p>
         </Card>

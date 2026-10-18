@@ -2555,6 +2555,11 @@ export interface LogosPayload {
     readonly background_banner: string;
 }
 
+// From chroniclesdk/unlisted_logs.go
+export interface MarkLogUnlistedRequest {
+    readonly unlisted: boolean;
+}
+
 // From chroniclesdk/guild_page.go
 export const MaxDescriptionLength = 500;
 
@@ -4808,6 +4813,7 @@ export interface WoWInstance {
     readonly tenant_slug?: string;
     readonly tenant_include_in_all?: boolean;
     readonly log_group_id: string;
+    readonly unlisted: boolean;
     readonly name: string;
     readonly slug: string;
     readonly start_time?: string;
@@ -4851,6 +4857,7 @@ export interface WoWLogGroup {
     readonly log_type: string;
     readonly format?: string;
     readonly flavor?: readonly string[];
+    readonly unlisted: boolean;
     readonly invalidated_at?: string;
     readonly invalid_reason?: string;
     readonly files: readonly WoWLogFile[];

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"mime/multipart"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -222,6 +223,36 @@ func (api *API) clientUploadsDisabled(ctx context.Context) bool {
 	return false
 }
 
+func uploadUnlisted(r *http.Request) (bool, error) {
+	value := r.FormValue("unlisted")
+	if value == "" {
+		value = r.URL.Query().Get("unlisted")
+	}
+	if value == "" {
+		return false, nil
+	}
+	return strconv.ParseBool(value)
+}
+
+func (api *API) authorizeUnlistedUpload(ctx context.Context, w http.ResponseWriter, unlisted bool) bool {
+	if !unlisted {
+		return true
+	}
+	actor, _ := authz.ActorFromContext(ctx)
+	allowed, err := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanMark_log_unlisted_User(actor))
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return false
+	}
+	if !allowed {
+		httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
+			Message: "You do not have permission to upload unlisted logs.",
+		})
+		return false
+	}
+	return true
+}
+
 func (api *API) WoWLogUpload(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -282,7 +313,16 @@ func (api *API) WoWLogUpload(w http.ResponseWriter, r *http.Request) {
 		IsGzipped: isGzipped(secondHeader),
 	}
 
-	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{firstInput, secondInput}, database.LogTypeV1, uuid.Nil, chronicle.UploadMeta{})
+	unlisted, err := uploadUnlisted(r)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "unlisted must be a boolean"})
+		return
+	}
+	if !api.authorizeUnlistedUpload(ctx, w, unlisted) {
+		return
+	}
+
+	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{firstInput, secondInput}, database.LogTypeV1, uuid.Nil, chronicle.UploadMeta{Unlisted: unlisted})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
@@ -411,6 +451,16 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 			meta.Format = t.DefaultFormat.LogFormat
 		}
 	}
+
+	unlisted, err := uploadUnlisted(r)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "unlisted must be a boolean"})
+		return
+	}
+	if !api.authorizeUnlistedUpload(ctx, w, unlisted) {
+		return
+	}
+	meta.Unlisted = unlisted
 
 	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{input}, logType, uuid.Nil, meta)
 	if err != nil {

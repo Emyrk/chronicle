@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue, ty
 import { createPortal } from "react-dom";
 import { useSearchParams, Link } from "react-router-dom";
 import { useSession, useCreateShare, fetchSharedView, toastError, type UserPanelLayout } from "@/api/queries";
-import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, LayoutPanelTop, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown, RotateCcw, Maximize2, Minimize2 } from "lucide-react";
+import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, LayoutPanelTop, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown, RotateCcw, Maximize2, Minimize2, LockKeyhole } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -443,6 +443,7 @@ function EncounterSidebar({
   onIncludeWipesChange,
   instanceStartTime,
   instanceId,
+  showRankings,
 }: {
   encounters: Encounter[];
   trashGroups: TrashGroup[];
@@ -458,8 +459,9 @@ function EncounterSidebar({
   onIncludeWipesChange: (value: boolean) => void;
   instanceStartTime: string;
   instanceId: string;
+  showRankings: boolean;
 }) {
-  const timeParsesQuery = useInstanceTimeParses(instanceId);
+  const timeParsesQuery = useInstanceTimeParses(showRankings ? instanceId : undefined);
   const killParses = bossKillParsesByEncounter(timeParsesQuery.data);
   const scopedKillParses = scopedKillParsesByEncounter(timeParsesQuery.data);
   const lookbackDays = timeParsesQuery.data?.lookback_days;
@@ -2291,7 +2293,7 @@ function InstancePageViewContent({
   useRegisterInstanceKeybinds("instance-page", "Instance page", INSTANCE_PAGE_KEYBINDS);
   const timeRange = useTimeRangeContextOptional();
 
-  const instanceTimeParsesQuery = useInstanceTimeParses(instance.id);
+  const instanceTimeParsesQuery = useInstanceTimeParses(instance.unlisted ? undefined : instance.id);
   const { data: instanceSpeedrun } = useQuery({
     queryKey: ["instance-speedrun", instance.id],
     queryFn: async (): Promise<SpeedrunResult | null> => {
@@ -2301,11 +2303,12 @@ function InstancePageViewContent({
     },
     staleTime: Infinity,
     retry: false,
+    enabled: !instance.unlisted,
   });
 
   // URL state for explainer mode (simple ?explain=panel_type)
   const [searchParams, setSearchParams] = useSearchParams();
-  const overviewEnabled = isInstanceOverviewEnabled(supportsOverview);
+  const overviewEnabled = isInstanceOverviewEnabled(supportsOverview) && !instance.unlisted;
   const requestedViewMode = parseInstanceViewMode(searchParams.get("view"));
   const viewMode: InstanceViewMode = overviewEnabled ? requestedViewMode : "encounters";
   const isEncounterView = viewMode === "encounters";
@@ -2768,7 +2771,8 @@ function InstancePageViewContent({
       const urlType = viewState.panels[index];
       const defaultType = (defaultPanelTypesByID[item.id] ?? "empty") as EventsPanelType;
       const resolved = (urlType ?? defaultType) as EventsPanelType;
-      next[item.id] = resolved in PANELS || isCustomPanelRef(resolved) ? resolved : "empty";
+      const valid = resolved in PANELS || isCustomPanelRef(resolved);
+      next[item.id] = valid ? resolved : "empty";
     });
     return next;
   }, [activeLayoutItems, defaultPanelTypesByID, viewState.panels]);
@@ -3414,6 +3418,17 @@ function InstancePageViewContent({
   }, [shareContextMenu]);
 
   const handleShareView = useCallback(async () => {
+    if (instance.unlisted || !isLoggedIn) {
+      const url = window.location.href;
+      try {
+        await navigator.clipboard.writeText(url);
+        toast.success("Share link copied", { description: url });
+      } catch {
+        toast.error("Failed to copy link");
+      }
+      return;
+    }
+
     const payload: SharedViewPayload = buildSharedViewPayload();
 
     try {
@@ -3429,7 +3444,7 @@ function InstancePageViewContent({
         description: error instanceof Error ? toastError(error) : "An unexpected error occurred.",
       });
     }
-  }, [buildSharedViewPayload, createShare, instance.id, viewMode]);
+  }, [buildSharedViewPayload, createShare, instance.id, instance.unlisted, isLoggedIn, viewMode]);
 
   const handleShareWithoutLayout = useCallback(async () => {
     const url = withInstanceViewMode(
@@ -3665,10 +3680,17 @@ function InstancePageViewContent({
         <div className="flex items-start justify-between gap-4 mb-1">
           <h1 className={cn("font-bold flex items-center gap-2", isMobile ? "text-xl" : "text-2xl", heroic && "drop-shadow-[0_0_8px_rgba(147,51,234,0.3)]")}>
             {instance.name}
-            <ClearParseBadge
-              parses={scopedClearParses(instanceTimeParsesQuery.data)}
-              lookbackDays={instanceTimeParsesQuery.data?.lookback_days}
-            />
+            {!instance.unlisted && (
+              <ClearParseBadge
+                parses={scopedClearParses(instanceTimeParsesQuery.data)}
+                lookbackDays={instanceTimeParsesQuery.data?.lookback_days}
+              />
+            )}
+            {instance.unlisted && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-300">
+                <LockKeyhole className="h-3 w-3" /> Unlisted
+              </span>
+            )}
             {instance.invalidatedAt && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -3838,7 +3860,7 @@ function InstancePageViewContent({
                           variant="outline"
                           size="sm"
                           className="gap-1.5"
-                          disabled={!isLoggedIn}
+                          disabled={!isLoggedIn && !instance.unlisted}
                         >
                           <Share2 className="h-4 w-4" />
                           Share
@@ -3846,7 +3868,7 @@ function InstancePageViewContent({
                       </span>
                     </DropdownMenuTrigger>
                   </TooltipTrigger>
-                  {!isLoggedIn && <TooltipContent>You must be logged in to share</TooltipContent>}
+                  {!isLoggedIn && !instance.unlisted && <TooltipContent>You must be logged in to share</TooltipContent>}
                 </Tooltip>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
@@ -4018,6 +4040,7 @@ function InstancePageViewContent({
             showHints={showHints}
             includeWipes={viewState.includeWipes}
             onIncludeWipesChange={setIncludeWipes}
+            showRankings={!instance.unlisted}
             instanceStartTime={instance.startTime}
           />
         )}

@@ -223,9 +223,9 @@ func (api *API) shareOG(host, code string) *frontend.OGData {
 	// Resolve instance: try by ID first, fall back to slug if ID was nulled (reparse).
 	var inst database.LogInstancesGuild
 	if shared.InstanceID.Valid {
-		inst, err = db.Instance(ctx, shared.InstanceID.UUID)
+		inst, err = db.PublicInstance(ctx, shared.InstanceID.UUID)
 	} else if shared.InstanceSlug != "" {
-		inst, err = db.InstanceBySlug(ctx, pgtype.Text{String: shared.InstanceSlug, Valid: true})
+		inst, err = db.PublicInstanceBySlug(ctx, pgtype.Text{String: shared.InstanceSlug, Valid: true})
 	} else {
 		return nil
 	}
@@ -363,7 +363,7 @@ func (api *API) armoryOG(host, realm, player string) *frontend.OGData {
 func resolveInstance(ctx context.Context, db *authz.Authz, idOrSlug string) (database.LogInstancesGuild, error) {
 	id, err := uuid.Parse(idOrSlug)
 	if err == nil {
-		return db.Instance(ctx, id)
+		return db.PublicInstance(ctx, id)
 	}
-	return db.InstanceBySlug(ctx, pgtype.Text{String: idOrSlug, Valid: true})
+	return db.PublicInstanceBySlug(ctx, pgtype.Text{String: idOrSlug, Valid: true})
 }

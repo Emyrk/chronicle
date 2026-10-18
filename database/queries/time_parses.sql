@@ -6,6 +6,7 @@ SELECT
     instance.max_players,
     COALESCE(instance.duplicate_group_id, instance.id) AS run_id
 FROM log_instances instance
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
 WHERE instance.id = @id;
 
 -- name: ListTimeParseReplacementLogGroups :many
@@ -13,6 +14,7 @@ WHERE instance.id = @id;
 -- compact memberships can elect a new representative afterward.
 SELECT DISTINCT instance.log_group_id
 FROM log_instances instance
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
 WHERE COALESCE(instance.duplicate_group_id, instance.id) = @run_id
   AND instance.id <> @instance_id;
 
@@ -20,5 +22,6 @@ WHERE COALESCE(instance.duplicate_group_id, instance.id) = @run_id
 -- Locate surviving uploads for logical runs whose source log group is deleted.
 SELECT DISTINCT instance.log_group_id
 FROM log_instances instance
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
 WHERE COALESCE(instance.duplicate_group_id, instance.id) = ANY(@run_ids::uuid[])
   AND instance.log_group_id <> @log_group_id;

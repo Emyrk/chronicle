@@ -17,6 +17,7 @@ representative_instances AS MATERIALIZED (
         instance.id,
         COALESCE(instance.duplicate_group_id, instance.id) AS run_id
     FROM log_instances instance
+    JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
     JOIN affected_runs affected
       ON affected.run_id = COALESCE(instance.duplicate_group_id, instance.id)
     WHERE instance.invalidated_at IS NULL
@@ -106,6 +107,7 @@ SELECT
 -- name: GetParseScoreMembershipCohort :many
 SELECT CASE WHEN @metric::text = 'hps' THEN membership.hps ELSE membership.dps END::double precision AS metric_value
 FROM parse_score_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 WHERE (
       (@tenant_id::uuid <> '00000000-0000-0000-0000-000000000000'::uuid AND membership.tenant_id = @tenant_id)
       OR
@@ -140,6 +142,7 @@ SELECT
     CASE WHEN @cohort_mode::text = 'spec' THEN membership.player_sub_spec ELSE '' END::text AS player_sub_spec,
     COUNT(*)::bigint AS sample_size
 FROM parse_score_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 WHERE (
       (@tenant_id::uuid <> '00000000-0000-0000-0000-000000000000'::uuid AND membership.tenant_id = @tenant_id)
       OR
@@ -172,6 +175,7 @@ SELECT
     instance.hashed_slug AS log_hashed_slug
 FROM parse_score_memberships membership
 JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 LEFT JOIN LATERAL (
     SELECT candidate.player_name
     FROM (
@@ -227,6 +231,7 @@ SELECT
     membership.run_id,
     CASE WHEN @metric::text = 'hps' THEN membership.hps ELSE membership.dps END::double precision AS metric_value
 FROM parse_score_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 -- tenant_ids is resolved by the caller (the default tenant also sees
 -- include_in_all tenants) so it is a plain index condition; an OR across
 -- tenant rules, or an array built in SQL, leaves the planner scanning every
@@ -245,9 +250,10 @@ WHERE membership.tenant_id = ANY(@tenant_ids::uuid[])
   AND CASE WHEN @metric::text = 'hps' THEN membership.hps ELSE membership.dps END > 0;
 
 -- name: ListParseScoreMemberships :many
-SELECT *
-FROM parse_score_memberships
-WHERE tenant_id = @tenant_id
+SELECT membership.*
+FROM parse_score_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
+WHERE membership.tenant_id = @tenant_id
   AND policy_version = @policy_version
   AND query_version = @query_version
 ORDER BY run_id, encounter_name, player_guid;

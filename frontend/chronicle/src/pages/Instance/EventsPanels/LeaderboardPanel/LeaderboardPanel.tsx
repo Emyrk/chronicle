@@ -3,6 +3,7 @@ import { Trophy, CheckCircle2, XCircle, Clock, Loader2 } from "lucide-react";
 import type { SpeedrunResult } from "@/api/typesGenerated";
 import type { ProcessorEvent } from "../processorTypes";
 import type { PanelDefinition, PanelRenderProps } from "../types";
+import { shouldLoadPublicRankingData } from "../panelAvailability";
 import {
   leaderboardProcessor,
   type LeaderboardPanelResult,
@@ -59,6 +60,7 @@ function LeaderboardQueryContent(
   props: PanelRenderProps<LeaderboardPanelResult>,
 ) {
   const instanceId = props.context.instance.id;
+  const unlisted = props.context.instance.unlisted;
   const { data: speedrun, isLoading: loading } = useQuery({
     queryKey: ["instance-speedrun", instanceId],
     queryFn: async () => {
@@ -70,7 +72,12 @@ function LeaderboardQueryContent(
     },
     staleTime: Infinity,
     retry: false,
+    enabled: shouldLoadPublicRankingData(unlisted),
   });
+
+  if (unlisted) {
+    return <LeaderboardEmptyState message="No leaderboard data is available for unlisted instances." />;
+  }
 
   if (loading) {
     return (
@@ -88,10 +95,14 @@ function LeaderboardQueryContent(
   );
 }
 
-function LeaderboardEmptyState() {
+function LeaderboardEmptyState({
+  message = "No speedrun data available for this instance.",
+}: {
+  message?: string;
+}) {
   return (
     <div className="text-center py-4 text-muted-foreground text-sm">
-      No speedrun data available for this instance.
+      {message}
     </div>
   );
 }

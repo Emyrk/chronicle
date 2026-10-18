@@ -10,6 +10,7 @@ import {
   FolderOpen,
 } from "lucide-react";
 import { compressFile } from "@/api/compress";
+import { VisibilityPicker } from "./VisibilityPicker";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
 
@@ -62,6 +63,7 @@ function statusLabel(status: FileStatus) {
 async function uploadSingleFile(
   file: File,
   format: string,
+  unlistedLog: boolean,
   onProgress: (pct: number) => void,
   onStatusChange: (status: FileStatus) => void,
 ): Promise<string> {
@@ -112,11 +114,10 @@ async function uploadSingleFile(
     });
 
     let endpoint = "/api/v1/raidlogs/logs/upload-v2";
-    if (format) {
-      const params = new URLSearchParams();
-      params.set("format", format);
-      endpoint += `?${params.toString()}`;
-    }
+    const params = new URLSearchParams();
+    params.set("unlisted", String(unlistedLog));
+    if (format) params.set("format", format);
+    endpoint += `?${params.toString()}`;
 
     xhr.open("POST", endpoint);
     xhr.send(formData);
@@ -128,9 +129,12 @@ const MAX_CONCURRENT = 3;
 
 export interface MultiUploadProps {
   format: string;
+  unlistedLog: boolean;
+  canMarkUnlisted: boolean;
+  onUnlistedLogChange: (value: boolean) => void;
 }
 
-export function MultiUpload({ format }: MultiUploadProps) {
+export function MultiUpload({ format, unlistedLog, canMarkUnlisted, onUnlistedLogChange }: MultiUploadProps) {
   const [entries, setEntries] = useState<UploadEntry[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -185,6 +189,7 @@ export function MultiUpload({ format }: MultiUploadProps) {
         const logId = await uploadSingleFile(
           entry.file,
           format,
+          unlistedLog,
           (pct) => updateEntry(entry.id, { progress: pct }),
           (status) => updateEntry(entry.id, { status }),
         );
@@ -219,7 +224,7 @@ export function MultiUpload({ format }: MultiUploadProps) {
 
     await runPool();
     setIsUploading(false);
-  }, [entries, format, updateEntry]);
+  }, [entries, format, unlistedLog, updateEntry]);
 
   const pendingCount = entries.filter(
     (e) => e.status === "pending" || e.status === "error",
@@ -270,6 +275,10 @@ export function MultiUpload({ format }: MultiUploadProps) {
           </Link>
         </p>
       </div>
+
+      <Card className="mb-4 p-4">
+        <VisibilityPicker unlistedLog={unlistedLog} canMarkUnlisted={canMarkUnlisted} onChange={onUnlistedLogChange} />
+      </Card>
 
       {/* Drop zone */}
       <Card

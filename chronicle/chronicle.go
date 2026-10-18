@@ -209,8 +209,9 @@ func (c *Chronicle) initStorage(ctx context.Context) error {
 // after parsing. Empty fields fall back to server-side derivation: Format from
 // logType, Flavor from the build-tag default.
 type UploadMeta struct {
-	Format database.LogFormat
-	Flavor database.WoWFlavor
+	Format   database.LogFormat
+	Flavor   database.WoWFlavor
+	Unlisted bool
 }
 
 func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, logType database.LogType, realmID uuid.UUID, meta UploadMeta) (*database.WoWLogGroup, []database.LogFile, error) {
@@ -388,6 +389,7 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, logTyp
 			// flavor is the server's identity, independent of log_type. nil leaves
 			// the column NULL.
 			Flavor:    flavor.Strings(),
+			Unlisted:  meta.Unlisted,
 			CreatedAt: database.Timestamptz(now),
 			UpdatedAt: database.Timestamptz(now),
 		})

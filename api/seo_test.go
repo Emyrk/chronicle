@@ -6,9 +6,16 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
+	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/Emyrk/chronicle/internal/services/testservices"
+	"github.com/Emyrk/chronicle/internal/testutil"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -62,6 +69,51 @@ func TestBrandingResolverNoIndex(t *testing.T) {
 	require.Equal(t, "noindex, nofollow", api.brandingResolver(tenantSEORequest(t, "/g/guild-id/edit", true)).Robots)
 	require.Equal(t, "noindex, nofollow", api.brandingResolver(tenantSEORequest(t, "/made-up-route", true)).Robots)
 	require.Equal(t, "noindex, nofollow", api.brandingResolver(tenantSEORequest(t, "/recent", false)).Robots)
+}
+
+func TestBrandingResolverNoIndexesUnlistedInstances(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(broker)
+	db := servicedbstore.DatabaseStore(broker)
+
+	ownerID := uuid.New()
+	serverID := uuid.New()
+	realmID := uuid.New()
+	logID := uuid.New()
+	instanceID := uuid.New()
+	const slug = "unlisted-seo-instance"
+
+	_, err := db.InsertUser(ctx, database.InsertUserParams{ID: ownerID, Username: "unlisted-seo-owner-" + ownerID.String()})
+	require.NoError(t, err)
+	_, err = db.InsertWoWServer(ctx, database.InsertWoWServerParams{ID: serverID, Name: "unlisted-seo-server-" + serverID.String()})
+	require.NoError(t, err)
+	_, err = db.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{ID: realmID, ServerID: serverID, Name: "Unlisted SEO Realm"})
+	require.NoError(t, err)
+
+	now := database.Timestamptz(time.Now())
+	_, err = zed.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+		ID: logID, Owner: ownerID, LogType: database.LogTypeV2, Unlisted: true,
+		CreatedAt: now, UpdatedAt: now,
+	})
+	require.NoError(t, err)
+	require.NoError(t, zed.InsertParsedLogGroup(ctx, logID))
+	_, err = zed.InsertInstance(ctx, database.InsertInstanceParams{
+		ID: instanceID, RealmID: realmID, LogGroupID: logID, Name: "Molten Core",
+		HashedSlug: pgtype.Text{String: slug, Valid: true}, Capabilities: []string{},
+		DifficultyName: "Normal", MaxPlayers: 40,
+	})
+	require.NoError(t, err)
+
+	api := testSEOAPI(t)
+	api.Zed = zed
+	for _, identifier := range []string{instanceID.String(), slug} {
+		request := httptest.NewRequest(http.MethodGet, "https://everlook.chronicleclassic.com/instances/"+identifier, nil)
+		request = request.WithContext(servicetenant.WithTenant(ctx, database.Tenant{Discoverable: true}))
+		require.Equal(t, "noindex, nofollow", api.brandingResolver(request).Robots)
+	}
 }
 
 func TestTenantRobotsAndSitemap(t *testing.T) {

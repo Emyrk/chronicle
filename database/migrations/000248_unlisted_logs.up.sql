@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE wow_log_groups
+ADD COLUMN unlisted BOOLEAN NOT NULL DEFAULT false;
+
+COMMIT;

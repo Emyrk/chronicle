@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
@@ -90,11 +91,11 @@ func (f *fakeExternalAPIStore) ListExternalAPILeaderboardDuplicateLogs(_ context
 	return f.leaderboardDuplicates, nil
 }
 
-func (f *fakeExternalAPIStore) Instance(_ context.Context, instanceID uuid.UUID) (database.LogInstancesGuild, error) {
+func (f *fakeExternalAPIStore) PublicInstance(_ context.Context, instanceID uuid.UUID) (database.LogInstancesGuild, error) {
 	f.instanceID = instanceID
 	return f.instance, f.instanceErr
 }
-func (f *fakeExternalAPIStore) InstanceBySlug(_ context.Context, slug pgtype.Text) (database.LogInstancesGuild, error) {
+func (f *fakeExternalAPIStore) PublicInstanceBySlug(_ context.Context, slug pgtype.Text) (database.LogInstancesGuild, error) {
 	f.instanceSlug = slug
 	return f.instance, f.instanceErr
 }
@@ -137,6 +138,46 @@ func (f *fakeExternalAPIStore) InstanceEvent(_ context.Context, params database.
 func (f *fakeExternalAPIStore) ListExternalAPIRecentInstances(_ context.Context, params database.ListExternalAPIRecentInstancesParams) ([]database.ListExternalAPIRecentInstancesRow, error) {
 	f.recentParams = params
 	return f.recent, nil
+}
+
+func TestInstanceByIdentifierUsesPublicLookups(t *testing.T) {
+	t.Parallel()
+
+	instanceID := uuid.New()
+	for _, tc := range []struct {
+		name       string
+		identifier string
+		check      func(*testing.T, *fakeExternalAPIStore)
+	}{
+		{
+			name: "uuid", identifier: instanceID.String(),
+			check: func(t *testing.T, store *fakeExternalAPIStore) {
+				require.Equal(t, instanceID, store.instanceID)
+				require.False(t, store.instanceSlug.Valid)
+			},
+		},
+		{
+			name: "slug", identifier: "public-slug",
+			check: func(t *testing.T, store *fakeExternalAPIStore) {
+				require.Equal(t, pgtype.Text{String: "public-slug", Valid: true}, store.instanceSlug)
+				require.Equal(t, uuid.Nil, store.instanceID)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			store := &fakeExternalAPIStore{}
+			service := &Service{db: store}
+			routeCtx := chi.NewRouteContext()
+			routeCtx.URLParams.Add("instance_id", tc.identifier)
+			req := httptest.NewRequest(http.MethodGet, "/instances/"+tc.identifier, nil)
+			req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+			_, err := service.instanceByIdentifier(req)
+			require.NoError(t, err)
+			tc.check(t, store)
+		})
+	}
 }
 
 func TestListServers(t *testing.T) {

@@ -68,6 +68,8 @@ LEFT JOIN guilds g ON g.id = gp.guild_id
 LEFT JOIN LATERAL (
     SELECT edr.player_spec, edr.player_role, edr.avg_ilvl
     FROM encounter_dps_rankings edr
+    JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
+    JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
     WHERE edr.realm_id = gp.realm_id
       AND edr.player_guid = gp.id::text
       AND edr.encounter_id IS NOT NULL
@@ -98,7 +100,7 @@ WITH participation AS (
         ) AS duplicate_rank
     FROM log_instance_players lip
     JOIN log_instances li ON li.id = lip.instance_id
-    JOIN wow_log_groups wlg ON wlg.id = li.log_group_id
+    JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
     WHERE lip.unit_guid = @player_guid::wow_guid
       AND li.realm_id = @realm_id
 ), deduped AS (
@@ -189,6 +191,7 @@ JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
   AND plg.parse_generation = wlg.parse_generation
   AND plg.finalized_at IS NOT NULL
+  AND NOT wlg.unlisted
 LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 LEFT JOIN guilds g ON g.id = li.guild_id
@@ -248,9 +251,11 @@ SELECT
     (youtube.video_url IS NOT NULL)::boolean AS has_youtube_video,
     COALESCE(youtube.video_url, '')::text AS youtube_url
 FROM log_instances selected
+JOIN wow_log_groups selected_group ON selected_group.id = selected.log_group_id AND NOT selected_group.unlisted
 JOIN log_instances duplicate
   ON duplicate.duplicate_group_id = selected.duplicate_group_id
  AND duplicate.id != selected.id
+JOIN wow_log_groups duplicate_group ON duplicate_group.id = duplicate.log_group_id AND NOT duplicate_group.unlisted
 JOIN wow_server_realms duplicate_realm ON duplicate_realm.id = duplicate.realm_id
 LEFT JOIN instance_speedruns duplicate_speedrun ON duplicate_speedrun.instance_id = duplicate.id
 LEFT JOIN LATERAL (

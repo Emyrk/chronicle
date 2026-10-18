@@ -1357,7 +1357,8 @@ CREATE TABLE wow_log_groups (
     flavor text[],
     invalidated_at timestamp with time zone,
     invalid_reason text DEFAULT ''::text NOT NULL,
-    parse_generation bigint DEFAULT 1 NOT NULL
+    parse_generation bigint DEFAULT 1 NOT NULL,
+    unlisted boolean DEFAULT false NOT NULL
 );
 
 CREATE TABLE wow_server_realms (

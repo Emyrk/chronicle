@@ -241,11 +241,8 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 		return fmt.Errorf("delete existing roles: %w", err)
 	}
 
-	if len(roles) == 0 {
-		return nil
-	}
-
-	// Re-create builder after delete (fresh txn)
+	// Re-create builder after delete (fresh txn). The baseline member role is
+	// always restored, even when the requested optional role set is empty.
 	b = policy.New()
 	gChron = b.GlobalChronicle()
 	usr = b.User(userID)
@@ -259,6 +256,8 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 			gChron.Admin(usr)
 		case "upload_capable":
 			gChron.Upload_capable(usr)
+		case "unlisted_log_capable":
+			gChron.Unlisted_log_capable(usr)
 		case "moderate_logs":
 			gChron.Moderate_logs(usr)
 		case "moderate_guilds":

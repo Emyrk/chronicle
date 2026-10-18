@@ -133,6 +133,24 @@ WHERE
   log_instances_guild.id = $1
 ;
 
+-- name: InstanceWithUnlisted :one
+SELECT sqlc.embed(log_instances_guild), wow_log_groups.unlisted
+FROM log_instances_guild
+JOIN wow_log_groups ON wow_log_groups.id = log_instances_guild.log_group_id
+WHERE log_instances_guild.id = $1;
+
+-- name: PublicInstance :one
+SELECT log_instances_guild.*
+FROM log_instances_guild
+JOIN wow_log_groups ON wow_log_groups.id = log_instances_guild.log_group_id AND NOT wow_log_groups.unlisted
+WHERE log_instances_guild.id = $1;
+
+-- name: PublicInstanceBySlug :one
+SELECT log_instances_guild.*
+FROM log_instances_guild
+JOIN wow_log_groups ON wow_log_groups.id = log_instances_guild.log_group_id AND NOT wow_log_groups.unlisted
+WHERE log_instances_guild.hashed_slug = $1;
+
 -- name: InstanceBySlug :one
 SELECT
   *
@@ -141,6 +159,13 @@ FROM
 WHERE
   hashed_slug = $1 AND hashed_slug != ''
 ;
+
+-- name: InstanceBySlugWithUnlisted :one
+SELECT sqlc.embed(log_instances_guild), wow_log_groups.unlisted
+FROM log_instances_guild
+JOIN wow_log_groups ON wow_log_groups.id = log_instances_guild.log_group_id
+WHERE log_instances_guild.hashed_slug = $1
+  AND log_instances_guild.hashed_slug != '';
 
 -- name: EncountersByInstanceID :many
 SELECT
@@ -250,6 +275,7 @@ JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
   AND plg.parse_generation = wlg.parse_generation
   AND plg.finalized_at IS NOT NULL
+  AND NOT wlg.unlisted
 LEFT JOIN instance_overview_metrics iom ON iom.instance_id = li.id
 LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
 JOIN users u ON u.id = wlg.owner
@@ -325,6 +351,7 @@ JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
   AND plg.parse_generation = wlg.parse_generation
   AND plg.finalized_at IS NOT NULL
+  AND NOT wlg.unlisted
 LEFT JOIN instance_overview_metrics iom ON iom.instance_id = li.id
 LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
 JOIN users u ON u.id = wlg.owner
@@ -385,8 +412,9 @@ WITH matching_runs AS (
     FROM log_instances li
     JOIN parsed_log_group plg ON plg.id = li.log_group_id
     JOIN wow_log_groups wlg ON wlg.id = plg.id
-  AND plg.parse_generation = wlg.parse_generation
-  AND plg.finalized_at IS NOT NULL
+      AND plg.parse_generation = wlg.parse_generation
+      AND plg.finalized_at IS NOT NULL
+      AND NOT wlg.unlisted
     LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
     WHERE (
           (li.start_time >= @start_time::timestamptz AND li.start_time < @end_time::timestamptz)
@@ -467,8 +495,9 @@ instance_rows AS (
     JOIN matching_runs ON matching_runs.run_id = COALESCE(li.duplicate_group_id, li.id)
     JOIN parsed_log_group plg ON plg.id = li.log_group_id
     JOIN wow_log_groups wlg ON wlg.id = plg.id
-  AND plg.parse_generation = wlg.parse_generation
-  AND plg.finalized_at IS NOT NULL
+      AND plg.parse_generation = wlg.parse_generation
+      AND plg.finalized_at IS NOT NULL
+      AND NOT wlg.unlisted
     LEFT JOIN instance_overview_metrics iom ON iom.instance_id = li.id
     LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
     JOIN users u ON u.id = wlg.owner
@@ -589,6 +618,7 @@ JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
   AND plg.parse_generation = wlg.parse_generation
   AND plg.finalized_at IS NOT NULL
+  AND NOT wlg.unlisted
 LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
 JOIN users u ON u.id = wlg.owner
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
@@ -654,6 +684,7 @@ ORDER BY lie.instance_id, lie.start_time ASC;
 -- name: FindDuplicateInstanceCandidates :many
 SELECT li.id, li.duplicate_group_id
 FROM log_instances li
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 WHERE li.realm_id = @realm_id
   AND li.name = @name
   AND li.invalidated_at IS NULL
@@ -735,6 +766,7 @@ JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
   AND plg.parse_generation = wlg.parse_generation
   AND plg.finalized_at IS NOT NULL
+  AND NOT wlg.unlisted
 JOIN users u ON u.id = wlg.owner
 WHERE li.duplicate_group_id = @duplicate_group_id
 ORDER BY li.id;

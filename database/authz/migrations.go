@@ -6,7 +6,6 @@ import (
 
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/google/uuid"
-
 )
 
 // AuthzMigration is a numbered authz schema migration.

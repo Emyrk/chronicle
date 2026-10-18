@@ -33,13 +33,14 @@ func InstanceIDMiddleware(db *authz.Authz) func(next http.Handler) http.Handler 
 			instanceIDStr := chi.URLParam(r, "instance_id")
 			instanceID, err := uuid.Parse(instanceIDStr)
 			var inst database.LogInstancesGuild
+			var unlisted bool
 			if err != nil {
-				inst, err = db.InstanceBySlug(r.Context(), pgtype.Text{
+				row, lookupErr := db.InstanceBySlugWithUnlisted(r.Context(), pgtype.Text{
 					String: instanceIDStr,
 					Valid:  true,
 				})
-				if err != nil {
-					httpapi.HandleResponseError(r.Context(), w, err, httpapi.APIError{
+				if lookupErr != nil {
+					httpapi.HandleResponseError(r.Context(), w, lookupErr, httpapi.APIError{
 						Response: chroniclesdk.Response{
 							Message: "Could not find instance",
 						},
@@ -48,11 +49,13 @@ func InstanceIDMiddleware(db *authz.Authz) func(next http.Handler) http.Handler 
 					})
 					return
 				}
+				inst = row.LogInstancesGuild
+				unlisted = row.Unlisted
 			} else {
 				r = r.WithContext(context.WithValue(r.Context(), instanceByIDKey{}, true))
-				inst, err = db.Instance(r.Context(), instanceID)
-				if err != nil {
-					httpapi.HandleResponseError(r.Context(), w, err, httpapi.APIError{
+				row, lookupErr := db.InstanceWithUnlisted(r.Context(), instanceID)
+				if lookupErr != nil {
+					httpapi.HandleResponseError(r.Context(), w, lookupErr, httpapi.APIError{
 						Response: chroniclesdk.Response{
 							Message: "Could not find instance by id",
 						},
@@ -61,9 +64,20 @@ func InstanceIDMiddleware(db *authz.Authz) func(next http.Handler) http.Handler 
 					})
 					return
 				}
+				inst = row.LogInstancesGuild
+				unlisted = row.Unlisted
 			}
 
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), instanceIDKey{}, inst)))
+			ctx := context.WithValue(r.Context(), instanceIDKey{}, inst)
+			ctx = context.WithValue(ctx, instanceUnlistedKey{}, unlisted)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+type instanceUnlistedKey struct{}
+
+func InstanceUnlisted(ctx context.Context) bool {
+	unlisted, _ := ctx.Value(instanceUnlistedKey{}).(bool)
+	return unlisted
 }

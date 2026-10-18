@@ -541,30 +541,28 @@ func (api *API) Routes() chi.Router {
 					r.Get("/recent", api.RecentInstances)
 					r.Get("/range", api.InstancesByTimeRange)
 					r.Route("/logs", func(r chi.Router) {
+						r.Get("/by-file-hash/{file-hash}", api.WoWLogGroupByFile)
+						r.Route("/{logID}", func(r chi.Router) {
+							r.Use(httpmw.LogIDMiddleware)
+							r.Get("/", api.WoWLogGroup)
+							r.Group(func(r chi.Router) {
+								r.Use(api.Auth.Authenticated(false))
+								r.Post("/reparse", api.WoWLogReparse)
+								r.Delete("/delete-files", api.DeleteWoWLogFiles)
+								r.Delete("/instances/{instance_id}", api.WoWLogDeleteInstance)
+								r.Put("/unlisted", api.MarkLogUnlisted)
+								r.Get("/files/{fileID}/download", api.WoWLogFileDownload)
+								r.Delete("/", api.WoWLogDeleteGroup)
+							})
+						})
 						r.Group(func(r chi.Router) {
-							r.Use(
-								api.Auth.Authenticated(false),
-							)
+							r.Use(api.Auth.Authenticated(false))
 							r.Group(func(r chi.Router) {
 								r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanUpload_log_User))
 								r.Post("/upload", api.WoWLogUpload)
 								r.Post("/upload-v2", api.WoWLogUploadV2)
 							})
 							r.Get("/", api.WoWLogGroups)
-							r.Get("/by-file-hash/{file-hash}", api.WoWLogGroupByFile)
-							r.Route("/{logID}", func(r chi.Router) {
-								r.Use(httpmw.LogIDMiddleware)
-								r.Group(func(r chi.Router) {
-									r.Post("/reparse", api.WoWLogReparse)
-									r.Delete("/delete-files", api.DeleteWoWLogFiles)
-									r.Delete("/instances/{instance_id}", api.WoWLogDeleteInstance)
-								})
-								r.Get("/", api.WoWLogGroup)
-								r.Get("/files/{fileID}/download", api.WoWLogFileDownload)
-								r.Group(func(r chi.Router) {
-									r.Delete("/", api.WoWLogDeleteGroup)
-								})
-							})
 						})
 					})
 
@@ -574,7 +572,6 @@ func (api *API) Routes() chi.Router {
 								r.Use(httpmw.InstanceIDMiddleware(api.Opts.Zed))
 								r.Get("/events/{type}", api.InstanceEvents)
 								r.With(api.trackGuildInstanceView).Get("/", api.Instance)
-
 								r.Get("/youtube", api.GetInstanceYoutube)
 								r.Get("/loot", api.GetInstanceLoot)
 								r.Get("/raid-group", api.InstanceRaidGroup)
@@ -586,9 +583,7 @@ func (api *API) Routes() chi.Router {
 								r.Get("/duplicates", api.ListDuplicateInstances)
 
 								r.Group(func(r chi.Router) {
-									r.Use(
-										api.Auth.Authenticated(false),
-									)
+									r.Use(api.Auth.Authenticated(false))
 									r.Post("/youtube", api.PostInstanceYoutube)
 								})
 

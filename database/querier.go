@@ -379,6 +379,7 @@ type sqlcQuerier interface {
 	GetUsersByIDs(ctx context.Context, ids []uuid.UUID) ([]ChronicleUser, error)
 	GetWoWLogFilesByGroupID(ctx context.Context, wowLogID uuid.UUID) ([]LogFile, error)
 	GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetWoWLogGroupByIDRow, error)
+	GetWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) (bool, error)
 	GetWoWLogGroupsByOwner(ctx context.Context, arg GetWoWLogGroupsByOwnerParams) ([]GetWoWLogGroupsByOwnerRow, error)
 	GetWoWServer(ctx context.Context, id uuid.UUID) (WowServer, error)
 	GetWoWServerByName(ctx context.Context, name string) (WowServer, error)
@@ -501,6 +502,7 @@ type sqlcQuerier interface {
 	Instance(ctx context.Context, id uuid.UUID) (LogInstancesGuild, error)
 	InstanceAnalyticsGroupKey(ctx context.Context, instanceID uuid.UUID) (string, error)
 	InstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (LogInstancesGuild, error)
+	InstanceBySlugWithUnlisted(ctx context.Context, hashedSlug pgtype.Text) (InstanceBySlugWithUnlistedRow, error)
 	InstanceEvent(ctx context.Context, arg InstanceEventParams) (LogInstanceEvent, error)
 	InstancePlayerGUIDsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]guid.GUID, error)
 	InstancePlayerSpecs(ctx context.Context, instanceID uuid.UUID) ([]InstancePlayerSpecsRow, error)
@@ -515,6 +517,7 @@ type sqlcQuerier interface {
 	// realm, or guild. Duplicate uploads are collapsed without reducing to one run per guild.
 	InstanceSpeedrunCohort(ctx context.Context, arg InstanceSpeedrunCohortParams) ([]InstanceSpeedrunCohortRow, error)
 	InstanceUnitsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceUnit, error)
+	InstanceWithUnlisted(ctx context.Context, id uuid.UUID) (InstanceWithUnlistedRow, error)
 	InvalidateOAuthDeviceSession(ctx context.Context, deviceSignature string) (int64, error)
 	InvalidateWoWLogGroup(ctx context.Context, arg InvalidateWoWLogGroupParams) error
 	IsLayoutTrackedByUser(ctx context.Context, arg IsLayoutTrackedByUserParams) (bool, error)
@@ -675,14 +678,18 @@ type sqlcQuerier interface {
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
 	MarkLogFilePartFailed(ctx context.Context, arg MarkLogFilePartFailedParams) error
 	MarkWhatsNewRead(ctx context.Context, arg MarkWhatsNewReadParams) (UserWhatsNewState, error)
+	MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) (WoWLogGroup, error)
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
 	PruneParsedInstanceFromLogOutput(ctx context.Context, arg PruneParsedInstanceFromLogOutputParams) error
 	// Removes summary cards whose instance/difficulty/player-count combination no
 	// longer has any ranking rows visible to the current tenant context.
 	PruneStaleRankingsInstanceSummaries(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	PublicInstance(ctx context.Context, id uuid.UUID) (LogInstancesGuild, error)
+	PublicInstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (LogInstancesGuild, error)
 	RankingRunByID(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	RankingRunIdentitiesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]RankingRunIdentitiesByInstanceIDsRow, error)
 	RankingRunIdentitiesByLogGroupID(ctx context.Context, logGroupID uuid.UUID) ([]RankingRunIdentitiesByLogGroupIDRow, error)
+	RankingRunLogGroupIDs(ctx context.Context, runIds []uuid.UUID) ([]uuid.UUID, error)
 	RankingRunRepairVerification(ctx context.Context, queryLimit int32) ([]RankingRunRepairVerificationRow, error)
 	RankingRunSources(ctx context.Context, affectedIds []uuid.UUID) ([]RankingRunSourcesRow, error)
 	// Returns box plot statistics (min, q1, median, q3, max, count) per class/spec.

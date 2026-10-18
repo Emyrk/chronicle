@@ -26,6 +26,7 @@ representative_instances AS MATERIALIZED (
         instance.id,
         COALESCE(instance.duplicate_group_id, instance.id) AS run_id
     FROM log_instances instance
+    JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
     JOIN affected_runs affected
       ON affected.run_id = COALESCE(instance.duplicate_group_id, instance.id)
     WHERE instance.invalidated_at IS NULL
@@ -97,6 +98,7 @@ SELECT
 -- name: GetTimeParseClearTimeMembershipCohort :many
 SELECT membership.duration_ms
 FROM time_parse_clear_time_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 WHERE membership.tenant_id = @tenant_id
   AND membership.policy_version = @policy_version
   AND membership.query_version = @query_version
@@ -108,7 +110,8 @@ WHERE membership.tenant_id = @tenant_id
   AND membership.max_players = @max_players;
 
 -- name: ListTimeParseClearTimeMemberships :many
-SELECT * FROM time_parse_clear_time_memberships
+SELECT membership.* FROM time_parse_clear_time_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 WHERE tenant_id = @tenant_id
   AND policy_version = @policy_version
   AND query_version = @query_version
@@ -137,6 +140,7 @@ representative_instances AS MATERIALIZED (
         instance.id,
         COALESCE(instance.duplicate_group_id, instance.id) AS run_id
     FROM log_instances instance
+    JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
     JOIN affected_runs affected
       ON affected.run_id = COALESCE(instance.duplicate_group_id, instance.id)
     WHERE instance.invalidated_at IS NULL
@@ -216,6 +220,7 @@ SELECT
 -- name: GetTimeParseBossKillMembershipCohort :many
 SELECT membership.duration_ms
 FROM time_parse_boss_kill_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 WHERE membership.tenant_id = @tenant_id
   AND membership.policy_version = @policy_version
   AND membership.query_version = @query_version
@@ -228,7 +233,8 @@ WHERE membership.tenant_id = @tenant_id
   AND membership.max_players = @max_players;
 
 -- name: ListTimeParseBossKillMemberships :many
-SELECT * FROM time_parse_boss_kill_memberships
+SELECT membership.* FROM time_parse_boss_kill_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 WHERE tenant_id = @tenant_id
   AND policy_version = @policy_version
   AND query_version = @query_version
@@ -242,6 +248,7 @@ SELECT
     membership.max_players,
     COUNT(*)::bigint AS sample_size
 FROM time_parse_boss_kill_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 WHERE membership.tenant_id = @tenant_id
   AND membership.policy_version = @policy_version
   AND membership.query_version = @query_version
@@ -259,6 +266,7 @@ SELECT
     membership.max_players,
     COUNT(*)::bigint AS sample_size
 FROM time_parse_clear_time_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 WHERE membership.tenant_id = @tenant_id
   AND membership.policy_version = @policy_version
   AND membership.query_version = @query_version
@@ -276,7 +284,8 @@ SELECT
     guild.id AS guild_id,
     guild.name AS guild_name
 FROM time_parse_boss_kill_memberships membership
-LEFT JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 LEFT JOIN guilds guild ON guild.id = instance.guild_id
 WHERE membership.tenant_id = @tenant_id
   AND membership.policy_version = @policy_version
@@ -298,7 +307,8 @@ SELECT
     guild.id AS guild_id,
     guild.name AS guild_name
 FROM time_parse_clear_time_memberships membership
-LEFT JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN log_instances instance ON instance.id = membership.instance_id
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 LEFT JOIN guilds guild ON guild.id = instance.guild_id
 WHERE membership.tenant_id = @tenant_id
   AND membership.policy_version = @policy_version
@@ -319,6 +329,7 @@ SELECT
     membership.max_players,
     membership.duration_ms
 FROM time_parse_boss_kill_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 WHERE membership.tenant_id = @tenant_id
   AND membership.policy_version = @policy_version
   AND membership.query_version = @query_version
@@ -333,6 +344,7 @@ SELECT
     membership.max_players,
     membership.duration_ms
 FROM time_parse_clear_time_memberships membership
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 WHERE membership.tenant_id = @tenant_id
   AND membership.policy_version = @policy_version
   AND membership.query_version = @query_version

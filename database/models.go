@@ -2485,6 +2485,7 @@ type WoWLogGroup struct {
 	InvalidatedAt   pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
 	InvalidReason   string             `db:"invalid_reason" json:"invalid_reason"`
 	ParseGeneration int64              `db:"parse_generation" json:"parse_generation"`
+	Unlisted        bool               `db:"unlisted" json:"unlisted"`
 }
 
 type World struct {

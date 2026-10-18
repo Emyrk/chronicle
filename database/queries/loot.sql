@@ -29,6 +29,7 @@ WITH ranked AS (
     ) AS drop_idx
   FROM instance_loot il
   JOIN log_instances li ON li.id = il.instance_id
+  JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
   WHERE il.realm_id = @realm_id
     AND il.received_guid = @received_guid
 ),

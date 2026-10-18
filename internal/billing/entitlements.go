@@ -19,7 +19,7 @@ const (
 
 	EntitlementStorage300MB    Entitlement = "+300mb-storage"
 	EntitlementDownloadRawLogs Entitlement = "download-raw-logs"
-	EntitlementPrivateLogs     Entitlement = "private-logs"
+	EntitlementUnlistedLogs    Entitlement = "unlisted-logs"
 	EntitlementAdFree          Entitlement = "ad-free"
 )
 

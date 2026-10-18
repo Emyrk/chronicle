@@ -85,9 +85,9 @@ type instanceRankingParseValue struct {
 func (s *Service) instanceByIdentifier(r *http.Request) (database.LogInstancesGuild, error) {
 	identifier := chi.URLParam(r, "instance_id")
 	if instanceID, err := uuid.Parse(identifier); err == nil {
-		return s.db.Instance(r.Context(), instanceID)
+		return s.db.PublicInstance(r.Context(), instanceID)
 	}
-	return s.db.InstanceBySlug(r.Context(), pgtype.Text{String: identifier, Valid: identifier != ""})
+	return s.db.PublicInstanceBySlug(r.Context(), pgtype.Text{String: identifier, Valid: identifier != ""})
 }
 
 func (s *Service) getInstanceBySlug(w http.ResponseWriter, r *http.Request) {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/authzed/gochugaru/rel"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -193,6 +194,111 @@ func TestGuildDiscordBotPermissions(t *testing.T) {
 
 	require.NoError(t, zed.SetGuildDiscordBotEnabled(ctx, guildID, false))
 	checkManage(t, leaderID, false)
+}
+
+func TestSetUserChronicleRolesSupportsUnlistedCapability(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(broker)
+	userID := uuid.New()
+
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"unlisted_log_capable"}))
+	roles, err := zed.UserChronicleRoles(ctx, userID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"chronicle_member", "unlisted_log_capable"}, roles)
+
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, nil))
+	roles, err = zed.UserChronicleRoles(ctx, userID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"chronicle_member"}, roles)
+}
+
+func TestLogUnlistedRoles(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(broker)
+
+	ownerID := uuid.New()
+	otherUnlistedID := uuid.New()
+	adminID := uuid.New()
+	logID := uuid.New()
+
+	b := policy.New()
+	chronicle := b.GlobalChronicle()
+	chronicle.Unlisted_log_capable(b.User(ownerID))
+	chronicle.Unlisted_log_capable(b.User(otherUnlistedID))
+	chronicle.Moderate_logs(b.User(adminID))
+	b.Raid_log(logID).Uploader(b.User(ownerID)).Chronicle(chronicle)
+	_, err := zed.Write(ctx, *b.Txn())
+	require.NoError(t, err)
+
+	check := func(userID uuid.UUID, expected bool) {
+		t.Helper()
+		allowed, err := zed.CheckOne(ctx, nil, rel.Relationship{
+			ResourceType: "raid_log", ResourceID: logID.String(), ResourceRelation: "mark_unlisted",
+			SubjectType: "user", SubjectID: userID.String(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, expected, allowed)
+	}
+
+	check(ownerID, true)
+	check(otherUnlistedID, false)
+	check(adminID, true)
+}
+
+func TestMarkWoWLogGroupUnlistedKeepsInstancePublic(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(broker)
+	db := servicedbstore.DatabaseStore(broker)
+
+	ownerID := uuid.New()
+	otherID := uuid.New()
+	serverID := uuid.New()
+	realmID := uuid.New()
+	logID := uuid.New()
+	instanceID := uuid.New()
+
+	_, err := db.InsertUser(ctx, database.InsertUserParams{ID: ownerID, Username: "unlisted-owner-" + ownerID.String()})
+	require.NoError(t, err)
+	_, err = db.InsertWoWServer(ctx, database.InsertWoWServerParams{ID: serverID, Name: "unlisted-server-" + serverID.String()})
+	require.NoError(t, err)
+	_, err = db.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{ID: realmID, ServerID: serverID, Name: "unlisted-realm-" + realmID.String()})
+	require.NoError(t, err)
+
+	now := database.Timestamptz(time.Now())
+	_, err = zed.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+		ID: logID, Owner: ownerID, LogType: database.LogTypeV1, CreatedAt: now, UpdatedAt: now,
+	})
+	require.NoError(t, err)
+	require.NoError(t, zed.InsertParsedLogGroup(ctx, logID))
+	_, err = zed.InsertInstance(ctx, database.InsertInstanceParams{
+		ID: instanceID, RealmID: realmID, LogGroupID: logID, Name: "Molten Core",
+		Capabilities: []string{}, DifficultyName: "Normal", MaxPlayers: 40,
+	})
+	require.NoError(t, err)
+
+	checkView := func() {
+		t.Helper()
+		allowed, err := zed.CheckOne(ctx, nil, rel.Relationship{
+			ResourceType: "instance", ResourceID: instanceID.String(), ResourceRelation: "view",
+			SubjectType: "user", SubjectID: otherID.String(),
+		})
+		require.NoError(t, err)
+		require.True(t, allowed)
+	}
+	checkView()
+
+	_, err = zed.MarkWoWLogGroupUnlisted(ctx, logID)
+	require.NoError(t, err)
+	checkView()
 }
 
 func TestInTx_NilWrapped(t *testing.T) {

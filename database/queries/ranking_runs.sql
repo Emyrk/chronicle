@@ -19,6 +19,13 @@ FROM log_instances li
 WHERE li.log_group_id = @log_group_id
 ORDER BY li.id;
 
+-- name: RankingRunLogGroupIDs :many
+SELECT DISTINCT li.log_group_id
+FROM log_instances li
+WHERE COALESCE(li.duplicate_group_id, li.id) = ANY(@run_ids::uuid[])
+   OR li.id = ANY(@run_ids::uuid[])
+ORDER BY li.log_group_id;
+
 -- name: RankingRunByID :one
 SELECT *
 FROM ranking_runs
@@ -54,6 +61,7 @@ members AS MATERIALIZED (
     CROSS JOIN LATERAL (
         SELECT candidate.*
         FROM log_instances candidate
+        JOIN wow_log_groups candidate_group ON candidate_group.id = candidate.log_group_id AND NOT candidate_group.unlisted
         WHERE COALESCE(candidate.duplicate_group_id, candidate.id) = affected_runs.run_id
           AND candidate.invalidated_at IS NULL
         -- Prevent flattening into a hash join that scans all log_instances.
@@ -200,6 +208,7 @@ WITH members AS MATERIALIZED (
             WHERE coverage.encounter_id IS NOT NULL
         )::integer AS boss_coverage
     FROM log_instances li
+    JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
     LEFT JOIN encounter_dps_rankings coverage ON coverage.instance_id = li.id
     WHERE li.invalidated_at IS NULL
     GROUP BY li.id
