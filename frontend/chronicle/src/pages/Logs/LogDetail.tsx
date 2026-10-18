@@ -26,7 +26,6 @@ import {
   ChevronRight,
   AlertTriangle,
   Fingerprint,
-  LockKeyhole,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
@@ -1192,6 +1191,14 @@ export function LogDetailView({
                   {log.owner_name && <> by <span className="text-foreground">{log.owner_name}</span></>}
                 </span>
                 <StatusBadge state={log.status.state} errors={log.status.errors} />
+                {!log.unlisted && canMarkUnlisted && (
+                  <UnlistedConfirmationDialog
+                    compact
+                    disabled={isMarkingUnlisted}
+                    isPending={isMarkingUnlisted}
+                    onConfirm={onMarkUnlisted}
+                  />
+                )}
               </div>
             </div>
 
@@ -1469,27 +1476,7 @@ export function LogDetailView({
             </div>
           </Card>
 
-
           {processingDone && <ProcessingStatusCard log={log} />}
-
-          {!log.unlisted && canMarkUnlisted && (
-            <Card className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="flex items-center gap-2 text-lg font-semibold">
-                  <LockKeyhole className="h-5 w-5 text-amber-400" />
-                  Make log unlisted
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Unlisted logs are excluded from rankings and public discovery. Anyone with the link can view them, and this change cannot be reversed.
-                </p>
-              </div>
-              <UnlistedConfirmationDialog
-                disabled={isMarkingUnlisted}
-                isPending={isMarkingUnlisted}
-                onConfirm={onMarkUnlisted}
-              />
-            </Card>
-          )}
 
           {/* Timing Report - only shows for completed log-parse jobs with report */}
           {parsedOutput?.report && (

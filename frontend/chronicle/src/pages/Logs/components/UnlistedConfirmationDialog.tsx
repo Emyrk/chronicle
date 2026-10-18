@@ -14,12 +14,15 @@ interface UnlistedConfirmationDialogProps {
   disabled?: boolean;
   isPending: boolean;
   onConfirm: () => void;
+  /** Render the trigger as a small, muted inline button (it's a rare action). */
+  compact?: boolean;
 }
 
 export function UnlistedConfirmationDialog({
   disabled = false,
   isPending,
   onConfirm,
+  compact = false,
 }: UnlistedConfirmationDialogProps) {
   const [step, setStep] = useState<0 | 1 | 2>(0);
 
@@ -31,7 +34,14 @@ export function UnlistedConfirmationDialog({
 
   return (
     <>
-      <Button variant="outline" disabled={disabled} onClick={() => setStep(1)}>
+      <Button
+        variant={compact ? "ghost" : "outline"}
+        size={compact ? "sm" : "default"}
+        disabled={disabled}
+        onClick={() => setStep(1)}
+        className={compact ? "h-auto gap-1 px-1.5 py-0.5 text-xs font-normal text-muted-foreground" : undefined}
+      >
+        {compact && <LockKeyhole className="h-3 w-3" />}
         Make unlisted
       </Button>
 
