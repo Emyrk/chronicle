@@ -920,12 +920,16 @@ function BuiltinEventsPanel({
         bleed={hoverHeader}
         front={(
           <>
-            <div className={cn(
-              "flex items-center justify-between",
-              hoverHeader
-                ? "absolute inset-x-0 top-0 z-50 bg-gradient-to-b from-black/85 via-black/55 to-transparent px-3 pb-4 pt-2 opacity-0 transition-opacity group-hover/panel:opacity-100 group-focus-within/panel:opacity-100"
-                : "mb-1",
-            )}>
+            <div
+              // Shown when the cursor reaches the top band it covers (it stays hoverable while invisible).
+              data-hover-header={hoverHeader || undefined}
+              className={cn(
+                "flex items-center justify-between",
+                hoverHeader
+                  ? "absolute inset-x-0 top-0 z-50 bg-gradient-to-b from-black/85 via-black/55 to-transparent px-3 pb-4 pt-2 opacity-0 transition-opacity hover:opacity-100 focus-within:opacity-100"
+                  : "mb-1",
+              )}
+            >
               <h3 className="text-sm font-medium flex items-center gap-2">
                 {customTitle ? (
                   <>

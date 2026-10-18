@@ -19,7 +19,11 @@ interface PanelCardProps {
   borderColor?: string | null;
   front: ReactNode;
   back: ReactNode;
-  /** The front has no padding: content runs to the edges (the panel's hoverHeader floats over it). */
+  /**
+   * The front has no padding: content runs to the edges (the panel's hoverHeader
+   * floats over it). Content can react to the header showing with
+   * `group-has-[[data-hover-header]:hover]/panel:*`.
+   */
   bleed?: boolean;
 }
 

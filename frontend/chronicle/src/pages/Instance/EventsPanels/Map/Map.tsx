@@ -140,10 +140,11 @@ function ExpandMapButton({ context }: { context: PanelRenderProps<MapResult>["co
 
 /**
  * The mini map's seek bar, floating centred just above the corner controls: a
- * thin line that thickens on hover; click or drag to seek.
+ * thin line that thickens on hover; click or drag to seek. `raised` lifts it
+ * over the "Replay from here" button while the preview shows.
  * `fraction` is how far through the fight it is.
  */
-function MiniScrubber({ fraction, onSeek }: { fraction: number; onSeek: (fraction: number) => void }) {
+function MiniScrubber({ fraction, onSeek, raised = false }: { fraction: number; onSeek: (fraction: number) => void; raised?: boolean }) {
   const percent = Math.min(100, Math.max(0, fraction * 100));
   const seekAt = (event: React.PointerEvent<HTMLDivElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -156,7 +157,7 @@ function MiniScrubber({ fraction, onSeek }: { fraction: number; onSeek: (fractio
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(percent)}
-      className="group/scrub absolute bottom-10 left-1/2 z-40 h-3 w-1/2 -translate-x-1/2 cursor-pointer touch-none"
+      className={cn("group/scrub absolute left-1/2 z-40 h-3 w-1/2 -translate-x-1/2 cursor-pointer touch-none", raised ? "bottom-[4.25rem]" : "bottom-10")}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -515,30 +516,31 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
           <>
             {/* Replay is off: a greyed preview, with the way to the real Replay controls. */}
             <div className="pointer-events-none absolute inset-0 z-30 bg-slate-900/25 backdrop-saturate-50" aria-hidden />
-            {/* Slides below the card's title row while it shows on hover (hoverHeader). */}
-            <div className="absolute left-2 top-2 z-40 flex items-center gap-1 transition-transform group-hover/panel:translate-y-9">
-              <span className="pointer-events-none rounded-sm bg-black/75 px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/70">Preview</span>
-              {props.context.onOpenReplay && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    // Hand the preview over to Replay at the same moment, still playing.
-                    // Enabled first, so the Replay controls keep this point rather than resetting.
-                    if (sync) {
-                      sync.enable();
-                      sync.setTimestamp(new Date(ready.cursorMs));
-                      sync.play();
-                    }
-                    props.context.onOpenReplay?.();
-                  }}
-                  title="Continue in Replay from here"
-                  className={mapFramingButtonClass}
-                >
-                  <Timer className="h-3 w-3" />
-                  Replay
-                </button>
-              )}
-            </div>
+            {/* Fades while the card's title row shows over it (hoverHeader). */}
+            <span className="pointer-events-none absolute left-2 top-2 z-40 rounded-sm bg-black/75 px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/70 transition-opacity group-has-[[data-hover-header]:hover]/panel:opacity-0">
+              Preview
+            </span>
+            {/* The way out of the preview: centred under the scrubber. */}
+            {props.context.onOpenReplay && (
+              <button
+                type="button"
+                onClick={() => {
+                  // Hand the preview over to Replay at the same moment, still playing.
+                  // Enabled first, so the Replay controls keep this point rather than resetting.
+                  if (sync) {
+                    sync.enable();
+                    sync.setTimestamp(new Date(ready.cursorMs));
+                    sync.play();
+                  }
+                  props.context.onOpenReplay?.();
+                }}
+                title="Turn on Replay at this moment and open its controls"
+                className="absolute bottom-10 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 whitespace-nowrap rounded-sm border border-black/60 bg-primary/90 px-2.5 py-1 text-[11px] font-medium text-primary-foreground shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-primary"
+              >
+                <Timer className="h-3.5 w-3.5" />
+                Replay from here
+              </button>
+            )}
           </>
         )}
         {/* Play/pause and speed: the preview's own clock, or the page's Replay once it is on. */}
@@ -562,6 +564,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
         )}
         {mini && (
           <MiniScrubber
+            raised={previewOn && Boolean(props.context.onOpenReplay)}
             fraction={(ready.cursorMs - ready.encounterStartMs) / Math.max(1, ready.encounterEndMs - ready.encounterStartMs)}
             onSeek={(fraction) => {
               const span = ready.encounterEndMs - ready.encounterStartMs;
