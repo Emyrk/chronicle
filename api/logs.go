@@ -94,13 +94,6 @@ func (api *API) WoWLogGroupByFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logID := file.WowLogID
-	actor, _ := authz.ActorFromContext(ctx)
-	ok, err := api.Zed.CheckOne(ctx, nil, policy.New().Raid_log(logID).CanView_User(actor))
-	if !ok || err != nil {
-		httpapi.Forbidden(w, err)
-		return
-	}
-
 	resp, err := api.Chronicle.WoWLogGroup(ctx, logID)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -119,13 +112,6 @@ func (api *API) WoWLogGroupByFile(w http.ResponseWriter, r *http.Request) {
 func (api *API) WoWLogGroup(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logID := httpmw.LogID(ctx)
-	actor, _ := authz.ActorFromContext(ctx)
-	ok, err := api.Zed.CheckOne(ctx, nil, policy.New().Raid_log(logID).CanView_User(actor))
-	if !ok || err != nil {
-		httpapi.Forbidden(w, err)
-		return
-	}
-
 	resp, err := api.Chronicle.WoWLogGroup(ctx, logID)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{

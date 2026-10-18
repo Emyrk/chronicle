@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestReconcilePrivateLogGroupRemovesCohortMemberships(t *testing.T) {
+func TestReconcileUnlistedLogGroupRemovesCohortMemberships(t *testing.T) {
 	t.Parallel()
 
 	ctx := testutil.Context(t, testutil.WaitMedium)
@@ -49,15 +49,15 @@ func TestReconcilePrivateLogGroupRemovesCohortMemberships(t *testing.T) {
 		EncounterName: "Razorgore", InstanceName: "Blackwing Lair", PlayerGuid: "1", PlayerName: "Mage",
 		PlayerClass: "Mage", PlayerSpec: "Frost", PlayerRole: "dps", PlayerLevel: 60,
 		DifficultyName: "Normal", MaxPlayers: 40, RealmID: realmID, RealmName: "Test Realm",
-		DamageDone: 1000, DurationSecs: 60, Dps: 100, LogHashedSlug: "private-log", KilledAt: database.Timestamptz(startedAt.Add(time.Minute)),
+		DamageDone: 1000, DurationSecs: 60, Dps: 100, LogHashedSlug: "unlisted-log", KilledAt: database.Timestamptz(startedAt.Add(time.Minute)),
 	}))
 
 	refreshVisibilityMemberships(t, ctx, store, logGroupID)
 	requireVisibilityMembershipCounts(t, ctx, store, 1, 1, 1)
 
-	_, err = zed.UpdateWoWLogGroupPrivacy(ctx, database.UpdateWoWLogGroupPrivacyParams{ID: logGroupID, Private: true})
+	_, err = zed.MarkWoWLogGroupUnlisted(ctx, logGroupID)
 	require.NoError(t, err)
-	require.NoError(t, chron.ReconcilePrivateLogGroup(ctx, logGroupID))
+	require.NoError(t, chron.ReconcileUnlistedLogGroup(ctx, logGroupID))
 	requireVisibilityMembershipCounts(t, ctx, store, 0, 0, 0)
 
 	_, err = store.GetInstanceSpeedrun(ctx, instanceID)
@@ -67,7 +67,7 @@ func TestReconcilePrivateLogGroupRemovesCohortMemberships(t *testing.T) {
 	require.Len(t, rankings, 1)
 }
 
-func TestReconcilePrivateLogGroupUnlinksDuplicates(t *testing.T) {
+func TestReconcileUnlistedLogGroupUnlinksDuplicates(t *testing.T) {
 	t.Parallel()
 
 	ctx := testutil.Context(t, testutil.WaitMedium)
@@ -78,21 +78,21 @@ func TestReconcilePrivateLogGroupUnlinksDuplicates(t *testing.T) {
 	ownerID, realmID := insertVisibilityTestOwnerAndRealm(t, ctx, store)
 	startedAt := time.Now().UTC().Add(-time.Hour)
 	publicLogID := insertVisibilityTestLogGroup(t, ctx, store, ownerID)
-	privateLogID := insertVisibilityTestLogGroup(t, ctx, store, ownerID)
+	unlistedLogID := insertVisibilityTestLogGroup(t, ctx, store, ownerID)
 	publicInstanceID := insertVisibilityTestInstance(t, ctx, store, publicLogID, realmID, "Molten Core", startedAt)
-	privateInstanceID := insertVisibilityTestInstance(t, ctx, store, privateLogID, realmID, "Molten Core", startedAt.Add(time.Minute))
+	unlistedInstanceID := insertVisibilityTestInstance(t, ctx, store, unlistedLogID, realmID, "Molten Core", startedAt.Add(time.Minute))
 
 	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
 		DuplicateGroupID: uuid.NullUUID{UUID: publicInstanceID, Valid: true},
-		Ids:              []uuid.UUID{publicInstanceID, privateInstanceID},
+		Ids:              []uuid.UUID{publicInstanceID, unlistedInstanceID},
 	}))
-	_, err := zed.UpdateWoWLogGroupPrivacy(ctx, database.UpdateWoWLogGroupPrivacyParams{ID: privateLogID, Private: true})
+	_, err := zed.MarkWoWLogGroupUnlisted(ctx, unlistedLogID)
 	require.NoError(t, err)
-	require.NoError(t, chron.ReconcilePrivateLogGroup(ctx, privateLogID))
+	require.NoError(t, chron.ReconcileUnlistedLogGroup(ctx, unlistedLogID))
 
-	privateInstance, err := store.Instance(ctx, privateInstanceID)
+	unlistedInstance, err := store.Instance(ctx, unlistedInstanceID)
 	require.NoError(t, err)
-	require.False(t, privateInstance.DuplicateGroupID.Valid)
+	require.False(t, unlistedInstance.DuplicateGroupID.Valid)
 	publicInstance, err := store.Instance(ctx, publicInstanceID)
 	require.NoError(t, err)
 	require.True(t, publicInstance.DuplicateGroupID.Valid)

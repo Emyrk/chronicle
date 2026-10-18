@@ -116,7 +116,7 @@ export interface UploadViewProps {
   authLoading: boolean;
   hasUploadPermission: boolean;
   hasAdminLogs: boolean;
-  canMarkPrivate: boolean;
+  canMarkUnlisted: boolean;
   combatLog: File | null;
   rawCombatLog: File | null;
   uploading: boolean;
@@ -142,8 +142,8 @@ export interface UploadViewProps {
   selectedFormat: string;
   /** Callback when the user picks a format. */
   onFormatSelect: (value: string) => void;
-  privateLog: boolean;
-  onPrivateLogChange: (value: boolean) => void;
+  unlistedLog: boolean;
+  onUnlistedLogChange: (value: boolean) => void;
 }
 
 export function UploadView({
@@ -151,7 +151,7 @@ export function UploadView({
   authLoading,
   hasUploadPermission,
   hasAdminLogs,
-  canMarkPrivate,
+  canMarkUnlisted,
   combatLog,
   rawCombatLog,
   uploading,
@@ -171,8 +171,8 @@ export function UploadView({
   selectedFormat,
   onFormatSelect,
   configLoaded,
-  privateLog,
-  onPrivateLogChange,
+  unlistedLog,
+  onUnlistedLogChange,
 }: UploadViewProps) {
   return (
     <div className="max-w-4xl mx-auto p-8 space-y-8">
@@ -321,9 +321,9 @@ export function UploadView({
             )}
 
             <VisibilityPicker
-              privateLog={privateLog}
-              canMarkPrivate={canMarkPrivate}
-              onChange={onPrivateLogChange}
+              unlistedLog={unlistedLog}
+              canMarkUnlisted={canMarkUnlisted}
+              onChange={onUnlistedLogChange}
             />
 
             {/* Format selector — visible to everyone when >1 available, or always for admins */}
@@ -436,7 +436,7 @@ export function UploadView({
                       {" · "}
                     </>
                   )}
-                  {privateLog ? "Private" : "Public"}
+                  {unlistedLog ? "Unlisted" : "Public"}
                 </p>
                 <Button
                   onClick={onUpload}
@@ -487,14 +487,14 @@ export function Upload() {
   const authzChecks = useMemo(() => ({ 
     upload: "chronicle:chronicle#upload_log",
     adminLogs: "chronicle:chronicle#admin_logs",
-    markPrivate: "chronicle:chronicle#mark_log_private",
+    markUnlisted: "chronicle:chronicle#mark_log_unlisted",
   }), []);
   const { data: authz } = useAuthorizationCheck(authzChecks, {
     enabled: isAuthenticated,
   });
   const hasUploadPermission = authz?.upload ?? false;
   const hasAdminLogs = authz?.adminLogs ?? false;
-  const canMarkPrivate = authz?.markPrivate ?? false;
+  const canMarkUnlisted = authz?.markUnlisted ?? false;
 
   const { data: siteConfig, isFetched: configLoaded } = useSiteConfig();
   const { data: flavorTags = [] } = useFlavors();
@@ -548,7 +548,7 @@ export function Upload() {
   const [searchParams] = useSearchParams();
   const isMultiple = searchParams.get("multiple") === "true";
   const showLegacy = searchParams.get("debug") === "true";
-  const [privateLog, setPrivateLog] = useState(false);
+  const [unlistedLog, setUnlistedLog] = useState(false);
   const [useV2Upload, setUseV2Upload] = useState(true);
 
   const handleToggleV2Upload = useCallback((checked: boolean) => {
@@ -681,7 +681,7 @@ export function Upload() {
         ? "/api/v1/raidlogs/logs/upload-v2"
         : "/api/v1/raidlogs/logs/upload";
       const params = new URLSearchParams();
-      params.set("private", String(privateLog));
+      params.set("unlisted", String(unlistedLog));
       if (useV2Upload) {
         // Send the resolved format and any admin flavor override.
         if (effectiveFormat) params.set("format", effectiveFormat);
@@ -697,10 +697,10 @@ export function Upload() {
         detail: err instanceof Error ? err.message : String(err),
       });
     }
-  }, [combatLog, rawCombatLog, useV2Upload, effectiveFormat, flavorOverride, privateLog]);
+  }, [combatLog, rawCombatLog, useV2Upload, effectiveFormat, flavorOverride, unlistedLog]);
 
   if (isMultiple) {
-    return <MultiUpload format={effectiveFormat} privateLog={privateLog} canMarkPrivate={canMarkPrivate} onPrivateLogChange={setPrivateLog} />;
+    return <MultiUpload format={effectiveFormat} unlistedLog={unlistedLog} canMarkUnlisted={canMarkUnlisted} onUnlistedLogChange={setUnlistedLog} />;
   }
 
   if (uploadsDisabled) {
@@ -723,7 +723,7 @@ export function Upload() {
       authLoading={authLoading}
       hasUploadPermission={hasUploadPermission}
       hasAdminLogs={hasAdminLogs}
-      canMarkPrivate={canMarkPrivate}
+      canMarkUnlisted={canMarkUnlisted}
       combatLog={combatLog}
       rawCombatLog={rawCombatLog}
       uploading={uploading}
@@ -743,8 +743,8 @@ export function Upload() {
       selectedFormat={selectedFormat}
       onFormatSelect={handleFormatSelect}
       configLoaded={configLoaded}
-      privateLog={privateLog}
-      onPrivateLogChange={setPrivateLog}
+      unlistedLog={unlistedLog}
+      onUnlistedLogChange={setUnlistedLog}
     />
   );
 }

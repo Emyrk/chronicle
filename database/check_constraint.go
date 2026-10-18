@@ -63,7 +63,6 @@ const (
 	CheckOauthServerSecretsIDCheck                              CheckConstraint = "oauth_server_secrets_id_check"                                 // oauth_server_secrets
 	CheckOauthTokenSessionsTokenTypeCheck                       CheckConstraint = "oauth_token_sessions_token_type_check"                         // oauth_token_sessions
 	CheckParseScoreResultsMetricCheck                           CheckConstraint = "parse_score_results_metric_check"                              // parse_score_results
-	CheckPrivateLogAccessRequestsStatusCheck                    CheckConstraint = "private_log_access_requests_status_check"                      // private_log_access_requests
 	CheckRaidCompositionsDataSizeChk                            CheckConstraint = "raid_compositions_data_size_chk"                               // raid_compositions
 	CheckRaidCompositionsNameLengthChk                          CheckConstraint = "raid_compositions_name_length_chk"                             // raid_compositions
 	CheckRetentionPoliciesScope                                 CheckConstraint = "retention_policies_scope"                                      // retention_policies

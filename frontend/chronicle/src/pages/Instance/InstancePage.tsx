@@ -23,7 +23,6 @@ import { InstanceKeybindProvider } from "./InstanceKeybinds";
 import { TimeRangeController } from "./TimeRangeController";
 import { useTenantGate } from "./TenantGate";
 import { useFocusMode } from "@/hooks/useFocusMode";
-import { PrivateLogAPIError } from "@/api/privateLogs";
 import { getReplayResetTimestamp, type SelectedEncounterTimes } from "./replaySelection";
 
 // Types for the Instance page
@@ -84,8 +83,8 @@ export interface Instance {
   units?: Record<string, ResolvedInstanceUnit>;
   // Server-computed feature flags for this instance
   capabilities: readonly string[];
-  // Private logs preserve combat analysis for authorized users but omit public ranking features.
-  private?: boolean;
+  // Unlisted logs preserve combat analysis for authorized users but omit public ranking features.
+  unlisted?: boolean;
   // Parse format and server-mechanics flavor of the source log group
   format?: string;
   flavor?: readonly string[];
@@ -147,7 +146,7 @@ function transformToInstance(
     names_by_entry?: Record<number, string>;
     summons_by_owner?: Record<string, readonly string[]>;
     capabilities?: readonly string[];
-    private?: boolean;
+    unlisted?: boolean;
     format?: string;
     flavor?: readonly string[];
     versions?: Record<string, string>;
@@ -237,7 +236,7 @@ function transformToInstance(
     players,
     units,
     capabilities: apiInstance.capabilities ?? [],
-    private: apiInstance.private,
+    unlisted: apiInstance.unlisted,
     format: apiInstance.format,
     flavor: apiInstance.flavor,
     versions: apiInstance.versions,
@@ -501,18 +500,6 @@ export function InstancePage() {
           <p className="font-medium text-destructive">
             {instanceError?.message || "Failed to load instance"}
           </p>
-          {instanceError instanceof PrivateLogAPIError && (
-            <>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Private logs only expose combat analysis after the owner approves your Chronicle account.
-              </p>
-              {(instanceError.link || instanceError.code) && (
-                <Button asChild className="mt-4">
-                  <Link to={instanceError.link ?? `/private-log-shares/${instanceError.code}`}>Request access</Link>
-                </Button>
-              )}
-            </>
-          )}
         </Card>
       </div>
     );

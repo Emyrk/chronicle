@@ -41,7 +41,7 @@ import { activePhaseForTimeRange, phaseTimeRangeSelection, phaseWidthPercent } f
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
 import type { PanelFilter } from "./EventsPanels/processors/filters";
 import { canonicalizeCustomPanelRef, isCustomPanelRef } from "./EventsPanels/custom/pluginTypes";
-import { PANELS, PRIVATE_LOG_RESTRICTED_PANELS } from "./EventsPanels/EventsPanel";
+import { PANELS, UNLISTED_LOG_RESTRICTED_PANELS } from "./EventsPanels/EventsPanel";
 import { Strip } from "./EventsPanels/Strips/Strip";
 import { STRIPS, isStripType } from "./EventsPanels/Strips/strips";
 import type { StripType } from "./EventsPanels/Strips/types";
@@ -2293,7 +2293,7 @@ function InstancePageViewContent({
   useRegisterInstanceKeybinds("instance-page", "Instance page", INSTANCE_PAGE_KEYBINDS);
   const timeRange = useTimeRangeContextOptional();
 
-  const instanceTimeParsesQuery = useInstanceTimeParses(instance.private ? undefined : instance.id);
+  const instanceTimeParsesQuery = useInstanceTimeParses(instance.unlisted ? undefined : instance.id);
   const { data: instanceSpeedrun } = useQuery({
     queryKey: ["instance-speedrun", instance.id],
     queryFn: async (): Promise<SpeedrunResult | null> => {
@@ -2303,12 +2303,12 @@ function InstancePageViewContent({
     },
     staleTime: Infinity,
     retry: false,
-    enabled: !instance.private,
+    enabled: !instance.unlisted,
   });
 
   // URL state for explainer mode (simple ?explain=panel_type)
   const [searchParams, setSearchParams] = useSearchParams();
-  const overviewEnabled = isInstanceOverviewEnabled(supportsOverview) && !instance.private;
+  const overviewEnabled = isInstanceOverviewEnabled(supportsOverview) && !instance.unlisted;
   const requestedViewMode = parseInstanceViewMode(searchParams.get("view"));
   const viewMode: InstanceViewMode = overviewEnabled ? requestedViewMode : "encounters";
   const isEncounterView = viewMode === "encounters";
@@ -2772,10 +2772,10 @@ function InstancePageViewContent({
       const defaultType = (defaultPanelTypesByID[item.id] ?? "empty") as EventsPanelType;
       const resolved = (urlType ?? defaultType) as EventsPanelType;
       const valid = resolved in PANELS || isCustomPanelRef(resolved);
-      next[item.id] = valid && !(instance.private && PRIVATE_LOG_RESTRICTED_PANELS.has(resolved)) ? resolved : "empty";
+      next[item.id] = valid && !(instance.unlisted && UNLISTED_LOG_RESTRICTED_PANELS.has(resolved)) ? resolved : "empty";
     });
     return next;
-  }, [activeLayoutItems, defaultPanelTypesByID, instance.private, viewState.panels]);
+  }, [activeLayoutItems, defaultPanelTypesByID, instance.unlisted, viewState.panels]);
 
   const panelOptionsByID = useMemo<Record<string, string | null>>(() => {
     const next: Record<string, string | null> = {};
@@ -3418,6 +3418,17 @@ function InstancePageViewContent({
   }, [shareContextMenu]);
 
   const handleShareView = useCallback(async () => {
+    if (instance.unlisted || !isLoggedIn) {
+      const url = window.location.href;
+      try {
+        await navigator.clipboard.writeText(url);
+        toast.success("Share link copied", { description: url });
+      } catch {
+        toast.error("Failed to copy link");
+      }
+      return;
+    }
+
     const payload: SharedViewPayload = buildSharedViewPayload();
 
     try {
@@ -3433,7 +3444,7 @@ function InstancePageViewContent({
         description: error instanceof Error ? toastError(error) : "An unexpected error occurred.",
       });
     }
-  }, [buildSharedViewPayload, createShare, instance.id, viewMode]);
+  }, [buildSharedViewPayload, createShare, instance.id, instance.unlisted, isLoggedIn, viewMode]);
 
   const handleShareWithoutLayout = useCallback(async () => {
     const url = withInstanceViewMode(
@@ -3669,15 +3680,15 @@ function InstancePageViewContent({
         <div className="flex items-start justify-between gap-4 mb-1">
           <h1 className={cn("font-bold flex items-center gap-2", isMobile ? "text-xl" : "text-2xl", heroic && "drop-shadow-[0_0_8px_rgba(147,51,234,0.3)]")}>
             {instance.name}
-            {!instance.private && (
+            {!instance.unlisted && (
               <ClearParseBadge
                 parses={scopedClearParses(instanceTimeParsesQuery.data)}
                 lookbackDays={instanceTimeParsesQuery.data?.lookback_days}
               />
             )}
-            {instance.private && (
+            {instance.unlisted && (
               <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-300">
-                <LockKeyhole className="h-3 w-3" /> Private
+                <LockKeyhole className="h-3 w-3" /> Unlisted
               </span>
             )}
             {instance.invalidatedAt && (
@@ -3743,8 +3754,8 @@ function InstancePageViewContent({
                 viewMode={overviewEnabled ? viewMode : undefined}
                 onViewModeChange={overviewEnabled ? setViewMode : undefined}
                 isLoggedIn={isLoggedIn}
-                onShareWithLayout={instance.private ? undefined : () => { void handleShareView(); }}
-                onShareWithoutLayout={instance.private ? undefined : () => { void handleShareWithoutLayout(); }}
+                onShareWithLayout={() => { void handleShareView(); }}
+                onShareWithoutLayout={() => { void handleShareWithoutLayout(); }}
                 youtubeButton={youtubeButton}
                 showHints={showHints}
                 onOpenHelp={() => setHelpOpen(true)}
@@ -3840,7 +3851,6 @@ function InstancePageViewContent({
               {showLiveSessionControls && (
                 <LiveSessionButton instanceId={instance.id} canCreate={isLoggedIn} />
               )}
-              {!instance.private && (
               <DropdownMenu modal={false}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -3850,7 +3860,7 @@ function InstancePageViewContent({
                           variant="outline"
                           size="sm"
                           className="gap-1.5"
-                          disabled={!isLoggedIn}
+                          disabled={!isLoggedIn && !instance.unlisted}
                         >
                           <Share2 className="h-4 w-4" />
                           Share
@@ -3858,7 +3868,7 @@ function InstancePageViewContent({
                       </span>
                     </DropdownMenuTrigger>
                   </TooltipTrigger>
-                  {!isLoggedIn && <TooltipContent>You must be logged in to share</TooltipContent>}
+                  {!isLoggedIn && !instance.unlisted && <TooltipContent>You must be logged in to share</TooltipContent>}
                 </Tooltip>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
@@ -3877,7 +3887,6 @@ function InstancePageViewContent({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              )}
               {isEncounterView && youtubeButton}
               {showHints && (
                 <>
@@ -4031,7 +4040,7 @@ function InstancePageViewContent({
             showHints={showHints}
             includeWipes={viewState.includeWipes}
             onIncludeWipesChange={setIncludeWipes}
-            showRankings={!instance.private}
+            showRankings={!instance.unlisted}
             instanceStartTime={instance.startTime}
           />
         )}

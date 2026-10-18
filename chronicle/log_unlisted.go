@@ -11,9 +11,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// ReconcilePrivateLogGroup removes a newly-private log from shared duplicate,
+// ReconcileUnlistedLogGroup removes a newly-unlisted log from shared duplicate,
 // ranking, and cohort state. Intrinsic per-instance facts remain persisted.
-func (c *Chronicle) ReconcilePrivateLogGroup(ctx context.Context, logGroupID uuid.UUID) error {
+func (c *Chronicle) ReconcileUnlistedLogGroup(ctx context.Context, logGroupID uuid.UUID) error {
 	identities, err := c.Zed.RankingRunIdentitiesByLogGroupID(ctx, logGroupID)
 	if err != nil {
 		return fmt.Errorf("list ranking run identities: %w", err)
@@ -21,7 +21,7 @@ func (c *Chronicle) ReconcilePrivateLogGroup(ctx context.Context, logGroupID uui
 	affectedIDs := rankingRunLogGroupIdentitySeeds(identities)
 	instances, err := c.Zed.GetInstancesByLogGroupID(ctx, logGroupID)
 	if err != nil {
-		return fmt.Errorf("list instances for privacy reconciliation: %w", err)
+		return fmt.Errorf("list instances for unlisted reconciliation: %w", err)
 	}
 
 	type rankingRunLogGroupStore interface {
@@ -62,7 +62,7 @@ func (c *Chronicle) ReconcilePrivateLogGroup(ctx context.Context, logGroupID uui
 				}
 				unlinked, err := tx.UnlinkDuplicateGroup(ctx, instance.ID)
 				if err != nil {
-					return fmt.Errorf("unlink private instance duplicate: %w", err)
+					return fmt.Errorf("unlink unlisted instance duplicate: %w", err)
 				}
 				affectedIDs = append(affectedIDs, instance.ID, unlinked.PreviousGroupID.UUID, unlinked.NewGroupID.UUID)
 			}
@@ -80,17 +80,17 @@ func (c *Chronicle) ReconcilePrivateLogGroup(ctx context.Context, logGroupID uui
 				if _, err := tx.RefreshParseScoreMembershipsForLogGroup(ctx, database.RefreshParseScoreMembershipsForLogGroupParams{
 					LogGroupID: affectedLogGroupID, PolicyVersion: parsepolicy.PolicyVersion, QueryVersion: parsepolicy.QueryVersion,
 				}); err != nil {
-					return fmt.Errorf("refresh parse score memberships after privacy change: %w", err)
+					return fmt.Errorf("refresh parse score memberships after unlisted change: %w", err)
 				}
 				if _, err := tx.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, database.RefreshTimeParseClearTimeMembershipsForLogGroupParams{
 					LogGroupID: affectedLogGroupID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
 				}); err != nil {
-					return fmt.Errorf("refresh clear-time memberships after privacy change: %w", err)
+					return fmt.Errorf("refresh clear-time memberships after unlisted change: %w", err)
 				}
 				if _, err := tx.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, database.RefreshTimeParseBossKillMembershipsForLogGroupParams{
 					LogGroupID: affectedLogGroupID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
 				}); err != nil {
-					return fmt.Errorf("refresh boss-kill memberships after privacy change: %w", err)
+					return fmt.Errorf("refresh boss-kill memberships after unlisted change: %w", err)
 				}
 			}
 			return nil

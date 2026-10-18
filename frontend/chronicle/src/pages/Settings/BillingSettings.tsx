@@ -62,7 +62,7 @@ const REWARDS = [
     flavor: "Every swing, every wipe, unabridged.",
   },
   {
-    title: "Private Logs",
+    title: "Unlisted Logs",
     icon: "ability_stealth",
     effects: ["Equip: Keeps your uploads out of public view."],
     flavor: "What happens in progression stays in progression.",
@@ -161,9 +161,9 @@ const COMPARISON = [
     revered: "Download the original combat log file behind any of your uploads. Use Chronicle as an archive for your raw data.",
   },
   {
-    feature: "Private logs",
+    feature: "Unlisted logs",
     friendly: "Uploads are publicly viewable.",
-    revered: "Keep uploads private so only you can view them.",
+    revered: "Keep uploads unlisted so only people with the link can find them.",
   },
   {
     feature: "Supporting Chronicle",
@@ -285,7 +285,7 @@ function Achievement({ billing }: { billing?: BillingSummary }) {
       </div>
 
       <p className="mt-4 border-t border-border pt-3 text-center font-wow text-sm" style={{ color: "#ffd200" }}>
-        Reward: Ad-free browsing, +300 MB storage, raw log downloads, and private logs
+        Reward: Ad-free browsing, +300 MB storage, raw log downloads, and unlisted logs
       </p>
     </div>
   )

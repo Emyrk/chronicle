@@ -61,7 +61,7 @@ members AS MATERIALIZED (
     CROSS JOIN LATERAL (
         SELECT candidate.*
         FROM log_instances candidate
-        JOIN wow_log_groups candidate_group ON candidate_group.id = candidate.log_group_id AND NOT candidate_group.private
+        JOIN wow_log_groups candidate_group ON candidate_group.id = candidate.log_group_id AND NOT candidate_group.unlisted
         WHERE COALESCE(candidate.duplicate_group_id, candidate.id) = affected_runs.run_id
           AND candidate.invalidated_at IS NULL
         -- Prevent flattening into a hash join that scans all log_instances.
@@ -208,7 +208,7 @@ WITH members AS MATERIALIZED (
             WHERE coverage.encounter_id IS NOT NULL
         )::integer AS boss_coverage
     FROM log_instances li
-    JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.private
+    JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
     LEFT JOIN encounter_dps_rankings coverage ON coverage.instance_id = li.id
     WHERE li.invalidated_at IS NULL
     GROUP BY li.id

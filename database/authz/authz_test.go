@@ -9,7 +9,6 @@ import (
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/authzed/gochugaru/rel"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -197,57 +196,7 @@ func TestGuildDiscordBotPermissions(t *testing.T) {
 	checkManage(t, leaderID, false)
 }
 
-func TestPrivateLogInstanceAccess(t *testing.T) {
-	t.Parallel()
-
-	broker := testservices.Authz(t)
-	ctx := testutil.Context(t, testutil.WaitLong)
-	zed := serviceauthz.Authz(broker)
-
-	ownerID := uuid.New()
-	viewerID := uuid.New()
-	otherID := uuid.New()
-	adminID := uuid.New()
-	publicInstanceID := uuid.New()
-	privateInstanceID := uuid.New()
-	privateLogID := uuid.New()
-
-	b := policy.New()
-	chronicle := b.GlobalChronicle()
-	chronicle.Moderate_logs(b.User(adminID))
-	b.Raid_log(privateLogID).
-		Uploader(b.User(ownerID)).
-		Approved_viewer(b.User(viewerID)).
-		Chronicle(chronicle)
-	b.Instance(privateInstanceID).Raid_log(b.Raid_log(privateLogID))
-	b.Instance(publicInstanceID).PublicWildcard().Raid_log(b.Raid_log(uuid.New()))
-	_, err := zed.Write(ctx, *b.Txn())
-	require.NoError(t, err)
-
-	checkInstance := func(userID, instanceID uuid.UUID, expected bool) {
-		t.Helper()
-		allowed, err := zed.CheckOne(ctx, nil, rel.Relationship{
-			ResourceType: "instance", ResourceID: instanceID.String(), ResourceRelation: "view",
-			SubjectType: "user", SubjectID: userID.String(),
-		})
-		require.NoError(t, err)
-		require.Equal(t, expected, allowed)
-	}
-
-	checkInstance(otherID, publicInstanceID, true)
-	checkInstance(ownerID, privateInstanceID, true)
-	checkInstance(viewerID, privateInstanceID, true)
-	checkInstance(otherID, privateInstanceID, false)
-	checkInstance(adminID, privateInstanceID, true)
-
-	deleteBuilder := policy.New()
-	deleteBuilder.Raid_log(privateLogID).Delete().Approved_viewer(deleteBuilder.User(viewerID))
-	_, err = zed.Write(ctx, *deleteBuilder.Txn())
-	require.NoError(t, err)
-	checkInstance(viewerID, privateInstanceID, false)
-}
-
-func TestSetUserChronicleRolesPreservesPublicLogCapability(t *testing.T) {
+func TestSetUserChronicleRolesSupportsUnlistedCapability(t *testing.T) {
 	t.Parallel()
 
 	broker := testservices.Authz(t)
@@ -255,18 +204,18 @@ func TestSetUserChronicleRolesPreservesPublicLogCapability(t *testing.T) {
 	zed := serviceauthz.Authz(broker)
 	userID := uuid.New()
 
-	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"private_log_capable"}))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"unlisted_log_capable"}))
 	roles, err := zed.UserChronicleRoles(ctx, userID)
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"chronicle_member", "public_log_capable", "private_log_capable"}, roles)
+	require.ElementsMatch(t, []string{"chronicle_member", "unlisted_log_capable"}, roles)
 
 	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, nil))
 	roles, err = zed.UserChronicleRoles(ctx, userID)
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"chronicle_member", "public_log_capable"}, roles)
+	require.ElementsMatch(t, []string{"chronicle_member"}, roles)
 }
 
-func TestLogPrivacyRoles(t *testing.T) {
+func TestLogUnlistedRoles(t *testing.T) {
 	t.Parallel()
 
 	broker := testservices.Authz(t)
@@ -274,46 +223,35 @@ func TestLogPrivacyRoles(t *testing.T) {
 	zed := serviceauthz.Authz(broker)
 
 	ownerID := uuid.New()
-	defaultUserID := uuid.New()
-	otherPrivateID := uuid.New()
+	otherUnlistedID := uuid.New()
 	adminID := uuid.New()
 	logID := uuid.New()
 
 	b := policy.New()
 	chronicle := b.GlobalChronicle()
-	chronicle.Private_log_capable(b.User(ownerID))
-	chronicle.Public_log_capable(b.User(ownerID))
-	chronicle.Public_log_capable(b.User(defaultUserID))
-	chronicle.Private_log_capable(b.User(otherPrivateID))
-	chronicle.Public_log_capable(b.User(otherPrivateID))
+	chronicle.Unlisted_log_capable(b.User(ownerID))
+	chronicle.Unlisted_log_capable(b.User(otherUnlistedID))
 	chronicle.Moderate_logs(b.User(adminID))
 	b.Raid_log(logID).Uploader(b.User(ownerID)).Chronicle(chronicle)
 	_, err := zed.Write(ctx, *b.Txn())
 	require.NoError(t, err)
 
-	canMarkPublic, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanMark_log_public_User(policy.New().User(defaultUserID)))
-	require.NoError(t, err)
-	require.True(t, canMarkPublic)
-	canMarkPrivate, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanMark_log_private_User(policy.New().User(defaultUserID)))
-	require.NoError(t, err)
-	require.False(t, canMarkPrivate)
-
-	check := func(userID uuid.UUID, permission string, expected bool) {
+	check := func(userID uuid.UUID, expected bool) {
 		t.Helper()
 		allowed, err := zed.CheckOne(ctx, nil, rel.Relationship{
-			ResourceType: "raid_log", ResourceID: logID.String(), ResourceRelation: permission,
+			ResourceType: "raid_log", ResourceID: logID.String(), ResourceRelation: "mark_unlisted",
 			SubjectType: "user", SubjectID: userID.String(),
 		})
 		require.NoError(t, err)
 		require.Equal(t, expected, allowed)
 	}
 
-	check(ownerID, "mark_private", true)
-	check(otherPrivateID, "mark_private", false)
-	check(adminID, "mark_private", true)
+	check(ownerID, true)
+	check(otherUnlistedID, false)
+	check(adminID, true)
 }
 
-func TestUpdateWoWLogGroupPrivacyUpdatesInstanceAccess(t *testing.T) {
+func TestMarkWoWLogGroupUnlistedKeepsInstancePublic(t *testing.T) {
 	t.Parallel()
 
 	broker := testservices.Authz(t)
@@ -328,11 +266,11 @@ func TestUpdateWoWLogGroupPrivacyUpdatesInstanceAccess(t *testing.T) {
 	logID := uuid.New()
 	instanceID := uuid.New()
 
-	_, err := db.InsertUser(ctx, database.InsertUserParams{ID: ownerID, Username: "privacy-owner-" + ownerID.String()})
+	_, err := db.InsertUser(ctx, database.InsertUserParams{ID: ownerID, Username: "unlisted-owner-" + ownerID.String()})
 	require.NoError(t, err)
-	_, err = db.InsertWoWServer(ctx, database.InsertWoWServerParams{ID: serverID, Name: "privacy-server-" + serverID.String()})
+	_, err = db.InsertWoWServer(ctx, database.InsertWoWServerParams{ID: serverID, Name: "unlisted-server-" + serverID.String()})
 	require.NoError(t, err)
-	_, err = db.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{ID: realmID, ServerID: serverID, Name: "privacy-realm-" + realmID.String()})
+	_, err = db.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{ID: realmID, ServerID: serverID, Name: "unlisted-realm-" + realmID.String()})
 	require.NoError(t, err)
 
 	now := database.Timestamptz(time.Now())
@@ -347,24 +285,20 @@ func TestUpdateWoWLogGroupPrivacyUpdatesInstanceAccess(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	checkView := func(expected bool) {
+	checkView := func() {
 		t.Helper()
 		allowed, err := zed.CheckOne(ctx, nil, rel.Relationship{
 			ResourceType: "instance", ResourceID: instanceID.String(), ResourceRelation: "view",
 			SubjectType: "user", SubjectID: otherID.String(),
 		})
 		require.NoError(t, err)
-		require.Equal(t, expected, allowed)
+		require.True(t, allowed)
 	}
-	checkView(true)
+	checkView()
 
-	_, err = zed.UpdateWoWLogGroupPrivacy(ctx, database.UpdateWoWLogGroupPrivacyParams{ID: logID, Private: true})
+	_, err = zed.MarkWoWLogGroupUnlisted(ctx, logID)
 	require.NoError(t, err)
-	checkView(false)
-
-	_, err = zed.UpdateWoWLogGroupPrivacy(ctx, database.UpdateWoWLogGroupPrivacyParams{ID: logID, Private: false})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
-	checkView(false)
+	checkView()
 }
 
 func TestInTx_NilWrapped(t *testing.T) {

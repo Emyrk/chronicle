@@ -92,7 +92,7 @@ func (api *API) InstanceEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	if httpmw.InstanceByID(ctx) {
 		// UUID event URLs are immutable, unlisted cache keys. Their response is
-		// intentionally public even when the containing log is private.
+		// intentionally public even when the containing log is unlisted.
 		w.Header().Set("Cache-Control", "public, max-age=15552000") // 180 days
 	} else {
 		// Slugs are not stable cache keys.
@@ -120,7 +120,7 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	setDataset := func(out *chroniclesdk.WoWInstance) {
-		out.Private = httpmw.InstancePrivate(ctx)
+		out.Unlisted = httpmw.InstanceUnlisted(ctx)
 		datasetID, ok := api.Opts.Dataset.LookupDatasetForRealm(ctx, inst.RealmID)
 		if !ok {
 			return

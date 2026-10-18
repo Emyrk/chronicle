@@ -11,8 +11,7 @@ definition chronicle {
   relation technical_admin: user
   relation admin: user
   relation upload_capable: user
-  relation private_log_capable: user
-  relation public_log_capable: user
+  relation unlisted_log_capable: user
   relation technical_user: user
   relation supporter: user
   relation chronicle_guild_member: user
@@ -46,8 +45,7 @@ definition chronicle {
   permission admin_speedrun_requirements = technical_admin + is_admin_raid_requirements
 
   permission upload_log = upload_capable + administer + supporter + chronicle_guild_member + chronicle_member
-  permission mark_log_private = private_log_capable + admin_logs
-  permission mark_log_public = public_log_capable + admin_logs
+  permission mark_log_unlisted = unlisted_log_capable + admin_logs
   permission create_layout = chronicle_guild_member + chronicle_member
   permission admin_world_data = technical_admin + is_admin_game_data
   permission admin_consumables = administer + manage_consumables
@@ -172,11 +170,9 @@ definition armory_player {
 definition raid_log {
   relation chronicle: chronicle
   relation uploader: user
-  relation approved_viewer: user
 
-  permission view = uploader + approved_viewer + chronicle->admin_logs
-  permission manage_access = uploader + chronicle->admin_logs
-  permission mark_private = chronicle->admin_logs + (uploader & chronicle->mark_log_private)
+  permission view = uploader + chronicle->admin_logs
+  permission mark_unlisted = chronicle->admin_logs + (uploader & chronicle->mark_log_unlisted)
   permission reparse = chronicle->admin_logs + (uploader & chronicle->can_reparse)
   permission delete_files = uploader + chronicle->admin_logs
   permission upload_youtube = uploader + chronicle->admin_logs

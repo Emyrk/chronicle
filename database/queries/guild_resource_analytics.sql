@@ -41,7 +41,7 @@ DO UPDATE SET
 -- name: InstanceAnalyticsGroupKey :one
 SELECT COALESCE(group_instance.hashed_slug, instance.hashed_slug)::text AS group_key
 FROM log_instances AS instance
-JOIN wow_log_groups AS log_group ON log_group.id = instance.log_group_id AND NOT log_group.private
+JOIN wow_log_groups AS log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
 LEFT JOIN log_instances AS group_instance
     ON group_instance.id = instance.duplicate_group_id
 WHERE instance.id = @instance_id
@@ -124,7 +124,7 @@ LEFT JOIN log_instances AS group_instance
 LEFT JOIN wow_log_groups AS log_group
     ON log_group.id = instance.log_group_id
 WHERE stats.guild_id = @guild_id
-  AND (stats.resource_kind NOT IN ('instance', 'instance_member') OR COALESCE(log_group.private, false) = false)
+  AND (stats.resource_kind NOT IN ('instance', 'instance_member') OR COALESCE(log_group.unlisted, false) = false)
   AND stats.viewed_on > (now() AT TIME ZONE 'UTC')::date - @lookback_days::int
 ORDER BY stats.viewed_on ASC, stats.resource_kind ASC, resource_name ASC;
 

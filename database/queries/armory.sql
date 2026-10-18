@@ -71,7 +71,7 @@ SELECT
 FROM
   game_player_gear_history h
 JOIN log_instances li ON li.id = h.instance_id
-JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.private
+JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
 WHERE
   h.realm_id = @realm_id
   AND h.player_id = @player_id

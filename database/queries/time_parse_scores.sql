@@ -1,6 +1,6 @@
 -- name: GetTimeParseScoreForContract :one
 SELECT score.* FROM time_parse_scores score
-JOIN wow_log_groups log_group ON log_group.id = score.log_group_id AND NOT log_group.private
+JOIN wow_log_groups log_group ON log_group.id = score.log_group_id AND NOT log_group.unlisted
 WHERE score.tenant_id = @tenant_id
   AND score.instance_id = @instance_id
   AND lookback_days = @lookback_days
@@ -39,7 +39,7 @@ SELECT
     @cutoff, @window_start, @lookback_days, @policy_version, @query_version, now()
 WHERE EXISTS (
     SELECT 1 FROM wow_log_groups log_group
-    WHERE log_group.id = @log_group_id AND NOT log_group.private
+    WHERE log_group.id = @log_group_id AND NOT log_group.unlisted
 )
 RETURNING *;
 
@@ -76,7 +76,7 @@ SELECT
     instance.difficulty_name,
     instance.max_players
 FROM log_instances instance
-JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.private
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
 JOIN wow_server_realms realm ON realm.id = instance.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
 WHERE instance.id = @id
@@ -87,7 +87,7 @@ WHERE instance.id = @id
 SELECT membership.duration_ms
 FROM time_parse_clear_time_memberships membership
 JOIN log_instances instance ON instance.id = membership.instance_id
-JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.private
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 WHERE membership.tenant_id = @tenant_id
   AND membership.policy_version = @policy_version
   AND membership.query_version = @query_version
@@ -108,7 +108,7 @@ WHERE membership.tenant_id = @tenant_id
 SELECT membership.duration_ms
 FROM time_parse_boss_kill_memberships membership
 JOIN log_instances instance ON instance.id = membership.instance_id
-JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.private
+JOIN wow_log_groups log_group ON log_group.id = membership.log_group_id AND NOT log_group.unlisted
 WHERE membership.tenant_id = @tenant_id
   AND membership.policy_version = @policy_version
   AND membership.query_version = @query_version
@@ -132,7 +132,7 @@ SELECT
     COALESCE(server.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS tenant_id,
     instance.start_time
 FROM log_instances instance
-JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.private
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
 JOIN wow_server_realms realm ON realm.id = instance.realm_id
 JOIN wow_servers server ON server.id = realm.server_id
 WHERE instance.invalidated_at IS NULL

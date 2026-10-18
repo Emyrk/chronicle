@@ -12,31 +12,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPrivateLogsExcludedFromPublicDiscoveryAndDerivedWrites(t *testing.T) {
+func TestUnlistedLogsExcludedFromPublicDiscoveryAndDerivedWrites(t *testing.T) {
 	t.Parallel()
 
-	pool, store, realmID := setupParsesTest(t)
+	_, store, realmID := setupParsesTest(t)
 	ctx := testutil.Context(t, testutil.WaitShort)
 	startedAt := time.Date(2026, time.October, 1, 20, 0, 0, 0, time.UTC)
 
 	userID := uuid.New()
 	_, err := store.InsertUser(ctx, database.InsertUserParams{
-		ID: userID, Username: "private-log-" + userID.String()[:8],
+		ID: userID, Username: "unlisted-log-" + userID.String()[:8],
 	})
 	require.NoError(t, err)
 
-	insertInstance := func(private bool, slug string) uuid.UUID {
+	insertInstance := func(unlisted bool, slug string) uuid.UUID {
 		t.Helper()
 		logGroupID := uuid.New()
 		_, err := store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
-			ID: logGroupID, Owner: userID, LogType: database.LogTypeV1,
+			ID: logGroupID, Owner: userID, LogType: database.LogTypeV1, Unlisted: unlisted,
 			CreatedAt: database.Timestamptz(startedAt), UpdatedAt: database.Timestamptz(startedAt),
 		})
 		require.NoError(t, err)
-		if private {
-			_, err = pool.Exec(ctx, "UPDATE wow_log_groups SET private = true WHERE id = $1", logGroupID)
-			require.NoError(t, err)
-		}
 		require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
 
 		instanceID := uuid.New()
@@ -51,11 +47,20 @@ func TestPrivateLogsExcludedFromPublicDiscoveryAndDerivedWrites(t *testing.T) {
 	}
 
 	publicInstanceID := insertInstance(false, "public-discovery-log")
-	privateInstanceID := insertInstance(true, "private-discovery-log")
+	unlistedInstanceID := insertInstance(true, "unlisted-discovery-log")
 
-	_, err = store.PublicInstance(ctx, privateInstanceID)
+	unlistedByID, err := store.InstanceWithUnlisted(ctx, unlistedInstanceID)
+	require.NoError(t, err)
+	require.True(t, unlistedByID.Unlisted)
+	require.Equal(t, unlistedInstanceID, unlistedByID.LogInstancesGuild.ID)
+	unlistedBySlug, err := store.InstanceBySlugWithUnlisted(ctx, pgtype.Text{String: "unlisted-discovery-log", Valid: true})
+	require.NoError(t, err)
+	require.True(t, unlistedBySlug.Unlisted)
+	require.Equal(t, unlistedInstanceID, unlistedBySlug.LogInstancesGuild.ID)
+
+	_, err = store.PublicInstance(ctx, unlistedInstanceID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	_, err = store.PublicInstanceBySlug(ctx, pgtype.Text{String: "private-discovery-log", Valid: true})
+	_, err = store.PublicInstanceBySlug(ctx, pgtype.Text{String: "unlisted-discovery-log", Valid: true})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	publicInstance, err := store.PublicInstance(ctx, publicInstanceID)
 	require.NoError(t, err)
@@ -83,14 +88,14 @@ func TestPrivateLogsExcludedFromPublicDiscoveryAndDerivedWrites(t *testing.T) {
 	require.Empty(t, duplicates)
 
 	require.NoError(t, store.InsertInstanceSpeedrun(ctx, database.InsertInstanceSpeedrunParams{
-		InstanceID: privateInstanceID, InstanceName: "Molten Core", RealmID: realmID,
+		InstanceID: unlistedInstanceID, InstanceName: "Molten Core", RealmID: realmID,
 		Qualified: true, StartTime: database.Timestamptz(startedAt),
 		CompletionTime: database.Timestamptz(startedAt.Add(time.Hour)),
 		DurationMs:     int64(time.Hour / time.Millisecond), Proof: []byte(`{"proof":[]}`),
 	}))
-	privateSpeedrun, err := store.GetInstanceSpeedrun(ctx, privateInstanceID)
+	unlistedSpeedrun, err := store.GetInstanceSpeedrun(ctx, unlistedInstanceID)
 	require.NoError(t, err)
-	require.Equal(t, privateInstanceID, privateSpeedrun.InstanceID)
+	require.Equal(t, unlistedInstanceID, unlistedSpeedrun.InstanceID)
 
 	leaderboard, err := store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
 		MinPlayers: 0, MaxPlayers: 40, ResultLimit: 10,
@@ -100,14 +105,14 @@ func TestPrivateLogsExcludedFromPublicDiscoveryAndDerivedWrites(t *testing.T) {
 	require.Empty(t, leaderboard)
 
 	require.NoError(t, store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
-		InstanceID: privateInstanceID, EncounterName: "Trash", InstanceName: "Molten Core",
-		PlayerGuid: "player-guid", PlayerName: "Private Player", PlayerClass: "Mage",
+		InstanceID: unlistedInstanceID, EncounterName: "Trash", InstanceName: "Molten Core",
+		PlayerGuid: "player-guid", PlayerName: "Unlisted Player", PlayerClass: "Mage",
 		PlayerSpec: "Frost", PlayerSubSpec: "", PlayerRole: "dps", PlayerLevel: 60,
 		DifficultyName: "Normal", MaxPlayers: 40, RealmID: realmID, RealmName: "Test Realm",
 		DamageDone: 1000, DurationSecs: 10, Dps: 100,
-		LogHashedSlug: "private-discovery-log", KilledAt: database.Timestamptz(startedAt),
+		LogHashedSlug: "unlisted-discovery-log", KilledAt: database.Timestamptz(startedAt),
 	}))
-	rankingRecords, err := store.InstanceRankingRecords(ctx, privateInstanceID)
+	rankingRecords, err := store.InstanceRankingRecords(ctx, unlistedInstanceID)
 	require.NoError(t, err)
 	require.Len(t, rankingRecords, 1)
 }

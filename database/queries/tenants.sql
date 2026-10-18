@@ -59,7 +59,7 @@ JOIN wow_servers ws ON ws.tenant_id = t.id
 JOIN wow_server_realms wsr ON wsr.server_id = ws.id
 JOIN log_instances li ON li.realm_id = wsr.id
   AND li.start_time >= @since::timestamptz
-JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.private
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 LEFT JOIN log_instance_players lip ON lip.instance_id = li.id
 WHERE t.discoverable = true
 GROUP BY t.id;

@@ -3,7 +3,7 @@ import { ArrowUpDown, Eye, Castle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { WoWLogGroup } from "@/api/queries";
 import type { WoWSimpleParsedInstance } from "@/api/typesGenerated";
-import { PrivateBadge } from "./PrivateLogAccessPanel";
+import { UnlistedBadge } from "./UnlistedBadge";
 import { parseParsedOutput, format } from "../utils/calendarUtils";
 
 function formatBytes(bytes: number): string {
@@ -114,7 +114,7 @@ export function UploadsTable({
                   <span className="text-sm font-medium">
                     {uploadDate ? format(uploadDate, "MMM d, yyyy") : "Unknown"}
                   </span>
-                  {log.private && <PrivateBadge />}
+                  {log.unlisted && <UnlistedBadge />}
                 </div>
                 <span className="text-xs text-muted-foreground">{realmName}</span>
               </div>
@@ -217,7 +217,7 @@ export function UploadsTable({
                   <td className="px-4 py-3 text-sm">
                     <div className="flex flex-wrap items-center gap-2">
                       <span>{uploadDate ? format(uploadDate, "MMM d, yyyy") : "Unknown"}</span>
-                      {log.private && <PrivateBadge />}
+                      {log.unlisted && <UnlistedBadge />}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm text-muted-foreground">

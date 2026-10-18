@@ -223,10 +223,10 @@ func (api *API) clientUploadsDisabled(ctx context.Context) bool {
 	return false
 }
 
-func uploadPrivate(r *http.Request) (bool, error) {
-	value := r.FormValue("private")
+func uploadUnlisted(r *http.Request) (bool, error) {
+	value := r.FormValue("unlisted")
 	if value == "" {
-		value = r.URL.Query().Get("private")
+		value = r.URL.Query().Get("unlisted")
 	}
 	if value == "" {
 		return false, nil
@@ -234,23 +234,19 @@ func uploadPrivate(r *http.Request) (bool, error) {
 	return strconv.ParseBool(value)
 }
 
-func (api *API) authorizeUploadPrivacy(ctx context.Context, w http.ResponseWriter, private bool) bool {
-	actor, _ := authz.ActorFromContext(ctx)
-	permission := policy.New().GlobalChronicle().CanMark_log_public_User(actor)
-	visibility := "public"
-	if private {
-		permission = policy.New().GlobalChronicle().CanMark_log_private_User(actor)
-		visibility = "private"
+func (api *API) authorizeUnlistedUpload(ctx context.Context, w http.ResponseWriter, unlisted bool) bool {
+	if !unlisted {
+		return true
 	}
-
-	allowed, err := api.Zed.CheckOne(ctx, nil, permission)
+	actor, _ := authz.ActorFromContext(ctx)
+	allowed, err := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanMark_log_unlisted_User(actor))
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return false
 	}
 	if !allowed {
 		httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
-			Message: "You do not have permission to upload " + visibility + " logs.",
+			Message: "You do not have permission to upload unlisted logs.",
 		})
 		return false
 	}
@@ -317,16 +313,16 @@ func (api *API) WoWLogUpload(w http.ResponseWriter, r *http.Request) {
 		IsGzipped: isGzipped(secondHeader),
 	}
 
-	private, err := uploadPrivate(r)
+	unlisted, err := uploadUnlisted(r)
 	if err != nil {
-		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "private must be a boolean"})
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "unlisted must be a boolean"})
 		return
 	}
-	if !api.authorizeUploadPrivacy(ctx, w, private) {
+	if !api.authorizeUnlistedUpload(ctx, w, unlisted) {
 		return
 	}
 
-	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{firstInput, secondInput}, database.LogTypeV1, uuid.Nil, chronicle.UploadMeta{Private: private})
+	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{firstInput, secondInput}, database.LogTypeV1, uuid.Nil, chronicle.UploadMeta{Unlisted: unlisted})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
@@ -456,15 +452,15 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	private, err := uploadPrivate(r)
+	unlisted, err := uploadUnlisted(r)
 	if err != nil {
-		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "private must be a boolean"})
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "unlisted must be a boolean"})
 		return
 	}
-	if !api.authorizeUploadPrivacy(ctx, w, private) {
+	if !api.authorizeUnlistedUpload(ctx, w, unlisted) {
 		return
 	}
-	meta.Private = private
+	meta.Unlisted = unlisted
 
 	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{input}, logType, uuid.Nil, meta)
 	if err != nil {

@@ -16,7 +16,7 @@ WHERE EXISTS (
     SELECT 1
     FROM log_instances instance
     JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id
-    WHERE instance.id = @instance_id AND NOT log_group.private
+    WHERE instance.id = @instance_id AND NOT log_group.unlisted
 );
 
 -- name: InsertWindowedParseScoreReceipt :one
@@ -35,7 +35,7 @@ WHERE EXISTS (
     SELECT 1
     FROM log_instances instance
     JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id
-    WHERE instance.id = @instance_id AND NOT log_group.private
+    WHERE instance.id = @instance_id AND NOT log_group.unlisted
 )
 ON CONFLICT (tenant_id, instance_id, lookback_days, policy_version, query_version)
 WHERE snapshot_id IS NULL
@@ -55,7 +55,7 @@ SELECT pg_advisory_xact_lock(hashtextextended(@lock_key, 0));
 SELECT receipt.*
 FROM parse_score_receipts receipt
 JOIN log_instances instance ON instance.id = receipt.instance_id
-JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.private
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
 WHERE receipt.tenant_id = @tenant_id
   AND receipt.instance_id = @instance_id
 ORDER BY computed_at DESC
@@ -65,8 +65,8 @@ LIMIT 1;
 SELECT EXISTS (
     SELECT 1
     FROM parse_score_results result
-    JOIN log_instances privacy_instance ON privacy_instance.id = result.instance_id
-    JOIN wow_log_groups log_group ON log_group.id = privacy_instance.log_group_id AND NOT log_group.private
+    JOIN log_instances visibility_instance ON visibility_instance.id = result.instance_id
+    JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
     WHERE result.tenant_id = @tenant_id AND result.instance_id = @instance_id
 );
 
@@ -74,7 +74,7 @@ SELECT EXISTS (
 -- Get all receipts for an instance (any snapshot).
 SELECT receipt.* FROM parse_score_receipts receipt
 JOIN log_instances instance ON instance.id = receipt.instance_id
-JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.private
+JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.unlisted
 WHERE receipt.instance_id = @instance_id
 ORDER BY computed_at DESC;
 
@@ -84,8 +84,8 @@ ORDER BY computed_at DESC;
 SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
     psr.*
 FROM parse_score_results psr
-JOIN log_instances privacy_instance ON privacy_instance.id = psr.instance_id
-JOIN wow_log_groups log_group ON log_group.id = privacy_instance.log_group_id AND NOT log_group.private
+JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = @tenant_id
   AND psr.instance_id = @instance_id
   AND psr.snapshot_id = @snapshot_id::uuid
@@ -96,8 +96,8 @@ ORDER BY psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.create
 SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
     psr.*
 FROM parse_score_results psr
-JOIN log_instances privacy_instance ON privacy_instance.id = psr.instance_id
-JOIN wow_log_groups log_group ON log_group.id = privacy_instance.log_group_id AND NOT log_group.private
+JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = @tenant_id
   AND psr.instance_id = @instance_id
   AND psr.snapshot_id IS NULL
@@ -110,8 +110,8 @@ ORDER BY psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.create
 SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
     psr.*
 FROM parse_score_results psr
-JOIN log_instances privacy_instance ON privacy_instance.id = psr.instance_id
-JOIN wow_log_groups log_group ON log_group.id = privacy_instance.log_group_id AND NOT log_group.private
+JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = @tenant_id
   AND psr.instance_id = @instance_id
   AND psr.metric = @metric
@@ -123,8 +123,8 @@ ORDER BY psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_s
 SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric)
     psr.*
 FROM parse_score_results psr
-JOIN log_instances privacy_instance ON privacy_instance.id = psr.instance_id
-JOIN wow_log_groups log_group ON log_group.id = privacy_instance.log_group_id AND NOT log_group.private
+JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.instance_id = @instance_id
 ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric,
          psr.created_at DESC;
@@ -165,8 +165,8 @@ SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
     psr.player_spec,
     psr.player_role
 FROM parse_score_results psr
-JOIN log_instances privacy_instance ON privacy_instance.id = psr.instance_id
-JOIN wow_log_groups log_group ON log_group.id = privacy_instance.log_group_id AND NOT log_group.private
+JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
+JOIN wow_log_groups log_group ON log_group.id = visibility_instance.log_group_id AND NOT log_group.unlisted
 WHERE psr.tenant_id = @tenant_id
   AND psr.player_guid = @player_guid
   AND psr.metric = @metric
@@ -194,7 +194,7 @@ FROM (
       AND (edr.dps > 0 OR edr.hps > 0)
 ) candidates
 JOIN log_instances li ON li.id = candidates.instance_id
-JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.private
+JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
 WHERE li.start_time >= @repair_since
   AND li.invalidated_at IS NULL
   AND NOT EXISTS (
@@ -224,6 +224,6 @@ SELECT
     li.log_group_id,
     li.guild_id
 FROM log_instances li
-JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.private
+JOIN wow_log_groups log_group ON log_group.id = li.log_group_id AND NOT log_group.unlisted
 WHERE li.id = @id
   AND li.invalidated_at IS NULL;

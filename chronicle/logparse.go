@@ -254,7 +254,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	//      value without re-resolving.
 	lg := logGroup.WoWLogGroup
 	invalidLog := lg.InvalidatedAt.Valid
-	publicLog := !lg.Private
+	publicLog := !lg.Unlisted
 	rankableLog := !invalidLog
 	logFormat := lg.LogType.Format()
 	if lg.Format.Valid {

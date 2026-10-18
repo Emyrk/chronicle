@@ -36,7 +36,7 @@ INSERT INTO
     log_type,
     format,
     flavor,
-    private,
+    unlisted,
     created_at,
     updated_at
   )
