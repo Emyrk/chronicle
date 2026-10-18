@@ -173,7 +173,7 @@ const MESH_MIN_SCREEN_SCALE = 0.5;
 const MESH_BOSS_SCALE = 2.5;
 // A guardian's model is grown to at least this tall (geometry units; a
 // player capsule is 3), so a totem published at its true, tiny size reads.
-const MIN_GUARDIAN_MODEL_HEIGHT = 2;
+const MIN_GUARDIAN_MODEL_HEIGHT = 1.2;
 // With a fight focused, the camera can back off to this multiple of the Fit
 // distance, and the target can pan this far (yards) from the focus centre.
 const MESH_MAX_DISTANCE_FACTOR = 2.5;
