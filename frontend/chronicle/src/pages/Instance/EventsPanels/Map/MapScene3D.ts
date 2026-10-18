@@ -42,6 +42,7 @@ import {
   LOGGED_Z_CLEARANCE_YARDS,
   medianHeight,
 } from "./dungeonMeshes";
+import { MAP_CURSOR, MAP_HOSTILE_CURSOR, MAP_UNIT_CURSOR } from "./mapCursors";
 import { FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, type MapPoint, type MapViewport } from "./mapModel";
 import {
   DEFAULT_EFFECT_OPTIONS,
@@ -816,6 +817,7 @@ export class MapScene3D {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setClearColor(0x11100d);
     this.renderer.domElement.style.display = "block";
+    this.renderer.domElement.style.cursor = MAP_CURSOR;
     this.renderer.domElement.addEventListener("webglcontextlost", this.handleContextLost);
     this.renderer.domElement.addEventListener("pointermove", this.handlePointerMove);
     this.renderer.domElement.addEventListener("pointerleave", this.handlePointerLeave);
@@ -2044,7 +2046,10 @@ export class MapScene3D {
     if (wobbling >= 0) this.wobbling.splice(wobbling, 1);
     const lunging = this.lunging.indexOf(object);
     if (lunging >= 0) this.lunging.splice(lunging, 1);
-    if (this.hoveredGuid === guid) this.hoveredGuid = null;
+    if (this.hoveredGuid === guid) {
+      this.hoveredGuid = null;
+      this.updateCursor();
+    }
   }
 
   // Applies the effects at the effect clock's current time. Returns whether
@@ -2669,10 +2674,19 @@ export class MapScene3D {
     if (this.effects) this.requestRender();
     if (guid === this.hoveredGuid) return;
     this.hoveredGuid = guid;
-    this.renderer.domElement.style.cursor = guid ? "pointer" : "";
+    this.updateCursor();
     this.updateLabel();
     this.requestRender();
   };
+
+  // WoW's cursors: the sword over an enemy, the gauntlet elsewhere; a
+  // drawing tool's crosshair wins over both.
+  private updateCursor() {
+    const kind = this.hoveredGuid ? this.units.get(this.hoveredGuid)?.kind : undefined;
+    this.renderer.domElement.style.cursor = this.planInput
+      ? "crosshair"
+      : kind === "hostile" ? MAP_HOSTILE_CURSOR : kind ? MAP_UNIT_CURSOR : MAP_CURSOR;
+  }
 
   /** Called with a unit's guid when it is clicked (not dragged, not double-clicked). */
   setOnUnitClick(callback: ((guid: string) => void) | null) {
@@ -3125,7 +3139,7 @@ export class MapScene3D {
     this.planInput = input;
     this.planPointer = null;
     this.controls.mouseButtons.LEFT = input ? null : THREE.MOUSE.ROTATE;
-    this.renderer.domElement.style.cursor = input ? "crosshair" : "";
+    this.updateCursor();
   }
 
   /** Whether plans can be drawn: they need the dungeon mesh's floor. */
