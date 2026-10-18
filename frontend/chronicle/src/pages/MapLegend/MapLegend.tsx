@@ -4,9 +4,9 @@ import { MAP_CONTROL_KEYBINDS } from "@/pages/Instance/EventsPanels/Map/mapContr
 import { DEAD_ENEMY_FRAME_LINGER_MS, DEAD_ENEMY_MODEL_FADE_MS } from "@/pages/Instance/EventsPanels/Map/mapDeathVisibility";
 import { healthBarColor, MAX_HEALTH_BARS, RECENT_HEALTH_MS } from "@/pages/Instance/EventsPanels/Map/mapModel";
 import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, hexCss, WALK_AVATAR_COLOR } from "@/pages/Instance/EventsPanels/Map/mapPalette";
-import { ABOVE_DISC_MODES, CAST_MODES } from "@/pages/Instance/EventsPanels/Map/mapViewSettings";
+import { ABOVE_DISC_MODES, CAST_MODES, TRAIL_OPTIONS } from "@/pages/Instance/EventsPanels/Map/mapViewSettings";
 import { HEAL_COLOR, HEAL_CRIT_COLOR, OVERHEAL_COLOR, SCHOOL_TOKENS, schoolColor } from "@/pages/Instance/EventsPanels/Map/replayEffects";
-import { DASH_ART_SIZE, DISPEL_COLORS, DISPEL_ORDER, HALO_COLORS, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, type HaloKind } from "@/pages/Instance/EventsPanels/Map/unitTokenArt";
+import { DASH_ART_SIZE, DISPEL_COLORS, DISPEL_ORDER, HALO_COLORS, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, TRAIL_LINE, type HaloKind } from "@/pages/Instance/EventsPanels/Map/unitTokenArt";
 import { participantColor } from "@/pages/Instance/liveSessionProtocol";
 import { POWER_COLORS } from "@/pages/Instance/EventsPanels/RaidFrames/raidFrameShared";
 import { At, BossToken, Ground, Token, useClock } from "./legendArt";
@@ -108,6 +108,33 @@ function OwnerLine({ from, to, color, lit = false }: { from: { x: number; y: num
       opacity={OWNER_LINE.opacity}
       style={lit ? undefined : { filter: `brightness(${OWNER_LINE.dim})` }}
     />
+  );
+}
+
+// A unit looping round the card at `seconds`, in percent of the card.
+const trailPath = (seconds: number) => ({ x: 50 + 32 * Math.sin(seconds * 1.1), y: 55 + 20 * Math.sin(seconds * 2.2) });
+
+// The map's movement trail: where the unit was over the last two seconds, every
+// 100 ms, fading from the unit back to nothing.
+function Trail({ seconds, color }: { seconds: number; color: string }) {
+  const steps = 20;
+  const points = Array.from({ length: steps + 1 }, (_, index) => trailPath(seconds - index * 0.1));
+  return (
+    <>
+      {points.slice(0, -1).map((point, index) => (
+        <line
+          key={index}
+          x1={point.x}
+          y1={point.y}
+          x2={points[index + 1].x}
+          y2={points[index + 1].y}
+          stroke={color}
+          strokeWidth={1.5}
+          vectorEffect="non-scaling-stroke"
+          opacity={TRAIL_LINE.opacity * (1 - (index + 0.5) / steps)}
+        />
+      ))}
+    </>
   );
 }
 
@@ -267,6 +294,14 @@ export function MapLegend() {
             </Ground>
           }>
             A thin line in the owner&apos;s colour from each pet, summon or totem to its player: faint, and bright while either one is selected, a target or pinned.
+          </Card>
+          <Card title="Movement trail" demo={
+            <Ground height={150}>
+              <Lines><Trail seconds={seconds} color="var(--color-class-paladin)" /></Lines>
+              <At x={trailPath(seconds).x} y={trailPath(seconds).y}><Token {...PALADIN} /></At>
+            </Ground>
+          }>
+            Off by default. With Map settings → Display → <em>Movement trail</em> set ({TRAIL_OPTIONS.filter((option) => option.value > 0).map((option) => option.label).join(", ")}), a thin line in each unit&apos;s colour runs along where it was over that time, fading to nothing; fainter for faded-out players.
           </Card>
         </Grid>
       </Section>

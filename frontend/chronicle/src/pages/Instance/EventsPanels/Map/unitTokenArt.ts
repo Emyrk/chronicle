@@ -94,6 +94,16 @@ export const OWNER_LINE = {
 } as const;
 
 /**
+ * Movement trails (a map setting, off by default): a thin line in the unit's
+ * colour along where it was lately, fading to nothing at its tail.
+ */
+export const TRAIL_LINE = {
+  opacity: 0.85,
+  /** Muted units' trails are this much fainter. */
+  mutedFactor: 0.35,
+} as const;
+
+/**
  * A unit in the air (knocked up, falling) leaves its shadow on the floor
  * below it, joined to the token by this thin line.
  */

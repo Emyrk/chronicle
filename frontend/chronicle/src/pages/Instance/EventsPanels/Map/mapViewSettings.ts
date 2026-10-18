@@ -16,6 +16,8 @@ export interface EffectSettings {
   castMode: CastIconMode;
   /** The live value drawn as a column above each player's token. */
   aboveDisc: AboveDiscMode;
+  /** Seconds of movement trail behind each unit; 0 for none. */
+  trailSeconds: number;
 }
 
 export const EFFECTS_STORAGE_KEY = "chronicle.map.effects3d";
@@ -30,6 +32,7 @@ export const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
   bars: true,
   castMode: "selected",
   aboveDisc: "none",
+  trailSeconds: 0,
 };
 
 export const ABOVE_DISC_MODES: { value: AboveDiscMode; label: string; title: string }[] = [
@@ -43,6 +46,11 @@ export const CAST_MODES: { value: CastIconMode; label: string; title: string }[]
   { value: "all", label: "All", title: "Cast icons over every player and boss" },
 ];
 
+export const TRAIL_OPTIONS: { value: number; label: string; title: string }[] = [
+  { value: 0, label: "Off", title: "No movement trails" },
+  ...[1, 2, 3, 4].map((seconds) => ({ value: seconds, label: `${seconds}s`, title: `A fading line along where each unit was over the last ${seconds} s` })),
+];
+
 export const DENSITY_OPTIONS = [16, 32, MAX_EFFECT_PRIMITIVES];
 
 export function readStoredEffectSettings(): EffectSettings {
@@ -53,6 +61,7 @@ export function readStoredEffectSettings(): EffectSettings {
     if (!CAST_MODES.some((mode) => mode.value === settings.castMode)) settings.castMode = "selected";
     if (!DENSITY_OPTIONS.includes(settings.maxEffects)) settings.maxEffects = MAX_EFFECT_PRIMITIVES;
     if (!ABOVE_DISC_MODES.some((mode) => mode.value === settings.aboveDisc)) settings.aboveDisc = DEFAULT_EFFECT_SETTINGS.aboveDisc;
+    if (!TRAIL_OPTIONS.some((option) => option.value === settings.trailSeconds)) settings.trailSeconds = DEFAULT_EFFECT_SETTINGS.trailSeconds;
     return settings;
   } catch {
     return DEFAULT_EFFECT_SETTINGS;

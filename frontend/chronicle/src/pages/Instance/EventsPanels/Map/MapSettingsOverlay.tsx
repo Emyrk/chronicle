@@ -3,7 +3,7 @@ import { Eye, Footprints, Gamepad2, Globe, PersonStanding, Scan, Sparkles, X, ty
 import { Switch } from "@/components/ui/Switch/Switch";
 import { cn } from "@/lib/utils";
 import { MAP_CONTROL_KEYBINDS } from "./mapControls";
-import { ABOVE_DISC_MODES, CAST_MODES, DENSITY_OPTIONS, type EffectSettings } from "./mapViewSettings";
+import { ABOVE_DISC_MODES, CAST_MODES, DENSITY_OPTIONS, TRAIL_OPTIONS, type EffectSettings } from "./mapViewSettings";
 import { WALK_AVATAR_GROUPS, WALK_AVATARS } from "./walkAvatars";
 
 export interface MapSettingsOverlayProps {
@@ -101,6 +101,12 @@ export function MapSettingsOverlay({
                 value={effectSettings.aboveDisc}
                 options={ABOVE_DISC_MODES}
                 onChange={(aboveDisc) => onEffectSettings({ aboveDisc })}
+              />
+              <Choice
+                label="Movement trail"
+                value={effectSettings.trailSeconds}
+                options={TRAIL_OPTIONS}
+                onChange={(trailSeconds) => onEffectSettings({ trailSeconds })}
               />
             </Section>
           )}

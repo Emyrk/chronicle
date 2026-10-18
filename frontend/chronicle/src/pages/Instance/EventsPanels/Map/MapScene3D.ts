@@ -28,7 +28,7 @@ import {
 } from "./cameraDirector";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
-import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
+import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanPoint } from "./plan/mapPlan";
 import { PlanLayer, type PlanSurface } from "./plan/planLayer";
@@ -240,6 +240,8 @@ const TARGET_LINE_WIDTH = TARGET_LINE.width;
 const TARGETS_TARGET_LINE_WIDTH = TARGET_LINE.targetsTargetWidth;
 const TARGET_LINE_LIFT = 0.25;
 const MAX_OWNER_LINES = 256;
+// Movement trail segments drawn at once (every unit's together).
+const MAX_TRAIL_SEGMENTS = 8192;
 const TARGET_LINE_DASH = TARGET_LINE.dash;
 const TARGET_LINE_SPEED = TARGET_LINE.speed;
 
@@ -360,6 +362,14 @@ export interface MapScene3DUnit {
   dispel?: DispelKind | null;
   /** Power (0-1) and its colour, drawn as a thinner column beside health. */
   power?: { fraction: number; color: string } | null;
+  /** Where the unit was lately, newest (now) first, for its movement trail. */
+  trail?: MapScene3DTrailPoint[];
+}
+
+/** One point of a unit's movement trail: where it was, and its logged height then. */
+export interface MapScene3DTrailPoint {
+  point: MapPoint;
+  z?: number;
 }
 
 /** The one live value drawn as a column above each token. */
@@ -454,6 +464,9 @@ interface UnitObject {
   deadLift: number;
   /** Height the model stands at: the floor, or a guardian's chip. */
   modelBase: number;
+  /** Its movement trail (MapScene3DUnit.trail), or null for none. */
+  trail: MapScene3DTrailPoint[] | null;
+  muted: boolean;
 }
 
 export interface MapScene3DEffects {
@@ -857,6 +870,10 @@ export class MapScene3D {
   private readonly ownerLinePositions = new Float32Array(MAX_OWNER_LINES * 6);
   private readonly ownerLineColors = new Float32Array(MAX_OWNER_LINES * 6);
   private readonly ownerLines: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+  // Movement trails, every unit's segments in one buffer; colours carry alpha for the fade.
+  private readonly trailPositions = new Float32Array(MAX_TRAIL_SEGMENTS * 6);
+  private readonly trailColors = new Float32Array(MAX_TRAIL_SEGMENTS * 8);
+  private readonly trailLines: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   private tokenAt = 0;
   private onPresence: ((presence: LiveMapPresence | null) => void) | null = null;
   private lastPresence: { json: string; at: number } | null = null;
@@ -960,6 +977,13 @@ export class MapScene3D {
     }));
     this.ownerLines.frustumCulled = false;
     this.scene.add(this.ownerLines);
+    const trailGeometry = new THREE.BufferGeometry();
+    trailGeometry.setAttribute("position", new THREE.BufferAttribute(this.trailPositions, 3).setUsage(THREE.DynamicDrawUsage));
+    trailGeometry.setAttribute("color", new THREE.BufferAttribute(this.trailColors, 4).setUsage(THREE.DynamicDrawUsage));
+    trailGeometry.setDrawRange(0, 0);
+    this.trailLines = new THREE.LineSegments(trailGeometry, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false }));
+    this.trailLines.frustumCulled = false;
+    this.scene.add(this.trailLines);
     const glow = () => new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
     this.rings = this.createPool(new THREE.RingGeometry(0.85, 1, 40).rotateX(-Math.PI / 2), glow(), MAX_EFFECT_PRIMITIVES);
     // Spell bolts: unit boxes stretched along the source -> target segment.
@@ -1132,6 +1156,8 @@ export class MapScene3D {
       object.healthFraction = unit.healthFraction ?? null;
       object.powerLevel = unit.power ?? null;
       object.owner = unit.owner;
+      object.trail = unit.trail && unit.trail.length > 1 ? unit.trail : null;
+      object.muted = unit.muted;
       if (object.color !== unit.color || object.icon !== (unit.icon ?? null)) {
         object.color = unit.color;
         object.icon = unit.icon ?? null;
@@ -1878,6 +1904,8 @@ export class MapScene3D {
     this.beams.material.dispose();
     this.ownerLines.geometry.dispose();
     this.ownerLines.material.dispose();
+    this.trailLines.geometry.dispose();
+    this.trailLines.material.dispose();
     for (const pool of [this.rings, this.bolts, this.slashes, this.bars]) {
       pool.geometry.dispose();
       pool.material.dispose();
@@ -1980,6 +2008,8 @@ export class MapScene3D {
       labelHeight: LABEL_HEIGHT,
       deadLift: DEAD_LIFT,
       modelBase: 0,
+      trail: null,
+      muted: unit.muted,
     };
     this.applyTokenFace(object);
     group.scale.setScalar(this.scaleOf(object));
@@ -3273,6 +3303,38 @@ export class MapScene3D {
     }
     this.updateTargetLines(dt);
     this.updateOwnerLines();
+    this.updateTrails();
+  }
+
+  // Each living unit's movement trail, in its colour, fading from the unit
+  // back to nothing; dimmer for muted units. It starts at the unit; older
+  // points stand at their logged height on the mesh, never below the unit's
+  // floor (a swimmer's log sits under the surface), on the flat artwork at 0.
+  private updateTrails() {
+    const mesh = this.dungeonMesh;
+    const lift = OWNER_LINE.lift * this.unitScale;
+    let count = 0;
+    for (const object of this.units.values()) {
+      const trail = object.trail;
+      if (!trail || object.dead) continue;
+      this.color.set(object.color);
+      const opacity = TRAIL_LINE.opacity * (object.muted ? TRAIL_LINE.mutedFactor : 1);
+      const last = trail.length - 1;
+      for (let index = 0; index < last && count < MAX_TRAIL_SEGMENTS; index++) {
+        for (const [slot, at] of [[0, index], [1, index + 1]] as const) {
+          const { point, z } = trail[at];
+          const scene = mapPointToScene(point, this.aspect, GROUND_WIDTH);
+          const y = !mesh ? 0 : at === 0 || z === undefined ? object.base.y : Math.max(z * mesh.scale, object.floorY);
+          this.trailPositions.set([scene.x, y + lift, scene.z], count * 6 + slot * 3);
+          this.trailColors.set([this.color.r, this.color.g, this.color.b, opacity * (1 - at / last)], count * 8 + slot * 4);
+        }
+        count++;
+      }
+    }
+    const geometry = this.trailLines.geometry;
+    geometry.setDrawRange(0, count * 2);
+    geometry.attributes.position.needsUpdate = count > 0;
+    geometry.attributes.color.needsUpdate = count > 0;
   }
 
   // A thin line from each guardian to its owner, in the owner's colour: dim,

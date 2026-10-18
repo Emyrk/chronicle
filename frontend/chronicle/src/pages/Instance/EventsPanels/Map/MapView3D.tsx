@@ -17,6 +17,7 @@ import {
   type DungeonMeshRequest,
   type DungeonMeshState,
   type MapScene3DEffectHover,
+  type MapScene3DTrailPoint,
   type MapScene3DUnit,
   type MapSceneDirector,
   type MapSceneFocus,
@@ -155,6 +156,31 @@ function EffectTooltip({ hover }: { hover: MapScene3DEffectHover }) {
   );
 }
 
+// Gap between a movement trail's points.
+const TRAIL_STEP_MS = 100;
+
+// Where the unit was every TRAIL_STEP_MS over the last `spanMs`, newest first
+// (from `sample`, the unit now), stopping at a map change or before its first sample.
+function sampleTrail(
+  marker: MapSceneMarker,
+  sample: MapPositionSample,
+  spanMs: number,
+  projectSample: (sample: MapPositionSample) => MapPoint | null,
+): MapScene3DTrailPoint[] {
+  const trail: MapScene3DTrailPoint[] = [];
+  const first = marker.positions[0];
+  for (let ago = 0; ago <= spanMs; ago += TRAIL_STEP_MS) {
+    const at = sample.timestampMs - ago;
+    if (!first || at < first.timestampMs) break;
+    const past = ago === 0 ? sample : replayPositionAt(marker.positions, at, marker.kind === "player");
+    if (!past || past.mapId !== sample.mapId) break;
+    const point = projectSample(past);
+    if (!point) break;
+    trail.push({ point, z: past.z });
+  }
+  return trail;
+}
+
 export default function MapView3D({
   ground,
   markers,
@@ -290,6 +316,7 @@ export default function MapView3D({
         : marker.sample;
       const point = sample === marker.sample ? marker.point : projectSample(sample) ?? marker.point;
       const modelUrl = miniatureUrl(marker.entry, miniatureUrls);
+      const trail = effectSettings.trailSeconds > 0 ? sampleTrail(marker, sample, effectSettings.trailSeconds * 1000, projectSample) : undefined;
       return [{
         guid: marker.guid,
         point,
@@ -307,10 +334,11 @@ export default function MapView3D({
         owner: marker.owner,
         dispel: dispelOf(marker.debuffs),
         power: marker.power ?? null,
+        trail,
       }];
     });
     scene.setUnits(units);
-  }, [bossGuids, dispelOf, frozen, markers, miniatureUrls, projectSample, showBars, smoothMs, specializations]);
+  }, [bossGuids, dispelOf, effectSettings.trailSeconds, frozen, markers, miniatureUrls, projectSample, showBars, smoothMs, specializations]);
 
   useEffect(() => {
     sceneRef.current?.setUnitRoles(unitRoles ?? NO_ROLES);
