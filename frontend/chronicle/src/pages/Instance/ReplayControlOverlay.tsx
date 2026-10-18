@@ -37,6 +37,7 @@ import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { createStreamCursor } from "@/api/protodecode/decode";
 import { SlainSchema, type Slain } from "@/api/proto/chronicle_pb";
 import { isPlayerGuidFast } from "./EventsPanels/processors/guidCache";
+import { isReplaySpaceToggle } from "./replaySpaceKey";
 import { useSyncModeContext, useSyncModeContextOptional } from "./SyncModeContext";
 
 export type ReplayPosition = "top" | "bottom";
@@ -447,6 +448,21 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
     };
   }, []);
 
+  // Space toggles play/pause. Skipped while YouTube drives playback (the
+  // button is disabled then too) so the two can never disagree.
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isReplaySpaceToggle(event)) return;
+      const s = syncRef.current;
+      if (!s.enabled || s.externalDriver !== "none") return;
+      event.preventDefault();
+      if (s.isPlaying) s.pause();
+      else s.play();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   // Calculate progress within encounter bounds
   const progress = useMemo(() => {
     if (!sync.encounterBounds || !sync.currentTimestamp) return 0;
@@ -513,7 +529,7 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
       className={extraClass}
       onClick={() => (sync.isPlaying ? sync.pause() : sync.play())}
       disabled={controlsDisabled}
-      title={sync.isPlaying ? "Pause" : "Play"}
+      title={sync.isPlaying ? "Pause (Space)" : "Play (Space)"}
     >
       {sync.isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
     </Button>
