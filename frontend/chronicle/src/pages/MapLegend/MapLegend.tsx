@@ -10,7 +10,7 @@ import { HEAL_COLOR, HEAL_CRIT_COLOR, OVERHEAL_COLOR, SCHOOL_TOKENS, schoolColor
 import { DASH_ART_SIZE, DISPEL_COLORS, DISPEL_ORDER, HALO_COLORS, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, TRAIL_LINE, type HaloKind } from "@/pages/Instance/EventsPanels/Map/unitTokenArt";
 import { participantColor } from "@/pages/Instance/liveSessionProtocol";
 import { POWER_COLORS } from "@/pages/Instance/EventsPanels/RaidFrames/raidFrameShared";
-import { At, BossToken, Ground, Token, useClock } from "./legendArt";
+import { At, BossToken, Ground, Token, UnitPlate, useClock } from "./legendArt";
 import {
   BoltDemo,
   CastIconDemo,
@@ -214,6 +214,24 @@ export function MapLegend() {
           </Card>
           <Card title="Muted" demo={<Ground><At x={35} y={55}><Token {...MAGE} /></At><At x={68} y={55}><Token {...PALADIN} muted /></At></Ground>}>
             While players are selected in the page&apos;s filter, everyone else fades to {Math.round(TOKEN_LAYOUT.mutedOpacity * 100)}%.
+          </Card>
+          <Card title="Hover" demo={
+            <Ground height={150}>
+              <At x={50} y={80}><Token {...SHAMAN} /></At>
+              <At x={50} y={58}>
+                <UnitPlate info={{
+                  name: "Nalu",
+                  nameColor: SHAMAN.ring,
+                  owner: null,
+                  health: { fraction: 0.72, color: healthBarColor(0.72), text: "3024 / 4200" },
+                  power: { fraction: 0.46, color: POWER_COLORS.mana },
+                  cast: { name: "Healing Wave", progress: cycle(seconds, 3), color: HEAL_COLOR },
+                  dead: false,
+                }} />
+              </At>
+            </Ground>
+          }>
+            Hovering a unit shows its nameplate: the name (in red for enemies, with the owner for a pet or totem), health with its percentage and amount, power, and a cast bar while it casts (or Dead).
           </Card>
         </Grid>
       </Section>

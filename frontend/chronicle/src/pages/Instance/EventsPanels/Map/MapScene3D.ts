@@ -28,7 +28,7 @@ import {
 } from "./cameraDirector";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
-import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
+import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanPoint } from "./plan/mapPlan";
 import { PlanLayer, type PlanSurface } from "./plan/planLayer";
@@ -75,6 +75,9 @@ import type { MapMarkerKind, MapSceneGround, MapUnitHealth } from "./useMapScene
 export const GROUND_WIDTH = 100;
 const MUTED_OPACITY = TOKEN_LAYOUT.mutedOpacity;
 const LABEL_HEIGHT = 5;
+// The hovered unit's nameplate is this many screen pixels per canvas pixel (at 1x),
+// at every zoom: about 135 px wide.
+const PLATE_SCREEN_SCALE = 0.8;
 /** Primitive pool size for each effect kind; also the derivation cap's ceiling. */
 export { MAX_EFFECT_PRIMITIVES };
 // Never run the effect clock further ahead of the last replay tick (real time).
@@ -734,7 +737,8 @@ export class MapScene3D {
   private readonly floorHeights = new FloorHeightCache((x, z, ceiling) => this.sampleFloor(x, z, ceiling));
   private readonly floorRay = new THREE.Ray();
   private constraining = false;
-  private label: THREE.Sprite | null = null;
+  // The hovered unit's nameplate (drawUnitPlate), redrawn when what it shows changes.
+  private label: { sprite: THREE.Sprite; canvas: HTMLCanvasElement; key: string } | null = null;
   private hoveredGuid: string | null = null;
   // A click on a unit (inspect it); held briefly so a double-click (zoom) cancels it.
   private onUnitClick: ((guid: string) => void) | null = null;
@@ -2867,31 +2871,78 @@ export class MapScene3D {
     }
   }
 
+  // The hovered unit's nameplate: name, health, power and cast, live.
   private updateLabel() {
-    const object = this.hoveredGuid ? this.units.get(this.hoveredGuid) : undefined;
-    if (!object) {
+    const guid = this.hoveredGuid;
+    const object = guid ? this.units.get(guid) : undefined;
+    if (!guid || !object) {
       this.clearLabel();
       return;
     }
-    if (this.label?.userData.text !== object.name) {
-      this.clearLabel();
-      this.label = createLabelSprite(object.name);
-      this.label.userData.baseScale = this.label.scale.clone();
-      this.scene.add(this.label);
+    if (!this.label) {
+      const canvas = document.createElement("canvas");
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
+      sprite.center.set(0.5, 0);
+      sprite.renderOrder = 10;
+      this.scene.add(sprite);
+      this.label = { sprite, canvas, key: "" };
     }
-    this.label!.scale.copy(this.label!.userData.baseScale as THREE.Vector3).multiplyScalar(this.unitScale);
+    const label = this.label;
+    const info = this.plateInfo(guid, object);
+    const size = unitPlateSize(info);
+    // Redraw only when something it shows changes (to the percent).
+    const key = JSON.stringify(info, (_key, value: unknown) => (typeof value === "number" ? Math.round(value * 100) / 100 : value));
+    if (key !== label.key) {
+      label.key = key;
+      if (label.canvas.width !== size.width * UNIT_PLATE.scale || label.canvas.height !== size.height * UNIT_PLATE.scale) {
+        label.canvas.width = size.width * UNIT_PLATE.scale;
+        label.canvas.height = size.height * UNIT_PLATE.scale;
+        label.sprite.material.map?.dispose();
+        const texture = new THREE.CanvasTexture(label.canvas);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        label.sprite.material.map = texture;
+        label.sprite.material.needsUpdate = true;
+      }
+      drawUnitPlate(label.canvas.getContext("2d")!, info);
+      label.sprite.material.map!.needsUpdate = true;
+    }
     // Above the unit's cast icons while it has any.
-    const iconTop = this.castIconTops.get(this.hoveredGuid!);
+    const iconTop = this.castIconTops.get(guid);
     const height = iconTop !== undefined ? iconTop + CAST_ICON_TOP_GAP : object.labelHeight;
     const { position } = object.group;
-    this.label!.position.set(position.x, position.y + height * this.scaleOf(object), position.z);
+    label.sprite.position.set(position.x, position.y + height * this.scaleOf(object), position.z);
+    // A fixed size on screen, like a game's nameplate, however close the camera is.
+    const viewportHeight = this.renderer.domElement.clientHeight || 1;
+    const worldPerPixel = (2 * this.camera.position.distanceTo(label.sprite.position) * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)) / viewportHeight;
+    label.sprite.scale.set(size.width * PLATE_SCREEN_SCALE * worldPerPixel, size.height * PLATE_SCREEN_SCALE * worldPerPixel, 1);
+  }
+
+  // What the hovered unit's nameplate shows, from what the scene already has.
+  private plateInfo(guid: string, object: UnitObject): UnitPlateInfo {
+    const health = object.healthFraction ?? (object.health && object.health.max > 0 ? object.health.current / object.health.max : null);
+    const cast = this.unitCasts.get(guid);
+    return {
+      name: object.name,
+      nameColor: object.kind === "hostile" ? ENEMY_RED : object.color,
+      owner: object.owner ? this.units.get(object.owner)?.name ?? null : null,
+      health: health === null ? null : {
+        fraction: health,
+        color: healthBarColor(health),
+        text: object.health && object.health.max > 0 ? `${shortNumber(object.health.current)} / ${shortNumber(object.health.max)}` : null,
+      },
+      power: object.powerLevel,
+      cast: cast ? { name: cast.spellName || "Casting", progress: cast.progress, color: `#${this.castColor(cast).getHexString()}` } : null,
+      dead: object.dead,
+    };
   }
 
   private clearLabel() {
     if (!this.label) return;
-    this.scene.remove(this.label);
-    this.label.material.map?.dispose();
-    this.label.material.dispose();
+    this.scene.remove(this.label.sprite);
+    this.label.sprite.material.map?.dispose();
+    this.label.sprite.material.dispose();
     this.label = null;
   }
 
@@ -3863,6 +3914,8 @@ export class MapScene3D {
       this.updateTokens(now);
       this.updateBars();
       this.updateEffectHover();
+      // The nameplate keeps its screen size as the camera moves.
+      if (this.hoveredGuid) this.updateLabel();
       this.renderer.render(this.scene, this.camera);
       this.emitPresence();
       if (animating) this.requestRender();
@@ -4007,6 +4060,13 @@ function isLiquid(object: THREE.Object3D, root: THREE.Object3D): boolean {
     if (/^liquid/i.test(node.name)) return true;
   }
   return false;
+}
+
+// 16800 -> "16.8k", 1250000 -> "1.25M", 950 -> "950".
+function shortNumber(value: number): string {
+  if (value >= 1_000_000) return `${+(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 10_000) return `${+(value / 1000).toFixed(1)}k`;
+  return String(Math.round(value));
 }
 
 function createLabelSprite(text: string): THREE.Sprite {

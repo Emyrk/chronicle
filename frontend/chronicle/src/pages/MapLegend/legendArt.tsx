@@ -19,8 +19,12 @@ import {
   drawShadow,
   drawSigil,
   drawSigilTicks,
+  drawUnitPlate,
+  UNIT_PLATE,
+  unitPlateSize,
   type DispelKind,
   type HaloKind,
+  type UnitPlateInfo,
 } from "@/pages/Instance/EventsPanels/Map/unitTokenArt";
 import { hexCss } from "@/pages/Instance/EventsPanels/Map/mapPalette";
 
@@ -84,6 +88,28 @@ function ArtCanvas({ draw, style, className }: { draw: (context: CanvasRendering
     draw(context);
   }, [draw]);
   return <canvas ref={ref} width={TOKEN_ART_SIZE} height={TOKEN_ART_SIZE} aria-hidden className={className} style={style} />;
+}
+
+/** A hovered unit's nameplate, drawn by the map's own drawUnitPlate; centred on its container's origin, above it. */
+export function UnitPlate({ info }: { info: UnitPlateInfo }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const nameColor = useCssColor(info.nameColor);
+  const size = unitPlateSize(info);
+  // Redrawn when anything it shows changes; the key carries the resolved colour.
+  const key = JSON.stringify({ ...info, nameColor });
+  useEffect(() => {
+    const context = ref.current?.getContext("2d");
+    if (context) drawUnitPlate(context, JSON.parse(key) as UnitPlateInfo);
+  }, [key]);
+  return (
+    <canvas
+      ref={ref}
+      width={size.width * UNIT_PLATE.scale}
+      height={size.height * UNIT_PLATE.scale}
+      aria-hidden
+      style={{ position: "absolute", left: -size.width / 2, top: -size.height, width: size.width, height: size.height }}
+    />
+  );
 }
 
 // A square layer `half` radii either side of the token's centre.

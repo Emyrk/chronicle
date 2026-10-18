@@ -435,3 +435,133 @@ export function drawDash(context: CanvasRenderingContext2D, dotted: boolean, col
   context.roundRect(4, 3, length, 10, 5);
   context.fill();
 }
+
+/** What a hovered unit's nameplate shows (drawUnitPlate). */
+export interface UnitPlateInfo {
+  name: string;
+  /** The name's colour: the class colour, or enemy red. */
+  nameColor: string;
+  /** A guardian's owner, shown after its name; null otherwise. */
+  owner: string | null;
+  /** Health (0-1), its bar colour and an absolute reading ("12.3k / 16.8k"), or null when unknown. */
+  health: { fraction: number; color: string; text: string | null } | null;
+  /** Power (0-1) and its colour (mana, rage, energy), or null. */
+  power: { fraction: number; color: string } | null;
+  /** A cast in progress: its spell, how far along (0-1) and its school colour. */
+  cast: { name: string; progress: number; color: string } | null;
+  dead: boolean;
+}
+
+/** The nameplate's layout, in canvas pixels at 1x (drawn at UNIT_PLATE.scale). */
+export const UNIT_PLATE = {
+  scale: 2,
+  width: 168,
+  padding: 6,
+  nameHeight: 16,
+  healthHeight: 12,
+  powerHeight: 4,
+  gap: 3,
+  statusHeight: 13,
+} as const;
+
+/** The nameplate's size at 1x for `info` (its rows depend on what is known). */
+export function unitPlateSize(info: UnitPlateInfo): { width: number; height: number } {
+  const plate = UNIT_PLATE;
+  let height = plate.padding * 2 + plate.nameHeight;
+  if (info.health) height += plate.gap + plate.healthHeight;
+  if (info.power) height += plate.gap + plate.powerHeight;
+  if (info.cast || info.dead) height += plate.gap + plate.statusHeight;
+  return { width: plate.width, height };
+}
+
+/**
+ * A hovered unit's nameplate, WoW style: its name (and owner), a health bar
+ * with the percentage, a thin power bar, and a cast bar while it casts (or
+ * "Dead"). Draws at UNIT_PLATE.scale on a canvas sized from unitPlateSize.
+ */
+export function drawUnitPlate(context: CanvasRenderingContext2D, info: UnitPlateInfo) {
+  const plate = UNIT_PLATE;
+  const { width, height } = unitPlateSize(info);
+  context.save();
+  context.setTransform(plate.scale, 0, 0, plate.scale, 0, 0);
+  context.clearRect(0, 0, width, height);
+  context.fillStyle = "rgba(0, 0, 0, 0.82)";
+  context.strokeStyle = "rgba(255, 255, 255, 0.14)";
+  context.lineWidth = 1;
+  context.beginPath();
+  context.roundRect(0.5, 0.5, width - 1, height - 1, 4);
+  context.fill();
+  context.stroke();
+  const inner = width - plate.padding * 2;
+  let y = plate.padding;
+  context.textBaseline = "middle";
+
+  // The name, then the owner in grey; each trimmed to fit.
+  context.font = "600 12px ui-sans-serif, system-ui, sans-serif";
+  const owner = info.owner ? ` (${info.owner})` : "";
+  const ownerRoom = owner ? Math.min(context.measureText(owner).width, inner / 2) : 0;
+  const name = fitText(context, info.name, inner - ownerRoom);
+  context.fillStyle = info.dead ? DEAD_RING : info.nameColor;
+  context.fillText(name, plate.padding, y + plate.nameHeight / 2);
+  if (owner) {
+    const nameWidth = context.measureText(name).width;
+    context.font = "500 11px ui-sans-serif, system-ui, sans-serif";
+    context.fillStyle = "rgba(255, 255, 255, 0.5)";
+    context.fillText(fitText(context, owner, inner - nameWidth), plate.padding + nameWidth, y + plate.nameHeight / 2);
+  }
+  y += plate.nameHeight;
+
+  const bar = (barY: number, barHeight: number, fraction: number, color: string) => {
+    context.fillStyle = "rgba(255, 255, 255, 0.1)";
+    context.fillRect(plate.padding, barY, inner, barHeight);
+    context.fillStyle = color;
+    context.fillRect(plate.padding, barY, inner * Math.max(0, Math.min(1, fraction)), barHeight);
+  };
+  // Bar text: white with a dark halo, so it reads on any fill.
+  const barText = (text: string, x: number, textY: number, align: CanvasTextAlign) => {
+    context.textAlign = align;
+    context.shadowColor = "#000";
+    context.shadowBlur = 2;
+    context.fillStyle = "#ffffff";
+    context.fillText(text, x, textY);
+    context.shadowBlur = 0;
+    context.textAlign = "left";
+  };
+
+  if (info.health) {
+    y += plate.gap;
+    const fraction = info.dead ? 0 : info.health.fraction;
+    bar(y, plate.healthHeight, fraction, info.health.color);
+    context.font = "600 10px ui-monospace, monospace";
+    barText(`${Math.round(fraction * 100)}%`, plate.padding + 3, y + plate.healthHeight / 2 + 0.5, "left");
+    if (info.health.text && !info.dead) barText(info.health.text, width - plate.padding - 3, y + plate.healthHeight / 2 + 0.5, "right");
+    y += plate.healthHeight;
+  }
+
+  if (info.power) {
+    y += plate.gap;
+    bar(y, plate.powerHeight, info.dead ? 0 : info.power.fraction, info.power.color);
+    y += plate.powerHeight;
+  }
+
+  if (info.dead) {
+    y += plate.gap;
+    context.font = "600 11px ui-sans-serif, system-ui, sans-serif";
+    context.fillStyle = ENEMY_RED;
+    context.fillText("Dead", plate.padding, y + plate.statusHeight / 2);
+  } else if (info.cast) {
+    y += plate.gap;
+    bar(y, plate.statusHeight, info.cast.progress, info.cast.color);
+    context.font = "500 10px ui-sans-serif, system-ui, sans-serif";
+    barText(fitText(context, info.cast.name, inner - 6), plate.padding + 3, y + plate.statusHeight / 2 + 0.5, "left");
+  }
+  context.restore();
+}
+
+// `text`, cut with an ellipsis to fit `width` in the current font.
+function fitText(context: CanvasRenderingContext2D, text: string, width: number): string {
+  if (context.measureText(text).width <= width) return text;
+  let cut = text;
+  while (cut.length > 1 && context.measureText(`${cut}…`).width > width) cut = cut.slice(0, -1);
+  return `${cut}…`;
+}
