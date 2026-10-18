@@ -166,7 +166,7 @@ export function MapLegend() {
             A ring in their class colour around their spec&apos;s icon (their class icon when the spec is unknown), with a coin-like edge and a shadow.
           </Card>
           <Card title="Guardian" demo={<Ground><At x={50} y={55}><Token kind="pet" ring="#67e8f9" facing={20} /></At></Ground>}>
-            Anything a player owns (pets, summons, totems): a smaller disc with a paw.
+            Anything a player owns (pets, summons, totems): a smaller disc with a paw. One with a 3D model (a totem) stands on that disc, grown so even small ones read.
           </Card>
           <Card title="Enemy" demo={<Ground><At x={50} y={55}><Token kind="hostile" ring="#fb7185" facing={200} /></At></Ground>}>
             Enemy red, with a dark red well instead of an icon. Units with a 3D model show the model instead.

@@ -168,8 +168,12 @@ const PLAYER_GEOMETRY_HEIGHT = 3;
 // at Fit.
 const MESH_MIN_SCREEN_SCALE = 0.5;
 // Boss minis are this many times a player's true scale on the mesh, so Kresh
-// (a 2.6-unit footprint) comes out around 4.5 yd across.
+// (a 2.6-unit footprint) comes out around 4.5 yd across. Guardians (pets,
+// totems) keep a player's scale: they stand on their own small chip.
 const MESH_BOSS_SCALE = 2.5;
+// A guardian's model is grown to at least this tall (geometry units; a
+// player capsule is 3), so a totem published at its true, tiny size reads.
+const MIN_GUARDIAN_MODEL_HEIGHT = 2.6;
 // With a fight focused, the camera can back off to this multiple of the Fit
 // distance, and the target can pan this far (yards) from the focus centre.
 const MESH_MAX_DISTANCE_FACTOR = 2.5;
@@ -391,6 +395,8 @@ interface UnitToken {
   /** Bosses: the turning tick ring, the sigil under a model, and the pin while there is none. */
   ticks: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
   sigil: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
+  /** A guardian with a model stands on this: its disc's face (paw, ring). */
+  chip: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
   bossPin: THREE.Sprite | null;
 }
 
@@ -445,6 +451,8 @@ interface UnitObject {
   barHeight: number;
   labelHeight: number;
   deadLift: number;
+  /** Height the model stands at: the floor, or a guardian's chip. */
+  modelBase: number;
 }
 
 export interface MapScene3DEffects {
@@ -1384,9 +1392,10 @@ export class MapScene3D {
     this.updateLabel();
   }
 
-  // Bosses stand larger than players on the mesh; everything else shares unitScale.
+  // Models (bosses, adds) stand larger than players on the mesh; guardians'
+  // models stand on their chip at a player's scale, like everything else.
   private scaleOf(object: UnitObject): number {
-    return this.dungeonMesh && object.miniatureUrl ? this.unitScale * MESH_BOSS_SCALE : this.unitScale;
+    return this.dungeonMesh && object.miniatureUrl && object.kind !== "pet" ? this.unitScale * MESH_BOSS_SCALE : this.unitScale;
   }
 
   // Puts the unit at (x, z) on the mesh floor while it shows, else at 0. A
@@ -1942,7 +1951,7 @@ export class MapScene3D {
       bodyMaterial,
       coneMaterial,
       cone,
-      token: { radius, face, edge, shadow, halo, pin, arc, debuff, columns, column, columnTrack, power, powerTrack, ticks, sigil: null, bossPin },
+      token: { radius, face, edge, shadow, halo, pin, arc, debuff, columns, column, columnTrack, power, powerTrack, ticks, sigil: null, chip: null, bossPin },
       icon: unit.icon ?? null,
       boss,
       mini: false,
@@ -1965,6 +1974,7 @@ export class MapScene3D {
       barHeight: BAR_HEIGHT,
       labelHeight: LABEL_HEIGHT,
       deadLift: DEAD_LIFT,
+      modelBase: 0,
     };
     this.applyTokenFace(object);
     group.scale.setScalar(this.scaleOf(object));
@@ -2014,6 +2024,13 @@ export class MapScene3D {
     object.coneMaterial.color.setHex(object.dead && object.boss ? 0x777777 : 0xffffff);
     object.coneMaterial.needsUpdate = true;
     object.token.edge.material.color.set(ring);
+    if (object.token.chip) {
+      const chipMap = this.tokenTextures.disc(null, ring, object.dead, "guardian");
+      if (object.token.chip.material.map !== chipMap) {
+        object.token.chip.material.map = chipMap;
+        object.token.chip.material.needsUpdate = true;
+      }
+    }
     if (object.mini) return;
     const map = object.boss
       ? this.tokenTextures.sigil()
@@ -2092,6 +2109,10 @@ export class MapScene3D {
   }
 
   private applyBossMini(object: UnitObject, mini: BossMini) {
+    if (!object.boss && object.kind === "pet") {
+      this.applyGuardianMini(object, mini);
+      return;
+    }
     object.mini = true;
     object.body.geometry = mini.geometry;
     object.body.scale.setScalar(1);
@@ -2148,7 +2169,52 @@ export class MapScene3D {
     object.barHeight = mini.barHeight;
     object.labelHeight = mini.labelHeight;
     object.deadLift = mini.deadLift;
+    object.modelBase = 0;
     if (object.dead) object.body.position.y = mini.deadLift;
+  }
+
+  // A guardian's model (a totem, a pet) keeps the guardian's disc as a chip
+  // to stand on, with its ring, facing notch, halos and shadow at disc size;
+  // a tiny model is grown to MIN_GUARDIAN_MODEL_HEIGHT.
+  private applyGuardianMini(object: UnitObject, mini: BossMini) {
+    const { token } = object;
+    const box = mini.geometry.boundingBox!;
+    const scale = Math.max(1, MIN_GUARDIAN_MODEL_HEIGHT / Math.max(1e-3, box.max.y - box.min.y));
+    if (!token.chip) {
+      token.chip = new THREE.Mesh(this.tokenPlane, new THREE.MeshBasicMaterial({
+        transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
+      }));
+      token.chip.scale.setScalar(token.radius);
+      token.chip.position.y = token.face;
+      object.group.add(token.chip);
+    }
+    object.mini = true;
+    object.body.geometry = mini.geometry;
+    object.body.scale.setScalar(scale);
+    object.body.rotation.set(0, 0, 0);
+    object.modelBase = token.face;
+    object.deadLift = token.face + mini.deadLift * scale;
+    object.body.position.y = object.dead ? object.deadLift : object.modelBase;
+    if (object.dead) object.body.rotation.x = -Math.PI / 2;
+    const bodyMaterial = object.bodyMaterial;
+    bodyMaterial.map = null;
+    bodyMaterial.depthWrite = bodyMaterial.opacity >= 1;
+    bodyMaterial.polygonOffset = false;
+    bodyMaterial.needsUpdate = true;
+    if (mini.material) {
+      const material = mini.material.clone();
+      material.transparent = true;
+      material.opacity = bodyMaterial.opacity;
+      material.depthWrite = bodyMaterial.depthWrite;
+      bodyMaterial.dispose();
+      object.body.material = material;
+      object.bodyMaterial = material;
+      object.textured = true;
+    }
+    setBodyColor(object);
+    this.applyTokenFace(object);
+    object.barHeight = Math.max(BAR_HEIGHT, token.face + box.max.y * scale + BOSS_MINI_BAR_GAP);
+    object.labelHeight = object.barHeight + LABEL_HEIGHT - BAR_HEIGHT;
   }
 
   private removeUnit(guid: string) {
@@ -2158,7 +2224,7 @@ export class MapScene3D {
     object.bodyMaterial.dispose();
     object.coneMaterial.dispose();
     const { token } = object;
-    for (const part of [token.shadow, token.edge, token.halo, token.pin, token.arc, token.debuff, token.column, token.columnTrack, token.power, token.powerTrack, token.ticks, token.sigil]) part?.material.dispose();
+    for (const part of [token.shadow, token.edge, token.halo, token.pin, token.arc, token.debuff, token.column, token.columnTrack, token.power, token.powerTrack, token.ticks, token.sigil, token.chip]) part?.material.dispose();
     token.bossPin?.material.dispose();
     object.drop?.material.dispose();
     this.units.delete(guid);
@@ -2717,7 +2783,7 @@ export class MapScene3D {
     object.dead = dead;
     if (object.mini) {
       object.body.rotation.x = dead ? -Math.PI / 2 : 0;
-      object.body.position.y = dead ? object.deadLift : 0;
+      object.body.position.y = dead ? object.deadLift : object.modelBase;
       setBodyColor(object);
     }
     this.applyTokenFace(object);
