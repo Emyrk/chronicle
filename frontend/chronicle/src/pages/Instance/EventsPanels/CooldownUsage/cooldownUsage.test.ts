@@ -4,6 +4,7 @@ import {
   buildCooldownRows,
   buildEffects,
   buildSegments,
+  cooldownStateAt,
   normalizeClassName,
   usedCooldownRows,
 } from "./cooldownUsage";
@@ -165,5 +166,24 @@ describe("normalizeClassName", () => {
   it("matches API and player class spellings", () => {
     expect(normalizeClassName("DeathKnight")).toBe("DEATHKNIGHT");
     expect(normalizeClassName("DRUID")).toBe("DRUID");
+  });
+});
+
+describe("cooldownStateAt", () => {
+  const { segments } = buildSegments([{ at: 10_000, cooldownMs: 30_000 }], [window(0, 100_000)]);
+  const row = { segments } as Parameters<typeof cooldownStateAt>[0];
+
+  it("is ready before the cast and once its cooldown runs out", () => {
+    expect(cooldownStateAt(row, 5_000)).toEqual({ ready: true, remainingMs: 0 });
+    expect(cooldownStateAt(row, 40_000)).toEqual({ ready: true, remainingMs: 0 });
+  });
+
+  it("counts down while cooling", () => {
+    expect(cooldownStateAt(row, 10_000)).toEqual({ ready: false, remainingMs: 30_000 });
+    expect(cooldownStateAt(row, 32_500)).toEqual({ ready: false, remainingMs: 7_500 });
+  });
+
+  it("reads as ready outside its windows", () => {
+    expect(cooldownStateAt(row, 150_000)).toEqual({ ready: true, remainingMs: 0 });
   });
 });

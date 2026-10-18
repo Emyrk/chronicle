@@ -9,7 +9,9 @@ import { useDatasetId } from "@/hooks/useDatasetId";
 import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
 import { cn } from "@/lib/utils";
 import { classColor } from "../Consumables/consumablesLedgerLogic";
+import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { GenericPanel } from "../GenericPanel";
+import { usePanelVariant } from "../PanelVariantContext";
 import { TemporalTimelineInterval, TemporalTimelineTrack } from "../TemporalTimeline";
 import type { PanelRenderProps } from "../types";
 import {
@@ -22,6 +24,7 @@ import {
   type TimeWindow,
 } from "./cooldownUsage";
 import type { CooldownUsageResult } from "./cooldownUsage.processor";
+import { CooldownsNow } from "./CooldownsNow";
 
 const CLASS_PREFIX = "c:";
 const MIN_CD_PREFIX = "m:";
@@ -145,6 +148,17 @@ export function CooldownUsageContent(props: PanelRenderProps<CooldownUsageResult
 
   const rangeStart = windows[0]?.start ?? 0;
   const rangeEnd = windows[windows.length - 1]?.end ?? 0;
+
+  // Over the map (a meter window), the panel reads at one moment: the replay's,
+  // else the end of the selected fights.
+  const variant = usePanelVariant();
+  const sync = useSyncModeContextOptional();
+  if (variant === "overlay") {
+    if (cooldownsError) return <div className="p-3 text-center text-[11px] text-red-300">Failed to load cooldown data.</div>;
+    if (cooldownsLoading) return <div className="p-3 text-center text-[11px] text-white/50">Loading cooldowns…</div>;
+    const atMs = sync?.enabled && sync.currentTimestamp ? sync.currentTimestamp.getTime() : rangeEnd;
+    return <CooldownsNow rows={allRows} atMs={atMs} />;
+  }
 
   return (
     <GenericPanel {...props}>

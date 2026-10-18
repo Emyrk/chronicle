@@ -72,6 +72,25 @@ export interface CooldownUsageRow {
   windowMs: number;
 }
 
+/** A cooldown at one moment: ready, or cooling with the time left until it is. */
+export interface CooldownStateAt {
+  ready: boolean;
+  /** 0 when ready. */
+  remainingMs: number;
+}
+
+/**
+ * The row's cooldown at `at` (inside its windows): cooling while a cast's
+ * cooldown runs, ready otherwise. Outside every window it reads as ready.
+ */
+export function cooldownStateAt(row: CooldownUsageRow, at: number): CooldownStateAt {
+  for (const segment of row.segments) {
+    if (at < segment.start || at >= segment.end) continue;
+    return segment.kind === "cooldown" ? { ready: false, remainingMs: segment.end - at } : { ready: true, remainingMs: 0 };
+  }
+  return { ready: true, remainingMs: 0 };
+}
+
 export function usedCooldownRows(rows: readonly CooldownUsageRow[]): CooldownUsageRow[] {
   return rows.filter((row) => row.casts.length > 0);
 }
