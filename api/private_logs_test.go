@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chronauth/claims"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/api/httpmw"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
@@ -22,6 +23,44 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
+
+func TestUpdatePrivateLogVisibilityRejectsPublication(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(broker)
+	store := servicedbstore.DatabaseStore(broker)
+
+	ownerID := uuid.New()
+	_, err := store.InsertUser(ctx, database.InsertUserParams{ID: ownerID, Username: "immutable-private-owner-" + ownerID.String()})
+	require.NoError(t, err)
+	logID := uuid.New()
+	now := database.Timestamptz(time.Now())
+	_, err = zed.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+		ID: logID, Owner: ownerID, LogType: database.LogTypeV2,
+		Private: true, CreatedAt: now, UpdatedAt: now,
+	})
+	require.NoError(t, err)
+
+	handlerAPI := &API{Opts: &Options{Zed: zed}, Zed: zed}
+	router := chi.NewRouter()
+	router.Route("/{logID}", func(r chi.Router) {
+		r.Use(httpmw.LogIDMiddleware)
+		r.Put("/privacy", handlerAPI.UpdatePrivateLogVisibility)
+	})
+
+	request := httptest.NewRequest(http.MethodPut, "/"+logID.String()+"/privacy", strings.NewReader(`{"private":false}`))
+	request.Header.Set("Content-Type", "application/json")
+	request = request.WithContext(authz.AsUser(request.Context(), ownerID))
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	require.Equal(t, http.StatusConflict, response.Code, response.Body.String())
+
+	private, err := store.GetWoWLogGroupPrivacy(ctx, logID)
+	require.NoError(t, err)
+	require.True(t, private)
+}
 
 func TestPrivateLogShareHandlersWithClaimsAndNoActor(t *testing.T) {
 	t.Parallel()

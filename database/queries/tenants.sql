@@ -37,12 +37,6 @@ RETURNING *;
 -- name: DeleteTenant :exec
 DELETE FROM tenants WHERE id = $1;
 
--- name: TenantIDByRealmID :one
-SELECT COALESCE(ws.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS tenant_id
-FROM wow_server_realms realm
-JOIN wow_servers ws ON ws.id = realm.server_id
-WHERE realm.id = @realm_id;
-
 -- name: SetServerTenant :exec
 -- Assigns or removes a tenant from a server.
 -- Pass NULL to remove the tenant assignment.

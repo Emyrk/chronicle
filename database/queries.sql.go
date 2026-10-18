@@ -14082,6 +14082,7 @@ UPDATE wow_log_groups
 SET private = $1,
     updated_at = NOW()
 WHERE id = $2
+  AND (NOT private OR $1)
 RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason, parse_generation, private
 `
 
@@ -20870,20 +20871,6 @@ func (q *sqlQuerier) TenantDiscoveryStats(ctx context.Context, since pgtype.Time
 		return nil, err
 	}
 	return items, nil
-}
-
-const tenantIDByRealmID = `-- name: TenantIDByRealmID :one
-SELECT COALESCE(ws.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS tenant_id
-FROM wow_server_realms realm
-JOIN wow_servers ws ON ws.id = realm.server_id
-WHERE realm.id = $1
-`
-
-func (q *sqlQuerier) TenantIDByRealmID(ctx context.Context, realmID uuid.UUID) (uuid.NullUUID, error) {
-	row := q.db.QueryRow(ctx, tenantIDByRealmID, realmID)
-	var tenant_id uuid.NullUUID
-	err := row.Scan(&tenant_id)
-	return tenant_id, err
 }
 
 const updateTenant = `-- name: UpdateTenant :one

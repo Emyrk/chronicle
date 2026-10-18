@@ -861,7 +861,6 @@ type sqlcQuerier interface {
 	// Returns instance and unique player counts per discoverable tenant within a
 	// time window. Used by the discovery endpoint to surface activity metrics.
 	TenantDiscoveryStats(ctx context.Context, since pgtype.Timestamptz) ([]TenantDiscoveryStatsRow, error)
-	TenantIDByRealmID(ctx context.Context, realmID uuid.UUID) (uuid.NullUUID, error)
 	TouchLogInstanceRankingSource(ctx context.Context, instanceID uuid.UUID) error
 	TouchSidekickUpload(ctx context.Context, arg TouchSidekickUploadParams) (int64, error)
 	TouchUploadKeyLastUsed(ctx context.Context, id uuid.UUID) error

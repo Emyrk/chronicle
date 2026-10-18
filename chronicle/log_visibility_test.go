@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestReconcileLogGroupVisibilityPublishesStoredCohortFacts(t *testing.T) {
+func TestReconcilePrivateLogGroupRemovesCohortMemberships(t *testing.T) {
 	t.Parallel()
 
 	ctx := testutil.Context(t, testutil.WaitMedium)
@@ -27,7 +27,7 @@ func TestReconcileLogGroupVisibilityPublishesStoredCohortFacts(t *testing.T) {
 	chron := &Chronicle{Zed: zed}
 
 	ownerID, realmID := insertVisibilityTestOwnerAndRealm(t, ctx, store)
-	logGroupID := insertVisibilityTestLogGroup(t, ctx, store, ownerID, true)
+	logGroupID := insertVisibilityTestLogGroup(t, ctx, store, ownerID)
 	instanceID := insertVisibilityTestInstance(t, ctx, store, logGroupID, realmID, "Blackwing Lair", time.Now().UTC())
 	encounterID := uuid.New()
 	startedAt := time.Now().UTC().Add(-time.Hour)
@@ -49,24 +49,25 @@ func TestReconcileLogGroupVisibilityPublishesStoredCohortFacts(t *testing.T) {
 		EncounterName: "Razorgore", InstanceName: "Blackwing Lair", PlayerGuid: "1", PlayerName: "Mage",
 		PlayerClass: "Mage", PlayerSpec: "Frost", PlayerRole: "dps", PlayerLevel: 60,
 		DifficultyName: "Normal", MaxPlayers: 40, RealmID: realmID, RealmName: "Test Realm",
-		DamageDone: 1000, DurationSecs: 60, Dps: 100, LogHashedSlug: "private-publication", KilledAt: database.Timestamptz(startedAt.Add(time.Minute)),
+		DamageDone: 1000, DurationSecs: 60, Dps: 100, LogHashedSlug: "private-log", KilledAt: database.Timestamptz(startedAt.Add(time.Minute)),
 	}))
 
-	require.NoError(t, chron.ReconcileLogGroupVisibility(ctx, logGroupID, false))
-	requireVisibilityMembershipCounts(t, ctx, store, 0, 0, 0)
-
-	_, err = zed.UpdateWoWLogGroupPrivacy(ctx, database.UpdateWoWLogGroupPrivacyParams{ID: logGroupID, Private: false})
-	require.NoError(t, err)
-	require.NoError(t, chron.ReconcileLogGroupVisibility(ctx, logGroupID, true))
+	refreshVisibilityMemberships(t, ctx, store, logGroupID)
 	requireVisibilityMembershipCounts(t, ctx, store, 1, 1, 1)
 
 	_, err = zed.UpdateWoWLogGroupPrivacy(ctx, database.UpdateWoWLogGroupPrivacyParams{ID: logGroupID, Private: true})
 	require.NoError(t, err)
-	require.NoError(t, chron.ReconcileLogGroupVisibility(ctx, logGroupID, false))
+	require.NoError(t, chron.ReconcilePrivateLogGroup(ctx, logGroupID))
 	requireVisibilityMembershipCounts(t, ctx, store, 0, 0, 0)
+
+	_, err = store.GetInstanceSpeedrun(ctx, instanceID)
+	require.NoError(t, err)
+	rankings, err := store.InstanceRankingRecords(ctx, instanceID)
+	require.NoError(t, err)
+	require.Len(t, rankings, 1)
 }
 
-func TestReconcileLogGroupVisibilityLinksPublishedDuplicates(t *testing.T) {
+func TestReconcilePrivateLogGroupUnlinksDuplicates(t *testing.T) {
 	t.Parallel()
 
 	ctx := testutil.Context(t, testutil.WaitMedium)
@@ -76,50 +77,26 @@ func TestReconcileLogGroupVisibilityLinksPublishedDuplicates(t *testing.T) {
 
 	ownerID, realmID := insertVisibilityTestOwnerAndRealm(t, ctx, store)
 	startedAt := time.Now().UTC().Add(-time.Hour)
-	publicLogID := insertVisibilityTestLogGroup(t, ctx, store, ownerID, false)
-	privateLogID := insertVisibilityTestLogGroup(t, ctx, store, ownerID, true)
+	publicLogID := insertVisibilityTestLogGroup(t, ctx, store, ownerID)
+	privateLogID := insertVisibilityTestLogGroup(t, ctx, store, ownerID)
 	publicInstanceID := insertVisibilityTestInstance(t, ctx, store, publicLogID, realmID, "Molten Core", startedAt)
 	privateInstanceID := insertVisibilityTestInstance(t, ctx, store, privateLogID, realmID, "Molten Core", startedAt.Add(time.Minute))
 
-	for _, instanceID := range []uuid.UUID{publicInstanceID, privateInstanceID} {
-		batch := store.InsertInstancePlayers(ctx, []database.InsertInstancePlayersParams{
-			{InstanceID: instanceID, UnitGuid: guid.GUID(1), Name: "One", Level: 60, Class: database.WowPlayableClassMAGE, Race: database.WowPlayableRaceHuman},
-			{InstanceID: instanceID, UnitGuid: guid.GUID(2), Name: "Two", Level: 60, Class: database.WowPlayableClassWARRIOR, Race: database.WowPlayableRaceHuman},
-		})
-		require.NoError(t, batch.Close())
-	}
+	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
+		DuplicateGroupID: uuid.NullUUID{UUID: publicInstanceID, Valid: true},
+		Ids:              []uuid.UUID{publicInstanceID, privateInstanceID},
+	}))
+	_, err := zed.UpdateWoWLogGroupPrivacy(ctx, database.UpdateWoWLogGroupPrivacyParams{ID: privateLogID, Private: true})
+	require.NoError(t, err)
+	require.NoError(t, chron.ReconcilePrivateLogGroup(ctx, privateLogID))
 
-	require.NoError(t, chron.ReconcileLogGroupVisibility(ctx, privateLogID, false))
 	privateInstance, err := store.Instance(ctx, privateInstanceID)
 	require.NoError(t, err)
 	require.False(t, privateInstance.DuplicateGroupID.Valid)
-
-	_, err = zed.UpdateWoWLogGroupPrivacy(ctx, database.UpdateWoWLogGroupPrivacyParams{ID: privateLogID, Private: false})
-	require.NoError(t, err)
-	require.NoError(t, chron.ReconcileLogGroupVisibility(ctx, privateLogID, true))
-
 	publicInstance, err := store.Instance(ctx, publicInstanceID)
 	require.NoError(t, err)
-	privateInstance, err = store.Instance(ctx, privateInstanceID)
-	require.NoError(t, err)
 	require.True(t, publicInstance.DuplicateGroupID.Valid)
-	require.True(t, privateInstance.DuplicateGroupID.Valid)
-	require.Equal(t, publicInstance.DuplicateGroupID.UUID, privateInstance.DuplicateGroupID.UUID)
-
-	_, err = zed.UpdateWoWLogGroupPrivacy(ctx, database.UpdateWoWLogGroupPrivacyParams{ID: privateLogID, Private: true})
-	require.NoError(t, err)
-	require.NoError(t, chron.ReconcileLogGroupVisibility(ctx, privateLogID, false))
-	privateInstance, err = store.Instance(ctx, privateInstanceID)
-	require.NoError(t, err)
-	require.False(t, privateInstance.DuplicateGroupID.Valid)
-
-	_, err = zed.UpdateWoWLogGroupPrivacy(ctx, database.UpdateWoWLogGroupPrivacyParams{ID: privateLogID, Private: false})
-	require.NoError(t, err)
-	require.NoError(t, chron.ReconcileLogGroupVisibility(ctx, privateLogID, true))
-	privateInstance, err = store.Instance(ctx, privateInstanceID)
-	require.NoError(t, err)
-	require.True(t, privateInstance.DuplicateGroupID.Valid)
-	require.Equal(t, publicInstance.DuplicateGroupID.UUID, privateInstance.DuplicateGroupID.UUID)
+	require.Equal(t, publicInstanceID, publicInstance.DuplicateGroupID.UUID)
 }
 
 func insertVisibilityTestOwnerAndRealm(t *testing.T, ctx context.Context, store database.Store) (uuid.UUID, uuid.UUID) {
@@ -136,7 +113,7 @@ func insertVisibilityTestOwnerAndRealm(t *testing.T, ctx context.Context, store 
 	return ownerID, realmID
 }
 
-func insertVisibilityTestLogGroup(t *testing.T, ctx context.Context, store database.Store, ownerID uuid.UUID, private bool) uuid.UUID {
+func insertVisibilityTestLogGroup(t *testing.T, ctx context.Context, store database.Store, ownerID uuid.UUID) uuid.UUID {
 	t.Helper()
 	logGroupID := uuid.New()
 	now := database.Timestamptz(time.Now())
@@ -144,10 +121,6 @@ func insertVisibilityTestLogGroup(t *testing.T, ctx context.Context, store datab
 		ID: logGroupID, Owner: ownerID, LogType: database.LogTypeV1, CreatedAt: now, UpdatedAt: now,
 	})
 	require.NoError(t, err)
-	if private {
-		_, err = store.UpdateWoWLogGroupPrivacy(ctx, database.UpdateWoWLogGroupPrivacyParams{ID: logGroupID, Private: true})
-		require.NoError(t, err)
-	}
 	require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
 	return logGroupID
 }
@@ -162,6 +135,22 @@ func insertVisibilityTestInstance(t *testing.T, ctx context.Context, store datab
 	})
 	require.NoError(t, err)
 	return instanceID
+}
+
+func refreshVisibilityMemberships(t *testing.T, ctx context.Context, store database.Store, logGroupID uuid.UUID) {
+	t.Helper()
+	_, err := store.RefreshParseScoreMembershipsForLogGroup(ctx, database.RefreshParseScoreMembershipsForLogGroupParams{
+		LogGroupID: logGroupID, PolicyVersion: parsepolicy.PolicyVersion, QueryVersion: parsepolicy.QueryVersion,
+	})
+	require.NoError(t, err)
+	_, err = store.RefreshTimeParseClearTimeMembershipsForLogGroup(ctx, database.RefreshTimeParseClearTimeMembershipsForLogGroupParams{
+		LogGroupID: logGroupID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+	})
+	require.NoError(t, err)
+	_, err = store.RefreshTimeParseBossKillMembershipsForLogGroup(ctx, database.RefreshTimeParseBossKillMembershipsForLogGroupParams{
+		LogGroupID: logGroupID, PolicyVersion: timeparsepolicy.PolicyVersion, QueryVersion: timeparsepolicy.QueryVersion,
+	})
+	require.NoError(t, err)
 }
 
 func requireVisibilityMembershipCounts(t *testing.T, ctx context.Context, store database.Store, parseCount, clearCount, bossCount int) {

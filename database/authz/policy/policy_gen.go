@@ -1418,7 +1418,7 @@ func (obj *ObjInstance) Create() *InstanceRelates {
 	return &InstanceRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Raid_log schema.zed:190
+// Raid_log schema.zed:189
 // Relationship: instance:<id>#raid_log@raid_log:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Raid_log() etc.
 func (obj *ObjInstance) Raid_log(subs ...*ObjRaid_log) *ObjInstance {
@@ -1436,7 +1436,7 @@ func (r *InstanceRelates) Raid_log(subs ...*ObjRaid_log) *InstanceRelates {
 	return r
 }
 
-// PublicWildcard schema.zed:191
+// PublicWildcard schema.zed:190
 // Relationship: instance:<id>#public@user:*
 func (obj *ObjInstance) PublicWildcard() *ObjInstance {
 	obj.src.Touch().Add("public", &v1.ObjectReference{
@@ -1979,10 +1979,6 @@ func (obj *ObjRaid_log) PermissionMark_private() string {
 	return "mark_private"
 }
 
-func (obj *ObjRaid_log) PermissionMark_public() string {
-	return "mark_public"
-}
-
 func (obj *ObjRaid_log) PermissionReparse() string {
 	return "reparse"
 }
@@ -2154,36 +2150,6 @@ func (obj *ObjRaid_log) CanMark_private_User(sub *ObjUser) rel.Relationship {
 		ResourceType:     r.ObjectType,
 		ResourceID:       r.ObjectId,
 		ResourceRelation: "mark_private",
-		SubjectType:      s.Obj.ObjectType,
-		SubjectID:        s.Obj.ObjectId,
-		SubjectRelation:  s.OptionalRelation,
-	}
-}
-
-// CanMark_public_Chronicle checks if the subject has mark_public permission
-// // Object: raid_log:<id>
-// Schema: permission mark_public = chronicle->admin_logs + (uploader & chronicle->mark_log_public)
-func (obj *ObjRaid_log) CanMark_public_Chronicle(sub *ObjChronicle) rel.Relationship {
-	r, s := obj.src.Obj, sub.src
-	return rel.Relationship{
-		ResourceType:     r.ObjectType,
-		ResourceID:       r.ObjectId,
-		ResourceRelation: "mark_public",
-		SubjectType:      s.Obj.ObjectType,
-		SubjectID:        s.Obj.ObjectId,
-		SubjectRelation:  s.OptionalRelation,
-	}
-}
-
-// CanMark_public_User checks if the subject has mark_public permission
-// // Object: raid_log:<id>
-// Schema: permission mark_public = chronicle->admin_logs + (uploader & chronicle->mark_log_public)
-func (obj *ObjRaid_log) CanMark_public_User(sub *ObjUser) rel.Relationship {
-	r, s := obj.src.Obj, sub.src
-	return rel.Relationship{
-		ResourceType:     r.ObjectType,
-		ResourceID:       r.ObjectId,
-		ResourceRelation: "mark_public",
 		SubjectType:      s.Obj.ObjectType,
 		SubjectID:        s.Obj.ObjectId,
 		SubjectRelation:  s.OptionalRelation,

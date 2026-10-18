@@ -45,7 +45,7 @@ export function VisibilityPicker({ privateLog, canMarkPrivate, onChange }: Visib
           <span className={canMarkPrivate ? undefined : "opacity-60"}>
             <span className="block text-sm font-medium">Private</span>
             <span className="block text-xs text-muted-foreground">
-              Viewers must request access. Excluded from rankings.
+              Viewers must request access. Excluded from rankings and permanently private after upload.
             </span>
           </span>
           {!canMarkPrivate && (

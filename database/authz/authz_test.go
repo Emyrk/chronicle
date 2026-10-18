@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/authzed/gochugaru/rel"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -308,11 +309,8 @@ func TestLogPrivacyRoles(t *testing.T) {
 	}
 
 	check(ownerID, "mark_private", true)
-	check(ownerID, "mark_public", true)
 	check(otherPrivateID, "mark_private", false)
-	check(otherPrivateID, "mark_public", false)
 	check(adminID, "mark_private", true)
-	check(adminID, "mark_public", true)
 }
 
 func TestUpdateWoWLogGroupPrivacyUpdatesInstanceAccess(t *testing.T) {
@@ -365,8 +363,8 @@ func TestUpdateWoWLogGroupPrivacyUpdatesInstanceAccess(t *testing.T) {
 	checkView(false)
 
 	_, err = zed.UpdateWoWLogGroupPrivacy(ctx, database.UpdateWoWLogGroupPrivacyParams{ID: logID, Private: false})
-	require.NoError(t, err)
-	checkView(true)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	checkView(false)
 }
 
 func TestInTx_NilWrapped(t *testing.T) {

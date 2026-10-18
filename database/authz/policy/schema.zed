@@ -177,7 +177,6 @@ definition raid_log {
   permission view = uploader + approved_viewer + chronicle->admin_logs
   permission manage_access = uploader + chronicle->admin_logs
   permission mark_private = chronicle->admin_logs + (uploader & chronicle->mark_log_private)
-  permission mark_public = chronicle->admin_logs + (uploader & chronicle->mark_log_public)
   permission reparse = chronicle->admin_logs + (uploader & chronicle->can_reparse)
   permission delete_files = uploader + chronicle->admin_logs
   permission upload_youtube = uploader + chronicle->admin_logs

@@ -56,21 +56,22 @@ func (api *API) UpdatePrivateLogVisibility(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	actor, _ := authz.ActorFromContext(ctx)
-	permission := policy.New().Raid_log(logGroupID).CanMark_public_User(actor)
-	visibility := "public"
-	if req.Private {
-		permission = policy.New().Raid_log(logGroupID).CanMark_private_User(actor)
-		visibility = "private"
+	if !req.Private {
+		httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{
+			Message: "Private logs cannot be made public.",
+		})
+		return
 	}
-	allowed, err := api.Zed.CheckOne(ctx, nil, permission)
+
+	actor, _ := authz.ActorFromContext(ctx)
+	allowed, err := api.Zed.CheckOne(ctx, nil, policy.New().Raid_log(logGroupID).CanMark_private_User(actor))
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 	if !allowed {
 		httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
-			Message: "You do not have permission to mark this log " + visibility + ".",
+			Message: "You do not have permission to mark this log private.",
 		})
 		return
 	}
@@ -80,11 +81,10 @@ func (api *API) UpdatePrivateLogVisibility(w http.ResponseWriter, r *http.Reques
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	alreadyRequestedVisibility := current == req.Private
-	if !alreadyRequestedVisibility {
+	if !current {
 		_, err = api.Zed.UpdateWoWLogGroupPrivacy(ctx, database.UpdateWoWLogGroupPrivacyParams{
 			ID:      logGroupID,
-			Private: req.Private,
+			Private: true,
 		})
 		if err != nil {
 			httpapi.InternalServerError(w, err)
@@ -92,19 +92,18 @@ func (api *API) UpdatePrivateLogVisibility(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	// Intrinsic metrics are persisted for every log. Reconcile only the shared
-	// duplicate, ranking, and cohort state when visibility changes (or when an
-	// idempotent retry repairs a previous partial failure).
-	if err := api.Chronicle.ReconcileLogGroupVisibility(ctx, logGroupID, !req.Private); err != nil {
+	// Intrinsic metrics remain persisted. Idempotent retries rerun reconciliation
+	// so a prior partial failure can still be repaired.
+	if err := api.Chronicle.ReconcilePrivateLogGroup(ctx, logGroupID); err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 
-	if alreadyRequestedVisibility {
-		httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "Log is already " + visibility + "."})
+	if current {
+		httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "Log is already private."})
 		return
 	}
-	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "Log is now " + visibility + "."})
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "Log is now private."})
 }
 
 func (api *API) CreatePrivateLogShareLink(w http.ResponseWriter, r *http.Request) {

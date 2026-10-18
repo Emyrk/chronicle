@@ -8,6 +8,7 @@ UPDATE wow_log_groups
 SET private = @private,
     updated_at = NOW()
 WHERE id = @id
+  AND (NOT private OR @private)
 RETURNING *;
 
 -- name: CreatePrivateLogShareLink :one
