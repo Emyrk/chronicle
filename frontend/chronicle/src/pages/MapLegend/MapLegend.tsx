@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { AIRBORNE_YARDS } from "@/pages/Instance/EventsPanels/Map/dungeonMeshes";
 import { MAP_CONTROL_KEYBINDS } from "@/pages/Instance/EventsPanels/Map/mapControls";
+import { DEAD_ENEMY_FRAME_LINGER_MS, DEAD_ENEMY_MODEL_FADE_MS } from "@/pages/Instance/EventsPanels/Map/mapDeathVisibility";
 import { healthBarColor, MAX_HEALTH_BARS, RECENT_HEALTH_MS } from "@/pages/Instance/EventsPanels/Map/mapModel";
 import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, hexCss, WALK_AVATAR_COLOR } from "@/pages/Instance/EventsPanels/Map/mapPalette";
 import { ABOVE_DISC_MODES, CAST_MODES } from "@/pages/Instance/EventsPanels/Map/mapViewSettings";
@@ -169,7 +170,7 @@ export function MapLegend() {
             Anything a player owns (pets, summons, totems): a smaller disc with a paw, or a totem pole for totems. One with a 3D model (a totem) stands on that disc, grown so even small ones read.
           </Card>
           <Card title="Enemy" demo={<Ground><At x={50} y={55}><Token kind="hostile" ring="#fb7185" facing={200} /></At></Ground>}>
-            Enemy red, with a dark red well instead of an icon. Units with a 3D model show the model instead.
+            Enemy red, with a dark red well instead of an icon. Units with a 3D model show the model instead. When a non-boss dies, its enemy frame stays for {ms(DEAD_ENEMY_FRAME_LINGER_MS)}, then disappears; its 3D model fades over {ms(DEAD_ENEMY_MODEL_FADE_MS)}. Boss frames and models remain.
           </Card>
           <Card title="Facing" demo={<Ground><At x={50} y={55}><Token {...MAGE} facing={(seconds * 40) % 360} /></At></Ground>}>
             The notch on the ring points where the unit faces and turns on the ground. When the log doesn&apos;t record facing, enemies face whoever they last hit and everyone else shows no notch.

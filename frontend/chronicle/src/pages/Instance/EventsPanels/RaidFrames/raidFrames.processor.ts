@@ -332,6 +332,24 @@ export function latestResourceAt(
   return latest;
 }
 
+/** When the current zero-health run began, or null when the unit is alive at `timestampMs`. */
+export function resourceDeathStartedAt(
+  samples: readonly RaidFrameResourceSample[],
+  timestampMs: number,
+): number | null {
+  let low = 0;
+  let high = samples.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (samples[middle].timestampMs <= timestampMs) low = middle + 1;
+    else high = middle;
+  }
+  let index = low - 1;
+  if (index < 0 || samples[index].currentHealth > 0) return null;
+  while (index > 0 && samples[index - 1].currentHealth <= 0) index -= 1;
+  return samples[index].timestampMs;
+}
+
 /** An instant whose spell_start is followed shortly by spell_fail never went off. */
 function dropFailedInstant(
   encounter: RaidFramesEncounter,

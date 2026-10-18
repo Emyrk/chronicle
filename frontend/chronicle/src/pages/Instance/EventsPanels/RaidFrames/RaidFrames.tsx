@@ -15,6 +15,7 @@ import {
   enemyFrameUnits,
   latestResourceAt,
   orderRaidFramePlayers,
+  resourceDeathStartedAt,
   raidFramesProcessor,
   type RaidFrameCast,
   type RaidFrameHeal,
@@ -23,6 +24,7 @@ import {
   type RaidFramesProcessorEvent,
   type RaidFramesResult,
 } from "./raidFrames.processor";
+import { deadEnemyFrameVisible } from "../Map/mapDeathVisibility";
 import { INCOMING_HEAL_WINDOW_MS, POWER_COLORS, percent, useDisplayTimestamp } from "./raidFrameShared";
 
 export function selectRaidFramesEncounter(
@@ -546,6 +548,8 @@ function InspectCastBar({ cast, timestampMs }: { cast: RaidFrameCast; timestampM
 
 /** Panel option token for enemy raid frames. */
 const ENEMIES_OPTION = "enemies";
+/** Map overlay option: remove dead non-boss enemy frames after their short linger. */
+export const HIDE_DEAD_ENEMIES_OPTION = "hide-dead-enemies";
 
 const BREAKOUT_WIDTH = 400;
 
@@ -605,7 +609,9 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
   }
   // Enemies mode (`enemies` in the panel option): the encounter's enemies
   // instead of the players, coloured as enemies.
-  const enemiesMode = (props.panelOption ?? "").split(",").includes(ENEMIES_OPTION);
+  const panelOptions = (props.panelOption ?? "").split(",");
+  const enemiesMode = panelOptions.includes(ENEMIES_OPTION);
+  const hideDeadEnemies = panelOptions.includes(HIDE_DEAD_ENEMIES_OPTION);
   const instancePlayers = props.context.instance.players ?? {};
   const units = props.context.instance.units ?? {};
   // The encounter's own enemy list: who counts, and who is a boss.
@@ -620,7 +626,13 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
         (guid) => units[guid]?.name ?? guid,
         bossGuids,
         encounterEnemyGuids,
-      ).map(({ guid, name }) => [guid, { name, class: "enemy" }] as const)
+      )
+        .filter(({ guid }) => !hideDeadEnemies || deadEnemyFrameVisible(
+          resourceDeathStartedAt(encounter.resourcesByUnit.get(guid) ?? [], timestampMs),
+          timestampMs,
+          bossGuids.has(guid),
+        ))
+        .map(({ guid, name }) => [guid, { name, class: "enemy" }] as const)
     : Object.entries(instancePlayers)
       .sort(([, left], [, right]) => left.class.localeCompare(right.class) || left.name.localeCompare(right.name));
   if (players.length === 0) {

@@ -55,9 +55,9 @@ import {
   deriveRecentHealGain,
   deriveLastHitTargets,
   deriveUnitCasts,
+  deathStartedAt,
   INTERRUPTED_ICON_MS,
   INTERRUPTED_PLAYER_ICON_MS,
-  isDeadAt,
   MAX_EFFECT_PRIMITIVES,
   schoolColor,
   type ActiveEffect,
@@ -68,6 +68,7 @@ import {
   type ReplayEffectKind,
   type UnitCast,
 } from "./replayEffects";
+import { deadEnemyModelOpacity } from "./mapDeathVisibility";
 import type { MapMarkerKind, MapSceneGround, MapUnitHealth } from "./useMapScene";
 
 /** Ground plane width in scene units; depth follows the artwork's aspect. */
@@ -2256,7 +2257,9 @@ export class MapScene3D {
 
     for (const object of this.units.values()) {
       const guid = object.group.userData.guid as string;
-      this.setDead(object, fx !== null && isDeadAt(fx, guid, cursorMs));
+      const deadSinceMs = fx ? deathStartedAt(fx, guid, cursorMs) : null;
+      this.setDead(object, deadSinceMs !== null);
+      this.updateDeadEnemyModel(object, deadSinceMs, cursorMs);
     }
     if (fx) deriveUnitCasts(fx, cursorMs, this.unitCasts);
     else this.unitCasts.clear();
@@ -2776,7 +2779,16 @@ export class MapScene3D {
     this.commitPool(this.bars, count);
   }
 
-  // Slain units lie down, grey, until resurrected.
+  // Dead non-boss enemies leave their ground token behind while the loaded 3D
+  // model fades away. Boss corpses stay fully visible.
+  private updateDeadEnemyModel(object: UnitObject, deadSinceMs: number | null, cursorMs: number) {
+    if (!object.mini || object.kind !== "hostile") return;
+    const opacity = deadEnemyModelOpacity(deadSinceMs, cursorMs, object.boss);
+    object.body.visible = opacity > 0;
+    object.bodyMaterial.opacity = opacity;
+    object.bodyMaterial.depthWrite = opacity >= 1;
+  }
+
   // Slain units: a model lies down, grey; a disc greys with a skull. Until resurrected.
   private setDead(object: UnitObject, dead: boolean) {
     if (object.dead === dead) return;

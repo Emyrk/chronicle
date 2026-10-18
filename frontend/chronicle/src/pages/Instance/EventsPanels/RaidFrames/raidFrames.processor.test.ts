@@ -15,6 +15,7 @@ import {
   incomingHealsAt,
   recentInstantAt,
   latestResourceAt,
+  resourceDeathStartedAt,
   raidFramesProcessor,
 } from "./raidFrames.processor";
 
@@ -244,6 +245,26 @@ describe("raidFramesProcessor", () => {
     raidFramesProcessor.processEvent(state, { ...meta, type: "raid_group", groupMemberGuids }, ENCOUNTER, FIRST_TIMESTAMP, "raid_group", context());
     expect(state.composition.groups[0][0]).toBe(OTHER_PLAYER);
     expect(state.composition.groups[1][0]).toBe(PLAYER);
+  });
+});
+
+describe("resourceDeathStartedAt", () => {
+  const sample = (timestampMs: number, currentHealth: number) => ({
+    timestampMs,
+    currentHealth,
+    maximumHealth: 100,
+    absorb: 0,
+    powerType: "mana",
+    currentPower: 0,
+    maximumPower: 100,
+  });
+  const samples = [sample(1_000, 100), sample(2_000, 0), sample(2_500, 0), sample(5_000, 50), sample(8_000, 0)];
+
+  it("returns the start of the current zero-health run", () => {
+    expect(resourceDeathStartedAt(samples, 1_999)).toBeNull();
+    expect(resourceDeathStartedAt(samples, 4_999)).toBe(2_000);
+    expect(resourceDeathStartedAt(samples, 5_000)).toBeNull();
+    expect(resourceDeathStartedAt(samples, 9_000)).toBe(8_000);
   });
 });
 

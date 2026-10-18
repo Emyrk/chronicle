@@ -28,7 +28,7 @@ import { MapView2D, type MapViewRequest } from "./MapView2D";
 import { useEmbeddedPanel, useEmbeddedPanelWithResult } from "../useEmbeddedPanel";
 import { UnitInspectContext, type UnitInspectSelection } from "../UnitInspectContext";
 import { InspectCards } from "./InspectCards";
-import { createRaidFramesPanel, selectRaidFramesEncounter } from "../RaidFrames/RaidFrames";
+import { createRaidFramesPanel, HIDE_DEAD_ENEMIES_OPTION, selectRaidFramesEncounter } from "../RaidFrames/RaidFrames";
 import { lastTargetAt } from "../RaidFrames/raidFrames.processor";
 import { createUnitAurasPanel } from "../UnitAuras/UnitAuras";
 import { TargetFrames } from "./TargetFrames";
@@ -647,7 +647,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
                   >
                     <X className="h-3 w-3" />
                   </button>
-                  <div className="min-w-0 overflow-hidden">{raidFrames("enemies")}</div>
+                  <div className="min-w-0 overflow-hidden">{raidFrames(`enemies,${HIDE_DEAD_ENEMIES_OPTION}`)}</div>
                 </div>
               ) : (
                 <button

@@ -16,6 +16,7 @@ import {
   deriveUnitCasts,
   deriveCombatText,
   deriveRecentHealGain,
+  deathStartedAt,
   formatHealAmount,
   HEAL_CHUNK_MS,
   HEAL_COLOR,
@@ -196,6 +197,13 @@ describe("isDeadAt", () => {
     expect(isDeadAt(fx, "tank", 5_000)).toBe(false);
     expect(isDeadAt(fx, "tank", 9_000)).toBe(true);
     expect(isDeadAt(fx, "healer", 9_000)).toBe(false);
+  });
+
+  it("returns the active death's start time", () => {
+    expect(deathStartedAt(fx, "tank", 999)).toBeNull();
+    expect(deathStartedAt(fx, "tank", 4_999)).toBe(1_000);
+    expect(deathStartedAt(fx, "tank", 5_000)).toBeNull();
+    expect(deathStartedAt(fx, "tank", 9_000)).toBe(8_000);
   });
 });
 

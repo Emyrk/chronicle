@@ -268,17 +268,21 @@ export function deriveRecentHealGain(fx: EncounterEffects, guid: string, cursorM
   return gain;
 }
 
-/** Whether `guid` died at or before `cursorMs` and has not been resurrected since. */
-export function isDeadAt(fx: EncounterEffects, guid: string, cursorMs: number): boolean {
+/** The latest death at or before `cursorMs`, or null when the unit is alive then. */
+export function deathStartedAt(fx: EncounterEffects, guid: string, cursorMs: number): number | null {
   const deaths = fx.deathsByUnit.get(guid);
-  if (!deaths) return false;
+  if (!deaths) return null;
   const death = latestTimeIndex(deaths, cursorMs);
-  if (death < 0) return false;
+  if (death < 0) return null;
   const resurrects = fx.resurrectsByUnit.get(guid);
   const resurrect = resurrects ? latestTimeIndex(resurrects, cursorMs) : -1;
-  return resurrect < 0 || resurrects![resurrect] < deaths[death];
+  return resurrect < 0 || resurrects![resurrect] < deaths[death] ? deaths[death] : null;
 }
 
+/** Whether `guid` died at or before `cursorMs` and has not been resurrected since. */
+export function isDeadAt(fx: EncounterEffects, guid: string, cursorMs: number): boolean {
+  return deathStartedAt(fx, guid, cursorMs) !== null;
+}
 
 /**
  * The effects visible at `cursorMs`, newest first, at most `maxEffects`.
