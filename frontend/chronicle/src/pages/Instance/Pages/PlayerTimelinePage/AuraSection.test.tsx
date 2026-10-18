@@ -82,12 +82,16 @@ describe("AuraSection", () => {
         unitName={(guid) => guid}
         pickedTarget={null}
         onPickTarget={noop}
+        isRaised={() => false}
+        onToggleRaised={noop}
         otherOpenByDefault
       />,
     );
 
     expect(markup).toContain("Arcane Rupture");
     expect(markup).toContain('data-aura-type="debuff"');
+    expect(markup).toContain('data-help="aura-label raisable"');
+    expect(markup).toContain("click to raise it onto the cast timeline");
     expect(markup).not.toContain("Debuffs on players");
   });
 });

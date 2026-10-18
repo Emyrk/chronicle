@@ -22,7 +22,7 @@ function writeRaised(names: readonly string[]) {
 }
 
 /**
- * Buffs the viewer raised onto the cast timeline from Buffs & debuffs, by name.
+ * Auras the viewer raised onto the cast timeline from Buffs & debuffs, by name.
  * A per-viewer preference shared by every log.
  */
 export function useRaisedAuras() {
@@ -45,8 +45,8 @@ export function useRaisedAuras() {
 }
 
 /**
- * Raised buffs as spell overrides: every gain draws as a proc that tints the
- * lane until the buff fades, the same as the Eclipse overrides. idsByName maps
+ * Raised auras as spell overrides: every gain draws as a proc that tints the
+ * lane until the aura fades, the same as the Eclipse overrides. idsByName maps
  * a normalized name to the spell IDs seen for it, so lookups by ID match too.
  */
 export function raisedAuraOverrides(names: readonly string[], idsByName: ReadonlyMap<string, number[]>): SpellOverride[] {

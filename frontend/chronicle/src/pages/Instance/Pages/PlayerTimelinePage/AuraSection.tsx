@@ -380,7 +380,7 @@ interface AuraRowViewProps {
   /** Smaller, indented rows for the "Other" group. */
   compact?: boolean;
   isRaised?: (name: string) => boolean;
-  /** Clicking the name raises the buff onto the cast timeline, or drops it. */
+  /** Clicking the name raises the aura onto the cast timeline, or drops it. */
   onToggleRaised?: (name: string) => void;
 }
 
@@ -388,7 +388,7 @@ function AuraRowView({ row, offsets, P, spellMeta, onHover, compact, isRaised, o
   const grid = { gridTemplateColumns: `${LABEL_WIDTH}px minmax(0,1fr)` };
   const barH = compact ? 8 : 10;
   const meta = spellMeta(row.spellId);
-  const raisable = onToggleRaised != null && row.isBuff;
+  const raisable = onToggleRaised != null;
   const raised = raisable && (isRaised?.(row.name) ?? false);
   return (
     <div className={cn("grid border-t border-border", compact ? "h-6" : "h-[30px]")} style={grid}>

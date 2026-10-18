@@ -282,6 +282,26 @@ describe("withOverrideBuffCasts", () => {
     const later = cast(5000);
     expect(idleGaps([...out.goCasts, later], gcd15, 400)).toEqual(idleGaps([own, later], gcd15, 400));
   });
+
+  it("adds a raised debuff as a proc cast with its active duration", () => {
+    const raised = [{ id: "r", names: ["Arcane Rupture"], showAsCooldown: {}, proc: true, raised: true, note: "" }];
+    const debuff = {
+      ...buff(1000, 9000),
+      spellId: 51954,
+      spellName: "Arcane Rupture",
+      isBuff: false,
+    };
+    const out = withOverrideBuffCasts(player({ aurasOn: [debuff] }), raised, 30_000);
+
+    expect(out.textCasts).toHaveLength(1);
+    expect(out.textCasts[0]).toMatchObject({
+      source: "aura",
+      spellName: "Arcane Rupture",
+      startMs: 1000,
+      buffEndMs: 9000,
+      raised: true,
+    });
+  });
 });
 
 describe("withConsumeCasts", () => {
