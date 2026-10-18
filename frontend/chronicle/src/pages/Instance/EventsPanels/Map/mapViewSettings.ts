@@ -29,13 +29,12 @@ export const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
   maxEffects: MAX_EFFECT_PRIMITIVES,
   bars: true,
   castMode: "selected",
-  aboveDisc: "cast",
+  aboveDisc: "none",
 };
 
 export const ABOVE_DISC_MODES: { value: AboveDiscMode; label: string; title: string }[] = [
   { value: "none", label: "None", title: "Nothing above the tokens" },
   { value: "health", label: "Health", title: "A column as tall as the unit's health, green to red" },
-  { value: "cast", label: "Cast", title: "A column rising in the spell school's colour while the unit casts" },
 ];
 
 export const CAST_MODES: { value: CastIconMode; label: string; title: string }[] = [

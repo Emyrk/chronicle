@@ -338,7 +338,7 @@ export interface MapScene3DUnit {
 }
 
 /** The one live value drawn as a column above each token. */
-export type AboveDiscMode = "none" | "health" | "cast";
+export type AboveDiscMode = "none" | "health";
 
 /** Who the map's target frames show, for the token halos and target lines. */
 export interface MapUnitRoles {
@@ -688,7 +688,7 @@ export class MapScene3D {
   private readonly columnBox = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
   // An open cylinder (radius 1, height 1) hanging below y = 0: a disc's edge.
   private readonly tokenEdge = new THREE.CylinderGeometry(1, 1, 1, 40, 1, true).translate(0, -0.5, 0);
-  private aboveDisc: AboveDiscMode = "cast";
+  private aboveDisc: AboveDiscMode = "none";
   private roles: MapUnitRoles = { selected: null, target: null, targetsTarget: null, pinned: new Set() };
   private readonly unitCasts = new Map<string, UnitCast>();
   private readonly lastHitTargets = new Map<string, string>();
@@ -2884,14 +2884,11 @@ export class MapScene3D {
         }
         token.arc.material.color.copy(castColor);
       }
-      // The column: health (green to red) or the cast bar rising in its school colour.
+      // The column: health, green to red (casts show as the arc round the ring).
       let value: number | null = null;
       if (!object.dead && this.aboveDisc === "health" && object.healthFraction !== null) {
         value = object.healthFraction;
         token.column.material.color.setStyle(healthBarColor(value));
-      } else if (this.aboveDisc === "cast" && cast && castColor) {
-        value = cast.progress;
-        token.column.material.color.copy(castColor);
       }
       token.column.visible = value !== null && value > 0;
       token.columnTrack.visible = value !== null;

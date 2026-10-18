@@ -151,7 +151,7 @@ export function MapLegend() {
           </Lines>
           <At x={bob.x} y={bob.y}><BossToken seconds={seconds} facing={130} halo="target" model={false} /></At>
           <At x={tank.x} y={tank.y}><Token ring="var(--color-class-warrior)" icon="/c/icons/class_warrior.png" facing={-50} halo="targetsTarget" /></At>
-          <At x={caster.x} y={caster.y}><Token {...MAGE} facing={55} halo="selected" cast={{ fraction: castFraction, color: frost }} column={{ value: castFraction, color: frost }} /></At>
+          <At x={caster.x} y={caster.y}><Token {...MAGE} facing={55} halo="selected" cast={{ fraction: castFraction, color: frost }} /></At>
           <At x={healer.x} y={healer.y}><Token {...SHAMAN} facing={-80} pinned cast={{ fraction: cycle(seconds + 1, 3), color: nature }} /></At>
           <At x={10} y={40}><Token {...HUNTER} dead facing={70} /></At>
           <At x={38} y={58}><Token kind="pet" ring="#67e8f9" facing={20} /></At>
@@ -265,7 +265,7 @@ export function MapLegend() {
         </Grid>
       </Section>
 
-      <Section id="above" title="Above the token" note={<>One live value rises as a column from every token. Choose it in Map settings → Units → <em>Above the token</em>.</>}>
+      <Section id="above" title="Above the token" note={<>Optionally, a health column rises from every token (off by default). Turn it on in Map settings → Units → <em>Above the token</em>.</>}>
         <Grid min={240}>
           {ABOVE_DISC_MODES.map((mode) => (
             <Card key={mode.value} title={mode.label} demo={
@@ -274,8 +274,7 @@ export function MapLegend() {
                   <At key={value} x={22 + index * 28} y={82}>
                     <Token
                       {...[PALADIN, MAGE, HUNTER][index]}
-                      column={mode.value === "health" ? { value, color: healthBarColor(value) }
-                        : mode.value === "cast" && index < 2 ? { value: cycle(seconds + index, 2.5 + index), color: index ? nature : frost } : null}
+                      column={mode.value === "health" ? { value, color: healthBarColor(value) } : null}
                     />
                   </At>
                 ))}
@@ -358,7 +357,7 @@ export function MapLegend() {
         </div>
       </Section>
 
-      <Section id="schools" title="Spell school colours" note="Bolts, hits, rings, cast arcs, columns, combat text and the selected unit's target line are coloured by spell school.">
+      <Section id="schools" title="Spell school colours" note="Bolts, hits, rings, cast arcs, combat text and the selected unit's target line are coloured by spell school.">
         <div className="flex flex-wrap gap-4">
           {Object.values(SCHOOL_TOKENS).map((name) => (
             <Swatch key={name} color={`var(--color-school-${name})`} label={name[0].toUpperCase() + name.slice(1)} />
