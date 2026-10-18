@@ -453,7 +453,7 @@ export interface MapScene3DEffects {
   } | null;
   /** Units whose heals (cast or received) float their amount; null for none. */
   healTextGuids: ReadonlySet<string> | null;
-  /** A cast spell's school colour from its spell data (CSS), for casts and AoE rings whose events carry no school. */
+  /** A cast spell's school colour from its spell data (CSS), for casts whose events carry no school. */
   castSchoolColor?: (spellId: number) => string | null;
 }
 
@@ -2059,9 +2059,7 @@ export class MapScene3D {
       const effect = active[index];
       const target = this.units.get(effect.target);
       if (!target) continue;
-      // An AoE ring takes its spell's school when the cast event had none.
-      const ringSchool = effect.type === "ring" && effect.spellId ? this.effects?.castSchoolColor?.(effect.spellId) : null;
-      const color = this.effectColor(ringSchool ?? effect.color);
+      const color = this.effectColor(effect.color);
       const fade = 1 - effect.progress;
       if (effect.type === "beam" || effect.type === "streak") {
         const source = effect.source ? this.units.get(effect.source) : undefined;
@@ -2134,13 +2132,12 @@ export class MapScene3D {
         target.bodyMaterial.emissive.copy(color).multiplyScalar(fade * 0.6 * Math.min(2, effect.intensity));
         if (!this.wobbling.includes(target)) this.wobbling.push(target);
       } else if (ringCount < MAX_EFFECT_PRIMITIVES) {
-        // "ring": an AoE pulse expanding from the caster; "impact": a small
-        // quick burst under a melee ability's target; "heal": a ring rising
-        // up the healed target, sized by the healing (bigger and gold on crits).
-        const radius = (effect.type === "ring"
-          ? 1.5 + 6 * effect.progress
-          : effect.type === "heal" ? (0.9 + 0.4 * effect.progress) * (0.5 + 0.5 * effect.intensity)
-            : 0.6 + 1.8 * effect.progress) * this.unitScale;
+        // "impact": a small quick burst under a melee ability's target;
+        // "heal": a ring rising up the healed target, sized by the healing
+        // (bigger and gold on crits).
+        const radius = (effect.type === "heal"
+          ? (0.9 + 0.4 * effect.progress) * (0.5 + 0.5 * effect.intensity)
+          : 0.6 + 1.8 * effect.progress) * this.unitScale;
         const brightness = fade * (effect.type === "impact" ? 1.2 : 1);
         const position = target.base;
         const y = position.y + (effect.type === "heal" ? (0.2 + 2.4 * effect.progress) * this.unitScale : 0.05);

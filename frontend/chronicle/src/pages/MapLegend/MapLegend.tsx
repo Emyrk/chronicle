@@ -17,7 +17,6 @@ import {
   HealDemo,
   HitDemo,
   MeleeDemo,
-  RingDemo,
   StreakDemo,
 } from "./legendEffects";
 
@@ -305,9 +304,6 @@ export function MapLegend() {
           <Card title="Interrupt" timing={ms(EFFECT_TIMINGS.interrupt)} demo={<HitDemo seconds={seconds} interrupt />}>
             A strong white shake on the interrupted caster.
           </Card>
-          <Card title="Area spell" timing={ms(EFFECT_TIMINGS.aoe)} demo={<RingDemo seconds={seconds} />}>
-            A ring widens across the ground from the caster.
-          </Card>
           <Card title="Heal" timing={ms(EFFECT_TIMINGS.heal)} demo={<HealDemo seconds={seconds} />}>
             A green bolt to the target and a ring rising up it, bigger for bigger heals.
           </Card>
@@ -359,7 +355,7 @@ export function MapLegend() {
         </div>
       </Section>
 
-      <Section id="schools" title="Spell school colours" note="Bolts, hits, rings, cast arcs, combat text and the selected unit's target line are coloured by spell school.">
+      <Section id="schools" title="Spell school colours" note="Bolts, hits, cast arcs, combat text and the selected unit's target line are coloured by spell school.">
         <div className="flex flex-wrap gap-4">
           {Object.values(SCHOOL_TOKENS).map((name) => (
             <Swatch key={name} color={`var(--color-school-${name})`} label={name[0].toUpperCase() + name.slice(1)} />

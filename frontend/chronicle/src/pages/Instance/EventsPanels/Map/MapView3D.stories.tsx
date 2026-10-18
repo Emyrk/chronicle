@@ -97,7 +97,7 @@ const BOSS_GUIDS = new Set(["Boss"]);
 // resurrected later.
 function syntheticEffects(players: number): EncounterEffects {
   const events: ReplayEffectEvent[] = [];
-  const base = { amount: 1000, overheal: 0, absorbed: 0, effective: 1000, crit: false, periodic: false, attack: "spell" as const, aoe: false, castTimeMs: 0, spellId: 1, spellName: "" };
+  const base = { amount: 1000, overheal: 0, absorbed: 0, effective: 1000, crit: false, periodic: false, attack: "spell" as const, castTimeMs: 0, spellId: 1, spellName: "" };
   for (let index = 0; index < players; index++) {
     const guid = `Player-${index}`;
     const cls = CLASSES[index % CLASSES.length];
@@ -131,7 +131,7 @@ function syntheticEffects(players: number): EncounterEffects {
       events.push({ ...base, ...flamestrike, timestampMs: t - 1_000, kind: "interrupt", source: "Player-3", target: "Boss", school: 2 });
       continue;
     }
-    events.push({ ...base, ...flamestrike, timestampMs: t, kind: "cast_go", source: "Boss", target: "", school: 4, aoe: true });
+    events.push({ ...base, ...flamestrike, timestampMs: t, kind: "cast_go", source: "Boss", target: "", school: 4 });
     for (let index = 0; index < players; index += 3) {
       events.push({ ...base, ...flamestrike, timestampMs: t, kind: "damage", source: "Boss", target: `Player-${index}`, school: 4 });
     }
@@ -422,7 +422,7 @@ function bossFightEffects(size: number): EncounterEffects {
   const members = fightMembers(size);
   const tanks = members.filter((member) => member.role === "tank");
   const events: ReplayEffectEvent[] = [];
-  const base = { amount: 1000, overheal: 0, absorbed: 0, effective: 1000, crit: false, periodic: false, attack: "spell" as const, aoe: false, castTimeMs: 0, spellId: 1, spellName: "" };
+  const base = { amount: 1000, overheal: 0, absorbed: 0, effective: 1000, crit: false, periodic: false, attack: "spell" as const, castTimeMs: 0, spellId: 1, spellName: "" };
   const autoAttack = { attack: "swing" as const, spellId: 6603, spellName: "Auto Attack" };
 
   members.forEach((member, index) => {
@@ -478,7 +478,7 @@ function bossFightEffects(size: number): EncounterEffects {
   }
   // One fire AoE on the group; the dodgers have stepped out of it.
   events.push({ ...base, ...BOSS_AOE, timestampMs: AOE_CAST_MS, kind: "cast_start", source: "Boss", target: "", school: 4, castTimeMs: AOE_LAND_MS - AOE_CAST_MS });
-  events.push({ ...base, ...BOSS_AOE, timestampMs: AOE_LAND_MS, kind: "cast_go", source: "Boss", target: "", school: 4, aoe: true });
+  events.push({ ...base, ...BOSS_AOE, timestampMs: AOE_LAND_MS, kind: "cast_go", source: "Boss", target: "", school: 4 });
   for (const member of members) {
     if ((member.role === "tank" || member.role === "melee") && !dodgesAoe(member, members)) {
       events.push({ ...base, ...BOSS_AOE, timestampMs: AOE_LAND_MS, kind: "damage", source: "Boss", target: member.guid, school: 4 });
@@ -603,7 +603,7 @@ const healUnits: SyntheticUnit[] = [
 // unless "Overheal" is on). Greater Heal lands every 5 s, the second one a
 // gold crit; the last one is half overheal.
 function healEvents(): EncounterEffects {
-  const base = { amount: 0, overheal: 0, absorbed: 0, effective: 0, crit: false, periodic: false, attack: "spell" as const, aoe: false, castTimeMs: 0 };
+  const base = { amount: 0, overheal: 0, absorbed: 0, effective: 0, crit: false, periodic: false, attack: "spell" as const, castTimeMs: 0 };
   const heal = (timestampMs: number, source: string, spell: typeof RENEW, amount: number, overheal: number, extra: Partial<ReplayEffectEvent> = {}): ReplayEffectEvent => ({
     ...base, ...spell, timestampMs, kind: "heal", source, target: HEAL_TANK, amount, overheal, effective: amount - overheal, ...extra,
   });
@@ -726,7 +726,7 @@ function bossMiniMarkers(cursorMs: number, fx: EncounterEffects): MapSceneMarker
 
 function bossMiniEffects(): EncounterEffects {
   const fx = createEncounterEffects();
-  const base = { amount: 1000, crit: false, periodic: false, melee: true, aoe: false, castTimeMs: 0, spellId: null, school: 2, source: "Player-0" };
+  const base = { amount: 1000, crit: false, periodic: false, melee: true, castTimeMs: 0, spellId: null, school: 2, source: "Player-0" };
   const events: ReplayEffectEvent[] = [];
   for (let t = 300; t < DURATION_MS; t += 700) {
     events.push({ ...base, timestampMs: t, kind: "damage", target: `Boss-${BOSS_ENTRIES[Math.floor(t / 700) % BOSS_ENTRIES.length]}` });
@@ -1246,7 +1246,7 @@ const CAST_SELECTED = new Set([CAST_MAGE, CAST_HUNTER, CAST_WARRIOR, CAST_PRIEST
 // boss casts Flamestrike. Auto Shot, Auto Attack and wand Shoot repeat
 // throughout and show no icon or text.
 function castEvents(): EncounterEffects {
-  const base = { amount: 800, overheal: 0, absorbed: 0, effective: 0, crit: false, periodic: false, attack: "spell" as const, aoe: false, castTimeMs: 0, school: 2 };
+  const base = { amount: 800, overheal: 0, absorbed: 0, effective: 0, crit: false, periodic: false, attack: "spell" as const, castTimeMs: 0, school: 2 };
   const events: ReplayEffectEvent[] = [
     { ...base, ...FROSTBOLT, timestampMs: 500, kind: "cast_start", source: CAST_MAGE, target: "Boss", castTimeMs: 2_500 },
     { ...base, ...FROSTBOLT, timestampMs: 3_000, kind: "cast_go", source: CAST_MAGE, target: "Boss" },
@@ -1256,7 +1256,7 @@ function castEvents(): EncounterEffects {
     { ...base, ...FIRE_BLAST, timestampMs: 6_500, kind: "cast_go", source: CAST_MAGE, target: "Boss" },
     { ...base, ...FIRE_BLAST, timestampMs: 6_500, kind: "damage", source: CAST_MAGE, target: "Boss" },
     { ...base, ...BOSS_AOE, school: 4, timestampMs: 1_500, kind: "cast_start", source: "Boss", target: "", castTimeMs: 2_500 },
-    { ...base, ...BOSS_AOE, school: 4, timestampMs: 4_000, kind: "cast_go", source: "Boss", target: "", aoe: true },
+    { ...base, ...BOSS_AOE, school: 4, timestampMs: 4_000, kind: "cast_go", source: "Boss", target: "" },
   ];
   for (let t = 300; t < CASTS_MS; t += 2_000) {
     events.push({ ...base, timestampMs: t, kind: "cast_go", source: CAST_HUNTER, target: "Boss", spellId: 75, spellName: "Auto Shot" });
@@ -1276,7 +1276,7 @@ function castEvents(): EncounterEffects {
 // then a 3.5 s Flamestrike is interrupted 3.2 s in with no spell id (as the
 // vanilla parser logs it). No player is selected; the boss still shows icons.
 function bossInterruptEvents(): EncounterEffects {
-  const base = { amount: 600, overheal: 0, absorbed: 0, effective: 0, crit: false, periodic: false, attack: "spell" as const, aoe: false, castTimeMs: 0, school: 4 };
+  const base = { amount: 600, overheal: 0, absorbed: 0, effective: 0, crit: false, periodic: false, attack: "spell" as const, castTimeMs: 0, school: 4 };
   const events: ReplayEffectEvent[] = [
     { ...base, ...BOSS_AOE, timestampMs: 500, kind: "cast_start", source: "Boss", target: "", castTimeMs: 2_500 },
     { ...base, ...BOSS_AOE, timestampMs: 1_700, kind: "interrupt", source: CAST_HUNTER, target: "Boss", school: 2 },
@@ -1353,7 +1353,7 @@ export const WithSelection: Story = {
   args: { players: 20, playbackSpeed: 1, mutedEvery: 3 },
 };
 
-/** Hit wobble, melee lunges/slashes, Auto Shot streaks, spell bolts, cast/AoE rings, interrupts, deaths and health bars at 1x. */
+/** Hit wobble, melee lunges/slashes, Auto Shot streaks, spell bolts, interrupts, deaths and health bars at 1x. */
 export const Effects: Story = {
   args: { players: 10, playbackSpeed: 1, effects: true },
 };
@@ -1363,7 +1363,7 @@ export const EffectsFortyPlayersAt4x: Story = {
   args: { players: 40, playbackSpeed: 4, effects: true },
 };
 
-/** Selected players' spell names float over their targets; hover a beam, streak, slash or ring for its spell tooltip. */
+/** Selected players' spell names float over their targets; hover a beam, streak or slash for its spell tooltip. */
 export const EffectsWithSelection: Story = {
   args: { players: 20, playbackSpeed: 1, mutedEvery: 3, effects: true },
 };

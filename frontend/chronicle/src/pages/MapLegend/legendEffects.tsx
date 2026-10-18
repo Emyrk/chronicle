@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import {
-  AOE_RING_MS,
   BEAM_MS,
   CAST_ICON_MS,
   COMBAT_TEXT_MS,
@@ -149,26 +148,6 @@ export function HitDemo({ seconds, interrupt = false }: { seconds: number; inter
   );
 }
 
-/** An AoE pulse: a ring widening across the ground from its caster. */
-export function RingDemo({ seconds }: { seconds: number }) {
-  const p = phase(seconds, AOE_RING_MS);
-  const color = schoolColor(4);
-  const radius = p === null ? 0 : 1.5 + 6 * p;
-  const brightness = p === null ? 0 : 1 - p;
-  return (
-    <Ground height={130}>
-      <At x={50} y={58}>
-        <Token ring="var(--color-class-warlock)" icon="/c/icons/class_warlock.png" />
-      </At>
-      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
-        {p !== null && (
-          <ellipse cx={50} cy={58} rx={radius * 4.5} ry={radius * 4.5 * 0.45 * 1.6} fill="none" stroke={color} strokeWidth={2.5} vectorEffect="non-scaling-stroke" opacity={brightness} />
-        )}
-      </svg>
-    </Ground>
-  );
-}
-
 /** A heal: a green bolt to the target and a ring rising up it (gold on crits). */
 export function HealDemo({ seconds, crit = false }: { seconds: number; crit?: boolean }) {
   const bolt = phase(seconds, BEAM_MS);
@@ -278,7 +257,6 @@ export const EFFECT_TIMINGS = {
   impact: IMPACT_MS,
   hit: HIT_WOBBLE_MS,
   meleeFlash: MELEE_FLASH_MS,
-  aoe: AOE_RING_MS,
   heal: HEAL_PULSE_MS,
   interrupt: INTERRUPT_MS,
   combatText: COMBAT_TEXT_MS,

@@ -1,5 +1,5 @@
 /**
- * Replay Map effects (hit wobble, beams, cast/AoE rings, deaths) derived
+ * Replay Map effects (hit wobble, beams, heals, deaths) derived
  * purely from the replay cursor. Worker-safe: no three.js, no React. Every
  * effect is a function of (events, cursor), so scrubbing in either direction
  * re-derives the same frame and never leaves stale effects behind.
@@ -38,7 +38,6 @@ export interface ReplayEffectEvent {
   crit: boolean;
   periodic: boolean;
   attack: ReplayAttackKind;
-  aoe: boolean;
   castTimeMs: number;
   spellId: number | null;
   /** Spell name as logged ("" when unknown). */
@@ -59,16 +58,15 @@ export interface EncounterEffects {
  * "beam": a spell bolt between units; "streak": a thin ranged auto shot;
  * "lunge": the attacker stepping toward its target; "slash": an arc at the
  * target of a melee hit; "impact": a small burst for melee abilities;
- * "hit": wobble and flash; "ring": an AoE pulse; "heal": a ring rising at a
- * healed target. (A cast in progress is the token's cast arc, not an effect.)
+ * "hit": wobble and flash; "heal": a ring rising at a healed target. (A cast in progress is the token's cast arc, not an effect.)
  */
-export type ActiveEffectType = "beam" | "streak" | "lunge" | "slash" | "impact" | "hit" | "ring" | "heal";
+export type ActiveEffectType = "beam" | "streak" | "lunge" | "slash" | "impact" | "hit" | "heal";
 
 export interface ActiveEffect {
   type: ActiveEffectType;
   /** Beam, streak, lunge or slash origin; absent for effects anchored on one unit. */
   source?: string;
-  /** The unit the effect is drawn at (the caster for rings and casts). */
+  /** The unit the effect is drawn at. */
   target: string;
   /** 0 at the event, approaching 1 as the effect expires. */
   progress: number;
@@ -121,7 +119,6 @@ export const SLASH_MS = 250;
 export const IMPACT_MS = 250;
 export const MELEE_FLASH_MS = 150;
 export const HIT_WOBBLE_MS = 300;
-export const AOE_RING_MS = 600;
 export const CAST_RING_MAX_MS = 3000;
 export const INTERRUPT_MS = 400;
 export const MERGE_MS = 100;
@@ -417,11 +414,6 @@ export function deriveActiveEffects(
         }
         break;
       }
-      case "cast_go":
-        if (event.aoe && ageMs < AOE_RING_MS && visible(event.source)) {
-          emit("ring", undefined, event.source, ageMs / AOE_RING_MS, schoolColor(event.school), 1);
-        }
-        break;
       case "interrupt":
         if (ageMs < INTERRUPT_MS && visible(event.target)) {
           emit("hit", undefined, event.target, ageMs / INTERRUPT_MS, INTERRUPT_COLOR, 2);

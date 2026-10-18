@@ -185,8 +185,7 @@ describe("mapProcessor", () => {
         spellType: 0,
       })?.events[0]).toMatchObject({ kind: "cast_start", source: "mage", castTimeMs: 2500, spellId: 10 });
       const go = { ...meta, type: "spell_go" as const, caster: "mage", target: "", spell, numHits: 4, numMisses: 0, itemId: null, corpseOwner: null };
-      expect(effectsOf(go)?.events[0]).toMatchObject({ kind: "cast_go", aoe: true });
-      expect(effectsOf({ ...go, numHits: 1 })?.events[0]).toMatchObject({ aoe: false });
+      expect(effectsOf(go)?.events[0]).toMatchObject({ kind: "cast_go", source: "mage", spellId: 10 });
     });
 
     it("records interrupts with the interrupted spell, if known", () => {

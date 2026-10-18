@@ -53,7 +53,6 @@ function event(timestampMs: number, kind: ReplayEffectEvent["kind"], source: str
     crit: false,
     periodic: false,
     attack: "spell",
-    aoe: false,
     castTimeMs: 0,
     spellId: 133,
     spellName: "Fireball",
@@ -161,7 +160,7 @@ describe("deriveActiveEffects", () => {
       event(1_000, "damage", "mage", "boss"),
       event(1_100, "cast_start", "priest", "", { castTimeMs: 2_500 }),
       event(1_200, "damage", "rogue", "boss", { attack: "swing" }),
-      event(1_400, "cast_go", "mage", "", { aoe: true }),
+      event(1_400, "cast_go", "mage", ""),
     );
     const out = deriveActiveEffects(fx, 1_450, DEFAULT_EFFECT_OPTIONS, []);
     const forward = out.map((effect) => ({ ...effect }));
@@ -180,11 +179,6 @@ describe("deriveActiveEffects", () => {
     );
     expect(derive(fx, 2_000)).toEqual([]);
     expect(derive(fx, 2_600)).toEqual([expect.objectContaining({ type: "hit", target: "mage", color: INTERRUPT_COLOR })]);
-  });
-
-  it("pulses a ring for AoE casts", () => {
-    const fx = effects(event(1_000, "cast_go", "mage", "", { aoe: true }), event(1_000, "cast_go", "priest", ""));
-    expect(derive(fx, 1_300)).toEqual([expect.objectContaining({ type: "ring", target: "mage", progress: 0.5 })]);
   });
 });
 

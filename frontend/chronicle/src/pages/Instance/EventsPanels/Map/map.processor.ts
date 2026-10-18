@@ -119,7 +119,6 @@ function effectEvent(timestampMs: number, kind: ReplayEffectEvent["kind"], sourc
     crit: false,
     periodic: false,
     attack: "spell",
-    aoe: false,
     castTimeMs: 0,
     spellId: null,
     spellName: "",
@@ -179,7 +178,6 @@ function toEffectEvent(event: MapProcessorEvent, timestampMs: number, encounter:
     }
     case "spell_go": {
       const fx = effectEvent(timestampMs, "cast_go", event.caster, event.target);
-      fx.aoe = event.numHits > 1;
       fx.spellId = event.spell.id;
       fx.spellName = event.spell.name;
       return fx;
