@@ -283,6 +283,30 @@ describe("withOverrideBuffCasts", () => {
     expect(idleGaps([...out.goCasts, later], gcd15, 400)).toEqual(idleGaps([own, later], gcd15, 400));
   });
 
+  it("adds a default-tracked debuff beside the spell's own cast", () => {
+    const tracked = [{
+      id: "arcane-rupture",
+      spellIds: [51955],
+      showAsCooldown: {},
+      proc: true,
+      trackAura: true,
+      note: "",
+    }];
+    const own = cast(500, 51954, { spellName: "Arcane Rupture" });
+    const debuff = {
+      ...buff(1000, 9000),
+      spellId: 51955,
+      spellName: "Arcane Rupture",
+      isBuff: false,
+    };
+    const out = withOverrideBuffCasts(player({ goCasts: [own], aurasOn: [debuff] }), tracked, 30_000);
+
+    expect(out.goCasts.map((candidate) => [candidate.source, candidate.spellId, candidate.buffEndMs])).toEqual([
+      ["spell_go", 51954, undefined],
+      ["aura", 51955, 9000],
+    ]);
+  });
+
   it("adds a raised debuff as a proc cast with its active duration", () => {
     const raised = [{ id: "r", names: ["Arcane Rupture"], showAsCooldown: {}, proc: true, raised: true, note: "" }];
     const debuff = {
