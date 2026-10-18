@@ -95,6 +95,20 @@ export interface MapView3DProps {
 const NO_DEBUFFS: readonly number[] = [];
 const NO_PLAN_ITEMS: readonly PlanItem[] = [];
 
+// How far one yard of world x and of world y moves a point on the artwork,
+// measured with the units' own projection around `sample` (walking the flat map).
+function flatYardStep(project: (sample: MapPositionSample) => MapPoint | null, sample: MapPositionSample): { x: MapPoint; y: MapPoint } | null {
+  const half = 5;
+  const step = (dx: number, dy: number): MapPoint | null => {
+    const from = project({ ...sample, x: sample.x - dx, y: sample.y - dy });
+    const to = project({ ...sample, x: sample.x + dx, y: sample.y + dy });
+    return from && to ? { leftPercent: (to.leftPercent - from.leftPercent) / (2 * half), topPercent: (to.topPercent - from.topPercent) / (2 * half) } : null;
+  };
+  const x = step(half, 0);
+  const y = step(0, half);
+  return x && y ? { x, y } : null;
+}
+
 const NO_ROLES: MapUnitRoles = { selected: null, target: null, targetsTarget: null, pinned: new Set() };
 
 export interface MapLivePresence {
@@ -222,6 +236,11 @@ export default function MapView3D({
   useEffect(() => {
     if (!frozen) sceneRef.current?.setGround(ground);
   }, [frozen, ground]);
+
+  const yardSample = markers[0]?.sample;
+  useEffect(() => {
+    if (!frozen) sceneRef.current?.setFlatYards(yardSample ? flatYardStep(projectSample, yardSample) : null);
+  }, [frozen, projectSample, yardSample]);
 
   useEffect(() => {
     if (!frozen) sceneRef.current?.setDungeonMesh(dungeonMesh);

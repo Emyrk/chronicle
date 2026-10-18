@@ -145,6 +145,11 @@ const ANGLED_OFFSET = new THREE.Vector3(0, 0.85, 0.75);
 // artwork-up at the top of the screen, as in the 2D view.
 const TOP_DOWN_OFFSET = new THREE.Vector3(0, 1, 0.0001);
 const TILES_MAX_DISTANCE = 400;
+// How far the orbit camera may tilt from straight down. On the flat artwork it
+// stays 30 degrees above the horizon, where the token faces still show; on
+// the mesh it may go down to the floor.
+const TILES_MAX_POLAR = Math.PI / 3;
+const MESH_MAX_POLAR = Math.PI / 2 - 0.05;
 
 // --- Dungeon mesh mode (the real cave as the ground, see dungeonMeshes.ts) ---
 // On the mesh, units start from true scale: a player capsule stands this tall.
@@ -605,6 +610,9 @@ export class MapScene3D {
   // The real dungeon mesh while "3D map" is on; `dungeonMeshRequest` is the
   // load in flight (a later request or toggle-off abandons it).
   private dungeonMesh: DungeonMesh | null = null;
+  // On the flat artwork: the map-percent step of one yard along world x and
+  // world y (setFlatYards), for walking there.
+  private flatYards: { x: MapPoint; y: MapPoint } | null = null;
   private dungeonMeshRequest: { url: string } | null = null;
   private readonly meshLight = new THREE.HemisphereLight(0xfff4e0, 0x6b5a48, 1.2);
   private focus: MapSceneFocus | null = null;
@@ -895,7 +903,7 @@ export class MapScene3D {
     }
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.maxPolarAngle = Math.PI / 2 - 0.05;
+    this.controls.maxPolarAngle = TILES_MAX_POLAR;
     this.controls.minDistance = 1;
     this.controls.maxDistance = TILES_MAX_DISTANCE;
     // Inertia on orbit and pan, and the wheel zooming toward the cursor rather
@@ -1265,13 +1273,13 @@ export class MapScene3D {
   // Units are world meshes, so scale them with camera distance to hold a
   // constant on-screen size: zooming in spreads them apart instead of
   // enlarging them. Scale 1 at the default full-map distance. On the dungeon
-  // mesh they hold their true size instead, down to a floor on that
-  // on-screen size so the raid stays visible zoomed out.
+  // mesh (and walking the flat artwork) they hold their true size instead,
+  // down to a floor on that on-screen size so the raid stays visible zoomed out.
   private updateUnitScale(force = false) {
     const screenScale = this.camera.position.distanceTo(this.controls.target) / this.baseDistance();
-    const mesh = this.dungeonMesh;
-    const scale = mesh
-      ? Math.max((MESH_PLAYER_HEIGHT_YARDS * mesh.scale) / PLAYER_GEOMETRY_HEIGHT, MESH_MIN_SCREEN_SCALE * screenScale)
+    const yards = this.dungeonMesh ? this.dungeonMesh.scale : this.walk ? this.yardScale() : null;
+    const scale = yards
+      ? Math.max((MESH_PLAYER_HEIGHT_YARDS * yards) / PLAYER_GEOMETRY_HEIGHT, MESH_MIN_SCREEN_SCALE * screenScale)
       : screenScale;
     if (scale === this.unitScale && !force) return;
     this.unitScale = scale;
@@ -1322,7 +1330,8 @@ export class MapScene3D {
   // The highest cave surface below (x, fromY, z), or null for none.
   private castFloor(x: number, z: number, fromY: number): number | null {
     const mesh = this.dungeonMesh;
-    if (!mesh) return null;
+    // The flat artwork is the floor everywhere.
+    if (!mesh) return 0;
     let best: number | null = null;
     for (const cave of mesh.caves) {
       this.floorRay.origin.set(x, fromY, z);
@@ -1370,16 +1379,19 @@ export class MapScene3D {
     if (!mesh) {
       this.focusCentre = null;
       this.controls.maxDistance = TILES_MAX_DISTANCE;
+      this.controls.maxPolarAngle = TILES_MAX_POLAR;
       // Back onto the flat ground, camera and target together.
       this.camera.position.y -= this.controls.target.y;
       this.controls.target.y = 0;
     } else if (this.focus) {
+      this.controls.maxPolarAngle = MESH_MAX_POLAR;
       const { x, z } = mapPointToScene(this.focus.centre, this.aspect, GROUND_WIDTH);
       this.focusCentre ??= new THREE.Vector3();
       this.focusCentre.set(x, this.floorHeights.heightAt("focus", x, z), z);
       this.controls.maxDistance = (MESH_MAX_DISTANCE_FACTOR * this.baseDistance()) / this.focus.zoom;
     } else {
       this.focusCentre = null;
+      this.controls.maxPolarAngle = MESH_MAX_POLAR;
       this.controls.maxDistance = MESH_FULL_MAP_DISTANCE_FACTOR * mesh.radius;
     }
     this.constrainCamera();
@@ -3189,9 +3201,28 @@ export class MapScene3D {
     this.onWalkChange = callback ?? (() => {});
   }
 
-  /** Walk mode needs the dungeon mesh: its floor and its yards. */
+  /** Walk mode needs yards: the dungeon mesh's, or the flat artwork's (setFlatYards). */
   canWalk(): boolean {
-    return this.dungeonMesh !== null;
+    return this.yardScale() !== null;
+  }
+
+  /**
+   * The flat artwork's scale for walking on it: the map-percent step of one
+   * yard along world x and along world y, from the same projection as the
+   * units; null when the artwork has no world mapping.
+   */
+  setFlatYards(perYard: { x: MapPoint; y: MapPoint } | null) {
+    this.flatYards = perYard;
+  }
+
+  // Scene units per yard: the mesh's, else the flat artwork's.
+  private yardScale(): number | null {
+    if (this.dungeonMesh) return this.dungeonMesh.scale;
+    const perYard = this.flatYards;
+    if (!perYard) return null;
+    const length = (step: MapPoint) => Math.hypot((step.leftPercent / 100) * GROUND_WIDTH, (step.topPercent / 100) * GROUND_WIDTH * this.aspect);
+    const scale = (length(perYard.x) + length(perYard.y)) / 2;
+    return Number.isFinite(scale) && scale > 0 ? scale : null;
   }
 
   setWalking(on: boolean) {
@@ -3202,8 +3233,8 @@ export class MapScene3D {
 
   // The character starts where the camera looks, facing away from it.
   private startWalk() {
-    const mesh = this.dungeonMesh;
-    if (!mesh) {
+    const scale = this.yardScale();
+    if (scale === null) {
       this.onWalkChange(false);
       return;
     }
@@ -3216,10 +3247,10 @@ export class MapScene3D {
     const target = this.controls.target;
     const offset = new THREE.Vector3().copy(this.camera.position).sub(target);
     const position = target.clone();
-    position.y = this.castFloor(position.x, position.z, position.y + WALK_STEP_YARDS * mesh.scale) ?? position.y;
+    position.y = this.castFloor(position.x, position.z, position.y + WALK_STEP_YARDS * scale) ?? position.y;
     const camYaw = Math.abs(offset.x) + Math.abs(offset.z) < 1e-6 ? 0 : Math.atan2(offset.x, offset.z);
     const avatar = createAvatar(this.geometries);
-    avatar.scale.setScalar((MESH_PLAYER_HEIGHT_YARDS * mesh.scale) / PLAYER_GEOMETRY_HEIGHT);
+    avatar.scale.setScalar((MESH_PLAYER_HEIGHT_YARDS * scale) / PLAYER_GEOMETRY_HEIGHT);
     this.scene.add(avatar);
     this.walk = {
       position,
@@ -3234,8 +3265,8 @@ export class MapScene3D {
       avatar,
     };
     this.controls.enabled = false;
-    this.camera.near = WALK_NEAR_YARDS * mesh.scale;
-    this.camera.far = WALK_FAR_YARDS * mesh.scale;
+    this.camera.near = WALK_NEAR_YARDS * scale;
+    this.camera.far = WALK_FAR_YARDS * scale;
     this.camera.updateProjectionMatrix();
     this.onWalkChange(true);
     this.requestRender();
@@ -3245,7 +3276,7 @@ export class MapScene3D {
   // framing), on the floor there, keeping the camera's angle and zoom.
   private moveWalkTo(viewport: MapViewport) {
     const walk = this.walk;
-    if (!walk || !this.dungeonMesh) return;
+    if (!walk || this.yardScale() === null) return;
     // The full map's centre is nowhere in particular: then the fight's focus.
     const whole = viewport.zoom <= FULL_MAP_VIEWPORT.zoom && this.focus;
     const point = whole && this.focus ? this.focus.centre : { leftPercent: viewport.centerX * 100, topPercent: viewport.centerY * 100 };
@@ -3264,7 +3295,7 @@ export class MapScene3D {
     this.heldActions.clear();
     this.disposeAvatar(walk.avatar);
     // The orbit camera picks up behind and above where the character stood.
-    const distance = Math.max(walk.camDistance, WALK_EXIT_DISTANCE_YARDS) * (this.dungeonMesh?.scale ?? 1);
+    const distance = Math.max(walk.camDistance, WALK_EXIT_DISTANCE_YARDS) * (this.yardScale() ?? 1);
     const pitch = Math.max(walk.camPitch, WALK_START_PITCH);
     this.controls.target.copy(walk.position);
     this.camera.position.set(
@@ -3296,14 +3327,13 @@ export class MapScene3D {
   private updateWalk(now: number): boolean {
     const walk = this.walk;
     if (!walk) return false;
-    const mesh = this.dungeonMesh;
-    if (!mesh) {
+    const scale = this.yardScale();
+    if (scale === null) {
       this.stopWalk();
       return false;
     }
     const dt = walk.lastMs ? Math.min(KEY_MAX_STEP_S, (now - walk.lastMs) / 1000) : 0;
     walk.lastMs = now;
-    const scale = mesh.scale;
     const held = this.heldActions;
     const axis = (positive: MapControlAction, negative: MapControlAction) => (held.has(positive) ? 1 : 0) - (held.has(negative) ? 1 : 0);
 

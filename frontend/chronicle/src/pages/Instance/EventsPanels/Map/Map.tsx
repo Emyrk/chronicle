@@ -285,9 +285,11 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   const followGroup = () => setFraming({ ...framing, viewport: null, manual: false, revision: framing.revision + 1 });
   // Follow stands in for Fit while the camera can follow: across a run, and on
   // the mesh, where the Director frames the boss and the group itself.
-  const canFollow = ready.wholeRun || (show3D && meshWanted && meshState === "ready");
+  const onMesh = show3D && meshWanted && meshState === "ready";
+  const canFollow = ready.wholeRun || onMesh;
   const following = canFollow && cinematic;
-  const canWalk = show3D && meshWanted && meshState === "ready";
+  // On the mesh once it has loaded, else on the flat artwork.
+  const canWalk = show3D && (!meshWanted || meshState === "ready");
   // A unit frame's Follow: the cinematic camera on that unit (resumed if the
   // user had pinned a framing); again, or taking the camera, stops it.
   const followUnit = (guid: string) => {
@@ -478,7 +480,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
             aria-pressed={walking}
             title={canWalk
               ? walking ? "Leave walk mode (G or Esc)" : "Walk mode (G): join the fight with a character of your own"
-              : "Walk mode needs the 3D map (Map settings → 3D map)"}
+              : "Walk mode: waiting for the 3D map to load"}
             aria-label="Walk mode"
             className={cn(
               "absolute right-2 top-10 z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 shadow-[0_4px_16px_rgba(0,0,0,.5)] disabled:opacity-40",
@@ -543,7 +545,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
           onPin={pin}
           onClear={() => setTarget(null)}
           followGuid={followGuid}
-          onFollow={canWalk ? followUnit : undefined}
+          onFollow={onMesh ? followUnit : undefined}
         />
         <InspectCards guids={pinned} onRemove={unpin} raidFrames={raidFrames} auras={auras} />
         <MeterWindows windows={meterWindows} onChange={setMeterWindows} context={props.context} durationMs={props.durationMs} />
