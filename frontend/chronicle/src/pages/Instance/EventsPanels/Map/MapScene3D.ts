@@ -630,6 +630,9 @@ export class MapScene3D {
   // A click on a unit (inspect it); held briefly so a double-click (zoom) cancels it.
   private onUnitClick: ((guid: string) => void) | null = null;
   private pointerDownAt: { x: number; y: number } | null = null;
+  // An orbit-camera drag; once it moves past a click it hides the cursor and
+  // (virtual) drives OrbitControls from a pointer moved by movementX/Y.
+  private orbitDrag: { button: number; x: number; y: number; virtual: boolean } | null = null;
   private unitClickTimer = 0;
   private groundKey = "";
   private aspect = 1;
@@ -2650,6 +2653,27 @@ export class MapScene3D {
   }
 
   private readonly handlePointerMove = (event: PointerEvent) => {
+    const orbitDrag = this.orbitDrag;
+    if (orbitDrag && !this.walk) {
+      if (orbitDrag.virtual) {
+        // OrbitControls reads clientX/Y, which stand still while the cursor is
+        // locked: hand it a pointer moved by the mouse instead. OrbitControls
+        // listens on the document, so it reads this event after the canvas.
+        orbitDrag.x += event.movementX;
+        orbitDrag.y += event.movementY;
+        Object.defineProperty(event, "clientX", { value: orbitDrag.x });
+        Object.defineProperty(event, "clientY", { value: orbitDrag.y });
+        return;
+      }
+      if (Math.hypot(event.clientX - orbitDrag.x, event.clientY - orbitDrag.y) > UNIT_CLICK_SLOP_PX) {
+        // A drag, not a click: hide the cursor, as WoW does.
+        this.pointerDownAt = null;
+        orbitDrag.x = event.clientX;
+        orbitDrag.y = event.clientY;
+        orbitDrag.virtual = true;
+        this.lockPointer();
+      }
+    }
     if (this.planInput && !this.walk) this.planInput.move(this.planPointAt(event), event, this.planPointer === event.pointerId);
     const drag = this.walk?.drag;
     if (this.walk && drag) {
@@ -2707,6 +2731,9 @@ export class MapScene3D {
       return;
     }
     this.pointerDownAt = event.button === 0 ? { x: event.clientX, y: event.clientY } : null;
+    if (!this.walk && (event.button === 0 || event.button === 2)) {
+      this.orbitDrag = { button: event.button, x: event.clientX, y: event.clientY, virtual: false };
+    }
     if (this.walk && (event.button === 0 || event.button === 2)) {
       this.walk.drag = { button: event.button, x: event.clientX, y: event.clientY };
       this.renderer.domElement.setPointerCapture(event.pointerId);
@@ -2724,6 +2751,10 @@ export class MapScene3D {
     }
     if (this.walk?.drag && this.walk.drag.button === event.button) {
       this.walk.drag = null;
+      this.unlockPointer();
+    }
+    if (this.orbitDrag?.button === event.button) {
+      this.orbitDrag = null;
       this.unlockPointer();
     }
     const down = this.pointerDownAt;
@@ -2830,7 +2861,13 @@ export class MapScene3D {
     const target = this.controls.target;
     const offset = this.directorVector.copy(this.camera.position).sub(target);
 
-    const rotate = axis("turn_left", "turn_right");
+    let rotate = axis("turn_left", "turn_right");
+    let strafe = axis("strafe_right", "strafe_left");
+    if (this.orbitDrag?.button === 2) {
+      // Holding right-click, the turn keys strafe instead, as in WoW.
+      strafe = Math.max(-1, Math.min(1, strafe - rotate));
+      rotate = 0;
+    }
     if (rotate) offset.applyAxisAngle(Y_AXIS, rotate * KEY_ROTATE_SPEED * dt);
 
     // Space rises (zooms out), X lowers (zooms in).
@@ -2841,7 +2878,6 @@ export class MapScene3D {
     }
 
     const forward = axis("forward", "back");
-    const strafe = axis("strafe_right", "strafe_left");
     if (forward || strafe) {
       // Along the ground, relative to where the camera looks.
       const horizontal = Math.hypot(offset.x, offset.z) || 1;

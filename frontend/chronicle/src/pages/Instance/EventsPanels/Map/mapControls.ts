@@ -51,7 +51,7 @@ export const MAP_CONTROL_KEYBINDS = [
   { keys: "Space / X", action: "Zoom out / in; while walking: jump (hold to fly up) / fly down" },
   { keys: keyLabel(WALK_TOGGLE_KEY), action: "Walk mode on / off: join the fight on the ground" },
   { keys: "Esc", action: "Leave walk mode" },
-  { keys: "Drag / right-drag", action: "While walking: look around / turn your character (the cursor hides while you drag)" },
-  { keys: "Right-drag + A / D", action: "While walking: strafe left / right, whatever A/D strafe is set to" },
+  { keys: "Drag / right-drag", action: "Orbit / pan the camera; while walking: look around / turn your character. The cursor hides while you drag" },
+  { keys: "Right-drag + A / D", action: "Strafe left / right, whatever A/D strafe is set to" },
   { keys: "Mouse wheel", action: "Zoom; while walking, all the way in is first person" },
 ];
