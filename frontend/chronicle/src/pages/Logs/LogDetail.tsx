@@ -823,12 +823,15 @@ function ParsedInstancesSection({
   canDeleteInstance,
   onDeleteInstance,
   isDeletingInstance,
-}: { 
+  headerAction,
+}: {
   log: WoWLogGroupState;
   canUploadYoutube: boolean;
   canDeleteInstance: boolean;
   onDeleteInstance: (instanceId: string, instanceName: string) => void;
   isDeletingInstance: boolean;
+  /** Rendered at the right of the section heading. */
+  headerAction?: React.ReactNode;
 }) {
   const parsedOutput = parseLogParseOutput(log.status.output, log.status.kind);
   
@@ -842,10 +845,13 @@ function ParsedInstancesSection({
   
   return (
     <Card className="p-6">
-      <h2 className="font-semibold text-lg flex items-center gap-2">
-        <Swords className="h-5 w-5 text-muted-foreground" />
-        Detected Instances
-      </h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-semibold text-lg flex items-center gap-2">
+          <Swords className="h-5 w-5 text-muted-foreground" />
+          Detected Instances
+        </h2>
+        {headerAction}
+      </div>
       
       {instances.length === 0 && !hasFailures ? (
         complete ? (
@@ -1124,6 +1130,15 @@ export function LogDetailView({
   // Title the page after its instances, deduped (re-clears share a name).
   const instanceNames = [...new Set(parsedOutput?.instances.map((i) => i.name) ?? [])].join(", ");
   const processingDone = log ? isProcessingDone(log) : false;
+  // Rare, irreversible action — kept small rather than given its own card.
+  const unlistedAction = log && !log.unlisted && canMarkUnlisted && (
+    <UnlistedConfirmationDialog
+      compact
+      disabled={isMarkingUnlisted}
+      isPending={isMarkingUnlisted}
+      onConfirm={onMarkUnlisted}
+    />
+  );
   return (
     <div className="max-w-4xl mx-auto p-8 space-y-8">
       {/* Back link */}
@@ -1191,14 +1206,8 @@ export function LogDetailView({
                   {log.owner_name && <> by <span className="text-foreground">{log.owner_name}</span></>}
                 </span>
                 <StatusBadge state={log.status.state} errors={log.status.errors} />
-                {!log.unlisted && canMarkUnlisted && (
-                  <UnlistedConfirmationDialog
-                    compact
-                    disabled={isMarkingUnlisted}
-                    isPending={isMarkingUnlisted}
-                    onConfirm={onMarkUnlisted}
-                  />
-                )}
+                {/* Instances section hosts this action; fall back here when it doesn't render. */}
+                {!parsedOutput && unlistedAction}
               </div>
             </div>
 
@@ -1372,11 +1381,12 @@ export function LogDetailView({
             canDeleteInstance={canDeleteInstance}
             onDeleteInstance={onDeleteInstance}
             isDeletingInstance={isDeletingInstance}
+            headerAction={unlistedAction}
           />
 
           {/* Files Card */}
           <Card className="p-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="font-semibold text-lg flex items-center gap-2">
                 <HardDrive className="h-5 w-5 text-muted-foreground" />
                 Uploaded Files
@@ -1425,7 +1435,7 @@ export function LogDetailView({
                 log.files.map((file: WoWLogFile) => (
                   <div 
                     key={file.id} 
-                    className={`flex items-center justify-between gap-3 p-3 rounded-lg border ${file.storage_deleted_at ? "opacity-60" : ""}`}
+                    className={`flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border ${file.storage_deleted_at ? "opacity-60" : ""}`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
@@ -1436,7 +1446,7 @@ export function LogDetailView({
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="ml-auto flex items-center gap-3">
                       <div className="text-right text-sm text-muted-foreground whitespace-nowrap">
                         {file.compressed_size_bytes != null ? (
                           <>
@@ -1525,7 +1535,7 @@ export function LogDetailView({
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-muted-foreground">
                     Permanently delete this log and all associated files.
                   </p>

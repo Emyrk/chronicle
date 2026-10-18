@@ -35,13 +35,13 @@ export function UnlistedConfirmationDialog({
   return (
     <>
       <Button
-        variant={compact ? "ghost" : "outline"}
+        variant="outline"
         size={compact ? "sm" : "default"}
         disabled={disabled}
         onClick={() => setStep(1)}
-        className={compact ? "h-auto gap-1 px-1.5 py-0.5 text-xs font-normal text-muted-foreground" : undefined}
+        className={compact ? "h-7 text-xs text-muted-foreground" : undefined}
       >
-        {compact && <LockKeyhole className="h-3 w-3" />}
+        {compact && <LockKeyhole className="h-3.5 w-3.5" />}
         Make unlisted
       </Button>
 
