@@ -565,9 +565,10 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
   );
 
   const pinnedTop = position === "top";
+  // The entrance slides in from the edge the controls are pinned to (animate-replay-enter).
   const containerClass = cn(
     "fixed left-1/2 z-40 w-[52rem] max-w-[calc(100vw-2rem)] -translate-x-1/2",
-    pinnedTop ? "top-4" : "bottom-4"
+    pinnedTop ? "top-4 [--replay-enter-from:min(-160%,-14rem)]" : "bottom-4 [--replay-enter-from:max(160%,14rem)]"
   );
 
   const pinButton = (extraClass: string) => (
@@ -585,11 +586,11 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
   // Collapsed mini-bar
   if (collapsed) {
     const miniBar = (
-      <div className={containerClass}>
+      <div key={position} className={containerClass}>
         <ReplayTransportBar
           initialTimestamp={initialTimestamp}
           deaths={deaths}
-          className="animate-replay-pop rounded-lg border border-primary/40 shadow-xl backdrop-blur-md"
+          className="animate-replay-enter rounded-lg border border-primary/40 shadow-xl backdrop-blur-md"
           actions={(
             <>
               {pinButton("h-8 w-8 shrink-0")}
@@ -611,8 +612,8 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
   }
 
   const content = (
-    <div className={containerClass}>
-      <div className="animate-replay-pop flex flex-col overflow-hidden rounded-lg border border-primary/40 bg-gradient-to-b from-primary-darker/30 to-black/60 shadow-xl backdrop-blur-md">
+    <div key={position} className={containerClass}>
+      <div className="animate-replay-enter flex flex-col overflow-hidden rounded-lg border border-primary/40 bg-gradient-to-b from-primary-darker/30 to-black/60 shadow-xl backdrop-blur-md">
         {/* Header */}
         <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/50 px-4 py-2">
           <div className="flex items-center gap-2.5">

@@ -101,7 +101,7 @@
   animation: pulse-ring 1.5s ease-out infinite;
 }
 
-/* One-shot entrance for the replay controls: slide up, overshoot, and flash a primary ring */
+/* One-shot entrance (e.g. an aura going active): slide up, overshoot, and flash a primary ring */
 @keyframes replay-pop {
   0% {
     opacity: 0;
@@ -122,6 +122,50 @@
 
 .animate-replay-pop {
   animation: replay-pop 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/*
+ * The replay controls' entrance: slide in from the screen edge they are pinned
+ * to (--replay-enter-from: at least 160% / 14rem from below or above), overshoot a
+ * touch, settle, and flash a primary ring.
+ */
+@keyframes replay-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(var(--replay-enter-from, 160%)) scale(0.97);
+    box-shadow: 0 0 0 0 oklch(0.6521 0.1102 233.7748 / 0), 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  }
+  15% {
+    opacity: 1;
+  }
+  60% {
+    transform: translateY(calc(var(--replay-enter-from, 160%) * -0.04)) scale(1.01);
+    box-shadow: 0 0 0 4px oklch(0.6521 0.1102 233.7748 / 0.35), 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  }
+  78% {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 0 0 7px oklch(0.6521 0.1102 233.7748 / 0.45), 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    box-shadow: 0 0 0 18px oklch(0.6521 0.1102 233.7748 / 0), 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  }
+}
+
+@keyframes replay-enter-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-replay-enter {
+  animation: replay-enter 1.1s cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-replay-enter {
+    animation: replay-enter-fade 0.2s ease-out both;
+  }
 }
 
 /* Slow coin flip for the support banner's Chronicle-logo/heart medallion. */
