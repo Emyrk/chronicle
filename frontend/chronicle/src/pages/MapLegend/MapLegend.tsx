@@ -394,7 +394,7 @@ export function MapLegend() {
         </div>
       </Section>
 
-      <Section id="controls" title="Controls" note="With the pointer over the map (or while walking).">
+      <Section id="controls" title="Controls" note="Follow or Fit and Reset sit inside the map's lower-right corner. Keyboard controls work with the pointer over the map (or while walking).">
         <div className="overflow-hidden rounded-lg border">
           <table className="w-full text-sm">
             <tbody>
