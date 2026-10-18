@@ -444,7 +444,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
           </div>
         )}
         {/* Without Replay the map is a still: say so over it rather than in a row of its own. */}
-        {!reloading && ready.overlayAvailable && !ready.syncEnabled && (
+        {!mini && !reloading && ready.overlayAvailable && !ready.syncEnabled && (
           <div className="pointer-events-none absolute left-1/2 top-2 z-40 -translate-x-1/2 whitespace-nowrap rounded-sm bg-black/75 px-2 py-0.5 text-[11px] text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
             Final positions · enable Replay to watch units move
           </div>
