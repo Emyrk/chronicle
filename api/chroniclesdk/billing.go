@@ -26,6 +26,7 @@ type BillingSummary struct {
 	Status            string         `json:"status,omitempty"`
 	CurrentPeriodEnd  *time.Time     `json:"current_period_end,omitempty"`
 	CancelAtPeriodEnd bool           `json:"cancel_at_period_end,omitempty"`
+	CustomerID        string         `json:"customer_id,omitempty"`
 	Entitlements      []string       `json:"entitlements"`
 	Prices            []BillingPrice `json:"prices,omitempty"`
 }
