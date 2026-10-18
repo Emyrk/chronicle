@@ -615,66 +615,52 @@ function ReveredSubscriptionSettings({ billing }: { billing: BillingSummary }) {
   } = billingSubscriptionState(billing)
 
   return (
-    <section className="max-w-3xl space-y-6">
-      <div className={cn(FRAME, "overflow-hidden")}>
-        <div className="border-b border-[#c9a227]/30 bg-[radial-gradient(circle_at_top,#5b4315_0%,#251b0b_48%,#111_72%)] px-6 py-8 text-center sm:px-10">
-          <img
-            src={iconUrl("inv_crown_01")}
-            alt=""
-            aria-hidden="true"
-            width={72}
-            height={72}
-            className={cn(
-              "mx-auto size-[4.5rem] rounded border-2",
-              hasReveredAccess
-                ? "border-[#c9a227] shadow-[0_0_28px_rgba(240,192,96,0.22)]"
-                : "border-zinc-600 opacity-60 grayscale",
-            )}
-          />
-          <p className="mt-4 font-wow text-sm uppercase tracking-[0.24em] text-[#f0c060]/75">Chronicle reputation</p>
-          <h2 className={cn("mt-1 font-wow text-4xl sm:text-5xl", hasReveredAccess ? "text-[#f0c060]" : "text-zinc-200")}>
-            {heading}
-          </h2>
-          <p className="mx-auto mt-3 max-w-xl text-sm text-zinc-300">
-            {subscriptionEnded && !hasReveredAccess
-              ? "Your subscription and Revered access have ended. Stripe will not renew or charge this subscription again."
-              : subscriptionEnded
-                ? `Your subscription has ended, but you remain Revered${periodEnd ? ` until ${periodEnd}` : " while your paid access finishes"}.`
-                : hasReveredAccess
-                  ? "Thank you for supporting Chronicle. Your Revered rewards stay active through the end of your paid billing period."
-                  : "Your subscription is recorded, but Stripe has not granted an active Revered entitlement yet."}
-          </p>
-        </div>
+    <section className="max-w-5xl space-y-8">
+      <div className="space-y-3">
+        <h2 className="font-wow text-3xl leading-tight sm:text-4xl">
+          <span style={{ color: hasReveredAccess ? GOLD : "#e4e4e7" }}>{heading}</span>
+          {hasReveredAccess ? <span className="text-white"> with Chronicle</span> : null}
+        </h2>
+        <p className="max-w-3xl text-muted-foreground">
+          {subscriptionEnded && !hasReveredAccess
+            ? "Your subscription and Revered access have ended. Stripe will not renew or charge this subscription again."
+            : subscriptionEnded
+              ? `Your subscription has ended, but you remain Revered${periodEnd ? ` until ${periodEnd}` : " while your paid access finishes"}.`
+              : hasReveredAccess
+                ? "Thank you for supporting Chronicle. Your Revered rewards stay active through the end of your paid billing period."
+                : "Your subscription is recorded, but Stripe has not granted an active Revered entitlement yet."}
+        </p>
+      </div>
 
-        <div className="grid gap-0 sm:grid-cols-2">
-          <div className="border-b border-border p-5 sm:border-r sm:border-b-0 sm:p-6">
-            <h3 className="font-wow text-lg text-white">Subscription</h3>
-            <dl className="mt-4 space-y-3 text-sm">
+      <Achievement billing={billing} />
+
+      <div className="grid items-start gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
+        <FramePanel title="Your Subscription">
+          <dl className="space-y-3 text-sm">
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">Standing</dt>
+              <dd className={cn("font-wow", hasReveredAccess ? "text-[#f0c060]" : "text-[#00c000]")}>
+                {hasReveredAccess ? SUPPORTER_TIER_NAME : "Friendly"}
+              </dd>
+            </div>
+            {billing.status ? (
               <div className="flex justify-between gap-3">
-                <dt className="text-muted-foreground">Standing</dt>
-                <dd className={cn("font-wow", hasReveredAccess ? "text-[#f0c060]" : "text-[#00c000]")}>
-                  {hasReveredAccess ? SUPPORTER_TIER_NAME : "Friendly"}
+                <dt className="text-muted-foreground">Status</dt>
+                <dd className="capitalize text-white">
+                  {subscriptionEnded ? "Ended" : cancellationScheduled ? "Canceling" : billing.status}
                 </dd>
               </div>
-              {billing.status ? (
-                <div className="flex justify-between gap-3">
-                  <dt className="text-muted-foreground">Status</dt>
-                  <dd className="capitalize text-white">
-                    {subscriptionEnded ? "Ended" : cancellationScheduled ? "Canceling" : billing.status}
-                  </dd>
-                </div>
-              ) : null}
-              {periodEnd ? (
-                <div className="flex justify-between gap-3">
-                  <dt className="text-muted-foreground">{periodLabel}</dt>
-                  <dd className="text-white">{periodEnd}</dd>
-                </div>
-              ) : null}
-            </dl>
-          </div>
+            ) : null}
+            {periodEnd ? (
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">{periodLabel}</dt>
+                <dd className="text-white">{periodEnd}</dd>
+              </div>
+            ) : null}
+          </dl>
 
-          <div className="p-5 sm:p-6">
-            <h3 className="font-wow text-lg text-white">
+          <div className="border-t border-border pt-3">
+            <h4 className="font-wow text-sm" style={{ color: "#ffd200" }}>
               {subscriptionEnded
                 ? hasReveredAccess
                   ? "Revered access remains"
@@ -682,58 +668,70 @@ function ReveredSubscriptionSettings({ billing }: { billing: BillingSummary }) {
                 : cancellationScheduled
                   ? "Cancellation scheduled"
                   : "Manage or cancel"}
-            </h3>
+            </h4>
             {subscriptionEnded ? (
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
                 {hasReveredAccess
                   ? `Stripe will not renew or charge this subscription again. Your existing Revered access remains available${periodEnd ? ` until ${periodEnd}` : " until the paid period finishes"}.`
                   : "Stripe will not renew or charge this subscription again. No active Revered entitlement is recorded, so its rewards are no longer available."}
               </p>
             ) : cancellationScheduled ? (
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
                 Your subscription will not renew. Your Revered rewards remain available until{periodEnd ? ` ${periodEnd}` : " the end of your billing period"}.
               </p>
             ) : (
-              <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm leading-6 text-muted-foreground">
+              <ol className="mt-1.5 list-decimal space-y-0.5 pl-4 text-xs leading-5 text-muted-foreground">
                 <li>Open the secure Stripe billing portal.</li>
                 <li>Select your Chronicle subscription.</li>
                 <li>Choose cancel and confirm the cancellation.</li>
               </ol>
             )}
-            <button
-              type="button"
-              className={cn(GOLD_BUTTON, "mt-5")}
-              disabled={portal.isPending}
-              onClick={() => void openBilling(() => portal.mutateAsync(), true)}
-            >
-              {portal.isPending
-                ? "Opening Stripe…"
-                : subscriptionEnded || cancellationScheduled
-                  ? "View Stripe Billing History"
-                  : "Open Stripe Billing Portal"}
-            </button>
+          </div>
+
+          <button
+            type="button"
+            className={GOLD_BUTTON}
+            disabled={portal.isPending}
+            onClick={() => void openBilling(() => portal.mutateAsync(), true)}
+          >
+            {portal.isPending
+              ? "Opening Stripe…"
+              : subscriptionEnded || cancellationScheduled
+                ? "View Stripe Billing History"
+                : "Open Stripe Billing Portal"}
+          </button>
+        </FramePanel>
+
+        <div>
+          <h3 className="font-wow text-xl font-semibold">{SUPPORTER_TIER_NAME} Rewards</h3>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            {REWARDS.map((reward) => (
+              <RewardTooltip key={reward.title} reward={reward} unlocked={hasReveredAccess} />
+            ))}
           </div>
         </div>
       </div>
 
-      <details className={cn(FRAME, "group px-5 py-4 text-sm")}>
-        <summary className="cursor-pointer font-medium text-zinc-200 marker:text-[#f0c060]">
-          Active feature entitlements ({billing.entitlements.length})
-          <span className="ml-2 font-normal text-muted-foreground">Debug details</span>
+      <details className={cn(FRAME, "group text-sm")}>
+        <summary className="cursor-pointer rounded-lg px-4 py-2 font-wow text-sm marker:text-[#f0c060] group-open:rounded-b-none group-open:border-b group-open:border-border">
+          <span style={{ color: GOLD }}>Active feature entitlements ({billing.entitlements.length})</span>
+          <span className="ml-2 font-sans text-xs text-muted-foreground">Debug details</span>
         </summary>
-        {billing.entitlements.length > 0 ? (
-          <ul className="mt-3 flex flex-wrap gap-2">
-            {billing.entitlements.map((entitlement) => (
-              <li key={entitlement}>
-                <code className="rounded border border-border bg-black/30 px-2 py-1 text-xs text-[#f0c060]">{entitlement}</code>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-3 text-sm text-amber-300">
-            No active Stripe feature entitlements are currently recorded for this account.
-          </p>
-        )}
+        <div className="p-4">
+          {billing.entitlements.length > 0 ? (
+            <ul className="flex flex-wrap gap-2">
+              {billing.entitlements.map((entitlement) => (
+                <li key={entitlement}>
+                  <code className="rounded border border-border bg-black/30 px-2 py-1 text-xs text-[#f0c060]">{entitlement}</code>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-amber-300">
+              No active Stripe feature entitlements are currently recorded for this account.
+            </p>
+          )}
+        </div>
       </details>
 
       <p className="text-center text-sm text-muted-foreground">
