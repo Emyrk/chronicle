@@ -128,11 +128,22 @@ export function isMiniMapOption(option: string | null | undefined): boolean {
   return (option ?? "").split(",").includes(MINI_MAP_PANEL_OPTION);
 }
 
-/** Opens the full Map layout from a mini map, when the page can switch layouts. */
-function ExpandMapButton({ context }: { context: PanelRenderProps<MapResult>["context"] }) {
+/**
+ * Opens the full Map layout from a mini map, when the page can switch layouts.
+ * `overlay`: drawn on the map's top-right corner, always there; it fades while
+ * the card's title row (which has its own Expand) shows over it.
+ */
+function ExpandMapButton({ context, overlay = false }: { context: PanelRenderProps<MapResult>["context"]; overlay?: boolean }) {
   if (!context.onApplyPreset) return null;
   return (
-    <button type="button" onClick={() => context.onApplyPreset?.("map")} title="Open the full map" className={framingButtonClass}>
+    <button
+      type="button"
+      onClick={() => context.onApplyPreset?.("map")}
+      title="Open the full map"
+      className={overlay
+        ? cn(mapFramingButtonClass, "absolute right-2 top-2 z-40 transition-opacity group-has-[[data-hover-header]:hover]/panel:pointer-events-none group-has-[[data-hover-header]:hover]/panel:opacity-0")
+        : framingButtonClass}
+    >
       <Maximize2 className="h-3 w-3" />
       Expand
     </button>
@@ -513,11 +524,12 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
           </Suspense>
         )}
         {framingControls}
+        {mini && <ExpandMapButton context={props.context} overlay />}
         {previewOn && (
           <>
             {/* Replay is off: a greyed preview, with the way to the real Replay controls. */}
             <div className="pointer-events-none absolute inset-0 z-30 bg-slate-900/25 backdrop-saturate-50" aria-hidden />
-            {/* Fades while the card's title row shows over it (hoverHeader). */}
+            {/* Fades while the card's title row shows over it (hoverHeader); Expand is at top right. */}
             <span className="pointer-events-none absolute left-2 top-2 z-40 rounded-sm bg-black/75 px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/70 transition-opacity group-has-[[data-hover-header]:hover]/panel:opacity-0">
               Preview
             </span>
@@ -814,6 +826,7 @@ function MapContent({ forceMini = false, ...props }: PanelRenderProps<MapResult>
       {props.headerSlot ? createPortal(wholeRunButton, props.headerSlot) : <div className="flex justify-end px-3 pt-2">{wholeRunButton}</div>}
       <div className="relative min-h-0 flex-1">
         <MapOverview2D {...props} mini={mini} />
+        {mini && <ExpandMapButton context={props.context} overlay />}
         {/* The mini map's way into the 3D replay: the whole run, playing on its own. */}
         {mini && (
           <button
