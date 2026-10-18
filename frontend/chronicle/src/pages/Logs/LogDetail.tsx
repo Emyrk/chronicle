@@ -18,7 +18,6 @@ import {
   Play,
   Swords,
   Castle,
-  ExternalLink,
   Skull,
   Shield,
   Youtube,
@@ -419,7 +418,7 @@ function IdentitySection({ identity }: { identity: IdentityReport }) {
           <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-open:rotate-90" />
           <Fingerprint className="h-5 w-5 text-blue-500" />
           Identity Report
-          <span className="text-sm font-normal text-muted-foreground">
+          <span className="text-sm font-normal text-muted-foreground whitespace-nowrap">
             ({totalCreatures} creatures, {totalSpells} spells)
           </span>
         </summary>
@@ -712,15 +711,21 @@ function InstanceCard({
     <div className="border rounded-lg overflow-hidden">
       {/* Header */}
       <div className="p-3 bg-muted/30 border-b">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <Castle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-            <h3 className="font-semibold truncate">{instance.name}</h3>
-            {instance.realm_name && instance.realm_name !== "Unknown" && (
-              <span className="text-xs text-muted-foreground shrink-0">{instance.realm_name}</span>
-            )}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-start gap-2 min-w-0">
+            <Castle className="h-4 w-4 mt-1 text-muted-foreground flex-shrink-0" />
+            <div className="min-w-0">
+              <h3 className="font-semibold">{instance.name}</h3>
+              <p className="text-xs text-muted-foreground">
+                {[
+                  instance.realm_name && instance.realm_name !== "Unknown" ? instance.realm_name : null,
+                  `${bossFights.length} boss fight${bossFights.length !== 1 ? "s" : ""}`,
+                  `${trashFights.length} trash`,
+                ].filter(Boolean).join(" · ")}
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 ml-auto">
             {canUploadYoutube && (
               <>
                 <input
@@ -764,9 +769,9 @@ function InstanceCard({
               </Button>
             )}
             <Link to={instanceUrl}>
-              <Button variant="outline" size="sm" className="h-7 text-xs">
-                <ExternalLink className="h-3.5 w-3.5 mr-1" />
+              <Button size="sm" className="h-7 text-xs">
                 View
+                <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
               </Button>
             </Link>
           </div>
@@ -786,43 +791,17 @@ function InstanceCard({
         </div>
       )}
       
-      {/* Content Grid */}
-      <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-        {/* Boss Fights Section */}
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Swords className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Boss Fights
-            </span>
+      {/* Boss fights — trash is summarized in the header */}
+      <div className="p-2">
+        {bossFights.length > 0 ? (
+          <div className="sm:columns-2 gap-x-4 [&>*]:break-inside-avoid">
+            {bossFights.map((encounter) => (
+              <BossEncounterRow key={encounter.id} encounter={encounter} />
+            ))}
           </div>
-          {bossFights.length > 0 ? (
-            <div className="space-y-0.5">
-              {bossFights.map((encounter) => (
-                <BossEncounterRow key={encounter.id} encounter={encounter} />
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground italic px-2">No boss fights</p>
-          )}
-        </div>
-        
-        {/* Trash Fights Section */}
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Shield className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Trash
-            </span>
-          </div>
-          {trashFights.length > 0 ? (
-            <div className="px-2 py-1.5 bg-muted/30 rounded text-sm">
-              {trashFights.length} Trash fight{trashFights.length !== 1 ? "s" : ""}
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground italic px-2">No trash fights</p>
-          )}
-        </div>
+        ) : (
+          <p className="text-xs text-muted-foreground italic px-2 py-1">No boss fights</p>
+        )}
       </div>
 
       {canUploadYoutube && (
@@ -864,7 +843,7 @@ function ParsedInstancesSection({
   
   return (
     <Card className="p-6">
-      <h2 className="font-semibold text-lg mb-4 flex items-center gap-2">
+      <h2 className="font-semibold text-lg flex items-center gap-2">
         <Swords className="h-5 w-5 text-muted-foreground" />
         Detected Instances
       </h2>
@@ -902,6 +881,181 @@ function ParsedInstancesSection({
           )}
         </div>
       )}
+    </Card>
+  );
+}
+
+/** Processing succeeded, or its record expired cleanly (parsed data is still there). */
+function isProcessingDone(log: WoWLogGroupState): boolean {
+  return log.status.state === RIVER_STATES.completed ||
+    (log.status.state === RIVER_STATES.discarded && log.status.errors.length === 0);
+}
+
+/** Job status for the log. Collapsed to a one-line summary once processing succeeded. */
+function ProcessingStatusCard({ log }: { log: WoWLogGroupState }) {
+  const done = isProcessingDone(log);
+  const summary = log.status.finalized_at && (
+    <span className="text-sm font-normal text-muted-foreground whitespace-nowrap">
+      {log.status.attempted_at
+        ? `${done ? "Parsed in" : "Ran for"} ${formatDuration(log.status.attempted_at, log.status.finalized_at)}`
+        : `Total ${formatDuration(log.status.created_at, log.status.finalized_at)}`}
+    </span>
+  );
+  const content = (
+    <div className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <p className="text-sm text-muted-foreground">Status</p>
+          <StatusBadge state={log.status.state} errors={log.status.errors} />
+        </div>
+        <div>
+          <p className="text-sm text-muted-foreground">Attempt</p>
+          <p className="font-medium">{log.status.attempt} / {log.status.max_attempts}</p>
+        </div>
+        <div>
+          <p className="text-sm text-muted-foreground">Job Type</p>
+          <p className="font-medium">{formatJobKind(log.status.kind)}</p>
+        </div>
+        <div>
+          <p className="text-sm text-muted-foreground">Job ID</p>
+          <p className="font-mono text-sm">{log.status.id}</p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 text-sm">
+        <div>
+          <p className="text-muted-foreground">Created</p>
+          <p>{formatDate(log.status.created_at)}</p>
+        </div>
+        <div>
+          <p className="text-muted-foreground">Scheduled</p>
+          <p>{formatDate(log.status.scheduled_at)}</p>
+        </div>
+        {log.status.attempted_at && (
+          <div>
+            <p className="text-muted-foreground">Started</p>
+            <p>{formatDate(log.status.attempted_at)}</p>
+          </div>
+        )}
+        {log.status.finalized_at && (
+          <div>
+            <p className="text-muted-foreground">Completed</p>
+            <p>{formatDate(log.status.finalized_at)}</p>
+          </div>
+        )}
+        <div>
+          <p className="text-muted-foreground">Log ID</p>
+          <p className="font-mono text-xs break-all">{log.id}</p>
+        </div>
+        <div>
+          <p className="text-muted-foreground">Last Updated</p>
+          <p>{formatDate(log.updated_at)}</p>
+        </div>
+      </div>
+
+      {(log.status.state === RIVER_STATES.pending || 
+        log.status.state === RIVER_STATES.available || 
+        log.status.state === RIVER_STATES.scheduled) && (
+        <div className="p-4 bg-muted rounded-lg">
+          <p className="text-sm text-muted-foreground">
+            Your logs are queued for processing. This may take a few minutes depending on the file size.
+          </p>
+        </div>
+      )}
+
+      {log.status.state === RIVER_STATES.running && (
+        <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
+          <p className="text-sm text-blue-700 dark:text-blue-300">
+            Your logs are currently being processed. Check back shortly for results.
+          </p>
+        </div>
+      )}
+
+      {log.status.state === RIVER_STATES.retryable && (
+        <div className="p-4 bg-yellow-50 dark:bg-yellow-950 rounded-lg">
+          <p className="text-sm text-yellow-700 dark:text-yellow-300">
+            Processing encountered an issue and will be retried automatically.
+          </p>
+        </div>
+      )}
+
+      {(log.status.state === RIVER_STATES.discarded || log.status.state === RIVER_STATES.cancelled) && log.status.errors.length > 0 && (() => {
+        const currentAttemptErrors = log.status.errors.filter(e => e.attempt === log.status.attempt);
+        const previousAttemptErrors = log.status.errors.filter(e => e.attempt !== log.status.attempt);
+
+        const renderError = (error: typeof log.status.errors[number], idx: number) => (
+          <div key={idx} className="text-sm">
+            <p className="text-muted-foreground">
+              Attempt {error.attempt} at {formatDate(error.at)}:
+            </p>
+            <p className="font-mono text-xs text-destructive whitespace-pre-wrap break-words">
+              {error.error}
+            </p>
+            {error.trace && (
+              <details className="mt-1">
+                <summary className="text-xs text-muted-foreground cursor-pointer">
+                  Stack trace
+                </summary>
+                <pre className="text-xs text-muted-foreground mt-1 overflow-x-auto">
+                  {error.trace}
+                </pre>
+              </details>
+            )}
+          </div>
+        );
+
+        return (
+          <div className="p-4 bg-destructive/10 rounded-lg space-y-3">
+            <p className="text-sm font-medium text-destructive">
+              {log.status.state === RIVER_STATES.cancelled ? "Job was cancelled" : "Processing failed"}
+              {" "}(Attempt {log.status.attempt})
+            </p>
+
+            {currentAttemptErrors.length > 0 && (
+              <div className="space-y-2">
+                {currentAttemptErrors.map(renderError)}
+              </div>
+            )}
+
+            {previousAttemptErrors.length > 0 && (
+              <details className="mt-2">
+                <summary className="text-xs text-muted-foreground cursor-pointer">
+                  Previous attempt errors ({previousAttemptErrors.length})
+                </summary>
+                <div className="mt-2 space-y-2 pl-2 border-l-2 border-muted">
+                  {previousAttemptErrors.map(renderError)}
+                </div>
+              </details>
+            )}
+          </div>
+        );
+      })()}
+    </div>
+  );
+
+  if (done) {
+    return (
+      <Card className="p-0 gap-0">
+        <details className="group">
+          <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 px-6 py-4 text-sm [&::-webkit-details-marker]:hidden">
+            <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-90" />
+            <span className="font-medium whitespace-nowrap">Processing details</span>
+            {summary}
+          </summary>
+          <div className="px-6 pb-6">{content}</div>
+        </details>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="p-6">
+      <h2 className="font-semibold text-lg flex flex-wrap items-center gap-x-2">
+        <Server className="h-5 w-5 text-muted-foreground" />
+        Processing Status
+        {summary}
+      </h2>
+      {content}
     </Card>
   );
 }
@@ -967,6 +1121,10 @@ export function LogDetailView({
     setReparseFlavor((log?.flavor ?? []).join(","));
     setShowReparseAxis(true);
   };
+  const parsedOutput = log ? parseLogParseOutput(log.status.output, log.status.kind) : null;
+  // Title the page after its instances, deduped (re-clears share a name).
+  const instanceNames = [...new Set(parsedOutput?.instances.map((i) => i.name) ?? [])].join(", ");
+  const processingDone = log ? isProcessingDone(log) : false;
   return (
     <div className="max-w-4xl mx-auto p-8 space-y-8">
       {/* Back link */}
@@ -1022,18 +1180,98 @@ export function LogDetailView({
       ) : (
         <>
           {/* Header */}
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold">Log Upload</h1>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-bold">{instanceNames || "Log Upload"}</h1>
                 {log.unlisted && <UnlistedBadge />}
               </div>
-              <p className="text-muted-foreground mt-1">
-                Uploaded {formatDate(log.created_at)}
-              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                <span>
+                  Uploaded {formatDate(log.created_at)}
+                  {log.owner_name && <> by <span className="text-foreground">{log.owner_name}</span></>}
+                </span>
+                <StatusBadge state={log.status.state} errors={log.status.errors} />
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <StatusBadge state={log.status.state} errors={log.status.errors} />
+
+            {/* Action Buttons */}
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onRefresh}
+                disabled={isRefreshing}
+                title="Refresh"
+              >
+                <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                <span className="sr-only">Refresh</span>
+              </Button>
+              {canReparse && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isReparsing || !isJobComplete(log.status.state)}
+                    >
+                      {isReparsing ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Reparsing...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-4 w-4 mr-2" />
+                          Reparse
+                        </>
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => onReparse(false)}>
+                      <Play className="h-4 w-4 mr-2" />
+                      Reparse
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onReparse(true)}>
+                      <Play className="h-4 w-4 mr-2 text-yellow-500" />
+                      Reparse (Verbose)
+                    </DropdownMenuItem>
+                    {canDownloadFiles && (
+                      <>
+                        <DropdownMenuItem onClick={() => onReparse(false, true)}>
+                          <Play className="h-4 w-4 mr-2 text-blue-500" />
+                          Reparse (Identity)
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <Play className="h-4 w-4 mr-2 text-purple-500" />
+                            Reparse as...
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
+                            {REPARSE_LOG_TYPES.map((opt) => (
+                              <DropdownMenuItem
+                                key={opt.value}
+                                onClick={() => onReparse(false, false, opt.value)}
+                              >
+                                {opt.label}
+                                {log?.log_type === opt.value && (
+                                  <span className="ml-2 text-xs text-muted-foreground">(current)</span>
+                                )}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                        <DropdownMenuItem onClick={openReparseAxis}>
+                          <Play className="h-4 w-4 mr-2 text-purple-500" />
+                          Reparse format + flavor...
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
           </div>
 
@@ -1042,83 +1280,6 @@ export function LogDetailView({
               The processing record for this log has expired, but all parsed data is still available below.
             </p>
           )}
-
-          {/* Action Buttons */}
-          <div className="flex items-center justify-between">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={onRefresh}
-              disabled={isRefreshing}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-{canReparse && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    disabled={isReparsing || !isJobComplete(log.status.state)}
-                  >
-                    {isReparsing ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Reparsing...
-                      </>
-                    ) : (
-                      <>
-                        <Play className="h-4 w-4 mr-2" />
-                        Reparse
-                      </>
-                    )}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => onReparse(false)}>
-                    <Play className="h-4 w-4 mr-2" />
-                    Reparse
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onReparse(true)}>
-                    <Play className="h-4 w-4 mr-2 text-yellow-500" />
-                    Reparse (Verbose)
-                  </DropdownMenuItem>
-                  {canDownloadFiles && (
-                    <>
-                      <DropdownMenuItem onClick={() => onReparse(false, true)}>
-                        <Play className="h-4 w-4 mr-2 text-blue-500" />
-                        Reparse (Identity)
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>
-                          <Play className="h-4 w-4 mr-2 text-purple-500" />
-                          Reparse as...
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent>
-                          {REPARSE_LOG_TYPES.map((opt) => (
-                            <DropdownMenuItem
-                              key={opt.value}
-                              onClick={() => onReparse(false, false, opt.value)}
-                            >
-                              {opt.label}
-                              {log?.log_type === opt.value && (
-                                <span className="ml-2 text-xs text-muted-foreground">(current)</span>
-                              )}
-                            </DropdownMenuItem>
-                          ))}
-                        </DropdownMenuSubContent>
-                      </DropdownMenuSub>
-                      <DropdownMenuItem onClick={openReparseAxis}>
-                        <Play className="h-4 w-4 mr-2 text-purple-500" />
-                        Reparse format + flavor...
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
 
           {/* Reparse format + flavor panel (admin) */}
           {showReparseAxis && (
@@ -1193,159 +1354,9 @@ export function LogDetailView({
             </Card>
           )}
 
-          {/* Processing Status Card */}
-          <Card className="p-6">
-            <h2 className="font-semibold text-lg mb-4 flex items-center gap-2">
-              <Server className="h-5 w-5 text-muted-foreground" />
-              Processing Status
-              {log.status.finalized_at && (
-                <span className="text-sm font-normal text-muted-foreground">
-                  (Total: {formatDuration(log.status.created_at, log.status.finalized_at)}
-                  {log.status.attempted_at && `, Processing: ${formatDuration(log.status.attempted_at, log.status.finalized_at)}`})
-                </span>
-              )}
-            </h2>
-            <div className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Status</p>
-                  <StatusBadge state={log.status.state} errors={log.status.errors} />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Attempt</p>
-                  <p className="font-medium">{log.status.attempt} / {log.status.max_attempts}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Job Type</p>
-                  <p className="font-medium">{formatJobKind(log.status.kind)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Job ID</p>
-                  <p className="font-mono text-sm">{log.status.id}</p>
-                </div>
-              </div>
 
-              <div className="grid gap-4 md:grid-cols-2 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Created</p>
-                  <p>{formatDate(log.status.created_at)}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Scheduled</p>
-                  <p>{formatDate(log.status.scheduled_at)}</p>
-                </div>
-                {log.status.attempted_at && (
-                  <div>
-                    <p className="text-muted-foreground">Started</p>
-                    <p>{formatDate(log.status.attempted_at)}</p>
-                  </div>
-                )}
-                {log.status.finalized_at && (
-                  <div>
-                    <p className="text-muted-foreground">Completed</p>
-                    <p>{formatDate(log.status.finalized_at)}</p>
-                  </div>
-                )}
-              </div>
 
-              {(log.status.state === RIVER_STATES.pending || 
-                log.status.state === RIVER_STATES.available || 
-                log.status.state === RIVER_STATES.scheduled) && (
-                <div className="p-4 bg-muted rounded-lg">
-                  <p className="text-sm text-muted-foreground">
-                    Your logs are queued for processing. This may take a few minutes depending on the file size.
-                  </p>
-                </div>
-              )}
-
-              {log.status.state === RIVER_STATES.running && (
-                <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
-                  <p className="text-sm text-blue-700 dark:text-blue-300">
-                    Your logs are currently being processed. Check back shortly for results.
-                  </p>
-                </div>
-              )}
-
-              {log.status.state === RIVER_STATES.retryable && (
-                <div className="p-4 bg-yellow-50 dark:bg-yellow-950 rounded-lg">
-                  <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                    Processing encountered an issue and will be retried automatically.
-                  </p>
-                </div>
-              )}
-
-              {(log.status.state === RIVER_STATES.discarded || log.status.state === RIVER_STATES.cancelled) && log.status.errors.length > 0 && (() => {
-                const currentAttemptErrors = log.status.errors.filter(e => e.attempt === log.status.attempt);
-                const previousAttemptErrors = log.status.errors.filter(e => e.attempt !== log.status.attempt);
-                
-                const renderError = (error: typeof log.status.errors[number], idx: number) => (
-                  <div key={idx} className="text-sm">
-                    <p className="text-muted-foreground">
-                      Attempt {error.attempt} at {formatDate(error.at)}:
-                    </p>
-                    <p className="font-mono text-xs text-destructive whitespace-pre-wrap break-words">
-                      {error.error}
-                    </p>
-                    {error.trace && (
-                      <details className="mt-1">
-                        <summary className="text-xs text-muted-foreground cursor-pointer">
-                          Stack trace
-                        </summary>
-                        <pre className="text-xs text-muted-foreground mt-1 overflow-x-auto">
-                          {error.trace}
-                        </pre>
-                      </details>
-                    )}
-                  </div>
-                );
-                
-                return (
-                  <div className="p-4 bg-destructive/10 rounded-lg space-y-3">
-                    <p className="text-sm font-medium text-destructive">
-                      {log.status.state === RIVER_STATES.cancelled ? "Job was cancelled" : "Processing failed"}
-                      {" "}(Attempt {log.status.attempt})
-                    </p>
-                    
-                    {currentAttemptErrors.length > 0 && (
-                      <div className="space-y-2">
-                        {currentAttemptErrors.map(renderError)}
-                      </div>
-                    )}
-                    
-                    {previousAttemptErrors.length > 0 && (
-                      <details className="mt-2">
-                        <summary className="text-xs text-muted-foreground cursor-pointer">
-                          Previous attempt errors ({previousAttemptErrors.length})
-                        </summary>
-                        <div className="mt-2 space-y-2 pl-2 border-l-2 border-muted">
-                          {previousAttemptErrors.map(renderError)}
-                        </div>
-                      </details>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-          </Card>
-
-          {!log.unlisted && canMarkUnlisted && (
-            <Card className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="flex items-center gap-2 text-lg font-semibold">
-                  <LockKeyhole className="h-5 w-5 text-amber-400" />
-                  Make log unlisted
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Unlisted logs are excluded from rankings and public discovery. Anyone with the link can view them, and this change cannot be reversed.
-                </p>
-              </div>
-              <UnlistedConfirmationDialog
-                disabled={isMarkingUnlisted}
-                isPending={isMarkingUnlisted}
-                onConfirm={onMarkUnlisted}
-              />
-            </Card>
-          )}
+          {!processingDone && <ProcessingStatusCard log={log} />}
 
           {/* Parsed Instances Section - only shows for log-parse jobs with output */}
           <ParsedInstancesSection
@@ -1358,7 +1369,7 @@ export function LogDetailView({
 
           {/* Files Card */}
           <Card className="p-6">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between">
               <h2 className="font-semibold text-lg flex items-center gap-2">
                 <HardDrive className="h-5 w-5 text-muted-foreground" />
                 Uploaded Files
@@ -1387,8 +1398,8 @@ export function LogDetailView({
             </div>
             
             {/* Warning about deleting files */}
-            {log.files && log.files.length > 0 && !log.files.every(f => f.storage_deleted_at) && (
-              <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+            {canDeleteFiles && log.files && log.files.length > 0 && !log.files.every(f => f.storage_deleted_at) && (
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                 <p className="text-sm text-amber-200">
                   <strong>Before deleting:</strong> These are your raw combat log files. Chronicle stores a compressed version of the parsed data, but if there are any parsing errors or missing data, the raw files are needed to investigate and re-parse.
                 </p>
@@ -1407,19 +1418,19 @@ export function LogDetailView({
                 log.files.map((file: WoWLogFile) => (
                   <div 
                     key={file.id} 
-                    className={`flex items-center justify-between p-3 rounded-lg border ${file.storage_deleted_at ? "opacity-60" : ""}`}
+                    className={`flex items-center justify-between gap-3 p-3 rounded-lg border ${file.storage_deleted_at ? "opacity-60" : ""}`}
                   >
-                    <div className="flex items-center gap-3">
-                      <FileText className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium text-sm">{file.mime_type || "Log File"}</p>
-                        <p className="text-xs text-muted-foreground">
-                          ID: {file.id.slice(0, 8)}...
+                    <div className="flex items-center gap-3 min-w-0">
+                      <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm">Combat log</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {file.mime_type || "unknown type"} · {file.id.slice(0, 8)}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <div className="text-right text-sm text-muted-foreground">
+                      <div className="text-right text-sm text-muted-foreground whitespace-nowrap">
                         {file.compressed_size_bytes != null ? (
                           <>
                             <p className="text-xs">
@@ -1432,7 +1443,7 @@ export function LogDetailView({
                         ) : (
                           <p>{formatBytes(file.size_bytes)}</p>
                         )}
-                        <p className="text-xs">{formatDate(file.created_at)}</p>
+                        <p className="hidden text-xs sm:block">{formatDate(file.created_at)}</p>
                         {file.storage_deleted_at && (
                           <p className="text-xs text-destructive">
                             Deleted: {formatDate(file.storage_deleted_at)}
@@ -1458,79 +1469,42 @@ export function LogDetailView({
             </div>
           </Card>
 
-          {/* Log Details Card */}
-          <Card className="p-6">
-            <h2 className="font-semibold text-lg mb-4">Details</h2>
-            <dl className="grid gap-4 md:grid-cols-2 text-sm">
+
+          {processingDone && <ProcessingStatusCard log={log} />}
+
+          {!log.unlisted && canMarkUnlisted && (
+            <Card className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <dt className="text-muted-foreground">Log ID</dt>
-                <dd className="font-mono text-xs mt-1 break-all">{log.id}</dd>
+                <h2 className="flex items-center gap-2 text-lg font-semibold">
+                  <LockKeyhole className="h-5 w-5 text-amber-400" />
+                  Make log unlisted
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Unlisted logs are excluded from rankings and public discovery. Anyone with the link can view them, and this change cannot be reversed.
+                </p>
               </div>
-              <div>
-                <dt className="text-muted-foreground">Uploaded by</dt>
-                <dd className="mt-1">{log.owner_name || "Unknown"}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Created</dt>
-                <dd className="mt-1">{formatDate(log.created_at)}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Last Updated</dt>
-                <dd className="mt-1">{formatDate(log.updated_at)}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Total Files</dt>
-                <dd className="mt-1">{log.files?.length || 0}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Total Size</dt>
-                <dd className="mt-1">
-                  {log.files ? (
-                    (() => {
-                      const totalOriginal = log.files.reduce((acc, f) => acc + f.size_bytes, 0);
-                      const totalStored = log.files.reduce(
-                        (acc, f) => acc + (f.compressed_size_bytes ?? f.size_bytes),
-                        0
-                      );
-                      const hasCompressed = log.files.some(f => f.compressed_size_bytes != null);
-                      
-                      if (hasCompressed && totalStored !== totalOriginal) {
-                        return (
-                          <span>
-                            {formatBytes(totalStored)}{" "}
-                            <span className="text-muted-foreground/70 text-xs">
-                              ({formatBytes(totalOriginal)} uncompressed)
-                            </span>
-                          </span>
-                        );
-                      }
-                      return formatBytes(totalOriginal);
-                    })()
-                  ) : (
-                    "0 B"
-                  )}
-                </dd>
-              </div>
-            </dl>
-          </Card>
+              <UnlistedConfirmationDialog
+                disabled={isMarkingUnlisted}
+                isPending={isMarkingUnlisted}
+                onConfirm={onMarkUnlisted}
+              />
+            </Card>
+          )}
 
           {/* Timing Report - only shows for completed log-parse jobs with report */}
-          {(() => {
-            const parsedOutput = parseLogParseOutput(log.status.output, log.status.kind);
-            return parsedOutput?.report ? (
-              <>
-                <TimingSection report={parsedOutput.report} />
-                {parsedOutput.report.identity && (
-                  <IdentitySection identity={parsedOutput.report.identity} />
-                )}
-              </>
-            ) : null;
-          })()}
+          {parsedOutput?.report && (
+            <>
+              <TimingSection report={parsedOutput.report} />
+              {parsedOutput.report.identity && (
+                <IdentitySection identity={parsedOutput.report.identity} />
+              )}
+            </>
+          )}
 
           {/* Delete Section */}
           {canDeleteInstance && (
             <Card className="p-6 border-destructive/50">
-              <h2 className="font-semibold text-lg mb-4 text-destructive">Danger Zone</h2>
+              <h2 className="font-semibold text-lg text-destructive">Danger Zone</h2>
               {showDeleteConfirm ? (
                 <div className="space-y-4">
                   <p className="text-sm text-muted-foreground">
