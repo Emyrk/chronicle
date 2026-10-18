@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canPublishLiveView,
   cursorScreenPosition,
   cursorSurfaceOffset,
   liveSessionInviteURL,
@@ -74,6 +75,17 @@ describe("shared cursor coordinates", () => {
       width: 600,
       height: 700,
     })).toEqual({ x: 620, y: 730 });
+  });
+});
+
+describe("canPublishLiveView", () => {
+  it("lets the leader publish immediately", () => {
+    expect(canPublishLiveView("leader", false)).toBe(true);
+  });
+
+  it("waits for the leader's initial view before a participant publishes", () => {
+    expect(canPublishLiveView("participant", false)).toBe(false);
+    expect(canPublishLiveView("participant", true)).toBe(true);
   });
 });
 

@@ -116,6 +116,13 @@ export function websocketURL(path: string, location: Pick<Location, "protocol" |
   return `${protocol}//${location.host}${path}`;
 }
 
+export function canPublishLiveView(
+  role: "leader" | "participant" | null,
+  hasReceivedInitialView: boolean,
+): boolean {
+  return role === "leader" || (role === "participant" && hasReceivedInitialView);
+}
+
 export function shouldPublishParticipantReplay(
   previous: LiveReplayState | null,
   next: LiveReplayState,

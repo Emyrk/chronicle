@@ -13,6 +13,7 @@ import type { CreateLiveSessionResponse, JoinLiveSessionResponse } from "@/api/t
 import { useSyncModeContext } from "./SyncModeContext";
 import {
   LIVE_SESSION_QUERY_PARAM,
+  canPublishLiveView,
   cursorScreenPosition,
   cursorSurfaceOffset,
   liveSessionInviteURL,
@@ -172,6 +173,9 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
   const currentViewRef = useRef<unknown>(null);
   const applyViewRef = useRef<((view: unknown) => void) | null>(null);
   const remoteViewJSONRef = useRef<string | null>(null);
+  // A participant must first adopt the leader's view. Otherwise its local default
+  // can win the data-channel startup race and reset the layout for every peer.
+  const hasReceivedInitialViewRef = useRef(false);
   const previousReplayRef = useRef<LiveReplayState | null>(null);
   const remoteReplayJSONRef = useRef<string | null>(null);
   const presencesRef = useRef(new Map<string, { presence: LiveMapPresence; at: number }>());
@@ -248,6 +252,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
       if (message.type === "view") {
         currentViewRef.current = message.view;
         remoteViewJSONRef.current = JSON.stringify(message.view);
+        if (currentRoleRef.current === "participant") hasReceivedInitialViewRef.current = true;
         applyViewRef.current?.(message.view);
       } else if (message.type === "replay") {
         applyRemoteReplay(message.replay);
@@ -346,6 +351,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     participantPeerRef.current?.close();
     participantPeerRef.current = null;
     pendingCandidatesRef.current.clear();
+    hasReceivedInitialViewRef.current = false;
     setParticipantCount(0);
     setRemotePointers({});
     pointerSurfacesRef.current.clear();
@@ -521,7 +527,12 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
       remoteViewJSONRef.current = null;
       return;
     }
-    if (status === "live") sendData({ type: "view", view });
+    if (
+      status === "live"
+      && canPublishLiveView(currentRoleRef.current, hasReceivedInitialViewRef.current)
+    ) {
+      sendData({ type: "view", view });
+    }
   }, [sendData, status]);
 
   const registerViewApplier = useCallback((apply: ((view: unknown) => void) | null) => {
