@@ -145,6 +145,9 @@ const ANGLED_OFFSET = new THREE.Vector3(0, 0.85, 0.75);
 // artwork-up at the top of the screen, as in the 2D view.
 const TOP_DOWN_OFFSET = new THREE.Vector3(0, 1, 0.0001);
 const TILES_MAX_DISTANCE = 400;
+// On the flat artwork, units are this many times their full-map size on
+// screen at every zoom, so a stacked raid reads as tokens, not specks.
+const TILES_UNIT_SCALE = 2;
 // How far the orbit camera may tilt from straight down. On the flat artwork it
 // stays 30 degrees above the horizon, where the token faces still show; on
 // the mesh it may go down to the floor.
@@ -1283,7 +1286,7 @@ export class MapScene3D {
     const yards = this.dungeonMesh ? this.dungeonMesh.scale : this.walk ? this.yardScale() : null;
     const scale = yards
       ? Math.max((MESH_PLAYER_HEIGHT_YARDS * yards) / PLAYER_GEOMETRY_HEIGHT, MESH_MIN_SCREEN_SCALE * screenScale)
-      : screenScale;
+      : TILES_UNIT_SCALE * screenScale;
     if (scale === this.unitScale && !force) return;
     this.unitScale = scale;
     for (const object of this.units.values()) object.group.scale.setScalar(this.scaleOf(object));
