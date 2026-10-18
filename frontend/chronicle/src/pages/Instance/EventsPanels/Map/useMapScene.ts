@@ -13,6 +13,7 @@ import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelRenderProps } from "../types";
 import { isMeshOnlyInstance, placeableDungeonMesh } from "./dungeonMeshes";
 import { groupCentre, isStaleRunSample, mergeRunEncounters, runSignature } from "./wholeRun";
+import { POWER_COLORS } from "../RaidFrames/raidFrameShared";
 import { activeDebuffsAt, type MapDebuff, type MapEncounterPositions, type MapPositionSample, type MapResult } from "./map.processor";
 import { inferRoles } from "../Roles/roles.processor";
 import { deriveRecentHealGain, isDeadAt, type EncounterEffects } from "./replayEffects";
@@ -123,6 +124,8 @@ export interface MapSceneMarker {
   owner?: string;
   /** Spell ids of the debuffs on this player at the cursor (the map tints it by their dispel type). */
   debuffs?: number[];
+  /** Power at the cursor (0-1) and its raid-frame colour, for the column beside health; absent without power. */
+  power?: { fraction: number; color: string };
 }
 
 export interface MapSceneGround {
@@ -395,6 +398,9 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     if (debuffs) marker.debuffs = activeDebuffsAt(debuffs, cursorMs);
     const latest = latestHealthAt(encounter.healthByUnit.get(marker.guid) ?? [], cursorMs);
     if (latest && latest.max > 0) marker.healthFraction = Math.min(1, Math.max(0, latest.current / latest.max));
+    if (latest?.maxPower && latest.power !== undefined) {
+      marker.power = { fraction: Math.min(1, Math.max(0, latest.power / latest.maxPower)), color: POWER_COLORS[latest.powerType ?? ""] ?? "#767676" };
+    }
     const sample = bars.get(marker.guid);
     if (sample) {
       marker.health = {

@@ -51,6 +51,10 @@ export interface MapHealthSample {
   current: number;
   max: number;
   absorb: number;
+  /** Power (mana, rage, energy …): current, maximum and kind (lowercase, as the raid frames key it). */
+  power?: number;
+  maxPower?: number;
+  powerType?: string;
 }
 
 /** A debuff on a player, from its application until it fades (Infinity while still on at the log's end). */
@@ -288,6 +292,17 @@ function addHealthSample(healthByUnit: Map<string, MapHealthSample[]>, event: Un
   // Snapshots repeat on every advanced event; keep only changes so the list
   // stays small and the latest sample's time is the last change.
   const last = samples[samples.length - 1];
-  if (last && last.current === event.currentHealth && last.max === event.maximumHealth && last.absorb === event.absorb) return;
-  samples.push({ timestampMs, current: event.currentHealth, max: event.maximumHealth, absorb: event.absorb });
+  // Power is kept only for units that have it.
+  const hasPower = event.maximumPower > 0;
+  const powerType = hasPower ? (event.powerType ?? "").toLowerCase() : undefined;
+  if (last && last.current === event.currentHealth && last.max === event.maximumHealth && last.absorb === event.absorb
+    && last.power === (hasPower ? event.currentPower : undefined) && last.maxPower === (hasPower ? event.maximumPower : undefined)
+    && last.powerType === powerType) return;
+  const sample: MapHealthSample = { timestampMs, current: event.currentHealth, max: event.maximumHealth, absorb: event.absorb };
+  if (hasPower) {
+    sample.power = event.currentPower;
+    sample.maxPower = event.maximumPower;
+    sample.powerType = powerType;
+  }
+  samples.push(sample);
 }

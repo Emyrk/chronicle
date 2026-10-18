@@ -106,8 +106,8 @@ export interface TokenProps {
   cast?: { fraction: number; color: string } | null;
   /** A debuff's dispel type, tinting the token. */
   dispel?: DispelKind | null;
-  /** Above the token: a column this full (0-1) in this colour. */
-  column?: { value: number; color: string } | null;
+  /** Above the token: a column this full (0-1) in this colour, and optionally a thinner power column beside it. */
+  column?: { value: number; color: string; power?: { value: number; color: string } } | null;
   muted?: boolean;
   /** Pixels per geometry unit. */
   scale?: number;
@@ -172,7 +172,7 @@ export function Token({
           {pinned && <ArtCanvas key="pin" draw={drawPinnedLayer} style={layer(radius, plane.pin)} />}
         </div>
       </div>
-      {column && <Column value={column.value} color={column.color} radius={radius} />}
+      {column && <Columns column={column} radius={radius} />}
     </div>
   );
 }
@@ -186,14 +186,23 @@ function drawPinnedLayer(context: CanvasRenderingContext2D) {
   drawHalo(context, "pinned", hexCss(HALO_COLORS.pinned));
 }
 
-// The column above the token, standing up off the disc (not tilted).
-function Column({ value, color, radius }: { value: number; color: string; radius: number }) {
-  const width = Math.max(4, radius * TOKEN_LAYOUT.columnWidth);
-  const full = radius * TOKEN_LAYOUT.columnHeight;
+// The columns above the token, standing up off the disc (not tilted): health,
+// and the thinner, shorter power column beside it, centred as a pair (layoutColumns).
+function Columns({ column, radius }: { column: NonNullable<TokenProps["column"]>; radius: number }) {
+  const healthWidth = Math.max(4, radius * TOKEN_LAYOUT.columnWidth);
+  const powerWidth = Math.max(2, radius * TOKEN_LAYOUT.powerColumnWidth);
+  const gap = Math.max(1, radius * TOKEN_LAYOUT.columnGap);
+  const pair = column.power ? healthWidth + gap + powerWidth : healthWidth;
+  const bar = (left: number, width: number, full: number, value: number, color: string) => (
+    <>
+      <div style={{ position: "absolute", left, bottom: 0, width, height: full, background: `rgba(255,255,255,${TOKEN_LAYOUT.columnTrackOpacity})` }} />
+      <div style={{ position: "absolute", left, bottom: 0, width, height: full * value, background: color, opacity: 0.92, boxShadow: `0 0 10px ${color}` }} />
+    </>
+  );
   return (
     <>
-      <div style={{ position: "absolute", left: -width / 2, bottom: 0, width, height: full, background: `rgba(255,255,255,${TOKEN_LAYOUT.columnTrackOpacity})` }} />
-      <div style={{ position: "absolute", left: -width / 2, bottom: 0, width, height: full * value, background: color, opacity: 0.92, boxShadow: `0 0 10px ${color}` }} />
+      {bar(-pair / 2, healthWidth, radius * TOKEN_LAYOUT.columnHeight, column.value, column.color)}
+      {column.power && bar(-pair / 2 + healthWidth + gap, powerWidth, radius * TOKEN_LAYOUT.powerColumnHeight, column.power.value, column.power.color)}
     </>
   );
 }

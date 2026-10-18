@@ -270,6 +270,7 @@ export default function MapView3D({
         healthFraction: marker.healthFraction,
         owner: marker.owner,
         dispel: dispelOf(marker.debuffs),
+        power: marker.power ?? null,
       }];
     });
     scene.setUnits(units);

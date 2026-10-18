@@ -254,8 +254,8 @@ describe("mapProcessor", () => {
       }
       const encounter = state.encounters.get("encounter")!;
       expect(encounter.healthByUnit.get("tank")).toEqual([
-        { timestampMs: start.getTime() + 100, current: 1000, max: 1000, absorb: 0 },
-        { timestampMs: start.getTime() + 300, current: 800, max: 1000, absorb: 50 },
+        { timestampMs: start.getTime() + 100, current: 1000, max: 1000, absorb: 0, power: 0, maxPower: 500, powerType: "mana" },
+        { timestampMs: start.getTime() + 300, current: 800, max: 1000, absorb: 50, power: 0, maxPower: 500, powerType: "mana" },
       ]);
       expect(encounter.healthByUnit.get("boss")).toHaveLength(1);
       expect(encounter.effects.events).toEqual([]);

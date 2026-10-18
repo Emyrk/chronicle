@@ -6,6 +6,7 @@ import { ABOVE_DISC_MODES, CAST_MODES } from "@/pages/Instance/EventsPanels/Map/
 import { HEAL_COLOR, HEAL_CRIT_COLOR, OVERHEAL_COLOR, SCHOOL_TOKENS, schoolColor } from "@/pages/Instance/EventsPanels/Map/replayEffects";
 import { DASH_ART_SIZE, DISPEL_COLORS, DISPEL_ORDER, HALO_COLORS, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, type HaloKind } from "@/pages/Instance/EventsPanels/Map/unitTokenArt";
 import { participantColor } from "@/pages/Instance/liveSessionProtocol";
+import { POWER_COLORS } from "@/pages/Instance/EventsPanels/RaidFrames/raidFrameShared";
 import { At, BossToken, Ground, Token, useClock } from "./legendArt";
 import {
   BoltDemo,
@@ -130,6 +131,7 @@ function HealthBar({ fraction, healed = 0, absorb = 0, dead = false }: { fractio
 const MAGE = { ring: "var(--color-class-mage)", icon: "/c/icons/spec_mage_frost.png" };
 const PALADIN = { ring: "var(--color-class-paladin)", icon: "/c/icons/spec_paladin_holy.png" };
 const SHAMAN = { ring: "var(--color-class-shaman)", icon: "/c/icons/spec_shaman_restoration.png" };
+const WARRIOR = { ring: "var(--color-class-warrior)", icon: "/c/icons/class_warrior.png" };
 const HUNTER = { ring: "var(--color-class-hunter)", icon: "/c/icons/spec_hunter_beastmastery.png" };
 
 export function MapLegend() {
@@ -265,7 +267,7 @@ export function MapLegend() {
         </Grid>
       </Section>
 
-      <Section id="above" title="Above the token" note={<>Optionally, a health column rises from every token (off by default). Turn it on in Map settings → Units → <em>Above the token</em>.</>}>
+      <Section id="above" title="Above the token" note={<>Optionally, health rises as a column from every token, with power (mana, rage, energy) in a thinner, shorter one beside it (off by default). Turn it on in Map settings → Units → <em>Above the token</em>.</>}>
         <Grid min={240}>
           {ABOVE_DISC_MODES.map((mode) => (
             <Card key={mode.value} title={mode.label} demo={
@@ -273,8 +275,8 @@ export function MapLegend() {
                 {[0.92, 0.54, 0.18].map((value, index) => (
                   <At key={value} x={22 + index * 28} y={82}>
                     <Token
-                      {...[PALADIN, MAGE, HUNTER][index]}
-                      column={mode.value === "health" ? { value, color: healthBarColor(value) } : null}
+                      {...[PALADIN, MAGE, WARRIOR][index]}
+                      column={mode.value === "health" ? { value, color: healthBarColor(value), power: { value: [0.35, 0.8, 0.6][index], color: POWER_COLORS[["mana", "mana", "rage"][index]] } } : null}
                     />
                   </At>
                 ))}

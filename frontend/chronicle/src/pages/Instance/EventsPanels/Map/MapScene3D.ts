@@ -335,6 +335,8 @@ export interface MapScene3DUnit {
   owner?: string;
   /** A debuffed player's dispel type (magic, curse, disease, poison), tinting its token. */
   dispel?: DispelKind | null;
+  /** Power (0-1) and its colour, drawn as a thinner column beside health. */
+  power?: { fraction: number; color: string } | null;
 }
 
 /** The one live value drawn as a column above each token. */
@@ -362,8 +364,12 @@ interface UnitToken {
   arc: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   /** A debuffed player's tint and glow, in the dispel type's colour. */
   debuff: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  /** Health and power columns, side by side and turned to face the camera. */
+  columns: THREE.Group;
   column: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   columnTrack: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  power: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  powerTrack: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   /** Bosses: the turning tick ring, the sigil under a model, and the pin while there is none. */
   ticks: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
   sigil: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
@@ -397,6 +403,7 @@ interface UnitObject {
   /** The body shows a loaded model rather than the flat disc. */
   mini: boolean;
   healthFraction: number | null;
+  powerLevel: { fraction: number; color: string } | null;
   owner: string | undefined;
   /** The log records which way it faces; otherwise enemies face whoever they last hit. */
   loggedFacing: boolean;
@@ -455,6 +462,31 @@ export interface MapScene3DEffectHover {
   /** Container-relative pixels of the effect's target. */
   x: number;
   y: number;
+}
+
+// Sizes the health column (and its track) and the thinner, shorter power
+// column beside it, centred as a pair on the token.
+function layoutColumns(columns: THREE.Group, radius: number) {
+  const [healthTrack, health, powerTrack, power] = columns.children as THREE.Mesh[];
+  const healthWidth = radius * COLUMN_WIDTH;
+  const powerWidth = radius * TOKEN_LAYOUT.powerColumnWidth;
+  const gap = radius * TOKEN_LAYOUT.columnGap;
+  const offset = (powerWidth + gap) / 2;
+  for (const part of [healthTrack, health]) {
+    part.scale.set(healthWidth, radius * COLUMN_HEIGHT, healthWidth);
+    part.position.x = -offset;
+  }
+  for (const part of [powerTrack, power]) {
+    part.scale.set(powerWidth, radius * TOKEN_LAYOUT.powerColumnHeight, powerWidth);
+    part.position.x = (healthWidth + gap) / 2;
+  }
+}
+
+// Fills a column to `value` (0-1) of `full`; hidden (track too) without a value.
+function fillColumn(column: THREE.Mesh, track: THREE.Mesh, value: number | null, full: number) {
+  column.visible = value !== null && value > 0;
+  track.visible = value !== null;
+  if (value !== null) column.scale.y = Math.max(0.02, full * value);
 }
 
 interface RemotePresence {
@@ -971,6 +1003,7 @@ export class MapScene3D {
       object.health = unit.health;
       object.loggedZ = unit.z;
       object.healthFraction = unit.healthFraction ?? null;
+      object.powerLevel = unit.power ?? null;
       object.owner = unit.owner;
       if (object.color !== unit.color || object.icon !== (unit.icon ?? null)) {
         object.color = unit.color;
@@ -1719,9 +1752,16 @@ export class MapScene3D {
     const arc = overlay(null, radius * TOKEN_PLANE.arc, face + TOKEN_LIFT.arc);
     const debuff = overlay(this.tokenTextures.debuffTint(), radius * DEBUFF_PLANE, face + TOKEN_LIFT.debuff);
     debuff.visible = false;
-    const columnTrack = new THREE.Mesh(this.columnBox, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: COLUMN_TRACK_OPACITY, depthWrite: false }));
-    const column = new THREE.Mesh(this.columnBox, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.92 }));
-    for (const part of [column, columnTrack]) part.scale.set(radius * COLUMN_WIDTH, radius * COLUMN_HEIGHT, radius * COLUMN_WIDTH);
+    const track = () => new THREE.Mesh(this.columnBox, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: COLUMN_TRACK_OPACITY, depthWrite: false }));
+    const fill = () => new THREE.Mesh(this.columnBox, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.92 }));
+    const columnTrack = track();
+    const column = fill();
+    const powerTrack = track();
+    const power = fill();
+    const columns = new THREE.Group();
+    columns.add(columnTrack, column, powerTrack, power);
+    columns.position.y = face;
+    layoutColumns(columns, radius);
     const ticks = boss ? overlay(this.tokenTextures.sigilTicks(), radius * TOKEN_PLANE.ticks * TOKEN_PLANE.sigil, face + TOKEN_LIFT.marks) : null;
     let bossPin: THREE.Sprite | null = null;
     if (boss) {
@@ -1733,7 +1773,7 @@ export class MapScene3D {
     const group = new THREE.Group();
     group.userData.guid = unit.guid;
     body.userData.guid = unit.guid;
-    group.add(shadow, edge, body, cone, debuff, arc, halo, pin, columnTrack, column);
+    group.add(shadow, edge, body, cone, debuff, arc, halo, pin, columns);
     if (ticks) group.add(ticks);
     if (bossPin) group.add(bossPin);
     this.unitsGroup.add(group);
@@ -1743,11 +1783,12 @@ export class MapScene3D {
       bodyMaterial,
       coneMaterial,
       cone,
-      token: { radius, face, edge, shadow, halo, pin, arc, debuff, column, columnTrack, ticks, sigil: null, bossPin },
+      token: { radius, face, edge, shadow, halo, pin, arc, debuff, columns, column, columnTrack, power, powerTrack, ticks, sigil: null, bossPin },
       icon: unit.icon ?? null,
       boss,
       mini: false,
       healthFraction: unit.healthFraction ?? null,
+      powerLevel: unit.power ?? null,
       owner: unit.owner,
       loggedFacing: unit.facing !== undefined,
       hitFacing: undefined,
@@ -1914,7 +1955,8 @@ export class MapScene3D {
     for (const [part, size] of [[token.halo, TOKEN_PLANE.halo], [token.pin, TOKEN_PLANE.pin], [token.arc, TOKEN_PLANE.arc], [token.shadow, TOKEN_PLANE.shadow]] as const) {
       part.scale.setScalar(MINI_TOKEN_RADIUS * size);
     }
-    for (const part of [token.column, token.columnTrack]) part.scale.set(MINI_TOKEN_RADIUS * COLUMN_WIDTH, MINI_TOKEN_RADIUS * COLUMN_HEIGHT, MINI_TOKEN_RADIUS * COLUMN_WIDTH);
+    token.columns.position.y = token.face;
+    layoutColumns(token.columns, MINI_TOKEN_RADIUS);
     if (token.bossPin) token.bossPin.visible = false;
     if (object.boss && !token.sigil) {
       // The model stands on the sigil.
@@ -1955,7 +1997,7 @@ export class MapScene3D {
     object.bodyMaterial.dispose();
     object.coneMaterial.dispose();
     const { token } = object;
-    for (const part of [token.shadow, token.edge, token.halo, token.pin, token.arc, token.debuff, token.column, token.columnTrack, token.ticks, token.sigil]) part?.material.dispose();
+    for (const part of [token.shadow, token.edge, token.halo, token.pin, token.arc, token.debuff, token.column, token.columnTrack, token.power, token.powerTrack, token.ticks, token.sigil]) part?.material.dispose();
     token.bossPin?.material.dispose();
     this.units.delete(guid);
     this.floorHeights.delete(guid);
@@ -2875,6 +2917,7 @@ export class MapScene3D {
     const dt = this.tokenAt ? Math.min(KEY_MAX_STEP_S, (now - this.tokenAt) / 1000) : 0;
     this.tokenAt = now;
     const { roles } = this;
+    const cameraYaw = this.cameraYaw();
     for (const [guid, object] of this.units) {
       const { token } = object;
       const cast = object.dead ? undefined : this.unitCasts.get(guid);
@@ -2888,19 +2931,18 @@ export class MapScene3D {
         }
         token.arc.material.color.copy(castColor);
       }
-      // The column: health, green to red (casts show as the arc round the ring).
-      let value: number | null = null;
-      if (!object.dead && this.aboveDisc === "health" && object.healthFraction !== null) {
-        value = object.healthFraction;
-        token.column.material.color.setStyle(healthBarColor(value));
-      }
-      token.column.visible = value !== null && value > 0;
-      token.columnTrack.visible = value !== null;
-      if (value !== null) {
-        const full = token.radius * COLUMN_HEIGHT;
-        token.column.scale.y = Math.max(0.02, full * value);
-        token.column.position.y = token.face;
-        token.columnTrack.position.y = token.face;
+      // The columns: health (green to red) and, beside it, thinner and
+      // shorter, power in its raid-frame colour. Casts show as the arc.
+      const health = !object.dead && this.aboveDisc === "health" ? object.healthFraction : null;
+      const power = !object.dead && this.aboveDisc === "health" ? object.powerLevel : null;
+      token.columns.visible = health !== null || power !== null;
+      if (token.columns.visible) {
+        // Side by side across the view: the pair turns with the camera.
+        token.columns.rotation.y = cameraYaw - object.group.rotation.y;
+        fillColumn(token.column, token.columnTrack, health, token.radius * COLUMN_HEIGHT);
+        if (health !== null) token.column.material.color.setStyle(healthBarColor(health));
+        fillColumn(token.power, token.powerTrack, power?.fraction ?? null, token.radius * TOKEN_LAYOUT.powerColumnHeight);
+        if (power) token.power.material.color.set(power.color);
       }
       const kind: HaloKind | null = guid === roles.selected ? "selected"
         : guid === roles.target ? "target"

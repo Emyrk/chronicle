@@ -43,6 +43,10 @@ export const TOKEN_LAYOUT = {
   columnWidth: 0.26,
   columnHeight: 3.2,
   columnTrackOpacity: 0.08,
+  /** The power column beside the health one: thinner and shorter, per radius, and the gap between them. */
+  powerColumnWidth: 0.16,
+  powerColumnHeight: 2.2,
+  columnGap: 0.08,
   /** The boss sigil's tick ring turns this fast (radians per second). */
   sigilSpin: 0.14,
   /** A boss without a model: its hexagon pin stands this high (per radius) over the sigil, this big. */
