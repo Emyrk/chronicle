@@ -37,7 +37,11 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	claims := chronauth.MustAuthenticatedClaims(r.Context())
+	var providerCustomerID string
 	if sub, err := s.store.GetBillingSubscriptionByUserID(r.Context(), claims.Subject); err == nil {
+		if sub.Provider == ProviderStripe {
+			providerCustomerID = sub.ProviderCustomerID
+		}
 		hasReveredEntitlement, err := s.HasEntitlement(r.Context(), claims.Subject, EntitlementChronicleRevered)
 		if err != nil {
 			httpapi.InternalServerError(w, err)
@@ -61,7 +65,6 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 	cancel := s.accessURL.ResolveReference(&url.URL{Path: "/account", RawQuery: "billing=cancel"}).String()
 	params := &stripe.CheckoutSessionCreateParams{
 		ClientReferenceID: stripe.String(claims.Subject.String()),
-		CustomerEmail:     stripe.String(user.Email),
 		LineItems: []*stripe.CheckoutSessionCreateLineItemParams{{
 			Price:    stripe.String(req.PriceID),
 			Quantity: stripe.Int64(1),
@@ -76,7 +79,12 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 			"chronicle_price_id":     req.PriceID,
 		}},
 	}
-	session, err := s.stripe.V1CheckoutSessions.Create(r.Context(), params)
+	if providerCustomerID != "" {
+		params.Customer = stripe.String(providerCustomerID)
+	} else {
+		params.CustomerEmail = stripe.String(user.Email)
+	}
+	session, err := s.createCheckoutSession(r.Context(), params)
 	if err != nil {
 		httpapi.InternalServerError(w, fmt.Errorf("create Stripe Checkout session: %w", err))
 		return

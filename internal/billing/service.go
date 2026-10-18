@@ -21,6 +21,7 @@ const (
 type accountRetriever func(context.Context, *stripe.AccountRetrieveParams) (*stripe.Account, error)
 type priceRetriever func(context.Context, string, *stripe.PriceRetrieveParams) (*stripe.Price, error)
 type subscriptionRetriever func(context.Context, string, *stripe.SubscriptionRetrieveParams) (*stripe.Subscription, error)
+type checkoutSessionCreator func(context.Context, *stripe.CheckoutSessionCreateParams) (*stripe.CheckoutSession, error)
 type subscriptionLister func(context.Context) ([]*stripe.Subscription, error)
 type activeEntitlementLister func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error)
 
@@ -45,6 +46,7 @@ type Service struct {
 	retrieveAccount           accountRetriever
 	retrievePrice             priceRetriever
 	retrieveSubscription      subscriptionRetriever
+	createCheckoutSession     checkoutSessionCreator
 	listSubscriptions         subscriptionLister
 	listActiveEntitlements    activeEntitlementLister
 
@@ -57,6 +59,7 @@ func New(opts Options) *Service {
 	var retrieveAccount accountRetriever
 	var retrievePrice priceRetriever
 	var retrieveSubscription subscriptionRetriever
+	var createCheckoutSession checkoutSessionCreator
 	var listSubscriptions subscriptionLister
 	var listActiveEntitlements activeEntitlementLister
 	if opts.SecretKey != "" {
@@ -64,9 +67,13 @@ func New(opts Options) *Service {
 		retrieveAccount = client.V1Accounts.Retrieve
 		retrievePrice = client.V1Prices.Retrieve
 		retrieveSubscription = client.V1Subscriptions.Retrieve
+		createCheckoutSession = client.V1CheckoutSessions.Create
 		listSubscriptions = func(ctx context.Context) ([]*stripe.Subscription, error) {
 			var subscriptions []*stripe.Subscription
-			params := &stripe.SubscriptionListParams{Status: stripe.String("all")}
+			// Stripe's default list excludes canceled subscription history. The
+			// reconciliation worker handles known local subscriptions separately, so
+			// discovering every old cancellation would resurrect cleared accounts.
+			params := &stripe.SubscriptionListParams{}
 			for sub, err := range client.V1Subscriptions.List(ctx, params).All(ctx) {
 				if err != nil {
 					return nil, err
@@ -111,6 +118,7 @@ func New(opts Options) *Service {
 		retrieveAccount:           retrieveAccount,
 		retrievePrice:             retrievePrice,
 		retrieveSubscription:      retrieveSubscription,
+		createCheckoutSession:     createCheckoutSession,
 		listSubscriptions:         listSubscriptions,
 		listActiveEntitlements:    listActiveEntitlements,
 	}

@@ -2,6 +2,7 @@ package billing
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -23,7 +24,7 @@ func (ArgsReconcileSubscriptions) Kind() string { return KindReconcileSubscripti
 func (ArgsReconcileSubscriptions) InsertOpts() river.InsertOpts {
 	return river.InsertOpts{
 		Queue:       river.QueueDefault,
-		MaxAttempts: 5,
+		MaxAttempts: 2,
 		UniqueOpts: river.UniqueOpts{ByState: []rivertype.JobState{
 			rivertype.JobStateScheduled,
 			rivertype.JobStatePending,
@@ -60,12 +61,17 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 		return fmt.Errorf("record billing reconciliation start: %w", err)
 	}
 	counts := reconciliationCounts{}
+	var partialErr error
 	defer func() {
 		status := "completed"
 		errorText := ""
-		if workErr != nil {
+		runErr := workErr
+		if runErr == nil {
+			runErr = partialErr
+		}
+		if runErr != nil {
 			status = "failed"
-			errorText = workErr.Error()
+			errorText = runErr.Error()
 		}
 		completionCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
@@ -196,22 +202,23 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 		}
 	}
 	counts.entitlementCustomersFound = int32(len(customers))
+	customerErrors := make([]error, 0, len(customers))
 	for customerID := range customers {
 		if err := w.Billing.syncStripeEntitlementsIfConfigured(ctx, customerID); err != nil {
-			// A customer deleted in Stripe (or from another Stripe account) must not
-			// block reconciliation for everyone else.
-			if stripeResourceMissing(err) {
-				if w.Logger != nil {
-					w.Logger.WarnContext(ctx, "skipping entitlements for missing Stripe customer", slog.String("customer_id", customerID))
-				}
-				continue
+			customerErr := fmt.Errorf("reconcile Stripe entitlements for customer %q: %w", customerID, err)
+			customerErrors = append(customerErrors, customerErr)
+			if w.Logger != nil {
+				w.Logger.WarnContext(ctx, "skipping Stripe entitlement customer", slog.String("customer_id", customerID), "error", err)
 			}
-			return fmt.Errorf("reconcile Stripe entitlements for customer %q: %w", customerID, err)
+			continue
 		}
 		counts.entitlementCustomersSynced++
 	}
+	if len(customerErrors) > 0 {
+		partialErr = errors.Join(customerErrors...)
+	}
 	if w.Logger != nil {
-		w.Logger.InfoContext(ctx, "billing reconciliation completed",
+		w.Logger.InfoContext(ctx, "billing reconciliation finished",
 			slog.Int("provider_customers_found", int(counts.providerCustomersFound)),
 			slog.Int("local_subscriptions_found", int(counts.localSubscriptionsFound)),
 			slog.Int("subscriptions_seen", int(counts.subscriptionsSeen)),
@@ -219,6 +226,7 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 			slog.Int("subscriptions_skipped_invalid", int(counts.subscriptionsInvalid)),
 			slog.Int("entitlement_customers_found", int(counts.entitlementCustomersFound)),
 			slog.Int("entitlement_customers_synced", int(counts.entitlementCustomersSynced)),
+			slog.Int("entitlement_customer_errors", len(customerErrors)),
 		)
 	}
 	return nil

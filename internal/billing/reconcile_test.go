@@ -79,6 +79,14 @@ func (s *reconciliationStore) CompleteBillingReconciliationRun(_ context.Context
 	return nil
 }
 
+func TestReconciliationJobRetriesAtMostOnce(t *testing.T) {
+	t.Parallel()
+
+	// River counts the initial execution as an attempt, so two attempts means
+	// at most one retry.
+	require.Equal(t, 2, ArgsReconcileSubscriptions{}.InsertOpts().MaxAttempts)
+}
+
 func TestSubscriptionWebhookUsesAuthoritativeStateAndMetadata(t *testing.T) {
 	t.Parallel()
 	userID := uuid.New()
@@ -292,6 +300,44 @@ func TestReconciliationKeepsListedSubscriptionOverStaleLocalRow(t *testing.T) {
 	require.Equal(t, string(stripe.SubscriptionStatusActive), store.conditionalUpserts[0].Status)
 }
 
+func TestReconciliationContinuesAfterEntitlementCustomerError(t *testing.T) {
+	t.Parallel()
+
+	validCustomerID := "cus_valid"
+	orphanCustomerID := "cus_orphan"
+	store := &reconciliationStore{
+		localSubscriptions: []database.BillingSubscription{{
+			UserID:             uuid.New(),
+			Provider:           ProviderStripe,
+			ProviderCustomerID: validCustomerID,
+		}},
+		providerCustomers: []database.ListBillingProviderCustomersForReconciliationRow{{
+			Provider:           ProviderStripe,
+			ProviderCustomerID: orphanCustomerID,
+		}},
+	}
+	svc := New(Options{Store: store, PriceIDs: []string{"price_monthly"}})
+	svc.listSubscriptions = func(context.Context) ([]*stripe.Subscription, error) { return nil, nil }
+	svc.listActiveEntitlements = func(_ context.Context, customerID string) ([]*stripe.EntitlementsActiveEntitlement, error) {
+		require.Equal(t, validCustomerID, customerID)
+		return nil, nil
+	}
+	tx := &entitlementStore{}
+	svc.runEntitlementTransaction = func(ctx context.Context, fn func(EntitlementTransaction) error) error {
+		return fn(tx)
+	}
+
+	err := (&ReconciliationWorker{Billing: svc, Store: store}).Work(context.Background(), &river.Job[ArgsReconcileSubscriptions]{})
+	require.NoError(t, err, "a customer-level failure must not fail or retry the River job")
+	require.Equal(t, "failed", store.completion.Status)
+	require.Contains(t, store.completion.ErrorText, `reconcile Stripe entitlements for customer "cus_orphan"`)
+	require.Contains(t, store.completion.ErrorText, `find Chronicle user for stripe customer "cus_orphan": no rows in result set`)
+	require.Contains(t, store.completion.ErrorText, orphanCustomerID)
+	require.Equal(t, int32(2), store.completion.EntitlementCustomersFound)
+	require.Equal(t, int32(1), store.completion.EntitlementCustomersSynced)
+	require.Equal(t, validCustomerID, tx.deletedCustomer.ProviderCustomerID)
+}
+
 func TestReconciliationSkipsEntitlementsForMissingStripeCustomer(t *testing.T) {
 	t.Parallel()
 
@@ -309,8 +355,9 @@ func TestReconciliationSkipsEntitlementsForMissingStripeCustomer(t *testing.T) {
 	}
 
 	err := (&ReconciliationWorker{Billing: svc, Store: store}).Work(context.Background(), &river.Job[ArgsReconcileSubscriptions]{})
-	require.NoError(t, err)
-	require.Equal(t, "completed", store.completion.Status)
+	require.NoError(t, err, "a customer-level failure must not fail or retry the River job")
+	require.Equal(t, "failed", store.completion.Status)
+	require.Contains(t, store.completion.ErrorText, `reconcile Stripe entitlements for customer "cus_deleted"`)
 	require.Equal(t, int32(1), store.completion.EntitlementCustomersFound)
 	require.Equal(t, int32(0), store.completion.EntitlementCustomersSynced)
 }

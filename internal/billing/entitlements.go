@@ -103,13 +103,15 @@ const (
 	stripeStorageGrantSource       = "billing:stripe:+300mb-storage"
 	stripeStorageGrantBytes  int64 = 300_000_000
 
-	stripeRoleChronicleRevered = "stripe_chronicle_revered"
+	stripeRoleAdFree          = "stripe_ad_free"
+	stripeRoleDownloadRawLogs = "stripe_download_raw_logs"
+	stripeRoleUnlistedLogs    = "stripe_unlisted_logs"
 )
 
-var legacyStripeRoles = []string{
-	"stripe_ad_free",
-	"stripe_download_raw_logs",
-	"stripe_unlisted_logs",
+var chronicleReveredStripeRoles = []string{
+	stripeRoleAdFree,
+	stripeRoleDownloadRawLogs,
+	stripeRoleUnlistedLogs,
 }
 
 // Grant expands the single Chronicle Revered Stripe feature into every benefit
@@ -124,24 +126,24 @@ func (chronicleReveredEntitlement) Grant(ctx context.Context, tx EntitlementTran
 	}); err != nil {
 		return err
 	}
-	for _, role := range legacyStripeRoles {
-		if err := tx.SetStripeEntitlementRole(ctx, userID, role, false); err != nil {
+	for _, role := range chronicleReveredStripeRoles {
+		if err := tx.SetStripeEntitlementRole(ctx, userID, role, true); err != nil {
 			return err
 		}
 	}
-	return tx.SetStripeEntitlementRole(ctx, userID, stripeRoleChronicleRevered, true)
+	return nil
 }
 
 func (chronicleReveredEntitlement) Revoke(ctx context.Context, tx EntitlementTransaction, userID uuid.UUID) error {
 	if err := tx.DeleteDataGrant(ctx, database.DeleteDataGrantParams{UserID: userID, Source: stripeStorageGrantSource}); err != nil {
 		return err
 	}
-	for _, role := range legacyStripeRoles {
+	for _, role := range chronicleReveredStripeRoles {
 		if err := tx.SetStripeEntitlementRole(ctx, userID, role, false); err != nil {
 			return err
 		}
 	}
-	return tx.SetStripeEntitlementRole(ctx, userID, stripeRoleChronicleRevered, false)
+	return nil
 }
 
 type stripeEntitlementDefinition struct {

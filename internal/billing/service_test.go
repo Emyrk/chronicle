@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -94,6 +95,80 @@ func TestBillingSummaryKeepsFormerBillingAccountVisibleWhileAllowingResubscripti
 	require.False(t, summary.HasSubscription)
 	require.Equal(t, string(stripe.SubscriptionStatusCanceled), summary.Status)
 	require.Len(t, summary.Prices, 1)
+}
+
+func TestCreateCheckoutReusesExistingStripeCustomer(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	store := &entitlementStore{
+		subscription: database.BillingSubscription{
+			UserID:             userID,
+			Provider:           ProviderStripe,
+			ProviderCustomerID: "cus_existing",
+			Status:             string(stripe.SubscriptionStatusCanceled),
+			CurrentPeriodEnd:   pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
+		},
+		user: database.ChronicleUser{ID: userID, Email: "supporter@example.com"},
+	}
+	var checkoutParams *stripe.CheckoutSessionCreateParams
+	service := &Service{
+		store:         store,
+		stripe:        &stripe.Client{},
+		webhookSecret: "whsec_test",
+		priceIDs:      []string{"price_monthly"},
+		allowedPrices: map[string]struct{}{"price_monthly": {}},
+		accessURL:     &url.URL{Scheme: "https", Host: "example.com"},
+		createCheckoutSession: func(_ context.Context, params *stripe.CheckoutSessionCreateParams) (*stripe.CheckoutSession, error) {
+			checkoutParams = params
+			return &stripe.CheckoutSession{URL: "https://checkout.stripe.test/session"}, nil
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/me/billing/checkout", strings.NewReader(`{"price_id":"price_monthly"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(chronauth.WithClaims(req.Context(), &claims.Claims{Subject: userID}))
+	rec := httptest.NewRecorder()
+	service.CreateCheckout(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, checkoutParams)
+	require.Equal(t, "cus_existing", stripe.StringValue(checkoutParams.Customer))
+	require.Nil(t, checkoutParams.CustomerEmail)
+}
+
+func TestCreateCheckoutUsesEmailWithoutExistingStripeCustomer(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	store := &entitlementStore{
+		subscriptionErr: pgx.ErrNoRows,
+		user:            database.ChronicleUser{ID: userID, Email: "new-supporter@example.com"},
+	}
+	var checkoutParams *stripe.CheckoutSessionCreateParams
+	service := &Service{
+		store:         store,
+		stripe:        &stripe.Client{},
+		webhookSecret: "whsec_test",
+		priceIDs:      []string{"price_monthly"},
+		allowedPrices: map[string]struct{}{"price_monthly": {}},
+		accessURL:     &url.URL{Scheme: "https", Host: "example.com"},
+		createCheckoutSession: func(_ context.Context, params *stripe.CheckoutSessionCreateParams) (*stripe.CheckoutSession, error) {
+			checkoutParams = params
+			return &stripe.CheckoutSession{URL: "https://checkout.stripe.test/session"}, nil
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/me/billing/checkout", strings.NewReader(`{"price_id":"price_monthly"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(chronauth.WithClaims(req.Context(), &claims.Claims{Subject: userID}))
+	rec := httptest.NewRecorder()
+	service.CreateCheckout(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, checkoutParams)
+	require.Nil(t, checkoutParams.Customer)
+	require.Equal(t, "new-supporter@example.com", stripe.StringValue(checkoutParams.CustomerEmail))
 }
 
 func TestValidateAccount(t *testing.T) {
@@ -251,6 +326,7 @@ type entitlementStore struct {
 	billingEntitlements []database.BillingEntitlement
 	subscription        database.BillingSubscription
 	subscriptionErr     error
+	user                database.ChronicleUser
 	entitlementChecks   []database.HasBillingEntitlementParams
 	providerCustomer    database.BillingSubscription
 	providerCustomerErr error
@@ -278,6 +354,10 @@ func (s *entitlementStore) ListBillingEntitlementsByUserID(context.Context, uuid
 
 func (s *entitlementStore) GetBillingSubscriptionByUserID(context.Context, uuid.UUID) (database.BillingSubscription, error) {
 	return s.subscription, s.subscriptionErr
+}
+
+func (s *entitlementStore) GetUserByID(context.Context, uuid.UUID) (database.ChronicleUser, error) {
+	return s.user, nil
 }
 
 func (s *entitlementStore) UpsertBillingSubscription(_ context.Context, arg database.UpsertBillingSubscriptionParams) (database.BillingSubscription, error) {
@@ -386,10 +466,9 @@ func TestSyncStripeEntitlementsPersistsAuthoritativeSnapshotAndStorageGrant(t *t
 	require.Equal(t, stripeStorageGrantSource, store.dataGrant.Source)
 	require.Equal(t, stripeStorageGrantSource, store.deletedDataGrant.Source)
 	require.Equal(t, []entitlementRoleChange{
-		{userID: userID, role: "stripe_ad_free", granted: false},
-		{userID: userID, role: "stripe_download_raw_logs", granted: false},
-		{userID: userID, role: "stripe_unlisted_logs", granted: false},
-		{userID: userID, role: stripeRoleChronicleRevered, granted: true},
+		{userID: userID, role: stripeRoleAdFree, granted: true},
+		{userID: userID, role: stripeRoleDownloadRawLogs, granted: true},
+		{userID: userID, role: stripeRoleUnlistedLogs, granted: true},
 	}, store.roleChanges)
 }
 
@@ -448,14 +527,12 @@ func TestSyncStripeEntitlementsTransfersOwnerAndAppliesRolePerEntitlement(t *tes
 		{UserID: currentOwner, Source: stripeStorageGrantSource},
 	}, store.deletedDataGrants)
 	require.Equal(t, []entitlementRoleChange{
-		{userID: previousOwner, role: "stripe_ad_free", granted: false},
-		{userID: previousOwner, role: "stripe_download_raw_logs", granted: false},
-		{userID: previousOwner, role: "stripe_unlisted_logs", granted: false},
-		{userID: previousOwner, role: stripeRoleChronicleRevered, granted: false},
-		{userID: currentOwner, role: "stripe_ad_free", granted: false},
-		{userID: currentOwner, role: "stripe_download_raw_logs", granted: false},
-		{userID: currentOwner, role: "stripe_unlisted_logs", granted: false},
-		{userID: currentOwner, role: stripeRoleChronicleRevered, granted: true},
+		{userID: previousOwner, role: stripeRoleAdFree, granted: false},
+		{userID: previousOwner, role: stripeRoleDownloadRawLogs, granted: false},
+		{userID: previousOwner, role: stripeRoleUnlistedLogs, granted: false},
+		{userID: currentOwner, role: stripeRoleAdFree, granted: true},
+		{userID: currentOwner, role: stripeRoleDownloadRawLogs, granted: true},
+		{userID: currentOwner, role: stripeRoleUnlistedLogs, granted: true},
 	}, store.roleChanges)
 }
 
@@ -465,7 +542,7 @@ func TestEntitlementTransactionDoesNotApplyRolesWhenDatabaseCommitFails(t *testi
 	store := &entitlementStore{transactionErr: errors.New("commit failed")}
 	run := NewEntitlementTransactionRunner(store, store)
 	err := run(context.Background(), func(tx EntitlementTransaction) error {
-		return tx.SetStripeEntitlementRole(context.Background(), uuid.New(), stripeRoleChronicleRevered, true)
+		return tx.SetStripeEntitlementRole(context.Background(), uuid.New(), stripeRoleAdFree, true)
 	})
 	require.ErrorContains(t, err, "commit failed")
 	require.Empty(t, store.roleChanges)

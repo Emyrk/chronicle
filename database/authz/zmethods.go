@@ -243,8 +243,6 @@ func setStripeEntitlementRole(ctx context.Context, authorizer Authorizer, userID
 	user := b.User(userID)
 	if granted {
 		switch role {
-		case "stripe_chronicle_revered":
-			chronicle.Stripe_chronicle_revered(user)
 		case "stripe_ad_free":
 			chronicle.Stripe_ad_free(user)
 		case "stripe_download_raw_logs":
@@ -256,8 +254,6 @@ func setStripeEntitlementRole(ctx context.Context, authorizer Authorizer, userID
 		}
 	} else {
 		switch role {
-		case "stripe_chronicle_revered":
-			chronicle.Delete().Stripe_chronicle_revered(user)
 		case "stripe_ad_free":
 			chronicle.Delete().Stripe_ad_free(user)
 		case "stripe_download_raw_logs":
