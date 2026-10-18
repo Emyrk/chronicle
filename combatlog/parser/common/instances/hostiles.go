@@ -46,7 +46,7 @@ func FromMap(m map[uint32]identifier.Identity) func(flavor database.WoWFlavor) *
 }
 
 func AllScarletMonestery(fl database.WoWFlavor) *identifier.Identifier {
-	all := []map[uint32]identifier.Identity{SMGraveyardHostiles(), SMLibraryHostiles(), SMArmoryHostiles(), CathedralHostiles()}
+	all := []map[uint32]identifier.Identity{SMGraveyardHostiles(fl), SMLibraryHostiles(), SMArmoryHostiles(), CathedralHostiles()}
 	if fl.Has(database.FlavorVanillaPlus) {
 		all = append(all, VanillaPlusSMRaidHostiles())
 	}
@@ -96,11 +96,11 @@ func SMGraveyardHostiles(f database.WoWFlavor) map[uint32]Identity {
 		4543: "Bloodmage Thalnos",
 	})
 
-	// nolint: npc is broken atm. every phase is a unique fight.
-	if false && f.Has(database.FlavorWrath) {
-		// Wrath Halloween Event
+	if f.Has(database.FlavorWrath) {
+		// Wrath Halloween event. The Horseman's body has one slain event per
+		// summon; the detached head phases use a different creature entry.
 		LoadBosses(hostile, map[uint32]string{
-			23682: "Headless Horesman",
+			23682: "Headless Horseman",
 		})
 	}
 
