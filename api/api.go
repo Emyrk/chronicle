@@ -334,6 +334,9 @@ func (api *API) Routes() chi.Router {
 					r.With(
 						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),
 					).Get("/billing/activity", api.Opts.Billing.AdminActivity)
+					r.With(
+						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),
+					).Post("/billing/resync", api.AdminResyncBilling)
 				}
 				r.Route("/users", func(r chi.Router) {
 					r.Use(

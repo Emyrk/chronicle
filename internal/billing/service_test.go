@@ -3,9 +3,16 @@ package billing
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/api/chronauth"
+	"github.com/Emyrk/chronicle/api/chronauth/claims"
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -18,6 +25,75 @@ func TestPublicTierName(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "revered", TierRevered)
 	require.Equal(t, "supporter", string(ProductSupporter))
+}
+
+func TestSubscriptionBlocksCheckoutMatchesManageableSubscriptionState(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.October, 18, 12, 0, 0, 0, time.UTC)
+	periodEnd := pgtype.Timestamptz{Time: now.Add(24 * time.Hour), Valid: true}
+
+	for _, tc := range []struct {
+		name                  string
+		status                stripe.SubscriptionStatus
+		end                   pgtype.Timestamptz
+		hasReveredEntitlement bool
+		want                  bool
+	}{
+		{name: "active", status: stripe.SubscriptionStatusActive, end: periodEnd, want: true},
+		{name: "trialing", status: stripe.SubscriptionStatusTrialing, end: periodEnd, want: true},
+		{name: "canceled with remaining entitlement", status: stripe.SubscriptionStatusCanceled, end: periodEnd, hasReveredEntitlement: true, want: true},
+		{name: "refunded canceled without entitlement", status: stripe.SubscriptionStatusCanceled, end: periodEnd, want: false},
+		{name: "past due in grace period", status: stripe.SubscriptionStatusPastDue, end: periodEnd, want: true},
+		{name: "expired beyond grace period", status: stripe.SubscriptionStatusCanceled, end: pgtype.Timestamptz{Time: now.Add(-4 * 24 * time.Hour), Valid: true}, hasReveredEntitlement: true, want: false},
+		{name: "unpaid", status: stripe.SubscriptionStatusUnpaid, end: periodEnd, want: false},
+		{name: "missing period end", status: stripe.SubscriptionStatusActive, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, subscriptionBlocksCheckout(now, database.BillingSubscription{
+				Status:           string(tc.status),
+				CurrentPeriodEnd: tc.end,
+			}, tc.hasReveredEntitlement))
+		})
+	}
+}
+
+func TestBillingSummaryKeepsFormerBillingAccountVisibleWhileAllowingResubscription(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	store := &entitlementStore{
+		subscription: database.BillingSubscription{
+			UserID:           userID,
+			Status:           string(stripe.SubscriptionStatusCanceled),
+			CurrentPeriodEnd: pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
+		},
+	}
+	price := testStripePrice("price_monthly", 200, stripe.PriceRecurringIntervalMonth, 1)
+	service := &Service{
+		store:         store,
+		stripe:        &stripe.Client{},
+		webhookSecret: "whsec_test",
+		priceIDs:      []string{price.ID},
+		accessURL:     &url.URL{Scheme: "https", Host: "example.com"},
+		retrievePrice: func(context.Context, string, *stripe.PriceRetrieveParams) (*stripe.Price, error) {
+			return price, nil
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/me/billing", nil)
+	req = req.WithContext(chronauth.WithClaims(req.Context(), &claims.Claims{Subject: userID}))
+	rec := httptest.NewRecorder()
+	service.Summary(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var summary chroniclesdk.BillingSummary
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &summary))
+	require.True(t, summary.HasBillingAccount)
+	require.False(t, summary.HasSubscription)
+	require.Equal(t, string(stripe.SubscriptionStatusCanceled), summary.Status)
+	require.Len(t, summary.Prices, 1)
 }
 
 func TestValidateAccount(t *testing.T) {
@@ -163,9 +239,16 @@ func testStripePrice(id string, amount int64, interval stripe.PriceRecurringInte
 	}
 }
 
+type entitlementRoleChange struct {
+	userID  uuid.UUID
+	role    string
+	granted bool
+}
+
 type entitlementStore struct {
 	database.Store
 	billingEntitled     bool
+	billingEntitlements []database.BillingEntitlement
 	subscription        database.BillingSubscription
 	subscriptionErr     error
 	entitlementChecks   []database.HasBillingEntitlementParams
@@ -175,7 +258,11 @@ type entitlementStore struct {
 	persisted           []database.UpsertBillingEntitlementParams
 	deletedCustomer     database.DeleteBillingEntitlementsByProviderCustomerIDParams
 	dataGrant           database.UpsertDataGrantParams
+	dataGrants          []database.UpsertDataGrantParams
 	deletedDataGrant    database.DeleteDataGrantParams
+	deletedDataGrants   []database.DeleteDataGrantParams
+	roleChanges         []entitlementRoleChange
+	transactionErr      error
 	upsert              database.UpsertBillingSubscriptionParams
 	upsertCalled        bool
 }
@@ -183,6 +270,10 @@ type entitlementStore struct {
 func (s *entitlementStore) HasBillingEntitlement(_ context.Context, arg database.HasBillingEntitlementParams) (bool, error) {
 	s.entitlementChecks = append(s.entitlementChecks, arg)
 	return s.billingEntitled, nil
+}
+
+func (s *entitlementStore) ListBillingEntitlementsByUserID(context.Context, uuid.UUID) ([]database.BillingEntitlement, error) {
+	return s.billingEntitlements, nil
 }
 
 func (s *entitlementStore) GetBillingSubscriptionByUserID(context.Context, uuid.UUID) (database.BillingSubscription, error) {
@@ -204,7 +295,10 @@ func (s *entitlementStore) GetBillingEntitlementOwnerByProviderCustomerID(_ cont
 }
 
 func (s *entitlementStore) InTx(ctx context.Context, fn func(database.Store) error, _ *pgx.TxOptions) error {
-	return fn(s)
+	if err := fn(s); err != nil {
+		return err
+	}
+	return s.transactionErr
 }
 
 func (s *entitlementStore) DeleteBillingEntitlementsByProviderCustomerID(_ context.Context, arg database.DeleteBillingEntitlementsByProviderCustomerIDParams) error {
@@ -219,11 +313,18 @@ func (s *entitlementStore) UpsertBillingEntitlement(_ context.Context, arg datab
 
 func (s *entitlementStore) UpsertDataGrant(_ context.Context, arg database.UpsertDataGrantParams) (database.DataGrant, error) {
 	s.dataGrant = arg
+	s.dataGrants = append(s.dataGrants, arg)
 	return database.DataGrant{}, nil
 }
 
 func (s *entitlementStore) DeleteDataGrant(_ context.Context, arg database.DeleteDataGrantParams) error {
 	s.deletedDataGrant = arg
+	s.deletedDataGrants = append(s.deletedDataGrants, arg)
+	return nil
+}
+
+func (s *entitlementStore) SetStripeEntitlementRole(_ context.Context, userID uuid.UUID, role string, granted bool) error {
+	s.roleChanges = append(s.roleChanges, entitlementRoleChange{userID: userID, role: role, granted: granted})
 	return nil
 }
 
@@ -234,11 +335,11 @@ func TestHasEntitlementUsesPersistedStripeEntitlement(t *testing.T) {
 	store := &entitlementStore{billingEntitled: true}
 	s := New(Options{Store: store})
 
-	got, err := s.HasEntitlement(context.Background(), userID, EntitlementAdFree)
+	got, err := s.HasEntitlement(context.Background(), userID, EntitlementChronicleRevered)
 	require.NoError(t, err)
 	require.True(t, got)
 	require.Equal(t, []database.HasBillingEntitlementParams{{
-		UserID: userID, EntitlementKey: string(EntitlementAdFree),
+		UserID: userID, EntitlementKey: string(EntitlementChronicleRevered),
 	}}, store.entitlementChecks)
 }
 
@@ -250,7 +351,7 @@ func TestEntitlementSummaryWebhookFetchesAuthoritativeEntitlements(t *testing.T)
 	s := New(Options{Store: store})
 	s.listActiveEntitlements = func(_ context.Context, customerID string) ([]*stripe.EntitlementsActiveEntitlement, error) {
 		require.Equal(t, "cus_123", customerID)
-		return []*stripe.EntitlementsActiveEntitlement{{ID: "ent_ads", LookupKey: string(EntitlementAdFree)}}, nil
+		return []*stripe.EntitlementsActiveEntitlement{{ID: "ent_revered", LookupKey: string(EntitlementChronicleRevered)}}, nil
 	}
 	raw, err := json.Marshal(stripe.EntitlementsActiveEntitlementSummary{Customer: "cus_123"})
 	require.NoError(t, err)
@@ -261,7 +362,7 @@ func TestEntitlementSummaryWebhookFetchesAuthoritativeEntitlements(t *testing.T)
 	})
 	require.NoError(t, err)
 	require.Len(t, store.persisted, 1)
-	require.Equal(t, string(EntitlementAdFree), store.persisted[0].EntitlementKey)
+	require.Equal(t, string(EntitlementChronicleRevered), store.persisted[0].EntitlementKey)
 }
 
 func TestSyncStripeEntitlementsPersistsAuthoritativeSnapshotAndStorageGrant(t *testing.T) {
@@ -272,18 +373,24 @@ func TestSyncStripeEntitlementsPersistsAuthoritativeSnapshotAndStorageGrant(t *t
 	s := New(Options{Store: store})
 	s.listActiveEntitlements = func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error) {
 		return []*stripe.EntitlementsActiveEntitlement{
-			{ID: "ent_storage", LookupKey: string(EntitlementStorage300MB)},
-			{ID: "ent_ads", LookupKey: string(EntitlementAdFree)},
+			{ID: "ent_revered", LookupKey: string(EntitlementChronicleRevered)},
+			{ID: "ent_unknown", LookupKey: "future-entitlement"},
 		}, nil
 	}
 
 	err := s.syncStripeEntitlements(context.Background(), "cus_123")
 	require.NoError(t, err)
 	require.Equal(t, database.DeleteBillingEntitlementsByProviderCustomerIDParams{Provider: ProviderStripe, ProviderCustomerID: "cus_123"}, store.deletedCustomer)
-	require.Len(t, store.persisted, 2)
+	require.Len(t, store.persisted, 2, "unknown entitlements remain visible in the persisted snapshot")
 	require.Equal(t, stripeStorageGrantBytes, store.dataGrant.StorageBytes)
 	require.Equal(t, stripeStorageGrantSource, store.dataGrant.Source)
-	require.Empty(t, store.deletedDataGrant.Source)
+	require.Equal(t, stripeStorageGrantSource, store.deletedDataGrant.Source)
+	require.Equal(t, []entitlementRoleChange{
+		{userID: userID, role: "stripe_ad_free", granted: false},
+		{userID: userID, role: "stripe_download_raw_logs", granted: false},
+		{userID: userID, role: "stripe_unlisted_logs", granted: false},
+		{userID: userID, role: stripeRoleChronicleRevered, granted: true},
+	}, store.roleChanges)
 }
 
 func TestSyncStripeEntitlementsUsesPersistedOwnerWithoutSubscription(t *testing.T) {
@@ -293,7 +400,7 @@ func TestSyncStripeEntitlementsUsesPersistedOwnerWithoutSubscription(t *testing.
 	store := &entitlementStore{providerCustomerErr: pgx.ErrNoRows, entitlementOwner: userID}
 	s := New(Options{Store: store})
 	s.listActiveEntitlements = func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error) {
-		return []*stripe.EntitlementsActiveEntitlement{{ID: "ent_ads", LookupKey: string(EntitlementAdFree)}}, nil
+		return []*stripe.EntitlementsActiveEntitlement{{ID: "ent_revered", LookupKey: string(EntitlementChronicleRevered)}}, nil
 	}
 
 	require.NoError(t, s.syncStripeEntitlements(context.Background(), "cus_123"))
@@ -315,6 +422,53 @@ func TestSyncStripeEntitlementsRemovesStorageGrantWhenAbsent(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, store.persisted)
 	require.Equal(t, database.DeleteDataGrantParams{UserID: userID, Source: stripeStorageGrantSource}, store.deletedDataGrant)
+}
+
+func TestSyncStripeEntitlementsTransfersOwnerAndAppliesRolePerEntitlement(t *testing.T) {
+	t.Parallel()
+
+	previousOwner := uuid.New()
+	currentOwner := uuid.New()
+	store := &entitlementStore{
+		providerCustomer: database.BillingSubscription{UserID: currentOwner},
+		entitlementOwner: previousOwner,
+	}
+	s := New(Options{Store: store})
+	s.listActiveEntitlements = func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error) {
+		return []*stripe.EntitlementsActiveEntitlement{
+			{ID: "ent_revered", LookupKey: string(EntitlementChronicleRevered)},
+			{ID: "ent_unknown", LookupKey: "future-entitlement"},
+		}, nil
+	}
+
+	require.NoError(t, s.syncStripeEntitlements(context.Background(), "cus_123"))
+	require.Len(t, store.persisted, 2, "unknown entitlements remain visible in the persisted snapshot")
+	require.Equal(t, []database.DeleteDataGrantParams{
+		{UserID: previousOwner, Source: stripeStorageGrantSource},
+		{UserID: currentOwner, Source: stripeStorageGrantSource},
+	}, store.deletedDataGrants)
+	require.Equal(t, []entitlementRoleChange{
+		{userID: previousOwner, role: "stripe_ad_free", granted: false},
+		{userID: previousOwner, role: "stripe_download_raw_logs", granted: false},
+		{userID: previousOwner, role: "stripe_unlisted_logs", granted: false},
+		{userID: previousOwner, role: stripeRoleChronicleRevered, granted: false},
+		{userID: currentOwner, role: "stripe_ad_free", granted: false},
+		{userID: currentOwner, role: "stripe_download_raw_logs", granted: false},
+		{userID: currentOwner, role: "stripe_unlisted_logs", granted: false},
+		{userID: currentOwner, role: stripeRoleChronicleRevered, granted: true},
+	}, store.roleChanges)
+}
+
+func TestEntitlementTransactionDoesNotApplyRolesWhenDatabaseCommitFails(t *testing.T) {
+	t.Parallel()
+
+	store := &entitlementStore{transactionErr: errors.New("commit failed")}
+	run := NewEntitlementTransactionRunner(store, store)
+	err := run(context.Background(), func(tx EntitlementTransaction) error {
+		return tx.SetStripeEntitlementRole(context.Background(), uuid.New(), stripeRoleChronicleRevered, true)
+	})
+	require.ErrorContains(t, err, "commit failed")
+	require.Empty(t, store.roleChanges)
 }
 
 func TestStripeSubscriptionPurchase(t *testing.T) {

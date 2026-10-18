@@ -21,9 +21,12 @@ type BillingSummary struct {
 	Enabled           bool           `json:"enabled"`
 	Tier              string         `json:"tier"`
 	AdsFree           bool           `json:"ads_free"`
+	HasSubscription   bool           `json:"has_subscription"`
+	HasBillingAccount bool           `json:"has_billing_account"`
 	Status            string         `json:"status,omitempty"`
 	CurrentPeriodEnd  *time.Time     `json:"current_period_end,omitempty"`
 	CancelAtPeriodEnd bool           `json:"cancel_at_period_end,omitempty"`
+	Entitlements      []string       `json:"entitlements"`
 	Prices            []BillingPrice `json:"prices,omitempty"`
 }
 
@@ -32,9 +35,13 @@ type AdminBillingReconciliationRun struct {
 	Status                      string     `json:"status"`
 	StartedAt                   time.Time  `json:"started_at"`
 	CompletedAt                 *time.Time `json:"completed_at,omitempty"`
+	ProviderCustomersFound      int32      `json:"provider_customers_found"`
+	LocalSubscriptionsFound     int32      `json:"local_subscriptions_found"`
 	SubscriptionsSeen           int32      `json:"subscriptions_seen"`
 	SubscriptionsChanged        int32      `json:"subscriptions_changed"`
 	SubscriptionsSkippedInvalid int32      `json:"subscriptions_skipped_invalid"`
+	EntitlementCustomersFound   int32      `json:"entitlement_customers_found"`
+	EntitlementCustomersSynced  int32      `json:"entitlement_customers_synced"`
 	ErrorText                   string     `json:"error_text,omitempty"`
 }
 

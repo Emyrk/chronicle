@@ -227,6 +227,51 @@ func (z *Authz) SetGuildDiscordBotEnabled(ctx context.Context, guildID uuid.UUID
 	return err
 }
 
+// SetStripeEntitlementRole grants or revokes one Stripe-owned Chronicle role.
+// It never modifies roles owned by Discord, administrators, or other systems.
+func (z *Authz) SetStripeEntitlementRole(ctx context.Context, userID uuid.UUID, role string, granted bool) error {
+	return setStripeEntitlementRole(ctx, z, userID, role, granted)
+}
+
+func (z *AuthzTX) SetStripeEntitlementRole(ctx context.Context, userID uuid.UUID, role string, granted bool) error {
+	return setStripeEntitlementRole(ctx, z, userID, role, granted)
+}
+
+func setStripeEntitlementRole(ctx context.Context, authorizer Authorizer, userID uuid.UUID, role string, granted bool) error {
+	b := policy.New()
+	chronicle := b.GlobalChronicle()
+	user := b.User(userID)
+	if granted {
+		switch role {
+		case "stripe_chronicle_revered":
+			chronicle.Stripe_chronicle_revered(user)
+		case "stripe_ad_free":
+			chronicle.Stripe_ad_free(user)
+		case "stripe_download_raw_logs":
+			chronicle.Stripe_download_raw_logs(user)
+		case "stripe_unlisted_logs":
+			chronicle.Stripe_unlisted_logs(user)
+		default:
+			return fmt.Errorf("invalid Stripe entitlement role %q", role)
+		}
+	} else {
+		switch role {
+		case "stripe_chronicle_revered":
+			chronicle.Delete().Stripe_chronicle_revered(user)
+		case "stripe_ad_free":
+			chronicle.Delete().Stripe_ad_free(user)
+		case "stripe_download_raw_logs":
+			chronicle.Delete().Stripe_download_raw_logs(user)
+		case "stripe_unlisted_logs":
+			chronicle.Delete().Stripe_unlisted_logs(user)
+		default:
+			return fmt.Errorf("invalid Stripe entitlement role %q", role)
+		}
+	}
+	_, err := authorizer.Write(ctx, *b.Txn())
+	return err
+}
+
 // SetUserChronicleRoles replaces all Chronicle roles for a user.
 // It deletes all existing chronicle→user relationships, then writes the new set.
 func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, roles []string) error {

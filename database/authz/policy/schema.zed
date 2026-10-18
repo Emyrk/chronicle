@@ -14,6 +14,14 @@ definition chronicle {
   relation unlisted_log_capable: user
   relation technical_user: user
   relation supporter: user
+
+  // Stripe owns the Chronicle Revered role. The legacy per-feature relations
+  // remain temporarily so synchronization can remove previously written grants.
+  relation stripe_chronicle_revered: user
+  relation stripe_ad_free: user
+  relation stripe_download_raw_logs: user
+  relation stripe_unlisted_logs: user
+
   relation chronicle_guild_member: user
   relation chronicle_member: user // Not in discord
 
@@ -41,6 +49,9 @@ definition chronicle {
   permission admin_queues = technical_admin + is_admin_queues
   permission set_user_data_limit = technical_admin
   permission shorter_urls = supporter + admin
+  permission ad_free = stripe_chronicle_revered
+  permission download_raw_logs = administer + moderate_logs + stripe_chronicle_revered
+  permission unlisted_logs = stripe_chronicle_revered
   permission admin_regressions = technical_admin + is_admin_raid_requirements
   permission admin_speedrun_requirements = technical_admin + is_admin_raid_requirements
 

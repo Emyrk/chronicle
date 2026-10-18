@@ -36,6 +36,21 @@ func TestBillingEnabledRequiresStripeAccountID(t *testing.T) {
 	require.True(t, (&Service{stripeAccountID: "acct_expected"}).BillingEnabled())
 }
 
+func TestDevStripeAPIKey(t *testing.T) {
+	t.Parallel()
+
+	service := Service{
+		stripeSecretKey:      "sk_test_example",
+		stripeSupporterPrice: "price_supporter",
+	}
+	key, err := service.devStripeAPIKey(true)
+	require.NoError(t, err)
+	require.Equal(t, "sk_test_example", key)
+
+	_, err = service.devStripeAPIKey(false)
+	require.ErrorContains(t, err, "requires dev auth")
+}
+
 func TestConfigureDevStripeWebhookSecret(t *testing.T) {
 	t.Parallel()
 

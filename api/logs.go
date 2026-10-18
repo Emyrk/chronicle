@@ -14,7 +14,6 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
-	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/slice"
 	"github.com/go-chi/chi/v5"
@@ -213,26 +212,14 @@ func (api *API) WoWLogFileDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	canAdminLogs, adminErr := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_logs_User(actor))
-	if adminErr != nil {
-		httpapi.InternalServerError(w, adminErr)
+	canDownloadRawLogs, permissionErr := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanDownload_raw_logs_User(actor))
+	if permissionErr != nil {
+		httpapi.InternalServerError(w, permissionErr)
 		return
 	}
-	if !canAdminLogs {
-		claims, authenticated := chronauth.AuthenticatedClaims(ctx)
-		if !authenticated || api.Opts.Billing == nil {
-			httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{Message: "Raw log downloads require Chronicle Revered."})
-			return
-		}
-		allowed, err := api.Opts.Billing.HasEntitlement(ctx, claims.Subject, billing.EntitlementDownloadRawLogs)
-		if err != nil {
-			httpapi.InternalServerError(w, err)
-			return
-		}
-		if !allowed {
-			httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{Message: "Raw log downloads require Chronicle Revered."})
-			return
-		}
+	if !canDownloadRawLogs {
+		httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{Message: "Raw log downloads require Chronicle Revered."})
+		return
 	}
 
 	// Check if file is deleted from storage

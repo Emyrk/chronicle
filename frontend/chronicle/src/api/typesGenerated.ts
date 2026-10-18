@@ -82,9 +82,13 @@ export interface AdminBillingReconciliationRun {
     readonly status: string;
     readonly started_at: string;
     readonly completed_at?: string;
+    readonly provider_customers_found: number;
+    readonly local_subscriptions_found: number;
     readonly subscriptions_seen: number;
     readonly subscriptions_changed: number;
     readonly subscriptions_skipped_invalid: number;
+    readonly entitlement_customers_found: number;
+    readonly entitlement_customers_synced: number;
     readonly error_text?: string;
 }
 
@@ -468,9 +472,12 @@ export interface BillingSummary {
     readonly enabled: boolean;
     readonly tier: string;
     readonly ads_free: boolean;
+    readonly has_subscription: boolean;
+    readonly has_billing_account: boolean;
     readonly status?: string;
     readonly current_period_end?: string;
     readonly cancel_at_period_end?: boolean;
+    readonly entitlements: readonly string[];
     readonly prices?: readonly BillingPrice[];
 }
 
@@ -3402,11 +3409,11 @@ export interface Session {
     readonly consumed_storage_bytes: number;
     readonly preferences: Preferences;
     /**
-     * AdsFree indicates that Stripe reports an active ad-free entitlement for the user.
+     * AdsFree indicates that authorization grants the user an ad-free experience.
      */
     readonly ads_free: boolean;
     /**
-     * CanDownloadRawLogs indicates that the user can download original combat log files.
+     * CanDownloadRawLogs indicates that authorization permits downloading original combat log files.
      */
     readonly can_download_raw_logs: boolean;
     /**

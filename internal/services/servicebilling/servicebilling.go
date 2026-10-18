@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
+	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/coder/serpent"
@@ -32,6 +33,10 @@ func BillingEnabled(broker *services.Services) bool {
 }
 
 func OnBilling() string { return (&Service{}).Name() }
+
+func DevStripeAPIKey(broker *services.Services, devAuth bool) (string, error) {
+	return services.MustGet[*Service](broker).devStripeAPIKey(devAuth)
+}
 
 func ConfigureDevStripeWebhookSecret(broker *services.Services, secret string, devAuth bool) error {
 	return services.MustGet[*Service](broker).configureDevStripeWebhookSecret(secret, devAuth)
@@ -58,6 +63,7 @@ func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
 		servicedbstore.OnDatabaseStore(),
+		serviceauthz.OnAuthz(),
 		serviceaccessurl.OnAccessURL(),
 	}
 }
@@ -74,12 +80,14 @@ func (s *Service) Start(ctx context.Context) error {
 		accessURL = parsed
 	}
 	store := servicedbstore.DatabaseStore(s.broker)
+	zed := serviceauthz.Authz(s.broker)
 	s.Billing = billing.New(billing.Options{
-		Store:         store,
-		SecretKey:     s.stripeSecretKey,
-		WebhookSecret: s.stripeWebhookSecret,
-		PriceIDs:      s.supporterPriceIDs(),
-		AccessURL:     accessURL,
+		Store:                  store,
+		StripeEntitlementRoles: zed,
+		SecretKey:              s.stripeSecretKey,
+		WebhookSecret:          s.stripeWebhookSecret,
+		PriceIDs:               s.supporterPriceIDs(),
+		AccessURL:              accessURL,
 	})
 	if err := s.Billing.ValidateAccount(ctx, s.stripeAccountID); err != nil {
 		return err
@@ -108,15 +116,22 @@ func (s *Service) BillingEnabled() bool {
 	return s != nil && s.stripeAccountID != ""
 }
 
-func (s *Service) configureDevStripeWebhookSecret(secret string, devAuth bool) error {
+func (s *Service) devStripeAPIKey(devAuth bool) (string, error) {
 	if !devAuth {
-		return errors.New("development Stripe listener requires dev auth")
+		return "", errors.New("development Stripe listener requires dev auth")
 	}
 	if !strings.HasPrefix(s.stripeSecretKey, "sk_test_") {
-		return errors.New("development Stripe listener requires a sandbox secret key")
+		return "", errors.New("development Stripe listener requires a sandbox secret key")
 	}
 	if len(s.supporterPriceIDs()) == 0 {
-		return errors.New("development Stripe listener requires at least one Supporter price ID")
+		return "", errors.New("development Stripe listener requires at least one Supporter price ID")
+	}
+	return s.stripeSecretKey, nil
+}
+
+func (s *Service) configureDevStripeWebhookSecret(secret string, devAuth bool) error {
+	if _, err := s.devStripeAPIKey(devAuth); err != nil {
+		return err
 	}
 	if !strings.HasPrefix(secret, "whsec_") {
 		return errors.New("stripe CLI returned an invalid webhook signing secret")

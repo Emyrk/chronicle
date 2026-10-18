@@ -2,20 +2,13 @@ package billing
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
-	"errors"
 	"github.com/Emyrk/chronicle/database"
-
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stripe/stripe-go/v87"
-)
-
-const (
-	stripeStorageGrantSource       = "billing:stripe:+300mb-storage"
-	stripeStorageGrantBytes  int64 = 300_000_000
 )
 
 func (s *Service) syncStripeEntitlementsIfConfigured(ctx context.Context, customerID string) error {
@@ -64,14 +57,17 @@ func (s *Service) syncStripeEntitlements(ctx context.Context, customerID string)
 		}
 	}
 
-	return s.store.InTx(ctx, func(tx database.Store) error {
+	if s.runEntitlementTransaction == nil {
+		return fmt.Errorf("billing entitlement transactions are not configured")
+	}
+	return s.runEntitlementTransaction(ctx, func(tx EntitlementTransaction) error {
 		if persistedOwner != uuid.Nil && persistedOwner != userID {
-			if err := tx.DeleteDataGrant(ctx, database.DeleteDataGrantParams{
-				UserID: persistedOwner,
-				Source: stripeStorageGrantSource,
-			}); err != nil {
-				return fmt.Errorf("remove previous Stripe owner's storage grant: %w", err)
+			if err := revokeAllStripeEntitlements(ctx, tx, persistedOwner); err != nil {
+				return fmt.Errorf("revoke previous Stripe owner's entitlements: %w", err)
 			}
+		}
+		if err := revokeAllStripeEntitlements(ctx, tx, userID); err != nil {
+			return fmt.Errorf("revoke current Stripe entitlement state: %w", err)
 		}
 
 		if err := tx.DeleteBillingEntitlementsByProviderCustomerID(ctx, database.DeleteBillingEntitlementsByProviderCustomerIDParams{
@@ -81,39 +77,41 @@ func (s *Service) syncStripeEntitlements(ctx context.Context, customerID string)
 			return fmt.Errorf("clear persisted Stripe entitlements: %w", err)
 		}
 
-		hasStorageGrant := false
-		for _, entitlement := range active {
+		granted := make(map[Entitlement]struct{}, len(active))
+		for _, activeEntitlement := range active {
+			key := Entitlement(activeEntitlement.LookupKey)
 			if _, err := tx.UpsertBillingEntitlement(ctx, database.UpsertBillingEntitlementParams{
 				UserID:                userID,
 				Provider:              ProviderStripe,
 				ProviderCustomerID:    customerID,
-				ProviderEntitlementID: entitlement.ID,
-				EntitlementKey:        entitlement.LookupKey,
+				ProviderEntitlementID: activeEntitlement.ID,
+				EntitlementKey:        activeEntitlement.LookupKey,
 			}); err != nil {
-				return fmt.Errorf("persist Stripe entitlement %q: %w", entitlement.LookupKey, err)
+				return fmt.Errorf("persist Stripe entitlement %q: %w", activeEntitlement.LookupKey, err)
 			}
-			if Entitlement(entitlement.LookupKey) == EntitlementStorage300MB {
-				hasStorageGrant = true
+			behavior, known := stripeEntitlementBehavior(key)
+			if !known {
+				continue
 			}
-		}
-
-		if hasStorageGrant {
-			if _, err := tx.UpsertDataGrant(ctx, database.UpsertDataGrantParams{
-				UserID:       userID,
-				Source:       stripeStorageGrantSource,
-				StorageBytes: stripeStorageGrantBytes,
-				Description:  pgtype.Text{String: "Stripe +300 MB storage entitlement", Valid: true},
-			}); err != nil {
-				return fmt.Errorf("upsert Stripe storage grant: %w", err)
+			if _, alreadyGranted := granted[key]; alreadyGranted {
+				continue
 			}
-		} else if err := tx.DeleteDataGrant(ctx, database.DeleteDataGrantParams{
-			UserID: userID,
-			Source: stripeStorageGrantSource,
-		}); err != nil {
-			return fmt.Errorf("remove Stripe storage grant: %w", err)
+			if err := behavior.Grant(ctx, tx, userID); err != nil {
+				return fmt.Errorf("grant Stripe entitlement %q: %w", key, err)
+			}
+			granted[key] = struct{}{}
 		}
 		return nil
-	}, nil)
+	})
+}
+
+func revokeAllStripeEntitlements(ctx context.Context, tx EntitlementTransaction, userID uuid.UUID) error {
+	for _, entitlement := range stripeEntitlements {
+		if err := entitlement.behavior.Revoke(ctx, tx, userID); err != nil {
+			return fmt.Errorf("revoke %q: %w", entitlement.key, err)
+		}
+	}
+	return nil
 }
 
 func stripeEntitlementCustomer(summary stripe.EntitlementsActiveEntitlementSummary) (string, error) {

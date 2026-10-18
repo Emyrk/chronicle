@@ -1102,32 +1102,44 @@ func (q *sqlQuerier) UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServ
 
 const completeBillingReconciliationRun = `-- name: CompleteBillingReconciliationRun :exec
 UPDATE billing_reconciliation_runs
-SET status = $2,
+SET status = $1,
     completed_at = NOW(),
-    subscriptions_seen = $3,
-    subscriptions_changed = $4,
-    subscriptions_skipped_invalid = $5,
-    error_text = $6
-WHERE id = $1
+    provider_customers_found = $2,
+    local_subscriptions_found = $3,
+    subscriptions_seen = $4,
+    subscriptions_changed = $5,
+    subscriptions_skipped_invalid = $6,
+    entitlement_customers_found = $7,
+    entitlement_customers_synced = $8,
+    error_text = $9
+WHERE id = $10
 `
 
 type CompleteBillingReconciliationRunParams struct {
-	ID                          uuid.UUID `db:"id" json:"id"`
 	Status                      string    `db:"status" json:"status"`
+	ProviderCustomersFound      int32     `db:"provider_customers_found" json:"provider_customers_found"`
+	LocalSubscriptionsFound     int32     `db:"local_subscriptions_found" json:"local_subscriptions_found"`
 	SubscriptionsSeen           int32     `db:"subscriptions_seen" json:"subscriptions_seen"`
 	SubscriptionsChanged        int32     `db:"subscriptions_changed" json:"subscriptions_changed"`
 	SubscriptionsSkippedInvalid int32     `db:"subscriptions_skipped_invalid" json:"subscriptions_skipped_invalid"`
+	EntitlementCustomersFound   int32     `db:"entitlement_customers_found" json:"entitlement_customers_found"`
+	EntitlementCustomersSynced  int32     `db:"entitlement_customers_synced" json:"entitlement_customers_synced"`
 	ErrorText                   string    `db:"error_text" json:"error_text"`
+	ID                          uuid.UUID `db:"id" json:"id"`
 }
 
 func (q *sqlQuerier) CompleteBillingReconciliationRun(ctx context.Context, arg CompleteBillingReconciliationRunParams) error {
 	_, err := q.db.Exec(ctx, completeBillingReconciliationRun,
-		arg.ID,
 		arg.Status,
+		arg.ProviderCustomersFound,
+		arg.LocalSubscriptionsFound,
 		arg.SubscriptionsSeen,
 		arg.SubscriptionsChanged,
 		arg.SubscriptionsSkippedInvalid,
+		arg.EntitlementCustomersFound,
+		arg.EntitlementCustomersSynced,
 		arg.ErrorText,
+		arg.ID,
 	)
 	return err
 }
@@ -1292,7 +1304,7 @@ func (q *sqlQuerier) HasBillingEntitlement(ctx context.Context, arg HasBillingEn
 const insertBillingReconciliationRun = `-- name: InsertBillingReconciliationRun :one
 INSERT INTO billing_reconciliation_runs (id, status)
 VALUES ($1, 'running')
-RETURNING id, status, started_at, completed_at, subscriptions_seen, subscriptions_changed, subscriptions_skipped_invalid, error_text
+RETURNING id, status, started_at, completed_at, subscriptions_seen, subscriptions_changed, subscriptions_skipped_invalid, error_text, provider_customers_found, local_subscriptions_found, entitlement_customers_found, entitlement_customers_synced
 `
 
 func (q *sqlQuerier) InsertBillingReconciliationRun(ctx context.Context, id uuid.UUID) (BillingReconciliationRun, error) {
@@ -1307,6 +1319,10 @@ func (q *sqlQuerier) InsertBillingReconciliationRun(ctx context.Context, id uuid
 		&i.SubscriptionsChanged,
 		&i.SubscriptionsSkippedInvalid,
 		&i.ErrorText,
+		&i.ProviderCustomersFound,
+		&i.LocalSubscriptionsFound,
+		&i.EntitlementCustomersFound,
+		&i.EntitlementCustomersSynced,
 	)
 	return i, err
 }
@@ -1434,7 +1450,7 @@ func (q *sqlQuerier) ListBillingSubscriptionsForReconciliation(ctx context.Conte
 }
 
 const listRecentBillingReconciliationRuns = `-- name: ListRecentBillingReconciliationRuns :many
-SELECT id, status, started_at, completed_at, subscriptions_seen, subscriptions_changed, subscriptions_skipped_invalid, error_text FROM billing_reconciliation_runs
+SELECT id, status, started_at, completed_at, subscriptions_seen, subscriptions_changed, subscriptions_skipped_invalid, error_text, provider_customers_found, local_subscriptions_found, entitlement_customers_found, entitlement_customers_synced FROM billing_reconciliation_runs
 ORDER BY started_at DESC
 LIMIT $1
 `
@@ -1457,6 +1473,10 @@ func (q *sqlQuerier) ListRecentBillingReconciliationRuns(ctx context.Context, li
 			&i.SubscriptionsChanged,
 			&i.SubscriptionsSkippedInvalid,
 			&i.ErrorText,
+			&i.ProviderCustomersFound,
+			&i.LocalSubscriptionsFound,
+			&i.EntitlementCustomersFound,
+			&i.EntitlementCustomersSynced,
 		); err != nil {
 			return nil, err
 		}

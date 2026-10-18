@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
@@ -10,7 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
-	"github.com/Emyrk/chronicle/internal/billing"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -30,20 +31,22 @@ func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	adsFree := false
-	canDownloadRawLogs := false
-	if a.Opts.Billing != nil {
-		adsFree, err = a.Opts.Billing.HasEntitlement(ctx, state.Claims.Subject, billing.EntitlementAdFree)
-		if err != nil {
-			httpapi.InternalServerError(w, err)
-			return
-		}
-		canDownloadRawLogs, err = a.Opts.Billing.HasEntitlement(ctx, state.Claims.Subject, billing.EntitlementDownloadRawLogs)
-		if err != nil {
-			httpapi.InternalServerError(w, err)
-			return
-		}
+	actor := policy.New().User(state.Claims.Subject)
+	chronicle := policy.New().GlobalChronicle()
+	permissions, err := a.Zed.Check(ctx, nil,
+		chronicle.CanAd_free_User(actor),
+		chronicle.CanDownload_raw_logs_User(actor),
+	)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
 	}
+	if len(permissions) != 2 {
+		httpapi.InternalServerError(w, fmt.Errorf("check whoami permissions: expected 2 results, got %d", len(permissions)))
+		return
+	}
+	adsFree := permissions[0]
+	canDownloadRawLogs := permissions[1]
 
 	sess := chroniclesdk.Session{
 		UserID:               state.Claims.Subject,

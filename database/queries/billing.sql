@@ -162,13 +162,17 @@ RETURNING *;
 
 -- name: CompleteBillingReconciliationRun :exec
 UPDATE billing_reconciliation_runs
-SET status = $2,
+SET status = @status,
     completed_at = NOW(),
-    subscriptions_seen = $3,
-    subscriptions_changed = $4,
-    subscriptions_skipped_invalid = $5,
-    error_text = $6
-WHERE id = $1;
+    provider_customers_found = @provider_customers_found,
+    local_subscriptions_found = @local_subscriptions_found,
+    subscriptions_seen = @subscriptions_seen,
+    subscriptions_changed = @subscriptions_changed,
+    subscriptions_skipped_invalid = @subscriptions_skipped_invalid,
+    entitlement_customers_found = @entitlement_customers_found,
+    entitlement_customers_synced = @entitlement_customers_synced,
+    error_text = @error_text
+WHERE id = @id;
 
 -- name: ListRecentBillingReconciliationRuns :many
 SELECT * FROM billing_reconciliation_runs
