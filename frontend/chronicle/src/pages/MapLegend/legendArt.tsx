@@ -116,6 +116,8 @@ export interface TokenProps {
   tilt?: number;
   /** In the air: pixels the token floats above its shadow, joined to it by the drop line. */
   lift?: number;
+  /** A guardian's mark: a totem's pole instead of the paw. */
+  totem?: boolean;
 }
 
 /** A unit token as the 3D map draws it, centred on its container's origin. */
@@ -134,6 +136,7 @@ export function Token({
   scale = 22,
   tilt = 58,
   lift = 0,
+  totem = false,
 }: TokenProps) {
   const radius = TOKEN_LAYOUT.radius[kind] * scale;
   const ringColor = useCssColor(ring);
@@ -170,7 +173,7 @@ export function Token({
           />
         ))}
         <div style={{ position: "absolute", transform: `translateZ(${thickness}px)`, transformStyle: "preserve-3d" }}>
-          <ArtCanvas key={`${image?.src}|${shownRing}|${dead}`} draw={(context) => drawDisc(context, { image, ring: ringColor, dead, well: kind === "hostile" ? "enemy" : kind === "pet" ? "guardian" : null })} style={layer(radius, 1)} />
+          <ArtCanvas key={`${image?.src}|${shownRing}|${dead}|${totem}`} draw={(context) => drawDisc(context, { image, ring: ringColor, dead, well: kind === "hostile" ? "enemy" : kind === "pet" ? (totem ? "totem" : "guardian") : null })} style={layer(radius, 1)} />
           <ArtCanvas
             key={`marks|${shownRing}`}
             draw={(context) => drawFacingMarks(context, shownRing, false)}

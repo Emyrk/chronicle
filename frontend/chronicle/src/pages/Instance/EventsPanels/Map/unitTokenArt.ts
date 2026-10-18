@@ -124,8 +124,40 @@ export interface DiscArt {
   image: CanvasImageSource | null;
   ring: string;
   dead: boolean;
-  /** What fills the disc without an icon: an enemy's dark red well, or a guardian's paw (pets, summons, totems). */
-  well: "enemy" | "guardian" | null;
+  /** What fills the disc without an icon: an enemy's dark red well, a totem's pole, or another guardian's paw (pets, summons). */
+  well: "enemy" | "guardian" | "totem" | null;
+}
+
+/** A guardian's mark: a totem pole for totems (by name), else a paw. */
+export function guardianWell(name: string): "guardian" | "totem" {
+  return /\btotem\b/i.test(name) ? "totem" : "guardian";
+}
+
+// A totem pole (winged top, two carved blocks, a wider foot) filling a disc
+// of `radius` around `centre`: a totem's mark, beside the other guardians' paw.
+function drawTotem(context: CanvasRenderingContext2D, centre: number, radius: number, color: string) {
+  context.fillStyle = color;
+  const box = (x: number, y: number, width: number, height: number) =>
+    context.fillRect(centre + (x - width / 2) * radius, centre + y * radius, width * radius, height * radius);
+  // The post.
+  box(0, -0.5, 0.2, 1.08);
+  // The wings, swept up at the tips.
+  context.beginPath();
+  context.moveTo(centre - 0.56 * radius, centre - 0.62 * radius);
+  context.lineTo(centre - 0.12 * radius, centre - 0.36 * radius);
+  context.lineTo(centre + 0.12 * radius, centre - 0.36 * radius);
+  context.lineTo(centre + 0.56 * radius, centre - 0.62 * radius);
+  context.lineTo(centre + 0.5 * radius, centre - 0.4 * radius);
+  context.lineTo(centre + 0.12 * radius, centre - 0.2 * radius);
+  context.lineTo(centre - 0.12 * radius, centre - 0.2 * radius);
+  context.lineTo(centre - 0.5 * radius, centre - 0.4 * radius);
+  context.closePath();
+  context.fill();
+  // The carved head and body blocks, and the foot.
+  box(0, -0.7, 0.3, 0.26);
+  box(0, -0.08, 0.42, 0.24);
+  box(0, 0.28, 0.36, 0.18);
+  box(0, 0.5, 0.56, 0.14);
 }
 
 // A paw print (one pad, four toes) filling a disc of `radius` around `centre`:
@@ -179,6 +211,8 @@ export function drawDisc(context: CanvasRenderingContext2D, { image, ring, dead,
     context.fillRect(0, 0, size, size);
   } else if (well === "guardian") {
     drawPaw(context, half, inner * 1.45, dead ? "#8a8a8a" : ring);
+  } else if (well === "totem") {
+    drawTotem(context, half, inner * 1.2, dead ? "#8a8a8a" : ring);
   }
   // Inner shade: darker toward the bottom edge, as if lit from above.
   const shade = context.createLinearGradient(0, half - inner, 0, half + inner);
