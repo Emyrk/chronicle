@@ -26,7 +26,7 @@ import {
 } from "./cameraDirector";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
-import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, ENEMY_RED, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
+import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, ENEMY_RED, HALO_COLORS, DROP_LINE, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanPoint } from "./plan/mapPlan";
 import { PlanLayer, type PlanSurface } from "./plan/planLayer";
@@ -431,6 +431,10 @@ interface UnitObject {
   dead: boolean;
   /** Replayed position; lunges offset `group.position` from it. */
   base: THREE.Vector3;
+  /** The floor under `base`; below it while the unit is in the air. */
+  floorY: number;
+  /** In the air: the line from the token down to its shadow on the floor (null until first airborne). */
+  drop: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
   /** Logged world height (yards), or undefined when the log has none. */
   loggedZ: number | undefined;
   health: MapUnitHealth | null;
@@ -1048,8 +1052,7 @@ export class MapScene3D {
         this.applyTokenFace(object);
       }
       const { x, z } = mapPointToScene(unit.point, this.aspect, GROUND_WIDTH);
-      object.base.set(x, this.baseHeight(unit.guid, x, z, unit.z), z);
-      object.group.position.copy(object.base);
+      this.placeUnit(unit.guid, object, x, z);
       object.loggedFacing = unit.facing !== undefined;
       const dispel = object.dead ? null : unit.dispel ?? null;
       object.token.debuff.visible = dispel !== null;
@@ -1057,6 +1060,7 @@ export class MapScene3D {
       // Without a logged facing an enemy keeps facing whoever it last hit (updateTokens).
       this.applyFacing(object, unit.facing ?? (unit.kind === "hostile" ? object.hitFacing : undefined));
       object.group.scale.setScalar(this.scaleOf(object));
+      this.layoutDrop(object);
       const opacity = unit.muted ? MUTED_OPACITY : 1;
       for (const material of [object.bodyMaterial, object.coneMaterial]) {
         material.opacity = opacity;
@@ -1299,7 +1303,10 @@ export class MapScene3D {
       : trueScale;
     if (scale === this.unitScale && !force) return;
     this.unitScale = scale;
-    for (const object of this.units.values()) object.group.scale.setScalar(this.scaleOf(object));
+    for (const object of this.units.values()) {
+      object.group.scale.setScalar(this.scaleOf(object));
+      this.layoutDrop(object);
+    }
     this.planLayer.setUnitScale(scale);
     this.updateLabel();
   }
@@ -1309,16 +1316,40 @@ export class MapScene3D {
     return this.dungeonMesh && object.miniatureUrl ? this.unitScale * MESH_BOSS_SCALE : this.unitScale;
   }
 
-  // The height a unit stands at: the mesh floor while it shows, else 0. A
+  // Puts the unit at (x, z) on the mesh floor while it shows, else at 0. A
   // logged height (`loggedZ`, yards) picks the floor nearest below it, and
   // lifts the unit off it when well above (a knock-up, a fall).
-  private baseHeight(guid: string, x: number, z: number, loggedZ: number | undefined): number {
+  private placeUnit(guid: string, object: UnitObject, x: number, z: number) {
     const mesh = this.dungeonMesh;
-    if (!mesh) return 0;
-    const floor = this.floorHeights.heightAt(guid, x, z, this.probeCeiling(loggedZ, mesh.scale));
-    if (loggedZ === undefined) return floor;
-    const logged = loggedZ * mesh.scale;
-    return logged - floor > AIRBORNE_YARDS * mesh.scale ? logged : floor;
+    const loggedZ = object.loggedZ;
+    const floor = mesh ? this.floorHeights.heightAt(guid, x, z, this.probeCeiling(loggedZ, mesh.scale)) : 0;
+    const logged = mesh && loggedZ !== undefined ? loggedZ * mesh.scale : null;
+    const y = mesh && logged !== null && logged - floor > AIRBORNE_YARDS * mesh.scale ? logged : floor;
+    object.floorY = floor;
+    object.base.set(x, y, z);
+    object.group.position.copy(object.base);
+    this.layoutDrop(object);
+  }
+
+  // In the air, the shadow stays on the floor and a thin line joins it to
+  // the token; both sit in the token's group, so in its (scaled) units.
+  private layoutDrop(object: UnitObject) {
+    const scale = object.group.scale.y || 1;
+    const drop = (object.base.y - object.floorY) / scale;
+    object.token.shadow.position.y = TOKEN_GROUND.shadow - drop;
+    if (drop <= 0) {
+      if (object.drop) object.drop.visible = false;
+      return;
+    }
+    if (!object.drop) {
+      object.drop = new THREE.Mesh(this.columnBox, new THREE.MeshBasicMaterial({
+        color: DROP_LINE.color, transparent: true, opacity: DROP_LINE.opacity, depthWrite: false,
+      }));
+      object.group.add(object.drop);
+    }
+    object.drop.visible = true;
+    object.drop.scale.set(DROP_LINE.width, drop + TOKEN_GROUND.underside - TOKEN_GROUND.shadow, DROP_LINE.width);
+    object.drop.position.y = TOKEN_GROUND.shadow - drop;
   }
 
   // Where a probe for a logged height starts (scene units): just above the
@@ -1391,10 +1422,7 @@ export class MapScene3D {
     this.groundGroup.visible = !mesh;
     this.meshLight.visible = mesh;
     this.floorHeights.clear();
-    for (const [guid, object] of this.units) {
-      object.base.y = this.baseHeight(guid, object.base.x, object.base.z, object.loggedZ);
-      object.group.position.copy(object.base);
-    }
+    for (const [guid, object] of this.units) this.placeUnit(guid, object, object.base.x, object.base.z);
     this.updateCameraLimits();
     this.updateUnitScale(true);
     this.requestRender();
@@ -1856,6 +1884,8 @@ export class MapScene3D {
       textured: false,
       dead: false,
       base: new THREE.Vector3(),
+      floorY: 0,
+      drop: null,
       loggedZ: unit.z,
       health: unit.health,
       miniatureUrl: unit.miniatureUrl,
@@ -2057,6 +2087,7 @@ export class MapScene3D {
     const { token } = object;
     for (const part of [token.shadow, token.edge, token.halo, token.pin, token.arc, token.debuff, token.column, token.columnTrack, token.power, token.powerTrack, token.ticks, token.sigil]) part?.material.dispose();
     token.bossPin?.material.dispose();
+    object.drop?.material.dispose();
     this.units.delete(guid);
     this.floorHeights.delete(guid);
     const wobbling = this.wobbling.indexOf(object);

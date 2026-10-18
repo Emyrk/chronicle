@@ -93,6 +93,17 @@ export const OWNER_LINE = {
   lift: 0.35,
 } as const;
 
+/**
+ * A unit in the air (knocked up, falling) leaves its shadow on the floor
+ * below it, joined to the token by this thin line.
+ */
+export const DROP_LINE = {
+  color: "#e7e5e4",
+  opacity: 0.55,
+  /** Thickness (geometry units). */
+  width: 0.08,
+} as const;
+
 // A small skull, as the design's death marker (12×12 path units).
 export function drawSkull(context: CanvasRenderingContext2D, centre: number, size: number) {
   context.save();

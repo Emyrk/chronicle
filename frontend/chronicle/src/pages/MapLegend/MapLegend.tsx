@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AIRBORNE_YARDS } from "@/pages/Instance/EventsPanels/Map/dungeonMeshes";
 import { MAP_CONTROL_KEYBINDS } from "@/pages/Instance/EventsPanels/Map/mapControls";
 import { healthBarColor, MAX_HEALTH_BARS, RECENT_HEALTH_MS } from "@/pages/Instance/EventsPanels/Map/mapModel";
 import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, hexCss, WALK_AVATAR_COLOR } from "@/pages/Instance/EventsPanels/Map/mapPalette";
@@ -178,6 +179,9 @@ export function MapLegend() {
           </Card>
           <Card title="Dead" demo={<Ground><At x={50} y={55}><Token {...HUNTER} dead facing={100} /></At></Ground>}>
             The ring and edge go grey, the icon darkens and a skull sits on it, until the unit is resurrected.
+          </Card>
+          <Card title="In the air" demo={<Ground><At x={50} y={78}><Token {...PALADIN} lift={Math.round(44 * Math.sin(Math.PI * cycle(seconds, 2.4)))} /></At></Ground>}>
+            Knocked up, falling or flying: on the 3D map, a unit logged more than {AIRBORNE_YARDS} yd above the floor rises to its logged height. Its shadow stays on the floor below, joined to it by a thin line.
           </Card>
           <Card title="Muted" demo={<Ground><At x={35} y={55}><Token {...MAGE} /></At><At x={68} y={55}><Token {...PALADIN} muted /></At></Ground>}>
             While players are selected in the page&apos;s filter, everyone else fades to {Math.round(TOKEN_LAYOUT.mutedOpacity * 100)}%.

@@ -4,6 +4,7 @@ import {
   DEAD_RING,
   DEBUFF_PLANE,
   DISPEL_COLORS,
+  DROP_LINE,
   ENEMY_RED,
   HALO_COLORS,
   MARKS_SCALE,
@@ -113,6 +114,8 @@ export interface TokenProps {
   scale?: number;
   /** Degrees the ground card is tilted back. */
   tilt?: number;
+  /** In the air: pixels the token floats above its shadow, joined to it by the drop line. */
+  lift?: number;
 }
 
 /** A unit token as the 3D map draws it, centred on its container's origin. */
@@ -130,6 +133,7 @@ export function Token({
   muted = false,
   scale = 22,
   tilt = 58,
+  lift = 0,
 }: TokenProps) {
   const radius = TOKEN_LAYOUT.radius[kind] * scale;
   const ringColor = useCssColor(ring);
@@ -139,10 +143,20 @@ export function Token({
   const shownRing = dead ? DEAD_RING : ringColor;
   const thickness = Math.max(2, Math.round(radius * 2 * TOKEN_LAYOUT.thickness));
   const castStep = cast ? cast.fraction : 0;
+  const tilted = { position: "absolute", left: 0, top: 0, transform: `perspective(600px) rotateX(${tilt}deg)`, transformStyle: "preserve-3d" } as const;
+  const shadow = <ArtCanvas draw={drawShadowLayer} style={layer(radius, plane.shadow)} />;
+  const lineWidth = Math.max(1.5, DROP_LINE.width * scale);
   return (
     <div className="relative h-0 w-0" style={{ opacity: muted ? TOKEN_LAYOUT.mutedOpacity : 1 }}>
-      <div style={{ position: "absolute", left: 0, top: 0, transform: `perspective(600px) rotateX(${tilt}deg)`, transformStyle: "preserve-3d" }}>
-        <ArtCanvas draw={drawShadowLayer} style={layer(radius, plane.shadow)} />
+      {lift > 0 && (
+        <>
+          <div style={tilted}>{shadow}</div>
+          <div style={{ position: "absolute", left: -lineWidth / 2, top: -lift, width: lineWidth, height: lift, background: DROP_LINE.color, opacity: DROP_LINE.opacity }} />
+        </>
+      )}
+      <div style={{ position: "absolute", left: 0, top: -lift }}>
+      <div style={tilted}>
+        {lift > 0 ? null : shadow}
         {/* The coin edge: the ring colour shaded 65% → 35% down its thickness (drawEdge). */}
         {Array.from({ length: thickness }, (_, index) => (
           <div
@@ -173,6 +187,7 @@ export function Token({
         </div>
       </div>
       {column && <Columns column={column} radius={radius} />}
+      </div>
     </div>
   );
 }
