@@ -3,7 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { Crosshair, Focus, Footprints, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Maximize2, Pause, Play, Route, Settings2, Skull, X } from "lucide-react";
+import { Crosshair, Focus, Footprints, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Maximize2, Pause, Play, Route, Settings2, Skull, Timer, X } from "lucide-react";
 import { MINI_MAP_PANEL_OPTION } from "../../viewDefaults";
 import { PANEL_CARD_BLEED } from "../PanelCard";
 import { parseLivePresenceSurface } from "../../liveSessionProtocol";
@@ -467,6 +467,22 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
         {framingControls}
         {previewOn && (
           <>
+            {/* Replay is off: a greyed preview, with the way to the real Replay controls. */}
+            <div className="pointer-events-none absolute inset-0 z-30 bg-slate-900/25 backdrop-saturate-50" aria-hidden />
+            <div className="absolute left-2 top-2 z-40 flex items-center gap-1">
+              <span className="pointer-events-none rounded-sm bg-black/75 px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/70">Preview</span>
+              {props.context.onOpenReplay && (
+                <button
+                  type="button"
+                  onClick={props.context.onOpenReplay}
+                  title="Open the Replay controls to scrub and play the fight"
+                  className={mapFramingButtonClass}
+                >
+                  <Timer className="h-3 w-3" />
+                  Replay
+                </button>
+              )}
+            </div>
             <div className="absolute bottom-2 left-2 z-40 flex items-center gap-1">
               <button
                 type="button"

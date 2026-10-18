@@ -349,6 +349,7 @@ function InstancePageInner({
         suppressActionBar={replayPanelVisible && replayPosition === "bottom"}
         supportsOverview
         focusActions={replayButton}
+        onOpenReplay={showReplayControls ? () => setShowReplayPanel(true) : undefined}
         youtubeButton={
           <div className="flex gap-1.5">
             {replayButton}

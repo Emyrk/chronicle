@@ -1534,6 +1534,8 @@ interface EncounterDetailProps {
   onFocusedChange: (focused: boolean) => void;
   /** Extra actions shown left of Exit focus while focused. */
   focusActions?: React.ReactNode;
+  /** Opens the Replay controls (desktop), e.g. from the mini map. */
+  onOpenReplay?: () => void;
   /** Reopen the encounter sidebar without reserving a layout column. */
   onShowSidebar?: () => void;
   /** Full-page content owned by the active layout, or null for a panel grid. */
@@ -1576,6 +1578,7 @@ function EncounterDetail({
   focused,
   onFocusedChange,
   focusActions,
+  onOpenReplay,
   onShowSidebar,
   pageType,
   pageState,
@@ -1673,6 +1676,7 @@ function EncounterDetail({
       entitySelection: deferredEntitySelection,
       onSelectEncounters,
       onApplyPreset: onPresetChange,
+      onOpenReplay,
       onTogglePlayer,
       onTogglePlayers,
     }),
@@ -1682,6 +1686,7 @@ function EncounterDetail({
       deferredEntitySelection,
       onSelectEncounters,
       onPresetChange,
+      onOpenReplay,
       onTogglePlayer,
       onTogglePlayers,
     ],
@@ -2244,6 +2249,8 @@ export interface InstancePageViewProps {
   youtubeButton?: React.ReactNode;
   /** Extra actions shown left of Exit focus while in focus mode */
   focusActions?: React.ReactNode;
+  /** Opens the Replay controls (desktop), e.g. from the mini map. */
+  onOpenReplay?: () => void;
   /** URL to log detail page (shown only if user can manage the log, desktop only) */
   logDetailUrl?: string;
   /** Callback to open the time range controller overlay */
@@ -2284,6 +2291,7 @@ function InstancePageViewContent({
   onSelectEncounters,
   youtubeButton,
   focusActions,
+  onOpenReplay,
   logDetailUrl,
   onOpenTimeRange,
   canAdminLogs,
@@ -4088,6 +4096,7 @@ function InstancePageViewContent({
             focused={focused}
             onFocusedChange={setFocused}
             focusActions={focusActions}
+            onOpenReplay={onOpenReplay}
             onShowSidebar={!sidebarOpen && !isMobile ? () => setSidebarOpen(true) : undefined}
             pageType={activePageType}
             pageState={pageStateBinding}

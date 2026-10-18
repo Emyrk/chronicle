@@ -42,6 +42,9 @@ export interface PanelContext {
   /** Switch the page to a preset layout (e.g. a mini map expanding to the Map preset). */
   onApplyPreset?: (presetId: string) => void;
 
+  /** Open the page's Replay controls (desktop only), e.g. from the mini map's preview. */
+  onOpenReplay?: () => void;
+
   /** Callback to toggle player selection */
   onTogglePlayer?: (playerId: string) => void;
   
