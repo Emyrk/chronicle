@@ -3,6 +3,7 @@ import {
   cursorScreenPosition,
   cursorSurfaceOffset,
   liveSessionInviteURL,
+  parseLivePresenceSurface,
   parseMapPresence,
   participantColor,
   shouldPublishParticipantReplay,
@@ -76,6 +77,20 @@ describe("shouldPublishParticipantReplay", () => {
   it("does not echo locally advancing timestamps while following playback", () => {
     const playing = { ...paused(1000), isPlaying: true };
     expect(shouldPublishParticipantReplay(playing, { ...playing, timestampMs: 1100 })).toBe(false);
+  });
+});
+
+describe("parseLivePresenceSurface", () => {
+  it("accepts stable panel presence surface identifiers", () => {
+    expect(parseLivePresenceSurface("map")).toBe("map");
+    expect(parseLivePresenceSurface("panel:rotation-timeline_2")).toBe("panel:rotation-timeline_2");
+  });
+
+  it("rejects malformed or oversized identifiers", () => {
+    expect(parseLivePresenceSurface("")).toBeUndefined();
+    expect(parseLivePresenceSurface("Map View")).toBeUndefined();
+    expect(parseLivePresenceSurface("a".repeat(65))).toBeUndefined();
+    expect(parseLivePresenceSurface(null)).toBeUndefined();
   });
 });
 

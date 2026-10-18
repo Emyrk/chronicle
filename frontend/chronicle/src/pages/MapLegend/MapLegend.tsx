@@ -384,7 +384,8 @@ export function MapLegend() {
               {["leader", "a1b2c3", "f9e8d7"].map((id) => <span key={id} className="h-3 w-3 rounded-sm" style={{ background: participantColor(id) }} />)}
             </span>{" "}
             <strong className="text-foreground">Live sessions</strong>: everyone else in the session shows in their cursor colour with their name,
-            as a camera pointing where they look, or as a figure while they walk.
+            as a camera pointing where they look, or as a figure while they walk. Coloured dots on the panel edge show who is currently viewing the map;
+            hover them for the participant list. Their shared page cursor is hidden over the 3D map because the map already shows their presence.
           </p>
         </div>
       </Section>
