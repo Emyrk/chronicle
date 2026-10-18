@@ -85,6 +85,16 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) CreatePortal(w http.ResponseWriter, r *http.Request) {
+	s.createPortal(w, r, false)
+}
+
+// CreateCancelPortal opens the Stripe portal directly on the subscription
+// cancellation confirmation, returning to /account/billing afterwards.
+func (s *Service) CreateCancelPortal(w http.ResponseWriter, r *http.Request) {
+	s.createPortal(w, r, true)
+}
+
+func (s *Service) createPortal(w http.ResponseWriter, r *http.Request, cancelFlow bool) {
 	if !s.Enabled() {
 		httpapi.Write(r.Context(), w, http.StatusServiceUnavailable, chroniclesdk.Response{Message: "Billing is not configured."})
 		return
@@ -99,10 +109,29 @@ func (s *Service) CreatePortal(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	portal, err := s.stripe.V1BillingPortalSessions.Create(r.Context(), &stripe.BillingPortalSessionCreateParams{
+	params := &stripe.BillingPortalSessionCreateParams{
 		Customer:  stripe.String(sub.ProviderCustomerID),
 		ReturnURL: stripe.String(s.accessURL.ResolveReference(&url.URL{Path: "/account"}).String()),
-	})
+	}
+	if cancelFlow {
+		if !sub.ProviderSubscriptionID.Valid {
+			httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "No active subscription was found."})
+			return
+		}
+		params.FlowData = &stripe.BillingPortalSessionCreateFlowDataParams{
+			Type: stripe.String(string(stripe.BillingPortalSessionFlowTypeSubscriptionCancel)),
+			SubscriptionCancel: &stripe.BillingPortalSessionCreateFlowDataSubscriptionCancelParams{
+				Subscription: stripe.String(sub.ProviderSubscriptionID.String),
+			},
+			AfterCompletion: &stripe.BillingPortalSessionCreateFlowDataAfterCompletionParams{
+				Type: stripe.String(string(stripe.BillingPortalSessionFlowAfterCompletionTypeRedirect)),
+				Redirect: &stripe.BillingPortalSessionCreateFlowDataAfterCompletionRedirectParams{
+					ReturnURL: stripe.String(s.accessURL.ResolveReference(&url.URL{Path: "/account/billing"}).String()),
+				},
+			},
+		}
+	}
+	portal, err := s.stripe.V1BillingPortalSessions.Create(r.Context(), params)
 	if err != nil {
 		httpapi.InternalServerError(w, fmt.Errorf("create Stripe portal session: %w", err))
 		return

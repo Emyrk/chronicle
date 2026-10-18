@@ -191,6 +191,10 @@ export function useCreateBillingPortal() {
   return useMutation({ mutationFn: () => createBillingRedirect("/api/v1/me/billing/portal") })
 }
 
+export function useCreateBillingCancel() {
+  return useMutation({ mutationFn: () => createBillingRedirect("/api/v1/me/billing/cancel") })
+}
+
 export function useSession(options?: Omit<UseQueryOptions<Session | null>, "queryKey" | "queryFn">) {
   return useQuery({
     queryKey: ["session"],
