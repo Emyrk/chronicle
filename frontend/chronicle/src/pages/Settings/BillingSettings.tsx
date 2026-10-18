@@ -727,7 +727,13 @@ function ReveredSubscriptionSettings({ billing }: { billing: BillingSummary }) {
           <span style={{ color: GOLD }}>Active feature entitlements ({billing.entitlements.length})</span>
           <span className="ml-2 font-sans text-xs text-muted-foreground">Debug details</span>
         </summary>
-        <div className="p-4">
+        <div className="space-y-3 p-4">
+          {billing.customer_id ? (
+            <p className="text-xs text-muted-foreground">
+              Stripe customer{" "}
+              <code className="rounded border border-border bg-black/30 px-2 py-1 text-xs text-zinc-200 select-all">{billing.customer_id}</code>
+            </p>
+          ) : null}
           {billing.entitlements.length > 0 ? (
             <ul className="flex flex-wrap gap-2">
               {billing.entitlements.map((entitlement) => (

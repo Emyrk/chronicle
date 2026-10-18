@@ -477,6 +477,7 @@ export interface BillingSummary {
     readonly status?: string;
     readonly current_period_end?: string;
     readonly cancel_at_period_end?: boolean;
+    readonly customer_id?: string;
     readonly entitlements: readonly string[];
     readonly prices?: readonly BillingPrice[];
 }

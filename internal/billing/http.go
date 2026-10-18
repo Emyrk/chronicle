@@ -155,6 +155,7 @@ func (s *Service) Summary(w http.ResponseWriter, r *http.Request) {
 		result.HasSubscription = subscriptionBlocksCheckout(time.Now(), sub, adFree)
 		result.Status = sub.Status
 		result.CancelAtPeriodEnd = sub.CancelAtPeriodEnd
+		result.CustomerID = sub.ProviderCustomerID
 		if sub.CurrentPeriodEnd.Valid {
 			result.CurrentPeriodEnd = &sub.CurrentPeriodEnd.Time
 		}
