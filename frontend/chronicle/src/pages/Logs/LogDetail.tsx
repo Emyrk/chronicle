@@ -46,6 +46,7 @@ import { shouldShowChronicleCompanionWarning } from "@/lib/logReliability";
 import { LOG_FORMAT_OPTIONS } from "@/config/serverCapabilities";
 import { useMarkLogUnlisted } from "@/api/unlistedLogs";
 import { UploadSyncDialog } from "./components/UploadSyncDialog";
+import { UnlistedConfirmationDialog } from "./components/UnlistedConfirmationDialog";
 import { UnlistedBadge } from "./components/UnlistedBadge";
 import { 
   useLogGroup,
@@ -1338,14 +1339,11 @@ export function LogDetailView({
                   Unlisted logs are excluded from rankings and public discovery. Anyone with the link can view them, and this change cannot be reversed.
                 </p>
               </div>
-              <Button
-                variant="outline"
+              <UnlistedConfirmationDialog
                 disabled={isMarkingUnlisted}
-                onClick={onMarkUnlisted}
-              >
-                {isMarkingUnlisted && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Make unlisted
-              </Button>
+                isPending={isMarkingUnlisted}
+                onConfirm={onMarkUnlisted}
+              />
             </Card>
           )}
 
