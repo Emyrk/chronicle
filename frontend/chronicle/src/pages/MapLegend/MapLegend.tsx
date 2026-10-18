@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
+import { MAJOR_COOLDOWN_MIN_MS } from "@/api/cooldownSpells";
 import { AIRBORNE_YARDS } from "@/pages/Instance/EventsPanels/Map/dungeonMeshes";
 import { MAP_CONTROL_KEYBINDS } from "@/pages/Instance/EventsPanels/Map/mapControls";
 import { DEAD_ENEMY_FRAME_LINGER_MS, DEAD_ENEMY_MODEL_FADE_MS } from "@/pages/Instance/EventsPanels/Map/mapDeathVisibility";
 import { healthBarColor, MAX_HEALTH_BARS, RECENT_HEALTH_MS } from "@/pages/Instance/EventsPanels/Map/mapModel";
-import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, hexCss, WALK_AVATAR_COLOR } from "@/pages/Instance/EventsPanels/Map/mapPalette";
+import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, COOLDOWN_ICON_SCALE, hexCss, WALK_AVATAR_COLOR } from "@/pages/Instance/EventsPanels/Map/mapPalette";
 import { ABOVE_DISC_MODES, CAST_MODES, TRAIL_OPTIONS } from "@/pages/Instance/EventsPanels/Map/mapViewSettings";
 import { HEAL_COLOR, HEAL_CRIT_COLOR, OVERHEAL_COLOR, SCHOOL_TOKENS, schoolColor } from "@/pages/Instance/EventsPanels/Map/replayEffects";
 import { DASH_ART_SIZE, DISPEL_COLORS, DISPEL_ORDER, HALO_COLORS, OWNER_LINE, TARGET_LINE, TOKEN_LAYOUT, TRAIL_LINE, type HaloKind } from "@/pages/Instance/EventsPanels/Map/unitTokenArt";
@@ -353,7 +354,7 @@ export function MapLegend() {
         </Grid>
       </Section>
 
-      <Section id="casts" title="Cast icons" note={<>The spell&apos;s icon floats over a caster (slowed down here too). Who gets them is set in Map settings → Combat → <em>Cast icons</em>: {CAST_MODES.map((mode) => `${mode.label} (${mode.title.toLowerCase()})`).join("; ")}.</>}>
+      <Section id="casts" title="Cast icons" note={<>The spell&apos;s icon floats over a caster when they cast it (slowed down here too). A player&apos;s procs (instant spells off the global cooldown, as the Player Timeline counts them) show none; enemies show every cast. Who gets them is set in Map settings → Combat → <em>Cast icons</em>: {CAST_MODES.map((mode) => `${mode.label} (${mode.title.toLowerCase()})`).join("; ")}.</>}>
         <Grid>
           <Card title="Casting" demo={<CastIconDemo seconds={seconds} mode="casting" />}>
             Grows in, then an outline sweeps round the icon as the cast bar runs.
@@ -363,6 +364,9 @@ export function MapLegend() {
           </Card>
           <Card title="Interrupted" timing={ms(EFFECT_TIMINGS.interruptedIcon)} demo={<CastIconDemo seconds={seconds} mode="interrupted" />}>
             Greys out with a wiggle; the outline freezes where it was cut and enemy casts are labelled.
+          </Card>
+          <Card title="Major cooldown" timing={ms(EFFECT_TIMINGS.cooldownIcon)} demo={<CastIconDemo seconds={seconds} mode="cooldown" />}>
+            A curated cooldown of {MAJOR_COOLDOWN_MIN_MS / 1000}s or more (the Player Timeline&apos;s ringed squares) is {COOLDOWN_ICON_SCALE}× the size, framed in gold, and stays up longer.
           </Card>
         </Grid>
       </Section>

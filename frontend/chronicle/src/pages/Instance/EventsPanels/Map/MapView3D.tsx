@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MAJOR_COOLDOWN_MIN_MS, useCooldownSpells } from "@/api/cooldownSpells";
 import { useSpell } from "@/api/queries";
 import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 import { useDatasetId } from "@/hooks/useDatasetId";
@@ -382,7 +383,20 @@ export default function MapView3D({
   const castGuids = effectSettings.enabled ? effectOptions.castIconGuids : null;
   // Every cast spell in the encounter, so mode or selection changes fetch nothing new.
   const castSpellIds = useMemo(() => (effects ? collectCastSpellIds(effects.events) : []), [effects]);
-  const { meta: spellMeta, loading: spellMetaLoading } = useSpellMeta(castSpellIds);
+  const { meta: spellMeta, gcd: spellGcd, loading: spellMetaLoading } = useSpellMeta(castSpellIds);
+  // As the player timeline sorts casts: a curated spell with a long enough
+  // cooldown is a major cooldown; an instant one off the GCD is a proc (the
+  // GCD reads as the default until the spell's data loads, so not a proc).
+  const cooldownSpells = useCooldownSpells();
+  const majorCooldowns = useMemo(() => {
+    const ids = new Set<number>();
+    for (const spells of Object.values(cooldownSpells.data?.byClass ?? {})) {
+      for (const spell of spells) if (!spell.ignored && spell.cooldown_ms >= MAJOR_COOLDOWN_MIN_MS) ids.add(spell.id);
+    }
+    return ids;
+  }, [cooldownSpells.data]);
+  const isCooldown = useCallback((spellId: number) => majorCooldowns.has(spellId), [majorCooldowns]);
+  const isProc = useCallback((spellId: number) => spellGcd(spellId) === 0, [spellGcd]);
 
   // Once the spell data is in, load the icon images ahead of playback.
   useEffect(() => {
@@ -411,12 +425,14 @@ export default function MapView3D({
         enemyGuids: effectOptions.bosses,
         iconUrl: (spellId) => spellMeta(spellId).icon,
         placeholderUrl: spellMeta(null).icon,
+        isProc,
+        isCooldown,
       } : null,
       // Heal amounts float for heals cast by or landing on selected players and tanks.
       healTextGuids: effectOptions.healText,
       castSchoolColor: (spellId) => schoolNameColor(spellMeta(spellId).spell?.school?.string),
     } : null);
-  }, [castGuids, effectOptions, effectSettings.enabled, effects, frozen, spellMeta]);
+  }, [castGuids, effectOptions, effectSettings.enabled, effects, frozen, isCooldown, isProc, spellMeta]);
 
   useEffect(() => {
     if (!frozen) sceneRef.current?.setEffectClock(cursorMs, playing, playbackSpeed);

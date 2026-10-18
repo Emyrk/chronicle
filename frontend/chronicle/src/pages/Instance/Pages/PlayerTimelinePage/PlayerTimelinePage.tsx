@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ArrowLeftRight, CircleHelp, FlaskConical } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
-import { useCooldownSpells } from "@/api/cooldownSpells";
+import { MAJOR_COOLDOWN_MIN_MS, useCooldownSpells } from "@/api/cooldownSpells";
 import { useMyFavorites } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -54,7 +54,7 @@ const PAGE_KEYBINDS = [{ keys: "Shift + click", action: "Flip to the rules & ass
 const NONE = "none";
 
 /** Casts of spells with at least this cooldown are drawn as cooldowns (squares on the rail). */
-const COOLDOWN_LANE_MIN_MS = 30_000;
+const COOLDOWN_LANE_MIN_MS = MAJOR_COOLDOWN_MIN_MS;
 
 const ROTATION_TIMELINE_PANEL: PanelDefinition<RotationTimelineResult, RotationTimelineEvent> = {
   ...rotationTimelineProcessor,

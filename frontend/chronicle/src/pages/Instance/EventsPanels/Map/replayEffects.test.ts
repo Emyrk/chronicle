@@ -7,6 +7,7 @@ import {
   MAX_PRELOAD_ICONS,
   BEAM_MS,
   CAST_ICON_MS,
+  COOLDOWN_ICON_MS,
   COMBAT_TEXT_MS,
   createEncounterEffects,
   DEFAULT_EFFECT_OPTIONS,
@@ -371,10 +372,28 @@ describe("deriveCastIcons", () => {
       event(3_000, "cast_go", "mage", "boss"),
     );
     expect(icons(fx, 999)).toEqual([]);
-    const icon = { caster: "mage", spellId: 133, spellName: "Fireball", progress: 0.5, cutProgress: 0, enemy: false };
+    const icon = { caster: "mage", spellId: 133, spellName: "Fireball", progress: 0.5, cutProgress: 0, enemy: false, cooldown: false };
     expect(icons(fx, 2_000)).toEqual([{ ...icon, elapsedMs: 1_000, phase: "casting" }]);
     expect(icons(fx, 3_000 + CAST_ICON_MS / 2)).toEqual([{ ...icon, elapsedMs: CAST_ICON_MS / 2, phase: "instant" }]);
     expect(icons(fx, 3_000 + CAST_ICON_MS)).toEqual([]);
+  });
+
+  it("shows no icon for a player's proc, but keeps an enemy's instant spells", () => {
+    const fx = effects(
+      event(1_000, "cast_go", "mage", "boss", { spellId: 20_007 }),
+      event(1_000, "cast_go", "boss", "mage", { spellId: 24_324 }),
+    );
+    const isProc = (spellId: number) => spellId === 20_007 || spellId === 24_324;
+    const shown = deriveCastIcons(fx, 1_100, casters, 12, [], { priorityGuids: null, filterGuids: null, enemyGuids: new Set(["boss"]), isProc });
+    expect(shown.map((icon) => icon.caster)).toEqual(["boss"]);
+  });
+
+  it("frames a major cooldown and keeps it up longer, even when it is off the GCD", () => {
+    const fx = effects(event(1_000, "cast_go", "mage", "mage", { spellId: 12_042 }));
+    const options = { priorityGuids: null, filterGuids: null, isProc: () => true, isCooldown: (spellId: number) => spellId === 12_042 };
+    const at = (cursorMs: number) => deriveCastIcons(fx, cursorMs, casters, 12, [], options).map((icon) => ({ ...icon }));
+    expect(at(1_000 + CAST_ICON_MS)).toMatchObject([{ spellId: 12_042, cooldown: true, phase: "instant", progress: CAST_ICON_MS / COOLDOWN_ICON_MS }]);
+    expect(at(1_000 + COOLDOWN_ICON_MS)).toEqual([]);
   });
 
   it("ends a cast at an interrupt, the caster's next cast, or the capped cast time", () => {
@@ -503,7 +522,7 @@ describe("interrupted casts", () => {
       event(2_100, "interrupt", "rogue", "boss", { spellId: null }),
     );
     expect(icons(fx, 2_200)).toEqual([{
-      caster: "boss", spellId: 2120, spellName: "Fireball", phase: "instant", elapsedMs: 200, progress: 200 / CAST_ICON_MS, cutProgress: 0, enemy: true,
+      caster: "boss", spellId: 2120, spellName: "Fireball", phase: "instant", elapsedMs: 200, progress: 200 / CAST_ICON_MS, cutProgress: 0, enemy: true, cooldown: false,
     }]);
   });
 

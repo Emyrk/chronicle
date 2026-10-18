@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import {
   BEAM_MS,
   CAST_ICON_MS,
+  COOLDOWN_ICON_MS,
   COMBAT_TEXT_MS,
   HEAL_COLOR,
   HEAL_CRIT_COLOR,
@@ -20,7 +21,7 @@ import {
   formatHealAmount,
   schoolColor,
 } from "@/pages/Instance/EventsPanels/Map/replayEffects";
-import { CAST_ARC_OPACITY, CUT_ARC_COLOR, CUT_TICK_COLOR, INTERRUPT_LABEL_COLOR } from "@/pages/Instance/EventsPanels/Map/mapPalette";
+import { CAST_ARC_OPACITY, COOLDOWN_ICON_COLOR, COOLDOWN_ICON_SCALE, CUT_ARC_COLOR, CUT_TICK_COLOR, INTERRUPT_LABEL_COLOR } from "@/pages/Instance/EventsPanels/Map/mapPalette";
 import { At, Ground, Token } from "./legendArt";
 
 /**
@@ -197,17 +198,19 @@ export function CombatTextDemo({ seconds }: { seconds: number }) {
 }
 
 /** A cast icon above the caster: casting (outline sweeps), gone off (pop + flash), or interrupted (grey, wiggle, label). */
-export function CastIconDemo({ seconds, mode }: { seconds: number; mode: "casting" | "instant" | "interrupted" }) {
+export function CastIconDemo({ seconds, mode }: { seconds: number; mode: "casting" | "instant" | "interrupted" | "cooldown" }) {
   const loop = seconds % LOOP_S;
   const castProgress = Math.min(1, loop / (LOOP_S * 0.8));
-  const instant = phase(seconds, CAST_ICON_MS);
+  // A major cooldown pops like any instant, larger, in a gold frame, and stays up longer.
+  const cooldown = mode === "cooldown";
+  const instant = phase(seconds, cooldown ? COOLDOWN_ICON_MS : CAST_ICON_MS);
   const interrupted = phase(seconds, INTERRUPTED_ICON_MS);
   let scale = 1;
   let opacity = 1;
   let rotate = 0;
   let grey = false;
   if (mode === "casting") scale = loop < 0.15 ? 0.75 + 0.25 * (loop / 0.15) : 1;
-  if (mode === "instant") {
+  if (mode === "instant" || cooldown) {
     if (instant === null) opacity = 0;
     else {
       scale = instant < 0.2 ? 1 + 0.35 * Math.sin((instant / 0.2) * Math.PI) : 1;
@@ -224,20 +227,22 @@ export function CastIconDemo({ seconds, mode }: { seconds: number; mode: "castin
     }
   }
   const sweep = mode === "casting" ? castProgress : mode === "interrupted" ? 0.55 : 1;
+  const ring = grey ? CUT_ARC_COLOR : cooldown ? COOLDOWN_ICON_COLOR : `rgba(255,255,255,${CAST_ARC_OPACITY})`;
+  const size = 40 * (cooldown ? COOLDOWN_ICON_SCALE : 1);
   return (
     <Ground height={150}>
-      <At x={50} y={78}>
-        <Token kind="hostile" ring="#fb7185" />
-        <div className="absolute" style={{ left: 0, top: -78, opacity, transform: `translateX(-50%) scale(${scale}) rotate(${rotate}deg)` }}>
+      <At x={50} y={cooldown ? 88 : 78}>
+        {cooldown ? <Token ring="var(--color-class-hunter)" icon="/c/icons/spec_hunter_beastmastery.png" /> : <Token kind="hostile" ring="#fb7185" />}
+        <div className="absolute" style={{ left: 0, top: -(cooldown ? 26 + size : 78), opacity, transform: `translateX(-50%) scale(${scale}) rotate(${rotate}deg)` }}>
           <div
-            className="relative h-10 w-10 rounded-sm p-[3px]"
-            style={{ background: `conic-gradient(${grey ? CUT_ARC_COLOR : `rgba(255,255,255,${CAST_ARC_OPACITY})`} ${sweep * 100}%, transparent 0)` }}
+            className="relative rounded-sm p-[3px]"
+            style={{ width: size, height: size, background: `conic-gradient(${ring} ${sweep * 100}%, transparent 0)` }}
           >
             {mode === "interrupted" && grey && (
               <div className="absolute h-[6px] w-[2px]" style={{ background: CUT_TICK_COLOR, left: "calc(100% - 2px)", top: "40%" }} />
             )}
-            <img src="/c/icons/spell_holy_holybolt.png" alt="" className="h-full w-full rounded-[2px]" style={{ filter: grey ? "grayscale(1) brightness(0.7)" : "none" }} />
-            {mode === "instant" && instant !== null && instant < 0.15 && <div className="absolute -inset-2 rounded-md border-2 border-white" style={{ opacity: 1 - instant / 0.15 }} />}
+            <img src={cooldown ? "/c/icons/ability_hunter_swiftstrike.png" : "/c/icons/spell_holy_holybolt.png"} alt="" className="h-full w-full rounded-[2px]" style={{ filter: grey ? "grayscale(1) brightness(0.7)" : "none" }} />
+            {(mode === "instant" || cooldown) && instant !== null && instant < 0.15 && <div className="absolute -inset-2 rounded-md border-2 border-white" style={{ opacity: 1 - instant / 0.15 }} />}
           </div>
           {mode === "interrupted" && grey && (
             <div className="mt-1 whitespace-nowrap text-center text-[10px] font-semibold [text-shadow:0_0_2px_#000]" style={{ color: INTERRUPT_LABEL_COLOR }}>Interrupted</div>
@@ -261,6 +266,7 @@ export const EFFECT_TIMINGS = {
   interrupt: INTERRUPT_MS,
   combatText: COMBAT_TEXT_MS,
   castIcon: CAST_ICON_MS,
+  cooldownIcon: COOLDOWN_ICON_MS,
   interruptedIcon: INTERRUPTED_ICON_MS,
 } as const;
 

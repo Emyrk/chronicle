@@ -17,6 +17,12 @@ export interface CooldownSpellEntry {
   duration_hidden: boolean;
 }
 
+/**
+ * A curated spell counts as a major cooldown (the player timeline's ringed
+ * squares, the replay map's gold cast icons) from this cooldown up.
+ */
+export const MAJOR_COOLDOWN_MIN_MS = 30_000;
+
 /** Cooldown spells keyed by class name (e.g. "Druid", "DeathKnight"). */
 export type CooldownSpellsByClass = Record<string, CooldownSpellEntry[]>;
 

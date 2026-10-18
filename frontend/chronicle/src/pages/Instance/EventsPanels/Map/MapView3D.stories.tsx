@@ -815,7 +815,8 @@ function seededSpell(id: number, icon: string, name: string): WoWSpell {
     duration: { ID: 0, Duration: 0, DurationPerLevel: 0, MaxDuration: 0 },
     recovery_time: 0,
     category_recovery_time: 0,
-    start_recovery_time: 0,
+    // A 1.5 s GCD (in ns): a cast, not a proc, so instants show their icon.
+    start_recovery_time: 1_500_000_000,
     attributes: { blocks: [0, 0, 0, 0, 0, 0, 0, 0, 0], string: "" },
     effects: [],
   } as unknown as WoWSpell;

@@ -32,7 +32,7 @@ import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LI
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanPoint } from "./plan/mapPlan";
 import { PlanLayer, type PlanSurface } from "./plan/planLayer";
-import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, CAST_ARC_OPACITY, CUT_ARC_COLOR, CUT_TICK_COLOR, DEAD_COLOR, INTERRUPT_LABEL_COLOR, WALK_AVATAR_COLOR, WALK_AVATAR_EMISSIVE } from "./mapPalette";
+import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, CAST_ARC_OPACITY, COOLDOWN_ICON_COLOR, COOLDOWN_ICON_SCALE, CUT_ARC_COLOR, CUT_TICK_COLOR, DEAD_COLOR, INTERRUPT_LABEL_COLOR, WALK_AVATAR_COLOR, WALK_AVATAR_EMISSIVE } from "./mapPalette";
 import {
   clampToRadius,
   corsAssetUrl,
@@ -490,6 +490,10 @@ export interface MapScene3DEffects {
     iconUrl: (spellId: number) => string;
     /** Shown until a spell's icon loads, or when it fails to. */
     placeholderUrl: string;
+    /** Procs (instant, off the GCD): no icon. */
+    isProc?: (spellId: number) => boolean;
+    /** Major cooldowns: a larger, gold-framed icon that stays up longer. */
+    isCooldown?: (spellId: number) => boolean;
   } | null;
   /** Units whose heals (cast or received) float their amount; null for none. */
   healTextGuids: ReadonlySet<string> | null;
@@ -2454,6 +2458,8 @@ export class MapScene3D {
         priorityGuids: castIcons!.priorityGuids,
         enemyGuids: castIcons!.enemyGuids,
         filterGuids: this.effectOptions.filterGuids,
+        isProc: castIcons!.isProc,
+        isCooldown: castIcons!.isCooldown,
       })
       : this.castIcons;
     if (!on) icons.length = 0;
@@ -2545,9 +2551,14 @@ export class MapScene3D {
         }
         label = icon.enemy && elapsed < INTERRUPT_LABEL_MS;
       }
+      if (icon.cooldown && !arcTexture) {
+        arcTexture = this.arcTexture(CAST_ARC_STEPS, false);
+        arcOpacity = 1;
+      }
       material.opacity = opacity;
       material.rotation = rotation;
-      const size = baseSize * scale * this.unitScale;
+      const iconSize = baseSize * (icon.cooldown ? COOLDOWN_ICON_SCALE : 1);
+      const size = iconSize * scale * this.unitScale;
       sprite.scale.set(size, size, 1);
       // Directly above the health bar; the newest icon on a caster is
       // centred and an older one sits to its right.
@@ -2557,7 +2568,7 @@ export class MapScene3D {
       }
       const bottom = caster.barHeight + CAST_ICON_BAR_GAP;
       const casterScale = this.scaleOf(caster);
-      sprite.position.set(caster.base.x, caster.base.y + (bottom + baseSize / 2) * casterScale, caster.base.z)
+      sprite.position.set(caster.base.x, caster.base.y + (bottom + iconSize / 2) * casterScale, caster.base.z)
         .addScaledVector(right, slot * baseSize * 1.1 * this.unitScale);
       sprite.visible = true;
       if (arcTexture) {
@@ -2572,13 +2583,15 @@ export class MapScene3D {
           arcMaterial.needsUpdate = true;
         }
         arcMaterial.opacity = arcOpacity * opacity;
+        // A cooldown's ring is gold; the cut-off part of an interrupt keeps its own colours.
+        arcMaterial.color.set(icon.cooldown && icon.phase !== "interrupted" ? COOLDOWN_ICON_COLOR : "#ffffff");
         arc.scale.set(size * CAST_ARC_SIZE, size * CAST_ARC_SIZE, 1);
         arc.position.copy(sprite.position);
         arc.visible = true;
       } else {
         arc.visible = false;
       }
-      let top = bottom + baseSize;
+      let top = bottom + iconSize;
       const labelSprite = this.castLabels[shown];
       if (label) {
         const text = this.labelTexture("Interrupted", INTERRUPT_LABEL_COLOR, false);

@@ -496,6 +496,8 @@ export function deriveCombatText(
 
 /** How long an instant cast's (or a finished cast's) icon stays up. */
 export const CAST_ICON_MS = 900;
+/** How long a major cooldown's icon stays up after it goes off (drawn larger, framed in gold). */
+export const COOLDOWN_ICON_MS = 2000;
 /** Icons shown side by side above one caster, at most. */
 export const MAX_CAST_ICONS_PER_UNIT = 2;
 /** Groups up to this size get cast icons over every player by default. */
@@ -613,6 +615,8 @@ export interface CastIcon {
   cutProgress: number;
   /** Whether the caster is an enemy (in `enemyGuids`). */
   enemy: boolean;
+  /** A major cooldown (CastIconOptions.isCooldown): larger, gold-framed, up longer. */
+  cooldown: boolean;
 }
 
 export interface CastIconOptions {
@@ -622,6 +626,14 @@ export interface CastIconOptions {
   filterGuids: ReadonlySet<string> | null;
   /** Enemies: their interrupted casts stay up for INTERRUPTED_ICON_MS. */
   enemyGuids?: ReadonlySet<string> | null;
+  /**
+   * Spells that go off on their own (procs: instant and off the GCD, as the
+   * player timeline counts them); a player's spell_go of one shows no icon.
+   * Enemies keep theirs: NPC spells often have no GCD in their spell data.
+   */
+  isProc?: (spellId: number) => boolean;
+  /** Major cooldowns (the curated list): their icons are larger, gold and up for COOLDOWN_ICON_MS. */
+  isCooldown?: (spellId: number) => boolean;
 }
 
 /**
@@ -738,7 +750,7 @@ export function deriveCastIcons(
   options: CastIconOptions = { priorityGuids: null, filterGuids: null },
 ): CastIcon[] {
   let count = 0;
-  const { priorityGuids, filterGuids, enemyGuids } = options;
+  const { priorityGuids, filterGuids, enemyGuids, isProc, isCooldown } = options;
   const events = fx.events;
   const [start, end] = eventWindow(events, cursorMs - CAST_RING_MAX_MS - INTERRUPTED_ICON_MS, cursorMs);
   for (let index = end - 1; index >= start; index--) {
@@ -748,15 +760,20 @@ export function deriveCastIcons(
     if (filterGuids && !filterGuids.has(event.source) && !filterGuids.has(event.target)) continue;
     const ageMs = cursorMs - event.timestampMs;
     const enemy = Boolean(enemyGuids?.has(event.source));
+    const spellId = event.spellId ?? 0;
+    const cooldown = Boolean(spellId && isCooldown?.(spellId));
     let phase: CastIcon["phase"];
     let elapsedMs: number;
     let progress: number;
     let cutProgress = 0;
     if (event.kind === "cast_go") {
-      if (ageMs >= CAST_ICON_MS) continue;
+      // A proc went off on its own; nobody cast it.
+      if (!cooldown && !enemy && spellId && isProc?.(spellId)) continue;
+      const lingerMs = cooldown ? COOLDOWN_ICON_MS : CAST_ICON_MS;
+      if (ageMs >= lingerMs) continue;
       phase = "instant";
       elapsedMs = ageMs;
-      progress = ageMs / CAST_ICON_MS;
+      progress = ageMs / lingerMs;
     } else {
       if (event.castTimeMs <= 0) continue;
       const durationMs = Math.min(event.castTimeMs, CAST_RING_MAX_MS);
@@ -782,7 +799,7 @@ export function deriveCastIcons(
     }
     if (onCaster >= MAX_CAST_ICONS_PER_UNIT) continue;
     const icon = out[count] ?? (out[count] = {
-      caster: "", spellId: 0, spellName: "", progress: 0, elapsedMs: 0, phase: "instant", cutProgress: 0, enemy: false,
+      caster: "", spellId: 0, spellName: "", progress: 0, elapsedMs: 0, phase: "instant", cutProgress: 0, enemy: false, cooldown: false,
     });
     icon.caster = event.source;
     icon.spellId = event.spellId!;
@@ -792,16 +809,17 @@ export function deriveCastIcons(
     icon.phase = phase;
     icon.cutProgress = cutProgress;
     icon.enemy = enemy;
+    icon.cooldown = cooldown;
     count++;
   }
-  // Over the cap: drop the lowest-ranked icon (non-priority, finished, oldest)
-  // until it fits, keeping the rest newest first.
+  // Over the cap: drop the lowest-ranked icon (non-priority, finished and not
+  // a cooldown, oldest) until it fits, keeping the rest newest first.
   while (count > max) {
     let drop = -1;
     let dropRank = Infinity;
     for (let index = count - 1; index >= 0; index--) {
       const icon = out[index];
-      const rank = (priorityGuids?.has(icon.caster) ? 2 : 0) + (icon.phase === "instant" ? 0 : 1);
+      const rank = (priorityGuids?.has(icon.caster) ? 2 : 0) + (icon.phase === "instant" && !icon.cooldown ? 0 : 1);
       if (rank < dropRank) {
         drop = index;
         dropRank = rank;
