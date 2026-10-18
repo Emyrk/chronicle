@@ -96,7 +96,8 @@ func SMGraveyardHostiles(f database.WoWFlavor) map[uint32]Identity {
 		4543: "Bloodmage Thalnos",
 	})
 
-	if f.Has(database.FlavorWrath) {
+	// nolint: npc is broken atm. every phase is a unique fight.
+	if false && f.Has(database.FlavorWrath) {
 		// Wrath Halloween Event
 		LoadBosses(hostile, map[uint32]string{
 			23682: "Headless Horesman",
