@@ -60,7 +60,9 @@ export function participantColor(participantId: string): string {
 
 /** A participant's short name, as their cursor shows it. */
 export function participantLabel(participantId: string): string {
-  return participantId === "leader" ? "Leader" : participantId.slice(0, 6);
+  if (participantId === "leader") return "Leader";
+  if (participantId.startsWith("user:")) return participantId.slice("user:".length);
+  return participantId.slice(0, 6);
 }
 
 export type LiveSessionSignalPayload =

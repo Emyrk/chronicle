@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/coder/websocket"
@@ -75,7 +76,17 @@ func (s *Service) Join(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	peer, instanceID, err := s.join(chi.URLParam(r, "code"), req.Password)
+	username := ""
+	if claims, authenticated := chronauth.AuthenticatedClaims(r.Context()); authenticated && s.resolveUsername != nil {
+		var err error
+		username, err = s.resolveUsername(r.Context(), claims.Subject)
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+	}
+
+	peer, instanceID, err := s.joinAs(chi.URLParam(r, "code"), req.Password, username)
 	if err != nil {
 		switch {
 		case errors.Is(err, errNotFound):

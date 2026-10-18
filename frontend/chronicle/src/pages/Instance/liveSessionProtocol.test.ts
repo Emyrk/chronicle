@@ -6,6 +6,7 @@ import {
   parseLivePresenceSurface,
   parseMapPresence,
   participantColor,
+  participantLabel,
   shouldPublishParticipantReplay,
   websocketURL,
   type LiveReplayState,
@@ -36,6 +37,15 @@ describe("websocketURL", () => {
   it("uses plain websockets for local HTTP development", () => {
     expect(websocketURL("/api/v1/live", { protocol: "http:", host: "localhost:4000" } as Location))
       .toBe("ws://localhost:4000/api/v1/live");
+  });
+});
+
+describe("participantLabel", () => {
+  it("shows authenticated usernames and shortens anonymous IDs", () => {
+    expect(participantLabel("leader")).toBe("Leader");
+    expect(participantLabel("user:Emyrk")).toBe("Emyrk");
+    expect(participantLabel("user:Emyrk-2")).toBe("Emyrk-2");
+    expect(participantLabel("AbCdEfGhIjKl")).toBe("AbCdEf");
   });
 });
 

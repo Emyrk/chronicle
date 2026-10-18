@@ -43,6 +43,7 @@ import (
 	"github.com/authzed/gochugaru/rel"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -191,7 +192,16 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		Queues:       opts.RiverQueue,
 		Zed:          opts.Zed,
 		CustomPanels: custompanelapi.New(custompanelapi.Options{HTTPClient: opts.CustomPanelHTTPClient}),
-		liveSessions: servicelivesession.New(servicelivesession.Options{AccessURL: opts.AccessURL}),
+		liveSessions: servicelivesession.New(servicelivesession.Options{
+			AccessURL: opts.AccessURL,
+			ResolveUsername: func(ctx context.Context, userID uuid.UUID) (string, error) {
+				user, err := opts.Zed.GetUserByID(ctx, userID)
+				if err != nil {
+					return "", err
+				}
+				return user.Username, nil
+			},
+		}),
 	}, nil
 }
 

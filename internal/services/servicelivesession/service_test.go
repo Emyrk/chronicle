@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/api/chronauth"
+	"github.com/Emyrk/chronicle/api/chronauth/claims"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
@@ -110,6 +112,44 @@ func TestLiveSessionHubPasswordCapacityAndLifecycle(t *testing.T) {
 
 	_, _, err = hub.join(capacityRoom.code, "")
 	require.ErrorIs(t, err, errNotFound)
+}
+
+func TestLiveSessionJoinUsesAuthenticatedUsernameWithCollisionSuffix(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	service := New(Options{
+		ResolveUsername: func(_ context.Context, gotUserID uuid.UUID) (string, error) {
+			require.Equal(t, userID, gotUserID)
+			return "Emyrk", nil
+		},
+	})
+	room, err := service.create(uuid.New(), "")
+	require.NoError(t, err)
+
+	router := chi.NewRouter()
+	router.Post("/api/v1/live-sessions/{code}/join", service.Join)
+	join := func(authenticated bool) string {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/live-sessions/"+room.code+"/join", strings.NewReader(`{}`))
+		if authenticated {
+			req = req.WithContext(chronauth.WithClaims(req.Context(), &claims.Claims{Subject: userID}))
+		}
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, req)
+		require.Equal(t, http.StatusOK, res.Code)
+		var joined chroniclesdk.JoinLiveSessionResponse
+		require.NoError(t, json.NewDecoder(res.Body).Decode(&joined))
+
+		service.mu.Lock()
+		participantID := room.participants[joined.ParticipantToken].id
+		service.mu.Unlock()
+		return participantID
+	}
+
+	require.Equal(t, "user:Emyrk", join(true))
+	require.Equal(t, "user:Emyrk-2", join(true))
+	require.NotContains(t, join(false), "user:")
 }
 
 func TestLiveSessionHubCleansExpiredReservationsAndUnstartedRooms(t *testing.T) {

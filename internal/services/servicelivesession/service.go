@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"strings"
 	"sync"
@@ -17,17 +18,18 @@ import (
 )
 
 const (
-	codeLength          = 8
-	tokenLength         = 32
-	participantIDLength = 12
-	maxParticipants     = 40
-	maxMessageBytes     = 64 << 10
-	joinReservationTTL  = 2 * time.Minute
-	unstartedRoomTTL    = 10 * time.Minute
-	heartbeatInterval   = 30 * time.Second
-	heartbeatTimeout    = 5 * time.Second
-	leaderID            = "leader"
-	writeTimeout        = 5 * time.Second
+	codeLength                       = 8
+	tokenLength                      = 32
+	participantIDLength              = 12
+	authenticatedParticipantIDPrefix = "user:"
+	maxParticipants                  = 40
+	maxMessageBytes                  = 64 << 10
+	joinReservationTTL               = 2 * time.Minute
+	unstartedRoomTTL                 = 10 * time.Minute
+	heartbeatInterval                = 30 * time.Second
+	heartbeatTimeout                 = 5 * time.Second
+	leaderID                         = "leader"
+	writeTimeout                     = 5 * time.Second
 )
 
 var (
@@ -39,11 +41,13 @@ var (
 )
 
 type Options struct {
-	AccessURL *url.URL
+	AccessURL       *url.URL
+	ResolveUsername func(context.Context, uuid.UUID) (string, error)
 }
 
 type Service struct {
-	accessURL *url.URL
+	accessURL       *url.URL
+	resolveUsername func(context.Context, uuid.UUID) (string, error)
 
 	mu    sync.Mutex
 	rooms map[string]*room
@@ -89,8 +93,9 @@ type connection struct {
 
 func New(options Options) *Service {
 	return &Service{
-		accessURL: options.AccessURL,
-		rooms:     make(map[string]*room),
+		accessURL:       options.AccessURL,
+		resolveUsername: options.ResolveUsername,
+		rooms:           make(map[string]*room),
 	}
 }
 
@@ -159,6 +164,10 @@ func (s *Service) create(instanceID uuid.UUID, password string) (*room, error) {
 }
 
 func (s *Service) join(code, password string) (*peer, uuid.UUID, error) {
+	return s.joinAs(code, password, "")
+}
+
+func (s *Service) joinAs(code, password, username string) (*peer, uuid.UUID, error) {
 	code = strings.ToUpper(code)
 
 	s.mu.Lock()
@@ -177,19 +186,16 @@ func (s *Service) join(code, password string) (*peer, uuid.UUID, error) {
 		return nil, uuid.Nil, errFull
 	}
 
+	participantID, err := room.nextParticipantID(username)
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
 	for {
 		token, err := cryptorand.String(tokenLength)
 		if err != nil {
 			return nil, uuid.Nil, err
 		}
-		participantID, err := cryptorand.StringCharset(cryptorand.Human, participantIDLength)
-		if err != nil {
-			return nil, uuid.Nil, err
-		}
 		if _, exists := room.participants[token]; exists {
-			continue
-		}
-		if _, exists := room.participantsByID[participantID]; exists {
 			continue
 		}
 
@@ -197,6 +203,32 @@ func (s *Service) join(code, password string) (*peer, uuid.UUID, error) {
 		room.participants[token] = peer
 		room.participantsByID[participantID] = peer
 		return peer, room.instanceID, nil
+	}
+}
+
+func (r *room) nextParticipantID(username string) (string, error) {
+	username = strings.TrimSpace(username)
+	if username != "" {
+		base := authenticatedParticipantIDPrefix + username
+		if _, exists := r.participantsByID[base]; !exists {
+			return base, nil
+		}
+		for suffix := 2; ; suffix++ {
+			candidate := fmt.Sprintf("%s-%d", base, suffix)
+			if _, exists := r.participantsByID[candidate]; !exists {
+				return candidate, nil
+			}
+		}
+	}
+
+	for {
+		participantID, err := cryptorand.StringCharset(cryptorand.Human, participantIDLength)
+		if err != nil {
+			return "", err
+		}
+		if _, exists := r.participantsByID[participantID]; !exists {
+			return participantID, nil
+		}
 	}
 }
 
