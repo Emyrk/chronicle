@@ -123,6 +123,18 @@ function formatDuration(startTime: string, endTime: string): string {
   return minutes > 0 ? `${minutes}:${seconds.toString().padStart(2, "0")}` : `${seconds}s`;
 }
 
+/** A marker's hover card: the fight, how long it lasted, and how far into the instance it started. */
+function MarkerTooltip({ route, instanceStartMs, small = false }: { route: EncounterRoute; instanceStartMs: number; small?: boolean }) {
+  const status = ENCOUNTER_STATUS[route.encounter.kill_type];
+  const offset = formatDuration(new Date(instanceStartMs).toISOString(), route.encounter.start_time);
+  return (
+    <span className={`pointer-events-none absolute left-1/2 top-full mt-1 hidden -translate-x-1/2 flex-col items-center whitespace-nowrap rounded bg-black/95 text-white shadow-lg group-hover:flex ${small ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-1 text-[10px]"}`}>
+      <span className="font-medium">{route.encounter.name} · {status.label}</span>
+      <span className="text-white/60">{formatDuration(route.encounter.start_time, route.encounter.end_time)} long · {offset} into the run</span>
+    </span>
+  );
+}
+
 function cameraPointStyle(point: MapPoint, camera: MapCamera) {
   return {
     left: `calc(${point.leftPercent * camera.scale}% + ${camera.x}px)`,
@@ -130,12 +142,13 @@ function cameraPointStyle(point: MapPoint, camera: MapCamera) {
   };
 }
 
-function RouteMarker({ route, index, viewport, camera, highlighted }: {
+function RouteMarker({ route, index, viewport, camera, highlighted, instanceStartMs }: {
   route: EncounterRoute;
   index: number;
   viewport: ReturnType<typeof fitMapViewport>;
   camera: MapCamera;
   highlighted: boolean;
+  instanceStartMs: number;
 }) {
   const point = pointInMapViewport(route.points.at(-1)!, viewport);
   const status = ENCOUNTER_STATUS[route.encounter.kill_type];
@@ -157,9 +170,7 @@ function RouteMarker({ route, index, viewport, camera, highlighted }: {
       >
         {index + 1}
       </div>
-      <span className="pointer-events-none absolute left-1/2 top-full mt-1 hidden -translate-x-1/2 whitespace-nowrap rounded bg-black/95 px-2 py-1 text-[10px] font-medium text-white shadow-lg group-hover:block">
-        {route.encounter.name} · {status.label}
-      </span>
+      <MarkerTooltip route={route} instanceStartMs={instanceStartMs} />
     </div>
   );
 }
@@ -181,10 +192,11 @@ function JourneyEndpoint({ point, camera, kind }: {
   );
 }
 
-function TransitMarker({ route, viewport, camera }: {
+function TransitMarker({ route, viewport, camera, instanceStartMs }: {
   route: EncounterRoute;
   viewport: ReturnType<typeof fitMapViewport>;
   camera: MapCamera;
+  instanceStartMs: number;
 }) {
   const point = pointInMapViewport(route.points.at(-1)!, viewport);
   const status = ENCOUNTER_STATUS[route.encounter.kill_type];
@@ -195,9 +207,7 @@ function TransitMarker({ route, viewport, camera }: {
       role="img"
       aria-label={`${route.encounter.name}, unselected ${status.label.toLowerCase()} encounter`}
     >
-      <span className="pointer-events-none absolute left-1/2 top-full mt-1 hidden -translate-x-1/2 whitespace-nowrap rounded bg-black/95 px-1.5 py-0.5 text-[9px] font-medium text-white shadow-lg group-hover:block">
-        {route.encounter.name} · {status.label}
-      </span>
+      <MarkerTooltip route={route} instanceStartMs={instanceStartMs} small />
     </div>
   );
 }
@@ -485,6 +495,8 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
     minScale,
   );
   const camera = userCamera ?? homeCamera;
+  // Markers say how far into the instance each fight started.
+  const instanceStartMs = Math.min(...props.context.instance.encounters.map((encounter) => new Date(encounter.start_time).getTime()));
   useLayoutEffect(() => {
     layoutRef.current = { rect: mapCanvasRect, minScale, home: homeCamera };
   });
@@ -636,7 +648,7 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
             <JourneyEndpoint point={pointInMapViewport(journeyEndPoint, viewport)} camera={camera} kind="end" />
           )}
           {transitRoutes.map((route) => (
-            <TransitMarker key={`transit-marker-${route.encounter.id}`} route={route} viewport={viewport} camera={camera} />
+            <TransitMarker key={`transit-marker-${route.encounter.id}`} route={route} viewport={viewport} camera={camera} instanceStartMs={instanceStartMs} />
           ))}
           {routes.slice(0, -1).map((route, index) => (
             <RouteMarker
@@ -646,6 +658,7 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
               viewport={viewport}
               camera={camera}
               highlighted={hoveredEncounterId === route.encounter.id}
+              instanceStartMs={instanceStartMs}
             />
           ))}
           </div>

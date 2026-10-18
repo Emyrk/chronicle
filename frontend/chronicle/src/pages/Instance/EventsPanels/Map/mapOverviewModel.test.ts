@@ -105,7 +105,7 @@ describe("map route overview model", () => {
     expect(pointInMapViewport({ leftPercent: 45, topPercent: 55 }, viewport)).toEqual({ leftPercent: 100, topPercent: 100 });
   });
 
-  it("retains unselected encounters between selected fights", () => {
+  it("retains unselected encounters up to the last selected fight, from the start of the run", () => {
     const encounters = new Map([
       ["before", mapEncounter("before", 0, 50)],
       ["one", mapEncounter("one", 100, 300)],
@@ -114,6 +114,7 @@ describe("map route overview model", () => {
       ["after", mapEncounter("after", 700, 800)],
     ]);
     expect(selectMapJourneyEncounters(encounters, ["one", "two"]).map(({ encounterId }) => encounterId)).toEqual([
+      "before",
       "one",
       "transit",
       "two",

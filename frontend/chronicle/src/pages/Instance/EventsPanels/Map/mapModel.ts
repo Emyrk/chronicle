@@ -355,10 +355,11 @@ export function selectMapJourneyEncounters(
     .filter((encounter): encounter is MapEncounterPositions => Boolean(encounter));
   if (selected.length === 0) return [];
 
-  const startMs = Math.min(...selected.map((encounter) => encounter.startMs));
+  // The journey runs from the start of the run (the way to the first selected
+  // fight included) to the end of the last selected fight.
   const endMs = Math.max(...selected.map((encounter) => encounter.endMs));
   return Array.from(encounters.values())
-    .filter((encounter) => encounter.endMs >= startMs && encounter.startMs <= endMs)
+    .filter((encounter) => encounter.startMs <= endMs)
     .sort((left, right) => left.startMs - right.startMs);
 }
 
