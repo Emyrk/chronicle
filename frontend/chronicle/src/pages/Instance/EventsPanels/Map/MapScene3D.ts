@@ -591,6 +591,8 @@ interface WalkState {
   /** The gold capsule: shown while the chosen monster loads, or for good without one. */
   capsule: THREE.Mesh;
   model: WalkAvatarModel | null;
+  /** The body's turn from `yaw` toward a strafe (radians, + is left); eases toward its target. */
+  bodyTurn: number;
 }
 
 // You, in walk mode: a gold player capsule (no facing cone; the camera shows the way).
@@ -603,6 +605,8 @@ function createAvatar(geometries: Record<MapMarkerKind | "cone", THREE.BufferGeo
 
 /** Seconds to cross-fade between a monster's idle, walk, run and in-air clips. */
 const WALK_AVATAR_FADE_S = 0.2;
+/** How fast the body turns into and out of a strafe (1/s; ~95% of the way in 0.25 s). */
+const WALK_BODY_TURN_RATE = 12;
 
 // A chosen monster in walk mode: its clone of the loaded model, and its clips.
 interface WalkAvatarModel {
@@ -3530,6 +3534,7 @@ export class MapScene3D {
       avatar,
       capsule: avatar.children[0] as THREE.Mesh,
       model: null,
+      bodyTurn: 0,
     };
     this.dressAvatar(this.walk);
     this.controls.enabled = false;
@@ -3687,8 +3692,13 @@ export class MapScene3D {
       playWalkAvatarState(walk.model, !walk.grounded ? "air" : !forward && !strafe ? "idle" : forward < 0 ? "walk" : "run");
       walk.model.mixer.update(dt);
     }
+    // Strafing turns the body toward where it goes, as in WoW: 45° running
+    // diagonally, 90° sideways, and backing away diagonally while backpedalling.
+    // Only the model turns; movement and the camera keep the facing.
+    const bodyTurn = !strafe ? 0 : forward < 0 ? Math.atan2(strafe, -forward) : -Math.atan2(strafe, forward);
+    walk.bodyTurn += (bodyTurn - walk.bodyTurn) * (1 - Math.exp(-WALK_BODY_TURN_RATE * dt));
     walk.avatar.position.copy(walk.position);
-    walk.avatar.rotation.y = walk.yaw;
+    walk.avatar.rotation.y = walk.yaw + walk.bodyTurn;
     const head = this.walkHead.set(walk.position.x, walk.position.y + WALK_EYE_YARDS * scale, walk.position.z);
     const firstPerson = walk.camDistance <= WALK_FIRST_PERSON_YARDS;
     walk.avatar.visible = !firstPerson;

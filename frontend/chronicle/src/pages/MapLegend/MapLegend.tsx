@@ -382,7 +382,7 @@ export function MapLegend() {
         <div className="grid gap-4 text-sm text-muted-foreground sm:grid-cols-2">
           <p>
             <Swatch color={hexCss(WALK_AVATAR_COLOR)} label={<strong className="text-foreground">Walk mode</strong>} /> (press G over the map, or the footprints button)
-            puts you on the ground to join the fight, as a creature from Azeroth you choose in Map settings → Character (it stands, walks and runs
+            puts you on the ground to join the fight, as a creature from Azeroth you choose in Map settings → Character (it stands, walks and runs, turning into a strafe
             as you move) or the classic gold figure; zoom all the way in for first person.
           </p>
           <p>
