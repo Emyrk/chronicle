@@ -37,7 +37,7 @@ import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { createStreamCursor } from "@/api/protodecode/decode";
 import { SlainSchema, type Slain } from "@/api/proto/chronicle_pb";
 import { isPlayerGuidFast } from "./EventsPanels/processors/guidCache";
-import { isReplayToggleKey } from "./replayToggleKey";
+import { useReplayToggleKey } from "./replayToggleKey";
 import { useSyncModeContext, useSyncModeContextOptional } from "./SyncModeContext";
 
 export type ReplayPosition = "top" | "bottom";
@@ -451,18 +451,13 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
   // K toggles play/pause, matching common media-player controls. Skipped while
   // YouTube drives playback (the button is disabled then too) so the two can
   // never disagree.
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (!isReplayToggleKey(event)) return;
-      const s = syncRef.current;
-      if (!s.enabled || s.externalDriver !== "none") return;
-      event.preventDefault();
-      if (s.isPlaying) s.pause();
-      else s.play();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  useReplayToggleKey(() => {
+    const s = syncRef.current;
+    if (!s.enabled || s.externalDriver !== "none") return false;
+    if (s.isPlaying) s.pause();
+    else s.play();
+    return true;
+  });
 
   // Calculate progress within encounter bounds
   const progress = useMemo(() => {

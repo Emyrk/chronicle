@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, type PointerEvent } from "react";
 import { Pause, Play, PowerOff, RotateCcw, Skull } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
+import { useReplayToggleKey } from "../../replayToggleKey";
 import type { PanelContext, PanelDefinition } from "../types";
 import { usePanelAggregation } from "../usePanelAggregation";
 import { usePlayerLifeState } from "../usePlayerLifeState";
@@ -113,6 +114,13 @@ export function ReplayControllerStrip({ result, context }: StripRenderProps<Repl
     sync.play();
   };
 
+  // K plays and pauses from anywhere on the page, as the Replay overlay's does.
+  useReplayToggleKey(() => {
+    if (disabled) return false;
+    togglePlay();
+    return true;
+  });
+
   const restart = () => {
     if (!sync || !bounds) return;
     seek(bounds.startMs);
@@ -143,7 +151,7 @@ export function ReplayControllerStrip({ result, context }: StripRenderProps<Repl
       {/* Stacked in a narrow column so the bars get the width: transport and clock, speeds, legend. */}
       <div className="flex shrink-0 flex-col gap-1">
         <div className="flex items-center gap-1">
-          <button type="button" onClick={togglePlay} disabled={disabled} title={playing ? "Pause" : "Play"} aria-label={playing ? "Pause" : "Play"} className={controlButtonClass}>
+          <button type="button" onClick={togglePlay} disabled={disabled} title={playing ? "Pause (K)" : "Play (K)"} aria-label={playing ? "Pause" : "Play"} className={controlButtonClass}>
             {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
           </button>
           <button type="button" onClick={restart} disabled={disabled} title="Restart" aria-label="Restart" className={controlButtonClass}>
