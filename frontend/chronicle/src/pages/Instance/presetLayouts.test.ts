@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_INSTANCE_PANEL_OPTIONS, defaultInstanceLayout, MINI_MAP_PANEL_OPTION } from "./viewDefaults";
+import { DEFAULT_INSTANCE_PANEL_OPTIONS, defaultInstanceLayout } from "./viewDefaults";
 import {
   DEFAULT_PRESET_ID,
   getAvailablePresetLayouts,
@@ -92,10 +92,10 @@ describe("Summary mini map", () => {
     return preset;
   }
 
-  it("puts a mini map beside the timeline for logs with positions", () => {
+  it("puts a Mini Map panel beside the timeline for logs with positions", () => {
     const summary = panelsPreset(["unit-position"]);
-    const mapId = Object.entries(summary.panelTypes).find(([, type]) => type === "map")?.[0];
-    expect(mapId && summary.panelOptions[mapId]).toBe(MINI_MAP_PANEL_OPTION);
+    const mapId = Object.entries(summary.panelTypes).find(([, type]) => type === "mini_map")?.[0];
+    expect(mapId).toBeDefined();
     expect(summary.layoutItems.find((item) => item.id === mapId)).toMatchObject({ x: 8, y: 0, w: 4 });
     // The timeline shares the top row and keeps its options.
     expect(summary.layoutItems.find((item) => item.id === "panel-1")).toMatchObject({ x: 0, y: 0, w: 8 });
@@ -106,22 +106,21 @@ describe("Summary mini map", () => {
     const summary = presetLayoutById("summary", ["unit-position"], true);
     expect(summary).toBe(PRESET_LAYOUTS_BY_ID.summary);
     const mobile = defaultInstanceLayout(["unit-position"], true);
-    expect(mobile.items.some((item) => mobile.panelTypes[item.id] === "map")).toBe(false);
+    expect(mobile.items.some((item) => mobile.panelTypes[item.id] === "mini_map")).toBe(false);
     // The Map tab itself stays available on mobile.
     expect(getAvailablePresetLayouts(["unit-position"], true).map((preset) => preset.id)).toContain("map");
   });
 
   it("leaves Summary unchanged for logs without positions", () => {
-    expect(Object.values(panelsPreset([]).panelTypes)).not.toContain("map");
+    expect(Object.values(panelsPreset([]).panelTypes)).not.toContain("mini_map");
     expect(getAvailablePresetLayouts([]).find((preset) => preset.id === "summary")).toBe(PRESET_LAYOUTS_BY_ID.summary);
   });
 
   it("is the built-in default layout for logs with positions", () => {
     const withPositions = defaultInstanceLayout(["unit-position"]);
-    const map = withPositions.items.find((item) => withPositions.panelTypes[item.id] === "map");
-    expect(map && withPositions.panelOptions[map.id]).toBe(MINI_MAP_PANEL_OPTION);
+    expect(withPositions.items.some((item) => withPositions.panelTypes[item.id] === "mini_map")).toBe(true);
 
     const without = defaultInstanceLayout([]);
-    expect(without.items.some((item) => without.panelTypes[item.id] === "map")).toBe(false);
+    expect(without.items.some((item) => without.panelTypes[item.id] === "mini_map")).toBe(false);
   });
 });

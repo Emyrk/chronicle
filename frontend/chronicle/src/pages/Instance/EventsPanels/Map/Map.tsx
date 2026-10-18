@@ -4,7 +4,6 @@ import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Crosshair, Focus, Footprints, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Maximize2, Pause, Play, Route, Settings2, Skull, Timer, X } from "lucide-react";
-import { MINI_MAP_PANEL_OPTION } from "../../viewDefaults";
 import { parseLivePresenceSurface } from "../../liveSessionProtocol";
 import { LivePresenceIndicator } from "../../LivePresenceIndicator";
 import { useLiveSessionOptional } from "../../LiveSessionContext";
@@ -120,6 +119,9 @@ function storeMesh(on: boolean) {
 
 const mapFramingButtonClass = "pointer-events-auto flex items-center gap-1 rounded-sm border border-black/80 bg-black/75 px-2 py-1 text-[10px] font-medium text-white/75 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-white disabled:opacity-40 disabled:hover:text-white/75";
 const framingButtonClass = "flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:hover:text-muted-foreground";
+
+/** The Map panel option that made it a mini map before the Mini Map panel; still honoured for saved layouts and links. */
+const MINI_MAP_PANEL_OPTION = "mini";
 
 /** The panel option asks for the mini map: the replay without overlays, for small panels. */
 export function isMiniMapOption(option: string | null | undefined): boolean {
@@ -777,9 +779,10 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   );
 }
 
-function MapContent(props: PanelRenderProps<MapResult>) {
+function MapContent({ forceMini = false, ...props }: PanelRenderProps<MapResult> & { forceMini?: boolean }) {
   const [wholeRun, setWholeRun] = useState(false);
-  const mini = isMiniMapOption(props.panelOption);
+  // The Mini Map panel is always mini; a Map panel is mini with the (older) "mini" option.
+  const mini = forceMini || isMiniMapOption(props.panelOption);
   const selectedCount = props.context.selectedEncounterIds.length;
   const presentation = mapPresentationForSelection(selectedCount, wholeRun);
   if (presentation === "replay-3d" && selectedCount !== 1) {
@@ -838,10 +841,11 @@ function MapMessage({ title, detail }: { title: string; detail: string }) {
   );
 }
 
-export function createMapPanel(): PanelDefinition<MapResult, MapProcessorEvent> {
+/** The Map panel; `mini` makes the Mini Map panel (just the replay, for small spots like the Summary). */
+export function createMapPanel({ mini = false }: { mini?: boolean } = {}): PanelDefinition<MapResult, MapProcessorEvent> {
   return {
     ...mapProcessor,
-    label: "Map",
+    label: mini ? "Mini Map" : "Map",
     icon: <MapIcon className="h-4 w-4" />,
     keybinds: MAP_CONTROL_KEYBINDS,
     requiredCapabilities: ["unit-position"],
@@ -851,6 +855,6 @@ export function createMapPanel(): PanelDefinition<MapResult, MapProcessorEvent> 
     hoverHeader: () => true,
     supportsFiltering: false,
     underConstruction: true,
-    render: (props) => <MapContent {...props} />,
+    render: (props) => <MapContent {...props} forceMini={mini} />,
   };
 }

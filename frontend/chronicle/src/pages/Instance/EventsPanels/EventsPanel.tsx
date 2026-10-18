@@ -146,6 +146,7 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   timeline: createTimelinePanel(),
   // Replay
   map: createMapPanel(),
+  mini_map: createMapPanel({ mini: true }),
   raid_frames: createRaidFramesPanel(),
   activity_log: createActivityLogPanel(),
   status: createStatusPanel(),

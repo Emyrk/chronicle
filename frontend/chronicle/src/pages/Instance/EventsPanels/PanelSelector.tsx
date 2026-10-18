@@ -84,7 +84,7 @@ const PANEL_CATEGORIES: PanelCategory[] = [
   },
   {
     label: "Replay",
-    items: ["map", "raid_frames", "activity_log", "status", "healer_casts"],
+    items: ["map", "mini_map", "raid_frames", "activity_log", "status", "healer_casts"],
   },
   {
     label: "Utility",

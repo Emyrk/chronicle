@@ -53,6 +53,7 @@ export const PANEL_EXPLAINERS: Partial<
   comparison: comparisonExplainer,
   consumables_ledger: consumablesLedgerExplainer,
   map: mapExplainer,
+  mini_map: mapExplainer,
 };
 
 /**

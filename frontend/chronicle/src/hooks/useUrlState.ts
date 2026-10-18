@@ -651,6 +651,7 @@ const PANEL_CODES: Record<PanelType, string> = {
   timeline: 'tl',
   rotations: 'rot',
   map: 'map',
+  mini_map: 'mmap',
   raid_frames: 'rf',
   activity_log: 'acl',
   status: 'st',

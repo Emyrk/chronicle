@@ -5,7 +5,6 @@ import {
   DEFAULT_INSTANCE_LAYOUT_ITEMS,
   DEFAULT_INSTANCE_PANEL_TYPES,
   DEFAULT_INSTANCE_PANEL_FILTERS,
-  MINI_MAP_PANEL_OPTION,
   POSITION_SUMMARY_CAPABILITY,
   POSITION_SUMMARY_LAYOUT_ITEMS,
   POSITION_SUMMARY_PANEL_TYPES,
@@ -143,7 +142,7 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
       desktopOnly: true,
       layoutItems: POSITION_SUMMARY_LAYOUT_ITEMS,
       panelTypes: POSITION_SUMMARY_PANEL_TYPES,
-      panelOptions: { "panel-6": MINI_MAP_PANEL_OPTION },
+      panelOptions: {},
     },
   },
   {
