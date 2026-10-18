@@ -12,11 +12,11 @@ describe("spell overrides", () => {
     expect(activeOverrides(["vanilla", "kronos"], overrides).map((o) => o.id)).toEqual(["b"]);
   });
 
-  it("tracks Arcane Rupture ranks 1 through 6 on Nightmare of Ursol", () => {
+  it("tracks the Arcane Rupture aura on Nightmare of Ursol", () => {
     const arcaneRupture = activeOverrides(["nightmare-of-ursol"]).find((override) => override.id === "arcane-rupture");
 
     expect(arcaneRupture).toMatchObject({
-      spellIds: [51955, 51956, 51957, 51958, 51959, 51960],
+      spellIds: [52502],
       showAsCooldown: {},
       proc: true,
       trackAura: true,

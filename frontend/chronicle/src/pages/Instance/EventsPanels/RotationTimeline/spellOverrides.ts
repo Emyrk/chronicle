@@ -63,13 +63,13 @@ export const SPELL_OVERRIDES: SpellOverride[] = [
   },
   {
     id: "arcane-rupture",
-    spellIds: [51955, 51956, 51957, 51958, 51959, 51960],
+    spellIds: [52502],
     flavor: ["nightmare-of-ursol"],
     showAsCooldown: {},
     proc: true,
     trackAura: true,
     color: "var(--color-school-arcane)",
-    note: "Arcane Rupture ranks 1–6 are self-debuffs that should tint the lane for their active duration.",
+    note: "Arcane Rupture is a self-debuff that should tint the lane for its active duration.",
   },
   {
     id: "blood-tap",

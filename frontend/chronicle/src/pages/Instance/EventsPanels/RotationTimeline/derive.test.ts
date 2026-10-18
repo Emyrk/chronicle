@@ -286,7 +286,7 @@ describe("withOverrideBuffCasts", () => {
   it("adds a default-tracked debuff beside the spell's own cast", () => {
     const tracked = [{
       id: "arcane-rupture",
-      spellIds: [51955],
+      spellIds: [52502],
       showAsCooldown: {},
       proc: true,
       trackAura: true,
@@ -295,7 +295,7 @@ describe("withOverrideBuffCasts", () => {
     const own = cast(500, 51954, { spellName: "Arcane Rupture" });
     const debuff = {
       ...buff(1000, 9000),
-      spellId: 51955,
+      spellId: 52502,
       spellName: "Arcane Rupture",
       isBuff: false,
     };
@@ -303,7 +303,7 @@ describe("withOverrideBuffCasts", () => {
 
     expect(out.goCasts.map((candidate) => [candidate.source, candidate.spellId, candidate.buffEndMs])).toEqual([
       ["spell_go", 51954, undefined],
-      ["aura", 51955, 9000],
+      ["aura", 52502, 9000],
     ]);
   });
 
