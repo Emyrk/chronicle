@@ -514,14 +514,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
 				return err
 			}
-			var guild *database.Guild
-			if publicLog {
-				guild, err = finalized.Guilds.Insert(ctx, encountersState.Units, instanceID, realmID, resolved.DatasetID, tx)
-			} else {
-				// Preserve the instance's intrinsic guild association without letting
-				// private gear or talents update the public armory projection.
-				guild, err = finalized.Guilds.InsertGuilds(ctx, realmID, tx)
-			}
+			guild, err := finalized.Guilds.Insert(ctx, encountersState.Units, instanceID, realmID, resolved.DatasetID, tx)
 			if err != nil {
 				return fmt.Errorf("insert guild: %w", err)
 			}

@@ -61,13 +61,6 @@ func New(units *unitdb.Units) *Tracker {
 	}
 }
 
-// InsertGuilds persists guild identities and returns the instance's majority
-// guild without updating the public armory projection.
-func (g *Tracker) InsertGuilds(ctx context.Context, realmID uuid.UUID, tx *authz.AuthzTX) (*database.Guild, error) {
-	_, guild, err := g.insertGuilds(ctx, realmID, tx)
-	return guild, err
-}
-
 func (g *Tracker) insertGuilds(ctx context.Context, realmID uuid.UUID, tx *authz.AuthzTX) (map[string]uuid.UUID, *database.Guild, error) {
 	guildIDs := make(map[string]uuid.UUID)
 	mostGuildPlayers := 0
