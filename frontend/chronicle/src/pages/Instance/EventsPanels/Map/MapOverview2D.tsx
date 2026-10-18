@@ -22,7 +22,7 @@ import {
   coverMapCanvasRect,
   dominantMapId,
   encounterRouteSamples,
-  fitMapCameraToPoints,
+  fitFreeMapCameraToPoints,
   fitMapViewport,
   pointInMapViewport,
   overviewDungeonCanvas,
@@ -270,12 +270,20 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
   const mapFrameRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const [mapShellSize, setMapShellSize] = useState({ width: 0, height: 0 });
-  const [camera, setCamera] = useState<MapCamera>({ scale: 1, x: 0, y: 0 });
+  // Null until the user pans or zooms: the camera is then the one framing the route.
+  const [userCamera, setUserCamera] = useState<MapCamera | null>(null);
   const [hoveredEncounterId, setHoveredEncounterId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   // The map covers the whole shell (no bars) and can be dragged partly off it.
   // The stable handlers below read the current layout from here.
-  const layoutRef = useRef<{ rect: MapCanvasRect; minScale: number }>({ rect: { left: 0, top: 0, width: 0, height: 0 }, minScale: 1 });
+  const layoutRef = useRef<{ rect: MapCanvasRect; minScale: number; home: MapCamera }>({
+    rect: { left: 0, top: 0, width: 0, height: 0 },
+    minScale: 1,
+    home: { scale: 1, x: 0, y: 0 },
+  });
+  const setCamera = useCallback((update: (current: MapCamera) => MapCamera) => {
+    setUserCamera((current) => update(current ?? layoutRef.current.home));
+  }, []);
 
   const handleWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
     if (!event.shiftKey || event.target instanceof Element && event.target.closest("[data-map-controls]")) return;
@@ -292,7 +300,7 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
       bounds,
       minScale,
     ));
-  }, []);
+  }, [setCamera]);
 
   const changeZoom = useCallback((multiplier: number) => {
     const frame = mapFrameRef.current;
@@ -307,7 +315,7 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
       bounds,
       minScale,
     ));
-  }, []);
+  }, [setCamera]);
 
   const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || event.target instanceof Element && event.target.closest("[data-map-controls]")) return;
@@ -329,7 +337,7 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
       x: current.x + deltaX,
       y: current.y + deltaY,
     }, rect, bounds, minScale));
-  }, []);
+  }, [setCamera]);
 
   const stopDragging = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (dragRef.current?.pointerId !== event.pointerId) return;
@@ -388,9 +396,6 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
   ), [canvas, mapShellSize]);
   // Zooming out as far as the whole map fitting the shell.
   const minScale = canvas ? containScaleForCover(mapShellSize, canvas) : 1;
-  useLayoutEffect(() => {
-    layoutRef.current = { rect: mapCanvasRect, minScale };
-  }, [mapCanvasRect, minScale]);
 
   const projectSample = useCallback((sample: MapPositionSample, calibration: ReturnType<typeof resolveDungeonMapCalibration>): MapPoint | null => {
     if (!artwork || sample.mapId !== mapId) return null;
@@ -448,7 +453,8 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
       const canvasSize = { width: canvas.width, height: canvas.height };
       const nextCanvasRect = coverMapCanvasRect(size, canvasSize);
       setMapShellSize(size);
-      setCamera((current) => clampFreeMapCamera(current, nextCanvasRect, size, containScaleForCover(size, canvasSize)));
+      // The route-framing camera follows the size on its own; a user's one is kept in bounds.
+      setUserCamera((current) => current && clampFreeMapCamera(current, nextCanvasRect, size, containScaleForCover(size, canvasSize)));
     };
     updateSize();
     const observer = new ResizeObserver(updateSize);
@@ -460,13 +466,27 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
   const allPoints = journeyRoutes.flatMap((route) => route.points);
   const viewport = fitMapViewport(allPoints, 6, 32);
   const mapScale = 100 / viewport.spanPercent;
-  const focusEncounter = useCallback((route: EncounterRoute) => {
-    // The covering rect is centred on the shell, so fitting within the rect centres on screen.
-    setCamera(clampFreeMapCamera(fitMapCameraToPoints(
+  // Until the user moves it, the camera frames the whole route (the covering
+  // rect alone crops it); artwork beyond the route fills the rest of the shell.
+  const homeCamera = fitFreeMapCameraToPoints(
+    allPoints.map((point) => pointInMapViewport(point, viewport)),
+    mapCanvasRect,
+    mapShellSize,
+    minScale,
+  );
+  const camera = userCamera ?? homeCamera;
+  useLayoutEffect(() => {
+    layoutRef.current = { rect: mapCanvasRect, minScale, home: homeCamera };
+  });
+  const focusEncounter = (route: EncounterRoute) => {
+    setUserCamera(fitFreeMapCameraToPoints(
       route.points.map((point) => pointInMapViewport(point, viewport)),
       mapCanvasRect,
-    ), mapCanvasRect, mapShellSize, minScale));
-  }, [mapCanvasRect, mapShellSize, minScale, viewport]);
+      mapShellSize,
+      minScale,
+      18,
+    ));
+  };
   const routeConnectors = journeyRoutes.slice(1).flatMap((route, index) => {
     const previous = journeyRoutes[index];
     const from = previous.points.at(-1);
@@ -536,7 +556,7 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
           onPointerUp={stopDragging}
           onPointerCancel={stopDragging}
           onLostPointerCapture={stopDragging}
-          onDoubleClick={() => setCamera({ scale: 1, x: 0, y: 0 })}
+          onDoubleClick={() => setUserCamera(null)}
         >
           {/* The whole shell drags; the map's covering rect sits inside it and clips at the shell. */}
           <div className="absolute" style={mapCanvasRect}>
@@ -629,10 +649,10 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
             <button type="button" aria-label="Zoom out" onClick={() => changeZoom(0.8)} className="px-2 py-0.5 hover:bg-white/10">−</button>
             <button type="button" aria-label="Zoom in" onClick={() => changeZoom(1.25)} className="border-l border-white/15 px-2 py-0.5 hover:bg-white/10">+</button>
           </div>
-          {(camera.scale !== 1 || camera.x !== 0 || camera.y !== 0) && (
+          {userCamera !== null && (
             <button
               type="button"
-              onClick={() => setCamera({ scale: 1, x: 0, y: 0 })}
+              onClick={() => setUserCamera(null)}
               className="rounded border border-white/15 px-1.5 py-0.5 font-medium text-white/85 hover:bg-white/10"
             >
               Reset

@@ -94,6 +94,44 @@ export function clampFreeMapCamera(
   };
 }
 
+/**
+ * The free camera that frames these points (percentages of `rect`) in the middle
+ * of `viewport`, leaving `paddingPercent` of the viewport around them.
+ */
+export function fitFreeMapCameraToPoints(
+  points: MapPoint[],
+  rect: MapCanvasRect,
+  viewport: MapCameraBounds,
+  minScale: number,
+  paddingPercent = 8,
+  maximumScale = 4,
+): MapCamera {
+  if (points.length === 0 || rect.width <= 0 || rect.height <= 0 || viewport.width <= 0 || viewport.height <= 0) {
+    return { scale: 1, x: 0, y: 0 };
+  }
+  let left = points[0].leftPercent;
+  let right = left;
+  let top = points[0].topPercent;
+  let bottom = top;
+  for (const point of points) {
+    left = Math.min(left, point.leftPercent);
+    right = Math.max(right, point.leftPercent);
+    top = Math.min(top, point.topPercent);
+    bottom = Math.max(bottom, point.topPercent);
+  }
+  const available = Math.max(0.1, 1 - (2 * paddingPercent) / 100);
+  const width = Math.max(((right - left) / 100) * rect.width, 1);
+  const height = Math.max(((bottom - top) / 100) * rect.height, 1);
+  const scale = Math.max(minScale, Math.min(maximumScale, (viewport.width * available) / width, (viewport.height * available) / height));
+  const centreX = ((left + right) / 2 / 100) * rect.width;
+  const centreY = ((top + bottom) / 2 / 100) * rect.height;
+  return clampFreeMapCamera({
+    scale,
+    x: viewport.width / 2 - rect.left - centreX * scale,
+    y: viewport.height / 2 - rect.top - centreY * scale,
+  }, rect, viewport, minScale);
+}
+
 /** Zoom a free camera about a point given in viewport coordinates. */
 export function zoomFreeMapCamera(
   camera: MapCamera,

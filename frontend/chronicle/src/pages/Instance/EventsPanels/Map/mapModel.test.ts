@@ -10,6 +10,7 @@ import {
   clampViewport,
   containScaleForCover,
   coverMapCanvasRect,
+  fitFreeMapCameraToPoints,
   zoomFreeMapCamera,
   focusCentre,
   INITIAL_MAP_FRAMING,
@@ -632,6 +633,17 @@ describe("free overview camera", () => {
     const farUp = clampFreeMapCamera({ scale: 1, x: 0, y: -10_000 }, rect, shell, 0.5);
     // Its bottom edge stays 48px inside the top of the shell.
     expect(rect.top + farUp.y + rect.height).toBe(48);
+  });
+
+  it("frames a route that the covering rect would crop", () => {
+    // Spans the full map height, which the cover crops in a wide shell.
+    const points = [{ leftPercent: 40, topPercent: 2 }, { leftPercent: 60, topPercent: 98 }];
+    const camera = fitFreeMapCameraToPoints(points, rect, shell, 0.5);
+    for (const point of points) {
+      const y = rect.top + camera.y + (point.topPercent / 100) * rect.height * camera.scale;
+      expect(y).toBeGreaterThanOrEqual(0);
+      expect(y).toBeLessThanOrEqual(shell.height);
+    }
   });
 
   it("zooms between the fit-whole scale and 5 about the focal point", () => {
