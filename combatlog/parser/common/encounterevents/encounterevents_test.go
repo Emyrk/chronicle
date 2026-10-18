@@ -118,17 +118,18 @@ func TestUnitTelemetryDeduplicationIsEncounterScoped(t *testing.T) {
 	require.Equal(t, int64(1), secondEncounter.UnitResources.Count)
 }
 
-func TestUnitPositionsAreNotDeduplicated(t *testing.T) {
+func TestUnitPositionCompactionPreservesRunEndpointsAndOptionalZChanges(t *testing.T) {
 	t.Parallel()
 
 	ts := time.Date(2026, time.October, 16, 12, 0, 0, 0, time.UTC)
 	unit := guid.GUID(1)
 	firstZ := 8.25
 	sameZ := 8.25
+	anotherSameZ := 8.25
 	changedZ := 9.5
 	events := encounterevents.New(false)
 
-	for i, z := range []*float64{&firstZ, &sameZ, &changedZ, nil} {
+	for i, z := range []*float64{&firstZ, &sameZ, &anotherSameZ, &changedZ, nil} {
 		require.NoError(t, events.Process(&messages.UnitPosition{
 			MessageBase: messages.Base(ts.Add(time.Duration(i) * time.Second)),
 			Unit:        unit,
