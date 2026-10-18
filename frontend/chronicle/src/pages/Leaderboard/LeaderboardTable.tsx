@@ -99,6 +99,9 @@ export function LeaderboardTable({ entries, startRank, className }: LeaderboardT
                   onClick={(event) => {
                     navigateWithModifiers(`/instances/${entry.slug || entry.instance_id}`, event, navigate)
                   }}
+                  onAuxClick={(event) => {
+                    navigateWithModifiers(`/instances/${entry.slug || entry.instance_id}`, event, navigate)
+                  }}
                 >
                   <td className="px-4 py-3 text-center font-medium">
                     {MEDAL_ICONS[rank] ?? (

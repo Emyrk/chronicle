@@ -122,6 +122,9 @@ export function RankingsTable({ entries, loading = false, metric = "dps" }: Rank
                 onClick={(event) => {
                   navigateWithModifiers(`/instances/${entry.log_hashed_slug}`, event, navigate)
                 }}
+                onAuxClick={(event) => {
+                  navigateWithModifiers(`/instances/${entry.log_hashed_slug}`, event, navigate)
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault()
