@@ -53,6 +53,7 @@ export function createHealingTakenPanel(
     label: config.label,
     icon: config.icon,
     keybinds: [{ keys: "Esc", action: "Return from a focused player to the player list" }],
+    renderOnlyOptionTokens: ["f:", "noranks", "effective", "overheal", "total"],
     supportsPerSecond: true,
     supportsFiltering: true,
     groupingOptions: [

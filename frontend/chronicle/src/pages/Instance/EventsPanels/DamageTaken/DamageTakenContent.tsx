@@ -11,24 +11,7 @@ import { extractGroupingFromPanelOption, extractPetModeFromPanelOption } from ".
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { useDamageTakenBreakout } from "./DamageTakenBreakout";
 import { formatNumber } from "@/lib/format";
-
-const FOCUS_PREFIX = "f:";
-
-function parseFocusFromOption(option: string | null | undefined): string | null {
-  if (!option) return null;
-  const token = option.split(",").find(t => t.startsWith(FOCUS_PREFIX));
-  return token ? token.slice(FOCUS_PREFIX.length) : null;
-}
-
-function updatePanelOptionToken(
-  current: string | null | undefined,
-  prefix: string,
-  value: string | null,
-): string | null {
-  const tokens = current ? current.split(",").filter(t => !t.startsWith(prefix)) : [];
-  if (value) tokens.push(`${prefix}${value}`);
-  return tokens.length > 0 ? tokens.join(",") : null;
-}
+import { parseMetricPanelLiveState, updateMetricPanelLiveState } from "../metricPanelLiveState";
 
 /**
  * Aggregate damage taken data across selected encounters.
@@ -99,17 +82,19 @@ export function hasDamageTakenEncounterData(result: unknown): result is DamageTa
 export const DamageTakenContent = (props: DamageTakenContentProps) => {
   const { targetType = "players" } = props;
   const { result, context } = props;
-  const [showRanks, setShowRanks] = useState(true);
+  const { focusedEntityId: focusedPlayerId, showRanks } = useMemo(
+    () => parseMetricPanelLiveState(props.panelOption),
+    [props.panelOption],
+  );
 
   // Ctrl+click context menu
   const [contextMenu, setContextMenu] = useState<{
     x: number; y: number; playerId: string; playerName: string;
   } | null>(null);
 
-  const focusedPlayerId = useMemo(() => parseFocusFromOption(props.panelOption), [props.panelOption]);
   const setFocusedPlayerId = useCallback((id: string | null) => {
     if (!props.setPanelOption) return;
-    props.setPanelOption(updatePanelOptionToken(props.panelOption, FOCUS_PREFIX, id));
+    props.setPanelOption(updateMetricPanelLiveState(props.panelOption, { focusedEntityId: id }));
   }, [props.setPanelOption, props.panelOption]);
 
   // Grouping is now driven by panelOption tokens (persisted in URL)
@@ -219,7 +204,7 @@ export const DamageTakenContent = (props: DamageTakenContentProps) => {
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  onClick={() => setShowRanks(!showRanks)}
+                  onClick={() => props.setPanelOption?.(updateMetricPanelLiveState(props.panelOption, { showRanks: !showRanks }))}
                   className={cn(
                     "flex items-center gap-1 px-2 py-0.5 text-2xs rounded transition-colors cursor-pointer",
                     showRanks

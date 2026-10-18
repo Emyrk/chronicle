@@ -14,19 +14,7 @@ import { ChevronLeft, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useParsePills } from "../parsePills";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
-
-// ── Panel option encoding ──
-// panelOption is a comma-separated string of tokens stored in the URL.
-// Standard tokens: g:<grouping>, p:<petMode>, f:<playerId>, bc:<color>, t:<title>
-// Examples: null, "g:name", "p:individual,f:0xABC123"
-
-const FOCUS_PREFIX = "f:";
-
-function parseFocusFromOption(option: string | null | undefined): string | null {
-  if (!option) return null;
-  const token = option.split(",").find(t => t.startsWith(FOCUS_PREFIX));
-  return token ? token.slice(FOCUS_PREFIX.length) : null;
-}
+import { parseMetricPanelLiveState, updateMetricPanelLiveState } from "../metricPanelLiveState";
 
 /** Update a single token prefix in panelOption, preserving all other tokens. */
 function updatePanelOptionToken(
@@ -109,10 +97,13 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
   const { sourceType = "players" } = props;
   const { result, context, panelOption, setPanelOption } = props;
   const syncMode = useSyncModeContextOptional();
-  const [showRanks, setShowRanks] = useState(true);
 
-  // Derive focus, grouping, and pet mode from the URL-persisted panelOption tokens
-  const focusedPlayerId = useMemo(() => parseFocusFromOption(panelOption), [panelOption]);
+  // Durable display state is encoded in panelOption, which is keyed by panel ID
+  // in shared live-session snapshots.
+  const { focusedEntityId: focusedPlayerId, showRanks } = useMemo(
+    () => parseMetricPanelLiveState(panelOption),
+    [panelOption],
+  );
   const groupingDefault = sourceType === "pets" ? "default" : "merged";
   const grouping = extractGroupingFromPanelOption(panelOption, groupingDefault);
   const petMode = extractPetModeFromPanelOption(panelOption);
@@ -123,7 +114,7 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
 
   const setFocusedPlayerId = useCallback((id: string | null) => {
     if (!setPanelOption) return;
-    setPanelOption(updatePanelOptionToken(panelOption, FOCUS_PREFIX, id));
+    setPanelOption(updateMetricPanelLiveState(panelOption, { focusedEntityId: id }));
   }, [setPanelOption, panelOption]);
 
   const setPetGrouping = (pg: "owner" | "pet" | "pet_name", base?: string | null) => {
@@ -306,7 +297,7 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  onClick={() => setShowRanks(!showRanks)}
+                  onClick={() => setPanelOption?.(updateMetricPanelLiveState(panelOption, { showRanks: !showRanks }))}
                   className={cn(
                     "flex items-center gap-1 px-2 py-0.5 text-2xs rounded transition-colors cursor-pointer",
                     showRanks
