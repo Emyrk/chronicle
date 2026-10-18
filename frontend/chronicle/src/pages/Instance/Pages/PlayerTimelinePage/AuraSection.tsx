@@ -187,8 +187,8 @@ export function AuraSection({
     [players, view.align, view.isIgnored],
   );
 
-  const buffs = useMemo(
-    () => classifyRows(buildRows(players.map((p) => p.data.aurasOn.filter((a) => a.isBuff)), durationMs), players, spellMeta, adminIgnored),
+  const playerAuras = useMemo(
+    () => classifyRows(buildRows(players.map((p) => p.data.aurasOn), durationMs), players, spellMeta, adminIgnored),
     [players, durationMs, spellMeta, adminIgnored],
   );
 
@@ -255,8 +255,8 @@ export function AuraSection({
         >
           <AuraGroup
             title="Buffs"
-            otherLabel="Other buffs"
-            rows={buffs}
+            otherLabel="Other buffs & debuffs"
+            rows={playerAuras}
             isRaised={isRaised}
             onToggleRaised={onToggleRaised}
             {...groupProps}
@@ -380,7 +380,7 @@ interface AuraRowViewProps {
   /** Smaller, indented rows for the "Other" group. */
   compact?: boolean;
   isRaised?: (name: string) => boolean;
-  /** Clicking the name raises the buff onto the cast timeline, or drops it. */
+  /** Clicking the name raises the aura onto the cast timeline, or drops it. */
   onToggleRaised?: (name: string) => void;
 }
 
@@ -388,7 +388,7 @@ function AuraRowView({ row, offsets, P, spellMeta, onHover, compact, isRaised, o
   const grid = { gridTemplateColumns: `${LABEL_WIDTH}px minmax(0,1fr)` };
   const barH = compact ? 8 : 10;
   const meta = spellMeta(row.spellId);
-  const raisable = onToggleRaised != null && row.isBuff;
+  const raisable = onToggleRaised != null;
   const raised = raisable && (isRaised?.(row.name) ?? false);
   return (
     <div className={cn("grid border-t border-border", compact ? "h-6" : "h-[30px]")} style={grid}>
@@ -403,6 +403,13 @@ function AuraRowView({ row, offsets, P, spellMeta, onHover, compact, isRaised, o
         onClick={raisable ? () => onToggleRaised(row.name) : undefined}
       >
         <AuraIcon meta={meta} name={row.name} size={compact ? 12 : 14} />
+        {!row.isBuff && (
+          <span
+            data-aura-type="debuff"
+            className="size-1.5 shrink-0 rounded-full bg-red-500"
+            title="Debuff on player"
+          />
+        )}
         <span
           className={cn("min-w-0 flex-1 truncate", raised && "text-yellow-200")}
           title={`${row.name}${row.spellId ? ` #${row.spellId}` : ""}${raisable ? (raised ? " · click to drop it from the cast timeline" : " · click to raise it onto the cast timeline") : ""}`}
@@ -511,10 +518,17 @@ function WholeFightRow({ rows, players, spellMeta }: WholeFightRowProps) {
                 return (
                   <span
                     key={row.key}
-                    className="flex rounded-[2px]"
+                    className="relative flex rounded-[2px]"
                     style={g.slot != null ? { boxShadow: `0 2px 0 ${SLOT_COLORS[g.slot]}` } : undefined}
                   >
                     <AuraIcon meta={meta} name={row.name} size={16} />
+                    {!row.isBuff && (
+                      <span
+                        data-aura-type="debuff"
+                        className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-red-500 ring-1 ring-background"
+                        title="Debuff on player"
+                      />
+                    )}
                   </span>
                 );
               })}

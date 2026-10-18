@@ -12,6 +12,18 @@ describe("spell overrides", () => {
     expect(activeOverrides(["vanilla", "kronos"], overrides).map((o) => o.id)).toEqual(["b"]);
   });
 
+  it("tracks the Arcane Rupture aura on Nightmare of Ursol", () => {
+    const arcaneRupture = activeOverrides(["nightmare-of-ursol"]).find((override) => override.id === "arcane-rupture");
+
+    expect(arcaneRupture).toMatchObject({
+      spellIds: [52502],
+      showAsCooldown: {},
+      proc: true,
+      trackAura: true,
+    });
+    expect(activeOverrides(["turtle"]).some((override) => override.id === "arcane-rupture")).toBe(false);
+  });
+
   it("matches by spell ID or by name, case-insensitively", () => {
     expect(findOverride(overrides, 51442, null)?.id).toBe("a");
     expect(findOverride(overrides, 1, "nature eclipse")?.id).toBe("a");

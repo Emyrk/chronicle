@@ -282,9 +282,10 @@ export function castKind(
 
 /**
  * Spell overrides that show a proc as a cooldown also need casts to draw. When
- * a player gained the buff but never cast the spell (common for procs), each
- * buff becomes a cast that ends when the buff faded. Returns player data with
- * those casts added; unchanged when nothing applies.
+ * a player gained the aura but never cast the spell (common for procs), each
+ * matching aura becomes a cast that ends when the aura faded. Non-buff auras
+ * only participate when raised or explicitly tracked by an override. Returns
+ * player data with those casts added; unchanged when nothing applies.
  */
 export function withOverrideBuffCasts(
   data: PlayerTimelineData,
@@ -298,11 +299,12 @@ export function withOverrideBuffCasts(
   const cast = new Set(casts.map((c) => c.spellName.toLowerCase()));
   const added: TimelineCast[] = [];
   for (const seg of data.aurasOn) {
-    if (!seg.isBuff) continue;
     const override = findOverride(wanted, seg.spellId, seg.spellName);
-    // Raised buffs draw beside the spell's casts; other overrides only fill in
-    // for a spell the player never cast.
-    if (!override || (!override.raised && cast.has(seg.spellName.toLowerCase()))) continue;
+    if (!override) continue;
+    // Raised and default-tracked auras draw beside the spell's casts; other
+    // overrides only apply to buffs and only fill in for a spell never cast.
+    const tracksAura = override.raised || override.trackAura;
+    if ((!seg.isBuff && !tracksAura) || (!tracksAura && cast.has(seg.spellName.toLowerCase()))) continue;
     added.push({
       source: "aura",
       startMs: seg.startMs,

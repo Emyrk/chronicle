@@ -25,7 +25,9 @@ export interface SpellOverride {
    * while still tinting the lane for its duration.
    */
   proc?: boolean;
-  /** Made in the browser: the viewer raised this buff from Buffs & debuffs. */
+  /** Build proc casts from matching auras by default, including debuffs. */
+  trackAura?: boolean;
+  /** Made in the browser: the viewer raised this aura from Buffs & debuffs. */
   raised?: boolean;
   /**
    * Never draw this spell's casts: the log writes it next to the spell that
@@ -58,6 +60,16 @@ export const SPELL_OVERRIDES: SpellOverride[] = [
     proc: true,
     color: "#3b82f6", // blue-500; the arcane school color is pink
     note: "Eclipse procs change a balance druid's damage enough to tint the lane for their duration.",
+  },
+  {
+    id: "arcane-rupture",
+    spellIds: [52502],
+    flavor: ["nightmare-of-ursol"],
+    showAsCooldown: {},
+    proc: true,
+    trackAura: true,
+    color: "var(--color-school-arcane)",
+    note: "Arcane Rupture is a self-debuff that should tint the lane for its active duration.",
   },
   {
     id: "blood-tap",
