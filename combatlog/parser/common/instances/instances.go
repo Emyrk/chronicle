@@ -68,7 +68,7 @@ var (
 		Name:      "Scarlet Monastery Graveyard",
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"scarlet monastery graveyard", "血色修道院-墓地"},
-		Hostiles:  FromMapFunc(SMGraveyardHostiles()),
+		Hostiles:  FromMapFunc(SMGraveyardHostiles),
 		DerivedName: func(flavor database.WoWFlavor) *MultiInstanceZone {
 			return NewMultiInstanceZone(map[string][]uint32{
 				"Headless Horseman": {
