@@ -14,7 +14,7 @@ export interface EffectSettings {
   /** Legacy boolean from before castMode; false migrates to "off". */
   casts?: boolean;
   castMode: CastIconMode;
-  /** The live value drawn as a column above each unit token. */
+  /** The live value drawn as a column above each player's token. */
   aboveDisc: AboveDiscMode;
 }
 
@@ -34,7 +34,7 @@ export const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
 
 export const ABOVE_DISC_MODES: { value: AboveDiscMode; label: string; title: string }[] = [
   { value: "none", label: "None", title: "Nothing above the tokens" },
-  { value: "health", label: "Health", title: "A column as tall as the unit's health, green to red, with its power (mana, rage, energy) in a thinner one beside it" },
+  { value: "health", label: "Health", title: "A column as tall as each player's health, green to red, with its power (mana, rage, energy) in a thinner one beside it" },
 ];
 
 export const CAST_MODES: { value: CastIconMode; label: string; title: string }[] = [

@@ -1034,7 +1034,7 @@ export class MapScene3D {
       if (dispel) object.token.debuff.material.color.set(DISPEL_COLORS[dispel]);
       // Without a logged facing an enemy keeps facing whoever it last hit (updateTokens).
       this.applyFacing(object, unit.facing ?? (unit.kind === "hostile" ? object.hitFacing : undefined));
-      this.applyScale(object);
+      object.group.scale.setScalar(this.scaleOf(object));
       const opacity = unit.muted ? MUTED_OPACITY : 1;
       for (const material of [object.bodyMaterial, object.coneMaterial]) {
         material.opacity = opacity;
@@ -1275,7 +1275,7 @@ export class MapScene3D {
       : screenScale;
     if (scale === this.unitScale && !force) return;
     this.unitScale = scale;
-    for (const object of this.units.values()) this.applyScale(object);
+    for (const object of this.units.values()) object.group.scale.setScalar(this.scaleOf(object));
     this.planLayer.setUnitScale(scale);
     this.updateLabel();
   }
@@ -1283,14 +1283,6 @@ export class MapScene3D {
   // Bosses stand larger than players on the mesh; everything else shares unitScale.
   private scaleOf(object: UnitObject): number {
     return this.dungeonMesh && object.miniatureUrl ? this.unitScale * MESH_BOSS_SCALE : this.unitScale;
-  }
-
-  // Only a boss's columns grow with its model; anyone else's (a totem, a
-  // whelp) stay the size of a player's.
-  private applyScale(object: UnitObject) {
-    const scale = this.scaleOf(object);
-    object.group.scale.setScalar(scale);
-    object.token.columns.scale.setScalar(object.boss ? 1 : this.unitScale / scale);
   }
 
   // The ground height under a unit: the mesh floor while it shows, else 0.
@@ -1832,7 +1824,7 @@ export class MapScene3D {
       deadLift: DEAD_LIFT,
     };
     this.applyTokenFace(object);
-    this.applyScale(object);
+    group.scale.setScalar(this.scaleOf(object));
     this.units.set(unit.guid, object);
     if (object.miniatureUrl) {
       const mini = this.requestBossMini(object.miniatureUrl);
@@ -1982,7 +1974,7 @@ export class MapScene3D {
       part.scale.setScalar(MINI_TOKEN_RADIUS * size);
     }
     token.columns.position.y = token.face;
-    layoutColumns(token.columns, object.boss ? MINI_TOKEN_RADIUS : TOKEN_RADIUS[object.kind]);
+    layoutColumns(token.columns, MINI_TOKEN_RADIUS);
     if (token.bossPin) token.bossPin.visible = false;
     if (object.boss && !token.sigil) {
       // The model stands on the sigil.
@@ -2971,10 +2963,12 @@ export class MapScene3D {
         }
         token.arc.material.color.copy(castColor);
       }
-      // The columns: health (green to red) and, beside it, thinner and
-      // shorter, power in its raid-frame colour. Casts show as the arc.
-      const health = !object.dead && this.aboveDisc === "health" ? object.healthFraction : null;
-      const power = !object.dead && this.aboveDisc === "health" ? object.powerLevel : null;
+      // The columns, over players only: health (green to red) and, beside
+      // it, thinner and shorter, power in its raid-frame colour. Casts show
+      // as the arc.
+      const columns = !object.dead && this.aboveDisc === "health" && object.kind === "player";
+      const health = columns ? object.healthFraction : null;
+      const power = columns ? object.powerLevel : null;
       token.columns.visible = health !== null || power !== null;
       if (token.columns.visible) {
         // Side by side across the view: the pair turns with the camera.

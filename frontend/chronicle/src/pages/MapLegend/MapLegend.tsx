@@ -267,7 +267,7 @@ export function MapLegend() {
         </Grid>
       </Section>
 
-      <Section id="above" title="Above the token" note={<>Optionally, health rises as a column from every token, with power (mana, rage, energy) in a thinner, shorter one beside it (off by default). Turn it on in Map settings → Units → <em>Above the token</em>.</>}>
+      <Section id="above" title="Above the token" note={<>Optionally, health rises as a column from every player's token, with power (mana, rage, energy) in a thinner, shorter one beside it (off by default). Turn it on in Map settings → Units → <em>Above the token</em>.</>}>
         <Grid min={240}>
           {ABOVE_DISC_MODES.map((mode) => (
             <Card key={mode.value} title={mode.label} demo={

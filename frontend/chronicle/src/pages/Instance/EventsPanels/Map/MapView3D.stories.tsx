@@ -986,7 +986,7 @@ const HAKKAR_UNITS = {
   shaman: "0x000000003B9CE6BE",
 } as const;
 
-// The health and power columns on, to see them over every kind of unit.
+// The health and power columns on: over the players, and none over anyone else.
 const HAKKAR_EFFECT_SETTINGS: EffectSettings = { ...DEFAULT_EFFECT_SETTINGS, aboveDisc: "health" };
 
 function HakkarOctoReplay({ follow = null }: { follow?: keyof typeof HAKKAR_UNITS | null }) {
@@ -1430,20 +1430,20 @@ export const KreshRealMesh: Story = {
  * The real Hakkar kill (Zul'Gurub, 16 players, ~53 s) from an octo log on the
  * Zul'Gurub mesh, replayed at 1x on a loop: the Hakkar model, Soulflayer and
  * Blood Priest adds, a shaman's four totem models, a Wind Serpent pet and
- * health/power columns. The mesh loads from the icon CDN (`turtle/maps/3d/`).
+ * the players' health/power columns. The mesh loads from the icon CDN (`turtle/maps/3d/`).
  */
 export const HakkarReal: Story = {
   render: () => <HakkarOctoReplay />,
 };
 
-/** HakkarReal following Hakkar: the boss model, its sigil and its taller columns. */
+/** HakkarReal following Hakkar: the boss model and its sigil (columns stand over players only). */
 export const HakkarRealBoss: Story = {
   // Looked at by eye; HakkarReal covers the fixture in the test run.
   tags: ["!test"],
   render: () => <HakkarOctoReplay follow="boss" />,
 };
 
-/** HakkarReal following the Mana Spring Totem among the shaman's four totem models: their columns stay player-sized. */
+/** HakkarReal following the Mana Spring Totem among the shaman's four totem models, which carry no columns. */
 export const HakkarRealTotems: Story = {
   // Looked at by eye; HakkarReal covers the fixture in the test run.
   tags: ["!test"],

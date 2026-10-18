@@ -6,7 +6,7 @@ The `Instance/Map/MapView3D/KreshReal` and `HakkarReal` stories replay real
 encounters from `src/pages/Instance/EventsPanels/Map/fixtures/` (`kreshReal.json`,
 `hakkarOcto.json`), so they render with no backend. The `HakkarReal*` stories
 each follow one kind of unit (boss, totem, pet, add, player) on the Zul'Gurub
-mesh, with the health and power columns on. The loader (`fixtures/mapFixture.ts`) feeds the fixture's
+mesh, with the players' health and power columns on. The loader (`fixtures/mapFixture.ts`) feeds the fixture's
 events through the production `mapProcessor`.
 
 To refresh the fixtures, run this from `frontend/chronicle` (after `pnpm install`):
