@@ -146,9 +146,8 @@ const ANGLED_OFFSET = new THREE.Vector3(0, 0.85, 0.75);
 // artwork-up at the top of the screen, as in the 2D view.
 const TOP_DOWN_OFFSET = new THREE.Vector3(0, 1, 0.0001);
 const TILES_MAX_DISTANCE = 400;
-// On the flat artwork, units are at least this many times their full-map
-// size on screen, so a stacked raid reads as tokens, not specks; zoomed in
-// past it they grow to their true size (updateUnitScale).
+// On flat artwork without a world mapping (no yards), units are this many
+// times their full-map size on screen at every zoom.
 const TILES_UNIT_SCALE = 2;
 // How far the orbit camera may tilt from straight down. On the flat artwork it
 // stays 30 degrees above the horizon, where the token faces still show; on
@@ -1279,19 +1278,19 @@ export class MapScene3D {
     return Math.max(GROUND_WIDTH, GROUND_WIDTH * this.aspect) * ANGLED_OFFSET.length();
   }
 
-  // Units are world meshes, so scale them with camera distance to hold a
-  // constant on-screen size (scale 1 at the default full-map distance). Where
-  // the ground has yards (the dungeon mesh, or flat artwork with a world
-  // mapping) they hold their true size instead, so zooming in enlarges them,
-  // down to a floor on that on-screen size so the raid stays visible zoomed
-  // out: half of it on the mesh, TILES_UNIT_SCALE times it on the flat artwork.
+  // Where the ground has yards, units hold their true size, so they keep
+  // their size against the map as it zooms: on flat artwork with a world
+  // mapping always, and on the dungeon mesh down to a floor on screen (half
+  // the full-map on-screen size) so the raid stays visible zoomed out.
+  // Without yards they hold a constant on-screen size instead (scale 1 at
+  // the default full-map distance).
   private updateUnitScale(force = false) {
     const screenScale = this.camera.position.distanceTo(this.controls.target) / this.baseDistance();
     const yards = this.yardScale();
-    const floor = this.dungeonMesh ? MESH_MIN_SCREEN_SCALE : TILES_UNIT_SCALE;
-    const scale = yards
-      ? Math.max((MESH_PLAYER_HEIGHT_YARDS * yards) / PLAYER_GEOMETRY_HEIGHT, floor * screenScale)
-      : TILES_UNIT_SCALE * screenScale;
+    const trueScale = yards ? (MESH_PLAYER_HEIGHT_YARDS * yards) / PLAYER_GEOMETRY_HEIGHT : null;
+    const scale = trueScale === null ? TILES_UNIT_SCALE * screenScale
+      : this.dungeonMesh ? Math.max(trueScale, MESH_MIN_SCREEN_SCALE * screenScale)
+      : trueScale;
     if (scale === this.unitScale && !force) return;
     this.unitScale = scale;
     for (const object of this.units.values()) object.group.scale.setScalar(this.scaleOf(object));
