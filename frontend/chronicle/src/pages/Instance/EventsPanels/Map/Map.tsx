@@ -9,6 +9,7 @@ import { LivePresenceIndicator } from "../../LivePresenceIndicator";
 import { useLiveSessionOptional } from "../../LiveSessionContext";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { ReplayToggleFlash } from "../../ReplayToggleFlash";
+import { ReplayPlayTooltip } from "../../ReplayPlayTooltip";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { fetchMiniatureUrls } from "./bossMinis";
 import { dungeonMeshBytes, dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
@@ -455,19 +456,25 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
       {/* Mini map: play/pause and speed lead the row (the preview's own clock, or the page's Replay once it is on). */}
       {mini && (
         <>
-          <button
-            type="button"
-            onClick={() => {
-              if (previewOn) setPreviewPlaying(!previewPlaying);
-              else if (sync?.isPlaying) sync.pause();
-              else sync?.play();
-            }}
-            title={ready.playing ? (previewOn ? "Pause the preview" : "Pause the replay") : (previewOn ? "Play the preview" : "Play the replay")}
-            aria-label={ready.playing ? (previewOn ? "Pause the preview" : "Pause the replay") : (previewOn ? "Play the preview" : "Play the replay")}
-            className={mapFramingButtonClass}
+          {/* X drives the page's Replay, not the preview's own clock. */}
+          <ReplayPlayTooltip
+            playing={ready.playing}
+            label={ready.playing ? (previewOn ? "Pause the preview" : "Pause the replay") : (previewOn ? "Play the preview" : "Play the replay")}
+            keybind={!previewOn}
           >
-            {ready.playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (previewOn) setPreviewPlaying(!previewPlaying);
+                else if (sync?.isPlaying) sync.pause();
+                else sync?.play();
+              }}
+              aria-label={ready.playing ? (previewOn ? "Pause the preview" : "Pause the replay") : (previewOn ? "Play the preview" : "Play the replay")}
+              className={mapFramingButtonClass}
+            >
+              {ready.playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+            </button>
+          </ReplayPlayTooltip>
           <span className="pointer-events-none rounded-sm bg-black/75 px-1.5 py-1 text-[10px] font-medium text-white/70">{ready.playbackSpeed}×</span>
         </>
       )}

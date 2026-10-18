@@ -3,6 +3,7 @@ import { Pause, Play, PowerOff, RotateCcw, Skull } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { useReplayToggleKey } from "../../replayToggleKey";
+import { ReplayPlayTooltip } from "../../ReplayPlayTooltip";
 import type { PanelContext, PanelDefinition } from "../types";
 import { usePanelAggregation } from "../usePanelAggregation";
 import { usePlayerLifeState } from "../usePlayerLifeState";
@@ -157,9 +158,11 @@ export function ReplayControllerStrip({ result, context, bars: barKind }: StripR
       {/* Stacked in a narrow column so the bars get the width: transport and clock, speeds, legend. */}
       <div className="flex shrink-0 flex-col gap-1">
         <div className="flex items-center gap-1">
-          <button type="button" onClick={togglePlay} disabled={disabled} title={playing ? "Pause (X)" : "Play (X)"} aria-label={playing ? "Pause" : "Play"} className={controlButtonClass}>
-            {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-          </button>
+          <ReplayPlayTooltip playing={playing}>
+            <button type="button" onClick={togglePlay} disabled={disabled} aria-label={playing ? "Pause" : "Play"} className={controlButtonClass}>
+              {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+            </button>
+          </ReplayPlayTooltip>
           <button type="button" onClick={restart} disabled={disabled} title="Restart" aria-label="Restart" className={controlButtonClass}>
             <RotateCcw className="h-3.5 w-3.5" />
           </button>

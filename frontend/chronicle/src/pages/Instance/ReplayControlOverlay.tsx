@@ -38,6 +38,7 @@ import { createStreamCursor } from "@/api/protodecode/decode";
 import { SlainSchema, type Slain } from "@/api/proto/chronicle_pb";
 import { isPlayerGuidFast } from "./EventsPanels/processors/guidCache";
 import { useReplayToggleKey } from "./replayToggleKey";
+import { ReplayPlayTooltip } from "./ReplayPlayTooltip";
 import { useSyncModeContext, useSyncModeContextOptional } from "./SyncModeContext";
 
 export type ReplayPosition = "top" | "bottom";
@@ -326,16 +327,18 @@ export function ReplayTransportBar({
             sync.isPlaying ? "animate-pulse bg-red-500" : "bg-muted-foreground/40",
           )}
         />
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8 shrink-0"
-          onClick={() => (sync.isPlaying ? sync.pause() : sync.play())}
-          disabled={controlsDisabled}
-          title={sync.isPlaying ? "Pause" : "Play"}
-        >
-          {sync.isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-        </Button>
+        <ReplayPlayTooltip playing={sync.isPlaying}>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={() => (sync.isPlaying ? sync.pause() : sync.play())}
+            disabled={controlsDisabled}
+            aria-label={sync.isPlaying ? "Pause" : "Play"}
+          >
+            {sync.isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+          </Button>
+        </ReplayPlayTooltip>
         <Button
           variant="outline"
           size="icon"
@@ -522,16 +525,18 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
   );
 
   const playPauseButton = (extraClass: string) => (
-    <Button
-      variant="outline"
-      size="icon"
-      className={extraClass}
-      onClick={() => (sync.isPlaying ? sync.pause() : sync.play())}
-      disabled={controlsDisabled}
-      title={sync.isPlaying ? "Pause (X)" : "Play (X)"}
-    >
-      {sync.isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-    </Button>
+    <ReplayPlayTooltip playing={sync.isPlaying}>
+      <Button
+        variant="outline"
+        size="icon"
+        className={extraClass}
+        onClick={() => (sync.isPlaying ? sync.pause() : sync.play())}
+        disabled={controlsDisabled}
+        aria-label={sync.isPlaying ? "Pause" : "Play"}
+      >
+        {sync.isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+      </Button>
+    </ReplayPlayTooltip>
   );
 
   const restartButton = (extraClass: string) => (
