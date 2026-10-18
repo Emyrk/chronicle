@@ -920,13 +920,15 @@ function BuiltinEventsPanel({
         bleed={hoverHeader}
         front={(
           <>
+            {/* hoverHeader: a thin strip along the top edge reveals the title row; once shown it
+                stays while the cursor is on it. Hidden, it lets clicks through to the content. */}
+            {hoverHeader && <div aria-hidden className="peer/header-trigger absolute inset-x-0 top-0 z-50 h-3" />}
             <div
-              // Shown when the cursor reaches the top band it covers (it stays hoverable while invisible).
               data-hover-header={hoverHeader || undefined}
               className={cn(
                 "flex items-center justify-between",
                 hoverHeader
-                  ? "absolute inset-x-0 top-0 z-50 bg-gradient-to-b from-black/85 via-black/55 to-transparent px-3 pb-4 pt-2 opacity-0 transition-opacity hover:opacity-100 focus-within:opacity-100"
+                  ? "pointer-events-none absolute inset-x-0 top-0 z-50 bg-[linear-gradient(to_bottom,rgb(0_0_0/0.92)_0%,rgb(0_0_0/0.92)_70%,transparent_100%)] px-3 pb-4 pt-2 opacity-0 transition-opacity hover:pointer-events-auto hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 peer-hover/header-trigger:pointer-events-auto peer-hover/header-trigger:opacity-100"
                   : "mb-1",
               )}
             >

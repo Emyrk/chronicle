@@ -5,7 +5,6 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Crosshair, Focus, Footprints, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Maximize2, Pause, Play, Route, Settings2, Skull, Timer, X } from "lucide-react";
 import { MINI_MAP_PANEL_OPTION } from "../../viewDefaults";
-import { PANEL_CARD_BLEED } from "../PanelCard";
 import { parseLivePresenceSurface } from "../../liveSessionProtocol";
 import { LivePresenceIndicator } from "../../LivePresenceIndicator";
 import { useLiveSessionOptional } from "../../LiveSessionContext";
@@ -464,9 +463,9 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   );
 
   return (
-    <div className={cn("flex h-full min-h-0 flex-col", !mini && [PANEL_CARD_BLEED, "p-1"])}>
+    <div className={cn("flex h-full min-h-0 flex-col", !mini && "p-1")}>
       {props.headerSlot ? createPortal(headerControls, props.headerSlot) : <div className="flex justify-end px-1">{headerControls}</div>}
-      {/* The full map runs to the card's edges (PANEL_CARD_BLEED) with a thin window frame; the mini map fills a padless card (hoverHeader). */}
+      {/* The card has no padding (hoverHeader): the full map keeps a thin window frame a hair inside it, the mini map runs to the edges. */}
       <div className={cn("relative min-h-0 flex-1 overflow-hidden bg-black/70", !mini && "rounded-sm border border-white/15")}>
         {!show3D ? (meshOnly
           ? <MapMessage title="No map artwork for this instance" detail={`${ready.mapName} has no 2D map; it is 3D only, and this browser could not provide WebGL.`} />
@@ -808,7 +807,7 @@ function MapContent(props: PanelRenderProps<MapResult>) {
     </div>
   );
   return (
-    <div className={cn("flex h-full min-h-0 flex-col", !mini && PANEL_CARD_BLEED)}>
+    <div className="flex h-full min-h-0 flex-col">
       {props.headerSlot ? createPortal(wholeRunButton, props.headerSlot) : <div className="flex justify-end px-3 pt-2">{wholeRunButton}</div>}
       <div className="relative min-h-0 flex-1">
         <MapOverview2D {...props} mini={mini} />
@@ -848,7 +847,8 @@ export function createMapPanel(): PanelDefinition<MapResult, MapProcessorEvent> 
     requiredCapabilities: ["unit-position"],
     syncDataMode: "full",
     disableCardFlip: true,
-    hoverHeader: isMiniMapOption,
+    // Mini or full, the map gets the card's full height; the title row shows from the top edge.
+    hoverHeader: () => true,
     supportsFiltering: false,
     underConstruction: true,
     render: (props) => <MapContent {...props} />,
