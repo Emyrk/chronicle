@@ -15,7 +15,8 @@ describe("navigateWithModifiers", () => {
   it.each([
     { ctrlKey: true, metaKey: false },
     { ctrlKey: false, metaKey: true },
-  ])("opens a new tab for modifier-click navigation", (modifiers) => {
+    { button: 1, ctrlKey: false, metaKey: false },
+  ])("opens a new tab for modifier-click or middle-click navigation", (modifiers) => {
     const navigate = vi.fn()
     const openNewTab = vi.fn()
 
@@ -23,5 +24,20 @@ describe("navigateWithModifiers", () => {
 
     expect(openNewTab).toHaveBeenCalledWith("/instances/example")
     expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it("ignores other auxiliary mouse buttons", () => {
+    const navigate = vi.fn()
+    const openNewTab = vi.fn()
+
+    navigateWithModifiers(
+      "/instances/example",
+      { button: 2, ctrlKey: false, metaKey: false },
+      navigate,
+      openNewTab,
+    )
+
+    expect(navigate).not.toHaveBeenCalled()
+    expect(openNewTab).not.toHaveBeenCalled()
   })
 })

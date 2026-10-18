@@ -1,4 +1,4 @@
-import { useSearchParams } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import { Skull, Loader2 } from "lucide-react"
 import { CLASS_CSS_VAR } from "./classDisplay"
 import { useRankingsInstances } from "@/api/rankingsQueries"
@@ -16,21 +16,19 @@ import type { RankingsInstanceSummary } from "@/api/typesGenerated"
 
 /** Instance picker. `showTopPlayers` lists each raid's top DPS on its card. */
 export function RankingsLanding({ showTopPlayers = true }: { showTopPlayers?: boolean }) {
-  const [, setParams] = useSearchParams()
+  const [params] = useSearchParams()
   const { data: summaries, isLoading } = useRankingsInstances()
   const { data: supportedInstances } = useSupportedInstances()
 
-  const handleSelectInstance = (name: string, difficultyName?: string) => {
-    setParams((prev) => {
-      const next = new URLSearchParams(prev)
-      next.set("instance", name)
-      if (difficultyName) {
-        next.set("diff", difficultyName)
-      } else {
-        next.delete("diff")
-      }
-      return next
-    })
+  const instanceHref = (name: string, difficultyName?: string) => {
+    const next = new URLSearchParams(params)
+    next.set("instance", name)
+    if (difficultyName) {
+      next.set("diff", difficultyName)
+    } else {
+      next.delete("diff")
+    }
+    return `?${next.toString()}`
   }
 
   if (isLoading) {
@@ -68,10 +66,10 @@ export function RankingsLanding({ showTopPlayers = true }: { showTopPlayers?: bo
   const renderGrid = (items: RankingsInstanceSummary[]) => (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
       {items.map((s) => (
-        <button
+        <Link
           key={`${s.instance_name}-${s.difficulty_name}-${s.max_players}`}
-          onClick={() => handleSelectInstance(s.instance_name, s.difficulty_name)}
-          className="group relative overflow-hidden rounded-xl border bg-card text-left transition-all hover:border-white/20 hover:shadow-lg aspect-[16/7]"
+          to={instanceHref(s.instance_name, s.difficulty_name)}
+          className="group relative block overflow-hidden rounded-xl border bg-card text-left transition-all hover:border-white/20 hover:shadow-lg aspect-[16/7]"
         >
           {/* Background image */}
           <img
@@ -126,7 +124,7 @@ export function RankingsLanding({ showTopPlayers = true }: { showTopPlayers?: bo
               {s.total_kills.toLocaleString()} kills
             </div>
           </div>
-        </button>
+        </Link>
       ))}
     </div>
   )

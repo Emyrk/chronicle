@@ -1,4 +1,4 @@
-import { useSearchParams } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { Loader2, SlidersHorizontal, Check, Users, Globe, X, ChevronDown, Info, ArrowLeft, Trophy } from "lucide-react"
 import { getInstanceConfig, getInstanceBackground } from "../Logs/utils/instanceImages"
@@ -465,17 +465,16 @@ function formatDuration(ms: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`
 }
 
-function InstanceCard({ board, timing, onSelect }: { board: SpeedrunInstanceBoard; timing: SpeedrunTimingMode; onSelect: (board: SpeedrunInstanceBoard) => void }) {
+function InstanceCard({ board, timing, to }: { board: SpeedrunInstanceBoard; timing: SpeedrunTimingMode; to: string }) {
   const name = board.instance_name
   const bg = getInstanceBackground(name)
   const { data: entries } = useSpeedrunLeaderboard(name, [], "", "", "", board.difficulty_name, timing)
   const top3 = entries?.slice(0, 3) ?? []
 
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(board)}
-      className="group relative overflow-hidden rounded-xl border bg-card text-left transition-all hover:border-white/20 hover:shadow-lg aspect-[16/7] w-full"
+    <Link
+      to={to}
+      className="group relative block overflow-hidden rounded-xl border bg-card text-left transition-all hover:border-white/20 hover:shadow-lg aspect-[16/7] w-full"
     >
       <img
         src={bg}
@@ -508,7 +507,7 @@ function InstanceCard({ board, timing, onSelect }: { board: SpeedrunInstanceBoar
           </div>
         )}
       </div>
-    </button>
+    </Link>
   )
 }
 
@@ -516,12 +515,12 @@ function InstanceBrowser({
   boards,
   timing,
   onTimingChange,
-  onSelect,
+  instanceHref,
 }: {
   boards: SpeedrunInstanceBoard[]
   timing: SpeedrunTimingMode
   onTimingChange: (timing: SpeedrunTimingMode) => void
-  onSelect: (board: SpeedrunInstanceBoard) => void
+  instanceHref: (board: SpeedrunInstanceBoard) => string
 }) {
   const { data: supportedInstances } = useSupportedInstances()
   const raids = boards
@@ -562,7 +561,7 @@ function InstanceBrowser({
               </h3>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {group.items.map((board) => (
-                  <InstanceCard key={`${board.instance_name}-${board.difficulty_name}`} board={board} timing={timing} onSelect={onSelect} />
+                  <InstanceCard key={`${board.instance_name}-${board.difficulty_name}`} board={board} timing={timing} to={instanceHref(board)} />
                 ))}
               </div>
             </div>
@@ -574,7 +573,7 @@ function InstanceBrowser({
           <h2 className="text-lg font-semibold text-muted-foreground">Dungeons</h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {dungeons.map((board) => (
-              <InstanceCard key={`${board.instance_name}-${board.difficulty_name}`} board={board} timing={timing} onSelect={onSelect} />
+              <InstanceCard key={`${board.instance_name}-${board.difficulty_name}`} board={board} timing={timing} to={instanceHref(board)} />
             ))}
           </div>
         </section>
@@ -681,12 +680,12 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
           boards={boards ?? []}
           timing={selectedTiming}
           onTimingChange={setTiming}
-          onSelect={(board) => setSearchParams((prev) => {
-            const next = new URLSearchParams(prev)
+          instanceHref={(board) => {
+            const next = new URLSearchParams(searchParams)
             next.set("instance", board.instance_name)
             next.set("difficulty", board.difficulty_name)
-            return next
-          })}
+            return `?${next.toString()}`
+          }}
         />
       </div>
     )
