@@ -439,6 +439,25 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
 
   const framingControls = (
     <div className="absolute bottom-2 left-2 z-40 flex items-center gap-1">
+      {/* Mini map: play/pause and speed lead the row (the preview's own clock, or the page's Replay once it is on). */}
+      {mini && (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              if (previewOn) setPreviewPlaying(!previewPlaying);
+              else if (sync?.isPlaying) sync.pause();
+              else sync?.play();
+            }}
+            title={ready.playing ? (previewOn ? "Pause the preview" : "Pause the replay") : (previewOn ? "Play the preview" : "Play the replay")}
+            aria-label={ready.playing ? (previewOn ? "Pause the preview" : "Pause the replay") : (previewOn ? "Play the preview" : "Play the replay")}
+            className={mapFramingButtonClass}
+          >
+            {ready.playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+          </button>
+          <span className="pointer-events-none rounded-sm bg-black/75 px-1.5 py-1 text-[10px] font-medium text-white/70">{ready.playbackSpeed}×</span>
+        </>
+      )}
       {canFollow ? (
         <button
           type="button"
@@ -555,25 +574,6 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               </button>
             )}
           </>
-        )}
-        {/* Play/pause and speed: the preview's own clock, or the page's Replay once it is on. */}
-        {mini && (
-          <div className="absolute bottom-2 left-2 z-40 flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => {
-                if (previewOn) setPreviewPlaying(!previewPlaying);
-                else if (sync?.isPlaying) sync.pause();
-                else sync?.play();
-              }}
-              title={ready.playing ? (previewOn ? "Pause the preview" : "Pause the replay") : (previewOn ? "Play the preview" : "Play the replay")}
-              aria-label={ready.playing ? (previewOn ? "Pause the preview" : "Pause the replay") : (previewOn ? "Play the preview" : "Play the replay")}
-              className={mapFramingButtonClass}
-            >
-              {ready.playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-            </button>
-            <span className="pointer-events-none rounded-sm bg-black/75 px-1.5 py-1 text-[10px] font-medium text-white/70">{ready.playbackSpeed}×</span>
-          </div>
         )}
         {mini && (
           <MiniScrubber
