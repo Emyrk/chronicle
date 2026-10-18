@@ -321,10 +321,38 @@ export function replayPositionAt(
   // Facing blends when both samples have it, else holds the earlier one's (if any).
   if (latest.facing !== undefined && next.facing !== undefined) sample.facing = lerpAngle(latest.facing, next.facing, t);
   else if (latest.facing !== undefined) sample.facing = latest.facing;
-  // A logged height blends like x/y; with only one side logged it holds that sample's.
-  if (latest.z !== undefined && next.z !== undefined) sample.z = latest.z + (next.z - latest.z) * t;
+  // A logged height follows a smooth curve through the samples around it, so a
+  // knock-up arcs rather than zigzags; with only one side logged it holds that sample's.
+  if (latest.z !== undefined && next.z !== undefined) sample.z = smoothHeight(positions, index, t);
   else if (latest.z !== undefined) sample.z = latest.z;
   return sample;
+}
+
+// The height `t` (0-1) of the way from sample `index` to the next: a cubic
+// Hermite curve (Catmull-Rom tangents over each sample's neighbours, scaled
+// for uneven gaps), which passes through every sample. Both samples have z.
+function smoothHeight(positions: readonly MapPositionSample[], index: number, t: number): number {
+  const p0 = positions[index];
+  const p1 = positions[index + 1];
+  const z0 = p0.z!;
+  const z1 = p1.z!;
+  const gap = p1.timestampMs - p0.timestampMs;
+  // A neighbour counts when it is logged, on the same map, and later/earlier.
+  const neighbour = (at: number, from: MapPositionSample) => {
+    const candidate = positions[at];
+    return candidate && candidate.z !== undefined && candidate.mapId === from.mapId && candidate.timestampMs !== from.timestampMs ? candidate : null;
+  };
+  // Slope (yards per ms) at a sample, from its neighbours on either side.
+  const slope = (before: MapPositionSample | null, after: MapPositionSample | null, at: MapPositionSample) => {
+    const from = before ?? at;
+    const to = after ?? at;
+    return to.timestampMs === from.timestampMs ? 0 : (to.z! - from.z!) / (to.timestampMs - from.timestampMs);
+  };
+  const m0 = slope(neighbour(index - 1, p0), p1, p0) * gap;
+  const m1 = slope(p0, neighbour(index + 2, p1), p1) * gap;
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return (2 * t3 - 3 * t2 + 1) * z0 + (t3 - 2 * t2 + t) * m0 + (-2 * t3 + 3 * t2) * z1 + (t3 - t2) * m1;
 }
 
 export function selectMapEncounter(

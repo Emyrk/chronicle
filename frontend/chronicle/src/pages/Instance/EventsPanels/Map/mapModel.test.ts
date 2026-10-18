@@ -372,6 +372,16 @@ describe("replayPositionAt", () => {
     expect(replayPositionAt(samples, 150)).not.toHaveProperty("z");
   });
 
+  it("arcs a logged height through the samples, as a knock-up rises and falls", () => {
+    const thrown: MapPositionSample[] = [0, 0, 20, 0, 0].map((z, index) => ({ timestampMs: index * 100, x: 0, y: 0, z, mapId: 1 }));
+    for (const sample of thrown) expect(replayPositionAt(thrown, sample.timestampMs)!.z).toBe(sample.z);
+    // Straight lines give 10 halfway up and halfway down; the arc runs above both.
+    expect(replayPositionAt(thrown, 150)!.z).toBeCloseTo(11.25, 6);
+    expect(replayPositionAt(thrown, 250)!.z).toBeCloseTo(11.25, 6);
+    // Level just before the peak, rather than the straight lines' corner.
+    expect(replayPositionAt(thrown, 190)!.z).toBeGreaterThan(19.5);
+  });
+
   it("matches the exact sample and holds the last one", () => {
     expect(replayPositionAt(samples, 200)).toEqual({ ...samples[1] });
     expect(replayPositionAt(samples, 999)).toBe(samples[2]);
