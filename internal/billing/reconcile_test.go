@@ -48,6 +48,19 @@ func (s *reconciliationStore) UpsertBillingSubscriptionIfChanged(_ context.Conte
 	return rows, nil
 }
 
+func (s *reconciliationStore) GetBillingEntitlementOwnerByProviderCustomerID(context.Context, database.GetBillingEntitlementOwnerByProviderCustomerIDParams) (uuid.UUID, error) {
+	return uuid.Nil, pgx.ErrNoRows
+}
+
+func (s *reconciliationStore) GetBillingSubscriptionByProviderCustomerID(_ context.Context, arg database.GetBillingSubscriptionByProviderCustomerIDParams) (database.BillingSubscription, error) {
+	for _, sub := range s.localSubscriptions {
+		if sub.ProviderCustomerID == arg.ProviderCustomerID {
+			return sub, nil
+		}
+	}
+	return database.BillingSubscription{}, pgx.ErrNoRows
+}
+
 func (s *reconciliationStore) ListBillingProviderCustomersForReconciliation(context.Context) ([]database.ListBillingProviderCustomersForReconciliationRow, error) {
 	return s.providerCustomers, nil
 }
@@ -231,6 +244,75 @@ func TestReconciliationCancelsLocalSubscriptionMissingFromStripe(t *testing.T) {
 	require.Len(t, store.conditionalUpserts, 1)
 	require.Equal(t, string(stripe.SubscriptionStatusCanceled), store.conditionalUpserts[0].Status)
 	require.Equal(t, local.CurrentPeriodEnd, store.conditionalUpserts[0].CurrentPeriodEnd)
+}
+
+// A user's row can still point at a subscription from a Stripe customer that no
+// longer exists. Once Stripe's list has written their current subscription, the
+// stale snapshot must not be written back as canceled.
+func TestReconciliationKeepsListedSubscriptionOverStaleLocalRow(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	stale := database.BillingSubscription{
+		UserID:                 userID,
+		Provider:               ProviderStripe,
+		ProviderCustomerID:     "cus_deleted",
+		ProviderSubscriptionID: text("sub_deleted"),
+		ProviderProductID:      text("prod_supporter"),
+		ProviderPriceID:        text("price_monthly"),
+		ProductCode:            string(ProductSupporter),
+		Status:                 string(stripe.SubscriptionStatusActive),
+		CurrentPeriodEnd:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+	}
+	current := testStripeSubscription("prod_supporter", "price_monthly", time.Now().Add(time.Hour))
+	current.ID = "sub_current"
+	current.Status = stripe.SubscriptionStatusActive
+	current.Customer = &stripe.Customer{ID: "cus_current"}
+	current.Metadata = map[string]string{
+		"chronicle_user_id":      userID.String(),
+		"chronicle_product_code": string(ProductSupporter),
+	}
+	store := &reconciliationStore{
+		localSubscriptions: []database.BillingSubscription{stale},
+		changedRows:        []int64{1},
+	}
+	svc := New(Options{Store: store, PriceIDs: []string{"price_monthly"}})
+	svc.listSubscriptions = func(context.Context) ([]*stripe.Subscription, error) {
+		return []*stripe.Subscription{current}, nil
+	}
+	svc.retrieveSubscription = func(_ context.Context, id string, _ *stripe.SubscriptionRetrieveParams) (*stripe.Subscription, error) {
+		require.Equal(t, current.ID, id)
+		return current, nil
+	}
+
+	err := (&ReconciliationWorker{Billing: svc, Store: store}).Work(context.Background(), &river.Job[ArgsReconcileSubscriptions]{})
+	require.NoError(t, err)
+	require.Len(t, store.conditionalUpserts, 1)
+	require.Equal(t, current.ID, store.conditionalUpserts[0].ProviderSubscriptionID.String)
+	require.Equal(t, string(stripe.SubscriptionStatusActive), store.conditionalUpserts[0].Status)
+}
+
+func TestReconciliationSkipsEntitlementsForMissingStripeCustomer(t *testing.T) {
+	t.Parallel()
+
+	store := &reconciliationStore{
+		localSubscriptions: []database.BillingSubscription{{
+			UserID:             uuid.New(),
+			Provider:           ProviderStripe,
+			ProviderCustomerID: "cus_deleted",
+		}},
+	}
+	svc := New(Options{Store: store, PriceIDs: []string{"price_monthly"}})
+	svc.listSubscriptions = func(context.Context) ([]*stripe.Subscription, error) { return nil, nil }
+	svc.listActiveEntitlements = func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error) {
+		return nil, &stripe.Error{Code: stripe.ErrorCodeResourceMissing}
+	}
+
+	err := (&ReconciliationWorker{Billing: svc, Store: store}).Work(context.Background(), &river.Job[ArgsReconcileSubscriptions]{})
+	require.NoError(t, err)
+	require.Equal(t, "completed", store.completion.Status)
+	require.Equal(t, int32(1), store.completion.EntitlementCustomersFound)
+	require.Equal(t, int32(0), store.completion.EntitlementCustomersSynced)
 }
 
 func TestAuthoritativeSubscriptionRejectsUnconfiguredPriceAndEmptyCustomer(t *testing.T) {
