@@ -1695,6 +1695,7 @@ export class MapScene3D {
 
   dispose() {
     this.disposed = true;
+    this.unlockPointer();
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
     this.controls.removeEventListener("change", this.handleControlsChange);
@@ -2653,8 +2654,12 @@ export class MapScene3D {
     const drag = this.walk?.drag;
     if (this.walk && drag) {
       // Drag looks around the character; right-drag also turns it to face the view.
-      this.walk.camYaw -= (event.clientX - drag.x) * WALK_LOOK_RADIANS_PER_PX;
-      this.walk.camPitch = Math.max(-WALK_PITCH_LIMIT, Math.min(WALK_PITCH_LIMIT, this.walk.camPitch + (event.clientY - drag.y) * WALK_LOOK_RADIANS_PER_PX));
+      // With the cursor locked (hidden), clientX/Y stand still and only movement reports the drag.
+      const locked = document.pointerLockElement === this.renderer.domElement;
+      const dx = locked ? event.movementX : event.clientX - drag.x;
+      const dy = locked ? event.movementY : event.clientY - drag.y;
+      this.walk.camYaw -= dx * WALK_LOOK_RADIANS_PER_PX;
+      this.walk.camPitch = Math.max(-WALK_PITCH_LIMIT, Math.min(WALK_PITCH_LIMIT, this.walk.camPitch + dy * WALK_LOOK_RADIANS_PER_PX));
       if (drag.button === 2) this.walk.yaw = this.walk.camYaw;
       drag.x = event.clientX;
       drag.y = event.clientY;
@@ -2705,6 +2710,8 @@ export class MapScene3D {
     if (this.walk && (event.button === 0 || event.button === 2)) {
       this.walk.drag = { button: event.button, x: event.clientX, y: event.clientY };
       this.renderer.domElement.setPointerCapture(event.pointerId);
+      // Hide the cursor while dragging the view, as WoW does.
+      this.lockPointer();
     }
   };
 
@@ -2715,7 +2722,10 @@ export class MapScene3D {
       this.planInput.up(this.planPointAt(event), event);
       return;
     }
-    if (this.walk?.drag && this.walk.drag.button === event.button) this.walk.drag = null;
+    if (this.walk?.drag && this.walk.drag.button === event.button) {
+      this.walk.drag = null;
+      this.unlockPointer();
+    }
     const down = this.pointerDownAt;
     this.pointerDownAt = null;
     if (!down || event.button !== 0 || !this.onUnitClick) return;
@@ -3316,6 +3326,7 @@ export class MapScene3D {
     if (!walk) return;
     this.walk = null;
     this.heldActions.clear();
+    this.unlockPointer();
     this.disposeAvatar(walk.avatar);
     // The orbit camera picks up behind and above where the character stood.
     const distance = Math.max(walk.camDistance, WALK_EXIT_DISTANCE_YARDS) * (this.yardScale() ?? 1);
@@ -3360,14 +3371,19 @@ export class MapScene3D {
     const held = this.heldActions;
     const axis = (positive: MapControlAction, negative: MapControlAction) => (held.has(positive) ? 1 : 0) - (held.has(negative) ? 1 : 0);
 
-    const turn = axis("turn_left", "turn_right");
+    let turn = axis("turn_left", "turn_right");
+    let strafe = axis("strafe_right", "strafe_left");
+    if (walk.drag?.button === 2) {
+      // Holding right-click steers with the mouse, so the turn keys strafe instead, as in WoW.
+      strafe = Math.max(-1, Math.min(1, strafe - turn));
+      turn = 0;
+    }
     if (turn) {
       const delta = turn * WALK_TURN_RADIANS_PER_S * dt;
       walk.yaw += delta;
       walk.camYaw += delta;
     }
     const forward = axis("forward", "back");
-    const strafe = axis("strafe_right", "strafe_left");
     if (forward || strafe) {
       // Facing (yaw) points along -z turned by yaw, as a unit's facing cone does.
       const step = ((forward < 0 ? WALK_BACK_YPS : WALK_RUN_YPS) * scale * dt) / Math.hypot(forward, strafe);
@@ -3440,6 +3456,17 @@ export class MapScene3D {
   };
 
   // Right-drag turns the character, so no context menu while walking.
+  private lockPointer() {
+    const canvas = this.renderer.domElement;
+    if (document.pointerLockElement === canvas || !canvas.requestPointerLock) return;
+    // A refused lock (no user gesture, unsupported) just leaves the cursor shown.
+    Promise.resolve(canvas.requestPointerLock()).catch(() => {});
+  }
+
+  private unlockPointer() {
+    if (document.pointerLockElement === this.renderer.domElement) document.exitPointerLock();
+  }
+
   private readonly handleWalkContextMenu = (event: MouseEvent) => {
     if (this.walk) event.preventDefault();
   };
