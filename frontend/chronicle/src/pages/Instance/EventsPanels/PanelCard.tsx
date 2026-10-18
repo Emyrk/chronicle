@@ -3,6 +3,14 @@ import { Card } from "@/components/ui/Card/Card";
 import { cn } from "@/lib/utils";
 import { useSeamlessLayout } from "./SeamlessLayoutContext";
 
+/**
+ * Lets panel content run to the card's sides and bottom edge (below the title
+ * row) by cancelling the card's padding; the height grows by the bottom
+ * padding it reclaims (merge after `h-full` with `cn`). Keep in step with
+ * `p-2 sm:p-4` below.
+ */
+export const PANEL_CARD_BLEED = "-mx-2 -mb-2 h-[calc(100%+0.5rem)] sm:-mx-4 sm:-mb-4 sm:h-[calc(100%+1rem)]";
+
 interface PanelCardProps {
   flipped: boolean;
   onMouseDown?: MouseEventHandler<HTMLDivElement>;

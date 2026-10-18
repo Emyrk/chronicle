@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Crosshair, Focus, Footprints, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Maximize2, Route, Settings2, Skull, Users, X } from "lucide-react";
 import { MINI_MAP_PANEL_OPTION } from "../../viewDefaults";
+import { PANEL_CARD_BLEED } from "../PanelCard";
 import { parseLivePresenceSurface } from "../../liveSessionProtocol";
 import { LivePresenceIndicator } from "../../LivePresenceIndicator";
 import { useLiveSessionOptional } from "../../LiveSessionContext";
@@ -390,9 +391,10 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2 p-2">
+    <div className={cn("flex h-full min-h-0 flex-col", mini ? PANEL_CARD_BLEED : "gap-2 p-2")}>
       {props.headerSlot ? createPortal(headerControls, props.headerSlot) : <div className="flex justify-end px-1">{headerControls}</div>}
-      <div className="relative min-h-0 flex-1 overflow-hidden rounded-md border border-white/10 bg-black/70">
+      {/* The mini map runs to the card's edges, so it drops its own frame. */}
+      <div className={cn("relative min-h-0 flex-1 overflow-hidden bg-black/70", !mini && "rounded-md border border-white/10")}>
         {!show3D ? (meshOnly
           ? <MapMessage title="No map artwork for this instance" detail={`${ready.mapName} has no 2D map; it is 3D only, and this browser could not provide WebGL.`} />
           : view2D
@@ -665,7 +667,7 @@ function MapContent(props: PanelRenderProps<MapResult>) {
     </div>
   );
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className={cn("flex h-full min-h-0 flex-col", mini && PANEL_CARD_BLEED)}>
       {props.headerSlot ? createPortal(wholeRunButton, props.headerSlot) : <div className="flex justify-end px-3 pt-2">{wholeRunButton}</div>}
       <div className="min-h-0 flex-1">
         <MapOverview2D {...props} mini={mini} />

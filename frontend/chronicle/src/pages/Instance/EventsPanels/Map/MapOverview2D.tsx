@@ -477,7 +477,7 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
   const displayedMapId = artwork.kind === "instance" ? artwork.instance.mapID : mapId;
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2 p-2">
+    <div className={`flex h-full min-h-0 flex-col ${mini ? "" : "gap-2 p-2"}`}>
       {!mini && <div className="flex items-center justify-between gap-2 px-1 text-[10px] text-muted-foreground">
         <div className="min-w-0 truncate">
           <span className="font-semibold text-foreground">{mapName}</span>
@@ -510,7 +510,7 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
           )}
         </div>
       </div>}
-      <div ref={mapShellRef} className="relative min-h-0 flex-1 overflow-hidden rounded-md border border-white/10 bg-[#11100d]">
+      <div ref={mapShellRef} className={`relative min-h-0 flex-1 overflow-hidden bg-[#11100d] ${mini ? "" : "rounded-md border border-white/10"}`}>
         <div
           ref={mapFrameRef}
           className={`absolute touch-none overflow-hidden bg-[#11100d] select-none ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}
