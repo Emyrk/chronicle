@@ -21,7 +21,7 @@ import {
   type MapSceneFocus,
   type MapUnitRoles,
 } from "./MapScene3D";
-import { collectCastSpellIds, DEFAULT_EFFECT_OPTIONS, effectiveCastIconGuids, iconPreloadUrls, type EncounterEffects } from "./replayEffects";
+import { collectCastSpellIds, DEFAULT_EFFECT_OPTIONS, effectiveCastIconGuids, iconPreloadUrls, schoolNameColor, type EncounterEffects } from "./replayEffects";
 import type { MapViewRequest } from "./MapView2D";
 import type { MapSceneGround, MapSceneMarker } from "./useMapScene";
 import { DEFAULT_EFFECT_SETTINGS, type EffectSettings } from "./mapViewSettings";
@@ -349,6 +349,7 @@ export default function MapView3D({
       } : null,
       // Heal amounts float for heals cast by or landing on selected players and tanks.
       healTextGuids: effectOptions.healText,
+      castSchoolColor: (spellId) => schoolNameColor(spellMeta(spellId).spell?.school?.string),
     } : null);
   }, [castGuids, effectOptions, effectSettings.enabled, effects, frozen, spellMeta]);
 

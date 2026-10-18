@@ -349,7 +349,7 @@ describe("deriveUnitCasts", () => {
       event(5_000, "cast_start", "boss", "tank", { castTimeMs: 2_000 }),
       event(6_500, "slain", "mage", "boss"),
     );
-    expect(deriveUnitCasts(fx, 2_000).get("mage")).toEqual({ progress: 0.5, school: 4, spellName: "Fireball" });
+    expect(deriveUnitCasts(fx, 2_000).get("mage")).toEqual({ progress: 0.5, school: 4, spellId: 133, spellName: "Fireball" });
     expect(deriveUnitCasts(fx, 3_000).has("mage")).toBe(false);
     expect(deriveUnitCasts(fx, 4_400).get("priest")?.progress).toBeCloseTo(0.16);
     expect(deriveUnitCasts(fx, 4_600).has("priest")).toBe(false);

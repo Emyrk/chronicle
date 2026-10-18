@@ -442,6 +442,8 @@ export interface MapScene3DEffects {
   } | null;
   /** Units whose heals (cast or received) float their amount; null for none. */
   healTextGuids: ReadonlySet<string> | null;
+  /** A cast spell's school colour from its spell data (CSS), for casts and AoE rings whose events carry no school. */
+  castSchoolColor?: (spellId: number) => string | null;
 }
 
 /** The spell effect under the pointer, for an HTML tooltip. */
@@ -1997,7 +1999,9 @@ export class MapScene3D {
       const effect = active[index];
       const target = this.units.get(effect.target);
       if (!target) continue;
-      const color = this.effectColor(effect.color);
+      // An AoE ring takes its spell's school when the cast event had none.
+      const ringSchool = effect.type === "ring" && effect.spellId ? this.effects?.castSchoolColor?.(effect.spellId) : null;
+      const color = this.effectColor(ringSchool ?? effect.color);
       const fade = 1 - effect.progress;
       if (effect.type === "beam" || effect.type === "streak") {
         const source = effect.source ? this.units.get(effect.source) : undefined;
@@ -2874,7 +2878,7 @@ export class MapScene3D {
     for (const [guid, object] of this.units) {
       const { token } = object;
       const cast = object.dead ? undefined : this.unitCasts.get(guid);
-      const castColor = cast ? this.effectColor(schoolColor(cast.school)) : null;
+      const castColor = cast ? this.castColor(cast) : null;
       token.arc.visible = Boolean(cast);
       if (cast && castColor) {
         const map = this.tokenTextures.castArc(Math.min(CAST_ARC_TEXTURE_STEPS, Math.floor(cast.progress * CAST_ARC_TEXTURE_STEPS)));
@@ -2944,6 +2948,12 @@ export class MapScene3D {
     geometry.attributes.color.needsUpdate = count > 0;
   }
 
+  // A cast's colour: its event's school, else its spell's (cast starts carry none).
+  private castColor(cast: UnitCast): THREE.Color {
+    const css = cast.school ? schoolColor(cast.school) : (cast.spellId ? this.effects?.castSchoolColor?.(cast.spellId) : null) ?? schoolColor(0);
+    return this.effectColor(css);
+  }
+
   // Selected -> its target (dashes in the cast's school colour while casting,
   // the unit's colour otherwise) and target -> target's target (purple dots).
   private updateTargetLines(dt: number) {
@@ -2953,7 +2963,7 @@ export class MapScene3D {
     const targetsTarget = roles.targetsTarget ? this.units.get(roles.targetsTarget) : undefined;
     const cast = roles.selected && selected && !selected.dead ? this.unitCasts.get(roles.selected) : undefined;
     const lines: [UnitObject | undefined, UnitObject | undefined, THREE.Color, boolean][] = [
-      [selected && !selected.dead ? selected : undefined, target, cast ? this.effectColor(schoolColor(cast.school)) : this.color.set(selected?.color ?? "#ffffff").clone(), false],
+      [selected && !selected.dead ? selected : undefined, target, cast ? this.castColor(cast) : this.color.set(selected?.color ?? "#ffffff").clone(), false],
       [target, targetsTarget && roles.targetsTarget !== roles.selected ? targetsTarget : undefined, new THREE.Color(HALO_COLORS.targetsTarget), true],
     ];
     lines.forEach(([from, to, color, dotted], index) => {

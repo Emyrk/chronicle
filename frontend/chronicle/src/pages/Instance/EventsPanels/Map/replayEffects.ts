@@ -148,6 +148,12 @@ export const SCHOOL_TOKENS: Readonly<Record<number, string>> = {
   8: "arcane",
 };
 
+/** The colour for a spell's school name from its spell data ("Frost" …), or null when it is not one of SCHOOL_TOKENS. */
+export function schoolNameColor(name: string | null | undefined): string | null {
+  const token = name?.toLowerCase();
+  return token && Object.values(SCHOOL_TOKENS).includes(token) ? `var(--color-school-${token})` : null;
+}
+
 export function schoolColor(school: number): string {
   return `var(--color-school-${SCHOOL_TOKENS[school] ?? "physical"})`;
 }
@@ -688,7 +694,9 @@ export function deriveLastHitTargets(
 /** A cast bar in progress: how far along (0-1) and its school (for colour). */
 export interface UnitCast {
   progress: number;
+  /** From the event; cast starts usually carry none (0), so the spell's data fills it in. */
   school: number;
+  spellId: number | null;
   spellName: string;
 }
 
@@ -709,7 +717,7 @@ export function deriveUnitCasts(fx: EncounterEffects, cursorMs: number, out: Map
     if (event.kind !== "cast_start" || event.castTimeMs <= 0 || out.has(event.source) || isBasicAttack(event)) continue;
     const ageMs = cursorMs - event.timestampMs;
     if (ageMs >= event.castTimeMs || castEndedBy(events, index, end)) continue;
-    out.set(event.source, { progress: ageMs / event.castTimeMs, school: event.school, spellName: event.spellName });
+    out.set(event.source, { progress: ageMs / event.castTimeMs, school: event.school, spellId: event.spellId, spellName: event.spellName });
   }
   return out;
 }
