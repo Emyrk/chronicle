@@ -3696,7 +3696,7 @@ SELECT
   COALESCE(guild_average.avg_duration_ms, 0)::bigint AS guild_avg_duration_ms,
   (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = li.id)::int AS player_count
 FROM log_instances li
-JOIN wow_log_groups wlg ON wlg.id = li.log_group_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.private
 JOIN users u ON u.id = wlg.owner
 LEFT JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 LEFT JOIN wow_servers ws ON ws.id = wsr.server_id
@@ -4988,6 +4988,7 @@ JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
   AND plg.parse_generation = wlg.parse_generation
   AND plg.finalized_at IS NOT NULL
+  AND NOT wlg.private
 LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 LEFT JOIN guilds g ON g.id = li.guild_id
@@ -14547,6 +14548,34 @@ func (q *sqlQuerier) RankingRunIdentitiesByLogGroupID(ctx context.Context, logGr
 	return items, nil
 }
 
+const rankingRunLogGroupIDs = `-- name: RankingRunLogGroupIDs :many
+SELECT DISTINCT li.log_group_id
+FROM log_instances li
+WHERE COALESCE(li.duplicate_group_id, li.id) = ANY($1::uuid[])
+   OR li.id = ANY($1::uuid[])
+ORDER BY li.log_group_id
+`
+
+func (q *sqlQuerier) RankingRunLogGroupIDs(ctx context.Context, runIds []uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, rankingRunLogGroupIDs, runIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var log_group_id uuid.UUID
+		if err := rows.Scan(&log_group_id); err != nil {
+			return nil, err
+		}
+		items = append(items, log_group_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const rankingRunRepairVerification = `-- name: RankingRunRepairVerification :many
 WITH members AS MATERIALIZED (
     SELECT
@@ -15175,8 +15204,6 @@ const hasInstanceDpsRankings = `-- name: HasInstanceDpsRankings :one
 SELECT EXISTS(
     SELECT 1
     FROM encounter_dps_rankings edr
-    JOIN log_instances instance ON instance.id = edr.instance_id
-    JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.private
     WHERE edr.instance_id = $1
 ) AS has_rankings
 `
@@ -15198,7 +15225,7 @@ INSERT INTO encounter_dps_rankings (
     healing_done, absorbed_done, hps, player_deaths, alive_percentage,
     log_hashed_slug, killed_at
 )
-SELECT
+VALUES (
     $1, $2, $3, $4,
     $5, $6, $7, $8, $9, $10, $11,
     $12, $13, $14,
@@ -15206,12 +15233,6 @@ SELECT
     $19, $20, $21, $22,
     $23, $24, $25, $26, $27,
     $28, $29
-WHERE EXISTS (
-    SELECT 1
-    FROM log_instances instance
-    JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id
-    WHERE instance.id = $2
-      AND NOT log_group.private
 )
 ON CONFLICT (encounter_id, player_guid) DO NOTHING
 `
@@ -15286,8 +15307,6 @@ func (q *sqlQuerier) InsertEncounterDpsRanking(ctx context.Context, arg InsertEn
 const instanceRankingRecords = `-- name: InstanceRankingRecords :many
 SELECT edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at, edr.healing_done, edr.absorbed_done, edr.hps, edr.player_sub_spec, edr.player_deaths, edr.alive_percentage
 FROM encounter_dps_rankings edr
-JOIN log_instances instance ON instance.id = edr.instance_id
-JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.private
 WHERE edr.instance_id = $1
 ORDER BY (encounter_id IS NULL), killed_at, encounter_name, player_name
 `
@@ -18991,7 +19010,6 @@ const getInstanceSpeedrun = `-- name: GetInstanceSpeedrun :one
 SELECT sr.instance_id, sr.instance_name, sr.realm_id, sr.guild_id, sr.qualified, sr.start_time, sr.completion_time, sr.duration_ms, sr.proof, sr.created_at, sr.addon_version, sr.parser_version_num, sr.addon_version_num, sr.ranked_start_time, sr.ranked_completion_time, sr.ranked_duration_ms, sr.boss_to_boss_start_time, sr.boss_to_boss_completion_time, sr.boss_to_boss_duration_ms, li.capabilities
 FROM instance_speedruns sr
 JOIN log_instances li ON li.id = sr.instance_id
-JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.private
 WHERE sr.instance_id = $1
 `
 
@@ -19130,18 +19148,12 @@ INSERT INTO instance_speedruns (
     boss_to_boss_start_time, boss_to_boss_completion_time, boss_to_boss_duration_ms,
     proof, addon_version, parser_version_num, addon_version_num
 )
-SELECT
+VALUES (
     $1, $2, $3, $4,
     $5, $6, $7, $8,
     $9, $10, $11,
     $12, $13, $14,
     $15, $16, $17, $18
-WHERE EXISTS (
-    SELECT 1
-    FROM log_instances instance
-    JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id
-    WHERE instance.id = $1
-      AND NOT log_group.private
 )
 `
 
@@ -20858,6 +20870,20 @@ func (q *sqlQuerier) TenantDiscoveryStats(ctx context.Context, since pgtype.Time
 		return nil, err
 	}
 	return items, nil
+}
+
+const tenantIDByRealmID = `-- name: TenantIDByRealmID :one
+SELECT COALESCE(ws.tenant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS tenant_id
+FROM wow_server_realms realm
+JOIN wow_servers ws ON ws.id = realm.server_id
+WHERE realm.id = $1
+`
+
+func (q *sqlQuerier) TenantIDByRealmID(ctx context.Context, realmID uuid.UUID) (uuid.NullUUID, error) {
+	row := q.db.QueryRow(ctx, tenantIDByRealmID, realmID)
+	var tenant_id uuid.NullUUID
+	err := row.Scan(&tenant_id)
+	return tenant_id, err
 }
 
 const updateTenant = `-- name: UpdateTenant :one

@@ -152,7 +152,7 @@ SELECT
   COALESCE(guild_average.avg_duration_ms, 0)::bigint AS guild_avg_duration_ms,
   (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = li.id)::int AS player_count
 FROM log_instances li
-JOIN wow_log_groups wlg ON wlg.id = li.log_group_id
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.private
 JOIN users u ON u.id = wlg.owner
 LEFT JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 LEFT JOIN wow_servers ws ON ws.id = wsr.server_id

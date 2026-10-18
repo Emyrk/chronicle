@@ -80,20 +80,30 @@ func (api *API) UpdatePrivateLogVisibility(w http.ResponseWriter, r *http.Reques
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	if current == req.Private {
-		httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "Log is already " + visibility + "."})
-		return
+	alreadyRequestedVisibility := current == req.Private
+	if !alreadyRequestedVisibility {
+		_, err = api.Zed.UpdateWoWLogGroupPrivacy(ctx, database.UpdateWoWLogGroupPrivacyParams{
+			ID:      logGroupID,
+			Private: req.Private,
+		})
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
 	}
 
-	_, err = api.Zed.UpdateWoWLogGroupPrivacy(ctx, database.UpdateWoWLogGroupPrivacyParams{
-		ID:      logGroupID,
-		Private: req.Private,
-	})
-	if err != nil {
+	// Intrinsic metrics are persisted for every log. Reconcile only the shared
+	// duplicate, ranking, and cohort state when visibility changes (or when an
+	// idempotent retry repairs a previous partial failure).
+	if err := api.Chronicle.ReconcileLogGroupVisibility(ctx, logGroupID, !req.Private); err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 
+	if alreadyRequestedVisibility {
+		httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "Log is already " + visibility + "."})
+		return
+	}
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "Log is now " + visibility + "."})
 }
 

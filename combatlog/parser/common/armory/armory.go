@@ -61,7 +61,14 @@ func New(units *unitdb.Units) *Tracker {
 	}
 }
 
-func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid.UUID, realmID uuid.UUID, datasetID uuid.UUID, tx *authz.AuthzTX) (*database.Guild, error) {
+// InsertGuilds persists guild identities and returns the instance's majority
+// guild without updating the public armory projection.
+func (g *Tracker) InsertGuilds(ctx context.Context, realmID uuid.UUID, tx *authz.AuthzTX) (*database.Guild, error) {
+	_, guild, err := g.insertGuilds(ctx, realmID, tx)
+	return guild, err
+}
+
+func (g *Tracker) insertGuilds(ctx context.Context, realmID uuid.UUID, tx *authz.AuthzTX) (map[string]uuid.UUID, *database.Guild, error) {
 	guildIDs := make(map[string]uuid.UUID)
 	mostGuildPlayers := 0
 	var guildWithMostPlayers *database.Guild
@@ -69,10 +76,7 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 	// Acquire row locks in a stable order across parser workers and processes.
 	// Random map iteration can otherwise deadlock two transactions that share
 	// multiple guilds or players but upsert them in opposite orders.
-	guildNames := sortedGuildNames(g.Guilds)
-	playerGUIDs := sortedPlayerGUIDs(g.Players)
-
-	for _, name := range guildNames {
+	for _, name := range sortedGuildNames(g.Guilds) {
 		players := g.Guilds[name]
 		insertedGuild, err := tx.UpsertGuild(ctx, database.UpsertGuildParams{
 			RealmID:   realmID,
@@ -80,7 +84,7 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 			CreatedAt: database.Timestamptz(time.Now()),
 		})
 		if err != nil {
-			return nil, fmt.Errorf("upsert guild: %w", err)
+			return nil, nil, fmt.Errorf("upsert guild: %w", err)
 		}
 
 		// This should never not be the case, but just in case.
@@ -93,6 +97,19 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 			guildWithMostPlayers = &insertedGuild
 		}
 	}
+
+	if mostGuildPlayers <= len(g.Participant)/2 {
+		guildWithMostPlayers = nil
+	}
+	return guildIDs, guildWithMostPlayers, nil
+}
+
+func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid.UUID, realmID uuid.UUID, datasetID uuid.UUID, tx *authz.AuthzTX) (*database.Guild, error) {
+	guildIDs, guildWithMostPlayers, err := g.insertGuilds(ctx, realmID, tx)
+	if err != nil {
+		return nil, err
+	}
+	playerGUIDs := sortedPlayerGUIDs(g.Players)
 
 	// Collect unique item IDs and names for batch metadata fetch.
 	// Names are used as fallback for transmog IDs that don't exist in the item table.
@@ -238,10 +255,7 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 		}
 	}
 
-	if mostGuildPlayers > len(g.Participant)/2 && guildWithMostPlayers != nil {
-		return guildWithMostPlayers, nil
-	}
-	return nil, nil
+	return guildWithMostPlayers, nil
 }
 
 func persistedPlayerLevel(player combatant.Combatant, udb *unitdb.Units) int16 {

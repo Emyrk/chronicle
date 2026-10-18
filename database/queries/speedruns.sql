@@ -6,25 +6,18 @@ INSERT INTO instance_speedruns (
     boss_to_boss_start_time, boss_to_boss_completion_time, boss_to_boss_duration_ms,
     proof, addon_version, parser_version_num, addon_version_num
 )
-SELECT
+VALUES (
     @instance_id, @instance_name, @realm_id, @guild_id,
     @qualified, @start_time, @completion_time, @duration_ms,
     @ranked_start_time, @ranked_completion_time, @ranked_duration_ms,
     @boss_to_boss_start_time, @boss_to_boss_completion_time, @boss_to_boss_duration_ms,
     @proof, @addon_version, @parser_version_num, @addon_version_num
-WHERE EXISTS (
-    SELECT 1
-    FROM log_instances instance
-    JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id
-    WHERE instance.id = @instance_id
-      AND NOT log_group.private
 );
 
 -- name: GetInstanceSpeedrun :one
 SELECT sr.*, li.capabilities
 FROM instance_speedruns sr
 JOIN log_instances li ON li.id = sr.instance_id
-JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.private
 WHERE sr.instance_id = $1;
 
 -- name: GetInstanceEncounterKillTimes :many

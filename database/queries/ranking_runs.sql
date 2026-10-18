@@ -19,6 +19,13 @@ FROM log_instances li
 WHERE li.log_group_id = @log_group_id
 ORDER BY li.id;
 
+-- name: RankingRunLogGroupIDs :many
+SELECT DISTINCT li.log_group_id
+FROM log_instances li
+WHERE COALESCE(li.duplicate_group_id, li.id) = ANY(@run_ids::uuid[])
+   OR li.id = ANY(@run_ids::uuid[])
+ORDER BY li.log_group_id;
+
 -- name: RankingRunByID :one
 SELECT *
 FROM ranking_runs

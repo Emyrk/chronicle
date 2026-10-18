@@ -695,6 +695,7 @@ type sqlcQuerier interface {
 	RankingRunByID(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	RankingRunIdentitiesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]RankingRunIdentitiesByInstanceIDsRow, error)
 	RankingRunIdentitiesByLogGroupID(ctx context.Context, logGroupID uuid.UUID) ([]RankingRunIdentitiesByLogGroupIDRow, error)
+	RankingRunLogGroupIDs(ctx context.Context, runIds []uuid.UUID) ([]uuid.UUID, error)
 	RankingRunRepairVerification(ctx context.Context, queryLimit int32) ([]RankingRunRepairVerificationRow, error)
 	RankingRunSources(ctx context.Context, affectedIds []uuid.UUID) ([]RankingRunSourcesRow, error)
 	// Returns box plot statistics (min, q1, median, q3, max, count) per class/spec.
@@ -860,6 +861,7 @@ type sqlcQuerier interface {
 	// Returns instance and unique player counts per discoverable tenant within a
 	// time window. Used by the discovery endpoint to surface activity metrics.
 	TenantDiscoveryStats(ctx context.Context, since pgtype.Timestamptz) ([]TenantDiscoveryStatsRow, error)
+	TenantIDByRealmID(ctx context.Context, realmID uuid.UUID) (uuid.NullUUID, error)
 	TouchLogInstanceRankingSource(ctx context.Context, instanceID uuid.UUID) error
 	TouchSidekickUpload(ctx context.Context, arg TouchSidekickUploadParams) (int64, error)
 	TouchUploadKeyLastUsed(ctx context.Context, id uuid.UUID) error

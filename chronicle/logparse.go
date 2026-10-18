@@ -255,7 +255,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	lg := logGroup.WoWLogGroup
 	invalidLog := lg.InvalidatedAt.Valid
 	publicLog := !lg.Private
-	publicRankedLog := !invalidLog && publicLog
+	rankableLog := !invalidLog
 	logFormat := lg.LogType.Format()
 	if lg.Format.Valid {
 		logFormat = lg.Format.LogFormat
@@ -515,20 +515,23 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				return err
 			}
 			var guild *database.Guild
-			var guildID uuid.UUID
 			if publicLog {
-				var err error
 				guild, err = finalized.Guilds.Insert(ctx, encountersState.Units, instanceID, realmID, resolved.DatasetID, tx)
-				if err != nil {
-					return fmt.Errorf("insert guild: %w", err)
-				}
-				if guild != nil {
-					guildID = guild.ID
-				}
+			} else {
+				// Preserve the instance's intrinsic guild association without letting
+				// private gear or talents update the public armory projection.
+				guild, err = finalized.Guilds.InsertGuilds(ctx, realmID, tx)
+			}
+			if err != nil {
+				return fmt.Errorf("insert guild: %w", err)
+			}
+			var guildID uuid.UUID
+			if guild != nil {
+				guildID = guild.ID
+			}
 
-				if err := finalized.Loot.Insert(ctx, instanceID, realmID, tx); err != nil {
-					return fmt.Errorf("insert loot: %w", err)
-				}
+			if err := finalized.Loot.Insert(ctx, instanceID, realmID, tx); err != nil {
+				return fmt.Errorf("insert loot: %w", err)
 			}
 
 			recorderName := ""
@@ -729,7 +732,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 					break
 				}
 			}
-			if publicRankedLog && finalized.Rankings != nil && finalized.Rankings.Speedrun != nil && hasBossKill {
+			if rankableLog && finalized.Rankings != nil && finalized.Rankings.Speedrun != nil && hasBossKill {
 				sr := finalized.Rankings.Speedrun
 				proofJSON, err := json.Marshal(rankings.SpeedrunProofPayload{
 					Proof:      sr.Proof,
@@ -853,7 +856,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 
 		// Rankings are supplementary. Persist them atomically in a separate
 		// transaction so a ranking error cannot roll back the parsed instance.
-		if publicRankedLog && finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil {
+		if rankableLog && finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil {
 			rankErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
 				if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
 					return err
@@ -946,7 +949,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 
 	// Enqueue parse score computation for each successfully parsed instance.
 	// Fire-and-forget: scoring failure doesn't fail the parse, but log errors.
-	if publicRankedLog && w.parent.queue != nil {
+	if rankableLog && publicLog && w.parent.queue != nil {
 		for _, inst := range jobOut.Instances {
 			_, enqErr := w.parent.queue.Insert(ctx, parseargs.ArgsComputeParseScores{
 				InstanceID: inst.ID,

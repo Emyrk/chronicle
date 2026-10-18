@@ -859,7 +859,7 @@ INSERT INTO encounter_dps_rankings (
     healing_done, absorbed_done, hps, player_deaths, alive_percentage,
     log_hashed_slug, killed_at
 )
-SELECT
+VALUES (
     @encounter_id, @instance_id, @encounter_name, @instance_name,
     @player_guid, @player_name, @player_class, @player_spec, @player_sub_spec, @player_role, @player_level,
     @talent_build_id, @difficulty_name, @max_players,
@@ -867,12 +867,6 @@ SELECT
     @damage_done, @duration_secs, @dps, @avg_ilvl,
     @healing_done, @absorbed_done, @hps, @player_deaths, @alive_percentage,
     @log_hashed_slug, @killed_at
-WHERE EXISTS (
-    SELECT 1
-    FROM log_instances instance
-    JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id
-    WHERE instance.id = @instance_id
-      AND NOT log_group.private
 )
 ON CONFLICT (encounter_id, player_guid) DO NOTHING;
 
@@ -1055,8 +1049,6 @@ ORDER BY edr.realm_name;
 -- includes zero-value DPS/HPS rows so instance-level ranking issues can be debugged.
 SELECT edr.*
 FROM encounter_dps_rankings edr
-JOIN log_instances instance ON instance.id = edr.instance_id
-JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.private
 WHERE edr.instance_id = @instance_id
 ORDER BY (encounter_id IS NULL), killed_at, encounter_name, player_name;
 
@@ -1064,7 +1056,5 @@ ORDER BY (encounter_id IS NULL), killed_at, encounter_name, player_name;
 SELECT EXISTS(
     SELECT 1
     FROM encounter_dps_rankings edr
-    JOIN log_instances instance ON instance.id = edr.instance_id
-    JOIN wow_log_groups log_group ON log_group.id = instance.log_group_id AND NOT log_group.private
     WHERE edr.instance_id = @instance_id
 ) AS has_rankings;

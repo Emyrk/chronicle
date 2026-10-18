@@ -191,6 +191,7 @@ JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
   AND plg.parse_generation = wlg.parse_generation
   AND plg.finalized_at IS NOT NULL
+  AND NOT wlg.private
 LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 LEFT JOIN guilds g ON g.id = li.guild_id

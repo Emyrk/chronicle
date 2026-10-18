@@ -7,6 +7,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
@@ -52,10 +53,25 @@ func TestPrivateLogsExcludedFromPublicDiscoveryAndDerivedWrites(t *testing.T) {
 	publicInstanceID := insertInstance(false, "public-discovery-log")
 	privateInstanceID := insertInstance(true, "private-discovery-log")
 
+	_, err = store.PublicInstance(ctx, privateInstanceID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = store.PublicInstanceBySlug(ctx, pgtype.Text{String: "private-discovery-log", Valid: true})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	publicInstance, err := store.PublicInstance(ctx, publicInstanceID)
+	require.NoError(t, err)
+	require.Equal(t, publicInstanceID, publicInstance.ID)
+
 	recent, err := store.ListRecentInstances(ctx, database.ListRecentInstancesParams{LimitCount: 10})
 	require.NoError(t, err)
 	require.Len(t, recent, 1)
 	require.Equal(t, publicInstanceID, recent[0].ID)
+
+	externalRecent, err := store.ListExternalAPIRecentInstances(ctx, database.ListExternalAPIRecentInstancesParams{
+		RealmID: uuid.Nil, GuildID: uuid.Nil, ResultLimit: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, externalRecent, 1)
+	require.Equal(t, publicInstanceID, externalRecent[0].ID)
 
 	duplicates, err := store.FindDuplicateInstanceCandidates(ctx, database.FindDuplicateInstanceCandidatesParams{
 		RealmID: realmID, Name: "Molten Core", MaxPlayers: 40,
@@ -72,9 +88,26 @@ func TestPrivateLogsExcludedFromPublicDiscoveryAndDerivedWrites(t *testing.T) {
 		CompletionTime: database.Timestamptz(startedAt.Add(time.Hour)),
 		DurationMs:     int64(time.Hour / time.Millisecond), Proof: []byte(`{"proof":[]}`),
 	}))
-	var privateSpeedruns int
-	require.NoError(t, pool.QueryRow(ctx,
-		"SELECT COUNT(*) FROM instance_speedruns WHERE instance_id = $1", privateInstanceID,
-	).Scan(&privateSpeedruns))
-	require.Zero(t, privateSpeedruns)
+	privateSpeedrun, err := store.GetInstanceSpeedrun(ctx, privateInstanceID)
+	require.NoError(t, err)
+	require.Equal(t, privateInstanceID, privateSpeedrun.InstanceID)
+
+	leaderboard, err := store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
+		MinPlayers: 0, MaxPlayers: 40, ResultLimit: 10,
+		InstanceName: "Molten Core", RealmNames: []string{},
+	})
+	require.NoError(t, err)
+	require.Empty(t, leaderboard)
+
+	require.NoError(t, store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
+		InstanceID: privateInstanceID, EncounterName: "Trash", InstanceName: "Molten Core",
+		PlayerGuid: "player-guid", PlayerName: "Private Player", PlayerClass: "Mage",
+		PlayerSpec: "Frost", PlayerSubSpec: "", PlayerRole: "dps", PlayerLevel: 60,
+		DifficultyName: "Normal", MaxPlayers: 40, RealmID: realmID, RealmName: "Test Realm",
+		DamageDone: 1000, DurationSecs: 10, Dps: 100,
+		LogHashedSlug: "private-discovery-log", KilledAt: database.Timestamptz(startedAt),
+	}))
+	rankingRecords, err := store.InstanceRankingRecords(ctx, privateInstanceID)
+	require.NoError(t, err)
+	require.Len(t, rankingRecords, 1)
 }
