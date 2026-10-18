@@ -1,29 +1,79 @@
-import { useMemo, useRef, type PointerEvent } from "react";
+import { useCallback, useMemo, useRef, type PointerEvent } from "react";
 import { Pause, Play, PowerOff, RotateCcw, Skull } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
+import type { PanelContext, PanelDefinition } from "../types";
+import { usePanelAggregation } from "../usePanelAggregation";
+import { usePlayerLifeState } from "../usePlayerLifeState";
+import { statusProcessor, type StatusProcessorEvent, type StatusResult } from "../Status/status.processor";
+import { createStatusRaidHealthModel, statusRaidHealthAt, type StatusRaidHealthModel } from "../Status/statusRaidHealth";
+import { useActualRaidDurabilityModel } from "../Status/useRaidDurabilityModel";
 import type { StripRenderProps } from "./types";
 import type { ReplayControllerResult } from "./replayController.processor";
+import { raidHealthColor } from "./raidHealthColor";
 import {
   formatBucket,
   formatReplayClock,
   replayBucketMs,
-  replayControllerBars,
   replayControllerMarkers,
   replayControllerTicks,
+  replayDurabilityBars,
   type ReplayBounds,
 } from "./replayControllerModel";
 
 const SPEEDS = [0.25, 0.5, 1, 2, 4];
 
+const DURABILITY_PANEL: PanelDefinition<StatusResult, StatusProcessorEvent> = {
+  ...statusProcessor,
+  label: "Replay Controller Durability",
+  icon: null,
+  keybinds: [],
+  syncDataMode: "full",
+  render: () => null,
+};
+
+/**
+ * Raid durability (0–100) at a time, for the controller's bars: one selected
+ * encounter uses sampled health when the log has it (else the estimate), as
+ * the Raid Durability strip does; several use each encounter's estimate.
+ * Null outside every selected encounter.
+ */
+function useReplayDurability(context: PanelContext): (timestampMs: number) => number | null {
+  const status = usePanelAggregation<StatusResult>({ panel: DURABILITY_PANEL, context, enabled: true });
+  const playerLife = usePlayerLifeState(context);
+  const encounters = useMemo(() => context.selectedEncounterIds
+    .flatMap((id) => {
+      const encounter = status.result.encounters.get(id);
+      return encounter ? [encounter] : [];
+    }), [context.selectedEncounterIds, status.result.encounters]);
+  const single = encounters.length === 1 ? encounters[0] : null;
+  const actual = useActualRaidDurabilityModel(context, single?.encounterId ?? null, single !== null);
+  const players = context.instance.players;
+  const segments = useMemo(() => encounters.map((encounter): { startMs: number; endMs: number; model: StatusRaidHealthModel } => {
+    if (single && actual.supported && actual.available) return { startMs: encounter.startMilli, endMs: encounter.endMilli, model: actual.model };
+    const transitions = playerLife.loading || playerLife.error
+      ? undefined
+      : new Map(Object.keys(players ?? {}).map((playerId) => [playerId, playerLife.state.transitions(encounter.encounterId, playerId)]));
+    return {
+      startMs: encounter.startMilli,
+      endMs: encounter.endMilli,
+      model: createStatusRaidHealthModel(Array.from(encounter.units.values()).filter((unit) => unit.kind === "player"), transitions),
+    };
+  }), [actual.available, actual.model, actual.supported, encounters, playerLife.error, playerLife.loading, playerLife.state, players, single]);
+  return useCallback((timestampMs: number) => {
+    const segment = segments.find((candidate) => timestampMs >= candidate.startMs && timestampMs <= candidate.endMs);
+    return segment && segment.model.unitCount > 0 ? statusRaidHealthAt(segment.model, timestampMs).percent : null;
+  }, [segments]);
+}
+
 const controlButtonClass = "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-popover text-foreground hover:bg-muted disabled:opacity-40";
 
 /**
- * Replay transport over a bar chart of party damage: play, restart, speed,
- * and drag anywhere on the bars to scrub. Played bars fill in as the cursor
- * passes; player deaths mark the top.
+ * Replay transport over a bar chart of raid durability: play, restart, speed,
+ * disable, and drag anywhere on the bars to scrub. Played bars colour in as
+ * the cursor passes; player deaths mark the top.
  */
-export function ReplayControllerStrip({ result }: StripRenderProps<ReplayControllerResult>) {
+export function ReplayControllerStrip({ result, context }: StripRenderProps<ReplayControllerResult>) {
   const sync = useSyncModeContextOptional();
   const trackRef = useRef<HTMLDivElement>(null);
   const boundsDates = sync?.encounterBounds ?? null;
@@ -36,7 +86,8 @@ export function ReplayControllerStrip({ result }: StripRenderProps<ReplayControl
   const disabled = !sync || !bounds || youtubeActive;
 
   const bucketMs = bounds ? replayBucketMs(bounds.endMs - bounds.startMs) : 0;
-  const bars = useMemo(() => bounds ? replayControllerBars(result, bounds, cursorMs, bucketMs) : [], [bounds, bucketMs, cursorMs, result]);
+  const durabilityAt = useReplayDurability(context);
+  const bars = useMemo(() => bounds ? replayDurabilityBars(durabilityAt, bounds, cursorMs, bucketMs) : [], [bounds, bucketMs, cursorMs, durabilityAt]);
   const markers = useMemo(() => bounds ? replayControllerMarkers(result, bounds, cursorMs) : [], [bounds, cursorMs, result]);
   const ticks = useMemo(() => bounds ? replayControllerTicks(bounds) : [], [bounds]);
 
@@ -137,7 +188,7 @@ export function ReplayControllerStrip({ result }: StripRenderProps<ReplayControl
           })}
         </div>
         <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
-          <span className="flex items-center gap-1" title={`Party damage per ${formatBucket(bucketMs)}`}><span className="h-1.5 w-1.5 bg-[var(--chart-3)]" />Dmg/{formatBucket(bucketMs)}</span>
+          <span className="flex items-center gap-1" title={`Lowest raid durability per ${formatBucket(bucketMs)}`}><span className="h-1.5 w-1.5 bg-emerald-500/60" />Durability</span>
           <span className="flex items-center gap-1"><Skull className="h-2 w-2 text-red-400" />Death</span>
         </div>
       </div>
@@ -157,14 +208,14 @@ export function ReplayControllerStrip({ result }: StripRenderProps<ReplayControl
         >
           <div className="absolute inset-x-0 bottom-[18px] top-[14px] flex items-stretch gap-px">
             {bars.map((bar) => (
-              <div key={bar.startMs} className="relative min-w-0 flex-1" title={`${formatReplayClock(bar.startMs - (bounds?.startMs ?? 0))} · ${Math.round(bar.value).toLocaleString()} damage`}>
+              <div key={bar.startMs} className="relative min-w-0 flex-1" title={`${formatReplayClock(bar.startMs - (bounds?.startMs ?? 0))} · ${Math.round(bar.value)}% durability`}>
                 <div
                   className="absolute inset-x-0 bottom-0 rounded-t-[1px]"
-                  style={{ height: `${bar.height}%`, background: bar.state === "current" ? "rgba(255,255,255,.22)" : bar.state === "future" ? "rgba(255,255,255,.08)" : "transparent" }}
+                  style={{ height: `${bar.height}%`, background: bar.state === "future" ? "rgba(255,255,255,.08)" : "transparent" }}
                 />
                 <div
-                  className="absolute inset-x-0 bottom-0 rounded-t-[1px]"
-                  style={{ height: `${bar.fill}%`, background: bar.state === "current" ? "var(--chart-5)" : "var(--chart-3)" }}
+                  className={cn("absolute inset-x-0 bottom-0 rounded-t-[1px]", raidHealthColor(bar.value), bar.state === "current" && "brightness-150")}
+                  style={{ height: `${bar.fill}%` }}
                 />
               </div>
             ))}

@@ -1,36 +1,36 @@
 import { describe, expect, it } from "vitest";
 import { timelineProcessor } from "../Timeline/timeline.processor";
-import { PARTY_DAMAGE_SERIES_ID, type ReplayControllerResult } from "./replayController.processor";
-import { formatBucket, formatReplayClock, replayBucketMs, replayControllerBars, replayControllerMarkers, replayControllerTicks } from "./replayControllerModel";
+import type { ReplayControllerResult } from "./replayController.processor";
+import { formatBucket, formatReplayClock, replayBucketMs, replayControllerMarkers, replayControllerTicks, replayDurabilityBars } from "./replayControllerModel";
 
 const START = 1_000_000;
 
-function result(bins: number[], overrides: Partial<ReplayControllerResult> = {}): ReplayControllerResult {
-  const timeline = timelineProcessor.createState();
-  timeline.binMs = 2000;
-  timeline.series.set(PARTY_DAMAGE_SERIES_ID, bins);
-  return { timeline, baseMs: START, ...overrides };
+function result(overrides: Partial<ReplayControllerResult> = {}): ReplayControllerResult {
+  return { timeline: timelineProcessor.createState(), baseMs: START, ...overrides };
 }
 
-describe("replayControllerBars", () => {
+describe("replayDurabilityBars", () => {
   const bounds = { startMs: START, endMs: START + 6000 };
+  // 100% for the first 2s, 40% until 4s, then 80%.
+  const durabilityAt = (ms: number) => ms < START + 2000 ? 100 : ms < START + 4000 ? 40 : 80;
 
-  it("fills played bars, partly fills the current one and ghosts the rest", () => {
-    const bars = replayControllerBars(result([100, 200, 50]), bounds, START + 3000, 2000);
+  it("shows each bar's lowest durability, played up to the cursor", () => {
+    const bars = replayDurabilityBars(durabilityAt, bounds, START + 3000, 2000);
     expect(bars.map((bar) => bar.state)).toEqual(["past", "current", "future"]);
-    expect(bars.map((bar) => bar.height)).toEqual([50, 100, 25]);
-    expect(bars[0].fill).toBe(50);
-    expect(bars[1].fill).toBe(50);
+    // A bar's last sample touches the next level, so each takes the lower of the two.
+    expect(bars.map((bar) => bar.value)).toEqual([40, 40, 80]);
+    expect(bars[0].fill).toBe(40);
+    expect(bars[1].fill).toBe(40);
     expect(bars[2].fill).toBe(0);
   });
 
   it("shows every bar as played with replay off", () => {
-    expect(replayControllerBars(result([100, 200, 50]), bounds, null, 2000).every((bar) => bar.state === "past")).toBe(true);
+    expect(replayDurabilityBars(durabilityAt, bounds, null, 2000).every((bar) => bar.state === "past")).toBe(true);
   });
 
-  it("lines bins up with bounds that start after the first selected encounter", () => {
-    const bars = replayControllerBars(result([1, 2, 3, 4]), { startMs: START + 4000, endMs: START + 8000 }, null, 2000);
-    expect(bars.map((bar) => bar.value)).toEqual([3, 4]);
+  it("leaves bars outside every encounter empty", () => {
+    const bars = replayDurabilityBars((ms) => ms < START + 2000 ? 90 : null, bounds, null, 2000);
+    expect(bars.map((bar) => bar.value)).toEqual([90, 0, 0]);
   });
 });
 
@@ -44,21 +44,11 @@ describe("bar width", () => {
     expect(formatBucket(2000)).toBe("2s");
     expect(formatBucket(60_000)).toBe("1m");
   });
-
-  it("sums fine bins into each bar and fills the current bar by damage done so far", () => {
-    const data = result([10, 30, 20, 40]);
-    data.timeline.binMs = 500;
-    const bars = replayControllerBars(data, { startMs: START, endMs: START + 2000 }, START + 1250, 1000);
-    expect(bars.map((bar) => bar.value)).toEqual([40, 60]);
-    expect(bars[1].state).toBe("current");
-    // Half of the 20 bin before the cursor: 10 of the tallest bar's 60.
-    expect(bars[1].fill).toBeCloseTo((10 / 60) * 100);
-  });
 });
 
 describe("replayControllerMarkers", () => {
   it("places player deaths, dimming those after the cursor", () => {
-    const data = result([]);
+    const data = result();
     data.timeline.playerDeaths.push(
       { offsetMs: 1000, playerId: "a", playerName: "Ladiess", className: "SHAMAN" },
       { offsetMs: 3000, playerId: "p", playerName: "Thaddeus", className: "PALADIN" },

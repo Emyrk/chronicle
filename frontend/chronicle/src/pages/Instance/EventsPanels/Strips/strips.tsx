@@ -27,6 +27,7 @@ import {
   stripOptionValue,
   stripTitleMode,
 } from "./stripOptions";
+import { raidHealthColor } from "./raidHealthColor";
 import { replayControllerProcessor } from "./replayController.processor";
 import { ReplayControllerStrip } from "./ReplayControllerStrip";
 import { stripReplayProgress } from "./stripReplay";
@@ -40,12 +41,6 @@ const DEFAULT_SIZE = {
   preferredThickness: 1,
   maxThickness: 2,
 };
-
-function raidHealthColor(percent: number): string {
-  if (percent < 25) return "bg-red-500/80";
-  if (percent < 55) return "bg-amber-500/65";
-  return "bg-emerald-500/60";
-}
 
 function ReplayStrip() {
   const deaths = usePlayerDeathTimes();
