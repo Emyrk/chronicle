@@ -422,6 +422,12 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
             Loading the encounter…
           </div>
         )}
+        {/* Without Replay the map is a still: say so over it rather than in a row of its own. */}
+        {!reloading && ready.overlayAvailable && !ready.syncEnabled && (
+          <div className="pointer-events-none absolute left-1/2 top-2 z-40 -translate-x-1/2 whitespace-nowrap rounded-sm bg-black/75 px-2 py-0.5 text-[11px] text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
+            Final positions · enable Replay to watch units move
+          </div>
+        )}
         {/* Top-left: the Raid Frames panel itself, drawn as an overlay (one
             implementation for the map and the panel). The inspect frame below moves freely. */}
         <UnitInspectContext.Provider value={inspectSelection}>
@@ -599,11 +605,9 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
       {webglUnavailable && (
         <p className="px-1 text-[9px] text-amber-300/80">3D view needs WebGL, which this browser could not provide. Showing the replay map in 2D instead.</p>
       )}
-      {!ready.overlayAvailable ? (
+      {!ready.overlayAvailable && (
         <p className="px-1 text-[9px] text-amber-300/80">No compatible world-coordinate mapping is available for this floor, so unit markers are hidden.</p>
-      ) : !ready.syncEnabled ? (
-        <p className="px-1 text-[9px] text-muted-foreground">Showing the final position snapshot. Enable Replay to watch units move.</p>
-      ) : null}
+      )}
     </div>
   );
 }
