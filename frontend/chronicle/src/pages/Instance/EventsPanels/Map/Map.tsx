@@ -36,8 +36,8 @@ import { MAP_CONTROL_KEYBINDS } from "./mapControls";
 import { MeterWindows } from "./MeterWindows";
 import { useMeterWindows } from "./meterWindowsState";
 import { MapSettingsOverlay } from "./MapSettingsOverlay";
-import { useEffectSettings } from "./mapViewSettings";
-import { readStoredWalkAvatar, storeWalkAvatar } from "./walkAvatars";
+import { DEFAULT_EFFECT_SETTINGS, useEffectSettings } from "./mapViewSettings";
+import { DEFAULT_WALK_AVATAR, readStoredWalkAvatar, storeWalkAvatar } from "./walkAvatars";
 import { useMapScene } from "./useMapScene";
 import { encounterJumps, mapPresentationForSelection } from "./wholeRun";
 import { PlanControls } from "./plan/PlanControls";
@@ -109,9 +109,11 @@ function storeShown(key: string, shown: boolean) {
   }
 }
 
-function storeMesh(on: boolean) {
+// null forgets the choice, so the default (preferredMeshState) applies again.
+function storeMesh(on: boolean | null) {
   try {
-    localStorage.setItem(MESH_STORAGE_KEY, String(on));
+    if (on === null) localStorage.removeItem(MESH_STORAGE_KEY);
+    else localStorage.setItem(MESH_STORAGE_KEY, String(on));
   } catch {
     // Storage may be unavailable (private mode); the toggle still works for this session.
   }
@@ -336,6 +338,16 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   const setWalkAvatar = (id: string) => {
     setWalkAvatarState(id);
     storeWalkAvatar(id);
+  };
+  // Map settings → Reset all: every setting to its default, and the frames back.
+  const resetAllSettings = () => {
+    updateEffectSettings(DEFAULT_EFFECT_SETTINGS);
+    setAdStrafe(true);
+    setWalkAvatar(DEFAULT_WALK_AVATAR);
+    setShowRaidFrames(true);
+    setShowEnemyFrames(true);
+    setStoredMesh(null);
+    storeMesh(null);
   };
   // WoW-style targeting: clicking a unit (on the map or a raid frame) makes it
   // the target, shown at centre left with its own target at centre right.
@@ -723,18 +735,14 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               onEffectSettings={updateEffectSettings}
               show3D={show3D}
               hasEffects={Boolean(ready.effects)}
-              raidFrames={showRaidFrames}
-              onRaidFrames={setShowRaidFrames}
-              enemyFrames={showEnemyFrames}
-              onEnemyFrames={setShowEnemyFrames}
               mesh={show3D && meshUrl ? { on: meshWanted, locked: meshOnly, loading: Boolean(dungeonMesh) && meshState === "loading", onToggle: toggleMesh } : null}
               floors={ready.floors.length > 1 ? { list: ready.floors, value: ready.selectedFloorNumber, onChange: ready.setFloorNumber } : null}
               onTopDown={() => setTopDownKey((key) => key + 1)}
-              walk={canWalk ? { on: walking, onToggle: () => setWalking(!walking) } : null}
               adStrafe={adStrafe}
               onAdStrafe={setAdStrafe}
               walkAvatar={walkAvatar}
               onWalkAvatar={setWalkAvatar}
+              onResetAll={resetAllSettings}
             />
           )}
           <TargetFrames

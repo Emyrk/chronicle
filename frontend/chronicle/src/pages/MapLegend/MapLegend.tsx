@@ -301,12 +301,12 @@ export function MapLegend() {
               <At x={trailPath(seconds).x} y={trailPath(seconds).y}><Token {...PALADIN} /></At>
             </Ground>
           }>
-            Off by default. With Map settings → Display → <em>Movement trail</em> set ({TRAIL_OPTIONS.filter((option) => option.value > 0).map((option) => option.label).join(", ")}), a thin line in each unit&apos;s colour runs along where it was over that time, fading to nothing; fainter for faded-out players.
+            Off by default. With Map settings → Units → <em>Movement trail</em> set ({TRAIL_OPTIONS.filter((option) => option.value > 0).map((option) => option.label).join(", ")}), a thin line in each unit&apos;s colour runs along where it was over that time, fading to nothing; fainter for faded-out players.
           </Card>
         </Grid>
       </Section>
 
-      <Section id="above" title="Above the token" note={<>Optionally, health rises as a column from every player's token, with power (mana, rage, energy) in a thinner, shorter one beside it (off by default). Turn it on in Map settings → Display → <em>Above the token</em>.</>}>
+      <Section id="above" title="Above the token" note={<>Optionally, health rises as a column from every player's token, with power (mana, rage, energy) in a thinner, shorter one beside it (off by default). Turn it on in Map settings → Units → <em>Above the token</em>.</>}>
         <Grid min={240}>
           {ABOVE_DISC_MODES.map((mode) => (
             <Card key={mode.value} title={mode.label} demo={
@@ -327,7 +327,7 @@ export function MapLegend() {
         </Grid>
       </Section>
 
-      <Section id="effects" title="Combat effects" note={`Short animations replay what happened at each moment of the fight (shown here at 1/${DEMO_SLOWDOWN} speed; the times are the map's). Turn them off, or limit them to selected players, in Map settings → Effects.`}>
+      <Section id="effects" title="Combat effects" note={`Short animations replay what happened at each moment of the fight (shown here at 1/${DEMO_SLOWDOWN} speed; the times are the map's). Turn them off, or limit them to selected players, in Map settings → Combat.`}>
         <Grid>
           <Card title="Spell" timing={ms(EFFECT_TIMINGS.bolt)} demo={<BoltDemo seconds={seconds} color={frost} />}>
             A bolt in the spell&apos;s school colour flies from caster to target; thicker on crits.
@@ -348,12 +348,12 @@ export function MapLegend() {
             A green bolt to the target and a ring rising up it, bigger for bigger heals.
           </Card>
           <Card title="Critical heal" timing={ms(EFFECT_TIMINGS.heal)} demo={<HealDemo seconds={seconds} crit />}>
-            The rising ring turns gold. Overheal can be shown too, in grey (Map settings → Effects).
+            The rising ring turns gold. Overheal can be shown too, in grey (Map settings → Combat).
           </Card>
         </Grid>
       </Section>
 
-      <Section id="casts" title="Cast icons" note={<>The spell&apos;s icon floats over a caster (slowed down here too). Who gets them is set in Map settings → Effects → <em>Cast icons</em>: {CAST_MODES.map((mode) => `${mode.label} (${mode.title.toLowerCase()})`).join("; ")}.</>}>
+      <Section id="casts" title="Cast icons" note={<>The spell&apos;s icon floats over a caster (slowed down here too). Who gets them is set in Map settings → Combat → <em>Cast icons</em>: {CAST_MODES.map((mode) => `${mode.label} (${mode.title.toLowerCase()})`).join("; ")}.</>}>
         <Grid>
           <Card title="Casting" demo={<CastIconDemo seconds={seconds} mode="casting" />}>
             Grows in, then an outline sweeps round the icon as the cast bar runs.
@@ -381,7 +381,7 @@ export function MapLegend() {
         </Grid>
       </Section>
 
-      <Section id="bars" title="Health bars" note={`Over bosses, selected players and units whose health changed in the last ${ms(RECENT_HEALTH_MS)}, up to ${MAX_HEALTH_BARS} at once. Toggle them in Map settings → Display.`}>
+      <Section id="bars" title="Health bars" note={`Over bosses, selected players and units whose health changed in the last ${ms(RECENT_HEALTH_MS)}, up to ${MAX_HEALTH_BARS} at once. Toggle them in Map settings → Units.`}>
         <div className="grid gap-3 sm:grid-cols-2">
           {[
             { label: "Healthy", bar: <HealthBar fraction={0.95} /> },

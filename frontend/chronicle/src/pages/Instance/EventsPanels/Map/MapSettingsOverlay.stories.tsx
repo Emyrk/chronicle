@@ -5,10 +5,8 @@ import { DEFAULT_EFFECT_SETTINGS, type EffectSettings } from "./mapViewSettings"
 import { DEFAULT_WALK_AVATAR } from "./walkAvatars";
 
 /** The map's settings dialog over a map-sized box, every tab available. */
-function SettingsPlayground() {
-  const [effectSettings, setEffectSettings] = useState<EffectSettings>(DEFAULT_EFFECT_SETTINGS);
-  const [raidFrames, setRaidFrames] = useState(true);
-  const [enemyFrames, setEnemyFrames] = useState(false);
+function SettingsPlayground({ initial = DEFAULT_EFFECT_SETTINGS }: { initial?: EffectSettings }) {
+  const [effectSettings, setEffectSettings] = useState<EffectSettings>(initial);
   const [meshOn, setMeshOn] = useState(true);
   const [floor, setFloor] = useState(1);
   const [adStrafe, setAdStrafe] = useState(true);
@@ -21,18 +19,19 @@ function SettingsPlayground() {
         onEffectSettings={(patch) => setEffectSettings((current) => ({ ...current, ...patch }))}
         show3D
         hasEffects
-        raidFrames={raidFrames}
-        onRaidFrames={setRaidFrames}
-        enemyFrames={enemyFrames}
-        onEnemyFrames={setEnemyFrames}
         mesh={{ on: meshOn, locked: false, loading: false, onToggle: () => setMeshOn(!meshOn) }}
         floors={{ list: [1, 2], value: floor, onChange: setFloor }}
         onTopDown={() => {}}
-        walk={{ on: false, onToggle: () => {} }}
         adStrafe={adStrafe}
         onAdStrafe={setAdStrafe}
         walkAvatar={walkAvatar}
         onWalkAvatar={setWalkAvatar}
+        onResetAll={() => {
+          setEffectSettings(DEFAULT_EFFECT_SETTINGS);
+          setMeshOn(true);
+          setAdStrafe(true);
+          setWalkAvatar(DEFAULT_WALK_AVATAR);
+        }}
       />
     </div>
   );
@@ -48,3 +47,8 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const AllTabs: Story = {};
+
+/** A few settings off their defaults: their dots, the tabs' dots and the reset buttons. */
+export const Changed: Story = {
+  args: { initial: { ...DEFAULT_EFFECT_SETTINGS, trailSeconds: 2, aboveDisc: "health", periodic: true } },
+};

@@ -34,7 +34,7 @@ frontend/chronicle/src/pages/Instance/EventsPanels/Map/
 ├── mapModel.ts           # healthBarColor, MAX_HEALTH_BARS, RECENT_HEALTH_MS, projection
 ├── mapControls.ts        # Keys and MAP_CONTROL_KEYBINDS (help text)
 ├── mapViewSettings.ts    # Saved display settings: CAST_MODES, ABOVE_DISC_MODES, defaults
-├── MapSettingsOverlay.tsx# The settings dialog: tabs (Display, Effects, World, Controls, Character)
+├── MapSettingsOverlay.tsx# The settings dialog: tabs (Units, Combat, World, Controls, Character), resets
 ├── walkAvatars.ts        # Walk-mode characters: creature roster, CDN URL, clip names
 └── TargetFrames.tsx      # Selected / Target / Target's target frames
 
@@ -109,10 +109,19 @@ them when the map's version changes:
 
 ## Settings tabs
 
-`MapSettingsOverlay` builds its tabs from a list of `{ id, label, icon, content }`.
-A new settings surface is one more entry; a tab whose `content` is `null` is
-hidden (e.g. Effects without combat events). The last tab is remembered in
-local storage.
+`MapSettingsOverlay` builds its tabs from a list of `{ id, label, icon, content, reset }`:
+Units (what is drawn on each unit), Combat (effects and cast icons), World,
+Controls and Character. A new settings surface is one more entry; a tab whose
+`content` is `null` is hidden (e.g. Combat without combat events). The last tab
+is remembered in local storage.
+
+- Settings hold preferences only. Things the map toggles itself (raid and enemy
+  frames with their X and corner buttons, walk mode, planning) are not repeated there.
+- Every setting shows a dot when it differs from its default, and each tab's
+  `reset` puts its settings back (the effect settings it owns are listed in
+  `UNIT_KEYS` / `COMBAT_KEYS`). A new setting needs its default in the tab's
+  reset and in `Map.tsx`'s `resetAllSettings` (the footer's "Reset all", which
+  also shows hidden frames again).
 
 ## Walk-mode characters (WoW creatures)
 

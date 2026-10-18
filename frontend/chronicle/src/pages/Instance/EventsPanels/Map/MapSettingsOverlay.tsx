@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Eye, Footprints, Gamepad2, Globe, PersonStanding, Scan, Sparkles, X, type LucideIcon } from "lucide-react";
+import { Gamepad2, Globe, PersonStanding, RotateCcw, Scan, Sparkles, UserRound, X, type LucideIcon } from "lucide-react";
 import { Switch } from "@/components/ui/Switch/Switch";
 import { cn } from "@/lib/utils";
 import { MAP_CONTROL_KEYBINDS } from "./mapControls";
-import { ABOVE_DISC_MODES, CAST_MODES, DENSITY_OPTIONS, TRAIL_OPTIONS, type EffectSettings } from "./mapViewSettings";
-import { WALK_AVATAR_GROUPS, WALK_AVATARS } from "./walkAvatars";
+import { ABOVE_DISC_MODES, CAST_MODES, DEFAULT_EFFECT_SETTINGS, DENSITY_OPTIONS, TRAIL_OPTIONS, type EffectSettings } from "./mapViewSettings";
+import { DEFAULT_WALK_AVATAR, WALK_AVATAR_GROUPS, WALK_AVATARS } from "./walkAvatars";
 
 export interface MapSettingsOverlayProps {
   onClose: () => void;
@@ -14,21 +14,17 @@ export interface MapSettingsOverlayProps {
   show3D: boolean;
   /** The encounter has combat events to draw. */
   hasEffects: boolean;
-  raidFrames: boolean;
-  onRaidFrames: (shown: boolean) => void;
-  enemyFrames: boolean;
-  onEnemyFrames: (shown: boolean) => void;
   /** The "3D map" dungeon mesh, when the instance has one. */
   mesh: { on: boolean; locked: boolean; loading: boolean; onToggle: () => void } | null;
   floors: { list: number[]; value: number | null; onChange: (floor: number) => void } | null;
   onTopDown: () => void;
-  /** Walk mode, when the dungeon mesh is up to walk on. */
-  walk: { on: boolean; onToggle: () => void } | null;
   adStrafe: boolean;
   onAdStrafe: (on: boolean) => void;
   /** The character you walk as (walkAvatars ids). */
   walkAvatar: string;
   onWalkAvatar: (id: string) => void;
+  /** Every map setting back to its default, hidden raid and enemy frames shown again. */
+  onResetAll: () => void;
 }
 
 /** One tab of the settings. A tab with no content (null) is hidden. */
@@ -37,14 +33,31 @@ interface SettingsTab {
   label: string;
   icon: LucideIcon;
   content: ReactNode | null;
+  /** Puts this tab's settings back to their defaults; `changed` when any differs. */
+  reset?: { changed: boolean; apply: () => void };
 }
 
 const TAB_STORAGE_KEY = "chronicle.map.settingsTab";
 
+// The effect settings each tab owns, for its reset and its changed marks.
+const UNIT_KEYS = ["bars", "aboveDisc", "trailSeconds"] as const satisfies readonly (keyof EffectSettings)[];
+const COMBAT_KEYS = ["enabled", "heals", "overheal", "periodic", "castMode", "onlySelected", "maxEffects"] as const satisfies readonly (keyof EffectSettings)[];
+
+function defaultsFor(keys: readonly (keyof EffectSettings)[]): Partial<EffectSettings> {
+  return Object.fromEntries(keys.map((key) => [key, DEFAULT_EFFECT_SETTINGS[key]]));
+}
+
+// How long "Reset all" waits for its confirming second click.
+const CONFIRM_MS = 4000;
+
 /**
  * Everything the map lets you set, in a tabbed dialog over the map, like a
- * game's options screen. Add a surface by adding a tab to `tabs`. Each setting
- * is kept in local storage by its owner (effects, raid frames, the mesh).
+ * game's options screen: what is drawn on the units, the combat effects, the
+ * world, the controls and your walk-mode character. Things the map toggles
+ * itself (raid and enemy frames, walk mode, planning) stay on the map. Each
+ * tab can reset to its defaults, and the footer resets everything. Add a
+ * surface by adding a tab to `tabs`; each setting is kept in local storage by
+ * its owner (effects, the mesh, controls, the avatar).
  */
 export function MapSettingsOverlay({
   onClose,
@@ -52,18 +65,14 @@ export function MapSettingsOverlay({
   onEffectSettings,
   show3D,
   hasEffects,
-  raidFrames,
-  onRaidFrames,
-  enemyFrames,
-  onEnemyFrames,
   mesh,
   floors,
   onTopDown,
-  walk,
   adStrafe,
   onAdStrafe,
   walkAvatar,
   onWalkAvatar,
+  onResetAll,
 }: MapSettingsOverlayProps) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -76,79 +85,84 @@ export function MapSettingsOverlay({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
+  const changed = (key: keyof EffectSettings) => effectSettings[key] !== DEFAULT_EFFECT_SETTINGS[key];
   const effectsOn = effectSettings.enabled;
   const tabs: SettingsTab[] = [
     {
-      id: "display",
-      label: "Display",
-      icon: Eye,
-      content: (
-        <>
-          <Section title="Overlays">
-            <Toggle label="Raid frames" detail="Every player's health, power and casts" checked={raidFrames} onChange={onRaidFrames} />
-            <Toggle label="Enemy frames" detail="Every enemy in the encounter, bosses first" checked={enemyFrames} onChange={onEnemyFrames} />
-          </Section>
-          {show3D && (
-            <Section title="Units">
-              <Toggle
-                label="Health bars"
-                detail="Over bosses, selected players and recently damaged units"
-                checked={effectSettings.bars}
-                onChange={(bars) => onEffectSettings({ bars })}
-              />
-              <Choice
-                label="Above the token"
-                value={effectSettings.aboveDisc}
-                options={ABOVE_DISC_MODES}
-                onChange={(aboveDisc) => onEffectSettings({ aboveDisc })}
-              />
-              <Choice
-                label="Movement trail"
-                value={effectSettings.trailSeconds}
-                options={TRAIL_OPTIONS}
-                onChange={(trailSeconds) => onEffectSettings({ trailSeconds })}
-              />
-            </Section>
-          )}
-        </>
-      ),
+      id: "units",
+      label: "Units",
+      icon: UserRound,
+      content: show3D ? (
+        <Section title="On each unit">
+          <Toggle
+            label="Health bars"
+            detail="Over bosses, selected players and recently damaged units"
+            checked={effectSettings.bars}
+            changed={changed("bars")}
+            onChange={(bars) => onEffectSettings({ bars })}
+          />
+          <Choice
+            label="Above the token"
+            detail="A live value as a column over each player"
+            value={effectSettings.aboveDisc}
+            options={ABOVE_DISC_MODES}
+            changed={changed("aboveDisc")}
+            onChange={(aboveDisc) => onEffectSettings({ aboveDisc })}
+          />
+          <Choice
+            label="Movement trail"
+            detail="A fading line along where each unit was"
+            value={effectSettings.trailSeconds}
+            options={TRAIL_OPTIONS}
+            changed={changed("trailSeconds")}
+            onChange={(trailSeconds) => onEffectSettings({ trailSeconds })}
+          />
+        </Section>
+      ) : null,
+      reset: { changed: UNIT_KEYS.some(changed), apply: () => onEffectSettings(defaultsFor(UNIT_KEYS)) },
     },
     {
-      id: "effects",
-      label: "Effects",
+      id: "combat",
+      label: "Combat",
       icon: Sparkles,
       content: show3D && hasEffects ? (
         <>
-          <Section title="Combat effects">
-            <Toggle
-              label="Combat effects"
-              detail="Hit wobble, spell beams, area rings and heal pulses"
-              checked={effectsOn}
-              onChange={(enabled) => onEffectSettings({ enabled })}
-            />
-            <Toggle label="Heals" detail="Heal beams, pulses and numbers" checked={effectSettings.heals} disabled={!effectsOn} onChange={(heals) => onEffectSettings({ heals })} />
-            <Toggle label="Overheal" detail="Heals that restored no health, in grey" checked={effectSettings.overheal} disabled={!effectsOn} onChange={(overheal) => onEffectSettings({ overheal })} />
-            <Toggle label="DoT ticks" detail="Damage and heal over time ticks" checked={effectSettings.periodic} disabled={!effectsOn} onChange={(periodic) => onEffectSettings({ periodic })} />
-            <Toggle label="Only selected" detail="Only effects involving the selected players" checked={effectSettings.onlySelected} disabled={!effectsOn} onChange={(onlySelected) => onEffectSettings({ onlySelected })} />
-          </Section>
-          <Section title="Detail">
+          <Toggle
+            label="Combat effects"
+            detail="Replay what happened: hits, spell beams, area rings, heals and cast icons"
+            checked={effectsOn}
+            changed={changed("enabled")}
+            onChange={(enabled) => onEffectSettings({ enabled })}
+          />
+          <Section title="Show">
+            <Toggle label="Heals" detail="Heal beams, pulses and numbers" checked={effectSettings.heals} changed={changed("heals")} disabled={!effectsOn} onChange={(heals) => onEffectSettings({ heals })} />
+            <Toggle label="Overheal" detail="Heals that restored no health, in grey" checked={effectSettings.overheal} changed={changed("overheal")} disabled={!effectsOn} onChange={(overheal) => onEffectSettings({ overheal })} />
+            <Toggle label="DoT ticks" detail="Damage and heal over time ticks" checked={effectSettings.periodic} changed={changed("periodic")} disabled={!effectsOn} onChange={(periodic) => onEffectSettings({ periodic })} />
             <Choice
               label="Cast icons"
+              detail="The spell's icon over a caster"
               disabled={!effectsOn}
               value={effectSettings.castMode}
               options={CAST_MODES}
+              changed={changed("castMode")}
               onChange={(castMode) => onEffectSettings({ castMode })}
             />
+          </Section>
+          <Section title="Limit">
+            <Toggle label="Only selected" detail="Only effects involving the selected players" checked={effectSettings.onlySelected} changed={changed("onlySelected")} disabled={!effectsOn} onChange={(onlySelected) => onEffectSettings({ onlySelected })} />
             <Choice
               label="Effects at once"
+              detail="Fewer keeps big raids readable"
               disabled={!effectsOn}
               value={effectSettings.maxEffects}
               options={DENSITY_OPTIONS.map((option) => ({ value: option, label: String(option), title: `Draw at most ${option} effects at once` }))}
+              changed={changed("maxEffects")}
               onChange={(maxEffects) => onEffectSettings({ maxEffects })}
             />
           </Section>
         </>
       ) : null,
+      reset: { changed: COMBAT_KEYS.some(changed), apply: () => onEffectSettings(defaultsFor(COMBAT_KEYS)) },
     },
     {
       id: "world",
@@ -163,6 +177,7 @@ export function MapSettingsOverlay({
                 ? "This instance has no map artwork; the dungeon mesh is all there is"
                 : mesh.loading ? "Loading the dungeon mesh…" : "Stand units on the real dungeon mesh instead of the map tiles"}
               checked={mesh.on}
+              changed={!mesh.locked && !mesh.on}
               disabled={mesh.locked}
               onChange={() => mesh.onToggle()}
             />
@@ -177,6 +192,7 @@ export function MapSettingsOverlay({
           )}
         </Section>
       ) : null,
+      reset: mesh && !mesh.locked ? { changed: !mesh.on, apply: () => { if (!mesh.on) mesh.onToggle(); } } : undefined,
     },
     {
       id: "controls",
@@ -184,23 +200,21 @@ export function MapSettingsOverlay({
       icon: Gamepad2,
       content: show3D ? (
         <>
-          <Section title="Camera">
+          <Section title="Movement">
             <Toggle
               label="A/D strafe"
               detail="A and D strafe and Q and E turn, instead of the other way round"
               checked={adStrafe}
+              changed={!adStrafe}
               onChange={onAdStrafe}
             />
-            <div className="flex flex-wrap gap-2">
+          </Section>
+          <Section title="Camera">
+            <div>
               <ActionButton icon={Scan} onClick={() => { onTopDown(); onClose(); }}>Top-down view</ActionButton>
-              {walk && (
-                <ActionButton icon={Footprints} title="WASD to move, Space to jump (hold to fly), G or Esc to leave" onClick={() => { walk.onToggle(); onClose(); }}>
-                  {walk.on ? "Leave walk mode" : "Walk mode (G)"}
-                </ActionButton>
-              )}
             </div>
           </Section>
-          <Section title="Keybinds">
+          <Section title="Keys">
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
               {MAP_CONTROL_KEYBINDS.map((bind) => (
                 <div key={bind.keys} className="contents">
@@ -212,6 +226,7 @@ export function MapSettingsOverlay({
           </Section>
         </>
       ) : null,
+      reset: { changed: !adStrafe, apply: () => onAdStrafe(true) },
     },
     {
       id: "character",
@@ -232,6 +247,7 @@ export function MapSettingsOverlay({
           ))}
         </>
       ) : null,
+      reset: { changed: walkAvatar !== DEFAULT_WALK_AVATAR, apply: () => onWalkAvatar(DEFAULT_WALK_AVATAR) },
     },
   ];
 
@@ -245,6 +261,22 @@ export function MapSettingsOverlay({
     } catch {
       // Storage may be unavailable; the tab still switches.
     }
+  };
+
+  // "Reset all" asks for a second click, which it waits a few seconds for.
+  const [confirmingReset, setConfirmingReset] = useState(false);
+  useEffect(() => {
+    if (!confirmingReset) return;
+    const id = setTimeout(() => setConfirmingReset(false), CONFIRM_MS);
+    return () => clearTimeout(id);
+  }, [confirmingReset]);
+  const resetAll = () => {
+    if (!confirmingReset) {
+      setConfirmingReset(true);
+      return;
+    }
+    setConfirmingReset(false);
+    onResetAll();
   };
 
   return (
@@ -274,6 +306,7 @@ export function MapSettingsOverlay({
                 >
                   <Icon className="h-3.5 w-3.5" />
                   {tab.label}
+                  {tab.reset?.changed && <ChangedDot />}
                 </button>
               );
             })}
@@ -285,9 +318,31 @@ export function MapSettingsOverlay({
 
         <div role="tabpanel" aria-label={activeTab.label} className="styled-scrollbar flex min-h-[16rem] flex-col gap-5 overflow-y-auto p-4">
           {activeTab.content}
+          {activeTab.reset && (
+            <div className="mt-auto flex justify-end">
+              <ActionButton icon={RotateCcw} disabled={!activeTab.reset.changed} onClick={activeTab.reset.apply}>
+                Reset {activeTab.label.toLowerCase()} to defaults
+              </ActionButton>
+            </div>
+          )}
         </div>
 
-        <p className="border-t border-white/10 px-4 py-2 text-[10px] text-zinc-500">Settings are saved in this browser.</p>
+        <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-2">
+          <p className="flex items-center gap-1.5 text-[10px] text-zinc-500">
+            Settings are saved in this browser. <ChangedDot /> changed from the default.
+          </p>
+          <button
+            type="button"
+            onClick={resetAll}
+            title="Every map setting back to its default, and hidden raid and enemy frames shown again"
+            className={cn(
+              "shrink-0 rounded px-2 py-1 text-[11px]",
+              confirmingReset ? "bg-red-500/80 text-white hover:bg-red-500" : "text-zinc-400 hover:bg-white/10 hover:text-zinc-100",
+            )}
+          >
+            {confirmingReset ? "Click again to reset everything" : "Reset all map settings"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -295,10 +350,15 @@ export function MapSettingsOverlay({
 
 function readStoredTab(): string {
   try {
-    return localStorage.getItem(TAB_STORAGE_KEY) ?? "display";
+    return localStorage.getItem(TAB_STORAGE_KEY) ?? "units";
   } catch {
-    return "display";
+    return "units";
   }
+}
+
+// Marks a setting (or a tab holding one) that differs from its default.
+function ChangedDot() {
+  return <span aria-label="changed from the default" title="Changed from the default" className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />;
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -310,9 +370,9 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function ActionButton({ icon: Icon, title, onClick, children }: { icon: LucideIcon; title?: string; onClick: () => void; children: ReactNode }) {
+function ActionButton({ icon: Icon, title, disabled = false, onClick, children }: { icon: LucideIcon; title?: string; disabled?: boolean; onClick: () => void; children: ReactNode }) {
   return (
-    <button type="button" onClick={onClick} title={title} className="flex items-center gap-2 rounded border border-white/15 px-2 py-1.5 text-xs hover:bg-white/10">
+    <button type="button" onClick={onClick} title={title} disabled={disabled} className="flex items-center gap-2 rounded border border-white/15 px-2 py-1.5 text-xs enabled:hover:bg-white/10 disabled:opacity-40">
       <Icon className="h-3.5 w-3.5" />
       {children}
     </button>
@@ -340,25 +400,37 @@ function AvatarGrid({ options, value, onChange }: { options: { id: string; label
   );
 }
 
+// A setting's name, with its changed mark and one line on what it does.
+function SettingLabel({ label, detail, changed }: { label: string; detail?: string; changed: boolean }) {
+  return (
+    <span className="flex min-w-0 flex-col">
+      <span className="flex items-center gap-1.5 text-xs font-medium">
+        {label}
+        {changed && <ChangedDot />}
+      </span>
+      {detail && <span className="text-[10px] leading-snug text-zinc-400">{detail}</span>}
+    </span>
+  );
+}
+
 function Toggle({
   label,
   detail,
   checked,
+  changed = false,
   disabled = false,
   onChange,
 }: {
   label: string;
   detail: string;
   checked: boolean;
+  changed?: boolean;
   disabled?: boolean;
   onChange: (checked: boolean) => void;
 }) {
   return (
     <label className={cn("flex items-start justify-between gap-3", disabled ? "opacity-45" : "cursor-pointer")}>
-      <span className="flex min-w-0 flex-col">
-        <span className="text-xs font-medium">{label}</span>
-        <span className="text-[10px] leading-snug text-zinc-400">{detail}</span>
-      </span>
+      <SettingLabel label={label} detail={detail} changed={changed} />
       <Switch size="sm" checked={checked} disabled={disabled} onCheckedChange={onChange} aria-label={label} />
     </label>
   );
@@ -366,21 +438,25 @@ function Toggle({
 
 function Choice<T extends string | number>({
   label,
+  detail,
   value,
   options,
+  changed = false,
   disabled = false,
   onChange,
 }: {
   label: string;
+  detail?: string;
   value: T;
   options: { value: T; label: string; title: string }[];
+  changed?: boolean;
   disabled?: boolean;
   onChange: (value: T) => void;
 }) {
   return (
     <div className={cn("flex items-center justify-between gap-3", disabled && "opacity-45")}>
-      <span className="text-xs font-medium">{label}</span>
-      <div role="group" aria-label={label} className="flex gap-0.5 rounded border border-white/15 p-0.5">
+      <SettingLabel label={label} detail={detail} changed={changed} />
+      <div role="group" aria-label={label} className="flex shrink-0 gap-0.5 rounded border border-white/15 p-0.5">
         {options.map((option) => (
           <button
             key={String(option.value)}
