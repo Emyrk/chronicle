@@ -43,20 +43,21 @@ func newUnitTelemetryDeduplicator() *unitTelemetryDeduplicator {
 func (d *unitTelemetryDeduplicator) duplicate(msg messages.Message) bool {
 	switch typed := msg.(type) {
 	case *messages.UnitPosition:
-		snapshot := unitPositionSnapshot{
-			x:         typed.X,
-			y:         typed.Y,
-			mapID:     typed.MapID,
-			facing:    typed.Facing,
-			hasFacing: typed.HasFacing,
-		}
-		if typed.Z != nil {
-			snapshot.z = *typed.Z
-			snapshot.hasZ = true
-		}
-		previous, ok := d.positions[typed.Unit]
-		d.positions[typed.Unit] = snapshot
-		return ok && previous == snapshot
+		return false // tracking all for now
+		//snapshot := unitPositionSnapshot{
+		//	x:         typed.X,
+		//	y:         typed.Y,
+		//	mapID:     typed.MapID,
+		//	facing:    typed.Facing,
+		//	hasFacing: typed.HasFacing,
+		//}
+		//if typed.Z != nil {
+		//	snapshot.z = *typed.Z
+		//	snapshot.hasZ = true
+		//}
+		//previous, ok := d.positions[typed.Unit]
+		//d.positions[typed.Unit] = snapshot
+		//return ok && previous == snapshot
 	case *messages.UnitResources:
 		snapshot := unitResourcesSnapshot{
 			currentHealth: typed.CurrentHealth,
