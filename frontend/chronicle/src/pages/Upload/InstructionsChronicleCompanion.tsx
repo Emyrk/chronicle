@@ -35,7 +35,7 @@ export function InstructionsChronicleCompanion() {
                       </a>
                     </li>
                     <li>Download the latest release zip</li>
-                    <li>Extract <code className="bg-muted px-1.5 py-0.5 rounded text-xs">VanillaFixes.exe</code> and <code className="bg-muted px-1.5 py-0.5 rounded text-xs">VfPatcher.dll</code> into your WoW folder (the same directory as <code className="bg-muted px-1.5 py-0.5 rounded text-xs">WoW.exe</code>)</li>
+                    <li>Extract <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">VanillaFixes.exe</code> and <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">VfPatcher.dll</code> into your WoW folder (the same directory as <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">WoW.exe</code>)</li>
                   </ol>
                 </div>
                 <div>
@@ -46,15 +46,15 @@ export function InstructionsChronicleCompanion() {
                         Nampower releases page
                       </a>
                     </li>
-                    <li>Download the latest <code className="bg-muted px-1.5 py-0.5 rounded text-xs">nampower.dll</code></li>
-                    <li>Place it in your WoW folder (the same directory as <code className="bg-muted px-1.5 py-0.5 rounded text-xs">WoW.exe</code>)</li>
-                    <li>Create or edit <code className="bg-muted px-1.5 py-0.5 rounded text-xs">dlls.txt</code> in the same folder and add <code className="bg-muted px-1.5 py-0.5 rounded text-xs">nampower.dll</code> on its own line</li>
+                    <li>Download the latest <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">nampower.dll</code></li>
+                    <li>Place it in your WoW folder (the same directory as <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">WoW.exe</code>)</li>
+                    <li>Create or edit <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">dlls.txt</code> in the same folder and add <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">nampower.dll</code> on its own line</li>
                   </ol>
                 </div>
                 <div>
                   <p className="font-medium text-foreground mb-1">3. Launch the game</p>
                   <p className="ml-1">
-                    Run <code className="bg-muted px-1.5 py-0.5 rounded text-xs">VanillaFixes.exe</code> instead of <code className="bg-muted px-1.5 py-0.5 rounded text-xs">WoW.exe</code>. VanillaFixes automatically loads DLLs listed in <code className="bg-muted px-1.5 py-0.5 rounded text-xs">dlls.txt</code>, including nampower.
+                    Run <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">VanillaFixes.exe</code> instead of <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">WoW.exe</code>. VanillaFixes automatically loads DLLs listed in <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">dlls.txt</code>, including nampower.
                   </p>
                 </div>
               </div>
@@ -70,24 +70,24 @@ export function InstructionsChronicleCompanion() {
       <div>
         <h3 className="font-medium mb-2">On Raid Night</h3>
         <div className="space-y-3 text-muted-foreground">
-          <p className="italic">Optional: Configure the addon with <code className="bg-muted px-1.5 py-0.5 rounded text-xs">/clog config</code></p>
+          <p className="italic">Optional: Configure the addon with <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">/clog config</code></p>
           <div>
             <p className="mb-1"><strong className="text-foreground">1. Prepare the logs</strong></p>
             <ul className="list-none ml-4">
-              <li>Type <code className="bg-muted px-1.5 py-0.5 rounded text-xs">/clog delete</code> to delete any existing logs</li>
+              <li>Type <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">/clog delete</code> to delete any existing logs</li>
             </ul>
           </div>
           <p><strong className="text-foreground">2. Do your raid</strong></p>
           <div>
             <p><strong className="text-foreground">3. Save your logs</strong></p>
             <ul className="list-none ml-4">
-              <li>Type <code className="bg-muted px-1.5 py-0.5 rounded text-xs">/clog save</code> to save the logs to disk</li>
+              <li>Type <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">/clog save</code> to save the logs to disk</li>
             </ul>
           </div>
           <div>
             <p className="mb-1"><strong className="text-foreground">4. Upload the file:</strong></p>
             <ul className="list-none ml-4">
-              <li><code className="bg-muted px-1.5 py-0.5 rounded text-xs">&lt;WoWFolder&gt;/CustomData/Chronicle_&lt;character_name&gt;.txt</code></li>
+              <li><code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">&lt;WoWFolder&gt;/CustomData/Chronicle_&lt;character_name&gt;.txt</code></li>
             </ul>
           </div>
         </div>

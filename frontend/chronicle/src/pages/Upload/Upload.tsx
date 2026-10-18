@@ -27,22 +27,20 @@ function FileDropZone({
   accept,
   onFile,
   label,
-  sizeUnit = "MB",
 }: {
   file: File | null;
   accept: string;
   onFile: (file: File) => void;
   label: string;
-  sizeUnit?: "MB" | "KB";
 }) {
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
 
   const formatSize = (bytes: number) =>
-    sizeUnit === "KB"
-      ? `${(bytes / 1024).toFixed(2)} KB`
-      : `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+    bytes < 1024 * 1024
+      ? `${(bytes / 1024).toFixed(1)} KB`
+      : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
@@ -79,11 +77,13 @@ function FileDropZone({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onClick={() => inputRef.current?.click()}
-      className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+      className={`border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
         dragging
           ? "border-primary bg-primary/5"
-          : "hover:border-primary"
-      }`}
+          : file
+            ? "border-primary/50 bg-primary/5 hover:border-primary"
+            : "hover:border-primary hover:bg-muted/30"
+      } ${file ? "p-4" : "px-6 py-10 text-center"}`}
     >
       <input
         ref={inputRef}
@@ -92,19 +92,24 @@ function FileDropZone({
         onChange={(e) => {
           const f = e.target.files?.[0];
           if (f) onFile(f);
+          e.target.value = "";
         }}
         className="hidden"
       />
       {file ? (
-        <div className="space-y-1">
-          <FileText className="h-8 w-8 mx-auto text-primary" />
-          <p className="text-sm font-medium">{file.name}</p>
-          <p className="text-xs text-muted-foreground">{formatSize(file.size)}</p>
+        <div className="flex items-center gap-3 text-left">
+          <FileText className="h-8 w-8 shrink-0 text-primary" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{file.name}</p>
+            <p className="text-xs text-muted-foreground">{formatSize(file.size)}</p>
+          </div>
+          <span className="shrink-0 text-xs text-muted-foreground">Click or drop to replace</span>
         </div>
       ) : (
-        <div className="space-y-1">
-          <UploadIcon className="h-8 w-8 mx-auto text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">{label}</p>
+        <div className="space-y-2">
+          <UploadIcon className={`h-10 w-10 mx-auto ${dragging ? "text-primary" : "text-muted-foreground"}`} />
+          <p className="text-sm font-medium">{dragging ? "Drop to select" : label}</p>
+          <p className="text-xs text-muted-foreground">.txt or .gz — compressed in your browser before upload</p>
         </div>
       )}
     </div>
@@ -174,17 +179,20 @@ export function UploadView({
   unlistedLog,
   onUnlistedLogChange,
 }: UploadViewProps) {
+  // Label for the "Default" format option, so users can see what default means.
+  const defaultLabel = selectedFormat ? undefined : LOG_FORMAT_OPTIONS.find((o) => o.value === effectiveFormat)?.label;
+
   return (
-    <div className="max-w-4xl mx-auto p-8 space-y-8">
-      <div className="flex items-start justify-between">
+    <div className="max-w-4xl mx-auto px-4 py-8 sm:p-8 space-y-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Upload Raid Logs</h1>
           <p className="text-muted-foreground mt-2">
-            Upload your combat log and raid roster to analyze your raid performance.
+            Upload a combat log to analyze your raid's performance.
           </p>
         </div>
         {isAuthenticated && (
-          <Link to="/logs">
+          <Link to="/logs" className="shrink-0">
             <Button variant="outline">
               <FolderOpen className="h-4 w-4 mr-2" />
               View My Logs
@@ -273,11 +281,11 @@ export function UploadView({
                 <div>
                   <h2 className="font-semibold">Combat Log</h2>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Select{" "}
+                    Select your{" "}
                     {effectiveFormat === "1.12a-cc-addon" ? (
-                      <code>/CustomData/Chronicle_&lt;character_name&gt;.txt</code>
+                      <code className="break-all">/CustomData/Chronicle_&lt;character_name&gt;.txt</code>
                     ) : (
-                      <code>/Logs/WoWCombatLog.txt</code>
+                      <code className="break-all">/Logs/WoWCombatLog.txt</code>
                     )}{" "}
                     file
                   </p>
@@ -314,7 +322,6 @@ export function UploadView({
                     accept=".txt,.csv,.txt.gz,.gz"
                     onFile={(f) => onFileDrop(f, "raw")}
                     label="Click or drag file here"
-                    sizeUnit="KB"
                   />
                 </div>
               </div>
@@ -338,7 +345,9 @@ export function UploadView({
                   onChange={(e) => onFormatSelect(e.target.value)}
                   className="block h-9 w-full sm:w-72 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 >
-                  <option value="">Default</option>
+                  <option value="">
+                    Default{defaultLabel ? ` (${defaultLabel})` : ""}
+                  </option>
                   {(hasAdminLogs ? LOG_FORMAT_OPTIONS : availableFormats).map((opt) => {
                     const isAvailable = availableFormats.some((a) => a.value === opt.value);
                     return (
@@ -455,9 +464,9 @@ export function UploadView({
       {/* Instructions — wait for config to avoid flashing the wrong variant */}
       {configLoaded && (
         <Card className="p-6">
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2">
             <Info className="h-5 w-5 text-muted-foreground" />
-            <h2 className="font-semibold">Raid Log Uploading</h2>
+            <h2 className="font-semibold">How to Record &amp; Upload</h2>
           </div>
 
           <div className="space-y-6 text-sm">

@@ -16,11 +16,11 @@ export function InstructionsForever() {
             Check the box for <strong className="text-foreground">Advanced Combat Logging</strong>.
           </li>
           <li>
-            Before the raid, type <code className="bg-muted px-1.5 py-0.5 rounded text-xs">/combatlog</code>.
+            Before the raid, type <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">/combatlog</code>.
           </li>
           <li>
             After the raid, upload{" "}
-            <code className="bg-muted px-1.5 py-0.5 rounded text-xs">
+            <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">
               &lt;WoW Folder&gt;/Logs/WoWCombatLog.txt
             </code>
             .

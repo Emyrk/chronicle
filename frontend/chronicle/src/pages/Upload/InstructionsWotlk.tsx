@@ -31,14 +31,14 @@ export function InstructionsWotlk({ tbc = false, hermesProxy = false }: { tbc?: 
           <div>
             <p className="mb-1"><strong className="text-foreground">1. Delete old logs before raiding:</strong></p>
             <ul className="list-none ml-4">
-              <li>Delete <code className="bg-muted px-1.5 py-0.5 rounded text-xs">&lt;WoWFolder&gt;/Logs/WoWCombatLog.txt</code></li>
+              <li>Delete <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">&lt;WoWFolder&gt;/Logs/WoWCombatLog.txt</code></li>
             </ul>
           </div>
           <p><strong className="text-foreground">2. Launch WoW and do your raid.</strong></p>
           <div>
             <p className="mb-1"><strong className="text-foreground">3. Upload the file:</strong></p>
             <ul className="list-none ml-4">
-              <li><code className="bg-muted px-1.5 py-0.5 rounded text-xs">&lt;WoWFolder&gt;/Logs/WoWCombatLog.txt</code></li>
+              <li><code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">&lt;WoWFolder&gt;/Logs/WoWCombatLog.txt</code></li>
             </ul>
           </div>
           <div>
