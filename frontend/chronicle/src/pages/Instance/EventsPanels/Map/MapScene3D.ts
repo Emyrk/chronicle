@@ -958,6 +958,9 @@ export class MapScene3D {
         y,
         (top + croppedHeight / 2 - 0.5) * depth,
       );
+      // The ground draws first (base tiles, then overlays): sorted by distance
+      // like the tokens, a tile nearer the camera would paint over their faces.
+      mesh.renderOrder = y > 0 ? -1 : -2;
       // Hidden until textured so pending or failed tiles show the backdrop.
       mesh.visible = false;
       this.groundGroup.add(mesh);
