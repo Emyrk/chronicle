@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
 // Advancer produces the next batch of parsed combat-log messages.
@@ -18,7 +19,8 @@ type Advancer interface {
 }
 
 // Processor reorders messages within a bounded time window. Messages with the
-// same timestamp retain their original order.
+// same timestamp retain their original order except that damage precedes death
+// for the same unit and encounter-end boundaries come last.
 type Processor struct {
 	source Advancer
 	window time.Duration
@@ -76,15 +78,79 @@ func (p *Processor) Advance(ctx context.Context) ([]messages.Message, error) {
 }
 
 func (p *Processor) popBefore(watermark time.Time, all bool) []messages.Message {
-	var ready []messages.Message
+	var queued []queuedMessage
 	for p.buffer.Len() > 0 {
 		next := p.buffer[0]
 		if !all && next.message.Date().After(watermark) {
 			break
 		}
-		ready = append(ready, heap.Pop(&p.buffer).(queuedMessage).message)
+		queued = append(queued, heap.Pop(&p.buffer).(queuedMessage))
+	}
+
+	ready := make([]messages.Message, 0, len(queued))
+	for len(queued) > 0 {
+		end := 1
+		for end < len(queued) && queued[end].message.Date().Equal(queued[0].message.Date()) {
+			end++
+		}
+		ready = append(ready, orderSameTimestamp(queued[:end])...)
+		queued = queued[end:]
 	}
 	return ready
+}
+
+func orderSameTimestamp(group []queuedMessage) []messages.Message {
+	remainingDamage := make(map[guid.GUID]int)
+	for _, queued := range group {
+		if damage, ok := queued.message.(*messages.Damage); ok {
+			remainingDamage[damage.Target]++
+		}
+	}
+
+	ordered := make([]messages.Message, 0, len(group))
+	pendingDeaths := make(map[guid.GUID][]messages.Message)
+	var encounterEnds []messages.Message
+	for _, queued := range group {
+		msg := queued.message
+		if isEncounterEnd(msg) {
+			encounterEnds = append(encounterEnds, msg)
+			continue
+		}
+
+		if damage, ok := msg.(*messages.Damage); ok {
+			ordered = append(ordered, msg)
+			remainingDamage[damage.Target]--
+			if remainingDamage[damage.Target] == 0 {
+				ordered = append(ordered, pendingDeaths[damage.Target]...)
+				delete(pendingDeaths, damage.Target)
+			}
+			continue
+		}
+
+		if victim, isDeath := deathVictim(msg); isDeath && remainingDamage[victim] > 0 {
+			pendingDeaths[victim] = append(pendingDeaths[victim], msg)
+			continue
+		}
+		ordered = append(ordered, msg)
+	}
+
+	return append(ordered, encounterEnds...)
+}
+
+func isEncounterEnd(msg messages.Message) bool {
+	boundary, ok := msg.(*messages.EncounterBoundary)
+	return ok && !boundary.Active
+}
+
+func deathVictim(msg messages.Message) (guid.GUID, bool) {
+	switch death := msg.(type) {
+	case *messages.Slain:
+		return death.Victim, true
+	case *messages.UnitDied:
+		return death.ID, true
+	default:
+		return 0, false
+	}
 }
 
 type queuedMessage struct {

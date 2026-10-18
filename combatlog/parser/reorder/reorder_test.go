@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/reorder"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/unitdied"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,6 +50,107 @@ func TestProcessorReordersEncounterEndAfterKillingBlow(t *testing.T) {
 
 	got := collectAll(t, processor)
 	require.Equal(t, []messages.Message{damage, slain, boundary, later}, got)
+}
+
+func TestProcessorOrdersSameTimestampCombatEvents(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, time.October, 14, 22, 15, 55, 294_000_000, time.UTC)
+	boss := guid.GUID(0xF13003D3078527B1)
+	add := guid.GUID(0xF13003D3078527B2)
+	player := guid.GUID(0x0000120C006422B6)
+
+	boundary := &messages.EncounterBoundary{
+		MessageBase: messages.Base(at),
+		Name:        "The Abandoned",
+		Active:      false,
+	}
+	bossSlain := &messages.Slain{
+		MessageBase: messages.Base(at),
+		Killer:      &player,
+		Victim:      boss,
+	}
+	addDamage := &messages.Damage{
+		MessageBase: messages.Base(at),
+		Caster:      &player,
+		Target:      add,
+		Amount:      10,
+	}
+	bossDamage := &messages.Damage{
+		MessageBase: messages.Base(at),
+		Caster:      &player,
+		Target:      boss,
+		Amount:      34,
+		Overkill:    6,
+	}
+	addDied := &messages.UnitDied{
+		MessageBase: messages.Base(at),
+		Info:        unitdied.Info{ID: add},
+	}
+
+	processor := reorder.New(&batchAdvancer{batches: [][]messages.Message{
+		{boundary},
+		{bossSlain},
+		{addDied},
+		{addDamage},
+		{bossDamage},
+	}}, 3*time.Second)
+
+	got := collectAll(t, processor)
+	require.Equal(t, []messages.Message{addDamage, addDied, bossDamage, bossSlain, boundary}, got)
+}
+
+func TestProcessorPreservesSameTimestampOrderWithoutDependency(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, time.October, 14, 22, 15, 55, 0, time.UTC)
+	boss := guid.GUID(0xF13003D3078527B1)
+	add := guid.GUID(0xF13003D3078527B2)
+	death := &messages.Slain{MessageBase: messages.Base(at), Victim: boss}
+	unrelatedDamage := &messages.Damage{
+		MessageBase: messages.Base(at),
+		Target:      add,
+		Amount:      10,
+	}
+	encounterStart := &messages.EncounterBoundary{
+		MessageBase: messages.Base(at),
+		Name:        "The Abandoned",
+		Active:      true,
+	}
+
+	processor := reorder.New(&batchAdvancer{batches: [][]messages.Message{
+		{death},
+		{unrelatedDamage},
+		{encounterStart},
+	}}, 3*time.Second)
+
+	got := collectAll(t, processor)
+	require.Equal(t, []messages.Message{death, unrelatedDamage, encounterStart}, got)
+}
+
+func TestProcessorPreservesDifferentTimestampOrder(t *testing.T) {
+	t.Parallel()
+
+	base := time.Date(2026, time.October, 14, 22, 15, 55, 0, time.UTC)
+	boss := guid.GUID(0xF13003D3078527B1)
+	boundary := &messages.EncounterBoundary{
+		MessageBase: messages.Base(base),
+		Name:        "The Abandoned",
+		Active:      false,
+	}
+	damage := &messages.Damage{
+		MessageBase: messages.Base(base.Add(time.Millisecond)),
+		Target:      boss,
+		Amount:      34,
+	}
+
+	processor := reorder.New(&batchAdvancer{batches: [][]messages.Message{
+		{boundary},
+		{damage},
+	}}, 3*time.Second)
+
+	got := collectAll(t, processor)
+	require.Equal(t, []messages.Message{boundary, damage}, got)
 }
 
 func TestProcessorFlushesBufferedMessagesAtEOF(t *testing.T) {
