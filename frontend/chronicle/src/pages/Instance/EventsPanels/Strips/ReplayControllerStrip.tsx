@@ -1,5 +1,5 @@
 import { useMemo, useRef, type PointerEvent } from "react";
-import { Pause, Play, RotateCcw, Skull } from "lucide-react";
+import { Pause, Play, PowerOff, RotateCcw, Skull } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { StripRenderProps } from "./types";
@@ -97,6 +97,18 @@ export function ReplayControllerStrip({ result }: StripRenderProps<ReplayControl
           </button>
           <button type="button" onClick={restart} disabled={disabled} title="Restart" aria-label="Restart" className={controlButtonClass}>
             <RotateCcw className="h-3.5 w-3.5" />
+          </button>
+          {/* Replay turns on with the first play or scrub; this turns it back off.
+              Always there (greyed while off) so the bars don't shift. */}
+          <button
+            type="button"
+            onClick={() => sync?.disable()}
+            disabled={!enabled || youtubeActive}
+            title="Disable Replay"
+            aria-label="Disable Replay"
+            className={controlButtonClass}
+          >
+            <PowerOff className="h-3.5 w-3.5" />
           </button>
           <span className="pl-1 font-mono text-sm tabular-nums text-[var(--color-class-warrior)]">
             {formatReplayClock(elapsedMs)}
