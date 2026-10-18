@@ -20,7 +20,8 @@ export function CooldownsNow({ rows, atMs }: { rows: readonly CooldownUsageRow[]
   }
   if (players.length === 0) return <div className="p-3 text-center text-[11px] text-white/50">No cooldowns cast in this log.</div>;
   return (
-    <div className="flex flex-col gap-0.5 p-1">
+    // The meter window clips; the list scrolls itself, like the Activity Log.
+    <div className="styled-scrollbar flex h-full min-h-0 flex-col gap-0.5 overflow-y-auto overflow-x-hidden p-1">
       {players.map((group) => {
         const player = group[0];
         const states = group.map((row) => cooldownStateAt(row, atMs));
