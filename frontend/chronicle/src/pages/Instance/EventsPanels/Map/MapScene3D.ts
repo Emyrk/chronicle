@@ -145,8 +145,9 @@ const ANGLED_OFFSET = new THREE.Vector3(0, 0.85, 0.75);
 // artwork-up at the top of the screen, as in the 2D view.
 const TOP_DOWN_OFFSET = new THREE.Vector3(0, 1, 0.0001);
 const TILES_MAX_DISTANCE = 400;
-// On the flat artwork, units are this many times their full-map size on
-// screen at every zoom, so a stacked raid reads as tokens, not specks.
+// On the flat artwork, units are at least this many times their full-map
+// size on screen, so a stacked raid reads as tokens, not specks; zoomed in
+// past it they grow to their true size (updateUnitScale).
 const TILES_UNIT_SCALE = 2;
 // How far the orbit camera may tilt from straight down. On the flat artwork it
 // stays 30 degrees above the horizon, where the token faces still show; on
@@ -1277,15 +1278,17 @@ export class MapScene3D {
   }
 
   // Units are world meshes, so scale them with camera distance to hold a
-  // constant on-screen size: zooming in spreads them apart instead of
-  // enlarging them. Scale 1 at the default full-map distance. On the dungeon
-  // mesh (and walking the flat artwork) they hold their true size instead,
-  // down to a floor on that on-screen size so the raid stays visible zoomed out.
+  // constant on-screen size (scale 1 at the default full-map distance). Where
+  // the ground has yards (the dungeon mesh, or flat artwork with a world
+  // mapping) they hold their true size instead, so zooming in enlarges them,
+  // down to a floor on that on-screen size so the raid stays visible zoomed
+  // out: half of it on the mesh, TILES_UNIT_SCALE times it on the flat artwork.
   private updateUnitScale(force = false) {
     const screenScale = this.camera.position.distanceTo(this.controls.target) / this.baseDistance();
-    const yards = this.dungeonMesh ? this.dungeonMesh.scale : this.walk ? this.yardScale() : null;
+    const yards = this.yardScale();
+    const floor = this.dungeonMesh ? MESH_MIN_SCREEN_SCALE : TILES_UNIT_SCALE;
     const scale = yards
-      ? Math.max((MESH_PLAYER_HEIGHT_YARDS * yards) / PLAYER_GEOMETRY_HEIGHT, MESH_MIN_SCREEN_SCALE * screenScale)
+      ? Math.max((MESH_PLAYER_HEIGHT_YARDS * yards) / PLAYER_GEOMETRY_HEIGHT, floor * screenScale)
       : TILES_UNIT_SCALE * screenScale;
     if (scale === this.unitScale && !force) return;
     this.unitScale = scale;
@@ -3219,6 +3222,7 @@ export class MapScene3D {
    */
   setFlatYards(perYard: { x: MapPoint; y: MapPoint } | null) {
     this.flatYards = perYard;
+    this.updateUnitScale();
   }
 
   // Scene units per yard: the mesh's, else the flat artwork's.
