@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/url"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -48,6 +49,7 @@ type Service struct {
 	lookPath               func(string) (string, error)
 	command                commandFactory
 	accessURL              func(*services.Services) string
+	apiKey                 func(*services.Services) (string, error)
 	configureWebhookSecret func(*services.Services, string) error
 	logger                 *slog.Logger
 
@@ -63,6 +65,9 @@ func New(broker *services.Services) *Service {
 		lookPath:   exec.LookPath,
 		command:    exec.CommandContext,
 		accessURL:  serviceaccessurl.AccessURL,
+		apiKey: func(broker *services.Services) (string, error) {
+			return servicebilling.DevStripeAPIKey(broker, serviceapi.DevAuth(broker))
+		},
 		configureWebhookSecret: func(broker *services.Services, secret string) error {
 			return servicebilling.ConfigureDevStripeWebhookSecret(broker, secret, serviceapi.DevAuth(broker))
 		},
@@ -100,8 +105,15 @@ func (s *Service) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	apiKey, err := s.apiKey(s.broker)
+	if err != nil {
+		return fmt.Errorf("configure Stripe CLI account: %w", err)
+	}
+	stripeEnv := environmentWith("STRIPE_API_KEY", apiKey)
 
-	secretOutput, err := s.command(ctx, executable, "listen", "--skip-update", "--color", "off", "--print-secret").CombinedOutput()
+	secretCmd := s.command(ctx, executable, "listen", "--skip-update", "--color", "off", "--print-secret")
+	secretCmd.Env = stripeEnv
+	secretOutput, err := secretCmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("read Stripe CLI webhook secret: %w: %s", err, redactWebhookSecrets(strings.TrimSpace(string(secretOutput))))
 	}
@@ -123,6 +135,7 @@ func (s *Service) Start(ctx context.Context) error {
 		"--events", strings.Join(eventTypes, ","),
 		"--forward-to", forwardTo,
 	)
+	cmd.Env = stripeEnv
 	// Stripe CLI can announce the webhook signing secret on either output
 	// stream. Discard both so the automatically discovered secret never lands
 	// in Chronicle logs.
@@ -176,6 +189,18 @@ func (s *Service) Options() serpent.OptionSet {
 			Value:       serpent.BoolOf(&s.enabled),
 		},
 	}
+}
+
+func environmentWith(name, value string) []string {
+	prefix := name + "="
+	environment := os.Environ()
+	result := make([]string, 0, len(environment)+1)
+	for _, entry := range environment {
+		if !strings.HasPrefix(entry, prefix) {
+			result = append(result, entry)
+		}
+	}
+	return append(result, prefix+value)
 }
 
 func localWebhookURL(accessURL string) (string, error) {

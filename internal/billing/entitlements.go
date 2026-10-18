@@ -7,6 +7,7 @@ import (
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stripe/stripe-go/v87"
 )
 
@@ -17,24 +18,165 @@ type Entitlement string
 const (
 	ProductSupporter ProductCode = "supporter"
 
-	EntitlementStorage300MB    Entitlement = "+300mb-storage"
-	EntitlementDownloadRawLogs Entitlement = "download-raw-logs"
-	EntitlementUnlistedLogs    Entitlement = "unlisted-logs"
-	EntitlementAdFree          Entitlement = "ad-free"
+	EntitlementChronicleRevered Entitlement = "chronicle-revered"
 )
+
+// EntitlementTransaction is the set of durable effects an entitlement may use.
+// Implementations can run arbitrary application code in Grant and Revoke while
+// the Stripe synchronizer remains unaware of the entitlement's behavior.
+type EntitlementTransaction interface {
+	database.Store
+	SetStripeEntitlementRole(ctx context.Context, userID uuid.UUID, role string, granted bool) error
+}
+
+type StripeEntitlementRoleSetter interface {
+	SetStripeEntitlementRole(ctx context.Context, userID uuid.UUID, role string, granted bool) error
+}
+
+type stripeRoleChange struct {
+	userID  uuid.UUID
+	role    string
+	granted bool
+}
+
+type deferredEntitlementTransaction struct {
+	database.Store
+	roleSetter  StripeEntitlementRoleSetter
+	roleChanges []stripeRoleChange
+	roleIndexes map[string]int
+}
+
+func (tx *deferredEntitlementTransaction) SetStripeEntitlementRole(_ context.Context, userID uuid.UUID, role string, granted bool) error {
+	if tx.roleSetter == nil {
+		return fmt.Errorf("stripe entitlement role setter is not configured")
+	}
+	key := userID.String() + "\x00" + role
+	if index, ok := tx.roleIndexes[key]; ok {
+		tx.roleChanges[index].granted = granted
+		return nil
+	}
+	tx.roleIndexes[key] = len(tx.roleChanges)
+	tx.roleChanges = append(tx.roleChanges, stripeRoleChange{userID: userID, role: role, granted: granted})
+	return nil
+}
+
+// NewEntitlementTransactionRunner commits database-backed effects first, then
+// applies the final desired SpiceDB role state. If a role write fails, Stripe's
+// webhook retry or periodic reconciliation safely retries the idempotent change.
+func NewEntitlementTransactionRunner(store database.Store, roleSetter StripeEntitlementRoleSetter) EntitlementTransactionRunner {
+	return func(ctx context.Context, fn func(EntitlementTransaction) error) error {
+		var effects *deferredEntitlementTransaction
+		if err := store.InTx(ctx, func(tx database.Store) error {
+			effects = &deferredEntitlementTransaction{
+				Store:       tx,
+				roleSetter:  roleSetter,
+				roleIndexes: make(map[string]int),
+			}
+			return fn(effects)
+		}, nil); err != nil {
+			return err
+		}
+		for _, change := range effects.roleChanges {
+			if err := roleSetter.SetStripeEntitlementRole(ctx, change.userID, change.role, change.granted); err != nil {
+				return fmt.Errorf("set Stripe entitlement role %q: %w", change.role, err)
+			}
+		}
+		return nil
+	}
+}
+
+type EntitlementTransactionRunner func(context.Context, func(EntitlementTransaction) error) error
+
+// StripeEntitlement defines the application behavior associated with one Stripe
+// entitlement lookup key. Grant and Revoke must be idempotent because Stripe
+// webhooks and reconciliation can apply the same authoritative snapshot again.
+type StripeEntitlement interface {
+	Grant(context.Context, EntitlementTransaction, uuid.UUID) error
+	Revoke(context.Context, EntitlementTransaction, uuid.UUID) error
+}
+
+type chronicleReveredEntitlement struct{}
+
+const (
+	// Keep the established source key so upgrading the Stripe feature model does
+	// not create a second storage grant for existing supporters.
+	stripeStorageGrantSource       = "billing:stripe:+300mb-storage"
+	stripeStorageGrantBytes  int64 = 300_000_000
+
+	stripeRoleChronicleRevered = "stripe_chronicle_revered"
+)
+
+var legacyStripeRoles = []string{
+	"stripe_ad_free",
+	"stripe_download_raw_logs",
+	"stripe_unlisted_logs",
+}
+
+// Grant expands the single Chronicle Revered Stripe feature into every benefit
+// owned by the tier. Future benefit changes remain application code instead of
+// Stripe catalog changes, so they apply without another Stripe billing cycle.
+func (chronicleReveredEntitlement) Grant(ctx context.Context, tx EntitlementTransaction, userID uuid.UUID) error {
+	if _, err := tx.UpsertDataGrant(ctx, database.UpsertDataGrantParams{
+		UserID:       userID,
+		Source:       stripeStorageGrantSource,
+		StorageBytes: stripeStorageGrantBytes,
+		Description:  pgtype.Text{String: "Stripe Chronicle Revered entitlement", Valid: true},
+	}); err != nil {
+		return err
+	}
+	for _, role := range legacyStripeRoles {
+		if err := tx.SetStripeEntitlementRole(ctx, userID, role, false); err != nil {
+			return err
+		}
+	}
+	return tx.SetStripeEntitlementRole(ctx, userID, stripeRoleChronicleRevered, true)
+}
+
+func (chronicleReveredEntitlement) Revoke(ctx context.Context, tx EntitlementTransaction, userID uuid.UUID) error {
+	if err := tx.DeleteDataGrant(ctx, database.DeleteDataGrantParams{UserID: userID, Source: stripeStorageGrantSource}); err != nil {
+		return err
+	}
+	for _, role := range legacyStripeRoles {
+		if err := tx.SetStripeEntitlementRole(ctx, userID, role, false); err != nil {
+			return err
+		}
+	}
+	return tx.SetStripeEntitlementRole(ctx, userID, stripeRoleChronicleRevered, false)
+}
+
+type stripeEntitlementDefinition struct {
+	key      Entitlement
+	behavior StripeEntitlement
+}
+
+// stripeEntitlements is the complete, executable definition of known Stripe
+// entitlements. Unknown lookup keys are still persisted, but have no effects.
+var stripeEntitlements = []stripeEntitlementDefinition{
+	{key: EntitlementChronicleRevered, behavior: chronicleReveredEntitlement{}},
+}
+
+func stripeEntitlementBehavior(key Entitlement) (StripeEntitlement, bool) {
+	for _, entitlement := range stripeEntitlements {
+		if entitlement.key == key {
+			return entitlement.behavior, true
+		}
+	}
+	return nil, false
+}
 
 const billingGracePeriod = 3 * 24 * time.Hour
 
-func subscriptionBlocksCheckout(now time.Time, sub database.BillingSubscription) bool {
+func subscriptionBlocksCheckout(now time.Time, sub database.BillingSubscription, hasReveredEntitlement bool) bool {
 	if !sub.CurrentPeriodEnd.Valid {
 		return false
 	}
 	switch sub.Status {
 	case string(stripe.SubscriptionStatusActive),
 		string(stripe.SubscriptionStatusTrialing),
-		string(stripe.SubscriptionStatusCanceled),
 		string(stripe.SubscriptionStatusPastDue):
 		return now.Before(sub.CurrentPeriodEnd.Time.Add(billingGracePeriod))
+	case string(stripe.SubscriptionStatusCanceled):
+		return hasReveredEntitlement && now.Before(sub.CurrentPeriodEnd.Time.Add(billingGracePeriod))
 	default:
 		return false
 	}

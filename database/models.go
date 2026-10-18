@@ -825,6 +825,10 @@ type BillingReconciliationRun struct {
 	SubscriptionsChanged        int32              `db:"subscriptions_changed" json:"subscriptions_changed"`
 	SubscriptionsSkippedInvalid int32              `db:"subscriptions_skipped_invalid" json:"subscriptions_skipped_invalid"`
 	ErrorText                   string             `db:"error_text" json:"error_text"`
+	ProviderCustomersFound      int32              `db:"provider_customers_found" json:"provider_customers_found"`
+	LocalSubscriptionsFound     int32              `db:"local_subscriptions_found" json:"local_subscriptions_found"`
+	EntitlementCustomersFound   int32              `db:"entitlement_customers_found" json:"entitlement_customers_found"`
+	EntitlementCustomersSynced  int32              `db:"entitlement_customers_synced" json:"entitlement_customers_synced"`
 }
 
 type BillingSubscription struct {

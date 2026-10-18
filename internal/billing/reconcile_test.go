@@ -140,6 +140,9 @@ func TestReconciliationCountsChangedNoopAndInvalidMetadata(t *testing.T) {
 			{Provider: ProviderStripe, ProviderSubscriptionID: text(validChanged.ID)},
 			{Provider: ProviderStripe, ProviderSubscriptionID: text(validNoop.ID)},
 		},
+		providerCustomers: []database.ListBillingProviderCustomersForReconciliationRow{
+			{Provider: ProviderStripe, ProviderCustomerID: "cus_persisted"},
+		},
 	}
 	svc := New(Options{Store: store, PriceIDs: []string{"price_monthly"}})
 	svc.listSubscriptions = func(context.Context) ([]*stripe.Subscription, error) {
@@ -153,9 +156,13 @@ func TestReconciliationCountsChangedNoopAndInvalidMetadata(t *testing.T) {
 	require.NoError(t, worker.Work(context.Background(), &river.Job[ArgsReconcileSubscriptions]{}))
 	require.NotEqual(t, uuid.Nil, store.runID)
 	require.Equal(t, "completed", store.completion.Status)
+	require.Equal(t, int32(1), store.completion.ProviderCustomersFound)
+	require.Equal(t, int32(2), store.completion.LocalSubscriptionsFound)
 	require.Equal(t, int32(3), store.completion.SubscriptionsSeen)
 	require.Equal(t, int32(1), store.completion.SubscriptionsChanged)
 	require.Equal(t, int32(1), store.completion.SubscriptionsSkippedInvalid)
+	require.Equal(t, int32(3), store.completion.EntitlementCustomersFound)
+	require.Equal(t, int32(3), store.completion.EntitlementCustomersSynced)
 }
 
 func TestReconciliationRetrievesLocalSubscriptionMissingFromList(t *testing.T) {

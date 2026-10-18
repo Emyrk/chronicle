@@ -227,7 +227,11 @@ CREATE TABLE billing_reconciliation_runs (
     subscriptions_seen integer DEFAULT 0 NOT NULL,
     subscriptions_changed integer DEFAULT 0 NOT NULL,
     subscriptions_skipped_invalid integer DEFAULT 0 NOT NULL,
-    error_text text DEFAULT ''::text NOT NULL
+    error_text text DEFAULT ''::text NOT NULL,
+    provider_customers_found integer DEFAULT 0 NOT NULL,
+    local_subscriptions_found integer DEFAULT 0 NOT NULL,
+    entitlement_customers_found integer DEFAULT 0 NOT NULL,
+    entitlement_customers_synced integer DEFAULT 0 NOT NULL
 );
 
 CREATE TABLE billing_subscriptions (

@@ -37,10 +37,17 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	claims := chronauth.MustAuthenticatedClaims(r.Context())
-	if sub, err := s.store.GetBillingSubscriptionByUserID(r.Context(), claims.Subject); err == nil && subscriptionBlocksCheckout(time.Now(), sub) {
-		httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "You already have an active subscription."})
-		return
-	} else if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if sub, err := s.store.GetBillingSubscriptionByUserID(r.Context(), claims.Subject); err == nil {
+		hasReveredEntitlement, err := s.HasEntitlement(r.Context(), claims.Subject, EntitlementChronicleRevered)
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		if subscriptionBlocksCheckout(time.Now(), sub, hasReveredEntitlement) {
+			httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "You already have an active subscription."})
+			return
+		}
+	} else if !errors.Is(err, pgx.ErrNoRows) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
@@ -105,23 +112,18 @@ func (s *Service) CreatePortal(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) Summary(w http.ResponseWriter, r *http.Request) {
 	claims := chronauth.MustAuthenticatedClaims(r.Context())
-	adFree, err := s.HasEntitlement(r.Context(), claims.Subject, EntitlementAdFree)
+	adFree, err := s.HasEntitlement(r.Context(), claims.Subject, EntitlementChronicleRevered)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 	result := chroniclesdk.BillingSummary{Enabled: s.Enabled(), Tier: TierFree, AdsFree: adFree}
-	if result.Enabled && !adFree {
-		result.Prices, err = s.supporterPrices(r.Context())
-		if err != nil {
-			httpapi.InternalServerError(w, err)
-			return
-		}
-	}
 	if adFree {
 		result.Tier = TierRevered
 	}
 	if sub, err := s.store.GetBillingSubscriptionByUserID(r.Context(), claims.Subject); err == nil {
+		result.HasBillingAccount = true
+		result.HasSubscription = subscriptionBlocksCheckout(time.Now(), sub, adFree)
 		result.Status = sub.Status
 		result.CancelAtPeriodEnd = sub.CancelAtPeriodEnd
 		if sub.CurrentPeriodEnd.Valid {
@@ -130,6 +132,22 @@ func (s *Service) Summary(w http.ResponseWriter, r *http.Request) {
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		httpapi.InternalServerError(w, err)
 		return
+	}
+	entitlements, err := s.store.ListBillingEntitlementsByUserID(r.Context(), claims.Subject)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	result.Entitlements = make([]string, 0, len(entitlements))
+	for _, entitlement := range entitlements {
+		result.Entitlements = append(result.Entitlements, entitlement.EntitlementKey)
+	}
+	if result.Enabled && !result.HasSubscription {
+		result.Prices, err = s.supporterPrices(r.Context())
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, result)
 }
@@ -160,9 +178,13 @@ func (s *Service) AdminActivity(w http.ResponseWriter, r *http.Request) {
 			ID:                          run.ID.String(),
 			Status:                      run.Status,
 			StartedAt:                   run.StartedAt.Time,
+			ProviderCustomersFound:      run.ProviderCustomersFound,
+			LocalSubscriptionsFound:     run.LocalSubscriptionsFound,
 			SubscriptionsSeen:           run.SubscriptionsSeen,
 			SubscriptionsChanged:        run.SubscriptionsChanged,
 			SubscriptionsSkippedInvalid: run.SubscriptionsSkippedInvalid,
+			EntitlementCustomersFound:   run.EntitlementCustomersFound,
+			EntitlementCustomersSynced:  run.EntitlementCustomersSynced,
 			ErrorText:                   run.ErrorText,
 		}
 		if run.CompletedAt.Valid {

@@ -91,6 +91,10 @@ func TestServiceStartsAndStopsListener(t *testing.T) {
 
 	executable := filepath.Join(t.TempDir(), "stripe")
 	require.NoError(t, os.WriteFile(executable, []byte(`#!/bin/sh
+if [ "$STRIPE_API_KEY" != "sk_test_listener" ]; then
+  echo "unexpected Stripe API key" >&2
+  exit 2
+fi
 for arg in "$@"; do
   if [ "$arg" = "--print-secret" ]; then
     echo whsec_test_listener
@@ -106,6 +110,7 @@ exec sleep 60
 	s.logger = slog.New(slog.DiscardHandler)
 	s.lookPath = func(string) (string, error) { return executable, nil }
 	s.accessURL = func(*services.Services) string { return "" }
+	s.apiKey = func(*services.Services) (string, error) { return "sk_test_listener", nil }
 	s.configureWebhookSecret = func(_ *services.Services, secret string) error {
 		configuredSecret = secret
 		return nil

@@ -128,6 +128,44 @@ func TestInvalidateLogsPermission(t *testing.T) {
 	}
 }
 
+func TestStripeChronicleReveredRole(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	userID := uuid.New()
+	user := policy.New().User(userID)
+	chronicle := policy.New().GlobalChronicle()
+	permissions := []rel.Interface{
+		chronicle.CanAd_free_User(user),
+		chronicle.CanDownload_raw_logs_User(user),
+		chronicle.CanUnlisted_logs_User(user),
+	}
+
+	require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, "stripe_chronicle_revered", true))
+	allowed, err := zed.Check(ctx, nil, permissions...)
+	require.NoError(t, err)
+	require.Equal(t, []bool{true, true, true}, allowed)
+
+	require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, "stripe_chronicle_revered", false))
+	allowed, err = zed.Check(ctx, nil, permissions...)
+	require.NoError(t, err)
+	require.Equal(t, []bool{false, false, false}, allowed)
+
+	builder := policy.New()
+	builder.GlobalChronicle().Supporter(builder.User(userID))
+	_, err = zed.Write(ctx, *builder.Txn())
+	require.NoError(t, err)
+	require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, "stripe_chronicle_revered", true))
+	require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, "stripe_chronicle_revered", false))
+	shorterURLs, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanShorter_urls_User(policy.New().User(userID)))
+	require.NoError(t, err)
+	require.True(t, shorterURLs, "revoking a Stripe role must preserve Discord-owned roles")
+
+	require.ErrorContains(t, zed.SetStripeEntitlementRole(ctx, userID, "supporter", true), "invalid Stripe entitlement role")
+}
+
 func TestGuildDiscordBotPermissions(t *testing.T) {
 	t.Parallel()
 

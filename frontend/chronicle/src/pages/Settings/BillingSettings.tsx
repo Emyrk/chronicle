@@ -1,9 +1,12 @@
 import { useState } from "react"
-import { Navigate } from "react-router-dom"
+import { Link, Navigate } from "react-router-dom"
 import type { BillingPrice, BillingSummary } from "@/api/typesGenerated"
 import { useCreateBillingCheckout, useCreateBillingPortal, useBillingSummary, useSiteConfig } from "@/api/queries"
 import { iconUrl } from "@/config/iconUrl"
+import { Button } from "@/components/ui/button"
+import { useAuth } from "@/hooks/useAuth"
 import { cn } from "@/lib/utils"
+import { LogIn } from "lucide-react"
 import { toast } from "sonner"
 import {
   SUPPORTER_TIER_NAME,
@@ -17,6 +20,7 @@ import {
   formatBillingAmount,
   formatMonthlyAmount,
 } from "./billingPricing"
+import { billingSubscriptionState } from "./billingSubscriptionState"
 
 // Styling mirrors the landing site's /support page: gold Friz Quadrata headings,
 // brown framed panels, and WoW item tooltips.
@@ -71,10 +75,13 @@ const REWARDS = [
 
 export function BillingSettings() {
   const { data: siteConfig, isLoading: isSiteConfigLoading } = useSiteConfig()
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth()
   const { data: billing, isLoading } = useBillingSummary()
 
-  if (isSiteConfigLoading) return null
+  if (isSiteConfigLoading || isAuthLoading) return null
   if (!siteConfig?.billing_enabled) return <Navigate to="/account/settings" replace />
+
+  if (!isAuthenticated) return <BillingSignInPrompt />
 
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">Loading billing status…</p>
@@ -89,11 +96,44 @@ export function BillingSettings() {
     )
   }
 
+  if (billing.has_subscription) {
+    return <ReveredSubscriptionSettings billing={billing} />
+  }
+
   return (
     <ReveredOverview
       billing={billing}
-      panel={billing.ads_free ? <SubscriptionPanel billing={billing} /> : <PlanPicker prices={billing.prices ?? []} />}
+      panel={billing.has_billing_account
+        ? <FormerSubscriberPanel billing={billing} />
+        : <PlanPicker prices={billing.prices ?? []} />}
     />
+  )
+}
+
+export function BillingSignInPrompt() {
+  return (
+    <section className="max-w-2xl space-y-5">
+      <div>
+        <h2 className="font-wow text-3xl text-[#f0c060]">Become Revered</h2>
+        <p className="mt-2 text-muted-foreground">
+          Sign in to view Revered plans, start a subscription, or open your existing Stripe billing history.
+        </p>
+      </div>
+      <div className={cn(FRAME, "flex flex-col items-center gap-4 p-6 text-center")}>
+        <div>
+          <h3 className="font-wow text-xl text-white">Sign in to continue</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Billing and subscription history are connected to your Chronicle account.
+          </p>
+        </div>
+        <Link to="/login?from=/account/billing">
+          <Button className="gap-2">
+            <LogIn className="h-4 w-4" />
+            Sign in
+          </Button>
+        </Link>
+      </div>
+    </section>
   )
 }
 
@@ -133,6 +173,14 @@ export function ReveredOverview({ billing, panel }: { billing?: BillingSummary; 
           </div>
         </div>
       </div>
+
+      <p className="text-center text-sm text-muted-foreground">
+        For any billing issues, contact{" "}
+        <a className="text-[#f0c060] underline decoration-[#f0c060]/40 underline-offset-4 hover:text-[#ffd580]" href="mailto:support@chronicleclassic.com">
+          support@chronicleclassic.com
+        </a>
+        .
+      </p>
 
       <ComparisonTable revered={revered} />
     </section>
@@ -216,10 +264,23 @@ function ComparisonTable({ revered }: { revered: boolean }) {
 }
 
 function useOpenBilling() {
-  return async (action: () => Promise<string>) => {
+  return async (action: () => Promise<string>, newTab = false) => {
+    const openedTab = newTab ? window.open("about:blank", "_blank") : null
+    if (newTab && !openedTab) {
+      toast.error("Allow pop-ups to open the Stripe Billing Portal.")
+      return
+    }
+    if (openedTab) openedTab.opener = null
+
     try {
-      window.location.assign(await action())
+      const url = await action()
+      if (openedTab) {
+        openedTab.location.assign(url)
+      } else {
+        window.location.assign(url)
+      }
     } catch (error) {
+      openedTab?.close()
       toast.error(error instanceof Error ? error.message : "Unable to open billing")
     }
   }
@@ -363,6 +424,86 @@ export function FramePanel({ title, children }: { title: string; children: React
 export const GOLD_BUTTON =
   "flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#c9a227]/70 bg-[#f0c060]/10 px-4 py-2.5 font-wow text-base font-bold text-[#f0c060] transition-colors hover:bg-[#f0c060]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 disabled:opacity-50"
 
+function FormerSubscriberPanel({ billing }: { billing: BillingSummary }) {
+  const [view, setView] = useState<"plans" | "history">("plans")
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-card p-1">
+        <button
+          type="button"
+          aria-pressed={view === "plans"}
+          onClick={() => setView("plans")}
+          className={cn(
+            "rounded-md px-3 py-2 text-sm font-medium transition-colors",
+            view === "plans"
+              ? "bg-[#f0c060]/15 text-[#f0c060]"
+              : "text-muted-foreground hover:bg-white/5 hover:text-white",
+          )}
+        >
+          Choose a plan
+        </button>
+        <button
+          type="button"
+          aria-pressed={view === "history"}
+          onClick={() => setView("history")}
+          className={cn(
+            "rounded-md px-3 py-2 text-sm font-medium transition-colors",
+            view === "history"
+              ? "bg-[#f0c060]/15 text-[#f0c060]"
+              : "text-muted-foreground hover:bg-white/5 hover:text-white",
+          )}
+        >
+          Subscription history
+        </button>
+      </div>
+      {view === "plans"
+        ? <PlanPicker prices={billing.prices ?? []} />
+        : <FormerSubscriptionHistory billing={billing} />}
+    </div>
+  )
+}
+
+function FormerSubscriptionHistory({ billing }: { billing: BillingSummary }) {
+  const portal = useCreateBillingPortal()
+  const openBilling = useOpenBilling()
+  const periodEnd = billing.current_period_end ? new Date(billing.current_period_end).toLocaleDateString() : null
+
+  return (
+    <FramePanel title="Previous Subscription">
+      <dl className="space-y-3 text-sm">
+        <div className="flex justify-between gap-3">
+          <dt className="text-muted-foreground">Plan</dt>
+          <dd className="font-wow text-zinc-200">{SUPPORTER_TIER_NAME}</dd>
+        </div>
+        {billing.status ? (
+          <div className="flex justify-between gap-3">
+            <dt className="text-muted-foreground">Status</dt>
+            <dd className="capitalize text-white">{billing.status === "canceled" ? "Ended" : billing.status}</dd>
+          </div>
+        ) : null}
+        {periodEnd ? (
+          <div className="flex justify-between gap-3">
+            <dt className="text-muted-foreground">Original period end</dt>
+            <dd className="text-white">{periodEnd}</dd>
+          </div>
+        ) : null}
+      </dl>
+      <p className="border-t border-border pt-3 text-xs leading-5 text-muted-foreground">
+        Stripe keeps the complete payment, invoice, refund, and subscription history for this billing account.
+      </p>
+      <button
+        type="button"
+        className={GOLD_BUTTON}
+        disabled={portal.isPending}
+        onClick={() => void openBilling(() => portal.mutateAsync(), true)}
+      >
+        {portal.isPending ? "Opening Stripe…" : "View Stripe Billing History"}
+      </button>
+    </FramePanel>
+  )
+}
+
 function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
   const checkout = useCreateBillingCheckout()
   const openBilling = useOpenBilling()
@@ -461,40 +602,147 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
   )
 }
 
-function SubscriptionPanel({ billing }: { billing: BillingSummary }) {
+function ReveredSubscriptionSettings({ billing }: { billing: BillingSummary }) {
   const portal = useCreateBillingPortal()
   const openBilling = useOpenBilling()
+  const periodEnd = billing.current_period_end ? new Date(billing.current_period_end).toLocaleDateString() : null
+  const {
+    hasReveredAccess,
+    subscriptionEnded,
+    cancellationScheduled,
+    heading,
+    periodLabel,
+  } = billingSubscriptionState(billing)
 
   return (
-    <FramePanel title="Your Standing">
-      <dl className="space-y-2 text-sm">
-        <div className="flex justify-between gap-3">
-          <dt className="text-muted-foreground">Reputation</dt>
-          <dd className="font-wow" style={{ color: GOLD }}>
-            {SUPPORTER_TIER_NAME}
-          </dd>
+    <section className="max-w-3xl space-y-6">
+      <div className={cn(FRAME, "overflow-hidden")}>
+        <div className="border-b border-[#c9a227]/30 bg-[radial-gradient(circle_at_top,#5b4315_0%,#251b0b_48%,#111_72%)] px-6 py-8 text-center sm:px-10">
+          <img
+            src={iconUrl("inv_crown_01")}
+            alt=""
+            aria-hidden="true"
+            width={72}
+            height={72}
+            className={cn(
+              "mx-auto size-[4.5rem] rounded border-2",
+              hasReveredAccess
+                ? "border-[#c9a227] shadow-[0_0_28px_rgba(240,192,96,0.22)]"
+                : "border-zinc-600 opacity-60 grayscale",
+            )}
+          />
+          <p className="mt-4 font-wow text-sm uppercase tracking-[0.24em] text-[#f0c060]/75">Chronicle reputation</p>
+          <h2 className={cn("mt-1 font-wow text-4xl sm:text-5xl", hasReveredAccess ? "text-[#f0c060]" : "text-zinc-200")}>
+            {heading}
+          </h2>
+          <p className="mx-auto mt-3 max-w-xl text-sm text-zinc-300">
+            {subscriptionEnded && !hasReveredAccess
+              ? "Your subscription and Revered access have ended. Stripe will not renew or charge this subscription again."
+              : subscriptionEnded
+                ? `Your subscription has ended, but you remain Revered${periodEnd ? ` until ${periodEnd}` : " while your paid access finishes"}.`
+                : hasReveredAccess
+                  ? "Thank you for supporting Chronicle. Your Revered rewards stay active through the end of your paid billing period."
+                  : "Your subscription is recorded, but Stripe has not granted an active Revered entitlement yet."}
+          </p>
         </div>
-        {billing.status ? (
-          <div className="flex justify-between gap-3">
-            <dt className="text-muted-foreground">Status</dt>
-            <dd className="capitalize text-white">{billing.cancel_at_period_end ? "Canceling" : billing.status}</dd>
+
+        <div className="grid gap-0 sm:grid-cols-2">
+          <div className="border-b border-border p-5 sm:border-r sm:border-b-0 sm:p-6">
+            <h3 className="font-wow text-lg text-white">Subscription</h3>
+            <dl className="mt-4 space-y-3 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Standing</dt>
+                <dd className={cn("font-wow", hasReveredAccess ? "text-[#f0c060]" : "text-[#00c000]")}>
+                  {hasReveredAccess ? SUPPORTER_TIER_NAME : "Friendly"}
+                </dd>
+              </div>
+              {billing.status ? (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted-foreground">Status</dt>
+                  <dd className="capitalize text-white">
+                    {subscriptionEnded ? "Ended" : cancellationScheduled ? "Canceling" : billing.status}
+                  </dd>
+                </div>
+              ) : null}
+              {periodEnd ? (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted-foreground">{periodLabel}</dt>
+                  <dd className="text-white">{periodEnd}</dd>
+                </div>
+              ) : null}
+            </dl>
           </div>
-        ) : null}
-        {billing.current_period_end ? (
-          <div className="flex justify-between gap-3">
-            <dt className="text-muted-foreground">{billing.cancel_at_period_end ? "Ends" : "Renews"}</dt>
-            <dd className="text-white">{new Date(billing.current_period_end).toLocaleDateString()}</dd>
+
+          <div className="p-5 sm:p-6">
+            <h3 className="font-wow text-lg text-white">
+              {subscriptionEnded
+                ? hasReveredAccess
+                  ? "Revered access remains"
+                  : "Revered access ended"
+                : cancellationScheduled
+                  ? "Cancellation scheduled"
+                  : "Manage or cancel"}
+            </h3>
+            {subscriptionEnded ? (
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                {hasReveredAccess
+                  ? `Stripe will not renew or charge this subscription again. Your existing Revered access remains available${periodEnd ? ` until ${periodEnd}` : " until the paid period finishes"}.`
+                  : "Stripe will not renew or charge this subscription again. No active Revered entitlement is recorded, so its rewards are no longer available."}
+              </p>
+            ) : cancellationScheduled ? (
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                Your subscription will not renew. Your Revered rewards remain available until{periodEnd ? ` ${periodEnd}` : " the end of your billing period"}.
+              </p>
+            ) : (
+              <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm leading-6 text-muted-foreground">
+                <li>Open the secure Stripe billing portal.</li>
+                <li>Select your Chronicle subscription.</li>
+                <li>Choose cancel and confirm the cancellation.</li>
+              </ol>
+            )}
+            <button
+              type="button"
+              className={cn(GOLD_BUTTON, "mt-5")}
+              disabled={portal.isPending}
+              onClick={() => void openBilling(() => portal.mutateAsync(), true)}
+            >
+              {portal.isPending
+                ? "Opening Stripe…"
+                : subscriptionEnded || cancellationScheduled
+                  ? "View Stripe Billing History"
+                  : "Open Stripe Billing Portal"}
+            </button>
           </div>
-        ) : null}
-      </dl>
-      <button
-        type="button"
-        className={GOLD_BUTTON}
-        disabled={portal.isPending}
-        onClick={() => void openBilling(() => portal.mutateAsync())}
-      >
-        Manage Subscription
-      </button>
-    </FramePanel>
+        </div>
+      </div>
+
+      <details className={cn(FRAME, "group px-5 py-4 text-sm")}>
+        <summary className="cursor-pointer font-medium text-zinc-200 marker:text-[#f0c060]">
+          Active feature entitlements ({billing.entitlements.length})
+          <span className="ml-2 font-normal text-muted-foreground">Debug details</span>
+        </summary>
+        {billing.entitlements.length > 0 ? (
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {billing.entitlements.map((entitlement) => (
+              <li key={entitlement}>
+                <code className="rounded border border-border bg-black/30 px-2 py-1 text-xs text-[#f0c060]">{entitlement}</code>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-3 text-sm text-amber-300">
+            No active Stripe feature entitlements are currently recorded for this account.
+          </p>
+        )}
+      </details>
+
+      <p className="text-center text-sm text-muted-foreground">
+        For any billing issues, contact{" "}
+        <a className="text-[#f0c060] underline decoration-[#f0c060]/40 underline-offset-4 hover:text-[#ffd580]" href="mailto:support@chronicleclassic.com">
+          support@chronicleclassic.com
+        </a>
+        .
+      </p>
+    </section>
   )
 }

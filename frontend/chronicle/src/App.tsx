@@ -34,6 +34,7 @@ import { AdminApplicationsListPage } from "./pages/Admin/AdminApplicationsListPa
 import { AdminCacheStatsPage } from "./pages/Admin/AdminCacheStatsPage"
 import { AdminParsingPage } from "./pages/Admin/AdminParsingPage"
 import { AdminCustomPanelsPage } from "./pages/Admin/AdminCustomPanelsPage"
+import { AdminBillingPage } from "./pages/Admin/AdminBillingPage"
 import { GearLayout } from "./pages/Gear/GearLayout"
 import { GearListPage } from "./pages/Gear/builder/GearListPage"
 import { GearTrendsPage } from "./pages/Gear/trends/GearTrendsPage"
@@ -176,6 +177,7 @@ function App() {
           <Route path="applications" element={<AdminApplicationsListPage />} />
           <Route path="cache-stats" element={<AdminCacheStatsPage />} />
           <Route path="custom-panels" element={<AdminCustomPanelsPage />} />
+          <Route path="billing" element={<AdminBillingPage />} />
           <Route path="parsing" element={<AdminParsingPage />} />
         </Route>
         <Route path="/servers" element={<ServersLayout />}>

@@ -25,25 +25,28 @@ type subscriptionLister func(context.Context) ([]*stripe.Subscription, error)
 type activeEntitlementLister func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error)
 
 type Options struct {
-	Store         database.Store
-	SecretKey     string
-	WebhookSecret string
-	PriceIDs      []string
-	AccessURL     *url.URL
+	Store                     database.Store
+	StripeEntitlementRoles    StripeEntitlementRoleSetter
+	RunEntitlementTransaction EntitlementTransactionRunner
+	SecretKey                 string
+	WebhookSecret             string
+	PriceIDs                  []string
+	AccessURL                 *url.URL
 }
 
 type Service struct {
-	store                  database.Store
-	stripe                 *stripe.Client
-	webhookSecret          string
-	priceIDs               []string
-	allowedPrices          map[string]struct{}
-	accessURL              *url.URL
-	retrieveAccount        accountRetriever
-	retrievePrice          priceRetriever
-	retrieveSubscription   subscriptionRetriever
-	listSubscriptions      subscriptionLister
-	listActiveEntitlements activeEntitlementLister
+	store                     database.Store
+	runEntitlementTransaction EntitlementTransactionRunner
+	stripe                    *stripe.Client
+	webhookSecret             string
+	priceIDs                  []string
+	allowedPrices             map[string]struct{}
+	accessURL                 *url.URL
+	retrieveAccount           accountRetriever
+	retrievePrice             priceRetriever
+	retrieveSubscription      subscriptionRetriever
+	listSubscriptions         subscriptionLister
+	listActiveEntitlements    activeEntitlementLister
 
 	pricesMu sync.Mutex
 	prices   []chroniclesdk.BillingPrice
@@ -89,18 +92,27 @@ func New(opts Options) *Service {
 	for _, priceID := range priceIDs {
 		allowedPrices[priceID] = struct{}{}
 	}
+	runEntitlementTransaction := opts.RunEntitlementTransaction
+	if runEntitlementTransaction == nil && opts.Store != nil {
+		roleSetter := opts.StripeEntitlementRoles
+		if roleSetter == nil {
+			roleSetter, _ = opts.Store.(StripeEntitlementRoleSetter)
+		}
+		runEntitlementTransaction = NewEntitlementTransactionRunner(opts.Store, roleSetter)
+	}
 	return &Service{
-		store:                  opts.Store,
-		stripe:                 client,
-		webhookSecret:          opts.WebhookSecret,
-		priceIDs:               priceIDs,
-		allowedPrices:          allowedPrices,
-		accessURL:              opts.AccessURL,
-		retrieveAccount:        retrieveAccount,
-		retrievePrice:          retrievePrice,
-		retrieveSubscription:   retrieveSubscription,
-		listSubscriptions:      listSubscriptions,
-		listActiveEntitlements: listActiveEntitlements,
+		store:                     opts.Store,
+		runEntitlementTransaction: runEntitlementTransaction,
+		stripe:                    client,
+		webhookSecret:             opts.WebhookSecret,
+		priceIDs:                  priceIDs,
+		allowedPrices:             allowedPrices,
+		accessURL:                 opts.AccessURL,
+		retrieveAccount:           retrieveAccount,
+		retrievePrice:             retrievePrice,
+		retrieveSubscription:      retrieveSubscription,
+		listSubscriptions:         listSubscriptions,
+		listActiveEntitlements:    listActiveEntitlements,
 	}
 }
 

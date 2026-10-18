@@ -6,7 +6,7 @@ import { ReveredOverview, FramePanel, GOLD_BUTTON } from "@/pages/Settings/Billi
 export function BecomeRevered() {
   // Signed-out visitors get no summary and see the Friendly standing.
   const { data: billing } = useBillingSummary()
-  const revered = billing?.ads_free ?? false
+  const revered = billing?.has_subscription ?? false
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">

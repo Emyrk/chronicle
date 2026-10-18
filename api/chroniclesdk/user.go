@@ -18,9 +18,9 @@ type Session struct {
 	MaxStorageBytes      int64       `json:"max_storage_bytes"`
 	ConsumedStorageBytes int64       `json:"consumed_storage_bytes"`
 	Preferences          Preferences `json:"preferences"`
-	// AdsFree indicates that Stripe reports an active ad-free entitlement for the user.
+	// AdsFree indicates that authorization grants the user an ad-free experience.
 	AdsFree bool `json:"ads_free"`
-	// CanDownloadRawLogs indicates that the user can download original combat log files.
+	// CanDownloadRawLogs indicates that authorization permits downloading original combat log files.
 	CanDownloadRawLogs bool `json:"can_download_raw_logs"`
 	// Email is the user's email address (if available).
 	Email string `json:"email"`
