@@ -453,10 +453,13 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
   // never disagree.
   useReplayToggleKey(() => {
     const s = syncRef.current;
-    if (!s.enabled || s.externalDriver !== "none") return false;
-    if (s.isPlaying) s.pause();
-    else s.play();
-    return true;
+    if (!s.enabled || s.externalDriver !== "none") return null;
+    if (s.isPlaying) {
+      s.pause();
+      return "pause";
+    }
+    s.play();
+    return "play";
   });
 
   // Calculate progress within encounter bounds

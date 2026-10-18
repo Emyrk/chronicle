@@ -122,9 +122,9 @@ export function ReplayControllerStrip({ result, context, bars: barKind }: StripR
 
   // X plays and pauses from anywhere on the page, as the Replay overlay's does.
   useReplayToggleKey(() => {
-    if (disabled) return false;
+    if (disabled) return null;
     togglePlay();
-    return true;
+    return playing ? "pause" : "play";
   });
 
   const restart = () => {

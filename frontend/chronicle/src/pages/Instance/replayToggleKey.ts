@@ -21,20 +21,31 @@ export function isReplayToggleKey(
   return !target.closest?.(INTERACTIVE_ELEMENTS);
 }
 
+/** What an X press did: "play" or "pause". */
+export type ReplayToggle = "play" | "pause";
+
+/** Window event an X press dispatches, for ReplayToggleFlash; `detail` is the ReplayToggle. */
+export const REPLAY_TOGGLE_EVENT = "chronicle:replay-toggle";
+
 /**
  * X toggles replay play/pause while the calling control is mounted (the Replay
- * overlay, a Replay strip). `toggle` returns false when it could
- * not act (e.g. YouTube drives playback). A handled press is marked handled,
- * so with several controls mounted X still toggles once.
+ * overlay, a Replay strip). `toggle` returns what it did, or null when it
+ * could not act (e.g. YouTube drives playback). A handled press is marked
+ * handled, so with several controls mounted X still toggles once, and it
+ * announces itself (REPLAY_TOGGLE_EVENT) so the page can flash the icon.
  */
-export function useReplayToggleKey(toggle: () => boolean) {
+export function useReplayToggleKey(toggle: () => ReplayToggle | null) {
   const toggleRef = useRef(toggle);
   useEffect(() => {
     toggleRef.current = toggle;
   });
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (isReplayToggleKey(event) && toggleRef.current()) event.preventDefault();
+      if (!isReplayToggleKey(event)) return;
+      const action = toggleRef.current();
+      if (!action) return;
+      event.preventDefault();
+      window.dispatchEvent(new CustomEvent<ReplayToggle>(REPLAY_TOGGLE_EVENT, { detail: action }));
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);

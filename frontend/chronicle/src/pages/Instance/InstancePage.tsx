@@ -17,6 +17,7 @@ import { YouTubeOverlay } from "./YouTubeOverlay";
 import { SyncModeProvider, useSyncModeContext } from "./SyncModeContext";
 import { LiveSessionProvider } from "./LiveSessionContext";
 import { ReplayControlOverlay, useReplayPosition } from "./ReplayControlOverlay";
+import { ReplayToggleFlash } from "./ReplayToggleFlash";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { TimeRangeProvider } from "./TimeRangeContext";
 import { InstanceKeybindProvider } from "./InstanceKeybinds";
@@ -368,6 +369,7 @@ function InstancePageInner({
           </div>
         }
       />
+      <ReplayToggleFlash />
       {replayPanelVisible && (
         <ReplayControlOverlay
           initialTimestamp={selectedEncounterTimes.start ? new Date(selectedEncounterTimes.start) : undefined}

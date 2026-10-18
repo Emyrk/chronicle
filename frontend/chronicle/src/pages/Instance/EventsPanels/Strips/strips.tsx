@@ -48,10 +48,13 @@ function ReplaySliderStrip() {
   const sync = useSyncModeContextOptional();
   const deaths = usePlayerDeathTimes();
   useReplayToggleKey(() => {
-    if (!sync?.enabled || sync.externalDriver !== "none") return false;
-    if (sync.isPlaying) sync.pause();
-    else sync.play();
-    return true;
+    if (!sync?.enabled || sync.externalDriver !== "none") return null;
+    if (sync.isPlaying) {
+      sync.pause();
+      return "pause";
+    }
+    sync.play();
+    return "play";
   });
 
   return <ReplayTransportBar deaths={deaths} />;
