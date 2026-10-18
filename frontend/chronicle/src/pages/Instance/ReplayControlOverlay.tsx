@@ -448,7 +448,7 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
     };
   }, []);
 
-  // K toggles play/pause, matching common media-player controls. Skipped while
+  // X toggles play/pause. Skipped while
   // YouTube drives playback (the button is disabled then too) so the two can
   // never disagree.
   useReplayToggleKey(() => {
@@ -525,7 +525,7 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
       className={extraClass}
       onClick={() => (sync.isPlaying ? sync.pause() : sync.play())}
       disabled={controlsDisabled}
-      title={sync.isPlaying ? "Pause (K)" : "Play (K)"}
+      title={sync.isPlaying ? "Pause (X)" : "Play (X)"}
     >
       {sync.isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
     </Button>

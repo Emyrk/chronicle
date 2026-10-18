@@ -120,7 +120,7 @@ export function ReplayControllerStrip({ result, context, bars: barKind }: StripR
     sync.play();
   };
 
-  // K plays and pauses from anywhere on the page, as the Replay overlay's does.
+  // X plays and pauses from anywhere on the page, as the Replay overlay's does.
   useReplayToggleKey(() => {
     if (disabled) return false;
     togglePlay();
@@ -157,7 +157,7 @@ export function ReplayControllerStrip({ result, context, bars: barKind }: StripR
       {/* Stacked in a narrow column so the bars get the width: transport and clock, speeds, legend. */}
       <div className="flex shrink-0 flex-col gap-1">
         <div className="flex items-center gap-1">
-          <button type="button" onClick={togglePlay} disabled={disabled} title={playing ? "Pause (K)" : "Play (K)"} aria-label={playing ? "Pause" : "Play"} className={controlButtonClass}>
+          <button type="button" onClick={togglePlay} disabled={disabled} title={playing ? "Pause (X)" : "Play (X)"} aria-label={playing ? "Pause" : "Play"} className={controlButtonClass}>
             {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
           </button>
           <button type="button" onClick={restart} disabled={disabled} title="Restart" aria-label="Restart" className={controlButtonClass}>

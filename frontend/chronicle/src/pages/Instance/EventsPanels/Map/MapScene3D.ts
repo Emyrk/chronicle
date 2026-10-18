@@ -3725,7 +3725,7 @@ export class MapScene3D {
       walk.position.z += (-cos * forward - sin * strafe) * step;
     }
 
-    // Space jumps from the ground and, held, keeps flying up; X flies down.
+    // Space jumps from the ground and, held, keeps flying up; Z flies down.
     if (held.has("up")) {
       walk.vy = walk.grounded ? WALK_JUMP_YPS * scale : Math.max(walk.vy, WALK_FLY_YPS * scale);
       walk.grounded = false;

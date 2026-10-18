@@ -725,7 +725,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
           )}
           {walking && (
             <div className="pointer-events-none absolute bottom-2 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-sm bg-black/75 px-2 py-1 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
-              <span className="font-semibold text-amber-300">Walking</span> · W/S move · {adStrafe ? "A/D strafe · Q/E turn" : "A/D turn (strafe while right-dragging) · Q/E strafe"} · Space jump (hold to fly) · X down · drag to look · wheel zoom · G or Esc to leave
+              <span className="font-semibold text-amber-300">Walking</span> · W/S move · {adStrafe ? "A/D strafe · Q/E turn" : "A/D turn (strafe while right-dragging) · Q/E strafe"} · Space jump (hold to fly) · Z down · drag to look · wheel zoom · G or Esc to leave
             </div>
           )}
           {settingsOpen && (

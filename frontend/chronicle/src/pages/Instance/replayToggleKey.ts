@@ -1,5 +1,5 @@
 /**
- * Key guard for the K play/pause shortcut of the replay controls.
+ * Key guard for the X play/pause shortcut of the replay controls.
  */
 import { useEffect, useRef } from "react";
 
@@ -13,7 +13,7 @@ export function isReplayToggleKey(
     target: EventTarget | null;
   }
 ): boolean {
-  if (event.code !== "KeyK" || event.defaultPrevented || event.repeat) return false;
+  if (event.code !== "KeyX" || event.defaultPrevented || event.repeat) return false;
   if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false;
   const target = event.target as HTMLElement | null;
   if (!target) return true;
@@ -22,10 +22,10 @@ export function isReplayToggleKey(
 }
 
 /**
- * K toggles replay play/pause while the calling control is mounted (the Replay
+ * X toggles replay play/pause while the calling control is mounted (the Replay
  * overlay, a Replay strip). `toggle` returns false when it could
  * not act (e.g. YouTube drives playback). A handled press is marked handled,
- * so with several controls mounted K still toggles once.
+ * so with several controls mounted X still toggles once.
  */
 export function useReplayToggleKey(toggle: () => boolean) {
   const toggleRef = useRef(toggle);

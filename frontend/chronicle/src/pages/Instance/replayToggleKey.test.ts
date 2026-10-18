@@ -3,7 +3,7 @@ import { isReplayToggleKey } from "./replayToggleKey";
 
 const key = (target: unknown, over: Record<string, unknown> = {}) =>
   ({
-    code: "KeyK",
+    code: "KeyX",
     defaultPrevented: false,
     repeat: false,
     ctrlKey: false,
@@ -22,13 +22,14 @@ const el = (tagName: string, extra: Record<string, unknown> = {}, interactive = 
 });
 
 describe("isReplayToggleKey", () => {
-  it("toggles on a plain K from the body", () => {
+  it("toggles on a plain X from the body", () => {
     expect(isReplayToggleKey(key(el("BODY")))).toBe(true);
     expect(isReplayToggleKey(key(null))).toBe(true);
   });
 
   it("ignores Space, other keys, modifiers, repeats and handled events", () => {
     expect(isReplayToggleKey(key(el("BODY"), { code: "Space" }))).toBe(false);
+    expect(isReplayToggleKey(key(el("BODY"), { code: "KeyK" }))).toBe(false);
     expect(isReplayToggleKey(key(el("BODY"), { code: "KeyA" }))).toBe(false);
     expect(isReplayToggleKey(key(el("BODY"), { ctrlKey: true }))).toBe(false);
     expect(isReplayToggleKey(key(el("BODY"), { shiftKey: true }))).toBe(false);

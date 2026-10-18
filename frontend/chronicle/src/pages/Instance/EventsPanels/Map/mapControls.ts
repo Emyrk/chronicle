@@ -12,7 +12,7 @@ export const MAP_CONTROL_ACTIONS = [
   { id: "strafe_left", label: "Strafe left", defaultKey: "KeyQ" },
   { id: "strafe_right", label: "Strafe right", defaultKey: "KeyE" },
   { id: "up", label: "Up", defaultKey: "Space" },
-  { id: "down", label: "Down", defaultKey: "KeyX" },
+  { id: "down", label: "Down", defaultKey: "KeyZ" },
 ] as const;
 
 export type MapControlAction = (typeof MAP_CONTROL_ACTIONS)[number]["id"];
@@ -48,7 +48,8 @@ export const MAP_CONTROL_KEYBINDS = [
   { keys: "W / S", action: "Move forward / back (pointer over the map, or while walking)" },
   { keys: "A / D", action: "Strafe left / right (turn with \"A/D strafe\" off in Map settings → Controls)" },
   { keys: "Q / E", action: "Turn left / right (strafe with \"A/D strafe\" off)" },
-  { keys: "Space / X", action: "Zoom out / in; while walking: jump (hold to fly up) / fly down" },
+  { keys: "Space / Z", action: "Zoom out / in; while walking: jump (hold to fly up) / fly down" },
+  { keys: "X", action: "Play / pause the replay" },
   { keys: keyLabel(WALK_TOGGLE_KEY), action: "Walk mode on / off: join the fight on the ground" },
   { keys: "Esc", action: "Leave walk mode" },
   { keys: "Drag / right-drag", action: "Orbit / pan the camera; while walking: look around / turn your character. The cursor hides while you drag" },

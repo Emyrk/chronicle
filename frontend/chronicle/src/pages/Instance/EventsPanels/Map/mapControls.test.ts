@@ -4,7 +4,7 @@ import { actionForKey, keyLabel, MAP_CONTROL_ACTIONS, MAP_CONTROL_KEYBINDS, WALK
 describe("mapControls", () => {
   it("uses WoW-style keys", () => {
     expect(MAP_CONTROL_ACTIONS.map((action) => action.defaultKey)).toEqual([
-      "KeyW", "KeyS", "KeyA", "KeyD", "KeyQ", "KeyE", "Space", "KeyX",
+      "KeyW", "KeyS", "KeyA", "KeyD", "KeyQ", "KeyE", "Space", "KeyZ",
     ]);
     expect(WALK_TOGGLE_KEY).toBe("KeyG");
     expect(MAP_CONTROL_KEYBINDS.some((keybind) => keybind.keys === "G")).toBe(true);
@@ -15,7 +15,7 @@ describe("mapControls", () => {
       .toEqual(["turn_left", "turn_right", "strafe_left", "strafe_right", "forward"]);
     expect(["KeyA", "KeyD", "KeyQ", "KeyE", "KeyW"].map((code) => actionForKey(code, true)))
       .toEqual(["strafe_left", "strafe_right", "turn_left", "turn_right", "forward"]);
-    expect(actionForKey("KeyZ", true)).toBeUndefined();
+    expect(actionForKey("KeyX", true)).toBeUndefined();
   });
 
   it("labels keys like a keyboard", () => {
