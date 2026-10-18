@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Upload as UploadIcon, FileText, Info, LogIn, AlertCircle, CheckCircle, FolderOpen, AlertTriangle, ArrowRight, Globe2, LockKeyhole } from "lucide-react";
+import { Upload as UploadIcon, FileText, Info, LogIn, AlertCircle, CheckCircle, FolderOpen, AlertTriangle, ArrowRight } from "lucide-react";
 import { compressFile } from "@/api/compress";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
@@ -19,6 +19,7 @@ import { InstructionsWotlk } from "./InstructionsWotlk";
 import { InstructionsChronicleCompanion } from "./InstructionsChronicleCompanion";
 import { InstructionsForever } from "./InstructionsForever";
 import { MultiUpload } from "./MultiUpload";
+import { VisibilityPicker } from "./VisibilityPicker";
 
 /** Reusable file drop zone — supports click-to-browse and drag-and-drop. */
 function FileDropZone({
@@ -203,19 +204,6 @@ export function UploadView({
         </Alert>
       )}
 
-      {/* Backup Warning */}
-      <Alert className="border-orange-500/50 bg-orange-500/10 text-orange-200 [&>svg]:text-orange-500">
-        <AlertTriangle className="h-4 w-4" />
-        <AlertTitle className="text-orange-200">Backup Your Log Files</AlertTitle>
-        <AlertDescription className="text-orange-200/80">
-          <p>
-            Chronicle is in early development and uploaded logs <b>will be deleted</b> at some point.
-            Always keep a backup of your original log files somewhere safe.
-          </p>
-        </AlertDescription>
-      </Alert>
-
-
       {/* Auth Check */}
       {!authLoading && !isAuthenticated ? (
         <Card className="p-6">
@@ -277,62 +265,95 @@ export function UploadView({
             </Alert>
           )}
 
-          <Card className="p-4">
-            <div className="mb-3">
-              <h2 className="text-sm font-semibold">Visibility</h2>
-              <p className="mt-1 text-xs text-muted-foreground">Private logs require owner approval before another user can view combat data.</p>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => onPrivateLogChange(false)}
-                className={`flex items-start gap-3 rounded-lg border p-3 text-left transition-colors ${!privateLog ? "border-primary bg-primary/10" : "hover:bg-muted/50"}`}
-              >
-                <Globe2 className="mt-0.5 h-5 w-5 text-primary" />
-                <span><span className="block text-sm font-medium">Public</span><span className="block text-xs text-muted-foreground">Visible normally and eligible for public results.</span></span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onPrivateLogChange(true)}
-                disabled={!canMarkPrivate}
-                title={canMarkPrivate ? undefined : "Private log access is required"}
-                className={`flex items-start gap-3 rounded-lg border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${privateLog ? "border-amber-500/50 bg-amber-500/10" : "hover:bg-muted/50"}`}
-              >
-                <LockKeyhole className="mt-0.5 h-5 w-5 text-amber-400" />
-                <span><span className="block text-sm font-medium">Private</span><span className="block text-xs text-muted-foreground">Excluded from rankings; viewers must request access.</span></span>
-              </button>
-            </div>
-          </Card>
+          <Card className="p-6">
+            {/* File Selection */}
+            {useV2Upload ? (
+              // V2: Single file upload
+              <div className="space-y-3">
+                <div>
+                  <h2 className="font-semibold">Combat Log</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Select{" "}
+                    {effectiveFormat === "1.12a-cc-addon" ? (
+                      <code>/CustomData/Chronicle_&lt;character_name&gt;.txt</code>
+                    ) : (
+                      <code>/Logs/WoWCombatLog.txt</code>
+                    )}{" "}
+                    file
+                  </p>
+                </div>
+                <FileDropZone
+                  file={combatLog}
+                  accept=".txt,.txt.gz,.gz"
+                  onFile={(f) => onFileDrop(f, "combat")}
+                  label="Click or drag file here"
+                />
+              </div>
+            ) : (
+              // V1: Original 2-file upload
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-3">
+                  <div>
+                    <h2 className="font-semibold">Combat Log</h2>
+                    <p className="text-sm text-muted-foreground mt-1">Select your WoWCombatLog.txt file</p>
+                  </div>
+                  <FileDropZone
+                    file={combatLog}
+                    accept=".txt,.txt.gz,.gz"
+                    onFile={(f) => onFileDrop(f, "combat")}
+                    label="Click or drag file here"
+                  />
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <h2 className="font-semibold">Raw Combat Log</h2>
+                    <p className="text-sm text-muted-foreground mt-1">Select your WoWRawCombatLog.txt</p>
+                  </div>
+                  <FileDropZone
+                    file={rawCombatLog}
+                    accept=".txt,.csv,.txt.gz,.gz"
+                    onFile={(f) => onFileDrop(f, "raw")}
+                    label="Click or drag file here"
+                    sizeUnit="KB"
+                  />
+                </div>
+              </div>
+            )}
 
-          {/* Format selector — visible to everyone when >1 available, or always for admins */}
-          {(availableFormats.length > 1 || hasAdminLogs) && (
-            <div className="flex items-center gap-2">
-              <Label htmlFor="format-select" className="text-sm font-medium whitespace-nowrap">
-                Log Format
-              </Label>
-              <select
-                id="format-select"
-                value={selectedFormat}
-                onChange={(e) => onFormatSelect(e.target.value)}
-                className="h-8 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">Default</option>
-                {(hasAdminLogs ? LOG_FORMAT_OPTIONS : availableFormats).map((opt) => {
-                  const isAvailable = availableFormats.some((a) => a.value === opt.value);
-                  return (
-                    <option key={opt.value} value={opt.value} className={!isAvailable ? "text-muted-foreground" : ""}>
-                      {opt.label}{!isAvailable ? " (other)" : ""}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          )}
+            <VisibilityPicker
+              privateLog={privateLog}
+              canMarkPrivate={canMarkPrivate}
+              onChange={onPrivateLogChange}
+            />
 
-          {/* Admin-only flavor override */}
-          {hasAdminLogs && (
-            <div className="space-y-3">
-              <div className="space-y-1.5">
+            {/* Format selector — visible to everyone when >1 available, or always for admins */}
+            {(availableFormats.length > 1 || hasAdminLogs) && (
+              <div className="space-y-2">
+                <Label htmlFor="format-select" className="text-sm font-medium">
+                  Log Format
+                </Label>
+                <select
+                  id="format-select"
+                  value={selectedFormat}
+                  onChange={(e) => onFormatSelect(e.target.value)}
+                  className="block h-9 w-full sm:w-72 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">Default</option>
+                  {(hasAdminLogs ? LOG_FORMAT_OPTIONS : availableFormats).map((opt) => {
+                    const isAvailable = availableFormats.some((a) => a.value === opt.value);
+                    return (
+                      <option key={opt.value} value={opt.value} className={!isAvailable ? "text-muted-foreground" : ""}>
+                        {opt.label}{!isAvailable ? " (other)" : ""}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
+
+            {/* Admin-only flavor override */}
+            {hasAdminLogs && (
+              <div className="space-y-2">
                 <Label className="text-sm font-medium">Flavor</Label>
                 <div className="flex flex-wrap gap-2">
                   {flavorTags.map((tag) => {
@@ -369,130 +390,65 @@ export function UploadView({
                   </p>
                 )}
               </div>
-            </div>
-          )}
+            )}
 
-          {/* V2 Upload Toggle - only visible with ?debug=true */}
-          {showLegacy && (
-            <div className="flex items-center gap-3">
-              <Switch
-                id="upload-version"
-                checked={!useV2Upload}
-                onCheckedChange={(checked: boolean) => onToggleV2Upload(!checked)}
-              />
-              <Label htmlFor="upload-version" className="cursor-pointer">
-                Use legacy upload (two files)
-              </Label>
-            </div>
-          )}
-
-          {/* File Selection */}
-          {useV2Upload ? (
-            // V2: Single file upload
-            <Card className="p-6 max-w-md mx-auto">
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-muted-foreground" />
-                  <h2 className="font-semibold">Combat Log</h2>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Select{" "}
-                  {effectiveFormat === "1.12a-cc-addon" ? (
-                    <code>/CustomData/Chronicle_&lt;character_name&gt;.txt</code>
-                  ) : (
-                    <code>/Logs/WoWCombatLog.txt</code>
-                  )}{" "}
-                  file
-                </p>
-                <FileDropZone
-                  file={combatLog}
-                  accept=".txt,.txt.gz,.gz"
-                  onFile={(f) => onFileDrop(f, "combat")}
-                  label="Click or drag file here"
+            {/* V2 Upload Toggle - only visible with ?debug=true */}
+            {showLegacy && (
+              <div className="flex items-center gap-3">
+                <Switch
+                  id="upload-version"
+                  checked={!useV2Upload}
+                  onCheckedChange={(checked: boolean) => onToggleV2Upload(!checked)}
                 />
-                <p className="text-[10px] text-muted-foreground mt-1 text-center">
-                  Uploading as{" "}
-                  {effectiveFormat ? (
-                    <span className="font-mono">{effectiveFormat}</span>
-                  ) : (
-                    <span className="font-mono">server default</span>
-                  )}
-                  {flavorOverride && (
+                <Label htmlFor="upload-version" className="cursor-pointer">
+                  Use legacy upload (two files)
+                </Label>
+              </div>
+            )}
+
+            <div className="border-t pt-4 space-y-3">
+              {uploading && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Uploading...</span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-muted-foreground">
+                  {useV2Upload && (
                     <>
+                      Uploading as{" "}
+                      <span className="font-mono">{effectiveFormat || "server default"}</span>
+                      {flavorOverride && (
+                        <>
+                          {" · "}
+                          <span className="font-mono">[{flavorOverride.split(",").join(", ")}]</span>
+                        </>
+                      )}
                       {" · "}
-                      <span className="font-mono">
-                        [{flavorOverride.split(",").join(", ")}]
-                      </span>
                     </>
                   )}
+                  {privateLog ? "Private" : "Public"}
                 </p>
+                <Button
+                  onClick={onUpload}
+                  disabled={useV2Upload ? !combatLog || uploading : !combatLog || !rawCombatLog || uploading}
+                  className="w-full sm:w-auto"
+                >
+                  <UploadIcon className="h-4 w-4 mr-2" />
+                  {uploading ? "Uploading..." : useV2Upload ? "Upload File" : "Upload Files"}
+                </Button>
               </div>
-            </Card>
-          ) : (
-            // V1: Original 2-file upload
-            <div className="grid gap-6 md:grid-cols-2">
-              <Card className="p-6">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-muted-foreground" />
-                    <h2 className="font-semibold">Combat Log</h2>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Select your WoWCombatLog.txt file
-                  </p>
-                  <FileDropZone
-                    file={combatLog}
-                    accept=".txt,.txt.gz,.gz"
-                    onFile={(f) => onFileDrop(f, "combat")}
-                    label="Click or drag file here"
-                  />
-                </div>
-              </Card>
-
-              <Card className="p-6">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-muted-foreground" />
-                    <h2 className="font-semibold">Raw Combat Log</h2>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Select your WoWRawCombatLog.txt
-                  </p>
-                  <FileDropZone
-                    file={rawCombatLog}
-                    accept=".txt,.csv,.txt.gz,.gz"
-                    onFile={(f) => onFileDrop(f, "raw")}
-                    label="Click or drag file here"
-                    sizeUnit="KB"
-                  />
-                </div>
-              </Card>
             </div>
-          )}
-
-      {uploading && (
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span>Uploading...</span>
-            <span>{uploadProgress}%</span>
-          </div>
-          <div className="h-2 bg-muted rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-primary transition-all duration-300"
-              style={{ width: `${uploadProgress}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      <Button
-        onClick={onUpload}
-        disabled={useV2Upload ? !combatLog || uploading : !combatLog || !rawCombatLog || uploading}
-        className="w-full md:w-auto"
-      >
-        <UploadIcon className="h-4 w-4 mr-2" />
-        {uploading ? "Uploading..." : useV2Upload ? "Upload File" : "Upload Files"}
-      </Button>
+          </Card>
         </>
       )}
 

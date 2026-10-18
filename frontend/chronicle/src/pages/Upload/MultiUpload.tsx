@@ -8,10 +8,9 @@ import {
   X,
   Loader2,
   FolderOpen,
-  Globe2,
-  LockKeyhole,
 } from "lucide-react";
 import { compressFile } from "@/api/compress";
+import { VisibilityPicker } from "./VisibilityPicker";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
 
@@ -278,16 +277,7 @@ export function MultiUpload({ format, privateLog, canMarkPrivate, onPrivateLogCh
       </div>
 
       <Card className="mb-4 p-4">
-        <div className="grid gap-2 sm:grid-cols-2">
-          <button type="button" onClick={() => onPrivateLogChange(false)} className={`flex items-start gap-3 rounded-lg border p-3 text-left ${!privateLog ? "border-primary bg-primary/10" : "hover:bg-muted/50"}`}>
-            <Globe2 className="mt-0.5 h-5 w-5 text-primary" />
-            <span><span className="block text-sm font-medium">Public uploads</span><span className="block text-xs text-muted-foreground">Normal visibility and public results.</span></span>
-          </button>
-          <button type="button" onClick={() => onPrivateLogChange(true)} disabled={!canMarkPrivate} title={canMarkPrivate ? undefined : "Private log access is required"} className={`flex items-start gap-3 rounded-lg border p-3 text-left disabled:cursor-not-allowed disabled:opacity-50 ${privateLog ? "border-amber-500/50 bg-amber-500/10" : "hover:bg-muted/50"}`}>
-            <LockKeyhole className="mt-0.5 h-5 w-5 text-amber-400" />
-            <span><span className="block text-sm font-medium">Private uploads</span><span className="block text-xs text-muted-foreground">Each file requires approved viewer access.</span></span>
-          </button>
-        </div>
+        <VisibilityPicker privateLog={privateLog} canMarkPrivate={canMarkPrivate} onChange={onPrivateLogChange} />
       </Card>
 
       {/* Drop zone */}
