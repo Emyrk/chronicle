@@ -15,7 +15,7 @@ export const DEAD_COLOR = 0x57534e;
 export const CAST_ARC_OPACITY = 0.7;
 /** A major cooldown's cast icon: framed (and its cast sweep drawn) in this gold, this many times the size. */
 export const COOLDOWN_ICON_COLOR = "#fbbf24";
-export const COOLDOWN_ICON_SCALE = 1.5;
+export const COOLDOWN_ICON_SCALE = 1.3;
 export const CUT_ARC_COLOR = "#78716c";
 /** The red tick where an interrupted cast was cut. */
 export const CUT_TICK_COLOR = "#ef4444";

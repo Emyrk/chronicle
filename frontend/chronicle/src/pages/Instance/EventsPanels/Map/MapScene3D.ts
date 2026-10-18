@@ -98,7 +98,7 @@ const MAX_LABEL_TEXTURES = 128;
 // Spell icons above casters: pooled sprites over the bars and combat text.
 const MAX_CAST_ICONS = 12;
 // About 26 px at the constant on-screen size.
-const CAST_ICON_SIZE = 3.4;
+const CAST_ICON_SIZE = 2.6;
 // Gap between a caster's health bar and the bottom of its icons.
 const CAST_ICON_BAR_GAP = 0.55;
 // Gap above the icons for combat text and the hover label.
