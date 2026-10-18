@@ -3,7 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { Crosshair, Focus, Footprints, HeartPulse, Loader2, Map as MapIcon, Maximize, Route, Settings2, Skull, Users, X } from "lucide-react";
+import { Crosshair, Focus, Footprints, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Route, Settings2, Skull, Users, X } from "lucide-react";
 import { useLiveSessionOptional } from "../../LiveSessionContext";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
@@ -37,11 +37,16 @@ import { MapSettingsOverlay } from "./MapSettingsOverlay";
 import { useEffectSettings } from "./mapViewSettings";
 import { useMapScene } from "./useMapScene";
 import { encounterJumps, mapPresentationForSelection } from "./wholeRun";
+import { PlanControls } from "./plan/PlanControls";
+import { ROLE_TOKENS, usePlanEditor, usePlanShortcuts, type PlanRosterEntry } from "./plan/usePlanEditor";
+import type { PlanItem } from "./plan/mapPlan";
+import { usePlayerSpecializations } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 
 export { mapPresentationForSelection };
 
 const MapView3D = lazy(() => import("./MapView3D"));
 
+const NO_PLAN_ITEMS: readonly PlanItem[] = [];
 const RAID_FRAMES_PANEL = createRaidFramesPanel();
 const UNIT_AURAS_PANEL = createUnitAurasPanel();
 
@@ -144,6 +149,27 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   }
   const reloading = !liveScene && (props.loading || props.processing) && heldScene !== null;
   const ready = liveScene ?? (reloading ? heldScene : null);
+  // Raid planning: drawing on the dungeon floor, a plan per world map.
+  const [planOpen, setPlanOpen] = useState(false);
+  const planEditor = usePlanEditor((liveScene ?? heldScene)?.worldMapId ?? 0);
+  const closePlan = useCallback(() => setPlanOpen(false), []);
+  usePlanShortcuts(planEditor, planOpen, closePlan);
+  const specializations = usePlayerSpecializations();
+  const instancePlayers = props.context.instance.players;
+  const planRoster = useMemo((): PlanRosterEntry[] => {
+    const styles = typeof document === "undefined" ? null : getComputedStyle(document.documentElement);
+    const players = Object.entries(instancePlayers ?? {})
+      .map(([guid, player]): PlanRosterEntry => ({
+        group: "Players",
+        label: player.name,
+        guid,
+        // Plans store hex colours: the class colour token resolved.
+        color: styles?.getPropertyValue(`--color-class-${player.class.toLowerCase()}`).trim().toLowerCase() || "#f5f5f4",
+        icon: specializations.get(guid)?.iconUrl ?? `/c/icons/class_${player.class.toLowerCase().replace(/\s+/g, "")}.png`,
+      }))
+      .sort((left, right) => left.label.localeCompare(right.label));
+    return [...ROLE_TOKENS, ...players];
+  }, [instancePlayers, specializations]);
   // A mesh-only instance (no map artwork) has nothing but the mesh to show:
   // the switch is on and stays on.
   const meshOnly = ready?.meshOnly ?? false;
@@ -365,6 +391,9 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               debuffSpellIds={ready.debuffSpellIds}
               followGuid={followGuid}
               onFollowChange={setFollowGuid}
+              planItems={planOpen && canWalk ? planEditor.drawnItems : NO_PLAN_ITEMS}
+              planSelectedId={planOpen ? planEditor.state.selectedId : null}
+              planInput={planOpen && canWalk ? planEditor.input : null}
             />
           </Suspense>
         )}
@@ -458,6 +487,28 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
           >
             <Footprints className="h-4 w-4" />
           </button>
+        )}
+        {show3D && (
+          <button
+            type="button"
+            onClick={() => {
+              if (!planOpen) setWalking(false);
+              setPlanOpen(!planOpen);
+            }}
+            disabled={!canWalk}
+            aria-pressed={planOpen}
+            title={canWalk ? planOpen ? "Close planning" : "Plan: draw markers, arrows, ranges and player spots on the floor" : "Planning needs the 3D map (Map settings → 3D map)"}
+            aria-label="Plan"
+            className={cn(
+              "absolute right-2 top-[4.5rem] z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 shadow-[0_4px_16px_rgba(0,0,0,.5)] disabled:opacity-40",
+              planOpen ? "bg-amber-400/90 text-black hover:bg-amber-300" : "bg-black/75 text-white/70 enabled:hover:bg-black/90 enabled:hover:text-white",
+            )}
+          >
+            <PenLine className="h-4 w-4" />
+          </button>
+        )}
+        {planOpen && canWalk && (
+          <PlanControls editor={planEditor} roster={planRoster} onClose={closePlan} />
         )}
         {walking && (
           <div className="pointer-events-none absolute bottom-2 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-sm bg-black/75 px-2 py-1 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]">

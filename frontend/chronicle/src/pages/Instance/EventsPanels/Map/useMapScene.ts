@@ -233,6 +233,8 @@ export type MapScene =
     markers: MapSceneMarker[];
     /** Every debuff spell seen on a player in the encounter (stable per encounter), to look up dispel types. */
     debuffSpellIds: number[];
+    /** The world map the scene shows (the encounter's), which raid plans are drawn for. */
+    worldMapId: number;
     /** Projects a sample onto the artwork with the same mapping as `markers`. */
     projectSample: (sample: MapPositionSample) => MapPoint | null;
     /** Boss-area bounds of the encounter's whole unit track; stable across replay ticks. */
@@ -487,6 +489,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     },
     markers,
     debuffSpellIds: encounterDebuffSpellIds(encounter.debuffsByUnit),
+    worldMapId: artworkMapId ?? mapId,
     projectSample,
     focusBounds: focus?.bounds ?? null,
     autoFit: wholeRun ? followViewport : focus?.autoFit ?? null,

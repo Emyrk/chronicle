@@ -10,6 +10,7 @@ import { useSpellMeta } from "../RotationTimeline/useSpellMeta";
 import { miniatureUrl } from "./bossMinis";
 import type { MapPositionSample } from "./map.processor";
 import { DISPEL_KINDS, DISPEL_ORDER, type DispelKind } from "./unitTokenArt";
+import type { PlanInput, PlanItem } from "./plan/mapPlan";
 import { prefersReducedMotion, replayPositionAt, VIEW_TRANSITION_MS, type MapPoint, type MapViewport } from "./mapModel";
 import {
   MapScene3D,
@@ -73,6 +74,11 @@ export interface MapView3DProps {
   livePresence?: MapLivePresence | null;
   /** The target frames' units: halos for the selected chain and pins, and target lines. */
   unitRoles?: MapUnitRoles | null;
+  /** The raid plan to draw on the floor (the current step's items, and any being drawn). */
+  planItems?: readonly PlanItem[];
+  planSelectedId?: string | null;
+  /** The active plan tool's pointer handlers: the left button draws instead of orbiting. */
+  planInput?: PlanInput | null;
   /** The unit the cinematic camera follows (a unit frame's Follow), or null for the group. */
   followGuid?: string | null;
   /** Called when the followed unit changes, including when the user takes the camera (null). */
@@ -87,6 +93,7 @@ export interface MapView3DProps {
 }
 
 const NO_DEBUFFS: readonly number[] = [];
+const NO_PLAN_ITEMS: readonly PlanItem[] = [];
 
 const NO_ROLES: MapUnitRoles = { selected: null, target: null, targetsTarget: null, pinned: new Set() };
 
@@ -159,6 +166,9 @@ export default function MapView3D({
   debuffSpellIds = NO_DEBUFFS,
   followGuid = null,
   onFollowChange,
+  planItems = NO_PLAN_ITEMS,
+  planSelectedId = null,
+  planInput = null,
 }: MapView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<MapScene3D | null>(null);
@@ -378,6 +388,14 @@ export default function MapView3D({
   useEffect(() => {
     sceneRef.current?.setOnFollowChange(onFollowChange ?? null);
   }, [onFollowChange]);
+
+  useEffect(() => {
+    sceneRef.current?.setPlanItems(planItems, planSelectedId);
+  }, [planItems, planSelectedId]);
+
+  useEffect(() => {
+    sceneRef.current?.setPlanInput(planInput);
+  }, [planInput]);
 
   // After the Director and view effects above, so a framing reset in the
   // same commit (resuming the cinematic camera) does not cancel the follow.
