@@ -486,11 +486,11 @@ function layoutColumns(columns: THREE.Group, radius: number) {
   }
 }
 
-// Fills a column to `value` (0-1) of `full`; hidden (track too) without a value.
-function fillColumn(column: THREE.Mesh, track: THREE.Mesh, value: number | null, full: number) {
+// Fills a column to `value` (0-1) of its track; hidden (track too) without a value.
+function fillColumn(column: THREE.Mesh, track: THREE.Mesh, value: number | null) {
   column.visible = value !== null && value > 0;
   track.visible = value !== null;
-  if (value !== null) column.scale.y = Math.max(0.02, full * value);
+  if (value !== null) column.scale.y = Math.max(0.02, track.scale.y * value);
 }
 
 interface RemotePresence {
@@ -1034,7 +1034,7 @@ export class MapScene3D {
       if (dispel) object.token.debuff.material.color.set(DISPEL_COLORS[dispel]);
       // Without a logged facing an enemy keeps facing whoever it last hit (updateTokens).
       this.applyFacing(object, unit.facing ?? (unit.kind === "hostile" ? object.hitFacing : undefined));
-      object.group.scale.setScalar(this.scaleOf(object));
+      this.applyScale(object);
       const opacity = unit.muted ? MUTED_OPACITY : 1;
       for (const material of [object.bodyMaterial, object.coneMaterial]) {
         material.opacity = opacity;
@@ -1275,7 +1275,7 @@ export class MapScene3D {
       : screenScale;
     if (scale === this.unitScale && !force) return;
     this.unitScale = scale;
-    for (const object of this.units.values()) object.group.scale.setScalar(this.scaleOf(object));
+    for (const object of this.units.values()) this.applyScale(object);
     this.planLayer.setUnitScale(scale);
     this.updateLabel();
   }
@@ -1283,6 +1283,14 @@ export class MapScene3D {
   // Bosses stand larger than players on the mesh; everything else shares unitScale.
   private scaleOf(object: UnitObject): number {
     return this.dungeonMesh && object.miniatureUrl ? this.unitScale * MESH_BOSS_SCALE : this.unitScale;
+  }
+
+  // Only a boss's columns grow with its model; anyone else's (a totem, a
+  // whelp) stay the size of a player's.
+  private applyScale(object: UnitObject) {
+    const scale = this.scaleOf(object);
+    object.group.scale.setScalar(scale);
+    object.token.columns.scale.setScalar(object.boss ? 1 : this.unitScale / scale);
   }
 
   // The ground height under a unit: the mesh floor while it shows, else 0.
@@ -1824,7 +1832,7 @@ export class MapScene3D {
       deadLift: DEAD_LIFT,
     };
     this.applyTokenFace(object);
-    group.scale.setScalar(this.scaleOf(object));
+    this.applyScale(object);
     this.units.set(unit.guid, object);
     if (object.miniatureUrl) {
       const mini = this.requestBossMini(object.miniatureUrl);
@@ -1974,7 +1982,7 @@ export class MapScene3D {
       part.scale.setScalar(MINI_TOKEN_RADIUS * size);
     }
     token.columns.position.y = token.face;
-    layoutColumns(token.columns, MINI_TOKEN_RADIUS);
+    layoutColumns(token.columns, object.boss ? MINI_TOKEN_RADIUS : TOKEN_RADIUS[object.kind]);
     if (token.bossPin) token.bossPin.visible = false;
     if (object.boss && !token.sigil) {
       // The model stands on the sigil.
@@ -2971,9 +2979,9 @@ export class MapScene3D {
       if (token.columns.visible) {
         // Side by side across the view: the pair turns with the camera.
         token.columns.rotation.y = cameraYaw - object.group.rotation.y;
-        fillColumn(token.column, token.columnTrack, health, token.radius * COLUMN_HEIGHT);
+        fillColumn(token.column, token.columnTrack, health);
         if (health !== null) token.column.material.color.setStyle(healthBarColor(health));
-        fillColumn(token.power, token.powerTrack, power?.fraction ?? null, token.radius * TOKEN_LAYOUT.powerColumnHeight);
+        fillColumn(token.power, token.powerTrack, power?.fraction ?? null);
         if (power) token.power.material.color.set(power.color);
       }
       const kind: HaloKind | null = guid === roles.selected ? "selected"
