@@ -62,7 +62,11 @@ function toEvent(row: MapFixture["events"][number], index: number, guids: string
     case "p":
       return { ...base, unit: guid(f[0]), x: f[1], y: f[2], mapId: f[3], facing: f[4] } as unknown as MapProcessorEvent;
     case "r":
-      return { ...base, unit: guid(f[0]), currentHealth: f[1], maximumHealth: f[2], absorb: f[3] } as unknown as MapProcessorEvent;
+      // Older fixtures stop at absorb and have no power.
+      return {
+        ...base, unit: guid(f[0]), currentHealth: f[1], maximumHealth: f[2], absorb: f[3],
+        currentPower: f[4] ?? 0, maximumPower: f[5] ?? 0, powerType: f[6] ?? "",
+      } as unknown as MapProcessorEvent;
     case "d":
     case "h":
       return {

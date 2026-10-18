@@ -38,7 +38,7 @@ async function get(url) {
 const round = (value, digits) => Math.round(value * 10 ** digits) / 10 ** digits
 const STREAMS = [
   ["p", "unit_position", "FastUnitPositionCursor", (e, g) => [g(e.unit), round(e.x, 2), round(e.y, 2), e.mapId, round(e.facing, 3)]],
-  ["r", "unit_resources", "FastUnitResourcesCursor", (e, g) => [g(e.unit), e.currentHealth, e.maximumHealth, e.absorb]],
+  ["r", "unit_resources", "FastUnitResourcesCursor", (e, g) => [g(e.unit), e.currentHealth, e.maximumHealth, e.absorb, e.currentPower, e.maximumPower, e.powerType]],
   ["d", "damage", "FastDamageCursor", (e, g) => [g(e.caster), g(e.target), e.amount, e.hitType, e.schools[0] ?? 0, e.spellId, e.sourceName]],
   ["h", "heal", "FastHealCursor", (e, g) => [g(e.caster), g(e.target), e.amount, e.hitType, e.schools[0] ?? 0, e.spellId, e.sourceName]],
   ["s", "spell_start", "FastSpellStartCursor", (e, g) => [g(e.caster), g(e.target), e.castTimeMilli, e.spell.id, e.spell.name]],
@@ -112,11 +112,17 @@ try {
   // name/entry/owner for the other units in this encounter.
   const players = {}
   const units = {}
+  const ownerBySummon = new Map(Object.entries(api.summons_by_owner ?? {})
+    .flatMap(([owner, summons]) => summons.map((summon) => [summon, owner])))
   for (const guid of guids) {
     const player = api.players?.[guid]
     if (player) players[guid] = { name: player.name, class: player.class }
     const unit = api.units?.[guid]
-    if (unit) units[guid] = { name: unit.name, entry: unit.entry, ...(unit.owner ? { owner: unit.owner } : {}) }
+    if (!unit) continue
+    // Like resolveInstanceUnits: names may come by entry, owners by summoner.
+    const name = unit.name ?? api.names_by_entry?.[unit.entry] ?? guid
+    const owner = unit.owner?.toString() ?? ownerBySummon.get(guid)
+    units[guid] = { name, entry: unit.entry, ...(owner ? { owner } : {}) }
   }
 
   // Some encounters come back without a hostile list. Fall back to the

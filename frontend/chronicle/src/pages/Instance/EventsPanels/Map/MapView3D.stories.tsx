@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SyncModeProvider, useSyncModeContext } from "../../SyncModeContext";
+import { hakkarOcto } from "./fixtures/hakkarOcto";
+import { DEFAULT_EFFECT_SETTINGS, type EffectSettings } from "./mapViewSettings";
 import { kreshReal } from "./fixtures/kreshReal";
 import { loadMapFixture, type LoadedMapFixture } from "./fixtures/mapFixture";
 import type { InstanceUnit, KillType, WoWHeroClasses } from "@/api/typesGenerated";
@@ -835,7 +837,12 @@ const KRESH_LOOP_PAUSE_MS = 1_000;
 
 // Replays a loaded fixture (the real Kresh kill, or a synthetic encounter
 // built in its shape) through the production useMapScene, looping.
-function FixturePlayer({ fixture, mesh = false }: { fixture: LoadedMapFixture; mesh?: boolean }) {
+function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSettings }: {
+  fixture: LoadedMapFixture;
+  mesh?: boolean;
+  followGuid?: string | null;
+  effectSettings?: EffectSettings;
+}) {
   const miniatureUrls = useStoryMiniatureUrls();
   const { instance } = fixture.props.context;
   const sync = useSyncModeContext();
@@ -879,6 +886,9 @@ function FixturePlayer({ fixture, mesh = false }: { fixture: LoadedMapFixture; m
     key: "fit",
   }), [autoFit]);
 
+  // The scene only follows a unit it has: wait for the mesh and the unit (a
+  // totem appears seconds into the fight).
+  const followable = meshState === "ready" && scene.status === "ready" && scene.markers.some((marker) => marker.guid === followGuid);
   const elapsed = Math.max(0, (currentTimestamp?.getTime() ?? fixture.startMs) - fixture.startMs) / 1000;
   return (
     <div style={{ width: 800, height: 520 }} className="relative overflow-hidden rounded-md border border-white/10 bg-black/70">
@@ -899,6 +909,10 @@ function FixturePlayer({ fixture, mesh = false }: { fixture: LoadedMapFixture; m
           dungeonMesh={dungeonMesh}
           onDungeonMeshState={setMeshState}
           focus={focus}
+          // As the panel's default framing: the cinematic camera on the mesh.
+          cinematic={mesh}
+          followGuid={followable ? followGuid : null}
+          effectSettings={effectSettings}
         />
       ) : (
         <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{scene.title}: {scene.detail}</div>
@@ -955,6 +969,38 @@ function KreshRealReplay({ selectPlayers, mesh = false }: { selectPlayers: boole
       <WithSpellIcons>
         <SyncModeProvider>
           <FixturePlayer fixture={fixture} mesh={mesh} />
+        </SyncModeProvider>
+      </WithSpellIcons>
+    </QueryClientProvider>
+  );
+}
+
+// The real Hakkar kill on the Zul'Gurub mesh: every kind of unit at once (the
+// boss model, adds, a shaman's four totems, a hunter's pet, players with
+// mana), each story following one of them.
+const HAKKAR_UNITS = {
+  boss: "0xF1300039F200C20E",
+  manaSpring: "0xF130001CF827B3DA",
+  pet: "0xF14002542E000018",
+  add: "0xF130002C5F11E679",
+  shaman: "0x000000003B9CE6BE",
+} as const;
+
+// The health and power columns on, to see them over every kind of unit.
+const HAKKAR_EFFECT_SETTINGS: EffectSettings = { ...DEFAULT_EFFECT_SETTINGS, aboveDisc: "health" };
+
+function HakkarOctoReplay({ follow = null }: { follow?: keyof typeof HAKKAR_UNITS | null }) {
+  const [fixture] = useState(() => loadMapFixture(hakkarOcto));
+  const [queryClient] = useState(() => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(["wow-map-manifest", hakkarOcto.instance.iconBaseUrl], fixture.manifest);
+    return client;
+  });
+  return (
+    <QueryClientProvider client={queryClient}>
+      <WithSpellIcons>
+        <SyncModeProvider>
+          <FixturePlayer fixture={fixture} mesh followGuid={follow ? HAKKAR_UNITS[follow] : null} effectSettings={HAKKAR_EFFECT_SETTINGS} />
         </SyncModeProvider>
       </WithSpellIcons>
     </QueryClientProvider>
@@ -1378,6 +1424,51 @@ export const KreshRealSelected: Story = {
  */
 export const KreshRealMesh: Story = {
   render: () => <KreshRealReplay selectPlayers={false} mesh />,
+};
+
+/**
+ * The real Hakkar kill (Zul'Gurub, 16 players, ~53 s) from an octo log on the
+ * Zul'Gurub mesh, replayed at 1x on a loop: the Hakkar model, Soulflayer and
+ * Blood Priest adds, a shaman's four totem models, a Wind Serpent pet and
+ * health/power columns. The mesh loads from the icon CDN (`turtle/maps/3d/`).
+ */
+export const HakkarReal: Story = {
+  render: () => <HakkarOctoReplay />,
+};
+
+/** HakkarReal following Hakkar: the boss model, its sigil and its taller columns. */
+export const HakkarRealBoss: Story = {
+  // Looked at by eye; HakkarReal covers the fixture in the test run.
+  tags: ["!test"],
+  render: () => <HakkarOctoReplay follow="boss" />,
+};
+
+/** HakkarReal following the Mana Spring Totem among the shaman's four totem models: their columns stay player-sized. */
+export const HakkarRealTotems: Story = {
+  // Looked at by eye; HakkarReal covers the fixture in the test run.
+  tags: ["!test"],
+  render: () => <HakkarOctoReplay follow="manaSpring" />,
+};
+
+/** HakkarReal following the hunter's Wind Serpent (a pet disc). */
+export const HakkarRealPet: Story = {
+  // Looked at by eye; HakkarReal covers the fixture in the test run.
+  tags: ["!test"],
+  render: () => <HakkarOctoReplay follow="pet" />,
+};
+
+/** HakkarReal following a Soulflayer add (a hostile without a boss sigil). */
+export const HakkarRealAdd: Story = {
+  // Looked at by eye; HakkarReal covers the fixture in the test run.
+  tags: ["!test"],
+  render: () => <HakkarOctoReplay follow="add" />,
+};
+
+/** HakkarReal following the shaman who dropped the totems: a player's health and mana columns. */
+export const HakkarRealPlayer: Story = {
+  // Looked at by eye; HakkarReal covers the fixture in the test run.
+  tags: ["!test"],
+  render: () => <HakkarOctoReplay follow="shaman" />,
 };
 
 /**
