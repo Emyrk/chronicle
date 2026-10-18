@@ -4,6 +4,8 @@ import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Crosshair, Focus, Footprints, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Route, Settings2, Skull, Users, X } from "lucide-react";
+import { parseLivePresenceSurface } from "../../liveSessionProtocol";
+import { LivePresenceIndicator } from "../../LivePresenceIndicator";
 import { useLiveSessionOptional } from "../../LiveSessionContext";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelDefinition, PanelRenderProps } from "../types";
@@ -215,6 +217,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   const [walkWanted, setWalking] = useState(false);
   const [followGuid, setFollowGuid] = useState<string | null>(null);
   const [adStrafe, setAdStrafeState] = useState(readStoredAdStrafe);
+  const presenceSurface = parseLivePresenceSurface(`panel:${props.panelId ?? "map"}`) ?? "map";
   // Live session: everyone sees each other's camera, or character while walking.
   const liveSession = useLiveSessionOptional();
   const liveOn = liveSession?.status === "live";
@@ -316,6 +319,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
   const headerControls = (
     <div className="flex min-w-0 shrink-0 items-center gap-2 text-[10px] text-muted-foreground">
       {!ready.overlayAvailable && <span className="text-amber-300/80">position overlay unavailable</span>}
+      <LivePresenceIndicator surface={presenceSurface} />
       <span className="flex items-center gap-1"><Users className="h-3 w-3" />{ready.markers.length}</span>
       {canFollow ? (
         <button
@@ -388,6 +392,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
               onWalkingChange={setWalking}
               adStrafe={adStrafe}
               livePresence={livePresence}
+              presenceSurface={presenceSurface}
               unitRoles={unitRoles}
               frozen={reloading}
               debuffSpellIds={ready.debuffSpellIds}

@@ -20,10 +20,17 @@ export interface LiveMapPresence {
   target: [number, number, number];
 }
 
+const LIVE_PRESENCE_SURFACE_PATTERN = /^[a-z0-9][a-z0-9:_-]{0,63}$/;
+
+/** A panel-owned presence surface that replaces the generic shared cursor. */
+export function parseLivePresenceSurface(value: unknown): string | undefined {
+  return typeof value === "string" && LIVE_PRESENCE_SURFACE_PATTERN.test(value) ? value : undefined;
+}
+
 export type LiveSessionDataMessage<TView = unknown> =
   | { type: "view"; view: TView }
   | { type: "replay"; replay: LiveReplayState }
-  | { type: "pointer"; participantId?: string; surfaceId?: string; x: number; y: number }
+  | { type: "pointer"; participantId?: string; surfaceId?: string; presenceSurface?: string; x: number; y: number }
   | { type: "presence"; participantId?: string; presence: LiveMapPresence | null };
 
 function isVector3(value: unknown): value is [number, number, number] {

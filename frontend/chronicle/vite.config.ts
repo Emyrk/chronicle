@@ -16,14 +16,22 @@ function backendProxy(): ProxyOptions {
   const target = process.env.HOST || "http://localhost:4000";
   const isRemote = !target.includes("localhost");
   const targetUrl = new URL(target);
-  const rewriteHeaders = (proxyReq: { setHeader: (name: string, value: string) => void }, host: string | undefined) => {
+  const rewriteHeaders = (
+    proxyReq: { setHeader: (name: string, value: string) => void },
+    host: string | undefined,
+    websocket = false,
+  ) => {
     if (isRemote) {
       // Fake browser headers to bypass "only browser connections allowed"
       proxyReq.setHeader('Host', targetUrl.host);
       proxyReq.setHeader('Origin', target.replace(/\/$/, ''));
       proxyReq.setHeader('Referer', target);
     } else if (host) {
-      proxyReq.setHeader('Host', host.replace(/:\d+$/, ':4000'));
+      const backendHost = host.replace(/:\d+$/, ':4000');
+      proxyReq.setHeader('Host', backendHost);
+      // coder/websocket requires the Origin host to match the proxied Host.
+      // The browser sends the Vite port, so rewrite it for upgrade requests.
+      if (websocket) proxyReq.setHeader('Origin', `${targetUrl.protocol}//${backendHost}`);
     }
   };
 
@@ -34,7 +42,7 @@ function backendProxy(): ProxyOptions {
     ws: true,
     configure: (proxy) => {
       proxy.on('proxyReq', (proxyReq, req) => rewriteHeaders(proxyReq, req.headers.host));
-      proxy.on('proxyReqWs', (proxyReq, req) => rewriteHeaders(proxyReq, req.headers.host));
+      proxy.on('proxyReqWs', (proxyReq, req) => rewriteHeaders(proxyReq, req.headers.host, true));
     },
   };
 }
@@ -52,6 +60,7 @@ export default defineConfig({
   }), tailwindcss(), {
     name: 'react-scan-dev',
     transformIndexHtml(_html, ctx) {
+      // eslint-disable-next-line no-constant-condition -- Keep the React Scan hook available but disabled by default.
       if (ctx.server && false) {
         return [{
           tag: 'script',

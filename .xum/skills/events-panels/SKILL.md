@@ -6,8 +6,8 @@ description: |
   Key architecture: processors are worker-safe pure TypeScript (NO React), panels are React wrappers.
   Processing runs in a Web Worker pool to keep UI responsive.
   Includes Focus feature: right-click player rows to drill into per-ability breakdown (URL-persisted).
-  Covers Sync mode aggregation policy (syncDataMode incremental vs full) and reusable
-  floating breakout components (IncomingEventsBreakout, RelativeHealthBar, shared fight-offset cursor).
+  Covers Sync mode aggregation policy (syncDataMode incremental vs full), live-session presence surfaces,
+  and reusable floating breakout components (IncomingEventsBreakout, RelativeHealthBar, shared fight-offset cursor).
 ---
 
 # Events Panels
@@ -332,6 +332,52 @@ Key consequences of `"full"`:
 - The panel works when selected mid-playback (no incremental state to rebuild).
 - Applied filters keep running in the worker; only filter editing pauses during Sync.
 - `usesIncrementalSyncProcessing()` in `usePanelAggregation.ts` is the gate.
+
+## Live-Session Presence Surfaces
+
+Live sessions normally draw each participant as a shared page cursor. A panel that
+draws richer participant presence inside its own interactive view should claim that
+exact DOM region as a **presence surface**:
+
+```tsx
+const presenceSurface = parseLivePresenceSurface(`panel:${panelId}`)!;
+
+<div data-live-presence-surface={presenceSurface}>
+  {/* interactive view with panel-owned participant presence */}
+</div>
+```
+
+`LiveSessionContext` includes the validated surface identifier in pointer updates.
+Remote clients hide the generic cursor while that pointer is on any presence surface,
+then restore it on the next pointer update outside the surface. Identifiers must start
+with a lowercase letter or number and use at most 64 lowercase letters, numbers, `:`, `_`, or `-`.
+Use a panel-instance identifier such as `panel:${panelId}`, not a panel-type name, so
+multiple copies of the same panel do not share occupancy indicators.
+
+Surface occupancy is reusable UI state. `useLivePresenceSurface(presenceSurface)` returns
+the remote participant IDs currently inside that surface, updating only when someone
+enters, leaves, moves to another surface, or disconnects. Put
+`<LivePresenceIndicator surface={presenceSurface} />` in the panel's `headerSlot` controls to
+show participant-coloured dots; its accessible tooltip lists everyone viewing the panel.
+The indicator excludes the local participant because occupancy is built from remote pointers.
+
+The attribute only hands cursor rendering to the panel. The panel must also implement
+its replacement presence transport and rendering. Follow the replay map pattern:
+
+- Put the attribute on the exact canvas or interactive view, not the whole panel card.
+  Header buttons and other ordinary UI should keep the shared cursor.
+- Publish panel-specific presence while mounted, send a heartbeat while idle, and
+  publish `null` during cleanup.
+- Subscribe without forcing page-wide React renders. Push updates into the panel's
+  renderer or another local store.
+- Validate untrusted presence payloads in `liveSessionProtocol.ts`, cover the parser
+  with unit tests, and expire peers that stop sending heartbeats.
+- Do not add a presence surface until the panel actually draws replacement presence.
+  Otherwise remote participants disappear while their pointer is inside the panel.
+
+The current reference is the replay map: `MapView3D.tsx` claims the `map` surface,
+`Map.tsx` connects the live-session API, and `MapView3D` publishes camera or walk-mode
+presence and draws remote participants.
 
 ## Reusable Breakout Components
 

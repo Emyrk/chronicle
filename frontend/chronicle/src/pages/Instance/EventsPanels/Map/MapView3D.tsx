@@ -72,6 +72,8 @@ export interface MapView3DProps {
   adStrafe?: boolean;
   /** In a live session: share your camera / character and draw everyone else's. */
   livePresence?: MapLivePresence | null;
+  /** Unique panel-instance surface that replaces the generic shared cursor. */
+  presenceSurface?: string;
   /** The target frames' units: halos for the selected chain and pins, and target lines. */
   unitRoles?: MapUnitRoles | null;
   /** The raid plan to draw on the floor (the current step's items, and any being drawn). */
@@ -175,6 +177,7 @@ export default function MapView3D({
   onWalkingChange,
   adStrafe = true,
   livePresence = null,
+  presenceSurface,
   unitRoles = null,
   frozen = false,
   debuffSpellIds = NO_DEBUFFS,
@@ -438,7 +441,7 @@ export default function MapView3D({
   }, [livePresence]);
 
   return (
-    <div className="relative h-full w-full">
+    <div data-live-presence-surface={presenceSurface} className="relative h-full w-full">
       <div ref={containerRef} className="absolute inset-0" />
       {effectHover && <EffectTooltip hover={effectHover} />}
     </div>
