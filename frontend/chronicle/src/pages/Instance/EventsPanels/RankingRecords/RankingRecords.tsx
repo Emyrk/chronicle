@@ -4,6 +4,7 @@ import { AlertTriangle, Database, Loader2, Search } from "lucide-react";
 import type { InstanceRankingRecord } from "@/api/typesGenerated";
 import type { ProcessorEvent } from "../processorTypes";
 import type { PanelDefinition, PanelRenderProps } from "../types";
+import { shouldLoadPublicRankingData } from "../panelAvailability";
 import { rankingRecordsProcessor, type RankingRecordsResult } from "./rankingRecords.processor";
 import { filterRankingRecords } from "./rankingRecordsFilter";
 
@@ -27,6 +28,7 @@ export function createRankingRecordsPanel(): PanelDefinition<RankingRecordsResul
 
 export function RankingRecordsContent({ context }: PanelRenderProps<RankingRecordsResult>) {
   const instanceID = context.instance.id;
+  const unlisted = context.instance.unlisted;
   const [search, setSearch] = useState("");
   const query = useQuery({
     queryKey: ["instance-ranking-records", instanceID],
@@ -41,6 +43,7 @@ export function RankingRecordsContent({ context }: PanelRenderProps<RankingRecor
     },
     staleTime: Infinity,
     retry: false,
+    enabled: shouldLoadPublicRankingData(unlisted),
   });
 
   const records = query.data ?? [];
@@ -48,6 +51,14 @@ export function RankingRecordsContent({ context }: PanelRenderProps<RankingRecor
     () => filterRankingRecords(query.data ?? [], search),
     [query.data, search],
   );
+
+  if (unlisted) {
+    return (
+      <div className="py-6 text-center text-sm text-muted-foreground">
+        No ranking records are available for unlisted instances.
+      </div>
+    );
+  }
 
   if (query.isLoading) {
     return (

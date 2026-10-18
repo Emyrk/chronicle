@@ -98,8 +98,6 @@ import { createPullsAndCleanupPanel } from "./PullsAndCleanup/PullsAndCleanup";
 
 const NO_KEYBINDS: readonly InstanceKeybind[] = [];
 
-export const UNLISTED_LOG_RESTRICTED_PANELS = new Set<EventsPanelType>(["leaderboard", "ranking_records"]);
-
 // Registry of all available panels
 // Using `any` here to allow different result types per panel.
 // Type safety is maintained within each panel definition.
@@ -926,7 +924,6 @@ function BuiltinEventsPanel({
                       <PanelSelector
                         value={panelType}
                         onChange={onPanelTypeChange}
-                        excludedValues={context.instance.unlisted ? UNLISTED_LOG_RESTRICTED_PANELS : undefined}
                       />
                     </span>
                   </>
@@ -934,7 +931,6 @@ function BuiltinEventsPanel({
                   <PanelSelector
                     value={panelType}
                     onChange={onPanelTypeChange}
-                    excludedValues={context.instance.unlisted ? UNLISTED_LOG_RESTRICTED_PANELS : undefined}
                   />
                 )}
                 <DropdownMenu modal={false}>

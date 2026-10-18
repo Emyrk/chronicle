@@ -1,5 +1,9 @@
 import type { PanelDefinition } from "./types";
 
+export function shouldLoadPublicRankingData(unlisted: boolean | undefined): boolean {
+  return !unlisted;
+}
+
 export function hasRequiredPanelCapabilities(
   panel: Pick<PanelDefinition<unknown>, "requiredCapabilities">,
   capabilities: readonly string[],

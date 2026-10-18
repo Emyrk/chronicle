@@ -41,7 +41,7 @@ import { activePhaseForTimeRange, phaseTimeRangeSelection, phaseWidthPercent } f
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
 import type { PanelFilter } from "./EventsPanels/processors/filters";
 import { canonicalizeCustomPanelRef, isCustomPanelRef } from "./EventsPanels/custom/pluginTypes";
-import { PANELS, UNLISTED_LOG_RESTRICTED_PANELS } from "./EventsPanels/EventsPanel";
+import { PANELS } from "./EventsPanels/EventsPanel";
 import { Strip } from "./EventsPanels/Strips/Strip";
 import { STRIPS, isStripType } from "./EventsPanels/Strips/strips";
 import type { StripType } from "./EventsPanels/Strips/types";
@@ -2772,10 +2772,10 @@ function InstancePageViewContent({
       const defaultType = (defaultPanelTypesByID[item.id] ?? "empty") as EventsPanelType;
       const resolved = (urlType ?? defaultType) as EventsPanelType;
       const valid = resolved in PANELS || isCustomPanelRef(resolved);
-      next[item.id] = valid && !(instance.unlisted && UNLISTED_LOG_RESTRICTED_PANELS.has(resolved)) ? resolved : "empty";
+      next[item.id] = valid ? resolved : "empty";
     });
     return next;
-  }, [activeLayoutItems, defaultPanelTypesByID, instance.unlisted, viewState.panels]);
+  }, [activeLayoutItems, defaultPanelTypesByID, viewState.panels]);
 
   const panelOptionsByID = useMemo<Record<string, string | null>>(() => {
     const next: Record<string, string | null> = {};
