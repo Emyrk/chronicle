@@ -19,6 +19,14 @@ import (
 	"testing"
 )
 
+func TestArmoryProvenanceInstanceID(t *testing.T) {
+	t.Parallel()
+
+	instanceID := uuid.New()
+	require.Equal(t, instanceID, armoryProvenanceInstanceID(instanceID, false))
+	require.Equal(t, uuid.Nil, armoryProvenanceInstanceID(instanceID, true))
+}
+
 func TestInitialLogCapabilities(t *testing.T) {
 	t.Parallel()
 

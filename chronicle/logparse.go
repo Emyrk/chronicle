@@ -514,7 +514,10 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
 				return err
 			}
-			guild, err := finalized.Guilds.Insert(ctx, encountersState.Units, instanceID, realmID, resolved.DatasetID, tx)
+			// Unlisted logs still update current player gear and talents, but must not
+			// expose the source instance or add it to public gear history.
+			armoryInstanceID := armoryProvenanceInstanceID(instanceID, lg.Unlisted)
+			guild, err := finalized.Guilds.Insert(ctx, encountersState.Units, armoryInstanceID, realmID, resolved.DatasetID, tx)
 			if err != nil {
 				return fmt.Errorf("insert guild: %w", err)
 			}
@@ -1017,6 +1020,13 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	}
 
 	return nil
+}
+
+func armoryProvenanceInstanceID(instanceID uuid.UUID, unlisted bool) uuid.UUID {
+	if unlisted {
+		return uuid.Nil
+	}
+	return instanceID
 }
 
 func (w *WorkerLogParse) NextRetry(job *river.Job[ArgsLogParse]) time.Time {
