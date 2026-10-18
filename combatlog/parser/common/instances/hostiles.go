@@ -83,7 +83,7 @@ func CathedralHostiles() map[uint32]identifier.Identity {
 	return hostile
 }
 
-func SMGraveyardHostiles() map[uint32]Identity {
+func SMGraveyardHostiles(f database.WoWFlavor) map[uint32]Identity {
 	hostile := make(map[uint32]Identity)
 	LoadAdds(hostile, map[uint32]string{
 		4283: "Scarlet Sentry",
@@ -95,6 +95,13 @@ func SMGraveyardHostiles() map[uint32]Identity {
 		3983: "Interrogator Vishas",
 		4543: "Bloodmage Thalnos",
 	})
+
+	if f.Has(database.FlavorWrath) {
+		// Wrath Halloween Event
+		LoadBosses(hostile, map[uint32]string{
+			23682: "Headless Horesman",
+		})
+	}
 
 	return hostile
 }
