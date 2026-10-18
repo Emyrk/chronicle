@@ -5,6 +5,10 @@ import {
   DEFAULT_INSTANCE_LAYOUT_ITEMS,
   DEFAULT_INSTANCE_PANEL_TYPES,
   DEFAULT_INSTANCE_PANEL_FILTERS,
+  MINI_MAP_PANEL_OPTION,
+  POSITION_SUMMARY_CAPABILITY,
+  POSITION_SUMMARY_LAYOUT_ITEMS,
+  POSITION_SUMMARY_PANEL_TYPES,
 } from "./viewDefaults";
 
 // ── Preset Layout Definition ────────────────────────────────────────────────
@@ -38,6 +42,14 @@ export interface PanelPresetLayout extends PresetLayoutBase {
   seamless?: boolean;
   /** In focus mode, stretch panel rows to fill the screen. */
   fit?: boolean;
+  /** A different grid for logs that have these capabilities (e.g. Summary's mini map for position logs). */
+  capabilityVariant?: {
+    requiredCapabilities: string[];
+    layoutItems: GridEditorItem[];
+    panelTypes: Record<string, EventsPanelType>;
+    /** Merged over the base preset's options. */
+    panelOptions: Record<string, string>;
+  };
 }
 
 export type PresetLayout = PagePresetLayout | PanelPresetLayout;
@@ -124,6 +136,12 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
       "panel-5": "g:merged,p:owner",
     },
     panelFilters: DEFAULT_INSTANCE_PANEL_FILTERS,
+    capabilityVariant: {
+      requiredCapabilities: [POSITION_SUMMARY_CAPABILITY],
+      layoutItems: POSITION_SUMMARY_LAYOUT_ITEMS,
+      panelTypes: POSITION_SUMMARY_PANEL_TYPES,
+      panelOptions: { "panel-6": MINI_MAP_PANEL_OPTION },
+    },
   },
   {
     id: "damage",
@@ -298,14 +316,37 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
   },
 ];
 
+function hasCapabilities(required: readonly string[] | undefined, capabilities: readonly string[]): boolean {
+  return (required ?? []).every((capability) => capabilities.includes(capability));
+}
+
+/** The preset as a log with these capabilities sees it: its capability variant applied when it qualifies. */
+export function resolvePresetLayout(preset: PresetLayout, capabilities: readonly string[]): PresetLayout {
+  if (!isPanelPresetLayout(preset) || !preset.capabilityVariant) return preset;
+  const variant = preset.capabilityVariant;
+  if (!hasCapabilities(variant.requiredCapabilities, capabilities)) return preset;
+  return {
+    ...preset,
+    layoutItems: variant.layoutItems,
+    panelTypes: variant.panelTypes,
+    panelOptions: { ...preset.panelOptions, ...variant.panelOptions },
+  };
+}
+
 export function getAvailablePresetLayouts(capabilities: readonly string[]): PresetLayout[] {
-  return PRESET_LAYOUTS.filter((preset) =>
-    (preset.requiredCapabilities ?? []).every((capability) => capabilities.includes(capability)),
-  );
+  return PRESET_LAYOUTS
+    .filter((preset) => hasCapabilities(preset.requiredCapabilities, capabilities))
+    .map((preset) => resolvePresetLayout(preset, capabilities));
 }
 
 export const PRESET_LAYOUTS_BY_ID = Object.fromEntries(
   PRESET_LAYOUTS.map((p) => [p.id, p]),
 ) as Record<string, PresetLayout>;
+
+/** A preset by id, resolved for the log's capabilities (use this to apply a preset). */
+export function presetLayoutById(presetId: string, capabilities: readonly string[]): PresetLayout | undefined {
+  const preset = PRESET_LAYOUTS_BY_ID[presetId];
+  return preset ? resolvePresetLayout(preset, capabilities) : undefined;
+}
 
 export const DEFAULT_PRESET_ID = "summary";

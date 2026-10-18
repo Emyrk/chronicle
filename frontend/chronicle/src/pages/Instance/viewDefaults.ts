@@ -48,6 +48,37 @@ export const DEFAULT_INSTANCE_PANEL_FILTERS: Record<string, PanelFilter[]> = {
   ],
 };
 
+// ── Position-log defaults ────────────────────────────────────────────────────
+// Logs with unit positions get a mini replay map beside the timeline.
+
+/** The Map panel option that draws it as a mini map (no overlays, an Expand button). */
+export const MINI_MAP_PANEL_OPTION = "mini";
+
+export const POSITION_SUMMARY_CAPABILITY = "unit-position";
+
+export const POSITION_SUMMARY_LAYOUT_ITEMS: GridEditorItem[] = [
+  { id: "panel-1", title: "Line Chart", x: 0, y: 0, w: 8, h: 4, minW: 4 },
+  { id: "panel-6", title: "Map", x: 8, y: 0, w: 4, h: 4, minW: 3 },
+  ...DEFAULT_INSTANCE_LAYOUT_ITEMS.filter((item) => item.id !== "panel-1"),
+];
+
+export const POSITION_SUMMARY_PANEL_TYPES: Record<string, EventsPanelType> = {
+  ...DEFAULT_INSTANCE_PANEL_TYPES,
+  "panel-6": "map",
+};
+
+/** The built-in default layout for a log: the position summary when the log has positions. */
+export function defaultInstanceLayout(capabilities: readonly string[]) {
+  const positions = capabilities.includes(POSITION_SUMMARY_CAPABILITY);
+  return {
+    items: positions ? POSITION_SUMMARY_LAYOUT_ITEMS : DEFAULT_INSTANCE_LAYOUT_ITEMS,
+    panelTypes: positions ? POSITION_SUMMARY_PANEL_TYPES : DEFAULT_INSTANCE_PANEL_TYPES,
+    panelOptions: positions
+      ? { ...DEFAULT_INSTANCE_PANEL_OPTIONS, "panel-6": MINI_MAP_PANEL_OPTION }
+      : DEFAULT_INSTANCE_PANEL_OPTIONS,
+  };
+}
+
 // ── Mobile defaults ──────────────────────────────────────────────────────────
 
 

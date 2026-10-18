@@ -3,7 +3,8 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { Crosshair, Focus, Footprints, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Route, Settings2, Skull, Users, X } from "lucide-react";
+import { Crosshair, Focus, Footprints, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Maximize2, Route, Settings2, Skull, Users, X } from "lucide-react";
+import { MINI_MAP_PANEL_OPTION } from "../../viewDefaults";
 import { parseLivePresenceSurface } from "../../liveSessionProtocol";
 import { LivePresenceIndicator } from "../../LivePresenceIndicator";
 import { useLiveSessionOptional } from "../../LiveSessionContext";
@@ -116,13 +117,31 @@ function storeMesh(on: boolean) {
 const mapFramingButtonClass = "pointer-events-auto flex items-center gap-1 rounded-sm border border-black/80 bg-black/75 px-2 py-1 text-[10px] font-medium text-white/75 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-white disabled:opacity-40 disabled:hover:text-white/75";
 const framingButtonClass = "flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:hover:text-muted-foreground";
 
+/** The panel option asks for the mini map: the replay without overlays, for small panels. */
+export function isMiniMapOption(option: string | null | undefined): boolean {
+  return (option ?? "").split(",").includes(MINI_MAP_PANEL_OPTION);
+}
+
+/** Opens the full Map layout from a mini map, when the page can switch layouts. */
+function ExpandMapButton({ context }: { context: PanelRenderProps<MapResult>["context"] }) {
+  if (!context.onApplyPreset) return null;
+  return (
+    <button type="button" onClick={() => context.onApplyPreset?.("map")} title="Open the full map" className={framingButtonClass}>
+      <Maximize2 className="h-3 w-3" />
+      Expand
+    </button>
+  );
+}
+
 interface ReplayMapProps extends PanelRenderProps<MapResult> {
   /** Replay the whole run instead of the one selected encounter. */
   wholeRun?: boolean;
   onExitWholeRun?: () => void;
+  /** Mini map: just the replay, without frames, settings, walk or plan. */
+  mini?: boolean;
 }
 
-function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }: ReplayMapProps) {
+function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = false, ...props }: ReplayMapProps) {
   const sync = useSyncModeContextOptional();
   const miniatureQuery = useQuery({
     queryKey: ["unit-miniatures"],
@@ -252,9 +271,9 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
     panel: RAID_FRAMES_PANEL,
     context: props.context,
     durationMs: props.durationMs,
-    enabled: showRaidFrames || showEnemyFrames || framesWanted,
+    enabled: !mini && (showRaidFrames || showEnemyFrames || framesWanted),
   });
-  const auras = useEmbeddedPanel({ panel: UNIT_AURAS_PANEL, context: props.context, durationMs: props.durationMs, enabled: framesWanted });
+  const auras = useEmbeddedPanel({ panel: UNIT_AURAS_PANEL, context: props.context, durationMs: props.durationMs, enabled: !mini && framesWanted });
   const cursorMs = sync?.enabled && sync.currentTimestamp ? sync.currentTimestamp.getTime() : null;
   const targetEncounter = target && raidFramesResult
     ? selectRaidFramesEncounter(raidFramesResult.encounters, props.context.selectedEncounterIds, cursorMs)
@@ -328,6 +347,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
           Overview
         </button>
       )}
+      {mini && <ExpandMapButton context={props.context} />}
     </div>
   );
 
@@ -428,152 +448,155 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
             Final positions · enable Replay to watch units move
           </div>
         )}
-        {/* Top-left: the Raid Frames panel itself, drawn as an overlay (one
-            implementation for the map and the panel). The inspect frame below moves freely. */}
-        <UnitInspectContext.Provider value={inspectSelection}>
-          <div className="pointer-events-none absolute bottom-2 left-2 top-2 z-30 flex max-w-[calc(100%-1rem)] flex-col items-start gap-1.5">
-            {showRaidFrames ? (
-              <div className="group/raid flex max-w-full shrink-0 items-start gap-0.5">
-                <div className="min-w-0 overflow-hidden">{raidFrames()}</div>
+        {/* The mini map is just the replay: no frames, settings, walk, plan or meters. */}
+        {!mini && (<>
+          {/* Top-left: the Raid Frames panel itself, drawn as an overlay (one
+              implementation for the map and the panel). The inspect frame below moves freely. */}
+          <UnitInspectContext.Provider value={inspectSelection}>
+            <div className="pointer-events-none absolute bottom-2 left-2 top-2 z-30 flex max-w-[calc(100%-1rem)] flex-col items-start gap-1.5">
+              {showRaidFrames ? (
+                <div className="group/raid flex max-w-full shrink-0 items-start gap-0.5">
+                  <div className="min-w-0 overflow-hidden">{raidFrames()}</div>
+                  <button
+                    type="button"
+                    onClick={() => setShowRaidFrames(false)}
+                    title="Hide raid frames"
+                    aria-label="Hide raid frames"
+                    className="pointer-events-auto grid h-4 w-4 shrink-0 place-items-center rounded-sm bg-black/75 text-white/60 opacity-0 transition-opacity hover:text-white focus-visible:opacity-100 group-hover/raid:opacity-100"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ) : (
+                // Hidden: a button in their corner brings them back.
                 <button
                   type="button"
-                  onClick={() => setShowRaidFrames(false)}
-                  title="Hide raid frames"
-                  aria-label="Hide raid frames"
-                  className="pointer-events-auto grid h-4 w-4 shrink-0 place-items-center rounded-sm bg-black/75 text-white/60 opacity-0 transition-opacity hover:text-white focus-visible:opacity-100 group-hover/raid:opacity-100"
+                  onClick={() => setShowRaidFrames(true)}
+                  title="Show raid frames"
+                  aria-label="Show raid frames"
+                  className="pointer-events-auto grid h-7 w-7 shrink-0 place-items-center rounded-sm border border-black/80 bg-black/75 text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-white"
                 >
-                  <X className="h-3 w-3" />
+                  <HeartPulse className="h-4 w-4" />
                 </button>
-              </div>
-            ) : (
-              // Hidden: a button in their corner brings them back.
-              <button
-                type="button"
-                onClick={() => setShowRaidFrames(true)}
-                title="Show raid frames"
-                aria-label="Show raid frames"
-                className="pointer-events-auto grid h-7 w-7 shrink-0 place-items-center rounded-sm border border-black/80 bg-black/75 text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-white"
-              >
-                <HeartPulse className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-          {/* Top-right, left of the settings button: the same panel's enemy frames. */}
-          <div className="pointer-events-none absolute right-11 top-2 z-30 flex max-w-[calc(100%-4rem)] justify-end">
-            {showEnemyFrames ? (
-              <div className="group/enemy flex max-w-full items-start gap-0.5">
+              )}
+            </div>
+            {/* Top-right, left of the settings button: the same panel's enemy frames. */}
+            <div className="pointer-events-none absolute right-11 top-2 z-30 flex max-w-[calc(100%-4rem)] justify-end">
+              {showEnemyFrames ? (
+                <div className="group/enemy flex max-w-full items-start gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowEnemyFrames(false)}
+                    title="Hide enemy frames"
+                    aria-label="Hide enemy frames"
+                    className="pointer-events-auto grid h-4 w-4 shrink-0 place-items-center rounded-sm bg-black/75 text-white/60 opacity-0 transition-opacity hover:text-white focus-visible:opacity-100 group-hover/enemy:opacity-100"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                  <div className="min-w-0 overflow-hidden">{raidFrames("enemies")}</div>
+                </div>
+              ) : (
                 <button
                   type="button"
-                  onClick={() => setShowEnemyFrames(false)}
-                  title="Hide enemy frames"
-                  aria-label="Hide enemy frames"
-                  className="pointer-events-auto grid h-4 w-4 shrink-0 place-items-center rounded-sm bg-black/75 text-white/60 opacity-0 transition-opacity hover:text-white focus-visible:opacity-100 group-hover/enemy:opacity-100"
+                  onClick={() => setShowEnemyFrames(true)}
+                  title="Show enemy frames"
+                  aria-label="Show enemy frames"
+                  className="pointer-events-auto grid h-7 w-7 place-items-center rounded-sm border border-black/80 bg-black/75 text-red-300/80 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-red-200"
                 >
-                  <X className="h-3 w-3" />
+                  <Skull className="h-4 w-4" />
                 </button>
-                <div className="min-w-0 overflow-hidden">{raidFrames("enemies")}</div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowEnemyFrames(true)}
-                title="Show enemy frames"
-                aria-label="Show enemy frames"
-                className="pointer-events-auto grid h-7 w-7 place-items-center rounded-sm border border-black/80 bg-black/75 text-red-300/80 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-red-200"
-              >
-                <Skull className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-        </UnitInspectContext.Provider>
-        <button
-          type="button"
-          onClick={() => setSettingsOpen(true)}
-          title="Map settings"
-          aria-label="Map settings"
-          className="absolute right-2 top-2 z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 bg-black/75 text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-white"
-        >
-          <Settings2 className="h-4 w-4" />
-        </button>
-        {show3D && (
+              )}
+            </div>
+          </UnitInspectContext.Provider>
           <button
             type="button"
-            onClick={() => setWalking(!walking)}
-            disabled={!canWalk}
-            aria-pressed={walking}
-            title={canWalk
-              ? walking ? "Leave walk mode (G or Esc)" : "Walk mode (G): join the fight with a character of your own"
-              : "Walk mode: waiting for the 3D map to load"}
-            aria-label="Walk mode"
-            className={cn(
-              "absolute right-2 top-10 z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 shadow-[0_4px_16px_rgba(0,0,0,.5)] disabled:opacity-40",
-              walking ? "bg-amber-400/90 text-black hover:bg-amber-300" : "bg-black/75 text-white/70 enabled:hover:bg-black/90 enabled:hover:text-white",
-            )}
+            onClick={() => setSettingsOpen(true)}
+            title="Map settings"
+            aria-label="Map settings"
+            className="absolute right-2 top-2 z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 bg-black/75 text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-white"
           >
-            <Footprints className="h-4 w-4" />
+            <Settings2 className="h-4 w-4" />
           </button>
-        )}
-        {show3D && (
-          <button
-            type="button"
-            onClick={() => {
-              if (!planOpen) setWalking(false);
-              setPlanOpen(!planOpen);
-            }}
-            disabled={!canWalk}
-            aria-pressed={planOpen}
-            title={canWalk ? planOpen ? "Close planning" : "Plan: draw markers, arrows, ranges and player spots on the floor" : "Planning needs the 3D map (Map settings → World → 3D map)"}
-            aria-label="Plan"
-            className={cn(
-              "absolute right-2 top-[4.5rem] z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 shadow-[0_4px_16px_rgba(0,0,0,.5)] disabled:opacity-40",
-              planOpen ? "bg-amber-400/90 text-black hover:bg-amber-300" : "bg-black/75 text-white/70 enabled:hover:bg-black/90 enabled:hover:text-white",
-            )}
-          >
-            <PenLine className="h-4 w-4" />
-          </button>
-        )}
-        {planOpen && canWalk && (
-          <PlanControls editor={planEditor} roster={planRoster} onClose={closePlan} />
-        )}
-        {walking && (
-          <div className="pointer-events-none absolute bottom-2 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-sm bg-black/75 px-2 py-1 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
-            <span className="font-semibold text-amber-300">Walking</span> · W/S move · {adStrafe ? "A/D strafe · Q/E turn" : "A/D turn (strafe while right-dragging) · Q/E strafe"} · Space jump (hold to fly) · X down · drag to look · wheel zoom · G or Esc to leave
-          </div>
-        )}
-        {settingsOpen && (
-          <MapSettingsOverlay
-            onClose={() => setSettingsOpen(false)}
-            effectSettings={effectSettings}
-            onEffectSettings={updateEffectSettings}
-            show3D={show3D}
-            hasEffects={Boolean(ready.effects)}
-            raidFrames={showRaidFrames}
-            onRaidFrames={setShowRaidFrames}
-            enemyFrames={showEnemyFrames}
-            onEnemyFrames={setShowEnemyFrames}
-            mesh={show3D && meshUrl ? { on: meshWanted, locked: meshOnly, loading: Boolean(dungeonMesh) && meshState === "loading", onToggle: toggleMesh } : null}
-            floors={ready.floors.length > 1 ? { list: ready.floors, value: ready.selectedFloorNumber, onChange: ready.setFloorNumber } : null}
-            onTopDown={() => setTopDownKey((key) => key + 1)}
-            walk={canWalk ? { on: walking, onToggle: () => setWalking(!walking) } : null}
-            adStrafe={adStrafe}
-            onAdStrafe={setAdStrafe}
+          {show3D && (
+            <button
+              type="button"
+              onClick={() => setWalking(!walking)}
+              disabled={!canWalk}
+              aria-pressed={walking}
+              title={canWalk
+                ? walking ? "Leave walk mode (G or Esc)" : "Walk mode (G): join the fight with a character of your own"
+                : "Walk mode: waiting for the 3D map to load"}
+              aria-label="Walk mode"
+              className={cn(
+                "absolute right-2 top-10 z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 shadow-[0_4px_16px_rgba(0,0,0,.5)] disabled:opacity-40",
+                walking ? "bg-amber-400/90 text-black hover:bg-amber-300" : "bg-black/75 text-white/70 enabled:hover:bg-black/90 enabled:hover:text-white",
+              )}
+            >
+              <Footprints className="h-4 w-4" />
+            </button>
+          )}
+          {show3D && (
+            <button
+              type="button"
+              onClick={() => {
+                if (!planOpen) setWalking(false);
+                setPlanOpen(!planOpen);
+              }}
+              disabled={!canWalk}
+              aria-pressed={planOpen}
+              title={canWalk ? planOpen ? "Close planning" : "Plan: draw markers, arrows, ranges and player spots on the floor" : "Planning needs the 3D map (Map settings → World → 3D map)"}
+              aria-label="Plan"
+              className={cn(
+                "absolute right-2 top-[4.5rem] z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 shadow-[0_4px_16px_rgba(0,0,0,.5)] disabled:opacity-40",
+                planOpen ? "bg-amber-400/90 text-black hover:bg-amber-300" : "bg-black/75 text-white/70 enabled:hover:bg-black/90 enabled:hover:text-white",
+              )}
+            >
+              <PenLine className="h-4 w-4" />
+            </button>
+          )}
+          {planOpen && canWalk && (
+            <PlanControls editor={planEditor} roster={planRoster} onClose={closePlan} />
+          )}
+          {walking && (
+            <div className="pointer-events-none absolute bottom-2 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-sm bg-black/75 px-2 py-1 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
+              <span className="font-semibold text-amber-300">Walking</span> · W/S move · {adStrafe ? "A/D strafe · Q/E turn" : "A/D turn (strafe while right-dragging) · Q/E strafe"} · Space jump (hold to fly) · X down · drag to look · wheel zoom · G or Esc to leave
+            </div>
+          )}
+          {settingsOpen && (
+            <MapSettingsOverlay
+              onClose={() => setSettingsOpen(false)}
+              effectSettings={effectSettings}
+              onEffectSettings={updateEffectSettings}
+              show3D={show3D}
+              hasEffects={Boolean(ready.effects)}
+              raidFrames={showRaidFrames}
+              onRaidFrames={setShowRaidFrames}
+              enemyFrames={showEnemyFrames}
+              onEnemyFrames={setShowEnemyFrames}
+              mesh={show3D && meshUrl ? { on: meshWanted, locked: meshOnly, loading: Boolean(dungeonMesh) && meshState === "loading", onToggle: toggleMesh } : null}
+              floors={ready.floors.length > 1 ? { list: ready.floors, value: ready.selectedFloorNumber, onChange: ready.setFloorNumber } : null}
+              onTopDown={() => setTopDownKey((key) => key + 1)}
+              walk={canWalk ? { on: walking, onToggle: () => setWalking(!walking) } : null}
+              adStrafe={adStrafe}
+              onAdStrafe={setAdStrafe}
+            />
+          )}
+          <TargetFrames
+            target={target}
+            targetOfTarget={targetOfTarget}
+            targetsTarget={targetsTarget}
+            raidFrames={raidFrames}
+            auras={auras}
+            onPin={pin}
+            onClear={() => setTarget(null)}
+            followGuid={followGuid}
+            onFollow={onMesh ? followUnit : undefined}
           />
-        )}
-        <TargetFrames
-          target={target}
-          targetOfTarget={targetOfTarget}
-          targetsTarget={targetsTarget}
-          raidFrames={raidFrames}
-          auras={auras}
-          onPin={pin}
-          onClear={() => setTarget(null)}
-          followGuid={followGuid}
-          onFollow={onMesh ? followUnit : undefined}
-        />
-        <InspectCards guids={pinned} onRemove={unpin} raidFrames={raidFrames} auras={auras} />
-        <MeterWindows windows={meterWindows} onChange={setMeterWindows} context={props.context} durationMs={props.durationMs} />
+          <InspectCards guids={pinned} onRemove={unpin} raidFrames={raidFrames} auras={auras} />
+          <MeterWindows windows={meterWindows} onChange={setMeterWindows} context={props.context} durationMs={props.durationMs} />
+        </>)}
       </div>
-      {jumps.length > 0 && ready.runStartMs !== null && (
+      {!mini && jumps.length > 0 && ready.runStartMs !== null && (
         <div className="flex flex-col gap-1 px-1">
           <div className="relative h-1.5 rounded bg-white/10" aria-hidden>
             {jumps.map((jump) => (
@@ -602,10 +625,10 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
           </div>
         </div>
       )}
-      {webglUnavailable && (
+      {!mini && webglUnavailable && (
         <p className="px-1 text-[9px] text-amber-300/80">3D view needs WebGL, which this browser could not provide. Showing the replay map in 2D instead.</p>
       )}
-      {!ready.overlayAvailable && (
+      {!mini && !ready.overlayAvailable && (
         <p className="px-1 text-[9px] text-amber-300/80">No compatible world-coordinate mapping is available for this floor, so unit markers are hidden.</p>
       )}
     </div>
@@ -614,12 +637,13 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, ...props }
 
 function MapContent(props: PanelRenderProps<MapResult>) {
   const [wholeRun, setWholeRun] = useState(false);
+  const mini = isMiniMapOption(props.panelOption);
   const selectedCount = props.context.selectedEncounterIds.length;
   const presentation = mapPresentationForSelection(selectedCount, wholeRun);
   if (presentation === "replay-3d" && selectedCount !== 1) {
-    return <SingleEncounterReplayMap {...props} wholeRun onExitWholeRun={() => setWholeRun(false)} />;
+    return <SingleEncounterReplayMap {...props} mini={mini} wholeRun onExitWholeRun={() => setWholeRun(false)} />;
   }
-  if (presentation === "replay-3d") return <SingleEncounterReplayMap {...props} />;
+  if (presentation === "replay-3d") return <SingleEncounterReplayMap {...props} mini={mini} />;
   // With nothing selected there is no data to replay: take the run's encounters
   // (what the page selects by default) so the processor has the whole run.
   const startWholeRun = () => {
@@ -632,16 +656,19 @@ function MapContent(props: PanelRenderProps<MapResult>) {
     setWholeRun(true);
   };
   const wholeRunButton = (
-    <button type="button" onClick={startWholeRun} title="Replay the whole run in 3D, the camera following the group" className={framingButtonClass}>
-      <Route className="h-3 w-3" />
-      Whole run
-    </button>
+    <div className="flex items-center gap-1">
+      <button type="button" onClick={startWholeRun} title="Replay the whole run in 3D, the camera following the group" className={framingButtonClass}>
+        <Route className="h-3 w-3" />
+        Whole run
+      </button>
+      {mini && <ExpandMapButton context={props.context} />}
+    </div>
   );
   return (
     <div className="flex h-full min-h-0 flex-col">
       {props.headerSlot ? createPortal(wholeRunButton, props.headerSlot) : <div className="flex justify-end px-3 pt-2">{wholeRunButton}</div>}
       <div className="min-h-0 flex-1">
-        <MapOverview2D {...props} />
+        <MapOverview2D {...props} mini={mini} />
       </div>
     </div>
   );

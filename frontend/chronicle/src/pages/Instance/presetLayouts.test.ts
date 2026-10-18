@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_INSTANCE_PANEL_OPTIONS } from "./viewDefaults";
+import { DEFAULT_INSTANCE_PANEL_OPTIONS, defaultInstanceLayout, MINI_MAP_PANEL_OPTION } from "./viewDefaults";
 import {
   DEFAULT_PRESET_ID,
   getAvailablePresetLayouts,
   isPanelPresetLayout,
   PRESET_LAYOUTS,
   PRESET_LAYOUTS_BY_ID,
+  presetLayoutById,
 } from "./presetLayouts";
 import {
   deserializeTimelineConfig,
@@ -81,5 +82,37 @@ describe("Map preset", () => {
   it("needs unit positions", () => {
     expect(getAvailablePresetLayouts([]).map((preset) => preset.id)).not.toContain("map");
     expect(getAvailablePresetLayouts(["unit-position"]).map((preset) => preset.id)).toContain("map");
+  });
+});
+
+describe("Summary mini map", () => {
+  function panelsPreset(capabilities: string[]) {
+    const preset = presetLayoutById("summary", capabilities);
+    if (!preset || !isPanelPresetLayout(preset)) throw new Error("Summary should be a panels preset");
+    return preset;
+  }
+
+  it("puts a mini map beside the timeline for logs with positions", () => {
+    const summary = panelsPreset(["unit-position"]);
+    const mapId = Object.entries(summary.panelTypes).find(([, type]) => type === "map")?.[0];
+    expect(mapId && summary.panelOptions[mapId]).toBe(MINI_MAP_PANEL_OPTION);
+    expect(summary.layoutItems.find((item) => item.id === mapId)).toMatchObject({ x: 8, y: 0, w: 4 });
+    // The timeline shares the top row and keeps its options.
+    expect(summary.layoutItems.find((item) => item.id === "panel-1")).toMatchObject({ x: 0, y: 0, w: 8 });
+    expect(summary.panelOptions["panel-1"]).toBe(panelsPreset([]).panelOptions["panel-1"]);
+  });
+
+  it("leaves Summary unchanged for logs without positions", () => {
+    expect(Object.values(panelsPreset([]).panelTypes)).not.toContain("map");
+    expect(getAvailablePresetLayouts([]).find((preset) => preset.id === "summary")).toBe(PRESET_LAYOUTS_BY_ID.summary);
+  });
+
+  it("is the built-in default layout for logs with positions", () => {
+    const withPositions = defaultInstanceLayout(["unit-position"]);
+    const map = withPositions.items.find((item) => withPositions.panelTypes[item.id] === "map");
+    expect(map && withPositions.panelOptions[map.id]).toBe(MINI_MAP_PANEL_OPTION);
+
+    const without = defaultInstanceLayout([]);
+    expect(without.items.some((item) => without.panelTypes[item.id] === "map")).toBe(false);
   });
 });

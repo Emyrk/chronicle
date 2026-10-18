@@ -81,15 +81,14 @@ import { formatClassLabel, formatRaceLabel } from "../ArmoryPage/characterDispla
 import { LAYOUT_ACTION_BAR_KEYS, type LayoutActionBarSlots } from "@/features/layoutBook/layoutBookStore";
 import { parsePanelLayout, readLayoutAppearance, type LayoutAppearance } from "@/features/layoutBook/parseLayout";
 import {
-  DEFAULT_INSTANCE_LAYOUT_ITEMS,
   ALTERNATE_INSTANCE_LAYOUT_ITEMS,
-  DEFAULT_INSTANCE_PANEL_TYPES,
-  DEFAULT_INSTANCE_PANEL_OPTIONS,
   DEFAULT_INSTANCE_PANEL_FILTERS,
+  defaultInstanceLayout,
 } from "./viewDefaults";
 import {
   getAvailablePresetLayouts,
   isPanelPresetLayout,
+  presetLayoutById,
   PRESET_LAYOUTS,
   PRESET_LAYOUTS_BY_ID,
   DEFAULT_PRESET_ID,
@@ -1334,8 +1333,9 @@ function PoppedOutLayoutContent({
   const [appearance, setAppearance] = useState(session.snapshot.appearance);
 
 
+  const capabilities = context.instance.capabilities;
   const applyPreset = useCallback((presetId: string) => {
-    const preset = PRESET_LAYOUTS_BY_ID[presetId];
+    const preset = presetLayoutById(presetId, capabilities ?? []);
     if (!preset) return;
     if (!isPanelPresetLayout(preset)) {
       // Pages keep the popup's panel layout around for switching back.
@@ -1355,7 +1355,7 @@ function PoppedOutLayoutContent({
     setSeedFiltersVersion((version) => version + 1);
     setActivePresetId(presetId);
     setAppearance(readLayoutAppearance(preset));
-  }, []);
+  }, [capabilities]);
 
   const castLayout = useCallback((layout: UserPanelLayout) => {
     try {
@@ -1672,6 +1672,7 @@ function EncounterDetail({
       selectedEncounterIds: selectedEncounterIDs,
       entitySelection: deferredEntitySelection,
       onSelectEncounters,
+      onApplyPreset: onPresetChange,
       onTogglePlayer,
       onTogglePlayers,
     }),
@@ -1680,6 +1681,7 @@ function EncounterDetail({
       selectedEncounterIDs,
       deferredEntitySelection,
       onSelectEncounters,
+      onPresetChange,
       onTogglePlayer,
       onTogglePlayers,
     ],
@@ -2438,9 +2440,12 @@ function InstancePageViewContent({
     ? instanceDefaults?.default_mobile_layout?.id ?? null
     : instanceDefaults?.default_desktop_layout?.id ?? null;
 
+  // A user's saved default layout wins; otherwise the built-in one for this log.
+  const builtInDefaultLayout = useMemo(() => defaultInstanceLayout(instance.capabilities ?? []), [instance.capabilities]);
+
   const standardOrderedLayoutItems = useMemo(
-    () => orderLayoutItems(normalizeLayoutItems(cachedDefaultLayout?.items ?? DEFAULT_INSTANCE_LAYOUT_ITEMS)),
-    [cachedDefaultLayout?.items],
+    () => orderLayoutItems(normalizeLayoutItems(cachedDefaultLayout?.items ?? builtInDefaultLayout.items)),
+    [builtInDefaultLayout.items, cachedDefaultLayout?.items],
   );
 
   const alternateOrderedLayoutItems = useMemo(
@@ -2448,7 +2453,7 @@ function InstancePageViewContent({
     [],
   );
 
-  const defaultPanelTypesByID = cachedDefaultLayout?.panelTypesById ?? DEFAULT_INSTANCE_PANEL_TYPES;
+  const defaultPanelTypesByID = cachedDefaultLayout?.panelTypesById ?? builtInDefaultLayout.panelTypes;
 
   const defaultOrderedPanels = useMemo<PanelType[]>(
     () =>
@@ -2479,11 +2484,11 @@ function InstancePageViewContent({
     panels: defaultOrderedPanels,
     panelOptions: defaultOrderedPanels.map((_, i) => {
       const itemId = standardOrderedLayoutItems[i]?.id;
-      return itemId ? (DEFAULT_INSTANCE_PANEL_OPTIONS[itemId] ?? null) : null;
+      return itemId ? (builtInDefaultLayout.panelOptions[itemId] ?? null) : null;
     }),
     layout: "standard",
     includeWipes: false,
-  }), [instance.encounters, defaultOrderedPanels, standardOrderedLayoutItems]);
+  }), [instance.encounters, defaultOrderedPanels, standardOrderedLayoutItems, builtInDefaultLayout.panelOptions]);
 
   const [viewState, setViewState] = useState<LocalInstanceViewState>(() =>
     createDefaultViewState(),
@@ -2598,7 +2603,7 @@ function InstancePageViewContent({
   );
 
   const applyPreset = useCallback((presetId: string) => {
-    const preset = PRESET_LAYOUTS_BY_ID[presetId];
+    const preset = presetLayoutById(presetId, instance.capabilities ?? []);
     if (!preset) return;
 
     if (!isPanelPresetLayout(preset)) {
@@ -2624,7 +2629,7 @@ function InstancePageViewContent({
     setSeedFiltersVersion((v) => v + 1);
     setPanelFiltersByID(preset.panelFilters);
     setActivePresetId(presetId);
-  }, []);
+  }, [instance.capabilities]);
 
   useEffect(() => {
     if (!layoutPopup) return;

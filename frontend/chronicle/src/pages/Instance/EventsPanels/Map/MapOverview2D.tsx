@@ -260,7 +260,8 @@ function RouteLegend({ routes, onHoverEncounter, onFocusEncounter }: {
   );
 }
 
-export function MapOverview2D(props: PanelRenderProps<MapResult>) {
+/** `mini`: just the routes on the map, without the toolbar, zoom hints, route list or caption. */
+export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapResult> & { mini?: boolean }) {
   const iconBaseUrl = props.context.instance.iconBaseUrl;
   const manifestQuery = useMapManifest(iconBaseUrl);
   const mapShellRef = useRef<HTMLDivElement>(null);
@@ -477,7 +478,7 @@ export function MapOverview2D(props: PanelRenderProps<MapResult>) {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-2">
-      <div className="flex items-center justify-between gap-2 px-1 text-[10px] text-muted-foreground">
+      {!mini && <div className="flex items-center justify-between gap-2 px-1 text-[10px] text-muted-foreground">
         <div className="min-w-0 truncate">
           <span className="font-semibold text-foreground">{mapName}</span>
           <span className="ml-1.5 font-mono">world {displayedMapId}</span>
@@ -508,7 +509,7 @@ export function MapOverview2D(props: PanelRenderProps<MapResult>) {
             </select>
           )}
         </div>
-      </div>
+      </div>}
       <div ref={mapShellRef} className="relative min-h-0 flex-1 overflow-hidden rounded-md border border-white/10 bg-[#11100d]">
         <div
           ref={mapFrameRef}
@@ -602,7 +603,7 @@ export function MapOverview2D(props: PanelRenderProps<MapResult>) {
             />
           ))}
         </div>
-        <div data-map-controls className="absolute bottom-2 left-2 z-30 flex items-center gap-1.5 rounded-md border border-white/10 bg-black/80 px-2 py-1 text-[9px] text-white/65 shadow-lg backdrop-blur-sm">
+        {!mini && <div data-map-controls className="absolute bottom-2 left-2 z-30 flex items-center gap-1.5 rounded-md border border-white/10 bg-black/80 px-2 py-1 text-[9px] text-white/65 shadow-lg backdrop-blur-sm">
           <span>Shift + scroll to zoom</span>
           <span className="text-white/25">·</span>
           <span>drag to pan</span>
@@ -619,20 +620,20 @@ export function MapOverview2D(props: PanelRenderProps<MapResult>) {
               Reset
             </button>
           )}
-        </div>
-        {routes.length > 0 && <RouteLegend
+        </div>}
+        {!mini && routes.length > 0 && <RouteLegend
           routes={routes}
           onHoverEncounter={setHoveredEncounterId}
           onFocusEncounter={focusEncounter}
         />}
       </div>
-      <p className="px-1 text-[9px] text-muted-foreground">
+      {!mini && <p className="px-1 text-[9px] text-muted-foreground">
         {routes.length > 0
           ? "Colored lines show selected encounters. Muted gray lines and small dots retain unselected fights. Dashed lines mark remaining telemetry gaps."
           : !dungeonBounds && imageProjection
             ? "This render has no calibrated bounds; routes and positions cannot be placed on it. Choose another map source to view them."
             : "The selected encounters have no positions that can be projected onto this map."}
-      </p>
+      </p>}
     </div>
   );
 }

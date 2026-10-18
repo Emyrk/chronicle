@@ -17,6 +17,7 @@ export const mapExplainer: PanelExplainer = {
     "Pin a unit frame to keep it as a box you can drag anywhere",
     "Press G over the map to walk around in the fight; WASD moves, Space jumps",
     "Map settings (the gear) turns effects, cast icons, health bars and the 3D map on and off",
+    "On the Summary the map is a mini map: just the replay, without frames or settings. Expand opens the full Map layout",
   ],
 
   guide: { title: "Map legend", href: "/map-legend", render: () => <MapLegend /> },

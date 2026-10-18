@@ -38,7 +38,10 @@ export interface PanelContext {
   
   /** Callback to select specific encounter(s) */
   onSelectEncounters?: (encounterIds: string[]) => void;
-  
+
+  /** Switch the page to a preset layout (e.g. a mini map expanding to the Map preset). */
+  onApplyPreset?: (presetId: string) => void;
+
   /** Callback to toggle player selection */
   onTogglePlayer?: (playerId: string) => void;
   
