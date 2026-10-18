@@ -137,6 +137,45 @@ function ExpandMapButton({ context }: { context: PanelRenderProps<MapResult>["co
   );
 }
 
+/**
+ * The mini map's seek bar, floating centred just above the corner controls: a
+ * thin line that thickens on hover; click or drag to seek.
+ * `fraction` is how far through the fight it is.
+ */
+function MiniScrubber({ fraction, onSeek }: { fraction: number; onSeek: (fraction: number) => void }) {
+  const percent = Math.min(100, Math.max(0, fraction * 100));
+  const seekAt = (event: React.PointerEvent<HTMLDivElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    onSeek(Math.min(1, Math.max(0, (event.clientX - bounds.left) / Math.max(1, bounds.width))));
+  };
+  return (
+    <div
+      role="slider"
+      aria-label="Seek"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(percent)}
+      className="group/scrub absolute bottom-10 left-1/2 z-40 h-3 w-1/2 -translate-x-1/2 cursor-pointer touch-none"
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        seekAt(event);
+      }}
+      onPointerMove={(event) => {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) seekAt(event);
+      }}
+    >
+      <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-full bg-black/60 shadow-[0_0_0_1px_rgba(255,255,255,.12)] transition-[height] group-hover/scrub:h-1.5">
+        <div className="h-full bg-primary/90" style={{ width: `${percent}%` }} />
+      </div>
+      <div
+        className="pointer-events-none absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary opacity-0 shadow-[0_0_0_2px_rgba(0,0,0,.6)] transition-opacity group-hover/scrub:opacity-100"
+        style={{ left: `${percent}%` }}
+      />
+    </div>
+  );
+}
+
 interface ReplayMapProps extends PanelRenderProps<MapResult> {
   /** Replay the whole run instead of the one selected encounter. */
   wholeRun?: boolean;
@@ -474,8 +513,17 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               {props.context.onOpenReplay && (
                 <button
                   type="button"
-                  onClick={props.context.onOpenReplay}
-                  title="Open the Replay controls to scrub and play the fight"
+                  onClick={() => {
+                    // Hand the preview over to Replay at the same moment, still playing.
+                    // Enabled first, so the Replay controls keep this point rather than resetting.
+                    if (sync) {
+                      sync.enable();
+                      sync.setTimestamp(new Date(ready.cursorMs));
+                      sync.play();
+                    }
+                    props.context.onOpenReplay?.();
+                  }}
+                  title="Continue in Replay from here"
                   className={mapFramingButtonClass}
                 >
                   <Timer className="h-3 w-3" />
@@ -483,26 +531,40 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
                 </button>
               )}
             </div>
-            <div className="absolute bottom-2 left-2 z-40 flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setPreviewPlaying(!previewPlaying)}
-                title={previewPlaying ? "Pause the preview" : "Play the preview"}
-                aria-label={previewPlaying ? "Pause the preview" : "Play the preview"}
-                className={mapFramingButtonClass}
-              >
-                {previewPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-              </button>
-              <span className="pointer-events-none rounded-sm bg-black/75 px-1.5 py-1 text-[10px] font-medium text-white/70">{ready.playbackSpeed}×</span>
-            </div>
-            {/* How far the preview is through the fight. */}
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 h-0.5 bg-white/10" aria-hidden>
-              <div
-                className="h-full bg-primary/80"
-                style={{ width: `${Math.min(100, Math.max(0, ((ready.cursorMs - ready.encounterStartMs) / Math.max(1, ready.encounterEndMs - ready.encounterStartMs)) * 100))}%` }}
-              />
-            </div>
           </>
+        )}
+        {/* Play/pause and speed: the preview's own clock, or the page's Replay once it is on. */}
+        {mini && (
+          <div className="absolute bottom-2 left-2 z-40 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                if (previewOn) setPreviewPlaying(!previewPlaying);
+                else if (sync?.isPlaying) sync.pause();
+                else sync?.play();
+              }}
+              title={ready.playing ? (previewOn ? "Pause the preview" : "Pause the replay") : (previewOn ? "Play the preview" : "Play the replay")}
+              aria-label={ready.playing ? (previewOn ? "Pause the preview" : "Pause the replay") : (previewOn ? "Play the preview" : "Play the replay")}
+              className={mapFramingButtonClass}
+            >
+              {ready.playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+            </button>
+            <span className="pointer-events-none rounded-sm bg-black/75 px-1.5 py-1 text-[10px] font-medium text-white/70">{ready.playbackSpeed}×</span>
+          </div>
+        )}
+        {mini && (
+          <MiniScrubber
+            fraction={(ready.cursorMs - ready.encounterStartMs) / Math.max(1, ready.encounterEndMs - ready.encounterStartMs)}
+            onSeek={(fraction) => {
+              const span = ready.encounterEndMs - ready.encounterStartMs;
+              if (previewOn) {
+                // The preview loops, so the very end would wrap to the start.
+                setPreviewElapsedMs((Math.min(fraction, 0.999) * span) / ready.playbackSpeed);
+              } else {
+                sync?.setTimestamp(new Date(ready.encounterStartMs + fraction * span));
+              }
+            }}
+          />
         )}
         {reloading && (
           <div className="pointer-events-none absolute left-1/2 top-2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-sm bg-black/75 px-2 py-0.5 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
