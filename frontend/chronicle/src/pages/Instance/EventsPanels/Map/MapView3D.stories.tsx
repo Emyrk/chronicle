@@ -19,6 +19,7 @@ import MapView3D from "./MapView3D";
 import type { MapViewRequest } from "./MapView2D";
 import { addEffectEvent, createEncounterEffects, isDeadAt, type EncounterEffects, type ReplayEffectEvent } from "./replayEffects";
 import { useMapScene, type MapMarkerKind, type MapSceneGround, type MapSceneMarker } from "./useMapScene";
+import { DEFAULT_WALK_AVATAR, WALK_AVATARS } from "./walkAvatars";
 
 const CLASSES = ["warrior", "paladin", "hunter", "rogue", "priest", "shaman", "mage", "warlock", "druid"];
 const DURATION_MS = 60_000;
@@ -837,11 +838,12 @@ const KRESH_LOOP_PAUSE_MS = 1_000;
 
 // Replays a loaded fixture (the real Kresh kill, or a synthetic encounter
 // built in its shape) through the production useMapScene, looping.
-function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSettings }: {
+function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSettings, walkAvatar }: {
   fixture: LoadedMapFixture;
   mesh?: boolean;
   followGuid?: string | null;
   effectSettings?: EffectSettings;
+  walkAvatar?: string;
 }) {
   const miniatureUrls = useStoryMiniatureUrls();
   const { instance } = fixture.props.context;
@@ -913,6 +915,7 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
           cinematic={mesh}
           followGuid={followable ? followGuid : null}
           effectSettings={effectSettings}
+          walkAvatar={walkAvatar}
         />
       ) : (
         <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{scene.title}: {scene.detail}</div>
@@ -941,7 +944,7 @@ const WC_MESH: WowMapMeshInstance = {
   frame: "wow-yup-mirrored-x",
 };
 
-function KreshRealReplay({ selectPlayers, mesh = false }: { selectPlayers: boolean; mesh?: boolean }) {
+function KreshRealReplay({ selectPlayers, mesh = false, walkAvatar }: { selectPlayers: boolean; mesh?: boolean; walkAvatar?: string }) {
   const [fixture] = useState(() => {
     const loaded = loadMapFixture(kreshReal, { selectPlayers });
     if (selectPlayers) (loaded.props.context.entitySelection.playerIds as Set<string>).delete(KRESH_UNSELECTED);
@@ -968,7 +971,7 @@ function KreshRealReplay({ selectPlayers, mesh = false }: { selectPlayers: boole
     <QueryClientProvider client={queryClient}>
       <WithSpellIcons>
         <SyncModeProvider>
-          <FixturePlayer fixture={fixture} mesh={mesh} />
+          <FixturePlayer fixture={fixture} mesh={mesh} walkAvatar={walkAvatar} />
         </SyncModeProvider>
       </WithSpellIcons>
     </QueryClientProvider>
@@ -1425,6 +1428,28 @@ export const KreshRealSelected: Story = {
 export const KreshRealMesh: Story = {
   render: () => <KreshRealReplay selectPlayers={false} mesh />,
 };
+
+/**
+ * KreshRealMesh with walk mode's character picker: hover the map and press G
+ * to walk as the chosen creature, loaded from the icon CDN (WALK_AVATAR_BASE_URL).
+ */
+export const KreshRealWalkAvatar: Story = {
+  render: () => <WalkAvatarReplay />,
+};
+
+function WalkAvatarReplay() {
+  const [avatar, setAvatar] = useState(DEFAULT_WALK_AVATAR);
+  return (
+    <div className="flex flex-col gap-2">
+      <select aria-label="Character" value={avatar} onChange={(event) => setAvatar(event.target.value)} className="w-56 rounded border border-white/15 bg-black px-2 py-1 text-xs text-white">
+        {WALK_AVATARS.map((option) => (
+          <option key={option.id} value={option.id}>{option.group ? `${option.group}: ${option.label}` : option.label}</option>
+        ))}
+      </select>
+      <KreshRealReplay selectPlayers={false} mesh walkAvatar={avatar} />
+    </div>
+  );
+}
 
 /**
  * The real Hakkar kill (Zul'Gurub, 16 players, ~53 s) from an octo log on the

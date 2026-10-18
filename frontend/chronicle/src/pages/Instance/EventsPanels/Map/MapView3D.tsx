@@ -26,6 +26,7 @@ import { collectCastSpellIds, DEFAULT_EFFECT_OPTIONS, effectiveCastIconGuids, ic
 import type { MapViewRequest } from "./MapView2D";
 import type { MapSceneGround, MapSceneMarker } from "./useMapScene";
 import { DEFAULT_EFFECT_SETTINGS, type EffectSettings } from "./mapViewSettings";
+import { CAPSULE_AVATAR } from "./walkAvatars";
 
 export interface MapView3DProps {
   ground: MapSceneGround;
@@ -70,6 +71,8 @@ export interface MapView3DProps {
   onWalkingChange?: (walking: boolean) => void;
   /** A/D strafe and Q/E turn (a saved map setting, on by default). */
   adStrafe?: boolean;
+  /** The character to walk as (walkAvatars ids). */
+  walkAvatar?: string;
   /** In a live session: share your camera / character and draw everyone else's. */
   livePresence?: MapLivePresence | null;
   /** Unique panel-instance surface that replaces the generic shared cursor. */
@@ -176,6 +179,7 @@ export default function MapView3D({
   walking = false,
   onWalkingChange,
   adStrafe = true,
+  walkAvatar = CAPSULE_AVATAR,
   livePresence = null,
   presenceSurface,
   unitRoles = null,
@@ -406,6 +410,10 @@ export default function MapView3D({
   useEffect(() => {
     sceneRef.current?.setAdStrafe(adStrafe);
   }, [adStrafe]);
+
+  useEffect(() => {
+    sceneRef.current?.setWalkAvatar(walkAvatar);
+  }, [walkAvatar]);
 
   useEffect(() => {
     sceneRef.current?.setOnFollowChange(onFollowChange ?? null);

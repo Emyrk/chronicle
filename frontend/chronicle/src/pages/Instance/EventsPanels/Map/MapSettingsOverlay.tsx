@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Eye, Footprints, Gamepad2, Globe, Scan, Sparkles, X, type LucideIcon } from "lucide-react";
+import { Eye, Footprints, Gamepad2, Globe, PersonStanding, Scan, Sparkles, X, type LucideIcon } from "lucide-react";
 import { Switch } from "@/components/ui/Switch/Switch";
 import { cn } from "@/lib/utils";
 import { MAP_CONTROL_KEYBINDS } from "./mapControls";
 import { ABOVE_DISC_MODES, CAST_MODES, DENSITY_OPTIONS, type EffectSettings } from "./mapViewSettings";
+import { WALK_AVATAR_GROUPS, WALK_AVATARS } from "./walkAvatars";
 
 export interface MapSettingsOverlayProps {
   onClose: () => void;
@@ -25,6 +26,9 @@ export interface MapSettingsOverlayProps {
   walk: { on: boolean; onToggle: () => void } | null;
   adStrafe: boolean;
   onAdStrafe: (on: boolean) => void;
+  /** The character you walk as (walkAvatars ids). */
+  walkAvatar: string;
+  onWalkAvatar: (id: string) => void;
 }
 
 /** One tab of the settings. A tab with no content (null) is hidden. */
@@ -58,6 +62,8 @@ export function MapSettingsOverlay({
   walk,
   adStrafe,
   onAdStrafe,
+  walkAvatar,
+  onWalkAvatar,
 }: MapSettingsOverlayProps) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -201,6 +207,26 @@ export function MapSettingsOverlay({
         </>
       ) : null,
     },
+    {
+      id: "character",
+      label: "Character",
+      icon: PersonStanding,
+      content: show3D ? (
+        <>
+          <p className="text-[11px] text-zinc-400">
+            Who you walk as in walk mode (G): a creature from Azeroth, at its own size.
+          </p>
+          <Section title="Classic">
+            <AvatarGrid options={WALK_AVATARS.filter((option) => option.group === null)} value={walkAvatar} onChange={onWalkAvatar} />
+          </Section>
+          {WALK_AVATAR_GROUPS.map(({ group, title }) => (
+            <Section key={group} title={title}>
+              <AvatarGrid options={WALK_AVATARS.filter((option) => option.group === group)} value={walkAvatar} onChange={onWalkAvatar} />
+            </Section>
+          ))}
+        </>
+      ) : null,
+    },
   ];
 
   const visibleTabs = tabs.filter((tab) => tab.content !== null);
@@ -220,7 +246,7 @@ export function MapSettingsOverlay({
       <div
         role="dialog"
         aria-label="Map settings"
-        className="flex max-h-full w-[34rem] max-w-full flex-col overflow-hidden rounded-md border border-white/10 bg-zinc-950/95 text-sm text-zinc-100 shadow-2xl"
+        className="flex max-h-full w-[38rem] max-w-full flex-col overflow-hidden rounded-md border border-white/10 bg-zinc-950/95 text-sm text-zinc-100 shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-white/10 px-3 pt-2">
@@ -284,6 +310,27 @@ function ActionButton({ icon: Icon, title, onClick, children }: { icon: LucideIc
       <Icon className="h-3.5 w-3.5" />
       {children}
     </button>
+  );
+}
+
+function AvatarGrid({ options, value, onChange }: { options: { id: string; label: string }[]; value: string; onChange: (id: string) => void }) {
+  return (
+    <div className="grid grid-cols-3 gap-1">
+      {options.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          aria-pressed={option.id === value}
+          onClick={() => onChange(option.id)}
+          className={cn(
+            "truncate rounded border px-2 py-1.5 text-left text-[11px]",
+            option.id === value ? "border-primary bg-primary/25 text-zinc-50" : "border-white/10 text-zinc-300 hover:bg-white/10",
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
   );
 }
 

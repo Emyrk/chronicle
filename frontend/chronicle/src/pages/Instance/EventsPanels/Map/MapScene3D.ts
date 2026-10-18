@@ -1,8 +1,10 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import type { MeshBVH } from "three-mesh-bvh";
 import { mapAssetUrl, type WowMapFloorBounds, type WowMapLayer, type WowMapMeshLiquid } from "@/pages/Technical/mapGallery";
+import { CAPSULE_AVATAR, WALK_AVATAR_CLIPS, walkAvatarUrl, type WalkAvatarState } from "./walkAvatars";
 import {
   AIM_AHEAD_FRACTION,
   BOSS_ENGAGE_YARDS,
@@ -577,6 +579,9 @@ interface WalkState {
   lastMs: number;
   drag: { button: number; x: number; y: number } | null;
   avatar: THREE.Group;
+  /** The gold capsule: shown while the chosen monster loads, or for good without one. */
+  capsule: THREE.Mesh;
+  model: WalkAvatarModel | null;
 }
 
 // You, in walk mode: a gold player capsule (no facing cone; the camera shows the way).
@@ -585,6 +590,73 @@ function createAvatar(geometries: Record<MapMarkerKind | "cone", THREE.BufferGeo
   const group = new THREE.Group();
   group.add(new THREE.Mesh(geometries.player, material));
   return group;
+}
+
+/** Seconds to cross-fade between a monster's idle, walk, run and in-air clips. */
+const WALK_AVATAR_FADE_S = 0.2;
+
+// A chosen monster in walk mode: its clone of the loaded model, and its clips.
+interface WalkAvatarModel {
+  root: THREE.Object3D;
+  mixer: THREE.AnimationMixer;
+  actions: Record<WalkAvatarState, THREE.AnimationAction | null>;
+  state: WalkAvatarState | null;
+}
+
+interface WalkAvatarTemplate {
+  scene: THREE.Group;
+  clips: THREE.AnimationClip[];
+}
+
+/** A creature keeps its own height in yards, within these (a chicken stays visible, a gryphon out of the camera). */
+const WALK_AVATAR_MIN_YARDS = 1.5;
+const WALK_AVATAR_MAX_YARDS = 3.5;
+
+// Each creature's glTF, loaded once and cloned for every walk. Never disposed
+// (like the dungeon meshes); a failed load is forgotten so it can be retried.
+const walkAvatarTemplates = new Map<string, Promise<WalkAvatarTemplate>>();
+function loadWalkAvatar(url: string): Promise<WalkAvatarTemplate> {
+  let template = walkAvatarTemplates.get(url);
+  if (!template) {
+    template = gltfLoader().then((loader) => loader.loadAsync(corsAssetUrl(url))).then((gltf) => {
+      // Feet on the ground at the creature's height in yards (the avatar group's
+      // PLAYER_GEOMETRY_HEIGHT is a MESH_PLAYER_HEIGHT_YARDS tall player), turned
+      // to face -z (glTF models face +z).
+      const height = new THREE.Box3().setFromObject(gltf.scene).max.y;
+      const yards = Math.min(WALK_AVATAR_MAX_YARDS, Math.max(WALK_AVATAR_MIN_YARDS, height));
+      if (height > 0) gltf.scene.scale.multiplyScalar((yards * PLAYER_GEOMETRY_HEIGHT) / (MESH_PLAYER_HEIGHT_YARDS * height));
+      gltf.scene.rotation.y = Math.PI;
+      return { scene: gltf.scene, clips: gltf.animations };
+    });
+    template.catch(() => walkAvatarTemplates.delete(url));
+    walkAvatarTemplates.set(url, template);
+  }
+  return template;
+}
+
+function createWalkAvatarModel(template: WalkAvatarTemplate): WalkAvatarModel {
+  const root = cloneSkinned(template.scene);
+  // Geometry and materials are the template's: disposeAvatar leaves them be.
+  root.traverse((child) => { child.userData.sharedAsset = true; });
+  const mixer = new THREE.AnimationMixer(root);
+  const clipFor = (names: readonly string[]) => names.map((name) => template.clips.find((clip) => clip.name === name)).find((clip) => clip) ?? null;
+  const actions = {} as Record<WalkAvatarState, THREE.AnimationAction | null>;
+  for (const state of Object.keys(WALK_AVATAR_CLIPS) as WalkAvatarState[]) {
+    const clip = clipFor(WALK_AVATAR_CLIPS[state]);
+    actions[state] = clip ? mixer.clipAction(clip) : null;
+  }
+  return { root, mixer, actions, state: null };
+}
+
+function playWalkAvatarState(model: WalkAvatarModel, state: WalkAvatarState) {
+  if (model.state === state) return;
+  const previous = model.state ? model.actions[model.state] : null;
+  const next = model.actions[state];
+  model.state = state;
+  // States can share a clip (a blob runs with its walk).
+  if (!next || next === previous) return;
+  next.reset().setEffectiveWeight(1).fadeIn(WALK_AVATAR_FADE_S).play();
+  previous?.fadeOut(WALK_AVATAR_FADE_S);
 }
 
 function createUnitGeometries(): Record<MapMarkerKind | "cone", THREE.BufferGeometry> {
@@ -741,6 +813,7 @@ export class MapScene3D {
   private readonly keyWindow: Window;
   private readonly heldActions = new Set<MapControlAction>();
   private walk: WalkState | null = null;
+  private walkAvatarId = CAPSULE_AVATAR;
   private adStrafe = true;
   private readonly tokenTextures = new UnitTokenTextures(() => this.requestRender());
   // The raid plan drawn on the floor (see plan/), and the drawing input while a tool is active.
@@ -3377,7 +3450,10 @@ export class MapScene3D {
       lastMs: 0,
       drag: null,
       avatar,
+      capsule: avatar.children[0] as THREE.Mesh,
+      model: null,
     };
+    this.dressAvatar(this.walk);
     this.controls.enabled = false;
     this.camera.near = WALK_NEAR_YARDS * scale;
     this.camera.far = WALK_FAR_YARDS * scale;
@@ -3408,6 +3484,7 @@ export class MapScene3D {
     this.walk = null;
     this.heldActions.clear();
     this.unlockPointer();
+    walk.model?.mixer.stopAllAction();
     this.disposeAvatar(walk.avatar);
     // The orbit camera picks up behind and above where the character stood.
     const distance = Math.max(walk.camDistance, WALK_EXIT_DISTANCE_YARDS) * (this.yardScale() ?? 1);
@@ -3429,9 +3506,38 @@ export class MapScene3D {
     this.requestRender();
   }
 
+  /** The character to walk as: "capsule" or a monster from walkAvatars. */
+  setWalkAvatar(id: string) {
+    if (id === this.walkAvatarId) return;
+    this.walkAvatarId = id;
+    if (this.walk) this.dressAvatar(this.walk);
+  }
+
+  // Swaps the walking character's model for the chosen one. The capsule
+  // stands in while it loads, and stays if it fails to.
+  private dressAvatar(walk: WalkState) {
+    if (walk.model) {
+      walk.model.mixer.stopAllAction();
+      walk.avatar.remove(walk.model.root);
+      walk.model = null;
+    }
+    walk.capsule.visible = true;
+    const id = this.walkAvatarId;
+    const url = walkAvatarUrl(id);
+    if (!url) return;
+    loadWalkAvatar(url).then((template) => {
+      if (this.disposed || this.walk !== walk || this.walkAvatarId !== id || walk.model) return;
+      walk.model = createWalkAvatarModel(template);
+      walk.avatar.add(walk.model.root);
+      walk.capsule.visible = false;
+      this.requestRender();
+    }).catch(() => {});
+  }
+
   private disposeAvatar(avatar: THREE.Group) {
     this.scene.remove(avatar);
     avatar.traverse((child) => {
+      if (child.userData.sharedAsset) return;
       const material = (child as THREE.Mesh).material as THREE.Material | undefined;
       material?.dispose();
     });
@@ -3499,6 +3605,10 @@ export class MapScene3D {
       walk.vy = 0;
     }
 
+    if (walk.model) {
+      playWalkAvatarState(walk.model, !walk.grounded ? "air" : !forward && !strafe ? "idle" : forward < 0 ? "walk" : "run");
+      walk.model.mixer.update(dt);
+    }
     walk.avatar.position.copy(walk.position);
     walk.avatar.rotation.y = walk.yaw;
     const head = this.walkHead.set(walk.position.x, walk.position.y + WALK_EYE_YARDS * scale, walk.position.z);
