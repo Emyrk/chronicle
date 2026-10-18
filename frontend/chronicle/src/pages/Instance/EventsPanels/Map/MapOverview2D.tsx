@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Map as MapIcon, RotateCcw, Skull } from "lucide-react";
 import type { Encounter } from "../../InstancePage";
@@ -285,10 +285,14 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
     setUserCamera((current) => update(current ?? layoutRef.current.home));
   }, []);
 
-  const handleWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
-    if (!event.shiftKey || event.target instanceof Element && event.target.closest("[data-map-controls]")) return;
+  // Ctrl (or Shift) + scroll zooms; a plain scroll still scrolls the page. Attached
+  // natively below (React's wheel listener is passive, so it cannot stop Ctrl's page zoom).
+  const handleWheel = useCallback((event: WheelEvent) => {
+    if (!(event.ctrlKey || event.shiftKey) || event.target instanceof Element && event.target.closest("[data-map-controls]")) return;
     event.preventDefault();
-    const bounds = event.currentTarget.getBoundingClientRect();
+    const frame = mapFrameRef.current;
+    if (!frame) return;
+    const bounds = frame.getBoundingClientRect();
     const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
     if (delta === 0) return;
     const { rect, minScale } = layoutRef.current;
@@ -461,6 +465,12 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
     observer.observe(shell);
     return () => observer.disconnect();
   }, [canvas, showMap]);
+  useEffect(() => {
+    const frame = mapFrameRef.current;
+    if (!frame || !showMap) return;
+    frame.addEventListener("wheel", handleWheel, { passive: false });
+    return () => frame.removeEventListener("wheel", handleWheel);
+  }, [handleWheel, showMap]);
 
   const transitRoutes = journeyRoutes.filter((route) => !route.selected);
   const allPoints = journeyRoutes.flatMap((route) => route.points);
@@ -550,7 +560,6 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
         <div
           ref={mapFrameRef}
           className={`absolute inset-0 touch-none overflow-hidden bg-[#11100d] select-none ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}
-          onWheel={handleWheel}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={stopDragging}
@@ -641,8 +650,13 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
           ))}
           </div>
         </div>
+        {mini && (
+          <div className="pointer-events-none absolute bottom-1.5 left-1.5 z-30 rounded-sm bg-black/70 px-1.5 py-0.5 text-[9px] text-white/65">
+            Ctrl+scroll to zoom, click and drag to pan
+          </div>
+        )}
         {!mini && <div data-map-controls className="absolute bottom-2 left-2 z-30 flex items-center gap-1.5 rounded-md border border-white/10 bg-black/80 px-2 py-1 text-[9px] text-white/65 shadow-lg backdrop-blur-sm">
-          <span>Shift + scroll to zoom</span>
+          <span>Ctrl + scroll to zoom</span>
           <span className="text-white/25">·</span>
           <span>drag to pan</span>
           <div className="ml-1 flex overflow-hidden rounded border border-white/15 text-white/85">
