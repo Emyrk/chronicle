@@ -36,9 +36,10 @@ split below.
   (icon, cast-time bar by school, damage, hatched idle gaps), auto-attack lane
   (main/off hand, outcome colors), cooldown lane.
 - Cast tooltip: spell, time, cast time, damage, crit, target, active buffs.
-- Collapsible "Buffs & debuffs": key buffs, "Other buffs" (sorted by A/B
-  uptime gap, pin/unpin), debuffs active on players A/B, target picker, target
-  strip, key debuffs applied by A/B to that target, and "Other debuffs".
+- Collapsible "Buffs & debuffs": buffs and player debuffs together (player
+  debuffs have a red dot), "Other buffs & debuffs" sorted by A/B uptime gap,
+  target picker, target strip, key debuffs applied by A/B to that target, and
+  "Other debuffs".
 - Ctrl+click a spell to ignore it everywhere on the page.
 - Page state survives share links.
 

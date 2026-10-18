@@ -82,10 +82,12 @@ describe("AuraSection", () => {
         unitName={(guid) => guid}
         pickedTarget={null}
         onPickTarget={noop}
+        otherOpenByDefault
       />,
     );
 
-    expect(markup).toContain("Debuffs on players");
     expect(markup).toContain("Arcane Rupture");
+    expect(markup).toContain('data-aura-type="debuff"');
+    expect(markup).not.toContain("Debuffs on players");
   });
 });
