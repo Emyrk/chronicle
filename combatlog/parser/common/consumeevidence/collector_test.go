@@ -51,10 +51,12 @@ func newTestCatalog() *testCatalog {
 			13813: true, // Blessed Sunfruit Juice (flask-like)
 		},
 		buffs: map[chrondbc.SpellID][]int32{
+			11359: {9030},  // Restoration → Restorative Potion
 			17624: {13510}, // Flask of the Titans → Flask item
 			17538: {13461}, // Greater Stoneshield → item 13461
 		},
 		directSpells: map[chrondbc.SpellID][]int32{
+			11359: {9030},         // Restoration → Restorative Potion
 			17531: {13444},        // Restore Mana → Major Mana Potion
 			17534: {13446},        // Healing Potion (Major) → Major Healing Potion
 			17538: {13461},        // Greater Stoneshield Potion
@@ -783,6 +785,51 @@ func TestInactiveFightCapturesDirectEpisodeParseWide(t *testing.T) {
 	assert.True(t, (*emitted)[1].IsProjection)
 	require.NotNil(t, (*emitted)[0].ConsumedAtUnixMs)
 	assert.Nil(t, (*emitted)[1].ConsumedAtUnixMs)
+}
+
+func TestPreCombatCastAndAuraShareOneConsume(t *testing.T) {
+	t.Parallel()
+
+	auraTracker := auras.New(nil)
+	tracker, collector := newTrackerAndCollector(auraTracker, newTestCatalog())
+	emitted := collectEmitted(collector)
+
+	player := testPlayerGUID()
+	consumeTime := time.Date(2024, 1, 1, 11, 59, 59, 803000000, time.UTC)
+	pullTime := consumeTime.Add(197 * time.Millisecond)
+	spell := testSpellWithDuration(11359, 30000)
+
+	tracker.Process(&messages.SpellGo{
+		MessageBase: messages.Base(consumeTime),
+		Caster:      player,
+		SpellData:   spell,
+	}, false)
+
+	aura := &messages.Aura{
+		MessageBase: messages.Base(pullTime),
+		Target:      player,
+		SpellName:   "Restoration",
+		SpellData:   spell,
+		IsBuff:      true,
+		Amount:      1,
+		State:       1,
+	}
+	auraTracker.Process(aura)
+	tracker.Process(aura, false)
+
+	encounterID := uuid.New()
+	collector.FightStarted(encounterID, &messages.Damage{MessageBase: messages.Base(pullTime)})
+	require.NoError(t, collector.ProcessMessage(true, encounterID, &messages.Damage{MessageBase: messages.Base(pullTime)}))
+
+	require.Len(t, *emitted, 2)
+	preCombat, activeAtPull := (*emitted)[0], (*emitted)[1]
+	assert.Equal(t, messages.EvidenceKindPreCombat, preCombat.Kind)
+	assert.Equal(t, messages.EvidenceKindActiveAtPull, activeAtPull.Kind)
+	assert.Equal(t, preCombat.ConsumeID, activeAtPull.ConsumeID,
+		"the cast and resulting active aura are one physical use")
+	assert.NotEqual(t, preCombat.EvidenceID, activeAtPull.EvidenceID)
+	require.NotNil(t, activeAtPull.ItemID)
+	assert.Equal(t, int32(9030), *activeAtPull.ItemID)
 }
 
 func TestPreCombatInstantProjectsIntoNextEncounterOnce(t *testing.T) {
