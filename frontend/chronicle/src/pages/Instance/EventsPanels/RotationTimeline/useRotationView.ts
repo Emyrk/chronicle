@@ -58,6 +58,8 @@ export interface RotationView extends RotationViewState {
    */
   pinAt: (ms: number, toleranceMs: number) => void;
   unpin: () => void;
+  /** Apply a remote/shared view without remounting the timeline or its aggregation. */
+  applyState: (state: RotationViewInitial) => void;
 }
 
 function clampWindow(startMs: number, endMs: number, durationMs: number): [number, number] {
@@ -72,6 +74,20 @@ export interface RotationViewInitial {
   window?: { startMs: number; endMs: number } | null;
   pinnedMs?: number | null;
   follow?: boolean;
+}
+
+export function resolveSharedRotationView(
+  state: RotationViewInitial,
+  durationMs: number,
+): { align: AlignMode; follow: boolean; pinnedMs: number | null; range: [number, number] } {
+  return {
+    align: state.align ?? "pull",
+    follow: state.follow ?? false,
+    pinnedMs: state.pinnedMs ?? null,
+    range: state.window
+      ? clampWindow(state.window.startMs, state.window.endMs, durationMs)
+      : [0, durationMs],
+  };
 }
 
 const ICON_SIZE_STORAGE_KEY = "chronicle.playerTimeline.iconSize";
@@ -236,6 +252,14 @@ export function useRotationView(
   const unpin = useCallback(() => setPinnedMs(null), []);
 
 
+  const applyState = useCallback((state: RotationViewInitial) => {
+    const resolved = resolveSharedRotationView(state, durationMs);
+    setAlign(resolved.align);
+    setFollow(resolved.follow);
+    setPinnedMs(resolved.pinnedMs);
+    setRange(() => resolved.range);
+  }, [durationMs, setRange]);
+
   const toggleIgnored = useCallback((spellName: string) => {
     setIgnoredNames((prev) => {
       const key = normalizeSpellName(spellName);
@@ -275,7 +299,8 @@ export function useRotationView(
       setCursorMs,
       pinAt,
       unpin,
+      applyState,
     }),
-    [startMs, endMs, align, metric, setMetric, iconSize, ignoredNames, isIgnored, cursorMs, pinnedMs, nowMs, follow, toggleFollow, followMs, setCursorMs, setIconSize, durationMs, setWindow, zoom, fit, panBy, toggleIgnored, pinAt, unpin],
+    [startMs, endMs, align, metric, setMetric, iconSize, ignoredNames, isIgnored, cursorMs, pinnedMs, nowMs, follow, toggleFollow, followMs, setCursorMs, setIconSize, durationMs, setWindow, zoom, fit, panBy, toggleIgnored, pinAt, unpin, applyState],
   );
 }

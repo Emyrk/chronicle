@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeftRight, CircleHelp, FlaskConical } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { MAJOR_COOLDOWN_MIN_MS, useCooldownSpells } from "@/api/cooldownSpells";
@@ -85,6 +85,15 @@ export function PlayerTimelinePage({ context, durationMs, initialState, onStateC
   );
   // Like the picks, the damage/healing view carries across encounters.
   const [metric, setMetric] = useState<TimelineMetric>(saved?.metric ?? "damage");
+
+  useEffect(() => {
+    if (!saved) return;
+    // Remote live-session state must update the existing page without remounting
+    // its expensive aggregation worker.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOverrides(saved.players[0] ? [saved.players[0], saved.players[1] ?? NONE] : [null, null]);
+    setMetric(saved.metric);
+  }, [saved]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -267,11 +276,32 @@ function PlayerTimelineContent({
     controlledMetric,
   );
 
+  const applyingSharedStateRef = useRef(false);
+  const applySharedViewState = view.applyState;
+
+  useEffect(() => {
+    if (!saved) return;
+    applyingSharedStateRef.current = true;
+    const appliesToEncounter = saved.encounterId === encounterId;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDebuffTarget(appliesToEncounter ? saved.debuffTarget : null);
+    applySharedViewState({
+      align: saved.align,
+      follow: saved.follow,
+      window: appliesToEncounter ? saved.window : null,
+      pinnedMs: appliesToEncounter ? saved.pinnedMs : null,
+    });
+  }, [applySharedViewState, encounterId, saved]);
+
   // Report the view so share links capture it. Replay moves the window on its
   // own, so the saved window is only taken outside replay.
   const replaying = view.nowMs != null;
   const wholeFight = view.startMs <= 0 && view.endMs >= durationMs;
   useEffect(() => {
+    if (applyingSharedStateRef.current) {
+      applyingSharedStateRef.current = false;
+      return;
+    }
     onStateChange?.({
       encounterId,
       players: [picked[0], picked[1]],

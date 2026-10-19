@@ -6,17 +6,3 @@ export function samePageState(left: unknown, right: unknown): boolean {
     return false;
   }
 }
-
-export interface ImportedPageState {
-  key: number;
-  state: unknown;
-}
-
-export function updateImportedPageState(
-  previous: ImportedPageState,
-  state: unknown,
-): ImportedPageState {
-  return samePageState(previous.state, state)
-    ? previous
-    : { key: previous.key + 1, state };
-}

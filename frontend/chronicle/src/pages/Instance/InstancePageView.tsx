@@ -63,7 +63,7 @@ import {
   sameEncounterSelection,
   validateSharedViewPayload,
 } from "./sharedViewImport";
-import { samePageState, updateImportedPageState } from "./pageStateSync";
+import { samePageState } from "./pageStateSync";
 import { InstanceViewModeSwitch } from "./InstanceViewMode";
 import { isInstanceOverviewEnabled, parseInstanceViewMode, withInstanceViewMode, type InstanceViewMode } from "./instanceViewModeState";
 import { InstanceOverview } from "./Overview/InstanceOverview";
@@ -1555,8 +1555,8 @@ interface EncounterDetailProps {
   onShowSidebar?: () => void;
   /** Full-page content owned by the active layout, or null for a panel grid. */
   pageType: InstancePageType | null;
-  /** Share-link state binding for the active page; the key remounts it on import. */
-  pageState: PageStateBinding & { key: number };
+  /** Share-link and live-session state binding for the active page. */
+  pageState: PageStateBinding;
   /** Callback when user clicks a preset tab */
   onPresetChange: (presetId: string) => void;
   /** Popup hosting the complete panel grid, when the layout is popped out. */
@@ -2196,7 +2196,7 @@ function EncounterDetail({
       </div>
 
       {pageType ? (
-        <InstanceContentPage key={pageState.key} pageType={pageType} context={panelContext} durationMs={totalDurationMs} pageState={pageState} />
+        <InstanceContentPage pageType={pageType} context={panelContext} durationMs={totalDurationMs} pageState={pageState} />
       ) : (
         <PanelTimingProvider panelCount={renderableLayoutItems(layoutItems).length}>
           <PanelTimingResetter encounters={encounters} />
@@ -2616,12 +2616,12 @@ function InstancePageViewContent({
   // Page view state for share links and live sessions. State changes must
   // re-render this component so the shared-view publisher runs immediately.
   const [pageState, setPageState] = useState<unknown>(undefined);
-  const [importedPageState, setImportedPageState] = useState<{ key: number; state: unknown }>({ key: 0, state: undefined });
+  const [importedPageState, setImportedPageState] = useState<unknown>(undefined);
   const onPageStateChange = useCallback((state: unknown) => {
     setPageState((previous: unknown) => samePageState(previous, state) ? previous : state);
   }, []);
   const pageStateBinding = useMemo(
-    () => ({ key: importedPageState.key, initial: importedPageState.state, onChange: onPageStateChange }),
+    () => ({ initial: importedPageState, onChange: onPageStateChange }),
     [importedPageState, onPageStateChange],
   );
 
@@ -3231,7 +3231,7 @@ function InstancePageViewContent({
       const sharedPageState = sharedPageLayout?.pageState;
       setActivePresetId(pagePreset?.id ?? DEFAULT_PRESET_ID);
       setPageState((previous: unknown) => samePageState(previous, sharedPageState) ? previous : sharedPageState);
-      setImportedPageState((previous: { key: number; state: unknown }) => updateImportedPageState(previous, sharedPageState));
+      setImportedPageState((previous: unknown) => samePageState(previous, sharedPageState) ? previous : sharedPageState);
     }
 
     // Restore per-panel filters if present in the payload.
