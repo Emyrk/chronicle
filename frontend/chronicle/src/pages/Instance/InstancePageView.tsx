@@ -13,7 +13,12 @@ import { useInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
 import { type LayoutType, type PanelType } from "@/hooks/useUrlState";
 import { useTimeRangeContextOptional } from "./TimeRangeContext";
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
-import { buildLayoutSections, normalizeGroupedLayoutItems, type LayoutSection } from "@/components/layout/layoutGroups";
+import {
+  buildLayoutSections,
+  compactLayoutItems,
+  normalizeGroupedLayoutItems,
+  type LayoutSection,
+} from "@/components/layout/layoutGroups";
 import type { ActionBarSlotsResponse, ActivityPeriod, InstancePlayer, SpeedrunResult } from "@/api/typesGenerated";
 import { PeriodMomentDisplay } from "@/components/PeriodMomentDisplay";
 import { Card } from "@/components/ui/Card/Card";
@@ -1007,7 +1012,8 @@ function normalizeLayoutItems(items: GridEditorItem[]): GridEditorItem[] {
 
   const normalized = normalizeGroupedLayoutItems(normalizedWithGroups);
 
-  // Resolve collisions independently in the outer grid and in each nested group.
+  // Match the editor: compact the outer grid vertically, while preserving
+  // intentional local spacing inside groups. Both scopes still resolve collisions.
   const scopes = new Map<string, GridEditorItem[]>();
   for (const item of normalized) {
     const scope = item.groupId ?? "__outer";
@@ -1015,32 +1021,8 @@ function normalizeLayoutItems(items: GridEditorItem[]): GridEditorItem[] {
   }
 
   const out: GridEditorItem[] = [];
-  for (const scopedItems of scopes.values()) {
-    const occupied = new Set<string>();
-    for (const item of orderLayoutItems(scopedItems)) {
-      let y = item.y;
-      while (true) {
-        let overlaps = false;
-        for (let dx = 0; dx < item.w && !overlaps; dx++) {
-          for (let dy = 0; dy < item.h; dy++) {
-            if (occupied.has(`${item.x + dx}:${y + dy}`)) {
-              overlaps = true;
-              break;
-            }
-          }
-        }
-        if (!overlaps) break;
-        y += 1;
-      }
-
-      for (let dx = 0; dx < item.w; dx++) {
-        for (let dy = 0; dy < item.h; dy++) {
-          occupied.add(`${item.x + dx}:${y + dy}`);
-        }
-      }
-
-      out.push({ ...item, y });
-    }
+  for (const [scope, scopedItems] of scopes) {
+    out.push(...compactLayoutItems(scopedItems, scope !== "__outer"));
   }
 
   return orderLayoutItems(out);

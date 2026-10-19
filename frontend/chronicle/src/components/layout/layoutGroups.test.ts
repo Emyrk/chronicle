@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { GridEditorItem } from "./GridLayoutEditor";
-import { buildLayoutSections, groupEditorHeightRows, normalizeGroupedLayoutItems, placeLayoutItem } from "./layoutGroups";
+import {
+  buildLayoutSections,
+  compactLayoutItems,
+  groupEditorHeightRows,
+  normalizeGroupedLayoutItems,
+  placeLayoutItem,
+} from "./layoutGroups";
 
 const items: GridEditorItem[] = [
   { id: "top", title: "Top", x: 0, y: 0, w: 12, h: 4 },
@@ -39,6 +45,38 @@ describe("buildLayoutSections", () => {
       group: expect.objectContaining({ id: "group-1" }),
       items: [],
     }]);
+  });
+});
+
+describe("compactLayoutItems", () => {
+  it("snaps panels into the first available row in their columns", () => {
+    const compacted = compactLayoutItems([
+      { id: "strip", title: "Replay", kind: "strip", x: 0, y: 0, w: 12, h: 1 },
+      { id: "group", title: "DPS/Healing", kind: "group", x: 0, y: 1, w: 12, h: 5 },
+      { id: "status", title: "Status", x: 0, y: 6, w: 6, h: 8 },
+      { id: "map", title: "Map", x: 6, y: 10, w: 6, h: 4 },
+      { id: "casts", title: "Healer Casts", x: 6, y: 14, w: 6, h: 4 },
+    ]);
+
+    expect(Object.fromEntries(compacted.map((item) => [item.id, item.y]))).toEqual({
+      strip: 0,
+      group: 1,
+      status: 6,
+      map: 6,
+      casts: 10,
+    });
+  });
+
+  it("preserves requested rows while pushing collisions down", () => {
+    const compacted = compactLayoutItems([
+      { id: "first", title: "First", x: 0, y: 3, w: 6, h: 4 },
+      { id: "second", title: "Second", x: 0, y: 4, w: 6, h: 4 },
+    ], true);
+
+    expect(compacted.map((item) => ({ id: item.id, y: item.y }))).toEqual([
+      { id: "first", y: 3 },
+      { id: "second", y: 7 },
+    ]);
   });
 });
 

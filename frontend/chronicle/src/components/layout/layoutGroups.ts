@@ -22,6 +22,27 @@ export function placeLayoutItem(
   return { x, y };
 }
 
+export function compactLayoutItems(
+  items: readonly GridEditorItem[],
+  preservePositions = false,
+): GridEditorItem[] {
+  const placed: GridEditorItem[] = [];
+
+  for (const item of [...items].sort((a, b) => a.y - b.y || a.x - b.x || a.id.localeCompare(b.id))) {
+    let y = preservePositions ? item.y : 0;
+    const overlaps = (other: GridEditorItem) =>
+      item.x < other.x + other.w
+      && item.x + item.w > other.x
+      && y < other.y + other.h
+      && y + item.h > other.y;
+
+    while (placed.some(overlaps)) y += 1;
+    placed.push({ ...item, y });
+  }
+
+  return placed;
+}
+
 export function normalizeGroupedLayoutItems(items: readonly GridEditorItem[]): GridEditorItem[] {
   const groupIds = new Set(items.filter((item) => item.kind === "group").map((item) => item.id));
   const normalized = items.map((item) =>
