@@ -1,3 +1,14 @@
+import type { MouseEvent } from "react";
+
+/** Opens the collapsed Nampower install guide and scrolls to it. */
+function openNampowerGuide(e: MouseEvent<HTMLAnchorElement>) {
+  const guide = document.getElementById("install-nampower");
+  if (!(guide instanceof HTMLDetailsElement)) return;
+  e.preventDefault();
+  guide.open = true;
+  guide.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 /** Upload instructions for 1.12a ChronicleCompanion + Nampower format. */
 export function InstructionsChronicleCompanion() {
   return (
@@ -14,54 +25,78 @@ export function InstructionsChronicleCompanion() {
             <a href="https://github.com/Emyrk/nampower" target="_blank" rel="noopener noreferrer" className="text-link hover:underline">
               Nampower
             </a>
-            <details className="mt-2 rounded-md border border-border/70 bg-muted/20">
-              <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium hover:bg-muted/40">
-                How to install Nampower
-              </summary>
-              <div className="px-3 pb-3 space-y-3 text-muted-foreground text-sm">
-                <p>
-                  Nampower is a DLL mod — it requires a DLL loader like{" "}
-                  <a href="https://github.com/hannesmann/vanillafixes" target="_blank" rel="noopener noreferrer" className="text-link hover:underline">
-                    VanillaFixes
-                  </a>
-                  {" "}to run.
-                </p>
-                <div>
-                  <p className="font-medium text-foreground mb-1">1. Install VanillaFixes (DLL loader)</p>
-                  <ol className="list-decimal list-inside space-y-1 ml-1">
-                    <li>Go to the{" "}
-                      <a href="https://github.com/hannesmann/vanillafixes/releases" target="_blank" rel="noopener noreferrer" className="text-link hover:underline">
-                        VanillaFixes releases page
-                      </a>
-                    </li>
-                    <li>Download the latest release zip</li>
-                    <li>Extract <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">VanillaFixes.exe</code> and <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">VfPatcher.dll</code> into your WoW folder (the same directory as <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">WoW.exe</code>)</li>
-                  </ol>
-                </div>
-                <div>
-                  <p className="font-medium text-foreground mb-1">2. Install Nampower</p>
-                  <ol className="list-decimal list-inside space-y-1 ml-1">
-                    <li>Go to the{" "}
-                      <a href="https://github.com/Emyrk/nampower/releases" target="_blank" rel="noopener noreferrer" className="text-link hover:underline">
-                        Nampower releases page
-                      </a>
-                    </li>
-                    <li>Download the latest <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">nampower.dll</code></li>
-                    <li>Place it in your WoW folder (the same directory as <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">WoW.exe</code>)</li>
-                    <li>Create or edit <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">dlls.txt</code> in the same folder and add <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">nampower.dll</code> on its own line</li>
-                  </ol>
-                </div>
-                <div>
-                  <p className="font-medium text-foreground mb-1">3. Launch the game</p>
-                  <p className="ml-1">
-                    Run <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">VanillaFixes.exe</code> instead of <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">WoW.exe</code>. VanillaFixes automatically loads DLLs listed in <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">dlls.txt</code>, including nampower.
-                  </p>
-                </div>
-              </div>
-            </details>
+            {" "}
+            <span className="text-sm">
+              (<a href="#install-nampower" onClick={openNampowerGuide} className="text-link hover:underline">install guide</a>)
+            </span>
           </li>
         </ul>
       </div>
+
+      <div>
+        <h3 className="font-medium mb-2">Optional dependencies</h3>
+        <p className="mb-2 text-muted-foreground">
+          Chronicle works without these, but positional data requires at least one:
+        </p>
+        <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+          <li>
+            <a href="https://github.com/brues-code/ClassicAPI" target="_blank" rel="noopener noreferrer" className="text-link hover:underline">
+              ClassicAPI
+            </a>
+          </li>
+          <li>
+            <a href="https://github.com/balakethelock/SuperWoW" target="_blank" rel="noopener noreferrer" className="text-link hover:underline">
+              SuperWoW
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <details id="install-nampower" className="scroll-mt-4 rounded-md border border-border/70 bg-muted/20">
+        <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium hover:bg-muted/40">
+          How to install Nampower
+        </summary>
+        <div className="px-3 pb-3 space-y-3 text-muted-foreground text-sm">
+          <p>
+            Nampower is a DLL mod — it requires a DLL loader like{" "}
+            <a href="https://github.com/hannesmann/vanillafixes" target="_blank" rel="noopener noreferrer" className="text-link hover:underline">
+              VanillaFixes
+            </a>
+            {" "}to run.
+          </p>
+          <div>
+            <p className="font-medium text-foreground mb-1">1. Install VanillaFixes (DLL loader)</p>
+            <ol className="list-decimal list-inside space-y-1 ml-1">
+              <li>Go to the{" "}
+                <a href="https://github.com/hannesmann/vanillafixes/releases" target="_blank" rel="noopener noreferrer" className="text-link hover:underline">
+                  VanillaFixes releases page
+                </a>
+              </li>
+              <li>Download the latest release zip</li>
+              <li>Extract <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">VanillaFixes.exe</code> and <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">VfPatcher.dll</code> into your WoW folder (the same directory as <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">WoW.exe</code>)</li>
+            </ol>
+          </div>
+          <div>
+            <p className="font-medium text-foreground mb-1">2. Install Nampower</p>
+            <ol className="list-decimal list-inside space-y-1 ml-1">
+              <li>Go to the{" "}
+                <a href="https://github.com/Emyrk/nampower/releases" target="_blank" rel="noopener noreferrer" className="text-link hover:underline">
+                  Nampower releases page
+                </a>
+              </li>
+              <li>Download the latest <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">nampower.dll</code></li>
+              <li>Place it in your WoW folder (the same directory as <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">WoW.exe</code>)</li>
+              <li>Create or edit <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">dlls.txt</code> in the same folder and add <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">nampower.dll</code> on its own line</li>
+            </ol>
+          </div>
+          <div>
+            <p className="font-medium text-foreground mb-1">3. Launch the game</p>
+            <p className="ml-1">
+              Run <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">VanillaFixes.exe</code> instead of <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">WoW.exe</code>. VanillaFixes automatically loads DLLs listed in <code className="bg-muted px-1.5 py-0.5 rounded text-xs break-all">dlls.txt</code>, including nampower.
+            </p>
+          </div>
+        </div>
+      </details>
 
       <p className="text-muted-foreground">
         <strong className="text-foreground">You can still use SuperWoWCombatLogger for Turtlogs compatibility</strong>
