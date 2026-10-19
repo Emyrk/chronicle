@@ -45,7 +45,7 @@ export const WithLogo: Story = {
   args: {
     serverLabel: "Chronicle",
     realmName: "Ambershire",
-    logoUrl: "/c/chronicle/ChronicleIconSquare.png",
+    logoUrl: "/c/chronicle/ChronicleIconSquare.webp",
     targetUrl: "https://chronicleclassic.com/instances/abc-123",
   },
 };
