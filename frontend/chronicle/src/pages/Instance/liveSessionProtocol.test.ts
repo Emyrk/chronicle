@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canEditLiveSessionState,
   canPublishLiveView,
   cursorScreenPosition,
   cursorSurfaceOffset,
@@ -13,18 +14,9 @@ import {
   participantLabel,
   receiveLiveView,
   setLiveViewApplier,
-  shouldPublishParticipantReplay,
   websocketURL,
-  type LiveReplayState,
   type LiveViewDelivery,
 } from "./liveSessionProtocol";
-
-const paused = (timestampMs: number): LiveReplayState => ({
-  enabled: true,
-  timestampMs,
-  isPlaying: false,
-  playbackSpeed: 1,
-});
 
 describe("liveSessionInviteURL", () => {
   it("preserves the instance URL and replaces imported snapshot state", () => {
@@ -103,14 +95,21 @@ describe("shared cursor coordinates", () => {
   });
 });
 
-describe("canPublishLiveView", () => {
-  it("lets the leader publish immediately", () => {
-    expect(canPublishLiveView("leader", false)).toBe(true);
+describe("live session edit authority", () => {
+  it("makes live participants read-only", () => {
+    expect(canEditLiveSessionState("live", "participant")).toBe(false);
   });
 
-  it("waits for the leader's initial view before a participant publishes", () => {
-    expect(canPublishLiveView("participant", false)).toBe(false);
-    expect(canPublishLiveView("participant", true)).toBe(true);
+  it("allows the leader and users outside a live session to edit", () => {
+    expect(canEditLiveSessionState("live", "leader")).toBe(true);
+    expect(canEditLiveSessionState("idle", null)).toBe(true);
+    expect(canEditLiveSessionState("connecting", "participant")).toBe(true);
+  });
+
+  it("only lets the leader publish shared views", () => {
+    expect(canPublishLiveView("leader")).toBe(true);
+    expect(canPublishLiveView("participant")).toBe(false);
+    expect(canPublishLiveView(null)).toBe(false);
   });
 });
 
@@ -154,19 +153,6 @@ describe("live snapshot requests", () => {
     expect(liveSnapshotMatchesRequest("request-1", undefined)).toBe(false);
     expect(liveSnapshotMatchesRequest(null, "request-1")).toBe(false);
     expect(liveSnapshotMatchesRequest(null, undefined)).toBe(false);
-  });
-});
-
-describe("shouldPublishParticipantReplay", () => {
-  it("publishes paused seeks and transport changes", () => {
-    expect(shouldPublishParticipantReplay(paused(1000), paused(2000))).toBe(true);
-    expect(shouldPublishParticipantReplay(paused(1000), { ...paused(1000), isPlaying: true })).toBe(true);
-    expect(shouldPublishParticipantReplay(paused(1000), { ...paused(1000), playbackSpeed: 2 })).toBe(true);
-  });
-
-  it("does not echo locally advancing timestamps while following playback", () => {
-    const playing = { ...paused(1000), isPlaying: true };
-    expect(shouldPublishParticipantReplay(playing, { ...playing, timestampMs: 1100 })).toBe(false);
   });
 });
 

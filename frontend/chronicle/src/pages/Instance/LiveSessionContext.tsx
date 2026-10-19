@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -14,6 +15,7 @@ import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { useSyncModeContext } from "./SyncModeContext";
 import {
   LIVE_SESSION_QUERY_PARAM,
+  canEditLiveSessionState,
   canPublishLiveView,
   cursorScreenPosition,
   cursorSurfaceOffset,
@@ -27,7 +29,6 @@ import {
   participantLabel,
   receiveLiveView,
   setLiveViewApplier,
-  shouldPublishParticipantReplay,
   websocketURL,
   type LiveCursorPositionMode,
   type LiveMapPresence,
@@ -90,6 +91,7 @@ interface LiveSessionContextValue {
   inviteURL: string | null;
   participantCount: number;
   viewSynchronized: boolean;
+  canEditSharedView: boolean;
   error: string | null;
   create: (instanceId: string, password?: string) => Promise<string>;
   join: (code: string, instanceId: string, password?: string) => Promise<void>;
@@ -196,12 +198,8 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     currentTimestamp: replayTimestamp,
     isPlaying: replayPlaying,
     playbackSpeed: replaySpeed,
-    enable: enableReplay,
-    disable: disableReplay,
-    setTimestamp: setReplayTimestamp,
-    play: playReplay,
-    pause: pauseReplay,
-    setPlaybackSpeed: setReplaySpeed,
+    setReadOnly: setReplayReadOnly,
+    applyAuthoritativeState: applyAuthoritativeReplayState,
   } = useSyncModeContext();
   const [status, setStatus] = useState<LiveSessionStatus>("idle");
   const [role, setRole] = useState<LiveSessionRole | null>(null);
@@ -215,6 +213,13 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
   const [viewboxSettings, setViewboxSettings] = useLocalStorage("live-viewbox-settings", DEFAULT_VIEWBOX_SETTINGS);
   const [cursorLayoutVersion, setCursorLayoutVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  const canEditSharedView = canEditLiveSessionState(status, role);
+
+  useLayoutEffect(() => {
+    setReplayReadOnly(!canEditSharedView);
+    return () => setReplayReadOnly(false);
+  }, [canEditSharedView, setReplayReadOnly]);
 
   const socketRef = useRef<WebSocket | null>(null);
   const peersRef = useRef(new Map<string, RTCPeerConnection>());
@@ -233,7 +238,6 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
   // A participant must first adopt the leader's view. Otherwise its local default
   // can win the data-channel startup race and reset the layout for every peer.
   const hasReceivedInitialViewRef = useRef(false);
-  const previousReplayRef = useRef<LiveReplayState | null>(null);
   const remoteReplayJSONRef = useRef<string | null>(null);
   const presencesRef = useRef(new Map<string, { presence: LiveMapPresence; at: number }>());
   const viewportPresencesRef = useRef(new Map<string, { viewport: LiveViewportPresence; at: number }>());
@@ -279,6 +283,16 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     replayStateRef.current = replayState;
   }, [replayState]);
+
+  const pauseAuthoritativeReplay = useCallback(() => {
+    const current = replayStateRef.current;
+    applyAuthoritativeReplayState({
+      enabled: current.enabled,
+      currentTimestamp: current.timestampMs === null ? null : new Date(current.timestampMs),
+      isPlaying: false,
+      playbackSpeed: current.playbackSpeed,
+    });
+  }, [applyAuthoritativeReplayState]);
 
   const sendSignal = useCallback((targetID: string | undefined, payload: LiveSessionSignalPayload) => {
     const socket = socketRef.current;
@@ -338,16 +352,13 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
 
   const applyRemoteReplay = useCallback((next: LiveReplayState) => {
     remoteReplayJSONRef.current = JSON.stringify(next);
-    if (!next.enabled) {
-      disableReplay();
-      return;
-    }
-    enableReplay();
-    setReplaySpeed(next.playbackSpeed);
-    setReplayTimestamp(next.timestampMs === null ? null : new Date(next.timestampMs));
-    if (next.isPlaying) playReplay();
-    else pauseReplay();
-  }, [disableReplay, enableReplay, pauseReplay, playReplay, setReplaySpeed, setReplayTimestamp]);
+    applyAuthoritativeReplayState({
+      enabled: next.enabled,
+      currentTimestamp: next.timestampMs === null ? null : new Date(next.timestampMs),
+      isPlaying: next.isPlaying,
+      playbackSpeed: next.playbackSpeed,
+    });
+  }, [applyAuthoritativeReplayState]);
 
   const handleDataMessage = useCallback((raw: string, senderID?: string) => {
     if (raw.length > MAX_SIGNAL_BYTES) return;
@@ -484,11 +495,11 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
         pendingSnapshotRequestIdRef.current = null;
         hasReceivedInitialViewRef.current = false;
         setViewSynchronized(false);
-        pauseReplay();
+        pauseAuthoritativeReplay();
         setStatus("ended");
       }
     };
-  }, [clearSnapshotRetry, handleDataMessage, pauseReplay, resyncView]);
+  }, [clearSnapshotRetry, handleDataMessage, pauseAuthoritativeReplay, resyncView]);
 
   const createLeaderPeer = useCallback(async (participantID: string) => {
     const peer = new RTCPeerConnection(PEER_CONNECTION_CONFIG);
@@ -594,7 +605,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
         sendData({ type: "presence", participantId: message.participant_id, presence: null });
         sendData({ type: "viewport_presence", participantId: message.participant_id, viewport: null });
       } else if (message.type === "session_ended") {
-        pauseReplay();
+        pauseAuthoritativeReplay();
         closeTransport();
         setStatus("ended");
         setSearchParams((previous) => {
@@ -633,7 +644,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     };
     socket.onclose = () => {
       if (socketRef.current !== socket || closingSocketRef.current) return;
-      pauseReplay();
+      pauseAuthoritativeReplay();
       closeTransport();
       setStatus(nextRole === "participant" ? "ended" : "error");
       if (nextRole === "leader") setError("The live signaling connection closed");
@@ -643,7 +654,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
       setError("Could not connect to the live session");
       setStatus("error");
     };
-  }, [closeTransport, createLeaderPeer, ensureParticipantPeer, pauseReplay, sendData, sendSignal, setRemotePointerSurface, setRemotePresence, setRemoteViewportPresence, setSearchParams]);
+  }, [closeTransport, createLeaderPeer, ensureParticipantPeer, pauseAuthoritativeReplay, sendData, sendSignal, setRemotePointerSurface, setRemotePresence, setRemoteViewportPresence, setSearchParams]);
 
   const create = useCallback(async (instanceId: string, password?: string) => {
     const response = await fetch("/api/v1/live-sessions", {
@@ -720,7 +731,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     }
     if (
       status === "live"
-      && canPublishLiveView(currentRoleRef.current, hasReceivedInitialViewRef.current)
+      && canPublishLiveView(currentRoleRef.current)
     ) {
       sendData({ type: "view", view });
     }
@@ -774,15 +785,11 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     const encoded = JSON.stringify(replayState);
     if (remoteReplayJSONRef.current === encoded) {
       remoteReplayJSONRef.current = null;
-      previousReplayRef.current = replayState;
       return;
     }
-    if (status === "live") {
-      const shouldPublish = role === "leader"
-        || shouldPublishParticipantReplay(previousReplayRef.current, replayState);
-      if (shouldPublish) sendData({ type: "replay", replay: replayState });
+    if (status === "live" && role === "leader") {
+      sendData({ type: "replay", replay: replayState });
     }
-    previousReplayRef.current = replayState;
   }, [replayState, role, sendData, status]);
 
   useEffect(() => {
@@ -900,6 +907,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     inviteURL,
     participantCount,
     viewSynchronized,
+    canEditSharedView,
     error,
     create,
     join,
@@ -913,7 +921,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     viewportPresences,
     viewboxSettings,
     setViewboxSettings,
-  }), [code, create, error, inviteURL, join, leave, participantCount, presenceSurfaceParticipants, publishMapPresence, publishView, registerViewApplier, resyncView, role, setViewboxSettings, status, subscribeMapPresence, viewboxSettings, viewportPresences, viewSynchronized]);
+  }), [canEditSharedView, code, create, error, inviteURL, join, leave, participantCount, presenceSurfaceParticipants, publishMapPresence, publishView, registerViewApplier, resyncView, role, setViewboxSettings, status, subscribeMapPresence, viewboxSettings, viewportPresences, viewSynchronized]);
 
   return (
     <LiveSessionContext.Provider value={value}>

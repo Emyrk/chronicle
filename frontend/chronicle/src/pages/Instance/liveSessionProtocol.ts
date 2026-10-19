@@ -220,22 +220,13 @@ export function websocketURL(path: string, location: Pick<Location, "protocol" |
   return `${protocol}//${location.host}${path}`;
 }
 
-export function canPublishLiveView(
+export function canEditLiveSessionState(
+  status: "idle" | "connecting" | "live" | "needs_password" | "ended" | "error",
   role: "leader" | "participant" | null,
-  hasReceivedInitialView: boolean,
 ): boolean {
-  return role === "leader" || (role === "participant" && hasReceivedInitialView);
+  return status !== "live" || role !== "participant";
 }
 
-export function shouldPublishParticipantReplay(
-  previous: LiveReplayState | null,
-  next: LiveReplayState,
-): boolean {
-  if (!previous) return true;
-  if (previous.enabled !== next.enabled) return true;
-  if (previous.isPlaying !== next.isPlaying) return true;
-  if (previous.playbackSpeed !== next.playbackSpeed) return true;
-  // While playback is running, timestamp advancement is driven by the leader.
-  // Paused seeks remain editable by every participant.
-  return !next.isPlaying && previous.timestampMs !== next.timestampMs;
+export function canPublishLiveView(role: "leader" | "participant" | null): boolean {
+  return role === "leader";
 }

@@ -2,6 +2,7 @@ import { useCallback, useRef, useState, useEffect } from "react";
 import { Clock, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTimeRangeContext } from "./TimeRangeContext";
+import { useLiveSession } from "./LiveSessionContext";
 import { useRegisterInstanceKeybinds } from "./InstanceKeybinds";
 
 function formatMs(ms: number): string {
@@ -21,6 +22,7 @@ const TIME_RANGE_KEYBINDS = [
  */
 export function TimeRangeController({ onClose }: { onClose: () => void }) {
   useRegisterInstanceKeybinds("time-range", "Time range", TIME_RANGE_KEYBINDS);
+  const { canEditSharedView } = useLiveSession();
   const timeRange = useTimeRangeContext();
   const { totalDurationMs, startOffsetMs, endOffsetMs, setRange, reset, enabled } = timeRange;
 
@@ -47,13 +49,14 @@ export function TimeRangeController({ onClose }: { onClose: () => void }) {
   }, []);
 
   const handlePointerDown = useCallback((handle: "start" | "end") => (e: React.PointerEvent) => {
+    if (!canEditSharedView) return;
     e.preventDefault();
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     setDragging(handle);
-  }, []);
+  }, [canEditSharedView]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    if (!dragging) return;
+    if (!canEditSharedView || !dragging) return;
     const pct = getPositionPct(e.clientX);
     const ms = pctToMs(pct);
     if (dragging === "start") {
@@ -63,7 +66,7 @@ export function TimeRangeController({ onClose }: { onClose: () => void }) {
       const clampedMs = startOffsetMs != null ? Math.max(ms, startOffsetMs) : ms;
       setRange(startOffsetMs, clampedMs);
     }
-  }, [dragging, getPositionPct, pctToMs, startOffsetMs, endOffsetMs, setRange]);
+  }, [canEditSharedView, dragging, getPositionPct, pctToMs, startOffsetMs, endOffsetMs, setRange]);
 
   const handlePointerUp = useCallback(() => {
     setDragging(null);
@@ -86,7 +89,7 @@ export function TimeRangeController({ onClose }: { onClose: () => void }) {
           Time Range
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={reset} title="Reset">
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={reset} title="Reset" disabled={!canEditSharedView}>
             <RotateCcw className="h-3 w-3" />
           </Button>
           <Button variant="ghost" size="sm" className="h-6 px-1.5 text-xs" onClick={onClose}>

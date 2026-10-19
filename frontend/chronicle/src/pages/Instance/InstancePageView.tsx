@@ -2387,13 +2387,19 @@ function InstancePageViewContent({
 
   const isMobile = useIsMobile();
 
+  const liveSession = useLiveSession();
+  const canEditSharedView = liveSession.canEditSharedView;
   const [focusParam, setFocusParam] = useFocusMode();
   const focused = focusParam && isEncounterView && !isMobile;
   // Leaving focus also leaves browser fullscreen, if Ctrl+Shift+F entered it.
-  const setFocused = useCallback((next: boolean) => {
+  const applyFocused = useCallback((next: boolean) => {
     setFocusParam(next);
     if (!next && document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
   }, [setFocusParam]);
+  const setFocused = useCallback((next: boolean) => {
+    if (!canEditSharedView) return;
+    applyFocused(next);
+  }, [applyFocused, canEditSharedView]);
 
   // Shift+F toggles focus, Ctrl/Cmd+Shift+F toggles focus with browser
   // fullscreen, and Esc leaves focus. Never while typing, and Esc is left to
@@ -2425,7 +2431,6 @@ function InstancePageViewContent({
   const showLiveSessionControls = showDebugDesktopControls(searchParams, isMobile);
   const { data: session } = useSession();
   const isLoggedIn = !!session?.user_id;
-  const liveSession = useLiveSession();
   useAutoJoinLiveSession(instance.id, showLiveSessionControls);
   const createShare = useCreateShare();
   const instanceDefaults = useInstanceDefaultsCache(isLoggedIn);
@@ -2476,6 +2481,14 @@ function InstancePageViewContent({
   const [layoutPopup, setLayoutPopup] = useState<LayoutPopupSession | null>(null);
   const layoutPopupRef = useRef<LayoutPopupSession | null>(null);
 
+  useEffect(() => {
+    if (canEditSharedView) return;
+    const popup = layoutPopupRef.current;
+    layoutPopupRef.current = null;
+    if (popup && !popup.window.closed) popup.window.close();
+    setLayoutPopup(null);
+  }, [canEditSharedView]);
+
   const [importedLayoutItems, setImportedLayoutItems] = useState<GridEditorItem[] | null>(null);
   // The imported layout's appearance; the default layout carries its own.
   const [importedLayoutAppearance, setImportedLayoutAppearance] = useState<LayoutAppearance>({});
@@ -2520,28 +2533,33 @@ function InstancePageViewContent({
   }, [createDefaultViewState, defaultLayoutId, instance.id]);
 
   const setEncounters = useCallback((ids: string[]) => {
+    if (!canEditSharedView) return;
     setViewState((prev) => ({ ...prev, encounters: ids }));
-  }, []);
+  }, [canEditSharedView]);
 
   const setIncludeWipes = useCallback((value: boolean) => {
+    if (!canEditSharedView) return;
     setViewState((prev) => ({ ...prev, includeWipes: value }));
-  }, []);
+  }, [canEditSharedView]);
 
   const setEnemies = useCallback((ids: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+    if (!canEditSharedView) return;
     setViewState((prev) => ({
       ...prev,
       enemies: typeof ids === "function" ? ids(prev.enemies) : ids,
     }));
-  }, []);
+  }, [canEditSharedView]);
 
   const setPlayers = useCallback((ids: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+    if (!canEditSharedView) return;
     setViewState((prev) => ({
       ...prev,
       players: typeof ids === "function" ? ids(prev.players) : ids,
     }));
-  }, []);
+  }, [canEditSharedView]);
 
   const setPanelType = useCallback((index: number, type: PanelType) => {
+    if (!canEditSharedView) return;
     setViewState((prev) => {
       const panels = [...prev.panels];
       const panelOptions = [...prev.panelOptions];
@@ -2553,9 +2571,10 @@ function InstancePageViewContent({
       panelOptions[index] = null;
       return { ...prev, panels, panelOptions };
     });
-  }, []);
+  }, [canEditSharedView]);
 
   const setPanelOption = useCallback((index: number, option: string | null) => {
+    if (!canEditSharedView) return;
     setViewState((prev) => {
       const panelOptions = [...prev.panelOptions];
       while (panelOptions.length <= index) {
@@ -2564,18 +2583,20 @@ function InstancePageViewContent({
       panelOptions[index] = option;
       return { ...prev, panelOptions };
     });
-  }, []);
+  }, [canEditSharedView]);
 
   const setPanels = useCallback((panels: PanelType[], panelOptions?: Array<string | null>) => {
+    if (!canEditSharedView) return;
     const nextOptions = panelOptions
       ? [...panelOptions, ...Array(Math.max(0, panels.length - panelOptions.length)).fill(null)]
       : panels.map(() => null);
     setViewState((prev) => ({ ...prev, panels: [...panels], panelOptions: nextOptions.slice(0, panels.length) }));
-  }, []);
+  }, [canEditSharedView]);
 
   const setLayout = useCallback((layout: LayoutType) => {
+    if (!canEditSharedView) return;
     setViewState((prev) => ({ ...prev, layout }));
-  }, []);
+  }, [canEditSharedView]);
 
   useEffect(() => {
     if (importedLayoutItems === null) {
@@ -2584,11 +2605,12 @@ function InstancePageViewContent({
   }, [defaultLayoutId, importedLayoutItems]);
 
   const resetView = useCallback(() => {
+    if (!canEditSharedView) return;
     setViewState(createDefaultViewState());
     setImportedLayoutItems(null);
     setActiveLayoutId(defaultLayoutId);
     setActivePresetId(DEFAULT_PRESET_ID);
-  }, [createDefaultViewState, defaultLayoutId]);
+  }, [canEditSharedView, createDefaultViewState, defaultLayoutId]);
 
   // ── Preset layouts ──────────────────────────────────────────────────────
   const [activePresetId, setActivePresetId] = useState<string | null>(DEFAULT_PRESET_ID);
@@ -2600,14 +2622,16 @@ function InstancePageViewContent({
   const [pageState, setPageState] = useState<unknown>(undefined);
   const [importedPageState, setImportedPageState] = useState<unknown>(undefined);
   const onPageStateChange = useCallback((state: unknown) => {
+    if (!canEditSharedView) return;
     setPageState((previous: unknown) => samePageState(previous, state) ? previous : state);
-  }, []);
+  }, [canEditSharedView]);
   const pageStateBinding = useMemo(
     () => ({ initial: importedPageState, onChange: onPageStateChange }),
     [importedPageState, onPageStateChange],
   );
 
   const applyPreset = useCallback((presetId: string) => {
+    if (!canEditSharedView) return;
     const preset = presetLayoutById(presetId, instance.capabilities ?? [], isMobile);
     if (!preset) return;
 
@@ -2634,7 +2658,7 @@ function InstancePageViewContent({
     setSeedFiltersVersion((v) => v + 1);
     setPanelFiltersByID(preset.panelFilters);
     setActivePresetId(presetId);
-  }, [instance.capabilities, isMobile]);
+  }, [canEditSharedView, instance.capabilities, isMobile]);
 
   useEffect(() => {
     if (!layoutPopup) return;
@@ -2678,9 +2702,15 @@ function InstancePageViewContent({
     }
   }, []);
 
+  const handleIncludeWipesChange = useCallback((value: boolean) => {
+    if (!canEditSharedView) return;
+    setIncludeWipes(value);
+  }, [canEditSharedView, setIncludeWipes]);
+
   const clearEntitySelection = useCallback(() => {
+    if (!canEditSharedView) return;
     setViewState((prev) => ({ ...prev, enemies: new Set(), players: new Set() }));
-  }, []);
+  }, [canEditSharedView]);
 
   const hasMigratedLegacyUrlStateRef = useRef(false);
 
@@ -2805,6 +2835,7 @@ function InstancePageViewContent({
   const [seedFiltersVersion, setSeedFiltersVersion] = useState(0);
 
   const handlePanelFiltersChange = useCallback((itemID: string, filters: PanelFilter[]) => {
+    if (!canEditSharedView) return;
     setPanelFiltersByID((prev) => {
       if (filters.length === 0) {
         if (!(itemID in prev)) return prev;
@@ -2814,7 +2845,7 @@ function InstancePageViewContent({
       }
       return { ...prev, [itemID]: filters };
     });
-  }, []);
+  }, [canEditSharedView]);
 
   const popOutLayout = useCallback(() => {
     const existing = layoutPopupRef.current;
@@ -2881,9 +2912,10 @@ function InstancePageViewContent({
   }, [viewState.encounters, viewState.includeWipes, instance.encounters]);
   
   const setInternalSelectedIds = useCallback((ids: string[]) => {
+    if (!canEditSharedView) return;
     setEncounters(ids);
     onSelectEncounters?.(ids);
-  }, [onSelectEncounters, setEncounters]);
+  }, [canEditSharedView, onSelectEncounters, setEncounters]);
   
   // URL state is the source of truth on initial load.
   // Only sync when parent passes an explicit external selection (e.g. YouTube overlay).
@@ -2986,6 +3018,7 @@ function InstancePageViewContent({
   
   // Toggle enemy selection
   const toggleEnemySelection = useCallback((enemyId: string) => {
+    if (!canEditSharedView) return;
     setEnemies((prev) => {
       const next = new Set(prev);
       if (next.has(enemyId)) {
@@ -2995,15 +3028,17 @@ function InstancePageViewContent({
       }
       return next;
     });
-  }, [setEnemies]);
+  }, [canEditSharedView, setEnemies]);
   
   // Select multiple enemies at once (replaces current selection)
   const selectEnemies = useCallback((enemyIds: string[]) => {
+    if (!canEditSharedView) return;
     setEnemies(new Set(enemyIds));
-  }, [setEnemies]);
+  }, [canEditSharedView, setEnemies]);
   
   // Toggle player selection
   const togglePlayerSelection = useCallback((playerId: string) => {
+    if (!canEditSharedView) return;
     setPlayers((prev) => {
       const next = new Set(prev);
       if (next.has(playerId)) {
@@ -3013,10 +3048,11 @@ function InstancePageViewContent({
       }
       return next;
     });
-  }, [setPlayers]);
+  }, [canEditSharedView, setPlayers]);
   
   // Toggle multiple players at once (if any are selected, deselect all; otherwise select all)
   const togglePlayersSelection = useCallback((playerIds: string[]) => {
+    if (!canEditSharedView) return;
     setPlayers((prev) => {
       const next = new Set(prev);
       const anySelected = playerIds.some((id) => next.has(id));
@@ -3033,12 +3069,13 @@ function InstancePageViewContent({
       }
       return next;
     });
-  }, [setPlayers]);
+  }, [canEditSharedView, setPlayers]);
 
   // Use internalSelectedIds which already prioritizes URL state over props
   const selectedIds = internalSelectedIds;
   
   const handleSelect = (id: string, mode: 'single' | 'toggle') => {
+    if (!canEditSharedView) return;
     // Always use setInternalSelectedIds to update both URL and parent state
     if (mode === 'toggle') {
       // Toggle selection
@@ -3057,6 +3094,7 @@ function InstancePageViewContent({
   };
 
   const handleSelectPhase = useCallback((phase: EncounterPhase, encounterId: string) => {
+    if (!canEditSharedView) return;
     const selection = phaseTimeRangeSelection(phase, encounterId);
 
     // Time-range offsets are based on the first selected encounter, so phase
@@ -3072,9 +3110,10 @@ function InstancePageViewContent({
       endOffsetMs: selection.endOffsetMs,
     };
     setInternalSelectedIds(selection.encounterIds);
-  }, [selectedIds, setInternalSelectedIds, timeRange]);
+  }, [canEditSharedView, selectedIds, setInternalSelectedIds, timeRange]);
 
   const handlePanelTypeChangeByID = useCallback((itemID: string, type: EventsPanelType) => {
+    if (!canEditSharedView) return;
     const idx = activeLayoutItems.findIndex((item) => item.id === itemID);
     if (idx === -1) return;
     setPanelType(idx, type as PanelType);
@@ -3091,9 +3130,10 @@ function InstancePageViewContent({
       return rest;
     });
     setActivePresetId(null); // User customized panels – clear preset
-  }, [activeLayoutItems, setPanelType]);
+  }, [activeLayoutItems, canEditSharedView, setPanelType]);
 
   const handleStripTypeChangeByID = useCallback((itemID: string, type: StripType) => {
+    if (!canEditSharedView) return;
     setImportedLayoutItems((previous) => (previous ?? activeLayoutItems).map((item) =>
       item.id === itemID && item.kind === "strip"
         ? { ...item, stripType: type, title: STRIPS[type].label }
@@ -3104,20 +3144,21 @@ function InstancePageViewContent({
     setSeedFiltersByID((previous) => ({ ...previous, [itemID]: defaults }));
     setSeedFiltersVersion((version) => version + 1);
     setActivePresetId(null);
-  }, [activeLayoutItems]);
+  }, [activeLayoutItems, canEditSharedView]);
 
   const handlePanelOptionChangeByID = useCallback((itemID: string, option: string | null) => {
+    if (!canEditSharedView) return;
     const idx = activeLayoutItems.findIndex((item) => item.id === itemID);
     if (idx === -1) return;
     setPanelOption(idx, option);
-  }, [activeLayoutItems, setPanelOption]);
+  }, [activeLayoutItems, canEditSharedView, setPanelOption]);
 
   const applySharedViewPayload = useCallback((payload: SharedViewPayload) => {
     const sharedPageLayout = readSharedPageLayout(payload);
     const sharedPageType = sharedPageLayout?.pageType ?? null;
 
     const sharedFocus = readSharedFocus(payload);
-    if (sharedFocus !== undefined) setFocused(sharedFocus);
+    if (sharedFocus !== undefined) applyFocused(sharedFocus);
 
     let orderedItems: GridEditorItem[] = [];
     let orderedPanels: PanelType[] = [];
@@ -3234,7 +3275,7 @@ function InstancePageViewContent({
     if (!sharedTimeRange) {
       timeRange?.reset();
     }
-  }, [allMergedEnemies, instance.encounters, instance.players, onSelectEncounters, setFocused, setViewState, timeRange]);
+  }, [allMergedEnemies, applyFocused, instance.encounters, instance.players, onSelectEncounters, setViewState, timeRange]);
 
   const handleExportLayout = useCallback(() => {
     const payload = {
@@ -3258,6 +3299,7 @@ function InstancePageViewContent({
   }, [activeLayoutItems, layoutAppearance, panelTypesByID, panelOptionsByID, panelFiltersByID]);
 
   const handleImportLayout = useCallback(() => {
+    if (!canEditSharedView) return;
     const raw = window.prompt("Paste exported layout JSON");
     if (!raw) return;
 
@@ -3320,7 +3362,7 @@ function InstancePageViewContent({
       const message = error instanceof Error ? error.message : "Invalid layout JSON";
       toast.error("Import failed", { description: message });
     }
-  }, [setPanels]);
+  }, [canEditSharedView, setPanels]);
 
   const buildSharedViewPayload = useCallback((): SharedViewPayload => {
     const view: NonNullable<SharedViewPayload["view"]> = {
@@ -3401,6 +3443,7 @@ function InstancePageViewContent({
   }, [buildSharedViewPayload]);
 
   const importStateFromJSON = useCallback(() => {
+    if (!canEditSharedView) return;
     const raw = window.prompt("Paste shared state JSON");
     if (!raw) {
       return;
@@ -3414,7 +3457,7 @@ function InstancePageViewContent({
       const message = error instanceof Error ? error.message : "Invalid state JSON";
       toast.error("Import failed", { description: message });
     }
-  }, [applySharedViewPayload]);
+  }, [applySharedViewPayload, canEditSharedView]);
 
   const handleShareButtonContextMenu = useCallback((event: MouseEvent<HTMLElement>) => {
     event.preventDefault();
@@ -3479,11 +3522,13 @@ function InstancePageViewContent({
 
 
   const castResetToDefault = useCallback(() => {
+    if (!canEditSharedView) return;
     resetView();
     toast.success("Cast layout", { description: "Reset to Default" });
-  }, [resetView]);
+  }, [canEditSharedView, resetView]);
 
   const castLayout = useCallback((layout: UserPanelLayout) => {
+    if (!canEditSharedView) return;
     try {
       const parsed = parsePanelLayout(layout);
       const normalizedItems = normalizeLayoutItems(parsed.items);
@@ -3522,7 +3567,7 @@ function InstancePageViewContent({
     } catch {
       toast.error("Failed to cast layout", { description: "Layout payload is invalid." });
     }
-  }, [setPanels]);
+  }, [canEditSharedView, setPanels]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -3752,12 +3797,12 @@ function InstancePageViewContent({
             <div className="flex flex-col items-end gap-2 shrink-0">
               <div className="flex items-center gap-2">
               <InstanceMenu
-                onImportLayout={isEncounterView ? handleImportLayout : undefined}
+                onImportLayout={isEncounterView && canEditSharedView ? handleImportLayout : undefined}
                 onExportLayout={isEncounterView && !activePageType ? handleExportLayout : undefined}
-                onPopOutLayout={isEncounterView ? popOutLayout : undefined}
+                onPopOutLayout={isEncounterView && canEditSharedView ? popOutLayout : undefined}
                 layoutPoppedOut={isEncounterView && layoutPopup !== null}
-                onResetView={isEncounterView ? resetView : undefined}
-                onOpenTimeRange={isEncounterView ? onOpenTimeRange : undefined}
+                onResetView={isEncounterView && canEditSharedView ? resetView : undefined}
+                onOpenTimeRange={isEncounterView && canEditSharedView ? onOpenTimeRange : undefined}
                 instanceId={instance.id}
                 logGroupId={instance.logGroupId}
                 instanceName={instance.name}
@@ -3931,12 +3976,12 @@ function InstancePageViewContent({
                 </>
               )}
               <InstanceMenu
-                onImportLayout={isEncounterView ? handleImportLayout : undefined}
+                onImportLayout={isEncounterView && canEditSharedView ? handleImportLayout : undefined}
                 onExportLayout={isEncounterView && !activePageType ? handleExportLayout : undefined}
-                onPopOutLayout={isEncounterView ? popOutLayout : undefined}
+                onPopOutLayout={isEncounterView && canEditSharedView ? popOutLayout : undefined}
                 layoutPoppedOut={isEncounterView && layoutPopup !== null}
-                onResetView={isEncounterView ? resetView : undefined}
-                onOpenTimeRange={isEncounterView ? onOpenTimeRange : undefined}
+                onResetView={isEncounterView && canEditSharedView ? resetView : undefined}
+                onOpenTimeRange={isEncounterView && canEditSharedView ? onOpenTimeRange : undefined}
                 instanceId={instance.id}
                 logGroupId={instance.logGroupId}
                 instanceName={instance.name}
@@ -4056,7 +4101,7 @@ function InstancePageViewContent({
             isMobile={isMobile}
             showHints={showHints}
             includeWipes={viewState.includeWipes}
-            onIncludeWipesChange={setIncludeWipes}
+            onIncludeWipesChange={handleIncludeWipesChange}
             showRankings={!instance.unlisted}
             instanceStartTime={instance.startTime}
           />

@@ -57,6 +57,12 @@ export interface SyncModeContextValue extends SyncModeState {
   externalDriver: SyncExternalDriver;
   /** Set the external driver */
   setExternalDriver: (driver: SyncExternalDriver) => void;
+  /** Whether user-driven replay edits are currently blocked. */
+  readOnly: boolean;
+  /** Controls whether public replay mutators accept user-driven edits. */
+  setReadOnly: (readOnly: boolean) => void;
+  /** Applies authoritative replay state even while public controls are read-only. */
+  applyAuthoritativeState: (state: SyncModeState) => void;
 }
 
 const defaultMetrics: SyncModeMetrics = {
@@ -90,26 +96,36 @@ interface SyncModeProviderProps {
 }
 
 export function SyncModeProvider({ children }: SyncModeProviderProps) {
-  const [enabled, setEnabled] = useState(false);
-  const [currentTimestamp, setCurrentTimestamp] = useState<Date | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
+  const [enabled, setEnabledState] = useState(false);
+  const [currentTimestamp, setCurrentTimestampState] = useState<Date | null>(null);
+  const [isPlaying, setIsPlayingState] = useState(false);
+  const [playbackSpeed, setPlaybackSpeedState] = useState(1.0);
+  const [readOnly, setReadOnlyState] = useState(false);
+  const readOnlyRef = useRef(false);
   const [metrics, setMetrics] = useState<SyncModeMetrics>(defaultMetrics);
   const [encounterBounds, setEncounterBounds] = useState<{ start: Date; end: Date } | null>(null);
-  const [externalDriver, setExternalDriver] = useState<SyncExternalDriver>('none');
+  const [externalDriver, setExternalDriverState] = useState<SyncExternalDriver>('none');
   
   // Track last frame time for playback
   const lastFrameTimeRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
+  const setReadOnly = useCallback((next: boolean) => {
+    readOnlyRef.current = next;
+    setReadOnlyState(next);
+    if (next) setExternalDriverState("none");
+  }, []);
+
   const enable = useCallback(() => {
-    setEnabled(true);
+    if (readOnlyRef.current) return;
+    setEnabledState(true);
   }, []);
 
   const disable = useCallback(() => {
-    setEnabled(false);
-    setIsPlaying(false);
-    setCurrentTimestamp(null);
+    if (readOnlyRef.current) return;
+    setEnabledState(false);
+    setIsPlayingState(false);
+    setCurrentTimestampState(null);
     setMetrics(defaultMetrics);
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
@@ -121,25 +137,26 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
   const prevTimestampRef = useRef<Date | null>(null);
   
   const setTimestamp = useCallback((ts: Date | null) => {
+    if (readOnlyRef.current) return;
     // Reset metrics when seeking backward (new timestamp is before previous)
     if (ts && prevTimestampRef.current && ts.getTime() < prevTimestampRef.current.getTime()) {
       setMetrics(defaultMetrics);
     }
     prevTimestampRef.current = ts;
-    setCurrentTimestamp(ts);
+    setCurrentTimestampState(ts);
   }, []);
 
   const play = useCallback(() => {
-    // Playing implicitly enables Sync mode. This also lets external drivers,
-    // such as a live collaboration session, apply play and timestamp state in
-    // one update without waiting for a provider re-render.
-    setEnabled(true);
-    setIsPlaying(true);
+    if (readOnlyRef.current) return;
+    // Playing implicitly enables Sync mode.
+    setEnabledState(true);
+    setIsPlayingState(true);
     lastFrameTimeRef.current = null;
   }, []);
 
   const pause = useCallback(() => {
-    setIsPlaying(false);
+    if (readOnlyRef.current) return;
+    setIsPlayingState(false);
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
@@ -147,7 +164,8 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
   }, []);
 
   const step = useCallback((deltaMs: number) => {
-    setCurrentTimestamp(prev => {
+    if (readOnlyRef.current) return;
+    setCurrentTimestampState(prev => {
       // If no timestamp yet, initialize from encounter bounds
       if (!prev) {
         if (encounterBounds) {
@@ -168,6 +186,27 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
       return newTime;
     });
   }, [encounterBounds]);
+
+  const setPlaybackSpeed = useCallback((speed: number) => {
+    if (readOnlyRef.current) return;
+    setPlaybackSpeedState(speed);
+  }, []);
+
+  const setExternalDriver = useCallback((driver: SyncExternalDriver) => {
+    if (readOnlyRef.current) return;
+    setExternalDriverState(driver);
+  }, []);
+
+  const applyAuthoritativeState = useCallback((state: SyncModeState) => {
+    prevTimestampRef.current = state.currentTimestamp;
+    setEnabledState(state.enabled);
+    setCurrentTimestampState(state.currentTimestamp);
+    setIsPlayingState(state.enabled && state.isPlaying);
+    setPlaybackSpeedState(state.playbackSpeed);
+    setExternalDriverState("none");
+    lastFrameTimeRef.current = null;
+    if (!state.enabled) setMetrics(defaultMetrics);
+  }, []);
 
   const updateMetrics = useCallback((processedCount: number, processingTimeMs: number) => {
     setMetrics(prev => ({
@@ -216,14 +255,14 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
       const deltaMs = (now - (lastFrameTimeRef.current ?? now)) * playbackSpeedRef.current;
       lastFrameTimeRef.current = now;
 
-      setCurrentTimestamp(prev => {
+      setCurrentTimestampState(prev => {
         if (!prev) return prev;
         const newTime = new Date(prev.getTime() + deltaMs);
         
         // Stop at encounter end
         const bounds = encounterBoundsRef.current;
         if (bounds && newTime >= bounds.end) {
-          setIsPlaying(false);
+          setIsPlayingState(false);
           return bounds.end;
         }
         
@@ -254,6 +293,9 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
     setEncounterBounds,
     externalDriver,
     setExternalDriver,
+    readOnly,
+    setReadOnly,
+    applyAuthoritativeState,
   }), [
     enabled,
     currentTimestamp,
@@ -271,6 +313,10 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
     encounterBounds,
     setEncounterBounds,
     externalDriver,
+    setExternalDriver,
+    readOnly,
+    setReadOnly,
+    applyAuthoritativeState,
   ]);
 
   return (
