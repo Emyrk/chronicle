@@ -31,6 +31,10 @@ func TestContentSecurityPolicy(t *testing.T) {
 	assert.Contains(t, csp, "img-src 'self' data: blob: https://www.googletagmanager.com")
 	assert.Contains(t, csp, "connect-src 'self' blob: https://raw.githubusercontent.com")
 	assert.NotContains(t, csp, "tweakcn.com")
+	assert.NotContains(t, csp, "fonts.googleapis.com")
+	assert.NotContains(t, csp, "fonts.gstatic.com")
+	assert.Contains(t, csp, "style-src 'self' 'unsafe-inline'")
+	assert.Contains(t, csp, "font-src 'self'")
 	assert.Contains(t, csp, "frame-ancestors 'none'")
 	assert.Contains(t, csp, "worker-src 'self' blob:")
 }
