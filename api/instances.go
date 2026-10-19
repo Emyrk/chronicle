@@ -93,7 +93,7 @@ func (api *API) InstanceEvents(w http.ResponseWriter, r *http.Request) {
 	if httpmw.InstanceByID(ctx) {
 		// UUID event URLs are immutable, unlisted cache keys. Their response is
 		// intentionally public even when the containing log is unlisted.
-		w.Header().Set("Cache-Control", "public, max-age=15552000") // 180 days
+		w.Header().Set("Cache-Control", "public, max-age=604800") // 7 days
 	} else {
 		// Slugs are not stable cache keys.
 		w.Header().Set("Cache-Control", "no-store")
