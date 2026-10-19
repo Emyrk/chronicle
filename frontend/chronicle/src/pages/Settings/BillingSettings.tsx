@@ -683,12 +683,12 @@ function ReveredSubscriptionSettings({ billing }: { billing: BillingSummary }) {
             {subscriptionEnded ? (
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
                 {hasReveredAccess
-                  ? `Stripe will not renew or charge this subscription again. Your existing Revered access remains available${displayDate ? ` until ${displayDate}` : " until the paid period finishes"}.`
+                  ? `Stripe will not renew or charge this subscription again. Your existing Revered access remains available${displayDate ? ` until ${displayDate}` : " until the paid period finishes"}. Once this subscription is fully expired, you can return here to choose a new subscription frequency.`
                   : "Stripe will not renew or charge this subscription again. No active Revered entitlement is recorded, so its rewards are no longer available."}
               </p>
             ) : cancellationScheduled ? (
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                Your subscription will not renew. Your Revered rewards remain available until{displayDate ? ` ${displayDate}` : " the end of your paid access"}.
+                Your subscription will not renew. Your Revered rewards remain available until{displayDate ? ` ${displayDate}` : " the end of your paid access"}. Once this subscription is fully expired, you can return here to choose a new subscription frequency.
               </p>
             ) : displayState === "payment_issue" ? (
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
