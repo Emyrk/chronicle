@@ -113,7 +113,10 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
   const setReadOnly = useCallback((next: boolean) => {
     readOnlyRef.current = next;
     setReadOnlyState(next);
-    if (next) setExternalDriverState("none");
+    if (next) {
+      setExternalDriverState("none");
+      setIsPlayingState(false);
+    }
   }, []);
 
   const enable = useCallback(() => {
