@@ -189,9 +189,9 @@ func flavorTalentCalculatorOG(host, productName, classSlug, build string) *front
 	productName = strings.TrimSpace(productName)
 	cls, ok := talentClassSlugs[strings.ToLower(classSlug)]
 	if !ok {
-		description := "Plan, share, and compare class and hunter pet talent builds."
+		description := "Plan, share, and compare class talent builds."
 		if productName != "" {
-			description = fmt.Sprintf("Build, share, and compare %s class and hunter pet talent builds with Chronicle's talent calculator.", productName)
+			description = fmt.Sprintf("Build, share, and compare %s class talent builds with Chronicle's talent calculator.", productName)
 		}
 		return &frontend.OGData{
 			Title:       "Talent Calculator",

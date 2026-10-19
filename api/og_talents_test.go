@@ -28,13 +28,13 @@ func TestTalentCalculatorOG(t *testing.T) {
 		t.Parallel()
 		og := talentCalculatorOG("capy.chronicleclassic.com", "", "")
 		require.Equal(t, "Talent Calculator", og.Title)
-		require.Equal(t, "Plan, share, and compare class and hunter pet talent builds.", og.Description)
+		require.Equal(t, "Plan, share, and compare class talent builds.", og.Description)
 	})
 
 	t.Run("FlavorSpecificCopy", func(t *testing.T) {
 		t.Parallel()
 		landing := flavorTalentCalculatorOG("forever.chronicleclassic.com", "WoW Forever", "", "")
-		require.Equal(t, "Build, share, and compare WoW Forever class and hunter pet talent builds with Chronicle's talent calculator.", landing.Description)
+		require.Equal(t, "Build, share, and compare WoW Forever class talent builds with Chronicle's talent calculator.", landing.Description)
 
 		class := flavorTalentCalculatorOG("forever.chronicleclassic.com", "WoW Forever", "warrior", "")
 		require.Equal(t, "Plan, compare, and share WoW Forever Warrior talent builds with Chronicle's talent calculator.", class.Description)
