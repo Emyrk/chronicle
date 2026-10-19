@@ -3,9 +3,11 @@ package synthetic
 import (
 	"time"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
+
+const razuviousOverkillWindow = 2 * time.Minute
 
 type razuviousOverkill struct {
 	lastSlain time.Time
@@ -32,8 +34,8 @@ func (r *razuviousOverkill) ProcessMessages(msg []messages.Message) {
 				continue
 			}
 
-			if r.raz != 0 && m.Date().Sub(r.lastSlain) > time.Minute {
-				// Stop processing raz overkills
+			if r.raz != 0 && m.Date().Sub(r.lastSlain) > razuviousOverkillWindow {
+				// Stop processing Razuvious overkills.
 				r.raz = 0
 				r.lastSlain = time.Time{}
 				continue
