@@ -17,6 +17,7 @@ import {
   canPublishLiveView,
   cursorScreenPosition,
   cursorSurfaceOffset,
+  cursorSurfaceRatio,
   liveSessionInviteURL,
   liveSnapshotMatchesRequest,
   parseLivePresenceSurface,
@@ -28,6 +29,7 @@ import {
   setLiveViewApplier,
   shouldPublishParticipantReplay,
   websocketURL,
+  type LiveCursorPositionMode,
   type LiveMapPresence,
   type LiveReplayState,
   type LiveSessionDataMessage,
@@ -61,18 +63,24 @@ interface RemotePointer {
   presenceSurface?: string;
   x: number;
   y: number;
+  xRatio?: number;
+  yRatio?: number;
+  surfaceWidth?: number;
+  surfaceHeight?: number;
 }
 
 export interface LiveViewboxSettings {
   showViewboxes: boolean;
   showLabels: boolean;
   showCommonArea: boolean;
+  cursorPositionMode?: LiveCursorPositionMode;
 }
 
 const DEFAULT_VIEWBOX_SETTINGS: LiveViewboxSettings = {
   showViewboxes: false,
   showLabels: true,
   showCommonArea: false,
+  cursorPositionMode: "proportional",
 };
 
 interface LiveSessionContextValue {
@@ -128,7 +136,10 @@ function liveCursorSurface(surfaceId: string | undefined): HTMLElement | null {
   return document.querySelector<HTMLElement>(`[data-live-cursor-surface="${CSS.escape(surfaceId)}"]`);
 }
 
-function pointerScreenPosition(pointer: RemotePointer): { x: number; y: number } {
+function pointerScreenPosition(
+  pointer: RemotePointer,
+  mode: LiveCursorPositionMode,
+): { x: number; y: number } {
   const surface = liveCursorSurface(pointer.surfaceId);
   if (!surface) {
     return {
@@ -136,12 +147,27 @@ function pointerScreenPosition(pointer: RemotePointer): { x: number; y: number }
       y: Math.min(pointer.y, window.innerHeight),
     };
   }
-  return cursorScreenPosition(pointer.x, pointer.y, surface.getBoundingClientRect());
+  return cursorScreenPosition(
+    pointer.x,
+    pointer.y,
+    surface.getBoundingClientRect(),
+    mode,
+    pointer.xRatio,
+    pointer.yRatio,
+  );
 }
 
-function RemoteCursor({ pointer, layoutVersion }: { pointer: RemotePointer; layoutVersion: number }) {
+function RemoteCursor({
+  pointer,
+  layoutVersion,
+  mode,
+}: {
+  pointer: RemotePointer;
+  layoutVersion: number;
+  mode: LiveCursorPositionMode;
+}) {
   if (pointer.presenceSurface) return null;
-  const position = pointerScreenPosition(pointer);
+  const position = pointerScreenPosition(pointer, mode);
   return (
     <div
       data-cursor-layout-version={layoutVersion}
@@ -386,10 +412,24 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
         const participantId = senderID ?? message.participantId;
         if (!participantId || !Number.isFinite(message.x) || !Number.isFinite(message.y)) return;
         const presenceSurface = parseLivePresenceSurface(message.presenceSurface);
+        const xRatio = typeof message.xRatio === "number" && Number.isFinite(message.xRatio)
+          ? Math.min(1, Math.max(0, message.xRatio))
+          : undefined;
+        const yRatio = typeof message.yRatio === "number" && Number.isFinite(message.yRatio)
+          ? Math.min(1, Math.max(0, message.yRatio))
+          : undefined;
         const pointer = {
           participantId,
           ...(typeof message.surfaceId === "string" ? { surfaceId: message.surfaceId } : {}),
           ...(presenceSurface ? { presenceSurface } : {}),
+          ...(xRatio !== undefined ? { xRatio } : {}),
+          ...(yRatio !== undefined ? { yRatio } : {}),
+          ...(typeof message.surfaceWidth === "number" && Number.isFinite(message.surfaceWidth) && message.surfaceWidth > 0
+            ? { surfaceWidth: message.surfaceWidth }
+            : {}),
+          ...(typeof message.surfaceHeight === "number" && Number.isFinite(message.surfaceHeight) && message.surfaceHeight > 0
+            ? { surfaceHeight: message.surfaceHeight }
+            : {}),
           x: Math.max(0, message.x),
           y: Math.max(0, message.y),
         };
@@ -824,11 +864,17 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
       const offset = rect
         ? cursorSurfaceOffset(event.clientX, event.clientY, rect)
         : { x: event.clientX, y: event.clientY };
+      const xRatio = rect ? cursorSurfaceRatio(offset.x, rect.width) : undefined;
+      const yRatio = rect ? cursorSurfaceRatio(offset.y, rect.height) : undefined;
       const pointer = {
         type: "pointer" as const,
         ...(role === "leader" ? { participantId: "leader" } : {}),
         ...(surface?.dataset.liveCursorSurface ? { surfaceId: surface.dataset.liveCursorSurface } : {}),
         ...(presenceSurface ? { presenceSurface } : {}),
+        ...(xRatio !== undefined ? { xRatio } : {}),
+        ...(yRatio !== undefined ? { yRatio } : {}),
+        ...(rect && rect.width > 0 ? { surfaceWidth: rect.width } : {}),
+        ...(rect && rect.height > 0 ? { surfaceHeight: rect.height } : {}),
         ...offset,
       };
       sendData(pointer);
@@ -873,7 +919,12 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     <LiveSessionContext.Provider value={value}>
       {children}
       {Object.values(remotePointers).map((pointer) => (
-        <RemoteCursor key={pointer.participantId} pointer={pointer} layoutVersion={cursorLayoutVersion} />
+        <RemoteCursor
+          key={pointer.participantId}
+          pointer={pointer}
+          layoutVersion={cursorLayoutVersion}
+          mode={viewboxSettings.cursorPositionMode ?? "proportional"}
+        />
       ))}
     </LiveSessionContext.Provider>
   );

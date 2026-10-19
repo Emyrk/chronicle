@@ -3,6 +3,7 @@ import {
   canPublishLiveView,
   cursorScreenPosition,
   cursorSurfaceOffset,
+  cursorSurfaceRatio,
   liveSessionInviteURL,
   liveSnapshotMatchesRequest,
   parseLivePresenceSurface,
@@ -71,6 +72,25 @@ describe("shared cursor coordinates", () => {
       width: 800,
       height: 1000,
     })).toEqual({ x: 220, y: 480 });
+  });
+
+  it("maps normalized coordinates proportionally onto a different surface", () => {
+    expect(cursorSurfaceRatio(400, 800)).toBe(0.5);
+    expect(cursorScreenPosition(400, 200, {
+      left: 20,
+      top: 30,
+      width: 400,
+      height: 600,
+    }, "proportional", 0.5, 0.25)).toEqual({ x: 220, y: 180 });
+  });
+
+  it("falls back to exact pixels when normalized coordinates are unavailable", () => {
+    expect(cursorScreenPosition(200, 150, {
+      left: 20,
+      top: 30,
+      width: 400,
+      height: 600,
+    }, "proportional")).toEqual({ x: 220, y: 180 });
   });
 
   it("clamps offsets that exceed a smaller receiving surface", () => {

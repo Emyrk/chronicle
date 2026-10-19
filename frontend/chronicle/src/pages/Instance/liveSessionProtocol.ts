@@ -74,7 +74,18 @@ export type LiveSessionDataMessage<TView = unknown> =
   | { type: "view"; view: TView; requestId?: string }
   | { type: "view_ack"; requestId: string }
   | { type: "replay"; replay: LiveReplayState }
-  | { type: "pointer"; participantId?: string; surfaceId?: string; presenceSurface?: string; x: number; y: number }
+  | {
+      type: "pointer";
+      participantId?: string;
+      surfaceId?: string;
+      presenceSurface?: string;
+      x: number;
+      y: number;
+      xRatio?: number;
+      yRatio?: number;
+      surfaceWidth?: number;
+      surfaceHeight?: number;
+    }
   | { type: "presence"; participantId?: string; presence: LiveMapPresence | null }
   | { type: "viewport_presence"; participantId?: string; viewport: LiveViewportPresence | null };
 
@@ -169,14 +180,31 @@ export function cursorSurfaceOffset(
   };
 }
 
+export type LiveCursorPositionMode = "exact" | "proportional";
+
+export function cursorSurfaceRatio(offset: number, size: number): number | undefined {
+  if (!Number.isFinite(offset) || !Number.isFinite(size) || size <= 0) return undefined;
+  return Math.min(1, Math.max(0, offset / size));
+}
+
 export function cursorScreenPosition(
   x: number,
   y: number,
   rect: CursorRect,
+  mode: LiveCursorPositionMode = "exact",
+  xRatio?: number,
+  yRatio?: number,
 ): { x: number; y: number } {
+  const proportional = mode === "proportional"
+    && Number.isFinite(xRatio)
+    && Number.isFinite(yRatio);
   return {
-    x: rect.left + Math.min(Math.max(0, x), rect.width),
-    y: rect.top + Math.min(Math.max(0, y), rect.height),
+    x: rect.left + (proportional
+      ? Math.min(1, Math.max(0, xRatio as number)) * rect.width
+      : Math.min(Math.max(0, x), rect.width)),
+    y: rect.top + (proportional
+      ? Math.min(1, Math.max(0, yRatio as number)) * rect.height
+      : Math.min(Math.max(0, y), rect.height)),
   };
 }
 

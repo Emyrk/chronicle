@@ -7,6 +7,9 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu/DropdownMenu";
@@ -144,6 +147,18 @@ export function LiveSessionButton({ instanceId, canCreate }: { instanceId: strin
                 Resync with leader
               </DropdownMenuItem>
             )}
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Remote cursor positioning</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={session.viewboxSettings.cursorPositionMode ?? "proportional"}
+              onValueChange={(cursorPositionMode) => {
+                if (cursorPositionMode !== "exact" && cursorPositionMode !== "proportional") return;
+                session.setViewboxSettings((previous) => ({ ...previous, cursorPositionMode }));
+              }}
+            >
+              <DropdownMenuRadioItem value="proportional">Proportional to panel</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="exact">Exact pixel offset</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
             <DropdownMenuSeparator />
             <DropdownMenuCheckboxItem
               checked={session.viewboxSettings.showViewboxes}
