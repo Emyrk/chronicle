@@ -65,7 +65,7 @@ function CoinMedallion({ className }: { className: string }) {
       <span aria-hidden="true" className="support-banner-coin absolute inset-0">
         <span className="support-banner-coin-face support-banner-coin-front">
           <img
-            src="/c/chronicle/ChronicleIconSquare.png"
+            src="/c/chronicle/ChronicleIconSquare.webp"
             alt=""
             className="h-full w-full object-contain"
           />

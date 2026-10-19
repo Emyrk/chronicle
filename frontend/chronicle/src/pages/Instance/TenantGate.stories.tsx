@@ -38,7 +38,7 @@ export const CrossTenantWithLogos: Story = {
     instanceTenantLogo: null, // placeholder until logos exist
     realmName: "Nordanaar",
     currentTenantName: "Epoch",
-    currentTenantLogo: "/c/chronicle/ChronicleIconSquare.png",
+    currentTenantLogo: "/c/chronicle/ChronicleIconSquare.webp",
     targetUrl: "https://legacy.chronicleclassic.com/instances/abc-123",
   },
 };
@@ -54,7 +54,7 @@ export const PrimaryBlockedNotIncluded: Story = {
     instanceTenantLogo: null,
     realmName: "Ambershire",
     currentTenantName: "Chronicle",
-    currentTenantLogo: "/c/chronicle/ChronicleIconSquare.png",
+    currentTenantLogo: "/c/chronicle/ChronicleIconSquare.webp",
     targetUrl: "https://epoch.chronicleclassic.com/instances/abc-123",
   },
 };
@@ -67,10 +67,10 @@ export const TenantViewingUntenanted: Story = {
   args: {
     instanceName: "Blackwing Lair",
     instanceTenantName: "Chronicle",
-    instanceTenantLogo: "/c/chronicle/ChronicleIconSquare.png",
+    instanceTenantLogo: "/c/chronicle/ChronicleIconSquare.webp",
     realmName: "Ambershire",
     currentTenantName: "Turtle WoW",
-    currentTenantLogo: "/c/chronicle/ChronicleIconSquare.png",
+    currentTenantLogo: "/c/chronicle/ChronicleIconSquare.webp",
     targetUrl: "https://chronicleclassic.com/instances/abc-123",
   },
 };
@@ -85,7 +85,7 @@ export const NoTargetUrl: Story = {
     instanceTenantLogo: null,
     realmName: "Nordanaar",
     currentTenantName: "Epoch",
-    currentTenantLogo: "/c/chronicle/ChronicleIconSquare.png",
+    currentTenantLogo: "/c/chronicle/ChronicleIconSquare.webp",
     targetUrl: null,
   },
 };
@@ -99,7 +99,7 @@ export const NoRealmName: Story = {
     instanceTenantName: "Turtle WoW",
     instanceTenantLogo: null,
     currentTenantName: "Epoch",
-    currentTenantLogo: "/c/chronicle/ChronicleIconSquare.png",
+    currentTenantLogo: "/c/chronicle/ChronicleIconSquare.webp",
     targetUrl: "https://legacy.chronicleclassic.com/instances/abc-123",
   },
 };
@@ -113,7 +113,7 @@ export const NoInstanceName: Story = {
     instanceTenantLogo: null,
     realmName: "Nordanaar",
     currentTenantName: "Epoch",
-    currentTenantLogo: "/c/chronicle/ChronicleIconSquare.png",
+    currentTenantLogo: "/c/chronicle/ChronicleIconSquare.webp",
     targetUrl: "https://legacy.chronicleclassic.com/instances/abc-123",
   },
 };

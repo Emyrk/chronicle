@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/Card/Card";
 import type { Instance } from "./InstancePage";
 
 /** Chronicle square icon served from /public — rendered inside a circle clip. */
-const CHRONICLE_LOGO = "/c/chronicle/ChronicleIconSquare.png";
+const CHRONICLE_LOGO = "/c/chronicle/ChronicleIconSquare.webp";
 
 /**
  * Tenant gate truth table — decides what a user sees when viewing an instance

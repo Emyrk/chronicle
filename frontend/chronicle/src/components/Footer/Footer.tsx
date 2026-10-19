@@ -84,7 +84,7 @@ export function Footer() {
                   rel="noopener noreferrer"
                   className="hover:text-foreground transition-colors inline-flex items-center gap-1"
                 >
-                  <img src="/c/chronicle/ChronicleIconSquare.png" alt="" aria-hidden="true" className="h-4 w-4" />
+                  <img src="/c/chronicle/ChronicleIconSquare.webp" alt="" aria-hidden="true" className="h-4 w-4" />
                   Supported Servers
                 </a>
               </li>
