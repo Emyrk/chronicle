@@ -26,9 +26,9 @@ func newAlgalonTestCharacters() *characters.Characters {
 	)
 }
 
-func processAlgalonAuraCleanup(t *testing.T, all *characters.Characters, target guid.GUID, at time.Time) {
+func processAlgalonAuraRemovals(t *testing.T, all *characters.Characters, target guid.GUID, at time.Time, count int) {
 	t.Helper()
-	for i := range algalonAuraCleanupThreshold {
+	for i := range count {
 		_, err := all.Process(&messages.Aura{
 			MessageBase: messages.Base(at),
 			Target:      target,
@@ -39,20 +39,23 @@ func processAlgalonAuraCleanup(t *testing.T, all *characters.Characters, target 
 	}
 }
 
-func TestAlgalonAuraCleanupWithLivingPlayersMarksDefeat(t *testing.T) {
+func processAlgalonAuraCleanup(t *testing.T, all *characters.Characters, target guid.GUID, at time.Time) {
+	t.Helper()
+	processAlgalonAuraRemovals(t, all, target, at, algalonAuraCleanupThreshold)
+}
+
+func TestAlgalonAuraCleanupWithOneLivingPlayerMarksDefeat(t *testing.T) {
 	t.Parallel()
 
 	all := newAlgalonTestCharacters()
 	player := guid.GUID(1)
 	deadPlayer := guid.GUID(2)
-	otherPlayer := guid.GUID(3)
 	algalon := creatureGUID(algalonEntry)
+	all.DB().Update(unitinfo.Info{Guid: algalon, MaxHealth: 2})
 	star := creatureGUID(32955)
 	start := time.Date(2026, time.August, 26, 16, 6, 30, 0, time.UTC)
 
 	_, err := all.Process(testDamage(start, player, algalon))
-	require.NoError(t, err)
-	_, err = all.Process(testDamage(start.Add(500*time.Millisecond), otherPlayer, algalon))
 	require.NoError(t, err)
 	_, err = all.Process(testDamage(start.Add(time.Second), deadPlayer, star))
 	require.NoError(t, err)
@@ -78,6 +81,69 @@ func TestAlgalonAuraCleanupWithLivingPlayersMarksDefeat(t *testing.T) {
 	require.True(t, ok)
 	require.False(t, add.IsActive())
 	require.Equal(t, period.EndStateReset, add.LastEndState())
+}
+
+func TestAlgalonPositiveOverkillMarksDefeat(t *testing.T) {
+	t.Parallel()
+
+	all := newAlgalonTestCharacters()
+	player := guid.GUID(1)
+	algalon := creatureGUID(algalonEntry)
+	at := time.Date(2026, time.August, 26, 16, 6, 30, 0, time.UTC)
+	damage := testDamage(at, player, algalon)
+	damage.Overkill = 1
+
+	_, err := all.Process(damage)
+	require.NoError(t, err)
+
+	boss, ok := all.Get(algalon)
+	require.True(t, ok)
+	require.False(t, boss.IsActive())
+	require.Equal(t, period.EndStateSlain, boss.LastEndState())
+	require.Equal(t, at, boss.Periods()[0].End.Timestamp.Date())
+}
+
+func TestAlgalonEvadeMarksDefeat(t *testing.T) {
+	t.Parallel()
+
+	all := newAlgalonTestCharacters()
+	player := guid.GUID(1)
+	algalon := creatureGUID(algalonEntry)
+	start := time.Date(2026, time.August, 26, 16, 6, 30, 0, time.UTC)
+
+	_, err := all.Process(testDamage(start, player, algalon))
+	require.NoError(t, err)
+	evade := testDamage(start.Add(time.Second), player, algalon)
+	evade.Amount = 0
+	evade.HitType = types.HitTypeEvade
+	_, err = all.Process(evade)
+	require.NoError(t, err)
+	_, err = all.Process(messages.TimedOut(evade.Date().Add(characters.ScriptedDefeatEvadeConfirmationWindow)))
+	require.NoError(t, err)
+
+	boss, ok := all.Get(algalon)
+	require.True(t, ok)
+	require.False(t, boss.IsActive())
+	require.Equal(t, period.EndStateSlain, boss.LastEndState())
+}
+
+func TestAlgalonAuraCleanupBelowThresholdRemainsActive(t *testing.T) {
+	t.Parallel()
+
+	all := newAlgalonTestCharacters()
+	player := guid.GUID(1)
+	algalon := creatureGUID(algalonEntry)
+	all.DB().Update(unitinfo.Info{Guid: algalon, MaxHealth: 1})
+	start := time.Date(2026, time.August, 26, 16, 6, 30, 0, time.UTC)
+
+	_, err := all.Process(testDamage(start, player, algalon))
+	require.NoError(t, err)
+	processAlgalonAuraRemovals(t, all, algalon, start.Add(22*time.Millisecond), algalonAuraCleanupThreshold-1)
+
+	boss, ok := all.Get(algalon)
+	require.True(t, ok)
+	require.True(t, boss.IsActive())
+	require.NotEqual(t, period.EndStateSlain, boss.LastEndState())
 }
 
 func TestAlgalonActivityKeepsAddsActiveUntilDefeat(t *testing.T) {

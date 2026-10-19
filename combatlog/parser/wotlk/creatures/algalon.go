@@ -8,9 +8,8 @@ import (
 )
 
 const (
-	algalonEntry                   = 32871
-	algalonSurrenderHealthPercent  = 95
-	algalonMinimumSurvivingPlayers = 2
+	algalonEntry                  = 32871
+	algalonSurrenderHealthPercent = 95
 )
 
 var algalonAddEntries = []uint32{
@@ -39,7 +38,7 @@ func NewAlgalon(id guid.GUID, all *characters.Characters) (characters.Character,
 	return &algalonCharacter{
 		Common:      characters.NewCommonCharacter(id, all),
 		all:         all,
-		defeat:      characters.NewScriptedDefeatDetector(id, algalonDefeatConfig()),
+		defeat:      characters.NewScriptedDefeatDetector(id, scriptedSurrenderWithAuraCleanupConfig(algalonAuraCleanupThreshold)),
 		seenPlayers: make(map[guid.GUID]struct{}),
 		deadPlayers: make(map[guid.GUID]struct{}),
 	}, true
@@ -62,9 +61,12 @@ func (c *algalonCharacter) Process(m messages.Message) error {
 	}
 
 	signal, defeated := c.defeat.Observe(m, c.IsActive())
+	if !defeated {
+		return nil
+	}
 	// Algalon removes a similar burst of debuffs when resetting after a wipe.
-	// Confirm the boss is near defeat and enough of the observed raid survived.
-	if !defeated || signal != characters.ScriptedDefeatAuraCleanup || !c.surrenderConfirmed() {
+	// Apply the additional confirmation only to the aura-cleanup fallback.
+	if signal == characters.ScriptedDefeatAuraCleanup && !c.surrenderConfirmed() {
 		return nil
 	}
 
@@ -115,11 +117,6 @@ func (c *algalonCharacter) observeIncomingDamage(m messages.Message) {
 }
 
 func (c *algalonCharacter) surrenderConfirmed() bool {
-	livingPlayers := len(c.seenPlayers) - len(c.deadPlayers)
-	if livingPlayers < algalonMinimumSurvivingPlayers {
-		return false
-	}
-
 	info, ok := c.Info()
 	if ok && info.MaxHealth > 0 {
 		return c.incomingDamage*100 >= info.MaxHealth*algalonSurrenderHealthPercent
@@ -127,6 +124,7 @@ func (c *algalonCharacter) surrenderConfirmed() bool {
 
 	// Older logs may lack maximum-health metadata. Require a surviving majority
 	// so one missing death event cannot turn a wipe cleanup into a kill.
+	livingPlayers := len(c.seenPlayers) - len(c.deadPlayers)
 	return livingPlayers*2 > len(c.seenPlayers)
 }
 
