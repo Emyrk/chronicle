@@ -103,6 +103,8 @@ function setStoredLayoutLabResizeHintDismissed() {
 }
 const ICON_PAGE_SIZE = 24;
 const MAX_PANELS = 8;
+// Color inputs need a hex value; mirrors the default --primary.
+const DEFAULT_GROUP_ACCENT = "#5F8FA6";
 const LAYOUT_TITLE_PATTERN = /^[A-Za-z0-9_\-\s]+$/;
 
 function createEmptyActionBarSlots(): LayoutActionBarSlots {
@@ -2270,8 +2272,14 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
                         isDropTarget && "bg-primary/10 ring-2 ring-inset ring-primary",
                       )}
                     >
-                      <div className="flex shrink-0 items-center gap-3 border-b border-border px-3 py-2 pl-12">
-                        <LayoutPanelTop className="h-5 w-5 shrink-0 text-muted-foreground" />
+                      <div
+                        className="flex shrink-0 items-center gap-3 border-b border-border px-3 py-2 pl-12"
+                        style={{
+                          backgroundColor: `color-mix(in oklab, ${item.accentColor || "var(--primary)"} 14%, transparent)`,
+                          boxShadow: `inset 3px 0 0 ${item.accentColor || "var(--primary)"}`,
+                        }}
+                      >
+                        <LayoutPanelTop className="h-5 w-5 shrink-0" style={{ color: item.accentColor || "var(--primary)" }} />
                         <div className="grid min-w-0 flex-1 gap-2 md:grid-cols-2">
                           <Input
                             aria-label="Group title"
@@ -2293,6 +2301,30 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
                             className="h-9 bg-background/80 text-muted-foreground"
                           />
                         </div>
+                        <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                          <input
+                            type="color"
+                            aria-label="Group color"
+                            value={item.accentColor ?? DEFAULT_GROUP_ACCENT}
+                            disabled={readOnly}
+                            onChange={(event) => setItems((previous) => previous.map((candidate) =>
+                              candidate.id === item.id ? { ...candidate, accentColor: event.target.value } : candidate,
+                            ))}
+                            className="h-7 w-7 cursor-pointer rounded border border-border bg-transparent p-0"
+                          />
+                          Color
+                        </label>
+                        {item.accentColor && !readOnly ? (
+                          <button
+                            type="button"
+                            className="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                            onClick={() => setItems((previous) => previous.map((candidate) =>
+                              candidate.id === item.id ? { ...candidate, accentColor: undefined } : candidate,
+                            ))}
+                          >
+                            Reset
+                          </button>
+                        ) : null}
                         <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
                           <input
                             type="checkbox"

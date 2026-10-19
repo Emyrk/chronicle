@@ -33,6 +33,8 @@ export interface GridEditorItem {
   description?: string;
   /** Group rows render as collapsible full-width dividers. */
   collapsedByDefault?: boolean;
+  /** Group accent color (any CSS color). Falls back to the theme primary. */
+  accentColor?: string;
   minW?: number;
   minH?: number;
   maxW?: number;

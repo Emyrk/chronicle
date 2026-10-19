@@ -1181,15 +1181,24 @@ function EventsPanelGrid({
 
             const isOpen = activeGroupState.open[group.id] ?? !group.collapsedByDefault;
             const hasOpened = activeGroupState.opened[group.id] ?? !group.collapsedByDefault;
+            const accent = group.accentColor || "var(--primary)";
             return (
-              <section key={section.id} className={cn(
-                "overflow-hidden border border-border bg-card/40",
-                seamless ? "rounded-none" : "rounded-lg",
-                fit && !isMobile && sectionHasPanel && "min-h-0 flex flex-1 flex-col",
-              )}>
+              <section
+                key={section.id}
+                className={cn(
+                  "overflow-hidden border bg-card/40",
+                  seamless ? "rounded-none" : "rounded-lg",
+                  fit && !isMobile && sectionHasPanel && "min-h-0 flex flex-1 flex-col",
+                )}
+                style={{ borderColor: `color-mix(in oklab, ${accent} 40%, var(--border))` }}
+              >
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-muted-foreground transition-[filter] hover:brightness-125 hover:text-foreground"
+                  style={{
+                    backgroundColor: `color-mix(in oklab, ${accent} 14%, transparent)`,
+                    boxShadow: `inset 3px 0 0 ${accent}`,
+                  }}
                   aria-expanded={isOpen}
                   onClick={() => {
                     setGroupState((previous) => {
@@ -1205,8 +1214,8 @@ function EventsPanelGrid({
                   }}
                 >
                   {isOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-                  <LayoutPanelTop className="size-3.5" />
-                  <span className="font-medium text-foreground">{group.title}</span>
+                  <LayoutPanelTop className="size-3.5" style={{ color: accent }} />
+                  <span className="font-semibold" style={{ color: accent }}>{group.title}</span>
                   {group.description ? <span className="min-w-0 truncate">{group.description}</span> : null}
                   <span className="ml-auto shrink-0">{section.items.length} item{section.items.length === 1 ? "" : "s"}</span>
                 </button>
