@@ -1,112 +1,122 @@
+import { lazy, Suspense } from "react"
 import { Routes, Route, Navigate, useLocation } from "react-router-dom"
-import { Login } from "./pages/Login/Login"
 import { Home } from "./pages/Home"
-import { Contact } from "./pages/Contact"
-import { BecomeRevered } from "./pages/BecomeRevered"
-import { Privacy } from "./pages/Privacy"
-import { Disclaimer } from "./pages/Disclaimer"
-import { SupportedInstances } from "./pages/SupportedInstances"
-import { Terms } from "./pages/Terms"
-import { ParsingPage } from "./pages/Parsing/ParsingPage"
-import { CohortViewerPage } from "./pages/Parsing/CohortViewerPage"
-import { Empty } from "./pages/Empty"
-import { Upload } from "./pages/Upload/Upload"
-import { LogsList } from "./pages/Logs/LogsList"
-import { LogDetail, LogDetailByHash } from "./pages/Logs/LogDetail"
-import { InstancePage } from "./pages/Instance/InstancePage"
-import { PopulationComparisonPage } from "./pages/Instance/Overview/PopulationComparisonPage"
-import { SharedViewRedirect } from "./pages/SharedViewRedirect"
-import { RecentRaids } from "./pages/Recent/RecentRaids"
-import { ProtoDecode } from "./pages/Debug/ProtoDecode"
-import { YouTubeSyncPage } from "./pages/YouTubeSync/YouTubeSyncPage"
-import { YouTubeSyncV2Page } from "./pages/YouTubeSyncV2/YouTubeSyncV2Page"
-import { YouTubeSyncV3Page } from "./pages/YouTubeSyncV3/YouTubeSyncV3Page"
-import { AdminLayout } from "./pages/Admin/AdminLayout"
-import { AdminUsersOverview } from "./pages/Admin/AdminUsersOverview"
-import { AdminLogsPage } from "./pages/Admin/AdminLogsPage"
-import { AdminLeaderboardPage } from "./pages/Admin/AdminLeaderboardPage"
-import { AdminSiteSettingsPage } from "./pages/Admin/AdminSiteSettingsPage"
-import { AdminStoragePage } from "./pages/Admin/AdminStoragePage"
-import { AdminUsersPage } from "./pages/Admin/AdminUsersPage"
-import { RegressionPage } from "./pages/Admin/RegressionPage"
-import { AdminOutdatedInstancesPage } from "./pages/Admin/AdminOutdatedInstancesPage"
-import { AdminApplicationsListPage } from "./pages/Admin/AdminApplicationsListPage"
-import { AdminCacheStatsPage } from "./pages/Admin/AdminCacheStatsPage"
-import { AdminParsingPage } from "./pages/Admin/AdminParsingPage"
-import { AdminCustomPanelsPage } from "./pages/Admin/AdminCustomPanelsPage"
-import { AdminBillingPage } from "./pages/Admin/AdminBillingPage"
-import { GearLayout } from "./pages/Gear/GearLayout"
-import { GearListPage } from "./pages/Gear/builder/GearListPage"
-import { GearTrendsPage } from "./pages/Gear/trends/GearTrendsPage"
-import { GearProgressionsPage } from "./pages/Gear/progression/GearProgressionsPage"
-import { GearProgressionPage } from "./pages/Gear/progression/builder/GearProgressionPage"
-import { StatWeightsPage } from "./pages/Gear/weights/StatWeightsPage"
-import { ServersLayout, ServersPage, UploadKeysPage, RetentionPage } from "./pages/Servers"
-import { SpellPage } from "./pages/WoWDB/SpellPage"
-import { SpellByNamePage } from "./pages/WoWDB/SpellByNamePage"
-import { ItemPage } from "./pages/WoWDB/ItemPage"
-import { ItemExplorerPage } from "./pages/WoWDB/ItemExplorerPage"
-import { SpellExplorerPage } from "./pages/WoWDB/SpellExplorerPage"
-import { CreatureExplorerPage } from "./pages/WoWDB/CreatureExplorerPage"
-import { ItemSetExplorerPage } from "./pages/WoWDB/ItemSetExplorerPage"
-import { ItemSetDetailPage } from "./pages/WoWDB/ItemSetDetailPage"
-import { WoWDBLayout } from "./pages/WoWDB/WoWDBLayout"
-import {
-  TechnicalDetailsPage,
-  PeriodicSpellsPage,
-  ExtraAttackSpellsPage,
-  VulnerabilitySpellsPage,
-  AuraDurationModifiersPage,
-  ClassSpellsPage,
-  ClassBuffsPage,
-  SpecClassIconsPage,
-  TalentTreesPage,
-  PetTargetingAbilitiesPage,
-  ConsumablesPage,
-  CooldownSpellsPage,
-  MapGalleryPage,
-  MiniaturesPage,
-} from "./pages/Technical"
-import {
-  AccountLayout,
-  ProfileSettings,
-  BillingSettings,
-  CharacterSettings,
-  StorageSettings,
-  SidekickSettings,
-  NotificationSettings,
-  PrivacySettings,
-  AppearanceSettings,
-  CustomPanelSettings,
-  LayoutBookSettings,
-  LayoutLabSettings,
-} from "./pages/Settings"
-import { GuildAnalytics, GuildPage, GuildPageEditor, GuildRoster, GuildSettings } from "./pages/GuildPage"
-import { ArmoryAnalysisRedirect, ArmoryPage, PerformanceComparisonPage } from "./pages/ArmoryPage"
-import { ArmorySearchPage } from "./pages/ArmorySearch"
-import { GuildSearchPage } from "./pages/GuildSearch"
-import { ApplyPage } from "./pages/Apply/ApplyPage"
-import { ApplicationPage } from "./pages/Apply/ApplicationPage"
-import { SimPage } from "./pages/Sim"
-import { RaidPlannerPage } from "./pages/RaidPlanner"
-import { TalentCalculatorPage } from "./pages/TalentCalculator/TalentCalculatorPage"
-import { GameDataLayout } from "./pages/GameData/GameDataPage"
-import { WDBTab } from "./pages/GameData/WDBTab"
-import { ImportSQLTab } from "./pages/GameData/ImportSQLTab"
-import { DBCTab } from "./pages/GameData/DBCTab"
-import { DatasetsTab } from "./pages/GameData/DatasetsTab"
-import { LeaderboardsPage, LegacyLeaderboardsRedirect } from "./pages/Leaderboards/LeaderboardsPage"
-import { CensusPage } from "./pages/Census/CensusPage"
-import { APIExplorer } from "./pages/APIExplorer/APIExplorer"
-import { CustomPanelsPage } from "./pages/Tools/CustomPanelsPage"
-import { ToolsPage } from "./pages/Tools/ToolsPage"
-import { SpeedrunningPage } from "./pages/Speedrunning/SpeedrunningPage"
-import { MapLegendPage } from "./pages/MapLegend/MapLegendPage"
-import { ClassDetailsPage } from "./pages/ClassDetails/ClassDetailsPage"
-import { SubspecsPage } from "./pages/Subspecs/SubspecsPage"
 import { NitroPayRuntime } from "./components/Ads/NitroPayRuntime"
 import { Layout } from "./components/Layout/Layout"
-import { TenantDatasetLayout } from "./components/Layout/TenantDatasetLayout"
+import { RouteLoadingFallback } from "./components/Layout/RouteLoadingFallback"
+
+const Login = lazy(() => import("./pages/Login/Login").then(({ Login }) => ({ default: Login })))
+const Contact = lazy(() => import("./pages/Contact").then(({ Contact }) => ({ default: Contact })))
+const BecomeRevered = lazy(() => import("./pages/BecomeRevered").then(({ BecomeRevered }) => ({ default: BecomeRevered })))
+const Privacy = lazy(() => import("./pages/Privacy").then(({ Privacy }) => ({ default: Privacy })))
+const Disclaimer = lazy(() => import("./pages/Disclaimer").then(({ Disclaimer }) => ({ default: Disclaimer })))
+const SupportedInstances = lazy(() => import("./pages/SupportedInstances").then(({ SupportedInstances }) => ({ default: SupportedInstances })))
+const Terms = lazy(() => import("./pages/Terms").then(({ Terms }) => ({ default: Terms })))
+const ParsingPage = lazy(() => import("./pages/Parsing/ParsingPage").then(({ ParsingPage }) => ({ default: ParsingPage })))
+const CohortViewerPage = lazy(() => import("./pages/Parsing/CohortViewerPage").then(({ CohortViewerPage }) => ({ default: CohortViewerPage })))
+const Empty = lazy(() => import("./pages/Empty").then(({ Empty }) => ({ default: Empty })))
+const Upload = lazy(() => import("./pages/Upload/Upload").then(({ Upload }) => ({ default: Upload })))
+const LogsList = lazy(() => import("./pages/Logs/LogsList").then(({ LogsList }) => ({ default: LogsList })))
+const LogDetail = lazy(() => import("./pages/Logs/LogDetail").then(({ LogDetail }) => ({ default: LogDetail })))
+const LogDetailByHash = lazy(() => import("./pages/Logs/LogDetail").then(({ LogDetailByHash }) => ({ default: LogDetailByHash })))
+const InstancePage = lazy(() => import("./pages/Instance/InstancePage").then(({ InstancePage }) => ({ default: InstancePage })))
+const PopulationComparisonPage = lazy(() => import("./pages/Instance/Overview/PopulationComparisonPage").then(({ PopulationComparisonPage }) => ({ default: PopulationComparisonPage })))
+const SharedViewRedirect = lazy(() => import("./pages/SharedViewRedirect").then(({ SharedViewRedirect }) => ({ default: SharedViewRedirect })))
+const RecentRaids = lazy(() => import("./pages/Recent/RecentRaids").then(({ RecentRaids }) => ({ default: RecentRaids })))
+const ProtoDecode = lazy(() => import("./pages/Debug/ProtoDecode").then(({ ProtoDecode }) => ({ default: ProtoDecode })))
+const YouTubeSyncPage = lazy(() => import("./pages/YouTubeSync/YouTubeSyncPage").then(({ YouTubeSyncPage }) => ({ default: YouTubeSyncPage })))
+const YouTubeSyncV2Page = lazy(() => import("./pages/YouTubeSyncV2/YouTubeSyncV2Page").then(({ YouTubeSyncV2Page }) => ({ default: YouTubeSyncV2Page })))
+const YouTubeSyncV3Page = lazy(() => import("./pages/YouTubeSyncV3/YouTubeSyncV3Page").then(({ YouTubeSyncV3Page }) => ({ default: YouTubeSyncV3Page })))
+const AdminLayout = lazy(() => import("./pages/Admin/AdminLayout").then(({ AdminLayout }) => ({ default: AdminLayout })))
+const AdminUsersOverview = lazy(() => import("./pages/Admin/AdminUsersOverview").then(({ AdminUsersOverview }) => ({ default: AdminUsersOverview })))
+const AdminLogsPage = lazy(() => import("./pages/Admin/AdminLogsPage").then(({ AdminLogsPage }) => ({ default: AdminLogsPage })))
+const AdminLeaderboardPage = lazy(() => import("./pages/Admin/AdminLeaderboardPage").then(({ AdminLeaderboardPage }) => ({ default: AdminLeaderboardPage })))
+const AdminSiteSettingsPage = lazy(() => import("./pages/Admin/AdminSiteSettingsPage").then(({ AdminSiteSettingsPage }) => ({ default: AdminSiteSettingsPage })))
+const AdminStoragePage = lazy(() => import("./pages/Admin/AdminStoragePage").then(({ AdminStoragePage }) => ({ default: AdminStoragePage })))
+const AdminUsersPage = lazy(() => import("./pages/Admin/AdminUsersPage").then(({ AdminUsersPage }) => ({ default: AdminUsersPage })))
+const RegressionPage = lazy(() => import("./pages/Admin/RegressionPage").then(({ RegressionPage }) => ({ default: RegressionPage })))
+const AdminOutdatedInstancesPage = lazy(() => import("./pages/Admin/AdminOutdatedInstancesPage").then(({ AdminOutdatedInstancesPage }) => ({ default: AdminOutdatedInstancesPage })))
+const AdminApplicationsListPage = lazy(() => import("./pages/Admin/AdminApplicationsListPage").then(({ AdminApplicationsListPage }) => ({ default: AdminApplicationsListPage })))
+const AdminCacheStatsPage = lazy(() => import("./pages/Admin/AdminCacheStatsPage").then(({ AdminCacheStatsPage }) => ({ default: AdminCacheStatsPage })))
+const AdminParsingPage = lazy(() => import("./pages/Admin/AdminParsingPage").then(({ AdminParsingPage }) => ({ default: AdminParsingPage })))
+const AdminCustomPanelsPage = lazy(() => import("./pages/Admin/AdminCustomPanelsPage").then(({ AdminCustomPanelsPage }) => ({ default: AdminCustomPanelsPage })))
+const AdminBillingPage = lazy(() => import("./pages/Admin/AdminBillingPage").then(({ AdminBillingPage }) => ({ default: AdminBillingPage })))
+const GearLayout = lazy(() => import("./pages/Gear/GearLayout").then(({ GearLayout }) => ({ default: GearLayout })))
+const GearListPage = lazy(() => import("./pages/Gear/builder/GearListPage").then(({ GearListPage }) => ({ default: GearListPage })))
+const GearTrendsPage = lazy(() => import("./pages/Gear/trends/GearTrendsPage").then(({ GearTrendsPage }) => ({ default: GearTrendsPage })))
+const GearProgressionsPage = lazy(() => import("./pages/Gear/progression/GearProgressionsPage").then(({ GearProgressionsPage }) => ({ default: GearProgressionsPage })))
+const GearProgressionPage = lazy(() => import("./pages/Gear/progression/builder/GearProgressionPage").then(({ GearProgressionPage }) => ({ default: GearProgressionPage })))
+const StatWeightsPage = lazy(() => import("./pages/Gear/weights/StatWeightsPage").then(({ StatWeightsPage }) => ({ default: StatWeightsPage })))
+const ServersLayout = lazy(() => import("./pages/Servers").then(({ ServersLayout }) => ({ default: ServersLayout })))
+const ServersPage = lazy(() => import("./pages/Servers").then(({ ServersPage }) => ({ default: ServersPage })))
+const UploadKeysPage = lazy(() => import("./pages/Servers").then(({ UploadKeysPage }) => ({ default: UploadKeysPage })))
+const RetentionPage = lazy(() => import("./pages/Servers").then(({ RetentionPage }) => ({ default: RetentionPage })))
+const SpellPage = lazy(() => import("./pages/WoWDB/SpellPage").then(({ SpellPage }) => ({ default: SpellPage })))
+const SpellByNamePage = lazy(() => import("./pages/WoWDB/SpellByNamePage").then(({ SpellByNamePage }) => ({ default: SpellByNamePage })))
+const ItemPage = lazy(() => import("./pages/WoWDB/ItemPage").then(({ ItemPage }) => ({ default: ItemPage })))
+const ItemExplorerPage = lazy(() => import("./pages/WoWDB/ItemExplorerPage").then(({ ItemExplorerPage }) => ({ default: ItemExplorerPage })))
+const SpellExplorerPage = lazy(() => import("./pages/WoWDB/SpellExplorerPage").then(({ SpellExplorerPage }) => ({ default: SpellExplorerPage })))
+const CreatureExplorerPage = lazy(() => import("./pages/WoWDB/CreatureExplorerPage").then(({ CreatureExplorerPage }) => ({ default: CreatureExplorerPage })))
+const ItemSetExplorerPage = lazy(() => import("./pages/WoWDB/ItemSetExplorerPage").then(({ ItemSetExplorerPage }) => ({ default: ItemSetExplorerPage })))
+const ItemSetDetailPage = lazy(() => import("./pages/WoWDB/ItemSetDetailPage").then(({ ItemSetDetailPage }) => ({ default: ItemSetDetailPage })))
+const WoWDBLayout = lazy(() => import("./pages/WoWDB/WoWDBLayout").then(({ WoWDBLayout }) => ({ default: WoWDBLayout })))
+const TechnicalDetailsPage = lazy(() => import("./pages/Technical").then(({ TechnicalDetailsPage }) => ({ default: TechnicalDetailsPage })))
+const PeriodicSpellsPage = lazy(() => import("./pages/Technical").then(({ PeriodicSpellsPage }) => ({ default: PeriodicSpellsPage })))
+const ExtraAttackSpellsPage = lazy(() => import("./pages/Technical").then(({ ExtraAttackSpellsPage }) => ({ default: ExtraAttackSpellsPage })))
+const VulnerabilitySpellsPage = lazy(() => import("./pages/Technical").then(({ VulnerabilitySpellsPage }) => ({ default: VulnerabilitySpellsPage })))
+const AuraDurationModifiersPage = lazy(() => import("./pages/Technical").then(({ AuraDurationModifiersPage }) => ({ default: AuraDurationModifiersPage })))
+const ClassSpellsPage = lazy(() => import("./pages/Technical").then(({ ClassSpellsPage }) => ({ default: ClassSpellsPage })))
+const ClassBuffsPage = lazy(() => import("./pages/Technical").then(({ ClassBuffsPage }) => ({ default: ClassBuffsPage })))
+const SpecClassIconsPage = lazy(() => import("./pages/Technical").then(({ SpecClassIconsPage }) => ({ default: SpecClassIconsPage })))
+const TalentTreesPage = lazy(() => import("./pages/Technical").then(({ TalentTreesPage }) => ({ default: TalentTreesPage })))
+const PetTargetingAbilitiesPage = lazy(() => import("./pages/Technical").then(({ PetTargetingAbilitiesPage }) => ({ default: PetTargetingAbilitiesPage })))
+const ConsumablesPage = lazy(() => import("./pages/Technical").then(({ ConsumablesPage }) => ({ default: ConsumablesPage })))
+const CooldownSpellsPage = lazy(() => import("./pages/Technical").then(({ CooldownSpellsPage }) => ({ default: CooldownSpellsPage })))
+const MapGalleryPage = lazy(() => import("./pages/Technical").then(({ MapGalleryPage }) => ({ default: MapGalleryPage })))
+const MiniaturesPage = lazy(() => import("./pages/Technical").then(({ MiniaturesPage }) => ({ default: MiniaturesPage })))
+const AccountLayout = lazy(() => import("./pages/Settings").then(({ AccountLayout }) => ({ default: AccountLayout })))
+const ProfileSettings = lazy(() => import("./pages/Settings").then(({ ProfileSettings }) => ({ default: ProfileSettings })))
+const BillingSettings = lazy(() => import("./pages/Settings").then(({ BillingSettings }) => ({ default: BillingSettings })))
+const CharacterSettings = lazy(() => import("./pages/Settings").then(({ CharacterSettings }) => ({ default: CharacterSettings })))
+const StorageSettings = lazy(() => import("./pages/Settings").then(({ StorageSettings }) => ({ default: StorageSettings })))
+const SidekickSettings = lazy(() => import("./pages/Settings").then(({ SidekickSettings }) => ({ default: SidekickSettings })))
+const NotificationSettings = lazy(() => import("./pages/Settings").then(({ NotificationSettings }) => ({ default: NotificationSettings })))
+const PrivacySettings = lazy(() => import("./pages/Settings").then(({ PrivacySettings }) => ({ default: PrivacySettings })))
+const AppearanceSettings = lazy(() => import("./pages/Settings").then(({ AppearanceSettings }) => ({ default: AppearanceSettings })))
+const CustomPanelSettings = lazy(() => import("./pages/Settings").then(({ CustomPanelSettings }) => ({ default: CustomPanelSettings })))
+const LayoutBookSettings = lazy(() => import("./pages/Settings").then(({ LayoutBookSettings }) => ({ default: LayoutBookSettings })))
+const LayoutLabSettings = lazy(() => import("./pages/Settings").then(({ LayoutLabSettings }) => ({ default: LayoutLabSettings })))
+const GuildAnalytics = lazy(() => import("./pages/GuildPage").then(({ GuildAnalytics }) => ({ default: GuildAnalytics })))
+const GuildPage = lazy(() => import("./pages/GuildPage").then(({ GuildPage }) => ({ default: GuildPage })))
+const GuildPageEditor = lazy(() => import("./pages/GuildPage").then(({ GuildPageEditor }) => ({ default: GuildPageEditor })))
+const GuildRoster = lazy(() => import("./pages/GuildPage").then(({ GuildRoster }) => ({ default: GuildRoster })))
+const GuildSettings = lazy(() => import("./pages/GuildPage").then(({ GuildSettings }) => ({ default: GuildSettings })))
+const ArmoryAnalysisRedirect = lazy(() => import("./pages/ArmoryPage").then(({ ArmoryAnalysisRedirect }) => ({ default: ArmoryAnalysisRedirect })))
+const ArmoryPage = lazy(() => import("./pages/ArmoryPage").then(({ ArmoryPage }) => ({ default: ArmoryPage })))
+const PerformanceComparisonPage = lazy(() => import("./pages/ArmoryPage").then(({ PerformanceComparisonPage }) => ({ default: PerformanceComparisonPage })))
+const ArmorySearchPage = lazy(() => import("./pages/ArmorySearch").then(({ ArmorySearchPage }) => ({ default: ArmorySearchPage })))
+const GuildSearchPage = lazy(() => import("./pages/GuildSearch").then(({ GuildSearchPage }) => ({ default: GuildSearchPage })))
+const ApplyPage = lazy(() => import("./pages/Apply/ApplyPage").then(({ ApplyPage }) => ({ default: ApplyPage })))
+const ApplicationPage = lazy(() => import("./pages/Apply/ApplicationPage").then(({ ApplicationPage }) => ({ default: ApplicationPage })))
+const SimPage = lazy(() => import("./pages/Sim").then(({ SimPage }) => ({ default: SimPage })))
+const RaidPlannerPage = lazy(() => import("./pages/RaidPlanner").then(({ RaidPlannerPage }) => ({ default: RaidPlannerPage })))
+const TalentCalculatorPage = lazy(() => import("./pages/TalentCalculator/TalentCalculatorPage").then(({ TalentCalculatorPage }) => ({ default: TalentCalculatorPage })))
+const GameDataLayout = lazy(() => import("./pages/GameData/GameDataPage").then(({ GameDataLayout }) => ({ default: GameDataLayout })))
+const WDBTab = lazy(() => import("./pages/GameData/WDBTab").then(({ WDBTab }) => ({ default: WDBTab })))
+const ImportSQLTab = lazy(() => import("./pages/GameData/ImportSQLTab").then(({ ImportSQLTab }) => ({ default: ImportSQLTab })))
+const DBCTab = lazy(() => import("./pages/GameData/DBCTab").then(({ DBCTab }) => ({ default: DBCTab })))
+const DatasetsTab = lazy(() => import("./pages/GameData/DatasetsTab").then(({ DatasetsTab }) => ({ default: DatasetsTab })))
+const LeaderboardsPage = lazy(() => import("./pages/Leaderboards/LeaderboardsPage").then(({ LeaderboardsPage }) => ({ default: LeaderboardsPage })))
+const LegacyLeaderboardsRedirect = lazy(() => import("./pages/Leaderboards/LeaderboardsPage").then(({ LegacyLeaderboardsRedirect }) => ({ default: LegacyLeaderboardsRedirect })))
+const CensusPage = lazy(() => import("./pages/Census/CensusPage").then(({ CensusPage }) => ({ default: CensusPage })))
+const APIExplorer = lazy(() => import("./pages/APIExplorer/APIExplorer").then(({ APIExplorer }) => ({ default: APIExplorer })))
+const CustomPanelsPage = lazy(() => import("./pages/Tools/CustomPanelsPage").then(({ CustomPanelsPage }) => ({ default: CustomPanelsPage })))
+const ToolsPage = lazy(() => import("./pages/Tools/ToolsPage").then(({ ToolsPage }) => ({ default: ToolsPage })))
+const SpeedrunningPage = lazy(() => import("./pages/Speedrunning/SpeedrunningPage").then(({ SpeedrunningPage }) => ({ default: SpeedrunningPage })))
+const MapLegendPage = lazy(() => import("./pages/MapLegend/MapLegendPage").then(({ MapLegendPage }) => ({ default: MapLegendPage })))
+const ClassDetailsPage = lazy(() => import("./pages/ClassDetails/ClassDetailsPage").then(({ ClassDetailsPage }) => ({ default: ClassDetailsPage })))
+const SubspecsPage = lazy(() => import("./pages/Subspecs/SubspecsPage").then(({ SubspecsPage }) => ({ default: SubspecsPage })))
+const TenantDatasetLayout = lazy(() => import("./components/Layout/TenantDatasetLayout").then(({ TenantDatasetLayout }) => ({ default: TenantDatasetLayout })))
 
 // Backend-handled paths that should bypass React Router
 const BACKEND_PATHS = ["/saffron", "/river", "/api", "/auth"]
@@ -128,7 +138,8 @@ function App() {
   return (
     <>
       <NitroPayRuntime />
-      <Routes>
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/youtube-sync" element={<YouTubeSyncPage />} />
       <Route path="/youtube-sync-v2" element={<YouTubeSyncV2Page />} />
@@ -268,7 +279,8 @@ function App() {
         </Route>
       </Route>
         <Route path="*" element={<CatchAllRoute />} />
-      </Routes>
+        </Routes>
+      </Suspense>
     </>
   )
 }

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Outlet } from "react-router-dom";
 import { NavBar } from "../NavBar/NavBar";
 import { Footer } from "../Footer/Footer";
@@ -8,6 +9,7 @@ import { usePageTracking } from "@/hooks/usePageTracking";
 import { usePublicTelemetryNotices } from "@/api/queries";
 import { NoticeBanner } from "../NoticeBanner/NoticeBanner";
 import { useHideSiteChrome } from "@/hooks/useFocusMode";
+import { RouteLoadingFallback } from "./RouteLoadingFallback";
 
 export function Layout() {
   usePageTracking();
@@ -25,7 +27,9 @@ export function Layout() {
         </>
       )}
       <main>
-        <Outlet />
+        <Suspense fallback={<RouteLoadingFallback />}>
+          <Outlet />
+        </Suspense>
       </main>
       {!hideChrome && <Footer />}
       <Toaster />
