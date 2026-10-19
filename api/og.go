@@ -26,7 +26,7 @@ func (api *API) OGRoutes() []frontend.OGRoute {
 		routes = append(routes, frontend.OGRoute{
 			Pattern: pattern,
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return &frontend.OGData{Title: metadata.Title, Description: metadata.Description, URL: canonicalRequestURL(api, r)}
+				return flavorStaticOG(pattern, seoProductName(api.resolvedSiteFlavor(r.Context())), metadata, canonicalRequestURL(api, r))
 			},
 		})
 	}
@@ -52,13 +52,13 @@ func (api *API) OGRoutes() []frontend.OGRoute {
 		{
 			Pattern: "/talents",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return talentCalculatorOG(ogHost(r), "", "")
+				return flavorTalentCalculatorOG(ogHost(r), seoProductName(api.resolvedSiteFlavor(r.Context())), "", "")
 			},
 		},
 		{
 			Pattern: "/talents/{class}",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return talentCalculatorOG(ogHost(r), chi.URLParam(r, "class"), r.URL.Query().Get("build"))
+				return flavorTalentCalculatorOG(ogHost(r), seoProductName(api.resolvedSiteFlavor(r.Context())), chi.URLParam(r, "class"), r.URL.Query().Get("build"))
 			},
 		},
 	}...)
@@ -67,6 +67,30 @@ func (api *API) OGRoutes() []frontend.OGRoute {
 type staticOGMetadata struct {
 	Title       string
 	Description string
+}
+
+func seoProductName(flavor database.WoWFlavor) string {
+	if flavor.Has(database.FlavorWoWForever) {
+		return "WoW Forever"
+	}
+	return ""
+}
+
+func flavorStaticOG(pattern, productName string, metadata staticOGMetadata, canonicalURL string) *frontend.OGData {
+	description := metadata.Description
+	if productName != "" {
+		switch pattern {
+		case "/":
+			description = fmt.Sprintf("Analyze %s combat logs with damage, healing, death, rankings, and raid performance reports. Upload logs and compare players and guilds.", productName)
+		case "/recent":
+			description = fmt.Sprintf("Browse recently uploaded %s combat logs and raid performance reports.", productName)
+		case "/leaderboards/statistics":
+			description = fmt.Sprintf("Explore %s raid performance statistics, damage rankings, healing rankings, and player parses.", productName)
+		case "/leaderboards/speedruns":
+			description = fmt.Sprintf("Compare the fastest %s raid clears and guild speedrun rankings.", productName)
+		}
+	}
+	return &frontend.OGData{Title: metadata.Title, Description: description, URL: canonicalURL}
 }
 
 var staticOGRoutes = map[string]staticOGMetadata{
@@ -155,24 +179,41 @@ func sanitizeBuildParam(build string) string {
 	return b.String()
 }
 
-// talentCalculatorOG builds Open Graph metadata for talent calculator links.
+// talentCalculatorOG builds generic Open Graph metadata for talent calculator links.
 // classSlug and build may be empty ("/talents" landing page).
 func talentCalculatorOG(host, classSlug, build string) *frontend.OGData {
+	return flavorTalentCalculatorOG(host, "", classSlug, build)
+}
+
+func flavorTalentCalculatorOG(host, productName, classSlug, build string) *frontend.OGData {
+	productName = strings.TrimSpace(productName)
 	cls, ok := talentClassSlugs[strings.ToLower(classSlug)]
 	if !ok {
+		description := "Plan, share, and compare class and hunter pet talent builds."
+		if productName != "" {
+			description = fmt.Sprintf("Build, share, and compare %s class and hunter pet talent builds with Chronicle's talent calculator.", productName)
+		}
 		return &frontend.OGData{
 			Title:       "Talent Calculator",
-			Description: "Plan, share, and compare class and hunter pet talent builds.",
+			Description: description,
 			URL:         fmt.Sprintf("https://%s/talents", host),
 		}
 	}
 	build = sanitizeBuildParam(build)
 
 	classURL := fmt.Sprintf("https://%s/talents/%s", host, strings.ToLower(classSlug))
+	className := cls.Display
+	if productName != "" {
+		className = productName + " " + className
+	}
 	if build == "" {
+		description := fmt.Sprintf("Plan and share %s talent builds.", cls.Display)
+		if productName != "" {
+			description = fmt.Sprintf("Plan, compare, and share %s talent builds with Chronicle's talent calculator.", className)
+		}
 		return &frontend.OGData{
 			Title:       fmt.Sprintf("%s Talent Calculator", cls.Display),
-			Description: fmt.Sprintf("Plan and share %s talent builds.", cls.Display),
+			Description: description,
 			URL:         classURL,
 		}
 	}
@@ -181,7 +222,7 @@ func talentCalculatorOG(host, classSlug, build string) *frontend.OGData {
 	if _, isPet := talentPetSlugs[strings.ToLower(classSlug)]; isPet {
 		return &frontend.OGData{
 			Title:       fmt.Sprintf("%s (%d/%d/%d)", cls.Display, summary[0], summary[1], summary[2]),
-			Description: fmt.Sprintf("A %d-point %s talent build. Open it in the talent calculator.", total, cls.Display),
+			Description: fmt.Sprintf("A %d-point %s talent build. Open it in the talent calculator.", total, className),
 			URL:         fmt.Sprintf("%s?build=%s", classURL, build),
 		}
 	}
@@ -193,7 +234,7 @@ func talentCalculatorOG(host, classSlug, build string) *frontend.OGData {
 	}
 	return &frontend.OGData{
 		Title:       title,
-		Description: fmt.Sprintf("A %d-point %s talent build. Open it in the talent calculator.", total, cls.Display),
+		Description: fmt.Sprintf("A %d-point %s talent build. Open it in the talent calculator.", total, className),
 		URL:         fmt.Sprintf("%s?build=%s", classURL, build),
 	}
 }

@@ -43,11 +43,11 @@ func TestBrandingResolverTenantSEO(t *testing.T) {
 	metadata := api.brandingResolver(tenantSEORequest(t, "/recent?tab=all", true))
 	require.Equal(t, "Everlook by Chronicle", metadata.Title)
 	require.Equal(t, "Everlook", metadata.SiteName)
-	require.Equal(t, defaultSEODescription, metadata.Description)
+	require.Equal(t, "Everlook raid analytics", metadata.Description)
 	require.Equal(t, "https://everlook.chronicleclassic.com/recent", metadata.CanonicalURL)
 	require.Equal(t, "https://everlook.chronicleclassic.com/banner.png", metadata.ImageURL)
 	require.Empty(t, metadata.Robots)
-	require.JSONEq(t, `{"@context":"https://schema.org","@type":"WebSite","name":"Everlook","url":"https://everlook.chronicleclassic.com/","description":"Chronicle provides combat log analysis for World of Warcraft communities. Upload combat logs to explore encounters, rankings, and performance insights.","image":"https://everlook.chronicleclassic.com/banner.png","publisher":{"@type":"Organization","name":"Chronicle","url":"https://chronicleclassic.com/"}}`, metadata.JSONLD)
+	require.JSONEq(t, `{"@context":"https://schema.org","@type":"WebSite","name":"Everlook","url":"https://everlook.chronicleclassic.com/","description":"Everlook raid analytics","image":"https://everlook.chronicleclassic.com/banner.png","publisher":{"@type":"Organization","name":"Chronicle","url":"https://chronicleclassic.com/"}}`, metadata.JSONLD)
 }
 
 func TestBrandingResolverGoogleAnalytics(t *testing.T) {
@@ -131,6 +131,7 @@ func TestTenantRobotsAndSitemap(t *testing.T) {
 	require.Equal(t, http.StatusOK, sitemap.Code)
 	require.Contains(t, sitemap.Body.String(), "https://everlook.chronicleclassic.com/leaderboards/statistics")
 	require.Contains(t, sitemap.Body.String(), "https://everlook.chronicleclassic.com/wowdb")
+	require.Contains(t, sitemap.Body.String(), "https://everlook.chronicleclassic.com/talents/warrior")
 	require.NotContains(t, sitemap.Body.String(), "/wowdb/item")
 	require.NotContains(t, sitemap.Body.String(), "/wowdb/spell")
 

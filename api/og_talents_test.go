@@ -3,8 +3,23 @@ package api
 import (
 	"testing"
 
+	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSEOProductName(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "WoW Forever", seoProductName(database.WoWFlavor{database.FlavorVanilla, database.FlavorWoWForever}))
+	require.Empty(t, seoProductName(database.WoWFlavor{database.FlavorVanilla, database.FlavorTurtle}))
+}
+
+func TestFlavorStaticOG(t *testing.T) {
+	t.Parallel()
+	og := flavorStaticOG("/", "WoW Forever", staticOGRoutes["/"], "https://forever.chronicleclassic.com/")
+	require.Equal(t, "Raid Logs and Performance Analysis", og.Title)
+	require.Contains(t, og.Description, "WoW Forever combat logs")
+	require.Contains(t, og.Description, "rankings")
+}
 
 func TestTalentCalculatorOG(t *testing.T) {
 	t.Parallel()
@@ -14,6 +29,15 @@ func TestTalentCalculatorOG(t *testing.T) {
 		og := talentCalculatorOG("capy.chronicleclassic.com", "", "")
 		require.Equal(t, "Talent Calculator", og.Title)
 		require.Equal(t, "Plan, share, and compare class and hunter pet talent builds.", og.Description)
+	})
+
+	t.Run("FlavorSpecificCopy", func(t *testing.T) {
+		t.Parallel()
+		landing := flavorTalentCalculatorOG("forever.chronicleclassic.com", "WoW Forever", "", "")
+		require.Equal(t, "Build, share, and compare WoW Forever class and hunter pet talent builds with Chronicle's talent calculator.", landing.Description)
+
+		class := flavorTalentCalculatorOG("forever.chronicleclassic.com", "WoW Forever", "warrior", "")
+		require.Equal(t, "Plan, compare, and share WoW Forever Warrior talent builds with Chronicle's talent calculator.", class.Description)
 	})
 
 	t.Run("ClassWithoutBuild", func(t *testing.T) {
