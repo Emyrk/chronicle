@@ -8,9 +8,8 @@ import (
 )
 
 const (
-	algalonEntry                   = 32871
-	algalonSurrenderHealthPercent  = 95
-	algalonMinimumSurvivingPlayers = 2
+	algalonEntry                  = 32871
+	algalonSurrenderHealthPercent = 95
 )
 
 var algalonAddEntries = []uint32{
@@ -115,11 +114,6 @@ func (c *algalonCharacter) observeIncomingDamage(m messages.Message) {
 }
 
 func (c *algalonCharacter) surrenderConfirmed() bool {
-	livingPlayers := len(c.seenPlayers) - len(c.deadPlayers)
-	if livingPlayers < algalonMinimumSurvivingPlayers {
-		return false
-	}
-
 	info, ok := c.Info()
 	if ok && info.MaxHealth > 0 {
 		return c.incomingDamage*100 >= info.MaxHealth*algalonSurrenderHealthPercent
@@ -127,6 +121,7 @@ func (c *algalonCharacter) surrenderConfirmed() bool {
 
 	// Older logs may lack maximum-health metadata. Require a surviving majority
 	// so one missing death event cannot turn a wipe cleanup into a kill.
+	livingPlayers := len(c.seenPlayers) - len(c.deadPlayers)
 	return livingPlayers*2 > len(c.seenPlayers)
 }
 

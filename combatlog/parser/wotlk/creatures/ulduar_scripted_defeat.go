@@ -9,7 +9,7 @@ import (
 const (
 	scriptedKeeperAuraCleanupThreshold = 8
 	kologarnAuraCleanupThreshold       = 7
-	algalonAuraCleanupThreshold        = 12
+	algalonAuraCleanupThreshold        = 9
 	scriptedAuraCleanupBurstWindow     = 100 * time.Millisecond
 	scriptedAuraCleanupDamageWindow    = 500 * time.Millisecond
 	freyaEvadeConfirmationWindow       = 5 * time.Second
