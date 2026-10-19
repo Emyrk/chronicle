@@ -18,7 +18,7 @@ func etagMiddleware(next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ext := path.Ext(r.URL.Path)
-		if ext != ".js" && ext != ".css" {
+		if ext != ".js" && ext != ".css" && ext != ".woff" && ext != ".woff2" {
 			next.ServeHTTP(w, r)
 			return
 		}
