@@ -7,6 +7,7 @@ import {
   liveSnapshotMatchesRequest,
   parseLivePresenceSurface,
   parseMapPresence,
+  parseViewportPresence,
   participantColor,
   participantLabel,
   receiveLiveView,
@@ -160,6 +161,29 @@ describe("parseLivePresenceSurface", () => {
     expect(parseLivePresenceSurface("Map View")).toBeUndefined();
     expect(parseLivePresenceSurface("a".repeat(65))).toBeUndefined();
     expect(parseLivePresenceSurface(null)).toBeUndefined();
+  });
+});
+
+describe("parseViewportPresence", () => {
+  it("accepts finite window and panel dimensions", () => {
+    expect(parseViewportPresence({
+      window: { width: 1440, height: 900 },
+      panels: { "panel-1": { width: 640, height: 420 } },
+    })).toEqual({
+      window: { width: 1440, height: 900 },
+      panels: { "panel-1": { width: 640, height: 420 } },
+    });
+  });
+
+  it("rejects invalid windows and drops malformed panels", () => {
+    expect(parseViewportPresence({ window: { width: 0, height: 900 }, panels: {} })).toBeNull();
+    expect(parseViewportPresence({
+      window: { width: 800, height: 600 },
+      panels: {
+        "panel-1": { width: Number.NaN, height: 300 },
+        "bad panel": { width: 200, height: 200 },
+      },
+    })).toEqual({ window: { width: 800, height: 600 }, panels: {} });
   });
 });
 

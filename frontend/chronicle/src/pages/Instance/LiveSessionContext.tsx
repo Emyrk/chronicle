@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { CreateLiveSessionResponse, JoinLiveSessionResponse } from "@/api/typesGenerated";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { useSyncModeContext } from "./SyncModeContext";
 import {
   LIVE_SESSION_QUERY_PARAM,
@@ -20,6 +21,7 @@ import {
   liveSnapshotMatchesRequest,
   parseLivePresenceSurface,
   parseMapPresence,
+  parseViewportPresence,
   participantColor,
   participantLabel,
   receiveLiveView,
@@ -32,6 +34,7 @@ import {
   type LiveSessionServerMessage,
   type LiveSessionSignalPayload,
   type LiveViewDelivery,
+  type LiveViewportPresence,
 } from "./liveSessionProtocol";
 
 import {
@@ -60,6 +63,18 @@ interface RemotePointer {
   y: number;
 }
 
+export interface LiveViewboxSettings {
+  showViewboxes: boolean;
+  showLabels: boolean;
+  showCommonArea: boolean;
+}
+
+const DEFAULT_VIEWBOX_SETTINGS: LiveViewboxSettings = {
+  showViewboxes: false,
+  showLabels: true,
+  showCommonArea: false,
+};
+
 interface LiveSessionContextValue {
   status: LiveSessionStatus;
   role: LiveSessionRole | null;
@@ -83,6 +98,9 @@ interface LiveSessionContextValue {
   subscribeMapPresence: (listener: MapPresenceListener) => () => void;
   /** Remote participants whose pointer is inside each panel-owned presence surface. */
   presenceSurfaceParticipants: LivePresenceSurfaceParticipants;
+  viewportPresences: Readonly<Record<string, LiveViewportPresence>>;
+  viewboxSettings: LiveViewboxSettings;
+  setViewboxSettings: (value: LiveViewboxSettings | ((previous: LiveViewboxSettings) => LiveViewboxSettings)) => void;
 }
 
 export type MapPresenceListener = (presences: ReadonlyMap<string, LiveMapPresence>) => void;
@@ -167,6 +185,8 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
   const [viewSynchronized, setViewSynchronized] = useState(false);
   const [remotePointers, setRemotePointers] = useState<Record<string, RemotePointer>>({});
   const [presenceSurfaceParticipants, setPresenceSurfaceParticipants] = useState<LivePresenceSurfaceParticipants>({});
+  const [viewportPresences, setViewportPresences] = useState<Record<string, LiveViewportPresence>>({});
+  const [viewboxSettings, setViewboxSettings] = useLocalStorage("live-viewbox-settings", DEFAULT_VIEWBOX_SETTINGS);
   const [cursorLayoutVersion, setCursorLayoutVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -190,6 +210,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
   const previousReplayRef = useRef<LiveReplayState | null>(null);
   const remoteReplayJSONRef = useRef<string | null>(null);
   const presencesRef = useRef(new Map<string, { presence: LiveMapPresence; at: number }>());
+  const viewportPresencesRef = useRef(new Map<string, { viewport: LiveViewportPresence; at: number }>());
   const presenceListenersRef = useRef(new Set<MapPresenceListener>());
   const pointerSurfacesRef = useRef(new Map<string, string>());
 
@@ -204,6 +225,14 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     else if (!presencesRef.current.delete(participantId)) return;
     notifyPresence();
   }, [notifyPresence]);
+
+  const setRemoteViewportPresence = useCallback((participantId: string, viewport: LiveViewportPresence | null) => {
+    if (viewport) viewportPresencesRef.current.set(participantId, { viewport, at: performance.now() });
+    else viewportPresencesRef.current.delete(participantId);
+    setViewportPresences(Object.fromEntries(
+      Array.from(viewportPresencesRef.current, ([id, entry]) => [id, entry.viewport]),
+    ));
+  }, []);
 
   const setRemotePointerSurface = useCallback((participantId: string, nextSurface: string | undefined) => {
     const previousSurface = pointerSurfacesRef.current.get(participantId);
@@ -379,6 +408,15 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
           sendData({ type: "presence", participantId, presence }, senderID);
         }
         return;
+      } else if (message.type === "viewport_presence") {
+        const participantId = senderID ?? message.participantId;
+        if (!participantId) return;
+        const viewport = parseViewportPresence(message.viewport);
+        setRemoteViewportPresence(participantId, viewport);
+        if (currentRoleRef.current === "leader") {
+          sendData({ type: "viewport_presence", participantId, viewport }, senderID);
+        }
+        return;
       } else {
         return;
       }
@@ -386,7 +424,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     } catch {
       // Ignore malformed peer messages in the proof of concept.
     }
-  }, [applyRemoteReplay, clearSnapshotRetry, sendData, setRemotePointerSurface, setRemotePresence]);
+  }, [applyRemoteReplay, clearSnapshotRetry, sendData, setRemotePointerSurface, setRemotePresence, setRemoteViewportPresence]);
 
   const configureChannel = useCallback((channel: RTCDataChannel, participantID?: string) => {
     channel.onopen = () => {
@@ -463,6 +501,8 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     setRemotePointers({});
     pointerSurfacesRef.current.clear();
     setPresenceSurfaceParticipants({});
+    viewportPresencesRef.current.clear();
+    setViewportPresences({});
     if (presencesRef.current.size > 0) {
       presencesRef.current.clear();
       notifyPresence();
@@ -509,8 +549,10 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
         setParticipantCount((count) => Math.max(0, count - 1));
         setRemotePointerSurface(message.participant_id, undefined);
         setRemotePresence(message.participant_id, null);
+        setRemoteViewportPresence(message.participant_id, null);
         // Tell everyone else they are gone too.
         sendData({ type: "presence", participantId: message.participant_id, presence: null });
+        sendData({ type: "viewport_presence", participantId: message.participant_id, viewport: null });
       } else if (message.type === "session_ended") {
         pauseReplay();
         closeTransport();
@@ -561,7 +603,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
       setError("Could not connect to the live session");
       setStatus("error");
     };
-  }, [closeTransport, createLeaderPeer, ensureParticipantPeer, pauseReplay, sendData, sendSignal, setRemotePointerSurface, setRemotePresence, setSearchParams]);
+  }, [closeTransport, createLeaderPeer, ensureParticipantPeer, pauseReplay, sendData, sendSignal, setRemotePointerSurface, setRemotePresence, setRemoteViewportPresence, setSearchParams]);
 
   const create = useCallback(async (instanceId: string, password?: string) => {
     const response = await fetch("/api/v1/live-sessions", {
@@ -673,6 +715,17 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
         changed = true;
       }
       if (changed) notifyPresence();
+      let viewportsChanged = false;
+      for (const [participantId, entry] of viewportPresencesRef.current) {
+        if (now - entry.at < PRESENCE_STALE_MS) continue;
+        viewportPresencesRef.current.delete(participantId);
+        viewportsChanged = true;
+      }
+      if (viewportsChanged) {
+        setViewportPresences(Object.fromEntries(
+          Array.from(viewportPresencesRef.current, ([id, entry]) => [id, entry.viewport]),
+        ));
+      }
     }, 1000);
     return () => window.clearInterval(interval);
   }, [notifyPresence, status]);
@@ -691,6 +744,66 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     }
     previousReplayRef.current = replayState;
   }, [replayState, role, sendData, status]);
+
+  useEffect(() => {
+    if (status !== "live") return;
+    let timeout: number | null = null;
+    const observed = new WeakSet<Element>();
+    const collect = (): LiveViewportPresence => {
+      const panels: LiveViewportPresence["panels"] = {};
+      for (const element of document.querySelectorAll<HTMLElement>("[data-live-panel-viewport]")) {
+        const panelId = element.dataset.livePanelViewport;
+        if (!panelId || !parseLivePresenceSurface(`panel:${panelId}`)) continue;
+        const rect = element.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) continue;
+        panels[panelId] = { width: rect.width, height: rect.height };
+      }
+      return { window: { width: window.innerWidth, height: window.innerHeight }, panels };
+    };
+    const publish = () => {
+      timeout = null;
+      sendData({
+        type: "viewport_presence",
+        ...(role === "leader" ? { participantId: liveSessionLeaderID } : {}),
+        viewport: collect(),
+      });
+    };
+    const schedule = () => {
+      if (timeout !== null) window.clearTimeout(timeout);
+      timeout = window.setTimeout(publish, 150);
+    };
+    const resizeObserver = new ResizeObserver(schedule);
+    const observePanels = () => {
+      for (const element of document.querySelectorAll("[data-live-panel-viewport]")) {
+        if (observed.has(element)) continue;
+        observed.add(element);
+        resizeObserver.observe(element);
+      }
+      schedule();
+    };
+    const mutationObserver = new MutationObserver(observePanels);
+    mutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-live-panel-viewport"],
+    });
+    window.addEventListener("resize", schedule, { passive: true });
+    observePanels();
+    const heartbeat = window.setInterval(publish, 2000);
+    return () => {
+      if (timeout !== null) window.clearTimeout(timeout);
+      window.clearInterval(heartbeat);
+      window.removeEventListener("resize", schedule);
+      mutationObserver.disconnect();
+      resizeObserver.disconnect();
+      sendData({
+        type: "viewport_presence",
+        ...(role === "leader" ? { participantId: liveSessionLeaderID } : {}),
+        viewport: null,
+      });
+    };
+  }, [role, sendData, status]);
 
   useEffect(() => () => closeTransport(), [closeTransport]);
 
@@ -751,7 +864,10 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     publishMapPresence,
     subscribeMapPresence,
     presenceSurfaceParticipants,
-  }), [code, create, error, inviteURL, join, leave, participantCount, presenceSurfaceParticipants, publishMapPresence, publishView, registerViewApplier, resyncView, role, status, subscribeMapPresence, viewSynchronized]);
+    viewportPresences,
+    viewboxSettings,
+    setViewboxSettings,
+  }), [code, create, error, inviteURL, join, leave, participantCount, presenceSurfaceParticipants, publishMapPresence, publishView, registerViewApplier, resyncView, role, setViewboxSettings, status, subscribeMapPresence, viewboxSettings, viewportPresences, viewSynchronized]);
 
   return (
     <LiveSessionContext.Provider value={value}>
@@ -773,6 +889,60 @@ export function useLiveSession(): LiveSessionContextValue {
 // eslint-disable-next-line react-refresh/only-export-components
 export function useLiveSessionOptional(): LiveSessionContextValue | null {
   return useContext(LiveSessionContext);
+}
+
+export function LivePanelViewboxes({ panelId }: { panelId: string }) {
+  const context = useLiveSessionOptional();
+  if (!context || context.status !== "live") return null;
+  const { showViewboxes, showLabels, showCommonArea } = context.viewboxSettings;
+  if (!showViewboxes && !showCommonArea) return null;
+
+  const boxes = Object.entries(context.viewportPresences)
+    .map(([participantId, viewport]) => ({ participantId, dimensions: viewport.panels[panelId] }))
+    .filter((entry): entry is { participantId: string; dimensions: { width: number; height: number } } => Boolean(entry.dimensions));
+  if (boxes.length === 0) return null;
+  const commonWidth = Math.min(...boxes.map((entry) => entry.dimensions.width));
+  const commonHeight = Math.min(...boxes.map((entry) => entry.dimensions.height));
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[60] overflow-hidden" aria-hidden="true">
+      {showCommonArea && (
+        <div
+          className="absolute left-1/2 top-1/2 border border-dashed border-white/40 bg-white/[0.035]"
+          style={{
+            width: `min(100%, ${commonWidth}px)`,
+            height: `min(100%, ${commonHeight}px)`,
+            transform: "translate(-50%, -50%)",
+          }}
+        />
+      )}
+      {showViewboxes && boxes.map(({ participantId, dimensions }) => {
+        const color = participantColor(participantId);
+        return (
+          <div
+            key={participantId}
+            className="absolute left-1/2 top-1/2 border border-dashed"
+            style={{
+              width: `min(100%, ${dimensions.width}px)`,
+              height: `min(100%, ${dimensions.height}px)`,
+              transform: "translate(-50%, -50%)",
+              borderColor: color,
+              boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 20%, transparent)`,
+            }}
+          >
+            {showLabels && (
+              <span
+                className="absolute left-1 top-1 rounded px-1 py-0.5 text-[9px] font-medium text-black shadow"
+                style={{ backgroundColor: color }}
+              >
+                {participantLabel(participantId)} · {Math.round(dimensions.width)}×{Math.round(dimensions.height)}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 const NO_SURFACE_PARTICIPANTS: readonly string[] = [];

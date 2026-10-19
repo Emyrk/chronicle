@@ -20,6 +20,11 @@ export interface LiveMapPresence {
   target: [number, number, number];
 }
 
+export interface LiveViewportPresence {
+  window: { width: number; height: number };
+  panels: Record<string, { width: number; height: number }>;
+}
+
 const LIVE_PRESENCE_SURFACE_PATTERN = /^[a-z0-9][a-z0-9:_-]{0,63}$/;
 
 /** A panel-owned presence surface that replaces the generic shared cursor. */
@@ -70,7 +75,8 @@ export type LiveSessionDataMessage<TView = unknown> =
   | { type: "view_ack"; requestId: string }
   | { type: "replay"; replay: LiveReplayState }
   | { type: "pointer"; participantId?: string; surfaceId?: string; presenceSurface?: string; x: number; y: number }
-  | { type: "presence"; participantId?: string; presence: LiveMapPresence | null };
+  | { type: "presence"; participantId?: string; presence: LiveMapPresence | null }
+  | { type: "viewport_presence"; participantId?: string; viewport: LiveViewportPresence | null };
 
 function isVector3(value: unknown): value is [number, number, number] {
   return Array.isArray(value) && value.length === 3 && value.every((part) => typeof part === "number" && Number.isFinite(part));
@@ -84,6 +90,37 @@ export function parseMapPresence(value: unknown): LiveMapPresence | null {
   if (mode !== "camera" && mode !== "walk") return null;
   if (!isVector3(position) || !isVector3(target)) return null;
   return { ground, mode, position: [...position], target: [...target] };
+}
+
+export function parseViewportPresence(value: unknown): LiveViewportPresence | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = value as Partial<LiveViewportPresence>;
+  const windowSize = candidate.window;
+  if (
+    !windowSize
+    || typeof windowSize.width !== "number"
+    || typeof windowSize.height !== "number"
+    || !Number.isFinite(windowSize.width)
+    || !Number.isFinite(windowSize.height)
+    || windowSize.width <= 0
+    || windowSize.height <= 0
+  ) return null;
+  const panels: Record<string, { width: number; height: number }> = {};
+  if (candidate.panels && typeof candidate.panels === "object" && !Array.isArray(candidate.panels)) {
+    for (const [panelId, dimensions] of Object.entries(candidate.panels).slice(0, 64)) {
+      if (!parseLivePresenceSurface(`panel:${panelId}`) || !dimensions || typeof dimensions !== "object") continue;
+      const { width, height } = dimensions as { width?: unknown; height?: unknown };
+      if (
+        typeof width === "number"
+        && typeof height === "number"
+        && Number.isFinite(width)
+        && Number.isFinite(height)
+        && width > 0
+        && height > 0
+      ) panels[panelId] = { width, height };
+    }
+  }
+  return { window: { width: windowSize.width, height: windowSize.height }, panels };
 }
 
 /** A participant's hue (degrees), shared by their cursor and their map presence. */

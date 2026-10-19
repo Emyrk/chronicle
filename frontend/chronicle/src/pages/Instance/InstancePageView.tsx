@@ -68,7 +68,7 @@ import { InstanceViewModeSwitch } from "./InstanceViewMode";
 import { isInstanceOverviewEnabled, parseInstanceViewMode, withInstanceViewMode, type InstanceViewMode } from "./instanceViewModeState";
 import { InstanceOverview } from "./Overview/InstanceOverview";
 import { LiveSessionButton } from "./LiveSessionButton";
-import { useAutoJoinLiveSession, useLiveSession } from "./LiveSessionContext";
+import { LivePanelViewboxes, useAutoJoinLiveSession, useLiveSession } from "./LiveSessionContext";
 
 import { showDebugDesktopControls } from "./debugFeatureGate";
 import { InstanceTimingTooltip } from "./InstanceTimingTooltip";
@@ -1258,9 +1258,10 @@ function EventsPanelGrid({
         const isStrip = stripType !== null;
         return (
           <div
+            data-live-panel-viewport={item.id}
             data-live-cursor-surface={`panel:${item.id}`}
             key={item.id}
-            className="min-h-0"
+            className="relative min-h-0"
             style={{
               gridColumn: isMobile ? "1 / -1" : `${item.x + 1} / span ${item.w}`,
               gridRow: isMobile
@@ -1300,6 +1301,7 @@ function EventsPanelGrid({
                 onFiltersChange={(filters) => onPanelFiltersChange(item.id, filters)}
               />
             )}
+            <LivePanelViewboxes panelId={item.id} />
           </div>
         );
       })}

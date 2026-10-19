@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -143,6 +144,26 @@ export function LiveSessionButton({ instanceId, canCreate }: { instanceId: strin
                 Resync with leader
               </DropdownMenuItem>
             )}
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem
+              checked={session.viewboxSettings.showViewboxes}
+              onCheckedChange={(checked) => session.setViewboxSettings((previous) => ({ ...previous, showViewboxes: checked }))}
+            >
+              Show participant viewboxes
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={session.viewboxSettings.showLabels}
+              disabled={!session.viewboxSettings.showViewboxes}
+              onCheckedChange={(checked) => session.setViewboxSettings((previous) => ({ ...previous, showLabels: checked }))}
+            >
+              Show viewbox labels
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={session.viewboxSettings.showCommonArea}
+              onCheckedChange={(checked) => session.setViewboxSettings((previous) => ({ ...previous, showCommonArea: checked }))}
+            >
+              Show common area
+            </DropdownMenuCheckboxItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={session.leave}>
               {session.role === "leader" ? "End session" : "Leave session"}
