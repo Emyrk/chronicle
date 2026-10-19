@@ -135,6 +135,8 @@ func (t *Tracker) recordAuraEpisode(auraMsg *messages.Aura) {
 	if ep := t.FindDirectEpisode(auraMsg.Target, spellID, candidateItems, ts); ep != nil {
 		consumeID = ep.consumeID
 		candidateItems = []int32{ep.itemID}
+	} else if ep := t.findPreCombatCastEpisode(auraMsg.Target, spellID, candidateItems, ts); ep != nil {
+		consumeID = ep.consumeID
 	} else {
 		consumeID = StableAuraConsumeID(auraMsg.Target, chrondbc.SpellID(spellID), ts)
 	}
