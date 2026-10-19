@@ -38,7 +38,7 @@ func NewAlgalon(id guid.GUID, all *characters.Characters) (characters.Character,
 	return &algalonCharacter{
 		Common:      characters.NewCommonCharacter(id, all),
 		all:         all,
-		defeat:      characters.NewScriptedDefeatDetector(id, algalonDefeatConfig()),
+		defeat:      characters.NewScriptedDefeatDetector(id, scriptedSurrenderWithAuraCleanupConfig(algalonAuraCleanupThreshold)),
 		seenPlayers: make(map[guid.GUID]struct{}),
 		deadPlayers: make(map[guid.GUID]struct{}),
 	}, true
@@ -61,9 +61,12 @@ func (c *algalonCharacter) Process(m messages.Message) error {
 	}
 
 	signal, defeated := c.defeat.Observe(m, c.IsActive())
+	if !defeated {
+		return nil
+	}
 	// Algalon removes a similar burst of debuffs when resetting after a wipe.
-	// Confirm the boss is near defeat and enough of the observed raid survived.
-	if !defeated || signal != characters.ScriptedDefeatAuraCleanup || !c.surrenderConfirmed() {
+	// Apply the additional confirmation only to the aura-cleanup fallback.
+	if signal == characters.ScriptedDefeatAuraCleanup && !c.surrenderConfirmed() {
 		return nil
 	}
 

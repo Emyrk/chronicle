@@ -16,16 +16,6 @@ const (
 	thorimEvadeConfirmationWindow      = 5 * time.Second
 )
 
-func algalonDefeatConfig() characters.ScriptedDefeatConfig {
-	return characters.ScriptedDefeatConfig{
-		AuraCleanup: characters.AuraCleanupDefeatConfig{
-			DistinctAuras: algalonAuraCleanupThreshold,
-			BurstWindow:   scriptedAuraCleanupBurstWindow,
-			DamageWindow:  scriptedAuraCleanupDamageWindow,
-		},
-	}
-}
-
 func scriptedSurrenderHitConfig() characters.ScriptedDefeatConfig {
 	return characters.ScriptedDefeatConfig{
 		PositiveOverkill: true,
