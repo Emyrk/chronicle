@@ -13,6 +13,7 @@ import {
   fitFreeMapCameraToPoints,
   zoomFreeMapCamera,
   focusCentre,
+  guardianVisibleAt,
   INITIAL_MAP_FRAMING,
   interpolateViewport,
   manualMapFraming,
@@ -137,6 +138,34 @@ describe("map replay model", () => {
     expect(latestPositionAt(samples, 200)).toBe(samples[1]);
     expect(latestPositionAt(samples, 250)).toBe(samples[1]);
     expect(latestPositionAt(samples, 999)).toBe(samples[2]);
+  });
+
+  it("hides guardians as soon as their position track ends or they die", () => {
+    const effects = createEncounterEffects();
+    const guardianPositions = [
+      { timestampMs: 1_000, x: 1, y: 2, mapId: 1420 },
+      { timestampMs: 5_000, x: 1, y: 2, mapId: 1420 },
+    ];
+
+    expect(guardianVisibleAt(guardianPositions, [], effects, "totem", 5_000)).toBe(true);
+    expect(guardianVisibleAt(guardianPositions, [], effects, "totem", 5_001)).toBe(false);
+
+    effects.deathsByUnit.set("totem", [3_000]);
+    expect(guardianVisibleAt(guardianPositions, [], effects, "totem", 2_999)).toBe(true);
+    expect(guardianVisibleAt(guardianPositions, [], effects, "totem", 3_000)).toBe(false);
+  });
+
+  it("hides a guardian immediately when its health reaches zero", () => {
+    const health = [
+      { timestampMs: 1_000, current: 100, max: 100, absorb: 0 },
+      { timestampMs: 4_000, current: 0, max: 100, absorb: 0 },
+    ];
+    expect(guardianVisibleAt([samples[0]], health, createEncounterEffects(), "totem", 3_999)).toBe(true);
+    expect(guardianVisibleAt([samples[0]], health, createEncounterEffects(), "totem", 4_000)).toBe(false);
+  });
+
+  it("keeps legacy single-sample guardian tracks visible until a lifecycle endpoint exists", () => {
+    expect(guardianVisibleAt([samples[0]], [], createEncounterEffects(), "totem", 99_000)).toBe(true);
   });
 
   it("finds the latest health sample at or before the replay cursor", () => {

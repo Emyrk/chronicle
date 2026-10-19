@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
@@ -158,6 +159,56 @@ func TestUnitTelemetryEmitter_ActivityMessageDoesNotDuplicateTelemetry(t *testin
 	require.Len(t, emitted, 1)
 	_, ok := emitted[0].(*messages.UnitResources)
 	require.True(t, ok)
+}
+
+func TestUnitTelemetryEmitter_InactiveCharacterEmitsPositionEndpoint(t *testing.T) {
+	t.Parallel()
+
+	before := time.Date(2026, 10, 13, 10, 0, 0, 0, time.UTC)
+	start := before.Add(time.Second)
+	inactiveAt := start.Add(30 * time.Second)
+	reactivatedAt := inactiveAt.Add(5 * time.Second)
+	creature := guid.GUID(0xF130000001000001)
+
+	chars := characters.NewCharacters(unitdb.New(), nil, nil)
+	char := characters.NewCommonCharacter(creature, chars)
+	chars.All.Add(char, before)
+	char.Start("test", &messages.Damage{MessageBase: messages.Base(start)})
+
+	emitter := newUnitTelemetryEmitter(chars)
+	var emitted []messages.Message
+	emitter.emit = func(m messages.Message) { emitted = append(emitted, m) }
+	require.NoError(t, emitter.ProcessMessage(false, uuid.Nil, &messages.UnitPosition{
+		MessageBase: messages.Base(before),
+		Unit:        creature,
+		X:           12,
+		Y:           34,
+	}))
+	emitter.FightStarted(uuid.New(), &messages.Damage{MessageBase: messages.Base(start)})
+	require.Len(t, emitted, 1)
+	emitted = nil
+
+	char.End("test", &messages.Damage{MessageBase: messages.Base(inactiveAt)}, period.EndStateReset)
+	emitter.ActivityChange(&messages.Damage{MessageBase: messages.Base(inactiveAt)}, char)
+
+	require.Len(t, emitted, 1)
+	endpoint, ok := emitted[0].(*messages.UnitPosition)
+	require.True(t, ok)
+	assert.True(t, endpoint.IsSynthetic())
+	assert.Equal(t, inactiveAt, endpoint.Date())
+	assert.Equal(t, creature, endpoint.Unit)
+	assert.Equal(t, 12.0, endpoint.X)
+	assert.Equal(t, 34.0, endpoint.Y)
+
+	// The same GUID may become active again during a fight. Ending its previous
+	// track must allow a fresh starting snapshot for the new activity period.
+	emitted = nil
+	char.Start("test", &messages.Damage{MessageBase: messages.Base(reactivatedAt)})
+	emitter.ActivityChange(&messages.Damage{MessageBase: messages.Base(reactivatedAt)}, char)
+	require.Len(t, emitted, 1)
+	restarted, ok := emitted[0].(*messages.UnitPosition)
+	require.True(t, ok)
+	assert.Equal(t, reactivatedAt, restarted.Date())
 }
 
 func TestUnitTelemetryEmitter_DoesNotEmitDeadUnits(t *testing.T) {

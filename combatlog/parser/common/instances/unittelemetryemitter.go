@@ -50,6 +50,8 @@ func (e *UnitTelemetryEmitter) ActivityChange(m messages.Message, chars ...chara
 	for _, char := range chars {
 		if char.IsActive() {
 			e.emitCached(char.ID(), m)
+		} else {
+			e.emitPositionEndpoint(char.ID(), m)
 		}
 	}
 }
@@ -126,6 +128,27 @@ func (e *UnitTelemetryEmitter) emitCachedOnce(id guid.GUID, m messages.Message, 
 	}
 	seen[id] = struct{}{}
 	e.emitCached(id, m)
+}
+
+// emitPositionEndpoint closes a character's position track at the moment it
+// becomes inactive. The map can then remove despawned guardians without
+// treating a timeout/reset as a combat-log death.
+func (e *UnitTelemetryEmitter) emitPositionEndpoint(id guid.GUID, trigger messages.Message) {
+	_, wasEmitted := e.emittedPosition[id]
+	delete(e.emittedPosition, id)
+	delete(e.emittedResource, id)
+	if e.emit == nil || !wasEmitted {
+		return
+	}
+	if _, dead := e.dead[id]; dead {
+		return
+	}
+	cached, ok := e.positions[id]
+	if !ok {
+		return
+	}
+	cached.MessageBase = messages.Base(trigger.Date(), messages.WithSynthetic())
+	e.emit(&cached)
 }
 
 func (e *UnitTelemetryEmitter) emitCached(id guid.GUID, trigger messages.Message) {

@@ -25,6 +25,7 @@ import {
   dominantMapId,
   dungeonMapPoint,
   focusCentre,
+  guardianVisibleAt,
   latestHealthAt,
   replayPositionAt,
   projectionScale,
@@ -327,13 +328,15 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     if (!encounter || cursorMs === null) return [];
     return Array.from(encounter.positionsByUnit.entries()).flatMap(([guid, positions]) => {
       const player = props.context.instance.players?.[guid];
+      const guardian = Boolean(props.context.instance.units?.[guid]?.owner);
       const sample = replayPositionAt(positions, cursorMs, Boolean(player));
       if (!sample) return [];
+      if (guardian && !guardianVisibleAt(positions, encounter.healthByUnit.get(guid) ?? [], encounter.effects, guid, cursorMs)) return [];
       // Across a run, trash that died or despawned must not linger at its last position.
-      if (wholeRun && !props.context.instance.players?.[guid] && isStaleRunSample(sample, cursorMs)) return [];
+      if (wholeRun && !player && isStaleRunSample(sample, cursorMs)) return [];
       return [{ guid, sample, positions }];
     });
-  }, [cursorMs, encounter, props.context.instance.players, wholeRun]);
+  }, [cursorMs, encounter, props.context.instance.players, props.context.instance.units, wholeRun]);
   const mapId = dominantMapId(visibleUnits.map((unit) => unit.sample));
   const representativeSample = visibleUnits.find((unit) => unit.sample.mapId === mapId)?.sample;
   // A run has no single instance encounter: the first with a map stands in for artwork lookup.

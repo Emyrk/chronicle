@@ -6,6 +6,7 @@ import type {
   WowMapManifest,
 } from "@/pages/Technical/mapGallery";
 import type { MapEncounterPositions, MapHealthSample, MapPositionSample } from "./map.processor";
+import { isDeadAt, type EncounterEffects } from "./replayEffects";
 
 export interface MapPoint {
   leftPercent: number;
@@ -292,6 +293,26 @@ export const INITIAL_POSITION_LEAD_MS = 10;
 function lerpAngle(from: number, to: number, t: number): number {
   const delta = Math.atan2(Math.sin(to - from), Math.cos(to - from));
   return from + delta * t;
+}
+
+/**
+ * Guardians disappear when killed or once their position track's explicit
+ * inactivity endpoint has passed. Older captures can contain only one initial
+ * position and no endpoint, so retain those rather than expiring an active,
+ * stationary guardian immediately.
+ */
+export function guardianVisibleAt(
+  positions: readonly MapPositionSample[],
+  health: readonly MapHealthSample[],
+  effects: EncounterEffects,
+  guid: string,
+  cursorMs: number,
+): boolean {
+  if (isDeadAt(effects, guid, cursorMs)) return false;
+  const resources = latestHealthAt(health, cursorMs);
+  if (resources && resources.current <= 0) return false;
+  if (positions.length < 2) return true;
+  return cursorMs <= positions[positions.length - 1].timestampMs;
 }
 
 // Like latestPositionAt, but linearly blends toward the next sample while both
