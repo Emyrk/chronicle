@@ -30,6 +30,7 @@ func TestContentSecurityPolicy(t *testing.T) {
 	assert.Contains(t, csp, "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:")
 	assert.Contains(t, csp, "img-src 'self' data: blob: https://www.googletagmanager.com")
 	assert.Contains(t, csp, "connect-src 'self' blob: https://raw.githubusercontent.com")
+	assert.NotContains(t, csp, "tweakcn.com")
 	assert.Contains(t, csp, "frame-ancestors 'none'")
 	assert.Contains(t, csp, "worker-src 'self' blob:")
 }
