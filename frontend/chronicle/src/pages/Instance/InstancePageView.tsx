@@ -63,6 +63,7 @@ import {
   sameEncounterSelection,
   validateSharedViewPayload,
 } from "./sharedViewImport";
+import { samePageState, updateImportedPageState } from "./pageStateSync";
 import { InstanceViewModeSwitch } from "./InstanceViewMode";
 import { isInstanceOverviewEnabled, parseInstanceViewMode, withInstanceViewMode, type InstanceViewMode } from "./instanceViewModeState";
 import { InstanceOverview } from "./Overview/InstanceOverview";
@@ -2606,7 +2607,7 @@ function InstancePageViewContent({
   const [pageState, setPageState] = useState<unknown>(undefined);
   const [importedPageState, setImportedPageState] = useState<{ key: number; state: unknown }>({ key: 0, state: undefined });
   const onPageStateChange = useCallback((state: unknown) => {
-    setPageState(state);
+    setPageState((previous: unknown) => samePageState(previous, state) ? previous : state);
   }, []);
   const pageStateBinding = useMemo(
     () => ({ key: importedPageState.key, initial: importedPageState.state, onChange: onPageStateChange }),
@@ -3218,8 +3219,8 @@ function InstancePageViewContent({
         : PRESET_LAYOUTS.find((preset) => preset.kind === "page" && preset.pageType === sharedPageType);
       const sharedPageState = sharedPageLayout?.pageState;
       setActivePresetId(pagePreset?.id ?? DEFAULT_PRESET_ID);
-      setPageState(sharedPageState);
-      setImportedPageState((prev) => ({ key: prev.key + 1, state: sharedPageState }));
+      setPageState((previous: unknown) => samePageState(previous, sharedPageState) ? previous : sharedPageState);
+      setImportedPageState((previous: { key: number; state: unknown }) => updateImportedPageState(previous, sharedPageState));
     }
 
     // Restore per-panel filters if present in the payload.
