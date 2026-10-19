@@ -45,12 +45,12 @@ export const SERVERS: ServerEntry[] = [
 
 /**
  * Additional Chronicle deployment URLs to auto-discover via /api/v1/discovery.
+ * The legacy endpoint includes its subtenants, such as Forever, in its response.
  * Discovered servers are merged on top of SERVERS by chronicleUrl match
  * (enriching with instances24h, live branding, etc). New URLs not in SERVERS
  * are appended to the list.
  */
 export const DISCOVERY_URLS: string[] = [
-  "https://forever.chronicleclassic.com",
   "https://legacy.chronicleclassic.com",
 ];
 
