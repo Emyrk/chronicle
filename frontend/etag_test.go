@@ -10,7 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/version"
 )
 
-func TestETagMiddlewareCachesFontAssets(t *testing.T) {
+func TestETagMiddlewareCachesStaticAssets(t *testing.T) {
 	originalGitTag := version.GitTag
 	originalGitCommit := version.GitCommit
 	originalBuildTime := version.BuildTime
@@ -27,14 +27,19 @@ func TestETagMiddlewareCachesFontAssets(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	for _, requestPath := range []string{
-		"/assets/inter-latin-400-normal-hash.woff2",
-		"/assets/legacy-font-hash.woff",
+	for _, test := range []struct {
+		requestPath  string
+		cacheControl string
+	}{
+		{requestPath: "/assets/app-hash.js", cacheControl: "public, max-age=86400"},
+		{requestPath: "/assets/app-hash.css", cacheControl: "public, max-age=86400"},
+		{requestPath: "/assets/inter-latin-400-normal-hash.woff2", cacheControl: "public, max-age=604800"},
+		{requestPath: "/assets/legacy-font-hash.woff", cacheControl: "public, max-age=604800"},
 	} {
 		recorder := httptest.NewRecorder()
-		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, requestPath, nil))
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, test.requestPath, nil))
 
-		require.Equal(t, "public, max-age=86400", recorder.Header().Get("Cache-Control"), requestPath)
-		require.NotEmpty(t, recorder.Header().Get("ETag"), requestPath)
+		require.Equal(t, test.cacheControl, recorder.Header().Get("Cache-Control"), test.requestPath)
+		require.NotEmpty(t, recorder.Header().Get("ETag"), test.requestPath)
 	}
 }

@@ -17,8 +17,13 @@ func etagMiddleware(next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ext := path.Ext(r.URL.Path)
-		if ext != ".js" && ext != ".css" && ext != ".woff" && ext != ".woff2" {
+		var cacheControl string
+		switch path.Ext(r.URL.Path) {
+		case ".js", ".css":
+			cacheControl = "public, max-age=86400"
+		case ".woff", ".woff2":
+			cacheControl = "public, max-age=604800"
+		default:
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -27,7 +32,7 @@ func etagMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		w.Header().Set("ETag", etag)
-		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.Header().Set("Cache-Control", cacheControl)
 		next.ServeHTTP(w, r)
 	})
 }
