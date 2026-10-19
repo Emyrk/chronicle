@@ -12,7 +12,6 @@ export function createStatusPanel(): PanelDefinition<StatusResult, StatusProcess
     keybinds: [],
     syncDataMode: "full",
     supportsFiltering: true,
-    underConstruction: true,
     render: (props: PanelRenderProps<StatusResult>) => <StatusContent {...props} />,
   };
 }

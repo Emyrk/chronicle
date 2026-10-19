@@ -16,7 +16,6 @@ export function createResistsPanel(): PanelDefinition<ResistsResult, DamageProce
     icon: <ShieldAlert className="h-4 w-4" />,
     keybinds: [{ keys: "Esc", action: "Return from a focused player to the player list" }],
     supportsPerSecond: false,
-    underConstruction: true,
     supportsFiltering: true,
     fixedFilters: [
       { type: "target_type" as const, value: ["player", "pet"], applyTo: ["damage"] },
