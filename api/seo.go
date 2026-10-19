@@ -53,7 +53,7 @@ func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
 		if branding.DisplayName != "" {
 			resolved.Title += " by Chronicle"
 		}
-		resolved.Description = defaultSEODescription
+		resolved.Description = firstNonEmpty(branding.Description, branding.Tagline, defaultSEODescription)
 		resolved.Favicon = branding.Favicon
 		resolved.ThemeCSS = buildThemeCSS(branding)
 		resolved.ImageURL = absoluteAssetURL(api, r, firstNonEmpty(branding.BackgroundBanner, branding.LogoWide, branding.SquareLogo))
@@ -175,6 +175,15 @@ var sitemapPaths = []string{
 	"/leaderboards/statistics",
 	"/leaderboards/speedruns",
 	"/talents",
+	"/talents/warrior",
+	"/talents/paladin",
+	"/talents/hunter",
+	"/talents/rogue",
+	"/talents/priest",
+	"/talents/shaman",
+	"/talents/mage",
+	"/talents/warlock",
+	"/talents/druid",
 	"/wowdb",
 	"/technical",
 	"/census",

@@ -121,6 +121,12 @@ export function TalentCalculatorPage() {
         ? talentData?.classes?.[String(selectedClassId)]
         : undefined;
 
+  const seoProductName = siteConfig?.dataset_flavor?.includes("wow-forever") ? "WoW Forever" : "";
+  const talentPageTitle = [seoProductName, selectedOption?.name, "Talent Calculator"].filter(Boolean).join(" ");
+  const talentPageDescription = selectedOption
+    ? `Plan, compare, and share ${seoProductName ? `${seoProductName} ` : ""}${selectedOption.name} talent builds.`
+    : `Plan, compare, and share ${seoProductName ? `${seoProductName} ` : ""}class talent builds.`;
+
   const isMobile = useIsMobile();
 
   // Top Builds "Show all" overlay: store the ranking cohort in a compact URL
@@ -227,8 +233,8 @@ export function TalentCalculatorPage() {
     return (
       <div className="container mx-auto px-4 py-4 max-w-7xl">
         <div className="mb-4">
-          <h1 className="text-2xl font-bold tracking-tight">Talent Calculator</h1>
-          <p className="mt-1 text-sm text-zinc-400">Pick a class or pet type to start planning.</p>
+          <h1 className="text-2xl font-bold tracking-tight">{talentPageTitle}</h1>
+          <p className="mt-1 text-sm text-zinc-400">{talentPageDescription} Pick a class or pet type to start planning.</p>
         </div>
         <div className="grid grid-cols-2 gap-3">
           {availableClasses.map((cls) => (
@@ -274,9 +280,7 @@ export function TalentCalculatorPage() {
   const mobileHeader = (
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0">
-        <h1 className="truncate text-lg font-bold tracking-tight">
-          {selectedOption ? `${selectedOption.name} Talents` : "Talent Calculator"}
-        </h1>
+        <h1 className="truncate text-lg font-bold tracking-tight">{talentPageTitle}</h1>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {diff && (
@@ -306,7 +310,8 @@ export function TalentCalculatorPage() {
       {/* Header — on mobile it lives inside the viewer card instead */}
       {(!isMobile || !classTreeData) && (
         <div className="mb-3">
-          <h1 className="text-2xl font-bold tracking-tight">Talent Calculator</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{talentPageTitle}</h1>
+          <p className="mt-1 text-sm text-zinc-400">{talentPageDescription}</p>
         </div>
       )}
 
