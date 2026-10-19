@@ -28,6 +28,33 @@ func TestPublicTierName(t *testing.T) {
 	require.Equal(t, "supporter", string(ProductSupporter))
 }
 
+func TestSubscriptionHasCurrentBillingStateIsIndependentFromCheckoutAndAccess(t *testing.T) {
+	t.Parallel()
+
+	providerSubscriptionID := pgtype.Text{String: "sub_123", Valid: true}
+	for _, tc := range []struct {
+		name                  string
+		status                stripe.SubscriptionStatus
+		hasReveredEntitlement bool
+		want                  bool
+	}{
+		{name: "active", status: stripe.SubscriptionStatusActive, want: true},
+		{name: "payment issue", status: stripe.SubscriptionStatusUnpaid, want: true},
+		{name: "paused", status: stripe.SubscriptionStatusPaused, want: true},
+		{name: "canceled with remaining access", status: stripe.SubscriptionStatusCanceled, hasReveredEntitlement: true, want: true},
+		{name: "canceled without access", status: stripe.SubscriptionStatusCanceled, want: false},
+		{name: "incomplete expired", status: stripe.SubscriptionStatusIncompleteExpired, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, subscriptionHasCurrentBillingState(database.BillingSubscription{
+				ProviderSubscriptionID: providerSubscriptionID,
+				Status:                 string(tc.status),
+			}, tc.hasReveredEntitlement))
+		})
+	}
+}
+
 func TestSubscriptionBlocksCheckoutMatchesManageableSubscriptionState(t *testing.T) {
 	t.Parallel()
 
@@ -38,6 +65,7 @@ func TestSubscriptionBlocksCheckoutMatchesManageableSubscriptionState(t *testing
 		name                  string
 		status                stripe.SubscriptionStatus
 		end                   pgtype.Timestamptz
+		cancelAt              pgtype.Timestamptz
 		hasReveredEntitlement bool
 		want                  bool
 	}{
@@ -46,6 +74,7 @@ func TestSubscriptionBlocksCheckoutMatchesManageableSubscriptionState(t *testing
 		{name: "canceled with remaining entitlement", status: stripe.SubscriptionStatusCanceled, end: periodEnd, hasReveredEntitlement: true, want: true},
 		{name: "refunded canceled without entitlement", status: stripe.SubscriptionStatusCanceled, end: periodEnd, want: false},
 		{name: "past due in grace period", status: stripe.SubscriptionStatusPastDue, end: periodEnd, want: true},
+		{name: "explicit cancellation date overrides a later period end", status: stripe.SubscriptionStatusActive, end: periodEnd, cancelAt: pgtype.Timestamptz{Time: now.Add(-4 * 24 * time.Hour), Valid: true}, want: false},
 		{name: "expired beyond grace period", status: stripe.SubscriptionStatusCanceled, end: pgtype.Timestamptz{Time: now.Add(-4 * 24 * time.Hour), Valid: true}, hasReveredEntitlement: true, want: false},
 		{name: "unpaid", status: stripe.SubscriptionStatusUnpaid, end: periodEnd, want: false},
 		{name: "missing period end", status: stripe.SubscriptionStatusActive, want: false},
@@ -55,20 +84,70 @@ func TestSubscriptionBlocksCheckoutMatchesManageableSubscriptionState(t *testing
 			require.Equal(t, tc.want, subscriptionBlocksCheckout(now, database.BillingSubscription{
 				Status:           string(tc.status),
 				CurrentPeriodEnd: tc.end,
+				CancelAt:         tc.cancelAt,
 			}, tc.hasReveredEntitlement))
 		})
 	}
+}
+
+func TestBillingSummarySeparatesCancellationRenewalAccessAndCheckoutState(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	periodEnd := time.Date(2027, time.April, 18, 0, 0, 0, 0, time.UTC)
+	cancelAt := time.Now().Add(30 * 24 * time.Hour).UTC().Truncate(time.Second)
+	store := &entitlementStore{
+		billingEntitled: true,
+		subscription: database.BillingSubscription{
+			UserID:                 userID,
+			Provider:               ProviderStripe,
+			ProviderCustomerID:     "cus_canceling",
+			ProviderSubscriptionID: pgtype.Text{String: "sub_canceling", Valid: true},
+			Status:                 string(stripe.SubscriptionStatusActive),
+			CurrentPeriodEnd:       pgtype.Timestamptz{Time: periodEnd, Valid: true},
+			CancelAtPeriodEnd:      false,
+			CancelAt:               pgtype.Timestamptz{Time: cancelAt, Valid: true},
+		},
+	}
+	service := &Service{
+		store:         store,
+		stripe:        &stripe.Client{},
+		webhookSecret: "whsec_test",
+		priceIDs:      []string{"price_monthly"},
+		accessURL:     &url.URL{Scheme: "https", Host: "example.com"},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/me/billing", nil)
+	req = req.WithContext(chronauth.WithClaims(req.Context(), &claims.Claims{Subject: userID}))
+	rec := httptest.NewRecorder()
+	service.Summary(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var summary chroniclesdk.BillingSummary
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &summary))
+	require.True(t, summary.HasBillingAccount)
+	require.True(t, summary.HasSubscription)
+	require.False(t, summary.CanCheckout)
+	require.True(t, summary.AdsFree)
+	require.Equal(t, string(stripe.SubscriptionStatusActive), summary.Status)
+	require.False(t, summary.CancelAtPeriodEnd)
+	require.Equal(t, &periodEnd, summary.CurrentPeriodEnd)
+	require.Equal(t, &cancelAt, summary.CancelAt)
+	require.Empty(t, summary.Prices)
 }
 
 func TestBillingSummaryKeepsFormerBillingAccountVisibleWhileAllowingResubscription(t *testing.T) {
 	t.Parallel()
 
 	userID := uuid.New()
+	periodEnd := time.Date(2026, time.November, 15, 0, 0, 0, 0, time.UTC)
+	cancelAt := time.Date(2026, time.November, 10, 0, 0, 0, 0, time.UTC)
 	store := &entitlementStore{
 		subscription: database.BillingSubscription{
 			UserID:           userID,
 			Status:           string(stripe.SubscriptionStatusCanceled),
-			CurrentPeriodEnd: pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
+			CurrentPeriodEnd: pgtype.Timestamptz{Time: periodEnd, Valid: true},
+			CancelAt:         pgtype.Timestamptz{Time: cancelAt, Valid: true},
 		},
 	}
 	price := testStripePrice("price_monthly", 200, stripe.PriceRecurringIntervalMonth, 1)
@@ -93,7 +172,10 @@ func TestBillingSummaryKeepsFormerBillingAccountVisibleWhileAllowingResubscripti
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &summary))
 	require.True(t, summary.HasBillingAccount)
 	require.False(t, summary.HasSubscription)
+	require.True(t, summary.CanCheckout)
 	require.Equal(t, string(stripe.SubscriptionStatusCanceled), summary.Status)
+	require.Equal(t, &periodEnd, summary.CurrentPeriodEnd)
+	require.Equal(t, &cancelAt, summary.CancelAt)
 	require.Len(t, summary.Prices, 1)
 }
 
@@ -578,6 +660,28 @@ func TestStripeSubscriptionPurchaseRejectsInvalidItems(t *testing.T) {
 	})
 	_, err = stripeSubscriptionPurchase(sub)
 	require.ErrorContains(t, err, "multiple products or prices")
+}
+
+func TestUpsertSubscriptionPreservesExplicitCancellationFields(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	periodEnd := time.Date(2027, time.April, 18, 23, 25, 45, 0, time.UTC)
+	cancelAt := time.Date(2026, time.November, 18, 23, 25, 45, 0, time.UTC)
+	store := &entitlementStore{}
+	s := New(Options{Store: store, PriceIDs: []string{"price_annual"}})
+	sub := testStripeSubscription("prod_supporter", "price_annual", periodEnd)
+	sub.ID = "sub_canceling"
+	sub.Customer = &stripe.Customer{ID: "cus_canceling"}
+	sub.Status = stripe.SubscriptionStatusActive
+	sub.CancelAt = cancelAt.Unix()
+	sub.CancelAtPeriodEnd = false
+
+	err := s.upsertSubscription(context.Background(), userID, ProductSupporter, sub)
+	require.NoError(t, err)
+	require.Equal(t, pgtype.Timestamptz{Time: periodEnd, Valid: true}, store.upsert.CurrentPeriodEnd)
+	require.False(t, store.upsert.CancelAtPeriodEnd)
+	require.Equal(t, pgtype.Timestamptz{Time: cancelAt, Valid: true}, store.upsert.CancelAt)
 }
 
 func TestUpsertSubscriptionPersistsPurchaseIdentity(t *testing.T) {

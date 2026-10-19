@@ -245,7 +245,8 @@ CREATE TABLE billing_subscriptions (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     provider text DEFAULT 'stripe'::text NOT NULL,
     provider_product_id text,
-    provider_price_id text
+    provider_price_id text,
+    cancel_at timestamp with time zone
 );
 
 CREATE TABLE billing_webhook_events (

@@ -262,6 +262,7 @@ func (s *Service) upsertSubscriptionIfChanged(ctx context.Context, userID uuid.U
 		Status:                 string(sub.Status),
 		CurrentPeriodEnd:       purchase.periodEnd,
 		CancelAtPeriodEnd:      sub.CancelAtPeriodEnd,
+		CancelAt:               stripeSubscriptionCancelAt(sub),
 	})
 	if err != nil {
 		return false, fmt.Errorf("upsert billing subscription: %w", err)
@@ -281,6 +282,7 @@ func (s *Service) cancelSubscriptionIfChanged(ctx context.Context, sub database.
 		Status:                 string(stripe.SubscriptionStatusCanceled),
 		CurrentPeriodEnd:       sub.CurrentPeriodEnd,
 		CancelAtPeriodEnd:      sub.CancelAtPeriodEnd,
+		CancelAt:               sub.CancelAt,
 	})
 	if err != nil {
 		return false, fmt.Errorf("mark billing subscription canceled: %w", err)

@@ -144,6 +144,8 @@ func TestReconciliationCountsChangedNoopAndInvalidMetadata(t *testing.T) {
 	validChanged := testStripeSubscription("prod_supporter", "price_monthly", time.Now().Add(time.Hour))
 	validChanged.ID = "sub_changed"
 	validChanged.Customer = &stripe.Customer{ID: "cus_changed"}
+	cancelAt := time.Date(2026, time.November, 18, 23, 25, 45, 0, time.UTC)
+	validChanged.CancelAt = cancelAt.Unix()
 	validChanged.Metadata = map[string]string{"chronicle_user_id": userID.String(), "chronicle_product_code": string(ProductSupporter)}
 	validNoop := testStripeSubscription("prod_supporter", "price_monthly", time.Now().Add(time.Hour))
 	validNoop.ID = "sub_noop"
@@ -182,6 +184,7 @@ func TestReconciliationCountsChangedNoopAndInvalidMetadata(t *testing.T) {
 	require.Equal(t, int32(3), store.completion.SubscriptionsSeen)
 	require.Equal(t, int32(1), store.completion.SubscriptionsChanged)
 	require.Equal(t, int32(1), store.completion.SubscriptionsSkippedInvalid)
+	require.Equal(t, pgtype.Timestamptz{Time: cancelAt, Valid: true}, store.conditionalUpserts[0].CancelAt)
 	require.Equal(t, int32(3), store.completion.EntitlementCustomersFound)
 	require.Equal(t, int32(3), store.completion.EntitlementCustomersSynced)
 }

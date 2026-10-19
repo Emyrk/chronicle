@@ -23,9 +23,11 @@ type BillingSummary struct {
 	AdsFree           bool           `json:"ads_free"`
 	HasSubscription   bool           `json:"has_subscription"`
 	HasBillingAccount bool           `json:"has_billing_account"`
+	CanCheckout       bool           `json:"can_checkout"`
 	Status            string         `json:"status,omitempty"`
 	CurrentPeriodEnd  *time.Time     `json:"current_period_end,omitempty"`
 	CancelAtPeriodEnd bool           `json:"cancel_at_period_end,omitempty"`
+	CancelAt          *time.Time     `json:"cancel_at,omitempty"`
 	CustomerID        string         `json:"customer_id,omitempty"`
 	Entitlements      []string       `json:"entitlements"`
 	Prices            []BillingPrice `json:"prices,omitempty"`
@@ -64,6 +66,7 @@ type AdminBillingSubscription struct {
 	Status                 string     `json:"status"`
 	CurrentPeriodEnd       *time.Time `json:"current_period_end,omitempty"`
 	CancelAtPeriodEnd      bool       `json:"cancel_at_period_end"`
+	CancelAt               *time.Time `json:"cancel_at,omitempty"`
 	UpdatedAt              time.Time  `json:"updated_at"`
 }
 

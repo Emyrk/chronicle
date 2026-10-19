@@ -289,6 +289,8 @@ function useOpenBilling() {
 /** WoW achievement row: greyed out with a reputation progress bar until earned. */
 function Achievement({ billing }: { billing?: BillingSummary }) {
   const revered = billing?.ads_free ?? false
+  const subscriptionState = billing ? billingSubscriptionState(billing) : null
+  const billingDate = subscriptionState?.effectiveDate
   const standing = revered ? SUPPORTER_TIER_NAME : billingTierLabel(billing?.tier ?? "free")
   const standingIndex = Math.max(0, STANDINGS.indexOf(standing as (typeof STANDINGS)[number]))
   // Free users show a sliver of progress into Friendly; subscribers fill through Revered.
@@ -316,10 +318,10 @@ function Achievement({ billing }: { billing?: BillingSummary }) {
         </div>
         <div className="flex w-16 shrink-0 flex-col items-center gap-1">
           <PointsShield earned={revered} />
-          {revered && billing?.current_period_end ? (
+          {revered && billingDate ? (
             <span className="text-[10px] text-zinc-400">
-              {billing.cancel_at_period_end ? "Ends" : "Renews"}{" "}
-              {new Date(billing.current_period_end).toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "2-digit" })}
+              {subscriptionState?.cancellationScheduled || subscriptionState?.subscriptionEnded ? "Ends" : "Renews"}{" "}
+              {new Date(billingDate).toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "2-digit" })}
             </span>
           ) : null}
         </div>
@@ -467,7 +469,8 @@ function FormerSubscriberPanel({ billing }: { billing: BillingSummary }) {
 function FormerSubscriptionHistory({ billing }: { billing: BillingSummary }) {
   const portal = useCreateBillingPortal()
   const openBilling = useOpenBilling()
-  const periodEnd = billing.current_period_end ? new Date(billing.current_period_end).toLocaleDateString() : null
+  const subscriptionState = billingSubscriptionState(billing)
+  const displayDate = subscriptionState.effectiveDate ? new Date(subscriptionState.effectiveDate).toLocaleDateString() : null
 
   return (
     <FramePanel title="Previous Subscription">
@@ -479,13 +482,13 @@ function FormerSubscriptionHistory({ billing }: { billing: BillingSummary }) {
         {billing.status ? (
           <div className="flex justify-between gap-3">
             <dt className="text-muted-foreground">Status</dt>
-            <dd className="capitalize text-white">{billing.status === "canceled" ? "Ended" : billing.status}</dd>
+            <dd className="text-white">{subscriptionState.statusLabel}</dd>
           </div>
         ) : null}
-        {periodEnd ? (
+        {displayDate ? (
           <div className="flex justify-between gap-3">
-            <dt className="text-muted-foreground">Original period end</dt>
-            <dd className="text-white">{periodEnd}</dd>
+            <dt className="text-muted-foreground">{subscriptionState.periodLabel}</dt>
+            <dd className="text-white">{displayDate}</dd>
           </div>
         ) : null}
       </dl>
@@ -606,14 +609,17 @@ function ReveredSubscriptionSettings({ billing }: { billing: BillingSummary }) {
   const portal = useCreateBillingPortal()
   const cancel = useCreateBillingCancel()
   const openBilling = useOpenBilling()
-  const periodEnd = billing.current_period_end ? new Date(billing.current_period_end).toLocaleDateString() : null
   const {
     hasReveredAccess,
+    displayState,
     subscriptionEnded,
     cancellationScheduled,
+    statusLabel,
     heading,
     periodLabel,
+    effectiveDate,
   } = billingSubscriptionState(billing)
+  const displayDate = effectiveDate ? new Date(effectiveDate).toLocaleDateString() : null
 
   return (
     <section className="max-w-5xl space-y-8">
@@ -626,9 +632,11 @@ function ReveredSubscriptionSettings({ billing }: { billing: BillingSummary }) {
           {subscriptionEnded && !hasReveredAccess
             ? "Your subscription and Revered access have ended. Stripe will not renew or charge this subscription again."
             : subscriptionEnded
-              ? `Your subscription has ended, but you remain Revered${periodEnd ? ` until ${periodEnd}` : " while your paid access finishes"}.`
-              : hasReveredAccess
-                ? "Thank you for supporting Chronicle. Your Revered rewards stay active through the end of your paid billing period."
+              ? `Your subscription has ended, but you remain Revered${displayDate ? ` until ${displayDate}` : " while your paid access finishes"}.`
+              : cancellationScheduled
+                ? `Your subscription will not renew. You remain Revered${displayDate ? ` until ${displayDate}` : " until your paid access finishes"}.`
+                : hasReveredAccess
+                  ? "Thank you for supporting Chronicle. Your Revered rewards stay active through the end of your paid billing period."
                 : "Your subscription is recorded, but Stripe has not granted an active Revered entitlement yet."}
         </p>
       </div>
@@ -647,15 +655,13 @@ function ReveredSubscriptionSettings({ billing }: { billing: BillingSummary }) {
             {billing.status ? (
               <div className="flex justify-between gap-3">
                 <dt className="text-muted-foreground">Status</dt>
-                <dd className="capitalize text-white">
-                  {subscriptionEnded ? "Ended" : cancellationScheduled ? "Canceling" : billing.status}
-                </dd>
+                <dd className="text-white">{statusLabel}</dd>
               </div>
             ) : null}
-            {periodEnd ? (
+            {displayDate ? (
               <div className="flex justify-between gap-3">
                 <dt className="text-muted-foreground">{periodLabel}</dt>
-                <dd className="text-white">{periodEnd}</dd>
+                <dd className="text-white">{displayDate}</dd>
               </div>
             ) : null}
           </dl>
@@ -668,22 +674,34 @@ function ReveredSubscriptionSettings({ billing }: { billing: BillingSummary }) {
                   : "Revered access ended"
                 : cancellationScheduled
                   ? "Cancellation scheduled"
-                  : "Manage or cancel"}
+                  : displayState === "payment_issue"
+                    ? "Payment needs attention"
+                    : displayState === "paused"
+                      ? "Subscription paused"
+                      : "Manage or cancel"}
             </h4>
             {subscriptionEnded ? (
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
                 {hasReveredAccess
-                  ? `Stripe will not renew or charge this subscription again. Your existing Revered access remains available${periodEnd ? ` until ${periodEnd}` : " until the paid period finishes"}.`
+                  ? `Stripe will not renew or charge this subscription again. Your existing Revered access remains available${displayDate ? ` until ${displayDate}` : " until the paid period finishes"}.`
                   : "Stripe will not renew or charge this subscription again. No active Revered entitlement is recorded, so its rewards are no longer available."}
               </p>
             ) : cancellationScheduled ? (
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                Your subscription will not renew. Your Revered rewards remain available until{periodEnd ? ` ${periodEnd}` : " the end of your billing period"}.
+                Your subscription will not renew. Your Revered rewards remain available until{displayDate ? ` ${displayDate}` : " the end of your paid access"}.
+              </p>
+            ) : displayState === "payment_issue" ? (
+              <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+                Stripe could not confirm the latest payment. Open the billing portal to update your payment method or review the invoice.
+              </p>
+            ) : displayState === "paused" ? (
+              <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+                Stripe reports this subscription as paused. Open the billing portal to review its billing state.
               </p>
             ) : (
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
                 Update your payment method or view invoices in the Stripe billing portal. If you cancel, your Revered
-                rewards stay active until{periodEnd ? ` ${periodEnd}` : " the end of your billing period"}.
+                rewards stay active until{displayDate ? ` ${displayDate}` : " the end of your billing period"}.
               </p>
             )}
           </div>

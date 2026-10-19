@@ -104,6 +104,7 @@ export interface AdminBillingSubscription {
     readonly status: string;
     readonly current_period_end?: string;
     readonly cancel_at_period_end: boolean;
+    readonly cancel_at?: string;
     readonly updated_at: string;
 }
 
@@ -474,9 +475,11 @@ export interface BillingSummary {
     readonly ads_free: boolean;
     readonly has_subscription: boolean;
     readonly has_billing_account: boolean;
+    readonly can_checkout: boolean;
     readonly status?: string;
     readonly current_period_end?: string;
     readonly cancel_at_period_end?: boolean;
+    readonly cancel_at?: string;
     readonly customer_id?: string;
     readonly entitlements: readonly string[];
     readonly prices?: readonly BillingPrice[];

@@ -160,10 +160,15 @@ func (s *Service) Summary(w http.ResponseWriter, r *http.Request) {
 	}
 	if sub, err := s.store.GetBillingSubscriptionByUserID(r.Context(), claims.Subject); err == nil {
 		result.HasBillingAccount = true
-		result.HasSubscription = subscriptionBlocksCheckout(time.Now(), sub, adFree)
+		result.HasSubscription = subscriptionHasCurrentBillingState(sub, adFree)
+		result.CanCheckout = !subscriptionBlocksCheckout(time.Now(), sub, adFree)
 		result.Status = sub.Status
 		result.CancelAtPeriodEnd = sub.CancelAtPeriodEnd
 		result.CustomerID = sub.ProviderCustomerID
+		if sub.CancelAt.Valid {
+			cancelAt := sub.CancelAt.Time
+			result.CancelAt = &cancelAt
+		}
 		if sub.CurrentPeriodEnd.Valid {
 			result.CurrentPeriodEnd = &sub.CurrentPeriodEnd.Time
 		}
@@ -180,7 +185,10 @@ func (s *Service) Summary(w http.ResponseWriter, r *http.Request) {
 	for _, entitlement := range entitlements {
 		result.Entitlements = append(result.Entitlements, entitlement.EntitlementKey)
 	}
-	if result.Enabled && !result.HasSubscription {
+	if !result.HasBillingAccount {
+		result.CanCheckout = true
+	}
+	if result.Enabled && result.CanCheckout {
 		result.Prices, err = s.supporterPrices(r.Context())
 		if err != nil {
 			httpapi.InternalServerError(w, err)
@@ -255,6 +263,10 @@ func (s *Service) AdminActivity(w http.ResponseWriter, r *http.Request) {
 			Status:                 sub.Status,
 			CancelAtPeriodEnd:      sub.CancelAtPeriodEnd,
 			UpdatedAt:              sub.UpdatedAt.Time,
+		}
+		if sub.CancelAt.Valid {
+			cancelAt := sub.CancelAt.Time
+			item.CancelAt = &cancelAt
 		}
 		if sub.CurrentPeriodEnd.Valid {
 			periodEnd := sub.CurrentPeriodEnd.Time
@@ -432,6 +444,7 @@ func (s *Service) markSubscriptionCanceled(ctx context.Context, subscriptionID s
 		Status:                 string(stripe.SubscriptionStatusCanceled),
 		CurrentPeriodEnd:       row.CurrentPeriodEnd,
 		CancelAtPeriodEnd:      row.CancelAtPeriodEnd,
+		CancelAt:               row.CancelAt,
 	})
 	if err != nil {
 		return "", fmt.Errorf("mark deleted subscription canceled: %w", err)
@@ -474,6 +487,13 @@ func stripeSubscriptionPurchase(sub *stripe.Subscription) (stripePurchase, error
 	return purchase, nil
 }
 
+func stripeSubscriptionCancelAt(sub *stripe.Subscription) pgtype.Timestamptz {
+	if sub.CancelAt <= 0 {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: time.Unix(sub.CancelAt, 0).UTC(), Valid: true}
+}
+
 func (s *Service) upsertSubscription(ctx context.Context, userID uuid.UUID, product ProductCode, sub *stripe.Subscription) error {
 	if sub.Customer == nil || sub.Customer.ID == "" {
 		return fmt.Errorf("subscription missing customer")
@@ -496,6 +516,7 @@ func (s *Service) upsertSubscription(ctx context.Context, userID uuid.UUID, prod
 		Status:                 string(sub.Status),
 		CurrentPeriodEnd:       purchase.periodEnd,
 		CancelAtPeriodEnd:      sub.CancelAtPeriodEnd,
+		CancelAt:               stripeSubscriptionCancelAt(sub),
 	})
 	if err != nil {
 		return fmt.Errorf("upsert billing subscription: %w", err)

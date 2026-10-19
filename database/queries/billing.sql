@@ -18,8 +18,9 @@ INSERT INTO billing_subscriptions (
   product_code,
   status,
   current_period_end,
-  cancel_at_period_end
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+  cancel_at_period_end,
+  cancel_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (user_id) DO UPDATE SET
   provider = EXCLUDED.provider,
   provider_customer_id = EXCLUDED.provider_customer_id,
@@ -30,6 +31,7 @@ ON CONFLICT (user_id) DO UPDATE SET
   status = EXCLUDED.status,
   current_period_end = EXCLUDED.current_period_end,
   cancel_at_period_end = EXCLUDED.cancel_at_period_end,
+  cancel_at = EXCLUDED.cancel_at,
   updated_at = NOW()
 RETURNING *;
 
@@ -44,8 +46,9 @@ INSERT INTO billing_subscriptions (
   product_code,
   status,
   current_period_end,
-  cancel_at_period_end
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+  cancel_at_period_end,
+  cancel_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (user_id) DO UPDATE SET
   provider = EXCLUDED.provider,
   provider_customer_id = EXCLUDED.provider_customer_id,
@@ -56,6 +59,7 @@ ON CONFLICT (user_id) DO UPDATE SET
   status = EXCLUDED.status,
   current_period_end = EXCLUDED.current_period_end,
   cancel_at_period_end = EXCLUDED.cancel_at_period_end,
+  cancel_at = EXCLUDED.cancel_at,
   updated_at = NOW()
 WHERE (billing_subscriptions.provider,
        billing_subscriptions.provider_customer_id,
@@ -65,7 +69,8 @@ WHERE (billing_subscriptions.provider,
        billing_subscriptions.product_code,
        billing_subscriptions.status,
        billing_subscriptions.current_period_end,
-       billing_subscriptions.cancel_at_period_end)
+       billing_subscriptions.cancel_at_period_end,
+       billing_subscriptions.cancel_at)
   IS DISTINCT FROM
       (EXCLUDED.provider,
        EXCLUDED.provider_customer_id,
@@ -75,7 +80,8 @@ WHERE (billing_subscriptions.provider,
        EXCLUDED.product_code,
        EXCLUDED.status,
        EXCLUDED.current_period_end,
-       EXCLUDED.cancel_at_period_end);
+       EXCLUDED.cancel_at_period_end,
+       EXCLUDED.cancel_at);
 
 -- name: GetBillingSubscriptionByProviderCustomerID :one
 SELECT * FROM billing_subscriptions

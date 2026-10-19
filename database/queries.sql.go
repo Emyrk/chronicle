@@ -1180,7 +1180,7 @@ func (q *sqlQuerier) GetBillingEntitlementOwnerByProviderCustomerID(ctx context.
 }
 
 const getBillingSubscriptionByProviderCustomerID = `-- name: GetBillingSubscriptionByProviderCustomerID :one
-SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id FROM billing_subscriptions
+SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id, cancel_at FROM billing_subscriptions
 WHERE provider = $1
   AND provider_customer_id = $2
 `
@@ -1205,12 +1205,13 @@ func (q *sqlQuerier) GetBillingSubscriptionByProviderCustomerID(ctx context.Cont
 		&i.Provider,
 		&i.ProviderProductID,
 		&i.ProviderPriceID,
+		&i.CancelAt,
 	)
 	return i, err
 }
 
 const getBillingSubscriptionByProviderID = `-- name: GetBillingSubscriptionByProviderID :one
-SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id FROM billing_subscriptions
+SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id, cancel_at FROM billing_subscriptions
 WHERE provider = $1
   AND provider_subscription_id = $2
 `
@@ -1235,12 +1236,13 @@ func (q *sqlQuerier) GetBillingSubscriptionByProviderID(ctx context.Context, arg
 		&i.Provider,
 		&i.ProviderProductID,
 		&i.ProviderPriceID,
+		&i.CancelAt,
 	)
 	return i, err
 }
 
 const getBillingSubscriptionByUserID = `-- name: GetBillingSubscriptionByUserID :one
-SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id FROM billing_subscriptions
+SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id, cancel_at FROM billing_subscriptions
 WHERE user_id = $1
 `
 
@@ -1259,6 +1261,7 @@ func (q *sqlQuerier) GetBillingSubscriptionByUserID(ctx context.Context, userID 
 		&i.Provider,
 		&i.ProviderProductID,
 		&i.ProviderPriceID,
+		&i.CancelAt,
 	)
 	return i, err
 }
@@ -1413,7 +1416,7 @@ func (q *sqlQuerier) ListBillingProviderCustomersForReconciliation(ctx context.C
 }
 
 const listBillingSubscriptionsForReconciliation = `-- name: ListBillingSubscriptionsForReconciliation :many
-SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id FROM billing_subscriptions
+SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id, cancel_at FROM billing_subscriptions
 WHERE provider = 'stripe'
 `
 
@@ -1438,6 +1441,7 @@ func (q *sqlQuerier) ListBillingSubscriptionsForReconciliation(ctx context.Conte
 			&i.Provider,
 			&i.ProviderProductID,
 			&i.ProviderPriceID,
+			&i.CancelAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1489,7 +1493,7 @@ func (q *sqlQuerier) ListRecentBillingReconciliationRuns(ctx context.Context, li
 }
 
 const listRecentBillingSubscriptions = `-- name: ListRecentBillingSubscriptions :many
-SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id FROM billing_subscriptions
+SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id, cancel_at FROM billing_subscriptions
 ORDER BY updated_at DESC
 LIMIT $1
 `
@@ -1515,6 +1519,7 @@ func (q *sqlQuerier) ListRecentBillingSubscriptions(ctx context.Context, limit i
 			&i.Provider,
 			&i.ProviderProductID,
 			&i.ProviderPriceID,
+			&i.CancelAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1622,8 +1627,9 @@ INSERT INTO billing_subscriptions (
   product_code,
   status,
   current_period_end,
-  cancel_at_period_end
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+  cancel_at_period_end,
+  cancel_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (user_id) DO UPDATE SET
   provider = EXCLUDED.provider,
   provider_customer_id = EXCLUDED.provider_customer_id,
@@ -1634,8 +1640,9 @@ ON CONFLICT (user_id) DO UPDATE SET
   status = EXCLUDED.status,
   current_period_end = EXCLUDED.current_period_end,
   cancel_at_period_end = EXCLUDED.cancel_at_period_end,
+  cancel_at = EXCLUDED.cancel_at,
   updated_at = NOW()
-RETURNING user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id
+RETURNING user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id, cancel_at
 `
 
 type UpsertBillingSubscriptionParams struct {
@@ -1649,6 +1656,7 @@ type UpsertBillingSubscriptionParams struct {
 	Status                 string             `db:"status" json:"status"`
 	CurrentPeriodEnd       pgtype.Timestamptz `db:"current_period_end" json:"current_period_end"`
 	CancelAtPeriodEnd      bool               `db:"cancel_at_period_end" json:"cancel_at_period_end"`
+	CancelAt               pgtype.Timestamptz `db:"cancel_at" json:"cancel_at"`
 }
 
 func (q *sqlQuerier) UpsertBillingSubscription(ctx context.Context, arg UpsertBillingSubscriptionParams) (BillingSubscription, error) {
@@ -1663,6 +1671,7 @@ func (q *sqlQuerier) UpsertBillingSubscription(ctx context.Context, arg UpsertBi
 		arg.Status,
 		arg.CurrentPeriodEnd,
 		arg.CancelAtPeriodEnd,
+		arg.CancelAt,
 	)
 	var i BillingSubscription
 	err := row.Scan(
@@ -1677,6 +1686,7 @@ func (q *sqlQuerier) UpsertBillingSubscription(ctx context.Context, arg UpsertBi
 		&i.Provider,
 		&i.ProviderProductID,
 		&i.ProviderPriceID,
+		&i.CancelAt,
 	)
 	return i, err
 }
@@ -1692,8 +1702,9 @@ INSERT INTO billing_subscriptions (
   product_code,
   status,
   current_period_end,
-  cancel_at_period_end
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+  cancel_at_period_end,
+  cancel_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (user_id) DO UPDATE SET
   provider = EXCLUDED.provider,
   provider_customer_id = EXCLUDED.provider_customer_id,
@@ -1704,6 +1715,7 @@ ON CONFLICT (user_id) DO UPDATE SET
   status = EXCLUDED.status,
   current_period_end = EXCLUDED.current_period_end,
   cancel_at_period_end = EXCLUDED.cancel_at_period_end,
+  cancel_at = EXCLUDED.cancel_at,
   updated_at = NOW()
 WHERE (billing_subscriptions.provider,
        billing_subscriptions.provider_customer_id,
@@ -1713,7 +1725,8 @@ WHERE (billing_subscriptions.provider,
        billing_subscriptions.product_code,
        billing_subscriptions.status,
        billing_subscriptions.current_period_end,
-       billing_subscriptions.cancel_at_period_end)
+       billing_subscriptions.cancel_at_period_end,
+       billing_subscriptions.cancel_at)
   IS DISTINCT FROM
       (EXCLUDED.provider,
        EXCLUDED.provider_customer_id,
@@ -1723,7 +1736,8 @@ WHERE (billing_subscriptions.provider,
        EXCLUDED.product_code,
        EXCLUDED.status,
        EXCLUDED.current_period_end,
-       EXCLUDED.cancel_at_period_end)
+       EXCLUDED.cancel_at_period_end,
+       EXCLUDED.cancel_at)
 `
 
 type UpsertBillingSubscriptionIfChangedParams struct {
@@ -1737,6 +1751,7 @@ type UpsertBillingSubscriptionIfChangedParams struct {
 	Status                 string             `db:"status" json:"status"`
 	CurrentPeriodEnd       pgtype.Timestamptz `db:"current_period_end" json:"current_period_end"`
 	CancelAtPeriodEnd      bool               `db:"cancel_at_period_end" json:"cancel_at_period_end"`
+	CancelAt               pgtype.Timestamptz `db:"cancel_at" json:"cancel_at"`
 }
 
 func (q *sqlQuerier) UpsertBillingSubscriptionIfChanged(ctx context.Context, arg UpsertBillingSubscriptionIfChangedParams) (int64, error) {
@@ -1751,6 +1766,7 @@ func (q *sqlQuerier) UpsertBillingSubscriptionIfChanged(ctx context.Context, arg
 		arg.Status,
 		arg.CurrentPeriodEnd,
 		arg.CancelAtPeriodEnd,
+		arg.CancelAt,
 	)
 	if err != nil {
 		return 0, err

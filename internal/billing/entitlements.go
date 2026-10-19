@@ -168,17 +168,40 @@ func stripeEntitlementBehavior(key Entitlement) (StripeEntitlement, bool) {
 
 const billingGracePeriod = 3 * 24 * time.Hour
 
+func billingSubscriptionAccessEnd(sub database.BillingSubscription) pgtype.Timestamptz {
+	if sub.CancelAt.Valid {
+		return sub.CancelAt
+	}
+	return sub.CurrentPeriodEnd
+}
+
+// subscriptionHasCurrentBillingState controls whether the account page should
+// present the current-subscription management surface. It is separate from
+// checkout eligibility and from current Revered access.
+func subscriptionHasCurrentBillingState(sub database.BillingSubscription, hasReveredEntitlement bool) bool {
+	if !sub.ProviderSubscriptionID.Valid {
+		return false
+	}
+	switch sub.Status {
+	case string(stripe.SubscriptionStatusCanceled), string(stripe.SubscriptionStatusIncompleteExpired):
+		return hasReveredEntitlement
+	default:
+		return true
+	}
+}
+
 func subscriptionBlocksCheckout(now time.Time, sub database.BillingSubscription, hasReveredEntitlement bool) bool {
-	if !sub.CurrentPeriodEnd.Valid {
+	accessEnd := billingSubscriptionAccessEnd(sub)
+	if !accessEnd.Valid {
 		return false
 	}
 	switch sub.Status {
 	case string(stripe.SubscriptionStatusActive),
 		string(stripe.SubscriptionStatusTrialing),
 		string(stripe.SubscriptionStatusPastDue):
-		return now.Before(sub.CurrentPeriodEnd.Time.Add(billingGracePeriod))
+		return now.Before(accessEnd.Time.Add(billingGracePeriod))
 	case string(stripe.SubscriptionStatusCanceled):
-		return hasReveredEntitlement && now.Before(sub.CurrentPeriodEnd.Time.Add(billingGracePeriod))
+		return hasReveredEntitlement && now.Before(accessEnd.Time.Add(billingGracePeriod))
 	default:
 		return false
 	}

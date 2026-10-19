@@ -843,6 +843,7 @@ type BillingSubscription struct {
 	Provider               string             `db:"provider" json:"provider"`
 	ProviderProductID      pgtype.Text        `db:"provider_product_id" json:"provider_product_id"`
 	ProviderPriceID        pgtype.Text        `db:"provider_price_id" json:"provider_price_id"`
+	CancelAt               pgtype.Timestamptz `db:"cancel_at" json:"cancel_at"`
 }
 
 type BillingWebhookEvent struct {
