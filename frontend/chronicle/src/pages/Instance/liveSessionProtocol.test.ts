@@ -13,6 +13,7 @@ import {
   participantColor,
   participantLabel,
   receiveLiveView,
+  shouldApplyLiveView,
   setLiveViewApplier,
   websocketURL,
   type LiveViewDelivery,
@@ -110,6 +111,18 @@ describe("live session edit authority", () => {
     expect(canPublishLiveView("leader")).toBe(true);
     expect(canPublishLiveView("participant")).toBe(false);
     expect(canPublishLiveView(null)).toBe(false);
+  });
+});
+
+describe("duplicate live views", () => {
+  it("skips repeated broadcasts so expensive panels can finish processing", () => {
+    expect(shouldApplyLiveView(null, '{"view":1}', undefined)).toBe(true);
+    expect(shouldApplyLiveView('{"view":1}', '{"view":1}', undefined)).toBe(false);
+    expect(shouldApplyLiveView('{"view":1}', '{"view":2}', undefined)).toBe(true);
+  });
+
+  it("always applies a correlated resync response", () => {
+    expect(shouldApplyLiveView('{"view":1}', '{"view":1}', "request-1")).toBe(true);
   });
 });
 

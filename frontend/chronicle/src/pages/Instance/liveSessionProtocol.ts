@@ -220,6 +220,14 @@ export function websocketURL(path: string, location: Pick<Location, "protocol" |
   return `${protocol}//${location.host}${path}`;
 }
 
+export function shouldApplyLiveView(
+  previousJSON: string | null,
+  nextJSON: string,
+  requestId: string | undefined,
+): boolean {
+  return requestId !== undefined || previousJSON !== nextJSON;
+}
+
 export function canEditLiveSessionState(
   status: "idle" | "connecting" | "live" | "needs_password" | "ended" | "error",
   role: "leader" | "participant" | null,

@@ -2431,6 +2431,7 @@ function InstancePageViewContent({
   const showLiveSessionControls = showDebugDesktopControls(searchParams, isMobile);
   const { data: session } = useSession();
   const isLoggedIn = !!session?.user_id;
+  const { publishView: publishLiveView, registerViewApplier } = liveSession;
   useAutoJoinLiveSession(instance.id, showLiveSessionControls);
   const createShare = useCreateShare();
   const instanceDefaults = useInstanceDefaultsCache(isLoggedIn);
@@ -3421,16 +3422,16 @@ function InstancePageViewContent({
   }, [activeLayoutId, activeLayoutItems, activePageType, activePresetId, layoutAppearance, allMergedEnemies, focusParam, instance.encounters, instance.players, pageState, panelFiltersByID, panelOptionsByID, panelTypesByID, timeRange?.enabled, timeRange?.startOffsetMs, timeRange?.endOffsetMs, viewState.encounters, viewState.enemies, viewState.includeWipes, viewState.players]);
 
   useEffect(() => {
-    liveSession.registerViewApplier((view) => {
+    registerViewApplier((view) => {
       const payload = validateSharedViewPayload(view, instance.id, instance.id) as unknown as SharedViewPayload;
       applySharedViewPayload(payload);
     });
-    return () => liveSession.registerViewApplier(null);
-  }, [applySharedViewPayload, instance.id, liveSession]);
+    return () => registerViewApplier(null);
+  }, [applySharedViewPayload, instance.id, registerViewApplier]);
 
   useEffect(() => {
-    liveSession.publishView(buildSharedViewPayload());
-  }, [buildSharedViewPayload, liveSession]);
+    publishLiveView(buildSharedViewPayload());
+  }, [buildSharedViewPayload, publishLiveView]);
 
   const copyStateToClipboard = useCallback(async () => {
     try {

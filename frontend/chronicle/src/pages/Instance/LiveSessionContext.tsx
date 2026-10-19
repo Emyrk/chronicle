@@ -28,6 +28,7 @@ import {
   participantColor,
   participantLabel,
   receiveLiveView,
+  shouldApplyLiveView,
   setLiveViewApplier,
   websocketURL,
   type LiveCursorPositionMode,
@@ -234,6 +235,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
   const pendingSnapshotRequestIdRef = useRef<string | null>(null);
   const snapshotRetryTimerRef = useRef<number | null>(null);
   const participantSnapshotRequestsRef = useRef(new Map<string, string>());
+  const lastAppliedViewJSONRef = useRef<string | null>(null);
   const remoteViewJSONRef = useRef<string | null>(null);
   // A participant must first adopt the leader's view. Otherwise its local default
   // can win the data-channel startup race and reset the layout for every peer.
@@ -344,6 +346,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
       : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     pendingSnapshotRequestIdRef.current = requestId;
     hasReceivedInitialViewRef.current = false;
+    lastAppliedViewJSONRef.current = null;
     viewDeliveryRef.current.pending = null;
     setViewSynchronized(false);
     channel.send(JSON.stringify({ type: "view_request", requestId } satisfies LiveSessionDataMessage));
@@ -399,8 +402,11 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
           const snapshotRequestId = liveSnapshotMatchesRequest(pendingRequestId, message.requestId)
             ? pendingRequestId
             : null;
+          const viewJSON = JSON.stringify(message.view);
+          if (!shouldApplyLiveView(lastAppliedViewJSONRef.current, viewJSON, message.requestId)) return;
           currentViewRef.current = message.view;
-          remoteViewJSONRef.current = JSON.stringify(message.view);
+          lastAppliedViewJSONRef.current = viewJSON;
+          remoteViewJSONRef.current = viewJSON;
           receiveLiveView(viewDeliveryRef.current, message.view, snapshotRequestId ? () => {
             if (pendingSnapshotRequestIdRef.current !== snapshotRequestId) return;
             clearSnapshotRetry();
@@ -546,6 +552,7 @@ export function LiveSessionProvider({ children }: { children: ReactNode }) {
     pendingSnapshotRequestIdRef.current = null;
     participantSnapshotRequestsRef.current.clear();
     hasReceivedInitialViewRef.current = false;
+    lastAppliedViewJSONRef.current = null;
     viewDeliveryRef.current.pending = null;
     setViewSynchronized(false);
     setParticipantCount(0);
