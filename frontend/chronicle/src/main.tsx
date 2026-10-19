@@ -21,7 +21,8 @@ const application: ReactNode = isBlogRoute ? (
 
 const tree = (
   <StrictMode>
-    <BrowserRouter>
+    {/* Show Suspense fallbacks immediately instead of keeping the previous route visible. */}
+    <BrowserRouter useTransitions={false}>
       {application}
     </BrowserRouter>
   </StrictMode>
