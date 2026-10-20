@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionForKey, DEFAULT_AD_STRAFE, easeAngleToward, keyLabel, MAP_CONTROL_ACTIONS, MAP_CONTROL_KEYBINDS, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY } from "./mapControls";
+import { actionForKey, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, keyLabel, MAP_CONTROL_ACTIONS, MAP_CONTROL_KEYBINDS, mobileJoystickAxis, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY } from "./mapControls";
 
 describe("easeAngleToward", () => {
   it("eases toward the target without snapping", () => {
@@ -113,6 +113,24 @@ describe("mapControls", () => {
     expect(["KeyA", "KeyD", "KeyQ", "KeyE", "KeyW"].map((code) => actionForKey(code, true)))
       .toEqual(["strafe_left", "strafe_right", undefined, undefined, "forward"]);
     expect(actionForKey("KeyX", true)).toBeUndefined();
+  });
+
+  it("normalizes mobile d-pad and joystick input", () => {
+    expect(clampMobileMapInput({ forward: 2, strafe: -3, turn: 0.5, pitch: Number.NaN, jump: true })).toEqual({
+      forward: 1,
+      strafe: -1,
+      turn: 0.5,
+      pitch: 0,
+      jump: true,
+    });
+  });
+
+  it("gives the mobile joystick a dead zone and progressive response", () => {
+    expect(mobileJoystickAxis(0.1)).toBe(0);
+    expect(mobileJoystickAxis(-0.1)).toBe(0);
+    expect(mobileJoystickAxis(1)).toBe(1);
+    expect(mobileJoystickAxis(-1)).toBe(-1);
+    expect(mobileJoystickAxis(0.57)).toBeCloseTo(0.5);
   });
 
   it("labels keys like a keyboard", () => {

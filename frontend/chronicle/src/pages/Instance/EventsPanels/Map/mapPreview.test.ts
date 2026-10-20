@@ -8,6 +8,11 @@ describe("mini map preview clock", () => {
     expect(previewSpeed(4 * 60 * 60_000)).toBe(32);
   });
 
+  it("can cap long whole-run previews for a calmer mobile map", () => {
+    expect(previewSpeed(4 * 60 * 60_000, 4)).toBe(4);
+    expect(previewCursorMs(0, 60 * 60_000, 1_000, 4)).toBe(4_000);
+  });
+
   it("loops through the encounter from its start", () => {
     // A 6 minute fight at 4x: 45 s of real time is the middle, 90 s wraps to the start.
     const startMs = 1_000;

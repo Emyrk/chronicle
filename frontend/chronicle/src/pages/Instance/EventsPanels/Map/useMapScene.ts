@@ -13,7 +13,7 @@ import { fetchMapManifest } from "@/pages/Technical/mapManifest";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelRenderProps } from "../types";
 import { isMeshOnlyInstance, placeableDungeonMesh } from "./dungeonMeshes";
-import { groupCentre, isStaleRunSample, mergeRunEncounters, runSignature } from "./wholeRun";
+import { groupCentre, isStaleRunSample, mergeRunEncounters, RUN_UNIT_STALE_MS, runSignature } from "./wholeRun";
 import { POWER_COLORS } from "../RaidFrames/raidFrameShared";
 import { activeDebuffsAt, type MapDebuff, type MapEncounterPositions, type MapPositionSample, type MapResult } from "./map.processor";
 import { inferRoles } from "../Roles/roles.processor";
@@ -282,21 +282,21 @@ export interface MapSceneOptions {
    * map's preview): `elapsedMs` of real time loops the encounter at
    * `previewSpeed(span)`. Ignored while Replay is on.
    */
-  preview?: { elapsedMs: number; playing: boolean } | null;
+  preview?: { elapsedMs: number; playing: boolean; maxSpeed?: number } | null;
 }
 
 /** How long one preview loop takes, whatever the fight's length. */
 const PREVIEW_LOOP_MS = 90_000;
 
 /** The preview's playback speed: a loop takes about PREVIEW_LOOP_MS, never slower than real time. */
-export function previewSpeed(spanMs: number): number {
-  return Math.max(1, Math.min(32, Math.round(spanMs / PREVIEW_LOOP_MS)));
+export function previewSpeed(spanMs: number, maxSpeed = 32): number {
+  return Math.max(1, Math.min(maxSpeed, Math.round(spanMs / PREVIEW_LOOP_MS)));
 }
 
 /** Where the preview is in the encounter after `elapsedMs` of real time, looping. */
-export function previewCursorMs(startMs: number, endMs: number, elapsedMs: number): number {
+export function previewCursorMs(startMs: number, endMs: number, elapsedMs: number, maxSpeed = 32): number {
   const span = Math.max(1, endMs - startMs);
-  return startMs + ((elapsedMs * previewSpeed(span)) % span);
+  return startMs + ((elapsedMs * previewSpeed(span, maxSpeed)) % span);
 }
 
 /**
@@ -321,16 +321,16 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   );
   const preview = !sync?.enabled ? options.preview ?? null : null;
   const cursorMs = timestampMs
-    ?? (preview && encounter ? previewCursorMs(encounter.startMs, encounter.endMs, preview.elapsedMs) : encounter?.endMs)
+    ?? (preview && encounter ? previewCursorMs(encounter.startMs, encounter.endMs, preview.elapsedMs, preview.maxSpeed) : encounter?.endMs)
     ?? null;
   const visibleUnits = useMemo(() => {
     if (!encounter || cursorMs === null) return [];
     return Array.from(encounter.positionsByUnit.entries()).flatMap(([guid, positions]) => {
       const player = props.context.instance.players?.[guid];
-      const sample = replayPositionAt(positions, cursorMs, Boolean(player));
+      const sample = replayPositionAt(positions, cursorMs, Boolean(player), wholeRun ? RUN_UNIT_STALE_MS : undefined);
       if (!sample) return [];
-      // Across a run, trash that died or despawned must not linger at its last position.
-      if (wholeRun && !props.context.instance.players?.[guid] && isStaleRunSample(sample, cursorMs)) return [];
+      // Across a run, nobody should glide between distant encounter samples or linger after telemetry stops.
+      if (wholeRun && isStaleRunSample(sample, cursorMs)) return [];
       return [{ guid, sample, positions }];
     });
   }, [cursorMs, encounter, props.context.instance.players, wholeRun]);
@@ -506,7 +506,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     overlayAvailable: artwork.kind !== "instance" || overlayAvailable,
     syncEnabled: Boolean(sync?.enabled),
     playing: preview ? preview.playing : Boolean(sync?.enabled && sync.isPlaying),
-    playbackSpeed: preview ? previewSpeed(encounter.endMs - encounter.startMs) : sync?.playbackSpeed ?? 1,
+    playbackSpeed: preview ? previewSpeed(encounter.endMs - encounter.startMs, preview.maxSpeed) : sync?.playbackSpeed ?? 1,
     cursorMs,
     encounterStartMs: encounter.startMs,
     encounterEndMs: encounter.endMs,

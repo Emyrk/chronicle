@@ -79,6 +79,20 @@ describe("Map preset", () => {
     expect(strip).toMatchObject({ kind: "strip", stripType: "replay", y: map.y + map.h, w: map.w });
   });
 
+  it("uses a shorter, non-fitted map panel on mobile without changing desktop", () => {
+    const desktop = presetLayoutById("map", ["unit-position"], false);
+    const mobile = presetLayoutById("map", ["unit-position"], true);
+    if (!desktop || !mobile || !isPanelPresetLayout(desktop) || !isPanelPresetLayout(mobile)) {
+      throw new Error("Map should resolve to panel presets");
+    }
+
+    expect(desktop.fit).toBe(true);
+    expect(desktop.layoutItems[0]).toMatchObject({ id: "panel-1", h: 9 });
+    expect(mobile.fit).toBe(false);
+    expect(mobile.layoutItems[0]).toMatchObject({ id: "panel-1", h: 4 });
+    expect(mobile.layoutItems[1]).toMatchObject({ id: "strip-1", y: 4 });
+  });
+
   it("needs unit positions", () => {
     expect(getAvailablePresetLayouts([]).map((preset) => preset.id)).not.toContain("map");
     expect(getAvailablePresetLayouts(["unit-position"]).map((preset) => preset.id)).toContain("map");

@@ -41,6 +41,11 @@ export interface PanelPresetLayout extends PresetLayoutBase {
   seamless?: boolean;
   /** In focus mode, stretch panel rows to fill the screen. */
   fit?: boolean;
+  /** Mobile-only sizing/fit overrides; panel contents and options stay unchanged. */
+  mobileVariant?: {
+    layoutItems: GridEditorItem[];
+    fit?: boolean;
+  };
   /** A different grid for logs that have these capabilities (e.g. Summary's mini map for position logs). */
   capabilityVariant?: {
     requiredCapabilities: string[];
@@ -267,6 +272,13 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
       { id: "panel-1", title: "Map", x: 0, y: 0, w: 12, h: 9, minW: 4 },
       { id: "strip-1", title: "Replay", kind: "strip", stripType: "replay", orientation: "horizontal", x: 0, y: 9, w: 12, h: 1, minW: 6, minH: 1, maxH: 2 },
     ],
+    mobileVariant: {
+      fit: false,
+      layoutItems: [
+        { id: "panel-1", title: "Map", x: 0, y: 0, w: 12, h: 4, minW: 4 },
+        { id: "strip-1", title: "Replay", kind: "strip", stripType: "replay", orientation: "horizontal", x: 0, y: 4, w: 12, h: 1, minW: 6, minH: 1, maxH: 2 },
+      ],
+    },
     panelTypes: {
       "panel-1": "map",
     },
@@ -324,14 +336,22 @@ function hasCapabilities(required: readonly string[] | undefined, capabilities: 
 
 /** The preset as a log with these capabilities sees it: its capability variant applied when it qualifies. */
 export function resolvePresetLayout(preset: PresetLayout, capabilities: readonly string[], mobile = false): PresetLayout {
-  if (!isPanelPresetLayout(preset) || !preset.capabilityVariant) return preset;
+  if (!isPanelPresetLayout(preset)) return preset;
+  let resolved = preset;
+  if (mobile && preset.mobileVariant) {
+    resolved = {
+      ...resolved,
+      layoutItems: preset.mobileVariant.layoutItems,
+      fit: preset.mobileVariant.fit ?? resolved.fit,
+    };
+  }
   const variant = preset.capabilityVariant;
-  if (!hasCapabilities(variant.requiredCapabilities, capabilities) || (variant.desktopOnly && mobile)) return preset;
+  if (!variant || !hasCapabilities(variant.requiredCapabilities, capabilities) || (variant.desktopOnly && mobile)) return resolved;
   return {
-    ...preset,
+    ...resolved,
     layoutItems: variant.layoutItems,
     panelTypes: variant.panelTypes,
-    panelOptions: { ...preset.panelOptions, ...variant.panelOptions },
+    panelOptions: { ...resolved.panelOptions, ...variant.panelOptions },
   };
 }
 

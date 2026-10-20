@@ -27,7 +27,7 @@ import {
   type DirectorUnit,
 } from "./cameraDirector";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
-import { actionForKey, DEFAULT_AD_STRAFE, easeAngleToward, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
+import { actionForKey, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, IDLE_MOBILE_MAP_INPUT, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, type MapControlAction, type MobileMapInput } from "./mapControls";
 import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanPoint } from "./plan/mapPlan";
@@ -205,11 +205,16 @@ const MESH_ANGLED_OFFSET = new THREE.Vector3(0, 1.6, 0.75);
 const ORBIT_DAMPING = 0.08;
 const ORBIT_ROTATE_SPEED = 0.6;
 const ORBIT_ZOOM_SPEED = 0.9;
+const MOBILE_ORBIT_DAMPING = 0.22;
+const MOBILE_ORBIT_ROTATE_SPEED = 0.35;
+const MOBILE_ORBIT_ZOOM_SPEED = 0.5;
+const MOBILE_ORBIT_PAN_SPEED = 0.35;
 const ORBIT_PAN_SPEED = 0.8;
 // Keyboard camera (mapControls): pan as a fraction of the camera distance per
 // second, so it feels the same zoomed in or out; rotate in radians per second;
 // zoom by e^(rate) per second.
 const KEY_PAN_SPEED = 0.6;
+const MOBILE_ORBIT_LOOK_SPEED = 0.55;
 const KEY_ROTATE_SPEED = 1.6;
 const KEY_ZOOM_SPEED = 1.2;
 // A dropped frame never jumps the camera further than this.
@@ -871,6 +876,7 @@ export class MapScene3D {
   // The window the map lives in: a popped-out panel has its own.
   private readonly keyWindow: Window;
   private readonly heldActions = new Set<MapControlAction>();
+  private mobileInput: MobileMapInput = IDLE_MOBILE_MAP_INPUT;
   private walk: WalkState | null = null;
   private walkAvatarId = CAPSULE_AVATAR;
   private adStrafe = DEFAULT_AD_STRAFE;
@@ -3165,6 +3171,12 @@ export class MapScene3D {
       drag.y = event.clientY;
       this.requestRender();
     }
+    if (event.pointerType !== "mouse") {
+      // Touch is camera input, not hover input. Avoid a full scene raycast and
+      // label/effect picking on every finger move while OrbitControls rotates.
+      this.pointerInside = true;
+      return;
+    }
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.pointer.set(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
@@ -3206,16 +3218,20 @@ export class MapScene3D {
       this.planInput.down(this.planPointAt(event), event);
       return;
     }
-    this.pointerDownAt = event.button === 0 ? { x: event.clientX, y: event.clientY } : null;
-    if (!this.walk && (event.button === 0 || event.button === 2)) {
+    // Touch is exclusively camera input on mobile. It should not turn the end
+    // of a drag or pinch into a unit click.
+    this.pointerDownAt = event.pointerType === "mouse" && event.button === 0 ? { x: event.clientX, y: event.clientY } : null;
+    if (!this.walk && event.pointerType === "mouse" && (event.button === 0 || event.button === 2)) {
+      // OrbitControls owns touch gestures. The custom pointer-lock drag is only
+      // for a mouse; trying to lock a touch pointer makes mobile orbiting jump.
       this.orbitDrag = { button: event.button, x: event.clientX, y: event.clientY, virtual: false };
     }
     if (this.walk && (event.button === 0 || event.button === 2)) {
       const buttons = setWalkMouseButton(this.walk.drag?.buttons ?? 0, event.button, true);
       this.walk.drag = { buttons, x: event.clientX, y: event.clientY };
       this.renderer.domElement.setPointerCapture(event.pointerId);
-      // Hide the cursor while dragging the view, as WoW does.
-      this.lockPointer();
+      // Hide a mouse cursor while dragging; touch keeps its real coordinates.
+      if (event.pointerType === "mouse") this.lockPointer();
     }
   };
 
@@ -3332,9 +3348,36 @@ export class MapScene3D {
     if (!this.walk) this.handleControlsEnd();
   };
 
-  // Moves the camera for the held keys; true while any is held.
+  /** Continuous input from the fullscreen mobile d-pad and look joystick. */
+  setMobileInput(input: MobileMapInput | null) {
+    const mobile = input !== null;
+    this.controls.dampingFactor = mobile ? MOBILE_ORBIT_DAMPING : ORBIT_DAMPING;
+    this.controls.rotateSpeed = mobile ? MOBILE_ORBIT_ROTATE_SPEED : ORBIT_ROTATE_SPEED;
+    this.controls.zoomSpeed = mobile ? MOBILE_ORBIT_ZOOM_SPEED : ORBIT_ZOOM_SPEED;
+    this.controls.panSpeed = mobile ? MOBILE_ORBIT_PAN_SPEED : ORBIT_PAN_SPEED;
+    // Phone gestures should be predictable: one finger orbits, two fingers
+    // pinch only. Panning and zoom-to-finger made the orbit target lurch around.
+    this.controls.enablePan = !mobile;
+    this.controls.zoomToCursor = !mobile;
+    this.controls.touches.ONE = THREE.TOUCH.ROTATE;
+    this.controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
+    const next = clampMobileMapInput(input ?? IDLE_MOBILE_MAP_INPUT);
+    const wasActive = Object.values(this.mobileInput).some((value) => value !== 0);
+    const active = Object.values(next).some((value) => value !== 0);
+    if (!this.walk && !wasActive && active) {
+      this.handleControlsStart();
+      this.keyMoveLastMs = 0;
+    }
+    this.mobileInput = next;
+    if (!this.walk && wasActive && !active) this.handleControlsEnd();
+    if (active) this.requestRender();
+  }
+
+  // Moves the camera for held keyboard keys or the mobile controls; true while either is active.
   private updateKeyboardCamera(now: number): boolean {
-    if (this.walk || this.heldActions.size === 0) return false;
+    const mobile = this.mobileInput;
+    const mobileActive = Object.values(mobile).some((value) => value !== 0);
+    if (this.walk || (this.heldActions.size === 0 && !mobileActive)) return false;
     const dt = this.keyMoveLastMs ? Math.min(KEY_MAX_STEP_S, (now - this.keyMoveLastMs) / 1000) : 0;
     this.keyMoveLastMs = now;
     if (dt <= 0) return true;
@@ -3344,13 +3387,20 @@ export class MapScene3D {
     const offset = this.directorVector.copy(this.camera.position).sub(target);
 
     let rotate = axis("turn_left", "turn_right");
-    let strafe = axis("strafe_right", "strafe_left");
+    const mobileRotate = -mobile.turn;
+    let strafe = axis("strafe_right", "strafe_left") + mobile.strafe;
     if (this.orbitDrag?.button === 2) {
       // Holding right-click, the turn keys strafe instead, as in WoW.
       strafe = Math.max(-1, Math.min(1, strafe - rotate));
       rotate = 0;
     }
     if (rotate) offset.applyAxisAngle(Y_AXIS, rotate * KEY_ROTATE_SPEED * dt);
+    if (mobileRotate) offset.applyAxisAngle(Y_AXIS, mobileRotate * MOBILE_ORBIT_LOOK_SPEED * dt);
+    if (mobile.pitch) {
+      const spherical = new THREE.Spherical().setFromVector3(offset);
+      spherical.phi = Math.max(0.18, Math.min(Math.PI / 2, spherical.phi + mobile.pitch * MOBILE_ORBIT_LOOK_SPEED * dt));
+      offset.setFromSpherical(spherical);
+    }
 
     // Space rises (zooms out), X lowers (zooms in).
     const zoom = axis("up", "down");
@@ -3359,7 +3409,7 @@ export class MapScene3D {
       offset.setLength(Math.min(this.controls.maxDistance, Math.max(this.controls.minDistance, distance)));
     }
 
-    const forward = axis("forward", "back");
+    const forward = axis("forward", "back") + mobile.forward;
     if (forward || strafe) {
       // Along the ground, relative to where the camera looks.
       const horizontal = Math.hypot(offset.x, offset.z) || 1;
@@ -3965,16 +4015,20 @@ export class MapScene3D {
       axis("strafe_right", "strafe_left"),
       mouse.steering,
     );
-    const { turn, strafe } = axes;
+    const turn = Math.max(-1, Math.min(1, axes.turn - this.mobileInput.turn));
+    const strafe = Math.max(-1, Math.min(1, axes.strafe + this.mobileInput.strafe));
     if (turn) {
       walk.yaw += turn * WALK_TURN_RADIANS_PER_S * dt;
     }
-    const forward = Math.max(-1, Math.min(1, axis("forward", "back") + (mouse.movingForward ? 1 : 0)));
+    const forward = Math.max(-1, Math.min(1, axis("forward", "back") + (mouse.movingForward ? 1 : 0) + this.mobileInput.forward));
     // Any planar movement brings a free-look camera back behind the character.
     // Keyboard turning moves the target yaw first, so the camera trails the turn.
     if (shouldFollowWalkCamera(forward, strafe, turn, walk.drag !== null)) {
       const followRate = turn ? WALK_CAMERA_TURN_FOLLOW_RATE : WALK_CAMERA_FOLLOW_RATE;
       walk.camYaw = easeAngleToward(walk.camYaw, walk.yaw, followRate, dt);
+    }
+    if (this.mobileInput.pitch) {
+      walk.camPitch = Math.max(-WALK_PITCH_LIMIT, Math.min(WALK_PITCH_LIMIT, walk.camPitch + this.mobileInput.pitch * KEY_ROTATE_SPEED * dt));
     }
     if (forward || strafe) {
       // Facing (yaw) points along -z turned by yaw, as a unit's facing cone does.
@@ -3986,7 +4040,7 @@ export class MapScene3D {
     }
 
     // Space jumps from the ground and, held, keeps flying up; Z flies down.
-    if (held.has("up")) {
+    if (held.has("up") || this.mobileInput.jump) {
       walk.vy = walk.grounded ? WALK_JUMP_YPS * scale : Math.max(walk.vy, WALK_FLY_YPS * scale);
       walk.grounded = false;
     } else if (held.has("down") && !walk.grounded) {
