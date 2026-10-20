@@ -409,6 +409,14 @@ describe("replayPositionAt", () => {
     expect(replayPositionAt(halfFaced, 50)!.facing).toBe(1.2);
   });
 
+  it("can hold the last real sample instead of gliding across a long run gap", () => {
+    const gapped: MapPositionSample[] = [
+      { timestampMs: 0, x: 0, y: 0, mapId: 1 },
+      { timestampMs: 60_000, x: 100, y: 100, mapId: 1 },
+    ];
+    expect(replayPositionAt(gapped, 30_000, true, 15_000)).toBe(gapped[0]);
+  });
+
   it("interpolates across long gaps but never across map changes", () => {
     const gapped: MapPositionSample[] = [
       { timestampMs: 0, x: 0, y: 0, mapId: 1, facing: 0 },

@@ -302,6 +302,7 @@ export function replayPositionAt(
   positions: MapPositionSample[],
   timestampMs: number,
   showInitialPosition = false,
+  maxInterpolationGapMs = Number.POSITIVE_INFINITY,
 ): MapPositionSample | null {
   const index = latestPositionIndex(positions, timestampMs);
   if (index < 0) {
@@ -310,7 +311,7 @@ export function replayPositionAt(
   }
   const latest = positions[index];
   const next = positions[index + 1];
-  if (!next || next.mapId !== latest.mapId || next.timestampMs <= latest.timestampMs) return latest;
+  if (!next || next.mapId !== latest.mapId || next.timestampMs <= latest.timestampMs || next.timestampMs - latest.timestampMs > maxInterpolationGapMs) return latest;
   const t = (timestampMs - latest.timestampMs) / (next.timestampMs - latest.timestampMs);
   const sample: MapPositionSample = {
     timestampMs,

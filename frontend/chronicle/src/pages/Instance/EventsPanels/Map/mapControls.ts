@@ -19,11 +19,46 @@ export type MapControlAction = (typeof MAP_CONTROL_ACTIONS)[number]["id"];
 
 export const DEFAULT_AD_STRAFE = false;
 
+/** Continuous touch input for the fullscreen mobile world. Values are normalized to -1…1. */
+export interface MobileMapInput {
+  forward: number;
+  strafe: number;
+  turn: number;
+  pitch: number;
+  jump: boolean;
+}
+
+export const IDLE_MOBILE_MAP_INPUT: MobileMapInput = {
+  forward: 0,
+  strafe: 0,
+  turn: 0,
+  pitch: 0,
+  jump: false,
+};
+
+export function clampMobileMapInput(input: MobileMapInput): MobileMapInput {
+  const clamp = (value: number) => Math.max(-1, Math.min(1, Number.isFinite(value) ? value : 0));
+  return {
+    forward: clamp(input.forward),
+    strafe: clamp(input.strafe),
+    turn: clamp(input.turn),
+    pitch: clamp(input.pitch),
+    jump: Boolean(input.jump),
+  };
+}
+
 // With A/D strafe enabled, A/D drive strafing instead of turning.
 const STRAFE_SWAP: Partial<Record<MapControlAction, MapControlAction>> = {
   turn_left: "strafe_left",
   turn_right: "strafe_right",
 };
+
+export function mobileJoystickAxis(value: number, deadZone = 0.14): number {
+  const clamped = Math.max(-1, Math.min(1, Number.isFinite(value) ? value : 0));
+  const magnitude = Math.abs(clamped);
+  if (magnitude <= deadZone) return 0;
+  return Math.sign(clamped) * ((magnitude - deadZone) / (1 - deadZone));
+}
 
 /** The action a key drives, with A/D turning by default or strafing when enabled. */
 export function actionForKey(code: string, adStrafe: boolean): MapControlAction | undefined {

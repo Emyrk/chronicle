@@ -1,9 +1,10 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view components intentionally share this module. */
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { Crosshair, Focus, Footprints, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Maximize2, Pause, Play, Route, Settings2, Skull, Timer, X } from "lucide-react";
+import { Crosshair, Focus, Footprints, Gamepad2, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Maximize2, Pause, Play, Route, Settings2, Skull, Timer, X } from "lucide-react";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { parseLivePresenceSurface } from "../../liveSessionProtocol";
 import { LivePresenceIndicator } from "../../LivePresenceIndicator";
 import { useLiveSessionOptional } from "../../LiveSessionContext";
@@ -35,7 +36,8 @@ import { createRaidFramesPanel, HIDE_DEAD_ENEMIES_OPTION, selectRaidFramesEncoun
 import { lastTargetAt } from "../RaidFrames/raidFrames.processor";
 import { createUnitAurasPanel } from "../UnitAuras/UnitAuras";
 import { TargetFrames } from "./TargetFrames";
-import { DEFAULT_AD_STRAFE, MAP_CONTROL_KEYBINDS } from "./mapControls";
+import { DEFAULT_AD_STRAFE, IDLE_MOBILE_MAP_INPUT, MAP_CONTROL_KEYBINDS, type MobileMapInput } from "./mapControls";
+import { MobileMapControls } from "./MobileMapControls";
 import { MeterWindows } from "./MeterWindows";
 import { useMeterWindows } from "./meterWindowsState";
 import { MapSettingsOverlay } from "./MapSettingsOverlay";
@@ -202,9 +204,11 @@ interface ReplayMapProps extends PanelRenderProps<MapResult> {
   onExitWholeRun?: () => void;
   /** Mini map: just the replay, without frames, settings, walk or plan. */
   mini?: boolean;
+  /** Mobile Map panel: inert 2D preview that opens the 3D world fullscreen. */
+  mobile?: boolean;
 }
 
-function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = false, ...props }: ReplayMapProps) {
+function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = false, mobile = false, ...props }: ReplayMapProps) {
   const sync = useSyncModeContextOptional();
   useReplayStepKeys((deltaMs) => {
     if (!sync || sync.externalDriver !== "none" || sync.readOnly || !sync.encounterBounds) return false;
@@ -215,6 +219,46 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     sync.setTimestamp(new Date(Math.min(endMs, Math.max(startMs, baseMs + deltaMs))));
     return true;
   });
+  // Walk mode ("join the fight"): your own character on the dungeon mesh.
+  const [walkWanted, setWalking] = useState(false);
+  const mobileWorldRef = useRef<HTMLDivElement>(null);
+  const [mobileWorldOpen, setMobileWorldOpen] = useState(false);
+  const [mobileInput, setMobileInput] = useState<MobileMapInput>(IDLE_MOBILE_MAP_INPUT);
+  const closeMobileWorld = useCallback(() => {
+    setMobileInput(IDLE_MOBILE_MAP_INPUT);
+    setWalking(false);
+    setMobileWorldOpen(false);
+    const orientation = screen.orientation as (ScreenOrientation & { unlock?: () => void }) | undefined;
+    orientation?.unlock?.();
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+  }, []);
+  const openMobileWorld = useCallback(() => {
+    setMobileWorldOpen(true);
+    const target = mobileWorldRef.current;
+    const request = target?.requestFullscreen?.();
+    if (!request) return;
+    void request.then(() => {
+      const orientation = screen.orientation as (ScreenOrientation & { lock?: (orientation: "landscape") => Promise<void> }) | undefined;
+      return orientation?.lock?.("landscape");
+    }).catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    if (!mobileWorldOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setMobileInput(IDLE_MOBILE_MAP_INPUT);
+        setWalking(false);
+        setMobileWorldOpen(false);
+      }
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, [mobileWorldOpen]);
   const miniatureQuery = useQuery({
     queryKey: ["unit-miniatures"],
     staleTime: 60 * 60 * 1000,
@@ -231,7 +275,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   const meshOn = preferredMeshState(storedMesh);
   // Mini map preview: with the page's Replay off, the mini plays the fight on a
   // loop by its own clock, so the Summary shows what the map does.
-  const previewOn = mini && !sync?.enabled;
+  const previewOn = (mini || mobile) && !sync?.enabled;
   const [previewPlaying, setPreviewPlaying] = useState(true);
   const [previewElapsedMs, setPreviewElapsedMs] = useState(0);
   useEffect(() => {
@@ -245,8 +289,14 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     return () => window.clearInterval(timer);
   }, [previewOn, previewPlaying]);
   const preview = useMemo(
-    () => previewOn ? { elapsedMs: previewElapsedMs, playing: previewPlaying } : null,
-    [previewElapsedMs, previewOn, previewPlaying],
+    () => previewOn ? {
+      elapsedMs: previewElapsedMs,
+      playing: previewPlaying,
+      // A whole raid compressed into the normal 90-second preview can hit 32×,
+      // making players and map changes unreadably jumpy on a phone.
+      maxSpeed: mobile && wholeRun ? 4 : undefined,
+    } : null,
+    [mobile, previewElapsedMs, previewOn, previewPlaying, wholeRun],
   );
   const scene = useMapScene(props, { rawDungeonProjection: show3D && meshOn && meshState === "ready", wholeRun, preview });
   // A new encounter starts its preview from the beginning.
@@ -330,8 +380,6 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   const [effectSettings, updateEffectSettings] = useEffectSettings();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [topDownKey, setTopDownKey] = useState(0);
-  // Walk mode ("join the fight"): your own character on the dungeon mesh.
-  const [walkWanted, setWalking] = useState(false);
   const [followGuid, setFollowGuid] = useState<string | null>(null);
   const [adStrafe, setAdStrafeState] = useState(readStoredAdStrafe);
   const [walkAvatar, setWalkAvatarState] = useState(readStoredWalkAvatar);
@@ -383,9 +431,9 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     panel: RAID_FRAMES_PANEL,
     context: props.context,
     durationMs: props.durationMs,
-    enabled: !mini && (showRaidFrames || showEnemyFrames || framesWanted),
+    enabled: !mini && !mobile && (showRaidFrames || showEnemyFrames || framesWanted),
   });
-  const auras = useEmbeddedPanel({ panel: UNIT_AURAS_PANEL, context: props.context, durationMs: props.durationMs, enabled: !mini && framesWanted });
+  const auras = useEmbeddedPanel({ panel: UNIT_AURAS_PANEL, context: props.context, durationMs: props.durationMs, enabled: !mini && !mobile && framesWanted });
   const cursorMs = sync?.enabled && sync.currentTimestamp ? sync.currentTimestamp.getTime() : null;
   const targetEncounter = target && raidFramesResult
     ? selectRaidFramesEncounter(raidFramesResult.encounters, props.context.selectedEncounterIds, cursorMs)
@@ -526,11 +574,31 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   );
 
   return (
-    <div className={cn("flex h-full min-h-0 flex-col", !mini && "p-1")}>
-      {props.headerSlot ? createPortal(headerControls, props.headerSlot) : <div className="flex justify-end px-1">{headerControls}</div>}
+    <div
+      ref={mobileWorldRef}
+      className={cn(
+        "flex h-full min-h-0 flex-col bg-black",
+        !mini && !mobile && "p-1",
+        mobileWorldOpen && "fixed inset-0 z-[100] h-[100dvh] w-screen",
+      )}
+    >
+      {!mobile && (props.headerSlot ? createPortal(headerControls, props.headerSlot) : <div className="flex justify-end px-1">{headerControls}</div>)}
       {/* The card has no padding (hoverHeader): the full map keeps a thin window frame a hair inside it, the mini map runs to the edges. */}
-      <div className={cn("relative min-h-0 flex-1 overflow-hidden bg-black/70", !mini && "rounded-sm border border-white/15")}>
-        {!show3D ? (meshOnly
+      <div className={cn("relative min-h-0 flex-1 overflow-hidden bg-black/70", !mini && !mobile && "rounded-sm border border-white/15")}>
+        {mobile && !mobileWorldOpen ? (
+          <>
+            <div className="pointer-events-none absolute inset-0">{view2D}</div>
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/15" aria-hidden />
+            <button
+              type="button"
+              onClick={openMobileWorld}
+              className="absolute bottom-4 left-1/2 z-40 flex min-h-12 -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-xl border border-amber-100/30 bg-amber-300 px-5 py-3 text-sm font-black uppercase tracking-[0.12em] text-black shadow-[0_10px_36px_rgba(0,0,0,.6)] active:scale-95"
+            >
+              <Gamepad2 className="size-5" />
+              Enter 3D world
+            </button>
+          </>
+        ) : !show3D ? (meshOnly
           ? <MapMessage title="No map artwork for this instance" detail={`${ready.mapName} has no 2D map; it is 3D only, and this browser could not provide WebGL.`} />
           : view2D
         ) : (
@@ -558,6 +626,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               topDownKey={topDownKey}
               walking={walking}
               onWalkingChange={setWalking}
+              mobileInput={mobileWorldOpen ? mobileInput : null}
               adStrafe={adStrafe}
               walkAvatar={walkAvatar}
               livePresence={livePresence}
@@ -573,9 +642,18 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
             />
           </Suspense>
         )}
-        {framingControls}
-        {mini && <ExpandMapButton context={props.context} overlay />}
-        {previewOn && (
+        {mobile && mobileWorldOpen && (
+          <MobileMapControls
+            walking={walking}
+            canWalk={canWalk}
+            onWalkingChange={setWalking}
+            onInputChange={setMobileInput}
+            onClose={closeMobileWorld}
+          />
+        )}
+        {!mobile && framingControls}
+        {!mobile && mini && <ExpandMapButton context={props.context} overlay />}
+        {!mobile && previewOn && (
           <>
             {/* Replay is off: a greyed preview, with the way to the real Replay controls. */}
             <div className="pointer-events-none absolute inset-0 z-30 bg-slate-900/25 backdrop-saturate-50" aria-hidden />
@@ -630,13 +708,13 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
           </div>
         )}
         {/* Without Replay the map is a still: say so over it rather than in a row of its own. */}
-        {!mini && !reloading && ready.overlayAvailable && !ready.syncEnabled && (
+        {!mini && !mobile && !reloading && ready.overlayAvailable && !ready.syncEnabled && (
           <div className="pointer-events-none absolute left-1/2 top-2 z-40 -translate-x-1/2 whitespace-nowrap rounded-sm bg-black/75 px-2 py-0.5 text-[11px] text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
             Final positions · enable Replay to watch units move
           </div>
         )}
         {/* The mini map is just the replay: no frames, settings, walk, plan or meters. */}
-        {!mini && (<>
+        {!mini && !mobile && (<>
           {/* Top-left: the Raid Frames panel itself, drawn as an overlay (one
               implementation for the map and the panel). The inspect frame below moves freely. */}
           <UnitInspectContext.Provider value={inspectSelection}>
@@ -781,7 +859,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
           <MeterWindows windows={meterWindows} onChange={setMeterWindows} context={props.context} durationMs={props.durationMs} />
         </>)}
       </div>
-      {!mini && jumps.length > 0 && ready.runStartMs !== null && (
+      {!mini && !mobile && jumps.length > 0 && ready.runStartMs !== null && (
         <div className="flex flex-col gap-1 px-3 py-2">
           <div className="relative h-1.5 rounded bg-white/10" aria-hidden>
             {jumps.map((jump) => (
@@ -810,10 +888,10 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
           </div>
         </div>
       )}
-      {!mini && webglUnavailable && (
+      {!mini && !mobile && webglUnavailable && (
         <p className="px-3 py-1 text-[9px] text-amber-300/80">3D view needs WebGL, which this browser could not provide. Showing the replay map in 2D instead.</p>
       )}
-      {!mini && !ready.overlayAvailable && (
+      {!mini && !mobile && !ready.overlayAvailable && (
         <p className="px-3 py-1 text-[9px] text-amber-300/80">No compatible world-coordinate mapping is available for this floor, so unit markers are hidden.</p>
       )}
     </div>
@@ -822,9 +900,11 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
 
 function MapContent({ forceMini = false, ...props }: PanelRenderProps<MapResult> & { forceMini?: boolean }) {
   const [wholeRun, setWholeRun] = useState(false);
+  const isMobile = useIsMobile();
   // The Mini Map panel is always mini; a Map panel is mini with the (older) "mini" option.
   const mini = forceMini || isMiniMapOption(props.panelOption);
   const selectedCount = props.context.selectedEncounterIds.length;
+  if (isMobile) return <SingleEncounterReplayMap {...props} mobile wholeRun={selectedCount !== 1} />;
   const presentation = mapPresentationForSelection(selectedCount, wholeRun);
   if (presentation === "replay-3d" && selectedCount !== 1) {
     return <SingleEncounterReplayMap {...props} mini={mini} wholeRun onExitWholeRun={() => setWholeRun(false)} />;
