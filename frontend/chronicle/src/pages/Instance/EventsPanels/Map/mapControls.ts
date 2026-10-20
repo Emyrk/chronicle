@@ -31,6 +31,55 @@ export function actionForKey(code: string, adStrafe: boolean): MapControlAction 
   return action && adStrafe ? STRAFE_SWAP[action] ?? action : action;
 }
 
+/**
+ * Eases an angle toward a target along the shortest arc. The exponential
+ * response is frame-rate independent and never snaps across the ±π boundary.
+ */
+export function easeAngleToward(current: number, target: number, rate: number, dt: number): number {
+  if (dt <= 0) return current;
+  const delta = Math.atan2(Math.sin(target - current), Math.cos(target - current));
+  return current + delta * (1 - Math.exp(-rate * dt));
+}
+
+/** Tracks left/right mouse state without relying on browser `event.buttons` updates. */
+export function setWalkMouseButton(buttons: number, button: number, down: boolean): number {
+  const bit = button === 0 ? 1 : button === 2 ? 2 : 0;
+  return down ? buttons | bit : buttons & ~bit;
+}
+
+export interface WalkMouseControl {
+  looking: boolean;
+  steering: boolean;
+  movingForward: boolean;
+}
+
+/** Decodes the browser mouse-button bitmask into WoW's walk-mode controls. */
+export function walkMouseControl(buttons: number): WalkMouseControl {
+  const left = (buttons & 1) !== 0;
+  const right = (buttons & 2) !== 0;
+  return {
+    looking: left || right,
+    steering: right,
+    movingForward: left && right,
+  };
+}
+
+/** Holding right-click changes keyboard turn input into the matching strafe, WoW-style. */
+export function rightDragWalkAxes(turn: number, strafe: number, rightDragging: boolean): { turn: number; strafe: number } {
+  if (!rightDragging) return { turn, strafe };
+  return { turn: 0, strafe: Math.max(-1, Math.min(1, strafe - turn)) };
+}
+
+/** Right-drag movement and facing follow the camera, rather than the old character heading. */
+export function walkMovementYaw(characterYaw: number, cameraYaw: number, rightDragging: boolean): number {
+  return rightDragging ? cameraYaw : characterYaw;
+}
+
+/** Whether planar walk input should bring a free-look camera back behind the character. */
+export function shouldFollowWalkCamera(forward: number, strafe: number, turn: number, dragging: boolean): boolean {
+  return !dragging && (forward !== 0 || strafe !== 0 || turn !== 0);
+}
+
 /** Toggles walk mode while the pointer is over the map (or while walking). */
 export const WALK_TOGGLE_KEY = "KeyG";
 
@@ -52,7 +101,8 @@ export const MAP_CONTROL_KEYBINDS = [
   { keys: "X", action: "Play / pause the replay" },
   { keys: keyLabel(WALK_TOGGLE_KEY), action: "Walk mode on / off: join the fight on the ground" },
   { keys: "Esc", action: "Leave walk mode" },
-  { keys: "Drag / right-drag", action: "Orbit / pan the camera; while walking: look around / turn your character. The cursor hides while you drag" },
-  { keys: "Right-drag + A / D", action: "Strafe left / right, whatever A/D strafe is set to" },
+  { keys: "Left-drag / right-drag", action: "While walking: free-look / steer character and camera. The cursor hides while you drag" },
+  { keys: "Left + right mouse", action: "While walking: run forward and steer with the mouse" },
+  { keys: "Right-drag + A / D", action: "Strafe left / right relative to the camera, whatever A/D strafe is set to" },
   { keys: "Mouse wheel", action: "Zoom; while walking, all the way in is first person" },
 ];

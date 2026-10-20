@@ -27,7 +27,7 @@ import {
   type DirectorUnit,
 } from "./cameraDirector";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
-import { actionForKey, DEFAULT_AD_STRAFE, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
+import { actionForKey, DEFAULT_AD_STRAFE, easeAngleToward, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
 import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanPoint } from "./plan/mapPlan";
@@ -263,6 +263,10 @@ const ORBIT_FAR = 2000;
 const WALK_RUN_YPS = 14;
 const WALK_BACK_YPS = 9;
 const WALK_TURN_RADIANS_PER_S = Math.PI;
+/** Camera follow strength during ordinary movement (~95% aligned after two seconds). */
+const WALK_CAMERA_FOLLOW_RATE = 1.5;
+/** Keyboard turns keep the camera much tighter behind the character (~95% in 0.4 s). */
+const WALK_CAMERA_TURN_FOLLOW_RATE = 8;
 const WALK_JUMP_YPS = 8;
 const WALK_FLY_YPS = 14;
 const WALK_GRAVITY_YPS2 = 19.3;
@@ -619,7 +623,8 @@ interface WalkState {
   /** Camera distance from the head, yards; 0 is first person. */
   camDistance: number;
   lastMs: number;
-  drag: { button: number; x: number; y: number } | null;
+  /** Held left/right mouse buttons (`PointerEvent.buttons`) and the last drag point. */
+  drag: { buttons: number; x: number; y: number } | null;
   avatar: THREE.Group;
   /** The gold capsule: shown while the chosen monster loads, or for good without one. */
   capsule: THREE.Mesh;
@@ -3155,7 +3160,7 @@ export class MapScene3D {
       const dy = locked ? event.movementY : event.clientY - drag.y;
       this.walk.camYaw -= dx * WALK_LOOK_RADIANS_PER_PX;
       this.walk.camPitch = Math.max(-WALK_PITCH_LIMIT, Math.min(WALK_PITCH_LIMIT, this.walk.camPitch + dy * WALK_LOOK_RADIANS_PER_PX));
-      if (drag.button === 2) this.walk.yaw = this.walk.camYaw;
+      if (walkMouseControl(drag.buttons).steering) this.walk.yaw = this.walk.camYaw;
       drag.x = event.clientX;
       drag.y = event.clientY;
       this.requestRender();
@@ -3206,7 +3211,8 @@ export class MapScene3D {
       this.orbitDrag = { button: event.button, x: event.clientX, y: event.clientY, virtual: false };
     }
     if (this.walk && (event.button === 0 || event.button === 2)) {
-      this.walk.drag = { button: event.button, x: event.clientX, y: event.clientY };
+      const buttons = setWalkMouseButton(this.walk.drag?.buttons ?? 0, event.button, true);
+      this.walk.drag = { buttons, x: event.clientX, y: event.clientY };
       this.renderer.domElement.setPointerCapture(event.pointerId);
       // Hide the cursor while dragging the view, as WoW does.
       this.lockPointer();
@@ -3220,9 +3226,14 @@ export class MapScene3D {
       this.planInput.up(this.planPointAt(event), event);
       return;
     }
-    if (this.walk?.drag && this.walk.drag.button === event.button) {
-      this.walk.drag = null;
-      this.unlockPointer();
+    if (this.walk?.drag && (event.button === 0 || event.button === 2)) {
+      const buttons = setWalkMouseButton(this.walk.drag.buttons, event.button, false);
+      if (buttons) {
+        this.walk.drag = { buttons, x: event.clientX, y: event.clientY };
+      } else {
+        this.walk.drag = null;
+        this.unlockPointer();
+      }
     }
     if (this.orbitDrag?.button === event.button) {
       this.orbitDrag = null;
@@ -3931,7 +3942,7 @@ export class MapScene3D {
   }
 
   // Moves the character for the held keys, applies gravity or flight and the
-  // floor, and puts the camera behind it; true while walking.
+  // floor, and eases the camera behind it while moving forward; true while walking.
   private updateWalk(now: number): boolean {
     const walk = this.walk;
     if (!walk) return false;
@@ -3945,19 +3956,26 @@ export class MapScene3D {
     const held = this.heldActions;
     const axis = (positive: MapControlAction, negative: MapControlAction) => (held.has(positive) ? 1 : 0) - (held.has(negative) ? 1 : 0);
 
-    let turn = axis("turn_left", "turn_right");
-    let strafe = axis("strafe_right", "strafe_left");
-    if (walk.drag?.button === 2) {
-      // Holding right-click steers with the mouse, so the turn keys strafe instead, as in WoW.
-      strafe = Math.max(-1, Math.min(1, strafe - turn));
-      turn = 0;
-    }
+    const mouse = walkMouseControl(walk.drag?.buttons ?? 0);
+    // Right-click owns facing in WoW: the character faces away from the camera,
+    // and every movement axis is therefore relative to the camera direction.
+    walk.yaw = walkMovementYaw(walk.yaw, walk.camYaw, mouse.steering);
+    const axes = rightDragWalkAxes(
+      axis("turn_left", "turn_right"),
+      axis("strafe_right", "strafe_left"),
+      mouse.steering,
+    );
+    const { turn, strafe } = axes;
     if (turn) {
-      const delta = turn * WALK_TURN_RADIANS_PER_S * dt;
-      walk.yaw += delta;
-      walk.camYaw += delta;
+      walk.yaw += turn * WALK_TURN_RADIANS_PER_S * dt;
     }
-    const forward = axis("forward", "back");
+    const forward = Math.max(-1, Math.min(1, axis("forward", "back") + (mouse.movingForward ? 1 : 0)));
+    // Any planar movement brings a free-look camera back behind the character.
+    // Keyboard turning moves the target yaw first, so the camera trails the turn.
+    if (shouldFollowWalkCamera(forward, strafe, turn, walk.drag !== null)) {
+      const followRate = turn ? WALK_CAMERA_TURN_FOLLOW_RATE : WALK_CAMERA_FOLLOW_RATE;
+      walk.camYaw = easeAngleToward(walk.camYaw, walk.yaw, followRate, dt);
+    }
     if (forward || strafe) {
       // Facing (yaw) points along -z turned by yaw, as a unit's facing cone does.
       const step = ((forward < 0 ? WALK_BACK_YPS : WALK_RUN_YPS) * scale * dt) / Math.hypot(forward, strafe);
