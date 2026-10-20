@@ -27,6 +27,7 @@ import {
 import { collectCastSpellIds, DEFAULT_EFFECT_OPTIONS, effectiveCastIconGuids, iconPreloadUrls, schoolNameColor, type EncounterEffects } from "./replayEffects";
 import type { MapViewRequest } from "./MapView2D";
 import type { MapSceneGround, MapSceneMarker } from "./useMapScene";
+import { DEFAULT_AD_STRAFE } from "./mapControls";
 import { DEFAULT_EFFECT_SETTINGS, type EffectSettings } from "./mapViewSettings";
 import { CAPSULE_AVATAR } from "./walkAvatars";
 
@@ -71,7 +72,7 @@ export interface MapView3DProps {
   walking?: boolean;
   /** Called when walk mode starts or ends, including from the keyboard (G, Esc). */
   onWalkingChange?: (walking: boolean) => void;
-  /** A/D strafe and Q/E turn (a saved map setting, on by default). */
+  /** Use A/D to strafe instead of turning (a saved map setting, off by default). */
   adStrafe?: boolean;
   /** The character to walk as (walkAvatars ids). */
   walkAvatar?: string;
@@ -205,7 +206,7 @@ export default function MapView3D({
   topDownKey = 0,
   walking = false,
   onWalkingChange,
-  adStrafe = true,
+  adStrafe = DEFAULT_AD_STRAFE,
   walkAvatar = CAPSULE_AVATAR,
   livePresence = null,
   presenceSurface,

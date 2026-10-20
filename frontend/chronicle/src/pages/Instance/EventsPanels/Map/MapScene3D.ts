@@ -27,7 +27,7 @@ import {
   type DirectorUnit,
 } from "./cameraDirector";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
-import { actionForKey, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
+import { actionForKey, DEFAULT_AD_STRAFE, WALK_TOGGLE_KEY, type MapControlAction } from "./mapControls";
 import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanPoint } from "./plan/mapPlan";
@@ -868,7 +868,7 @@ export class MapScene3D {
   private readonly heldActions = new Set<MapControlAction>();
   private walk: WalkState | null = null;
   private walkAvatarId = CAPSULE_AVATAR;
-  private adStrafe = true;
+  private adStrafe = DEFAULT_AD_STRAFE;
   private readonly tokenTextures = new UnitTokenTextures(() => this.requestRender());
   // The raid plan drawn on the floor (see plan/), and the drawing input while a tool is active.
   private readonly planLayer = new PlanLayer(this.tokenTextures);
@@ -3751,7 +3751,7 @@ export class MapScene3D {
     this.requestRender();
   }
 
-  /** A/D strafe and Q/E turn instead of the other way round. */
+  /** Use A/D to strafe instead of turning. */
   setAdStrafe(on: boolean) {
     if (on === this.adStrafe) return;
     // A held key would be released as the other action.

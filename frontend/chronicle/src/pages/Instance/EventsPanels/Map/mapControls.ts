@@ -9,23 +9,23 @@ export const MAP_CONTROL_ACTIONS = [
   { id: "back", label: "Move back", defaultKey: "KeyS" },
   { id: "turn_left", label: "Turn left", defaultKey: "KeyA" },
   { id: "turn_right", label: "Turn right", defaultKey: "KeyD" },
-  { id: "strafe_left", label: "Strafe left", defaultKey: "KeyQ" },
-  { id: "strafe_right", label: "Strafe right", defaultKey: "KeyE" },
+  { id: "strafe_left", label: "Strafe left", defaultKey: null },
+  { id: "strafe_right", label: "Strafe right", defaultKey: null },
   { id: "up", label: "Up", defaultKey: "Space" },
   { id: "down", label: "Down", defaultKey: "KeyZ" },
 ] as const;
 
 export type MapControlAction = (typeof MAP_CONTROL_ACTIONS)[number]["id"];
 
-// With A/D strafe (a saved map setting, on by default), A/D and Q/E trade places.
+export const DEFAULT_AD_STRAFE = false;
+
+// With A/D strafe enabled, A/D drive strafing instead of turning.
 const STRAFE_SWAP: Partial<Record<MapControlAction, MapControlAction>> = {
   turn_left: "strafe_left",
   turn_right: "strafe_right",
-  strafe_left: "turn_left",
-  strafe_right: "turn_right",
 };
 
-/** The action a key drives, with A/D strafing (the default) or turning. */
+/** The action a key drives, with A/D turning by default or strafing when enabled. */
 export function actionForKey(code: string, adStrafe: boolean): MapControlAction | undefined {
   const action = MAP_CONTROL_ACTIONS.find((candidate) => candidate.defaultKey === code)?.id;
   return action && adStrafe ? STRAFE_SWAP[action] ?? action : action;
@@ -46,8 +46,8 @@ export function keyLabel(code: string): string {
 /** For the instance page's keybind help. */
 export const MAP_CONTROL_KEYBINDS = [
   { keys: "W / S", action: "Move forward / back (pointer over the map, or while walking)" },
-  { keys: "A / D", action: "Strafe left / right (turn with \"A/D strafe\" off in Map settings → Controls)" },
-  { keys: "Q / E", action: "Turn left / right (strafe with \"A/D strafe\" off)" },
+  { keys: "A / D", action: "Turn left / right (strafe with \"A/D strafe\" on in Map settings → Controls)" },
+  { keys: "Q / E", action: "Rewind / fast forward replay by 1 second" },
   { keys: "Space / Z", action: "Zoom out / in; while walking: jump (hold to fly up) / fly down" },
   { keys: "X", action: "Play / pause the replay" },
   { keys: keyLabel(WALK_TOGGLE_KEY), action: "Walk mode on / off: join the fight on the ground" },

@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Gamepad2, Globe, PersonStanding, RotateCcw, Scan, Sparkles, UserRound, X, type LucideIcon } from "lucide-react";
 import { Switch } from "@/components/ui/Switch/Switch";
 import { cn } from "@/lib/utils";
-import { MAP_CONTROL_KEYBINDS } from "./mapControls";
+import { DEFAULT_AD_STRAFE, MAP_CONTROL_KEYBINDS } from "./mapControls";
 import { ABOVE_DISC_MODES, CAST_MODES, DEFAULT_EFFECT_SETTINGS, DENSITY_OPTIONS, TRAIL_OPTIONS, type EffectSettings } from "./mapViewSettings";
 import { DEFAULT_WALK_AVATAR, WALK_AVATAR_GROUPS, WALK_AVATARS } from "./walkAvatars";
 
@@ -203,9 +203,9 @@ export function MapSettingsOverlay({
           <Section title="Movement">
             <Toggle
               label="A/D strafe"
-              detail="A and D strafe and Q and E turn, instead of the other way round"
+              detail="A and D strafe instead of turning"
               checked={adStrafe}
-              changed={!adStrafe}
+              changed={adStrafe !== DEFAULT_AD_STRAFE}
               onChange={onAdStrafe}
             />
           </Section>
@@ -226,7 +226,7 @@ export function MapSettingsOverlay({
           </Section>
         </>
       ) : null,
-      reset: { changed: !adStrafe, apply: () => onAdStrafe(true) },
+      reset: { changed: adStrafe !== DEFAULT_AD_STRAFE, apply: () => onAdStrafe(DEFAULT_AD_STRAFE) },
     },
     {
       id: "character",

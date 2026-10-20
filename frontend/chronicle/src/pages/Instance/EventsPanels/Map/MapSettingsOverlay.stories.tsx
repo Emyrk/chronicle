@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { MapSettingsOverlay } from "./MapSettingsOverlay";
+import { DEFAULT_AD_STRAFE } from "./mapControls";
 import { DEFAULT_EFFECT_SETTINGS, type EffectSettings } from "./mapViewSettings";
 import { DEFAULT_WALK_AVATAR } from "./walkAvatars";
 
@@ -9,7 +10,7 @@ function SettingsPlayground({ initial = DEFAULT_EFFECT_SETTINGS }: { initial?: E
   const [effectSettings, setEffectSettings] = useState<EffectSettings>(initial);
   const [meshOn, setMeshOn] = useState(true);
   const [floor, setFloor] = useState(1);
-  const [adStrafe, setAdStrafe] = useState(true);
+  const [adStrafe, setAdStrafe] = useState(DEFAULT_AD_STRAFE);
   const [walkAvatar, setWalkAvatar] = useState(DEFAULT_WALK_AVATAR);
   return (
     <div style={{ width: 900, height: 620 }} className="relative overflow-hidden rounded-md border border-white/10 bg-zinc-800">
@@ -29,7 +30,7 @@ function SettingsPlayground({ initial = DEFAULT_EFFECT_SETTINGS }: { initial?: E
         onResetAll={() => {
           setEffectSettings(DEFAULT_EFFECT_SETTINGS);
           setMeshOn(true);
-          setAdStrafe(true);
+          setAdStrafe(DEFAULT_AD_STRAFE);
           setWalkAvatar(DEFAULT_WALK_AVATAR);
         }}
       />

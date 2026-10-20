@@ -9,6 +9,7 @@ import { LivePresenceIndicator } from "../../LivePresenceIndicator";
 import { useLiveSessionOptional } from "../../LiveSessionContext";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { ReplayToggleFlash } from "../../ReplayToggleFlash";
+import { useReplayStepKeys } from "../../replayStepKey";
 import { ReplayPlayTooltip } from "../../ReplayPlayTooltip";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { fetchMiniatureUrls } from "./bossMinis";
@@ -34,7 +35,7 @@ import { createRaidFramesPanel, HIDE_DEAD_ENEMIES_OPTION, selectRaidFramesEncoun
 import { lastTargetAt } from "../RaidFrames/raidFrames.processor";
 import { createUnitAurasPanel } from "../UnitAuras/UnitAuras";
 import { TargetFrames } from "./TargetFrames";
-import { MAP_CONTROL_KEYBINDS } from "./mapControls";
+import { DEFAULT_AD_STRAFE, MAP_CONTROL_KEYBINDS } from "./mapControls";
 import { MeterWindows } from "./MeterWindows";
 import { useMeterWindows } from "./meterWindowsState";
 import { MapSettingsOverlay } from "./MapSettingsOverlay";
@@ -76,14 +77,15 @@ export function preferredMeshState(stored: boolean | null): boolean {
 const RAID_FRAMES_STORAGE_KEY = "chronicle.map.raidFrames";
 const ENEMY_FRAMES_STORAGE_KEY = "chronicle.map.enemyFrames";
 
-// A/D strafe (Q/E turn), the default; "turn" swaps them back.
+// A/D strafe is optional; the default keeps A/D turning.
 const AD_STRAFE_STORAGE_KEY = "chronicle.map.adStrafe";
 
 function readStoredAdStrafe(): boolean {
   try {
-    return localStorage.getItem(AD_STRAFE_STORAGE_KEY) !== "turn";
+    const stored = localStorage.getItem(AD_STRAFE_STORAGE_KEY);
+    return stored === null ? DEFAULT_AD_STRAFE : stored === "strafe";
   } catch {
-    return true;
+    return DEFAULT_AD_STRAFE;
   }
 }
 
@@ -204,6 +206,15 @@ interface ReplayMapProps extends PanelRenderProps<MapResult> {
 
 function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = false, ...props }: ReplayMapProps) {
   const sync = useSyncModeContextOptional();
+  useReplayStepKeys((deltaMs) => {
+    if (!sync || sync.externalDriver !== "none" || sync.readOnly || !sync.encounterBounds) return false;
+    const startMs = sync.encounterBounds.start.getTime();
+    const endMs = sync.encounterBounds.end.getTime();
+    const baseMs = sync.currentTimestamp?.getTime() ?? (deltaMs < 0 ? endMs : startMs);
+    sync.enable();
+    sync.setTimestamp(new Date(Math.min(endMs, Math.max(startMs, baseMs + deltaMs))));
+    return true;
+  });
   const miniatureQuery = useQuery({
     queryKey: ["unit-miniatures"],
     staleTime: 60 * 60 * 1000,
@@ -344,7 +355,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   // Map settings → Reset all: every setting to its default, and the frames back.
   const resetAllSettings = () => {
     updateEffectSettings(DEFAULT_EFFECT_SETTINGS);
-    setAdStrafe(true);
+    setAdStrafe(DEFAULT_AD_STRAFE);
     setWalkAvatar(DEFAULT_WALK_AVATAR);
     setShowRaidFrames(true);
     setShowEnemyFrames(true);
@@ -735,7 +746,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
           )}
           {walking && (
             <div className="pointer-events-none absolute bottom-2 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-sm bg-black/75 px-2 py-1 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
-              <span className="font-semibold text-amber-300">Walking</span> · W/S move · {adStrafe ? "A/D strafe · Q/E turn" : "A/D turn (strafe while right-dragging) · Q/E strafe"} · Space jump (hold to fly) · Z down · drag to look · wheel zoom · G or Esc to leave
+              <span className="font-semibold text-amber-300">Walking</span> · W/S move · {adStrafe ? "A/D strafe" : "A/D turn (strafe while right-dragging)"} · Q/E rewind/fast forward · Space jump (hold to fly) · Z down · drag to look · wheel zoom · G or Esc to leave
             </div>
           )}
           {settingsOpen && (
