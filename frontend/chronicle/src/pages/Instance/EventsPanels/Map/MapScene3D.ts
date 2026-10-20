@@ -72,7 +72,7 @@ import {
   type ReplayEffectKind,
   type UnitCast,
 } from "./replayEffects";
-import { deadEnemyModelOpacity } from "./mapDeathVisibility";
+import { deadUnitVisualState } from "./mapDeathVisibility";
 import type { MapMarkerKind, MapSceneGround, MapUnitHealth } from "./useMapScene";
 
 /** Ground plane width in scene units; depth follows the artwork's aspect. */
@@ -2469,7 +2469,7 @@ export class MapScene3D {
       const guid = object.group.userData.guid as string;
       const deadSinceMs = fx ? deathStartedAt(fx, guid, cursorMs) : null;
       this.setDead(object, deadSinceMs !== null);
-      this.updateDeadEnemyModel(object, deadSinceMs, cursorMs);
+      this.updateDeadUnitVisibility(object, deadSinceMs, cursorMs);
     }
     if (fx) deriveUnitCasts(fx, cursorMs, this.unitCasts);
     else this.unitCasts.clear();
@@ -2601,7 +2601,7 @@ export class MapScene3D {
     let shown = 0;
     for (const text of texts) {
       const target = this.units.get(text.target);
-      if (!target) continue;
+      if (!target || !target.group.visible) continue;
       const sprite = this.combatSprites[shown];
       const label = this.labelTexture(text.text, this.effects!.resolveColor(text.color), text.crit);
       if (sprite.material.map !== label.texture) {
@@ -2639,7 +2639,7 @@ export class MapScene3D {
     const right = this.vectorB.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
     let visible = 0;
     for (const icon of icons) {
-      if (this.units.has(icon.caster)) visible++;
+      if (this.units.get(icon.caster)?.group.visible) visible++;
     }
     const baseSize = CAST_ICON_SIZE * (visible > CAST_ICON_CROWDED ? CAST_ICON_CROWDED_SCALE : 1);
     this.castIconTops.clear();
@@ -2654,7 +2654,7 @@ export class MapScene3D {
     for (let index = 0; index < icons.length; index++) {
       const icon = icons[index];
       const caster = this.units.get(icon.caster);
-      if (!caster) continue;
+      if (!caster || !caster.group.visible) continue;
       // The question mark stands in while the icon loads or after it failed.
       const texture = this.iconTexture(castIcons!.iconUrl(icon.spellId)) ?? this.iconTexture(castIcons!.placeholderUrl);
       if (!texture) continue;
@@ -2981,7 +2981,7 @@ export class MapScene3D {
     };
     for (const object of this.units.values()) {
       const { health } = object;
-      if (!health || count + 4 > MAX_HEALTH_BARS * 4) continue;
+      if (!object.group.visible || !health || count + 4 > MAX_HEALTH_BARS * 4) continue;
       const dead = health.dead || object.dead;
       barLift = object.barHeight * this.scaleOf(object);
       const fraction = health.max > 0 ? Math.min(1, Math.max(0, health.current / health.max)) : 0;
@@ -2999,14 +2999,22 @@ export class MapScene3D {
     this.commitPool(this.bars, count);
   }
 
-  // Dead non-boss enemies leave their ground token behind while the loaded 3D
-  // model fades away. Boss corpses stay fully visible.
-  private updateDeadEnemyModel(object: UnitObject, deadSinceMs: number | null, cursorMs: number) {
-    if (!object.mini || object.kind !== "hostile") return;
-    const opacity = deadEnemyModelOpacity(deadSinceMs, cursorMs, object.boss);
-    object.body.visible = opacity > 0;
-    object.bodyMaterial.opacity = opacity;
-    object.bodyMaterial.depthWrite = opacity >= 1;
+  // Slain totems disappear immediately. Dead non-boss enemies leave their
+  // ground frame behind while the loaded 3D model and its shadow fade together.
+  // Boss corpses stay fully visible.
+  private updateDeadUnitVisibility(object: UnitObject, deadSinceMs: number | null, cursorMs: number) {
+    const hostileModel = object.mini && object.kind === "hostile";
+    const state = deadUnitVisualState(deadSinceMs, cursorMs, {
+      boss: object.boss,
+      hostileModel,
+      totem: object.kind === "pet" && guardianWell(object.name) === "totem",
+    });
+    object.group.visible = state.unitVisible;
+    if (!hostileModel) return;
+    object.body.visible = state.modelOpacity > 0;
+    object.bodyMaterial.opacity = state.modelOpacity;
+    object.bodyMaterial.depthWrite = state.modelOpacity >= 1;
+    object.token.shadow.material.opacity = state.shadowOpacity;
   }
 
   // Slain units: a model lies down, grey; a disc greys with a skull. Until resurrected.
@@ -3044,7 +3052,7 @@ export class MapScene3D {
   private updateLabel() {
     const guid = this.hoveredGuid;
     const object = guid ? this.units.get(guid) : undefined;
-    if (!guid || !object) {
+    if (!guid || !object || !object.group.visible) {
       this.clearLabel();
       return;
     }
@@ -3606,9 +3614,10 @@ export class MapScene3D {
   // the unit's colour otherwise) and target -> target's target (purple dots).
   private updateTargetLines(dt: number) {
     const { roles } = this;
-    const selected = roles.selected ? this.units.get(roles.selected) : undefined;
-    const target = roles.target ? this.units.get(roles.target) : undefined;
-    const targetsTarget = roles.targetsTarget ? this.units.get(roles.targetsTarget) : undefined;
+    const shown = (object: UnitObject | undefined) => object?.group.visible ? object : undefined;
+    const selected = shown(roles.selected ? this.units.get(roles.selected) : undefined);
+    const target = shown(roles.target ? this.units.get(roles.target) : undefined);
+    const targetsTarget = shown(roles.targetsTarget ? this.units.get(roles.targetsTarget) : undefined);
     const cast = roles.selected && selected && !selected.dead ? this.unitCasts.get(roles.selected) : undefined;
     const lines: [UnitObject | undefined, UnitObject | undefined, THREE.Color, boolean][] = [
       [selected && !selected.dead ? selected : undefined, target, cast ? this.castColor(cast) : this.color.set(selected?.color ?? "#ffffff").clone(), false],

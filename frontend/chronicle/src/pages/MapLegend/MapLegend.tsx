@@ -195,10 +195,10 @@ export function MapLegend() {
             A ring in their class colour around their spec&apos;s icon (their class icon when the spec is unknown), with a coin-like edge and a shadow.
           </Card>
           <Card title="Guardian" demo={<Ground><At x={35} y={55}><Token kind="pet" ring="#67e8f9" facing={20} /></At><At x={68} y={55}><Token kind="pet" ring="#67e8f9" totem /></At></Ground>}>
-            Anything a player owns (pets, summons, totems): a smaller disc with a paw, or a totem pole for totems. One with a 3D model (a totem) stands on that disc, grown so even small ones read.
+            Anything a player owns (pets, summons, totems): a smaller disc with a paw, or a totem pole for totems. One with a 3D model (a totem) stands on that disc, grown so even small ones read. Slain totems disappear immediately.
           </Card>
           <Card title="Enemy" demo={<Ground><At x={50} y={55}><Token kind="hostile" ring="#fb7185" facing={200} /></At></Ground>}>
-            Enemy red, with a dark red well instead of an icon. Units with a 3D model show the model instead. When a non-boss dies, its enemy frame stays for {ms(DEAD_ENEMY_FRAME_LINGER_MS)}, then disappears; its 3D model fades over {ms(DEAD_ENEMY_MODEL_FADE_MS)}. Boss frames and models remain.
+            Enemy red, with a dark red well instead of an icon. Units with a 3D model show the model instead. When a non-boss dies, its enemy frame stays for {ms(DEAD_ENEMY_FRAME_LINGER_MS)}, then disappears; its 3D model and shadow fade together over {ms(DEAD_ENEMY_MODEL_FADE_MS)}. Boss frames and models remain.
           </Card>
           <Card title="Facing" demo={<Ground><At x={50} y={55}><Token {...MAGE} facing={(seconds * 40) % 360} /></At></Ground>}>
             The notch on the ring points where the unit faces and turns on the ground. When the log doesn&apos;t record facing, enemies face whoever they last hit and everyone else shows no notch.
@@ -207,7 +207,7 @@ export function MapLegend() {
             An arc fills clockwise round the ring in the spell school&apos;s colour as the cast bar runs.
           </Card>
           <Card title="Dead" demo={<Ground><At x={50} y={55}><Token {...HUNTER} dead facing={100} /></At></Ground>}>
-            The ring and edge go grey, the icon darkens and a skull sits on it, until the unit is resurrected.
+            The ring and edge go grey, the icon darkens and a skull sits on it, until the unit is resurrected. Totems are removed immediately instead.
           </Card>
           <Card title="In the air" demo={<Ground><At x={50} y={78}><Token {...PALADIN} lift={Math.round(44 * Math.sin(Math.PI * cycle(seconds, 2.4)))} /></At></Ground>}>
             Knocked up, falling or flying: on the 3D map, a unit logged more than {AIRBORNE_YARDS} yd above the floor rises to its logged height. Its shadow stays on the floor below, joined to it by a thin line.
