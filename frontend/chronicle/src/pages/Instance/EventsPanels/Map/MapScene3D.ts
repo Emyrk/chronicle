@@ -3355,9 +3355,10 @@ export class MapScene3D {
     this.controls.rotateSpeed = mobile ? MOBILE_ORBIT_ROTATE_SPEED : ORBIT_ROTATE_SPEED;
     this.controls.zoomSpeed = mobile ? MOBILE_ORBIT_ZOOM_SPEED : ORBIT_ZOOM_SPEED;
     this.controls.panSpeed = mobile ? MOBILE_ORBIT_PAN_SPEED : ORBIT_PAN_SPEED;
-    // Phone gestures should be predictable: one finger orbits, two fingers
-    // pinch only. Panning and zoom-to-finger made the orbit target lurch around.
-    this.controls.enablePan = !mobile;
+    // Phone gestures should be predictable: one finger orbits, while two
+    // fingers pinch and pan together. Keep zoom-to-finger off on mobile so the
+    // orbit target does not lurch toward either touch point.
+    this.controls.enablePan = true;
     this.controls.zoomToCursor = !mobile;
     this.controls.touches.ONE = THREE.TOUCH.ROTATE;
     this.controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
