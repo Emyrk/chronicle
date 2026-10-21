@@ -3611,8 +3611,15 @@ function InstancePageViewContent({
   }, [actionBarLayoutsByID, actionBarSlots, castLayout, suppressActionBar]);
 
 
+  // Applying the imported payload changes callbacks used to build the view. Keep
+  // the fetch keyed only to the URL code so those changes cannot re-import it.
+  const importCode = searchParams.get("import");
+  const applySharedViewPayloadRef = useRef(applySharedViewPayload);
   useEffect(() => {
-    const importCode = searchParams.get("import");
+    applySharedViewPayloadRef.current = applySharedViewPayload;
+  }, [applySharedViewPayload]);
+
+  useEffect(() => {
     if (!importCode) return;
 
     let cancelled = false;
@@ -3630,7 +3637,7 @@ function InstancePageViewContent({
           next.delete("import");
           return next;
         });
-        applySharedViewPayload(payload);
+        applySharedViewPayloadRef.current(payload);
         toast.success("Loaded view from shared url, refreshing the page will reset to your default layout.");
       } catch {
         if (cancelled) return;
@@ -3641,7 +3648,7 @@ function InstancePageViewContent({
     return () => {
       cancelled = true;
     };
-  }, [applySharedViewPayload, instance.id, searchParams, setSearchParams]);
+  }, [importCode, instance.id, setSearchParams]);
 
   const selectedEncounters = useMemo(
     () => instance.encounters.filter((e) => selectedIds.includes(e.id)),
