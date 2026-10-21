@@ -55,12 +55,13 @@ function renderGuidePage(template, guide) {
     .replace('<div id="root"></div>', root)
     .replace(/<title>.*?<\/title>/s, `<title>${escapeHTML(title)}</title>`)
     .replace(/<meta name="description" content=".*?"\s*\/?>/s, `<meta name="description" content="${escapeHTML(guide.description)}" />`)
+    .replace(/<!-- \{\{ if \.CanonicalURL \}\} --><link rel="canonical" href=".*?" \/><!-- \{\{ end \}\} -->/s, `<link rel="canonical" href="${canonicalPath}" />`)
     .replace(/<meta property="og:title" content=".*?"\s*\/?>/s, `<meta property="og:title" content="${escapeHTML(title)}" />`)
     .replace(/<meta property="og:description" content=".*?"\s*\/?>/s, `<meta property="og:description" content="${escapeHTML(guide.description)}" />`)
     .replace(/<meta property="og:url" content=".*?"\s*\/?>/s, `<meta property="og:url" content="${canonicalPath}" />`)
     .replace(/<meta name="twitter:title" content=".*?"\s*\/?>/s, `<meta name="twitter:title" content="${escapeHTML(title)}" />`)
     .replace(/<meta name="twitter:description" content=".*?"\s*\/?>/s, `<meta name="twitter:description" content="${escapeHTML(guide.description)}" />`)
-    .replace("</head>", `    <link rel="canonical" href="${canonicalPath}" />\n    ${extraMetadata}\n  </head>`);
+    .replace("</head>", `    ${extraMetadata}\n  </head>`);
 }
 
 const template = await readFile(path.join(distDirectory, "index.html"), "utf8");
