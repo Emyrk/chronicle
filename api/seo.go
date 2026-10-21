@@ -20,7 +20,7 @@ const defaultSEODescription = "Chronicle provides combat log analysis for World 
 var indexablePrefixes = []string{
 	"/", "/recent", "/guilds", "/g", "/armory", "/instances", "/s", "/leaderboards",
 	"/talents", "/wowdb", "/technical", "/census", "/speedrunning", "/tools", "/contact",
-	"/privacy", "/terms", "/disclaimer", "/supported-instances",
+	"/privacy", "/terms", "/disclaimer", "/supported-instances", "/guides",
 }
 
 var noIndexPrefixes = []string{
@@ -189,6 +189,7 @@ var sitemapPaths = []string{
 	"/census",
 	"/speedrunning",
 	"/tools",
+	"/guides/chronicle.onyxia",
 }
 
 func (api *API) robotsTXT(w http.ResponseWriter, r *http.Request) {

@@ -55,6 +55,14 @@ Trusted host controls are React siblings rendered above the guide layer. Guide n
 
 `GuidePage` is a standalone `/guides/:guideId` route. `GuideHost` owns package/runtime lifecycle and guide UI. The map adapter reuses Chronicle map asset contracts and renderer primitives but does not depend on replay aggregation, combat-log streams, `Map.tsx`, or panel context. The checked-in Onyxia package is the first resolver target and exercises the same ZIP loading path as uploaded packages.
 
+## Discovery and server-rendered metadata
+
+Built-in package builds derive `public/guides/catalog.json` from each package's source manifest. The catalog contains only public discovery fields and the package URL; it avoids unzipping guide archives in the request path and does not become a second hand-maintained metadata source.
+
+The production frontend build uses that catalog to emit one static HTML document per canonical guide route and alias. Each document includes title, description, canonical, Open Graph, Twitter, and author metadata plus a semantic guide summary in the root element. Chronicle serves that content before JavaScript runs, so crawlers and no-JavaScript visitors can read the guide description, author, game version, and encounter list. The client detects the guide prerender marker, removes the summary, and mounts the isolated interactive runtime rather than attempting to hydrate a different tree.
+
+Guide routes are explicitly indexable and canonical built-in guides are included in the sitemap. Lua is never executed to produce discovery metadata.
+
 ## Resource limits
 
 The constants live beside the package and protocol validators and are part of API version 1. Initial limits intentionally favor small authored guides:

@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build:guides": "node scripts/build-guide-packages.mjs",
-    "build": "pnpm build:guides && tsc -b && vite build && vite build --ssr src/blog/prerender.tsx --outDir .blog-prerender --emptyOutDir && node scripts/prerender-blog.mjs",
+    "build": "pnpm build:guides && tsc -b && vite build && node scripts/prerender-guides.mjs && vite build --ssr src/blog/prerender.tsx --outDir .blog-prerender --emptyOutDir && node scripts/prerender-blog.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run --project unit",

@@ -9,7 +9,7 @@ cd frontend/chronicle
 pnpm build:guides
 ```
 
-This writes `public/guides/chronicle.onyxia.zip` deterministically.
+This writes `public/guides/chronicle.onyxia.zip` deterministically and regenerates `public/guides/catalog.json`. The catalog exposes safe package metadata to Chronicle's build and server layers without opening ZIP files at request time.
 
 ## Manifest version 1
 
@@ -42,6 +42,14 @@ Capabilities are required features, not permissions to browser primitives:
 - `timers` schedules bounded one-shot callbacks.
 
 An unknown capability or API version rejects the package before execution.
+
+## Search and no-JavaScript metadata
+
+`name`, `description`, `author`, `game`, `game_version`, and `encounters` are also the guide's public discovery metadata. Keep them useful without executing Lua: Chronicle generates a catalog and a static HTML page for every built-in guide during the frontend build.
+
+The generated page provides title, description, canonical, Open Graph, Twitter, and author metadata. Its body contains a readable summary with the guide name, description, author, game version, and encounters. Visitors without JavaScript can read that summary; when JavaScript is available, Chronicle replaces it with the interactive guide host.
+
+The canonical route uses the package ID (`/guides/example.hello`). Friendly aliases may also be generated, but they point search engines to the package-ID route.
 
 ## Minimal guide
 
