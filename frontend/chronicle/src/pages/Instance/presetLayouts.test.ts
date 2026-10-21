@@ -79,7 +79,7 @@ describe("Map preset", () => {
     expect(strip).toMatchObject({ kind: "strip", stripType: "replay", y: map.y + map.h, w: map.w });
   });
 
-  it("uses a shorter, non-fitted map panel on mobile without changing desktop", () => {
+  it("uses a shorter, non-fitted map panel on mobile and keeps desktop fitted", () => {
     const desktop = presetLayoutById("map", ["unit-position"], false);
     const mobile = presetLayoutById("map", ["unit-position"], true);
     if (!desktop || !mobile || !isPanelPresetLayout(desktop) || !isPanelPresetLayout(mobile)) {
@@ -87,7 +87,7 @@ describe("Map preset", () => {
     }
 
     expect(desktop.fit).toBe(true);
-    expect(desktop.layoutItems[0]).toMatchObject({ id: "panel-1", h: 9 });
+    expect(desktop.layoutItems[0]).toMatchObject({ id: "panel-1", h: 7 });
     expect(mobile.fit).toBe(false);
     expect(mobile.layoutItems[0]).toMatchObject({ id: "panel-1", h: 4 });
     expect(mobile.layoutItems[1]).toMatchObject({ id: "strip-1", y: 4 });
