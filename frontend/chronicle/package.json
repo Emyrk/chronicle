@@ -6,7 +6,8 @@
   "types": "design-sync.entry.ts",
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "build": "tsc -b && vite build && vite build --ssr src/blog/prerender.tsx --outDir .blog-prerender --emptyOutDir && node scripts/prerender-blog.mjs",
+    "build:guides": "node scripts/build-guide-packages.mjs",
+    "build": "pnpm build:guides && tsc -b && vite build && vite build --ssr src/blog/prerender.tsx --outDir .blog-prerender --emptyOutDir && node scripts/prerender-blog.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run --project unit",
@@ -45,6 +46,8 @@
     "clsx": "^2.1.1",
     "codegenv1": "link:@bufbuild/protobuf/codegenv1",
     "date-fns": "^4.1.0",
+    "fengari": "0.1.5",
+    "fflate": "0.8.2",
     "html-to-image": "^1.11.13",
     "lucide-react": "^0.562.0",
     "next-themes": "^0.4.6",
@@ -101,6 +104,9 @@
   "pnpm": {
     "overrides": {
       "vite": "npm:rolldown-vite@7.2.5"
+    },
+    "patchedDependencies": {
+      "fengari@0.1.5": "patches/fengari@0.1.5.patch"
     }
   },
   "msw": {
