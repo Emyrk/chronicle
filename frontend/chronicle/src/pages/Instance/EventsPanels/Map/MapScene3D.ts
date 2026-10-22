@@ -35,7 +35,6 @@ import { PlanLayer, type PlanSurface } from "./plan/planLayer";
 import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, CAST_ARC_OPACITY, COOLDOWN_ICON_COLOR, COOLDOWN_ICON_SCALE, CUT_ARC_COLOR, CUT_TICK_COLOR, DEAD_COLOR, INTERRUPT_LABEL_COLOR, WALK_AVATAR_COLOR, WALK_AVATAR_EMISSIVE } from "./mapPalette";
 import {
   clampToRadius,
-  corsAssetUrl,
   dungeonMeshBytes,
   dungeonMeshPlacement,
   floorBelow,
@@ -674,7 +673,7 @@ const walkAvatarTemplates = new Map<string, Promise<WalkAvatarTemplate>>();
 function loadWalkAvatar(url: string): Promise<WalkAvatarTemplate> {
   let template = walkAvatarTemplates.get(url);
   if (!template) {
-    template = gltfLoader().then((loader) => loader.loadAsync(corsAssetUrl(url))).then((gltf) => {
+    template = gltfLoader().then((loader) => loader.loadAsync(url)).then((gltf) => {
       // Feet on the ground at the creature's height in yards (the avatar group's
       // PLAYER_GEOMETRY_HEIGHT is a MESH_PLAYER_HEIGHT_YARDS tall player), turned
       // to face -z (glTF models face +z).
@@ -1148,7 +1147,7 @@ export class MapScene3D {
       // Hidden until textured so pending or failed tiles show the backdrop.
       mesh.visible = false;
       this.groundGroup.add(mesh);
-      this.textureLoader.load(corsAssetUrl(mapAssetUrl(iconBaseUrl, path)), (texture) => {
+      this.textureLoader.load(mapAssetUrl(iconBaseUrl, path), (texture) => {
         if (this.disposed || mesh.parent !== this.groundGroup) {
           texture.dispose();
           return;
@@ -2203,7 +2202,7 @@ export class MapScene3D {
   private requestBossMini(url: string): BossMini | null {
     if (this.bossMinis.has(url)) return this.bossMinis.get(url) ?? null;
     this.bossMinis.set(url, null);
-    void this.loadBossMiniCandidate(corsAssetUrl(url)).then((mini) => {
+    void this.loadBossMiniCandidate(url).then((mini) => {
       if (!mini) return;
       if (this.disposed) {
         mini.geometry.dispose();
@@ -2840,7 +2839,7 @@ export class MapScene3D {
     }
     this.iconTextures.delete(url);
     this.iconTextures.set(url, "loading");
-    this.textureLoader.load(corsAssetUrl(url), (texture) => {
+    this.textureLoader.load(url, (texture) => {
       if (this.disposed || this.iconTextures.get(url) !== "loading") {
         texture.dispose();
         return;
@@ -4226,7 +4225,7 @@ async function parseDungeonMesh(request: DungeonMeshRequest): Promise<ParsedDung
   try {
     // The bytes may already be on their way: the map prefetches them while the encounter processes.
     const [loader, { MeshBVH }, bytes] = await Promise.all([gltfLoader(), import("three-mesh-bvh"), dungeonMeshBytes(request.url)]);
-    const gltf = await loader.parseAsync(bytes, THREE.LoaderUtils.extractUrlBase(corsAssetUrl(request.url)));
+    const gltf = await loader.parseAsync(bytes, THREE.LoaderUtils.extractUrlBase(request.url));
     releaseDungeonMeshBytes(request.url);
     for (const node of gltf.scene.children) node.position.set(0, 0, 0);
     const placement = dungeonMeshPlacement(request.bounds, GROUND_WIDTH);
