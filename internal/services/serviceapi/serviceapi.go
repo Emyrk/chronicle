@@ -130,6 +130,7 @@ func (s *Service) DependsOn() []string {
 		servicegithub.OnGitHub(),
 		serviceexternalapi.OnExternalAPI(),
 		serviceoauth.OnOAuth(),
+		serviceinference.OnInference(),
 		servicesidekick.OnSidekick(),
 	}
 }

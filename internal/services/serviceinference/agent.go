@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -35,11 +36,11 @@ type assistant struct {
 }
 
 var pageCatalog = []map[string]string{
-	{"path": "/", "name": "Home", "description": "Recent raid logs and Chronicle overview"},
-	{"path": "/rankings", "name": "Rankings", "description": "Player performance leaderboards and filters"},
+	{"path": "/recent", "name": "Recent raids", "description": "Browse recently uploaded raid logs"},
+	{"path": "/leaderboards/statistics", "name": "Rankings", "description": "Player performance leaderboards and filters"},
 	{"path": "/guilds", "name": "Guilds", "description": "Guild discovery and public guild pages"},
 	{"path": "/upload", "name": "Upload", "description": "Upload a combat log"},
-	{"path": "/settings", "name": "Settings", "description": "Account, integrations, and appearance settings"},
+	{"path": "/account/settings", "name": "Account settings", "description": "Account profile and settings"},
 }
 var assistants = map[string]assistant{
 	"site-help": {ID: "site-help", System: "You are Chronicle site help. Explain how to navigate Chronicle and answer rankings questions using tools. Never invent pages or ranking results.", Tools: []ToolDefinition{
@@ -70,8 +71,12 @@ func decodeStrict(raw string, dst any) error {
 	if err := dec.Decode(dst); err != nil {
 		return err
 	}
-	if dec.More() {
-		return errors.New("multiple JSON values")
+	var trailing json.RawMessage
+	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New("multiple JSON values")
+		}
+		return err
 	}
 	return nil
 }

@@ -80,7 +80,7 @@ func TestAgentLoopTextAndToolCall(t *testing.T) {
 	require.Equal(t, 4, usage.PromptTokens)
 	require.Len(t, persisted, 3)
 	require.Equal(t, RoleTool, persisted[1].Role)
-	require.Contains(t, persisted[1].Content, "/rankings")
+	require.Contains(t, persisted[1].Content, "/leaderboards/statistics")
 	require.Equal(t, "Use Rankings.", persisted[2].Content)
 	body := stream.String()
 	for _, event := range []string{"TOOL_CALL_START", "TOOL_CALL_ARGS", "TOOL_CALL_END", "TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT", "TEXT_MESSAGE_END"} {

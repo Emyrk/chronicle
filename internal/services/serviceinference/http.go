@@ -124,15 +124,21 @@ func (s *Service) authorizeOpenRouter(w http.ResponseWriter, r *http.Request) {
 	}
 	callback := *s.accessURL
 	callback.Path = "/api/v1/inference/openrouter/callback"
-	q := callback.Query()
-	q.Set("state", state)
-	callback.RawQuery = q.Encode()
+	callback.RawQuery = ""
 	authorizeURL, err := s.openRouter.AuthorizationURL(callback.String(), openrouter.PKCEChallenge(verifier))
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceAuthorizeResponse{AuthorizeURL: authorizeURL})
+	authorize, err := url.Parse(authorizeURL)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	query := authorize.Query()
+	query.Set("state", state)
+	authorize.RawQuery = query.Encode()
+	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceAuthorizeResponse{AuthorizeURL: authorize.String()})
 }
 
 func (s *Service) callbackOpenRouter(w http.ResponseWriter, r *http.Request) {
