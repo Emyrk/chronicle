@@ -16,9 +16,13 @@ type ProductCode string
 type Entitlement string
 
 const (
-	ProductSupporter ProductCode = "supporter"
+	ProductHonored ProductCode = "honored"
+	ProductRevered ProductCode = "revered"
+	ProductExalted ProductCode = "exalted"
 
+	EntitlementChronicleHonored Entitlement = "chronicle-honored"
 	EntitlementChronicleRevered Entitlement = "chronicle-revered"
+	EntitlementChronicleExalted Entitlement = "chronicle-exalted"
 )
 
 // EntitlementTransaction is the set of durable effects an entitlement may use.
@@ -95,7 +99,7 @@ type StripeEntitlement interface {
 	Revoke(context.Context, EntitlementTransaction, uuid.UUID) error
 }
 
-type chronicleReveredEntitlement struct{}
+type chroniclePaidEntitlement struct{}
 
 const (
 	// Keep the established source key so upgrading the Stripe feature model does
@@ -108,25 +112,25 @@ const (
 	stripeRoleUnlistedLogs    = "stripe_unlisted_logs"
 )
 
-var chronicleReveredStripeRoles = []string{
+var chroniclePaidStripeRoles = []string{
 	stripeRoleAdFree,
 	stripeRoleDownloadRawLogs,
 	stripeRoleUnlistedLogs,
 }
 
-// Grant expands the single Chronicle Revered Stripe feature into every benefit
-// owned by the tier. Future benefit changes remain application code instead of
+// Grant expands any Chronicle paid-tier Stripe feature into every benefit
+// owned by that tier. Future benefit changes remain application code instead of
 // Stripe catalog changes, so they apply without another Stripe billing cycle.
-func (chronicleReveredEntitlement) Grant(ctx context.Context, tx EntitlementTransaction, userID uuid.UUID) error {
+func (chroniclePaidEntitlement) Grant(ctx context.Context, tx EntitlementTransaction, userID uuid.UUID) error {
 	if _, err := tx.UpsertDataGrant(ctx, database.UpsertDataGrantParams{
 		UserID:       userID,
 		Source:       stripeStorageGrantSource,
 		StorageBytes: stripeStorageGrantBytes,
-		Description:  pgtype.Text{String: "Stripe Chronicle Revered entitlement", Valid: true},
+		Description:  pgtype.Text{String: "Stripe Chronicle paid tier entitlement", Valid: true},
 	}); err != nil {
 		return err
 	}
-	for _, role := range chronicleReveredStripeRoles {
+	for _, role := range chroniclePaidStripeRoles {
 		if err := tx.SetStripeEntitlementRole(ctx, userID, role, true); err != nil {
 			return err
 		}
@@ -134,11 +138,11 @@ func (chronicleReveredEntitlement) Grant(ctx context.Context, tx EntitlementTran
 	return nil
 }
 
-func (chronicleReveredEntitlement) Revoke(ctx context.Context, tx EntitlementTransaction, userID uuid.UUID) error {
+func (chroniclePaidEntitlement) Revoke(ctx context.Context, tx EntitlementTransaction, userID uuid.UUID) error {
 	if err := tx.DeleteDataGrant(ctx, database.DeleteDataGrantParams{UserID: userID, Source: stripeStorageGrantSource}); err != nil {
 		return err
 	}
-	for _, role := range chronicleReveredStripeRoles {
+	for _, role := range chroniclePaidStripeRoles {
 		if err := tx.SetStripeEntitlementRole(ctx, userID, role, false); err != nil {
 			return err
 		}
@@ -147,14 +151,17 @@ func (chronicleReveredEntitlement) Revoke(ctx context.Context, tx EntitlementTra
 }
 
 type stripeEntitlementDefinition struct {
-	key      Entitlement
-	behavior StripeEntitlement
+	key         Entitlement
+	behaviorKey string
+	behavior    StripeEntitlement
 }
 
 // stripeEntitlements is the complete, executable definition of known Stripe
 // entitlements. Unknown lookup keys are still persisted, but have no effects.
 var stripeEntitlements = []stripeEntitlementDefinition{
-	{key: EntitlementChronicleRevered, behavior: chronicleReveredEntitlement{}},
+	{key: EntitlementChronicleHonored, behaviorKey: "chronicle-paid", behavior: chroniclePaidEntitlement{}},
+	{key: EntitlementChronicleRevered, behaviorKey: "chronicle-paid", behavior: chroniclePaidEntitlement{}},
+	{key: EntitlementChronicleExalted, behaviorKey: "chronicle-paid", behavior: chroniclePaidEntitlement{}},
 }
 
 func stripeEntitlementBehavior(key Entitlement) (StripeEntitlement, bool) {
@@ -177,20 +184,20 @@ func billingSubscriptionAccessEnd(sub database.BillingSubscription) pgtype.Times
 
 // subscriptionHasCurrentBillingState controls whether the account page should
 // present the current-subscription management surface. It is separate from
-// checkout eligibility and from current Revered access.
-func subscriptionHasCurrentBillingState(sub database.BillingSubscription, hasReveredEntitlement bool) bool {
+// checkout eligibility and from current paid-tier access.
+func subscriptionHasCurrentBillingState(sub database.BillingSubscription, hasPaidEntitlement bool) bool {
 	if !sub.ProviderSubscriptionID.Valid {
 		return false
 	}
 	switch sub.Status {
 	case string(stripe.SubscriptionStatusCanceled), string(stripe.SubscriptionStatusIncompleteExpired):
-		return hasReveredEntitlement
+		return hasPaidEntitlement
 	default:
 		return true
 	}
 }
 
-func subscriptionBlocksCheckout(now time.Time, sub database.BillingSubscription, hasReveredEntitlement bool) bool {
+func subscriptionBlocksCheckout(now time.Time, sub database.BillingSubscription, hasPaidEntitlement bool) bool {
 	accessEnd := billingSubscriptionAccessEnd(sub)
 	if !accessEnd.Valid {
 		return false
@@ -201,10 +208,39 @@ func subscriptionBlocksCheckout(now time.Time, sub database.BillingSubscription,
 		string(stripe.SubscriptionStatusPastDue):
 		return now.Before(accessEnd.Time.Add(billingGracePeriod))
 	case string(stripe.SubscriptionStatusCanceled):
-		return hasReveredEntitlement && now.Before(accessEnd.Time.Add(billingGracePeriod))
+		return hasPaidEntitlement && now.Before(accessEnd.Time.Add(billingGracePeriod))
 	default:
 		return false
 	}
+}
+
+func isPaidProduct(product ProductCode) bool {
+	switch product {
+	case ProductHonored, ProductRevered, ProductExalted:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *Service) paidTier(ctx context.Context, userID uuid.UUID) (string, bool, error) {
+	for _, candidate := range []struct {
+		entitlement Entitlement
+		tier        string
+	}{
+		{entitlement: EntitlementChronicleExalted, tier: TierExalted},
+		{entitlement: EntitlementChronicleRevered, tier: TierRevered},
+		{entitlement: EntitlementChronicleHonored, tier: TierHonored},
+	} {
+		granted, err := s.HasEntitlement(ctx, userID, candidate.entitlement)
+		if err != nil {
+			return TierFree, false, err
+		}
+		if granted {
+			return candidate.tier, true, nil
+		}
+	}
+	return TierFree, false, nil
 }
 
 func (s *Service) HasEntitlement(ctx context.Context, userID uuid.UUID, entitlement Entitlement) (bool, error) {

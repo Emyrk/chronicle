@@ -106,10 +106,15 @@ func (s *Service) syncStripeEntitlements(ctx context.Context, customerID string)
 }
 
 func revokeAllStripeEntitlements(ctx context.Context, tx EntitlementTransaction, userID uuid.UUID) error {
+	revoked := make(map[string]struct{}, len(stripeEntitlements))
 	for _, entitlement := range stripeEntitlements {
+		if _, alreadyRevoked := revoked[entitlement.behaviorKey]; alreadyRevoked {
+			continue
+		}
 		if err := entitlement.behavior.Revoke(ctx, tx, userID); err != nil {
 			return fmt.Errorf("revoke %q: %w", entitlement.key, err)
 		}
+		revoked[entitlement.behaviorKey] = struct{}{}
 	}
 	return nil
 }

@@ -45,11 +45,12 @@ func ConfigureDevStripeWebhookSecret(broker *services.Services, secret string, d
 type Service struct {
 	broker *services.Services
 
-	stripeSecretKey       string
-	stripeAccountID       string
-	stripeWebhookSecret   string
-	stripeSupporterPrice  string
-	stripeSupporterPrices []string
+	stripeSecretKey     string
+	stripeAccountID     string
+	stripeWebhookSecret string
+	stripeHonoredPrices []string
+	stripeReveredPrices []string
+	stripeExaltedPrices []string
 
 	Billing *billing.Service
 	Worker  *billing.ReconciliationWorker
@@ -86,7 +87,9 @@ func (s *Service) Start(ctx context.Context) error {
 		StripeEntitlementRoles: zed,
 		SecretKey:              s.stripeSecretKey,
 		WebhookSecret:          s.stripeWebhookSecret,
-		PriceIDs:               s.supporterPriceIDs(),
+		HonoredPriceIDs:        s.stripeHonoredPrices,
+		ReveredPriceIDs:        s.stripeReveredPrices,
+		ExaltedPriceIDs:        s.stripeExaltedPrices,
 		AccessURL:              accessURL,
 	})
 	if err := s.Billing.ValidateAccount(ctx, s.stripeAccountID); err != nil {
@@ -102,14 +105,8 @@ func (s *Service) Start(ctx context.Context) error {
 
 func (s *Service) Close(context.Context) error { return nil }
 
-func (s *Service) supporterPriceIDs() []string {
-	if len(s.stripeSupporterPrices) > 0 {
-		return append([]string(nil), s.stripeSupporterPrices...)
-	}
-	if s.stripeSupporterPrice != "" {
-		return []string{s.stripeSupporterPrice}
-	}
-	return nil
+func (s *Service) hasConfiguredPrice() bool {
+	return len(s.stripeHonoredPrices) > 0 || len(s.stripeReveredPrices) > 0 || len(s.stripeExaltedPrices) > 0
 }
 
 func (s *Service) BillingEnabled() bool {
@@ -123,8 +120,8 @@ func (s *Service) devStripeAPIKey(devAuth bool) (string, error) {
 	if !strings.HasPrefix(s.stripeSecretKey, "sk_test_") {
 		return "", errors.New("development Stripe listener requires a sandbox secret key")
 	}
-	if len(s.supporterPriceIDs()) == 0 {
-		return "", errors.New("development Stripe listener requires at least one Supporter price ID")
+	if !s.hasConfiguredPrice() {
+		return "", errors.New("development Stripe listener requires at least one tier price ID")
 	}
 	return s.stripeSecretKey, nil
 }
@@ -144,7 +141,7 @@ func (s *Service) Options() serpent.OptionSet {
 	return serpent.OptionSet{
 		{
 			Name:        "Stripe Secret Key",
-			Description: "Optional Stripe secret key. Billing is enabled when this, the webhook secret, and at least one Supporter price ID are configured.",
+			Description: "Optional Stripe secret key. Billing is enabled when this, the webhook secret, and at least one tier price ID are configured.",
 			Flag:        "stripe-secret-key",
 			Env:         "CHRONICLE_STRIPE_SECRET_KEY",
 			Default:     "",
@@ -167,20 +164,28 @@ func (s *Service) Options() serpent.OptionSet {
 			Value:       serpent.StringOf(&s.stripeWebhookSecret),
 		},
 		{
-			Name:        "Stripe Supporter Price IDs",
-			Description: "Optional comma-separated recurring Stripe price IDs for the ad-free Supporter tier. Prices must belong to one product and currency.",
-			Flag:        "stripe-supporter-price-ids",
-			Env:         "CHRONICLE_STRIPE_SUPPORTER_PRICE_IDS",
+			Name:        "Stripe Honored Price IDs",
+			Description: "Optional comma-separated recurring Stripe price IDs for the Honored tier. Prices must belong to one product and currency.",
+			Flag:        "stripe-honored-price-ids",
+			Env:         "CHRONICLE_STRIPE_HONORED_PRICE_IDS",
 			Default:     "",
-			Value:       serpent.StringArrayOf(&s.stripeSupporterPrices),
+			Value:       serpent.StringArrayOf(&s.stripeHonoredPrices),
 		},
 		{
-			Name:        "Stripe Supporter Price ID",
-			Description: "Optional single recurring Stripe price ID retained for backward compatibility.",
-			Flag:        "stripe-supporter-price-id",
-			Env:         "CHRONICLE_STRIPE_SUPPORTER_PRICE_ID",
+			Name:        "Stripe Revered Price IDs",
+			Description: "Optional comma-separated recurring Stripe price IDs for the Revered tier. Prices must belong to one product and currency.",
+			Flag:        "stripe-revered-price-ids",
+			Env:         "CHRONICLE_STRIPE_REVERED_PRICE_IDS",
 			Default:     "",
-			Value:       serpent.StringOf(&s.stripeSupporterPrice),
+			Value:       serpent.StringArrayOf(&s.stripeReveredPrices),
+		},
+		{
+			Name:        "Stripe Exalted Price IDs",
+			Description: "Optional comma-separated recurring Stripe price IDs for the Exalted tier. Prices must belong to one product and currency.",
+			Flag:        "stripe-exalted-price-ids",
+			Env:         "CHRONICLE_STRIPE_EXALTED_PRICE_IDS",
+			Default:     "",
+			Value:       serpent.StringArrayOf(&s.stripeExaltedPrices),
 		},
 	}
 }

@@ -6,27 +6,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSupporterPriceIDsPrefersPluralConfiguration(t *testing.T) {
+func TestHasConfiguredPrice(t *testing.T) {
 	t.Parallel()
-
-	s := Service{
-		stripeSupporterPrice:  "price_legacy",
-		stripeSupporterPrices: []string{"price_monthly", "price_annual"},
-	}
-	require.Equal(t, []string{"price_monthly", "price_annual"}, s.supporterPriceIDs())
+	require.False(t, (&Service{}).hasConfiguredPrice())
+	require.True(t, (&Service{stripeHonoredPrices: []string{"price_honored"}}).hasConfiguredPrice())
+	require.True(t, (&Service{stripeReveredPrices: []string{"price_revered"}}).hasConfiguredPrice())
+	require.True(t, (&Service{stripeExaltedPrices: []string{"price_exalted"}}).hasConfiguredPrice())
 }
 
-func TestOptionsIncludeStripeAccountID(t *testing.T) {
+func TestOptionsIncludeStripeConfiguration(t *testing.T) {
 	t.Parallel()
 
-	var found bool
+	wanted := map[string]bool{
+		"CHRONICLE_STRIPE_ACCOUNT_ID":        false,
+		"CHRONICLE_STRIPE_HONORED_PRICE_IDS": false,
+		"CHRONICLE_STRIPE_REVERED_PRICE_IDS": false,
+		"CHRONICLE_STRIPE_EXALTED_PRICE_IDS": false,
+	}
 	for _, option := range (&Service{}).Options() {
-		if option.Env == "CHRONICLE_STRIPE_ACCOUNT_ID" {
-			found = true
-			break
+		if _, ok := wanted[option.Env]; ok {
+			wanted[option.Env] = true
 		}
 	}
-	require.True(t, found)
+	for env, found := range wanted {
+		require.Truef(t, found, "missing option for %s", env)
+	}
 }
 
 func TestBillingEnabledRequiresStripeAccountID(t *testing.T) {
@@ -40,8 +44,8 @@ func TestDevStripeAPIKey(t *testing.T) {
 	t.Parallel()
 
 	service := Service{
-		stripeSecretKey:      "sk_test_example",
-		stripeSupporterPrice: "price_supporter",
+		stripeSecretKey:     "sk_test_example",
+		stripeReveredPrices: []string{"price_revered"},
 	}
 	key, err := service.devStripeAPIKey(true)
 	require.NoError(t, err)
@@ -64,56 +68,33 @@ func TestConfigureDevStripeWebhookSecret(t *testing.T) {
 		{
 			name:    "configured",
 			devAuth: true,
-			service: Service{
-				stripeSecretKey:      "sk_test_example",
-				stripeSupporterPrice: "price_supporter",
-			},
-			secret: "whsec_example",
+			service: Service{stripeSecretKey: "sk_test_example", stripeHonoredPrices: []string{"price_honored"}},
+			secret:  "whsec_example",
 		},
 		{
-			name:    "configured with multiple prices",
-			devAuth: true,
-			service: Service{
-				stripeSecretKey:       "sk_test_example",
-				stripeSupporterPrices: []string{"price_monthly", "price_annual"},
-			},
-			secret: "whsec_example",
-		},
-		{
-			name: "requires dev auth",
-			service: Service{
-				stripeSecretKey:      "sk_test_example",
-				stripeSupporterPrice: "price_supporter",
-			},
+			name:    "requires dev auth",
+			service: Service{stripeSecretKey: "sk_test_example", stripeReveredPrices: []string{"price_revered"}},
 			secret:  "whsec_example",
 			wantErr: "requires dev auth",
 		},
 		{
 			name:    "rejects live key",
 			devAuth: true,
-			service: Service{
-				stripeSecretKey:      "sk_live_example",
-				stripeSupporterPrice: "price_supporter",
-			},
+			service: Service{stripeSecretKey: "sk_live_example", stripeExaltedPrices: []string{"price_exalted"}},
 			secret:  "whsec_example",
 			wantErr: "requires a sandbox secret key",
 		},
 		{
 			name:    "requires price",
 			devAuth: true,
-			service: Service{
-				stripeSecretKey: "sk_test_example",
-			},
+			service: Service{stripeSecretKey: "sk_test_example"},
 			secret:  "whsec_example",
-			wantErr: "requires at least one Supporter price ID",
+			wantErr: "requires at least one tier price ID",
 		},
 		{
 			name:    "rejects invalid webhook secret",
 			devAuth: true,
-			service: Service{
-				stripeSecretKey:      "sk_test_example",
-				stripeSupporterPrice: "price_supporter",
-			},
+			service: Service{stripeSecretKey: "sk_test_example", stripeReveredPrices: []string{"price_revered"}},
 			secret:  "invalid",
 			wantErr: "invalid webhook signing secret",
 		},
