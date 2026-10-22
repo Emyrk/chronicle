@@ -81,6 +81,7 @@ type Options struct {
 	OAuth                 OAuthHandler
 	Sidekick              SidekickService
 	Rankings              http.Handler
+	Inference             http.Handler
 	Mailer                *chroniclemail.Mailer
 	ItemPricing           *itempricing.Service
 	CustomPanelHTTPClient *http.Client
@@ -301,6 +302,15 @@ func (api *API) Routes() chi.Router {
 				r.Put("/raid-comps/{compID}/sharing", api.UpdateRaidCompositionSharing)
 				r.Post("/share", api.CreateShare)
 			})
+			if api.Opts.Inference != nil {
+				r.Group(func(r chi.Router) {
+					r.Use(
+						api.Auth.Authenticated(false),
+						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanUse_inference_chat_User),
+					)
+					r.Mount("/inference", api.Opts.Inference)
+				})
+			}
 			r.Mount("/custom-panels", api.CustomPanels.Routes())
 			r.Mount("/panel-layout", panellayoutapi.New(api.Opts.Zed, api.Auth).Routes())
 			r.Mount("/gear-builder", gearbuilderapi.New(api.Opts.Zed, api.Auth, api.Opts.CacheSvc).Routes())

@@ -31,4 +31,5 @@ const (
 	ServiceWhatsNew    = "whats-new"
 	ServiceBilling     = "billing"
 	ServiceStripeCLI   = "stripe-cli"
+	ServiceInference   = "inference"
 )

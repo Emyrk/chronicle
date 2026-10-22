@@ -7,15 +7,16 @@ RETURNING *;
 
 -- name: ListInferenceConnectionsByOwner :many
 SELECT * FROM inference_connections
-WHERE user_id = $1
+WHERE user_id = $1 AND status <> 'deleted'
 ORDER BY created_at DESC;
 
 -- name: GetInferenceConnectionByOwner :one
 SELECT * FROM inference_connections
-WHERE id = $1 AND user_id = $2;
+WHERE id = $1 AND user_id = $2 AND status <> 'deleted';
 
 -- name: DeleteInferenceConnectionByOwner :exec
-DELETE FROM inference_connections
+UPDATE inference_connections
+SET status = 'deleted', updated_at = now()
 WHERE id = $1 AND user_id = $2;
 
 -- name: UpdateInferenceConnectionLastUsedByOwner :one
@@ -91,4 +92,13 @@ SET status = $3,
     completed_at = $7,
     updated_at = now()
 WHERE id = $1 AND user_id = $2
+RETURNING *;
+
+-- name: GetOrCreateInferenceThread :one
+INSERT INTO inference_threads (
+  user_id, assistant_id, persistence, context_type, context_id, title
+) VALUES ($1, $2, 'durable', $3, $4, $5)
+ON CONFLICT (user_id, assistant_id, context_type, context_id)
+  WHERE persistence = 'durable' AND context_type IS NOT NULL
+DO UPDATE SET updated_at = inference_threads.updated_at
 RETURNING *;

@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Emyrk/chronicle/internal/services/serviceinference"
+	serviceinference "github.com/Emyrk/chronicle/internal/services/serviceinference/contracts"
 )
 
 const (

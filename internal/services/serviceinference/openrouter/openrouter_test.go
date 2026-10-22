@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Emyrk/chronicle/internal/services/serviceinference"
+	serviceinference "github.com/Emyrk/chronicle/internal/services/serviceinference/contracts"
 	"github.com/stretchr/testify/require"
 )
 

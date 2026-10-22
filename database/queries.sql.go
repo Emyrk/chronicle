@@ -8959,7 +8959,8 @@ func (q *sqlQuerier) ConsumeInferenceOAuthTransaction(ctx context.Context, arg C
 }
 
 const deleteInferenceConnectionByOwner = `-- name: DeleteInferenceConnectionByOwner :exec
-DELETE FROM inference_connections
+UPDATE inference_connections
+SET status = 'deleted', updated_at = now()
 WHERE id = $1 AND user_id = $2
 `
 
@@ -8975,7 +8976,7 @@ func (q *sqlQuerier) DeleteInferenceConnectionByOwner(ctx context.Context, arg D
 
 const getInferenceConnectionByOwner = `-- name: GetInferenceConnectionByOwner :one
 SELECT id, user_id, provider, auth_mode, label, encrypted_credential, credential_key_version, provider_account_key_hash, status, created_at, updated_at, last_used_at FROM inference_connections
-WHERE id = $1 AND user_id = $2
+WHERE id = $1 AND user_id = $2 AND status <> 'deleted'
 `
 
 type GetInferenceConnectionByOwnerParams struct {
@@ -9079,6 +9080,47 @@ type GetInferenceThreadByOwnerParams struct {
 
 func (q *sqlQuerier) GetInferenceThreadByOwner(ctx context.Context, arg GetInferenceThreadByOwnerParams) (InferenceThread, error) {
 	row := q.db.QueryRow(ctx, getInferenceThreadByOwner, arg.ID, arg.UserID)
+	var i InferenceThread
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.AssistantID,
+		&i.Persistence,
+		&i.ContextType,
+		&i.ContextID,
+		&i.Title,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getOrCreateInferenceThread = `-- name: GetOrCreateInferenceThread :one
+INSERT INTO inference_threads (
+  user_id, assistant_id, persistence, context_type, context_id, title
+) VALUES ($1, $2, 'durable', $3, $4, $5)
+ON CONFLICT (user_id, assistant_id, context_type, context_id)
+  WHERE persistence = 'durable' AND context_type IS NOT NULL
+DO UPDATE SET updated_at = inference_threads.updated_at
+RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at
+`
+
+type GetOrCreateInferenceThreadParams struct {
+	UserID      uuid.UUID   `db:"user_id" json:"user_id"`
+	AssistantID string      `db:"assistant_id" json:"assistant_id"`
+	ContextType pgtype.Text `db:"context_type" json:"context_type"`
+	ContextID   pgtype.Text `db:"context_id" json:"context_id"`
+	Title       string      `db:"title" json:"title"`
+}
+
+func (q *sqlQuerier) GetOrCreateInferenceThread(ctx context.Context, arg GetOrCreateInferenceThreadParams) (InferenceThread, error) {
+	row := q.db.QueryRow(ctx, getOrCreateInferenceThread,
+		arg.UserID,
+		arg.AssistantID,
+		arg.ContextType,
+		arg.ContextID,
+		arg.Title,
+	)
 	var i InferenceThread
 	err := row.Scan(
 		&i.ID,
@@ -9315,7 +9357,7 @@ func (q *sqlQuerier) InsertInferenceThread(ctx context.Context, arg InsertInfere
 
 const listInferenceConnectionsByOwner = `-- name: ListInferenceConnectionsByOwner :many
 SELECT id, user_id, provider, auth_mode, label, encrypted_credential, credential_key_version, provider_account_key_hash, status, created_at, updated_at, last_used_at FROM inference_connections
-WHERE user_id = $1
+WHERE user_id = $1 AND status <> 'deleted'
 ORDER BY created_at DESC
 `
 

@@ -319,6 +319,7 @@ type sqlcQuerier interface {
 	GetModificationRequestByID(ctx context.Context, id uuid.UUID) (ApplicationModificationRequest, error)
 	GetOAuthDeviceSession(ctx context.Context, signature string) (GetOAuthDeviceSessionRow, error)
 	GetOAuthTokenSession(ctx context.Context, arg GetOAuthTokenSessionParams) ([]byte, error)
+	GetOrCreateInferenceThread(ctx context.Context, arg GetOrCreateInferenceThreadParams) (InferenceThread, error)
 	GetOrCreateOAuthServerSecret(ctx context.Context, secret []byte) ([]byte, error)
 	GetPanelLayoutByCode(ctx context.Context, code pgtype.Text) (GetPanelLayoutByCodeRow, error)
 	GetPanelLayoutByID(ctx context.Context, id uuid.UUID) (GetPanelLayoutByIDRow, error)
