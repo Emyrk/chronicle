@@ -3,7 +3,6 @@ import * as THREE from "three";
 import type { WowMapFloorBounds, WowMapInstance, WowMapMeshInstance } from "@/pages/Technical/mapGallery";
 import {
   clampToRadius,
-  corsAssetUrl,
   dungeonMeshLiquid,
   dungeonMeshPlacement,
   dungeonMeshUrl,
@@ -98,20 +97,6 @@ describe("placeableDungeonMesh", () => {
 describe("dungeonMeshUrl", () => {
   it("resolves the manifest path under the icon CDN's maps", () => {
     expect(dungeonMeshUrl(WC_MESH, "https://icons.example.com/forever/")).toBe("https://icons.example.com/forever/maps/3d/wailing-caverns-open-top.glb");
-  });
-});
-
-describe("corsAssetUrl", () => {
-  it("marks cross-origin URLs", () => {
-    expect(corsAssetUrl("https://icons.example.com/maps/tiles/1.webp", "http://localhost:5173")).toBe("https://icons.example.com/maps/tiles/1.webp?cors");
-    expect(corsAssetUrl("https://icons.example.com/maps/tiles/1.webp?v=2", "http://localhost:5173")).toBe("https://icons.example.com/maps/tiles/1.webp?v=2&cors");
-  });
-
-  it("leaves relative and same-origin URLs alone", () => {
-    expect(corsAssetUrl("/3d/wailing-caverns-open-top.glb", "http://localhost:5173")).toBe("/3d/wailing-caverns-open-top.glb");
-    expect(corsAssetUrl("http://localhost:5173/3d/wailing-caverns-open-top.glb", "http://localhost:5173")).toBe("http://localhost:5173/3d/wailing-caverns-open-top.glb");
-    expect(corsAssetUrl("http://localhost:51730/x.glb", "http://localhost:5173")).toBe("http://localhost:51730/x.glb?cors");
-    expect(corsAssetUrl("/3d/wailing-caverns-open-top.glb", undefined)).toBe("/3d/wailing-caverns-open-top.glb");
   });
 });
 

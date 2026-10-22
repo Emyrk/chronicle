@@ -1,6 +1,5 @@
 import type { Material, Object3D, Texture, WebGLRenderer } from "three";
 import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { corsAssetUrl } from "@/pages/Instance/EventsPanels/Map/dungeonMeshes";
 
 interface ThumbnailRenderer {
   renderer: WebGLRenderer;
@@ -65,7 +64,7 @@ async function createThumbnailRenderer(): Promise<ThumbnailRenderer> {
 async function renderThumbnail(url: string): Promise<string> {
   rendererPromise ??= createThumbnailRenderer();
   const { renderer, loader, THREE } = await rendererPromise;
-  const gltf = await loader.loadAsync(corsAssetUrl(url));
+  const gltf = await loader.loadAsync(url);
   const model = gltf.scene;
 
   try {

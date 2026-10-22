@@ -132,7 +132,7 @@ Dev, Storybook and production all read the GLBs from the icon CDN (`forever/maps
 
 ### CORS
 
-The icon CDN applies its CORS policy per request origin, not per object or content type: a request with an allowlisted `Origin` for any key under `forever/maps/`, including a `.glb` that does not exist yet, answers with `Access-Control-Allow-Origin` and `Vary: Origin`. Nothing extra needs to be set on the R2 bucket for meshes. The frontend still appends `?cors` to cross-origin texture and mesh URLs, because a response cached without `Origin` carries no CORS headers.
+The icon CDN applies its CORS policy to every map asset response, not per object or content type: requests for keys under the map namespace answer with `Access-Control-Allow-Origin: *` and `Vary: Origin`. Nothing extra needs to be set on the R2 bucket for meshes. The frontend uses the canonical asset URL for both ordinary images and CORS-enabled texture or mesh requests, so they share one browser cache entry.
 
 ## Manually uploaded Forever maps
 
