@@ -67,6 +67,50 @@ func TestZoneReentryDoesNotReuseDifferentDifficulty(t *testing.T) {
 	require.Same(t, state.Instances[1], state.CurrentInstance)
 }
 
+func TestEncounterUsesSingleKnownMapWhenZoneOmitsIt(t *testing.T) {
+	t.Parallel()
+
+	const (
+		mapID     uint32 = 807
+		bossEntry uint32 = 900099
+	)
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	hostiles := make(map[uint32]instances.Identity)
+	instances.LoadBosses(hostiles, map[uint32]string{bossEntry: "Solnius"})
+	factory := &instances.CommonFactory{
+		Name:      "Emerald Sanctum",
+		ZoneNames: []string{"emerald sanctum"},
+		MapIDs:    []uint32{mapID},
+		Hostiles: func(database.WoWFlavor) *identifier.Identifier {
+			return identifier.NewIdentifier(hostiles)
+		},
+	}
+	state := NewWithInstanceResolver(ctx, logger, func(_ bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
+		if !factory.MatchZone(z) {
+			return nil
+		}
+		return factory.New(ctx, logger, db, z, database.WoWFlavor{})
+	})
+
+	seen := time.Date(2026, time.October, 22, 20, 0, 0, 0, time.UTC)
+	state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen, Name: "emerald sanctum"}})
+	player := guid.GUID(1)
+	boss := guid.GUID(0xF130000000000000 | uint64(bossEntry)<<24 | 1)
+	require.NoError(t, state.Process(&messages.Damage{
+		MessageBase: messages.Base(seen.Add(time.Second)), Caster: &player, Target: boss, Amount: 1,
+	}))
+	require.NoError(t, state.Process(&messages.Slain{
+		MessageBase: messages.Base(seen.Add(2 * time.Second)), Victim: boss, Killer: &player,
+	}))
+
+	require.Len(t, state.Instances, 1)
+	finalized, err := state.Instances[0].Finalize(ctx)
+	require.NoError(t, err)
+	require.Len(t, finalized.Encounters, 1)
+	require.Equal(t, mapID, finalized.Encounters[0].Combat.MapID)
+}
+
 func TestEncountersRetainMapAtFightStart(t *testing.T) {
 	t.Parallel()
 

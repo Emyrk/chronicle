@@ -489,10 +489,13 @@ export function resolveMapArtwork(
       || (mapId === 0 && normalizedInstanceName !== "" && normalizedMapName(candidate.name) === normalizedInstanceName),
   );
 
+  // Older logs can persist map ID 0. Once the instance name identifies its
+  // world map, use that ID to find the corresponding UI map assignment.
+  const assignmentMapId = mapId || instance?.mapID || 0;
   const zoneCandidates = manifest.maps.flatMap((map) => {
     if (!map.art?.some((art) => art.layers.some((layer) => layer.tiles.length > 0))) return [];
     return (map.assignments ?? [])
-      .filter((assignment) => assignment.mapID === mapId && (!sample || assignmentContains(assignment, sample)))
+      .filter((assignment) => assignment.mapID === assignmentMapId && (!sample || assignmentContains(assignment, sample)))
       .map((assignment) => ({ kind: "zone" as const, map, assignment }));
   });
   const zone = zoneCandidates.length > 0

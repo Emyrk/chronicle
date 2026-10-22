@@ -240,6 +240,7 @@ var (
 		Name:      "Emerald Sanctum",
 		Category:  InstanceCategoryRaid,
 		ZoneNames: []string{"emerald sanctum", "翡翠圣殿"},
+		MapIDs:    []uint32{807},
 		Hostiles:  FromMap(EmeraldSanctumHostiles()),
 		ProgressionBosses: func(database.WoWFlavor) []string {
 			return []string{"Erennius", "Solnius", "Solnius (Hard Mode)"}

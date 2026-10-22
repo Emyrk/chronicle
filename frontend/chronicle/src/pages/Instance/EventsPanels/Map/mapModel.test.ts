@@ -240,6 +240,44 @@ describe("map replay model", () => {
     })).toMatchObject({ kind: "zone", map: { name: "Zul'Gurub" } });
   });
 
+  it("uses a zone assignment from a name-resolved instance world map", () => {
+    const emeraldSanctumManifest: WowMapManifest = {
+      ...manifest,
+      maps: [...manifest.maps, {
+        id: 678,
+        name: "Emerald Sanctum",
+        parentID: 0,
+        type: 3,
+        flags: 0,
+        assignments: [{
+          id: 678,
+          mapID: 807,
+          areaID: 5097,
+          orderIndex: 0,
+          region: [2666, 2666, -1_000_000, 3519.72, 3939.1, 1_000_000],
+          uiMin: [0, 0],
+          uiMax: [1, 1],
+        }],
+        art: manifest.maps[1].art,
+      }],
+      instances: [...(manifest.instances ?? []), {
+        mapID: 807,
+        name: "Emerald Sanctum",
+        instanceType: 2,
+        directory: "emeraldsanctum",
+        floors: [{ floor: 1, width: 1002, height: 668, tileWidth: 256, tileHeight: 256, tiles: [] }],
+      }],
+    };
+
+    expect(resolveMapArtwork(emeraldSanctumManifest, 0, {
+      timestampMs: 0,
+      x: 3000,
+      y: 3000,
+      mapId: 0,
+      facing: 0,
+    }, "Emerald Sanctum")).toMatchObject({ kind: "zone", map: { id: 678, name: "Emerald Sanctum" } });
+  });
+
   it("converts world coordinates using UiMapAssignment axis order", () => {
     const assignment = manifest.maps[1].assignments![0];
     expect(zoneMapPoint({ timestampMs: 0, x: 3837, y: 3033, mapId: 0, facing: 0 }, assignment)).toEqual({
