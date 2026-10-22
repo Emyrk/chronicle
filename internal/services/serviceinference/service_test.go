@@ -9,7 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/serviceinference/agui"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -86,6 +88,47 @@ func TestAgentLoopTextAndToolCall(t *testing.T) {
 	for _, event := range []string{"TOOL_CALL_START", "TOOL_CALL_ARGS", "TOOL_CALL_END", "TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT", "TEXT_MESSAGE_END"} {
 		require.True(t, strings.Contains(body, event), event)
 	}
+}
+
+func TestFinalizationContextSurvivesClientCancellation(t *testing.T) {
+	t.Parallel()
+	parent, cancelParent := context.WithCancel(context.Background())
+	cancelParent()
+
+	ctx, cancel := finalizationContext(parent)
+	defer cancel()
+	require.NoError(t, ctx.Err())
+}
+
+func TestBoundedDurableHistoryStartsAtUserAndLimitsBytes(t *testing.T) {
+	t.Parallel()
+	row := func(role Role, content string) database.InferenceMessage {
+		return database.InferenceMessage{ID: uuid.New(), Content: writeJSONMessage(Message{Role: role, Content: content})}
+	}
+	rows := []database.InferenceMessage{
+		row(RoleTool, "orphaned tool result"),
+		row(RoleAssistant, "orphaned answer"),
+		row(RoleUser, "current question"),
+		row(RoleAssistant, strings.Repeat("a", 200)),
+	}
+
+	history := boundedHistory(rows)
+	require.Len(t, history, 2)
+	require.Equal(t, RoleUser, history[0].Role)
+	require.Equal(t, "current question", history[0].Content)
+
+	threadMessages := boundedThreadMessages(rows)
+	require.Len(t, threadMessages, 2)
+	require.Equal(t, string(RoleUser), threadMessages[0].Role)
+
+	oversized := []database.InferenceMessage{
+		row(RoleUser, "discarded question"),
+		row(RoleAssistant, strings.Repeat("x", maxHistoryBytes)),
+		row(RoleUser, "kept question"),
+	}
+	history = boundedHistory(oversized)
+	require.Len(t, history, 1)
+	require.Equal(t, "kept question", history[0].Content)
 }
 
 func TestToolArgumentsAreStrictAndBounded(t *testing.T) {

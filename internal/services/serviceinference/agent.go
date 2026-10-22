@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 const (
 	maxRunBody         = 256 << 10
 	maxHistoryMessages = 50
+	maxHistoryBytes    = 256 << 10
 	maxIterations      = 5
 	maxToolCalls       = 10
 	maxToolArguments   = 16 << 10
@@ -234,6 +236,27 @@ func sdkMessage(m chroniclesdk.InferenceMessage) (Message, error) {
 	return Message{ID: m.ID, Role: role, Name: m.Name, Content: m.Content}, nil
 }
 
+func boundedHistory(rows []database.InferenceMessage) []Message {
+	messages := make([]Message, 0, len(rows))
+	bytes := 0
+	for i := len(rows) - 1; i >= 0; i-- {
+		if bytes+len(rows[i].Content) > maxHistoryBytes {
+			break
+		}
+		var message Message
+		if err := json.Unmarshal(rows[i].Content, &message); err != nil {
+			continue
+		}
+		bytes += len(rows[i].Content)
+		messages = append(messages, message)
+	}
+	slices.Reverse(messages)
+	for len(messages) > 0 && messages[0].Role != RoleUser {
+		messages = messages[1:]
+	}
+	return messages
+}
+
 func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxRunBody)
 	var req chroniclesdk.InferenceRunRequest
@@ -299,17 +322,12 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 		}
 		tc.instanceID = inst.ID
 		threadID = uuid.NullUUID{UUID: thread.ID, Valid: true}
-		rows, err := s.db.ListInferenceMessagesByThread(r.Context(), thread.ID)
+		rows, err := s.db.ListRecentInferenceMessagesByThread(r.Context(), database.ListRecentInferenceMessagesByThreadParams{ThreadID: thread.ID, Limit: maxHistoryMessages})
 		if err != nil {
 			httpapi.InternalServerError(w, err)
 			return
 		}
-		for _, row := range rows {
-			var m Message
-			if json.Unmarshal(row.Content, &m) == nil {
-				history = append(history, m)
-			}
-		}
+		history = boundedHistory(rows)
 		input, err = sdkMessage(*req.Message)
 		if err != nil || input.Role != RoleUser {
 			badRequest(w, r, "A valid user message is required.")
@@ -337,7 +355,11 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 	}
 	runRow, err := s.db.InsertInferenceRun(r.Context(), database.InsertInferenceRunParams{ThreadID: threadID, UserID: uid, ConnectionID: conn.ID, AssistantID: a.ID, Model: req.Model, Status: "running", IdempotencyKey: req.RunID})
 	if err != nil {
-		httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "This run_id was already used."})
+		if database.IsUniqueViolation(err) {
+			httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "This run_id was already used."})
+			return
+		}
+		httpapi.InternalServerError(w, err)
 		return
 	}
 	if a.Durable {
@@ -353,6 +375,7 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 		streamThread = threadID.UUID.String()
 	}
 	if err = writer.Write(agui.RunStartedEvent{ThreadID: streamThread, RunID: req.RunID, ProtocolVersion: "1.0"}); err != nil {
+		s.finishRun(r.Context(), runRow, "error", Usage{}, "stream_error")
 		return
 	}
 	usage, err := s.agentLoop(r.Context(), writer, provider, cred, req.Model, a, history, tc, func(m Message) error {
@@ -370,7 +393,13 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 	s.finishRun(r.Context(), runRow, "completed", usage, "")
 	_ = writer.Write(agui.RunFinishedEvent{ThreadID: streamThread, RunID: req.RunID})
 }
+func finalizationContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+}
+
 func (s *Service) finishRun(ctx context.Context, row database.InferenceRun, status string, usage Usage, code string) {
+	ctx, cancel := finalizationContext(ctx)
+	defer cancel()
 	_, err := s.db.UpdateInferenceRun(ctx, database.UpdateInferenceRunParams{ID: row.ID, UserID: row.UserID, Status: status, InputTokens: int64(usage.PromptTokens), OutputTokens: int64(usage.CompletionTokens), ErrorCode: pgtype.Text{String: code, Valid: code != ""}, CompletedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}})
 	if err != nil {
 		s.logger.Error("update inference run", "error", err)

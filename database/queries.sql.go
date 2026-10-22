@@ -9394,39 +9394,6 @@ func (q *sqlQuerier) ListInferenceConnectionsByOwner(ctx context.Context, userID
 	return items, nil
 }
 
-const listInferenceMessagesByThread = `-- name: ListInferenceMessagesByThread :many
-SELECT id, thread_id, role, content, tool_call_id, created_at FROM inference_messages
-WHERE thread_id = $1
-ORDER BY created_at, id
-`
-
-func (q *sqlQuerier) ListInferenceMessagesByThread(ctx context.Context, threadID uuid.UUID) ([]InferenceMessage, error) {
-	rows, err := q.db.Query(ctx, listInferenceMessagesByThread, threadID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []InferenceMessage
-	for rows.Next() {
-		var i InferenceMessage
-		if err := rows.Scan(
-			&i.ID,
-			&i.ThreadID,
-			&i.Role,
-			&i.Content,
-			&i.ToolCallID,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listInferenceThreadsByOwner = `-- name: ListInferenceThreadsByOwner :many
 SELECT id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at FROM inference_threads
 WHERE user_id = $1
@@ -9452,6 +9419,49 @@ func (q *sqlQuerier) ListInferenceThreadsByOwner(ctx context.Context, userID uui
 			&i.Title,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentInferenceMessagesByThread = `-- name: ListRecentInferenceMessagesByThread :many
+SELECT id, thread_id, role, content, tool_call_id, created_at
+FROM (
+  SELECT id, thread_id, role, content, tool_call_id, created_at FROM inference_messages
+  WHERE thread_id = $1
+  ORDER BY created_at DESC, id DESC
+  LIMIT $2
+) recent
+ORDER BY created_at, id
+`
+
+type ListRecentInferenceMessagesByThreadParams struct {
+	ThreadID uuid.UUID `db:"thread_id" json:"thread_id"`
+	Limit    int32     `db:"limit" json:"limit"`
+}
+
+func (q *sqlQuerier) ListRecentInferenceMessagesByThread(ctx context.Context, arg ListRecentInferenceMessagesByThreadParams) ([]InferenceMessage, error) {
+	rows, err := q.db.Query(ctx, listRecentInferenceMessagesByThread, arg.ThreadID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InferenceMessage
+	for rows.Next() {
+		var i InferenceMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.ThreadID,
+			&i.Role,
+			&i.Content,
+			&i.ToolCallID,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

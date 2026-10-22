@@ -582,7 +582,6 @@ type sqlcQuerier interface {
 	ListGuildPageTabs(ctx context.Context, pageID uuid.UUID) ([]GuildPageTab, error)
 	ListGuildsWithPages(ctx context.Context, arg ListGuildsWithPagesParams) ([]ListGuildsWithPagesRow, error)
 	ListInferenceConnectionsByOwner(ctx context.Context, userID uuid.UUID) ([]InferenceConnection, error)
-	ListInferenceMessagesByThread(ctx context.Context, threadID uuid.UUID) ([]InferenceMessage, error)
 	ListInferenceThreadsByOwner(ctx context.Context, userID uuid.UUID) ([]InferenceThread, error)
 	ListInstancesByDuplicateGroup(ctx context.Context, duplicateGroupID uuid.NullUUID) ([]ListInstancesByDuplicateGroupRow, error)
 	ListInstancesByParserVersion(ctx context.Context, parserVersion string) ([]ListInstancesByParserVersionRow, error)
@@ -624,6 +623,7 @@ type sqlcQuerier interface {
 	ListRecentBillingReconciliationRuns(ctx context.Context, limit int32) ([]BillingReconciliationRun, error)
 	ListRecentBillingSubscriptions(ctx context.Context, limit int32) ([]BillingSubscription, error)
 	ListRecentBillingWebhookEvents(ctx context.Context, limit int32) ([]BillingWebhookEvent, error)
+	ListRecentInferenceMessagesByThread(ctx context.Context, arg ListRecentInferenceMessagesByThreadParams) ([]InferenceMessage, error)
 	// Pages logical runs, then returns every upload in each selected duplicate group.
 	// The first row for each run is its representative: most boss encounters, then
 	// most total encounters, then the duplicate-group anchor and stable tie-breakers.

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -293,6 +294,15 @@ func (s *Service) listThreads(w http.ResponseWriter, r *http.Request) {
 		if c := r.URL.Query().Get("context"); c != "" && row.ContextType.String != c {
 			continue
 		}
+		if row.ContextType.String == "instance" {
+			if _, err := s.instanceForUser(r, row.ContextID.String); err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					continue
+				}
+				httpapi.InternalServerError(w, err)
+				return
+			}
+		}
 		out = append(out, threadSDK(row))
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceThreadsResponse{Threads: out})
@@ -319,20 +329,34 @@ func (s *Service) getThread(w http.ResponseWriter, r *http.Request) {
 func threadSDK(t database.InferenceThread) chroniclesdk.InferenceThread {
 	return chroniclesdk.InferenceThread{ID: t.ID, AssistantID: t.AssistantID, Persistence: t.Persistence, ContextType: t.ContextType.String, ContextID: t.ContextID.String, Title: t.Title, CreatedAt: t.CreatedAt.Time, UpdatedAt: t.UpdatedAt.Time}
 }
+func boundedThreadMessages(rows []database.InferenceMessage) []chroniclesdk.InferenceMessage {
+	messages := make([]chroniclesdk.InferenceMessage, 0, len(rows))
+	bytes := 0
+	for i := len(rows) - 1; i >= 0; i-- {
+		if bytes+len(rows[i].Content) > maxHistoryBytes {
+			break
+		}
+		var message Message
+		if err := json.Unmarshal(rows[i].Content, &message); err != nil {
+			continue
+		}
+		bytes += len(rows[i].Content)
+		messages = append(messages, chroniclesdk.InferenceMessage{ID: rows[i].ID.String(), Role: string(message.Role), Content: message.Content, Name: message.Name, ToolCallID: message.ToolCallID})
+	}
+	slices.Reverse(messages)
+	for len(messages) > 0 && messages[0].Role != string(RoleUser) {
+		messages = messages[1:]
+	}
+	return messages
+}
+
 func (s *Service) writeThread(w http.ResponseWriter, r *http.Request, t database.InferenceThread) {
-	rows, err := s.db.ListInferenceMessagesByThread(r.Context(), t.ID)
+	rows, err := s.db.ListRecentInferenceMessagesByThread(r.Context(), database.ListRecentInferenceMessagesByThreadParams{ThreadID: t.ID, Limit: maxHistoryMessages})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	msgs := make([]chroniclesdk.InferenceMessage, 0, len(rows))
-	for _, row := range rows {
-		var m Message
-		if json.Unmarshal(row.Content, &m) == nil {
-			msgs = append(msgs, chroniclesdk.InferenceMessage{ID: row.ID.String(), Role: string(m.Role), Content: m.Content, Name: m.Name, ToolCallID: m.ToolCallID})
-		}
-	}
-	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceThreadResponse{Thread: threadSDK(t), Messages: msgs})
+	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceThreadResponse{Thread: threadSDK(t), Messages: boundedThreadMessages(rows)})
 }
 
 func writeJSONMessage(m Message) []byte { b, _ := json.Marshal(m); return b }

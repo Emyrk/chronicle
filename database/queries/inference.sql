@@ -63,9 +63,14 @@ INSERT INTO inference_messages (thread_id, role, content, tool_call_id)
 VALUES ($1, $2, $3, $4)
 RETURNING *;
 
--- name: ListInferenceMessagesByThread :many
-SELECT * FROM inference_messages
-WHERE thread_id = $1
+-- name: ListRecentInferenceMessagesByThread :many
+SELECT *
+FROM (
+  SELECT * FROM inference_messages
+  WHERE thread_id = $1
+  ORDER BY created_at DESC, id DESC
+  LIMIT $2
+) recent
 ORDER BY created_at, id;
 
 -- name: InsertInferenceRun :one
