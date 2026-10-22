@@ -1125,6 +1125,72 @@ CREATE TABLE guilds (
     created_at timestamp with time zone DEFAULT now()
 );
 
+CREATE TABLE inference_connections (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    provider text NOT NULL,
+    auth_mode text NOT NULL,
+    label text NOT NULL,
+    encrypted_credential bytea NOT NULL,
+    credential_key_version text NOT NULL,
+    provider_account_key_hash bytea,
+    status text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_used_at timestamp with time zone
+);
+
+CREATE TABLE inference_messages (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    thread_id uuid NOT NULL,
+    role text NOT NULL,
+    content jsonb NOT NULL,
+    tool_call_id text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE inference_oauth_transactions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    provider text NOT NULL,
+    state_hash bytea NOT NULL,
+    encrypted_verifier bytea NOT NULL,
+    verifier_key_version text NOT NULL,
+    return_path text NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE inference_runs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    thread_id uuid,
+    user_id uuid NOT NULL,
+    connection_id uuid NOT NULL,
+    assistant_id text NOT NULL,
+    model text NOT NULL,
+    status text NOT NULL,
+    idempotency_key text NOT NULL,
+    input_tokens bigint DEFAULT 0 NOT NULL,
+    output_tokens bigint DEFAULT 0 NOT NULL,
+    error_code text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    completed_at timestamp with time zone
+);
+
+CREATE TABLE inference_threads (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    assistant_id text NOT NULL,
+    persistence text NOT NULL,
+    context_type text,
+    context_id text,
+    title text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT inference_threads_check CHECK (((context_type IS NULL) = (context_id IS NULL)))
+);
+
 CREATE TABLE instance_loot (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     instance_id uuid NOT NULL,
@@ -2554,6 +2620,27 @@ ALTER TABLE ONLY guilds
 ALTER TABLE ONLY guilds
     ADD CONSTRAINT guilds_realm_id_name_key UNIQUE (realm_id, name);
 
+ALTER TABLE ONLY inference_connections
+    ADD CONSTRAINT inference_connections_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY inference_messages
+    ADD CONSTRAINT inference_messages_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY inference_oauth_transactions
+    ADD CONSTRAINT inference_oauth_transactions_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY inference_oauth_transactions
+    ADD CONSTRAINT inference_oauth_transactions_state_hash_key UNIQUE (state_hash);
+
+ALTER TABLE ONLY inference_runs
+    ADD CONSTRAINT inference_runs_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY inference_runs
+    ADD CONSTRAINT inference_runs_user_id_idempotency_key_key UNIQUE (user_id, idempotency_key);
+
+ALTER TABLE ONLY inference_threads
+    ADD CONSTRAINT inference_threads_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY instance_loot
     ADD CONSTRAINT instance_loot_pkey PRIMARY KEY (id);
 
@@ -3046,6 +3133,24 @@ CREATE UNIQUE INDEX idx_wow_server_realms_name_unique ON wow_server_realms USING
 
 CREATE UNIQUE INDEX idx_wow_servers_name_unique ON wow_servers USING btree (lower(name));
 
+CREATE UNIQUE INDEX inference_connections_active_openrouter_key_idx ON inference_connections USING btree (user_id, provider_account_key_hash) WHERE ((provider = 'openrouter'::text) AND (status = 'active'::text) AND (provider_account_key_hash IS NOT NULL));
+
+CREATE INDEX inference_connections_user_idx ON inference_connections USING btree (user_id, created_at DESC);
+
+CREATE INDEX inference_messages_thread_created_idx ON inference_messages USING btree (thread_id, created_at, id);
+
+CREATE INDEX inference_oauth_transactions_expires_idx ON inference_oauth_transactions USING btree (expires_at);
+
+CREATE INDEX inference_oauth_transactions_user_idx ON inference_oauth_transactions USING btree (user_id, created_at DESC);
+
+CREATE INDEX inference_runs_thread_idx ON inference_runs USING btree (thread_id, created_at);
+
+CREATE INDEX inference_runs_user_created_idx ON inference_runs USING btree (user_id, created_at DESC);
+
+CREATE UNIQUE INDEX inference_threads_durable_context_assistant_idx ON inference_threads USING btree (user_id, assistant_id, context_type, context_id) WHERE ((persistence = 'durable'::text) AND (context_type IS NOT NULL));
+
+CREATE INDEX inference_threads_user_updated_idx ON inference_threads USING btree (user_id, updated_at DESC);
+
 CREATE INDEX instance_loot_received ON instance_loot USING btree (realm_id, received_guid, received_ts DESC);
 
 CREATE INDEX instance_speedruns_cohort_lookup_idx ON instance_speedruns USING btree (instance_name, start_time);
@@ -3342,6 +3447,27 @@ ALTER TABLE ONLY guild_settings
 
 ALTER TABLE ONLY guilds
     ADD CONSTRAINT guilds_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY inference_connections
+    ADD CONSTRAINT inference_connections_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY inference_messages
+    ADD CONSTRAINT inference_messages_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES inference_threads(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY inference_oauth_transactions
+    ADD CONSTRAINT inference_oauth_transactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY inference_runs
+    ADD CONSTRAINT inference_runs_connection_id_fkey FOREIGN KEY (connection_id) REFERENCES inference_connections(id);
+
+ALTER TABLE ONLY inference_runs
+    ADD CONSTRAINT inference_runs_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES inference_threads(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY inference_runs
+    ADD CONSTRAINT inference_runs_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY inference_threads
+    ADD CONSTRAINT inference_threads_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY instance_loot
     ADD CONSTRAINT instance_loot_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;

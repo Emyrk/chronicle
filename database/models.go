@@ -1621,6 +1621,71 @@ type GuildSpeedrunRank struct {
 	GuildRank    int64         `db:"guild_rank" json:"guild_rank"`
 }
 
+type InferenceConnection struct {
+	ID                     uuid.UUID          `db:"id" json:"id"`
+	UserID                 uuid.UUID          `db:"user_id" json:"user_id"`
+	Provider               string             `db:"provider" json:"provider"`
+	AuthMode               string             `db:"auth_mode" json:"auth_mode"`
+	Label                  string             `db:"label" json:"label"`
+	EncryptedCredential    []byte             `db:"encrypted_credential" json:"encrypted_credential"`
+	CredentialKeyVersion   string             `db:"credential_key_version" json:"credential_key_version"`
+	ProviderAccountKeyHash []byte             `db:"provider_account_key_hash" json:"provider_account_key_hash"`
+	Status                 string             `db:"status" json:"status"`
+	CreatedAt              pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	LastUsedAt             pgtype.Timestamptz `db:"last_used_at" json:"last_used_at"`
+}
+
+type InferenceMessage struct {
+	ID         uuid.UUID          `db:"id" json:"id"`
+	ThreadID   uuid.UUID          `db:"thread_id" json:"thread_id"`
+	Role       string             `db:"role" json:"role"`
+	Content    []byte             `db:"content" json:"content"`
+	ToolCallID pgtype.Text        `db:"tool_call_id" json:"tool_call_id"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type InferenceOauthTransaction struct {
+	ID                 uuid.UUID          `db:"id" json:"id"`
+	UserID             uuid.UUID          `db:"user_id" json:"user_id"`
+	Provider           string             `db:"provider" json:"provider"`
+	StateHash          []byte             `db:"state_hash" json:"state_hash"`
+	EncryptedVerifier  []byte             `db:"encrypted_verifier" json:"encrypted_verifier"`
+	VerifierKeyVersion string             `db:"verifier_key_version" json:"verifier_key_version"`
+	ReturnPath         string             `db:"return_path" json:"return_path"`
+	ExpiresAt          pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	CreatedAt          pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type InferenceRun struct {
+	ID             uuid.UUID          `db:"id" json:"id"`
+	ThreadID       uuid.NullUUID      `db:"thread_id" json:"thread_id"`
+	UserID         uuid.UUID          `db:"user_id" json:"user_id"`
+	ConnectionID   uuid.UUID          `db:"connection_id" json:"connection_id"`
+	AssistantID    string             `db:"assistant_id" json:"assistant_id"`
+	Model          string             `db:"model" json:"model"`
+	Status         string             `db:"status" json:"status"`
+	IdempotencyKey string             `db:"idempotency_key" json:"idempotency_key"`
+	InputTokens    int64              `db:"input_tokens" json:"input_tokens"`
+	OutputTokens   int64              `db:"output_tokens" json:"output_tokens"`
+	ErrorCode      pgtype.Text        `db:"error_code" json:"error_code"`
+	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	CompletedAt    pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+}
+
+type InferenceThread struct {
+	ID          uuid.UUID          `db:"id" json:"id"`
+	UserID      uuid.UUID          `db:"user_id" json:"user_id"`
+	AssistantID string             `db:"assistant_id" json:"assistant_id"`
+	Persistence string             `db:"persistence" json:"persistence"`
+	ContextType pgtype.Text        `db:"context_type" json:"context_type"`
+	ContextID   pgtype.Text        `db:"context_id" json:"context_id"`
+	Title       string             `db:"title" json:"title"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type InstanceLoot struct {
 	ID           uuid.UUID          `db:"id" json:"id"`
 	InstanceID   uuid.UUID          `db:"instance_id" json:"instance_id"`

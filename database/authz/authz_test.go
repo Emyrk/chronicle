@@ -101,6 +101,33 @@ func TestManageConsumablesRole(t *testing.T) {
 	require.False(t, canManageWorldData)
 }
 
+func TestInferenceChatPermission(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	ctx := testutil.Context(t, testutil.WaitLong)
+
+	for _, tc := range []struct {
+		name    string
+		roles   []string
+		allowed bool
+	}{
+		{name: "dedicated capability", roles: []string{"inference_chat_capable"}, allowed: true},
+		{name: "admin", roles: []string{"admin"}, allowed: true},
+		{name: "ordinary user", roles: nil, allowed: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			userID := uuid.New()
+			require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, tc.roles))
+
+			allowed, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanUse_inference_chat_User(policy.New().User(userID)))
+			require.NoError(t, err)
+			require.Equal(t, tc.allowed, allowed)
+		})
+	}
+}
+
 func TestInvalidateLogsPermission(t *testing.T) {
 	t.Parallel()
 

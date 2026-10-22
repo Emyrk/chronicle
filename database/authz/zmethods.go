@@ -281,6 +281,7 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 		"upload_capable",
 		"unlisted_log_capable",
 		"ad_free_capable",
+		"inference_chat_capable",
 		"moderate_logs",
 		"moderate_guilds",
 		"is_admin_users",
@@ -316,6 +317,8 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 			gChron.Unlisted_log_capable(usr)
 		case "ad_free_capable":
 			gChron.Ad_free_capable(usr)
+		case "inference_chat_capable":
+			gChron.Inference_chat_capable(usr)
 		case "moderate_logs":
 			gChron.Moderate_logs(usr)
 		case "moderate_guilds":
