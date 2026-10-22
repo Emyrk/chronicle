@@ -10,6 +10,26 @@ local ORANGE = {0.98, 0.45, 0.09, 0.85}
 local WHITE = {0.96, 0.96, 0.95, 1.0}
 local MUTED = {0.72, 0.72, 0.68, 1.0}
 
+-- Package map coordinates are normalized against the full rendered dungeon.
+-- Keep encounter diagrams inside Onyxia's northern arena rather than stretching
+-- them across the complete cave artwork.
+local MAP_LEFT = 0.57
+local MAP_TOP = 0.08
+local MAP_WIDTH = 0.38
+local MAP_HEIGHT = 0.38
+
+local function mapX(x) return MAP_LEFT + x * MAP_WIDTH end
+local function mapY(y) return MAP_TOP + y * MAP_HEIGHT end
+local function mapRadius(radius) return radius * math.min(MAP_WIDTH, MAP_HEIGHT) end
+local function mapPoints(points)
+  local mapped = {}
+  for index = 1, #points, 2 do
+    table.insert(mapped, mapX(points[index]))
+    table.insert(mapped, mapY(points[index + 1]))
+  end
+  return mapped
+end
+
 local chapters = {
   {
     id = "briefing",
@@ -86,7 +106,7 @@ end
 
 local function unit(id, label, role, x, y, facing, entry)
   local marker = remember(Map:CreateUnitMarker(id))
-  marker:SetMapPosition(x, y)
+  marker:SetMapPosition(mapX(x), mapY(y))
   marker:SetSize(role == "boss" and 32 or 19, role == "boss" and 32 or 19)
   marker:SetLabel(label)
   marker:SetRole(role)
@@ -98,8 +118,8 @@ end
 
 local function circle(id, x, y, radius, rgba)
   local shape = remember(Map:CreateCircle(id))
-  shape:SetMapPosition(x, y)
-  shape:SetRadius(radius)
+  shape:SetMapPosition(mapX(x), mapY(y))
+  shape:SetRadius(mapRadius(radius))
   shape:SetLineWidth(2)
   color(shape, rgba)
   fill(shape, {rgba[1], rgba[2], rgba[3], 0.18})
@@ -108,8 +128,8 @@ end
 
 local function cone(id, x, y, radius, facing, angle, rgba)
   local shape = remember(Map:CreateCone(id))
-  shape:SetMapPosition(x, y)
-  shape:SetRadius(radius)
+  shape:SetMapPosition(mapX(x), mapY(y))
+  shape:SetRadius(mapRadius(radius))
   shape:SetFacing(facing)
   shape:SetAngle(angle)
   shape:SetLineWidth(2)
@@ -120,7 +140,7 @@ end
 
 local function arrow(id, x1, y1, x2, y2, rgba)
   local shape = remember(Map:CreateArrow(id))
-  shape:SetPoints({x1, y1, x2, y2})
+  shape:SetPoints(mapPoints({x1, y1, x2, y2}))
   shape:SetLineWidth(3)
   shape:SetHeadSize(10)
   color(shape, rgba)
@@ -129,7 +149,7 @@ end
 
 local function mapText(id, text, x, y, rgba)
   local label = remember(Map:CreateText(id))
-  label:SetMapPosition(x, y)
+  label:SetMapPosition(mapX(x), mapY(y))
   label:SetText(text)
   label:SetFontSize(16)
   color(label, rgba)
@@ -213,7 +233,7 @@ end
 local function renderBreath(correct)
   unit("onyxia", "Onyxia", "boss", 0.20, 0.50, math.pi / 2, 10184)
   local lane = remember(Map:CreatePolygon("breath-lane"))
-  lane:SetPoints({0.18, 0.39, 0.88, 0.39, 0.88, 0.61, 0.18, 0.61})
+  lane:SetPoints(mapPoints({0.18, 0.39, 0.88, 0.39, 0.88, 0.61, 0.18, 0.61}))
   lane:SetLineWidth(2)
   color(lane, RED)
   fill(lane, {0.94, 0.27, 0.27, 0.22})
@@ -256,7 +276,7 @@ end
 
 local root = CreateFrame("Frame", "guide-panel", UIParent)
 root:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 24, -24)
-root:SetSize(430, 310)
+root:SetSize(430, 360)
 root:SetBackgroundColor(0.03, 0.035, 0.045, 0.93)
 root:SetBorderColor(1, 1, 1, 0.18)
 root:SetLayer("OVERLAY")
@@ -279,8 +299,8 @@ body:SetFontSize(14)
 color(body, MUTED)
 
 local callout = CreateFrame("FontString", "guide-callout", root)
-callout:SetPoint("TOPLEFT", root, "TOPLEFT", 22, -208)
-callout:SetSize(386, 46)
+callout:SetPoint("TOPLEFT", root, "TOPLEFT", 22, -210)
+callout:SetSize(386, 42)
 callout:SetFontSize(13)
 
 local progress = CreateFrame("FontString", "guide-progress", root)
@@ -296,7 +316,7 @@ previous:SetBackgroundColor(0.12, 0.13, 0.17, 0.96)
 previous:SetBorderColor(1, 1, 1, 0.18)
 
 local mode = CreateFrame("Button", "guide-mode", root)
-mode:SetPoint("BOTTOM", root, "BOTTOM", 0, 54)
+mode:SetPoint("BOTTOM", root, "BOTTOM", 0, 70)
 mode:SetSize(136, 34)
 mode:SetBackgroundColor(0.10, 0.20, 0.13, 0.96)
 mode:SetBorderColor(1, 1, 1, 0.18)
@@ -333,7 +353,7 @@ local function render()
   elseif chapter.id == "deep-breath" then renderBreath(showingCorrect)
   else renderLanding(showingCorrect) end
 
-  Map:SetCamera(0.5, 0.5, chapter.id == "deep-breath" and 1.08 or 1.0)
+  Map:SetCamera(mapX(0.5), mapY(0.5), chapter.id == "deep-breath" and 1.85 or 1.7)
   callout:SetAlpha(1)
   C_Timer.After(0.6, function() callout:SetAlpha(0.78) end)
 end

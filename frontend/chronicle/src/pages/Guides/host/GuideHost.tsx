@@ -406,7 +406,7 @@ export function GuideHost({
         onExit={onExit}
       />
 
-      <div data-guide-layer className="absolute inset-0 z-10 pt-[57px]">
+      <div data-guide-layer className="absolute inset-0 z-10">
         <div className="absolute inset-x-0 bottom-0 top-[57px] overflow-hidden bg-[radial-gradient(circle_at_50%_15%,rgba(120,84,36,0.14),transparent_42%),linear-gradient(180deg,#071018,#020617)]">
           {mapId === null ? (
             <div className="grid size-full place-items-center text-sm text-slate-400">This guide does not declare a map.</div>

@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, within } from "storybook/test";
+import type { WowMapMeshInstance, WowMapRenderedInstance } from "@/pages/Technical/mapGallery";
+import { renderedDungeonMapPoint } from "@/pages/Instance/EventsPanels/Map/mapModel";
 import type { SceneOperation } from "../protocol";
 import { UI_ROOT_ID } from "../protocol";
 import { loadGuidePackage } from "../package";
@@ -58,6 +60,40 @@ const runtimeFactory: GuideRuntimeFactory = (callbacks) => {
   };
 };
 
+const ICON_BASE_URL = "https://icons.chronicleclassic.com/turtle";
+const ONYXIA_MESH: WowMapMeshInstance = {
+  path: "3d/249-47a487143546bb61-onyxias-lair-octowow-v001-open-top.glb",
+  bounds: { minX: -260.0325, maxX: 63.2182, minY: -286.4366, maxY: 26.0842 },
+  zMin: -96.4474,
+  zMax: 49.5633,
+  frame: "wow-yup-mirrored-x",
+  liquid: { color: "#d66020", opacity: 0.85 },
+};
+const ONYXIA_RENDER: WowMapRenderedInstance = {
+  path: "renders/249-ec84c64cb8d18001-onyxias-lair-octowow-v001-shaded-water-2400.png",
+  width: 2400,
+  height: 2482,
+  source: "octowow-v001",
+  bounds: ONYXIA_MESH.bounds,
+};
+const ONYXIA_REAL_MAP: GuideResolvedMap = {
+  ground: { iconBaseUrl: ICON_BASE_URL, canvas: ONYXIA_RENDER },
+  dungeonMesh: {
+    url: `${ICON_BASE_URL}/maps/${ONYXIA_MESH.path}`,
+    bounds: ONYXIA_MESH.bounds,
+    liquid: ONYXIA_MESH.liquid,
+  },
+  projectSample: (sample) => renderedDungeonMapPoint(sample, ONYXIA_MESH.bounds),
+  normalizedToWorld: (x, y) => ({
+    x: ONYXIA_MESH.bounds.maxX - y * (ONYXIA_MESH.bounds.maxX - ONYXIA_MESH.bounds.minX),
+    y: ONYXIA_MESH.bounds.maxY - x * (ONYXIA_MESH.bounds.maxY - ONYXIA_MESH.bounds.minY),
+  }),
+  normalizedRadiusToYards: (radius) => radius * Math.min(
+    ONYXIA_MESH.bounds.maxX - ONYXIA_MESH.bounds.minX,
+    ONYXIA_MESH.bounds.maxY - ONYXIA_MESH.bounds.minY,
+  ),
+};
+
 const fakeMap: GuideResolvedMap = {
   ground: { iconBaseUrl: "", canvas: { floor: 0, width: 1000, height: 700, tileWidth: 0, tileHeight: 0, tiles: [] } },
   dungeonMesh: null,
@@ -87,7 +123,7 @@ function StoryMap({ markers, planItems }: GuideMapRenderProps) {
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
-function RealOnyxiaGuide() {
+function PackagedOnyxiaGuide({ realMap }: { realMap: boolean }) {
   const query = useQuery({
     queryKey: ["storybook-onyxia-guide"],
     queryFn: async () => {
@@ -103,9 +139,9 @@ function RealOnyxiaGuide() {
     <GuideHost
       guide={query.data}
       runtimeFactory={browserGuideRuntimeFactory}
-      iconBaseUrl="storybook://maps"
-      mapResolver={async () => fakeMap}
-      MapRenderer={StoryMap}
+      iconBaseUrl={realMap ? ICON_BASE_URL : "storybook://maps"}
+      mapResolver={async () => realMap ? ONYXIA_REAL_MAP : fakeMap}
+      {...(realMap ? {} : { MapRenderer: StoryMap })}
       onExit={() => undefined}
       className="h-screen min-h-[42rem]"
     />
@@ -135,7 +171,13 @@ export const InteractiveBriefing: Story = {
 };
 
 export const PackagedLuaOnyxia: Story = {
-  render: () => <RealOnyxiaGuide />,
+  tags: ["!test"],
+  render: () => <PackagedOnyxiaGuide realMap />,
+};
+
+export const PackagedLuaOnyxiaTestHarness: Story = {
+  tags: ["!dev", "!autodocs"],
+  render: () => <PackagedOnyxiaGuide realMap={false} />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText("Give every group a side")).toBeVisible();
