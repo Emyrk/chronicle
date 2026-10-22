@@ -14,6 +14,7 @@ import {
   type MapManifestLayers,
   type MapManifestNamespace,
 } from "../maps/manifest";
+import { renderImageMetadata } from "../maps/renderImage";
 import type { Env } from "../types";
 
 const maps = new Hono<{ Bindings: Env }>();
@@ -204,46 +205,8 @@ async function acquirePublishLock(bucket: R2Bucket, namespace: MapManifestNamesp
   return result !== null;
 }
 
-function uint32BE(bytes: Uint8Array, offset: number): number {
-  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(offset, false);
-}
-
 function uint32LE(bytes: Uint8Array, offset: number): number {
   return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(offset, true);
-}
-
-function pngDimensions(bytes: Uint8Array): { width: number; height: number } {
-  const signature = [137, 80, 78, 71, 13, 10, 26, 10];
-  if (bytes.length < 33 || signature.some((value, index) => bytes[index] !== value)) {
-    throw new TypeError("render asset must be a valid PNG");
-  }
-  let offset = 8;
-  let width = 0;
-  let height = 0;
-  let sawIHDR = false;
-  let sawIEND = false;
-  while (offset + 12 <= bytes.length) {
-    const length = uint32BE(bytes, offset);
-    const end = offset + 12 + length;
-    if (end > bytes.length) throw new TypeError("render PNG has a truncated chunk");
-    const type = String.fromCharCode(...bytes.slice(offset + 4, offset + 8));
-    if (!sawIHDR) {
-      if (type !== "IHDR" || length !== 13) throw new TypeError("render PNG has no valid IHDR chunk");
-      width = uint32BE(bytes, offset + 8);
-      height = uint32BE(bytes, offset + 12);
-      sawIHDR = true;
-    }
-    offset = end;
-    if (type === "IEND") {
-      if (length !== 0 || offset !== bytes.length) throw new TypeError("render PNG has an invalid IEND chunk");
-      sawIEND = true;
-      break;
-    }
-  }
-  if (!sawIHDR || !sawIEND || width <= 0 || height <= 0 || width > 32768 || height > 32768) {
-    throw new TypeError("render PNG has invalid dimensions or chunks");
-  }
-  return { width, height };
 }
 
 function validateGLB(bytes: Uint8Array): void {
@@ -435,9 +398,10 @@ maps.post("/internal/api/v1/maps/:namespace/assets/:kind", async (c) => {
     let extension: string;
     let contentType: string;
     if (kind === "renders") {
-      dimensions = pngDimensions(bytes);
-      extension = "png";
-      contentType = "image/png";
+      const metadata = renderImageMetadata(bytes);
+      dimensions = { width: metadata.width, height: metadata.height };
+      extension = metadata.extension;
+      contentType = metadata.contentType;
     } else {
       validateGLB(bytes);
       extension = "glb";

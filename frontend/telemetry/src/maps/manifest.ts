@@ -538,6 +538,10 @@ function validAssetPath(assetPath: string, prefix: string): boolean {
   return parts.every((part) => part !== "" && part !== "." && part !== "..");
 }
 
+function isRenderImagePath(assetPath: string): boolean {
+  return assetPath.endsWith(".png") || assetPath.endsWith(".webp");
+}
+
 function mergeLayer(
   kind: LayerKind,
   rawLayer: unknown,
@@ -581,7 +585,7 @@ function mergeLayer(
       instance.styled = artwork;
     } else if (kind === "renders") {
       const artwork = entry.renders;
-      if (!artwork || !validAssetPath(artwork.path, "renders/") || !artwork.path.endsWith(".png") || artwork.width <= 0 || artwork.height <= 0) {
+      if (!artwork || !validAssetPath(artwork.path, "renders/") || !isRenderImagePath(artwork.path) || artwork.width <= 0 || artwork.height <= 0) {
         throw new TypeError(`invalid renders map layer artwork for mapID ${entry.mapID}`);
       }
       instance.renders = artwork;

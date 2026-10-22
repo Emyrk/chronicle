@@ -114,7 +114,7 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           <div>
             <div class="eyebrow">R2 asset registry</div>
             <h1>Map foundry</h1>
-            <p>Stage manual PNG renders and calibrated GLB meshes, inspect the manifests, then publish the reader manifest last.</p>
+            <p>Stage manual PNG or WebP renders and calibrated GLB meshes, inspect the manifests, then publish the reader manifest last.</p>
           </div>
           <div class="header-actions"><a class="back" href="/internal">← Telemetry</a><a class="back" href="/internal/miniatures">Miniature foundry →</a></div>
         </header>
@@ -278,7 +278,7 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
             meta.innerHTML = '<span>Original · ' + floor.width + '×' + floor.height + ' · ' + columns + '×' + rows + ' tiles</span><span>' + escapeHTML(floor.bounds ? 'calibrated bounds' : 'no world bounds') + '</span>';
           } else if (previewMode === 'rendered') {
             const image = sources.images[previewChoice];
-            if (!image) { stage.innerHTML = '<div class="preview-empty"><strong>No rendered artwork</strong>Upload a manual PNG or publish styled artwork.</div>'; meta.innerHTML = ''; return; }
+            if (!image) { stage.innerHTML = '<div class="preview-empty"><strong>No rendered artwork</strong>Upload a manual PNG or WebP image, or publish styled artwork.</div>'; meta.innerHTML = ''; return; }
             const url = assetURL(image.artwork.path);
             stage.innerHTML = '<img class="image-preview" src="' + url + '" alt="' + escapeHTML(image.label + ' preview') + '" />';
             meta.innerHTML = '<span>' + escapeHTML(image.label) + ' · ' + image.artwork.width + '×' + image.artwork.height + '</span><a href="' + url + '" target="_blank" rel="noreferrer">Open asset ↗</a>';
@@ -323,9 +323,9 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
             '<div class="map-title"><div><h2>' + escapeHTML(selectedName() || 'Manual map') + '</h2><p>mapID ' + selectedID + (base?.directory ? ' · ' + escapeHTML(base.directory) : ' · manual-only instance') + '</p>' +
             (!base ? '<input class="manual-name" id="map-name" type="text" value="' + escapeHTML(selectedName()) + '" placeholder="Required map name" />' : '<input id="map-name" type="hidden" value="' + escapeHTML(selectedName()) + '" />') + '</div></div>' +
             '<div class="layer-grid">' +
-              '<article class="layer-card"><h3>Rendered map <span class="layer-tag">PNG</span></h3><p>Manual 2D artwork. Image dimensions are read from the uploaded PNG.</p>' +
+              '<article class="layer-card"><h3>Rendered map <span class="layer-tag">PNG / WebP</span></h3><p>Manual 2D artwork. Image dimensions and format are read from the uploaded file.</p>' +
                 '<div class="path ' + (!render ? 'empty-path' : '') + '">' + escapeHTML(render?.path || 'No render registered') + '</div>' +
-                '<label class="upload">Upload or replace PNG<input id="render-file" type="file" accept="image/png,.png" /></label>' +
+                '<label class="upload">Upload or replace image<input id="render-file" type="file" accept="image/png,image/webp,.png,.webp" /></label>' +
                 '<div class="dimensions"><label>Width<input id="render-width" type="number" min="1" value="' + (render?.width || '') + '" /></label><label>Height<input id="render-height" type="number" min="1" value="' + (render?.height || '') + '" /></label></div>' +
                 '<label class="bounds-toggle"><input id="has-bounds" type="checkbox" ' + (bounds ? 'checked' : '') + ' /> Calibrated world bounds</label>' +
                 '<div class="bounds" id="bounds" ' + (!bounds ? 'hidden' : '') + '><label>Min X<input id="min-x" type="number" step="any" value="' + (bounds?.minX ?? 0) + '" /></label><label>Max X<input id="max-x" type="number" step="any" value="' + (bounds?.maxX ?? 0) + '" /></label><label>Min Y<input id="min-y" type="number" step="any" value="' + (bounds?.minY ?? 0) + '" /></label><label>Max Y<input id="max-y" type="number" step="any" value="' + (bounds?.maxY ?? 0) + '" /></label></div>' +

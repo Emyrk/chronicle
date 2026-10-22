@@ -9,11 +9,11 @@ Chronicle publishes each dataset's map manifest beneath its configured icon base
 <icon-base>/maps/manifest.meshes.json
 <icon-base>/maps/manifest.renders.json
 <icon-base>/maps/original/<tile-id>.webp
-<icon-base>/maps/renders/<name>.png
+<icon-base>/maps/renders/<name>.{png,webp}
 <icon-base>/maps/3d/<slug>-open-top.glb
 ```
 
-The frontend accepts v1 published manifests during migration; all new imports use v2. `make maps` works for each `SERVER` and publishes native artwork under `original/`. Hand-uploaded PNGs, styled art and placeable meshes are independent optional layers under `renders/`, `render-styled/` and `3d/`. The publisher merges their root-level source manifests into `manifest.json` after each job. Generated manifests and tiles live under `frontend/imagecache/<server>/maps/`, are ignored by Git, and are published to object storage.
+The frontend accepts v1 published manifests during migration; all new imports use v2. `make maps` works for each `SERVER` and publishes native artwork under `original/`. Hand-uploaded PNG or WebP renders, styled art and placeable meshes are independent optional layers under `renders/`, `render-styled/` and `3d/`. The publisher merges their root-level source manifests into `manifest.json` after each job. Generated manifests and tiles live under `frontend/imagecache/<server>/maps/`, are ignored by Git, and are published to object storage.
 
 ## MPQ-era clients
 
@@ -75,7 +75,7 @@ The Replay Map's "3D map" toggle stands the units on the dungeon's real geometry
 
 Some dungeons have no native floor artwork (Ragefire Chasm, map 389, and Ruins of Lordaeron, map 2999), so the original manifest has no `instances[]` entry for them. A `meshes` layer entry whose `mapID` is unknown to the original then creates a floorless instance, `{ "mapID", "name", "floors": [], "mesh" }`, taking its `name` from the layer entry (required in that case; for an existing instance the original's name wins and the entry's `name` is ignored). The entry may still carry nothing but `mesh` (and `name`); floors, `renders` or `styled` are rejected; the `renders` layer may also create named floorless instances.
 
-A floorless instance with a placeable `mesh` uses the mesh extent for single-encounter 3D replay, including when a manual PNG exists. Its `renders` PNG is available in the 2D overview; without calibrated image bounds, the overview does not place route or player markers. A floorless instance without a render remains 3D-only, with no 2D artwork or floor selector.
+A floorless instance with a placeable `mesh` uses the mesh extent for single-encounter 3D replay, including when a manual render exists. Its PNG or WebP `renders` image is available in the 2D overview; without calibrated image bounds, the overview does not place route or player markers. A floorless instance without a render remains 3D-only, with no 2D artwork or floor selector.
 
 Do not copy mesh bounds from examples or the 2D PNG: derive and verify them from each actual GLB before adding its `mesh` entry.
 
@@ -136,14 +136,14 @@ The icon CDN applies its CORS policy per request origin, not per object or conte
 
 ## Manually uploaded Forever maps
 
-The tracked `frontend/imagecache/map-layers/forever/manifest.renders.json` registers hand-uploaded PNGs at `forever/maps/renders/*.png`. Its product-only target and named entries attach by world `mapID`; unknown IDs create floorless instances. `frontend/imagecache/meshes/forever/manifest.meshes.json` independently registers placeable GLBs with verified bounds and frame (see [Adding a dungeon](#adding-a-dungeon)). No separate path-only 3D layer or generated raw-render layer is published.
+The tracked `frontend/imagecache/map-layers/forever/manifest.renders.json` registers hand-uploaded PNG or WebP images at `forever/maps/renders/`. Its product-only target and named entries attach by world `mapID`; unknown IDs create floorless instances. `frontend/imagecache/meshes/forever/manifest.meshes.json` independently registers placeable GLBs with verified bounds and frame (see [Adding a dungeon](#adding-a-dungeon)). No separate path-only 3D layer or generated raw-render layer is published.
 
 ```bash
 SERVER=forever make maps/renders-upload
 make maps/forever-meshes-manifest-upload  # GLBs already uploaded
 ```
 
-The render upload publishes JSON only: verify PNG objects, MIME types and CORS first. It requires a v2 native source manifest on R2 but no native floor for RFC or Ruins. The merger rejects unnamed floorless entries, incompatible products and invalid paths. Images without calibrated `renders.bounds` can be displayed but must not be used to place route or player overlays. The `styled` layer remains independent.
+The render upload publishes JSON only: verify PNG or WebP objects, MIME types and CORS first. It requires a v2 native source manifest on R2 but no native floor for RFC or Ruins. The merger rejects unnamed floorless entries, incompatible products and invalid paths. Images without calibrated `renders.bounds` can be displayed but must not be used to place route or player overlays. The `styled` layer remains independent.
 
 ## Cleaning generated maps
 

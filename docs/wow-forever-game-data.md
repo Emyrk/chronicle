@@ -113,21 +113,21 @@ The published layout is:
 ```text
 <icon-base>/maps/
 ├── manifest.original.json  # native artwork; updated by make maps
-├── manifest.renders.json   # hand-uploaded PNG metadata, when available
+├── manifest.renders.json   # hand-uploaded PNG/WebP metadata, when available
 ├── manifest.meshes.json    # placeable GLB metadata, when available
 ├── manifest.styled.json    # hand-styled image metadata, when available
 ├── manifest.json           # merged public manifest, uploaded last
 ├── original/<FileDataID>.webp
-├── renders/<image>.png
+├── renders/<image>.{png,webp}
 ├── render-styled/<image>.jpeg
 └── 3d/<slug>-open-top.glb
 ```
 
-All source manifests use `chronicle-wow-map-art-v2`. Native metadata owns the map hierarchy, tiles and instance floors; independent layers join by world map ID. The publisher fetches unchanged sources from R2 and validates the full merged manifest before uploading any changed files. Generated native assets are ignored by Git; PNG metadata lives in `frontend/imagecache/map-layers/<server>/`, styled art in `styled-maps/<server>/`, and mesh metadata beside untracked GLBs in `meshes/<server>/` (see [WoW map assets](wow-map-assets.md)).
+All source manifests use `chronicle-wow-map-art-v2`. Native metadata owns the map hierarchy, tiles and instance floors; independent layers join by world map ID. The publisher fetches unchanged sources from R2 and validates the full merged manifest before uploading any changed files. Generated native assets are ignored by Git; manual render metadata lives in `frontend/imagecache/map-layers/<server>/`, styled art in `styled-maps/<server>/`, and mesh metadata beside untracked GLBs in `meshes/<server>/` (see [WoW map assets](wow-map-assets.md)).
 
 ```bash
 SERVER=forever make maps               # refresh native artwork
-SERVER=forever make maps/renders-upload # register hand-uploaded PNGs
+SERVER=forever make maps/renders-upload # register hand-uploaded PNG/WebP renders
 make maps/forever-meshes-manifest-upload # register already-uploaded GLBs
 make maps/forever-styled-upload         # publish styled art
 ```

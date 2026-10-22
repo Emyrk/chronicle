@@ -80,6 +80,27 @@ func TestMergeWowdataMaps(t *testing.T) {
 	}
 }
 
+func TestApplyWowMapLayerEntryRenderExtensions(t *testing.T) {
+	t.Parallel()
+	for _, assetPath := range []string{"renders/43.png", "renders/43.webp"} {
+		assetPath := assetPath
+		t.Run(assetPath, func(t *testing.T) {
+			t.Parallel()
+			artwork := &wowMapManualRender{Path: assetPath, Width: 1200, Height: 800}
+			instance := &wowMapInstance{MapID: 43}
+			require.NoError(t, applyWowMapLayerEntry("renders", wowMapLayerInstance{MapID: 43, Renders: artwork}, instance))
+			require.Equal(t, artwork, instance.Renders)
+		})
+	}
+
+	instance := &wowMapInstance{MapID: 43}
+	err := applyWowMapLayerEntry("renders", wowMapLayerInstance{
+		MapID:   43,
+		Renders: &wowMapManualRender{Path: "renders/43.jpg", Width: 1200, Height: 800},
+	}, instance)
+	require.ErrorContains(t, err, "invalid renders")
+}
+
 func TestMergeWowdataMapsInvalid(t *testing.T) {
 	t.Parallel()
 	target := wowMapTarget{Product: "wow_classic_beta", Build: "1.2.3", Region: "us", Locale: "enUS"}

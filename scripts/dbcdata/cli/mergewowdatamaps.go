@@ -198,7 +198,7 @@ func applyWowMapLayerEntry(kind string, entry wowMapLayerInstance, instance *wow
 	if kind == "renders" {
 		artwork := entry.Renders
 		if artwork == nil || entry.Styled != nil || entry.Mesh != nil ||
-			!validWowMapLayerPath(artwork.Path, "renders/") || !strings.HasSuffix(artwork.Path, ".png") || artwork.Width <= 0 || artwork.Height <= 0 {
+			!validWowMapLayerPath(artwork.Path, "renders/") || !validWowMapRenderExtension(artwork.Path) || artwork.Width <= 0 || artwork.Height <= 0 {
 			return fmt.Errorf("invalid renders map layer artwork for mapID %d", entry.MapID)
 		}
 		instance.Renders = artwork
@@ -213,6 +213,10 @@ func applyWowMapLayerEntry(kind string, entry wowMapLayerInstance, instance *wow
 	}
 	instance.Styled = artwork
 	return nil
+}
+
+func validWowMapRenderExtension(assetPath string) bool {
+	return strings.HasSuffix(assetPath, ".png") || strings.HasSuffix(assetPath, ".webp")
 }
 
 // validWowMapLayerPath accepts a clean, relative asset path under prefix.

@@ -123,9 +123,20 @@ test("rejects unsafe asset paths", () => {
   );
 });
 
+test("accepts PNG and WebP manual renders", () => {
+  for (const path of ["renders/a.png", "renders/a.webp"]) {
+    const merged = mergeMapManifests(original(), { renders: layer({ mapID: 43, renders: { path, width: 2, height: 1 } }) });
+    assert.equal(merged.instances[0]?.renders?.path, path);
+  }
+});
+
 test("rejects invalid manual dimensions and extensions", () => {
   assert.throws(
     () => mergeMapManifests(original(), { renders: layer({ mapID: 43, renders: { path: "renders/a.png", width: 0, height: 1 } }) }),
+    /invalid renders/,
+  );
+  assert.throws(
+    () => mergeMapManifests(original(), { renders: layer({ mapID: 43, renders: { path: "renders/a.jpg", width: 1, height: 1 } }) }),
     /invalid renders/,
   );
   assert.throws(
@@ -189,6 +200,7 @@ test("allows only clean preview asset paths from known map layers", () => {
     "tiles/7474519.webp",
     "render-styled/wailing-caverns.jpeg",
     "renders/wailing-caverns.png",
+    "renders/zul-gurub.webp",
     "3d/wailing-caverns.glb",
   ]) {
     assert.equal(isPreviewableMapAssetPath(path), true, path);

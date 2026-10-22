@@ -98,7 +98,7 @@ Common live failures:
 
 ## Map foundry
 
-The Access-protected map dashboard at `/internal/maps` manages manual PNG render and calibrated GLB mesh registrations for these R2 namespaces:
+The Access-protected map dashboard at `/internal/maps` manages manual PNG or WebP render and calibrated GLB mesh registrations for these R2 namespaces:
 
 ```text
 forever, kronos, epoch, turtle, tbc, vanillaplus, warmane, ascension, azerothcore
@@ -117,7 +117,7 @@ The dashboard uploads immutable assets beneath `renders/` or `3d/`, and stores p
 Selecting a map opens a draft-aware preview workbench:
 
 - **Original** assembles native floor tiles (including published legacy `tiles/` paths) with a floor selector.
-- **Rendered** switches between draft or published manual PNG and styled artwork.
+- **Rendered** switches between draft or published manual PNG/WebP and styled artwork.
 - **3D model** loads draft or published GLBs in an orbit, pan and zoom viewer.
 
 Preview assets stream through Access-protected Worker routes rather than directly from the public bucket. Mesh entries require explicit calibrated XY bounds, zMin/zMax and the `wow-yup-mirrored-x` frame; uploading a GLB does not infer coordinates. Saving a draft does not change public metadata. Publishing:
