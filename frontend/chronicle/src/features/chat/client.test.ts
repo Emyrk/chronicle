@@ -111,6 +111,19 @@ describe("runAgUi", () => {
     await expect(promise).rejects.toMatchObject({ kind: "http", status: 503 });
   });
 
+  it("bounds non-2xx response details while reading", async () => {
+    const promise = runAgUi({
+      url: "/api/assistant",
+      body: {},
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(new Response("x".repeat(50_000), { status: 502 })),
+      onEvent: () => undefined,
+    });
+
+    await expect(promise).rejects.toSatisfy((error: unknown) =>
+      error instanceof AgUiClientError && error.kind === "http" && error.message.length < 600
+    );
+  });
+
   it("reports a stream that ends without a terminal run event", async () => {
     const promise = runAgUi({
       url: "/api/assistant",

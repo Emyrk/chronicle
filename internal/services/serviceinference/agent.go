@@ -133,7 +133,10 @@ func (s *Service) executeTool(ctx context.Context, tc toolContext, name, args st
 			return "", err
 		}
 		if strings.TrimSpace(in.InstanceName) == "" || len(in.InstanceName) > 100 {
-			return "", errors.New("instance_name is required")
+			return "", errors.New("instance_name must be 1-100 characters")
+		}
+		if len(in.Encounter) > 100 || len(in.Class) > 30 || len(in.Spec) > 50 || len(in.Role) > 30 {
+			return "", errors.New("ranking filter is too long")
 		}
 		if in.Limit == 0 {
 			in.Limit = 10
@@ -181,19 +184,13 @@ func (s *Service) executeTool(ctx context.Context, tc toolContext, name, args st
 		if err != nil {
 			return "", err
 		}
-		encounters, err := s.db.EncountersByInstanceID(ctx, inst.ID)
+		encounters, err := s.db.ListInferenceInstanceEncounters(ctx, inst.ID)
 		if err != nil {
 			return "", err
 		}
-		players, err := s.db.InstancePlayersByInstanceID(ctx, inst.ID)
+		players, err := s.db.ListInferenceInstancePlayers(ctx, inst.ID)
 		if err != nil {
 			return "", err
-		}
-		if len(encounters) > 100 {
-			encounters = encounters[:100]
-		}
-		if len(players) > 100 {
-			players = players[:100]
 		}
 		type enc struct {
 			Name            string  `json:"name"`
@@ -257,6 +254,37 @@ func boundedHistory(rows []database.InferenceMessage) []Message {
 	return messages
 }
 
+const runLease = 15 * time.Minute
+
+func (s *Service) createRun(
+	ctx context.Context,
+	params database.InsertInferenceRunParams,
+	input *Message,
+) (database.InferenceRun, error) {
+	if _, err := s.db.ExpireStaleInferenceRuns(ctx); err != nil {
+		return database.InferenceRun{}, fmt.Errorf("expire stale inference runs: %w", err)
+	}
+	if input == nil || !params.ThreadID.Valid {
+		return s.db.InsertInferenceRun(ctx, params)
+	}
+
+	var run database.InferenceRun
+	err := s.db.InTx(ctx, func(tx database.Store) error {
+		var err error
+		run, err = tx.InsertInferenceRun(ctx, params)
+		if err != nil {
+			return err
+		}
+		_, err = tx.InsertInferenceMessage(ctx, database.InsertInferenceMessageParams{
+			ThreadID: params.ThreadID.UUID,
+			Role:     string(RoleUser),
+			Content:  writeJSONMessage(*input),
+		})
+		return err
+	}, nil)
+	return run, err
+}
+
 func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxRunBody)
 	var req chroniclesdk.InferenceRunRequest
@@ -281,7 +309,7 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "This run_id was already used."})
 		return
 	} else if !errors.Is(err, pgx.ErrNoRows) {
-		httpapi.InternalServerError(w, err)
+		s.internalError(w, "look up inference run", err)
 		return
 	}
 	conn, err := s.db.GetInferenceConnectionByOwner(r.Context(), database.GetInferenceConnectionByOwnerParams{ID: req.ConnectionID, UserID: uid})
@@ -296,7 +324,7 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 	}
 	cred, err := s.cipher.Decrypt(conn.EncryptedCredential, credentialAAD(uid.String(), "provider-credential"))
 	if err != nil {
-		httpapi.InternalServerError(w, errors.New("decrypt inference credential"))
+		s.internalError(w, "decrypt inference credential", err)
 		return
 	}
 	var thread database.InferenceThread
@@ -311,8 +339,12 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		thread, err = s.db.GetInferenceThreadByOwner(r.Context(), database.GetInferenceThreadByOwnerParams{ID: *req.ThreadID, UserID: uid})
-		if err != nil || thread.AssistantID != a.ID {
+		if err != nil || thread.AssistantID != a.ID || thread.Persistence != "durable" || thread.ContextType.String != "instance" {
 			httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Thread not found."})
+			return
+		}
+		if req.Instance == "" || req.Instance != thread.ContextID.String {
+			badRequest(w, r, "Thread does not belong to the requested instance.")
 			return
 		}
 		inst, err := s.instanceForUser(r, thread.ContextID.String)
@@ -324,7 +356,7 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 		threadID = uuid.NullUUID{UUID: thread.ID, Valid: true}
 		rows, err := s.db.ListRecentInferenceMessagesByThread(r.Context(), database.ListRecentInferenceMessagesByThreadParams{ThreadID: thread.ID, Limit: maxHistoryMessages})
 		if err != nil {
-			httpapi.InternalServerError(w, err)
+			s.internalError(w, "load inference thread history", err)
 			return
 		}
 		history = boundedHistory(rows)
@@ -353,21 +385,35 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	runRow, err := s.db.InsertInferenceRun(r.Context(), database.InsertInferenceRunParams{ThreadID: threadID, UserID: uid, ConnectionID: conn.ID, AssistantID: a.ID, Model: req.Model, Status: "running", IdempotencyKey: req.RunID})
+	runParams := database.InsertInferenceRunParams{
+		ThreadID:       threadID,
+		UserID:         uid,
+		ConnectionID:   conn.ID,
+		AssistantID:    a.ID,
+		Model:          req.Model,
+		Status:         "running",
+		IdempotencyKey: req.RunID,
+		LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(runLease), Valid: true},
+	}
+	var durableInput *Message
+	if a.Durable {
+		durableInput = &input
+	}
+	runRow, err := s.createRun(r.Context(), runParams, durableInput)
 	if err != nil {
+		if database.IsUniqueViolation(err, database.UniqueConstraint("inference_runs_one_running_per_thread_idx")) {
+			httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "This thread already has a run in progress."})
+			return
+		}
 		if database.IsUniqueViolation(err) {
 			httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "This run_id was already used."})
 			return
 		}
-		httpapi.InternalServerError(w, err)
+		s.internalError(w, "create inference run", err)
 		return
 	}
-	if a.Durable {
-		if _, err = s.db.InsertInferenceMessage(r.Context(), database.InsertInferenceMessageParams{ThreadID: thread.ID, Role: string(RoleUser), Content: writeJSONMessage(input)}); err != nil {
-			s.finishRun(r.Context(), runRow, "error", Usage{}, "persist_input")
-			httpapi.InternalServerError(w, err)
-			return
-		}
+	if _, err := s.db.UpdateInferenceConnectionLastUsedByOwner(r.Context(), database.UpdateInferenceConnectionLastUsedByOwnerParams{ID: conn.ID, UserID: uid}); err != nil {
+		s.logger.Warn("update inference connection last used", "error", err)
 	}
 	writer := agui.NewWriter(w)
 	streamThread := runRow.ID.String()
@@ -375,38 +421,48 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 		streamThread = threadID.UUID.String()
 	}
 	if err = writer.Write(agui.RunStartedEvent{ThreadID: streamThread, RunID: req.RunID, ProtocolVersion: "1.0"}); err != nil {
-		s.finishRun(r.Context(), runRow, "error", Usage{}, "stream_error")
+		_ = s.finishRun(r.Context(), runRow, "error", Usage{}, "stream_error")
 		return
 	}
-	usage, err := s.agentLoop(r.Context(), writer, provider, cred, req.Model, a, history, tc, func(m Message) error {
+	usage, err := s.agentLoop(r.Context(), writer, provider, cred, req.Model, a, history, tc, func(messages ...Message) error {
 		if !a.Durable {
 			return nil
 		}
-		_, e := s.db.InsertInferenceMessage(r.Context(), database.InsertInferenceMessageParams{ThreadID: thread.ID, Role: string(m.Role), Content: writeJSONMessage(m), ToolCallID: pgtype.Text{String: m.ToolCallID, Valid: m.ToolCallID != ""}})
-		return e
+		return s.db.InTx(r.Context(), func(tx database.Store) error {
+			for _, message := range messages {
+				if _, err := tx.InsertInferenceMessage(r.Context(), database.InsertInferenceMessageParams{ThreadID: thread.ID, Role: string(message.Role), Content: writeJSONMessage(message), ToolCallID: pgtype.Text{String: message.ToolCallID, Valid: message.ToolCallID != ""}}); err != nil {
+					return err
+				}
+			}
+			return nil
+		}, nil)
 	})
 	if err != nil {
-		s.finishRun(r.Context(), runRow, "error", usage, "provider_error")
+		_ = s.finishRun(r.Context(), runRow, "error", usage, "provider_error")
 		_ = writer.Write(agui.RunErrorEvent{Message: "The inference run failed.", Code: "provider_error"})
 		return
 	}
-	s.finishRun(r.Context(), runRow, "completed", usage, "")
+	if err := s.finishRun(r.Context(), runRow, "completed", usage, ""); err != nil {
+		_ = writer.Write(agui.RunErrorEvent{Message: "The inference run could not be finalized.", Code: "persistence_error"})
+		return
+	}
 	_ = writer.Write(agui.RunFinishedEvent{ThreadID: streamThread, RunID: req.RunID})
 }
 func finalizationContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 }
 
-func (s *Service) finishRun(ctx context.Context, row database.InferenceRun, status string, usage Usage, code string) {
+func (s *Service) finishRun(ctx context.Context, row database.InferenceRun, status string, usage Usage, code string) error {
 	ctx, cancel := finalizationContext(ctx)
 	defer cancel()
 	_, err := s.db.UpdateInferenceRun(ctx, database.UpdateInferenceRunParams{ID: row.ID, UserID: row.UserID, Status: status, InputTokens: int64(usage.PromptTokens), OutputTokens: int64(usage.CompletionTokens), ErrorCode: pgtype.Text{String: code, Valid: code != ""}, CompletedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}})
 	if err != nil {
 		s.logger.Error("update inference run", "error", err)
 	}
+	return err
 }
 
-func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provider, credential []byte, model string, a assistant, messages []Message, tc toolContext, persist func(Message) error) (Usage, error) {
+func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provider, credential []byte, model string, a assistant, messages []Message, tc toolContext, persist func(...Message) error) (Usage, error) {
 	messages = append([]Message{{Role: RoleSystem, Content: a.System}}, messages...)
 	var usage Usage
 	toolCount := 0
@@ -455,15 +511,15 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 		if err != nil {
 			return usage, err
 		}
-		if started {
-			if err := w.Write(agui.TextMessageEndEvent{MessageID: messageID}); err != nil {
-				return usage, err
-			}
-		}
 		assistantMessage := Message{ID: messageID, Role: RoleAssistant, Content: content.String()}
 		if finish != FinishReasonToolCalls || len(calls) == 0 {
 			if err := persist(assistantMessage); err != nil {
 				return usage, err
+			}
+			if started {
+				if err := w.Write(agui.TextMessageEndEvent{MessageID: messageID}); err != nil {
+					return usage, err
+				}
 			}
 			return usage, nil
 		}
@@ -474,10 +530,7 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 			}
 			assistantMessage.ToolCalls = append(assistantMessage.ToolCalls, ToolCall{ID: c.ID, Name: c.Name, Arguments: c.Args.String()})
 		}
-		if err := persist(assistantMessage); err != nil {
-			return usage, err
-		}
-		messages = append(messages, assistantMessage)
+		toolMessages := make([]Message, 0, len(assistantMessage.ToolCalls))
 		for _, call := range assistantMessage.ToolCalls {
 			toolCount++
 			if toolCount > maxToolCalls {
@@ -493,17 +546,23 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 			if err != nil {
 				output = `{"error":"invalid tool request"}`
 			}
-			if err := w.Write(agui.ToolCallEndEvent{ToolCallID: call.ID}); err != nil {
+			toolMessages = append(toolMessages, Message{Role: RoleTool, Name: call.Name, ToolCallID: call.ID, Content: output})
+		}
+		persistedMessages := append([]Message{assistantMessage}, toolMessages...)
+		if err := persist(persistedMessages...); err != nil {
+			return usage, err
+		}
+		if started {
+			if err := w.Write(agui.TextMessageEndEvent{MessageID: messageID}); err != nil {
 				return usage, err
 			}
-			tm := Message{Role: RoleTool, Name: call.Name, ToolCallID: call.ID, Content: output}
-			if err := persist(tm); err != nil {
+		}
+		messages = append(messages, persistedMessages...)
+		for _, toolMessage := range toolMessages {
+			if err := w.Write(agui.ToolCallEndEvent{ToolCallID: toolMessage.ToolCallID}); err != nil {
 				return usage, err
 			}
-			messages = append(messages, tm)
 		}
 	}
 	return usage, errors.New("agent iteration limit reached")
 }
-
-var _ = fmt.Sprintf

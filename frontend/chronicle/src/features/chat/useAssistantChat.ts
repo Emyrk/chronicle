@@ -28,6 +28,7 @@ export interface UseAssistantChatOptions {
   createRequest?: (input: CreateChatRunRequestInput) => unknown;
   onMessagesChange?: (messages: ChatMessage[]) => void;
   onRunComplete?: () => void | Promise<void>;
+  onRunSettled?: () => void | Promise<void>;
   runClient?: (options: RunAgUiOptions) => Promise<void>;
 }
 
@@ -117,10 +118,10 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
       });
 
       const requestInput = { messages, runId, threadId };
-      const body = (options.createRequest ?? createDefaultChatRunRequest)(requestInput);
       const onEvent = (event: AgUiEvent) => dispatch({ type: "apply_event", event });
 
       try {
+        const body = (options.createRequest ?? createDefaultChatRunRequest)(requestInput);
         await (options.runClient ?? runAgUi)({
           url: options.endpoint,
           body,
@@ -140,6 +141,11 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
         if (abortControllerRef.current === abortController) {
           abortControllerRef.current = null;
           activeRunRef.current = false;
+        }
+        try {
+          await options.onRunSettled?.();
+        } catch {
+          // A refresh failure must not leave the controller wedged after the run settles.
         }
       }
     },

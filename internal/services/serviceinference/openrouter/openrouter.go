@@ -193,11 +193,23 @@ func (c *Client) StreamChat(ctx context.Context, credential []byte, request serv
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return responseError("stream OpenRouter chat", response, credential)
 	}
-	if err := parseSSE(response.Body, callback); err != nil {
+	if contentType := response.Header.Get("Content-Type"); !strings.Contains(strings.ToLower(contentType), "text/event-stream") {
+		return fmt.Errorf("stream OpenRouter chat: unexpected Content-Type %q", contentType)
+	}
+	finished := false
+	if err := parseSSE(response.Body, func(event serviceinference.StreamEvent) error {
+		if event.Type == serviceinference.StreamEventFinish {
+			finished = true
+		}
+		return callback(event)
+	}); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		return fmt.Errorf("stream OpenRouter chat: %w", err)
+	}
+	if !finished {
+		return errors.New("stream OpenRouter chat: stream ended without a finish reason")
 	}
 	return nil
 }

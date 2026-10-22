@@ -247,6 +247,30 @@ export async function* parseSseStream(
   }
 }
 
+async function readResponseSnippet(response: Response, maxBytes = 500): Promise<string> {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let result = "";
+  let bytes = 0;
+  try {
+    while (bytes < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const remaining = maxBytes - bytes;
+      const chunk = value.byteLength > remaining ? value.subarray(0, remaining) : value;
+      bytes += chunk.byteLength;
+      result += decoder.decode(chunk, { stream: bytes < maxBytes });
+      if (value.byteLength > remaining) break;
+    }
+    result += decoder.decode();
+    return result.trim();
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
+}
+
 export async function runAgUi(options: RunAgUiOptions): Promise<void> {
   const fetchImplementation = options.fetch ?? fetch;
   const headers = new Headers(options.headers);
@@ -271,8 +295,8 @@ export async function runAgUi(options: RunAgUiOptions): Promise<void> {
   }
 
   if (!response.ok) {
-    const detail = (await response.text()).trim();
-    const suffix = detail ? `: ${detail.slice(0, 500)}` : "";
+    const detail = await readResponseSnippet(response);
+    const suffix = detail ? `: ${detail}` : "";
     throw new AgUiClientError(
       "http",
       `AG-UI request failed with HTTP ${response.status}${suffix}`,

@@ -1131,7 +1131,7 @@ CREATE TABLE inference_connections (
     provider text NOT NULL,
     auth_mode text NOT NULL,
     label text NOT NULL,
-    encrypted_credential bytea NOT NULL,
+    encrypted_credential bytea,
     credential_key_version text NOT NULL,
     provider_account_key_hash bytea,
     status text NOT NULL,
@@ -1175,7 +1175,8 @@ CREATE TABLE inference_runs (
     error_code text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    completed_at timestamp with time zone
+    completed_at timestamp with time zone,
+    lease_expires_at timestamp with time zone
 );
 
 CREATE TABLE inference_threads (
@@ -3142,6 +3143,10 @@ CREATE INDEX inference_messages_thread_created_idx ON inference_messages USING b
 CREATE INDEX inference_oauth_transactions_expires_idx ON inference_oauth_transactions USING btree (expires_at);
 
 CREATE INDEX inference_oauth_transactions_user_idx ON inference_oauth_transactions USING btree (user_id, created_at DESC);
+
+CREATE UNIQUE INDEX inference_runs_one_running_per_thread_idx ON inference_runs USING btree (thread_id) WHERE ((status = 'running'::text) AND (thread_id IS NOT NULL));
+
+CREATE INDEX inference_runs_stale_idx ON inference_runs USING btree (lease_expires_at) WHERE (status = 'running'::text);
 
 CREATE INDEX inference_runs_thread_idx ON inference_runs USING btree (thread_id, created_at);
 

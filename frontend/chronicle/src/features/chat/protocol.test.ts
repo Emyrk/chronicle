@@ -49,6 +49,22 @@ describe("chatReducer", () => {
     ]);
   });
 
+  it("marks partial messages and tool calls interrupted when a run fails", () => {
+    let state = createInitialChatState();
+    state = apply(state, { type: "TEXT_MESSAGE_START", messageId: "assistant-1", role: "assistant" });
+    state = apply(state, { type: "TEXT_MESSAGE_CONTENT", messageId: "assistant-1", delta: "Partial" });
+    state = apply(state, {
+      type: "TOOL_CALL_START",
+      toolCallId: "tool-1",
+      toolCallName: "lookup",
+      parentMessageId: "assistant-1",
+    });
+    state = apply(state, { type: "RUN_ERROR", message: "Disconnected" });
+
+    expect(state.messages[0]).toMatchObject({ streaming: false, interrupted: true });
+    expect(state.messages[0].toolCalls?.[0].status).toBe("interrupted");
+  });
+
   it("surfaces protocol run errors", () => {
     const state = apply(createInitialChatState(), {
       type: "RUN_ERROR",

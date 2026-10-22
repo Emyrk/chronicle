@@ -85,7 +85,7 @@ export type AgUiEvent =
 
 export type ChatRole = "user" | "assistant";
 export type ChatRunStatus = "idle" | "running" | "finished" | "error";
-export type ChatToolCallStatus = "streaming" | "complete";
+export type ChatToolCallStatus = "streaming" | "complete" | "interrupted";
 
 export interface ChatToolCall {
   id: string;
@@ -99,6 +99,7 @@ export interface ChatMessage {
   role: ChatRole;
   content: string;
   streaming?: boolean;
+  interrupted?: boolean;
   toolCalls?: ChatToolCall[];
 }
 
@@ -157,6 +158,19 @@ function updateToolCall(
   });
 }
 
+function interruptStreamingMessages(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map((message) => ({
+    ...message,
+    streaming: message.streaming ? false : message.streaming,
+    interrupted: message.streaming || message.toolCalls?.some((toolCall) => toolCall.status === "streaming")
+      ? true
+      : message.interrupted,
+    toolCalls: message.toolCalls?.map((toolCall) =>
+      toolCall.status === "streaming" ? { ...toolCall, status: "interrupted" as const } : toolCall
+    ),
+  }));
+}
+
 function applyEvent(state: ChatState, event: AgUiEvent): ChatState {
   switch (event.type) {
     case "RUN_STARTED":
@@ -177,6 +191,7 @@ function applyEvent(state: ChatState, event: AgUiEvent): ChatState {
     case "RUN_ERROR":
       return {
         ...state,
+        messages: interruptStreamingMessages(state.messages),
         status: "error",
         error: event.message,
       };
@@ -272,9 +287,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "apply_event":
       return applyEvent(state, action.event);
     case "run_failed":
-      return { ...state, status: "error", error: action.message };
+      return { ...state, messages: interruptStreamingMessages(state.messages), status: "error", error: action.message };
     case "run_cancelled":
-      return { ...state, status: "idle" };
+      return { ...state, messages: interruptStreamingMessages(state.messages), status: "idle" };
     case "clear_error":
       return { ...state, error: undefined, status: state.status === "error" ? "idle" : state.status };
   }

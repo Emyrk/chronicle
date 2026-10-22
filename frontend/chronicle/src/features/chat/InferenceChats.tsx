@@ -126,9 +126,9 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
       threadId={response?.thread.id}
       initialMessages={response ? toChatMessages(response.messages) : []}
       createRequest={createRequest}
-      onRunComplete={refreshThread}
+      onRunSettled={refreshThread}
       launcherLabel="Ask about this raid"
-      launcherClassName="fixed right-4 bottom-4 z-40 rounded-full shadow-lg sm:right-6 sm:bottom-6"
+      launcherClassName="fixed right-4 bottom-20 z-[90] rounded-full shadow-lg sm:right-6 sm:bottom-6"
       title={`${instanceName} assistant`}
       description="Analyze this instance with its persisted conversation history. Responses can be inaccurate."
       configuration={selection.connections.length > 0 ? <AssistantConfiguration selection={selection} /> : undefined}

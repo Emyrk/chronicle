@@ -59,7 +59,7 @@ func (s *Service) Routes() http.Handler                             { return s }
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.router.ServeHTTP(w, r) }
 func (s *Service) Close(context.Context) error                      { return nil }
 
-func (s *Service) Start(context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	s.logger = servicelogger.Logger(s.broker)
 	s.db = servicedbstore.DatabaseStore(s.broker)
 	s.zed = serviceauthz.Authz(s.broker)
@@ -92,6 +92,13 @@ func (s *Service) Start(context.Context) error {
 	s.registry = NewRegistry()
 	if err := s.registry.Register(s.openRouter); err != nil {
 		return err
+	}
+	expired, err := s.db.ExpireStaleInferenceRuns(ctx)
+	if err != nil {
+		return fmt.Errorf("expire stale inference runs: %w", err)
+	}
+	if expired > 0 {
+		s.logger.Warn("expired stale inference runs", "count", expired)
 	}
 	s.enabled = true
 	return nil

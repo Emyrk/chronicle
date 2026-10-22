@@ -28,25 +28,30 @@ function chooseConnection(connections: readonly InferenceConnection[], storedId?
 
 export function useInferenceSelection(userId: string | undefined, enabled = true) {
   const connectionsQuery = useInferenceConnections({ enabled: enabled && Boolean(userId) });
-  const connections = useMemo(() => connectionsQuery.data?.connections ?? [], [connectionsQuery.data]);
-  const [chosenConnectionId, setChosenConnectionId] = useState<string>();
+  const connections = useMemo(
+    () => (connectionsQuery.data?.connections ?? []).filter((connection) => connection.status === "active"),
+    [connectionsQuery.data],
+  );
+  const [chosenConnection, setChosenConnection] = useState<{ userId?: string; value?: string }>({});
+  const chosenConnectionId = chosenConnection.userId === userId ? chosenConnection.value : undefined;
   const connectionId = chooseConnection(
     connections,
     chosenConnectionId ?? (userId ? readStored(userId, "connection") : undefined),
   );
   const modelsQuery = useInferenceModels(connectionId, { enabled: enabled && Boolean(connectionId) });
   const models = useMemo(() => modelsQuery.data?.models ?? [], [modelsQuery.data]);
-  const [chosenModelId, setChosenModelId] = useState<string>();
+  const [chosenModel, setChosenModel] = useState<{ userId?: string; value?: string }>({});
+  const chosenModelId = chosenModel.userId === userId ? chosenModel.value : undefined;
   const modelId = chooseDefaultModel(
     models,
     chosenModelId ?? (userId ? readStored(userId, "model") : undefined),
   );
   const setConnectionId = useCallback((value: string | undefined) => {
-    setChosenConnectionId(value);
+    setChosenConnection({ userId, value });
     if (userId) writeStored(userId, "connection", value);
   }, [userId]);
   const setModelId = useCallback((value: string | undefined) => {
-    setChosenModelId(value);
+    setChosenModel({ userId, value });
     if (userId) writeStored(userId, "model", value);
   }, [userId]);
 

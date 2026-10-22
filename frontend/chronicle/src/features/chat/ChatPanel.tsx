@@ -34,14 +34,15 @@ function formattedArguments(value: string): string {
 
 function ToolCallCard({ toolCall }: { toolCall: ChatToolCall }) {
   const complete = toolCall.status === "complete";
+  const interrupted = toolCall.status === "interrupted";
   return (
     <div className="bg-muted/40 mt-3 overflow-hidden rounded-lg border text-xs">
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <Wrench className="text-primary size-3.5" />
         <span className="min-w-0 flex-1 truncate font-mono font-medium">{toolCall.name}</span>
         <span className="text-muted-foreground flex items-center gap-1">
-          {complete ? <Check className="size-3.5" /> : <LoaderCircle className="size-3.5 animate-spin" />}
-          {complete ? "Complete" : "Preparing"}
+          {complete ? <Check className="size-3.5" /> : interrupted ? <AlertCircle className="size-3.5" /> : <LoaderCircle className="size-3.5 animate-spin" />}
+          {complete ? "Complete" : interrupted ? "Interrupted" : "Preparing"}
         </span>
       </div>
       <pre className="styled-scrollbar text-muted-foreground max-h-36 overflow-auto p-3 font-mono whitespace-pre-wrap">
@@ -87,6 +88,9 @@ function Message({ message }: { message: ChatMessage }) {
           ) : null
         ) : (
           <p className="whitespace-pre-wrap">{message.content}</p>
+        )}
+        {message.interrupted && (
+          <p className="text-muted-foreground mt-2 text-xs italic">Response interrupted.</p>
         )}
         {message.toolCalls?.map((toolCall) => (
           <ToolCallCard key={toolCall.id} toolCall={toolCall} />

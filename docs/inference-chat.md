@@ -27,6 +27,11 @@ Configure the service with:
 
 The equivalent encryption-key flag is `--inference-credential-encryption-key`. When no encryption key is configured, inference routes return `503 Service Unavailable` and the rest of Chronicle starts normally. A configured but invalid key fails service startup.
 
+> [!WARNING]
+> The initial release supports one encryption key identified as `v1`; it does not yet provide online key rotation. Every replica must receive the same key, and changing or losing it requires users to reconnect their provider accounts. Back up the key under the production secret-recovery policy before enabling inference.
+
+Disconnecting a provider connection immediately erases Chronicle's encrypted credential and account-key hash while retaining non-secret connection metadata needed by historical run rows. It does not currently revoke the generated key at OpenRouter, so users who need upstream revocation must also remove it from their OpenRouter account.
+
 ## Streaming contract
 
 The browser/backend contract is the Chronicle-owned subset of AG-UI 1.0 over server-sent events. Supported events are:
@@ -35,7 +40,7 @@ The browser/backend contract is the Chronicle-owned subset of AG-UI 1.0 over ser
 - `TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`, and `TEXT_MESSAGE_END`
 - `TOOL_CALL_START`, `TOOL_CALL_ARGS`, and `TOOL_CALL_END`
 
-The frontend client incrementally parses UTF-8 SSE frames and reduces these events into messages and tool-call state. Cancellation aborts the run request. Run finalization uses a detached, bounded context so a disconnected browser does not leave the database row permanently marked `running`.
+The frontend client incrementally parses UTF-8 SSE frames and reduces these events into messages and tool-call state. Cancellation aborts the run request. Run finalization uses a detached, bounded context so an ordinary browser disconnect can still update the database. Durable threads reject overlapping active runs, and a 15-minute lease marks abandoned runs terminal after a node crash or failed finalization.
 
 ## Persistence and limits
 

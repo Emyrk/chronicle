@@ -540,7 +540,7 @@ export function InstancePage() {
               canInvalidateLogs={canInvalidateLogs}
               duplicateGroupId={apiInstance?.duplicate_group_id}
             />
-            <InstanceAssistantChat instanceId={instance.id} instanceName={instance.name} />
+            <InstanceAssistantChat key={instance.id} instanceId={instance.id} instanceName={instance.name} />
           </PlayerSpecializationProvider>
         </InstanceEventsProvider>
       </TimeRangeProvider>

@@ -1672,6 +1672,7 @@ type InferenceRun struct {
 	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	CompletedAt    pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+	LeaseExpiresAt pgtype.Timestamptz `db:"lease_expires_at" json:"lease_expires_at"`
 }
 
 type InferenceThread struct {

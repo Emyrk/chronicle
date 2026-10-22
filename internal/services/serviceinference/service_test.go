@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -34,6 +36,20 @@ func TestDisabledRoutesReturnServiceUnavailable(t *testing.T) {
 	s.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/connections", nil))
 	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 	require.Contains(t, recorder.Body.String(), "not configured")
+}
+
+func TestOpenRouterCallbackURLCarriesState(t *testing.T) {
+	t.Parallel()
+	accessURL, err := url.Parse("https://chronicle.example/base?tenant=turtle#fragment")
+	require.NoError(t, err)
+	callback, err := url.Parse(openRouterCallbackURL(accessURL, "state-token"))
+	require.NoError(t, err)
+	require.Equal(t, "https", callback.Scheme)
+	require.Equal(t, "chronicle.example", callback.Host)
+	require.Equal(t, "/api/v1/inference/openrouter/callback", callback.Path)
+	require.Equal(t, "turtle", callback.Query().Get("tenant"))
+	require.Equal(t, "state-token", callback.Query().Get("state"))
+	require.Empty(t, callback.Fragment)
 }
 
 func TestValidateLocalReturnPath(t *testing.T) {
@@ -75,11 +91,17 @@ func TestAgentLoopTextAndToolCall(t *testing.T) {
 	var stream bytes.Buffer
 	writer := agui.NewStreamWriter(&stream, nil)
 	var persisted []Message
+	var persistBatches []int
 	s := &Service{}
-	usage, err := s.agentLoop(context.Background(), writer, provider, nil, "model", assistants["site-help"], []Message{{Role: RoleUser, Content: "Where are rankings?"}}, toolContext{service: s}, func(m Message) error { persisted = append(persisted, m); return nil })
+	usage, err := s.agentLoop(context.Background(), writer, provider, nil, "model", assistants["site-help"], []Message{{Role: RoleUser, Content: "Where are rankings?"}}, toolContext{service: s}, func(messages ...Message) error {
+		persistBatches = append(persistBatches, len(messages))
+		persisted = append(persisted, messages...)
+		return nil
+	})
 	require.NoError(t, err)
 	require.Equal(t, 2, provider.calls)
 	require.Equal(t, 4, usage.PromptTokens)
+	require.Equal(t, []int{2, 1}, persistBatches)
 	require.Len(t, persisted, 3)
 	require.Equal(t, RoleTool, persisted[1].Role)
 	require.Contains(t, persisted[1].Content, "/leaderboards/statistics")
@@ -88,6 +110,24 @@ func TestAgentLoopTextAndToolCall(t *testing.T) {
 	for _, event := range []string{"TOOL_CALL_START", "TOOL_CALL_ARGS", "TOOL_CALL_END", "TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT", "TEXT_MESSAGE_END"} {
 		require.True(t, strings.Contains(body, event), event)
 	}
+}
+
+func TestAgentLoopDoesNotEndMessageBeforePersistence(t *testing.T) {
+	t.Parallel()
+	provider := &scriptedProvider{streams: [][]StreamEvent{{
+		{Type: StreamEventTextDelta, Text: "provisional"},
+		{Type: StreamEventFinish, FinishReason: FinishReasonStop},
+	}}}
+	var stream bytes.Buffer
+	writer := agui.NewStreamWriter(&stream, nil)
+	sentinel := errors.New("persist failed")
+	_, err := (&Service{}).agentLoop(context.Background(), writer, provider, nil, "model", assistants["site-help"], []Message{{Role: RoleUser, Content: "question"}}, toolContext{}, func(...Message) error {
+		return sentinel
+	})
+	require.ErrorIs(t, err, sentinel)
+	require.Contains(t, stream.String(), "TEXT_MESSAGE_START")
+	require.Contains(t, stream.String(), "TEXT_MESSAGE_CONTENT")
+	require.NotContains(t, stream.String(), "TEXT_MESSAGE_END")
 }
 
 func TestFinalizationContextSurvivesClientCancellation(t *testing.T) {
@@ -137,6 +177,8 @@ func TestToolArgumentsAreStrictAndBounded(t *testing.T) {
 	_, err := s.executeTool(context.Background(), toolContext{service: s}, "find_pages", `{"query":"rank","extra":true}`)
 	require.Error(t, err)
 	_, err = s.executeTool(context.Background(), toolContext{service: s}, "query_rankings", `{"instance_name":"x","limit":11}`)
+	require.Error(t, err)
+	_, err = s.executeTool(context.Background(), toolContext{service: s}, "query_rankings", `{"instance_name":"x","encounter":"`+strings.Repeat("e", 101)+`"}`)
 	require.Error(t, err)
 	_, err = s.executeTool(context.Background(), toolContext{service: s}, "unknown", `{}`)
 	require.Error(t, err)

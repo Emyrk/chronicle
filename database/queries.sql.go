@@ -8960,7 +8960,10 @@ func (q *sqlQuerier) ConsumeInferenceOAuthTransaction(ctx context.Context, arg C
 
 const deleteInferenceConnectionByOwner = `-- name: DeleteInferenceConnectionByOwner :exec
 UPDATE inference_connections
-SET status = 'deleted', updated_at = now()
+SET status = 'deleted',
+    encrypted_credential = NULL,
+    provider_account_key_hash = NULL,
+    updated_at = now()
 WHERE id = $1 AND user_id = $2
 `
 
@@ -8972,6 +8975,25 @@ type DeleteInferenceConnectionByOwnerParams struct {
 func (q *sqlQuerier) DeleteInferenceConnectionByOwner(ctx context.Context, arg DeleteInferenceConnectionByOwnerParams) error {
 	_, err := q.db.Exec(ctx, deleteInferenceConnectionByOwner, arg.ID, arg.UserID)
 	return err
+}
+
+const expireStaleInferenceRuns = `-- name: ExpireStaleInferenceRuns :execrows
+UPDATE inference_runs
+SET status = 'abandoned',
+    error_code = 'stale_run',
+    completed_at = now(),
+    updated_at = now()
+WHERE status = 'running'
+  AND lease_expires_at IS NOT NULL
+  AND lease_expires_at <= now()
+`
+
+func (q *sqlQuerier) ExpireStaleInferenceRuns(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, expireStaleInferenceRuns)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getInferenceConnectionByOwner = `-- name: GetInferenceConnectionByOwner :one
@@ -9005,7 +9027,7 @@ func (q *sqlQuerier) GetInferenceConnectionByOwner(ctx context.Context, arg GetI
 }
 
 const getInferenceRunByIdempotencyKey = `-- name: GetInferenceRunByIdempotencyKey :one
-SELECT id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at FROM inference_runs
+SELECT id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at FROM inference_runs
 WHERE user_id = $1 AND idempotency_key = $2
 `
 
@@ -9032,12 +9054,13 @@ func (q *sqlQuerier) GetInferenceRunByIdempotencyKey(ctx context.Context, arg Ge
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
+		&i.LeaseExpiresAt,
 	)
 	return i, err
 }
 
 const getInferenceRunByOwner = `-- name: GetInferenceRunByOwner :one
-SELECT id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at FROM inference_runs
+SELECT id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at FROM inference_runs
 WHERE id = $1 AND user_id = $2
 `
 
@@ -9064,6 +9087,7 @@ func (q *sqlQuerier) GetInferenceRunByOwner(ctx context.Context, arg GetInferenc
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
+		&i.LeaseExpiresAt,
 	)
 	return i, err
 }
@@ -9185,9 +9209,16 @@ func (q *sqlQuerier) InsertInferenceConnection(ctx context.Context, arg InsertIn
 }
 
 const insertInferenceMessage = `-- name: InsertInferenceMessage :one
-INSERT INTO inference_messages (thread_id, role, content, tool_call_id)
-VALUES ($1, $2, $3, $4)
-RETURNING id, thread_id, role, content, tool_call_id, created_at
+WITH inserted AS (
+  INSERT INTO inference_messages (thread_id, role, content, tool_call_id)
+  VALUES ($1, $2, $3, $4)
+  RETURNING id, thread_id, role, content, tool_call_id, created_at
+), touched AS (
+  UPDATE inference_threads
+  SET updated_at = now()
+  WHERE id = $1
+)
+SELECT id, thread_id, role, content, tool_call_id, created_at FROM inserted
 `
 
 type InsertInferenceMessageParams struct {
@@ -9197,14 +9228,23 @@ type InsertInferenceMessageParams struct {
 	ToolCallID pgtype.Text `db:"tool_call_id" json:"tool_call_id"`
 }
 
-func (q *sqlQuerier) InsertInferenceMessage(ctx context.Context, arg InsertInferenceMessageParams) (InferenceMessage, error) {
+type InsertInferenceMessageRow struct {
+	ID         uuid.UUID          `db:"id" json:"id"`
+	ThreadID   uuid.UUID          `db:"thread_id" json:"thread_id"`
+	Role       string             `db:"role" json:"role"`
+	Content    []byte             `db:"content" json:"content"`
+	ToolCallID pgtype.Text        `db:"tool_call_id" json:"tool_call_id"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+func (q *sqlQuerier) InsertInferenceMessage(ctx context.Context, arg InsertInferenceMessageParams) (InsertInferenceMessageRow, error) {
 	row := q.db.QueryRow(ctx, insertInferenceMessage,
 		arg.ThreadID,
 		arg.Role,
 		arg.Content,
 		arg.ToolCallID,
 	)
-	var i InferenceMessage
+	var i InsertInferenceMessageRow
 	err := row.Scan(
 		&i.ID,
 		&i.ThreadID,
@@ -9262,9 +9302,10 @@ func (q *sqlQuerier) InsertInferenceOAuthTransaction(ctx context.Context, arg In
 const insertInferenceRun = `-- name: InsertInferenceRun :one
 INSERT INTO inference_runs (
   thread_id, user_id, connection_id, assistant_id, model, status,
-  idempotency_key, input_tokens, output_tokens, error_code, completed_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at
+  idempotency_key, input_tokens, output_tokens, error_code, completed_at,
+  lease_expires_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at
 `
 
 type InsertInferenceRunParams struct {
@@ -9279,6 +9320,7 @@ type InsertInferenceRunParams struct {
 	OutputTokens   int64              `db:"output_tokens" json:"output_tokens"`
 	ErrorCode      pgtype.Text        `db:"error_code" json:"error_code"`
 	CompletedAt    pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+	LeaseExpiresAt pgtype.Timestamptz `db:"lease_expires_at" json:"lease_expires_at"`
 }
 
 func (q *sqlQuerier) InsertInferenceRun(ctx context.Context, arg InsertInferenceRunParams) (InferenceRun, error) {
@@ -9294,6 +9336,7 @@ func (q *sqlQuerier) InsertInferenceRun(ctx context.Context, arg InsertInference
 		arg.OutputTokens,
 		arg.ErrorCode,
 		arg.CompletedAt,
+		arg.LeaseExpiresAt,
 	)
 	var i InferenceRun
 	err := row.Scan(
@@ -9311,6 +9354,7 @@ func (q *sqlQuerier) InsertInferenceRun(ctx context.Context, arg InsertInference
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
+		&i.LeaseExpiresAt,
 	)
 	return i, err
 }
@@ -9383,6 +9427,80 @@ func (q *sqlQuerier) ListInferenceConnectionsByOwner(ctx context.Context, userID
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.LastUsedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInferenceInstanceEncounters = `-- name: ListInferenceInstanceEncounters :many
+SELECT id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id
+FROM log_instance_encounters
+WHERE instance_id = $1
+ORDER BY start_time, id
+LIMIT 100
+`
+
+func (q *sqlQuerier) ListInferenceInstanceEncounters(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounter, error) {
+	rows, err := q.db.Query(ctx, listInferenceInstanceEncounters, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogInstanceEncounter
+	for rows.Next() {
+		var i LogInstanceEncounter
+		if err := rows.Scan(
+			&i.ID,
+			&i.InstanceID,
+			&i.Name,
+			&i.Remaining,
+			&i.Boss,
+			&i.StartTime,
+			&i.EndTime,
+			&i.KillType,
+			&i.MapID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInferenceInstancePlayers = `-- name: ListInferenceInstancePlayers :many
+SELECT instance_id, unit_guid, name, level, class, race, guild_id
+FROM log_instance_players
+WHERE instance_id = $1
+ORDER BY name, unit_guid
+LIMIT 100
+`
+
+func (q *sqlQuerier) ListInferenceInstancePlayers(ctx context.Context, instanceID uuid.UUID) ([]LogInstancePlayer, error) {
+	rows, err := q.db.Query(ctx, listInferenceInstancePlayers, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogInstancePlayer
+	for rows.Next() {
+		var i LogInstancePlayer
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.UnitGuid,
+			&i.Name,
+			&i.Level,
+			&i.Class,
+			&i.Race,
+			&i.GuildID,
 		); err != nil {
 			return nil, err
 		}
@@ -9514,7 +9632,7 @@ SET status = $3,
     completed_at = $7,
     updated_at = now()
 WHERE id = $1 AND user_id = $2
-RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at
+RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at
 `
 
 type UpdateInferenceRunParams struct {
@@ -9553,6 +9671,7 @@ func (q *sqlQuerier) UpdateInferenceRun(ctx context.Context, arg UpdateInference
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
+		&i.LeaseExpiresAt,
 	)
 	return i, err
 }

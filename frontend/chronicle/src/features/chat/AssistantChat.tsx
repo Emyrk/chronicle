@@ -51,6 +51,7 @@ export function AssistantChat({
   createRequest,
   onMessagesChange,
   onRunComplete,
+  onRunSettled,
   runClient,
   ...panelProps
 }: AssistantChatProps) {
@@ -62,6 +63,7 @@ export function AssistantChat({
     createRequest,
     onMessagesChange,
     onRunComplete,
+    onRunSettled,
     runClient,
   });
 

@@ -74,7 +74,7 @@ func userID(r *http.Request) uuid.UUID { return chronauth.MustAuthenticatedClaim
 func (s *Service) listConnections(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.ListInferenceConnectionsByOwner(r.Context(), userID(r))
 	if err != nil {
-		httpapi.InternalServerError(w, err)
+		s.internalError(w, "list inference connections", err)
 		return
 	}
 	out := make([]chroniclesdk.InferenceConnection, 0, len(rows))
@@ -92,6 +92,16 @@ func connectionSDK(row database.InferenceConnection) chroniclesdk.InferenceConne
 	return chroniclesdk.InferenceConnection{ID: row.ID, Provider: row.Provider, AuthMode: row.AuthMode, Label: row.Label, Status: row.Status, CreatedAt: row.CreatedAt.Time, LastUsedAt: last}
 }
 
+func openRouterCallbackURL(accessURL *url.URL, state string) string {
+	callback := *accessURL
+	callback.Path = "/api/v1/inference/openrouter/callback"
+	query := callback.Query()
+	query.Set("state", state)
+	callback.RawQuery = query.Encode()
+	callback.Fragment = ""
+	return callback.String()
+}
+
 func (s *Service) authorizeOpenRouter(w http.ResponseWriter, r *http.Request) {
 	var req chroniclesdk.InferenceAuthorizeRequest
 	if !httpapi.Read(r.Context(), w, r, &req) {
@@ -103,50 +113,39 @@ func (s *Service) authorizeOpenRouter(w http.ResponseWriter, r *http.Request) {
 	}
 	state, err := randomToken(32)
 	if err != nil {
-		httpapi.InternalServerError(w, err)
+		s.internalError(w, "generate OAuth state", err)
 		return
 	}
 	verifier, err := randomToken(64)
 	if err != nil {
-		httpapi.InternalServerError(w, err)
+		s.internalError(w, "generate OAuth verifier", err)
 		return
 	}
 	uid := userID(r)
 	encrypted, err := s.cipher.Encrypt([]byte(verifier), credentialAAD(uid.String(), "oauth-verifier"))
 	if err != nil {
-		httpapi.InternalServerError(w, err)
+		s.internalError(w, "encrypt OAuth verifier", err)
 		return
 	}
 	_, err = s.db.InsertInferenceOAuthTransaction(r.Context(), database.InsertInferenceOAuthTransactionParams{UserID: uid, Provider: string(openrouter.ProviderID), StateHash: hashSecret(state), EncryptedVerifier: encrypted, VerifierKeyVersion: credentialKeyID, ReturnPath: req.ReturnPath, ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(oauthTTL), Valid: true}})
 	if err != nil {
-		httpapi.InternalServerError(w, err)
+		s.internalError(w, "store OAuth transaction", err)
 		return
 	}
-	callback := *s.accessURL
-	callback.Path = "/api/v1/inference/openrouter/callback"
-	callback.RawQuery = ""
-	authorizeURL, err := s.openRouter.AuthorizationURL(callback.String(), openrouter.PKCEChallenge(verifier))
+	callbackURL := openRouterCallbackURL(s.accessURL, state)
+	authorizeURL, err := s.openRouter.AuthorizationURL(callbackURL, openrouter.PKCEChallenge(verifier))
 	if err != nil {
-		httpapi.InternalServerError(w, err)
+		s.internalError(w, "build OpenRouter authorization URL", err)
 		return
 	}
-	authorize, err := url.Parse(authorizeURL)
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-	query := authorize.Query()
-	query.Set("state", state)
-	authorize.RawQuery = query.Encode()
-	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceAuthorizeResponse{AuthorizeURL: authorize.String()})
+	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceAuthorizeResponse{AuthorizeURL: authorizeURL})
 }
 
 func (s *Service) callbackOpenRouter(w http.ResponseWriter, r *http.Request) {
 	uid := userID(r)
 	state := r.URL.Query().Get("state")
-	code := r.URL.Query().Get("code")
-	if state == "" || code == "" {
-		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Missing OAuth callback parameters."})
+	if state == "" {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Missing OAuth state."})
 		return
 	}
 	tx, err := s.db.ConsumeInferenceOAuthTransaction(r.Context(), database.ConsumeInferenceOAuthTransactionParams{StateHash: hashSecret(state), UserID: uid})
@@ -160,6 +159,11 @@ func (s *Service) callbackOpenRouter(w http.ResponseWriter, r *http.Request) {
 		q.Set("inference_connection", result)
 		u.RawQuery = q.Encode()
 		http.Redirect(w, r, u.String(), http.StatusSeeOther)
+	}
+	code := r.URL.Query().Get("code")
+	if code == "" || r.URL.Query().Get("error") != "" {
+		redirect("error")
+		return
 	}
 	verifier, err := s.cipher.Decrypt(tx.EncryptedVerifier, credentialAAD(uid.String(), "oauth-verifier"))
 	if err != nil {
@@ -200,7 +204,7 @@ func (s *Service) deleteConnection(w http.ResponseWriter, r *http.Request) {
 	}
 	err = s.db.DeleteInferenceConnectionByOwner(r.Context(), database.DeleteInferenceConnectionByOwnerParams{ID: row.ID, UserID: userID(r)})
 	if err != nil {
-		httpapi.InternalServerError(w, err)
+		s.internalError(w, "delete inference connection", err)
 		return
 	}
 	httpapi.Write(r.Context(), w, http.StatusNoContent, nil)
@@ -217,7 +221,7 @@ func (s *Service) listModels(w http.ResponseWriter, r *http.Request) {
 	}
 	cred, err := s.cipher.Decrypt(row.EncryptedCredential, credentialAAD(row.UserID.String(), "provider-credential"))
 	if err != nil {
-		httpapi.InternalServerError(w, errors.New("decrypt inference credential"))
+		s.internalError(w, "decrypt inference credential", err)
 		return
 	}
 	provider, ok := s.registry.Provider(ProviderID(row.Provider))
@@ -274,7 +278,7 @@ func (s *Service) createInstanceThread(w http.ResponseWriter, r *http.Request) {
 	}
 	thread, err := s.db.GetOrCreateInferenceThread(r.Context(), database.GetOrCreateInferenceThreadParams{UserID: userID(r), AssistantID: "instance-analyst", ContextType: pgtype.Text{String: "instance", Valid: true}, ContextID: pgtype.Text{String: inst.ID.String(), Valid: true}, Title: inst.Name})
 	if err != nil {
-		httpapi.InternalServerError(w, err)
+		s.internalError(w, "create inference thread", err)
 		return
 	}
 	s.writeThread(w, r, thread)
@@ -282,7 +286,7 @@ func (s *Service) createInstanceThread(w http.ResponseWriter, r *http.Request) {
 func (s *Service) listThreads(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.ListInferenceThreadsByOwner(r.Context(), userID(r))
 	if err != nil {
-		httpapi.InternalServerError(w, err)
+		s.internalError(w, "list inference threads", err)
 		return
 	}
 	out := make([]chroniclesdk.InferenceThread, 0, len(rows))
@@ -298,7 +302,7 @@ func (s *Service) listThreads(w http.ResponseWriter, r *http.Request) {
 				if errors.Is(err, pgx.ErrNoRows) {
 					continue
 				}
-				httpapi.InternalServerError(w, err)
+				s.internalError(w, "authorize inference thread", err)
 				return
 			}
 		}
@@ -352,13 +356,20 @@ func boundedThreadMessages(rows []database.InferenceMessage) []chroniclesdk.Infe
 func (s *Service) writeThread(w http.ResponseWriter, r *http.Request, t database.InferenceThread) {
 	rows, err := s.db.ListRecentInferenceMessagesByThread(r.Context(), database.ListRecentInferenceMessagesByThreadParams{ThreadID: t.ID, Limit: maxHistoryMessages})
 	if err != nil {
-		httpapi.InternalServerError(w, err)
+		s.internalError(w, "load inference thread", err)
 		return
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceThreadResponse{Thread: threadSDK(t), Messages: boundedThreadMessages(rows)})
 }
 
 func writeJSONMessage(m Message) []byte { b, _ := json.Marshal(m); return b }
+func (s *Service) internalError(w http.ResponseWriter, operation string, err error) {
+	if s.logger != nil {
+		s.logger.Error(operation, "error", err)
+	}
+	httpapi.InternalServerError(w, errors.New(operation))
+}
+
 func badRequest(w http.ResponseWriter, r *http.Request, message string) {
 	httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: message})
 }
