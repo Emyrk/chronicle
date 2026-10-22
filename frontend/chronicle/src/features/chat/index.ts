@@ -1,3 +1,5 @@
+export { GlobalSiteHelpChat, InstanceAssistantChat } from "./InferenceChats";
+export { InferenceSettings } from "./InferenceSettings";
 export { AssistantChat, AssistantChatLauncher } from "./AssistantChat";
 export type { AssistantChatLauncherProps, AssistantChatProps } from "./AssistantChat";
 export { AgUiClientError, parseAgUiEvent, parseSseStream, runAgUi } from "./client";

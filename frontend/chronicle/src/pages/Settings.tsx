@@ -68,6 +68,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip
 import { getSpellIconUrl } from "@/api/wowdb";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
+import { InferenceSettings } from "@/features/chat/InferenceSettings";
 import { FavoritesList } from "@/components/Favorites";
 
 export { BillingSettings } from "./Settings/BillingSettings";
@@ -353,6 +354,8 @@ export function ProfileSettings() {
           <span className="text-sm capitalize">{session.auth_provider === "password" ? "Email & Password" : session.auth_provider}</span>
         </div>
       )}
+
+      <InferenceSettings />
     </div>
   );
 }

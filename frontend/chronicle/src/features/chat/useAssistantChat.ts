@@ -27,6 +27,7 @@ export interface UseAssistantChatOptions {
   threadId?: string;
   createRequest?: (input: CreateChatRunRequestInput) => unknown;
   onMessagesChange?: (messages: ChatMessage[]) => void;
+  onRunComplete?: () => void | Promise<void>;
   runClient?: (options: RunAgUiOptions) => Promise<void>;
 }
 
@@ -127,6 +128,7 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
           signal: abortController.signal,
           onEvent,
         });
+        await options.onRunComplete?.();
         return true;
       } catch (error) {
         if (error instanceof AgUiClientError && error.kind === "aborted") {
@@ -141,7 +143,7 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
         }
       }
     },
-    [options.createRequest, options.endpoint, options.headers, options.runClient],
+    [options],
   );
 
   return {

@@ -32,12 +32,14 @@ export interface AssistantChatProps
   extends UseAssistantChatOptions,
     Omit<ChatPanelProps, "controller"> {
   launcherLabel?: string;
+  launcherClassName?: string;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
 
 export function AssistantChat({
   launcherLabel,
+  launcherClassName,
   open,
   onOpenChange,
   title = "Chronicle Assistant",
@@ -48,6 +50,7 @@ export function AssistantChat({
   threadId,
   createRequest,
   onMessagesChange,
+  onRunComplete,
   runClient,
   ...panelProps
 }: AssistantChatProps) {
@@ -58,13 +61,14 @@ export function AssistantChat({
     threadId,
     createRequest,
     onMessagesChange,
+    onRunComplete,
     runClient,
   });
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetTrigger asChild>
-        <AssistantChatLauncher label={launcherLabel} />
+        <AssistantChatLauncher label={launcherLabel} className={launcherClassName} />
       </SheetTrigger>
       <SheetContent className="w-full gap-0 p-0 sm:max-w-md">
         <SheetHeader className="sr-only">

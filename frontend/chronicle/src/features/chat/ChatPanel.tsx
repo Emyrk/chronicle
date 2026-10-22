@@ -13,6 +13,7 @@ export interface ChatPanelProps {
   description?: string;
   placeholder?: string;
   emptyState?: ReactNode;
+  configuration?: ReactNode;
   disabled?: boolean;
   disabledTitle?: string;
   disabledDescription?: string;
@@ -72,10 +73,8 @@ function Message({ message }: { message: ChatMessage }) {
           message.content ? (
             <ReactMarkdown
               components={{
-                a: ({ children, ...props }) => (
-                  <a {...props} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">
-                    {children}
-                  </a>
+                a: ({ children }) => (
+                  <span className="text-primary underline underline-offset-2">{children}</span>
                 ),
               }}
             >
@@ -117,6 +116,7 @@ export function ChatPanel({
   description = "Ask questions and get help without leaving the page.",
   placeholder = "Ask the assistant…",
   emptyState,
+  configuration,
   disabled = false,
   disabledTitle = "Connect to use the assistant",
   disabledDescription = "Connect the required provider before starting a conversation.",
@@ -160,6 +160,7 @@ export function ChatPanel({
         </div>
         <p className="text-muted-foreground mt-1 text-sm">{description}</p>
       </header>
+      {configuration && <div className="border-b px-4 py-3">{configuration}</div>}
 
       {disabled ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-6">

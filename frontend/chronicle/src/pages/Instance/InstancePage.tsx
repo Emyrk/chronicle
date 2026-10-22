@@ -23,6 +23,7 @@ import { InstanceKeybindProvider } from "./InstanceKeybinds";
 import { TimeRangeController } from "./TimeRangeController";
 import { useTenantGate } from "./TenantGate";
 import { useFocusMode } from "@/hooks/useFocusMode";
+import { InstanceAssistantChat } from "@/features/chat/InferenceChats";
 import { getReplayResetTimestamp, type SelectedEncounterTimes } from "./replaySelection";
 
 // Types for the Instance page
@@ -539,6 +540,7 @@ export function InstancePage() {
               canInvalidateLogs={canInvalidateLogs}
               duplicateGroupId={apiInstance?.duplicate_group_id}
             />
+            <InstanceAssistantChat instanceId={instance.id} instanceName={instance.name} />
           </PlayerSpecializationProvider>
         </InstanceEventsProvider>
       </TimeRangeProvider>
