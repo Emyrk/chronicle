@@ -1,3 +1,4 @@
+import { AlertTriangle } from "lucide-react";
 import type { MouseEvent } from "react";
 
 /** Opens the collapsed Nampower install guide and scrolls to it. */
@@ -10,7 +11,7 @@ function openNampowerGuide(e: MouseEvent<HTMLAnchorElement>) {
 }
 
 /** Upload instructions for 1.12a ChronicleCompanion + Nampower format. */
-export function InstructionsChronicleCompanion() {
+export function InstructionsChronicleCompanion({ nightmareOfUrsol = false }: { nightmareOfUrsol?: boolean }) {
   return (
     <>
       <div>
@@ -48,9 +49,29 @@ export function InstructionsChronicleCompanion() {
             <a href="https://github.com/balakethelock/SuperWoW" target="_blank" rel="noopener noreferrer" className="text-link hover:underline">
               SuperWoW
             </a>
+            {nightmareOfUrsol && (
+              <span className="ml-2 inline-flex items-center gap-1 rounded border border-amber-500/50 bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-300">
+                <AlertTriangle className="h-3 w-3" />
+                Friendly positions only
+              </span>
+            )}
           </li>
         </ul>
       </div>
+
+      {nightmareOfUrsol && (
+        <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-amber-100">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+            <div>
+              <p className="font-medium">Use ClassicAPI for complete map replays</p>
+              <p className="mt-1 text-amber-100/80">
+                SuperWoW only emits positional data for friendly units. Hostile entities will not be shown. Switch to ClassicAPI for positional data on all units.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <details id="install-nampower" className="scroll-mt-4 rounded-md border border-border/70 bg-muted/20">
         <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium hover:bg-muted/40">
