@@ -29,6 +29,7 @@ func NewOnyxiaCharacter(flavor database.WoWFlavor) func(id guid.GUID, all *chara
 		if flavor.Has(database.FlavorNightmareOfUrsol) {
 			return characters.NewAdsGoWithBossCustomCharacter(c, all, 10184,
 				11262, // Whelp
+				50144, // Hatcher
 			), true
 		}
 
