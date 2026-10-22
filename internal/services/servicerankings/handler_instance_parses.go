@@ -48,6 +48,28 @@ type instanceParsePlayerInfo struct {
 	bosses map[string]database.ListRankingsForInstanceRow
 }
 
+func isUnknownPlayerSpec(spec string) bool {
+	return spec == "" || strings.EqualFold(spec, "unknown")
+}
+
+func preferKnownPlayerSpec(player *instanceParsePlayerInfo, ranking database.ListRankingsForInstanceRow) {
+	if !isUnknownPlayerSpec(player.spec) || isUnknownPlayerSpec(ranking.PlayerSpec) {
+		return
+	}
+	player.spec = ranking.PlayerSpec
+	player.subSpec = ranking.PlayerSubSpec
+	player.role = ranking.PlayerRole
+}
+
+func hasOnlyUnknownEncounterSpecs(player *instanceParsePlayerInfo) bool {
+	for _, ranking := range player.bosses {
+		if !isUnknownPlayerSpec(ranking.PlayerSpec) {
+			return false
+		}
+	}
+	return true
+}
+
 // handleInstanceParses returns parse scores for players in a specific instance (log run).
 //
 //	GET /instances/{instanceID}/parses?encounter_names=Ragnaros,Golemagg&metric=dps&period=all&timeframe=historical
@@ -343,6 +365,8 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 			}
 			players[m.PlayerGuid] = p
 			playerOrder = append(playerOrder, m.PlayerGuid)
+		} else {
+			preferKnownPlayerSpec(p, m)
 		}
 		// Keep the first (highest DPS, since ordered by dps DESC).
 		if _, has := p.bosses[m.EncounterName]; !has {
@@ -368,10 +392,11 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 			Bosses:        make([]chroniclesdk.InstanceParseBoss, 0, len(p.bosses)),
 		}
 
-		// Check unknown spec in spec mode.
-		isUnknownSpec := cohortMode == parsepolicy.CohortModeSpec && (p.spec == "" || strings.EqualFold(p.spec, "unknown"))
+		// A player is globally unknown only when none of their selected boss
+		// rows has a usable spec. Individual encounters are checked below.
+		allSpecsUnknown := cohortMode == parsepolicy.CohortModeSpec && hasOnlyUnknownEncounterSpecs(p)
 
-		if isUnknownSpec {
+		if allSpecsUnknown {
 			sdkPlayer.Status = string(parsepolicy.ReasonUnknownSpec)
 			sdkPlayer.Reason = "Unknown spec; cannot score in spec mode"
 		}
@@ -407,14 +432,19 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 				continue
 			}
 
-			if !isUnknownSpec {
+			encounterSpecUnknown := cohortMode == parsepolicy.CohortModeSpec && isUnknownPlayerSpec(memberRow.PlayerSpec)
+			if encounterSpecUnknown {
+				boss.Status = string(parsepolicy.ReasonUnknownSpec)
+			}
+
+			if !encounterSpecUnknown {
 				// Load cohort for this boss+class(+spec). Many players share a
 				// bucket (e.g. all Fury Warriors on one boss), so cache cohort
 				// slices per bucket key for the duration of this request to
 				// avoid an N+1 query pattern across players.
 				bucketKey := fmt.Sprintf("%s|%s|%d|%s|%s|%s",
 					encName, memberRow.DifficultyName, memberRow.MaxPlayers,
-					memberRow.PlayerClass, p.spec, p.subSpec)
+					memberRow.PlayerClass, memberRow.PlayerSpec, memberRow.PlayerSubSpec)
 				cohort, cached := cohortCache[bucketKey]
 				if !cached {
 					var cErr error
@@ -425,7 +455,7 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 						EncounterName:  encName,
 						DifficultyName: memberRow.DifficultyName, MaxPlayers: memberRow.MaxPlayers,
 						PlayerClass: memberRow.PlayerClass, CohortMode: string(cohortMode),
-						PlayerSpec: p.spec, PlayerSubSpec: p.subSpec,
+						PlayerSpec: memberRow.PlayerSpec, PlayerSubSpec: memberRow.PlayerSubSpec,
 					})
 					if cErr != nil {
 						logger.Error("failed to load membership cohort", "encounter", encName, "player_guid", playerGUID, "error", cErr)
@@ -508,6 +538,8 @@ func buildPersistedInstanceParsePlayers(
 			}
 			players[ranking.PlayerGuid] = player
 			playerOrder = append(playerOrder, ranking.PlayerGuid)
+		} else {
+			preferKnownPlayerSpec(player, ranking)
 		}
 		if _, exists := player.bosses[ranking.EncounterName]; !exists {
 			player.bosses[ranking.EncounterName] = ranking
@@ -536,8 +568,8 @@ func buildPersistedInstanceParsePlayers(
 			Bosses:        make([]chroniclesdk.InstanceParseBoss, 0, len(player.bosses)),
 		}
 
-		unknownSpec := cohortMode == parsepolicy.CohortModeSpec && (player.spec == "" || strings.EqualFold(player.spec, "unknown"))
-		if unknownSpec {
+		allSpecsUnknown := cohortMode == parsepolicy.CohortModeSpec && hasOnlyUnknownEncounterSpecs(player)
+		if allSpecsUnknown {
 			sdkPlayer.Status = string(parsepolicy.ReasonUnknownSpec)
 			sdkPlayer.Reason = "Unknown spec; cannot score in spec mode"
 		}
@@ -563,7 +595,9 @@ func buildPersistedInstanceParsePlayers(
 				sdkPlayer.Bosses = append(sdkPlayer.Bosses, boss)
 				continue
 			}
-			if unknownSpec {
+			encounterSpecUnknown := cohortMode == parsepolicy.CohortModeSpec && isUnknownPlayerSpec(ranking.PlayerSpec)
+			if encounterSpecUnknown {
+				boss.Status = string(parsepolicy.ReasonUnknownSpec)
 				sdkPlayer.Bosses = append(sdkPlayer.Bosses, boss)
 				continue
 			}
