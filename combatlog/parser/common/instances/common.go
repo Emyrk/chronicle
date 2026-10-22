@@ -95,9 +95,11 @@ type CommonFactory struct {
 	// ProgressionBosses is used as the default set.
 	RankingEncounterSets func(flavor database.WoWFlavor) []RankingEncounterSet
 	ZoneNames            []string
-	MapIDs               []uint32
-	Hostiles             func(flavor database.WoWFlavor) *identifier.Identifier
-	FlavoredRankings     func(flavor database.WoWFlavor) *rankings.Rankings
+	// MapIDs match localized or unexpected zone names. When exactly one is
+	// known, it also fills a missing zone map ID for encounter persistence.
+	MapIDs           []uint32
+	Hostiles         func(flavor database.WoWFlavor) *identifier.Identifier
+	FlavoredRankings func(flavor database.WoWFlavor) *rankings.Rankings
 	// Preprocessors creates fresh message preprocessors for each parsed instance.
 	Preprocessors func() []instancehook.Preprocessor
 }

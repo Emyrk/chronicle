@@ -1,10 +1,14 @@
 package instances
 
 import (
+	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/database"
 )
@@ -21,6 +25,44 @@ func TestCommonFactoryMatchZoneFallsBackToMapID(t *testing.T) {
 	require.True(t, factory.MatchZone(zone.Zone{Name: "ahn'qiraj temple", MapID: 531}))
 	require.False(t, factory.MatchZone(zone.Zone{Name: "ahn'qiraj temple", MapID: 509}))
 	require.True(t, factory.MatchZone(zone.Zone{Name: "ahn'qiraj", MapID: 0}))
+}
+
+func TestCommonFactoryInjectsSingleKnownMapID(t *testing.T) {
+	t.Parallel()
+
+	factory := &CommonFactory{
+		Name:   "Emerald Sanctum",
+		MapIDs: []uint32{807},
+		Hostiles: func(database.WoWFlavor) *identifier.Identifier {
+			return identifier.NewIdentifier(map[uint32]identifier.Identity{})
+		},
+	}
+
+	instance := factory.New(context.Background(), slog.Default(), unitdb.New(), zone.Zone{Name: "emerald sanctum"}, database.WoWFlavor{})
+	require.Equal(t, uint32(807), instance.CurrentZone.MapID)
+	require.Equal(t, uint32(807), instance.activeMapID)
+}
+
+func TestCommonFactoryDoesNotInjectAmbiguousMapID(t *testing.T) {
+	t.Parallel()
+
+	factory := &CommonFactory{
+		Name:   "Multi-map Raid",
+		MapIDs: []uint32{100, 101},
+		Hostiles: func(database.WoWFlavor) *identifier.Identifier {
+			return identifier.NewIdentifier(map[uint32]identifier.Identity{})
+		},
+	}
+
+	instance := factory.New(context.Background(), slog.Default(), unitdb.New(), zone.Zone{Name: "multi-map raid"}, database.WoWFlavor{})
+	require.Zero(t, instance.CurrentZone.MapID)
+	require.Zero(t, instance.activeMapID)
+}
+
+func TestEmeraldSanctumFactoryMapID(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, []uint32{807}, EmeraldSanctumFactory.MapIDs)
 }
 
 func TestWailingCavernsFactoryMatchesMapID(t *testing.T) {

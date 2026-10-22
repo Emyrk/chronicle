@@ -115,6 +115,10 @@ type InstanceParams struct {
 }
 
 func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z zone.Zone, flavor database.WoWFlavor) *Hookable {
+	if z.MapID == 0 && len(f.MapIDs) == 1 {
+		z.MapID = f.MapIDs[0]
+	}
+
 	var r *rankings.Rankings
 	if f.FlavoredRankings != nil {
 		r = f.FlavoredRankings(flavor)
