@@ -1,6 +1,13 @@
 import type { GuideRuntimeFactory } from "./host";
 import { GuideRuntimeController } from "./runtime";
 
+let startSequence = 0;
+
+export function createGuideRequestId(): string {
+  startSequence += 1;
+  return `guide-start-${Date.now().toString(36)}-${startSequence.toString(36)}`;
+}
+
 export const browserGuideRuntimeFactory: GuideRuntimeFactory = (callbacks) => {
   const controller = new GuideRuntimeController(callbacks);
   let eventSequence = 0;
@@ -10,7 +17,7 @@ export const browserGuideRuntimeFactory: GuideRuntimeFactory = (callbacks) => {
       for (const path of guide.paths ?? []) if (path.endsWith(".lua")) files[path] = guide.read(path);
       controller.start({
         type: "start",
-        requestId: crypto.randomUUID(),
+        requestId: createGuideRequestId(),
         guide: {
           id: guide.manifest.id,
           entrypoint: guide.manifest.entrypoint,
