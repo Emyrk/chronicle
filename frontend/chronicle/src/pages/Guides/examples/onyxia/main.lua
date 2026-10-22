@@ -1,5 +1,5 @@
--- Chronicle's Onyxia package is intentionally authored entirely in Lua.
--- Tactics for Turtle WoW 1.18.1 are community-sourced and should be checked
+-- Chronicle's Onyxia package is authored entirely in Lua.
+-- Turtle WoW 1.18.1 tactics are community-sourced and should be checked
 -- against current raid logs; exact add timing and threat rules remain uncertain.
 
 local GREEN = {0.13, 0.77, 0.37, 0.78}
@@ -10,66 +10,75 @@ local ORANGE = {0.98, 0.45, 0.09, 0.85}
 local WHITE = {0.96, 0.96, 0.95, 1.0}
 local MUTED = {0.72, 0.72, 0.68, 1.0}
 
--- Package map coordinates are normalized against the full rendered dungeon.
--- Keep encounter diagrams inside Onyxia's northern arena rather than stretching
--- them across the complete cave artwork.
-local MAP_LEFT = 0.57
-local MAP_TOP = 0.08
-local MAP_WIDTH = 0.38
-local MAP_HEIGHT = 0.38
+-- Onyxia's package scenes use the same world-yard coordinates as Chronicle's
+-- combat-log map and the original raid-guide prototype. Convert those points
+-- into the normalized rendered-map coordinates exposed by the Lua API.
+local MIN_X = -260.0325
+local MAX_X = 63.2182
+local MIN_Y = -286.4366
+local MAX_Y = 26.0842
+local WORLD_SCALE = math.min(MAX_X - MIN_X, MAX_Y - MIN_Y)
+local ARENA_Y_OFFSET = -43
 
-local function mapX(x) return MAP_LEFT + x * MAP_WIDTH end
-local function mapY(y) return MAP_TOP + y * MAP_HEIGHT end
-local function mapRadius(radius) return radius * math.min(MAP_WIDTH, MAP_HEIGHT) end
-local function mapPoints(points)
-  local mapped = {}
-  for index = 1, #points, 2 do
-    table.insert(mapped, mapX(points[index]))
-    table.insert(mapped, mapY(points[index + 1]))
-  end
-  return mapped
+local function point(x, y)
+  return {x = x, y = y + ARENA_Y_OFFSET}
 end
+
+local function mapPoint(at)
+  return (MAX_Y - at.y) / (MAX_Y - MIN_Y), (MAX_X - at.x) / (MAX_X - MIN_X)
+end
+
+local function mapRadius(yards)
+  return yards / WORLD_SCALE
+end
+
+local ONYXIA = {x = -18, y = -214}
+local NORTH = {x = 32, y = -214}
+local ENTRANCE = {x = -92, y = -214}
+local LEFT_PIT = {x = -61, y = -169}
+local RIGHT_PIT = {x = -61, y = -259}
+local ARENA_CENTRE = {x = -24, y = -214}
 
 local chapters = {
   {
     id = "briefing",
     eyebrow = "BEFORE THE PULL",
     title = "Give every group a side",
-    body = "Hold Onyxia at the north wall, form two shallow raid wings on her flanks, and reserve the entrance half for add control. Keep the centre lane readable.",
-    correct = "Assign three or four tank jobs and leave the centre open.",
-    wrong = "A loose centre stack hides breaths, overlaps healers, and leaves no transition path.",
+    body = "Build the room around three jobs: hold Onyxia at the north wall, keep the raid on her flanks, and reserve the entrance half for add control.",
+    correct = "The room should look deliberately empty through the middle. That space becomes your warning system later.",
+    wrong = "One loose stack creates tail swipes, breath hits, healer overlap, and no obvious path when the fight changes phase.",
   },
   {
     id = "phase-one",
     eyebrow = "PHASE 1 · 100% → 65%",
-    title = "Flanks are safe; front and tail are not",
-    body = "Let the main tank settle Onyxia facing north. Melee use the rear flanks rather than standing directly behind her, while ranged and healers mirror each other.",
-    correct = "Think wings, not a semicircle. Nobody crosses the dragon to reach an assignment.",
-    wrong = "Turning Onyxia into the raid makes every correction worse. Re-centre the boss first.",
+    title = "Flanks are safe, front and tail are not",
+    body = "The main tank points Onyxia into the north wall. Everyone else forms two shallow wings beside her ribcage, never a stack behind her tail.",
+    correct = "Think wings, not a semicircle. Nobody needs to cross the dragon's front or tail to reach their assignment.",
+    wrong = "Turning Onyxia into the raid makes every correction worse. The tank re-centres first; the raid does not chase through her hitbox.",
   },
   {
     id = "air-phase",
     eyebrow = "PHASE 2 · 65% → 40%",
     title = "Kill the drake before the landing",
-    body = "Community reports describe an additional dragonkin in the air phase. Assign an off-tank and melee to it, control both whelp sides, and stop boss damage if the add is alive near 40%.",
-    correct = "Use separated whelp pockets and a spread ranged line while melee kill the drake.",
-    wrong = "A centre stack gives fireballs and loose whelps the same target.",
+    body = "Onyxia takes the air with a reported dragonkin add. An off-tank holds it for melee while ranged pressure Onyxia and the raid controls both whelp sides.",
+    correct = "Controlled whelp pockets and a spread ranged line keep the room readable. The drake must die before Onyxia lands.",
+    wrong = "A centre stack gives fireballs and loose whelps the same target and hides Onyxia's line until the breath is committed.",
   },
   {
     id = "deep-breath",
     eyebrow = "PHASE 2 REACTION",
-    title = "Move sideways; never race the breath",
-    body = "Watch Onyxia's position and facing. When she lines up the room, leave the projected lane at a right angle through the closest edge.",
-    correct = "The shortest safe movement is perpendicular to the lane. Pick an edge and commit.",
-    wrong = "Running down the lane keeps the raid in danger longer and blocks nearby exits.",
+    title = "Move sideways, never race the breath",
+    body = "When Onyxia lines up the room, leave the projected lane at a right angle through the closest edge. Do not run along the breath path.",
+    correct = "The shortest safe movement is perpendicular to the lane. Pick the closer edge and commit immediately.",
+    wrong = "Running down the lane keeps the raid inside the hazard longer and blocks players trying to take the nearest exit.",
   },
   {
     id = "landing",
     eyebrow = "PHASE 3 · 40% → KILL",
     title = "Separate the hatchers, then burn",
-    body = "Treat the landing as a second pull. Re-establish Onyxia north, isolate both reported hatchers, move out of Rain of Fire, control whelps, and kill adds before returning to the boss.",
-    correct = "Separate add control from the boss group and preserve a clean raid lane.",
-    wrong = "Mixing the boss, adds, and raid makes fear or a tail swipe turn the transition into a wipe.",
+    body = "Treat the landing as a second pull. Re-establish Onyxia north, isolate the two reported hatchers, move out of Rain of Fire, and kill adds first.",
+    correct = "Separate both hatchers, step out of Rain of Fire, kill the add priority, then spend cooldowns on Onyxia.",
+    wrong = "Chasing damage mixes the dragon, adds, and raid in one lane. Fear or a tail swipe turns the transition into a wipe.",
   },
 }
 
@@ -104,21 +113,54 @@ local function clearScene()
   scene = {}
 end
 
-local function unit(id, label, role, x, y, facing, entry)
+local function normalizedFacing(radians)
+  local fullTurn = math.pi * 2
+  local value = radians or 0
+  while value < 0 do value = value + fullTurn end
+  while value > fullTurn do value = value - fullTurn end
+  return value
+end
+
+local function unit(id, label, role, at, facing, entry)
   local marker = remember(Map:CreateUnitMarker(id))
-  marker:SetMapPosition(mapX(x), mapY(y))
+  marker:SetMapPosition(mapPoint(at))
   marker:SetSize(role == "boss" and 32 or 19, role == "boss" and 32 or 19)
   marker:SetLabel(label)
   marker:SetRole(role)
-  marker:SetFacing(facing or 0)
+  marker:SetFacing(normalizedFacing(facing))
   if entry then marker:SetCreatureID(entry) end
   color(marker, roleColors[role])
   return marker
 end
 
-local function circle(id, x, y, radius, rgba)
+local function boss(at, facing)
+  return unit("onyxia", "Onyxia", "boss", at or ONYXIA, facing or 0, 10184)
+end
+
+local function roleLine(prefix, role, count, from, to)
+  for index = 1, count do
+    local amount = count == 1 and 0.5 or (index - 1) / (count - 1)
+    unit(prefix .. "-" .. index, role:sub(1, 1):upper() .. role:sub(2) .. " " .. index, role, {
+      x = from.x + (to.x - from.x) * amount,
+      y = from.y + (to.y - from.y) * amount,
+    })
+  end
+end
+
+local function roleArc(prefix, role, count, centre, radius, startAngle, endAngle)
+  for index = 1, count do
+    local amount = count == 1 and 0.5 or (index - 1) / (count - 1)
+    local angle = startAngle + (endAngle - startAngle) * amount
+    unit(prefix .. "-" .. index, role:sub(1, 1):upper() .. role:sub(2) .. " " .. index, role, {
+      x = centre.x + math.cos(angle) * radius,
+      y = centre.y + math.sin(angle) * radius,
+    }, angle + math.pi)
+  end
+end
+
+local function circle(id, at, radius, rgba)
   local shape = remember(Map:CreateCircle(id))
-  shape:SetMapPosition(mapX(x), mapY(y))
+  shape:SetMapPosition(mapPoint(at))
   shape:SetRadius(mapRadius(radius))
   shape:SetLineWidth(2)
   color(shape, rgba)
@@ -126,151 +168,213 @@ local function circle(id, x, y, radius, rgba)
   return shape
 end
 
-local function cone(id, x, y, radius, facing, angle, rgba)
+local function cone(id, at, radius, facing, widthDegrees, rgba)
   local shape = remember(Map:CreateCone(id))
-  shape:SetMapPosition(mapX(x), mapY(y))
+  shape:SetMapPosition(mapPoint(at))
   shape:SetRadius(mapRadius(radius))
-  shape:SetFacing(facing)
-  shape:SetAngle(angle)
+  shape:SetFacing(normalizedFacing(facing))
+  shape:SetAngle(widthDegrees * math.pi / 180)
   shape:SetLineWidth(2)
   color(shape, rgba)
   fill(shape, {rgba[1], rgba[2], rgba[3], 0.16})
   return shape
 end
 
-local function arrow(id, x1, y1, x2, y2, rgba)
+local function arrow(id, from, to, rgba)
+  local fromX, fromY = mapPoint(from)
+  local toX, toY = mapPoint(to)
   local shape = remember(Map:CreateArrow(id))
-  shape:SetPoints(mapPoints({x1, y1, x2, y2}))
+  shape:SetPoints({fromX, fromY, toX, toY})
   shape:SetLineWidth(3)
   shape:SetHeadSize(10)
   color(shape, rgba)
   return shape
 end
 
-local function mapText(id, text, x, y, rgba)
-  local label = remember(Map:CreateText(id))
-  label:SetMapPosition(mapX(x), mapY(y))
-  label:SetText(text)
-  label:SetFontSize(16)
-  color(label, rgba)
-  return label
+local function rectangle(id, from, to, rgba)
+  local x1, y1 = mapPoint({x = from.x, y = from.y})
+  local x2, y2 = mapPoint({x = to.x, y = from.y})
+  local x3, y3 = mapPoint({x = to.x, y = to.y})
+  local x4, y4 = mapPoint({x = from.x, y = to.y})
+  local shape = remember(Map:CreatePolygon(id))
+  shape:SetPoints({x1, y1, x2, y2, x3, y3, x4, y4})
+  shape:SetLineWidth(2)
+  color(shape, rgba)
+  fill(shape, {rgba[1], rgba[2], rgba[3], 0.18})
+  return shape
 end
 
-local function lineOf(role, prefix, count, x1, y1, x2, y2)
-  for index = 1, count do
-    local amount = count == 1 and 0.5 or (index - 1) / (count - 1)
-    unit(prefix .. index, role .. " " .. index, role,
-      x1 + (x2 - x1) * amount,
-      y1 + (y2 - y1) * amount,
-      0)
+local function mapText(id, label, at, rgba)
+  local text = remember(Map:CreateText(id))
+  text:SetMapPosition(mapPoint(at))
+  text:SetText(label)
+  text:SetFontSize(16)
+  color(text, rgba)
+  return text
+end
+
+local function safeFlanks()
+  roleLine("melee-left", "melee", 5, point(-7, -145), point(-35, -143))
+  roleLine("melee-right", "melee", 5, point(-7, -197), point(-35, -199))
+  roleLine("ranged-left", "ranged", 5, point(-11, -128), point(-51, -125))
+  roleLine("ranged-right", "ranged", 5, point(-11, -214), point(-51, -217))
+  roleLine("healers", "healer", 5, point(-19, -135), point(-19, -207))
+end
+
+local function phaseOneCorrect()
+  boss()
+  unit("main-tank", "Main Tank", "tank", NORTH, math.pi)
+  unit("off-tank", "Off Tank", "tank", point(19, -180), math.pi)
+  safeFlanks()
+end
+
+local function phaseOneWrong()
+  boss(ONYXIA, math.pi)
+  unit("main-tank", "Main Tank", "tank", point(-34, -171), 0)
+  unit("off-tank", "Off Tank", "tank", point(-22, -167), 0)
+  roleArc("raid-stack", "melee", 8, ONYXIA, 12, -0.55, 0.55)
+  roleArc("ranged-stack", "ranged", 9, point(-36, -171), 15, -0.45, 0.45)
+  roleLine("healers", "healer", 5, point(-44, -163), point(-44, -179))
+end
+
+local function spreadAirRaid(bossAt, bossFacing, bossId)
+  if bossId then
+    unit(bossId, "Onyxia", "boss", bossAt, bossFacing, 10184)
+  else
+    boss(bossAt or point(-5, -171), bossFacing or math.pi / 2)
   end
+  unit("air-drake", "Air-phase Drake", "add", point(-52, -171), 0)
+  roleLine("melee-whelps-left", "melee", 4, point(-48, -136), point(-66, -137))
+  roleLine("melee-whelps-right", "melee", 4, point(-48, -206), point(-66, -205))
+  roleLine("ranged-north", "ranged", 6, point(11, -133), point(11, -209))
+  roleLine("ranged-south", "ranged", 4, point(-38, -145), point(-38, -197))
+  roleLine("healers-air", "healer", 5, point(-13, -132), point(-13, -210))
+  unit("add-tank-left", "Whelp Tank", "tank", point(-54, -132), -math.pi / 2)
+  unit("add-tank-right", "Whelp Tank", "tank", point(-54, -210), math.pi / 2)
 end
 
-local function standardFlanks()
-  lineOf("melee", "melee-left-", 5, 0.46, 0.39, 0.62, 0.38)
-  lineOf("melee", "melee-right-", 5, 0.46, 0.61, 0.62, 0.62)
-  lineOf("ranged", "ranged-left-", 5, 0.48, 0.27, 0.70, 0.25)
-  lineOf("ranged", "ranged-right-", 5, 0.48, 0.73, 0.70, 0.75)
-  lineOf("healer", "healer-", 5, 0.55, 0.31, 0.55, 0.69)
+local function stackedAirRaid(bossAt, bossFacing, bossId)
+  if bossId then
+    unit(bossId, "Onyxia", "boss", bossAt, bossFacing, 10184)
+  else
+    boss(bossAt or point(-5, -171), bossFacing or math.pi / 2)
+  end
+  unit("air-drake", "Air-phase Drake", "add", point(-24, -171), 0)
+  roleArc("raid-stack", "ranged", 12, point(-11, -171), 10, 0, math.pi * 2)
+  roleArc("melee-stack", "melee", 8, point(-27, -171), 8, 0, math.pi * 2)
+  roleLine("healers-stack", "healer", 5, point(-16, -166), point(-16, -176))
+  unit("lonely-tank", "Whelp Tank", "tank", point(-59, -131), -math.pi / 2)
+end
+
+local function hatchers()
+  unit("hatcher-left", "Onyxian Hatcher", "add", point(-76, -145), 0, 11262)
+  unit("hatcher-right", "Onyxian Hatcher", "add", point(-76, -198), 0, 11262)
+end
+
+local function landingCorrect()
+  boss(point(-4, -171), 0)
+  unit("main-tank", "Main Tank", "tank", point(26, -171), math.pi)
+  unit("hatcher-tank", "Hatcher Tank", "tank", point(-72, -171), 0)
+  hatchers()
+  roleLine("melee-boss", "melee", 6, point(-8, -145), point(-31, -145))
+  roleLine("ranged-boss", "ranged", 6, point(-5, -204), point(-38, -207))
+  roleLine("add-team", "melee", 4, point(-66, -153), point(-66, -190))
+  roleLine("healers", "healer", 5, point(-29, -135), point(-29, -207))
+end
+
+local function landingWrong()
+  boss(point(-20, -171), math.pi)
+  unit("main-tank", "Main Tank", "tank", point(-37, -171), 0)
+  hatchers()
+  roleArc("raid-tail", "melee", 10, point(-12, -171), 13, -0.4, 0.4)
+  roleArc("raid-front", "ranged", 10, point(-30, -171), 16, math.pi - 0.4, math.pi + 0.4)
+  roleLine("healers", "healer", 5, point(-44, -163), point(-44, -179))
 end
 
 local function renderBriefing(correct)
-  unit("onyxia", "Onyxia", "boss", 0.42, 0.50, 0, 10184)
   if correct then
-    unit("main-tank", "Main Tank", "tank", 0.16, 0.50, math.pi)
-    standardFlanks()
-    circle("left-wing", 0.56, 0.34, 0.12, GREEN)
-    circle("right-wing", 0.56, 0.66, 0.12, GREEN)
-    arrow("centre-lane", 0.88, 0.50, 0.14, 0.50, WHITE)
-    mapText("lane-label", "KEEP CENTRE CLEAR", 0.78, 0.50, WHITE)
+    phaseOneCorrect()
+    mapText("briefing-north", "NORTH WALL", point(37, -171), GOLD)
+    circle("briefing-left", point(-20, -146), 17, GREEN)
+    circle("briefing-right", point(-20, -197), 17, GREEN)
+    arrow("briefing-centre", ENTRANCE, NORTH, WHITE)
+    mapText("briefing-lane", "KEEP THIS LANE CLEAR", point(-43, -171), WHITE)
   else
-    lineOf("melee", "bad-melee-", 8, 0.55, 0.46, 0.66, 0.54)
-    lineOf("ranged", "bad-ranged-", 8, 0.66, 0.43, 0.75, 0.57)
-    circle("bad-stack", 0.64, 0.50, 0.17, RED)
-    mapText("bad-label", "NO GROUP ASSIGNMENTS", 0.78, 0.50, RED)
+    phaseOneWrong()
+    circle("briefing-bad-stack", point(-30, -171), 22, RED)
+    mapText("briefing-bad-text", "NO GROUP ASSIGNMENTS", point(-51, -171), RED)
   end
 end
 
 local function renderPhaseOne(correct)
-  unit("onyxia", "Onyxia", "boss", 0.42, 0.50, correct and 0 or math.pi, 10184)
-  cone("breath", 0.42, 0.50, 0.25, correct and 0 or math.pi, 1.15, RED)
-  cone("tail", 0.42, 0.50, 0.22, correct and math.pi or 0, 0.95, RED)
   if correct then
-    unit("main-tank", "Main Tank", "tank", 0.16, 0.50, math.pi)
-    standardFlanks()
-    circle("safe-left", 0.56, 0.34, 0.12, GREEN)
-    circle("safe-right", 0.56, 0.66, 0.12, GREEN)
+    phaseOneCorrect()
+    cone("p1-front", ONYXIA, 43, 0, 65, RED)
+    cone("p1-tail", ONYXIA, 38, math.pi, 55, RED)
+    circle("p1-left", point(-19, -146), 16, GREEN)
+    circle("p1-right", point(-19, -197), 16, GREEN)
+    mapText("p1-tank", "TANK", point(34, -171), GOLD)
   else
-    unit("main-tank", "Main Tank", "tank", 0.58, 0.50, 0)
-    lineOf("melee", "tail-stack-", 9, 0.48, 0.47, 0.66, 0.53)
-    lineOf("ranged", "front-stack-", 9, 0.64, 0.42, 0.78, 0.58)
-    circle("danger-stack", 0.63, 0.50, 0.17, RED)
+    phaseOneWrong()
+    cone("p1-wrong-breath", ONYXIA, 48, math.pi, 75, RED)
+    cone("p1-wrong-tail", ONYXIA, 42, 0, 65, RED)
+    circle("p1-wrong-stack", point(-34, -171), 21, RED)
+    mapText("p1-wrong-text", "TAIL + BREATH OVERLAP", point(-55, -171), RED)
   end
 end
 
 local function renderAir(correct)
-  unit("onyxia", "Onyxia", "boss", 0.34, 0.50, math.pi / 2, 10184)
-  unit("drake", "Air-phase Drake", "add", correct and 0.66 or 0.48, 0.50, 0)
-  circle("left-pit", 0.78, 0.28, 0.08, ORANGE)
-  circle("right-pit", 0.78, 0.72, 0.08, correct and ORANGE or RED)
   if correct then
-    unit("left-tank", "Whelp Tank", "tank", 0.72, 0.27, 0)
-    unit("right-tank", "Whelp Tank", "tank", 0.72, 0.73, 0)
-    lineOf("melee", "drake-team-", 7, 0.57, 0.43, 0.69, 0.57)
-    lineOf("ranged", "spread-", 9, 0.32, 0.24, 0.52, 0.76)
-    arrow("left-control", 0.78, 0.28, 0.68, 0.34, GREEN)
-    arrow("right-control", 0.78, 0.72, 0.68, 0.66, GREEN)
-    mapText("spread-label", "SPREAD FOR FIREBALLS", 0.25, 0.50, BLUE)
+    spreadAirRaid()
+    circle("p2-left-pit", LEFT_PIT, 12, ORANGE)
+    circle("p2-right-pit", RIGHT_PIT, 12, ORANGE)
+    arrow("p2-left-arrow", LEFT_PIT, point(-51, -141), GREEN)
+    arrow("p2-right-arrow", RIGHT_PIT, point(-51, -202), GREEN)
+    mapText("p2-spread", "SPREAD FOR FIREBALLS", point(15, -171), BLUE)
+    rectangle("p2-centre", point(24, -181), point(-61, -161), WHITE)
   else
-    lineOf("ranged", "centre-stack-", 12, 0.47, 0.43, 0.57, 0.57)
-    lineOf("melee", "boss-tunnel-", 7, 0.38, 0.45, 0.48, 0.55)
-    arrow("loose-whelps", 0.78, 0.72, 0.53, 0.52, RED)
-    circle("air-stack", 0.52, 0.50, 0.15, RED)
-    mapText("whelp-label", "UNCONTROLLED WHELPS", 0.73, 0.64, RED)
+    stackedAirRaid()
+    circle("p2-bad-stack", point(-16, -171), 19, RED)
+    circle("p2-open-pit", RIGHT_PIT, 14, RED)
+    arrow("p2-bad-line", RIGHT_PIT, point(-19, -171), RED)
+    mapText("p2-bad-text", "UNCONTROLLED WHELPS", point(-48, -191), RED)
   end
 end
 
 local function renderBreath(correct)
-  unit("onyxia", "Onyxia", "boss", 0.20, 0.50, math.pi / 2, 10184)
-  local lane = remember(Map:CreatePolygon("breath-lane"))
-  lane:SetPoints(mapPoints({0.18, 0.39, 0.88, 0.39, 0.88, 0.61, 0.18, 0.61}))
-  lane:SetLineWidth(2)
-  color(lane, RED)
-  fill(lane, {0.94, 0.27, 0.27, 0.22})
   if correct then
-    lineOf("ranged", "upper-", 6, 0.44, 0.27, 0.74, 0.27)
-    lineOf("healer", "lower-", 5, 0.47, 0.73, 0.72, 0.73)
-    arrow("upper-exit", 0.55, 0.46, 0.55, 0.27, GREEN)
-    arrow("lower-exit", 0.58, 0.55, 0.58, 0.73, GREEN)
-    mapText("breath-advice", "CROSS THE CLOSEST EDGE", 0.69, 0.20, GREEN)
+    spreadAirRaid(point(-19, -118), -math.pi / 2, "breath-onyxia")
   else
-    lineOf("ranged", "bad-breath-stack-", 11, 0.48, 0.46, 0.63, 0.54)
-    arrow("run-with-breath", 0.51, 0.50, 0.82, 0.50, RED)
-    circle("breath-stack", 0.56, 0.50, 0.14, RED)
-    mapText("breath-fail", "RUNNING WITH THE BREATH", 0.70, 0.66, RED)
+    stackedAirRaid(point(-19, -118), -math.pi / 2, "breath-onyxia")
+  end
+  rectangle("breath-lane", point(-4, -126), point(-40, -218), RED)
+
+  if correct then
+    arrow("breath-left-exit", point(-18, -157), point(-18, -136), GREEN)
+    arrow("breath-right-exit", point(-19, -186), point(-19, -207), GREEN)
+    mapText("breath-label", "CROSS THE EDGE", point(-44, -171), GREEN)
+  else
+    arrow("breath-run", point(-18, -153), point(-36, -194), RED)
+    circle("breath-stack", point(-17, -171), 17, RED)
+    mapText("breath-label", "RUNNING WITH THE BREATH", point(-47, -191), RED)
   end
 end
 
 local function renderLanding(correct)
-  unit("onyxia", "Onyxia", "boss", 0.41, 0.50, correct and 0 or math.pi, 10184)
-  unit("hatcher-left", "Onyxian Hatcher", "add", 0.79, 0.34, 0, 11262)
-  unit("hatcher-right", "Onyxian Hatcher", "add", 0.79, 0.66, 0, 11262)
   if correct then
-    unit("main-tank", "Main Tank", "tank", 0.16, 0.50, math.pi)
-    unit("add-tank-left", "Hatcher Tank", "tank", 0.72, 0.29, 0)
-    unit("add-tank-right", "Hatcher Tank", "tank", 0.72, 0.71, 0)
-    standardFlanks()
-    circle("boss-zone", 0.47, 0.50, 0.20, GREEN)
-    circle("add-left-zone", 0.78, 0.30, 0.11, ORANGE)
-    circle("add-right-zone", 0.78, 0.70, 0.11, ORANGE)
-    mapText("add-label", "ADD CONTROL", 0.84, 0.50, ORANGE)
+    landingCorrect()
+    circle("p3-boss-zone", point(-10, -171), 38, GREEN)
+    circle("p3-add-zone", point(-73, -171), 24, ORANGE)
+    circle("p3-rain-left", point(-76, -145), 10, RED)
+    circle("p3-rain-right", point(-76, -198), 10, RED)
+    arrow("p3-separator", point(-52, -128), point(-52, -216), WHITE)
+    mapText("p3-add-label", "ADD CONTROL", point(-84, -171), ORANGE)
   else
-    unit("main-tank", "Main Tank", "tank", 0.58, 0.50, 0)
-    lineOf("melee", "landing-stack-", 10, 0.50, 0.44, 0.69, 0.56)
-    lineOf("ranged", "landing-ranged-", 8, 0.64, 0.40, 0.76, 0.60)
-    circle("mixed-zone", 0.65, 0.50, 0.22, RED)
-    cone("landing-breath", 0.41, 0.50, 0.28, math.pi, 1.2, RED)
-    mapText("landing-fail", "BOSS + ADDS + RAID", 0.77, 0.50, RED)
+    landingWrong()
+    cone("p3-bad-front", point(-20, -171), 45, math.pi, 75, RED)
+    cone("p3-bad-tail", point(-20, -171), 40, 0, 65, RED)
+    circle("p3-adds-loose", point(-75, -171), 28, RED)
+    mapText("p3-bad-label", "BOSS + ADDS + RAID", point(-52, -171), RED)
   end
 end
 
@@ -353,7 +457,8 @@ local function render()
   elseif chapter.id == "deep-breath" then renderBreath(showingCorrect)
   else renderLanding(showingCorrect) end
 
-  Map:SetCamera(mapX(0.5), mapY(0.5), chapter.id == "deep-breath" and 1.85 or 1.7)
+  local cameraX, cameraY = mapPoint(ARENA_CENTRE)
+  Map:SetCamera(cameraX, cameraY, chapter.id == "deep-breath" and 1.85 or 1.65)
   callout:SetAlpha(1)
   C_Timer.After(0.6, function() callout:SetAlpha(0.78) end)
 end
