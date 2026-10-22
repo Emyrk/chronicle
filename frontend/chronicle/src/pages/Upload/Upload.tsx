@@ -141,6 +141,8 @@ export interface UploadViewProps {
   configLoaded: boolean;
   /** All known flavor tags from the server. */
   flavorTags: string[];
+  /** Default flavor tags of the tenant's resolved dataset. */
+  datasetFlavor: readonly string[];
   /** Format options available to the user. */
   availableFormats: { value: string; label: string }[];
   /** User's currently selected format (may be empty = use default). */
@@ -172,6 +174,7 @@ export function UploadView({
   onFlavorOverrideChange,
   effectiveFormat,
   flavorTags,
+  datasetFlavor,
   availableFormats,
   selectedFormat,
   onFormatSelect,
@@ -480,7 +483,9 @@ export function UploadView({
                 hermesProxy={effectiveFormat === "hermesproxy_1_14_2_cc"}
               />
             ) : (
-              <InstructionsChronicleCompanion />
+              <InstructionsChronicleCompanion
+                nightmareOfUrsol={effectiveFormat === "1.12a-cc-addon" && datasetFlavor.includes("nightmare-of-ursol")}
+              />
             )}
           </div>
         </Card>
@@ -748,6 +753,7 @@ export function Upload() {
       onFlavorOverrideChange={setFlavorOverride}
       effectiveFormat={effectiveFormat}
       flavorTags={flavorTags}
+      datasetFlavor={siteConfig?.dataset_flavor ?? []}
       availableFormats={availableFormats}
       selectedFormat={selectedFormat}
       onFormatSelect={handleFormatSelect}

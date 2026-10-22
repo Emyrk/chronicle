@@ -1,10 +1,11 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view components intentionally share this module. */
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { Crosshair, Focus, Footprints, Gamepad2, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Maximize2, Pause, Play, Route, Settings2, Skull, Timer, X } from "lucide-react";
+import { AlertTriangle, Crosshair, Focus, Footprints, Gamepad2, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Maximize2, Pause, Play, Route, Settings2, Skull, Timer, X } from "lucide-react";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { parseLivePresenceSurface } from "../../liveSessionProtocol";
 import { LivePresenceIndicator } from "../../LivePresenceIndicator";
 import { useLiveSessionOptional } from "../../LiveSessionContext";
@@ -40,6 +41,12 @@ import { DEFAULT_AD_STRAFE, IDLE_MOBILE_MAP_INPUT, MAP_CONTROL_KEYBINDS, type Mo
 import { MobileMapControls } from "./MobileMapControls";
 import { MeterWindows } from "./MeterWindows";
 import { useMeterWindows } from "./meterWindowsState";
+import {
+  dismissMapTelemetryWarning,
+  hasLimitedSuperWowPositionTelemetry,
+  isMapTelemetryWarningDismissed,
+  MAP_TELEMETRY_WARNING_STORAGE_KEY,
+} from "./mapTelemetryWarning";
 import { MapSettingsOverlay } from "./MapSettingsOverlay";
 import { DEFAULT_EFFECT_SETTINGS, useEffectSettings } from "./mapViewSettings";
 import { DEFAULT_WALK_AVATAR, readStoredWalkAvatar, storeWalkAvatar } from "./walkAvatars";
@@ -898,18 +905,69 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   );
 }
 
+function MapTelemetryWarning({ props, children }: { props: PanelRenderProps<MapResult>; children: ReactNode }) {
+  const [dismissedInstances, setDismissedInstances] = useLocalStorage<unknown>(MAP_TELEMETRY_WARNING_STORAGE_KEY, []);
+  const instanceId = props.context.instance.id;
+  const showWarning = props.variant !== "overlay"
+    && hasLimitedSuperWowPositionTelemetry(props.context.instance)
+    && !isMapTelemetryWarningDismissed(dismissedInstances, instanceId);
+
+  return (
+    <div className="relative h-full min-h-0">
+      {children}
+      {showWarning && (
+        <div
+          role="alert"
+          className="absolute left-2 right-2 top-2 z-50 flex items-start gap-2 rounded-md border border-amber-400/70 bg-amber-950/95 px-3 py-2 text-xs text-amber-50 shadow-lg backdrop-blur-sm"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+          <p className="min-w-0 flex-1 leading-relaxed">
+            <strong>Incomplete hostile positions.</strong>{" "}
+            SuperWoW only emits positional data for friendly units. Hostile entities will not be shown. Switch to ClassicAPI for positional data on all units.
+          </p>
+          <button
+            type="button"
+            onClick={() => setDismissedInstances((current: unknown) => dismissMapTelemetryWarning(current, instanceId))}
+            className="-mr-1 -mt-1 rounded p-1 text-amber-100/70 hover:bg-amber-100/10 hover:text-amber-50"
+            aria-label="Dismiss positional data warning for this instance"
+            title="Dismiss for this instance"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MapContent({ forceMini = false, ...props }: PanelRenderProps<MapResult> & { forceMini?: boolean }) {
   const [wholeRun, setWholeRun] = useState(false);
   const isMobile = useIsMobile();
   // The Mini Map panel is always mini; a Map panel is mini with the (older) "mini" option.
   const mini = forceMini || isMiniMapOption(props.panelOption);
   const selectedCount = props.context.selectedEncounterIds.length;
-  if (isMobile) return <SingleEncounterReplayMap {...props} mobile wholeRun={selectedCount !== 1} />;
+  if (isMobile) {
+    return (
+      <MapTelemetryWarning props={props}>
+        <SingleEncounterReplayMap {...props} mobile wholeRun={selectedCount !== 1} />
+      </MapTelemetryWarning>
+    );
+  }
   const presentation = mapPresentationForSelection(selectedCount, wholeRun);
   if (presentation === "replay-3d" && selectedCount !== 1) {
-    return <SingleEncounterReplayMap {...props} mini={mini} wholeRun onExitWholeRun={() => setWholeRun(false)} />;
+    return (
+      <MapTelemetryWarning props={props}>
+        <SingleEncounterReplayMap {...props} mini={mini} wholeRun onExitWholeRun={() => setWholeRun(false)} />
+      </MapTelemetryWarning>
+    );
   }
-  if (presentation === "replay-3d") return <SingleEncounterReplayMap {...props} mini={mini} />;
+  if (presentation === "replay-3d") {
+    return (
+      <MapTelemetryWarning props={props}>
+        <SingleEncounterReplayMap {...props} mini={mini} />
+      </MapTelemetryWarning>
+    );
+  }
   // With nothing selected there is no data to replay: take the run's encounters
   // (what the page selects by default) so the processor has the whole run.
   const startWholeRun = () => {
@@ -931,25 +989,27 @@ function MapContent({ forceMini = false, ...props }: PanelRenderProps<MapResult>
     </div>
   );
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      {props.headerSlot ? createPortal(wholeRunButton, props.headerSlot) : <div className="flex justify-end px-3 pt-2">{wholeRunButton}</div>}
-      <div className="relative min-h-0 flex-1">
-        <MapOverview2D {...props} mini={mini} />
-        {mini && <ExpandMapButton context={props.context} overlay />}
-        {/* The mini map's way into the 3D replay: the whole run, playing on its own. */}
-        {mini && (
-          <button
-            type="button"
-            onClick={startWholeRun}
-            title="Watch the whole run in 3D"
-            className="absolute bottom-8 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-black/60 bg-primary/90 px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-[0_4px_16px_rgba(0,0,0,.6)] hover:bg-primary"
-          >
-            <Play className="h-3.5 w-3.5" />
-            Watch the run
-          </button>
-        )}
+    <MapTelemetryWarning props={props}>
+      <div className="flex h-full min-h-0 flex-col">
+        {props.headerSlot ? createPortal(wholeRunButton, props.headerSlot) : <div className="flex justify-end px-3 pt-2">{wholeRunButton}</div>}
+        <div className="relative min-h-0 flex-1">
+          <MapOverview2D {...props} mini={mini} />
+          {mini && <ExpandMapButton context={props.context} overlay />}
+          {/* The mini map's way into the 3D replay: the whole run, playing on its own. */}
+          {mini && (
+            <button
+              type="button"
+              onClick={startWholeRun}
+              title="Watch the whole run in 3D"
+              className="absolute bottom-8 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-black/60 bg-primary/90 px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-[0_4px_16px_rgba(0,0,0,.6)] hover:bg-primary"
+            >
+              <Play className="h-3.5 w-3.5" />
+              Watch the run
+            </button>
+          )}
+        </div>
       </div>
-    </div>
+    </MapTelemetryWarning>
   );
 }
 
