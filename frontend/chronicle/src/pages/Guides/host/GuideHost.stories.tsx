@@ -182,8 +182,9 @@ export const PackagedLuaOnyxiaTestHarness: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText("Give every group a side")).toBeVisible();
     await userEvent.click(await canvas.findByRole("button", { name: "Next" }));
-    await expect(await canvas.findByText("Flanks are safe; front and tail are not")).toBeVisible();
-    await userEvent.click(await canvas.findByRole("button", { name: "Showing: Safe" }));
-    await expect(await canvas.findByRole("button", { name: "Showing: Danger" })).toBeVisible();
+    await expect(await canvas.findByText("Flanks are safe, front and tail are not")).toBeVisible();
+    await expect(await canvas.findByRole("button", { name: "Correct", exact: true })).toBeVisible();
+    await userEvent.click(await canvas.findByRole("button", { name: "Incorrect", exact: true }));
+    await expect(await canvas.findByText("Turning Onyxia into the raid makes every correction worse. The tank re-centres first; the raid does not chase through her hitbox.")).toBeVisible();
   },
 };

@@ -20,7 +20,12 @@ describe("Onyxia guide package", () => {
     const sources = Object.fromEntries(
       guide.paths.filter((path) => path.endsWith(".lua")).map((path) => [path, guide.readText(path)]),
     )
-    const runtime = createGuideRuntime({ entrypoint: guide.manifest.entrypoint, sources })
+    const scheduledTimers: number[] = []
+    const runtime = createGuideRuntime({
+      entrypoint: guide.manifest.entrypoint,
+      sources,
+      scheduleTimer: (id) => scheduledTimers.push(id),
+    })
     let scene = createInitialScene()
     scene = applySceneBatch(scene, runtime.start())
 
@@ -31,9 +36,21 @@ describe("Onyxia guide package", () => {
     expect(scene.nodes.get("onyxia")?.props.y).toBeCloseTo(0.251255, 5)
     expect(scene.nodes.get("main-tank")?.props.x).toBeCloseTo(0.768218, 5)
     expect(scene.nodes.get("main-tank")?.props.y).toBeCloseTo(0.096576, 5)
+    let timerIndex = 0
+    runtime.timer(scheduledTimers[timerIndex++])
+    scene = applySceneBatch(scene, runtime.flush())
+    expect(scene.nodes.get("onyxia")?.props.x).not.toBeCloseTo(0.768218, 5)
+    while (timerIndex < scheduledTimers.length) {
+      runtime.timer(scheduledTimers[timerIndex++])
+      scene = applySceneBatch(scene, runtime.flush())
+    }
+    expect(scene.nodes.get("onyxia")?.props.x).toBeCloseTo(0.768218, 5)
+
     expect(scene.nodes.has("off-tank")).toBe(true)
     expect(scene.nodes.has("briefing-north")).toBe(true)
     expect(scene.nodes.get("guide-next")?.listeners).toContain("click")
+    expect(scene.nodes.get("guide-correct")?.props.text).toBe("Correct")
+    expect(scene.nodes.get("guide-incorrect")?.props.text).toBe("Incorrect")
 
     runtime.event({ id: "guide-previous", event: "click" })
     scene = applySceneBatch(scene, runtime.flush())
@@ -45,9 +62,8 @@ describe("Onyxia guide package", () => {
     expect(scene.nodes.has("p1-front")).toBe(true)
     expect(scene.nodes.has("p1-tail")).toBe(true)
 
-    runtime.event({ id: "guide-mode", event: "click" })
+    runtime.event({ id: "guide-incorrect", event: "click" })
     scene = applySceneBatch(scene, runtime.flush())
-    expect(scene.nodes.get("guide-mode")?.props.text).toBe("Showing: Danger")
     expect(scene.nodes.has("p1-wrong-stack")).toBe(true)
     expect(scene.nodes.has("p1-wrong-text")).toBe(true)
 

@@ -50,6 +50,7 @@ describe("adaptGuideMapScene", () => {
     const adapted = adaptGuideMapScene(scene, map, 249);
     expect(adapted.markers).toHaveLength(1);
     expect(adapted.markers[0]).toMatchObject({ guid: "boss", kind: "hostile", entry: 10184, point: { leftPercent: 20, topPercent: 30 } });
+    expect(adapted.bossGuids).toEqual(new Set(["boss"]));
     expect(adapted.planItems.find((item) => item.id === "label")).toMatchObject({ kind: "text", text: "Tank here", color: "#ffffff" });
     expect(adapted.planItems.find((item) => item.id === "arrow")).toMatchObject({ kind: "arrow", points: [{ x: 10, y: 20 }, { x: 40, y: 50 }] });
     const polygon = adapted.planItems.find((item) => item.id === "poly");

@@ -10,10 +10,13 @@ describe("trusted guide layer", () => {
         status="running"
         guideName="Onyxia's Lair"
         fullscreen={false}
+        walking={false}
+        canWalk
         onStart={vi.fn()}
         onStop={vi.fn()}
         onRestart={vi.fn()}
         onFullscreen={vi.fn()}
+        onWalkingChange={vi.fn()}
         onExit={vi.fn()}
       />,
     );
@@ -22,6 +25,7 @@ describe("trusted guide layer", () => {
     expect(markup).toContain("z-[1000]");
     expect(markup).not.toContain("data-guide-node");
     expect(markup).toContain('aria-label="Exit guide"');
+    expect(markup).toContain('aria-label="Enter walk mode"');
   });
 
   it("renders UI parentage, anchor transforms, and scroll styling from the retained scene", () => {

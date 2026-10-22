@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Expand, LogOut, Maximize2, Minimize2, Pause, Play, RefreshCw, TriangleAlert } from "lucide-react";
+import { Expand, Footprints, LogOut, Maximize2, Minimize2, Pause, Play, RefreshCw, TriangleAlert } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -11,6 +11,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
+import { fetchMiniatureUrls } from "../../Instance/EventsPanels/Map/bossMinis";
 import MapView3D from "../../Instance/EventsPanels/Map/MapView3D";
 import { clampViewport } from "../../Instance/EventsPanels/Map/mapModel";
 import { applySceneBatch, createInitialScene, UI_ROOT_ID, type RetainedScene, type SceneNode, type Viewport } from "../protocol";
@@ -49,6 +50,10 @@ function DefaultGuideMapRenderer(props: GuideMapRenderProps) {
       view={props.view}
       planItems={props.planItems}
       dungeonMesh={props.dungeonMesh}
+      miniatureUrls={props.miniatureUrls}
+      bossGuids={props.bossGuids}
+      walking={props.walking}
+      onWalkingChange={props.onWalkingChange}
       onUnitClick={props.onUnitClick}
       onUnavailable={props.onUnavailable}
     />
@@ -114,6 +119,27 @@ function nodeStyle(node: SceneNode): CSSProperties {
   };
 }
 
+function nodeClassName(node: SceneNode): string | undefined {
+  if (node.kind === "frame") {
+    return node.id === "guide-panel"
+      ? "overflow-hidden rounded-xl border border-border/80 bg-card/95 text-card-foreground shadow-2xl backdrop-blur-xl"
+      : "rounded-lg";
+  }
+  if (node.kind === "text") {
+    if (node.id === "guide-eyebrow") return "font-semibold uppercase tracking-[0.2em]";
+    if (node.id === "guide-title") return "font-serif font-semibold leading-tight tracking-wide";
+    if (node.id === "guide-body") return "styled-scrollbar overflow-auto whitespace-pre-wrap leading-relaxed text-muted-foreground";
+    if (node.id === "guide-callout") return "styled-scrollbar overflow-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-muted/70 px-3 py-2 font-medium leading-snug shadow-inner";
+    if (node.id === "guide-disclaimer") return "rounded-full border border-border/70 bg-card/85 px-3 py-1 text-muted-foreground shadow-lg backdrop-blur-md";
+    return "styled-scrollbar overflow-auto whitespace-pre-wrap";
+  }
+  if (node.kind === "button") {
+    const selected = node.id === "guide-correct" || node.id === "guide-incorrect";
+    return `rounded-md border border-border/80 px-3 py-1 font-semibold shadow-sm backdrop-blur-sm transition-all duration-200 hover:-translate-y-px hover:border-ring hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${selected ? "uppercase tracking-[0.12em]" : ""}`;
+  }
+  return undefined;
+}
+
 interface GuideUiSceneProps {
   scene: RetainedScene;
   assets: ReadonlyMap<string, string>;
@@ -135,9 +161,9 @@ export function GuideUiScene({ scene, assets, onNodeClick }: GuideUiSceneProps) 
     const style = nodeStyle(node);
     const click = node.listeners.includes("click") ? (event: ReactMouseEvent) => onNodeClick(node, event) : undefined;
     const children = childrenByParent.get(node.id)?.map(renderNode);
-    if (node.kind === "frame") return <div key={node.id} data-guide-node={node.id} style={style} onClick={click}>{children}</div>;
+    if (node.kind === "frame") return <div key={node.id} data-guide-node={node.id} className={nodeClassName(node)} style={style} onClick={click}>{children}</div>;
     if (node.kind === "text") {
-      return <div key={node.id} data-guide-node={node.id} className="styled-scrollbar overflow-auto whitespace-pre-wrap" style={style} onClick={click}>{text(node.props.text)}</div>;
+      return <div key={node.id} data-guide-node={node.id} className={nodeClassName(node)} style={style} onClick={click}>{text(node.props.text)}</div>;
     }
     if (node.kind === "texture") {
       const source = assets.get(text(node.props.asset));
@@ -162,7 +188,7 @@ export function GuideUiScene({ scene, assets, onNodeClick }: GuideUiSceneProps) 
           disabled={node.props.enabled === false}
           style={style}
           onClick={(event) => onNodeClick(node, event)}
-          className="rounded border px-3 py-1 font-medium shadow-lg backdrop-blur-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+          className={nodeClassName(node)}
         >
           {text(node.props.text)}
         </button>
@@ -178,10 +204,13 @@ export interface TrustedGuideControlsProps {
   status: "loading" | "running" | "stopped" | "error";
   guideName: string;
   fullscreen: boolean;
+  walking?: boolean;
+  canWalk?: boolean;
   onStart(): void;
   onStop(): void;
   onRestart(): void;
   onFullscreen(): void;
+  onWalkingChange?(walking: boolean): void;
   onExit(): void;
 }
 
@@ -189,29 +218,45 @@ export function TrustedGuideControls({
   status,
   guideName,
   fullscreen,
+  walking = false,
+  canWalk = false,
   onStart,
   onStop,
   onRestart,
   onFullscreen,
+  onWalkingChange,
   onExit,
 }: TrustedGuideControlsProps) {
   return (
-    <div data-guide-trusted-controls className="pointer-events-auto absolute inset-x-0 top-0 z-[1000] flex items-center justify-between gap-3 border-b border-amber-200/15 bg-slate-950/88 px-3 py-2 text-slate-100 shadow-2xl backdrop-blur-md">
+    <div data-guide-trusted-controls className="pointer-events-auto absolute inset-x-0 top-0 z-[1000] flex items-center justify-between gap-3 border-b border-border bg-card/95 px-3 py-2 text-card-foreground shadow-xl backdrop-blur-xl">
       <div className="min-w-0">
-        <div className="truncate font-serif text-sm font-semibold tracking-wide text-amber-100">{guideName}</div>
-        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Trusted Chronicle controls · {status}</div>
+        <div className="truncate font-serif text-sm font-semibold tracking-wide text-foreground">{guideName}</div>
+        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Trusted Chronicle controls · {status}</div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         {status === "stopped" ? (
-          <button type="button" onClick={onStart} className="rounded-md border border-emerald-300/25 bg-emerald-950/80 p-2 text-emerald-200 hover:bg-emerald-900" aria-label="Start guide"><Play className="size-4" /></button>
+          <button type="button" onClick={onStart} className="rounded-md border border-emerald-500/30 bg-emerald-950/70 p-2 text-emerald-300 transition hover:bg-emerald-900" aria-label="Start guide"><Play className="size-4" /></button>
         ) : (
-          <button type="button" onClick={onStop} disabled={status === "error"} className="rounded-md border border-slate-500/30 bg-slate-900/80 p-2 text-slate-200 hover:bg-slate-800 disabled:opacity-40" aria-label="Stop guide"><Pause className="size-4" /></button>
+          <button type="button" onClick={onStop} disabled={status === "error"} className="rounded-md border border-border bg-secondary p-2 text-secondary-foreground transition hover:bg-accent disabled:opacity-40" aria-label="Stop guide"><Pause className="size-4" /></button>
         )}
-        <button type="button" onClick={onRestart} className="rounded-md border border-slate-500/30 bg-slate-900/80 p-2 text-slate-200 hover:bg-slate-800" aria-label="Restart guide"><RefreshCw className="size-4" /></button>
-        <button type="button" onClick={onFullscreen} className="rounded-md border border-slate-500/30 bg-slate-900/80 p-2 text-slate-200 hover:bg-slate-800" aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}>
+        <button type="button" onClick={onRestart} className="rounded-md border border-border bg-secondary p-2 text-secondary-foreground transition hover:bg-accent" aria-label="Restart guide"><RefreshCw className="size-4" /></button>
+        {canWalk && (
+          <button
+            type="button"
+            onClick={() => onWalkingChange?.(!walking)}
+            className={`flex items-center gap-1.5 rounded-md border px-2.5 py-2 text-xs font-semibold transition ${walking ? "border-amber-400/50 bg-amber-500/15 text-amber-200" : "border-border bg-secondary text-secondary-foreground hover:bg-accent"}`}
+            aria-label={walking ? "Exit walk mode" : "Enter walk mode"}
+            aria-pressed={walking}
+            title="Walk mode · WASD to move, mouse to look, Esc to exit"
+          >
+            <Footprints className="size-4" />
+            <span className="hidden sm:inline">{walking ? "Walking" : "Walk"}</span>
+          </button>
+        )}
+        <button type="button" onClick={onFullscreen} className="rounded-md border border-border bg-secondary p-2 text-secondary-foreground transition hover:bg-accent" aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}>
           {fullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
         </button>
-        <button type="button" onClick={onExit} className="rounded-md border border-amber-300/25 bg-amber-950/70 p-2 text-amber-100 hover:bg-amber-900" aria-label="Exit guide"><LogOut className="size-4" /></button>
+        <button type="button" onClick={onExit} className="rounded-md border border-amber-500/30 bg-amber-950/60 p-2 text-amber-200 transition hover:bg-amber-900" aria-label="Exit guide"><LogOut className="size-4" /></button>
       </div>
     </div>
   );
@@ -262,6 +307,7 @@ export function GuideHost({
   });
   const [restartKey, setRestartKey] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
+  const [walking, setWalking] = useState(false);
   const [mapUnavailableRun, setMapUnavailableRun] = useState<number | null>(null);
   const { lifecycle: state, scene, assets } = model;
   const mapUnavailable = mapUnavailableRun === restartKey;
@@ -272,6 +318,13 @@ export function GuideHost({
     enabled: mapId !== null && iconBaseUrl.length > 0,
     staleTime: 60 * 60 * 1000,
     queryFn: () => mapResolver(mapId!, iconBaseUrl),
+  });
+
+  const miniatureQuery = useQuery({
+    queryKey: ["guide-miniatures"],
+    enabled: mapId !== null,
+    staleTime: 60 * 60 * 1000,
+    queryFn: () => fetchMiniatureUrls(),
   });
 
   useEffect(() => {
@@ -350,6 +403,7 @@ export function GuideHost({
   }, []);
 
   const stop = useCallback(() => {
+    setWalking(false);
     runtimeRef.current?.stop("user stopped");
     runtimeRef.current = null;
     assetRegistryRef.current?.revoke();
@@ -359,6 +413,7 @@ export function GuideHost({
   }, []);
 
   const restart = useCallback(() => {
+    setWalking(false);
     runtimeRef.current?.stop("user restarted");
     setRestartKey((key) => key + 1);
   }, []);
@@ -387,6 +442,8 @@ export function GuideHost({
     runtimeRef.current?.event({ nodeId, event: "click" });
   }, []);
 
+  const canWalk = Boolean(mapQuery.data?.dungeonMesh && !mapUnavailable);
+
   const mapScene = useMemo(() => mapId !== null && mapQuery.data ? adaptGuideMapScene(scene, mapQuery.data, mapId, assets) : null, [assets, mapId, mapQuery.data, scene]);
   const view = useMemo(() => ({
     viewport: clampViewport({ centerX: scene.camera.x, centerY: scene.camera.y, zoom: scene.camera.zoom }),
@@ -399,10 +456,13 @@ export function GuideHost({
         status={state.status}
         guideName={guide.manifest.name}
         fullscreen={fullscreen}
+        walking={walking}
+        canWalk={canWalk}
         onStart={restart}
         onStop={stop}
         onRestart={restart}
         onFullscreen={() => void toggleFullscreen()}
+        onWalkingChange={setWalking}
         onExit={onExit}
       />
 
@@ -424,8 +484,12 @@ export function GuideHost({
               view={view}
               planItems={mapScene.planItems}
               dungeonMesh={mapQuery.data.dungeonMesh}
+              miniatureUrls={miniatureQuery.data}
+              bossGuids={mapScene.bossGuids}
+              walking={walking}
+              onWalkingChange={setWalking}
               onUnitClick={handleUnitClick}
-              onUnavailable={() => setMapUnavailableRun(restartKey)}
+              onUnavailable={() => { setWalking(false); setMapUnavailableRun(restartKey); }}
             />
           ) : null}
         </div>

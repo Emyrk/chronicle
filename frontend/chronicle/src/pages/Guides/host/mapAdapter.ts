@@ -181,6 +181,7 @@ export function parseUnitEntry(value: unknown): number | undefined {
 export interface GuideMapScene {
   markers: MapSceneMarker[];
   planItems: PlanItem[];
+  bossGuids: ReadonlySet<string>;
 }
 
 function markerKind(role: string): MapSceneMarker["kind"] {
@@ -197,6 +198,7 @@ export function adaptGuideMapScene(
 ): GuideMapScene {
   const markers: MapSceneMarker[] = [];
   const planItems: PlanItem[] = [];
+  const bossGuids = new Set<string>();
 
   for (const node of scene.nodes.values()) {
     if (node.props.visible === false) continue;
@@ -206,6 +208,7 @@ export function adaptGuideMapScene(
       const y = numberProp(node, "y");
       const world = map.normalizedToWorld(x, y);
       const role = stringProp(node, "role", "player").toLowerCase();
+      if (role === "boss") bossGuids.add(node.id);
       const sample: MapPositionSample = {
         timestampMs: 0,
         x: world.x,
@@ -257,5 +260,5 @@ export function adaptGuideMapScene(
       else planItems.push({ id: node.id, kind: "pen", points: node.kind === "polygon" && points.length > 0 ? [...points, points[0]] : points, color });
     }
   }
-  return { markers, planItems };
+  return { markers, planItems, bossGuids };
 }

@@ -94,6 +94,8 @@ local roleColors = {
 local chapterIndex = 1
 local showingCorrect = true
 local scene = {}
+local movingUnits = {}
+local animationGeneration = 0
 
 local function color(object, rgba)
   object:SetColor(rgba[1], rgba[2], rgba[3], rgba[4])
@@ -109,8 +111,10 @@ local function remember(object)
 end
 
 local function clearScene()
+  animationGeneration = animationGeneration + 1
   for _, object in ipairs(scene) do object:Destroy() end
   scene = {}
+  movingUnits = {}
 end
 
 local function normalizedFacing(radians)
@@ -123,7 +127,13 @@ end
 
 local function unit(id, label, role, at, facing, entry)
   local marker = remember(Map:CreateUnitMarker(id))
-  marker:SetMapPosition(mapPoint(at))
+  local targetX, targetY = mapPoint(at)
+  local direction = #movingUnits % 2 == 0 and -1 or 1
+  local distance = role == "boss" and 0.025 or 0.014
+  local startX = targetX + distance * direction
+  local startY = targetY + distance * 0.65
+  marker:SetMapPosition(targetX, targetY)
+  table.insert(movingUnits, {marker = marker, fromX = startX, fromY = startY, toX = targetX, toY = targetY})
   marker:SetSize(role == "boss" and 32 or 19, role == "boss" and 32 or 19)
   marker:SetLabel(label)
   marker:SetRole(role)
@@ -131,6 +141,28 @@ local function unit(id, label, role, at, facing, entry)
   if entry then marker:SetCreatureID(entry) end
   color(marker, roleColors[role])
   return marker
+end
+
+local function animateUnitsIntoPlace()
+  local generation = animationGeneration
+  local step = 0
+  local steps = 8
+
+  local function tick()
+    if generation ~= animationGeneration then return end
+    step = step + 1
+    local amount = step / steps
+    local eased = 1 - (1 - amount) ^ 3
+    for _, movement in ipairs(movingUnits) do
+      movement.marker:SetMapPosition(
+        movement.fromX + (movement.toX - movement.fromX) * eased,
+        movement.fromY + (movement.toY - movement.fromY) * eased
+      )
+    end
+    if step < steps then C_Timer.After(0.045, tick) end
+  end
+
+  C_Timer.After(0.03, tick)
 end
 
 local function boss(at, facing)
@@ -419,11 +451,17 @@ previous:SetText("Previous")
 previous:SetBackgroundColor(0.12, 0.13, 0.17, 0.96)
 previous:SetBorderColor(1, 1, 1, 0.18)
 
-local mode = CreateFrame("Button", "guide-mode", root)
-mode:SetPoint("BOTTOM", root, "BOTTOM", 0, 70)
-mode:SetSize(136, 34)
-mode:SetBackgroundColor(0.10, 0.20, 0.13, 0.96)
-mode:SetBorderColor(1, 1, 1, 0.18)
+local correctButton = CreateFrame("Button", "guide-correct", root)
+correctButton:SetPoint("BOTTOM", root, "BOTTOM", -70, 70)
+correctButton:SetSize(128, 34)
+correctButton:SetText("Correct")
+correctButton:SetBorderColor(1, 1, 1, 0.18)
+
+local incorrectButton = CreateFrame("Button", "guide-incorrect", root)
+incorrectButton:SetPoint("BOTTOM", root, "BOTTOM", 70, 70)
+incorrectButton:SetSize(128, 34)
+incorrectButton:SetText("Incorrect")
+incorrectButton:SetBorderColor(1, 1, 1, 0.18)
 
 local nextButton = CreateFrame("Button", "guide-next", root)
 nextButton:SetPoint("BOTTOMRIGHT", root, "BOTTOMRIGHT", -20, 14)
@@ -448,8 +486,10 @@ local function render()
   callout:SetText(showingCorrect and chapter.correct or chapter.wrong)
   color(callout, showingCorrect and GREEN or RED)
   progress:SetText(chapterIndex .. " / " .. #chapters)
-  mode:SetText(showingCorrect and "Showing: Safe" or "Showing: Danger")
-  mode:SetBackgroundColor(showingCorrect and 0.10 or 0.28, showingCorrect and 0.24 or 0.08, showingCorrect and 0.15 or 0.08, 0.96)
+  correctButton:SetBackgroundColor(showingCorrect and 0.08 or 0.08, showingCorrect and 0.32 or 0.09, showingCorrect and 0.17 or 0.11, 0.96)
+  correctButton:SetColor(showingCorrect and 0.74 or 0.56, showingCorrect and 1.00 or 0.60, showingCorrect and 0.82 or 0.58, 1)
+  incorrectButton:SetBackgroundColor(showingCorrect and 0.09 or 0.34, showingCorrect and 0.09 or 0.07, showingCorrect and 0.11 or 0.08, 0.96)
+  incorrectButton:SetColor(showingCorrect and 0.64 or 1.00, showingCorrect and 0.58 or 0.72, showingCorrect and 0.58 or 0.72, 1)
 
   if chapter.id == "briefing" then renderBriefing(showingCorrect)
   elseif chapter.id == "phase-one" then renderPhaseOne(showingCorrect)
@@ -457,6 +497,7 @@ local function render()
   elseif chapter.id == "deep-breath" then renderBreath(showingCorrect)
   else renderLanding(showingCorrect) end
 
+  animateUnitsIntoPlace()
   local cameraX, cameraY = mapPoint(ARENA_CENTRE)
   Map:SetCamera(cameraX, cameraY, chapter.id == "deep-breath" and 1.85 or 1.65)
   callout:SetAlpha(1)
@@ -477,9 +518,18 @@ nextButton:SetScript("OnClick", function()
   end
 end)
 
-mode:SetScript("OnClick", function()
-  showingCorrect = not showingCorrect
-  render()
+correctButton:SetScript("OnClick", function()
+  if not showingCorrect then
+    showingCorrect = true
+    render()
+  end
+end)
+
+incorrectButton:SetScript("OnClick", function()
+  if showingCorrect then
+    showingCorrect = false
+    render()
+  end
 end)
 
 UIParent:SetScript("OnSizeChanged", function(_, width, height)

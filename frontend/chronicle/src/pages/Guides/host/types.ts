@@ -68,6 +68,10 @@ export interface GuideMapRenderProps {
   view: MapViewRequest;
   planItems: readonly PlanItem[];
   dungeonMesh: DungeonMeshRequest | null;
+  miniatureUrls?: ReadonlyMap<number, string>;
+  bossGuids?: ReadonlySet<string>;
+  walking: boolean;
+  onWalkingChange(walking: boolean): void;
   onUnitClick?(guid: string): void;
   onUnavailable(): void;
 }
