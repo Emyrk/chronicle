@@ -35,6 +35,23 @@ describe("GuideRuntimeController", () => {
     controller.stop(); expect(workers[0].messages.at(-1)).toEqual({ type: "stop" }); expect(workers[0].terminated).toBe(true)
   })
 
+  it("allows a slow worker module to initialize without weakening callback timeouts", () => {
+    vi.useFakeTimers()
+    const worker = new FakeWorker(); const errors: Error[] = []
+    const controller = new GuideRuntimeController({ workerFactory: () => worker, onError: (error) => errors.push(error) })
+
+    controller.start(startMessage())
+    vi.advanceTimersByTime(5_000)
+    expect(worker.terminated).toBe(false)
+    expect(errors).toHaveLength(0)
+
+    worker.emit({ type: "ready", protocolVersion: 1 })
+    controller.event({ eventId: "event-1", nodeId: "button", event: "click" })
+    vi.advanceTimersByTime(2_001)
+    expect(worker.terminated).toBe(true)
+    expect(errors.at(-1)?.message).toMatch(/watchdog/)
+  })
+
   it("terminates an unresponsive worker without fallback or an automatic restart loop", () => {
     vi.useFakeTimers()
     const workers: FakeWorker[] = []; const errors: Error[] = []

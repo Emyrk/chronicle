@@ -14,6 +14,7 @@ export interface WorkerLike {
 export interface GuideRuntimeControllerOptions {
   workerFactory?: (url: URL, options: WorkerOptions) => WorkerLike
   watchdogMs?: number
+  startupWatchdogMs?: number
   onReady?: () => void
   onBatch?: (operations: readonly SceneOperation[]) => void
   onError?: (error: Error) => void
@@ -28,12 +29,14 @@ export class GuideRuntimeController {
   private generation = 0
   private readonly workerFactory: (url: URL, options: WorkerOptions) => WorkerLike
   private readonly watchdogMs: number
+  private readonly startupWatchdogMs: number
   private readonly options: GuideRuntimeControllerOptions
 
   constructor(options: GuideRuntimeControllerOptions = {}) {
     this.options = options
     this.workerFactory = options.workerFactory ?? ((url, workerOptions) => new Worker(url, workerOptions))
     this.watchdogMs = options.watchdogMs ?? 2_000
+    this.startupWatchdogMs = options.startupWatchdogMs ?? options.watchdogMs ?? 10_000
   }
 
   start(message: StartMessage) {
@@ -65,7 +68,7 @@ export class GuideRuntimeController {
     this.worker = worker
     worker.onmessage = (event) => { if (generation === this.generation) this.handleMessage(event.data) }
     worker.onerror = (event) => { if (generation === this.generation) this.handleWorkerFailure(new Error(event.message || "guide worker failed")) }
-    if (this.lastStart) { worker.postMessage(this.lastStart); this.armWatchdog() }
+    if (this.lastStart) { worker.postMessage(this.lastStart); this.armWatchdog(this.startupWatchdogMs) }
   }
 
   private send(message: HostMessage) {
@@ -98,9 +101,9 @@ export class GuideRuntimeController {
     this.pendingEventId = null
     this.options.onError?.(error)
   }
-  private armWatchdog() {
+  private armWatchdog(timeoutMs = this.watchdogMs) {
     this.clearWatchdog()
-    this.watchdog = setTimeout(() => { this.watchdog = null; this.handleWorkerFailure(new Error("guide worker watchdog expired")) }, this.watchdogMs)
+    this.watchdog = setTimeout(() => { this.watchdog = null; this.handleWorkerFailure(new Error("guide worker watchdog expired")) }, timeoutMs)
   }
   private clearWatchdog() { if (this.watchdog) clearTimeout(this.watchdog); this.watchdog = null }
 }
