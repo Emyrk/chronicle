@@ -39,7 +39,7 @@ describe("Footer", () => {
 
     const markup = renderToStaticMarkup(<Footer />);
 
-    expect(markup).not.toContain("Become Revered");
+    expect(markup).not.toContain("Support Chronicle");
     expect(markup).not.toContain('href="/revered"');
   });
 
@@ -49,7 +49,7 @@ describe("Footer", () => {
 
     const markup = renderToStaticMarkup(<Footer />);
 
-    expect(markup).toContain("Become Revered");
+    expect(markup).toContain("Support Chronicle");
     expect(markup).toContain('href="/revered"');
   });
 });
