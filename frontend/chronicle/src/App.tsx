@@ -50,7 +50,6 @@ const StatWeightsPage = lazy(() => import("./pages/Gear/weights/StatWeightsPage"
 const ServersLayout = lazy(() => import("./pages/Servers").then(({ ServersLayout }) => ({ default: ServersLayout })))
 const ServersPage = lazy(() => import("./pages/Servers").then(({ ServersPage }) => ({ default: ServersPage })))
 const UploadKeysPage = lazy(() => import("./pages/Servers").then(({ UploadKeysPage }) => ({ default: UploadKeysPage })))
-const RetentionPage = lazy(() => import("./pages/Servers").then(({ RetentionPage }) => ({ default: RetentionPage })))
 const SpellPage = lazy(() => import("./pages/WoWDB/SpellPage").then(({ SpellPage }) => ({ default: SpellPage })))
 const SpellByNamePage = lazy(() => import("./pages/WoWDB/SpellByNamePage").then(({ SpellByNamePage }) => ({ default: SpellByNamePage })))
 const ItemPage = lazy(() => import("./pages/WoWDB/ItemPage").then(({ ItemPage }) => ({ default: ItemPage })))
@@ -194,7 +193,6 @@ function App() {
         <Route path="/servers" element={<ServersLayout />}>
           <Route index element={<ServersPage />} />
           <Route path="keys" element={<UploadKeysPage />} />
-          <Route path="retention" element={<RetentionPage />} />
         </Route>
         <Route element={<TenantDatasetLayout />}>
           <Route path="/talents" element={<TalentCalculatorPage />} />

@@ -585,18 +585,3 @@ GROUP BY
   wow_log_groups.id,
   u.username
 ;
-
--- name: GetExpiredRawLogGroups :many
--- Returns log groups whose raw files are past their owner's retention window.
--- Only considers users who have set a retention policy (non-NULL).
-SELECT DISTINCT
-  wlg.id AS log_group_id
-FROM wow_log_groups wlg
-JOIN log_file lf ON lf.wow_log_id = wlg.id
-JOIN users u ON u.id = lf.owner
-WHERE
-  u.raw_log_retention_hours IS NOT NULL
-  AND lf.storage_deleted_at IS NULL
-  AND lf.created_at < NOW() - make_interval(hours => u.raw_log_retention_hours)
-LIMIT $1
-;

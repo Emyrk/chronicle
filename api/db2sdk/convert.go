@@ -68,10 +68,6 @@ func User[T database.ChronicleUser | database.ListAllUsersRow](row T, roles []st
 		MaxStorageBytesUpdated: dataLimitUpdated,
 		ConsumedStorageBytes:   user.ConsumedStorageBytes,
 	}
-	if user.RawLogRetentionHours.Valid {
-		v := user.RawLogRetentionHours.Int32
-		u.RawLogRetentionHours = &v
-	}
 	return u
 }
 

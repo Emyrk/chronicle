@@ -303,8 +303,7 @@ CREATE TABLE users (
     created_at timestamp with time zone,
     updated_at timestamp with time zone,
     default_desktop_layout_id uuid,
-    default_mobile_layout_id uuid,
-    raw_log_retention_hours integer
+    default_mobile_layout_id uuid
 );
 
 CREATE VIEW chronicle_users AS
@@ -315,7 +314,6 @@ CREATE VIEW chronicle_users AS
     u.updated_at,
     u.default_desktop_layout_id,
     u.default_mobile_layout_id,
-    u.raw_log_retention_hours,
     COALESCE(sl.max_storage_bytes, (0)::numeric) AS max_storage_bytes,
     sl.updated_at AS data_limit_updated_at,
     COALESCE(lf.total_size_bytes, (0)::numeric) AS consumed_storage_bytes
@@ -1318,7 +1316,10 @@ CREATE TABLE log_instances (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     invalidated_at timestamp with time zone,
     invalid_reason text DEFAULT ''::text NOT NULL,
-    CONSTRAINT log_instances_category_check CHECK ((category = ANY (ARRAY['raid'::text, 'dungeon'::text])))
+    retention_expires_at timestamp with time zone,
+    retention_policy_key text DEFAULT 'default'::text NOT NULL,
+    CONSTRAINT log_instances_category_check CHECK ((category = ANY (ARRAY['raid'::text, 'dungeon'::text]))),
+    CONSTRAINT log_instances_retention_policy_key_not_empty CHECK ((retention_policy_key <> ''::text))
 );
 
 COMMENT ON COLUMN log_instances.guild_id IS 'If set, that means it was a guild run.';
@@ -1603,30 +1604,6 @@ CREATE TABLE regression_snapshots (
     build_time text DEFAULT ''::text NOT NULL,
     matches_previous boolean,
     previous_snapshot_id uuid
-);
-
-CREATE TABLE retention_policies (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    server_id uuid,
-    realm_id uuid,
-    enabled boolean DEFAULT true NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    last_run_at timestamp with time zone,
-    total_deleted bigint DEFAULT 0 NOT NULL,
-    total_kept bigint DEFAULT 0 NOT NULL,
-    CONSTRAINT retention_policies_scope CHECK ((((server_id IS NOT NULL) AND (realm_id IS NULL)) OR ((server_id IS NULL) AND (realm_id IS NOT NULL))))
-);
-
-CREATE TABLE retention_rules (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    policy_id uuid NOT NULL,
-    priority integer NOT NULL,
-    action text NOT NULL,
-    conditions jsonb DEFAULT '[]'::jsonb NOT NULL,
-    description text DEFAULT ''::text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT retention_rules_action_check CHECK ((action = ANY (ARRAY['keep'::text, 'delete'::text])))
 );
 
 CREATE TABLE river_job (
@@ -2661,21 +2638,6 @@ ALTER TABLE ONLY regression_fixtures
 ALTER TABLE ONLY regression_snapshots
     ADD CONSTRAINT regression_snapshots_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY retention_policies
-    ADD CONSTRAINT retention_policies_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY retention_policies
-    ADD CONSTRAINT retention_policies_unique_realm UNIQUE (realm_id);
-
-ALTER TABLE ONLY retention_policies
-    ADD CONSTRAINT retention_policies_unique_server UNIQUE (server_id);
-
-ALTER TABLE ONLY retention_rules
-    ADD CONSTRAINT retention_rules_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY retention_rules
-    ADD CONSTRAINT retention_rules_unique_priority UNIQUE (policy_id, priority);
-
 ALTER TABLE ONLY river_job
     ADD CONSTRAINT river_job_pkey PRIMARY KEY (id);
 
@@ -3064,6 +3026,8 @@ CREATE UNIQUE INDEX log_instance_youtube_timestamped_instance_id_idx ON log_inst
 CREATE UNIQUE INDEX log_instance_youtube_timestamped_slug_idx ON log_instance_youtube_timestamped USING btree (instance_slug) WHERE (instance_slug IS NOT NULL);
 
 CREATE UNIQUE INDEX log_instances_hashed_slug_idx ON log_instances USING btree (hashed_slug) WHERE (hashed_slug IS NOT NULL);
+
+CREATE INDEX log_instances_retention_expired_idx ON log_instances USING btree (retention_expires_at, id) WHERE (retention_expires_at IS NOT NULL);
 
 CREATE INDEX oauth_device_sessions_expires_at_idx ON oauth_device_sessions USING btree (expires_at);
 
@@ -3455,15 +3419,6 @@ ALTER TABLE ONLY regression_snapshots
 
 ALTER TABLE ONLY regression_snapshots
     ADD CONSTRAINT regression_snapshots_previous_snapshot_id_fkey FOREIGN KEY (previous_snapshot_id) REFERENCES regression_snapshots(id) ON DELETE SET NULL;
-
-ALTER TABLE ONLY retention_policies
-    ADD CONSTRAINT retention_policies_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY retention_policies
-    ADD CONSTRAINT retention_policies_server_id_fkey FOREIGN KEY (server_id) REFERENCES wow_servers(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY retention_rules
-    ADD CONSTRAINT retention_rules_policy_id_fkey FOREIGN KEY (policy_id) REFERENCES retention_policies(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY server_applications
     ADD CONSTRAINT server_applications_initiated_by_fkey FOREIGN KEY (initiated_by) REFERENCES users(id);

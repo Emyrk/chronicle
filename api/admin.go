@@ -299,57 +299,6 @@ func (a *API) AdminSetUserRoles(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusOK, db2sdk.User(user, roles))
 }
 
-// AdminSetUserRetention sets a user's raw log retention policy.
-// @Summary Set user raw log retention
-// @Tags Admin
-// @Param userID path string true "User ID"
-// @Param request body chroniclesdk.AdminSetUserRetentionRequest true "Retention settings"
-// @Success 200 {object} chroniclesdk.User
-// @Router /api/v1/admin/users/{userID}/retention [put]
-func (a *API) AdminSetUserRetention(w http.ResponseWriter, r *http.Request) {
-	userID, err := uuid.Parse(chi.URLParam(r, "userID"))
-	if err != nil {
-		httpapi.Write(r.Context(), w, http.StatusBadRequest, map[string]string{
-			"message": "invalid user ID",
-		})
-		return
-	}
-
-	var req chroniclesdk.AdminSetUserRetentionRequest
-	if !httpapi.Read(r.Context(), w, r, &req) {
-		return
-	}
-
-	var retentionHours pgtype.Int4
-	if req.RawLogRetentionHours > 0 {
-		retentionHours = pgtype.Int4{Int32: req.RawLogRetentionHours, Valid: true}
-	}
-	// 0 means "keep forever" → NULL in DB
-
-	_, err = a.Opts.Zed.UpdateUserRawLogRetentionHours(r.Context(), database.UpdateUserRawLogRetentionHoursParams{
-		ID:                   userID,
-		RawLogRetentionHours: retentionHours,
-	})
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-
-	user, err := a.Opts.Zed.GetUserByID(r.Context(), userID)
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-
-	roles, err := a.Opts.Zed.UserChronicleRoles(r.Context(), userID)
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-
-	httpapi.Write(r.Context(), w, http.StatusOK, db2sdk.User(user, roles))
-}
-
 const (
 	defaultAdminLogsLimit = 50
 	maxAdminLogsLimit     = 100

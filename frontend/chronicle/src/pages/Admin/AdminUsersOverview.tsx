@@ -4,7 +4,6 @@ import {
   useResyncUserRoles,
   useUpsertUserGrant,
   useSetUserRoles,
-  useSetUserRetention,
   type User,
 } from "@/api/queries";
 import {
@@ -30,7 +29,6 @@ import {
   ListTodo,
   Upload,
   Trophy,
-  Clock,
   FlaskConical,
   LockKeyhole,
 } from "lucide-react";
@@ -303,70 +301,6 @@ function RoleEditor({
   );
 }
 
-// --- Retention editor ------------------------------------------------------
-
-function RetentionEditor({
-  user,
-  onSave,
-  isSaving,
-}: {
-  user: User;
-  onSave: (hours: number) => void;
-  isSaving: boolean;
-}) {
-  const currentHours = user.raw_log_retention_hours;
-  const [inputValue, setInputValue] = useState(
-    currentHours != null ? currentHours.toString() : ""
-  );
-
-  const handleSave = () => {
-    const parsed = inputValue.trim() === "" ? 0 : parseInt(inputValue, 10);
-    if (isNaN(parsed) || parsed < 0) return;
-    onSave(parsed);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleSave();
-    else if (e.key === "Escape") {
-      setInputValue(currentHours != null ? currentHours.toString() : "");
-    }
-  };
-
-  const displayValue =
-    currentHours != null
-      ? currentHours >= 24
-        ? `${Math.round(currentHours / 24)}d`
-        : `${currentHours}h`
-      : "Forever";
-
-  return (
-    <div className="flex items-center gap-2 min-w-[140px]">
-      <Clock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-      <div className="flex items-center gap-1.5">
-        <input
-          type="number"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onBlur={handleSave}
-          placeholder="∞"
-          className="w-16 px-1.5 py-0.5 text-xs bg-secondary rounded border-0 text-right"
-          min={0}
-        />
-        <span className="text-[10px] text-muted-foreground">hrs</span>
-        {isSaving ? (
-          <Loader2 className="h-3 w-3 animate-spin" />
-        ) : (
-          <button onClick={handleSave} className="text-muted-foreground hover:text-foreground">
-            <Check className="h-3 w-3" />
-          </button>
-        )}
-        <span className="text-[10px] text-muted-foreground">({displayValue})</span>
-      </div>
-    </div>
-  );
-}
-
 // --- Filter bar ------------------------------------------------------------
 
 interface Filters {
@@ -607,8 +541,6 @@ interface UserRowProps {
   isSavingLimit: boolean;
   onSaveRoles: (roles: string[]) => void;
   isSavingRoles: boolean;
-  onSaveRetention: (hours: number) => void;
-  isSavingRetention: boolean;
 }
 
 function UserRow({
@@ -621,8 +553,6 @@ function UserRow({
   isSavingLimit,
   onSaveRoles,
   isSavingRoles,
-  onSaveRetention,
-  isSavingRetention,
 }: UserRowProps) {
   const pct = storagePct(user);
 
@@ -696,10 +626,6 @@ function UserRow({
       {expanded && (
         <div className="space-y-2">
           <RoleEditor user={user} onSave={onSaveRoles} isSaving={isSavingRoles} />
-          <div className="px-4 pb-3 flex items-center gap-3">
-            <span className="text-xs font-medium text-muted-foreground">Raw Log Retention:</span>
-            <RetentionEditor user={user} onSave={onSaveRetention} isSaving={isSavingRetention} />
-          </div>
         </div>
       )}
     </div>
@@ -715,7 +641,6 @@ export function AdminUsersOverview() {
   const resyncMutation = useResyncUserRoles();
   const upsertGrantMutation = useUpsertUserGrant();
   const setRolesMutation = useSetUserRoles();
-  const setRetentionMutation = useSetUserRetention();
 
   // UI state
   const [searchQuery, setSearchQuery] = useState("");
@@ -727,7 +652,6 @@ export function AdminUsersOverview() {
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [savingLimitId, setSavingLimitId] = useState<string | null>(null);
   const [savingRolesId, setSavingRolesId] = useState<string | null>(null);
-  const [savingRetentionId, setSavingRetentionId] = useState<string | null>(null);
 
   // --- Filtering + sorting (client-side) ---
   const filteredUsers = useMemo(() => {
@@ -847,18 +771,6 @@ export function AdminUsersOverview() {
     }
   };
 
-  const handleSaveRetention = async (userId: string, hours: number) => {
-    setSavingRetentionId(userId);
-    try {
-      await setRetentionMutation.mutateAsync({ userId, rawLogRetentionHours: hours });
-      toast.success(hours > 0 ? `Retention set to ${hours}h` : "Retention set to forever");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update retention");
-    } finally {
-      setSavingRetentionId(null);
-    }
-  };
-
   // --- Loading / error states ---
   if (isLoading) {
     return (
@@ -974,8 +886,6 @@ export function AdminUsersOverview() {
               isSavingLimit={savingLimitId === user.id}
               onSaveRoles={(roles) => handleSaveRoles(user.id, roles)}
               isSavingRoles={savingRolesId === user.id}
-              onSaveRetention={(hours) => handleSaveRetention(user.id, hours)}
-              isSavingRetention={savingRetentionId === user.id}
             />
           ))}
         </Card>

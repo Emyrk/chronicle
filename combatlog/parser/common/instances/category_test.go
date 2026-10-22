@@ -18,6 +18,9 @@ func TestCommonFactoryCopiesCategoryToDynamicInstance(t *testing.T) {
 	factory := &CommonFactory{
 		Name:     "Static Name",
 		Category: InstanceCategoryRaid,
+		RetentionPolicyKey: func(database.WoWFlavor) string {
+			return "custom-policy"
+		},
 		NameFromZone: func(context.Context, zone.Zone, database.WoWFlavor) string {
 			return "Zone-Derived Name"
 		},
@@ -31,6 +34,7 @@ func TestCommonFactoryCopiesCategoryToDynamicInstance(t *testing.T) {
 
 	instance := factory.New(context.Background(), slog.Default(), unitdb.New(), zone.Zone{}, database.WoWFlavor{})
 	require.Equal(t, InstanceCategoryRaid, instance.Category)
+	require.Equal(t, "custom-policy", instance.RetentionPolicyKey)
 	require.Equal(t, "Zone-Derived Name", instance.Name())
 
 	instance.derivedName.cachedOverride = "Fight-Derived Name"

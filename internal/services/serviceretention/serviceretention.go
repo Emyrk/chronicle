@@ -1,18 +1,16 @@
 package serviceretention
 
 import (
-  "context"
-  "time"
+	"context"
+	"time"
 
-  "github.com/Emyrk/chronicle/chronicle/retention"
-  "github.com/Emyrk/chronicle/database"
-  "github.com/Emyrk/chronicle/database/storage"
-  "github.com/Emyrk/chronicle/internal/services"
-  "github.com/Emyrk/chronicle/internal/services/servicedbstore"
-  "github.com/Emyrk/chronicle/internal/services/servicelogger"
-  "github.com/Emyrk/chronicle/internal/services/servicestorage"
+	"github.com/Emyrk/chronicle/chronicle/retention"
+	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
+	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 
-  "github.com/coder/serpent"
+	"github.com/coder/serpent"
 )
 
 var _ services.Servicer = (*Service)(nil)
@@ -33,10 +31,9 @@ func OnRetention() string {
 type Service struct {
 	broker *services.Services
 
-	Schedule       time.Duration
-	Worker         *retention.Worker
-	RealmWorker    *retention.RealmWorker
-	RawLogWorker   *retention.RawLogWorker
+	Schedule            time.Duration
+	RecalculationWorker *retention.RecalculationWorker
+	DeletionWorker      *retention.DeletionWorker
 }
 
 func New(broker *services.Services) *Service {
@@ -53,7 +50,6 @@ func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
 		servicedbstore.OnDatabaseStore(),
-		servicestorage.OnStorage(),
 	}
 }
 
@@ -64,25 +60,16 @@ func (s *Service) Configures() []string {
 func (s *Service) Start(_ context.Context) error {
 	logger := servicelogger.Logger(s.broker)
 	store := servicedbstore.DatabaseStore(s.broker)
-	stor := servicestorage.Storage(s.broker)
 
 	namedLogger := services.NamedLogger(logger, s.Name())
 
-	s.Worker = &retention.Worker{
+	s.RecalculationWorker = &retention.RecalculationWorker{
 		Store:  store,
 		Logger: namedLogger,
 	}
-
-	s.RealmWorker = &retention.RealmWorker{
-		Store:   store,
-		Storage: stor,
-		Logger:  namedLogger,
-	}
-
-	s.RawLogWorker = &retention.RawLogWorker{
-		Store:   store,
-		Storage: stor,
-		Logger:  namedLogger,
+	s.DeletionWorker = &retention.DeletionWorker{
+		Store:  store,
+		Logger: namedLogger,
 	}
 
 	return nil
@@ -109,9 +96,4 @@ func (s *Service) Options() serpent.OptionSet {
 // Store returns the database store from the service broker.
 func Store(broker *services.Services) database.Store {
 	return servicedbstore.DatabaseStore(broker)
-}
-
-// ObjectStorage returns the object storage from the service broker.
-func ObjectStorage(broker *services.Services) storage.ObjectStorage {
-	return servicestorage.Storage(broker)
 }

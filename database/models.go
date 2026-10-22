@@ -861,7 +861,6 @@ type ChronicleUser struct {
 	UpdatedAt              pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	DefaultDesktopLayoutID uuid.NullUUID      `db:"default_desktop_layout_id" json:"default_desktop_layout_id"`
 	DefaultMobileLayoutID  uuid.NullUUID      `db:"default_mobile_layout_id" json:"default_mobile_layout_id"`
-	RawLogRetentionHours   pgtype.Int4        `db:"raw_log_retention_hours" json:"raw_log_retention_hours"`
 	MaxStorageBytes        int64              `db:"max_storage_bytes" json:"max_storage_bytes"`
 	DataLimitUpdatedAt     interface{}        `db:"data_limit_updated_at" json:"data_limit_updated_at"`
 	ConsumedStorageBytes   int64              `db:"consumed_storage_bytes" json:"consumed_storage_bytes"`
@@ -1748,6 +1747,8 @@ type LogInstance struct {
 	UpdatedAt               pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	InvalidatedAt           pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
 	InvalidReason           string             `db:"invalid_reason" json:"invalid_reason"`
+	RetentionExpiresAt      pgtype.Timestamptz `db:"retention_expires_at" json:"retention_expires_at"`
+	RetentionPolicyKey      string             `db:"retention_policy_key" json:"retention_policy_key"`
 }
 
 type LogInstanceEncounter struct {
@@ -2039,28 +2040,6 @@ type RegressionSnapshot struct {
 	PreviousSnapshotID uuid.NullUUID      `db:"previous_snapshot_id" json:"previous_snapshot_id"`
 }
 
-type RetentionPolicy struct {
-	ID           uuid.UUID          `db:"id" json:"id"`
-	ServerID     uuid.NullUUID      `db:"server_id" json:"server_id"`
-	RealmID      uuid.NullUUID      `db:"realm_id" json:"realm_id"`
-	Enabled      bool               `db:"enabled" json:"enabled"`
-	CreatedAt    pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	LastRunAt    pgtype.Timestamptz `db:"last_run_at" json:"last_run_at"`
-	TotalDeleted int64              `db:"total_deleted" json:"total_deleted"`
-	TotalKept    int64              `db:"total_kept" json:"total_kept"`
-}
-
-type RetentionRule struct {
-	ID          uuid.UUID          `db:"id" json:"id"`
-	PolicyID    uuid.UUID          `db:"policy_id" json:"policy_id"`
-	Priority    int32              `db:"priority" json:"priority"`
-	Action      string             `db:"action" json:"action"`
-	Conditions  []byte             `db:"conditions" json:"conditions"`
-	Description string             `db:"description" json:"description"`
-	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
-}
-
 type RiverJob struct {
 	ID           int64              `db:"id" json:"id"`
 	State        RiverJobState      `db:"state" json:"state"`
@@ -2330,7 +2309,6 @@ type User struct {
 	UpdatedAt              pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	DefaultDesktopLayoutID uuid.NullUUID      `db:"default_desktop_layout_id" json:"default_desktop_layout_id"`
 	DefaultMobileLayoutID  uuid.NullUUID      `db:"default_mobile_layout_id" json:"default_mobile_layout_id"`
-	RawLogRetentionHours   pgtype.Int4        `db:"raw_log_retention_hours" json:"raw_log_retention_hours"`
 }
 
 type UserActionBarSlot struct {
