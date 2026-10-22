@@ -13,7 +13,7 @@ import (
 
 const (
 	credentialVersion byte = 1
-	headerSize             = 4
+	headerSize        int  = 4
 )
 
 var credentialMagic = [2]byte{'C', 'C'}

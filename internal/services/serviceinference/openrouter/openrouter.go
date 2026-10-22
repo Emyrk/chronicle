@@ -107,7 +107,7 @@ func (c *Client) ListModels(ctx context.Context, credential []byte) ([]servicein
 	if err != nil {
 		return nil, fmt.Errorf("list OpenRouter models: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return nil, responseError("list OpenRouter models", response, credential)
 	}
@@ -189,7 +189,7 @@ func (c *Client) StreamChat(ctx context.Context, credential []byte, request serv
 		}
 		return fmt.Errorf("stream OpenRouter chat: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return responseError("stream OpenRouter chat", response, credential)
 	}
@@ -253,7 +253,7 @@ func (c *Client) ExchangeAuthorizationCode(ctx context.Context, code, codeVerifi
 	if err != nil {
 		return OAuthKey{}, fmt.Errorf("exchange OpenRouter OAuth code: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return OAuthKey{}, responseError("exchange OpenRouter OAuth code", response, []byte(code), []byte(codeVerifier))
 	}
@@ -264,7 +264,7 @@ func (c *Client) ExchangeAuthorizationCode(ctx context.Context, code, codeVerifi
 	if payload.Key == "" {
 		return OAuthKey{}, errors.New("OpenRouter OAuth exchange returned an empty key")
 	}
-	return OAuthKey{Key: payload.Key}, nil
+	return OAuthKey(payload), nil
 }
 
 func (c *Client) newRequest(ctx context.Context, method, path string, credential []byte, body io.Reader) (*http.Request, error) {

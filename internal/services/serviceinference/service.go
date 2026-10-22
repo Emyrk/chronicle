@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -122,15 +121,3 @@ func (s *Service) Options() serpent.OptionSet {
 
 func credentialAAD(userID, purpose string) []byte { return []byte(userID + ":" + purpose) }
 func hashSecret(value string) []byte              { sum := sha256.Sum256([]byte(value)); return sum[:] }
-func safeError(err error) string {
-	if err == nil {
-		return ""
-	}
-	text := err.Error()
-	if len(text) > 300 {
-		text = text[:300]
-	}
-	return text
-}
-
-var errDisabled = errors.New("inference is disabled")

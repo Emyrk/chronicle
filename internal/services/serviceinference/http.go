@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
@@ -360,15 +359,6 @@ func (s *Service) writeThread(w http.ResponseWriter, r *http.Request, t database
 }
 
 func writeJSONMessage(m Message) []byte { b, _ := json.Marshal(m); return b }
-func redirectURL(path, result string) string {
-	u, _ := url.Parse(path)
-	q := u.Query()
-	q.Set("inference_connection", result)
-	u.RawQuery = q.Encode()
-	return u.String()
-}
 func badRequest(w http.ResponseWriter, r *http.Request, message string) {
 	httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: message})
 }
-
-var _ = fmt.Sprintf
