@@ -464,13 +464,17 @@ local function render()
 end
 
 previous:SetScript("OnClick", function()
-  chapterIndex = chapterIndex == 1 and #chapters or chapterIndex - 1
-  render()
+  if chapterIndex > 1 then
+    chapterIndex = chapterIndex - 1
+    render()
+  end
 end)
 
 nextButton:SetScript("OnClick", function()
-  chapterIndex = chapterIndex == #chapters and 1 or chapterIndex + 1
-  render()
+  if chapterIndex < #chapters then
+    chapterIndex = chapterIndex + 1
+    render()
+  end
 end)
 
 mode:SetScript("OnClick", function()

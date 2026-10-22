@@ -35,6 +35,10 @@ describe("Onyxia guide package", () => {
     expect(scene.nodes.has("briefing-north")).toBe(true)
     expect(scene.nodes.get("guide-next")?.listeners).toContain("click")
 
+    runtime.event({ id: "guide-previous", event: "click" })
+    scene = applySceneBatch(scene, runtime.flush())
+    expect(scene.nodes.get("guide-title")?.props.text).toBe("Give every group a side")
+
     runtime.event({ id: "guide-next", event: "click" })
     scene = applySceneBatch(scene, runtime.flush())
     expect(scene.nodes.get("guide-title")?.props.text).toBe("Flanks are safe, front and tail are not")
@@ -46,6 +50,16 @@ describe("Onyxia guide package", () => {
     expect(scene.nodes.get("guide-mode")?.props.text).toBe("Showing: Danger")
     expect(scene.nodes.has("p1-wrong-stack")).toBe(true)
     expect(scene.nodes.has("p1-wrong-text")).toBe(true)
+
+    for (let index = 0; index < 3; index++) {
+      runtime.event({ id: "guide-next", event: "click" })
+      scene = applySceneBatch(scene, runtime.flush())
+    }
+    expect(scene.nodes.get("guide-title")?.props.text).toBe("Separate the hatchers, then burn")
+
+    runtime.event({ id: "guide-next", event: "click" })
+    scene = applySceneBatch(scene, runtime.flush())
+    expect(scene.nodes.get("guide-title")?.props.text).toBe("Separate the hatchers, then burn")
 
     runtime.stop()
     expect(runtime.stats().stopped).toBe(true)
