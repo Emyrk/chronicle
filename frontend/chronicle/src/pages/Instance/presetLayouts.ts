@@ -81,8 +81,8 @@ export function mapPresetRowsForViewport(viewportHeight: number): number {
 export function resizeMapPresetForViewport(layoutItems: readonly GridEditorItem[], viewportHeight: number): GridEditorItem[] {
   const mapRows = mapPresetRowsForViewport(viewportHeight);
   return layoutItems.map((item) => {
-    if (item.id === "panel-1") return item.h === mapRows ? item : { ...item, h: mapRows };
-    if (item.id === "strip-1") return item.y === mapRows ? item : { ...item, y: mapRows };
+    if (item.id === "panel-1") return item.h === mapRows && item.y === 1 ? item : { ...item, y: 1, h: mapRows };
+    if (item.id === "strip-1") return item.y === 0 ? item : { ...item, y: 0 };
     return item;
   });
 }
@@ -292,8 +292,8 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
     seamless: true,
     fit: true,
     layoutItems: [
-      { id: "panel-1", title: "Map", x: 0, y: 0, w: 12, h: 9, minW: 4 },
-      { id: "strip-1", title: "Replay", kind: "strip", stripType: "replay", orientation: "horizontal", x: 0, y: 9, w: 12, h: 1, minW: 6, minH: 1, maxH: 2 },
+      { id: "strip-1", title: "Replay", kind: "strip", stripType: "replay", orientation: "horizontal", x: 0, y: 0, w: 12, h: 1, minW: 6, minH: 1, maxH: 2 },
+      { id: "panel-1", title: "Map", x: 0, y: 1, w: 12, h: 9, minW: 4 },
     ],
     mobileVariant: {
       fit: false,
