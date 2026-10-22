@@ -64,6 +64,29 @@ export function isPanelPresetLayout(preset: PresetLayout): preset is PanelPreset
   return preset.kind === "panels";
 }
 
+const MAP_PRESET_MIN_ROWS = 4;
+const MAP_PRESET_MAX_ROWS = 9;
+
+/** Keep the Map preset and its replay strip above the fold on shorter screens. */
+export function mapPresetRowsForViewport(viewportHeight: number): number {
+  if (viewportHeight < 800) return MAP_PRESET_MIN_ROWS;
+  if (viewportHeight < 900) return 5;
+  if (viewportHeight < 1050) return 6;
+  if (viewportHeight < 1250) return 7;
+  if (viewportHeight < 1450) return 8;
+  return MAP_PRESET_MAX_ROWS;
+}
+
+/** Resize only the stable Map preset items, leaving custom layouts untouched. */
+export function resizeMapPresetForViewport(layoutItems: readonly GridEditorItem[], viewportHeight: number): GridEditorItem[] {
+  const mapRows = mapPresetRowsForViewport(viewportHeight);
+  return layoutItems.map((item) => {
+    if (item.id === "panel-1") return item.h === mapRows ? item : { ...item, h: mapRows };
+    if (item.id === "strip-1") return item.y === mapRows ? item : { ...item, y: mapRows };
+    return item;
+  });
+}
+
 // ── Shared timeline series config ───────────────────────────────────────────
 // All presets share the same 5-series timeline (Damage Done, Healing, Damage
 // Taken, Effective Healing, Friendly Fire) with different hidden series per
@@ -269,8 +292,8 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
     seamless: true,
     fit: true,
     layoutItems: [
-      { id: "panel-1", title: "Map", x: 0, y: 0, w: 12, h: 7, minW: 4 },
-      { id: "strip-1", title: "Replay", kind: "strip", stripType: "replay", orientation: "horizontal", x: 0, y: 7, w: 12, h: 1, minW: 6, minH: 1, maxH: 2 },
+      { id: "panel-1", title: "Map", x: 0, y: 0, w: 12, h: 9, minW: 4 },
+      { id: "strip-1", title: "Replay", kind: "strip", stripType: "replay", orientation: "horizontal", x: 0, y: 9, w: 12, h: 1, minW: 6, minH: 1, maxH: 2 },
     ],
     mobileVariant: {
       fit: false,

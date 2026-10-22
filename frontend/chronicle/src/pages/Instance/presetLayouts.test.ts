@@ -4,6 +4,8 @@ import {
   DEFAULT_PRESET_ID,
   getAvailablePresetLayouts,
   isPanelPresetLayout,
+  mapPresetRowsForViewport,
+  resizeMapPresetForViewport,
   PRESET_LAYOUTS,
   PRESET_LAYOUTS_BY_ID,
   presetLayoutById,
@@ -87,10 +89,30 @@ describe("Map preset", () => {
     }
 
     expect(desktop.fit).toBe(true);
-    expect(desktop.layoutItems[0]).toMatchObject({ id: "panel-1", h: 7 });
+    expect(desktop.layoutItems[0]).toMatchObject({ id: "panel-1", h: 9 });
     expect(mobile.fit).toBe(false);
     expect(mobile.layoutItems[0]).toMatchObject({ id: "panel-1", h: 4 });
     expect(mobile.layoutItems[1]).toMatchObject({ id: "strip-1", y: 4 });
+  });
+
+  it.each([
+    [720, 4],
+    [800, 5],
+    [900, 6],
+    [1080, 7],
+    [1300, 8],
+    [1600, 9],
+  ])("a %ipx-tall viewport uses %i map rows", (viewportHeight, rows) => {
+    expect(mapPresetRowsForViewport(viewportHeight)).toBe(rows);
+  });
+
+  it("moves the replay strip with the responsive map height", () => {
+    const preset = PRESET_LAYOUTS_BY_ID.map;
+    if (!isPanelPresetLayout(preset)) throw new Error("Map should be a panels preset");
+
+    const [map, strip] = resizeMapPresetForViewport(preset.layoutItems, 900);
+    expect(map).toMatchObject({ id: "panel-1", h: 6 });
+    expect(strip).toMatchObject({ id: "strip-1", y: 6 });
   });
 
   it("needs unit positions", () => {
