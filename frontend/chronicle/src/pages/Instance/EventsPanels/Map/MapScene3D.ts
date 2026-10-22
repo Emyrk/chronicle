@@ -208,7 +208,8 @@ const ORBIT_ZOOM_SPEED = 0.9;
 const MOBILE_ORBIT_DAMPING = 0.22;
 const MOBILE_ORBIT_ROTATE_SPEED = 0.35;
 const MOBILE_ORBIT_ZOOM_SPEED = 0.5;
-const MOBILE_ORBIT_PAN_SPEED = 0.35;
+// A short two-finger swipe should cover useful ground on a small screen.
+const MOBILE_ORBIT_PAN_SPEED = 1;
 const ORBIT_PAN_SPEED = 0.8;
 // Keyboard camera (mapControls): pan as a fraction of the camera distance per
 // second, so it feels the same zoomed in or out; rotate in radians per second;
