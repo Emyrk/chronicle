@@ -65,10 +65,10 @@ describe("inference selection and OAuth", () => {
   });
 
   it("parses success and error callback signals", () => {
-    expect(parseInferenceOAuthResult(new URLSearchParams("inference=connected"))?.type).toBe("success");
-    expect(parseInferenceOAuthResult(new URLSearchParams("inference_error=denied"))).toMatchObject({
+    expect(parseInferenceOAuthResult(new URLSearchParams("inference_connection=success"))?.type).toBe("success");
+    expect(parseInferenceOAuthResult(new URLSearchParams("inference_connection=error"))).toMatchObject({
       type: "error",
-      message: "denied",
+      message: "OpenRouter could not be connected.",
     });
   });
 

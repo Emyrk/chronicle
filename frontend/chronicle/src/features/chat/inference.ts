@@ -74,20 +74,19 @@ export interface InferenceOAuthResult {
 }
 
 export function parseInferenceOAuthResult(searchParams: URLSearchParams): InferenceOAuthResult | null {
-  const status = searchParams.get("inference") ?? searchParams.get("inference_status");
-  const error = searchParams.get("inference_error");
-  if (error || status === "error") {
+  const status = searchParams.get("inference_connection");
+  if (status === "error") {
     return {
       type: "error",
-      message: error || "OpenRouter could not be connected.",
-      keys: ["inference", "inference_status", "inference_error"],
+      message: "OpenRouter could not be connected.",
+      keys: ["inference_connection"],
     };
   }
-  if (status === "connected" || status === "success") {
+  if (status === "success") {
     return {
       type: "success",
       message: "OpenRouter connected successfully.",
-      keys: ["inference", "inference_status", "inference_error"],
+      keys: ["inference_connection"],
     };
   }
   return null;
