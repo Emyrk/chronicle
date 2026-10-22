@@ -3,7 +3,7 @@ export { GUIDE_CAPABILITIES, validateGuideManifest } from "./manifest"
 export { GuidePackageError } from "./errors"
 export { loadGuidePackage, loadGuidePackageSync } from "./loader"
 export type { GuidePackageErrorCode } from "./errors"
-export type { GuideCapability, GuideManifestV1 } from "./manifest"
+export type { GuideCapability, GuideEventStream, GuideEventStreamType, GuideManifestV1 } from "./manifest"
 export type {
   GuidePackageBytes,
   GuidePackageFiles,

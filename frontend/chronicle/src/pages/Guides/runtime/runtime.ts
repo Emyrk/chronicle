@@ -307,7 +307,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
       }); lua.lua_setglobal(L, to_luastring("C_Timer"))
     }
     let chapter = ""
-    lua.lua_createtable(L, 0, 2); registerFunction(L, "SetChapter", (state) => { chapter = stringAt(state, lua.lua_istable(state, 1) ? 2 : 1, "chapter"); return 0 }); registerFunction(L, "GetChapter", (state) => { pushString(state, chapter || " "); return 1 }); lua.lua_setglobal(L, to_luastring("Guide"))
+    lua.lua_createtable(L, 0, 2); registerFunction(L, "SetChapter", (state) => { chapter = stringAt(state, lua.lua_istable(state, 1) ? 2 : 1, "chapter"); addOperation({ op: "chapter", chapter }); return 0 }); registerFunction(L, "GetChapter", (state) => { pushString(state, chapter || " "); return 1 }); lua.lua_setglobal(L, to_luastring("Guide"))
     pushFunction(L, requireModule); lua.lua_setglobal(L, to_luastring("require"))
   }
   const pushArgument = (state: LuaState, value: unknown) => {

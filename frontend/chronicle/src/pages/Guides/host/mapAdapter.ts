@@ -8,7 +8,9 @@ import type {
 } from "@/pages/Technical/mapGallery";
 import { dungeonMeshLiquid, dungeonMeshUrl, placeableDungeonMesh } from "../../Instance/EventsPanels/Map/dungeonMeshes";
 import type { MapPositionSample } from "../../Instance/EventsPanels/Map/map.processor";
-import { dungeonMapPoint, renderedDungeonMapPoint, zoneMapPoint } from "../../Instance/EventsPanels/Map/mapModel";
+import { dungeonMapPoint, renderedDungeonMapPoint, replayPositionAt, zoneMapPoint } from "../../Instance/EventsPanels/Map/mapModel";
+import type { MapEncounterPositions } from "../../Instance/EventsPanels/Map/map.processor";
+import type { EncounterEffects } from "../../Instance/EventsPanels/Map/replayEffects";
 import type { PlanItem, PlanMarkerIcon, PlanPoint } from "../../Instance/EventsPanels/Map/plan/mapPlan";
 import type { MapSceneMarker } from "../../Instance/EventsPanels/Map/useMapScene";
 import type { RetainedScene, SceneNode } from "../protocol";
@@ -182,6 +184,7 @@ export interface GuideMapScene {
   markers: MapSceneMarker[];
   planItems: PlanItem[];
   bossGuids: ReadonlySet<string>;
+  effects?: EncounterEffects;
 }
 
 function markerKind(role: string): MapSceneMarker["kind"] {
@@ -195,6 +198,8 @@ export function adaptGuideMapScene(
   map: GuideResolvedMap,
   mapId: number,
   assets: ReadonlyMap<string, string> = new Map(),
+  eventEncounter: MapEncounterPositions | null = null,
+  cursorMs: number | null = null,
 ): GuideMapScene {
   const markers: MapSceneMarker[] = [];
   const planItems: PlanItem[] = [];
@@ -209,7 +214,7 @@ export function adaptGuideMapScene(
       const world = map.normalizedToWorld(x, y);
       const role = stringProp(node, "role", "player").toLowerCase();
       if (role === "boss") bossGuids.add(node.id);
-      const sample: MapPositionSample = {
+      const staticSample: MapPositionSample = {
         timestampMs: 0,
         x: world.x,
         y: world.y,
@@ -217,11 +222,14 @@ export function adaptGuideMapScene(
         mapId,
         facing: numberProp(node, "facing", 0),
       };
+      const positions = eventEncounter?.positionsByUnit.get(node.id) ?? [staticSample];
+      const sample = cursorMs === null ? positions.at(-1)! : replayPositionAt(positions, cursorMs, true) ?? positions[0];
+      const point = map.projectSample(sample) ?? { leftPercent: x * 100, topPercent: y * 100 };
       markers.push({
         guid: node.id,
         sample,
-        positions: [sample],
-        point: { leftPercent: x * 100, topPercent: y * 100 },
+        positions,
+        point,
         color,
         kind: markerKind(role),
         muted: false,
@@ -260,5 +268,5 @@ export function adaptGuideMapScene(
       else planItems.push({ id: node.id, kind: "pen", points: node.kind === "polygon" && points.length > 0 ? [...points, points[0]] : points, color });
     }
   }
-  return { markers, planItems, bossGuids };
+  return { markers, planItems, bossGuids, ...(eventEncounter ? { effects: eventEncounter.effects } : {}) };
 }

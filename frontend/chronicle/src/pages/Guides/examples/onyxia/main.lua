@@ -41,6 +41,14 @@ local ARENA_CENTRE = {x = -24, y = -214}
 
 local chapters = {
   {
+    id = "entrance",
+    eyebrow = "REAL RAID MOVEMENT · 18 SECONDS",
+    title = "Watch the raid enter the room",
+    body = "This opening uses Chronicle unit-position protobuf events sampled from a real Onyxia pull. Play, pause, or scrub the timeline to inspect every route.",
+    correct = "Use the real paths as the starting point, then tune entrance.json when a chip crosses terrain or finishes in the wrong assignment.",
+    wrong = "The incorrect view is reserved for comparing an unsafe entrance once its paths have been authored.",
+  },
+  {
     id = "briefing",
     eyebrow = "BEFORE THE PULL",
     title = "Give every group a side",
@@ -94,8 +102,6 @@ local roleColors = {
 local chapterIndex = 1
 local showingCorrect = true
 local scene = {}
-local movingUnits = {}
-local animationGeneration = 0
 
 local function color(object, rgba)
   object:SetColor(rgba[1], rgba[2], rgba[3], rgba[4])
@@ -111,10 +117,8 @@ local function remember(object)
 end
 
 local function clearScene()
-  animationGeneration = animationGeneration + 1
   for _, object in ipairs(scene) do object:Destroy() end
   scene = {}
-  movingUnits = {}
 end
 
 local function normalizedFacing(radians)
@@ -127,13 +131,7 @@ end
 
 local function unit(id, label, role, at, facing, entry)
   local marker = remember(Map:CreateUnitMarker(id))
-  local targetX, targetY = mapPoint(at)
-  local direction = #movingUnits % 2 == 0 and -1 or 1
-  local distance = role == "boss" and 0.025 or 0.014
-  local startX = targetX + distance * direction
-  local startY = targetY + distance * 0.65
-  marker:SetMapPosition(targetX, targetY)
-  table.insert(movingUnits, {marker = marker, fromX = startX, fromY = startY, toX = targetX, toY = targetY})
+  marker:SetMapPosition(mapPoint(at))
   marker:SetSize(role == "boss" and 32 or 19, role == "boss" and 32 or 19)
   marker:SetLabel(label)
   marker:SetRole(role)
@@ -141,28 +139,6 @@ local function unit(id, label, role, at, facing, entry)
   if entry then marker:SetCreatureID(entry) end
   color(marker, roleColors[role])
   return marker
-end
-
-local function animateUnitsIntoPlace()
-  local generation = animationGeneration
-  local step = 0
-  local steps = 8
-
-  local function tick()
-    if generation ~= animationGeneration then return end
-    step = step + 1
-    local amount = step / steps
-    local eased = 1 - (1 - amount) ^ 3
-    for _, movement in ipairs(movingUnits) do
-      movement.marker:SetMapPosition(
-        movement.fromX + (movement.toX - movement.fromX) * eased,
-        movement.fromY + (movement.toY - movement.fromY) * eased
-      )
-    end
-    if step < steps then C_Timer.After(0.045, tick) end
-  end
-
-  C_Timer.After(0.03, tick)
 end
 
 local function boss(at, facing)
@@ -321,6 +297,17 @@ local function landingWrong()
   roleArc("raid-tail", "melee", 10, point(-12, -171), 13, -0.4, 0.4)
   roleArc("raid-front", "ranged", 10, point(-30, -171), 16, math.pi - 0.4, math.pi + 0.4)
   roleLine("healers", "healer", 5, point(-44, -163), point(-44, -179))
+end
+
+local function renderEntrance()
+  boss()
+  local counts = {tank = 2, melee = 10, ranged = 9, healer = 8}
+  for _, role in ipairs({"tank", "melee", "ranged", "healer"}) do
+    for index = 1, counts[role] do
+      unit(string.format("%s-%02d", role, index), string.format("%s %d", role:sub(1, 1):upper() .. role:sub(2), index), role, ENTRANCE)
+    end
+  end
+  mapText("entrance-label", "REAL PULL · SCRUB THE TIMELINE", point(-90, -171), GOLD)
 end
 
 local function renderBriefing(correct)
@@ -491,13 +478,13 @@ local function render()
   incorrectButton:SetBackgroundColor(showingCorrect and 0.09 or 0.34, showingCorrect and 0.09 or 0.07, showingCorrect and 0.11 or 0.08, 0.96)
   incorrectButton:SetColor(showingCorrect and 0.64 or 1.00, showingCorrect and 0.58 or 0.72, showingCorrect and 0.58 or 0.72, 1)
 
-  if chapter.id == "briefing" then renderBriefing(showingCorrect)
+  if chapter.id == "entrance" then renderEntrance()
+  elseif chapter.id == "briefing" then renderBriefing(showingCorrect)
   elseif chapter.id == "phase-one" then renderPhaseOne(showingCorrect)
   elseif chapter.id == "air-phase" then renderAir(showingCorrect)
   elseif chapter.id == "deep-breath" then renderBreath(showingCorrect)
   else renderLanding(showingCorrect) end
 
-  animateUnitsIntoPlace()
   local cameraX, cameraY = mapPoint(ARENA_CENTRE)
   Map:SetCamera(cameraX, cameraY, chapter.id == "deep-breath" and 1.85 or 1.65)
   callout:SetAlpha(1)

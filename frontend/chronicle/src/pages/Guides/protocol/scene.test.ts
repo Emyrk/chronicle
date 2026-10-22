@@ -26,12 +26,14 @@ describe("retained guide scene reducer", () => {
       { op: "set", id: "label", props: { text: "updated" } },
       { op: "listen", id: "label", event: "click", enabled: true },
       { op: "camera", x: 0.25, y: 0.75, zoom: 2 },
+      { op: "chapter", chapter: "phase-one" },
     ])
 
     expect(initial.nodes.size).toBe(0)
     expect(next.nodes.get("label")?.props.text).toBe("updated")
     expect(next.nodes.get("label")?.listeners).toEqual(["click"])
     expect(next.camera).toEqual({ x: 0.25, y: 0.75, zoom: 2 })
+    expect(next.chapter).toBe("phase-one")
 
     const destroyed = applySceneBatch(next, [{ op: "destroy", id: "panel" }])
     expect(destroyed.nodes.has("panel")).toBe(false)
@@ -81,6 +83,7 @@ describe("retained guide scene reducer", () => {
       { op: "create", id: "face", kind: "cone", parentId: null, props: { x: 0.5, y: 0.5, radius: 0.2, facing: Math.PI * 2 + 0.01, angle: 1, color: "#fff", width: 1 } },
       { op: "create", id: "points", kind: "polygon", parentId: null, props: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], color: "#fff", width: 1 } },
       { op: "create", id: "anchor", kind: "frame", parentId: UI_ROOT_ID, props: { x: 0, y: 0, width: 1, height: 1, anchor: "near" } },
+      { op: "chapter", chapter: "" },
     ]
     for (const operation of cases) expect(() => applySceneBatch(createInitialScene(), [operation])).toThrow(SceneValidationError)
   })

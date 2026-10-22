@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import { loadGuidePackageSync } from "../../package"
 import { applySceneBatch, createInitialScene } from "../../protocol"
+import { loadGuideEventData } from "../../host/eventStreams"
 import { createGuideRuntime } from "../../runtime"
 
 function loadOnyxia() {
@@ -16,45 +17,40 @@ describe("Onyxia guide package", () => {
     const guide = loadOnyxia()
     expect(guide.manifest.id).toBe("chronicle.onyxia")
     expect(guide.manifest.map_id).toBe(249)
+    expect(guide.manifest.event_streams).toEqual([{ type: "unit_position", path: "events/unit_position.pb" }])
+    const eventData = loadGuideEventData(guide)
+    const entrance = eventData.result.encounters.get("entrance")
+    expect(entrance?.positionsByUnit.size).toBe(30)
+    expect(entrance?.endMs).toBe(18_000)
+    expect(entrance?.positionsByUnit.get("tank-01")).toHaveLength(19)
 
     const sources = Object.fromEntries(
       guide.paths.filter((path) => path.endsWith(".lua")).map((path) => [path, guide.readText(path)]),
     )
-    const scheduledTimers: number[] = []
-    const runtime = createGuideRuntime({
-      entrypoint: guide.manifest.entrypoint,
-      sources,
-      scheduleTimer: (id) => scheduledTimers.push(id),
-    })
+    const runtime = createGuideRuntime({ entrypoint: guide.manifest.entrypoint, sources })
     let scene = createInitialScene()
     scene = applySceneBatch(scene, runtime.start())
 
-    expect(scene.nodes.get("guide-title")?.props.text).toBe("Give every group a side")
+    expect(scene.chapter).toBe("entrance")
+    expect(scene.nodes.get("guide-title")?.props.text).toBe("Watch the raid enter the room")
     expect(scene.nodes.get("onyxia")?.kind).toBe("unit")
     expect(scene.nodes.get("onyxia")?.props.entry).toBe(10184)
-    expect(scene.nodes.get("onyxia")?.props.x).toBeCloseTo(0.768218, 5)
-    expect(scene.nodes.get("onyxia")?.props.y).toBeCloseTo(0.251255, 5)
-    expect(scene.nodes.get("main-tank")?.props.x).toBeCloseTo(0.768218, 5)
-    expect(scene.nodes.get("main-tank")?.props.y).toBeCloseTo(0.096576, 5)
-    let timerIndex = 0
-    runtime.timer(scheduledTimers[timerIndex++])
-    scene = applySceneBatch(scene, runtime.flush())
-    expect(scene.nodes.get("onyxia")?.props.x).not.toBeCloseTo(0.768218, 5)
-    while (timerIndex < scheduledTimers.length) {
-      runtime.timer(scheduledTimers[timerIndex++])
-      scene = applySceneBatch(scene, runtime.flush())
-    }
-    expect(scene.nodes.get("onyxia")?.props.x).toBeCloseTo(0.768218, 5)
-
-    expect(scene.nodes.has("off-tank")).toBe(true)
-    expect(scene.nodes.has("briefing-north")).toBe(true)
+    expect(scene.nodes.has("tank-01")).toBe(true)
+    expect(scene.nodes.has("melee-10")).toBe(true)
+    expect(scene.nodes.has("ranged-09")).toBe(true)
+    expect(scene.nodes.has("healer-08")).toBe(true)
     expect(scene.nodes.get("guide-next")?.listeners).toContain("click")
     expect(scene.nodes.get("guide-correct")?.props.text).toBe("Correct")
     expect(scene.nodes.get("guide-incorrect")?.props.text).toBe("Incorrect")
 
     runtime.event({ id: "guide-previous", event: "click" })
     scene = applySceneBatch(scene, runtime.flush())
+    expect(scene.nodes.get("guide-title")?.props.text).toBe("Watch the raid enter the room")
+
+    runtime.event({ id: "guide-next", event: "click" })
+    scene = applySceneBatch(scene, runtime.flush())
     expect(scene.nodes.get("guide-title")?.props.text).toBe("Give every group a side")
+    expect(scene.nodes.has("briefing-north")).toBe(true)
 
     runtime.event({ id: "guide-next", event: "click" })
     scene = applySceneBatch(scene, runtime.flush())
@@ -93,7 +89,7 @@ describe("Onyxia guide package", () => {
       return scene.nodes.get("guide-title")?.props.text
     }
 
-    expect(start()).toBe("Give every group a side")
-    expect(start()).toBe("Give every group a side")
+    expect(start()).toBe("Watch the raid enter the room")
+    expect(start()).toBe("Watch the raid enter the room")
   })
 })

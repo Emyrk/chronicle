@@ -4,6 +4,7 @@ import type { DungeonMeshRequest } from "../../Instance/EventsPanels/Map/MapScen
 import type { MapPositionSample } from "../../Instance/EventsPanels/Map/map.processor";
 import type { MapPoint } from "../../Instance/EventsPanels/Map/mapModel";
 import type { MapViewRequest } from "../../Instance/EventsPanels/Map/MapView2D";
+import type { EncounterEffects } from "../../Instance/EventsPanels/Map/replayEffects";
 import type { PlanItem } from "../../Instance/EventsPanels/Map/plan/mapPlan";
 import type { MapSceneGround, MapSceneMarker } from "../../Instance/EventsPanels/Map/useMapScene";
 
@@ -15,6 +16,7 @@ export interface GuideManifestLike {
   mapId?: number;
   capabilities: readonly string[];
   assets: readonly string[];
+  event_streams?: readonly { type: "unit_position" | "spell_start" | "spell_go"; path: string }[];
   description?: string;
 }
 
@@ -65,9 +67,13 @@ export interface GuideMapRenderProps {
   ground: MapSceneGround;
   markers: MapSceneMarker[];
   projectSample: (sample: MapPositionSample) => MapPoint | null;
+  cursorMs: number;
+  playing: boolean;
+  playbackSpeed: number;
   view: MapViewRequest;
   planItems: readonly PlanItem[];
   dungeonMesh: DungeonMeshRequest | null;
+  effects?: EncounterEffects;
   miniatureUrls?: ReadonlyMap<number, string>;
   bossGuids?: ReadonlySet<string>;
   walking: boolean;

@@ -25,7 +25,7 @@ const validManifest = {
   encounters: ["Onyxia"],
 }
 
-function validEntries(overrides: Partial<typeof validManifest> = {}): TestZipEntry[] {
+function validEntries(overrides: Record<string, unknown> = {}): TestZipEntry[] {
   return [
     { name: "guide.json", data: jsonEntry({ ...validManifest, ...overrides }) },
     { name: "src/main.lua", data: "return require('src.helper')" },
@@ -55,6 +55,23 @@ describe("guide manifest", () => {
     expect(Object.isFrozen(manifest.assets)).toBe(true)
   })
 
+  it("validates, normalizes, and freezes declared event streams", () => {
+    const manifest = validateGuideManifest({
+      ...validManifest,
+      event_streams: [
+        { type: "unit_position", path: "events/positions.pb" },
+        { type: "spell_start", path: "events/casts.pb" },
+      ],
+    })
+
+    expect(manifest.event_streams).toEqual([
+      { type: "unit_position", path: "events/positions.pb" },
+      { type: "spell_start", path: "events/casts.pb" },
+    ])
+    expect(Object.isFrozen(manifest.event_streams)).toBe(true)
+    expect(Object.isFrozen(manifest.event_streams?.[0])).toBe(true)
+  })
+
   it.each([
     [{ ...validManifest, manifest_version: 2 }, "MANIFEST_VERSION"],
     [{ ...validManifest, api_version: 2 }, "API_VERSION"],
@@ -68,6 +85,10 @@ describe("guide manifest", () => {
     [{ ...validManifest, capabilities: ["network"] }, "CAPABILITY_UNSUPPORTED"],
     [{ ...validManifest, capabilities: ["ui", "ui"] }, "MANIFEST_INVALID"],
     [{ ...validManifest, assets: ["code.lua"] }, "ASSET_INVALID"],
+    [{ ...validManifest, event_streams: [{ type: "damage", path: "events/damage.pb" }] }, "MANIFEST_INVALID"],
+    [{ ...validManifest, event_streams: [{ type: "unit_position", path: "events/positions.json" }] }, "MANIFEST_INVALID"],
+    [{ ...validManifest, event_streams: [{ type: "unit_position", path: "events/a.pb" }, { type: "unit_position", path: "events/b.pb" }] }, "MANIFEST_INVALID"],
+    [{ ...validManifest, event_streams: [{ type: "unit_position", path: "events/same.pb" }, { type: "spell_go", path: "events/same.pb" }] }, "MANIFEST_INVALID"],
     [{ ...validManifest, encounters: [""] }, "MANIFEST_INVALID"],
   ])("rejects an invalid manifest", (manifest, code) => {
     expectPackageError(() => validateGuideManifest(manifest), code)
@@ -114,6 +135,21 @@ describe("guide ZIP loading", () => {
     expectPackageError(
       () => loadGuidePackageSync(buildTestZip(validEntries({ entrypoint: "missing.lua" }))),
       "ENTRYPOINT_MISSING",
+    )
+  })
+
+  it("loads declared protobuf event streams and requires their files", () => {
+    const eventStreams = [{ type: "unit_position", path: "events/positions.pb" }]
+    const entries = validEntries({ event_streams: eventStreams })
+    entries.push({ name: "events/positions.pb", data: new Uint8Array([1, 2, 3]) })
+
+    const guidePackage = loadGuidePackageSync(buildTestZip(entries))
+    expect(guidePackage.manifest.event_streams).toEqual(eventStreams)
+    expect(guidePackage.read("events/positions.pb")).toEqual(new Uint8Array([1, 2, 3]))
+
+    expectPackageError(
+      () => loadGuidePackageSync(buildTestZip(validEntries({ event_streams: eventStreams }))),
+      "ASSET_MISSING",
     )
   })
 

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Expand, Footprints, LogOut, Maximize2, Minimize2, Pause, Play, RefreshCw, TriangleAlert } from "lucide-react";
+import { Copy, Crosshair, Expand, Footprints, LogOut, Maximize2, Minimize2, Pause, Play, RefreshCw, TriangleAlert } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -16,6 +16,7 @@ import MapView3D from "../../Instance/EventsPanels/Map/MapView3D";
 import { clampViewport } from "../../Instance/EventsPanels/Map/mapModel";
 import { applySceneBatch, createInitialScene, UI_ROOT_ID, type RetainedScene, type SceneNode, type Viewport } from "../protocol";
 import { createAssetUrlRegistry, guideHostReducer, INITIAL_GUIDE_HOST_STATE, type GuideHostAction, type GuideHostState } from "./lifecycle";
+import { loadGuideEventData } from "./eventStreams";
 import { adaptGuideMapScene, defaultGuideMapResolver } from "./mapAdapter";
 import type {
   GuideMapRenderer,
@@ -35,6 +36,7 @@ export interface GuideHostProps {
   onExit(): void;
   mapResolver?: GuideMapResolver;
   MapRenderer?: GuideMapRenderer;
+  authoring?: boolean;
   className?: string;
 }
 
@@ -44,12 +46,13 @@ function DefaultGuideMapRenderer(props: GuideMapRenderProps) {
       ground={props.ground}
       markers={props.markers}
       projectSample={props.projectSample}
-      cursorMs={0}
-      playing={false}
-      playbackSpeed={1}
+      cursorMs={props.cursorMs}
+      playing={props.playing}
+      playbackSpeed={props.playbackSpeed}
       view={props.view}
       planItems={props.planItems}
       dungeonMesh={props.dungeonMesh}
+      effects={props.effects}
       miniatureUrls={props.miniatureUrls}
       bossGuids={props.bossGuids}
       walking={props.walking}
@@ -262,6 +265,93 @@ export function TrustedGuideControls({
   );
 }
 
+interface GuidePlaybackControlsProps {
+  startMs: number;
+  endMs: number;
+  cursorMs: number;
+  playing: boolean;
+  speed: number;
+  onCursor(cursorMs: number): void;
+  onPlaying(playing: boolean): void;
+  onSpeed(speed: number): void;
+}
+
+function GuidePlaybackControls({ startMs, endMs, cursorMs, playing, speed, onCursor, onPlaying, onSpeed }: GuidePlaybackControlsProps) {
+  const elapsed = Math.max(0, cursorMs - startMs);
+  const duration = Math.max(1, endMs - startMs);
+  return (
+    <div data-guide-playback className="pointer-events-auto absolute bottom-4 right-4 z-[850] flex w-[min(34rem,calc(100%-2rem))] items-center gap-2 rounded-xl border border-border bg-card/95 p-2 text-card-foreground shadow-2xl backdrop-blur-xl">
+      <button type="button" onClick={() => onPlaying(!playing)} className="rounded-md border border-border bg-secondary p-2 hover:bg-accent" aria-label={playing ? "Pause replay" : "Play replay"}>
+        {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
+      </button>
+      <button type="button" onClick={() => { onCursor(startMs); onPlaying(true); }} className="rounded-md border border-border bg-secondary p-2 hover:bg-accent" aria-label="Replay chapter">
+        <RefreshCw className="size-4" />
+      </button>
+      <input
+        aria-label="Guide timeline"
+        type="range"
+        min={startMs}
+        max={endMs}
+        step={25}
+        value={Math.min(endMs, Math.max(startMs, cursorMs))}
+        onChange={(event) => { onPlaying(false); onCursor(Number(event.currentTarget.value)); }}
+        className="min-w-0 flex-1 accent-amber-500"
+      />
+      <span className="w-20 text-right font-mono text-[11px] text-muted-foreground">{(elapsed / 1000).toFixed(1)} / {(duration / 1000).toFixed(1)}s</span>
+      <select aria-label="Playback speed" value={speed} onChange={(event) => onSpeed(Number(event.currentTarget.value))} className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs">
+        {[0.5, 1, 2].map((value) => <option key={value} value={value}>{value}×</option>)}
+      </select>
+    </div>
+  );
+}
+
+function GuideAuthoringOverlay({
+  markers,
+  unitId,
+  sample,
+  elapsedMs,
+  onUnit,
+}: {
+  markers: readonly { guid: string; name: string }[];
+  unitId: string | null;
+  sample: { x: number; y: number; z?: number; facing?: number } | null;
+  elapsedMs: number;
+  onUnit(unitId: string): void;
+}) {
+  const payload = unitId && sample ? JSON.stringify({
+    unit_id: unitId,
+    t_ms: Math.round(elapsedMs),
+    x: Number(sample.x.toFixed(3)),
+    y: Number(sample.y.toFixed(3)),
+    ...(sample.z === undefined ? {} : { z: Number(sample.z.toFixed(3)) }),
+    ...(sample.facing === undefined ? {} : { facing: Number(sample.facing.toFixed(5)) }),
+  }, null, 2) : "Select a raid chip to inspect its world position.";
+  return (
+    <div data-guide-authoring className="pointer-events-auto absolute bottom-20 right-4 z-[860] w-72 rounded-xl border border-cyan-400/30 bg-slate-950/95 p-3 text-slate-100 shadow-2xl backdrop-blur-xl">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300"><Crosshair className="size-4" />Coordinate authoring</div>
+      <div className="styled-scrollbar mt-2 flex max-h-24 flex-wrap gap-1 overflow-auto" aria-label="Raid units">
+        {markers.map((marker) => (
+          <button
+            key={marker.guid}
+            type="button"
+            onClick={() => onUnit(marker.guid)}
+            aria-pressed={marker.guid === unitId}
+            className={`rounded-full border px-2 py-1 text-[10px] font-semibold transition ${marker.guid === unitId ? "border-cyan-300 bg-cyan-500/25 text-cyan-100" : "border-slate-700 bg-slate-900 text-slate-300 hover:border-cyan-500/60 hover:text-cyan-200"}`}
+          >
+            {marker.name}
+          </button>
+        ))}
+      </div>
+      <pre className="styled-scrollbar mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-black/40 p-2 font-mono text-[11px] text-slate-300">{payload}</pre>
+      {unitId && sample && (
+        <button type="button" onClick={() => void navigator.clipboard?.writeText(payload)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-cyan-400/25 bg-cyan-950/60 px-3 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-900/70">
+          <Copy className="size-3.5" />Copy sample
+        </button>
+      )}
+    </div>
+  );
+}
+
 function viewportOf(element: HTMLElement | null): Viewport {
   return { width: Math.max(1, Math.round(element?.clientWidth ?? 1)), height: Math.max(1, Math.round(element?.clientHeight ?? 1)) };
 }
@@ -294,6 +384,7 @@ export function GuideHost({
   onExit,
   mapResolver = defaultGuideMapResolver,
   MapRenderer = DefaultGuideMapRenderer,
+  authoring = false,
   className = "",
 }: GuideHostProps) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -308,10 +399,23 @@ export function GuideHost({
   const [restartKey, setRestartKey] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
   const [walking, setWalking] = useState(false);
+  const [selectedAuthoringUnit, setSelectedAuthoringUnit] = useState<string | null>(null);
   const [mapUnavailableRun, setMapUnavailableRun] = useState<number | null>(null);
   const { lifecycle: state, scene, assets } = model;
   const mapUnavailable = mapUnavailableRun === restartKey;
   const mapId = guide.manifest.map_id ?? guide.manifest.mapId ?? null;
+
+  const eventDataState = useMemo(() => {
+    try {
+      return { data: loadGuideEventData(guide), error: null };
+    } catch (error) {
+      return { data: null, error: error instanceof Error ? error : new Error(String(error)) };
+    }
+  }, [guide]);
+  const activeEventEncounter = scene.chapter ? eventDataState.data?.result.encounters.get(scene.chapter) ?? null : null;
+  const [timelineCursorMs, setTimelineCursorMs] = useState(0);
+  const [timelinePlaying, setTimelinePlaying] = useState(true);
+  const [timelineSpeed, setTimelineSpeed] = useState(1);
 
   const mapQuery = useQuery({
     queryKey: ["guide-map", mapId, iconBaseUrl],
@@ -328,6 +432,30 @@ export function GuideHost({
   });
 
   useEffect(() => {
+    if (!activeEventEncounter || !timelinePlaying) return;
+    let last = performance.now();
+    const timer = window.setInterval(() => {
+      const now = performance.now();
+      const elapsed = (now - last) * timelineSpeed;
+      last = now;
+      setTimelineCursorMs((cursor) => {
+        const next = cursor + elapsed;
+        if (next >= activeEventEncounter.endMs) {
+          window.clearInterval(timer);
+          setTimelinePlaying(false);
+          return activeEventEncounter.endMs;
+        }
+        return next;
+      });
+    }, 50);
+    return () => window.clearInterval(timer);
+  }, [activeEventEncounter, timelinePlaying, timelineSpeed]);
+
+  useEffect(() => {
+    if (eventDataState.error) {
+      dispatch({ type: "error", error: eventDataState.error });
+      return;
+    }
     let active = true;
     let controller: GuideRuntimeControllerLike | null = null;
     sceneRef.current = createInitialScene();
@@ -343,8 +471,18 @@ export function GuideHost({
         onBatch: (operations) => {
           if (!active) return;
           try {
+            const previousChapter = sceneRef.current.chapter;
             const next = applySceneBatch(sceneRef.current, operations);
             sceneRef.current = next;
+            if (next.chapter !== previousChapter) {
+              const encounter = next.chapter ? eventDataState.data?.result.encounters.get(next.chapter) : null;
+              if (encounter) {
+                setTimelineCursorMs(encounter.startMs);
+                setTimelinePlaying(true);
+              } else {
+                setTimelinePlaying(false);
+              }
+            }
             dispatch({ type: "scene", scene: next });
           } catch (error) {
             const failure = error instanceof Error ? error : new Error(String(error));
@@ -376,7 +514,7 @@ export function GuideHost({
       registry.revoke();
       if (assetRegistryRef.current === registry) assetRegistryRef.current = null;
     };
-  }, [guide, restartKey, runtimeFactory]);
+  }, [eventDataState.data, eventDataState.error, guide, restartKey, runtimeFactory]);
 
   useEffect(() => {
     const element = hostRef.current;
@@ -437,14 +575,17 @@ export function GuideHost({
   }, []);
 
   const handleUnitClick = useCallback((nodeId: string) => {
+    if (authoring) setSelectedAuthoringUnit(nodeId);
     const node = sceneRef.current.nodes.get(nodeId);
-    if (!node?.listeners.includes("click")) return;
-    runtimeRef.current?.event({ nodeId, event: "click" });
-  }, []);
+    if (node?.listeners.includes("click")) runtimeRef.current?.event({ nodeId, event: "click" });
+  }, [authoring]);
 
   const canWalk = Boolean(mapQuery.data?.dungeonMesh && !mapUnavailable);
 
-  const mapScene = useMemo(() => mapId !== null && mapQuery.data ? adaptGuideMapScene(scene, mapQuery.data, mapId, assets) : null, [assets, mapId, mapQuery.data, scene]);
+  const mapScene = useMemo(() => mapId !== null && mapQuery.data
+    ? adaptGuideMapScene(scene, mapQuery.data, mapId, assets, activeEventEncounter, activeEventEncounter ? timelineCursorMs : null)
+    : null, [activeEventEncounter, assets, mapId, mapQuery.data, scene, timelineCursorMs]);
+  const selectedAuthoringMarker = selectedAuthoringUnit ? mapScene?.markers.find((marker) => marker.guid === selectedAuthoringUnit) ?? null : null;
   const view = useMemo(() => ({
     viewport: clampViewport({ centerX: scene.camera.x, centerY: scene.camera.y, zoom: scene.camera.zoom }),
     key: `${scene.camera.x}:${scene.camera.y}:${scene.camera.zoom}`,
@@ -478,12 +619,16 @@ export function GuideHost({
             <div className="grid size-full place-items-center px-6 text-center text-sm text-amber-200"><TriangleAlert className="mb-2 size-6" />WebGL is unavailable for this map.</div>
           ) : mapScene ? (
             <MapRenderer
+              cursorMs={activeEventEncounter ? timelineCursorMs : 0}
+              playing={Boolean(activeEventEncounter && timelinePlaying)}
+              playbackSpeed={timelineSpeed}
               ground={mapQuery.data.ground}
               markers={mapScene.markers}
               projectSample={mapQuery.data.projectSample}
               view={view}
               planItems={mapScene.planItems}
               dungeonMesh={mapQuery.data.dungeonMesh}
+              effects={mapScene.effects}
               miniatureUrls={miniatureQuery.data}
               bossGuids={mapScene.bossGuids}
               walking={walking}
@@ -497,6 +642,29 @@ export function GuideHost({
           <GuideUiScene scene={scene} assets={assets} onNodeClick={handleNodeClick} />
         </div>
       </div>
+
+      {state.status === "running" && authoring && activeEventEncounter && mapScene && (
+        <GuideAuthoringOverlay
+          markers={mapScene.markers}
+          unitId={selectedAuthoringMarker?.guid ?? null}
+          sample={selectedAuthoringMarker?.sample ?? null}
+          elapsedMs={timelineCursorMs - activeEventEncounter.startMs}
+          onUnit={setSelectedAuthoringUnit}
+        />
+      )}
+
+      {state.status === "running" && activeEventEncounter && (
+        <GuidePlaybackControls
+          startMs={activeEventEncounter.startMs}
+          endMs={activeEventEncounter.endMs}
+          cursorMs={timelineCursorMs}
+          playing={timelinePlaying}
+          speed={timelineSpeed}
+          onCursor={setTimelineCursorMs}
+          onPlaying={setTimelinePlaying}
+          onSpeed={setTimelineSpeed}
+        />
+      )}
 
       {state.status !== "running" && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 top-[57px] z-[900] grid place-items-center bg-slate-950/55 p-6 backdrop-blur-[2px]">

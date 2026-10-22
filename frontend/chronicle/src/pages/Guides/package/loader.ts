@@ -121,6 +121,7 @@ function validateManifestFiles(manifest: GuideManifestV1, files: ReadonlyMap<str
   }
 
   const assets = new Set(manifest.assets)
+  const eventStreams = new Set((manifest.event_streams ?? []).map((stream) => stream.path))
   for (const asset of assets) {
     if (!files.has(asset)) {
       throw packageError("ASSET_MISSING", `Declared guide asset does not exist in the ZIP: ${JSON.stringify(asset)}.`, {
@@ -129,11 +130,17 @@ function validateManifestFiles(manifest: GuideManifestV1, files: ReadonlyMap<str
     }
   }
 
+  for (const stream of eventStreams) {
+    if (!files.has(stream)) {
+      throw packageError("ASSET_MISSING", `Declared guide event stream does not exist in the ZIP: ${JSON.stringify(stream)}.`, { path: stream })
+    }
+  }
+
   for (const path of files.keys()) {
-    if (path !== "guide.json" && !path.toLowerCase().endsWith(".lua") && !assets.has(path)) {
+    if (path !== "guide.json" && !path.toLowerCase().endsWith(".lua") && !assets.has(path) && !eventStreams.has(path)) {
       throw packageError(
         "ASSET_UNDECLARED",
-        `Package file ${JSON.stringify(path)} is not Lua source and is not declared in guide.json assets.`,
+        `Package file ${JSON.stringify(path)} is not Lua source and is not declared in guide.json assets or event_streams.`,
         { path },
       )
     }

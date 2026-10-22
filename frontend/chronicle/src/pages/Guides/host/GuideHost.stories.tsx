@@ -102,7 +102,7 @@ const fakeMap: GuideResolvedMap = {
   normalizedRadiusToYards: (radius) => radius,
 };
 
-function StoryMap({ markers, planItems }: GuideMapRenderProps) {
+function StoryMap({ markers, planItems, onUnitClick }: GuideMapRenderProps) {
   return (
     <div className="relative size-full overflow-hidden bg-[radial-gradient(ellipse_at_center,#334155_0%,#172033_42%,#070b12_75%)]">
       <div className="absolute inset-[12%] rounded-[48%] border border-amber-200/15 bg-[radial-gradient(circle_at_50%_42%,#2d384b,#111827_58%,#020617)] shadow-[inset_0_0_80px_rgba(0,0,0,.85)]" />
@@ -112,10 +112,17 @@ function StoryMap({ markers, planItems }: GuideMapRenderProps) {
         <div key={item.id} className="absolute left-1/2 top-[36%] h-[30%] w-[24%] origin-top -translate-x-1/2 bg-gradient-to-b from-orange-400/40 to-transparent [clip-path:polygon(50%_0,100%_100%,0_100%)]" />
       ) : null)}
       {markers.map((marker) => (
-        <div key={marker.guid} className="absolute -translate-x-1/2 -translate-y-1/2 text-center" style={{ left: `${marker.point.leftPercent}%`, top: `${marker.point.topPercent}%` }}>
-          <div className="mx-auto size-5 rounded-full border-2 border-white/70 shadow-lg" style={{ backgroundColor: marker.color }} />
-          <div className="mt-1 rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-semibold text-white">{marker.name}</div>
-        </div>
+        <button
+          key={marker.guid}
+          type="button"
+          onClick={() => onUnitClick?.(marker.guid)}
+          className="absolute -translate-x-1/2 -translate-y-1/2 text-center"
+          style={{ left: `${marker.point.leftPercent}%`, top: `${marker.point.topPercent}%` }}
+          aria-label={`Select ${marker.name}`}
+        >
+          <span className="mx-auto block size-5 rounded-full border-2 border-white/70 shadow-lg" style={{ backgroundColor: marker.color }} />
+          <span className="mt-1 block rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-semibold text-white">{marker.name}</span>
+        </button>
       ))}
     </div>
   );
@@ -123,7 +130,7 @@ function StoryMap({ markers, planItems }: GuideMapRenderProps) {
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
-function PackagedOnyxiaGuide({ realMap }: { realMap: boolean }) {
+function PackagedOnyxiaGuide({ realMap, authoring = false }: { realMap: boolean; authoring?: boolean }) {
   const query = useQuery({
     queryKey: ["storybook-onyxia-guide"],
     queryFn: async () => {
@@ -142,6 +149,7 @@ function PackagedOnyxiaGuide({ realMap }: { realMap: boolean }) {
       iconBaseUrl={realMap ? ICON_BASE_URL : "storybook://maps"}
       mapResolver={async () => realMap ? ONYXIA_REAL_MAP : fakeMap}
       {...(realMap ? {} : { MapRenderer: StoryMap })}
+      authoring={authoring}
       onExit={() => undefined}
       className="h-screen min-h-[42rem]"
     />
@@ -175,11 +183,31 @@ export const PackagedLuaOnyxia: Story = {
   render: () => <PackagedOnyxiaGuide realMap />,
 };
 
+export const PackagedLuaOnyxiaAuthoring: Story = {
+  tags: ["!test"],
+  render: () => <PackagedOnyxiaGuide realMap authoring />,
+};
+
+export const PackagedLuaOnyxiaAuthoringTestHarness: Story = {
+  tags: ["!dev", "!autodocs"],
+  render: () => <PackagedOnyxiaGuide realMap={false} authoring />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText("Coordinate authoring")).toBeVisible();
+    await userEvent.click(await canvas.findByRole("button", { name: "Tank 1" }));
+    await expect(await canvas.findByText(/"unit_id": "tank-01"/)).toBeVisible();
+    await expect(await canvas.findByRole("button", { name: "Copy sample" })).toBeVisible();
+  },
+};
+
 export const PackagedLuaOnyxiaTestHarness: Story = {
   tags: ["!dev", "!autodocs"],
   render: () => <PackagedOnyxiaGuide realMap={false} />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expect(await canvas.findByText("Watch the raid enter the room")).toBeVisible();
+    await expect(await canvas.findByRole("slider", { name: "Guide timeline" })).toBeVisible();
+    await userEvent.click(await canvas.findByRole("button", { name: "Next" }));
     await expect(await canvas.findByText("Give every group a side")).toBeVisible();
     await userEvent.click(await canvas.findByRole("button", { name: "Next" }));
     await expect(await canvas.findByText("Flanks are safe, front and tail are not")).toBeVisible();

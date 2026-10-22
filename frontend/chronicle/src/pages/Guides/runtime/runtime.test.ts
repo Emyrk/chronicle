@@ -96,12 +96,15 @@ describe("guide Lua runtime", () => {
       icon:SetTexture("assets/safe.png")
       icon:SetPosition(0.5, 0.5)
       Map:SetCamera(0.5, 0.5, 2)
+      Guide:SetChapter("phase-one")
+      assert(Guide:GetChapter() == "phase-one")
       icon:Destroy()
     `)
     expect(operations).toEqual(expect.arrayContaining([
       expect.objectContaining({ op: "create", id: "boss", kind: "unit", parentId: null }),
       expect.objectContaining({ op: "set", id: "boss", props: { entry: 10184, unit: "10184" } }),
       { op: "camera", x: 0.5, y: 0.5, zoom: 2 },
+      { op: "chapter", chapter: "phase-one" },
       { op: "destroy", id: "safe" },
     ]))
     expectValid(operations)

@@ -53,7 +53,12 @@ export interface CameraOperation {
   zoom: number
 }
 
-export type SceneOperation = CreateOperation | SetOperation | ListenOperation | DestroyOperation | CameraOperation
+export interface ChapterOperation {
+  op: "chapter"
+  chapter: string
+}
+
+export type SceneOperation = CreateOperation | SetOperation | ListenOperation | DestroyOperation | CameraOperation | ChapterOperation
 
 export interface SceneNode {
   readonly id: string
@@ -72,6 +77,7 @@ export interface CameraState {
 export interface RetainedScene {
   readonly nodes: ReadonlyMap<string, SceneNode>
   readonly camera: CameraState
+  readonly chapter: string | null
 }
 
 export interface Viewport {

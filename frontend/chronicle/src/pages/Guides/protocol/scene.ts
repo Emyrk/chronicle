@@ -188,13 +188,16 @@ export function validateSceneOperation(input: unknown): SceneOperation {
     case "camera":
       exact(operation, ["op", "x", "y", "zoom"], "camera operation")
       return { op: "camera", x: bounded(operation.x, 0, 1, "camera.x"), y: bounded(operation.y, 0, 1, "camera.y"), zoom: bounded(operation.zoom, 0.1, 20, "camera.zoom") }
+    case "chapter":
+      exact(operation, ["op", "chapter"], "chapter operation")
+      return { op: "chapter", chapter: id(operation.chapter, "chapter") }
     default:
       throw new SceneValidationError(`unknown operation ${operation.op}`)
   }
 }
 
 export function createInitialScene(): RetainedScene {
-  return Object.freeze({ nodes: new ImmutableMap<string, SceneNode>(), camera: Object.freeze({ x: 0.5, y: 0.5, zoom: 1 }) })
+  return Object.freeze({ nodes: new ImmutableMap<string, SceneNode>(), camera: Object.freeze({ x: 0.5, y: 0.5, zoom: 1 }), chapter: null })
 }
 
 function assertParent(nodes: Map<string, SceneNode>, nodeId: string, kind: NodeKind, parentId: string | null) {
@@ -244,10 +247,15 @@ export function applySceneBatch(scene: RetainedScene, rawOperations: readonly un
   const nodes = new Map<string, SceneNode>()
   for (const [key, value] of scene.nodes) nodes.set(key, cloneNode(value))
   let camera = { ...scene.camera }
+  let chapter = scene.chapter
 
   for (const operation of operations) {
     if (operation.op === "camera") {
       camera = { x: operation.x, y: operation.y, zoom: operation.zoom }
+      continue
+    }
+    if (operation.op === "chapter") {
+      chapter = operation.chapter
       continue
     }
     if (operation.id === UI_ROOT_ID) throw new SceneValidationError(`${UI_ROOT_ID} is reserved`)
@@ -279,5 +287,5 @@ export function applySceneBatch(scene: RetainedScene, rawOperations: readonly un
     }
   }
 
-  return Object.freeze({ nodes: new ImmutableMap(nodes), camera: Object.freeze(camera) })
+  return Object.freeze({ nodes: new ImmutableMap(nodes), camera: Object.freeze(camera), chapter })
 }

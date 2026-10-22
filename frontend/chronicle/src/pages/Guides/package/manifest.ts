@@ -4,6 +4,10 @@ import { normalizePackagePath } from "./paths"
 export const GUIDE_CAPABILITIES = ["ui", "map", "input", "timers"] as const
 export type GuideCapability = (typeof GUIDE_CAPABILITIES)[number]
 
+export const GUIDE_EVENT_STREAM_TYPES = ["unit_position", "spell_start", "spell_go"] as const
+export type GuideEventStreamType = (typeof GUIDE_EVENT_STREAM_TYPES)[number]
+export type GuideEventStream = Readonly<{ type: GuideEventStreamType; path: string }>
+
 export type GuideManifestV1 = Readonly<{
   manifest_version: 1
   id: string
@@ -17,10 +21,12 @@ export type GuideManifestV1 = Readonly<{
   game_version?: string
   capabilities: readonly GuideCapability[]
   assets: readonly string[]
+  event_streams?: readonly GuideEventStream[]
   description?: string
   encounters?: readonly string[]
 }>
 
+const eventStreamTypeSet: ReadonlySet<string> = new Set(GUIDE_EVENT_STREAM_TYPES)
 const capabilitySet: ReadonlySet<string> = new Set(GUIDE_CAPABILITIES)
 const PACKAGE_ID = /^[a-z0-9]+(?:\.[a-z0-9]+)+$/
 const PACKAGE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
@@ -54,6 +60,37 @@ function requireStringArray(record: Record<string, unknown>, field: string): str
     throw packageError("MANIFEST_INVALID", `guide.json field ${JSON.stringify(field)} must be an array of strings.`)
   }
   return value
+}
+
+function optionalEventStreams(record: Record<string, unknown>): readonly GuideEventStream[] | undefined {
+  const value = record.event_streams
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) throw packageError("MANIFEST_INVALID", "guide.json field \"event_streams\" must be an array.")
+  const types = new Set<string>()
+  const paths = new Set<string>()
+  const streams = value.map((raw, index): GuideEventStream => {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+      throw packageError("MANIFEST_INVALID", `guide.json event_streams[${index}] must be an object.`)
+    }
+    const stream = raw as Record<string, unknown>
+    const keys = Object.keys(stream)
+    if (keys.some((key) => key !== "type" && key !== "path") || keys.length !== 2) {
+      throw packageError("MANIFEST_INVALID", `guide.json event_streams[${index}] must contain only type and path.`)
+    }
+    if (typeof stream.type !== "string" || !eventStreamTypeSet.has(stream.type)) {
+      throw packageError("MANIFEST_INVALID", `guide.json event_streams[${index}] has unsupported type ${JSON.stringify(stream.type)}.`)
+    }
+    const path = normalizePackagePath(typeof stream.path === "string" ? stream.path : "")
+    if (!path.toLowerCase().endsWith(".pb")) {
+      throw packageError("MANIFEST_INVALID", `Guide event stream must be a .pb file, received ${JSON.stringify(path)}.`, { path })
+    }
+    if (types.has(stream.type)) throw packageError("MANIFEST_INVALID", `Guide event stream type ${JSON.stringify(stream.type)} is declared more than once.`)
+    if (paths.has(path)) throw packageError("MANIFEST_INVALID", `Guide event stream path ${JSON.stringify(path)} is declared more than once.`, { path })
+    types.add(stream.type)
+    paths.add(path)
+    return Object.freeze({ type: stream.type as GuideEventStreamType, path })
+  })
+  return Object.freeze(streams)
 }
 
 function uniqueNonEmptyStrings(values: readonly string[], field: string): readonly string[] {
@@ -126,6 +163,8 @@ export function validateGuideManifest(value: unknown): GuideManifestV1 {
     capabilities.push(capability as GuideCapability)
   }
 
+  const eventStreams = optionalEventStreams(record)
+
   const assets: string[] = []
   const seenAssets = new Set<string>()
   for (const assetValue of requireStringArray(record, "assets")) {
@@ -155,6 +194,7 @@ export function validateGuideManifest(value: unknown): GuideManifestV1 {
     ...(gameVersion === undefined ? {} : { game_version: gameVersion }),
     capabilities: Object.freeze(capabilities),
     assets: Object.freeze(assets),
+    ...(eventStreams === undefined ? {} : { event_streams: eventStreams }),
     ...(description === undefined ? {} : { description }),
     ...(encounters === undefined ? {} : { encounters }),
   })
