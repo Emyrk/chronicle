@@ -33,7 +33,7 @@ RETURNING *;
 
 -- name: ConsumeInferenceOAuthTransaction :one
 DELETE FROM inference_oauth_transactions
-WHERE state_hash = $1 AND expires_at > now()
+WHERE state_hash = $1 AND user_id = $2 AND expires_at > now()
 RETURNING *;
 
 -- name: InsertInferenceThread :one

@@ -45,7 +45,7 @@ type sqlcQuerier interface {
 	CompleteDiscordMembershipGrantCheckMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckMemberParams) (DiscordMembershipGrantCheck, error)
 	CompleteDiscordMembershipGrantCheckNonMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckNonMemberParams) (DiscordMembershipGrantCheck, error)
 	ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error)
-	ConsumeInferenceOAuthTransaction(ctx context.Context, stateHash []byte) (InferenceOauthTransaction, error)
+	ConsumeInferenceOAuthTransaction(ctx context.Context, arg ConsumeInferenceOAuthTransactionParams) (InferenceOauthTransaction, error)
 	CopyLegacySpellEffects(ctx context.Context, arg []CopyLegacySpellEffectsParams) *CopyLegacySpellEffectsBatchResults
 	CopyLegacySpellPowers(ctx context.Context, arg []CopyLegacySpellPowersParams) *CopyLegacySpellPowersBatchResults
 	CopyLegacySpellVariants(ctx context.Context, arg []CopyLegacySpellVariantsParams) *CopyLegacySpellVariantsBatchResults

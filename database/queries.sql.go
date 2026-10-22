@@ -8932,12 +8932,17 @@ func (q *sqlQuerier) UpsertGuildSettings(ctx context.Context, arg UpsertGuildSet
 
 const consumeInferenceOAuthTransaction = `-- name: ConsumeInferenceOAuthTransaction :one
 DELETE FROM inference_oauth_transactions
-WHERE state_hash = $1 AND expires_at > now()
+WHERE state_hash = $1 AND user_id = $2 AND expires_at > now()
 RETURNING id, user_id, provider, state_hash, encrypted_verifier, verifier_key_version, return_path, expires_at, created_at
 `
 
-func (q *sqlQuerier) ConsumeInferenceOAuthTransaction(ctx context.Context, stateHash []byte) (InferenceOauthTransaction, error) {
-	row := q.db.QueryRow(ctx, consumeInferenceOAuthTransaction, stateHash)
+type ConsumeInferenceOAuthTransactionParams struct {
+	StateHash []byte    `db:"state_hash" json:"state_hash"`
+	UserID    uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) ConsumeInferenceOAuthTransaction(ctx context.Context, arg ConsumeInferenceOAuthTransactionParams) (InferenceOauthTransaction, error) {
+	row := q.db.QueryRow(ctx, consumeInferenceOAuthTransaction, arg.StateHash, arg.UserID)
 	var i InferenceOauthTransaction
 	err := row.Scan(
 		&i.ID,
