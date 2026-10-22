@@ -96,6 +96,7 @@ import {
   getAvailablePresetLayouts,
   isPanelPresetLayout,
   presetLayoutById,
+  resizeMapPresetForViewport,
   PRESET_LAYOUTS,
   PRESET_LAYOUTS_BY_ID,
   DEFAULT_PRESET_ID,
@@ -104,6 +105,20 @@ import {
 } from "./presetLayouts";
 import { openLayoutPopup, syncPopupAppearance, type LayoutPopup } from "./EventsPanels/panelPopup";
 import { InstanceKeybindProvider, useRegisterInstanceKeybinds } from "./InstanceKeybinds";
+
+function useViewportHeight(targetWindow: Window | null): number {
+  const [height, setHeight] = useState(() => targetWindow?.innerHeight ?? 1080);
+
+  useEffect(() => {
+    if (!targetWindow) return;
+    const updateHeight = () => setHeight(targetWindow.innerHeight);
+    updateHeight();
+    targetWindow.addEventListener("resize", updateHeight, { passive: true });
+    return () => targetWindow.removeEventListener("resize", updateHeight);
+  }, [targetWindow]);
+
+  return height;
+}
 
 // ============================================================================
 // Encounter selector localStorage helpers (7-day expiry)
@@ -1328,6 +1343,11 @@ function PoppedOutLayoutContent({
   const [seedFiltersVersion, setSeedFiltersVersion] = useState(1);
   const [activePresetId, setActivePresetId] = useState(session.snapshot.activePresetId);
   const [appearance, setAppearance] = useState(session.snapshot.appearance);
+  const viewportHeight = useViewportHeight(session.window);
+  const visibleLayoutItems = useMemo(
+    () => activePresetId === "map" ? resizeMapPresetForViewport(layoutItems, viewportHeight) : layoutItems,
+    [activePresetId, layoutItems, viewportHeight],
+  );
 
 
   const capabilities = context.instance.capabilities;
@@ -1467,10 +1487,10 @@ function PoppedOutLayoutContent({
         {popupPageType ? (
           <InstanceContentPage pageType={popupPageType} context={context} durationMs={durationMs} pageState={popupPageState} />
         ) : (
-          <PanelTimingProvider panelCount={renderableLayoutItems(layoutItems).length}>
+          <PanelTimingProvider panelCount={renderableLayoutItems(visibleLayoutItems).length}>
             <ChartDataRegistryProvider>
               <EventsPanelGrid
-                layoutItems={layoutItems}
+                layoutItems={visibleLayoutItems}
                 panelTypesById={panelTypesById}
                 panelOptionsById={panelOptionsById}
                 seedFiltersByID={seedFiltersById}
@@ -1585,6 +1605,13 @@ function EncounterDetail({
   layouts,
 }: EncounterDetailProps) {
   const availablePresetLayouts = getAvailablePresetLayouts(instance.capabilities ?? [], isMobile);
+  const viewportHeight = useViewportHeight(typeof window === "undefined" ? null : window);
+  const visibleLayoutItems = useMemo(
+    () => activePresetId === "map" && !isMobile
+      ? resizeMapPresetForViewport(layoutItems, viewportHeight)
+      : layoutItems,
+    [activePresetId, isMobile, layoutItems, viewportHeight],
+  );
   // Active tab and collapsible state
   const [activeTab, setActiveTab] = useState<'enemies' | 'players'>('enemies');
   const [isEntityPanelOpen, setIsEntityPanelOpen] = useState(false);
@@ -2180,14 +2207,14 @@ function EncounterDetail({
       {pageType ? (
         <InstanceContentPage pageType={pageType} context={panelContext} durationMs={totalDurationMs} pageState={pageState} />
       ) : (
-        <PanelTimingProvider panelCount={renderableLayoutItems(layoutItems).length}>
+        <PanelTimingProvider panelCount={renderableLayoutItems(visibleLayoutItems).length}>
           <PanelTimingResetter encounters={encounters} />
 
           <ChartDataRegistryProvider>
             <PortalContainerProvider container={typeof document === "undefined" ? null : document.body}>
               <div className={cn(focused && "min-h-0 flex-1 overflow-auto styled-scrollbar")}>
               <EventsPanelGrid
-                layoutItems={layoutItems}
+                layoutItems={visibleLayoutItems}
                 panelTypesById={panelTypesById}
                 panelOptionsById={panelOptionsById}
                 seedFiltersByID={seedFiltersByID}
