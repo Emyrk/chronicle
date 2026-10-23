@@ -294,8 +294,11 @@ export class InferenceRuntime implements InferenceRuntimeClient {
       if (error instanceof Error && error.message === "stale_state") {
         return continuation("stale_state", resultMessage("The page state changed before the tool could run."));
       }
-      if (error instanceof Error && error.message === "capability_unavailable") {
-        return continuation("capability_unavailable", resultMessage("The requested capability is not currently available."));
+      if (error instanceof Error && error.message.startsWith("capability_unavailable")) {
+        const detail = error.message.slice("capability_unavailable".length).replace(/^:\s*/, "").trim();
+        return continuation("capability_unavailable", resultMessage(
+          detail || "The requested capability is not currently available.",
+        ));
       }
       return continuation("client_error", resultMessage("The client tool could not be completed."));
     }

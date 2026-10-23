@@ -110,6 +110,18 @@ describe("InferenceRuntime", () => {
     expect(JSON.stringify(result)).not.toContain("secret stack detail");
   });
 
+  it("preserves an intentional capability-unavailable explanation", async () => {
+    const runtime = new InferenceRuntime({ sessionId: "session-1" });
+    register(runtime, vi.fn(() => {
+      throw new Error("capability_unavailable: This instance view is read-only while following a live session.");
+    }));
+
+    await expect(runtime.executeClientTool(request(), new AbortController().signal)).resolves.toMatchObject({
+      status: "capability_unavailable",
+      result: { message: "This instance view is read-only while following a live session." },
+    });
+  });
+
   it("returns capability_unavailable when a capability unmounts during execution", async () => {
     let finish!: (value: unknown) => void;
     const runtime = new InferenceRuntime({ sessionId: "session-1" });

@@ -52,7 +52,7 @@ var assistants = map[string]assistant{
 		{Name: "find_pages", Description: "Find Chronicle pages by name or description.", Parameters: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","maxLength":100}},"required":["query"],"additionalProperties":false}`)},
 		{Name: "query_rankings", Description: "Query a bounded Chronicle player leaderboard.", Parameters: json.RawMessage(`{"type":"object","properties":{"instance_name":{"type":"string","maxLength":100},"encounter":{"type":"string","maxLength":100},"class":{"type":"string","maxLength":30},"spec":{"type":"string","maxLength":50},"role":{"type":"string","maxLength":30},"metric":{"type":"string","enum":["dps","hps"]},"limit":{"type":"integer","minimum":1,"maximum":10}},"required":["instance_name"],"additionalProperties":false}`)},
 	}},
-	"instance-analyst": {ID: "instance-analyst", Durable: true, System: "You are a read-only Chronicle raid instance analyst. Use the instance_summary tool for bounded metadata, encounter, and roster context. Do not claim access to raw event streams.", Tools: []ToolDefinition{
+	"instance-analyst": {ID: "instance-analyst", Durable: true, System: "You are a Chronicle raid instance analyst. Use instance_summary for bounded metadata, encounter, and roster context. You may inspect, query, or update the current instance UI only through advertised client tools. Do not claim access to raw event streams. If a client tool returns user_rejected or capability_unavailable, do not retry the same mutation; explain why it could not be completed. After stale_state, inspect once for fresh state before retrying at most once.", Tools: []ToolDefinition{
 		{Name: "instance_summary", Description: "Return bounded metadata, encounters, and players for this authorized raid instance.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
 	}},
 }
@@ -580,7 +580,7 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 		if s.logger != nil {
 			s.logger.Warn("inference run failed", "run_id", req.RunID, "error", err)
 		}
-		_ = s.finishRun(r.Context(), runRow, "error", result.State, "provider_error")
+		_ = s.finishRun(r.Context(), runRow, "error", result.State, inferenceRunErrorCode(err))
 		_ = writer.Write(inferenceRunErrorEvent(err))
 		return
 	}
@@ -661,14 +661,32 @@ func writeDebugSnapshot(w *agui.Writer, debug debugRunContext, iteration int, ph
 	return w.Write(debugSnapshotEvent(debug, iteration, phase, model, a, messages, usage))
 }
 
+var (
+	errAgentIterationLimit = errors.New("agent iteration limit reached")
+	errAgentToolLimit      = errors.New("agent tool-call limit reached")
+)
+
+func inferenceRunErrorCode(err error) string {
+	var providerErr *ProviderError
+	if errors.As(err, &providerErr) && strings.TrimSpace(providerErr.Code) != "" {
+		return strings.TrimSpace(providerErr.Code)
+	}
+	if errors.Is(err, errAgentIterationLimit) || errors.Is(err, errAgentToolLimit) {
+		return "agent_limit"
+	}
+	return "provider_error"
+}
+
 func inferenceRunErrorEvent(err error) agui.RunErrorEvent {
 	var providerErr *ProviderError
 	if errors.As(err, &providerErr) && strings.TrimSpace(providerErr.UserMessage) != "" {
-		code := strings.TrimSpace(providerErr.Code)
-		if code == "" {
-			code = "provider_error"
+		return agui.RunErrorEvent{Message: providerErr.UserMessage, Code: inferenceRunErrorCode(err)}
+	}
+	if errors.Is(err, errAgentIterationLimit) || errors.Is(err, errAgentToolLimit) {
+		return agui.RunErrorEvent{
+			Message: "The assistant could not finish within the tool-step limit. The page may be read-only or changing; review the last tool result and try again.",
+			Code:    "agent_limit",
 		}
-		return agui.RunErrorEvent{Message: providerErr.UserMessage, Code: code}
 	}
 	return agui.RunErrorEvent{Message: "The inference run failed. Please try again.", Code: "provider_error"}
 }
@@ -773,7 +791,7 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 		for _, call := range assistantMessage.ToolCalls {
 			state.ToolCallCount++
 			if state.ToolCallCount > maxToolCalls {
-				return agentLoopResult{State: state}, errors.New("too many tool calls")
+				return agentLoopResult{State: state}, errAgentToolLimit
 			}
 			if clientTool, ok := clientToolByName(call.Name); ok && capability != nil {
 				if pending != nil {
@@ -844,5 +862,5 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 			return agentLoopResult{State: state, Paused: pending}, nil
 		}
 	}
-	return agentLoopResult{State: state}, errors.New("agent iteration limit reached")
+	return agentLoopResult{State: state}, errAgentIterationLimit
 }

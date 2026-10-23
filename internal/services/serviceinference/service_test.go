@@ -166,6 +166,11 @@ func TestInferenceRunErrorEventUsesSafeProviderDetails(t *testing.T) {
 	require.Equal(t, "provider_rate_limited", event.Code)
 	require.Equal(t, "OpenRouter rejected the request (HTTP 429): rate limit exceeded", event.Message)
 
+	limited := inferenceRunErrorEvent(errAgentIterationLimit)
+	require.Equal(t, "agent_limit", inferenceRunErrorCode(errAgentIterationLimit))
+	require.Equal(t, "agent_limit", limited.Code)
+	require.Contains(t, limited.Message, "tool-step limit")
+
 	generic := inferenceRunErrorEvent(errors.New("database details"))
 	require.Equal(t, "provider_error", generic.Code)
 	require.Equal(t, "The inference run failed. Please try again.", generic.Message)
@@ -462,6 +467,11 @@ func TestClientToolArgumentsAndResultsAreBoundedAndNormalized(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{"status":"client_error"}`, content)
 	require.NotContains(t, content, "SECRET")
+	content, err = normalizedClientToolResult(chroniclesdk.InferenceClientToolResultRequest{Status: "capability_unavailable", Result: json.RawMessage(`{"message":"This instance view is read-only while following a live session.","exception":"SECRET"}`)})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"status":"capability_unavailable","result":{"message":"This instance view is read-only while following a live session."}}`, content)
+	require.NotContains(t, content, "SECRET")
+
 	_, err = normalizedClientToolResult(chroniclesdk.InferenceClientToolResultRequest{Status: "success", Result: json.RawMessage(strings.Repeat("x", maxClientResult+1))})
 	require.ErrorContains(t, err, "too large")
 }

@@ -88,7 +88,9 @@ export function InstanceInferenceCapability({
         argumentsValue as QueryMetricPanelArguments,
       ),
       update_instance_ui: (argumentsValue) => {
-        if (!canMutate) throw new Error("capability_unavailable");
+        if (!canMutate) {
+          throw new Error("capability_unavailable: This instance view is read-only while following a live session.");
+        }
         const plan = planInstanceUIUpdate(state, argumentsValue as UpdateInstanceUIArguments);
         for (const operation of plan.operations) applyOperation(operation);
         return {

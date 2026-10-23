@@ -47,7 +47,7 @@ var instancePageClientTools = []clientToolDefinition{
 		CapabilityID:   instancePageCapabilityID, CapabilityVersion: instancePageCapabilityVersion, Effect: "read", Confirmation: "never",
 	},
 	{
-		ToolDefinition: ToolDefinition{Name: "update_instance_ui", Description: "Apply bounded view mutations to the current authorized instance page.", Parameters: json.RawMessage(`{"type":"object","properties":{"expected_revision":{"type":"integer","minimum":0},"operations":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","properties":{"op":{"type":"string","enum":["apply_preset","set_panel","set_panel_option","set_panel_filters","select_encounters","select_players","select_enemies","set_time_range","clear_time_range"]},"preset_id":{"type":"string"},"panel_id":{"type":"string"},"panel_type":{"type":"string"},"option":{"type":["string","null"]},"filters":{"type":"array","maxItems":20},"ids":{"type":"array","items":{"type":"string"},"maxItems":100},"start_offset_ms":{"type":"integer","minimum":0},"end_offset_ms":{"type":"integer","minimum":0}},"required":["op"],"additionalProperties":false}}},"required":["operations"],"additionalProperties":false}`)},
+		ToolDefinition: ToolDefinition{Name: "update_instance_ui", Description: "Apply bounded view mutations to the current authorized instance page. If the result is user_rejected or capability_unavailable, do not retry the same mutation. After stale_state, inspect fresh UI state before retrying once.", Parameters: json.RawMessage(`{"type":"object","properties":{"expected_revision":{"type":"integer","minimum":0},"operations":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","properties":{"op":{"type":"string","enum":["apply_preset","set_panel","set_panel_option","set_panel_filters","select_encounters","select_players","select_enemies","set_time_range","clear_time_range"]},"preset_id":{"type":"string"},"panel_id":{"type":"string"},"panel_type":{"type":"string"},"option":{"type":["string","null"]},"filters":{"type":"array","maxItems":20},"ids":{"type":"array","items":{"type":"string"},"maxItems":100},"start_offset_ms":{"type":"integer","minimum":0},"end_offset_ms":{"type":"integer","minimum":0}},"required":["op"],"additionalProperties":false}}},"required":["operations"],"additionalProperties":false}`)},
 		CapabilityID:   instancePageCapabilityID, CapabilityVersion: instancePageCapabilityVersion, Effect: "view_mutation", Confirmation: "unless_yolo",
 	},
 }
@@ -200,7 +200,18 @@ func normalizedClientToolResult(request chroniclesdk.InferenceClientToolResultRe
 			return "", errors.New("invalid client tool result")
 		}
 	case "user_rejected", "capability_unavailable", "stale_state", "client_error":
-		payload = nil
+		var failure struct {
+			Message string `json:"message"`
+		}
+		if len(request.Result) > 0 && json.Valid(request.Result) && json.Unmarshal(request.Result, &failure) == nil {
+			failure.Message = strings.TrimSpace(failure.Message)
+			if runes := []rune(failure.Message); len(runes) > 500 {
+				failure.Message = string(runes[:500])
+			}
+			if failure.Message != "" {
+				payload = failure
+			}
+		}
 	default:
 		return "", errors.New("invalid client tool status")
 	}
