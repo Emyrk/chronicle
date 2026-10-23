@@ -526,7 +526,7 @@ export function InstancePage() {
             flavor={instance.flavor ?? []}
             selectedEncounterIds={selectedEncounterIds}
           >
-            <div className="mx-auto flex w-full max-w-[1920px] gap-6">
+            <div className="flex w-full gap-6">
               <div className="min-w-0 flex-1">
                 {tenantGate.banner && !focused && (
                   <div className="w-full px-4 pt-4">
