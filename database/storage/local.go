@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -67,6 +68,9 @@ func (l *LocalStorage) UploadFile(_ context.Context, bucketId string, relativePa
 func (l *LocalStorage) DownloadFile(_ context.Context, bucketId string, filePath string, _ ...UrlOptions) ([]byte, error) {
 	fullPath := l.filePath(bucketId, filePath)
 	data, err := os.ReadFile(fullPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("%w: %s", ErrFileNotFound, filePath)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("read file: %w", err)
 	}

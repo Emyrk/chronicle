@@ -33,6 +33,16 @@ func TestNewLocalStorageAt(t *testing.T) {
 	require.Equal(t, "world", string(data))
 }
 
+func TestLocalStorageDownloadMissingFile(t *testing.T) {
+	t.Parallel()
+
+	st, err := storage.NewLocalStorageAt(t.TempDir())
+	require.NoError(t, err)
+
+	_, err = st.DownloadFile(t.Context(), "test-bucket", "missing.pprof")
+	require.ErrorIs(t, err, storage.ErrFileNotFound)
+}
+
 func TestNewLocalStorageAt_CreatesDir(t *testing.T) {
 	t.Parallel()
 

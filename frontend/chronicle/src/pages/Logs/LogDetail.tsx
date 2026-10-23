@@ -236,6 +236,36 @@ function formatMs(ms: Duration): string {
 }
 
 function TimingSection({ report, logId }: { report: LogParseReport; logId: string }) {
+  const [profileDownloading, setProfileDownloading] = useState(false);
+  const [profileUnavailable, setProfileUnavailable] = useState(false);
+
+  const downloadCPUProfile = async () => {
+    setProfileDownloading(true);
+    try {
+      const response = await fetch(`/api/v1/raidlogs/logs/${logId}/profile/download`);
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: "Failed to download CPU profile" }));
+        if (response.status === 404) {
+          setProfileUnavailable(true);
+        }
+        throw new Error(error.message || "Failed to download CPU profile");
+      }
+
+      const href = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = `parse-${logId}-cpu.pprof`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(href), 0);
+    } catch (error) {
+      toast.error("Failed to download CPU profile", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    } finally {
+      setProfileDownloading(false);
+    }
+  };
+
   return (
     <Card className="p-6">
       <details className="group">
@@ -272,11 +302,18 @@ function TimingSection({ report, logId }: { report: LogParseReport; logId: strin
                   Open it with <code>go tool pprof</code> or a compatible flamegraph viewer.
                 </p>
               </div>
-              <Button variant="outline" size="sm" asChild>
-                <a href={`/api/v1/raidlogs/logs/${logId}/profile/download`} download>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={downloadCPUProfile}
+                disabled={profileDownloading || profileUnavailable}
+              >
+                {profileDownloading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
                   <Download className="mr-2 h-4 w-4" />
-                  Download .pprof
-                </a>
+                )}
+                {profileUnavailable ? "Profile unavailable" : "Download .pprof"}
               </Button>
             </div>
           )}

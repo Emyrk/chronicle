@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"mime/multipart"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
@@ -217,14 +219,12 @@ func (api *API) WoWLogParseProfileDownload(w http.ResponseWriter, r *http.Reques
 	}
 
 	profile, err := api.Chronicle.DownloadParseCPUProfile(ctx, logID)
+	if errors.Is(err, storage.ErrFileNotFound) {
+		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{Message: "The CPU profile is no longer available"})
+		return
+	}
 	if err != nil {
-		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
-			Response: chroniclesdk.Response{
-				Message: "Failed to download parse CPU profile",
-				Detail:  err.Error(),
-			},
-			Status: http.StatusNotFound,
-		})
+		httpapi.InternalServerError(w, err)
 		return
 	}
 

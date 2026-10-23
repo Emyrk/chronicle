@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"path"
@@ -12,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 )
 
 var _ ObjectStorage = (*S3Storage)(nil)
@@ -119,6 +121,11 @@ func (s *S3Storage) UploadFile(ctx context.Context, bucketId string, relativePat
 	return FileUploadResponse{Key: path.Join(bucketId, relativePath)}, nil
 }
 
+func isS3FileNotFound(err error) bool {
+	var apiErr smithy.APIError
+	return errors.As(err, &apiErr) && (apiErr.ErrorCode() == "NoSuchKey" || apiErr.ErrorCode() == "NotFound")
+}
+
 func (s *S3Storage) DownloadFile(ctx context.Context, bucketId string, filePath string, _ ...UrlOptions) ([]byte, error) {
 	bucket, key := s.bucketAndKey(bucketId, filePath)
 	output, err := s.client.GetObject(ctx, &s3.GetObjectInput{
@@ -126,6 +133,9 @@ func (s *S3Storage) DownloadFile(ctx context.Context, bucketId string, filePath 
 		Key:    aws.String(key),
 	})
 	if err != nil {
+		if isS3FileNotFound(err) {
+			return nil, fmt.Errorf("%w: %s", ErrFileNotFound, filePath)
+		}
 		return nil, fmt.Errorf("get object: %w", err)
 	}
 	//nolint:errcheck

@@ -2,12 +2,15 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"io"
 )
 
+var ErrFileNotFound = errors.New("storage file not found")
+
 // FileOptions configures file upload behavior.
 type FileOptions struct {
-	ContentType *string
+	ContentType  *string
 	CacheControl *string
 }
 
