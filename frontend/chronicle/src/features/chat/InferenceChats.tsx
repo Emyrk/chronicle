@@ -4,7 +4,12 @@ import { Bot, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { AssistantChat } from "./AssistantChat";
-import { useCreateInstanceInferenceThread, useInferencePermission, useInferenceThread } from "./api";
+import {
+  isInferenceServiceUnavailable,
+  useCreateInstanceInferenceThread,
+  useInferencePermission,
+  useInferenceThread,
+} from "./api";
 import { buildInstanceAnalystRunRequest, buildSiteHelpRunRequest, toChatMessages } from "./inference";
 import { useInferenceSelection } from "./useInferenceSelection";
 
@@ -66,8 +71,13 @@ export function GlobalSiteHelpChat() {
     return buildSiteHelpRunRequest(input, { connectionId: selection.connectionId, modelId: selection.modelId });
   }, [selection.connectionId, selection.modelId]);
 
-  if (!isAuthenticated || !permission.allowed) return null;
-  const disconnected = !selection.isLoading && selection.connections.length === 0;
+  if (
+    !isAuthenticated
+    || !permission.allowed
+    || selection.isLoading
+    || isInferenceServiceUnavailable(selection.error)
+  ) return null;
+  const disconnected = selection.connections.length === 0;
   return (
     <AssistantChat
       open={open}
@@ -112,9 +122,14 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
     return buildInstanceAnalystRunRequest(input, { connectionId: selection.connectionId, modelId: selection.modelId }, instanceId);
   }, [instanceId, selection.connectionId, selection.modelId]);
 
-  if (!isAuthenticated || !permission.allowed) return null;
+  if (
+    !isAuthenticated
+    || !permission.allowed
+    || selection.isLoading
+    || isInferenceServiceUnavailable(selection.error)
+  ) return null;
   const response = threadQuery.data ?? createThread.data;
-  const disconnected = !selection.isLoading && selection.connections.length === 0;
+  const disconnected = selection.connections.length === 0;
   const threadLoading = open && selection.ready && !response && !createThread.error;
 
   return (

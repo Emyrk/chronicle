@@ -15,10 +15,24 @@ const inferenceKeys = {
   instanceThread: (instanceId: string) => ["inference", "threads", "instance", instanceId] as const,
 };
 
-async function readError(response: Response, fallback: string): Promise<Error> {
+export class InferenceAPIError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "InferenceAPIError";
+    this.status = status;
+  }
+}
+
+export function isInferenceServiceUnavailable(error: unknown): boolean {
+  return error instanceof InferenceAPIError && error.status === 503;
+}
+
+async function readError(response: Response, fallback: string): Promise<InferenceAPIError> {
   const body = await response.json().catch(() => null) as { message?: string; detail?: string } | null;
   const detail = body?.detail ? `: ${body.detail}` : "";
-  return new Error(`${body?.message ?? fallback}${detail}`);
+  return new InferenceAPIError(`${body?.message ?? fallback}${detail}`, response.status);
 }
 
 export function useInferencePermission(enabled = true) {

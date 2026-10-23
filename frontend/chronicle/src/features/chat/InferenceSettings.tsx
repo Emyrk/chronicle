@@ -4,7 +4,13 @@ import { toast } from "sonner";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { useAuthorizeOpenRouter, useDeleteInferenceConnection, useInferenceConnections, useInferencePermission } from "./api";
+import {
+  isInferenceServiceUnavailable,
+  useAuthorizeOpenRouter,
+  useDeleteInferenceConnection,
+  useInferenceConnections,
+  useInferencePermission,
+} from "./api";
 import { parseInferenceOAuthResult, safeLocalReturnPath } from "./inference";
 
 export function InferenceSettings() {
@@ -26,7 +32,11 @@ export function InferenceSettings() {
     setSearchParams(cleaned, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  if (!isAuthenticated || (!permission.isLoading && !permission.allowed)) return null;
+  if (
+    !isAuthenticated
+    || (!permission.isLoading && !permission.allowed)
+    || isInferenceServiceUnavailable(connections.error)
+  ) return null;
 
   const connect = async () => {
     try {
