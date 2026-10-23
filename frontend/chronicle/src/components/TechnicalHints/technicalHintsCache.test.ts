@@ -5,6 +5,7 @@ import {
   writeCachedTechnicalHints,
 } from "./technicalHintsCache";
 import { selectTechnicalHint } from "./technicalHintRotation";
+import { mergeTechnicalHints, STATIC_TECHNICAL_HINTS } from "./staticTechnicalHints";
 import type { TechnicalHintsResponse } from "./types";
 
 function createStorage(): Storage {
@@ -65,6 +66,25 @@ describe("technical hints cache", () => {
 
     expect(readCachedTechnicalHints(storage, Date.parse("2026-10-23T13:00:00Z"))?.payloads)
       .toEqual([response.payloads[0]]);
+  });
+});
+
+describe("static technical hints", () => {
+  it("provides a catalog without the API and merges dynamic facts by stable ID", () => {
+    const fallback = mergeTechnicalHints(undefined);
+    expect(fallback.payloads).toHaveLength(STATIC_TECHNICAL_HINTS.length);
+    expect(fallback.payloads.some((hint) => hint.kind === "tip")).toBe(true);
+    expect(fallback.payloads.some((hint) => hint.kind === "panel")).toBe(true);
+    expect(fallback.payloads.some((hint) => hint.kind === "blog")).toBe(true);
+
+    const merged = mergeTechnicalHints({
+      ...response,
+      payloads: [
+        ...response.payloads,
+        { id: "activity-24h", kind: "community_fact", title: "Today", body: "42 runs" },
+      ],
+    });
+    expect(merged.payloads.some((hint) => hint.id === "activity-24h")).toBe(true);
   });
 });
 
