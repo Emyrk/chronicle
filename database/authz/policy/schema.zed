@@ -12,6 +12,7 @@ definition chronicle {
   relation admin: user
   relation upload_capable: user
   relation unlisted_log_capable: user
+  relation ad_free_capable: user
   relation technical_user: user
   relation supporter: user
 
@@ -47,7 +48,7 @@ definition chronicle {
   permission admin_queues = technical_admin + is_admin_queues
   permission set_user_data_limit = technical_admin
   permission shorter_urls = supporter + admin
-  permission ad_free = supporter + stripe_ad_free
+  permission ad_free = ad_free_capable + supporter + stripe_ad_free
   permission download_raw_logs = administer + moderate_logs + stripe_download_raw_logs
   permission unlisted_logs = stripe_unlisted_logs
   permission admin_regressions = technical_admin + is_admin_raid_requirements

@@ -251,6 +251,43 @@ func TestGuildDiscordBotPermissions(t *testing.T) {
 	checkManage(t, leaderID, false)
 }
 
+func TestSetUserChronicleRolesSupportsAdFreeCapability(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(broker)
+	userID := uuid.New()
+
+	require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, "stripe_download_raw_logs", true))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"ad_free_capable"}))
+
+	roles, err := zed.UserChronicleRoles(ctx, userID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"chronicle_member", "ad_free_capable", "stripe_download_raw_logs"}, roles)
+
+	chronicle := policy.New().GlobalChronicle()
+	user := policy.New().User(userID)
+	allowed, err := zed.Check(ctx, nil,
+		chronicle.CanAd_free_User(user),
+		chronicle.CanDownload_raw_logs_User(user),
+	)
+	require.NoError(t, err)
+	require.Equal(t, []bool{true, true}, allowed)
+
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, nil))
+	roles, err = zed.UserChronicleRoles(ctx, userID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"chronicle_member", "stripe_download_raw_logs"}, roles)
+
+	allowed, err = zed.Check(ctx, nil,
+		chronicle.CanAd_free_User(user),
+		chronicle.CanDownload_raw_logs_User(user),
+	)
+	require.NoError(t, err)
+	require.Equal(t, []bool{false, true}, allowed)
+}
+
 func TestSetUserChronicleRolesSupportsUnlistedCapability(t *testing.T) {
 	t.Parallel()
 
