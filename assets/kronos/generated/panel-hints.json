@@ -1,0 +1,42 @@
+[
+  {
+    "id": "comparison-side-by-side",
+    "panelID": "comparison",
+    "content": "Compare matching metrics from several panels side by side without rebuilding each view."
+  },
+  {
+    "id": "death-log-recap",
+    "panelID": "death_log",
+    "content": "Select a death to inspect the incoming damage, healing, and auras immediately before it."
+  },
+  {
+    "id": "consumables-ledger-cost",
+    "panelID": "consumables_ledger",
+    "content": "Use the ledger view to compare consumable usage and estimated cost across players."
+  },
+  {
+    "id": "cooldown-coverage",
+    "panelID": "cooldown_usage",
+    "content": "Scan cooldown usage raid-wide to find missing uses and gaps in planned coverage."
+  },
+  {
+    "id": "rotation-idle-time",
+    "panelID": "rotations",
+    "content": "The rotation timeline makes idle gaps and out-of-order casts visible second by second."
+  },
+  {
+    "id": "replay-map",
+    "panelID": "map",
+    "content": "Pair the map with Replay to follow movement, positioning, and targets through the fight."
+  },
+  {
+    "id": "logging-metadata-diagnostics",
+    "panelID": "logging_metadata",
+    "content": "Check logger versions and recorded metadata here when a raid is missing expected events."
+  },
+  {
+    "id": "pull-cleanup",
+    "panelID": "pulls_and_cleanup",
+    "content": "Review pull boundaries and cleanup events when encounter segmentation looks unusual."
+  }
+]

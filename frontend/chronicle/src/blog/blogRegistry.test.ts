@@ -1,7 +1,16 @@
+import type { ComponentType } from "react";
 import { describe, expect, it } from "vitest";
-import { blogPostMatchesFlavor, type BlogPostDefinition } from "./blogRegistry";
+import {
+  BLOG_POSTS,
+  blogPostMatchesFlavor,
+  createBlogPosts,
+  type BlogPostDefinition,
+  type BlogPostMetadata,
+} from "./blogRegistry";
 
-const basePost: BlogPostDefinition = {
+const TestComponent: ComponentType<{ post: BlogPostDefinition }> = () => null;
+
+const baseMetadata: BlogPostMetadata = {
   id: "test",
   title: "Test",
   description: "Test post",
@@ -9,8 +18,45 @@ const basePost: BlogPostDefinition = {
   rarity: "common",
   tag: "Docs",
   icon: "inv_misc_book_09",
-  component: () => null,
 };
+
+const basePost: BlogPostDefinition = {
+  ...baseMetadata,
+  component: TestComponent,
+};
+
+describe("blog registry", () => {
+  it("hydrates every JSON metadata item with its runtime component", () => {
+    expect(BLOG_POSTS).toHaveLength(19);
+    expect(new Set(BLOG_POSTS.map((post) => post.id)).size).toBe(BLOG_POSTS.length);
+    expect(BLOG_POSTS.every((post) => typeof post.component === "function")).toBe(true);
+  });
+
+  it("rejects duplicate metadata IDs", () => {
+    expect(() => createBlogPosts(
+      [baseMetadata, baseMetadata],
+      { test: TestComponent },
+    )).toThrow("Duplicate blog post ID: test");
+  });
+
+  it("rejects metadata without a component mapping", () => {
+    expect(() => createBlogPosts([baseMetadata], {})).toThrow("Blog post test has no component mapping");
+  });
+
+  it("rejects orphan component mappings", () => {
+    expect(() => createBlogPosts(
+      [baseMetadata],
+      { test: TestComponent, orphan: TestComponent },
+    )).toThrow("Blog component mapping orphan has no metadata");
+  });
+
+  it("rejects empty required metadata", () => {
+    expect(() => createBlogPosts(
+      [{ ...baseMetadata, title: "" }],
+      { test: TestComponent },
+    )).toThrow("Blog post test has an empty or invalid title");
+  });
+});
 
 describe("blogPostMatchesFlavor", () => {
   it("allows posts without flavor restrictions", () => {
