@@ -7,6 +7,7 @@ import { adSizeLabel, adSizesForFormat, type AdFormat, type RailLayout } from ".
 import { isAdPlacementDisabled, type AdPlacement } from "./adPolicy"
 import {
   clearNitroPayAds,
+  guardNitroPayReportFrameAccess,
   isNitroPayRenderedEventForPlacement,
   requestNitroPayAd,
   type NitroPayAd,
@@ -222,6 +223,7 @@ export function AdSlot({
         )}
         <div
           id={adID}
+          onClickCapture={(event) => guardNitroPayReportFrameAccess(event.currentTarget, event.target)}
           className={cn(
             showPreview
               ? "relative flex items-center justify-center overflow-hidden rounded-md border border-dashed border-border/60 bg-muted/10"

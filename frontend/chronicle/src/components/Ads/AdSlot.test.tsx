@@ -8,7 +8,12 @@ import { describe, expect, it, vi } from "vitest"
 import { AdSlot } from "./AdSlot"
 import { adSizeLabel, adSizesForFormat } from "./adFormats"
 import { isAdPlacementDisabled } from "./adPolicy"
-import { clearNitroPayAds, isNitroPayRenderedEventForPlacement, nitroPayAdOptions } from "./nitroPay"
+import {
+  clearNitroPayAds,
+  isNitroPayRenderedEventForPlacement,
+  nitroPayAdOptions,
+  nitroPayReportNeedsFrameGuard,
+} from "./nitroPay"
 import {
   isLocalAdPreviewHost,
   shouldShowAdPreview,
@@ -226,6 +231,13 @@ describe("AdSlot", () => {
 
     expect(nitroPayAdOptions(sizes)).not.toHaveProperty("demo")
     expect(nitroPayAdOptions(sizes, true)).toMatchObject({ demo: true, sizes })
+  })
+
+  it("guards NitroPay reporting for direct non-URL creative frames", () => {
+    expect(nitroPayReportNeedsFrameGuard("IFRAME", "")).toBe(true)
+    expect(nitroPayReportNeedsFrameGuard("iframe", "about:blank")).toBe(true)
+    expect(nitroPayReportNeedsFrameGuard("IFRAME", "https://ads.example.com/creative")).toBe(false)
+    expect(nitroPayReportNeedsFrameGuard("DIV", "")).toBe(false)
   })
 
   it("matches NitroPay render events to their placement", () => {

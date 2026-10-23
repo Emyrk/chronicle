@@ -103,6 +103,25 @@ export function nitroPayAdOptions(sizes: NitroPaySize[], demo = false): NitroPay
   }
 }
 
+export function nitroPayReportNeedsFrameGuard(tagName: string | undefined, source: string | undefined) {
+  return tagName?.toLowerCase() === "iframe" && !source?.startsWith("http") && !source?.startsWith("//")
+}
+
+export function guardNitroPayReportFrameAccess(holder: HTMLElement, eventTarget: EventTarget | null) {
+  if (!(eventTarget instanceof Element) || !eventTarget.closest(".report-link")) return
+
+  const creative = holder.firstElementChild as HTMLIFrameElement | null
+  if (!nitroPayReportNeedsFrameGuard(creative?.tagName, creative?.src)) return
+
+  // NitroPay reads the document of a direct, non-URL iframe while opening its
+  // report form. Chrome throws when a failed creative has become chrome-error.
+  // A layout-neutral first child makes the reporter submit the slot markup
+  // instead of dereferencing the failed iframe document.
+  const guard = document.createElement("template")
+  guard.dataset.nitroPayReportGuard = ""
+  holder.prepend(guard)
+}
+
 export function isNitroPayRenderedEventForPlacement(event: Event, id: string): boolean {
   const renderedEvent = event as NitroPayRenderedEvent
   return renderedEvent.adInfo?.adUnitCode === id || renderedEvent.detail?.adInfo?.adUnitCode === id
