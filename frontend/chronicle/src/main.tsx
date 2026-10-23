@@ -6,6 +6,13 @@ import './index.css'
 import App from './App.tsx'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BlogApp } from './blog/BlogApp'
+import { reloadAfterRouteLoadFailure } from './lib/routeLoadRecovery'
+
+window.addEventListener('vite:preloadError', (event) => {
+  if (reloadAfterRouteLoadFailure()) {
+    event.preventDefault()
+  }
+})
 
 const queryClient = new QueryClient()
 const root = document.getElementById('root')!
