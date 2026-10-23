@@ -229,7 +229,7 @@ export function AdSlot({
                 ? "relative flex items-center justify-center overflow-hidden rounded-md border border-dashed border-[#f0c060]/35 bg-[#f0c060]/5 [&>iframe]:relative [&>iframe]:z-10 [&>iframe]:!bg-transparent"
                 : cn(
                     "!bg-transparent [&>iframe]:!bg-transparent",
-                    liveCreativeRendered ? "[&>*]:opacity-100" : "[&>*]:pointer-events-none [&>*]:opacity-0",
+                    liveCreativeRendered ? "opacity-100" : "pointer-events-none opacity-0",
                   ),
             format === "sidebar" && "flex justify-center",
             (showPreview || showDemo || format !== "responsive") && frameClasses[format],
