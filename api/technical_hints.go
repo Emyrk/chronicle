@@ -185,13 +185,17 @@ type panelHintAsset struct {
 }
 
 type blogPostAsset struct {
-	ID          string     `json:"id"`
-	Title       string     `json:"title"`
-	Description string     `json:"description"`
-	Tag         string     `json:"tag"`
-	Icon        string     `json:"icon"`
-	PublishedAt string     `json:"publishedAt"`
-	FlavorSets  [][]string `json:"flavorSets"`
+	ID              string     `json:"id"`
+	Title           string     `json:"title"`
+	Description     string     `json:"description"`
+	Tag             string     `json:"tag"`
+	Icon            string     `json:"icon"`
+	PublishedAt     string     `json:"publishedAt"`
+	FlavorSets      [][]string `json:"flavorSets"`
+	HintTitle       string     `json:"hintTitle"`
+	HintDescription string     `json:"hintDescription"`
+	HintHref        string     `json:"hintHref"`
+	HintEnabled     *bool      `json:"hintEnabled"`
 }
 
 func loadStaticTechnicalHints(reader staticHintAssetReader) ([]chroniclesdk.TechnicalHint, error) {
@@ -222,7 +226,7 @@ func loadStaticTechnicalHints(reader staticHintAssetReader) ([]chroniclesdk.Tech
 			Kind:  chroniclesdk.TechnicalHintKindTip,
 			Title: humanizeHintID(tip.ID),
 			Body:  tip.Content,
-			Href:  "/technical#chronicle-tips",
+			Href:  "/technical/hints#chronicle-tips",
 			Tags:  []string{"tip"},
 		})
 	}
@@ -235,23 +239,29 @@ func loadStaticTechnicalHints(reader staticHintAssetReader) ([]chroniclesdk.Tech
 			Kind:        chroniclesdk.TechnicalHintKindPanel,
 			Title:       humanizeHintID(panel.PanelID),
 			Body:        panel.Content,
-			Href:        "/technical#panel-insights",
+			Href:        "/technical/hints#panel-insights",
 			ActionLabel: "See panel insights",
 			Panel:       panel.PanelID,
 			Tags:        []string{"panel", panel.PanelID},
 		})
 	}
 	for _, post := range posts {
-		if post.ID == "" || post.Title == "" || post.Description == "" {
+		if post.ID == "" || post.Title == "" || post.Description == "" || (post.HintEnabled != nil && !*post.HintEnabled) {
 			continue
+		}
+		href := post.HintHref
+		actionLabel := "Open the feature"
+		if href == "" {
+			href = "/blog/" + post.ID
+			actionLabel = "Read the article"
 		}
 		payloads = append(payloads, chroniclesdk.TechnicalHint{
 			ID:          "blog-" + post.ID,
 			Kind:        chroniclesdk.TechnicalHintKindBlog,
-			Title:       post.Title,
-			Body:        post.Description,
-			Href:        "/blog/" + post.ID,
-			ActionLabel: "Read the article",
+			Title:       firstNonEmpty(post.HintTitle, post.Title),
+			Body:        firstNonEmpty(post.HintDescription, post.Description),
+			Href:        href,
+			ActionLabel: actionLabel,
 			Icon:        post.Icon,
 			BlogID:      post.ID,
 			Tags:        []string{"blog", post.Tag},

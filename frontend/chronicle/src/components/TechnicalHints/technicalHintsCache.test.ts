@@ -70,6 +70,34 @@ describe("technical hints cache", () => {
 });
 
 describe("static technical hints", () => {
+  it("uses feature-oriented destinations and excludes vehicle support", () => {
+    const byID = new Map(STATIC_TECHNICAL_HINTS.map((hint) => [hint.id, hint]));
+
+    expect(byID.get("blog-armory-refresh")).toMatchObject({
+      title: "Player Armory",
+      href: "/armory",
+    });
+    expect(byID.get("blog-talent-builder-refresh")).toMatchObject({
+      title: "Talent Calculator",
+      href: "/talents",
+    });
+    expect(byID.get("blog-youtube-sync-refresh")).toMatchObject({
+      title: "YouTube Sync",
+      href: "/youtube-sync-v3",
+    });
+    expect(byID.get("blog-consumables-panel")?.title).toBe("Consumable Tracking");
+    expect(byID.has("blog-vehicle-support")).toBe(false);
+    expect(mergeTechnicalHints({
+      ...response,
+      payloads: [{
+        id: "blog-vehicle-support",
+        kind: "blog",
+        title: "Vehicle support",
+        body: "Stale API payload",
+      }],
+    }).payloads.some((hint) => hint.id === "blog-vehicle-support")).toBe(false);
+  });
+
   it("provides a catalog without the API and merges dynamic facts by stable ID", () => {
     const fallback = mergeTechnicalHints(undefined);
     expect(fallback.payloads).toHaveLength(STATIC_TECHNICAL_HINTS.length);

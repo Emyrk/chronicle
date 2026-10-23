@@ -45,6 +45,11 @@ export interface BlogPostMetadata {
   /** Optional YouTube video ID embedded at the top of the post. */
   youtubeID?: string;
   flavorSets?: readonly BlogFlavorSet[];
+  /** Optional feature-oriented copy and destination used by technical hint cards. */
+  hintTitle?: string;
+  hintDescription?: string;
+  hintHref?: string;
+  hintEnabled?: boolean;
 }
 
 export interface BlogPostDefinition extends BlogPostMetadata {
@@ -142,6 +147,12 @@ function normalizeBlogPostMetadata(value: unknown): BlogPostMetadata {
   const flavor = optionalString(value, "flavor", id);
   const youtubeID = optionalString(value, "youtubeID", id);
   const flavorSets = normalizeFlavorSets(value.flavorSets, id);
+  const hintTitle = optionalString(value, "hintTitle", id);
+  const hintDescription = optionalString(value, "hintDescription", id);
+  const hintHref = optionalString(value, "hintHref", id);
+  if (value.hintEnabled !== undefined && typeof value.hintEnabled !== "boolean") {
+    throw new Error(`Blog post ${id} has invalid hintEnabled`);
+  }
   return {
     id,
     title: requiredString(value, "title", id),
@@ -153,6 +164,10 @@ function normalizeBlogPostMetadata(value: unknown): BlogPostMetadata {
     ...(flavor ? { flavor } : {}),
     ...(youtubeID ? { youtubeID } : {}),
     ...(flavorSets ? { flavorSets } : {}),
+    ...(hintTitle ? { hintTitle } : {}),
+    ...(hintDescription ? { hintDescription } : {}),
+    ...(hintHref ? { hintHref } : {}),
+    ...(typeof value.hintEnabled === "boolean" ? { hintEnabled: value.hintEnabled } : {}),
   };
 }
 
