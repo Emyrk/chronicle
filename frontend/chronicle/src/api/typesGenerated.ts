@@ -3653,6 +3653,11 @@ export interface SiteConfig {
      */
     readonly ads_enabled: boolean;
     /**
+     * DisabledAds contains tenant-level opt-outs such as "rail" or
+     * "recent-content". Empty means every placement remains eligible.
+     */
+    readonly disabled_ads: readonly string[];
+    /**
      * NitroPaySiteID is the public site identifier used by the shared ad runtime.
      * It is omitted unless AdsEnabled is true.
      */
@@ -4056,6 +4061,7 @@ export interface Tenant {
     readonly include_in_all: boolean;
     readonly discoverable: boolean;
     readonly ads_enabled: boolean;
+    readonly disabled_ads: readonly string[];
     readonly branding: Branding | null;
     readonly parse_config: ParseConfig | null;
     readonly default_dataset_id: string | null;
@@ -4492,6 +4498,7 @@ export interface UpsertTenantRequest {
     readonly include_in_all: boolean | null;
     readonly discoverable: boolean | null;
     readonly ads_enabled?: boolean;
+    readonly disabled_ads?: readonly string[];
     readonly branding: Branding | null;
     readonly parse_config: ParseConfig | null;
     readonly default_format: string | null;

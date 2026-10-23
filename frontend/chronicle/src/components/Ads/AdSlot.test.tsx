@@ -7,6 +7,7 @@ import type { SiteConfig } from "@/api/typesGenerated"
 import { describe, expect, it, vi } from "vitest"
 import { AdSlot } from "./AdSlot"
 import { adSizeLabel, adSizesForFormat } from "./adFormats"
+import { isAdPlacementDisabled } from "./adPolicy"
 import { clearNitroPayAds, nitroPayAdOptions } from "./nitroPay"
 import {
   isLocalAdPreviewHost,
@@ -245,6 +246,33 @@ describe("AdSlot", () => {
     expect(markup).toContain(`href="${href}"`)
     expect(markup).toContain('title="Become a supporter to remove ads"')
     expect(markup).toContain("Go ad-free")
+  })
+
+  it("applies tenant opt-outs by ad group and exact placement", () => {
+    expect(isAdPlacementDisabled(["rail"], "leaderboards-right-rail", "rail")).toBe(true)
+    expect(isAdPlacementDisabled(["recent-content"], "recent-between-pages", "responsive")).toBe(true)
+    expect(isAdPlacementDisabled(["recent-content"], "recent-right-rail", "rail")).toBe(false)
+    expect(isAdPlacementDisabled(["statistics-encounter-sidebar"], "statistics-encounter-sidebar", "responsive")).toBe(
+      true,
+    )
+  })
+
+  it("does not render a tenant-disabled ad group", () => {
+    const markup = renderAdSlot(
+      <AdSlot
+        placement="leaderboards-right-rail"
+        format="rail"
+        hostname="turtle.chronicleclassic.com"
+        previewEnabled={false}
+      />,
+      {
+        ads_enabled: true,
+        disabled_ads: ["rail"],
+        nitropay_site_id: "12345",
+      } as unknown as SiteConfig,
+    )
+
+    expect(markup).toBe("")
   })
 
   it("does not render for a tenant with ads disabled", () => {

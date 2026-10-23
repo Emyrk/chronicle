@@ -18,6 +18,7 @@ type Tenant struct {
 	IncludeInAll        bool         `json:"include_in_all"`
 	Discoverable        bool         `json:"discoverable"`
 	AdsEnabled          bool         `json:"ads_enabled"`
+	DisabledAds         []string     `json:"disabled_ads"`
 	Branding            *Branding    `json:"branding"`
 	ParseConfig         *ParseConfig `json:"parse_config"`
 	DefaultDatasetID    *uuid.UUID   `json:"default_dataset_id"`
@@ -72,6 +73,7 @@ func TenantFromDB(t database.Tenant) Tenant {
 		IncludeInAll:        t.IncludeInAll,
 		Discoverable:        t.Discoverable,
 		AdsEnabled:          t.AdsEnabled,
+		DisabledAds:         t.DisabledAds,
 		AdditionalFlavor:    t.AdditionalFlavor,
 		CreatedAt:           t.CreatedAt.Time,
 		UpdatedAt:           t.UpdatedAt.Time,
@@ -191,6 +193,7 @@ type UpsertTenantRequest struct {
 	IncludeInAll        *bool         `json:"include_in_all"`
 	Discoverable        *bool         `json:"discoverable"`
 	AdsEnabled          *bool         `json:"ads_enabled,omitempty"`
+	DisabledAds         []string      `json:"disabled_ads,omitempty"`
 	Branding            *Branding     `json:"branding"`
 	ParseConfig         *ParseConfig  `json:"parse_config"`
 	DefaultFormat       *string       `json:"default_format"`
@@ -275,6 +278,7 @@ func (r UpsertTenantRequest) ToInsertParams() database.InsertTenantParams {
 		IncludeInAll:        includeInAll,
 		Discoverable:        discoverable,
 		AdsEnabled:          adsEnabled,
+		DisabledAds:         r.DisabledAds,
 		Branding:            r.marshalBranding(),
 		ParseConfig:         r.marshalParseConfig(),
 		ExternalLinking:     r.marshalExternalLinking(),
@@ -330,6 +334,7 @@ func (r UpsertTenantRequest) ToUpdateParams() database.UpdateTenantParams {
 		IncludeInAll:        includeInAll,
 		Discoverable:        discoverable,
 		AdsEnabled:          adsEnabled,
+		DisabledAds:         r.DisabledAds,
 		Branding:            r.marshalBranding(),
 		ParseConfig:         r.marshalParseConfig(),
 		ExternalLinking:     r.marshalExternalLinking(),

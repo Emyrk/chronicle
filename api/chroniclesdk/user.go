@@ -205,6 +205,9 @@ type SiteConfig struct {
 	// AdsEnabled is true only when the resolved tenant or root site opted into ads
 	// and the deployment configured both ads.txt and a NitroPay site ID.
 	AdsEnabled bool `json:"ads_enabled"`
+	// DisabledAds contains tenant-level opt-outs such as "rail" or
+	// "recent-content". Empty means every placement remains eligible.
+	DisabledAds []string `json:"disabled_ads"`
 	// NitroPaySiteID is the public site identifier used by the shared ad runtime.
 	// It is omitted unless AdsEnabled is true.
 	NitroPaySiteID string `json:"nitropay_site_id,omitempty"`

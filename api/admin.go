@@ -830,6 +830,10 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled || config.ClientUploadsDisabled || (t != nil && t.DisableClientUpload),
 		BillingEnabled:        a.Opts.BillingEnabled,
 		AdsEnabled:            adsEnabled,
+		DisabledAds:           []string{},
+	}
+	if t != nil {
+		resp.DisabledAds = t.DisabledAds
 	}
 	if adsEnabled {
 		resp.NitroPaySiteID = a.Opts.NitroPaySiteID
@@ -918,8 +922,12 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled || config.ClientUploadsDisabled || (t != nil && t.DisableClientUpload),
 		BillingEnabled:        a.Opts.BillingEnabled,
 		AdsEnabled:            adsEnabled,
+		DisabledAds:           []string{},
 		Branding:              unmarshalBranding(config.Branding),
 		Discoverable:          config.Discoverable,
+	}
+	if t != nil {
+		resp.DisabledAds = t.DisabledAds
 	}
 	if adsEnabled {
 		resp.NitroPaySiteID = a.Opts.NitroPaySiteID

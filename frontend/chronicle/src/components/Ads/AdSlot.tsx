@@ -4,9 +4,10 @@ import { useSession, useSiteConfig } from "@/api/queries"
 import { cn } from "@/lib/utils"
 import { shouldShowAdPreview } from "./adPreview"
 import { adSizeLabel, adSizesForFormat, type AdFormat, type RailLayout } from "./adFormats"
+import { isAdPlacementDisabled, type AdPlacement } from "./adPolicy"
 import { clearNitroPayAds, requestNitroPayAd, type NitroPayAd } from "./nitroPay"
 
-export type AdPlacement = `${string}-${string}`
+export type { AdPlacement } from "./adPolicy"
 
 const formatClasses: Record<AdFormat, string> = {
   responsive: "hidden w-full lg:block",
@@ -128,7 +129,8 @@ export function AdSlot({
     () => adSizesForFormat(format, wideRail, compactCard, sidebarAvailableHeight),
     [compactCard, format, sidebarAvailableHeight, wideRail],
   )
-  const adsAllowed = !sessionLoading && !session?.ads_free
+  const placementDisabled = isAdPlacementDisabled(siteConfig?.disabled_ads, placement, format)
+  const adsAllowed = !sessionLoading && !session?.ads_free && !placementDisabled
 
   useEffect(() => {
     if (!adsAllowed || !siteID || showPreview || eligibleSizes.length === 0) return

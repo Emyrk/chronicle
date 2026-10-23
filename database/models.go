@@ -2235,6 +2235,7 @@ type Tenant struct {
 	ExternalLinking     []byte             `db:"external_linking" json:"external_linking"`
 	AdditionalFlavor    []string           `db:"additional_flavor" json:"additional_flavor"`
 	AdsEnabled          bool               `db:"ads_enabled" json:"ads_enabled"`
+	DisabledAds         []string           `db:"disabled_ads" json:"disabled_ads"`
 }
 
 type TimeParseBossKillMembership struct {
