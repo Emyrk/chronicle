@@ -167,10 +167,24 @@ func insertInstanceWithSlugFallback(
 	ctx context.Context,
 	insert func(context.Context, database.InsertInstanceParams) (database.LogInstance, error),
 	params database.InsertInstanceParams,
+	fallbackSlugs ...string,
 ) (database.LogInstance, error) {
 	instance, err := insert(ctx, params)
 	if !errors.Is(err, pgx.ErrNoRows) || !params.HashedSlug.Valid {
 		return instance, err
+	}
+
+	lastSlug := params.HashedSlug.String
+	for _, fallbackSlug := range fallbackSlugs {
+		if fallbackSlug == "" || fallbackSlug == lastSlug {
+			continue
+		}
+		params.HashedSlug = pgtype.Text{String: fallbackSlug, Valid: true}
+		instance, err = insert(ctx, params)
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return instance, err
+		}
+		lastSlug = fallbackSlug
 	}
 
 	params.HashedSlug = pgtype.Text{Valid: false}
@@ -582,10 +596,30 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				InvalidReason:           lg.InvalidReason,
 			}
 
-			// InsertInstance atomically declines a colliding non-null slug. Retry
-			// without a slug so concurrent parsers in different processes cannot
-			// fail the entire log on the unique index.
-			dbinstance, err = insertInstanceWithSlugFallback(ctx, tx.InsertInstance, insertInstanceParams)
+			// Preserve the original stable slug when possible. If another instance
+			// with the same name already owns it, distinguish common variants by
+			// difficulty and raid size, then by parse ordinal, before falling back
+			// to a slugless instance.
+			variantSlug := database.InstanceVariantSlug(
+				job.Args.LogID,
+				inst.Name(),
+				inst.CurrentZone.DifficultyName,
+				int32(inst.CurrentZone.MaxPlayers),
+			)
+			ordinalSlug := database.InstanceOrdinalSlug(
+				job.Args.LogID,
+				inst.Name(),
+				inst.CurrentZone.DifficultyName,
+				int32(inst.CurrentZone.MaxPlayers),
+				i,
+			)
+			dbinstance, err = insertInstanceWithSlugFallback(
+				ctx,
+				tx.InsertInstance,
+				insertInstanceParams,
+				variantSlug,
+				ordinalSlug,
+			)
 			if err != nil {
 				return fmt.Errorf("insert instance: %w", err)
 			}

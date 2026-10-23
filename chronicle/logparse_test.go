@@ -216,7 +216,7 @@ func TestInferTalentSubSpec(t *testing.T) {
 func TestInsertInstanceWithSlugFallback(t *testing.T) {
 	t.Parallel()
 
-	t.Run("slug collision retries without slug", func(t *testing.T) {
+	t.Run("slug collision retries with variant slug", func(t *testing.T) {
 		t.Parallel()
 
 		calls := 0
@@ -224,16 +224,61 @@ func TestInsertInstanceWithSlugFallback(t *testing.T) {
 		instance, err := insertInstanceWithSlugFallback(t.Context(), func(_ context.Context, params database.InsertInstanceParams) (database.LogInstance, error) {
 			calls++
 			if calls == 1 {
+				require.Equal(t, pgtype.Text{String: "collision", Valid: true}, params.HashedSlug)
+				return database.LogInstance{}, pgx.ErrNoRows
+			}
+			require.Equal(t, pgtype.Text{String: "variant", Valid: true}, params.HashedSlug)
+			return database.LogInstance{ID: instanceID}, nil
+		}, database.InsertInstanceParams{HashedSlug: pgtype.Text{String: "collision", Valid: true}}, "variant")
+
+		require.NoError(t, err)
+		require.Equal(t, instanceID, instance.ID)
+		require.Equal(t, 2, calls)
+	})
+
+	t.Run("variant collision retries with ordinal slug", func(t *testing.T) {
+		t.Parallel()
+
+		calls := 0
+		instanceID := uuid.New()
+		instance, err := insertInstanceWithSlugFallback(t.Context(), func(_ context.Context, params database.InsertInstanceParams) (database.LogInstance, error) {
+			calls++
+			switch calls {
+			case 1:
+				require.Equal(t, pgtype.Text{String: "collision", Valid: true}, params.HashedSlug)
+				return database.LogInstance{}, pgx.ErrNoRows
+			case 2:
+				require.Equal(t, pgtype.Text{String: "variant", Valid: true}, params.HashedSlug)
+				return database.LogInstance{}, pgx.ErrNoRows
+			default:
+				require.Equal(t, pgtype.Text{String: "ordinal", Valid: true}, params.HashedSlug)
+				return database.LogInstance{ID: instanceID}, nil
+			}
+		}, database.InsertInstanceParams{HashedSlug: pgtype.Text{String: "collision", Valid: true}}, "variant", "ordinal")
+
+		require.NoError(t, err)
+		require.Equal(t, instanceID, instance.ID)
+		require.Equal(t, 3, calls)
+	})
+
+	t.Run("all slug collisions retry without slug", func(t *testing.T) {
+		t.Parallel()
+
+		calls := 0
+		instanceID := uuid.New()
+		instance, err := insertInstanceWithSlugFallback(t.Context(), func(_ context.Context, params database.InsertInstanceParams) (database.LogInstance, error) {
+			calls++
+			if calls < 4 {
 				require.True(t, params.HashedSlug.Valid)
 				return database.LogInstance{}, pgx.ErrNoRows
 			}
 			require.False(t, params.HashedSlug.Valid)
 			return database.LogInstance{ID: instanceID}, nil
-		}, database.InsertInstanceParams{HashedSlug: pgtype.Text{String: "collision", Valid: true}})
+		}, database.InsertInstanceParams{HashedSlug: pgtype.Text{String: "collision", Valid: true}}, "variant", "ordinal")
 
 		require.NoError(t, err)
 		require.Equal(t, instanceID, instance.ID)
-		require.Equal(t, 2, calls)
+		require.Equal(t, 4, calls)
 	})
 
 	t.Run("non-collision errors are not retried", func(t *testing.T) {
@@ -244,7 +289,7 @@ func TestInsertInstanceWithSlugFallback(t *testing.T) {
 		_, err := insertInstanceWithSlugFallback(t.Context(), func(context.Context, database.InsertInstanceParams) (database.LogInstance, error) {
 			calls++
 			return database.LogInstance{}, insertErr
-		}, database.InsertInstanceParams{HashedSlug: pgtype.Text{String: "slug", Valid: true}})
+		}, database.InsertInstanceParams{HashedSlug: pgtype.Text{String: "slug", Valid: true}}, "variant")
 
 		require.ErrorIs(t, err, insertErr)
 		require.Equal(t, 1, calls)
@@ -257,7 +302,7 @@ func TestInsertInstanceWithSlugFallback(t *testing.T) {
 		_, err := insertInstanceWithSlugFallback(t.Context(), func(context.Context, database.InsertInstanceParams) (database.LogInstance, error) {
 			calls++
 			return database.LogInstance{}, pgx.ErrNoRows
-		}, database.InsertInstanceParams{})
+		}, database.InsertInstanceParams{}, "variant")
 
 		require.ErrorIs(t, err, pgx.ErrNoRows)
 		require.Equal(t, 1, calls)
