@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import type { ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
+import { MemoryRouter } from "react-router-dom"
 import type { Session } from "@/api/queries"
 import type { SiteConfig } from "@/api/typesGenerated"
 import { describe, expect, it, vi } from "vitest"
@@ -25,7 +26,9 @@ function renderAdSlot(
   }
 
   return renderToStaticMarkup(
-    <QueryClientProvider client={queryClient}>{element}</QueryClientProvider>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>{element}</MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 
@@ -139,6 +142,30 @@ describe("AdSlot", () => {
     expect(markup).toContain("min-h-[600px]")
     expect(markup).toContain(">Advertisement</div>")
     expect(markup).not.toContain("Ad preview")
+  })
+
+  it.each([
+    { name: "billing settings for a signed-in user", session: { ads_free: false }, href: "/account/billing" },
+    { name: "the Revered page for a signed-out visitor", session: null, href: "/revered" },
+  ])("links the label to $name when billing is enabled", ({ session, href }) => {
+    const markup = renderAdSlot(
+      <AdSlot
+        placement="leaderboards-right-rail"
+        format="rail"
+        hostname="turtle.chronicleclassic.com"
+        previewEnabled={false}
+      />,
+      {
+        ads_enabled: true,
+        billing_enabled: true,
+        nitropay_site_id: "12345",
+      } as SiteConfig,
+      session,
+    )
+
+    expect(markup).toContain(`href="${href}"`)
+    expect(markup).toContain('title="Become Revered to remove ads"')
+    expect(markup).toContain("Go ad-free")
   })
 
   it("does not render for a tenant with ads disabled", () => {

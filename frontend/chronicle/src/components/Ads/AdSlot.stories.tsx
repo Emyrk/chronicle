@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
+import { MemoryRouter } from "react-router-dom"
 import { AdSlot } from "./AdSlot"
 
 const meta = {
@@ -7,6 +8,13 @@ const meta = {
   parameters: {
     layout: "fullscreen",
   },
+  decorators: [
+    (Story) => (
+      <MemoryRouter>
+        <Story />
+      </MemoryRouter>
+    ),
+  ],
   args: {
     hostname: "localhost",
     placement: "leaderboards-right-rail",

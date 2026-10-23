@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { Link } from "react-router-dom"
 import { useSession, useSiteConfig } from "@/api/queries"
 import { cn } from "@/lib/utils"
 import { shouldShowAdPreview } from "./adPreview"
@@ -112,9 +113,25 @@ export function AdSlot({
       data-ad-provider={showPreview ? "preview" : "nitropay"}
     >
       <div>
-        <div className="mb-1.5 text-center text-[9px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60">
-          Advertisement
-        </div>
+        {siteConfig?.billing_enabled ? (
+          <Link
+            to={session ? "/account/billing" : "/revered"}
+            title="Become Revered to remove ads"
+            className="group mb-1.5 grid text-center text-[9px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60 transition-colors hover:text-[#f0c060] focus-visible:text-[#f0c060]"
+          >
+            {/* Both labels share one grid cell so swapping on hover never shifts layout. */}
+            <span className="col-start-1 row-start-1 group-hover:invisible group-focus-visible:invisible">
+              Advertisement
+            </span>
+            <span className="invisible col-start-1 row-start-1 group-hover:visible group-focus-visible:visible" aria-hidden="true">
+              Go ad-free
+            </span>
+          </Link>
+        ) : (
+          <div className="mb-1.5 text-center text-[9px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60">
+            Advertisement
+          </div>
+        )}
         <div
           id={adID}
           className={cn(
