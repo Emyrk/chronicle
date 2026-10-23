@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { 
@@ -57,6 +57,7 @@ import {
   useDeleteLogInstance,
   useAuthorizationCheck,
   useUploadInstanceYoutube,
+  getLogGroupRefetchInterval,
   type WoWLogGroupState, 
   type WoWLogFile, 
   type RiverJobState,
@@ -210,7 +211,7 @@ function StatusBadge({ state, errors }: { state: RiverJobState; errors?: readonl
     case RIVER_STATES.scheduled:
       return (
         <div className="flex items-center gap-2 text-muted-foreground">
-          <Clock className="h-4 w-4" />
+          <Clock className="h-4 w-4 animate-pulse" />
           <span className="text-sm font-medium">Scheduled</span>
         </div>
       );
@@ -219,7 +220,7 @@ function StatusBadge({ state, errors }: { state: RiverJobState; errors?: readonl
     default:
       return (
         <div className="flex items-center gap-2 text-muted-foreground">
-          <Clock className="h-4 w-4" />
+          <Clock className="h-4 w-4 animate-pulse" />
           <span className="text-sm font-medium">Pending</span>
         </div>
       );
@@ -951,6 +952,37 @@ function isProcessingDone(log: WoWLogGroupState): boolean {
     (log.status.state === RIVER_STATES.discarded && log.status.errors.length === 0);
 }
 
+/** Milliseconds until the next automatic status poll, or null when the log isn't polling. */
+function useNextCheckIn(log: WoWLogGroupState | undefined, lastCheckedAt: number | undefined) {
+  const interval = log ? getLogGroupRefetchInterval(log) : false;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!interval) return;
+    const id = window.setInterval(() => setNow(Date.now()), 200);
+    return () => window.clearInterval(id);
+  }, [interval]);
+  if (!interval || !lastCheckedAt) return null;
+  return {
+    interval,
+    remainingMs: Math.min(interval, Math.max(0, lastCheckedAt + interval - now)),
+  };
+}
+
+/** Refresh icon whose arrows fill in clockwise as the next automatic poll approaches. */
+function RefreshCountdownIcon({ progress, spinning }: { progress: number; spinning: boolean }) {
+  if (spinning) return <RefreshCw className="h-4 w-4 animate-spin text-primary" />;
+  const mask = `conic-gradient(#000 ${progress * 360}deg, transparent 0)`;
+  return (
+    <span className="relative inline-flex h-4 w-4">
+      <RefreshCw className="absolute inset-0 h-4 w-4 opacity-30" />
+      <RefreshCw
+        className="absolute inset-0 h-4 w-4 text-primary"
+        style={{ maskImage: mask, WebkitMaskImage: mask }}
+      />
+    </span>
+  );
+}
+
 /** Job status for the log. Collapsed to a one-line summary once processing succeeded. */
 function ProcessingStatusCard({ log }: { log: WoWLogGroupState }) {
   const done = isProcessingDone(log);
@@ -1142,6 +1174,8 @@ export interface LogDetailViewProps {
   isDeletingInstance: boolean;
   onRefresh: () => void;
   isRefreshing: boolean;
+  /** When the log was last fetched (ms since epoch); drives the next-poll countdown. */
+  lastCheckedAt?: number;
   canMarkUnlisted: boolean;
   onMarkUnlisted: () => void;
   isMarkingUnlisted: boolean;
@@ -1169,6 +1203,7 @@ export function LogDetailView({
   isDeletingInstance,
   onRefresh,
   isRefreshing,
+  lastCheckedAt,
   canMarkUnlisted,
   onMarkUnlisted,
   isMarkingUnlisted,
@@ -1187,6 +1222,8 @@ export function LogDetailView({
   // Title the page after its instances, deduped (re-clears share a name).
   const instanceNames = [...new Set(parsedOutput?.instances.map((i) => i.name) ?? [])].join(", ");
   const processingDone = log ? isProcessingDone(log) : false;
+  const nextCheck = useNextCheckIn(log, lastCheckedAt);
+  const nextCheckSeconds = nextCheck ? Math.ceil(nextCheck.remainingMs / 1000) : 0;
   // Rare, irreversible action — kept small rather than given its own card.
   const unlistedAction = log && !log.unlisted && canMarkUnlisted && (
     <UnlistedConfirmationDialog
@@ -1275,9 +1312,24 @@ export function LogDetailView({
                 size="sm"
                 onClick={onRefresh}
                 disabled={isRefreshing}
-                title="Refresh"
+                title={nextCheck
+                  ? `Refresh (auto-refreshes every ${nextCheck.interval / 1000}s)`
+                  : "Refresh"}
+                className={nextCheck ? "gap-1.5 tabular-nums" : undefined}
               >
-                <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                {nextCheck ? (
+                  <>
+                    <RefreshCountdownIcon
+                      progress={1 - nextCheck.remainingMs / nextCheck.interval}
+                      spinning={isRefreshing || nextCheck.remainingMs === 0}
+                    />
+                    <span className="text-xs text-muted-foreground" aria-hidden="true">
+                      {isRefreshing || nextCheckSeconds === 0 ? "…" : `${nextCheckSeconds}s`}
+                    </span>
+                  </>
+                ) : (
+                  <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                )}
                 <span className="sr-only">Refresh</span>
               </Button>
               {canReparse && (
@@ -1631,6 +1683,7 @@ export function LogDetail() {
     error: logError,
     refetch,
     isRefetching,
+    dataUpdatedAt,
   } = useLogGroup(logId || "", {
     enabled: !!logId,
   });
@@ -1770,6 +1823,7 @@ export function LogDetail() {
       isDeletingInstance={deleteLogInstance.isPending}
       onRefresh={handleRefresh}
       isRefreshing={isRefetching}
+      lastCheckedAt={dataUpdatedAt}
       canMarkUnlisted={canMarkUnlisted}
       onMarkUnlisted={handleMarkUnlisted}
       isMarkingUnlisted={markUnlisted.isPending}
@@ -1789,6 +1843,7 @@ export function LogDetailByHash() {
     error: logError,
     refetch,
     isRefetching,
+    dataUpdatedAt,
   } = useLogGroupByFileHash(fileHash || "", {
     enabled: !!fileHash,
   });
@@ -1930,6 +1985,7 @@ export function LogDetailByHash() {
       isDeletingInstance={deleteLogInstance.isPending}
       onRefresh={handleRefresh}
       isRefreshing={isRefetching}
+      lastCheckedAt={dataUpdatedAt}
       canMarkUnlisted={canMarkUnlisted}
       onMarkUnlisted={handleMarkUnlisted}
       isMarkingUnlisted={markUnlisted.isPending}

@@ -116,6 +116,7 @@ const defaultProps = {
   isDeletingInstance: false,
   onRefresh: () => console.log("Refresh clicked"),
   isRefreshing: false,
+  lastCheckedAt: Date.now(),
 };
 
 const meta: Meta<typeof LogDetailView> = {
