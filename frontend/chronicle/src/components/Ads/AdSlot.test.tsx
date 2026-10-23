@@ -243,15 +243,26 @@ describe("AdSlot", () => {
 
   it("matches NitroPay render events to their placement", () => {
     const directEvent = Object.assign(new Event("nitroAds.rendered"), {
-      adInfo: { adUnitCode: "nitropay-recent-right-rail" },
+      adInfo: { adUnitCode: "nitropay-recent-right-rail", bidder: "example-bidder" },
     })
     const customEvent = Object.assign(new Event("nitroAds.rendered"), {
-      detail: { adInfo: { adUnitCode: "nitropay-recent-left-rail" } },
+      detail: { adInfo: { adUnitCode: "nitropay-recent-left-rail", bidder: "example-bidder" } },
+    })
+    const blankEvent = Object.assign(new Event("nitroAds.rendered"), {
+      detail: {
+        adInfo: {
+          adUnitCode: "nitropay-recent-right-rail",
+          bidder: "blank",
+          creativeId: "",
+          cpm: 0,
+        },
+      },
     })
 
     expect(isNitroPayRenderedEventForPlacement(directEvent, "nitropay-recent-right-rail")).toBe(true)
     expect(isNitroPayRenderedEventForPlacement(customEvent, "nitropay-recent-left-rail")).toBe(true)
     expect(isNitroPayRenderedEventForPlacement(directEvent, "nitropay-recent-left-rail")).toBe(false)
+    expect(isNitroPayRenderedEventForPlacement(blankEvent, "nitropay-recent-right-rail")).toBe(false)
   })
 
   it.each([
