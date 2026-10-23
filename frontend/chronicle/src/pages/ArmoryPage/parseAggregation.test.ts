@@ -5,6 +5,7 @@ import {
   bestScoreByInstance,
   filterParsesBySpec,
   performanceSpecs,
+  scoreParses,
   summarizeProgress,
   summarizeRaids,
   topEncounters,
@@ -51,6 +52,13 @@ describe("performance spec selection", () => {
     ]);
   });
 
+  it("calculates the player score from only the selected spec parses", () => {
+    expect(scoreParses(filterParsesBySpec(parses, "Fire"))).toMatchObject({
+      display_value: 80,
+      num_parses: 2,
+      encounter_groups: 1,
+    });
+  });
 });
 
 describe("summarizeRaids", () => {

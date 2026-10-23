@@ -1,6 +1,7 @@
 import type {
   CharacterEncounterStats,
   CharacterParse,
+  CharacterScore,
   PlayerOutfit,
 } from "@/api/typesGenerated";
 
@@ -80,6 +81,23 @@ export function filterParsesBySpec(
 ): CharacterParse[] {
   if (!spec) return [...parses];
   return parses.filter((parse) => parse.player_spec === spec);
+}
+
+export function scoreParses(parses: readonly CharacterParse[]): CharacterScore | undefined {
+  if (parses.length === 0) return undefined;
+
+  const raids = summarizeRaids(parses);
+  const encounterScores = raids.flatMap((raid) => raid.encounters.map((encounter) => (
+    encounter.scoreInputs.reduce((sum, score) => sum + score, 0) / encounter.scoreInputs.length
+  )));
+  const value = encounterScores.reduce((sum, score) => sum + score, 0) / encounterScores.length;
+
+  return {
+    value,
+    display_value: roundDisplay(value),
+    num_parses: parses.length,
+    encounter_groups: encounterScores.length,
+  };
 }
 
 /**

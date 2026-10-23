@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { ArmoryLootItem, ArmoryPlayer } from "@/api/typesGenerated";
 import {
@@ -12,7 +12,6 @@ import {
   averageScoreByInstance,
   bestScoreByInstance,
   filterParsesBySpec,
-  performanceSpecs,
   summarizeProgress,
   summarizeRaids,
 } from "../parseAggregation";
@@ -36,12 +35,21 @@ interface OverviewTabProps {
   player: ArmoryPlayer;
   onOpenTab: (tab: "gear" | "talents" | "activity") => void;
   metric: ParseMetric;
+  selectedSpec: string | null;
+  specs: string[];
+  onSpecChange: (spec: string | null) => void;
 }
 
-export function OverviewTab({ player, onOpenTab, metric }: OverviewTabProps) {
+export function OverviewTab({
+  player,
+  onOpenTab,
+  metric,
+  selectedSpec,
+  specs,
+  onSpecChange,
+}: OverviewTabProps) {
   const [searchParams] = useSearchParams();
   const isPerformance = searchParams.get("mode") === "performance";
-  const [raidScoreSpec, setRaidScoreSpec] = useState<string | null>(null);
 
   // Shared data.
   const gearHistory = useArmoryGearHistory(player.realm_name, player.id);
@@ -54,8 +62,6 @@ export function OverviewTab({ player, onOpenTab, metric }: OverviewTabProps) {
   // Performance mode: parse scores.
   const parsesQuery = useCharacterParses(player.id, metric);
   const parses = useMemo(() => parsesQuery.data?.parses ?? [], [parsesQuery.data]);
-  const specs = useMemo(() => performanceSpecs(parses), [parses]);
-  const selectedSpec = raidScoreSpec && specs.includes(raidScoreSpec) ? raidScoreSpec : null;
   const raidScoreParses = useMemo(
     () => filterParsesBySpec(parses, selectedSpec),
     [parses, selectedSpec],
@@ -139,7 +145,7 @@ export function OverviewTab({ player, onOpenTab, metric }: OverviewTabProps) {
               playerClass={player.class}
               specs={specs}
               selectedSpec={selectedSpec}
-              onSpecChange={setRaidScoreSpec}
+              onSpecChange={onSpecChange}
               isLoading={parsesQuery.isLoading}
             />
           </div>

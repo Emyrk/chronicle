@@ -3,6 +3,7 @@ import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button";
 import { parseColor, parseHexColor } from "@/pages/Instance/parseColors";
 import type { EncounterSummary } from "../parseAggregation";
+import { PerformanceSpecSelector } from "./PerformanceSpecSelector";
 import type { ParseMetric } from "./util";
 
 interface ScoreCardProps {
@@ -10,14 +11,28 @@ interface ScoreCardProps {
   top3: EncounterSummary[];
   metric: ParseMetric;
   onMetricChange: (metric: ParseMetric) => void;
+  playerClass: string;
+  specs: string[];
+  selectedSpec: string | null;
+  onSpecChange: (spec: string | null) => void;
   isLoading: boolean;
 }
 
 /**
- * The character's overall parse score (the server averages the best 3 parses
- * per boss, then averages across bosses) plus their top-scoring bosses.
+ * The character's overall or selected-spec score (best 3 parses per boss,
+ * averaged across bosses) plus their top-scoring bosses.
  */
-export function ScoreCard({ score, top3, metric, onMetricChange, isLoading }: ScoreCardProps) {
+export function ScoreCard({
+  score,
+  top3,
+  metric,
+  onMetricChange,
+  playerClass,
+  specs,
+  selectedSpec,
+  onSpecChange,
+  isLoading,
+}: ScoreCardProps) {
   return (
     // min-h matches JourneyStatsCard so toggling modes doesn't shift the layout.
     <Card className="h-full min-h-[172px] gap-0 py-4">
@@ -38,6 +53,17 @@ export function ScoreCard({ score, top3, metric, onMetricChange, isLoading }: Sc
             </Button>
           ))}
         </CardAction>
+        {specs.length > 1 && (
+          <div className="col-span-full">
+            <PerformanceSpecSelector
+              playerClass={playerClass}
+              specs={specs}
+              selectedSpec={selectedSpec}
+              onSpecChange={onSpecChange}
+              label="Player score specialization"
+            />
+          </div>
+        )}
       </CardHeader>
       <CardContent className="flex items-center gap-6">
         <div className="shrink-0">
