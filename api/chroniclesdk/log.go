@@ -125,6 +125,7 @@ type WoWInstance struct {
 	TenantName              string                  `json:"tenant_name,omitempty"`
 	TenantSlug              string                  `json:"tenant_slug,omitempty"`
 	TenantIncludeAll        bool                    `json:"tenant_include_in_all,omitempty"`
+	OwnerAdsFree            bool                    `json:"owner_ads_free"`
 	LogGroupID              uuid.UUID               `json:"log_group_id"`
 	Unlisted                bool                    `json:"unlisted"`
 	Name                    string                  `json:"name"`

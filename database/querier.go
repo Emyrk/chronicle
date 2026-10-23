@@ -280,6 +280,7 @@ type sqlcQuerier interface {
 	GetInstanceCleanEncounterKillTimes(ctx context.Context, instanceID uuid.UUID) ([]GetInstanceCleanEncounterKillTimesRow, error)
 	GetInstanceEncounterCharacterFights(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounterHostile, error)
 	GetInstanceEncounterKillTimes(ctx context.Context, instanceID uuid.UUID) ([]GetInstanceEncounterKillTimesRow, error)
+	GetInstanceLogOwner(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	GetInstanceLoot(ctx context.Context, arg GetInstanceLootParams) ([]GetInstanceLootRow, error)
 	GetInstanceOverviewMetrics(ctx context.Context, arg GetInstanceOverviewMetricsParams) (InstanceOverviewMetric, error)
 	GetInstanceSpeedrun(ctx context.Context, instanceID uuid.UUID) (GetInstanceSpeedrunRow, error)

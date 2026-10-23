@@ -24,6 +24,7 @@ import { TimeRangeController } from "./TimeRangeController";
 import { useTenantGate } from "./TenantGate";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import { InstanceAssistantChat } from "@/features/chat/InferenceChats";
+import { AdSuppressionProvider } from "@/components/Ads/AdSuppressionProvider";
 import { getReplayResetTimestamp, type SelectedEncounterTimes } from "./replaySelection";
 
 // Types for the Instance page
@@ -133,6 +134,7 @@ function transformToInstance(
   apiInstance: {
     id: string;
     slug?: string;
+    owner_ads_free: boolean;
     log_group_id: string;
     name: string;
     start_time?: string;
@@ -512,6 +514,7 @@ export function InstancePage() {
   }
 
   return (
+    <AdSuppressionProvider suppressed={apiInstance?.owner_ads_free === true}>
     <DatasetProvider datasetId={instance.datasetId} iconBaseUrl={instance.iconBaseUrl}>
     <SyncModeProvider>
       <LiveSessionProvider>
@@ -547,6 +550,7 @@ export function InstancePage() {
       </LiveSessionProvider>
     </SyncModeProvider>
     </DatasetProvider>
+    </AdSuppressionProvider>
   );
 }
 

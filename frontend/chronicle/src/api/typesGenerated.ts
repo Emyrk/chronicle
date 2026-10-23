@@ -4971,6 +4971,7 @@ export interface WoWInstance {
     readonly tenant_name?: string;
     readonly tenant_slug?: string;
     readonly tenant_include_in_all?: boolean;
+    readonly owner_ads_free: boolean;
     readonly log_group_id: string;
     readonly unlisted: boolean;
     readonly name: string;

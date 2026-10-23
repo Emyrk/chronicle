@@ -13,6 +13,9 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
+	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
+	"github.com/Emyrk/chronicle/internal/services/testservices"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -42,6 +45,60 @@ func TestAttendanceOnly(t *testing.T) {
 			require.Equal(t, tt.want, attendanceOnly(r))
 		})
 	}
+}
+
+func TestInstanceOwnerAdsFree(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(broker)
+	store := servicedbstore.DatabaseStore(broker)
+
+	serverID := uuid.New()
+	realmID := uuid.New()
+	_, err := store.InsertWoWServer(ctx, database.InsertWoWServerParams{
+		ID: serverID, Name: "server-" + serverID.String()[:8],
+	})
+	require.NoError(t, err)
+	_, err = store.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{
+		ID: realmID, ServerID: serverID, Name: "realm-" + realmID.String()[:8],
+	})
+	require.NoError(t, err)
+
+	ownerID := uuid.New()
+	_, err = store.InsertUser(ctx, database.InsertUserParams{
+		ID: ownerID, Username: "owner-" + ownerID.String()[:8],
+	})
+	require.NoError(t, err)
+
+	logGroupID := uuid.New()
+	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
+	_, err = store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+		ID: logGroupID, Owner: ownerID, LogType: database.LogTypeV1,
+		CreatedAt: database.Timestamptz(now), UpdatedAt: database.Timestamptz(now),
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
+
+	instanceID := uuid.New()
+	_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
+		ID: instanceID, RealmID: realmID, LogGroupID: logGroupID,
+		Name: "Molten Core", DifficultyName: "Normal", MaxPlayers: 40,
+		StartTime: database.Timestamptz(now), EndTime: database.Timestamptz(now.Add(time.Hour)),
+		Capabilities: []string{},
+	})
+	require.NoError(t, err)
+
+	handlerAPI := &API{Opts: &Options{Zed: zed}}
+	adsFree, err := handlerAPI.instanceOwnerAdsFree(ctx, instanceID)
+	require.NoError(t, err)
+	require.False(t, adsFree)
+
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, ownerID, []string{"ad_free_capable"}))
+	adsFree, err = handlerAPI.instanceOwnerAdsFree(ctx, instanceID)
+	require.NoError(t, err)
+	require.True(t, adsFree)
 }
 
 func TestUngroupInstanceMaintainsDuplicateGroupURLsAndLists(t *testing.T) {

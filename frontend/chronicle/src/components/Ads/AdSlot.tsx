@@ -13,6 +13,7 @@ import {
   type NitroPayAd,
 } from "./nitroPay"
 import { useAdSiteConfig } from "./useAdSiteConfig"
+import { useAdsSuppressed } from "./adSuppression"
 
 export type { AdPlacement } from "./adPolicy"
 
@@ -123,6 +124,7 @@ export function AdSlot({
 }) {
   const adSiteConfig = useAdSiteConfig()
   const { data: session, isLoading: sessionLoading } = useSession()
+  const adsSuppressed = useAdsSuppressed()
   const [renderedRequestKey, setRenderedRequestKey] = useState<string>()
   const slotRef = useRef<HTMLElement>(null)
   const measuredAvailableHeight = useSidebarViewportHeight(format === "sidebar", slotRef)
@@ -138,7 +140,7 @@ export function AdSlot({
     [compactCard, format, sidebarAvailableHeight, wideRail],
   )
   const placementDisabled = isAdPlacementDisabled(adSiteConfig?.disabled_ads, placement, format)
-  const adsAllowed = !sessionLoading && !session?.ads_free && !placementDisabled
+  const adsAllowed = !adsSuppressed && !sessionLoading && !session?.ads_free && !placementDisabled
   const requestKey = `${adID}:${eligibleSizes.map((size) => size.join("x")).join(",")}`
   const liveCreativeRendered = renderedRequestKey === requestKey
   const adLabelVisible = showPreview || showDemo || liveCreativeRendered

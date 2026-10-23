@@ -6,6 +6,7 @@ import type { Session } from "@/api/queries"
 import type { SiteConfig } from "@/api/typesGenerated"
 import { describe, expect, it, vi } from "vitest"
 import { AdSlot } from "./AdSlot"
+import { AdSuppressionProvider } from "./AdSuppressionProvider"
 import { adSizeLabel, adSizesForFormat } from "./adFormats"
 import { isAdPlacementDisabled } from "./adPolicy"
 import {
@@ -339,6 +340,21 @@ describe("AdSlot", () => {
         <AdSlot placement="leaderboards-right-rail" hostname="localhost" previewEnabled />,
         undefined,
         { ads_free: true },
+      ),
+    ).toBe("")
+  })
+
+  it.each([
+    { name: "anonymous viewers", session: null },
+    { name: "signed-in viewers", session: { ads_free: false } },
+  ])("does not render when the page suppresses ads for $name", ({ session }) => {
+    expect(
+      renderAdSlot(
+        <AdSuppressionProvider suppressed>
+          <AdSlot placement="instance-overview-summary" hostname="localhost" previewEnabled />
+        </AdSuppressionProvider>,
+        undefined,
+        session,
       ),
     ).toBe("")
   })

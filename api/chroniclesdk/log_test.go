@@ -54,6 +54,7 @@ func TestWoWAttendanceInstanceJSON(t *testing.T) {
 
 	var response map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(data, &response))
+	require.JSONEq(t, `false`, string(response["owner_ads_free"]))
 	require.Contains(t, response, "players")
 	require.JSONEq(t, `null`, string(response["dataset_id"]))
 	require.NotContains(t, response, "encounters")

@@ -11344,6 +11344,20 @@ func (q *sqlQuerier) GetInstanceEncounterCharacterFights(ctx context.Context, in
 	return items, nil
 }
 
+const getInstanceLogOwner = `-- name: GetInstanceLogOwner :one
+SELECT wow_log_groups.owner
+FROM log_instances_guild
+JOIN wow_log_groups ON wow_log_groups.id = log_instances_guild.log_group_id
+WHERE log_instances_guild.id = $1
+`
+
+func (q *sqlQuerier) GetInstanceLogOwner(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getInstanceLogOwner, id)
+	var owner uuid.UUID
+	err := row.Scan(&owner)
+	return owner, err
+}
+
 const getInstancesByLogGroupID = `-- name: GetInstancesByLogGroupID :many
 SELECT
   id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, invalidated_at, invalid_reason, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor

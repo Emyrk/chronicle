@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -108,6 +109,17 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 
 	db := api.Opts.Zed
 
+	ownerAdsFree, err := api.instanceOwnerAdsFree(ctx, inst.ID)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to resolve instance advertising policy",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
 	players, err := db.InstancePlayersByInstanceID(ctx, inst.ID)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -120,6 +132,7 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	setDataset := func(out *chroniclesdk.WoWInstance) {
+		out.OwnerAdsFree = ownerAdsFree
 		out.Unlisted = httpmw.InstanceUnlisted(ctx)
 		datasetID, ok := api.Opts.Dataset.LookupDatasetForRealm(ctx, inst.RealmID)
 		if !ok {
@@ -186,6 +199,19 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 	out := db2sdk.WowDecoratedInstance(inst, units, players, encounters, fights, phases)
 	setDataset(&out.WoWInstance)
 	httpapi.Write(ctx, w, http.StatusOK, out)
+}
+
+func (api *API) instanceOwnerAdsFree(ctx context.Context, instanceID uuid.UUID) (bool, error) {
+	ownerID, err := api.Opts.Zed.GetInstanceLogOwner(ctx, instanceID)
+	if err != nil {
+		return false, err
+	}
+
+	return api.Opts.Zed.CheckOne(
+		ctx,
+		nil,
+		policy.New().GlobalChronicle().CanAd_free_User(policy.New().User(ownerID)),
+	)
 }
 
 func attendanceOnly(r *http.Request) bool {
