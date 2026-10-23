@@ -50,6 +50,7 @@ These are hard requirements.
 - Never call an invalidator while holding `Service.mu` or a cache's internal mutex.
 - Copy registered handlers under `Service.mu`, release it, then invoke handlers.
 - Generation application holds `reconcileMu` while invoking handlers. Handlers are therefore leaf callbacks: they must not call `RegisterInvalidator`, `ApplyPublished`, reconciliation methods, or any operation that reacquires `reconcileMu` or `Service.mu`.
+- Prefer local eviction in handlers. If a handler must query PostgreSQL (the tenant slug reload does), give that query a short context deadline **inside the handler** so every caller, including notifications, startup, and periodic reconciliation, releases `reconcileMu` promptly on failure. Do not rely on the post-commit best-effort timeout to protect other callers.
 - Never hold a cache mutex while querying PostgreSQL, publishing notifications, logging through a potentially blocking sink, or invoking user-provided code.
 - Document any new lock and its ordering relative to `Service.mu`, `reconcileMu`, cache locks, pubsub locks, and database transactions.
 

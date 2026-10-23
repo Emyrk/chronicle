@@ -161,12 +161,23 @@ func (s *Service) refreshCache(ctx context.Context) error {
 	return nil
 }
 
+const cacheInvalidationTimeout = 2 * time.Second
+
 func registerCacheInvalidator(cacheSvc *servicecache.Service, refresh func(context.Context) error) error {
+	return registerCacheInvalidatorWithTimeout(cacheSvc, refresh, cacheInvalidationTimeout)
+}
+
+func registerCacheInvalidatorWithTimeout(cacheSvc *servicecache.Service, refresh func(context.Context) error, timeout time.Duration) error {
 	return cacheSvc.RegisterInvalidator(
 		servicecache.NamespaceTenantSlugs,
 		servicecache.ScopeGlobal,
 		"tenant_slug_reload",
 		func(ctx context.Context, _ servicecache.Invalidation) error {
+			// Generation application serializes all invalidators. A stalled tenant
+			// query must not hold that lock indefinitely; a failed refresh leaves
+			// the generation unobserved for the next reconciliation attempt.
+			ctx, cancel := context.WithTimeout(ctx, timeout)
+			defer cancel()
 			return refresh(ctx)
 		},
 	)
