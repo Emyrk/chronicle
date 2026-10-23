@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest"
 import { AdSlot } from "./AdSlot"
 import { adSizeLabel, adSizesForFormat } from "./adFormats"
 import { isAdPlacementDisabled } from "./adPolicy"
-import { clearNitroPayAds, nitroPayAdOptions } from "./nitroPay"
+import { clearNitroPayAds, isNitroPayRenderedEventForPlacement, nitroPayAdOptions } from "./nitroPay"
 import {
   isLocalAdPreviewHost,
   shouldShowAdPreview,
@@ -190,6 +190,9 @@ describe("AdSlot", () => {
     expect(markup).toContain("min-h-[600px]")
     expect(markup).toContain("!bg-transparent")
     expect(markup).toContain("[&amp;&gt;iframe]:!bg-transparent")
+    expect(markup).toContain("[&amp;&gt;*]:opacity-0")
+    expect(markup).toContain('data-ad-rendered="false"')
+    expect(markup).toContain("text-muted-foreground/60 invisible")
     expect(markup).toContain(">Advertisement</div>")
     expect(markup).not.toContain("Ad preview")
   })
@@ -222,6 +225,19 @@ describe("AdSlot", () => {
 
     expect(nitroPayAdOptions(sizes)).not.toHaveProperty("demo")
     expect(nitroPayAdOptions(sizes, true)).toMatchObject({ demo: true, sizes })
+  })
+
+  it("matches NitroPay render events to their placement", () => {
+    const directEvent = Object.assign(new Event("nitroAds.rendered"), {
+      adInfo: { adUnitCode: "nitropay-recent-right-rail" },
+    })
+    const customEvent = Object.assign(new Event("nitroAds.rendered"), {
+      detail: { adInfo: { adUnitCode: "nitropay-recent-left-rail" } },
+    })
+
+    expect(isNitroPayRenderedEventForPlacement(directEvent, "nitropay-recent-right-rail")).toBe(true)
+    expect(isNitroPayRenderedEventForPlacement(customEvent, "nitropay-recent-left-rail")).toBe(true)
+    expect(isNitroPayRenderedEventForPlacement(directEvent, "nitropay-recent-left-rail")).toBe(false)
   })
 
   it.each([

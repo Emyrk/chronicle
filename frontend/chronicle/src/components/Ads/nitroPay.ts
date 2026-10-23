@@ -4,6 +4,17 @@ export interface NitroPayAd {
   onNavigate: () => void
 }
 
+interface NitroPayRenderedEvent extends Event {
+  adInfo?: {
+    adUnitCode?: string
+  }
+  detail?: {
+    adInfo?: {
+      adUnitCode?: string
+    }
+  }
+}
+
 type NitroPayAdResult = NitroPayAd | NitroPayAd[] | null
 type NitroPayCreateAdReturn = NitroPayAdResult | Promise<NitroPayAdResult>
 type NitroPayCreateAdArgs = [id: string, options: NitroPayAdOptions]
@@ -90,6 +101,11 @@ export function nitroPayAdOptions(sizes: NitroPaySize[], demo = false): NitroPay
     },
     sizes,
   }
+}
+
+export function isNitroPayRenderedEventForPlacement(event: Event, id: string): boolean {
+  const renderedEvent = event as NitroPayRenderedEvent
+  return renderedEvent.adInfo?.adUnitCode === id || renderedEvent.detail?.adInfo?.adUnitCode === id
 }
 
 export async function requestNitroPayAd(

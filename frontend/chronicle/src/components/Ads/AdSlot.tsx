@@ -5,7 +5,12 @@ import { cn } from "@/lib/utils"
 import { shouldShowAdPreview } from "./adPreview"
 import { adSizeLabel, adSizesForFormat, type AdFormat, type RailLayout } from "./adFormats"
 import { isAdPlacementDisabled, type AdPlacement } from "./adPolicy"
-import { clearNitroPayAds, requestNitroPayAd, type NitroPayAd } from "./nitroPay"
+import {
+  clearNitroPayAds,
+  isNitroPayRenderedEventForPlacement,
+  requestNitroPayAd,
+  type NitroPayAd,
+} from "./nitroPay"
 import { useAdSiteConfig } from "./useAdSiteConfig"
 
 export type { AdPlacement } from "./adPolicy"
@@ -117,6 +122,7 @@ export function AdSlot({
 }) {
   const adSiteConfig = useAdSiteConfig()
   const { data: session, isLoading: sessionLoading } = useSession()
+  const [renderedRequestKey, setRenderedRequestKey] = useState<string>()
   const slotRef = useRef<HTMLElement>(null)
   const measuredAvailableHeight = useSidebarViewportHeight(format === "sidebar", slotRef)
   const sidebarAvailableHeight = availableHeight ?? measuredAvailableHeight
@@ -132,12 +138,22 @@ export function AdSlot({
   )
   const placementDisabled = isAdPlacementDisabled(adSiteConfig?.disabled_ads, placement, format)
   const adsAllowed = !sessionLoading && !session?.ads_free && !placementDisabled
+  const requestKey = `${adID}:${eligibleSizes.map((size) => size.join("x")).join(",")}`
+  const liveCreativeRendered = renderedRequestKey === requestKey
+  const adLabelVisible = showPreview || showDemo || liveCreativeRendered
 
   useEffect(() => {
     if (!adsAllowed || !siteID || showPreview || eligibleSizes.length === 0) return
 
     let active = true
     let ads: NitroPayAd[] = []
+    const handleRendered = (event: Event) => {
+      if (isNitroPayRenderedEventForPlacement(event, adID)) {
+        setRenderedRequestKey(requestKey)
+      }
+    }
+    document.addEventListener("nitroAds.rendered", handleRendered)
+
     void requestNitroPayAd(siteID, adID, eligibleSizes, showDemo)
       .then((createdAds) => {
         if (!active) {
@@ -152,9 +168,10 @@ export function AdSlot({
 
     return () => {
       active = false
+      document.removeEventListener("nitroAds.rendered", handleRendered)
       clearNitroPayAds(ads)
     }
-  }, [adID, adsAllowed, eligibleSizes, placement, showDemo, showPreview, siteID])
+  }, [adID, adsAllowed, eligibleSizes, placement, requestKey, showDemo, showPreview, siteID])
 
   // Fail closed while deciding so paid supporters never see an ad flash.
   if (!adsAllowed || (!showPreview && !siteID)) {
@@ -173,13 +190,17 @@ export function AdSlot({
       data-ad-placement={placement}
       data-ad-provider={showPreview ? "preview" : "nitropay"}
       data-ad-demo={showDemo || undefined}
+      data-ad-rendered={!showPreview && !showDemo ? liveCreativeRendered : undefined}
     >
       <div>
         {adSiteConfig?.billing_enabled ? (
           <Link
             to={session ? "/account/billing" : "/supporter"}
             title="Become a supporter to remove ads"
-            className="group mb-1.5 grid text-center text-[9px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60 transition-colors hover:text-[#f0c060] focus-visible:text-[#f0c060]"
+            className={cn(
+              "group mb-1.5 grid text-center text-[9px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60 transition-colors hover:text-[#f0c060] focus-visible:text-[#f0c060]",
+              !adLabelVisible && "invisible",
+            )}
           >
             {/* Both labels share one grid cell so swapping on hover never shifts layout. */}
             <span className="col-start-1 row-start-1 group-hover:invisible group-focus-visible:invisible">
@@ -190,7 +211,12 @@ export function AdSlot({
             </span>
           </Link>
         ) : (
-          <div className="mb-1.5 text-center text-[9px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60">
+          <div
+            className={cn(
+              "mb-1.5 text-center text-[9px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60",
+              !adLabelVisible && "invisible",
+            )}
+          >
             Advertisement
           </div>
         )}
@@ -201,7 +227,10 @@ export function AdSlot({
               ? "relative flex items-center justify-center overflow-hidden rounded-md border border-dashed border-border/60 bg-muted/10"
               : showDemo
                 ? "relative flex items-center justify-center overflow-hidden rounded-md border border-dashed border-[#f0c060]/35 bg-[#f0c060]/5 [&>iframe]:relative [&>iframe]:z-10 [&>iframe]:!bg-transparent"
-                : "!bg-transparent [&>iframe]:!bg-transparent",
+                : cn(
+                    "!bg-transparent [&>iframe]:!bg-transparent",
+                    liveCreativeRendered ? "[&>*]:opacity-100" : "[&>*]:pointer-events-none [&>*]:opacity-0",
+                  ),
             format === "sidebar" && "flex justify-center",
             (showPreview || showDemo || format !== "responsive") && frameClasses[format],
             format === "card" && (compactCard ? "h-[100px]" : "h-[250px]"),
