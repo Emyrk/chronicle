@@ -30,26 +30,35 @@ func TestTenantAdsEnabled(t *testing.T) {
 	t.Parallel()
 
 	tenant := chroniclesdk.TenantFromDB(database.Tenant{
-		ID:         uuid.New(),
-		Name:       "Progression",
-		AdsEnabled: true,
+		ID:          uuid.New(),
+		Name:        "Progression",
+		AdsEnabled:  true,
+		DisabledAds: []string{"rail", "recent-content"},
 	})
 	require.True(t, tenant.AdsEnabled)
+	require.Equal(t, []string{"rail", "recent-content"}, tenant.DisabledAds)
 
 	enabled := true
-	createReq := chroniclesdk.UpsertTenantRequest{AdsEnabled: &enabled}
+	createReq := chroniclesdk.UpsertTenantRequest{
+		AdsEnabled:  &enabled,
+		DisabledAds: []string{"rail"},
+	}
 	require.True(t, createReq.ToInsertParams().AdsEnabled)
+	require.Equal(t, []string{"rail"}, createReq.ToInsertParams().DisabledAds)
 
 	updateReq := chroniclesdk.UpsertTenantRequest{
-		ID:         uuid.NullUUID{UUID: tenant.ID, Valid: true},
-		AdsEnabled: &enabled,
+		ID:          uuid.NullUUID{UUID: tenant.ID, Valid: true},
+		AdsEnabled:  &enabled,
+		DisabledAds: []string{"recent-content"},
 	}
 	updateParams := updateReq.ToUpdateParams()
 	require.True(t, updateParams.AdsEnabled.Valid)
 	require.True(t, updateParams.AdsEnabled.Bool)
+	require.Equal(t, []string{"recent-content"}, updateParams.DisabledAds)
 
 	unchangedParams := (chroniclesdk.UpsertTenantRequest{
 		ID: uuid.NullUUID{UUID: tenant.ID, Valid: true},
 	}).ToUpdateParams()
 	require.False(t, unchangedParams.AdsEnabled.Valid)
+	require.Nil(t, unchangedParams.DisabledAds)
 }

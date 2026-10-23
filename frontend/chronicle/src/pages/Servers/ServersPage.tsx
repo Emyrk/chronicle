@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { TENANT_AD_DISABLE_OPTIONS } from "@/components/Ads/adPolicy";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import {
@@ -195,6 +196,7 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
   const [disableUpload, setDisableUpload] = useState(tenant?.disable_client_upload ?? false);
   const [discoverable, setDiscoverable] = useState(tenant?.discoverable ?? false);
   const [adsEnabled, setAdsEnabled] = useState(tenant?.ads_enabled ?? false);
+  const [disabledAds, setDisabledAds] = useState<string[]>([...(tenant?.disabled_ads ?? [])]);
 
   // Parse mode (spec / class / disabled)
   const [parseMode, setParseMode] = useState(tenant?.parse_config?.cohort_mode || "spec");
@@ -233,6 +235,7 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
         disable_client_upload: disableUpload,
         discoverable,
         ads_enabled: adsEnabled,
+        disabled_ads: disabledAds,
         branding: hasBranding
           ? {
               square_logo: squareLogo || undefined,
@@ -287,6 +290,26 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
         Enable ads
         <span className="text-xs text-muted-foreground">(requires deployment configuration)</span>
       </label>
+      <fieldset className="ml-6 space-y-1" disabled={!adsEnabled}>
+        <legend className="text-xs font-medium text-muted-foreground">Disable ad groups</legend>
+        {TENANT_AD_DISABLE_OPTIONS.map(({ key, label }) => (
+          <label key={key} className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={disabledAds.includes(key)}
+              onChange={(e) =>
+                setDisabledAds((current) =>
+                  e.target.checked ? [...current, key] : current.filter((disabled) => disabled !== key),
+                )
+              }
+            />
+            {label}
+          </label>
+        ))}
+        <p className="text-[10px] text-muted-foreground">
+          Opt-outs are retained while ads are disabled and apply when ads are turned back on.
+        </p>
+      </fieldset>
       <div className="pt-2 border-t space-y-2">
         <p className="text-xs font-medium text-muted-foreground">Parses</p>
         <div className="space-y-1.5">

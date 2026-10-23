@@ -1,7 +1,7 @@
 import { useEffect } from "react"
 import { useLocation } from "react-router-dom"
-import { useSiteConfig } from "@/api/queries"
 import { loadNitroPay } from "./nitroPay"
+import { useAdSiteConfig } from "./useAdSiteConfig"
 
 declare global {
   interface Window {
@@ -20,9 +20,9 @@ function addPrivacyLinks() {
  * Individual AdSlot instances still own placement creation and navigation.
  */
 export function NitroPayRuntime() {
-  const { data: siteConfig } = useSiteConfig()
+  const adSiteConfig = useAdSiteConfig()
   const location = useLocation()
-  const siteID = siteConfig?.ads_enabled ? siteConfig.nitropay_site_id : undefined
+  const siteID = adSiteConfig?.ads_enabled ? adSiteConfig.nitropay_site_id : undefined
 
   useEffect(() => {
     if (!siteID) return

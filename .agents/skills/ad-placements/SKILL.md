@@ -114,7 +114,11 @@ The backend computes effective `SiteConfig.ads_enabled`. It is true only when:
 2. The deployment configures a valid numeric `CHRONICLE_NITROPAY_SITE_ID`.
 3. The resolved tenant has `ads_enabled = true`.
 
-Eligible tenant site config exposes the public NitroPay site ID. `NitroPayRuntime` loads NitroPay once on every route so its bundled CMP can collect and manage consent, while `AdSlot` requests placements only after the effective gate passes. Disabled tenants do not render an ad container, load NitroPay, or receive the advertising CSP expansion. Local preview remains available only when the frontend is running in dev mode, `CHRONICLE_PREVIEW_ADS=true`, and the hostname is `localhost` or `127.0.0.1`. `pnpm run dev --with-ads` sets that flag for convenience. Do not replace production eligibility with a frontend-only environment flag.
+Eligible tenant site config exposes the public NitroPay site ID plus `disabled_ads`, an opt-out list managed in the tenant editor. `frontend/chronicle/src/components/Ads/adPolicy.ts` owns the supported group keys and matching rules: `rail` disables every rail-format slot, `recent-content` disables non-rail placements whose stable ID starts with `recent-`, and an exact placement ID disables only that slot. Preserve unknown keys in the admin form so a newer policy is not erased by an older client.
+
+`NitroPayRuntime` loads NitroPay once on every route so its bundled CMP can collect and manage consent, while `AdSlot` requests placements only after the effective gate and placement policy pass. The advertising subset of site config is cached per origin in `localStorage` for one hour through `adSiteConfigCache.ts`; `useAdSiteConfig` returns that last known decision immediately during a reload while the canonical site-config query refreshes in parallel. Cache only the public advertising fields, validate stored data, and fail back to the API when storage is unavailable or stale.
+
+A tenant may therefore keep ads enabled while opting out of selected groups. Fully disabled tenants do not render an ad container, load NitroPay, or receive the advertising CSP expansion. Local preview remains available only when the frontend is running in dev mode, `CHRONICLE_PREVIEW_ADS=true`, and the hostname is `localhost` or `127.0.0.1`. `pnpm run dev --with-ads` sets that flag for convenience. Do not replace production eligibility with a frontend-only environment flag.
 
 ## Live-serving contract
 
@@ -139,6 +143,8 @@ At minimum, `AdSlot.test.tsx` must cover:
 - Stable `data-ad-placement` output.
 - No rendering without the preview flag or on a non-local hostname while live serving is unavailable.
 - Effective tenant enablement for both disabled and live NitroPay branches.
+- Tenant opt-outs for format groups, page groups, and exact placement IDs.
+- One-hour ad-config caching, including enabled, disabled, stale, and malformed values.
 
 Page tests should cover product eligibility only. They should not retest provider behavior owned by `AdSlot`.
 
