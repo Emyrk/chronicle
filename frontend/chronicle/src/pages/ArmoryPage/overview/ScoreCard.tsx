@@ -10,47 +10,22 @@ interface ScoreCardProps {
   top3: EncounterSummary[];
   metric: ParseMetric;
   onMetricChange: (metric: ParseMetric) => void;
-  specs: string[];
-  selectedSpec: string | null;
-  onSpecChange: (spec: string | null) => void;
   isLoading: boolean;
 }
 
 /**
- * The character's overall or selected-spec score (best 3 parses per boss,
- * averaged across bosses) plus their top-scoring bosses.
+ * The character's overall parse score (the server averages the best 3 parses
+ * per boss, then averages across bosses) plus their top-scoring bosses.
  */
-export function ScoreCard({
-  score,
-  top3,
-  metric,
-  onMetricChange,
-  specs,
-  selectedSpec,
-  onSpecChange,
-  isLoading,
-}: ScoreCardProps) {
+export function ScoreCard({ score, top3, metric, onMetricChange, isLoading }: ScoreCardProps) {
   return (
     // min-h matches JourneyStatsCard so toggling modes doesn't shift the layout.
     <Card className="h-full min-h-[172px] gap-0 py-4">
-      <CardHeader className="grid-cols-1 pb-3 sm:has-data-[slot=card-action]:grid-cols-[1fr_auto]">
+      <CardHeader className="pb-3">
         <CardTitle className="text-xs font-normal tracking-widest text-muted-foreground uppercase">
           Player score · last 60 days
         </CardTitle>
-        <CardAction className="col-start-1 row-start-2 flex items-center gap-1 justify-self-start sm:col-start-2 sm:row-start-1 sm:justify-self-end">
-          {specs.length > 1 && (
-            <select
-              aria-label="Performance specialization"
-              value={selectedSpec ?? ""}
-              onChange={(event) => onSpecChange(event.target.value || null)}
-              className="h-7 max-w-32 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <option value="">Overall</option>
-              {specs.map((spec) => (
-                <option key={spec} value={spec}>{spec}</option>
-              ))}
-            </select>
-          )}
+        <CardAction className="flex gap-1">
           {(["dps", "hps"] as const).map((m) => (
             <Button
               key={m}

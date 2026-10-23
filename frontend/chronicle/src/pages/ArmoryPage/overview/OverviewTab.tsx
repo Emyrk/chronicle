@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { ArmoryLootItem, ArmoryPlayer } from "@/api/typesGenerated";
 import {
@@ -12,6 +12,7 @@ import {
   averageScoreByInstance,
   bestScoreByInstance,
   filterParsesBySpec,
+  performanceSpecs,
   summarizeProgress,
   summarizeRaids,
 } from "../parseAggregation";
@@ -35,12 +36,12 @@ interface OverviewTabProps {
   player: ArmoryPlayer;
   onOpenTab: (tab: "gear" | "talents" | "activity") => void;
   metric: ParseMetric;
-  selectedSpec: string | null;
 }
 
-export function OverviewTab({ player, onOpenTab, metric, selectedSpec }: OverviewTabProps) {
+export function OverviewTab({ player, onOpenTab, metric }: OverviewTabProps) {
   const [searchParams] = useSearchParams();
   const isPerformance = searchParams.get("mode") === "performance";
+  const [raidScoreSpec, setRaidScoreSpec] = useState<string | null>(null);
 
   // Shared data.
   const gearHistory = useArmoryGearHistory(player.realm_name, player.id);
@@ -52,11 +53,14 @@ export function OverviewTab({ player, onOpenTab, metric, selectedSpec }: Overvie
 
   // Performance mode: parse scores.
   const parsesQuery = useCharacterParses(player.id, metric);
-  const parses = useMemo(
-    () => filterParsesBySpec(parsesQuery.data?.parses ?? [], selectedSpec),
-    [parsesQuery.data, selectedSpec],
+  const parses = useMemo(() => parsesQuery.data?.parses ?? [], [parsesQuery.data]);
+  const specs = useMemo(() => performanceSpecs(parses), [parses]);
+  const selectedSpec = raidScoreSpec && specs.includes(raidScoreSpec) ? raidScoreSpec : null;
+  const raidScoreParses = useMemo(
+    () => filterParsesBySpec(parses, selectedSpec),
+    [parses, selectedSpec],
   );
-  const raids = useMemo(() => summarizeRaids(parses), [parses]);
+  const raids = useMemo(() => summarizeRaids(raidScoreParses), [raidScoreParses]);
   const nightScores = useMemo(
     () =>
       isPerformance
@@ -97,7 +101,7 @@ export function OverviewTab({ player, onOpenTab, metric, selectedSpec }: Overvie
   const performanceHistoryPath = `/performance-history?${serializePerformanceComparisonState({
     ...DEFAULT_PERFORMANCE_COMPARISON_STATE,
     realmName: player.realm_name,
-    players: [{ id: player.id, spec: selectedSpec, subSpec: null, hidden: false }],
+    players: [{ id: player.id, spec: null, subSpec: null, hidden: false }],
     metric,
   }).toString()}`;
 
@@ -132,6 +136,9 @@ export function OverviewTab({ player, onOpenTab, metric, selectedSpec }: Overvie
               metric={metric}
               performanceHistoryPath={performanceHistoryPath}
               bossCounts={bossCounts}
+              specs={specs}
+              selectedSpec={selectedSpec}
+              onSpecChange={setRaidScoreSpec}
               isLoading={parsesQuery.isLoading}
             />
           </div>

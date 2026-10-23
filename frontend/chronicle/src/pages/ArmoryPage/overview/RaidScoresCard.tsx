@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, ArrowUpRight } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/Collapsible/Collapsible";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/Table/Table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
@@ -16,11 +16,23 @@ interface RaidScoresCardProps {
   performanceHistoryPath: string;
   /** Total boss count per instance name, from the supported-instances API. */
   bossCounts?: Map<string, number>;
+  specs: string[];
+  selectedSpec: string | null;
+  onSpecChange: (spec: string | null) => void;
   isLoading: boolean;
 }
 
 /** Per-raid score ledger; expand a raid for its per-boss breakdown. */
-export function RaidScoresCard({ raids, metric, performanceHistoryPath, bossCounts, isLoading }: RaidScoresCardProps) {
+export function RaidScoresCard({
+  raids,
+  metric,
+  performanceHistoryPath,
+  bossCounts,
+  specs,
+  selectedSpec,
+  onSpecChange,
+  isLoading,
+}: RaidScoresCardProps) {
   const [open, setOpen] = useState<string | null>(raids[0] ? raidKey(raids[0]) : null);
   // Open the biggest raid once data arrives (state initializes before load).
   const [autoOpened, setAutoOpened] = useState(false);
@@ -47,6 +59,21 @@ export function RaidScoresCard({ raids, metric, performanceHistoryPath, bossCoun
         <CardDescription>
           Best-3 average per boss, last 60 days · expand a raid for its bosses
         </CardDescription>
+        {specs.length > 1 && (
+          <CardAction>
+            <select
+              aria-label="Raid score specialization"
+              value={selectedSpec ?? ""}
+              onChange={(event) => onSpecChange(event.target.value || null)}
+              className="h-8 max-w-40 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">Overall</option>
+              {specs.map((spec) => (
+                <option key={spec} value={spec}>{spec}</option>
+              ))}
+            </select>
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent className="space-y-3 px-0">
         {raids.length === 0 && (
