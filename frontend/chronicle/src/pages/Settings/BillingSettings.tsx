@@ -6,7 +6,7 @@ import { iconUrl } from "@/config/iconUrl"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/useAuth"
 import { cn } from "@/lib/utils"
-import { Check, CircleCheck, CreditCard, LogIn, XCircle } from "lucide-react"
+import { Check, CircleCheck, CreditCard, LogIn, Sparkles, XCircle } from "lucide-react"
 import { toast } from "sonner"
 import {
   PAID_BILLING_TIERS,
@@ -179,7 +179,7 @@ export function SupporterOverview({ billing, panel }: { billing?: BillingSummary
   )
 }
 
-const COMPARISON: { feature: string; friendly: string; honored: string; revered?: string; exalted?: string }[] = [
+const COMPARISON: { feature: string; friendly: string; honored: string; revered?: string; exalted?: string; highlight?: boolean }[] = [
   {
     feature: "Log parsing, panels, rankings, and replays",
     friendly: "Full access. Core analysis is never paywalled.",
@@ -212,6 +212,14 @@ const COMPARISON: { feature: string; friendly: string; honored: string; revered?
     friendly: "—",
     honored: "Your subscription directly funds hosting and ongoing development.",
   },
+  {
+    feature: "Future perks",
+    friendly: "—",
+    honored: "—",
+    revered: "More perks coming soon.",
+    exalted: "More perks coming soon.",
+    highlight: true,
+  },
 ]
 
 const SAME_AS_HONORED = "Same as Honored."
@@ -243,21 +251,31 @@ function ComparisonTable({ currentTier }: { currentTier: string }) {
         </div>
         <dl className="divide-y divide-white/5">
           {COMPARISON.map((row) => (
-            <div key={row.feature} className={cn("grid gap-2 px-5 py-3 text-sm md:gap-4", COMPARISON_GRID)}>
-              <dt className="font-medium text-white">{row.feature}</dt>
+            <div
+              key={row.feature}
+              className={cn("grid gap-2 px-5 py-3 text-sm md:gap-4", COMPARISON_GRID, row.highlight && "bg-gradient-to-r from-[#f0c060]/10 via-[#0070dd]/10 to-[#a335ee]/20")}
+            >
+              <dt className={cn("font-medium text-white", row.highlight && "flex items-center gap-1.5 font-wow")} style={row.highlight ? { color: GOLD } : undefined}>
+                {row.highlight ? <Sparkles className="size-4 shrink-0" aria-hidden="true" /> : null}
+                {row.feature}
+              </dt>
               {COMPARISON_COLUMNS.map(({ tier, label, color }) => {
                 const value = tier === "free" ? row.friendly : (row[tier] ?? SAME_AS_HONORED)
+                const emphasized = row.highlight && tier !== "free" && row[tier] !== undefined && value !== "—"
                 return (
                   <dd
                     key={tier}
                     className={cn(
                       value === SAME_AS_HONORED ? "italic text-muted-foreground" : tier === "free" ? "text-muted-foreground" : "text-zinc-200",
                       tier === currentTier && "-mx-2 rounded bg-white/5 px-2",
+                      emphasized && "flex items-center gap-1.5 font-semibold",
                     )}
+                    style={emphasized ? { color } : undefined}
                   >
                     <span className="mr-1 font-wow text-xs not-italic md:hidden" style={{ color }}>
                       {label}:
                     </span>
+                    {emphasized ? <Sparkles className="size-3.5 shrink-0 animate-pulse" aria-hidden="true" /> : null}
                     {value}
                   </dd>
                 )
