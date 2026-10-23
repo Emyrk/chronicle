@@ -40,6 +40,15 @@ func newCreatureFetcher(ctx context.Context, db CreatureQuerier, cacheSvc *servi
 	}
 }
 
+func (f *creatureFetcher) invalidateDataset(datasetID uuid.UUID) {
+	if f == nil {
+		return
+	}
+	f.cache.RemoveFunc(func(key creatureKey) bool {
+		return key.DatasetID == datasetID
+	})
+}
+
 // Creature returns the creature template for the given entry ID and dataset.
 // Returns (nil, false) if the creature is not found or the DB is unavailable.
 func (f *creatureFetcher) Creature(datasetID uuid.UUID, entry int32) (*database.WorldCreatureTemplate, bool) {

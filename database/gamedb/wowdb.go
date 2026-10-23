@@ -153,7 +153,7 @@ func New(ctx context.Context, opts Options) (*WoWDB, error) {
 		spellFetcher = spells.NewDBCFetcher(chrondbc.NewSpells(v), customSpells)
 	}
 
-	return &WoWDB{
+	w := &WoWDB{
 		ctx:             ctx,
 		spellFile:       sf, // nil in DB-only mode
 		datasetID:       opts.DatasetID,
@@ -166,7 +166,12 @@ func New(ctx context.Context, opts Options) (*WoWDB, error) {
 		extraAttacks:    eaCache,
 		durationMods:    dmCache,
 		periodicSpells:  psCache,
-	}, nil
+	}
+	if err := w.registerInvalidators(opts.CacheSvc); err != nil {
+		_ = w.Close()
+		return nil, err
+	}
+	return w, nil
 }
 
 // ForDataset returns a [GameDB] scoped to the given dataset. Item and creature
@@ -405,32 +410,53 @@ func (w *WoWDB) loadPeriodicSpells(ctx context.Context, datasetID uuid.UUID) (ma
 
 // --- Invalidation ---
 
-// InvalidateSpellCache evicts all cached spells for a dataset. Call after
-// importing new spell data so subsequent lookups hit the database.
-func (w *WoWDB) InvalidateSpellCache(datasetID uuid.UUID) {
-	w.spells.InvalidateDataset(datasetID)
-}
-
-// InvalidateTalentCache evicts cached talent trees for a dataset.
-func (w *WoWDB) InvalidateTalentCache(datasetID uuid.UUID) {
-	if w.talents != nil {
-		w.talents.InvalidateDataset(datasetID)
+func (w *WoWDB) registerInvalidators(cacheSvc *servicecache.Service) error {
+	if cacheSvc == nil {
+		return nil
 	}
-}
-
-// InvalidateExtraAttacks evicts cached extra-attack data for a dataset.
-func (w *WoWDB) InvalidateExtraAttacks(datasetID uuid.UUID) {
-	w.extraAttacks.Remove(datasetID)
-}
-
-// InvalidateDurationModifiers evicts cached duration modifier data for a dataset.
-func (w *WoWDB) InvalidateDurationModifiers(datasetID uuid.UUID) {
-	w.durationMods.Remove(datasetID)
-}
-
-// InvalidatePeriodicSpells evicts cached periodic spell data for a dataset.
-func (w *WoWDB) InvalidatePeriodicSpells(datasetID uuid.UUID) {
-	w.periodicSpells.Remove(datasetID)
+	type registration struct {
+		namespace servicecache.Namespace
+		name      string
+		handler   servicecache.InvalidationHandler
+	}
+	registrations := []registration{
+		{servicecache.NamespaceSpells, "wowdb_spells", func(_ context.Context, req servicecache.Invalidation) error {
+			w.spells.InvalidateDataset(req.DatasetID)
+			return nil
+		}},
+		{servicecache.NamespaceItems, "wowdb_items", func(_ context.Context, req servicecache.Invalidation) error {
+			w.itemFetcher.invalidateDataset(req.DatasetID)
+			return nil
+		}},
+		{servicecache.NamespaceCreatures, "wowdb_creatures", func(_ context.Context, req servicecache.Invalidation) error {
+			w.creatureFetcher.invalidateDataset(req.DatasetID)
+			return nil
+		}},
+		{servicecache.NamespaceExtraAttacks, "wowdb_extra_attacks", func(_ context.Context, req servicecache.Invalidation) error {
+			w.extraAttacks.Remove(req.DatasetID)
+			return nil
+		}},
+		{servicecache.NamespaceDurationMods, "wowdb_duration_modifiers", func(_ context.Context, req servicecache.Invalidation) error {
+			w.durationMods.Remove(req.DatasetID)
+			return nil
+		}},
+		{servicecache.NamespacePeriodicSpells, "wowdb_periodic_spells", func(_ context.Context, req servicecache.Invalidation) error {
+			w.periodicSpells.Remove(req.DatasetID)
+			return nil
+		}},
+	}
+	if w.talents != nil {
+		registrations = append(registrations, registration{servicecache.NamespaceTalents, "wowdb_talents", func(_ context.Context, req servicecache.Invalidation) error {
+			w.talents.InvalidateDataset(req.DatasetID)
+			return nil
+		}})
+	}
+	for _, registration := range registrations {
+		if err := cacheSvc.RegisterInvalidator(registration.namespace, servicecache.ScopeDataset, registration.name, registration.handler); err != nil {
+			return fmt.Errorf("register %s cache invalidator: %w", registration.namespace, err)
+		}
+	}
+	return nil
 }
 
 func (w *WoWDB) Close() error {

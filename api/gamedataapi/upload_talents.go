@@ -1,12 +1,14 @@
 package gamedataapi
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -48,8 +50,9 @@ func (h *Handler) UploadTalentTrees(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.wowDB != nil {
-		h.wowDB.InvalidateTalentCache(datasetID)
+	if err := h.invalidateDataset(ctx, datasetID, servicecache.NamespaceTalents); err != nil {
+		httpapi.InternalServerError(w, fmt.Errorf("invalidate talent cache: %w", err))
+		return
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "talent trees updated"})

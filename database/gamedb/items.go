@@ -60,6 +60,18 @@ func newItemFetcher(ctx context.Context, db ItemMetadataQuerier, cacheSvc *servi
 	}
 }
 
+func (f *itemFetcher) invalidateDataset(datasetID uuid.UUID) {
+	if f == nil {
+		return
+	}
+	f.idCache.RemoveFunc(func(key itemIDKey) bool {
+		return key.DatasetID == datasetID
+	})
+	f.nameCache.RemoveFunc(func(key itemNameKey) bool {
+		return key.DatasetID == datasetID
+	})
+}
+
 // ResolveGear fixes item IDs in a gear slice in-place for the given dataset.
 // Items whose ID is already cached (or found by ID in DB) are left as-is.
 // Items whose ID is unknown are resolved by name if unique.

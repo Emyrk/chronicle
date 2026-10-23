@@ -7,6 +7,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Gophercraft/core/format/dbc"
 	"github.com/Gophercraft/core/format/dbc/dbdefs"
 	"github.com/google/uuid"
@@ -219,8 +220,12 @@ func (h *Handler) handleSpellDurationsUpload(ctx context.Context, w http.Respons
 		})
 		return
 	}
-	if h.wowDB != nil {
-		h.wowDB.InvalidateSpellCache(datasetID)
+	if err := h.invalidateDataset(ctx, datasetID, servicecache.NamespaceSpells); err != nil {
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+			Message: "Spell durations imported but cache invalidation failed",
+			Detail:  err.Error(),
+		})
+		return
 	}
 
 	resp.Inserted = len(rows)

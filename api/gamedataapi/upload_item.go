@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/wdb"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -131,6 +132,16 @@ func (h *Handler) handleItemUpload(ctx context.Context, w http.ResponseWriter, m
 		if err := h.deriveConsumables(ctx, datasetID); err != nil {
 			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 				Message: "Items imported but consumable generation failed",
+				Detail:  err.Error(),
+			})
+			return
+		}
+	}
+
+	if len(toUpsert) > 0 {
+		if err := h.invalidateDataset(ctx, datasetID, servicecache.NamespaceItems); err != nil {
+			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+				Message: "Items imported but cache invalidation failed",
 				Detail:  err.Error(),
 			})
 			return

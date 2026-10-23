@@ -5,6 +5,8 @@ package servicecache
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
 
 	"github.com/coder/serpent"
+	"github.com/google/uuid"
 )
 
 // Default TTLs for game-data caches. Tune these to control memory pressure
@@ -48,19 +51,75 @@ type CacheStat struct {
 	TTL      time.Duration `json:"ttl"`
 }
 
+// Namespace is a stable logical cache name used by invalidation publishers.
+type Namespace string
+
+const (
+	NamespaceTenantSlugs    Namespace = "tenant_slugs"
+	NamespaceSpells         Namespace = "spells"
+	NamespaceTalents        Namespace = "talents"
+	NamespaceItems          Namespace = "items"
+	NamespaceCreatures      Namespace = "creatures"
+	NamespaceExtraAttacks   Namespace = "extra_attacks"
+	NamespaceDurationMods   Namespace = "duration_modifiers"
+	NamespacePeriodicSpells Namespace = "periodic_spells"
+)
+
+// Scope identifies the supported invalidation granularity for a handler.
+type Scope uint8
+
+const (
+	ScopeGlobal Scope = iota + 1
+	ScopeDataset
+)
+
+// Invalidation is a typed local-process cache invalidation request.
+type Invalidation struct {
+	Namespace Namespace
+	Scope     Scope
+	DatasetID uuid.UUID
+}
+
+// GlobalInvalidation creates an invalidation for an entire namespace.
+func GlobalInvalidation(namespace Namespace) Invalidation {
+	return Invalidation{Namespace: namespace, Scope: ScopeGlobal}
+}
+
+// DatasetInvalidation creates an invalidation scoped to one dataset.
+func DatasetInvalidation(namespace Namespace, datasetID uuid.UUID) Invalidation {
+	return Invalidation{Namespace: namespace, Scope: ScopeDataset, DatasetID: datasetID}
+}
+
+// InvalidationHandler handles one local invalidation.
+type InvalidationHandler func(context.Context, Invalidation) error
+
+var (
+	ErrDuplicateInvalidator = errors.New("duplicate cache invalidator")
+	ErrUnknownNamespace     = errors.New("unknown cache invalidation namespace")
+	ErrUnsupportedScope     = errors.New("unsupported cache invalidation scope")
+)
+
+type invalidator struct {
+	name    string
+	scope   Scope
+	handler InvalidationHandler
+}
+
 // Service is the centralized cache service. It owns metrics registration
 // and a registry of all live caches for admin visibility.
 type Service struct {
 	broker *services.Services
 
-	mu      sync.Mutex
-	caches  []lrucache.CacheInfo
-	metrics *lrucache.Metrics
+	mu           sync.Mutex
+	caches       []lrucache.CacheInfo
+	invalidators map[Namespace][]invalidator
+	metrics      *lrucache.Metrics
 }
 
 func New(broker *services.Services) *Service {
 	return &Service{
-		broker: broker,
+		broker:       broker,
+		invalidators: make(map[Namespace][]invalidator),
 	}
 }
 
@@ -83,6 +142,70 @@ func (s *Service) Start(_ context.Context) error {
 }
 
 func (s *Service) Close(_ context.Context) error { return nil }
+
+// RegisterInvalidator registers a named handler for a namespace and scope.
+// Handlers run in registration order. Registering the same handler name twice
+// for one namespace returns [ErrDuplicateInvalidator].
+func (s *Service) RegisterInvalidator(namespace Namespace, scope Scope, name string, handler InvalidationHandler) error {
+	if namespace == "" || name == "" || handler == nil {
+		return fmt.Errorf("register cache invalidator: namespace, name, and handler are required")
+	}
+	if scope != ScopeGlobal && scope != ScopeDataset {
+		return fmt.Errorf("register cache invalidator %q: %w: %d", name, ErrUnsupportedScope, scope)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.invalidators == nil {
+		s.invalidators = make(map[Namespace][]invalidator)
+	}
+	for _, registered := range s.invalidators[namespace] {
+		if registered.name == name {
+			return fmt.Errorf("%w: namespace %q handler %q", ErrDuplicateInvalidator, namespace, name)
+		}
+	}
+	s.invalidators[namespace] = append(s.invalidators[namespace], invalidator{
+		name:    name,
+		scope:   scope,
+		handler: handler,
+	})
+	return nil
+}
+
+// Invalidate routes a local invalidation to every registered handler for its
+// namespace. All matching handlers run even if an earlier handler fails.
+func (s *Service) Invalidate(ctx context.Context, req Invalidation) error {
+	if req.Scope != ScopeGlobal && req.Scope != ScopeDataset {
+		return fmt.Errorf("invalidate %q: %w: %d", req.Namespace, ErrUnsupportedScope, req.Scope)
+	}
+	if req.Scope == ScopeDataset && req.DatasetID == uuid.Nil {
+		return fmt.Errorf("invalidate %q: dataset ID is required", req.Namespace)
+	}
+
+	s.mu.Lock()
+	handlers, ok := s.invalidators[req.Namespace]
+	handlers = append([]invalidator(nil), handlers...)
+	s.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("%w: %q", ErrUnknownNamespace, req.Namespace)
+	}
+
+	var errs []error
+	matched := false
+	for _, registered := range handlers {
+		if registered.scope != req.Scope {
+			continue
+		}
+		matched = true
+		if err := registered.handler(ctx, req); err != nil {
+			errs = append(errs, fmt.Errorf("invalidate %q with %q: %w", req.Namespace, registered.name, err))
+		}
+	}
+	if !matched {
+		return fmt.Errorf("invalidate %q: %w: %d", req.Namespace, ErrUnsupportedScope, req.Scope)
+	}
+	return errors.Join(errs...)
+}
 
 // register adds a cache to the introspection registry.
 func (s *Service) register(c lrucache.CacheInfo) {

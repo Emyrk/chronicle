@@ -1,19 +1,20 @@
 package servicetenant
 
 import (
-  "context"
-  "fmt"
-  "net/url"
-  "strings"
-  "time"
+	"context"
+	"fmt"
+	"net/url"
+	"strings"
+	"time"
 
-  "github.com/Emyrk/chronicle/database"
-  "github.com/Emyrk/chronicle/internal/maps"
-  "github.com/Emyrk/chronicle/internal/services"
-  "github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
-  "github.com/Emyrk/chronicle/internal/services/servicepgxpool"
+	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/maps"
+	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
+	"github.com/Emyrk/chronicle/internal/services/servicecache"
+	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 
-  "github.com/coder/serpent"
+	"github.com/coder/serpent"
 )
 
 var _ services.Servicer = (*Service)(nil)
@@ -36,7 +37,8 @@ type Service struct {
 
 	// db is a raw database.Store used for tenant queries.
 	// This store is NOT behind RLS — tenant queries themselves are not tenant-scoped.
-	db database.Store
+	db       database.Store
+	cacheSvc *servicecache.Service
 
 	slugs maps.MutexMap[string, database.Tenant]
 }
@@ -63,12 +65,14 @@ func (s *Service) DependsOn() []string {
 	return []string{
 		servicepgxpool.OnPGXPool(),
 		serviceaccessurl.OnAccessURL(),
+		servicecache.OnCache(),
 	}
 }
 
 func (s *Service) Start(ctx context.Context) error {
 	pool := servicepgxpool.PGXPool(s.broker)
 	s.db = database.New(pool)
+	s.cacheSvc = servicecache.CacheService(s.broker)
 
 	// Pull the access URL from the access URL service.
 	if raw := serviceaccessurl.AccessURL(s.broker); raw != "" {
@@ -86,6 +90,9 @@ func (s *Service) Start(ctx context.Context) error {
 	// Initial cache load.
 	if err := s.refreshCache(ctx); err != nil {
 		return fmt.Errorf("load tenant cache: %w", err)
+	}
+	if err := registerCacheInvalidator(s.cacheSvc, s.refreshCache); err != nil {
+		return fmt.Errorf("register tenant cache invalidator: %w", err)
 	}
 
 	// Background goroutine refreshes the cache every 5 minutes.
@@ -154,9 +161,19 @@ func (s *Service) refreshCache(ctx context.Context) error {
 	return nil
 }
 
-// InvalidateCache forces an immediate cache refresh from the database.
-func (s *Service) InvalidateCache() {
-	_ = s.refreshCache(context.Background())
+func registerCacheInvalidator(cacheSvc *servicecache.Service, refresh func(context.Context) error) error {
+	return cacheSvc.RegisterInvalidator(
+		servicecache.NamespaceTenantSlugs,
+		servicecache.ScopeGlobal,
+		"tenant_slug_reload",
+		func(ctx context.Context, _ servicecache.Invalidation) error {
+			return refresh(ctx)
+		},
+	)
+}
+
+func (s *Service) invalidateCache(ctx context.Context) error {
+	return s.cacheSvc.Invalidate(ctx, servicecache.GlobalInvalidation(servicecache.NamespaceTenantSlugs))
 }
 
 // IsAllowedOrigin checks if the given origin is a valid tenant subdomain

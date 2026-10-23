@@ -13,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/spelldb"
 	"github.com/Emyrk/chronicle/internal/gamedataoverrides"
+	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/wowdata"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -144,12 +145,14 @@ func (h *Handler) persistWowdata(ctx context.Context, datasetID uuid.UUID, p *wo
 	if err := h.deriveConsumables(ctx, datasetID); err != nil {
 		return fmt.Errorf("derive consumables: %w", err)
 	}
-	if h.wowDB != nil {
-		h.wowDB.InvalidateTalentCache(datasetID)
-		h.wowDB.InvalidateSpellCache(datasetID)
-		h.wowDB.InvalidateExtraAttacks(datasetID)
-		h.wowDB.InvalidateDurationModifiers(datasetID)
-		h.wowDB.InvalidatePeriodicSpells(datasetID)
+	if err := h.invalidateDataset(ctx, datasetID,
+		servicecache.NamespaceTalents,
+		servicecache.NamespaceSpells,
+		servicecache.NamespaceExtraAttacks,
+		servicecache.NamespaceDurationMods,
+		servicecache.NamespacePeriodicSpells,
+	); err != nil {
+		return fmt.Errorf("invalidate imported game-data caches: %w", err)
 	}
 	return nil
 }

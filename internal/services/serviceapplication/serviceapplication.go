@@ -3,14 +3,15 @@ package serviceapplication
 import (
 	"context"
 
-	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
+	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicebot"
+	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/serviceriver"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
@@ -40,7 +41,7 @@ type Service struct {
 	Zed                   *authz.Authz
 	Bot                   *chroniclebot.Bot
 	Queue                 *riverqueue.Queues
-	Tenant                *servicetenant.Service
+	Cache                 *servicecache.Service
 	accessURL             string
 }
 
@@ -58,7 +59,7 @@ func New(broker *services.Services) *Service {
 	return &Service{broker: broker}
 }
 
-func (s *Service) Name() string        { return services.ServiceApplication }
+func (s *Service) Name() string         { return services.ServiceApplication }
 func (s *Service) Configures() []string { return nil }
 
 func (s *Service) DependsOn() []string {
@@ -69,6 +70,7 @@ func (s *Service) DependsOn() []string {
 		serviceriver.OnRiverQueue(),
 		serviceaccessurl.OnAccessURL(),
 		servicetenant.OnTenant(),
+		servicecache.OnCache(),
 	}
 }
 
@@ -100,9 +102,13 @@ func (s *Service) Start(_ context.Context) error {
 	s.Zed = serviceauthz.Authz(s.broker)
 	s.Bot = servicebot.DiscordBot(s.broker)
 	s.Queue = serviceriver.RiverQueue(s.broker)
-	s.Tenant = servicetenant.Tenant(s.broker)
+	s.Cache = servicecache.CacheService(s.broker)
 	s.accessURL = serviceaccessurl.AccessURL(s.broker)
 	return nil
+}
+
+func (s *Service) invalidateTenantCache(ctx context.Context) error {
+	return s.Cache.Invalidate(ctx, servicecache.GlobalInvalidation(servicecache.NamespaceTenantSlugs))
 }
 
 func (s *Service) Close(_ context.Context) error { return nil }

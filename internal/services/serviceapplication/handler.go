@@ -157,7 +157,10 @@ func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, fmt.Errorf("create tenant: %w", err))
 		return
 	}
-	s.Tenant.InvalidateCache()
+	if err := s.invalidateTenantCache(ctx); err != nil {
+		httpapi.InternalServerError(w, fmt.Errorf("reload tenant cache: %w", err))
+		return
+	}
 
 	appID := uuid.New()
 	_, err = s.Zed.InsertServerApplication(bypassCtx, database.InsertServerApplicationParams{

@@ -104,7 +104,9 @@ func (s *Service) applyCore(ctx context.Context, app database.GetServerApplicati
 	if err != nil {
 		return fmt.Errorf("update tenant: %w", err)
 	}
-	s.Tenant.InvalidateCache()
+	if err := s.invalidateTenantCache(ctx); err != nil {
+		return fmt.Errorf("reload tenant cache: %w", err)
+	}
 	return nil
 }
 
@@ -122,7 +124,9 @@ func (s *Service) applySlug(ctx context.Context, app database.GetServerApplicati
 	if err != nil {
 		return fmt.Errorf("update tenant slug: %w", err)
 	}
-	s.Tenant.InvalidateCache()
+	if err := s.invalidateTenantCache(ctx); err != nil {
+		return fmt.Errorf("reload tenant cache: %w", err)
+	}
 	return nil
 }
 
@@ -156,7 +160,9 @@ func (s *Service) applyDescription(ctx context.Context, app database.GetServerAp
 	if err != nil {
 		return fmt.Errorf("update tenant: %w", err)
 	}
-	s.Tenant.InvalidateCache()
+	if err := s.invalidateTenantCache(ctx); err != nil {
+		return fmt.Errorf("reload tenant cache: %w", err)
+	}
 	return nil
 }
 
@@ -193,7 +199,9 @@ func (s *Service) applyLogos(ctx context.Context, app database.GetServerApplicat
 	if err != nil {
 		return fmt.Errorf("update tenant: %w", err)
 	}
-	s.Tenant.InvalidateCache()
+	if err := s.invalidateTenantCache(ctx); err != nil {
+		return fmt.Errorf("reload tenant cache: %w", err)
+	}
 	return nil
 }
 
@@ -227,7 +235,9 @@ func (s *Service) applyTheme(ctx context.Context, app database.GetServerApplicat
 	if err != nil {
 		return fmt.Errorf("update tenant: %w", err)
 	}
-	s.Tenant.InvalidateCache()
+	if err := s.invalidateTenantCache(ctx); err != nil {
+		return fmt.Errorf("reload tenant cache: %w", err)
+	}
 	return nil
 }
 
@@ -363,7 +373,9 @@ func (s *Service) applySettings(ctx context.Context, app database.GetServerAppli
 	if err != nil {
 		return fmt.Errorf("update tenant settings: %w", err)
 	}
-	s.Tenant.InvalidateCache()
+	if err := s.invalidateTenantCache(ctx); err != nil {
+		return fmt.Errorf("reload tenant cache: %w", err)
+	}
 	return nil
 }
 
