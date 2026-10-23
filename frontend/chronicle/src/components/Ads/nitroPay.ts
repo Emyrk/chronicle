@@ -19,6 +19,7 @@ interface NitroPayAPI {
 }
 
 interface NitroPayAdOptions {
+  demo?: boolean
   refreshLimit: number
   refreshTime: number
   report: {
@@ -77,23 +78,29 @@ export function loadNitroPay(siteID: string): Promise<void> {
   return scriptPromise
 }
 
+export function nitroPayAdOptions(sizes: NitroPaySize[], demo = false): NitroPayAdOptions {
+  return {
+    ...(demo && { demo: true }),
+    refreshLimit: 10,
+    refreshTime: 30,
+    report: {
+      enabled: true,
+      icon: true,
+      wording: "Report Ad",
+    },
+    sizes,
+  }
+}
+
 export async function requestNitroPayAd(
   siteID: string,
   id: string,
   sizes: NitroPaySize[],
+  demo = false,
 ): Promise<NitroPayAd[]> {
   await loadNitroPay(siteID)
   const result = await Promise.resolve(
-    window.nitroAds?.createAd(id, {
-      refreshLimit: 10,
-      refreshTime: 30,
-      report: {
-        enabled: true,
-        icon: true,
-        wording: "Report Ad",
-      },
-      sizes,
-    }) ?? null,
+    window.nitroAds?.createAd(id, nitroPayAdOptions(sizes, demo)) ?? null,
   )
 
   if (!result) return []

@@ -95,6 +95,7 @@ export function AdSlot({
   railLayout = "single",
   hostname = window.location.hostname,
   previewEnabled = import.meta.env.DEV && import.meta.env.CHRONICLE_PREVIEW_ADS,
+  demoEnabled = import.meta.env.CHRONICLE_PREVIEW_ADS_DEMO,
   availableHeight,
   className,
 }: {
@@ -106,6 +107,8 @@ export function AdSlot({
   hostname?: string
   /** Test seam for preview eligibility. Product callers should use the environment flag. */
   previewEnabled?: boolean
+  /** Test seam for NitroPay demo creatives. Product callers should use the environment flag. */
+  demoEnabled?: boolean
   /** Test seam for sidebar size eligibility. Product callers should use viewport measurement. */
   availableHeight?: number
   className?: string
@@ -115,7 +118,8 @@ export function AdSlot({
   const slotRef = useRef<HTMLElement>(null)
   const measuredAvailableHeight = useSidebarViewportHeight(format === "sidebar", slotRef)
   const sidebarAvailableHeight = availableHeight ?? measuredAvailableHeight
-  const showPreview = shouldShowAdPreview(hostname, previewEnabled)
+  const showDemo = demoEnabled === true
+  const showPreview = !showDemo && shouldShowAdPreview(hostname, previewEnabled)
   const siteID = siteConfig?.ads_enabled ? siteConfig.nitropay_site_id : undefined
   const adID = `nitropay-${placement}`
   const wideRail = useMediaQuery(format === "rail" ? railLayoutQueries[railLayout] : undefined)
@@ -131,7 +135,7 @@ export function AdSlot({
 
     let active = true
     let ads: NitroPayAd[] = []
-    void requestNitroPayAd(siteID, adID, eligibleSizes)
+    void requestNitroPayAd(siteID, adID, eligibleSizes, showDemo)
       .then((createdAds) => {
         if (!active) {
           clearNitroPayAds(createdAds)
@@ -147,7 +151,7 @@ export function AdSlot({
       active = false
       clearNitroPayAds(ads)
     }
-  }, [adID, adsAllowed, eligibleSizes, placement, showPreview, siteID])
+  }, [adID, adsAllowed, eligibleSizes, placement, showDemo, showPreview, siteID])
 
   // Fail closed while deciding so paid supporters never see an ad flash.
   if (!adsAllowed || (!showPreview && !siteID)) {
@@ -165,6 +169,7 @@ export function AdSlot({
       aria-label={showPreview ? "Advertisement preview" : "Advertisement"}
       data-ad-placement={placement}
       data-ad-provider={showPreview ? "preview" : "nitropay"}
+      data-ad-demo={showDemo || undefined}
     >
       <div>
         {siteConfig?.billing_enabled ? (
@@ -189,23 +194,28 @@ export function AdSlot({
         <div
           id={adID}
           className={cn(
-            showPreview &&
-              "relative flex items-center justify-center overflow-hidden rounded-md border border-dashed border-border/60 bg-muted/10",
+            showPreview
+              ? "relative flex items-center justify-center overflow-hidden rounded-md border border-dashed border-border/60 bg-muted/10"
+              : showDemo
+                ? "relative flex items-center justify-center overflow-hidden rounded-md border border-dashed border-[#f0c060]/35 bg-[#f0c060]/5 [&>iframe]:relative [&>iframe]:z-10 [&>iframe]:!bg-transparent"
+                : "!bg-transparent [&>iframe]:!bg-transparent",
             format === "sidebar" && "flex justify-center",
-            (showPreview || format !== "responsive") && frameClasses[format],
+            (showPreview || showDemo || format !== "responsive") && frameClasses[format],
             format === "card" && (compactCard ? "h-[100px]" : "h-[250px]"),
           )}
         >
-          {showPreview && (
-            <>
+          {(showPreview || showDemo) && (
+            <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
               <div className="absolute inset-0 opacity-[0.025] [background-image:linear-gradient(135deg,currentColor_12.5%,transparent_12.5%,transparent_50%,currentColor_50%,currentColor_62.5%,transparent_62.5%,transparent)] [background-size:12px_12px]" />
-              <div className="relative text-center text-muted-foreground/55">
-                <p className="text-[10px] font-medium uppercase tracking-[0.16em]">Ad preview</p>
+              <div className={cn("relative text-center", showDemo ? "text-[#f0c060]/70" : "text-muted-foreground/55")}>
+                <p className="text-[10px] font-medium uppercase tracking-[0.16em]">
+                  {showDemo ? "NitroPay demo" : "Ad preview"}
+                </p>
                 <p className="mt-1 font-mono text-[10px]">
                   {adSizeLabel(format, wideRail, compactCard, sidebarAvailableHeight)}
                 </p>
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>

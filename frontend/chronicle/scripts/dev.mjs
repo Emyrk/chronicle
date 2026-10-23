@@ -1,13 +1,18 @@
 import { spawn } from "node:child_process"
 
 const args = process.argv.slice(2)
-const withAdsIndex = args.indexOf("--with-ads")
 const env = { ...process.env }
 
-if (withAdsIndex !== -1) {
-  args.splice(withAdsIndex, 1)
-  env.CHRONICLE_PREVIEW_ADS = "true"
+function enableFlag(argument, environmentVariable) {
+  const index = args.indexOf(argument)
+  if (index === -1) return
+
+  args.splice(index, 1)
+  env[environmentVariable] = "true"
 }
+
+enableFlag("--with-ads", "CHRONICLE_PREVIEW_ADS")
+enableFlag("--with-demo-ads", "CHRONICLE_PREVIEW_ADS_DEMO")
 
 const vite = spawn("vite", args, {
   env,

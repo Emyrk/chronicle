@@ -52,6 +52,7 @@ export default defineConfig({
   define: {
     'import.meta.env.VITE_SERVER_NAME': JSON.stringify(process.env.SERVER || 'turtle'),
     'import.meta.env.CHRONICLE_PREVIEW_ADS': JSON.stringify(process.env.CHRONICLE_PREVIEW_ADS === 'true'),
+    'import.meta.env.CHRONICLE_PREVIEW_ADS_DEMO': JSON.stringify(process.env.CHRONICLE_PREVIEW_ADS_DEMO === 'true'),
   },
   plugins: [react({
     babel: {
