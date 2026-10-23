@@ -176,6 +176,26 @@ func TestTechnicalHintsDegradesWhenStaticAssetsAreUnavailable(t *testing.T) {
 	require.Equal(t, "activity-logs-processed-24h", response.Payloads[0].ID)
 }
 
+func TestLoadStaticTechnicalHintsUsesFeatureCopyAndExclusions(t *testing.T) {
+	t.Parallel()
+
+	payloads, err := loadStaticTechnicalHints(fakeTechnicalHintAssets{
+		"general-tips.json": `[]`,
+		"panel-hints.json":  `[]`,
+		"blog-posts.json": `[
+			{"id":"armory-refresh","title":"Armory page refresh","description":"Announcement copy","tag":"Feature","icon":"inv_misc_book_09","hintTitle":"Player Armory","hintDescription":"Search for players.","hintHref":"/armory"},
+			{"id":"vehicle-support","title":"Vehicle support","description":"Vehicle announcement","tag":"Feature","icon":"ability_vehicle_siegeenginecharge","hintEnabled":false}
+		]`,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []chroniclesdk.TechnicalHint{{
+		ID: "blog-armory-refresh", Kind: chroniclesdk.TechnicalHintKindBlog,
+		Title: "Player Armory", Body: "Search for players.", Href: "/armory",
+		ActionLabel: "Open the feature", Icon: "inv_misc_book_09", BlogID: "armory-refresh",
+		Tags: []string{"blog", "Feature"},
+	}}, payloads)
+}
+
 func TestLoadStaticTechnicalHints(t *testing.T) {
 	t.Parallel()
 
@@ -189,12 +209,12 @@ func TestLoadStaticTechnicalHints(t *testing.T) {
 		{
 			ID: "tip-panel-focus", Kind: chroniclesdk.TechnicalHintKindTip,
 			Title: "Panel focus", Body: "Right-click a player row.",
-			Href: "/technical#chronicle-tips", Tags: []string{"tip"},
+			Href: "/technical/hints#chronicle-tips", Tags: []string{"tip"},
 		},
 		{
 			ID: "panel-death-recap", Kind: chroniclesdk.TechnicalHintKindPanel,
 			Title: "Death log", Body: "Inspect events before a death.",
-			Href: "/technical#panel-insights", ActionLabel: "See panel insights",
+			Href: "/technical/hints#panel-insights", ActionLabel: "See panel insights",
 			Panel: "death_log", Tags: []string{"panel", "death_log"},
 		},
 		{

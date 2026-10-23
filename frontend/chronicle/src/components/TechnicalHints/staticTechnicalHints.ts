@@ -11,13 +11,17 @@ function humanize(value: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+const DISABLED_TECHNICAL_HINT_IDS = new Set(
+  BLOG_POSTS.filter((post) => post.hintEnabled === false).map((post) => `blog-${post.id}`),
+);
+
 export const STATIC_TECHNICAL_HINTS: readonly TechnicalHint[] = [
   ...(generalTipsJSON as GeneralTipAsset[]).map((tip): TechnicalHint => ({
     id: `tip-${tip.id}`,
     kind: "tip",
     title: humanize(tip.id),
     body: tip.content,
-    href: "/technical#chronicle-tips",
+    href: "/technical/hints#chronicle-tips",
     tags: ["tip"],
   })),
   ...(panelHintsJSON as PanelHintAsset[]).map((hint): TechnicalHint => ({
@@ -25,18 +29,18 @@ export const STATIC_TECHNICAL_HINTS: readonly TechnicalHint[] = [
     kind: "panel",
     title: humanize(hint.panelID),
     body: hint.content,
-    href: "/technical#panel-insights",
+    href: "/technical/hints#panel-insights",
     action_label: "See panel insights",
     panel: hint.panelID,
     tags: ["panel", hint.panelID],
   })),
-  ...BLOG_POSTS.map((post): TechnicalHint => ({
+  ...BLOG_POSTS.filter((post) => post.hintEnabled !== false).map((post): TechnicalHint => ({
     id: `blog-${post.id}`,
     kind: "blog",
-    title: post.title,
-    body: post.description,
-    href: blogPostPath(post.id),
-    action_label: "Read the article",
+    title: post.hintTitle ?? post.title,
+    body: post.hintDescription ?? post.description,
+    href: post.hintHref ?? blogPostPath(post.id),
+    action_label: post.hintHref ? "Open the feature" : "Read the article",
     icon: post.icon,
     blog_id: post.id,
     tags: ["blog", post.tag],
@@ -47,7 +51,10 @@ export function mergeTechnicalHints(
   dynamic: TechnicalHintsResponse | undefined,
 ): TechnicalHintsResponse {
   const payloads = new Map(STATIC_TECHNICAL_HINTS.map((hint) => [hint.id, hint]));
-  for (const hint of dynamic?.payloads ?? []) payloads.set(hint.id, hint);
+  for (const hint of dynamic?.payloads ?? []) {
+    if (DISABLED_TECHNICAL_HINT_IDS.has(hint.id)) continue;
+    if (hint.kind === "community_fact" || !payloads.has(hint.id)) payloads.set(hint.id, hint);
+  }
 
   return {
     version: dynamic?.version ?? "static-v1",
