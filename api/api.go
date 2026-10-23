@@ -137,15 +137,17 @@ type Options struct {
 }
 
 type API struct {
-	AppContext     context.Context
-	Opts           *Options
-	Auth           *chronauth.Service
-	Chronicle      *chronicle.Chronicle
-	Queues         *riverqueue.Queues
-	Zed            *authz.Authz
-	CustomPanels   *custompanelapi.Handler
-	liveSessions   *servicelivesession.Service
-	discoveryStats discoveryStatsCache
+	AppContext          context.Context
+	Opts                *Options
+	Auth                *chronauth.Service
+	Chronicle           *chronicle.Chronicle
+	Queues              *riverqueue.Queues
+	Zed                 *authz.Authz
+	CustomPanels        *custompanelapi.Handler
+	liveSessions        *servicelivesession.Service
+	discoveryStats      discoveryStatsCache
+	technicalHintsStore technicalHintsStore
+	technicalHints      technicalHintsCache
 }
 
 func New(ctx context.Context, opts Options) (*API, error) {
@@ -189,13 +191,14 @@ func New(ctx context.Context, opts Options) (*API, error) {
 	}
 
 	return &API{
-		Opts:         &opts,
-		AppContext:   ctx,
-		Auth:         service,
-		Chronicle:    opts.Chronicle,
-		Queues:       opts.RiverQueue,
-		Zed:          opts.Zed,
-		CustomPanels: custompanelapi.New(custompanelapi.Options{HTTPClient: opts.CustomPanelHTTPClient}),
+		Opts:                &opts,
+		AppContext:          ctx,
+		Auth:                service,
+		Chronicle:           opts.Chronicle,
+		Queues:              opts.RiverQueue,
+		Zed:                 opts.Zed,
+		CustomPanels:        custompanelapi.New(custompanelapi.Options{HTTPClient: opts.CustomPanelHTTPClient}),
+		technicalHintsStore: opts.Zed,
 		liveSessions: servicelivesession.New(servicelivesession.Options{
 			AccessURL: opts.AccessURL,
 			ResolveUsername: func(ctx context.Context, userID uuid.UUID) (string, error) {
@@ -562,6 +565,9 @@ func (api *API) Routes() chi.Router {
 
 			// Public census data
 			r.Get("/census", api.Census)
+
+			// Public technical hints and community activity.
+			r.Get("/technical-hints", api.TechnicalHints)
 
 			// Public site-wide statistics
 			r.Get("/stats", api.SiteStats)
