@@ -25,6 +25,7 @@ import { useTenantGate } from "./TenantGate";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import { InstanceAssistantChat } from "@/features/chat/InferenceChats";
 import { AdSuppressionProvider } from "@/components/Ads/AdSuppressionProvider";
+import { AdSlot } from "@/components/Ads/AdSlot";
 import { getReplayResetTimestamp, type SelectedEncounterTimes } from "./replaySelection";
 
 // Types for the Instance page
@@ -525,24 +526,29 @@ export function InstancePage() {
             flavor={instance.flavor ?? []}
             selectedEncounterIds={selectedEncounterIds}
           >
-            {tenantGate.banner && !focused && (
-              <div className="w-full px-4 pt-4">
-                {tenantGate.banner}
+            <div className="mx-auto flex w-full max-w-[1920px] gap-6">
+              <div className="min-w-0 flex-1">
+                {tenantGate.banner && !focused && (
+                  <div className="w-full px-4 pt-4">
+                    {tenantGate.banner}
+                  </div>
+                )}
+                {!focused && <AddonMissingBanner instance={instance} />}
+                <InstancePageInner
+                  instance={instance}
+                  selectedEncounterIds={selectedEncounterIds}
+                  onSelectEncounters={setUserSelectedEncounterIds}
+                  youtubeData={youtubeData}
+                  selectedEncounterTimes={selectedEncounterTimes}
+                  logDetailUrl={logDetailUrl}
+                  rawEncounters={apiInstance?.encounters}
+                  canAdminLogs={canAdminLogs}
+                  canInvalidateLogs={canInvalidateLogs}
+                  duplicateGroupId={apiInstance?.duplicate_group_id}
+                />
               </div>
-            )}
-            {!focused && <AddonMissingBanner instance={instance} />}
-            <InstancePageInner
-              instance={instance}
-              selectedEncounterIds={selectedEncounterIds}
-              onSelectEncounters={setUserSelectedEncounterIds}
-              youtubeData={youtubeData}
-              selectedEncounterTimes={selectedEncounterTimes}
-              logDetailUrl={logDetailUrl}
-              rawEncounters={apiInstance?.encounters}
-              canAdminLogs={canAdminLogs}
-              canInvalidateLogs={canInvalidateLogs}
-              duplicateGroupId={apiInstance?.duplicate_group_id}
-            />
+              {!focused && <AdSlot placement="instance-right-rail" format="rail" railLayout="compact" />}
+            </div>
             <InstanceAssistantChat key={instance.id} instanceId={instance.id} instanceName={instance.name} />
           </PlayerSpecializationProvider>
         </InstanceEventsProvider>

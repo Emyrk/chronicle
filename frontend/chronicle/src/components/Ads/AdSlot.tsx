@@ -27,11 +27,13 @@ const formatClasses: Record<AdFormat, string> = {
 const railLayoutClasses: Record<RailLayout, string> = {
   single: "min-[1920px]:w-[300px]",
   paired: "min-[2080px]:w-[300px]",
+  compact: "",
 }
 
-const railLayoutQueries: Record<RailLayout, string> = {
+const railLayoutQueries: Record<RailLayout, string | undefined> = {
   single: "(min-width: 1920px)",
   paired: "(min-width: 2080px)",
+  compact: undefined,
 }
 
 const frameClasses: Record<AdFormat, string> = {
@@ -111,7 +113,7 @@ export function AdSlot({
   /** Stable hyphenated identifier; use kebab-case for reporting and placement-specific policy. */
   placement: AdPlacement
   format?: AdFormat
-  /** Paired rails wait for a wider viewport before reserving 300px per side. */
+  /** Paired rails wait for extra width; compact rails remain fixed at 160px. */
   railLayout?: RailLayout
   hostname?: string
   /** Test seam for preview eligibility. Product callers should use the environment flag. */

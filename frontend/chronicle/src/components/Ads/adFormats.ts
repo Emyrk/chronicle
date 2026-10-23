@@ -1,7 +1,7 @@
 import type { NitroPaySize } from "./nitroPay"
 
 export type AdFormat = "responsive" | "rail" | "card" | "sidebar"
-export type RailLayout = "single" | "paired"
+export type RailLayout = "single" | "paired" | "compact"
 
 const formatSizes: Record<AdFormat, NitroPaySize[]> = {
   responsive: [

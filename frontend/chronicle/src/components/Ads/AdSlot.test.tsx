@@ -77,6 +77,24 @@ describe("AdSlot", () => {
     expect(markup).not.toContain("min-[1920px]:w-[300px]")
   })
 
+  it("keeps compact rails fixed at 160 × 600 on wide screens", () => {
+    const markup = renderAdSlot(
+      <AdSlot
+        placement="instance-right-rail"
+        format="rail"
+        railLayout="compact"
+        hostname="localhost"
+        previewEnabled
+      />,
+    )
+
+    expect(markup).toContain("160 × 600")
+    expect(markup).not.toContain("300 × 600")
+    expect(markup).not.toContain("min-[1920px]:w-[300px]")
+    expect(markup).not.toContain("min-[2080px]:w-[300px]")
+    expect(markup).toContain("2xl:block")
+  })
+
   it("offers both rail sizes only when 300px is reserved", () => {
     expect(adSizesForFormat("rail", false)).toEqual([[160, 600]])
     expect(adSizesForFormat("rail", true)).toEqual([
