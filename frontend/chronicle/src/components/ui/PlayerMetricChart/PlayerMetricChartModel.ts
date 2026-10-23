@@ -1,3 +1,17 @@
+import type { CSSProperties } from 'react'
+
+/**
+ * Optional cosmetic styling for a player's row (e.g. supporter perks).
+ * The row exposes the player's class color as `--bar-color`.
+ */
+export interface PlayerRowCosmetic {
+  nameClassName?: string
+  nameStyle?: CSSProperties
+  /** Replaces the default bar fill. */
+  barBackground?: string
+  barClassName?: string
+}
+
 export interface PlayerMetricChartData {
   playerID: string
   playerName: string
@@ -10,6 +24,7 @@ export interface PlayerMetricChartData {
   stackedValue?: number
   // dimmed reduces visual prominence (used for filtering)
   dimmed?: boolean
+  cosmetic?: PlayerRowCosmetic
 }
 
 export interface PlayerMetricChartRow extends PlayerMetricChartData {

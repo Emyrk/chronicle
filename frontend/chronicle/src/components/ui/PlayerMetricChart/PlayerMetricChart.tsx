@@ -548,6 +548,7 @@ export function PlayerMetricRow({
       data-panel-row={isFirstRow ? true : undefined}
       data-lesson-target={hasBreakout ? "pin-breakout" : undefined}
       style={{
+        '--bar-color': player.color,
         display: 'flex',
         alignItems: 'center',
         height: rowHeight,
@@ -558,18 +559,20 @@ export function PlayerMetricRow({
         opacity: isDimmed ? 0.35 : 1,
         transition: 'opacity 0.2s ease',
         cursor: hasBreakout ? 'pointer' : 'default',
-      }}
+      } as React.CSSProperties}
       className={cn(isPinned && "ring-2 ring-primary ring-inset")}
     >
       {/* Colored bar background */}
       <div
+        className={player.cosmetic?.barClassName}
         style={{
           position: 'absolute',
           left: 0,
           top: 0,
           bottom: 0,
           width: `${(player.value / maximumValue) * 100}%`,
-          background: `linear-gradient(to right, oklch(0 0 0 / 0.3), oklch(0 0 0 / 0.15)), ${player.color}`,
+          background: player.cosmetic?.barBackground
+            ?? `linear-gradient(to right, oklch(0 0 0 / 0.3), oklch(0 0 0 / 0.15)), ${player.color}`,
           opacity: 0.85,
           transition: animateValues ? 'width 0.3s ease' : 'none',
         }}
@@ -702,6 +705,7 @@ export function PlayerMetricRow({
         {/* Spec name */}
         <span
           ref={nameRef}
+          className={player.cosmetic?.nameClassName}
           style={{
             flex: '0 1 auto',
             minWidth: 0,
@@ -710,6 +714,7 @@ export function PlayerMetricRow({
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
+            ...player.cosmetic?.nameStyle,
           }}
         >
           {player.playerName}
