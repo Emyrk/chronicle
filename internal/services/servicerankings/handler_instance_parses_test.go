@@ -434,6 +434,68 @@ func TestHandleInstanceParses_PersistedProjection(t *testing.T) {
 		}
 	})
 
+	t.Run("ScoresKnownPersistedEncounterAfterUnknownSpecEncounter", func(t *testing.T) {
+		t.Parallel()
+		f := setupParsesTest(t)
+		baseTime := time.Now().Add(-time.Hour)
+		for _, ranking := range []struct {
+			encounterName string
+			playerSpec    string
+		}{
+			{encounterName: "Boss1", playerSpec: "Unknown"},
+			{encounterName: "Boss2", playerSpec: "Arms"},
+		} {
+			f.insertTestRanking(t, struct {
+				encounterName  string
+				playerGUID     string
+				playerName     string
+				playerClass    string
+				playerSpec     string
+				dps            float64
+				hps            float64
+				difficultyName string
+				maxPlayers     int16
+				killedAt       time.Time
+			}{
+				encounterName:  ranking.encounterName,
+				playerGUID:     "Player-persisted",
+				playerName:     "PersistedPlayer",
+				playerClass:    "WARRIOR",
+				playerSpec:     ranking.playerSpec,
+				dps:            1000,
+				difficultyName: "Normal",
+				maxPlayers:     40,
+				killedAt:       baseTime,
+			})
+		}
+		snapshot := f.publishSnapshot(t)
+		persistedResult(f, t, uuid.NullUUID{UUID: snapshot.ID, Valid: true}, uuid.Nil, "Boss2", "dps", 91)
+		f.insertPersistedParseReceipt(t, uuid.Nil, snapshot.ID, 1)
+
+		guardedStore := &noMembershipCohortStore{Store: f.store}
+		response := requestGuardedInstanceParses(
+			t,
+			guardedStore,
+			f.instanceID,
+			"?encounter_names=Boss1,Boss2&metric=dps",
+		)
+		require.True(t, response.Available)
+		require.Len(t, response.Players, 1)
+		player := response.Players[0]
+		assert.Empty(t, player.Status)
+		assert.Equal(t, "Arms", player.PlayerSpec)
+		require.NotNil(t, player.AverageParse)
+		assert.Equal(t, 1, player.AverageParse.Killed)
+		assert.Equal(t, 2, player.AverageParse.Selected)
+		bosses := make(map[string]chroniclesdk.InstanceParseBoss, len(player.Bosses))
+		for _, boss := range player.Bosses {
+			bosses[boss.EncounterName] = boss
+		}
+		assert.Equal(t, "unknown_spec", bosses["Boss1"].Status)
+		assert.Equal(t, 91, bosses["Boss2"].DisplayScore)
+		assert.Zero(t, guardedStore.queries, "persisted parses must not query memberships")
+	})
+
 	t.Run("MissingReceiptServesOrphanedPersistedResults", func(t *testing.T) {
 		t.Parallel()
 		f := setupParsesTest(t)
@@ -753,6 +815,80 @@ func TestHandleInstanceParses(t *testing.T) {
 			assert.Equal(t, 2, p.AverageParse.Killed)
 			assert.Equal(t, 2, p.AverageParse.Selected)
 		}
+	})
+
+	t.Run("ScoresKnownEncounterAfterUnknownSpecEncounter", func(t *testing.T) {
+		t.Parallel()
+		f := setupParsesTest(t)
+
+		baseTime := time.Now().Add(-time.Hour)
+		for i, dps := range []float64{100, 200, 300, 400, 500, 600} {
+			playerGUID := fmt.Sprintf("0x%016x", i+1)
+			playerName := "Player" + padInt(i+1, 1)
+			for _, boss := range []string{"Boss1", "Boss2"} {
+				playerSpec := "Arms"
+				if i == 5 && boss == "Boss1" {
+					playerSpec = "Unknown"
+				}
+				f.insertTestRanking(t, struct {
+					encounterName  string
+					playerGUID     string
+					playerName     string
+					playerClass    string
+					playerSpec     string
+					dps            float64
+					hps            float64
+					difficultyName string
+					maxPlayers     int16
+					killedAt       time.Time
+				}{
+					encounterName:  boss,
+					playerGUID:     playerGUID,
+					playerName:     playerName,
+					playerClass:    "WARRIOR",
+					playerSpec:     playerSpec,
+					dps:            dps,
+					hps:            0,
+					difficultyName: "Normal",
+					maxPlayers:     40,
+					killedAt:       baseTime.Add(time.Duration(i) * time.Minute),
+				})
+			}
+		}
+
+		f.publishSnapshot(t)
+
+		svc := newTestService(t, f.store)
+		r := chi.NewRouter()
+		r.Get("/instances/{instanceID}/parses", svc.HandleInstanceParses)
+
+		req := httptest.NewRequest("GET", "/instances/"+f.instanceID.String()+"/parses?encounter_names=Boss1,Boss2&metric=dps", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		var resp chroniclesdk.InstanceParsesResponse
+		require.NoError(t, json.Unmarshal(readAll(t, w.Body), &resp))
+
+		var player *chroniclesdk.InstanceParsePlayer
+		for i := range resp.Players {
+			if resp.Players[i].PlayerName == "Player6" {
+				player = &resp.Players[i]
+				break
+			}
+		}
+		require.NotNil(t, player)
+		assert.Empty(t, player.Status)
+		assert.Equal(t, "Arms", player.PlayerSpec)
+		require.NotNil(t, player.AverageParse)
+		assert.Equal(t, 1, player.AverageParse.Killed)
+		assert.Equal(t, 2, player.AverageParse.Selected)
+		bosses := make(map[string]chroniclesdk.InstanceParseBoss, len(player.Bosses))
+		for _, boss := range player.Bosses {
+			bosses[boss.EncounterName] = boss
+		}
+		assert.Equal(t, "unknown_spec", bosses["Boss1"].Status)
+		assert.Equal(t, 100, bosses["Boss2"].DisplayScore)
 	})
 
 	t.Run("UnknownSpecInSpecMode", func(t *testing.T) {

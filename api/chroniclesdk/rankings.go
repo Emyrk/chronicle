@@ -235,7 +235,7 @@ type InstanceParseBoss struct {
 	DisplayScore  int     `json:"display_score"`
 	Rank          int     `json:"rank"`
 	SampleSize    int     `json:"sample_size"`
-	// Status: "ok", "low_confidence", "sample_too_small".
+	// Status: "ok", "low_confidence", "sample_too_small", "unknown_spec", or "no_metric_value".
 	Status string `json:"status"`
 }
 

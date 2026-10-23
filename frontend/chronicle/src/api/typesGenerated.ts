@@ -1951,7 +1951,7 @@ export interface InstanceParseBoss {
     readonly rank: number;
     readonly sample_size: number;
     /**
-     * Status: "ok", "low_confidence", "sample_too_small".
+     * Status: "ok", "low_confidence", "sample_too_small", "unknown_spec", or "no_metric_value".
      */
     readonly status: string;
 }
