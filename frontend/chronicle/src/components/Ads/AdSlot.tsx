@@ -207,12 +207,22 @@ export function AdSlot({
     if (!adsAllowed || !siteID || showPreview || eligibleSizes.length === 0) return
 
     let active = true
+    let noFill = false
     let ads: NitroPayAd[] = []
     setRequestSnapshot({ key: requestKey, state: "pending" })
 
     const handleRendered = (event: Event) => {
+      if (noFill) return
+
       const result = classifyNitroPayRenderedEvent(event, adID)
-      if (result !== "unrelated") {
+      if (result === "no_fill") {
+        // A confirmed no-fill makes the fallback interactive. Stop NitroPay
+        // refreshes first so a later creative cannot replace a user's click target.
+        noFill = true
+        clearNitroPayAds(ads)
+        ads = []
+        setRequestSnapshot({ key: requestKey, state: result })
+      } else if (result === "filled") {
         setRequestSnapshot({ key: requestKey, state: result })
       }
     }
@@ -220,7 +230,7 @@ export function AdSlot({
 
     void requestNitroPayAd(siteID, adID, eligibleSizes, showDemo)
       .then((createdAds) => {
-        if (!active) {
+        if (!active || noFill) {
           clearNitroPayAds(createdAds)
           return
         }

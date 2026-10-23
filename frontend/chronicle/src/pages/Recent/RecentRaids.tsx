@@ -2,6 +2,10 @@ import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "rea
 import { Loader2, Castle, Search, Check, ChevronsUpDown } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { AdSlot, type AdFallbackRenderer } from "@/components/Ads/AdSlot";
+import { TechnicalHintCard } from "@/components/TechnicalHints/TechnicalHintCard";
+import { selectTechnicalHint } from "@/components/TechnicalHints/technicalHintRotation";
+import type { TechnicalHint } from "@/components/TechnicalHints/types";
+import { useTechnicalHints } from "@/components/TechnicalHints/useTechnicalHints";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 
@@ -124,9 +128,36 @@ function InstanceCombobox({
   );
 }
 
-// Recent card placements opt into the fixed fallback frame now. Technical-hint
-// data and rendering will replace this no-op in the separate hints implementation.
-const renderRecentAdFallback: AdFallbackRenderer = () => null;
+const DEFAULT_RECENT_HINT: TechnicalHint = {
+  id: "recent-technical-hints",
+  kind: "tip",
+  title: "Explore Chronicle",
+  body: "Discover analysis tips, panel insights, and technical guides.",
+  href: "/technical",
+  action_label: "Browse Chronicle tips",
+};
+
+function RecentAdSlot({ adNumber }: { adNumber: number }) {
+  const placement = `recent-grid-card-${adNumber}` as const;
+  const { data } = useTechnicalHints();
+  const hint = useMemo(
+    () => selectTechnicalHint(data, placement) ?? DEFAULT_RECENT_HINT,
+    [data, placement],
+  );
+  const renderFallback = useCallback<AdFallbackRenderer>(
+    ({ interactive }) => (
+      <TechnicalHintCard
+        hint={hint}
+        interactive={interactive}
+        compact
+        className="rounded-none border-0"
+      />
+    ),
+    [hint],
+  );
+
+  return <AdSlot placement={placement} format="card" renderFallback={renderFallback} />;
+}
 
 const API_BASE = "/api/v1/raidlogs";
 const RECENT_WINDOW_DAYS = 30;
@@ -489,13 +520,7 @@ export function RecentRaids() {
                         instances={group}
                         bossCount={bossCounts?.get(instance.name)}
                       />
-                      {adNumber !== undefined && (
-                        <AdSlot
-                          placement={`recent-grid-card-${adNumber}`}
-                          format="card"
-                          renderFallback={renderRecentAdFallback}
-                        />
-                      )}
+                      {adNumber !== undefined && <RecentAdSlot adNumber={adNumber} />}
                     </Fragment>
                   );
                 })}

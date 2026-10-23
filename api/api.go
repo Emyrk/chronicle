@@ -66,6 +66,11 @@ type InferenceService interface {
 	AccountRoutes() http.Handler
 }
 
+type AssetsHandler interface {
+	http.Handler
+	ReadFile(string) ([]byte, error)
+}
+
 type Options struct {
 	Logger                *slog.Logger
 	Storage               storage.ObjectStorage
@@ -78,7 +83,7 @@ type Options struct {
 	SaffronURL            *url.URL
 	OCRURL                *url.URL
 	WoWDB                 http.Handler
-	Assets                http.Handler
+	Assets                AssetsHandler
 	InternalGameData      http.Handler
 	ExternalAPI           http.Handler
 	OAuth                 OAuthHandler

@@ -80,6 +80,42 @@ func TestTechnicalHintsResponseAndCache(t *testing.T) {
 	}
 }
 
+func TestTechnicalHintsCacheDoesNotOverwriteNewerConcurrentResponse(t *testing.T) {
+	t.Parallel()
+
+	var cache technicalHintsCache
+	olderTime := time.Date(2026, 10, 23, 16, 0, 0, 0, time.UTC)
+	newerTime := olderTime.Add(time.Second)
+	olderStarted := make(chan struct{})
+	releaseOlder := make(chan struct{})
+	olderDone := make(chan chroniclesdk.TechnicalHintsResponse)
+
+	go func() {
+		response, _ := cache.get("tenant", olderTime, func() (chroniclesdk.TechnicalHintsResponse, error) {
+			close(olderStarted)
+			<-releaseOlder
+			return chroniclesdk.TechnicalHintsResponse{Version: "old", GeneratedAt: olderTime}, nil
+		})
+		olderDone <- response
+	}()
+
+	<-olderStarted
+	newer, err := cache.get("tenant", newerTime, func() (chroniclesdk.TechnicalHintsResponse, error) {
+		return chroniclesdk.TechnicalHintsResponse{Version: "new", GeneratedAt: newerTime}, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, "new", newer.Version)
+	close(releaseOlder)
+	require.Equal(t, "new", (<-olderDone).Version)
+
+	cached, err := cache.get("tenant", newerTime.Add(time.Second), func() (chroniclesdk.TechnicalHintsResponse, error) {
+		t.Fatal("fresh cache entry unexpectedly reloaded")
+		return chroniclesdk.TechnicalHintsResponse{}, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, "new", cached.Version)
+}
+
 func TestTechnicalHintsCacheIsTenantScoped(t *testing.T) {
 	t.Parallel()
 
@@ -110,6 +146,64 @@ func TestBuildDynamicTechnicalHintsOmitsEmptyFactsAndUses24HourWindow(t *testing
 	require.Equal(t, store.totalsParams.StartTime, store.mostParams.StartTime)
 	require.Equal(t, store.totalsParams.EndTime, store.mostParams.EndTime)
 	require.EqualValues(t, technicalHintsTopLimit, store.mostParams.LimitCount)
+}
+
+type fakeTechnicalHintAssets map[string]string
+
+func (assets fakeTechnicalHintAssets) ServeHTTP(http.ResponseWriter, *http.Request) {}
+
+func (assets fakeTechnicalHintAssets) ReadFile(filename string) ([]byte, error) {
+	return []byte(assets[filename]), nil
+}
+
+func TestTechnicalHintsDegradesWhenStaticAssetsAreUnavailable(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeTechnicalHintsStore{
+		totals: database.TechnicalHintActivityTotalsRow{LogsProcessed: 1},
+	}
+	api := &API{
+		Opts:                &Options{Assets: fakeTechnicalHintAssets{}},
+		technicalHintsStore: store,
+	}
+	recorder := httptest.NewRecorder()
+	api.TechnicalHints(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/technical-hints", nil))
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response chroniclesdk.TechnicalHintsResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Len(t, response.Payloads, 1)
+	require.Equal(t, "activity-logs-processed-24h", response.Payloads[0].ID)
+}
+
+func TestLoadStaticTechnicalHints(t *testing.T) {
+	t.Parallel()
+
+	payloads, err := loadStaticTechnicalHints(fakeTechnicalHintAssets{
+		"general-tips.json": `[{"id":"panel-focus","content":"Right-click a player row."}]`,
+		"panel-hints.json":  `[{"id":"death-recap","panelID":"death_log","content":"Inspect events before a death."}]`,
+		"blog-posts.json":   `[{"id":"focus-mode","title":"Focus mode","description":"Hide everything else.","tag":"Feature","icon":"spell_holy_mindvision","publishedAt":"2026-10-16"}]`,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []chroniclesdk.TechnicalHint{
+		{
+			ID: "tip-panel-focus", Kind: chroniclesdk.TechnicalHintKindTip,
+			Title: "Panel focus", Body: "Right-click a player row.",
+			Href: "/technical#chronicle-tips", Tags: []string{"tip"},
+		},
+		{
+			ID: "panel-death-recap", Kind: chroniclesdk.TechnicalHintKindPanel,
+			Title: "Death log", Body: "Inspect events before a death.",
+			Href: "/technical#panel-insights", ActionLabel: "See panel insights",
+			Panel: "death_log", Tags: []string{"panel", "death_log"},
+		},
+		{
+			ID: "blog-focus-mode", Kind: chroniclesdk.TechnicalHintKindBlog,
+			Title: "Focus mode", Body: "Hide everything else.",
+			Href: "/blog/focus-mode", ActionLabel: "Read the article",
+			Icon: "spell_holy_mindvision", BlogID: "focus-mode", Tags: []string{"blog", "Feature"},
+		},
+	}, payloads)
 }
 
 func TestMostActiveInstancesBodyOmitsZeroRows(t *testing.T) {
