@@ -16628,7 +16628,7 @@ deduped AS (
         edr.player_deaths,
         edr.duration_secs,
         edr.avg_ilvl,
-        edr.log_hashed_slug,
+        COALESCE(NULLIF(edr_instance.hashed_slug, ''), edr.instance_id::text) AS log_hashed_slug,
         edr.killed_at,
         tb.sub_spec AS talent_sub_spec,
         tb.talent_layout AS talent_layout,

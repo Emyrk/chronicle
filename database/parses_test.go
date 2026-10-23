@@ -242,7 +242,7 @@ func TestTrashRankingsAllowDistinctSubSpecs(t *testing.T) {
 func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	t.Parallel()
 
-	_, store, realmID := setupParsesTest(t)
+	pool, store, realmID := setupParsesTest(t)
 	ctx := testutil.Context(t, testutil.WaitMedium)
 
 	userID := uuid.New()
@@ -309,6 +309,11 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	// when the query explicitly requires all three encounters.
 	insertEncounterRanking(incompleteID, "Lucifron", "PRIEST", "Holy", "Bear", 2000, baseTime)
 	insertEncounterRanking(incompleteID, "Magmadar", "PRIEST", "Holy", "Bear", 2000, baseTime.Add(time.Minute))
+
+	// Slugless instances must remain linkable by their instance ID when an older
+	// denormalized ranking row is also missing a slug.
+	_, err = pool.Exec(ctx, "UPDATE encounter_dps_rankings SET log_hashed_slug = '' WHERE instance_id = $1", duplicateID)
+	require.NoError(t, err)
 
 	equivalenceParams := database.RankingsLeaderboardParams{
 		Metric: "hps", QueryLimit: 10,
