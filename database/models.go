@@ -2205,6 +2205,18 @@ type SharedView struct {
 	InstanceSlug string             `db:"instance_slug" json:"instance_slug"`
 }
 
+type SidekickAccountConfig struct {
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	Config    []byte             `db:"config" json:"config"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type SidekickConfigOverride struct {
+	SidekickID uuid.UUID          `db:"sidekick_id" json:"sidekick_id"`
+	Config     []byte             `db:"config" json:"config"`
+	UpdatedAt  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type SidekickInstallation struct {
 	ID             uuid.UUID          `db:"id" json:"id"`
 	UserID         uuid.UUID          `db:"user_id" json:"user_id"`

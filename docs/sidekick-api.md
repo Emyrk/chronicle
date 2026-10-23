@@ -29,6 +29,7 @@ Send `PUT /api/v1/sidekick/status` with the OAuth bearer token once per minute:
 {
   "platform": "Windows 11",
   "version": "1.2.3",
+  "config_hash": "b568659ffa9fe99b312ce1c6ad2724d8b46924833e0641423329c91d9f698be5",
   "wow_directories": [
     {
       "path": "C:\\Games\\Turtle WoW",
@@ -71,6 +72,62 @@ Limits:
 - code: 100 characters
 - message: 500 characters
 - details: 4,000 characters
+
+## Managed configuration
+
+Chronicle is authoritative for Sidekick configuration. Configuration has two levels:
+
+1. An account default.
+2. An optional complete override for one Sidekick installation.
+
+A Sidekick without an override inherits the account default. Deleting an override restores inheritance. The initial account default is:
+
+```json
+{
+  "version": 1,
+  "auto_upload": {
+    "enabled": false
+  }
+}
+```
+
+Version 1 only contains `auto_upload.enabled`. Clients must treat the returned document as a complete typed configuration, not as a patch.
+
+Authenticated account endpoints:
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/v1/me/sidekicks/config` | Read the account default and its canonical hash. |
+| `PUT` | `/api/v1/me/sidekicks/config` | Replace the complete account default. |
+| `GET` | `/api/v1/me/sidekicks/{sidekickID}/config` | Read inherited, override, effective, and effective hash state. |
+| `PUT` | `/api/v1/me/sidekicks/{sidekickID}/config` | Replace the installation's complete override. |
+| `DELETE` | `/api/v1/me/sidekicks/{sidekickID}/config` | Delete the override and resume inheritance. |
+
+All installation endpoints enforce account ownership. `GET /api/v1/me/sidekicks` also includes `account_config`, and every installation includes its `configuration` state for account settings screens.
+
+### Heartbeat reconciliation
+
+`config_hash` in the heartbeat request is the SHA-256 hex digest of the exact deterministic JSON serialization of the typed effective config. For version 1, the disabled default serializes as:
+
+```json
+{"version":1,"auto_upload":{"enabled":false}}
+```
+
+The heartbeat response always includes the canonical desired `config_hash`. It includes `config` only when the request hash is absent or differs:
+
+```json
+{
+  "config_hash": "b568659ffa9fe99b312ce1c6ad2724d8b46924833e0641423329c91d9f698be5",
+  "config": {
+    "version": 1,
+    "auto_upload": {
+      "enabled": false
+    }
+  }
+}
+```
+
+When the hashes match, `config` is omitted. Older clients may omit `config_hash`; the heartbeat still succeeds, and they may ignore the additional response fields.
 
 ## Upload tracking
 

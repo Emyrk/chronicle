@@ -64,6 +64,11 @@ func (s *Service) Close(context.Context) error { return nil }
 func (s *Service) setupRoutes() {
 	s.accountRoutes = chi.NewRouter()
 	s.accountRoutes.Get("/", s.ListMySidekicks)
+	s.accountRoutes.Get("/config", s.GetMySidekickAccountConfig)
+	s.accountRoutes.Put("/config", s.PutMySidekickAccountConfig)
+	s.accountRoutes.Get("/{sidekickID}/config", s.GetMySidekickConfig)
+	s.accountRoutes.Put("/{sidekickID}/config", s.PutMySidekickConfig)
+	s.accountRoutes.Delete("/{sidekickID}/config", s.DeleteMySidekickConfig)
 	s.accountRoutes.Patch("/{sidekickID}", s.RenameMySidekick)
 	s.accountRoutes.Delete("/{sidekickID}", s.DisconnectMySidekick)
 

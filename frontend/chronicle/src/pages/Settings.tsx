@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-r
 import { cn } from "@/lib/utils";
 import { iconListUrl } from "@/config/iconUrl";
 import { toast } from "sonner";
-import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop } from "lucide-react";
+import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
@@ -170,6 +170,7 @@ const allTabs: Tab[] = [
   // { path: "/account/notifications", label: "Notifications", icon: Bell },
   // { path: "/account/privacy", label: "Privacy", icon: Shield },
   // { path: "/account/appearance", label: "Appearance", icon: Palette },
+  { path: "/account/sidekick", label: "Sidekick", icon: Laptop },
   { path: "/account/custom-panels", label: "Custom panels", icon: Blocks },
   { path: "/account/layout-book", label: "Layout Book", icon: BookOpenText },
   { path: "/account/layout-lab", label: "Layout Lab", icon: LayoutTemplate },

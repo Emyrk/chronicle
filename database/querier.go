@@ -131,6 +131,7 @@ type sqlcQuerier interface {
 	DeleteRegressionSnapshot(ctx context.Context, id uuid.UUID) error
 	DeleteRetentionPolicy(ctx context.Context, id uuid.UUID) error
 	DeleteRetentionRule(ctx context.Context, id uuid.UUID) error
+	DeleteSidekickConfigOverride(ctx context.Context, arg DeleteSidekickConfigOverrideParams) ([]byte, error)
 	DeleteSidekickWoWDirectoriesExcept(ctx context.Context, arg DeleteSidekickWoWDirectoriesExceptParams) (int64, error)
 	DeleteTenant(ctx context.Context, id uuid.UUID) error
 	DeleteTimeParseBossKillMembershipSeries(ctx context.Context, arg DeleteTimeParseBossKillMembershipSeriesParams) error
@@ -352,6 +353,9 @@ type sqlcQuerier interface {
 	GetServersForWorld(ctx context.Context, worldID uuid.UUID) ([]WowServer, error)
 	GetSharedViewByCode(ctx context.Context, code string) (SharedView, error)
 	GetSharedViewByInstanceAndHash(ctx context.Context, arg GetSharedViewByInstanceAndHashParams) (SharedView, error)
+	GetSidekickAccountConfig(ctx context.Context, userID uuid.UUID) ([]byte, error)
+	GetSidekickConfigOverride(ctx context.Context, arg GetSidekickConfigOverrideParams) ([]byte, error)
+	GetSidekickInstallationByUser(ctx context.Context, arg GetSidekickInstallationByUserParams) (SidekickInstallation, error)
 	GetSidekickInstallationForOAuthRequest(ctx context.Context, arg GetSidekickInstallationForOAuthRequestParams) (uuid.UUID, error)
 	GetSiteConfig(ctx context.Context) (SiteConfig, error)
 	GetSpellItemEnchantmentByID(ctx context.Context, arg GetSpellItemEnchantmentByIDParams) (DbcSpellItemEnchantment, error)
@@ -962,6 +966,8 @@ type sqlcQuerier interface {
 	UpsertRetentionPolicy(ctx context.Context, arg UpsertRetentionPolicyParams) (RetentionPolicy, error)
 	UpsertRetentionPolicyByRealm(ctx context.Context, arg UpsertRetentionPolicyByRealmParams) (RetentionPolicy, error)
 	UpsertRetentionRule(ctx context.Context, arg UpsertRetentionRuleParams) (RetentionRule, error)
+	UpsertSidekickAccountConfig(ctx context.Context, arg UpsertSidekickAccountConfigParams) ([]byte, error)
+	UpsertSidekickConfigOverride(ctx context.Context, arg UpsertSidekickConfigOverrideParams) ([]byte, error)
 	UpsertSidekickInstallation(ctx context.Context, arg UpsertSidekickInstallationParams) (SidekickInstallation, error)
 	UpsertSidekickWoWDirectory(ctx context.Context, arg UpsertSidekickWoWDirectoryParams) error
 	// Insert a unique talent build, returning its ID. If the build already exists,

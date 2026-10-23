@@ -18760,6 +18760,28 @@ func (q *sqlQuerier) GetSharedViewByInstanceAndHash(ctx context.Context, arg Get
 	return i, err
 }
 
+const deleteSidekickConfigOverride = `-- name: DeleteSidekickConfigOverride :one
+DELETE FROM sidekick_config_overrides sco
+USING sidekick_installations si
+WHERE sco.sidekick_id = $1
+  AND si.id = sco.sidekick_id
+  AND si.user_id = $2
+  AND si.disconnected_at IS NULL
+RETURNING sco.config
+`
+
+type DeleteSidekickConfigOverrideParams struct {
+	SidekickID uuid.UUID `db:"sidekick_id" json:"sidekick_id"`
+	UserID     uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) DeleteSidekickConfigOverride(ctx context.Context, arg DeleteSidekickConfigOverrideParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, deleteSidekickConfigOverride, arg.SidekickID, arg.UserID)
+	var config []byte
+	err := row.Scan(&config)
+	return config, err
+}
+
 const deleteSidekickWoWDirectoriesExcept = `-- name: DeleteSidekickWoWDirectoriesExcept :execrows
 DELETE FROM sidekick_wow_directories
 WHERE sidekick_id = $1
@@ -18796,6 +18818,69 @@ type DisconnectSidekickInstallationParams struct {
 
 func (q *sqlQuerier) DisconnectSidekickInstallation(ctx context.Context, arg DisconnectSidekickInstallationParams) (SidekickInstallation, error) {
 	row := q.db.QueryRow(ctx, disconnectSidekickInstallation, arg.ID, arg.UserID)
+	var i SidekickInstallation
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Platform,
+		&i.Version,
+		&i.LastSeenAt,
+		&i.LastUploadAt,
+		&i.DisconnectedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getSidekickAccountConfig = `-- name: GetSidekickAccountConfig :one
+SELECT config
+FROM sidekick_account_configs
+WHERE user_id = $1
+`
+
+func (q *sqlQuerier) GetSidekickAccountConfig(ctx context.Context, userID uuid.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getSidekickAccountConfig, userID)
+	var config []byte
+	err := row.Scan(&config)
+	return config, err
+}
+
+const getSidekickConfigOverride = `-- name: GetSidekickConfigOverride :one
+SELECT sco.config
+FROM sidekick_config_overrides sco
+JOIN sidekick_installations si ON si.id = sco.sidekick_id
+WHERE sco.sidekick_id = $1
+  AND si.user_id = $2
+`
+
+type GetSidekickConfigOverrideParams struct {
+	SidekickID uuid.UUID `db:"sidekick_id" json:"sidekick_id"`
+	UserID     uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) GetSidekickConfigOverride(ctx context.Context, arg GetSidekickConfigOverrideParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getSidekickConfigOverride, arg.SidekickID, arg.UserID)
+	var config []byte
+	err := row.Scan(&config)
+	return config, err
+}
+
+const getSidekickInstallationByUser = `-- name: GetSidekickInstallationByUser :one
+SELECT id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+FROM sidekick_installations
+WHERE id = $1
+  AND user_id = $2
+`
+
+type GetSidekickInstallationByUserParams struct {
+	SidekickID uuid.UUID `db:"sidekick_id" json:"sidekick_id"`
+	UserID     uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) GetSidekickInstallationByUser(ctx context.Context, arg GetSidekickInstallationByUserParams) (SidekickInstallation, error) {
+	row := q.db.QueryRow(ctx, getSidekickInstallationByUser, arg.SidekickID, arg.UserID)
 	var i SidekickInstallation
 	err := row.Scan(
 		&i.ID,
@@ -19152,6 +19237,53 @@ func (q *sqlQuerier) UpsertActiveSidekickIssue(ctx context.Context, arg UpsertAc
 		&i.ResolvedAt,
 	)
 	return i, err
+}
+
+const upsertSidekickAccountConfig = `-- name: UpsertSidekickAccountConfig :one
+INSERT INTO sidekick_account_configs (user_id, config)
+VALUES ($1, $2::jsonb)
+ON CONFLICT (user_id) DO UPDATE SET
+  config = EXCLUDED.config,
+  updated_at = NOW()
+RETURNING config
+`
+
+type UpsertSidekickAccountConfigParams struct {
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+	Config []byte    `db:"config" json:"config"`
+}
+
+func (q *sqlQuerier) UpsertSidekickAccountConfig(ctx context.Context, arg UpsertSidekickAccountConfigParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, upsertSidekickAccountConfig, arg.UserID, arg.Config)
+	var config []byte
+	err := row.Scan(&config)
+	return config, err
+}
+
+const upsertSidekickConfigOverride = `-- name: UpsertSidekickConfigOverride :one
+INSERT INTO sidekick_config_overrides (sidekick_id, config)
+SELECT id, $1::jsonb
+FROM sidekick_installations
+WHERE id = $2
+  AND user_id = $3
+  AND disconnected_at IS NULL
+ON CONFLICT (sidekick_id) DO UPDATE SET
+  config = EXCLUDED.config,
+  updated_at = NOW()
+RETURNING config
+`
+
+type UpsertSidekickConfigOverrideParams struct {
+	Config     []byte    `db:"config" json:"config"`
+	SidekickID uuid.UUID `db:"sidekick_id" json:"sidekick_id"`
+	UserID     uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) UpsertSidekickConfigOverride(ctx context.Context, arg UpsertSidekickConfigOverrideParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, upsertSidekickConfigOverride, arg.Config, arg.SidekickID, arg.UserID)
+	var config []byte
+	err := row.Scan(&config)
+	return config, err
 }
 
 const upsertSidekickInstallation = `-- name: UpsertSidekickInstallation :one

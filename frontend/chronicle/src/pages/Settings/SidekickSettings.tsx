@@ -9,16 +9,19 @@ import {
   Loader2,
   Pencil,
   PlugZap,
+  RotateCcw,
+  Settings2,
   Unplug,
   Upload,
   Wifi,
   WifiOff,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { SidekickInstallation } from "@/api/typesGenerated";
-import { useDisconnectSidekick, useMySidekicks, useRenameSidekick } from "@/api/queries";
+import type { SidekickConfig, SidekickInstallation } from "@/api/typesGenerated";
+import { useDeleteSidekickOverride, useDisconnectSidekick, useMySidekicks, useRenameSidekick, useUpdateSidekickAccountConfig, useUpdateSidekickOverride } from "@/api/queries";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/Switch/Switch";
 import { Input } from "@/components/ui/input";
 
 function formatTimestamp(value?: string): string {
@@ -42,6 +45,13 @@ function tenantHost(baseURL: string): string {
   }
 }
 
+function withAutoUpload(config: SidekickConfig, enabled: boolean): SidekickConfig {
+  return {
+    version: config.version,
+    auto_upload: { enabled },
+  };
+}
+
 function StatusDatum({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div className="rounded-lg border bg-background/60 px-3 py-2.5">
@@ -59,18 +69,27 @@ function SidekickCard({
   readOnly,
   onRename,
   onDisconnect,
+  onConfigChange,
+  onResetConfig,
   busy,
 }: {
   sidekick: SidekickInstallation;
   readOnly?: boolean;
   onRename?: (id: string, name: string) => Promise<void>;
   onDisconnect?: (id: string) => Promise<void>;
+  onConfigChange?: (id: string, config: SidekickConfig) => Promise<void>;
+  onResetConfig?: (id: string) => Promise<void>;
   busy?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(sidekick.name);
   const activeIssues = sidekick.issues.filter((issue) => !issue.resolved_at);
   const resolvedIssues = sidekick.issues.filter((issue) => issue.resolved_at);
+  const configuration = sidekick.configuration ?? {
+    inherited: true,
+    effective: { version: 1, auto_upload: { enabled: false } },
+    effective_hash: "",
+  };
   const disconnected = Boolean(sidekick.disconnected_at);
 
   const saveName = async () => {
@@ -131,6 +150,39 @@ function SidekickCard({
         <StatusDatum icon={<Clock3 className="h-3.5 w-3.5" />} label="Last seen" value={formatTimestamp(sidekick.last_seen_at)} />
         <StatusDatum icon={<Upload className="h-3.5 w-3.5" />} label="Last upload" value={formatTimestamp(sidekick.last_upload_at)} />
         <StatusDatum icon={<PlugZap className="h-3.5 w-3.5" />} label="Connected" value={formatTimestamp(sidekick.created_at)} />
+      </div>
+
+      <div className="border-t px-5 py-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <Settings2 className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold">Automatic uploads</h3>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                {configuration.inherited ? "Account default" : "Override"}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {configuration.inherited
+                ? "This Sidekick inherits the account setting. Changing it creates a complete override for this installation."
+                : "This Sidekick uses its own complete configuration override."}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {!readOnly && !disconnected && !configuration.inherited ? (
+              <Button variant="ghost" size="sm" className="gap-1.5" disabled={busy} onClick={() => onResetConfig && void onResetConfig(sidekick.id)}>
+                <RotateCcw className="h-3.5 w-3.5" />
+                Use account default
+              </Button>
+            ) : null}
+            <Switch
+              checked={configuration.effective.auto_upload.enabled}
+              disabled={readOnly || disconnected || busy || !onConfigChange}
+              onCheckedChange={(enabled) => onConfigChange && void onConfigChange(sidekick.id, withAutoUpload(configuration.effective, enabled))}
+              aria-label={`Automatic uploads for ${sidekick.name}`}
+            />
+          </div>
+        </div>
       </div>
 
       <div className="border-t px-5 py-4">
@@ -224,6 +276,8 @@ function SidekickCard({
 export function SidekickCards({ sidekicks, readOnly = false }: { sidekicks: readonly SidekickInstallation[]; readOnly?: boolean }) {
   const rename = useRenameSidekick();
   const disconnect = useDisconnectSidekick();
+  const updateOverride = useUpdateSidekickOverride();
+  const deleteOverride = useDeleteSidekickOverride();
 
   if (sidekicks.length === 0) {
     return (
@@ -244,7 +298,23 @@ export function SidekickCards({ sidekicks, readOnly = false }: { sidekicks: read
           key={sidekick.id}
           sidekick={sidekick}
           readOnly={readOnly}
-          busy={rename.isPending || disconnect.isPending}
+          busy={rename.isPending || disconnect.isPending || updateOverride.isPending || deleteOverride.isPending}
+          onConfigChange={readOnly ? undefined : async (id, config) => {
+            try {
+              await updateOverride.mutateAsync({ id, config });
+              toast.success("Sidekick override updated");
+            } catch {
+              toast.error("Could not update Sidekick override");
+            }
+          }}
+          onResetConfig={readOnly ? undefined : async (id) => {
+            try {
+              await deleteOverride.mutateAsync(id);
+              toast.success("Sidekick now uses the account default");
+            } catch {
+              toast.error("Could not reset Sidekick override");
+            }
+          }}
           onRename={readOnly ? undefined : async (id, name) => {
             try {
               await rename.mutateAsync({ id, name });
@@ -269,6 +339,17 @@ export function SidekickCards({ sidekicks, readOnly = false }: { sidekicks: read
 
 export function SidekickSettings() {
   const { data, isLoading, error } = useMySidekicks();
+  const updateAccountConfig = useUpdateSidekickAccountConfig();
+
+  const setAccountAutoUpload = async (enabled: boolean) => {
+    if (!data) return;
+    try {
+      await updateAccountConfig.mutateAsync(withAutoUpload(data.account_config.config, enabled));
+      toast.success("Account Sidekick default updated");
+    } catch {
+      toast.error("Could not update the account Sidekick default");
+    }
+  };
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -278,6 +359,34 @@ export function SidekickSettings() {
           Monitor every Chronicle Sidekick connected to your account and disconnect devices you no longer use.
         </p>
       </div>
+
+      {data ? (
+        <Card className="p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Settings2 className="h-5 w-5 text-primary" />
+                <h2 className="font-semibold">Account default</h2>
+              </div>
+              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                New and inherited Sidekicks use this complete configuration. Automatic uploads are disabled until you enable them here or create an installation override.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 rounded-lg border bg-muted/20 px-4 py-3">
+              <div className="text-right">
+                <div className="text-sm font-medium">Automatic uploads</div>
+                <div className="text-xs text-muted-foreground">{data.account_config.config.auto_upload.enabled ? "Enabled" : "Disabled"}</div>
+              </div>
+              <Switch
+                checked={data.account_config.config.auto_upload.enabled}
+                disabled={updateAccountConfig.isPending}
+                onCheckedChange={(enabled) => void setAccountAutoUpload(enabled)}
+                aria-label="Account default automatic uploads"
+              />
+            </div>
+          </div>
+        </Card>
+      ) : null}
 
       {isLoading ? (
         <div className="flex items-center gap-2 py-12 text-sm text-muted-foreground">
