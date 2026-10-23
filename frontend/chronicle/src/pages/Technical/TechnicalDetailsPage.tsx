@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft, BookOpen, Box, Braces, ChevronDown, Clock, FileCode, FileType2, FlaskConical, Globe2, Images, Map, PawPrint, ShieldAlert, ShieldCheck, Sparkles, Swords, TimerReset } from "lucide-react";
+import { ArrowLeft, BookOpen, Box, Braces, ChevronDown, Clock, FileCode, FileType2, FlaskConical, Globe2, Images, Lightbulb, Map, PawPrint, ShieldAlert, ShieldCheck, Sparkles, Swords, TimerReset } from "lucide-react";
 import { useDatasets, useSiteConfig } from "@/api/queries";
-import { TechnicalHintsCatalog } from "@/components/TechnicalHints/TechnicalHintsCatalog";
 import { Card } from "@/components/ui/Card/Card";
 import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
 
@@ -13,6 +12,12 @@ interface TechnicalLink {
 }
 
 const TECHNICAL_LINKS: TechnicalLink[] = [
+  {
+    title: "Technical Hints",
+    description: "Preview Recent ad placeholders and browse every cached hint payload",
+    href: "/technical/hints",
+    icon: <Lightbulb className="h-4 w-4" />,
+  },
   {
     title: "Extra Attack Spells",
     description: "Generated list of spells that grant extra attacks",
@@ -125,7 +130,7 @@ export function TechnicalDetailsPage() {
   const iconBaseUrl = scopedIconBaseUrl ?? dataset?.icon_base_url;
 
   return (
-    <div className="container mx-auto max-w-6xl px-4 py-4">
+    <div className="container mx-auto max-w-3xl px-4 py-4">
       <Link
         to="/"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-3"
@@ -139,16 +144,9 @@ export function TechnicalDetailsPage() {
         <h1 className="text-xl font-bold">Technical Details</h1>
       </div>
 
-      <p className="mb-6 text-sm text-muted-foreground">
-        Tips, guides, community activity, and data references for getting more out of Chronicle.
+      <p className="mb-4 text-sm text-muted-foreground">
+        Data dumps, diagnostics, and development references from Chronicle.
       </p>
-
-      <TechnicalHintsCatalog />
-
-      <div className="mb-3 mt-10">
-        <h2 className="text-lg font-semibold">Technical reference</h2>
-        <p className="text-sm text-muted-foreground">Data dumps and configuration from Chronicle&apos;s game database.</p>
-      </div>
 
       <Card className="mb-5 gap-0 overflow-hidden border-primary/20 bg-gradient-to-br from-card via-card to-primary/5 p-0">
         <details className="group">

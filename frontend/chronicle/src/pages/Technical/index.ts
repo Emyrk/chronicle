@@ -1,4 +1,5 @@
 export { TechnicalDetailsPage } from "./TechnicalDetailsPage";
+export { TechnicalHintsPage } from "./TechnicalHintsPage";
 export { PeriodicSpellsPage } from "./PeriodicSpellsPage";
 export { ExtraAttackSpellsPage } from "./ExtraAttackSpellsPage";
 export { VulnerabilitySpellsPage } from "./VulnerabilitySpellsPage";
