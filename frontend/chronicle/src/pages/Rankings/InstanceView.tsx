@@ -810,7 +810,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       </p>
 
       {!isMobile && shouldShowCompactEncounterAd(encounterNames.length) && (
-        <AdSlot placement="statistics-encounter-sidebar" className="mt-5" />
+        <AdSlot placement="statistics-encounter-sidebar" format="sidebar" className="mt-5" />
       )}
     </>
   )
@@ -842,7 +842,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
       {/* Encounter sidebar — desktop: always present, mobile: overlay */}
       {!isMobile && (
-        <div className="pt-1 w-64 shrink-0 border-r pr-4 overflow-y-auto styled-scrollbar sticky top-4 max-h-[calc(100vh-2rem)]">
+        <div className="pt-1 w-[267px] shrink-0 border-r pr-4 overflow-y-auto styled-scrollbar sticky top-4 max-h-[calc(100vh-2rem)]">
           {usesMultiEncounterSelection && sidebarContent}
         </div>
       )}
