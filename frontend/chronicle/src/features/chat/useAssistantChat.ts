@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { AgUiClientError, runAgUi, type RunAgUiOptions } from "./client";
+import { useOptionalInferenceRuntime, type InferenceClientDescriptor } from "./runtime";
 import {
   chatReducer,
   createInitialChatState,
@@ -12,12 +13,14 @@ export interface CreateChatRunRequestInput {
   messages: ChatMessage[];
   runId: string;
   threadId: string;
+  client?: InferenceClientDescriptor;
 }
 
 export interface DefaultChatRunRequest {
   messages: ChatMessage[];
   runId: string;
   threadId: string;
+  client?: InferenceClientDescriptor;
 }
 
 export interface UseAssistantChatOptions {
@@ -61,6 +64,7 @@ function getErrorMessage(error: unknown): string {
 }
 
 export function useAssistantChat(options: UseAssistantChatOptions): AssistantChatController {
+  const runtime = useOptionalInferenceRuntime();
   const [state, dispatch] = useReducer(
     chatReducer,
     options.initialMessages ?? [],
@@ -117,7 +121,12 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
         event: { type: "RUN_STARTED", runId, threadId },
       });
 
-      const requestInput = { messages, runId, threadId };
+      const requestInput = {
+        messages,
+        runId,
+        threadId,
+        ...(runtime ? { client: runtime.getClientDescriptor() } : {}),
+      };
       const onEvent = (event: AgUiEvent) => dispatch({ type: "apply_event", event });
 
       try {
@@ -127,6 +136,7 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
           body,
           headers: options.headers,
           signal: abortController.signal,
+          runtime: runtime ?? undefined,
           onEvent,
         });
         await options.onRunComplete?.();
@@ -149,7 +159,7 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
         }
       }
     },
-    [options],
+    [options, runtime],
   );
 
   return {

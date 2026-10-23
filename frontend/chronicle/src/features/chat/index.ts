@@ -14,6 +14,10 @@ export {
 export type {
   AgUiEvent,
   AgUiEventType,
+  ClientToolCapability,
+  ClientToolConfirmation,
+  ClientToolEffect,
+  ClientToolRequestEvent,
   ChatAction,
   ChatMessage,
   ChatRole,
@@ -31,6 +35,25 @@ export type {
   ToolCallEndEvent,
   ToolCallStartEvent,
 } from "./protocol";
+export {
+  InferenceRuntime,
+  InferenceRuntimeProvider,
+  useInferenceCapability,
+  useInferenceRuntime,
+  useOptionalInferenceRuntime,
+} from "./runtime";
+export type {
+  ClientToolContinuation,
+  ClientToolResultStatus,
+  InferenceCapabilityDescriptor,
+  InferenceCapabilityRegistration,
+  InferenceCapabilityScope,
+  InferenceClientDescriptor,
+  InferenceRuntimeClient,
+  InferenceRuntimeSnapshot,
+  InferenceToolContext,
+  InferenceToolHandler,
+} from "./runtime";
 export { createDefaultChatRunRequest, useAssistantChat } from "./useAssistantChat";
 export type {
   AssistantChatController,

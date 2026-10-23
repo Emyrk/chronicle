@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
-import { AlertCircle, Bot, Check, CircleStop, LoaderCircle, LockKeyhole, ScanSearch, Send, Wrench } from "lucide-react";
+import { AlertCircle, Bot, Check, CircleStop, LoaderCircle, LockKeyhole, ScanSearch, Send, ShieldAlert, Wrench } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert/Alert";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/Switch/Switch";
 import { cn } from "@/lib/utils";
 import { DebugInspector } from "./DebugInspector";
+import { useOptionalInferenceRuntime } from "./runtime";
 import type { ChatMessage, ChatToolCall } from "./protocol";
 import type { AssistantChatController } from "./useAssistantChat";
 
@@ -135,6 +136,7 @@ export function ChatPanel({
   onDebugEnabledChange,
   className,
 }: ChatPanelProps) {
+  const runtime = useOptionalInferenceRuntime();
   const [composer, setComposer] = useState("");
   const messageEndRef = useRef<HTMLDivElement>(null);
 
@@ -174,19 +176,33 @@ export function ChatPanel({
             </div>
             <p className="text-muted-foreground mt-1 text-sm">{description}</p>
           </div>
-          {debugAvailable && (
-            <label className="text-muted-foreground flex shrink-0 items-center gap-2 text-xs" title="Capture the exact provider-neutral prompt, tools, and skills">
-              <ScanSearch className="size-3.5" />
-              Debug
-              <Switch
-                size="sm"
-                checked={debugEnabled}
-                onCheckedChange={onDebugEnabledChange}
-                disabled={controller.isRunning}
-                aria-label="Enable prompt debugging"
-              />
-            </label>
-          )}
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            {runtime && (
+              <label className="text-muted-foreground flex items-center gap-2 text-xs" title="Allow view-changing client tools without confirmation for this session">
+                <ShieldAlert className="size-3.5" />
+                YOLO
+                <Switch
+                  size="sm"
+                  checked={runtime.yoloEnabled}
+                  onCheckedChange={runtime.setYoloEnabled}
+                  aria-label="Enable YOLO mode for client tools"
+                />
+              </label>
+            )}
+            {debugAvailable && (
+              <label className="text-muted-foreground flex items-center gap-2 text-xs" title="Capture the exact provider-neutral prompt, tools, and skills">
+                <ScanSearch className="size-3.5" />
+                Debug
+                <Switch
+                  size="sm"
+                  checked={debugEnabled}
+                  onCheckedChange={onDebugEnabledChange}
+                  disabled={controller.isRunning}
+                  aria-label="Enable prompt debugging"
+                />
+              </label>
+            )}
+          </div>
         </div>
       </header>
       {configuration && <div className="border-b px-4 py-3">{configuration}</div>}

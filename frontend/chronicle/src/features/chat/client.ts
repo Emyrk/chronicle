@@ -1,4 +1,5 @@
-import { AG_UI_EVENT_TYPES, type AgUiEvent, type AgUiEventType } from "./protocol";
+import { AG_UI_EVENT_TYPES, type AgUiEvent, type AgUiEventType, type ClientToolRequestEvent } from "./protocol";
+import type { InferenceRuntimeClient } from "./runtime";
 
 export interface SseEvent {
   data: string;
@@ -32,6 +33,7 @@ export interface RunAgUiOptions {
   signal?: AbortSignal;
   headers?: HeadersInit;
   fetch?: typeof fetch;
+  runtime?: InferenceRuntimeClient;
   onEvent: (event: AgUiEvent, transportEvent: SseEvent) => void;
 }
 
@@ -162,6 +164,33 @@ function validateDebugSnapshot(value: Record<string, unknown>, event: SseEvent):
   }
 }
 
+const CLIENT_TOOL_EFFECTS = new Set(["read", "view_mutation"]);
+const CLIENT_TOOL_CONFIRMATIONS = new Set(["never", "unless_yolo"]);
+
+function validateClientToolRequest(value: Record<string, unknown>, event: SseEvent): void {
+  for (const field of ["runId", "threadId", "toolCallId", "toolName", "arguments"]) {
+    requireString(value, field, event);
+  }
+  requireOptionalString(value, "clientSessionId", event);
+  const effect = requireString(value, "effect", event);
+  if (!CLIENT_TOOL_EFFECTS.has(effect)) {
+    throw new AgUiClientError("parse", "CLIENT_TOOL_REQUEST has an unsupported effect.", { event });
+  }
+  const confirmation = requireString(value, "confirmation", event);
+  if (!CLIENT_TOOL_CONFIRMATIONS.has(confirmation)) {
+    throw new AgUiClientError("parse", "CLIENT_TOOL_REQUEST has an unsupported confirmation policy.", { event });
+  }
+  const capability = requireRecord(value.capability, "capability", event);
+  requireString(capability, "id", event);
+  requireString(capability, "version", event);
+  for (const field of ["scopeType", "scopeId", "stateRevision"]) {
+    requireOptionalString(capability, field, event);
+  }
+  if ((capability.scopeType === undefined) !== (capability.scopeId === undefined)) {
+    throw new AgUiClientError("parse", "CLIENT_TOOL_REQUEST capability scope must include type and id.", { event });
+  }
+}
+
 function validateAgUiEvent(value: unknown, transportEvent: SseEvent): AgUiEvent {
   if (!isRecord(value)) {
     throw new AgUiClientError("parse", "AG-UI event data must be a JSON object.", {
@@ -216,6 +245,9 @@ function validateAgUiEvent(value: unknown, transportEvent: SseEvent): AgUiEvent 
     case "TOOL_CALL_ARGS":
       requireString(withTransportType, "toolCallId", transportEvent);
       requireString(withTransportType, "delta", transportEvent);
+      break;
+    case "CLIENT_TOOL_REQUEST":
+      validateClientToolRequest(withTransportType, transportEvent);
       break;
     case "DEBUG_SNAPSHOT":
       validateDebugSnapshot(withTransportType, transportEvent);
@@ -383,27 +415,29 @@ async function readResponseSnippet(response: Response, maxBytes = 500): Promise<
   }
 }
 
-export async function runAgUi(options: RunAgUiOptions): Promise<void> {
+async function postSse(
+  options: RunAgUiOptions,
+  url: string,
+  body: unknown,
+): Promise<Response> {
   const fetchImplementation = options.fetch ?? fetch;
   const headers = new Headers(options.headers);
   headers.set("Accept", "text/event-stream");
-  if (!headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
+  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
   let response: Response;
   try {
-    response = await fetchImplementation(options.url, {
+    response = await fetchImplementation(url, {
       method: "POST",
       headers,
-      body: JSON.stringify(options.body),
+      body: JSON.stringify(body),
       signal: options.signal,
     });
   } catch (error) {
     if (options.signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) {
       throw new AgUiClientError("aborted", "AG-UI run was cancelled.", { cause: error });
     }
-    throw new AgUiClientError("stream", "Unable to start the AG-UI run.", { cause: error });
+    throw new AgUiClientError("stream", "Unable to continue the AG-UI run.", { cause: error });
   }
 
   if (!response.ok) {
@@ -415,7 +449,6 @@ export async function runAgUi(options: RunAgUiOptions): Promise<void> {
       { status: response.status },
     );
   }
-
   const contentType = response.headers.get("Content-Type") ?? "";
   if (!contentType.toLowerCase().includes("text/event-stream")) {
     throw new AgUiClientError(
@@ -423,21 +456,48 @@ export async function runAgUi(options: RunAgUiOptions): Promise<void> {
       `AG-UI response has unexpected Content-Type "${contentType || "missing"}".`,
     );
   }
-  if (!response.body) {
-    throw new AgUiClientError("stream", "AG-UI response did not include a readable body.");
-  }
+  if (!response.body) throw new AgUiClientError("stream", "AG-UI response did not include a readable body.");
+  return response;
+}
 
-  let terminalEventReceived = false;
-  for await (const transportEvent of parseSseStream(response.body, options.signal)) {
+async function consumeSegment(
+  options: RunAgUiOptions,
+  response: Response,
+): Promise<"terminal" | ClientToolRequestEvent> {
+  for await (const transportEvent of parseSseStream(response.body!, options.signal)) {
     const event = parseAgUiEvent(transportEvent);
-    terminalEventReceived ||= event.type === "RUN_FINISHED" || event.type === "RUN_ERROR";
     options.onEvent(event, transportEvent);
+    if (event.type === "RUN_FINISHED" || event.type === "RUN_ERROR") return "terminal";
+    if (event.type === "CLIENT_TOOL_REQUEST") return event;
   }
+  throw new AgUiClientError(
+    "stream",
+    "AG-UI event stream ended before a terminal event or client tool request was received.",
+  );
+}
 
-  if (!terminalEventReceived) {
-    throw new AgUiClientError(
-      "stream",
-      "AG-UI event stream ended before a terminal run event was received.",
-    );
+export async function runAgUi(options: RunAgUiOptions): Promise<void> {
+  let response = await postSse(options, options.url, options.body);
+  while (true) {
+    const outcome = await consumeSegment(options, response);
+    if (outcome === "terminal") return;
+    if (!options.runtime) {
+      throw new AgUiClientError("stream", "The run requested a client tool without an inference runtime.");
+    }
+
+    let continuation;
+    try {
+      continuation = await options.runtime.executeClientTool(
+        outcome,
+        options.signal ?? new AbortController().signal,
+      );
+    } catch (error) {
+      if (options.signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) {
+        throw new AgUiClientError("aborted", "AG-UI run was cancelled.", { cause: error });
+      }
+      throw new AgUiClientError("stream", "The client tool runtime failed.", { cause: error });
+    }
+    const continuationUrl = `/api/v1/inference/runs/${encodeURIComponent(outcome.runId)}/client-tools/${encodeURIComponent(outcome.toolCallId)}`;
+    response = await postSse(options, continuationUrl, continuation);
   }
 }

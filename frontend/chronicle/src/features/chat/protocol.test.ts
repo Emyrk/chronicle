@@ -106,3 +106,21 @@ describe("chatReducer", () => {
     expect(state).toMatchObject({ status: "error", error: "Provider disconnected" });
   });
 });
+
+it("keeps a client tool request pending until the server emits TOOL_CALL_END", () => {
+  let state = createInitialChatState([{ id: "assistant-1", role: "assistant", content: "", streaming: true }]);
+  state = apply(state, {
+    type: "CLIENT_TOOL_REQUEST",
+    runId: "run-1",
+    threadId: "thread-1",
+    toolCallId: "tool-1",
+    toolName: "change_view",
+    arguments: '{"tab":"damage"}',
+    capability: { id: "page", version: "1" },
+    effect: "view_mutation",
+    confirmation: "unless_yolo",
+  });
+  expect(state.messages[0].toolCalls?.[0]).toMatchObject({ status: "streaming", arguments: '{"tab":"damage"}' });
+  state = apply(state, { type: "TOOL_CALL_END", toolCallId: "tool-1" });
+  expect(state.messages[0].toolCalls?.[0].status).toBe("complete");
+});

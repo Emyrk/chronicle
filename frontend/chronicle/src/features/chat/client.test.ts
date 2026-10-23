@@ -218,3 +218,92 @@ describe("runAgUi", () => {
     await expect(promise).rejects.toMatchObject({ kind: "aborted" });
   });
 });
+
+describe("client tool continuation", () => {
+  const clientRequest = {
+    type: "CLIENT_TOOL_REQUEST",
+    runId: "run-1",
+    threadId: "thread-1",
+    toolCallId: "call-1",
+    toolName: "inspect",
+    arguments: "{}",
+    clientSessionId: "session-1",
+    capability: { id: "page", version: "1", scopeType: "route", scopeId: "rankings", stateRevision: "4" },
+    effect: "read",
+    confirmation: "never",
+  } as const;
+
+  it("validates client request fields and rejects malformed policies", () => {
+    expect(parseAgUiEvent({ data: JSON.stringify(clientRequest) })).toEqual(clientRequest);
+    expect(() => parseAgUiEvent({ data: JSON.stringify({ ...clientRequest, effect: "write" }) }))
+      .toThrowError(expect.objectContaining<Partial<AgUiClientError>>({ kind: "parse" }));
+    expect(() => parseAgUiEvent({ data: JSON.stringify({ ...clientRequest, capability: { id: "page", version: "1", scopeType: "route" } }) }))
+      .toThrowError(expect.objectContaining<Partial<AgUiClientError>>({ kind: "parse" }));
+  });
+
+  it("executes a client tool and consumes the continuation SSE segment", async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(
+        `data: ${JSON.stringify(clientRequest)}\n\n`,
+        { headers: { "Content-Type": "text/event-stream" } },
+      ))
+      .mockResolvedValueOnce(new Response(
+        'data: {"type":"TOOL_CALL_END","toolCallId":"call-1"}\n\n' +
+        'data: {"type":"RUN_FINISHED","threadId":"thread-1","runId":"run-1"}\n\n',
+        { headers: { "Content-Type": "text/event-stream" } },
+      ));
+    const executeClientTool = vi.fn(async () => ({
+      client_session_id: "session-1",
+      capability_id: "page",
+      capability_version: "1",
+      scope_type: "route",
+      scope_id: "rankings",
+      state_revision: "4",
+      status: "success" as const,
+      result: { ok: true },
+    }));
+    const events: AgUiEvent[] = [];
+
+    await runAgUi({
+      url: "/api/v1/inference/runs",
+      body: { run_id: "run-1" },
+      fetch: fetchMock,
+      runtime: { getClientDescriptor: () => ({ session_id: "session-1", capabilities: [] }), executeClientTool },
+      onEvent: (event) => events.push(event),
+    });
+
+    expect(executeClientTool).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/v1/inference/runs/run-1/client-tools/call-1");
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toMatchObject({
+      client_session_id: "session-1",
+      status: "success",
+      result: { ok: true },
+    });
+    expect(events.map((event) => event.type)).toEqual(["CLIENT_TOOL_REQUEST", "TOOL_CALL_END", "RUN_FINISHED"]);
+  });
+
+  it("preserves one abort signal across tool execution and continuation", async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(
+      `data: ${JSON.stringify(clientRequest)}\n\n`,
+      { headers: { "Content-Type": "text/event-stream" } },
+    ));
+    const promise = runAgUi({
+      url: "/api/v1/inference/runs",
+      body: {},
+      signal: controller.signal,
+      fetch: fetchMock,
+      runtime: {
+        getClientDescriptor: () => ({ session_id: "session-1", capabilities: [] }),
+        executeClientTool: (_request, signal) => new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+        }),
+      },
+      onEvent: () => undefined,
+    });
+    controller.abort();
+    await expect(promise).rejects.toMatchObject({ kind: "aborted" });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+});

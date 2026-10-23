@@ -6,6 +6,7 @@ import './index.css'
 import App from './App.tsx'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BlogApp } from './blog/BlogApp'
+import { InferenceRuntimeProvider } from './features/chat/runtime'
 import { reloadAfterRouteLoadFailure } from './lib/routeLoadRecovery'
 
 window.addEventListener('vite:preloadError', (event) => {
@@ -22,7 +23,9 @@ const application: ReactNode = isBlogRoute ? (
   <BlogApp />
 ) : (
   <QueryClientProvider client={queryClient}>
-    <App />
+    <InferenceRuntimeProvider>
+      <App />
+    </InferenceRuntimeProvider>
   </QueryClientProvider>
 )
 
