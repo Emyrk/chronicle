@@ -7,6 +7,7 @@ import {
   billingPeriodLabel,
   billingPriceQualities,
   billingTierLabel,
+  billingTierStorageLabel,
   formatMonthlyAmount,
 } from "./billingPricing"
 
@@ -64,6 +65,15 @@ describe("billingTierLabel", () => {
     expect(billingTierLabel("revered")).toBe("Revered")
     expect(billingTierLabel("exalted")).toBe("Exalted")
     expect(billingTierLabel("free")).toBe("Friendly")
+  })
+})
+
+describe("billingTierStorageLabel", () => {
+  it("presents the storage allowance for each paid tier", () => {
+    expect(billingTierStorageLabel("honored")).toBe("300 MB")
+    expect(billingTierStorageLabel("revered")).toBe("1 GB")
+    expect(billingTierStorageLabel("exalted")).toBe("2 GB")
+    expect(billingTierStorageLabel("free")).toBeUndefined()
   })
 })
 
