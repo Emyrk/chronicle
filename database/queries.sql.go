@@ -20880,6 +20880,115 @@ func (q *sqlQuerier) ListSpellRangesByDataset(ctx context.Context, datasetID uui
 	return items, nil
 }
 
+const technicalHintActivityTotals = `-- name: TechnicalHintActivityTotals :one
+WITH visible_instances AS (
+    SELECT
+        li.log_group_id,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id,
+        plg.finalized_at,
+        COALESCE(li.start_time, wlg.created_at) AS activity_time
+    FROM log_instances li
+    JOIN parsed_log_group plg ON plg.id = li.log_group_id
+    JOIN wow_log_groups wlg ON wlg.id = plg.id
+      AND plg.parse_generation = wlg.parse_generation
+      AND plg.finalized_at IS NOT NULL
+      AND NOT wlg.unlisted
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+)
+SELECT
+    COUNT(DISTINCT log_group_id) FILTER (
+        WHERE finalized_at >= $1::timestamptz
+          AND finalized_at < $2::timestamptz
+    )::bigint AS logs_processed,
+    COUNT(DISTINCT run_id) FILTER (
+        WHERE activity_time >= $1::timestamptz
+          AND activity_time < $2::timestamptz
+    )::bigint AS instance_runs
+FROM visible_instances
+`
+
+type TechnicalHintActivityTotalsParams struct {
+	StartTime pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime   pgtype.Timestamptz `db:"end_time" json:"end_time"`
+}
+
+type TechnicalHintActivityTotalsRow struct {
+	LogsProcessed int64 `db:"logs_processed" json:"logs_processed"`
+	InstanceRuns  int64 `db:"instance_runs" json:"instance_runs"`
+}
+
+// Counts public, finalized activity in a bounded window. Joining realms applies
+// the same tenant RLS scope as the public recent-instances endpoint.
+func (q *sqlQuerier) TechnicalHintActivityTotals(ctx context.Context, arg TechnicalHintActivityTotalsParams) (TechnicalHintActivityTotalsRow, error) {
+	row := q.db.QueryRow(ctx, technicalHintActivityTotals, arg.StartTime, arg.EndTime)
+	var i TechnicalHintActivityTotalsRow
+	err := row.Scan(&i.LogsProcessed, &i.InstanceRuns)
+	return i, err
+}
+
+const technicalHintMostActiveInstances = `-- name: TechnicalHintMostActiveInstances :many
+WITH visible_runs AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        COALESCE(li.duplicate_group_id, li.id) AS run_id,
+        COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) AS instance_name
+    FROM log_instances li
+    JOIN parsed_log_group plg ON plg.id = li.log_group_id
+    JOIN wow_log_groups wlg ON wlg.id = plg.id
+      AND plg.parse_generation = wlg.parse_generation
+      AND plg.finalized_at IS NOT NULL
+      AND NOT wlg.unlisted
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
+    WHERE COALESCE(li.start_time, wlg.created_at) >= $2::timestamptz
+      AND COALESCE(li.start_time, wlg.created_at) < $3::timestamptz
+      AND COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), NULL) IS NOT NULL
+    ORDER BY
+        COALESCE(li.duplicate_group_id, li.id),
+        (li.id = li.duplicate_group_id) DESC NULLS LAST,
+        li.id
+)
+SELECT
+    instance_name,
+    COUNT(*)::bigint AS run_count
+FROM visible_runs
+GROUP BY instance_name
+ORDER BY run_count DESC, instance_name ASC
+LIMIT $1
+`
+
+type TechnicalHintMostActiveInstancesParams struct {
+	LimitCount int32              `db:"limit_count" json:"limit_count"`
+	StartTime  pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime    pgtype.Timestamptz `db:"end_time" json:"end_time"`
+}
+
+type TechnicalHintMostActiveInstancesRow struct {
+	InstanceName string `db:"instance_name" json:"instance_name"`
+	RunCount     int64  `db:"run_count" json:"run_count"`
+}
+
+// Instance names are normalized the same way as the public recent-instances
+// query, and each duplicate group contributes exactly one logical run.
+func (q *sqlQuerier) TechnicalHintMostActiveInstances(ctx context.Context, arg TechnicalHintMostActiveInstancesParams) ([]TechnicalHintMostActiveInstancesRow, error) {
+	rows, err := q.db.Query(ctx, technicalHintMostActiveInstances, arg.LimitCount, arg.StartTime, arg.EndTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TechnicalHintMostActiveInstancesRow
+	for rows.Next() {
+		var i TechnicalHintMostActiveInstancesRow
+		if err := rows.Scan(&i.InstanceName, &i.RunCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteAllTelemetryNotices = `-- name: DeleteAllTelemetryNotices :exec
 DELETE FROM telemetry_notices
 `
