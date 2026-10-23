@@ -170,9 +170,14 @@ func TestStripeEntitlementRoles(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, "stripe_ad_free", true))
 	require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, "stripe_ad_free", false))
-	shorterURLs, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanShorter_urls_User(policy.New().User(userID)))
+	chronicle := policy.New().GlobalChronicle()
+	user := policy.New().User(userID)
+	allowed, err := zed.Check(ctx, nil,
+		chronicle.CanShorter_urls_User(user),
+		chronicle.CanAd_free_User(user),
+	)
 	require.NoError(t, err)
-	require.True(t, shorterURLs, "revoking a Stripe role must preserve Discord-owned roles")
+	require.Equal(t, []bool{true, true}, allowed, "revoking a Stripe role must preserve Discord-owned supporter permissions")
 
 	require.ErrorContains(t, zed.SetStripeEntitlementRole(ctx, userID, "supporter", true), "invalid Stripe entitlement role")
 }
