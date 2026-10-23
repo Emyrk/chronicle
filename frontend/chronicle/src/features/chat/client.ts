@@ -168,8 +168,11 @@ const CLIENT_TOOL_EFFECTS = new Set(["read", "view_mutation"]);
 const CLIENT_TOOL_CONFIRMATIONS = new Set(["never", "unless_yolo"]);
 
 function validateClientToolRequest(value: Record<string, unknown>, event: SseEvent): void {
-  for (const field of ["runId", "threadId", "toolCallId", "toolName", "arguments"]) {
+  for (const field of ["runId", "threadId", "toolCallId", "toolName"]) {
     requireString(value, field, event);
+  }
+  if (!("arguments" in value)) {
+    throw new AgUiClientError("parse", "CLIENT_TOOL_REQUEST is missing arguments.", { event });
   }
   requireOptionalString(value, "clientSessionId", event);
   const effect = requireString(value, "effect", event);

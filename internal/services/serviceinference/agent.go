@@ -771,7 +771,17 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 			}
 		}
 		if pending != nil {
-			if err := w.Write(agui.ClientToolRequestEvent{RunID: debug.RunID, ThreadID: debug.ThreadID, ToolCallID: pending.Call.ID, ToolName: pending.Call.Name, Arguments: pending.Arguments, Capability: agui.ClientToolCapability{ID: pending.Capability.ID, Version: pending.Capability.Version}, Effect: pending.Effect, Confirmation: pending.Confirmation}); err != nil {
+			if err := w.Write(agui.ClientToolRequestEvent{
+				RunID: debug.RunID, ThreadID: debug.ThreadID, ToolCallID: pending.Call.ID,
+				ToolName: pending.Call.Name, Arguments: pending.Arguments,
+				Capability: agui.ClientToolCapability{
+					ID: pending.Capability.ID, Version: pending.Capability.Version,
+					ScopeType: pending.Capability.ScopeType, ScopeID: pending.Capability.ScopeID,
+					StateRevision: pending.Capability.StateRevision,
+				},
+				ClientSessionID: pending.Capability.SessionID,
+				Effect:          pending.Effect, Confirmation: pending.Confirmation,
+			}); err != nil {
 				return agentLoopResult{State: state}, err
 			}
 			return agentLoopResult{State: state, Paused: pending}, nil

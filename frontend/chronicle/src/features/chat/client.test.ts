@@ -226,7 +226,7 @@ describe("client tool continuation", () => {
     threadId: "thread-1",
     toolCallId: "call-1",
     toolName: "inspect",
-    arguments: "{}",
+    arguments: {},
     clientSessionId: "session-1",
     capability: { id: "page", version: 1, scopeType: "route", scopeId: "rankings", stateRevision: 4 },
     effect: "read",
@@ -236,6 +236,10 @@ describe("client tool continuation", () => {
   it("validates client request fields and rejects malformed policies", () => {
     expect(parseAgUiEvent({ data: JSON.stringify(clientRequest) })).toEqual(clientRequest);
     expect(() => parseAgUiEvent({ data: JSON.stringify({ ...clientRequest, effect: "write" }) }))
+      .toThrowError(expect.objectContaining<Partial<AgUiClientError>>({ kind: "parse" }));
+    const missingArguments: Record<string, unknown> = { ...clientRequest };
+    delete missingArguments.arguments;
+    expect(() => parseAgUiEvent({ data: JSON.stringify(missingArguments) }))
       .toThrowError(expect.objectContaining<Partial<AgUiClientError>>({ kind: "parse" }));
     expect(() => parseAgUiEvent({ data: JSON.stringify({ ...clientRequest, capability: { id: "page", version: 1, scopeType: "route" } }) }))
       .toThrowError(expect.objectContaining<Partial<AgUiClientError>>({ kind: "parse" }));

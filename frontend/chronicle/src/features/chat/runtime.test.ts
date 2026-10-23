@@ -9,7 +9,7 @@ function request(overrides: Partial<ClientToolRequestEvent> = {}): ClientToolReq
     threadId: "thread-1",
     toolCallId: "call-1",
     toolName: "inspect",
-    arguments: '{"value":7}',
+    arguments: { value: 7 },
     clientSessionId: "session-1",
     capability: { id: "page", version: 1, scopeType: "route", scopeId: "rankings", stateRevision: 4 },
     effect: "read",
@@ -77,11 +77,9 @@ describe("InferenceRuntime", () => {
     expect(yoloConfirm).not.toHaveBeenCalled();
   });
 
-  it("normalizes malformed arguments and handler failures without exposing stack details", async () => {
+  it("normalizes handler failures without exposing stack details", async () => {
     const runtime = new InferenceRuntime({ sessionId: "session-1" });
     register(runtime, vi.fn(() => { throw new Error("secret stack detail"); }));
-    await expect(runtime.executeClientTool(request({ arguments: "{" }), new AbortController().signal))
-      .resolves.toMatchObject({ status: "client_error", result: { message: expect.stringContaining("malformed") } });
     const result = await runtime.executeClientTool(request(), new AbortController().signal);
     expect(result).toMatchObject({ status: "client_error" });
     expect(JSON.stringify(result)).not.toContain("secret stack detail");

@@ -199,7 +199,7 @@ func normalizedClientToolResult(request chroniclesdk.InferenceClientToolResultRe
 		if err := json.Unmarshal(request.Result, &payload); err != nil {
 			return "", errors.New("invalid client tool result")
 		}
-	case "rejected", "error":
+	case "user_rejected", "capability_unavailable", "stale_state", "client_error":
 		payload = nil
 	default:
 		return "", errors.New("invalid client tool status")

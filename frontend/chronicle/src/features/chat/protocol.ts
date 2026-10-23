@@ -91,7 +91,7 @@ export interface ClientToolRequestEvent extends AgUiEventBase {
   threadId: string;
   toolCallId: string;
   toolName: string;
-  arguments: string;
+  arguments: unknown;
   capability: ClientToolCapability;
   clientSessionId?: string;
   effect: ClientToolEffect;
@@ -361,6 +361,7 @@ function applyEvent(state: ChatState, event: AgUiEvent): ChatState {
         })),
       };
     case "CLIENT_TOOL_REQUEST": {
+      const argumentsText = JSON.stringify(event.arguments ?? null);
       const hasToolCall = state.messages.some((message) =>
         message.toolCalls?.some((toolCall) => toolCall.id === event.toolCallId),
       );
@@ -370,7 +371,7 @@ function applyEvent(state: ChatState, event: AgUiEvent): ChatState {
           messages: updateToolCall(state.messages, event.toolCallId, (toolCall) => ({
             ...toolCall,
             name: event.toolName,
-            arguments: event.arguments,
+            arguments: argumentsText,
           })),
         };
       }
@@ -378,7 +379,7 @@ function applyEvent(state: ChatState, event: AgUiEvent): ChatState {
       const toolCall: ChatToolCall = {
         id: event.toolCallId,
         name: event.toolName,
-        arguments: event.arguments,
+        arguments: argumentsText,
         status: "streaming",
       };
       if (!fallbackMessage) {

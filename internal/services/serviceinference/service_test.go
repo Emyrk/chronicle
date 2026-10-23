@@ -412,9 +412,9 @@ func TestClientToolArgumentsAndResultsAreBoundedAndNormalized(t *testing.T) {
 	require.Error(t, err)
 
 	secret := `{"exception":"database password SECRET"}`
-	content, err := normalizedClientToolResult(chroniclesdk.InferenceClientToolResultRequest{Status: "error", Result: json.RawMessage(secret)})
+	content, err := normalizedClientToolResult(chroniclesdk.InferenceClientToolResultRequest{Status: "client_error", Result: json.RawMessage(secret)})
 	require.NoError(t, err)
-	require.JSONEq(t, `{"status":"error"}`, content)
+	require.JSONEq(t, `{"status":"client_error"}`, content)
 	require.NotContains(t, content, "SECRET")
 	_, err = normalizedClientToolResult(chroniclesdk.InferenceClientToolResultRequest{Status: "success", Result: json.RawMessage(strings.Repeat("x", maxClientResult+1))})
 	require.ErrorContains(t, err, "too large")

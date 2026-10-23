@@ -250,12 +250,7 @@ export class InferenceRuntime implements InferenceRuntimeClient {
       return continuation("capability_unavailable", resultMessage("The requested client tool is unavailable."));
     }
 
-    let argumentsValue: unknown;
-    try {
-      argumentsValue = JSON.parse(request.arguments);
-    } catch {
-      return continuation("client_error", resultMessage("The client tool arguments were malformed."));
-    }
+    const argumentsValue = request.arguments;
 
     if (
       request.effect === "view_mutation" &&
