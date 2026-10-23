@@ -2,11 +2,13 @@ package gamedataapi
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Gophercraft/core/format/dbc"
 	"github.com/Gophercraft/core/format/dbc/dbdefs"
@@ -178,51 +180,37 @@ func (h *Handler) handleSpellDurationsUpload(ctx context.Context, w http.Respons
 		return
 	}
 
-	if _, err := h.pool.Exec(ctx, `DELETE FROM dbc_spell_durations WHERE dataset_id = $1`, datasetID); err != nil {
-		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-			Message: "Failed to clear existing spell durations",
-			Detail:  err.Error(),
-		})
-		return
-	}
-
-	const batchSize = 500
-	batch := &pgx.Batch{}
-	for _, row := range rows {
-		batch.Queue(`INSERT INTO dbc_spell_durations (dataset_id, id, duration, duration_per_level, max_duration) VALUES ($1,$2,$3,$4,$5)`,
-			datasetID, row.ID, row.Duration, row.DurationPerLevel, row.MaxDuration,
-		)
-		if batch.Len() >= batchSize {
-			if err := flushBatch(ctx, h.pool, batch); err != nil {
-				httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-					Message: "Failed to write batch",
-					Detail:  err.Error(),
-				})
-				return
+	if err := h.mutateDataset(ctx, datasetID, []servicecache.Namespace{servicecache.NamespaceSpells}, func(tx database.Store) error {
+		if _, err := tx.Exec(ctx, `DELETE FROM dbc_spell_durations WHERE dataset_id = $1`, datasetID); err != nil {
+			return fmt.Errorf("clear existing spell durations: %w", err)
+		}
+		const batchSize = 500
+		batch := &pgx.Batch{}
+		for _, row := range rows {
+			batch.Queue(`INSERT INTO dbc_spell_durations (dataset_id, id, duration, duration_per_level, max_duration) VALUES ($1,$2,$3,$4,$5)`,
+				datasetID, row.ID, row.Duration, row.DurationPerLevel, row.MaxDuration,
+			)
+			if batch.Len() >= batchSize {
+				if err := flushBatch(ctx, tx, batch); err != nil {
+					return fmt.Errorf("write spell duration batch: %w", err)
+				}
+				batch = &pgx.Batch{}
 			}
-			batch = &pgx.Batch{}
 		}
-	}
-	if batch.Len() > 0 {
-		if err := flushBatch(ctx, h.pool, batch); err != nil {
-			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-				Message: "Failed to write final batch",
-				Detail:  err.Error(),
-			})
-			return
+		if batch.Len() > 0 {
+			if err := flushBatch(ctx, tx, batch); err != nil {
+				return fmt.Errorf("write final spell duration batch: %w", err)
+			}
 		}
+		return nil
+	}); err != nil {
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{Message: "Failed to replace spell durations", Detail: err.Error()})
+		return
 	}
 
 	if err := h.deriveAffectedAuraDurations(ctx, datasetID); err != nil {
 		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 			Message: "Spell durations imported but affected aura duration generation failed",
-			Detail:  err.Error(),
-		})
-		return
-	}
-	if err := h.invalidateDataset(ctx, datasetID, servicecache.NamespaceSpells); err != nil {
-		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-			Message: "Spell durations imported but cache invalidation failed",
 			Detail:  err.Error(),
 		})
 		return

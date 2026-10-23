@@ -43,7 +43,10 @@ func TestInvalidationRegistrationAndErrors(t *testing.T) {
 	handler := func(context.Context, Invalidation) error { return nil }
 	require.NoError(t, svc.RegisterInvalidator(NamespaceTenantSlugs, ScopeGlobal, "reload", handler))
 
-	err := svc.RegisterInvalidator(NamespaceTenantSlugs, ScopeGlobal, "reload", handler)
+	err := svc.RegisterInvalidator(Namespace("missing"), ScopeGlobal, "missing", handler)
+	require.ErrorIs(t, err, ErrUnknownNamespace)
+
+	err = svc.RegisterInvalidator(NamespaceTenantSlugs, ScopeGlobal, "reload", handler)
 	require.ErrorIs(t, err, ErrDuplicateInvalidator)
 
 	err = svc.Invalidate(context.Background(), GlobalInvalidation(Namespace("missing")))

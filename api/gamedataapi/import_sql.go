@@ -11,10 +11,10 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/wdb"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const maxSQLFileSize = 200 * 1024 * 1024 // 200 MB
@@ -256,7 +256,9 @@ func (h *Handler) importCreatureTemplateSQL(ctx context.Context, w http.Response
 	}
 
 	if (mode == "upsert" || mode == "insert") && len(toUpsert) > 0 {
-		if err := upsertCreaturesSQL(ctx, h.pool, datasetID, toUpsert); err != nil {
+		if err := h.mutateDataset(ctx, datasetID, []servicecache.Namespace{servicecache.NamespaceCreatures}, func(tx database.Store) error {
+			return upsertCreaturesSQL(ctx, tx, datasetID, toUpsert)
+		}); err != nil {
 			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 				Message: "Failed to upsert creatures",
 				Detail:  err.Error(),
@@ -378,7 +380,9 @@ func (h *Handler) importItemTemplateSQL(ctx context.Context, w http.ResponseWrit
 	}
 
 	if (mode == "upsert" || mode == "insert") && len(toUpsert) > 0 {
-		if err := upsertItems(ctx, h.pool, datasetID, toUpsert); err != nil {
+		if err := h.mutateDataset(ctx, datasetID, []servicecache.Namespace{servicecache.NamespaceItems}, func(tx database.Store) error {
+			return upsertItems(ctx, tx, datasetID, toUpsert)
+		}); err != nil {
 			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 				Message: "Failed to upsert items",
 				Detail:  err.Error(),
@@ -456,7 +460,7 @@ func sqlCreatureRowArgs(datasetID uuid.UUID, r database.WorldCreatureTemplate) [
 	}
 }
 
-func upsertCreaturesSQL(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, rows []database.WorldCreatureTemplate) error {
+func upsertCreaturesSQL(ctx context.Context, db database.DBTX, datasetID uuid.UUID, rows []database.WorldCreatureTemplate) error {
 	const batchSize = 500
 	for i := 0; i < len(rows); i += batchSize {
 		end := min(i+batchSize, len(rows))
@@ -464,7 +468,7 @@ func upsertCreaturesSQL(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.
 		for _, r := range rows[i:end] {
 			batch.Queue(upsertCreatureSQLStmt, sqlCreatureRowArgs(datasetID, r)...)
 		}
-		br := pool.SendBatch(ctx, batch)
+		br := db.SendBatch(ctx, batch)
 		for range rows[i:end] {
 			if _, err := br.Exec(); err != nil {
 				_ = br.Close()

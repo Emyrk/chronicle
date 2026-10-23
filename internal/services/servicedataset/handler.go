@@ -1,11 +1,13 @@
 package servicedataset
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 
 	"github.com/go-chi/chi/v5"
@@ -161,10 +163,31 @@ func (s *Service) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.db.DeleteDataset(ctx, id)
+	var published []servicecache.PublishedGeneration
+	err = s.db.InTx(ctx, func(tx database.Store) error {
+		if s.cacheSvc != nil {
+			for _, namespace := range servicecache.DatasetNamespaces() {
+				generation, err := s.cacheSvc.PublishTx(ctx, tx, servicecache.GlobalInvalidation(namespace))
+				if err != nil {
+					return fmt.Errorf("publish global %s cache invalidation: %w", namespace, err)
+				}
+				published = append(published, generation)
+			}
+		}
+		if err := tx.DeleteDatasetCacheGenerations(ctx, id); err != nil {
+			return fmt.Errorf("delete dataset cache generations: %w", err)
+		}
+		return tx.DeleteDataset(ctx, id)
+	}, nil)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
+	}
+	if s.cacheSvc != nil {
+		if err := s.cacheSvc.ApplyPublished(ctx, published...); err != nil {
+			httpapi.InternalServerError(w, fmt.Errorf("apply dataset deletion cache invalidations: %w", err))
+			return
+		}
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "deleted"})

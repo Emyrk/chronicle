@@ -7,12 +7,17 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/spelldb"
+	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/google/uuid"
 )
 
 func (h *Handler) persistLegacySpells(ctx context.Context, datasetID uuid.UUID, rows []spelldb.SpellRow, spells []*chrondbc.Spell) error {
-	store := database.New(h.pool)
-	return store.InTx(ctx, func(tx database.Store) error {
+	return h.mutateDataset(ctx, datasetID, []servicecache.Namespace{
+		servicecache.NamespaceSpells,
+		servicecache.NamespaceExtraAttacks,
+		servicecache.NamespaceDurationMods,
+		servicecache.NamespacePeriodicSpells,
+	}, func(tx database.Store) error {
 		const batchSize = 500
 		for i := 0; i < len(rows); i += batchSize {
 			end := min(i+batchSize, len(rows))
@@ -27,7 +32,7 @@ func (h *Handler) persistLegacySpells(ctx context.Context, datasetID uuid.UUID, 
 			return fmt.Errorf("update dataset metadata: %w", err)
 		}
 		return nil
-	}, nil)
+	})
 }
 
 func persistLegacyNormalizedSpells(ctx context.Context, store database.Store, datasetID uuid.UUID, spells []*chrondbc.Spell) error {
