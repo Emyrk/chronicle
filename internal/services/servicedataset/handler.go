@@ -184,10 +184,7 @@ func (s *Service) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.cacheSvc != nil {
-		if err := s.cacheSvc.ApplyPublished(ctx, published...); err != nil {
-			httpapi.InternalServerError(w, fmt.Errorf("apply dataset deletion cache invalidations: %w", err))
-			return
-		}
+		s.cacheSvc.ApplyPublishedBestEffort(published...)
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "deleted"})

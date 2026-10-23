@@ -151,6 +151,7 @@ type Service struct {
 	callbackMu      sync.Mutex
 	callbacks       sync.WaitGroup
 	closing         bool
+	closeTimeout    time.Duration
 	stopPeriodic    func()
 }
 
@@ -173,9 +174,11 @@ type PublishedGeneration struct {
 }
 
 const (
-	invalidationChannel  = "cache_invalidation"
-	maxNotificationBytes = 1024
-	reconcileInterval    = time.Minute
+	invalidationChannel      = "cache_invalidation"
+	maxNotificationBytes     = 1024
+	reconcileInterval        = time.Minute
+	defaultCloseTimeout      = 5 * time.Second
+	defaultLocalApplyTimeout = 2 * time.Second
 )
 
 func New(broker *services.Services) *Service {
@@ -209,10 +212,9 @@ func (s *Service) Start(ctx context.Context) error {
 	return s.startReconciler(ctx)
 }
 
-func (s *Service) Close(_ context.Context) error {
-	if s.cancelSubscribe != nil {
-		s.cancelSubscribe()
-	}
+func (s *Service) Close(ctx context.Context) error {
+	// Stop admitting callbacks before any potentially blocking pubsub teardown.
+	// This also makes Wait safe: no callback can call Add after closing is set.
 	s.callbackMu.Lock()
 	s.closing = true
 	s.callbackMu.Unlock()
@@ -222,12 +224,43 @@ func (s *Service) Close(_ context.Context) error {
 	if s.stopPeriodic != nil {
 		s.stopPeriodic()
 	}
-	if s.loopDone != nil {
-		<-s.loopDone
+
+	timeout := s.closeTimeout
+	if timeout <= 0 {
+		timeout = defaultCloseTimeout
 	}
-	// SubscribeWithErr owns its callback goroutine. Wait for any callback that
-	// started before cancellation to finish before returning from shutdown.
-	s.callbacks.Wait()
+	closeCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	localDone := make(chan struct{})
+	go func() {
+		if s.loopDone != nil {
+			<-s.loopDone
+		}
+		s.callbacks.Wait()
+		close(localDone)
+	}()
+
+	subscriptionDone := make(chan struct{})
+	if s.cancelSubscribe == nil {
+		close(subscriptionDone)
+	} else {
+		go func() {
+			s.cancelSubscribe()
+			close(subscriptionDone)
+		}()
+	}
+
+	for localDone != nil || subscriptionDone != nil {
+		select {
+		case <-localDone:
+			localDone = nil
+		case <-subscriptionDone:
+			subscriptionDone = nil
+		case <-closeCtx.Done():
+			return fmt.Errorf("close cache service: %w", closeCtx.Err())
+		}
+	}
 	return nil
 }
 
@@ -359,6 +392,40 @@ func (s *Service) ApplyPublished(ctx context.Context, published ...PublishedGene
 	return errors.Join(errs...)
 }
 
+// ApplyPublishedBestEffort schedules local application of committed
+// generations without delaying the mutation response. Durable reconciliation
+// retries handlers whose observed generation does not advance.
+func (s *Service) ApplyPublishedBestEffort(published ...PublishedGeneration) {
+	if len(published) == 0 {
+		return
+	}
+	s.callbackMu.Lock()
+	if s.closing {
+		s.callbackMu.Unlock()
+		return
+	}
+	s.callbacks.Add(1)
+	s.callbackMu.Unlock()
+
+	baseCtx := s.serviceCtx
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	published = append([]PublishedGeneration(nil), published...)
+	go func() {
+		defer s.callbacks.Done()
+		ctx, cancel := context.WithTimeout(baseCtx, defaultLocalApplyTimeout)
+		defer cancel()
+		if err := s.ApplyPublished(ctx, published...); err != nil {
+			logger := s.logger
+			if logger == nil {
+				logger = slog.Default()
+			}
+			logger.Error("local cache invalidation failed after commit; reconciliation will retry", "error", err)
+		}
+	}()
+}
+
 func (scope Scope) String() string {
 	switch scope {
 	case ScopeGlobal:
@@ -436,8 +503,10 @@ func (s *Service) startReconciler(ctx context.Context) error {
 	// Subscribe before the initial scan so a commit racing startup is observed
 	// either by the scan or by its notification.
 	if err := s.reconcileAll(s.serviceCtx); err != nil {
-		cancel()
 		s.cancel()
+		// Pubsub cancellation may wait for PostgreSQL UNLISTEN. Startup must
+		// return its reconciliation failure instead of hanging on listener cleanup.
+		cancelSubscriptionAsync(cancel)
 		return fmt.Errorf("initial cache generation reconciliation: %w", err)
 	}
 
@@ -449,6 +518,12 @@ func (s *Service) startReconciler(ctx context.Context) error {
 	s.loopDone = make(chan struct{})
 	go s.reconcileLoop(s.serviceCtx)
 	return nil
+}
+
+func cancelSubscriptionAsync(cancel func()) {
+	if cancel != nil {
+		go cancel()
+	}
 }
 
 func (s *Service) reconcileLoop(ctx context.Context) {
