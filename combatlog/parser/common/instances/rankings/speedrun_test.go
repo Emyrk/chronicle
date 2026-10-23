@@ -226,6 +226,72 @@ func TestSpeedrunTracker_FightEnded_QualifiesOnlyWhenAllSatisfied(t *testing.T) 
 	assert.Equal(t, t0.Add(2*time.Minute), tracker.completionTime)
 }
 
+func TestSpeedrunTracker_BossesCompletedBeforeTrailingTrash(t *testing.T) {
+	t.Parallel()
+
+	rules := SpeedrunRules{
+		Requirements: []SpeedrunRequirement{
+			{Name: "Boss A", EntryIDs: []uint32{100}, Count: 1, Category: SpeedrunCategoryBosses},
+			{Name: "Boss B", EntryIDs: []uint32{200}, Count: 1, Category: SpeedrunCategoryBosses},
+			{Name: "Trailing Trash", EntryIDs: []uint32{300}, Count: 1, Category: SpeedrunCategoryTrash},
+		},
+	}
+	tracker := NewSpeedrunTracker(rules, nil, nil)
+
+	firstBossEnd := t0.Add(time.Minute)
+	tracker.FightStarted(uuid.New(), msg(t0))
+	tracker.ActivityChange(msg(firstBossEnd), &stubChar{
+		id: makeCreatureGUID(100, 1), active: false, endState: period.EndStateSlain, hasPeriod: true,
+	})
+	tracker.FightEnded(uuid.New(), msg(firstBossEnd))
+
+	_, completed := tracker.BossesCompletedAt()
+	assert.False(t, completed)
+
+	secondBossEnd := t0.Add(2 * time.Minute)
+	tracker.FightStarted(uuid.New(), msg(t0.Add(90*time.Second)))
+	tracker.ActivityChange(msg(secondBossEnd), &stubChar{
+		id: makeCreatureGUID(200, 1), active: false, endState: period.EndStateSlain, hasPeriod: true,
+	})
+	tracker.FightEnded(uuid.New(), msg(secondBossEnd))
+
+	completedAt, completed := tracker.BossesCompletedAt()
+	assert.True(t, completed)
+	assert.Equal(t, secondBossEnd, completedAt)
+	assert.False(t, tracker.completed, "trailing trash should still prevent speedrun qualification")
+}
+
+func TestSpeedrunTracker_ReentryBoundaryUsesFinalBossFight(t *testing.T) {
+	t.Parallel()
+
+	rules := SpeedrunRules{
+		Requirements: []SpeedrunRequirement{
+			{Name: "Boss", EntryIDs: []uint32{100}, Count: 1, Category: SpeedrunCategoryBosses},
+			{Name: "Trailing Trash", EntryIDs: []uint32{200}, Count: 1, Category: SpeedrunCategoryTrash},
+		},
+	}
+	tracker := NewSpeedrunTracker(rules, nil, nil)
+
+	bossEnd := t0.Add(time.Minute)
+	tracker.FightStarted(uuid.New(), msg(t0))
+	tracker.ActivityChange(msg(bossEnd), &stubChar{
+		id: makeCreatureGUID(100, 1), active: false, endState: period.EndStateSlain, hasPeriod: true,
+	})
+	tracker.FightEnded(uuid.New(), msg(bossEnd))
+
+	trashEnd := t0.Add(20 * time.Minute)
+	tracker.FightStarted(uuid.New(), msg(t0.Add(19*time.Minute)))
+	tracker.ActivityChange(msg(trashEnd), &stubChar{
+		id: makeCreatureGUID(200, 1), active: false, endState: period.EndStateSlain, hasPeriod: true,
+	})
+	tracker.FightEnded(uuid.New(), msg(trashEnd))
+
+	boundary, gap, completed := tracker.ReentryBoundary()
+	assert.True(t, completed)
+	assert.Equal(t, bossEnd, boundary)
+	assert.Equal(t, BossCompletionReentryGap, gap)
+}
+
 func TestSpeedrunTracker_CompletedIgnoresSubsequentKills(t *testing.T) {
 	t.Parallel()
 	rules := SpeedrunRules{

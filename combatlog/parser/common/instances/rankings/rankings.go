@@ -36,8 +36,9 @@ type LevelRangeRequirement struct {
 
 // SpeedrunRules defines all requirements for a valid speedrun.
 const (
-	DefaultReentryGap = 24 * time.Hour
-	DungeonReentryGap = 15 * time.Minute
+	DefaultReentryGap        = 24 * time.Hour
+	BossCompletionReentryGap = time.Hour
+	DungeonReentryGap        = 15 * time.Minute
 )
 
 type SpeedrunRules struct {
