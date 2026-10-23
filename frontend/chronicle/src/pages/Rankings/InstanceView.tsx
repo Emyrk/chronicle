@@ -22,7 +22,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages"
 import { cn } from "@/lib/utils"
 import { AdSlot } from "@/components/Ads/AdSlot"
-import { shouldShowCompactEncounterAd } from "@/components/Ads/adPreview"
+import { shouldShowEncounterAd } from "@/components/Ads/adPreview"
 import type { RankingsKillTimeStats, RankingsSuccessRate } from "@/api/typesGenerated"
 import {
   useSiteConfig,
@@ -809,8 +809,8 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         Metrics reflect the selected encounters. Ctrl+Click to toggle individual encounters.
       </p>
 
-      {!isMobile && shouldShowCompactEncounterAd(encounterNames.length) && (
-        <AdSlot placement="statistics-encounter-sidebar" className="mt-5" />
+      {!isMobile && shouldShowEncounterAd(encounterNames.length) && (
+        <AdSlot placement="statistics-encounter-sidebar" format="sidebar" className="mt-5" />
       )}
     </>
   )
@@ -842,7 +842,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
       {/* Encounter sidebar — desktop: always present, mobile: overlay */}
       {!isMobile && (
-        <div className="pt-1 w-64 shrink-0 border-r pr-4 overflow-y-auto styled-scrollbar sticky top-4 max-h-[calc(100vh-2rem)]">
+        <div className="pt-1 w-[267px] shrink-0 border-r pr-4 overflow-y-auto styled-scrollbar sticky top-4 max-h-[calc(100vh-2rem)]">
           {usesMultiEncounterSelection && sidebarContent}
         </div>
       )}

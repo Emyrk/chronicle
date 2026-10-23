@@ -101,14 +101,15 @@ export const MobileCard: Story = {
   ),
 }
 
-export const Responsive: Story = {
+export const Sidebar: Story = {
   args: {
     placement: "statistics-encounter-sidebar",
-    format: "responsive",
+    format: "sidebar",
+    availableHeight: 600,
   },
   render: (args) => (
     <div className="min-h-screen bg-background px-6 py-8 text-foreground">
-      <aside className="w-64 border-r pr-4">
+      <aside className="w-[267px] border-r pr-4">
         <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">Encounters</h2>
         <div className="space-y-1">
           {["Lucifron", "Magmadar", "Gehennas", "Garr", "Baron Geddon"].map((encounter) => (

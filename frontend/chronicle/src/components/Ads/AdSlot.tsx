@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
 import { Link } from "react-router-dom"
 import { useSession, useSiteConfig } from "@/api/queries"
 import { cn } from "@/lib/utils"
@@ -12,6 +12,7 @@ const formatClasses: Record<AdFormat, string> = {
   responsive: "hidden w-full lg:block",
   rail: "hidden w-40 shrink-0 self-start 2xl:sticky 2xl:top-20 2xl:block",
   card: "flex h-full w-full self-start justify-center",
+  sidebar: "hidden w-[250px] lg:block",
 }
 
 const railLayoutClasses: Record<RailLayout, string> = {
@@ -28,7 +29,11 @@ const frameClasses: Record<AdFormat, string> = {
   responsive: "min-h-28",
   rail: "min-h-[600px]",
   card: "w-[300px]",
+  sidebar: "min-h-[250px]",
 }
+
+// Reserve room for the label above the creative and breathing room below it.
+const SIDEBAR_VERTICAL_GUTTER = 40
 
 function useMediaQuery(query: string | undefined): boolean {
   const [matches, setMatches] = useState(() =>
@@ -47,6 +52,37 @@ function useMediaQuery(query: string | undefined): boolean {
   return matches
 }
 
+function useSidebarViewportHeight(enabled: boolean, element: RefObject<HTMLElement | null>): number | undefined {
+  const [availableHeight, setAvailableHeight] = useState<number>()
+
+  useEffect(() => {
+    if (!enabled) return
+
+    const update = () => {
+      const scrollContainer = element.current?.parentElement
+      if (!scrollContainer) return
+      setAvailableHeight(
+        Math.max(0, Math.floor(window.innerHeight - scrollContainer.getBoundingClientRect().top - SIDEBAR_VERTICAL_GUTTER)),
+      )
+    }
+
+    const animationFrame = window.requestAnimationFrame(update)
+    window.addEventListener("resize", update)
+
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(update)
+    if (element.current) observer?.observe(element.current)
+    if (element.current?.parentElement) observer?.observe(element.current.parentElement)
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame)
+      window.removeEventListener("resize", update)
+      observer?.disconnect()
+    }
+  }, [element, enabled])
+
+  return availableHeight
+}
+
 /**
  * The single entry point for Chronicle ad placements.
  *
@@ -59,6 +95,7 @@ export function AdSlot({
   railLayout = "single",
   hostname = window.location.hostname,
   previewEnabled = import.meta.env.DEV && import.meta.env.CHRONICLE_PREVIEW_ADS,
+  availableHeight,
   className,
 }: {
   /** Stable hyphenated identifier; use kebab-case for reporting and placement-specific policy. */
@@ -69,23 +106,32 @@ export function AdSlot({
   hostname?: string
   /** Test seam for preview eligibility. Product callers should use the environment flag. */
   previewEnabled?: boolean
+  /** Test seam for sidebar size eligibility. Product callers should use viewport measurement. */
+  availableHeight?: number
   className?: string
 }) {
   const { data: siteConfig } = useSiteConfig()
   const { data: session, isLoading: sessionLoading } = useSession()
+  const slotRef = useRef<HTMLElement>(null)
+  const measuredAvailableHeight = useSidebarViewportHeight(format === "sidebar", slotRef)
+  const sidebarAvailableHeight = availableHeight ?? measuredAvailableHeight
   const showPreview = shouldShowAdPreview(hostname, previewEnabled)
   const siteID = siteConfig?.ads_enabled ? siteConfig.nitropay_site_id : undefined
   const adID = `nitropay-${placement}`
   const wideRail = useMediaQuery(format === "rail" ? railLayoutQueries[railLayout] : undefined)
   const compactCard = useMediaQuery(format === "card" ? "(max-width: 1023px)" : undefined)
+  const eligibleSizes = useMemo(
+    () => adSizesForFormat(format, wideRail, compactCard, sidebarAvailableHeight),
+    [compactCard, format, sidebarAvailableHeight, wideRail],
+  )
   const adsAllowed = !sessionLoading && !session?.ads_free
 
   useEffect(() => {
-    if (!adsAllowed || !siteID || showPreview) return
+    if (!adsAllowed || !siteID || showPreview || eligibleSizes.length === 0) return
 
     let active = true
     let ads: NitroPayAd[] = []
-    void requestNitroPayAd(siteID, adID, adSizesForFormat(format, wideRail, compactCard))
+    void requestNitroPayAd(siteID, adID, eligibleSizes)
       .then((createdAds) => {
         if (!active) {
           clearNitroPayAds(createdAds)
@@ -101,15 +147,20 @@ export function AdSlot({
       active = false
       clearNitroPayAds(ads)
     }
-  }, [adID, adsAllowed, compactCard, format, placement, showPreview, siteID, wideRail])
+  }, [adID, adsAllowed, eligibleSizes, placement, showPreview, siteID])
 
   // Fail closed while deciding so paid supporters never see an ad flash.
   if (!adsAllowed || (!showPreview && !siteID)) {
     return null
   }
 
+  if (format === "sidebar" && eligibleSizes.length === 0) {
+    return <aside ref={slotRef} className={cn(formatClasses.sidebar, className)} aria-hidden="true" />
+  }
+
   return (
     <aside
+      ref={slotRef}
       className={cn(formatClasses[format], format === "rail" && railLayoutClasses[railLayout], className)}
       aria-label={showPreview ? "Advertisement preview" : "Advertisement"}
       data-ad-placement={placement}
@@ -140,6 +191,7 @@ export function AdSlot({
           className={cn(
             showPreview &&
               "relative flex items-center justify-center overflow-hidden rounded-md border border-dashed border-border/60 bg-muted/10",
+            format === "sidebar" && "flex justify-center",
             (showPreview || format !== "responsive") && frameClasses[format],
             format === "card" && (compactCard ? "h-[100px]" : "h-[250px]"),
           )}
@@ -150,7 +202,7 @@ export function AdSlot({
               <div className="relative text-center text-muted-foreground/55">
                 <p className="text-[10px] font-medium uppercase tracking-[0.16em]">Ad preview</p>
                 <p className="mt-1 font-mono text-[10px]">
-                  {adSizeLabel(format, wideRail, compactCard)}
+                  {adSizeLabel(format, wideRail, compactCard, sidebarAvailableHeight)}
                 </p>
               </div>
             </>

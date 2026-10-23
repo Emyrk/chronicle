@@ -32,6 +32,14 @@ Wide-screen rail:
 
 Use `railLayout="paired"` when a page renders rails on both sides. Single rails reserve 300px at 1920px; paired rails wait until 2080px so the page can reserve 300px on both sides without reducing the primary content width.
 
+Fixed-width content sidebar:
+
+```tsx
+<AdSlot placement="statistics-encounter-sidebar" format="sidebar" />
+```
+
+The sidebar format reserves 250px and measures the scrollable sidebar's viewport height. It offers 250×250, 240×400, and 160×600 only when each creative can fit in that viewport after scrolling below the preceding content.
+
 `responsive` is the default format. A placement ID is a stable, kebab-case description of the page region, not the advertiser, campaign, or current dimensions.
 
 ## Ownership boundary
@@ -39,7 +47,7 @@ Use `railLayout="paired"` when a page renders rails on both sides. Single rails 
 ### Callers own
 
 - The location in page flow.
-- Product-specific eligibility, such as only showing the encounter placement for short encounter lists.
+- Product-specific eligibility, such as requiring a non-empty encounter list.
 - Surrounding spacing through `className`.
 - A stable `placement` name for reporting and placement-specific policy.
 
@@ -67,7 +75,7 @@ If a proposed change makes a caller aware of a NitroPay site ID, `nitroAds`, con
 
 1. Choose a stable ID in the form `<page>-<region>`, for example `logs-list-between-pages`. The `AdPlacement` template-literal type requires at least one hyphen; code review still owns full kebab-case validation, uniqueness, and typo detection.
 2. Insert `AdSlot` at the intended point in normal document flow.
-3. Use the default responsive format unless the surrounding layout reserves a permanent rail.
+3. Use the default responsive format unless the surrounding layout reserves a permanent rail or a 250px content sidebar.
 4. Keep product eligibility outside the component only when it depends on page data.
 5. Start the frontend with `pnpm run dev --with-ads` or `CHRONICLE_PREVIEW_ADS=true pnpm run dev`.
 6. Verify the preview on `localhost` at every applicable breakpoint.
@@ -82,6 +90,7 @@ Do not create a placement-specific wrapper merely to render `AdSlot`. A wrapper 
 | Responsive | `<AdSlot placement="..." />` | Hidden below `lg`; fills available width; minimum preview height 7rem |
 | Rail | `<AdSlot placement="..." format="rail" />` | Hidden below `2xl`; 160px wide by default; expands to 300px when its layout has spare viewport width; 600px minimum height; sticky below navigation |
 | Card | `<AdSlot placement="..." format="card" />` | Fixed 300×100 below `lg`, fixed 300×250 at `lg` and wider; centered within a content-grid cell |
+| Sidebar | `<AdSlot placement="..." format="sidebar" />` | Hidden below `lg`; fixed at 250px wide; offers 250×250, 240×400, and 160×600 according to the scrollable sidebar's viewport height |
 
 Add a new format only when neither existing format can represent the required dimensions or breakpoint behavior. Format changes belong in `AdSlot.tsx` and require component tests plus a Storybook story.
 
@@ -90,7 +99,7 @@ Add a new format only when neither existing format can represent the required di
 | Placement | Caller | Eligibility |
 |---|---|---|
 | `leaderboards-right-rail` | `pages/Leaderboards/LeaderboardsPage.tsx` | Leaderboard landing and detail layouts; visible at `2xl` |
-| `statistics-encounter-sidebar` | `pages/Rankings/InstanceView.tsx` | Explicitly non-mobile statistics detail with 1–8 encounter rows; rendered after the keybind help text |
+| `statistics-encounter-sidebar` | `pages/Rankings/InstanceView.tsx` | Non-mobile statistics detail with any non-empty encounter list; fixed 250px width and scrolls below the encounters |
 | `recent-right-rail` | `pages/Recent/RecentRaids.tsx` | Recent uploads; visible at `2xl` |
 | `recent-left-rail` | `pages/Recent/RecentRaids.tsx` | Recent uploads; visible with the right rail at 1800px and wider |
 | `recent-grid-card-*` | `pages/Recent/RecentRaids.tsx` | Recent uploads; 300×100 on mobile and 300×250 on desktop, inserted after pseudo-random groups of 4 to 8 raids |
@@ -126,6 +135,7 @@ At minimum, `AdSlot.test.tsx` must cover:
 - Responsive preview defaults.
 - Rail preview dimensions, sticky behavior, and single/paired width breakpoints.
 - NitroPay rail size eligibility: 160×600 normally and both 300×600 plus 160×600 only after 300px is reserved; the local preview label must reflect the same eligible set.
+- Sidebar size eligibility: 250×250, 240×400, and 160×600 are offered only when the scrollable sidebar viewport can contain them.
 - Stable `data-ad-placement` output.
 - No rendering without the preview flag or on a non-local hostname while live serving is unavailable.
 - Effective tenant enablement for both disabled and live NitroPay branches.

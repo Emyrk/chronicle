@@ -11,7 +11,7 @@ import { clearNitroPayAds } from "./nitroPay"
 import {
   isLocalAdPreviewHost,
   shouldShowAdPreview,
-  shouldShowCompactEncounterAd,
+  shouldShowEncounterAd,
 } from "./adPreview"
 
 function renderAdSlot(
@@ -82,6 +82,37 @@ describe("AdSlot", () => {
     expect(adSizeLabel("rail", false)).toBe("160 × 600")
     expect(adSizeLabel("rail", true)).toBe("300 × 600 / 160 × 600")
     expect(adSizeLabel("responsive", false)).toBe("responsive")
+  })
+
+  it("offers only fixed sidebar sizes that fit below the placement", () => {
+    expect(adSizesForFormat("sidebar", false, false, 650)).toEqual([
+      [160, 600],
+      [240, 400],
+      [250, 250],
+    ])
+    expect(adSizesForFormat("sidebar", false, false, 450)).toEqual([
+      [240, 400],
+      [250, 250],
+    ])
+    expect(adSizesForFormat("sidebar", false, false, 300)).toEqual([[250, 250]])
+    expect(adSizesForFormat("sidebar", false, false, 249)).toEqual([])
+  })
+
+  it("renders a 250px-wide sidebar placement with height-eligible sizes", () => {
+    const markup = renderAdSlot(
+      <AdSlot
+        placement="statistics-encounter-sidebar"
+        format="sidebar"
+        availableHeight={450}
+        hostname="127.0.0.1"
+        previewEnabled
+      />,
+    )
+
+    expect(markup).toContain("w-[250px]")
+    expect(markup).toContain("min-h-[250px]")
+    expect(markup).toContain("240 × 400 / 250 × 250")
+    expect(markup).toContain('data-ad-placement="statistics-encounter-sidebar"')
   })
 
   it("renders the responsive desktop format by default", () => {
@@ -233,9 +264,9 @@ describe("AdSlot", () => {
     expect(shouldShowAdPreview("chronicleclassic.com", true)).toBe(false)
   })
 
-  it("uses the compact slot only for short encounter lists", () => {
-    expect(shouldShowCompactEncounterAd(0)).toBe(false)
-    expect(shouldShowCompactEncounterAd(8)).toBe(true)
-    expect(shouldShowCompactEncounterAd(9)).toBe(false)
+  it("shows the sidebar placement for any non-empty encounter list", () => {
+    expect(shouldShowEncounterAd(0)).toBe(false)
+    expect(shouldShowEncounterAd(8)).toBe(true)
+    expect(shouldShowEncounterAd(40)).toBe(true)
   })
 })
