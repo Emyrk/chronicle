@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
 import { Link } from "react-router-dom"
-import { useSession, useSiteConfig } from "@/api/queries"
+import { useSession } from "@/api/queries"
 import { cn } from "@/lib/utils"
 import { shouldShowAdPreview } from "./adPreview"
 import { adSizeLabel, adSizesForFormat, type AdFormat, type RailLayout } from "./adFormats"
 import { isAdPlacementDisabled, type AdPlacement } from "./adPolicy"
 import { clearNitroPayAds, requestNitroPayAd, type NitroPayAd } from "./nitroPay"
+import { useAdSiteConfig } from "./useAdSiteConfig"
 
 export type { AdPlacement } from "./adPolicy"
 
@@ -114,14 +115,14 @@ export function AdSlot({
   availableHeight?: number
   className?: string
 }) {
-  const { data: siteConfig } = useSiteConfig()
+  const adSiteConfig = useAdSiteConfig()
   const { data: session, isLoading: sessionLoading } = useSession()
   const slotRef = useRef<HTMLElement>(null)
   const measuredAvailableHeight = useSidebarViewportHeight(format === "sidebar", slotRef)
   const sidebarAvailableHeight = availableHeight ?? measuredAvailableHeight
   const showDemo = demoEnabled === true
   const showPreview = !showDemo && shouldShowAdPreview(hostname, previewEnabled)
-  const siteID = siteConfig?.ads_enabled ? siteConfig.nitropay_site_id : undefined
+  const siteID = adSiteConfig?.ads_enabled ? adSiteConfig.nitropay_site_id : undefined
   const adID = `nitropay-${placement}`
   const wideRail = useMediaQuery(format === "rail" ? railLayoutQueries[railLayout] : undefined)
   const compactCard = useMediaQuery(format === "card" ? "(max-width: 1023px)" : undefined)
@@ -129,7 +130,7 @@ export function AdSlot({
     () => adSizesForFormat(format, wideRail, compactCard, sidebarAvailableHeight),
     [compactCard, format, sidebarAvailableHeight, wideRail],
   )
-  const placementDisabled = isAdPlacementDisabled(siteConfig?.disabled_ads, placement, format)
+  const placementDisabled = isAdPlacementDisabled(adSiteConfig?.disabled_ads, placement, format)
   const adsAllowed = !sessionLoading && !session?.ads_free && !placementDisabled
 
   useEffect(() => {
@@ -174,7 +175,7 @@ export function AdSlot({
       data-ad-demo={showDemo || undefined}
     >
       <div>
-        {siteConfig?.billing_enabled ? (
+        {adSiteConfig?.billing_enabled ? (
           <Link
             to={session ? "/account/billing" : "/supporter"}
             title="Become a supporter to remove ads"
