@@ -577,8 +577,11 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := s.agentLoop(r.Context(), writer, provider, cred, req.Model, a, history, tc, debug, client, agentLoopState{}, persist, pause)
 	if err != nil {
+		if s.logger != nil {
+			s.logger.Warn("inference run failed", "run_id", req.RunID, "error", err)
+		}
 		_ = s.finishRun(r.Context(), runRow, "error", result.State, "provider_error")
-		_ = writer.Write(agui.RunErrorEvent{Message: "The inference run failed.", Code: "provider_error"})
+		_ = writer.Write(inferenceRunErrorEvent(err))
 		return
 	}
 	if result.Paused != nil {
@@ -656,6 +659,18 @@ func writeDebugSnapshot(w *agui.Writer, debug debugRunContext, iteration int, ph
 		return nil
 	}
 	return w.Write(debugSnapshotEvent(debug, iteration, phase, model, a, messages, usage))
+}
+
+func inferenceRunErrorEvent(err error) agui.RunErrorEvent {
+	var providerErr *ProviderError
+	if errors.As(err, &providerErr) && strings.TrimSpace(providerErr.UserMessage) != "" {
+		code := strings.TrimSpace(providerErr.Code)
+		if code == "" {
+			code = "provider_error"
+		}
+		return agui.RunErrorEvent{Message: providerErr.UserMessage, Code: code}
+	}
+	return agui.RunErrorEvent{Message: "The inference run failed. Please try again.", Code: "provider_error"}
 }
 
 type agentLoopState struct {

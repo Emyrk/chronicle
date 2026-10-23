@@ -427,6 +427,26 @@ async function readResponseSnippet(response: Response, maxBytes = 500): Promise<
   }
 }
 
+function httpErrorMessage(status: number, detail: string): string {
+  if (status === 401) {
+    return "Your session has expired or is no longer authorized. Refresh the page or sign in again.";
+  }
+  let message = detail;
+  try {
+    const body = JSON.parse(detail) as { message?: unknown; detail?: unknown };
+    if (typeof body.message === "string") {
+      message = body.message;
+      if (typeof body.detail === "string" && body.detail) {
+        message += `: ${body.detail}`;
+      }
+    }
+  } catch {
+    // Preserve bounded plain-text provider or proxy details.
+  }
+  const suffix = message ? `: ${message}` : "";
+  return `Assistant request failed with HTTP ${status}${suffix}`;
+}
+
 async function postSse(
   options: RunAgUiOptions,
   url: string,
@@ -454,10 +474,9 @@ async function postSse(
 
   if (!response.ok) {
     const detail = await readResponseSnippet(response);
-    const suffix = detail ? `: ${detail}` : "";
     throw new AgUiClientError(
       "http",
-      `AG-UI request failed with HTTP ${response.status}${suffix}`,
+      httpErrorMessage(response.status, detail),
       { status: response.status },
     );
   }

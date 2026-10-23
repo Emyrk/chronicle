@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { AssistantChat } from "./AssistantChat";
 import {
+  isInferenceAuthorizationError,
   isInferenceServiceUnavailable,
   useClearInferenceThread,
   useCreateInstanceInferenceThread,
@@ -13,6 +14,7 @@ import {
   useInferencePermission,
   useInferenceThread,
 } from "./api";
+import { shouldCreateInstanceThread } from "./instanceThread";
 import { buildInstanceAnalystRunRequest, buildSiteHelpRunRequest, toChatMessages } from "./inference";
 import { ModelCombobox } from "./ModelCombobox";
 import type { DebugCommandInput } from "./useAssistantChat";
@@ -132,7 +134,14 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
   const threadQuery = useInferenceThread(threadId, { enabled: false });
 
   useEffect(() => {
-    if (open && permission.allowed && selection.ready && !createThread.data && !createThread.isPending) {
+    if (shouldCreateInstanceThread({
+      open,
+      allowed: permission.allowed,
+      ready: selection.ready,
+      hasData: Boolean(createThread.data),
+      pending: createThread.isPending,
+      error: Boolean(createThread.error),
+    })) {
       createThread.mutate(instanceId);
     }
   }, [open, permission.allowed, selection.ready, createThread, instanceId]);
@@ -170,7 +179,9 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
   ) return null;
   const response = threadQuery.data ?? createThread.data;
   const disconnected = selection.connections.length === 0;
-  const threadLoading = open && selection.ready && !response && !createThread.error;
+  const threadError = createThread.error ?? threadQuery.error;
+  const authorizationFailed = isInferenceAuthorizationError(threadError);
+  const threadLoading = open && selection.ready && !response && !threadError;
 
   return (
     <AssistantChat
@@ -195,9 +206,15 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
       debugAvailable={debugPermission.allowed}
       debugEnabled={debugEnabled}
       onDebugEnabledChange={setDebugEnabled}
-      disabled={disconnected || Boolean(selection.error || createThread.error) || threadLoading}
-      disabledTitle={disconnected ? "Connect OpenRouter to analyze this raid" : threadLoading ? "Opening instance assistant" : "Instance assistant unavailable"}
-      disabledDescription={selection.error?.message ?? createThread.error?.message ?? (threadLoading ? "Loading persisted conversation history…" : "Connect a provider in account settings, then choose a model.")}
+      disabled={disconnected || Boolean(selection.error || threadError) || threadLoading}
+      disabledTitle={disconnected
+        ? "Connect OpenRouter to analyze this raid"
+        : threadLoading
+          ? "Opening instance assistant"
+          : authorizationFailed
+            ? "Assistant authorization expired"
+            : "Instance assistant unavailable"}
+      disabledDescription={selection.error?.message ?? threadError?.message ?? (threadLoading ? "Loading persisted conversation history…" : "Connect a provider in account settings, then choose a model.")}
       disabledAction={disconnected ? <ConnectRequiredAction /> : undefined}
       className="h-dvh sm:h-[min(760px,100vh)]"
     />

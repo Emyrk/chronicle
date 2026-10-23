@@ -423,10 +423,61 @@ func responseError(operation string, response *http.Response, secrets ...[]byte)
 	if truncated {
 		message += "..."
 	}
-	if message == "" {
-		return fmt.Errorf("%s: HTTP %d", operation, response.StatusCode)
+
+	internalMessage := fmt.Sprintf("%s: HTTP %d", operation, response.StatusCode)
+	if message != "" {
+		internalMessage += ": " + message
 	}
-	return fmt.Errorf("%s: HTTP %d: %s", operation, response.StatusCode, message)
+	return &serviceinference.ProviderError{
+		Code:        providerErrorCode(response.StatusCode),
+		UserMessage: providerErrorMessage(response.StatusCode, response.Header.Get("Content-Type"), message),
+		Err:         errors.New(internalMessage),
+	}
+}
+
+func providerErrorCode(status int) string {
+	switch status {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return "provider_authentication_failed"
+	case http.StatusPaymentRequired:
+		return "provider_payment_required"
+	case http.StatusTooManyRequests:
+		return "provider_rate_limited"
+	default:
+		if status >= http.StatusInternalServerError {
+			return "provider_unavailable"
+		}
+		return "provider_request_failed"
+	}
+}
+
+func providerErrorMessage(status int, contentType, body string) string {
+	detail := ""
+	if strings.Contains(strings.ToLower(contentType), "application/json") {
+		var payload struct {
+			Message string `json:"message"`
+			Error   struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if json.Unmarshal([]byte(body), &payload) == nil {
+			detail = strings.TrimSpace(payload.Error.Message)
+			if detail == "" {
+				detail = strings.TrimSpace(payload.Message)
+			}
+		}
+	} else if strings.HasPrefix(strings.ToLower(contentType), "text/plain") {
+		detail = strings.TrimSpace(body)
+	}
+	if runes := []rune(detail); len(runes) > 500 {
+		detail = string(runes[:500]) + "…"
+	}
+
+	message := fmt.Sprintf("OpenRouter rejected the request (HTTP %d).", status)
+	if detail != "" {
+		message = fmt.Sprintf("OpenRouter rejected the request (HTTP %d): %s", status, detail)
+	}
+	return message
 }
 
 type modelsResponse struct {

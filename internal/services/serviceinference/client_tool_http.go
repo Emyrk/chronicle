@@ -138,8 +138,11 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := s.agentLoop(r.Context(), writer, provider, credential, run.Model, assistantDefinition, history, toolContext{service: s, instanceID: instance.ID}, debug, capability, state, persist, pause)
 	if err != nil {
+		if s.logger != nil {
+			s.logger.Warn("continued inference run failed", "run_id", run.IdempotencyKey, "error", err)
+		}
 		_ = s.finishRun(r.Context(), run, "error", result.State, "provider_error")
-		_ = writer.Write(agui.RunErrorEvent{Message: "The inference run failed.", Code: "provider_error"})
+		_ = writer.Write(inferenceRunErrorEvent(err))
 		return
 	}
 	if result.Paused != nil {

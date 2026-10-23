@@ -155,6 +155,23 @@ func TestDebugPreviewDoesNotInvokeProvider(t *testing.T) {
 	require.Empty(t, snapshot.Skills)
 }
 
+func TestInferenceRunErrorEventUsesSafeProviderDetails(t *testing.T) {
+	t.Parallel()
+
+	event := inferenceRunErrorEvent(&ProviderError{
+		Code:        "provider_rate_limited",
+		UserMessage: "OpenRouter rejected the request (HTTP 429): rate limit exceeded",
+		Err:         errors.New("internal provider detail"),
+	})
+	require.Equal(t, "provider_rate_limited", event.Code)
+	require.Equal(t, "OpenRouter rejected the request (HTTP 429): rate limit exceeded", event.Message)
+
+	generic := inferenceRunErrorEvent(errors.New("database details"))
+	require.Equal(t, "provider_error", generic.Code)
+	require.Equal(t, "The inference run failed. Please try again.", generic.Message)
+	require.NotContains(t, generic.Message, "database")
+}
+
 func TestOpenRouterCallbackURLCarriesState(t *testing.T) {
 	t.Parallel()
 	accessURL, err := url.Parse("https://chronicle.example/base?tenant=turtle#fragment")

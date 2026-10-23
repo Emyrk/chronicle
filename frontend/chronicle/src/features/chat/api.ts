@@ -34,10 +34,25 @@ export function isInferenceServiceUnavailable(error: unknown): boolean {
   return error instanceof InferenceAPIError && error.status === 503;
 }
 
+export function inferenceAPIErrorMessage(
+  status: number,
+  body: { message?: string; detail?: string } | null,
+  fallback: string,
+): string {
+  if (status === 401) {
+    return "Your session has expired or is no longer authorized. Refresh the page or sign in again.";
+  }
+  const detail = body?.detail ? `: ${body.detail}` : "";
+  return `${body?.message ?? fallback}${detail}`;
+}
+
+export function isInferenceAuthorizationError(error: unknown): boolean {
+  return error instanceof InferenceAPIError && (error.status === 401 || error.status === 403);
+}
+
 async function readError(response: Response, fallback: string): Promise<InferenceAPIError> {
   const body = await response.json().catch(() => null) as { message?: string; detail?: string } | null;
-  const detail = body?.detail ? `: ${body.detail}` : "";
-  return new InferenceAPIError(`${body?.message ?? fallback}${detail}`, response.status);
+  return new InferenceAPIError(inferenceAPIErrorMessage(response.status, body, fallback), response.status);
 }
 
 export function useInferencePermission(enabled = true) {
@@ -171,6 +186,7 @@ export function useCreateInstanceInferenceThread() {
       if (!response.ok) throw await readError(response, "Failed to open the instance assistant");
       return response.json() as Promise<InferenceThreadResponse>;
     },
+    retry: false,
     onSuccess: (data, instanceId) => {
       queryClient.setQueryData(inferenceKeys.thread(data.thread.id), data);
       queryClient.setQueryData(inferenceKeys.instanceThread(instanceId), data);
@@ -218,6 +234,7 @@ export function useInferenceThread(
   options?: Omit<UseQueryOptions<InferenceThreadResponse>, "queryKey" | "queryFn">,
 ) {
   return useQuery({
+    ...options,
     queryKey: inferenceKeys.thread(threadId ?? ""),
     queryFn: async () => {
       const response = await fetch(`/api/v1/inference/threads/${encodeURIComponent(threadId ?? "")}`, {
@@ -226,9 +243,8 @@ export function useInferenceThread(
       if (!response.ok) throw await readError(response, "Failed to refresh assistant history");
       return response.json() as Promise<InferenceThreadResponse>;
     },
-    enabled: Boolean(threadId),
+    enabled: Boolean(threadId) && (options?.enabled ?? true),
     retry: false,
-    ...options,
   });
 }
 

@@ -120,6 +120,23 @@ type StreamEvent struct {
 // the provider request.
 type StreamCallback func(StreamEvent) error
 
+// ProviderError carries bounded provider-owned diagnostics that are safe to
+// show to the user while retaining the underlying error for server logs.
+type ProviderError struct {
+	Code        string
+	UserMessage string
+	Err         error
+}
+
+func (e *ProviderError) Error() string {
+	if e.Err != nil {
+		return e.Err.Error()
+	}
+	return e.UserMessage
+}
+
+func (e *ProviderError) Unwrap() error { return e.Err }
+
 // Provider lists models and streams chat completions. credential is opaque to
 // the core and must never be retained by an implementation.
 type Provider interface {

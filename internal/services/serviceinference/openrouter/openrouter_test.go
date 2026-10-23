@@ -180,6 +180,12 @@ func TestStreamChatHTTPErrorRedactsCredential(t *testing.T) {
 	client := newTestClient(t, server)
 	err := client.StreamChat(testutil.Context(t, testutil.WaitShort), []byte("secret-credential"), serviceinference.ChatRequest{Model: "model"}, func(serviceinference.StreamEvent) error { return nil })
 	require.Error(t, err)
+	var providerErr *serviceinference.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, "provider_authentication_failed", providerErr.Code)
+	require.Contains(t, providerErr.UserMessage, "OpenRouter rejected the request (HTTP 401)")
+	require.NotContains(t, providerErr.UserMessage, "secret-credential")
+	require.NotContains(t, providerErr.UserMessage, "provider-secret-value")
 	require.ErrorContains(t, err, "HTTP 401")
 	require.NotContains(t, err.Error(), "secret-credential")
 	require.NotContains(t, err.Error(), "provider-secret-value")

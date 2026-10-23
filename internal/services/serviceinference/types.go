@@ -43,6 +43,7 @@ const (
 type ToolCallDelta = contracts.ToolCallDelta
 type StreamEvent = contracts.StreamEvent
 type StreamCallback = contracts.StreamCallback
+type ProviderError = contracts.ProviderError
 type Provider = contracts.Provider
 type History = contracts.History
 type EphemeralHistory = contracts.EphemeralHistory

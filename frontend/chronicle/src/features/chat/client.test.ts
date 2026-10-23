@@ -173,6 +173,29 @@ describe("runAgUi", () => {
     await expect(promise).rejects.toMatchObject({ kind: "http", status: 503 });
   });
 
+  it("turns a 401 into a terminal authorization message", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response('{"message":"Unauthorized"}', {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const promise = runAgUi({
+      url: "/api/assistant",
+      body: {},
+      fetch: fetchMock,
+      onEvent: () => undefined,
+    });
+
+    await expect(promise).rejects.toMatchObject({
+      kind: "http",
+      status: 401,
+      message: "Your session has expired or is no longer authorized. Refresh the page or sign in again.",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("bounds non-2xx response details while reading", async () => {
     const promise = runAgUi({
       url: "/api/assistant",
