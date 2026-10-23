@@ -1,0 +1,34 @@
+[
+  {
+    "id": "encounter-multi-select",
+    "content": "Ctrl/Cmd+click encounters to select several fights and combine their metrics."
+  },
+  {
+    "id": "boss-encounter-filter",
+    "content": "Use the Bosses filter to hide trash encounters and focus on boss pulls."
+  },
+  {
+    "id": "encounter-order-toggle",
+    "content": "Switch encounter ordering to move between grouped fights and the chronological raid timeline."
+  },
+  {
+    "id": "entity-selection",
+    "content": "Select players or enemies to filter panels to damage, healing, and events involving those units."
+  },
+  {
+    "id": "role-selection",
+    "content": "Use the Roles panel to select all tanks, healers, or damage dealers at once."
+  },
+  {
+    "id": "panel-focus",
+    "content": "Right-click a supported player row to focus it and open a per-ability breakdown."
+  },
+  {
+    "id": "share-layout",
+    "content": "Layouts can be shared so everyone in a raid can start from the same panel setup."
+  },
+  {
+    "id": "url-state",
+    "content": "Chronicle stores encounter, entity, and panel selections in the URL so you can share the exact view."
+  }
+]
