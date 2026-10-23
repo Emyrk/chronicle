@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Loader2, Youtube, Timer, TriangleAlert } from "lucide-react";
-import { useInstance, useInstanceYoutube, useAuthorizationCheck } from "@/api/queries";
+import { useInstance, useInstanceYoutube, useAuthorizationCheck, useSession } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
 import { InstanceEventsProvider } from "@/hooks/instanceEvents";
 import { DatasetProvider } from "@/hooks/useDatasetId";
@@ -26,7 +26,9 @@ import { useFocusMode } from "@/hooks/useFocusMode";
 import { InstanceAssistantChat } from "@/features/chat/InferenceChats";
 import { AdSuppressionProvider } from "@/components/Ads/AdSuppressionProvider";
 import { AdSlot } from "@/components/Ads/AdSlot";
+import { useAdSiteConfig } from "@/components/Ads/useAdSiteConfig";
 import { getReplayResetTimestamp, type SelectedEncounterTimes } from "./replaySelection";
+import { shouldShowInstanceAdRail } from "./instanceAdRail";
 
 // Types for the Instance page
 export interface EnemyUnit {
@@ -477,6 +479,15 @@ export function InstancePage() {
   const isLoading = instanceLoading;
   const tenantGate = useTenantGate(instance);
   const [focused] = useFocusMode();
+  const { data: session } = useSession();
+  const adSiteConfig = useAdSiteConfig();
+  const ownerAdsFree = apiInstance?.owner_ads_free === true;
+  const showAdRail = shouldShowInstanceAdRail({
+    adsEnabled: adSiteConfig?.ads_enabled === true,
+    focused,
+    ownerAdsFree,
+    viewerAdsFree: session?.ads_free === true,
+  });
 
   if (isLoading) {
     return (
@@ -515,7 +526,7 @@ export function InstancePage() {
   }
 
   return (
-    <AdSuppressionProvider suppressed={apiInstance?.owner_ads_free === true}>
+    <AdSuppressionProvider suppressed={ownerAdsFree}>
     <DatasetProvider datasetId={instance.datasetId} iconBaseUrl={instance.iconBaseUrl}>
     <SyncModeProvider>
       <LiveSessionProvider>
@@ -547,7 +558,7 @@ export function InstancePage() {
                   duplicateGroupId={apiInstance?.duplicate_group_id}
                 />
               </div>
-              {!focused && (
+              {showAdRail && (
                 <div className="hidden w-40 shrink-0 self-start 2xl:sticky 2xl:top-20 2xl:block">
                   <AdSlot
                     placement="instance-right-rail"
