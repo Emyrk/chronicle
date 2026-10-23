@@ -562,6 +562,7 @@ func (api *API) Routes() chi.Router {
 							r.Group(func(r chi.Router) {
 								r.Use(api.Auth.Authenticated(false))
 								r.Post("/reparse", api.WoWLogReparse)
+								r.Get("/profile/download", api.WoWLogParseProfileDownload)
 								r.Delete("/delete-files", api.DeleteWoWLogFiles)
 								r.Delete("/instances/{instance_id}", api.WoWLogDeleteInstance)
 								r.Put("/unlisted", api.MarkLogUnlisted)

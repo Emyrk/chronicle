@@ -1188,6 +1188,8 @@ export interface ReparseLogGroupOptions {
   withDebug?: boolean;
   /** Enable identity mode to collect all creatures/spells (admin only) */
   identityMode?: boolean;
+  /** Capture a parse-only CPU profile (admin only) */
+  profile?: boolean;
   /** Override the log type before reparsing (admin only) */
   logType?: string;
   /** Override the parse format before reparsing (admin only) */
@@ -1200,13 +1202,16 @@ export function useReparseLogGroup() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ logId, withDebug = false, identityMode = false, logType, format, flavor }: ReparseLogGroupOptions) => {
+    mutationFn: async ({ logId, withDebug = false, identityMode = false, profile = false, logType, format, flavor }: ReparseLogGroupOptions) => {
       const url = new URL(`/api/v1/raidlogs/logs/${logId}/reparse`, window.location.origin);
       if (withDebug) {
         url.searchParams.set("verbose", "true");
       }
       if (identityMode) {
         url.searchParams.set("identity_mode", "true");
+      }
+      if (profile) {
+        url.searchParams.set("profile", "true");
       }
       if (logType) {
         url.searchParams.set("log_type", logType);

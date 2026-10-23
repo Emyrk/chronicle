@@ -43,7 +43,7 @@ type reparseOverride struct {
 	Flavor  database.WoWFlavor
 }
 
-func (api *API) enqueueReparseLogGroup(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, override reparseOverride) (int64, error) {
+func (api *API) enqueueReparseLogGroup(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, profile bool, override reparseOverride) (int64, error) {
 	files, err := api.Zed.GetWoWLogFilesByGroupID(ctx, logID)
 	if err != nil {
 		return 0, err
@@ -57,6 +57,12 @@ func (api *API) enqueueReparseLogGroup(ctx context.Context, logID uuid.UUID, ver
 				http.StatusBadRequest,
 			)
 		}
+	}
+
+	// A new reparse supersedes any previous profile, even when this reparse is
+	// not profiled or later fails before reaching the parse phase.
+	if err := api.Chronicle.RemoveParseCPUProfile(ctx, logID); err != nil {
+		return 0, err
 	}
 
 	if override.LogType != nil {
@@ -92,7 +98,7 @@ func (api *API) enqueueReparseLogGroup(ctx context.Context, logID uuid.UUID, ver
 		realmID = meta.UUID
 	}
 
-	res, err := api.Chronicle.EnqueueReParseLog(ctx, logID, verbose, identityMode, realmID)
+	res, err := api.Chronicle.EnqueueReParseLog(ctx, logID, verbose, identityMode, profile, realmID)
 	if err != nil {
 		return 0, err
 	}
@@ -113,13 +119,16 @@ func (api *API) WoWLogReparse(w http.ResponseWriter, r *http.Request) {
 
 	verbose := r.URL.Query().Get("verbose") == "true"
 	identityMode := r.URL.Query().Get("identity_mode") == "true"
-	if identityMode {
-		idActor, _ := authz.ActorFromContext(ctx)
-		isAdmin, adminErr := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_logs_User(idActor))
+	profile := r.URL.Query().Get("profile") == "true"
+	if identityMode || profile {
+		adminActor, _ := authz.ActorFromContext(ctx)
+		isAdmin, adminErr := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_logs_User(adminActor))
 		if adminErr != nil || !isAdmin {
-			httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
-				Message: "Only admins can use identity mode",
-			})
+			message := "Only admins can use identity mode"
+			if profile {
+				message = "Only admins can profile reparses"
+			}
+			httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{Message: message})
 			return
 		}
 	}
@@ -164,7 +173,7 @@ func (api *API) WoWLogReparse(w http.ResponseWriter, r *http.Request) {
 		override.Flavor = parseFlavorParam(fl)
 	}
 
-	jobID, err := api.enqueueReparseLogGroup(ctx, logID, verbose, identityMode, override)
+	jobID, err := api.enqueueReparseLogGroup(ctx, logID, verbose, identityMode, profile, override)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
@@ -178,6 +187,52 @@ func (api *API) WoWLogReparse(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpapi.Write(ctx, w, http.StatusAccepted, jobID)
+}
+
+func (api *API) WoWLogParseProfileDownload(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	logID := httpmw.LogID(ctx)
+	actor, _ := authz.ActorFromContext(ctx)
+
+	isAdmin, err := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_logs_User(actor))
+	if err != nil || !isAdmin {
+		httpapi.Forbidden(w, err)
+		return
+	}
+
+	canView, err := api.Zed.CheckOne(ctx, nil, policy.New().Raid_log(logID).CanView_User(actor))
+	if err != nil || !canView {
+		httpapi.Forbidden(w, err)
+		return
+	}
+
+	available, err := api.Chronicle.CurrentParseCPUProfileAvailable(ctx, logID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if !available {
+		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{Message: "No CPU profile is available for the current parse"})
+		return
+	}
+
+	profile, err := api.Chronicle.DownloadParseCPUProfile(ctx, logID)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to download parse CPU profile",
+				Detail:  err.Error(),
+			},
+			Status: http.StatusNotFound,
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"parse-%s-cpu.pprof\"", logID.String()))
+	w.Header().Set("Content-Length", strconv.Itoa(len(profile)))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(profile)
 }
 
 func (api *API) DeleteWoWLogFiles(w http.ResponseWriter, r *http.Request) {

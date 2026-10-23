@@ -73,6 +73,7 @@ type ArgsLogParse struct {
 	TenantID     uuid.UUID `json:"tenant_id,omitempty"`
 	Verbose      bool      `json:"verbose,omitempty"`
 	IdentityMode bool      `json:"identity_mode,omitempty"`
+	Profile      bool      `json:"profile,omitempty"`
 
 	Replacement           bool        `json:"replacement,omitempty"`
 	PreviousRankingRunIDs []uuid.UUID `json:"previous_ranking_run_ids,omitempty"`
@@ -191,6 +192,11 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse], rankingRunRefresh *rankingRunRefreshPlan) error {
 	if job.Args.TenantID != uuid.Nil {
 		ctx = servicetenant.WithTenantID(ctx, job.Args.TenantID)
+	}
+	if job.Args.Replacement {
+		if err := w.parent.RemoveParseCPUProfile(ctx, job.Args.LogID); err != nil {
+			return fmt.Errorf("clear superseded parse CPU profile: %w", err)
+		}
 	}
 	parseGeneration := effectiveParseGeneration(job.Args.ParseGeneration)
 	jobStart := time.Now()
@@ -382,11 +388,14 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 
 	// ── Parse ────────────────────────────────────────────────────────────
 	reg := w.parent.RegistryForFlavor(flavor)
-	parsed, err := w.parseCombatLog(ctx, logFormat, files, gameDB, reg, job.Args.IdentityMode, preloadedFirst, preRealmName)
+	parsed, profileCaptured, err := w.parseCombatLogWithOptionalCPUProfile(ctx, job.Args.LogID, job.Args.Profile, func() (*parseResult, error) {
+		return w.parseCombatLog(ctx, logFormat, files, gameDB, reg, job.Args.IdentityMode, preloadedFirst, preRealmName)
+	})
 	if err != nil {
 		jobResult = "failure"
 		return err
 	}
+	report.CPUProfileAvailable = profileCaptured
 
 	logCapabilities := parsed.logCapabilities
 	encountersState := parsed.encountersState
@@ -1239,7 +1248,7 @@ func buildIdentityReport(cs *creatures.Creatures) *chroniclesdk.IdentityReport {
 	return rpt
 }
 
-func newArgsLogParse(ctx context.Context, logID uuid.UUID, parseGeneration int64, verbose bool, identityMode bool, realmID uuid.UUID) ArgsLogParse {
+func newArgsLogParse(ctx context.Context, logID uuid.UUID, parseGeneration int64, verbose bool, identityMode bool, profile bool, realmID uuid.UUID) ArgsLogParse {
 	return ArgsLogParse{
 		LogID:           logID,
 		ParseGeneration: parseGeneration,
@@ -1247,18 +1256,19 @@ func newArgsLogParse(ctx context.Context, logID uuid.UUID, parseGeneration int64
 		TenantID:        servicetenant.TenantIDFromContext(ctx),
 		Verbose:         verbose,
 		IdentityMode:    identityMode,
+		Profile:         profile,
 	}
 }
 
-func newReplacementArgsLogParse(ctx context.Context, logID uuid.UUID, parseGeneration int64, verbose bool, identityMode bool, realmID uuid.UUID, previousRankingRunIDs []uuid.UUID) ArgsLogParse {
-	args := newArgsLogParse(ctx, logID, parseGeneration, verbose, identityMode, realmID)
+func newReplacementArgsLogParse(ctx context.Context, logID uuid.UUID, parseGeneration int64, verbose bool, identityMode bool, profile bool, realmID uuid.UUID, previousRankingRunIDs []uuid.UUID) ArgsLogParse {
+	args := newArgsLogParse(ctx, logID, parseGeneration, verbose, identityMode, profile, realmID)
 	args.Replacement = true
 	args.PreviousRankingRunIDs = rankingargs.NormalizeIDs(previousRankingRunIDs)
 	return args
 }
 
 func (c *Chronicle) EnqueueParseLog(ctx context.Context, log database.WoWLogGroup, verbose bool, identityMode bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
-	res, err := c.queue.Insert(ctx, newArgsLogParse(ctx, log.ID, log.ParseGeneration, verbose, identityMode, realmID), &river.InsertOpts{
+	res, err := c.queue.Insert(ctx, newArgsLogParse(ctx, log.ID, log.ParseGeneration, verbose, identityMode, false, realmID), &river.InsertOpts{
 		Tags: []string{
 			fmt.Sprintf("owner_%s", log.Owner.String()),
 		},

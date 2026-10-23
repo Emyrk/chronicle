@@ -345,7 +345,7 @@ func (w *WorkerResync) Work(ctx context.Context, job *river.Job[ArgsResync]) err
 		if err != nil {
 			return fmt.Errorf("advance parse generation: %w", err)
 		}
-		parseArgs := newReplacementArgsLogParse(parseCtx, logGroupID, generation, false, false, parseRealmID, rankingRunLogGroupIdentitySeeds(identities))
+		parseArgs := newReplacementArgsLogParse(parseCtx, logGroupID, generation, false, false, false, parseRealmID, rankingRunLogGroupIdentitySeeds(identities))
 		insertOpts := resyncParseInsertOpts(parseArgs, w.parseQueue)
 		pgxTx, ok := tx.PGXTx()
 		if !ok {

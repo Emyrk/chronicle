@@ -50,8 +50,9 @@ type UploadInput struct {
 }
 
 const (
-	BucketRaidLogs  = "raidlogs"
-	BucketTemporary = "temporary"
+	BucketRaidLogs      = "raidlogs"
+	BucketParseProfiles = "parse-profiles"
+	BucketTemporary     = "temporary"
 )
 
 type Chronicle struct {
@@ -68,6 +69,7 @@ type Chronicle struct {
 	emitParsingLogs    bool
 	registryMu         sync.Mutex
 	registryByFlavor   map[string]*registry.Registry
+	parseProfileMu     sync.RWMutex
 	primaryDomain      string
 	defaultFlavor      database.WoWFlavor
 	defaultDatasetID   uuid.UUID
@@ -188,6 +190,14 @@ func (c *Chronicle) initStorage(ctx context.Context) error {
 	_, err := c.Storage.CreateBucket(ctx, BucketRaidLogs, storage.BucketOptions{
 		Public:           false,
 		AllowedMimeTypes: raidLogMimes,
+	})
+	if err != nil && err.Error() != "The resource already exists" {
+		return err
+	}
+
+	_, err = c.Storage.CreateBucket(ctx, BucketParseProfiles, storage.BucketOptions{
+		Public:           false,
+		AllowedMimeTypes: []string{"application/octet-stream"},
 	})
 	if err != nil && err.Error() != "The resource already exists" {
 		return err
@@ -599,7 +609,7 @@ func (c *Chronicle) AppendServerLog(ctx context.Context, group database.WoWLogGr
 		if !ok {
 			return errors.New("server log part transaction does not expose pgx transaction")
 		}
-		if _, err := c.enqueueReParseLog(ctx, tx, pgxTx, group.ID, false, false, realmID); err != nil {
+		if _, err := c.enqueueReParseLog(ctx, tx, pgxTx, group.ID, false, false, false, realmID); err != nil {
 			return fmt.Errorf("enqueue reparse after server log part: %w", err)
 		}
 		return nil
@@ -802,6 +812,10 @@ func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) erro
 	err = c.RemoveWoWLogFilesFromStorage(ctx, logID)
 	if err != nil {
 		return fmt.Errorf("remove log files from storage: %w", err)
+	}
+
+	if err := c.RemoveParseCPUProfile(ctx, logID); err != nil {
+		return err
 	}
 
 	err = c.Zed.DeleteWoWLogGroup(ctx, logID)

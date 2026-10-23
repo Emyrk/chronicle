@@ -325,7 +325,7 @@ func (api *API) RegressionRequeueVersion(w http.ResponseWriter, r *http.Request)
 
 	requeued := 0
 	for logGroupID := range seen {
-		_, err := api.Chronicle.EnqueueReParseLog(ctx, logGroupID, false, false, uuid.Nil)
+		_, err := api.Chronicle.EnqueueReParseLog(ctx, logGroupID, false, false, false, uuid.Nil)
 		if err != nil {
 			httpapi.InternalServerError(w, err)
 			return

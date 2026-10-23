@@ -234,6 +234,9 @@ type LogParseReport struct {
 
 	// Identity contains all creatures/spells seen, populated only when identity_mode is enabled.
 	Identity *IdentityReport `json:"identity,omitempty"`
+
+	// CPUProfileAvailable indicates that an admin-requested parse CPU profile can be downloaded.
+	CPUProfileAvailable bool `json:"cpu_profile_available,omitempty"`
 }
 
 // MissedSpell holds the count and name of a spell not found in the DBC.

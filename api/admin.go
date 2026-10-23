@@ -725,7 +725,7 @@ func (a *API) AdminBulkReparseLogs(w http.ResponseWriter, r *http.Request) {
 			realmID = meta.UUID
 		}
 
-		if _, err := a.Chronicle.EnqueueReParseLog(ctx, logID, false, false, realmID); err != nil {
+		if _, err := a.Chronicle.EnqueueReParseLog(ctx, logID, false, false, false, realmID); err != nil {
 			resp.Failed = append(resp.Failed, chroniclesdk.AdminBulkLogFailure{
 				LogGroupID: logID,
 				Detail:     err.Error(),
@@ -766,7 +766,7 @@ func (a *API) AdminBulkReparseOutdatedInstances(w http.ResponseWriter, r *http.R
 	}
 
 	for _, row := range rows {
-		_, enqueueErr := a.enqueueReparseLogGroup(ctx, row.LogGroupID, false, false, reparseOverride{})
+		_, enqueueErr := a.enqueueReparseLogGroup(ctx, row.LogGroupID, false, false, false, reparseOverride{})
 		if enqueueErr != nil {
 			resp.Failed = append(resp.Failed, chroniclesdk.AdminBulkReparseFailure{
 				LogGroupID: row.LogGroupID,

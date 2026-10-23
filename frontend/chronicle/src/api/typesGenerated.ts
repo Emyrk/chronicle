@@ -2550,6 +2550,10 @@ export interface LogParseReport {
      * Identity contains all creatures/spells seen, populated only when identity_mode is enabled.
      */
     readonly identity?: IdentityReport;
+    /**
+     * CPUProfileAvailable indicates that an admin-requested parse CPU profile can be downloaded.
+     */
+    readonly cpu_profile_available?: boolean;
 }
 
 // From chroniclesdk/response.go
