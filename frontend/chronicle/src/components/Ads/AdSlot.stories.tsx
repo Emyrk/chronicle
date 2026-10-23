@@ -117,6 +117,11 @@ export const Card: Story = {
   args: {
     placement: "recent-grid-card-1",
     format: "card",
+    renderFallback: ({ state }) => (
+      <a href="#technical-hint" className="flex h-full items-center justify-center rounded-xl border bg-card p-6 text-sm">
+        Technical hint fallback ({state})
+      </a>
+    ),
   },
   render: (args) => (
     <div className="min-h-screen bg-background px-6 py-8 text-foreground">
@@ -149,6 +154,11 @@ export const MobileCard: Story = {
   args: {
     placement: "recent-grid-card-1",
     format: "card",
+    renderFallback: ({ state }) => (
+      <a href="#technical-hint" className="flex h-full items-center justify-center rounded-xl border bg-card p-6 text-sm">
+        Technical hint fallback ({state})
+      </a>
+    ),
   },
   parameters: {
     viewport: { defaultViewport: "mobile1" },

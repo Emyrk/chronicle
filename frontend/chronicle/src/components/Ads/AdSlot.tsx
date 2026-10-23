@@ -1,21 +1,37 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react"
 import { Link } from "react-router-dom"
 import { useSession } from "@/api/queries"
 import { cn } from "@/lib/utils"
 import { shouldShowAdPreview } from "./adPreview"
 import { adSizeLabel, adSizesForFormat, type AdFormat, type RailLayout } from "./adFormats"
+import {
+  adFallbackPresentation,
+  adRequestStateForKey,
+  type AdRequestSnapshot,
+  type AdRequestState,
+} from "./adRequestState"
 import { isAdPlacementDisabled, type AdPlacement } from "./adPolicy"
 import {
+  classifyNitroPayRenderedEvent,
   clearNitroPayAds,
   guardNitroPayReportFrameAccess,
-  isNitroPayRenderedEventForPlacement,
   requestNitroPayAd,
   type NitroPayAd,
 } from "./nitroPay"
 import { useAdSiteConfig } from "./useAdSiteConfig"
 import { useAdsSuppressed } from "./adSuppression"
 
+export type { AdRequestState } from "./adRequestState"
 export type { AdPlacement } from "./adPolicy"
+
+export interface AdFallbackRenderProps {
+  /** The current state of this exact NitroPay request. */
+  state: Exclude<AdRequestState, "filled">
+  /** True only after NitroPay confirms bidder="blank" for this request. */
+  interactive: boolean
+}
+
+export type AdFallbackRenderer = (props: AdFallbackRenderProps) => ReactNode
 
 const formatClasses: Record<AdFormat, string> = {
   responsive: "hidden w-full lg:block",
@@ -120,6 +136,7 @@ export function AdSlot({
   minViewportHeight,
   viewportHeight,
   availableHeight,
+  renderFallback,
   className,
 }: {
   /** Stable hyphenated identifier; use kebab-case for reporting and placement-specific policy. */
@@ -140,12 +157,14 @@ export function AdSlot({
   viewportHeight?: number
   /** Test seam for sidebar size eligibility. Product callers should use viewport measurement. */
   availableHeight?: number
+  /** Render fixed-format content while a live request is unfilled. AdSlot owns its interactivity. */
+  renderFallback?: AdFallbackRenderer
   className?: string
 }) {
   const adSiteConfig = useAdSiteConfig()
   const { data: session, isLoading: sessionLoading } = useSession()
   const adsSuppressed = useAdsSuppressed()
-  const [renderedRequestKey, setRenderedRequestKey] = useState<string>()
+  const [requestSnapshot, setRequestSnapshot] = useState<AdRequestSnapshot>()
   const slotRef = useRef<HTMLElement>(null)
   const measuredAvailableHeight = useSidebarViewportHeight(format === "sidebar", slotRef)
   const sidebarAvailableHeight = availableHeight ?? measuredAvailableHeight
@@ -175,7 +194,13 @@ export function AdSlot({
     !placementDisabled &&
     viewportHeightEligible
   const requestKey = `${adID}:${eligibleSizes.map((size) => size.join("x")).join(",")}`
-  const liveCreativeRendered = renderedRequestKey === requestKey
+  const requestState = adRequestStateForKey(requestSnapshot, requestKey)
+  const liveCreativeRendered = requestState === "filled"
+  const usesFallbackFrame = Boolean(renderFallback) && format !== "responsive" && !showPreview && !showDemo
+  const fallbackPresentation = adFallbackPresentation(requestState)
+  const fallbackVisible = usesFallbackFrame && fallbackPresentation.visible
+  const fallbackState = requestState === "filled" ? undefined : requestState
+  const fallbackInteractive = fallbackPresentation.interactive
   const adLabelVisible = showPreview || showDemo || liveCreativeRendered
 
   useEffect(() => {
@@ -183,9 +208,12 @@ export function AdSlot({
 
     let active = true
     let ads: NitroPayAd[] = []
+    setRequestSnapshot({ key: requestKey, state: "pending" })
+
     const handleRendered = (event: Event) => {
-      if (isNitroPayRenderedEventForPlacement(event, adID)) {
-        setRenderedRequestKey(requestKey)
+      const result = classifyNitroPayRenderedEvent(event, adID)
+      if (result !== "unrelated") {
+        setRequestSnapshot({ key: requestKey, state: result })
       }
     }
     document.addEventListener("nitroAds.rendered", handleRendered)
@@ -199,6 +227,9 @@ export function AdSlot({
         ads = createdAds
       })
       .catch((error: unknown) => {
+        if (active) {
+          setRequestSnapshot({ key: requestKey, state: "error" })
+        }
         console.error(`Unable to load NitroPay placement ${placement}`, error)
       })
 
@@ -232,6 +263,7 @@ export function AdSlot({
       data-ad-provider={showPreview ? "preview" : "nitropay"}
       data-ad-demo={showDemo || undefined}
       data-ad-rendered={!showPreview && !showDemo ? liveCreativeRendered : undefined}
+      data-ad-request-state={!showPreview && !showDemo ? requestState : undefined}
     >
       <div>
         {adSiteConfig?.billing_enabled ? (
@@ -261,37 +293,107 @@ export function AdSlot({
             Advertisement
           </div>
         )}
-        <div
-          id={adID}
-          onClickCapture={(event) => guardNitroPayReportFrameAccess(event.currentTarget, event.target)}
-          className={cn(
-            showPreview
-              ? "relative flex items-center justify-center overflow-hidden rounded-md border border-dashed border-border/60 bg-muted/10"
-              : showDemo
-                ? "relative flex items-center justify-center overflow-hidden rounded-md border border-dashed border-[#f0c060]/35 bg-[#f0c060]/5 [&>iframe]:relative [&>iframe]:z-10 [&>iframe]:!bg-transparent"
-                : cn(
-                    "!bg-transparent [&>iframe]:!bg-transparent",
-                    liveCreativeRendered ? "opacity-100" : "pointer-events-none opacity-0",
-                  ),
-            format === "sidebar" && "flex justify-center",
-            (showPreview || showDemo || format !== "responsive") && frameClasses[format],
-            (format === "card" || format === "adaptive") && (compactCard ? "h-[100px]" : "h-[250px]"),
-          )}
-        >
-          {(showPreview || showDemo) && (
-            <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
-              <div className="absolute inset-0 opacity-[0.025] [background-image:linear-gradient(135deg,currentColor_12.5%,transparent_12.5%,transparent_50%,currentColor_50%,currentColor_62.5%,transparent_62.5%,transparent)] [background-size:12px_12px]" />
-              <div className={cn("relative text-center", showDemo ? "text-[#f0c060]/70" : "text-muted-foreground/55")}>
-                <p className="text-[10px] font-medium uppercase tracking-[0.16em]">
-                  {showDemo ? "NitroPay demo" : "Ad preview"}
-                </p>
-                <p className="mt-1 font-mono text-[10px]">
-                  {adSizeLabel(format, wideRail, compactCard, sidebarAvailableHeight)}
-                </p>
+{usesFallbackFrame ? (
+          <div
+            className={cn(
+              "relative overflow-hidden",
+              format === "sidebar" && "flex justify-center",
+              frameClasses[format],
+              (format === "card" || format === "adaptive") && (compactCard ? "h-[100px]" : "h-[250px]"),
+            )}
+          >
+            <div
+              id={adID}
+              onClickCapture={(event) => guardNitroPayReportFrameAccess(event.currentTarget, event.target)}
+              className={cn(
+                "absolute inset-0 !bg-transparent [&>iframe]:!bg-transparent",
+                liveCreativeRendered ? "opacity-100" : "pointer-events-none opacity-0",
+              )}
+            />
+            {fallbackVisible && fallbackState && renderFallback && (
+              <div
+                data-ad-fallback=""
+                data-ad-fallback-interactive={fallbackInteractive}
+                aria-hidden={fallbackPresentation.ariaHidden}
+                inert={fallbackPresentation.inert}
+                className={cn(
+                  "absolute inset-0 overflow-hidden",
+                  !fallbackInteractive && "pointer-events-none select-none",
+                )}
+              >
+                {renderFallback({ state: fallbackState, interactive: fallbackInteractive })}
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        ) : (
+          <div
+            id={adID}
+            onClickCapture={(event) => guardNitroPayReportFrameAccess(event.currentTarget, event.target)}
+            className={cn(
+              showPreview
+                ? "relative flex items-center justify-center overflow-hidden rounded-md border border-dashed border-border/60 bg-muted/10"
+                : showDemo
+                  ? "relative flex items-center justify-center overflow-hidden rounded-md border border-dashed border-[#f0c060]/35 bg-[#f0c060]/5 [&>iframe]:relative [&>iframe]:z-10 [&>iframe]:!bg-transparent"
+                  : cn(
+                      "!bg-transparent [&>iframe]:!bg-transparent",
+                      liveCreativeRendered ? "opacity-100" : "pointer-events-none opacity-0",
+                    ),
+              format === "sidebar" && "flex justify-center",
+              (showPreview || showDemo || format !== "responsive") && frameClasses[format],
+              (format === "card" || format === "adaptive") && (compactCard ? "h-[100px]" : "h-[250px]"),
+            )}
+          >
+            {(showPreview || showDemo) && (
+              <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+                <div className="absolute inset-0 opacity-[0.025] [background-image:linear-gradient(135deg,currentColor_12.5%,transparent_12.5%,transparent_50%,currentColor_50%,currentColor_62.5%,transparent_62.5%,transparent)] [background-size:12px_12px]" />
+                <div className={cn("relative text-center", showDemo ? "text-[#f0c060]/70" : "text-muted-foreground/55")}>
+                  <p className="text-[10px] font-medium uppercase tracking-[0.16em]">
+                    {showDemo ? "NitroPay demo" : "Ad preview"}
+                  </p>
+                  <p className="mt-1 font-mono text-[10px]">
+                    {adSizeLabel(format, wideRail, compactCard, sidebarAvailableHeight)}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div
+            id={adID}
+            onClickCapture={(event) => guardNitroPayReportFrameAccess(event.currentTarget, event.target)}
+            className={cn(
+              showPreview
+                ? "relative flex items-center justify-center overflow-hidden rounded-md border border-dashed border-border/60 bg-muted/10"
+                : showDemo
+                  ? "relative flex items-center justify-center overflow-hidden rounded-md border border-dashed border-[#f0c060]/35 bg-[#f0c060]/5 [&>iframe]:relative [&>iframe]:z-10 [&>iframe]:!bg-transparent"
+                  : cn(
+                      "!bg-transparent [&>iframe]:!bg-transparent",
+                      liveCreativeRendered ? "opacity-100" : "pointer-events-none opacity-0",
+                    ),
+              format === "sidebar" && "flex justify-center",
+              (showPreview || showDemo || format !== "responsive") && frameClasses[format],
+              format === "card" && (compactCard ? "h-[100px]" : "h-[250px]"),
+            )}
+          >
+            {(showPreview || showDemo) && (
+              <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+                <div className="absolute inset-0 opacity-[0.025] [background-image:linear-gradient(135deg,currentColor_12.5%,transparent_12.5%,transparent_50%,currentColor_50%,currentColor_62.5%,transparent_62.5%,transparent)] [background-size:12px_12px]" />
+                <div className={cn("relative text-center", showDemo ? "text-[#f0c060]/70" : "text-muted-foreground/55")}>
+                  <p className="text-[10px] font-medium uppercase tracking-[0.16em]">
+                    {showDemo ? "NitroPay demo" : "Ad preview"}
+                  </p>
+                  <p className="mt-1 font-mono text-[10px]">
+                    {adSizeLabel(format, wideRail, compactCard, sidebarAvailableHeight)}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </aside>
   )
