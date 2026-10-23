@@ -461,10 +461,10 @@ func (h *Hookable) UpdateZoneDifficulty(z zone.Zone) {
 }
 
 // ShouldStartNewRun reports whether a later entry into the same zone should
-// start a new parsed instance. The current run must be complete and inactive
-// for its configured re-entry gap.
+// start a new parsed instance. A qualified run uses its configured gap; killing
+// every required boss lowers longer gaps to the boss-completion gap.
 func (h *Hookable) ShouldStartNewRun(at time.Time) bool {
-	completedAt, gap, ok := h.completedSpeedrunBoundary()
+	completedAt, gap, ok := h.speedrunReentryBoundary()
 	if !ok {
 		return false
 	}
@@ -475,7 +475,7 @@ func (h *Hookable) ShouldStartNewRun(at time.Time) bool {
 	return at.Sub(lastActivity) > gap
 }
 
-func (h *Hookable) completedSpeedrunBoundary() (time.Time, time.Duration, bool) {
+func (h *Hookable) speedrunReentryBoundary() (time.Time, time.Duration, bool) {
 	var completedAt time.Time
 	var gap time.Duration
 	trackers := make([]*rankings.SpeedrunTracker, 0, 1+len(h.derivedSpeedrunTrackers))
@@ -486,12 +486,12 @@ func (h *Hookable) completedSpeedrunBoundary() (time.Time, time.Duration, bool) 
 		trackers = append(trackers, tracker)
 	}
 	for _, tracker := range trackers {
-		at, complete := tracker.CompletedAt()
+		at, trackerGap, complete := tracker.ReentryBoundary()
 		if !complete || (!completedAt.IsZero() && !at.After(completedAt)) {
 			continue
 		}
 		completedAt = at
-		gap = tracker.ReentryGap()
+		gap = trackerGap
 	}
 	return completedAt, gap, !completedAt.IsZero()
 }

@@ -32,11 +32,13 @@ type requirementState struct {
 type SpeedrunTracker struct {
 	instancehook.BaseHook
 
-	rules       SpeedrunRules
-	entryToRule map[uint32]int // entry ID → index into rules.Requirements
-	state       []requirementState
-	remaining   int // unsatisfied requirements remaining
-	seenGUIDs   map[guid.GUID]struct{}
+	rules              SpeedrunRules
+	entryToRule        map[uint32]int // entry ID → index into rules.Requirements
+	state              []requirementState
+	remaining          int // unsatisfied requirements remaining
+	bossesRemaining    int // unsatisfied non-trash requirements remaining
+	seenGUIDs          map[guid.GUID]struct{}
+	bossCompletionTime time.Time
 
 	units      *unitdb.Units      // may be nil in tests
 	engagement *EngagementTracker // may be nil in tests
@@ -57,10 +59,14 @@ type SpeedrunTracker struct {
 
 func NewSpeedrunTracker(rules SpeedrunRules, units *unitdb.Units, engagement *EngagementTracker) *SpeedrunTracker {
 	entryToRule := make(map[uint32]int)
+	bossesRemaining := 0
 	rankedStartAfterRequirementIndex := -1
 	for i, req := range rules.Requirements {
 		for _, eid := range req.EntryIDs {
 			entryToRule[eid] = i
+		}
+		if req.Category != SpeedrunCategoryTrash {
+			bossesRemaining++
 		}
 		if req.Name == rules.RankedStartAfterRequirement {
 			rankedStartAfterRequirementIndex = i
@@ -71,6 +77,7 @@ func NewSpeedrunTracker(rules SpeedrunRules, units *unitdb.Units, engagement *En
 		entryToRule:                      entryToRule,
 		state:                            make([]requirementState, len(rules.Requirements)),
 		remaining:                        len(rules.Requirements),
+		bossesRemaining:                  bossesRemaining,
 		seenGUIDs:                        make(map[guid.GUID]struct{}),
 		units:                            units,
 		engagement:                       engagement,
@@ -128,6 +135,7 @@ func (t *SpeedrunTracker) ActivityChange(m messages.Message, chars ...characters
 			rs.satisfied = true
 			t.remaining--
 			if t.rules.Requirements[ruleIdx].Category != SpeedrunCategoryTrash {
+				t.bossesRemaining--
 				t.currentFightSatisfiedBoss = true
 				if ruleIdx == t.rankedStartAfterRequirementIndex {
 					t.currentFightSatisfiedRankedStart = true
@@ -177,6 +185,9 @@ func (t *SpeedrunTracker) FightEnded(encounterID uuid.UUID, m messages.Message) 
 		t.completionTime = m.Date()
 		t.rankedCompletionTime = m.Date()
 		t.bossToBossCompletionTime = m.Date()
+		if t.bossesRemaining == 0 && t.bossCompletionTime.IsZero() {
+			t.bossCompletionTime = m.Date()
+		}
 	}
 
 	if t.remaining != 0 {
@@ -210,6 +221,31 @@ func (t *SpeedrunTracker) Finalize(_ context.Context) error { return nil }
 // CompletedAt returns the completion timestamp and whether the run completed.
 func (t *SpeedrunTracker) CompletedAt() (time.Time, bool) {
 	return t.completionTime, t.completed
+}
+
+// BossesCompletedAt returns the end of the fight that satisfied the final
+// non-trash requirement. Speedrun qualification may still be pending on trash.
+func (t *SpeedrunTracker) BossesCompletedAt() (time.Time, bool) {
+	return t.bossCompletionTime, !t.bossCompletionTime.IsZero()
+}
+
+// ReentryBoundary returns the earliest completed-run policy that permits a
+// later zone entry to start a new parsed instance. Killing every required boss
+// lowers long raid gaps to one hour, while preserving shorter configured gaps.
+func (t *SpeedrunTracker) ReentryBoundary() (time.Time, time.Duration, bool) {
+	completedAt, completed := t.CompletedAt()
+	gap := t.ReentryGap()
+
+	bossesCompletedAt, bossesCompleted := t.BossesCompletedAt()
+	if bossesCompleted {
+		if !completed || bossesCompletedAt.Before(completedAt) {
+			completedAt = bossesCompletedAt
+		}
+		gap = min(gap, BossCompletionReentryGap)
+		completed = true
+	}
+
+	return completedAt, gap, completed
 }
 
 // ReentryGap returns the inactivity gap required before a later entry starts a

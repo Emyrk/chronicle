@@ -7,8 +7,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
 func completedHookable(completedAt, lastActivity time.Time, reentryGap time.Duration) *Hookable {
@@ -21,6 +23,41 @@ func completedHookable(completedAt, lastActivity time.Time, reentryGap time.Dura
 	}
 }
 
+type slainReentryCharacter struct {
+	id guid.GUID
+}
+
+func (c *slainReentryCharacter) ID() guid.GUID                       { return c.id }
+func (c *slainReentryCharacter) IsActive() bool                      { return false }
+func (c *slainReentryCharacter) String() string                      { return c.id.String() }
+func (c *slainReentryCharacter) Died(string, messages.Message)       {}
+func (c *slainReentryCharacter) Process(messages.Message) error      { return nil }
+func (c *slainReentryCharacter) Periods() []period.Period            { return nil }
+func (c *slainReentryCharacter) RecentlySlain(messages.Message) bool { return false }
+func (c *slainReentryCharacter) LastEndState() period.EndState       { return period.EndStateSlain }
+func (c *slainReentryCharacter) SetPeriodHook(period.Hook)           {}
+func (c *slainReentryCharacter) CurrentPeriod() (period.Period, bool) {
+	return period.Period{EndState: period.EndStateSlain}, true
+}
+
+func bossesCompletedHookable(completedAt, lastActivity time.Time, reentryGap time.Duration) *Hookable {
+	const bossEntry uint32 = 1
+	rules := rankings.SpeedrunRules{
+		Requirements: []rankings.SpeedrunRequirement{
+			{Name: "Boss", EntryIDs: []uint32{bossEntry}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+			{Name: "Trailing Trash", EntryIDs: []uint32{2}, Count: 1, Category: rankings.SpeedrunCategoryTrash},
+		},
+		ReentryGap: reentryGap,
+	}
+	tracker := rankings.NewSpeedrunTracker(rules, nil, nil)
+	tracker.FightStarted(uuid.New(), messages.TimedOut(completedAt.Add(-time.Minute)))
+	tracker.ActivityChange(messages.TimedOut(completedAt), &slainReentryCharacter{
+		id: guid.GUID(0xF130000000000000 | uint64(bossEntry)<<24 | 1),
+	})
+	tracker.FightEnded(uuid.New(), messages.TimedOut(completedAt))
+	return &Hookable{speedrunTracker: tracker, lastActivity: lastActivity}
+}
+
 func TestHookableShouldStartNewRun(t *testing.T) {
 	t.Parallel()
 
@@ -31,6 +68,20 @@ func TestHookableShouldStartNewRun(t *testing.T) {
 		h := completedHookable(completedAt, completedAt, 0)
 		assert.False(t, h.ShouldStartNewRun(completedAt.Add(24*time.Hour)))
 		assert.True(t, h.ShouldStartNewRun(completedAt.Add(24*time.Hour+time.Millisecond)))
+	})
+
+	t.Run("all raid bosses killed allows reentry after one hour", func(t *testing.T) {
+		t.Parallel()
+		h := bossesCompletedHookable(completedAt, completedAt, 0)
+		assert.False(t, h.ShouldStartNewRun(completedAt.Add(time.Hour)))
+		assert.True(t, h.ShouldStartNewRun(completedAt.Add(time.Hour+time.Millisecond)))
+	})
+
+	t.Run("configured shorter gap still applies after all bosses", func(t *testing.T) {
+		t.Parallel()
+		h := bossesCompletedHookable(completedAt, completedAt, rankings.DungeonReentryGap)
+		assert.False(t, h.ShouldStartNewRun(completedAt.Add(rankings.DungeonReentryGap)))
+		assert.True(t, h.ShouldStartNewRun(completedAt.Add(rankings.DungeonReentryGap+time.Millisecond)))
 	})
 
 	t.Run("dungeon requires more than fifteen minutes", func(t *testing.T) {
