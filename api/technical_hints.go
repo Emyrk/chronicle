@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -50,7 +51,18 @@ func (api *API) TechnicalHints(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	cacheKey := servicetenant.TenantIDFromContext(ctx).String()
 
+	var assets staticHintAssetReader
+	if api.Opts != nil {
+		assets = api.Opts.Assets
+	}
 	response, err := api.technicalHints.get(cacheKey, now, func() (chroniclesdk.TechnicalHintsResponse, error) {
+		static, staticErr := loadStaticTechnicalHints(assets)
+		if staticErr != nil {
+			static = nil
+			if api.Opts != nil && api.Opts.Logger != nil {
+				api.Opts.Logger.WarnContext(ctx, "technical hint assets unavailable", "error", staticErr)
+			}
+		}
 		dynamic, err := buildDynamicTechnicalHints(ctx, api.technicalHintsStore, now)
 		if err != nil {
 			return chroniclesdk.TechnicalHintsResponse{}, err
@@ -60,15 +72,12 @@ func (api *API) TechnicalHints(w http.ResponseWriter, r *http.Request) {
 			Version:      technicalHintsVersion,
 			GeneratedAt:  now,
 			RefreshAfter: now.Add(technicalHintsCacheTTL),
-			Payloads:     mergeTechnicalHints(staticTechnicalHints(), dynamic),
+			Payloads:     mergeTechnicalHints(static, dynamic),
 		}, nil
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
-			Response: chroniclesdk.Response{
-				Message: "Failed to fetch technical hints",
-				Detail:  err.Error(),
-			},
+			Response: chroniclesdk.Response{Message: "Failed to fetch technical hints"},
 		})
 		return
 	}
@@ -79,23 +88,32 @@ func (api *API) TechnicalHints(w http.ResponseWriter, r *http.Request) {
 
 func (cache *technicalHintsCache) get(key string, now time.Time, load func() (chroniclesdk.TechnicalHintsResponse, error)) (chroniclesdk.TechnicalHintsResponse, error) {
 	cache.mu.Lock()
-	defer cache.mu.Unlock()
-
 	if entry, ok := cache.entries[key]; ok && now.Before(entry.expiresAt) {
+		cache.mu.Unlock()
 		return entry.response, nil
 	}
+	cache.mu.Unlock()
 
+	// Do not hold the global cache lock during asset or database I/O. Concurrent
+	// misses may duplicate a refresh, but one slow tenant cannot block the rest.
 	response, err := load()
 	if err != nil {
 		return chroniclesdk.TechnicalHintsResponse{}, err
 	}
+
+	cache.mu.Lock()
 	if cache.entries == nil {
 		cache.entries = make(map[string]technicalHintsCacheEntry)
 	}
-	cache.entries[key] = technicalHintsCacheEntry{
-		response:  response,
-		expiresAt: now.Add(technicalHintsCacheTTL),
+	if current, ok := cache.entries[key]; ok && current.response.GeneratedAt.After(response.GeneratedAt) {
+		response = current.response
+	} else {
+		cache.entries[key] = technicalHintsCacheEntry{
+			response:  response,
+			expiresAt: now.Add(technicalHintsCacheTTL),
+		}
 	}
+	cache.mu.Unlock()
 	return response, nil
 }
 
@@ -151,9 +169,114 @@ func buildDynamicTechnicalHints(ctx context.Context, store technicalHintsStore, 
 	return payloads, nil
 }
 
-func staticTechnicalHints() []chroniclesdk.TechnicalHint {
-	// Static generated-asset payloads are intentionally integrated here later.
+type staticHintAssetReader interface {
+	ReadFile(string) ([]byte, error)
+}
+
+type generalTipAsset struct {
+	ID      string `json:"id"`
+	Content string `json:"content"`
+}
+
+type panelHintAsset struct {
+	ID      string `json:"id"`
+	PanelID string `json:"panelID"`
+	Content string `json:"content"`
+}
+
+type blogPostAsset struct {
+	ID          string     `json:"id"`
+	Title       string     `json:"title"`
+	Description string     `json:"description"`
+	Tag         string     `json:"tag"`
+	Icon        string     `json:"icon"`
+	PublishedAt string     `json:"publishedAt"`
+	FlavorSets  [][]string `json:"flavorSets"`
+}
+
+func loadStaticTechnicalHints(reader staticHintAssetReader) ([]chroniclesdk.TechnicalHint, error) {
+	if reader == nil {
+		return nil, nil
+	}
+
+	var tips []generalTipAsset
+	if err := readTechnicalHintAsset(reader, "general-tips.json", &tips); err != nil {
+		return nil, err
+	}
+	var panels []panelHintAsset
+	if err := readTechnicalHintAsset(reader, "panel-hints.json", &panels); err != nil {
+		return nil, err
+	}
+	var posts []blogPostAsset
+	if err := readTechnicalHintAsset(reader, "blog-posts.json", &posts); err != nil {
+		return nil, err
+	}
+
+	payloads := make([]chroniclesdk.TechnicalHint, 0, len(tips)+len(panels)+len(posts))
+	for _, tip := range tips {
+		if tip.ID == "" || tip.Content == "" {
+			continue
+		}
+		payloads = append(payloads, chroniclesdk.TechnicalHint{
+			ID:    "tip-" + tip.ID,
+			Kind:  chroniclesdk.TechnicalHintKindTip,
+			Title: humanizeHintID(tip.ID),
+			Body:  tip.Content,
+			Href:  "/technical#chronicle-tips",
+			Tags:  []string{"tip"},
+		})
+	}
+	for _, panel := range panels {
+		if panel.ID == "" || panel.PanelID == "" || panel.Content == "" {
+			continue
+		}
+		payloads = append(payloads, chroniclesdk.TechnicalHint{
+			ID:          "panel-" + panel.ID,
+			Kind:        chroniclesdk.TechnicalHintKindPanel,
+			Title:       humanizeHintID(panel.PanelID),
+			Body:        panel.Content,
+			Href:        "/technical#panel-insights",
+			ActionLabel: "See panel insights",
+			Panel:       panel.PanelID,
+			Tags:        []string{"panel", panel.PanelID},
+		})
+	}
+	for _, post := range posts {
+		if post.ID == "" || post.Title == "" || post.Description == "" {
+			continue
+		}
+		payloads = append(payloads, chroniclesdk.TechnicalHint{
+			ID:          "blog-" + post.ID,
+			Kind:        chroniclesdk.TechnicalHintKindBlog,
+			Title:       post.Title,
+			Body:        post.Description,
+			Href:        "/blog/" + post.ID,
+			ActionLabel: "Read the article",
+			Icon:        post.Icon,
+			BlogID:      post.ID,
+			Tags:        []string{"blog", post.Tag},
+		})
+	}
+	return payloads, nil
+}
+
+func readTechnicalHintAsset(reader staticHintAssetReader, filename string, target any) error {
+	data, err := reader.ReadFile(filename)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", filename, err)
+	}
+	if err := json.Unmarshal(data, target); err != nil {
+		return fmt.Errorf("decode %s: %w", filename, err)
+	}
 	return nil
+}
+
+func humanizeHintID(id string) string {
+	words := strings.ReplaceAll(strings.ReplaceAll(id, "-", " "), "_", " ")
+	if words == "" {
+		return "Chronicle tip"
+	}
+	return strings.ToUpper(words[:1]) + words[1:]
 }
 
 func mergeTechnicalHints(static, dynamic []chroniclesdk.TechnicalHint) []chroniclesdk.TechnicalHint {
