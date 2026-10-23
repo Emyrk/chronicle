@@ -202,7 +202,7 @@ func TestAgentLoopTextAndToolCall(t *testing.T) {
 	var persisted []Message
 	var persistBatches []int
 	s := &Service{}
-	usage, err := s.agentLoop(context.Background(), writer, provider, nil, "model", assistants["site-help"], []Message{{Role: RoleUser, Content: "Where are rankings?"}}, toolContext{service: s}, func(messages ...Message) error {
+	usage, err := s.agentLoop(context.Background(), writer, provider, nil, "model", assistants["site-help"], []Message{{Role: RoleUser, Content: "Where are rankings?"}}, toolContext{service: s}, debugRunContext{}, func(messages ...Message) error {
 		persistBatches = append(persistBatches, len(messages))
 		persisted = append(persisted, messages...)
 		return nil
@@ -219,6 +219,90 @@ func TestAgentLoopTextAndToolCall(t *testing.T) {
 	for _, event := range []string{"TOOL_CALL_START", "TOOL_CALL_ARGS", "TOOL_CALL_END", "TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT", "TEXT_MESSAGE_END"} {
 		require.True(t, strings.Contains(body, event), event)
 	}
+	require.NotContains(t, body, "DEBUG_SNAPSHOT")
+}
+
+func debugSnapshots(t *testing.T, stream string) []agui.DebugSnapshotEvent {
+	t.Helper()
+	var snapshots []agui.DebugSnapshotEvent
+	for _, line := range strings.Split(stream, "\n") {
+		if !strings.HasPrefix(line, "data: ") || !strings.Contains(line, `"type":"DEBUG_SNAPSHOT"`) {
+			continue
+		}
+		var snapshot agui.DebugSnapshotEvent
+		require.NoError(t, json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &snapshot))
+		snapshots = append(snapshots, snapshot)
+	}
+	return snapshots
+}
+
+func TestAgentLoopDebugSnapshotsMatchProviderRequestsAndResults(t *testing.T) {
+	t.Parallel()
+	provider := &scriptedProvider{streams: [][]StreamEvent{
+		{{Type: StreamEventToolCallDelta, ToolCall: ToolCallDelta{Index: 0, ID: "call-1", Name: "list_pages", Arguments: "{}"}}, {Type: StreamEventUsage, Usage: Usage{PromptTokens: 3, CompletionTokens: 1, TotalTokens: 4}}, {Type: StreamEventFinish, FinishReason: FinishReasonToolCalls}},
+		{{Type: StreamEventTextDelta, Text: "Use Rankings."}, {Type: StreamEventUsage, Usage: Usage{PromptTokens: 4, CompletionTokens: 2, TotalTokens: 6}}, {Type: StreamEventFinish, FinishReason: FinishReasonStop}},
+	}}
+	var stream bytes.Buffer
+	writer := agui.NewStreamWriter(&stream, nil)
+	s := &Service{}
+	debug := debugRunContext{Enabled: true, RunID: "run-1", Persistence: "ephemeral"}
+	usage, err := s.agentLoop(context.Background(), writer, provider, []byte("provider-secret"), "provider/model", assistants["site-help"], []Message{{Role: RoleUser, Content: "Where are rankings?"}}, toolContext{service: s}, debug, func(...Message) error { return nil })
+	require.NoError(t, err)
+	require.Equal(t, Usage{PromptTokens: 7, CompletionTokens: 3, TotalTokens: 10}, usage)
+	require.NotContains(t, stream.String(), "provider-secret")
+
+	snapshots := debugSnapshots(t, stream.String())
+	require.Len(t, snapshots, 4)
+	request := snapshots[0]
+	require.Equal(t, "request", request.Phase)
+	require.Equal(t, "run-1", request.RunID)
+	require.Equal(t, "provider/model", request.Model)
+	require.Equal(t, "ephemeral", request.Persistence)
+	require.Equal(t, assistants["site-help"].System, request.Messages[0].Content)
+	require.Equal(t, "Where are rankings?", request.Messages[1].Content)
+	require.Equal(t, "list_pages", request.Tools[0].Name)
+	require.Empty(t, request.Skills)
+	require.Equal(t, maxHistoryMessages, request.Limits.MaxHistoryMessages)
+	require.Equal(t, maxToolOutput, request.Limits.MaxToolOutput)
+	require.Equal(t, agui.DebugUsage{}, request.Usage)
+
+	toolResults := snapshots[1]
+	require.Equal(t, "tool_results", toolResults.Phase)
+	require.Len(t, toolResults.Messages, 4)
+	require.Equal(t, "list_pages", toolResults.Messages[2].ToolCalls[0].Name)
+	require.Equal(t, "tool", toolResults.Messages[3].Role)
+	require.Contains(t, toolResults.Messages[3].Content, "/leaderboards/statistics")
+	require.Equal(t, agui.DebugUsage{PromptTokens: 3, CompletionTokens: 1, TotalTokens: 4}, toolResults.Usage)
+
+	nextRequest := snapshots[2]
+	require.Equal(t, "request", nextRequest.Phase)
+	require.Equal(t, toolResults.Messages, nextRequest.Messages)
+
+	response := snapshots[3]
+	require.Equal(t, "response", response.Phase)
+	require.Equal(t, "Use Rankings.", response.Messages[len(response.Messages)-1].Content)
+	require.Equal(t, agui.DebugUsage{PromptTokens: 7, CompletionTokens: 3, TotalTokens: 10}, response.Usage)
+}
+
+func TestInferenceDebugRequiresPermissionBeforeDatabaseAccess(t *testing.T) {
+	t.Parallel()
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	userID := uuid.New()
+	require.NoError(t, zed.SetUserChronicleRoles(testutil.Context(t, testutil.WaitLong), userID, []string{"inference_capable"}))
+
+	service := &Service{zed: zed, logger: slog.Default()}
+	body := `{"run_id":"run-1","debug":true,"connection_id":"00000000-0000-0000-0000-000000000001","model":"provider/model","assistant_id":"site-help","messages":[{"role":"user","content":"help"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(chronauth.WithClaims(req.Context(), &claims.Claims{Subject: userID}))
+	recorder := httptest.NewRecorder()
+
+	// The service intentionally has no database, cipher, or provider. A 403 proves
+	// debug authorization happens before any of those dependencies are touched.
+	service.run(recorder, req)
+	require.Equal(t, http.StatusForbidden, recorder.Code, recorder.Body.String())
+	require.Contains(t, recorder.Body.String(), "debug access is not enabled")
 }
 
 func TestAgentLoopDoesNotEndMessageBeforePersistence(t *testing.T) {
@@ -230,7 +314,7 @@ func TestAgentLoopDoesNotEndMessageBeforePersistence(t *testing.T) {
 	var stream bytes.Buffer
 	writer := agui.NewStreamWriter(&stream, nil)
 	sentinel := errors.New("persist failed")
-	_, err := (&Service{}).agentLoop(context.Background(), writer, provider, nil, "model", assistants["site-help"], []Message{{Role: RoleUser, Content: "question"}}, toolContext{}, func(...Message) error {
+	_, err := (&Service{}).agentLoop(context.Background(), writer, provider, nil, "model", assistants["site-help"], []Message{{Role: RoleUser, Content: "question"}}, toolContext{}, debugRunContext{}, func(...Message) error {
 		return sentinel
 	})
 	require.ErrorIs(t, err, sentinel)

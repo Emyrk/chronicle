@@ -10,12 +10,14 @@ export interface InferenceSelection {
 export function buildSiteHelpRunRequest(
   input: CreateChatRunRequestInput,
   selection: InferenceSelection,
+  debug = false,
 ): InferenceRunRequest {
   return {
     run_id: input.runId,
     connection_id: selection.connectionId,
     model: selection.modelId,
     assistant_id: "site-help",
+    ...(debug ? { debug: true } : {}),
     messages: input.messages.map(toInferenceMessage),
   };
 }
@@ -24,6 +26,7 @@ export function buildInstanceAnalystRunRequest(
   input: CreateChatRunRequestInput,
   selection: InferenceSelection,
   instanceId: string,
+  debug = false,
 ): InferenceRunRequest {
   const message = input.messages.at(-1);
   if (!message || message.role !== "user") {
@@ -34,6 +37,7 @@ export function buildInstanceAnalystRunRequest(
     connection_id: selection.connectionId,
     model: selection.modelId,
     assistant_id: "instance-analyst",
+    ...(debug ? { debug: true } : {}),
     thread_id: input.threadId,
     instance: instanceId,
     message: toInferenceMessage(message),

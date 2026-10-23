@@ -42,6 +42,13 @@ describe("inference request builders", () => {
     });
   });
 
+  it("only requests debug snapshots when the authorized toggle is enabled", () => {
+    expect(buildSiteHelpRunRequest(input, selection, true)).toMatchObject({ debug: true });
+    expect(buildInstanceAnalystRunRequest(input, selection, "instance-1", true)).toMatchObject({ debug: true });
+    expect(buildSiteHelpRunRequest(input, selection)).not.toHaveProperty("debug");
+    expect(buildInstanceAnalystRunRequest(input, selection, "instance-1")).not.toHaveProperty("debug");
+  });
+
   it("maps only visible user and assistant messages from durable history", () => {
     expect(toChatMessages([
       { id: "1", role: "system", content: "hidden" },

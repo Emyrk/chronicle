@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/services/serviceinference/agui"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -29,6 +30,7 @@ const (
 	maxToolCalls       = 10
 	maxToolArguments   = 16 << 10
 	maxToolOutput      = 64 << 10
+	maxAssistantText   = 256 << 10
 )
 
 type assistant struct {
@@ -53,6 +55,69 @@ var assistants = map[string]assistant{
 	"instance-analyst": {ID: "instance-analyst", Durable: true, System: "You are a read-only Chronicle raid instance analyst. Use the instance_summary tool for bounded metadata, encounter, and roster context. Do not claim access to raw event streams.", Tools: []ToolDefinition{
 		{Name: "instance_summary", Description: "Return bounded metadata, encounters, and players for this authorized raid instance.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
 	}},
+}
+
+type debugRunContext struct {
+	Enabled     bool
+	RunID       string
+	Persistence string
+	ContextType string
+	ContextID   string
+}
+
+func debugSnapshotEvent(debug debugRunContext, iteration int, phase, model string, a assistant, messages []Message, usage Usage) agui.DebugSnapshotEvent {
+	debugMessages := make([]agui.DebugMessage, 0, len(messages))
+	for _, message := range messages {
+		debugMessage := agui.DebugMessage{
+			Role:       string(message.Role),
+			Name:       message.Name,
+			Content:    message.Content,
+			ToolCallID: message.ToolCallID,
+		}
+		for _, toolCall := range message.ToolCalls {
+			debugMessage.ToolCalls = append(debugMessage.ToolCalls, agui.DebugToolCall{
+				ID:        toolCall.ID,
+				Name:      toolCall.Name,
+				Arguments: toolCall.Arguments,
+			})
+		}
+		debugMessages = append(debugMessages, debugMessage)
+	}
+	debugTools := make([]agui.DebugTool, 0, len(a.Tools))
+	for _, tool := range a.Tools {
+		debugTools = append(debugTools, agui.DebugTool{
+			Name:        tool.Name,
+			Description: tool.Description,
+			Parameters:  slices.Clone(tool.Parameters),
+		})
+	}
+	return agui.DebugSnapshotEvent{
+		RunID:       debug.RunID,
+		Iteration:   iteration,
+		Phase:       phase,
+		AssistantID: a.ID,
+		Model:       model,
+		Persistence: debug.Persistence,
+		ContextType: debug.ContextType,
+		ContextID:   debug.ContextID,
+		Messages:    debugMessages,
+		Tools:       debugTools,
+		Skills:      make([]agui.DebugSkill, 0),
+		Limits: agui.DebugLimits{
+			MaxHistoryMessages: maxHistoryMessages,
+			MaxHistoryBytes:    maxHistoryBytes,
+			MaxIterations:      maxIterations,
+			MaxToolCalls:       maxToolCalls,
+			MaxToolArguments:   maxToolArguments,
+			MaxToolOutput:      maxToolOutput,
+			MaxAssistantText:   maxAssistantText,
+		},
+		Usage: agui.DebugUsage{
+			PromptTokens:     usage.PromptTokens,
+			CompletionTokens: usage.CompletionTokens,
+			TotalTokens:      usage.TotalTokens,
+		},
+	}
 }
 
 type toolContext struct {
@@ -305,6 +370,17 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, r, "A model is required.")
 		return
 	}
+	if req.Debug {
+		allowed, err := s.zed.CheckOne(r.Context(), nil, policy.New().GlobalChronicle().CanDebug_inference_chat_User(policy.New().User(uid)))
+		if err != nil {
+			s.internalError(w, "authorize inference debug", err)
+			return
+		}
+		if !allowed {
+			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "Inference debug access is not enabled for this account."})
+			return
+		}
+	}
 	if _, err := s.db.GetInferenceRunByIdempotencyKey(r.Context(), database.GetInferenceRunByIdempotencyKeyParams{UserID: uid, IdempotencyKey: req.RunID}); err == nil {
 		httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "This run_id was already used."})
 		return
@@ -424,7 +500,17 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 		_ = s.finishRun(r.Context(), runRow, "error", Usage{}, "stream_error")
 		return
 	}
-	usage, err := s.agentLoop(r.Context(), writer, provider, cred, req.Model, a, history, tc, func(messages ...Message) error {
+	debug := debugRunContext{
+		Enabled:     req.Debug,
+		RunID:       req.RunID,
+		Persistence: "ephemeral",
+	}
+	if a.Durable {
+		debug.Persistence = "durable"
+		debug.ContextType = thread.ContextType.String
+		debug.ContextID = thread.ContextID.String
+	}
+	usage, err := s.agentLoop(r.Context(), writer, provider, cred, req.Model, a, history, tc, debug, func(messages ...Message) error {
 		if !a.Durable {
 			return nil
 		}
@@ -462,11 +548,21 @@ func (s *Service) finishRun(ctx context.Context, row database.InferenceRun, stat
 	return err
 }
 
-func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provider, credential []byte, model string, a assistant, messages []Message, tc toolContext, persist func(...Message) error) (Usage, error) {
+func writeDebugSnapshot(w *agui.Writer, debug debugRunContext, iteration int, phase, model string, a assistant, messages []Message, usage Usage) error {
+	if !debug.Enabled {
+		return nil
+	}
+	return w.Write(debugSnapshotEvent(debug, iteration, phase, model, a, messages, usage))
+}
+
+func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provider, credential []byte, model string, a assistant, messages []Message, tc toolContext, debug debugRunContext, persist func(...Message) error) (Usage, error) {
 	messages = append([]Message{{Role: RoleSystem, Content: a.System}}, messages...)
 	var usage Usage
 	toolCount := 0
 	for iteration := 0; iteration < maxIterations; iteration++ {
+		if err := writeDebugSnapshot(w, debug, iteration+1, "request", model, a, messages, usage); err != nil {
+			return usage, err
+		}
 		messageID := uuid.NewString()
 		var content strings.Builder
 		calls := map[int]*toolCallAccumulator{}
@@ -482,7 +578,7 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 					}
 				}
 				content.WriteString(event.Text)
-				if content.Len() > 256<<10 {
+				if content.Len() > maxAssistantText {
 					return errors.New("assistant message too large")
 				}
 				return w.Write(agui.TextMessageContentEvent{MessageID: messageID, Delta: event.Text})
@@ -514,6 +610,10 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 		assistantMessage := Message{ID: messageID, Role: RoleAssistant, Content: content.String()}
 		if finish != FinishReasonToolCalls || len(calls) == 0 {
 			if err := persist(assistantMessage); err != nil {
+				return usage, err
+			}
+			completedMessages := append(slices.Clone(messages), assistantMessage)
+			if err := writeDebugSnapshot(w, debug, iteration+1, "response", model, a, completedMessages, usage); err != nil {
 				return usage, err
 			}
 			if started {
@@ -558,6 +658,9 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 			}
 		}
 		messages = append(messages, persistedMessages...)
+		if err := writeDebugSnapshot(w, debug, iteration+1, "tool_results", model, a, messages, usage); err != nil {
+			return usage, err
+		}
 		for _, toolMessage := range toolMessages {
 			if err := w.Write(agui.ToolCallEndEvent{ToolCallID: toolMessage.ToolCallID}); err != nil {
 				return usage, err

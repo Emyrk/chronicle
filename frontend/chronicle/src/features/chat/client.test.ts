@@ -68,6 +68,68 @@ describe("parseAgUiEvent", () => {
     ).toEqual({ type: "TEXT_MESSAGE_END", messageId: "message-1" });
   });
 
+  it("validates and returns a complete debug snapshot", () => {
+    const snapshot = {
+      type: "DEBUG_SNAPSHOT",
+      runId: "run-1",
+      iteration: 1,
+      phase: "request",
+      assistantId: "site-help",
+      model: "provider/model",
+      persistence: "ephemeral",
+      messages: [{ role: "system", content: "instructions", toolCalls: [{ id: "call-1", name: "lookup", arguments: "{}" }] }],
+      tools: [{ name: "lookup", description: "Look up data", parameters: { type: "object" } }],
+      skills: [],
+      limits: {
+        maxHistoryMessages: 50,
+        maxHistoryBytes: 262144,
+        maxIterations: 5,
+        maxToolCalls: 10,
+        maxToolArguments: 16384,
+        maxToolOutput: 65536,
+        maxAssistantText: 262144,
+      },
+      usage: { promptTokens: 1, completionTokens: 2, totalTokens: 3 },
+    };
+
+    expect(parseAgUiEvent({ data: JSON.stringify(snapshot) })).toEqual(snapshot);
+  });
+
+  it("rejects malformed nested debug snapshot data", () => {
+    const base = {
+      type: "DEBUG_SNAPSHOT",
+      runId: "run-1",
+      iteration: 1,
+      phase: "request",
+      assistantId: "site-help",
+      model: "provider/model",
+      persistence: "ephemeral",
+      messages: [{ role: "system", content: "instructions" }],
+      tools: [],
+      skills: [],
+      limits: {
+        maxHistoryMessages: 50,
+        maxHistoryBytes: 262144,
+        maxIterations: 5,
+        maxToolCalls: 10,
+        maxToolArguments: 16384,
+        maxToolOutput: 65536,
+        maxAssistantText: 262144,
+      },
+      usage: { promptTokens: 1, completionTokens: 2, totalTokens: 3 },
+    };
+
+    expect(() => parseAgUiEvent({ data: JSON.stringify({ ...base, iteration: 1.5 }) })).toThrowError(
+      expect.objectContaining<Partial<AgUiClientError>>({ kind: "parse" }),
+    );
+    expect(() => parseAgUiEvent({ data: JSON.stringify({ ...base, messages: [{ role: "system", content: 42 }] }) })).toThrowError(
+      expect.objectContaining<Partial<AgUiClientError>>({ kind: "parse" }),
+    );
+    expect(() => parseAgUiEvent({ data: JSON.stringify({ ...base, usage: { promptTokens: "secret" } }) })).toThrowError(
+      expect.objectContaining<Partial<AgUiClientError>>({ kind: "parse" }),
+    );
+  });
+
   it("reports malformed JSON as a typed parse error", () => {
     expect(() => parseAgUiEvent({ data: "{" })).toThrowError(
       expect.objectContaining<Partial<AgUiClientError>>({ kind: "parse" }),

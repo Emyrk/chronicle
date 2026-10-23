@@ -7,6 +7,7 @@ import { AssistantChat } from "./AssistantChat";
 import {
   isInferenceServiceUnavailable,
   useCreateInstanceInferenceThread,
+  useInferenceDebugPermission,
   useInferencePermission,
   useInferenceThread,
 } from "./api";
@@ -63,12 +64,14 @@ function SiteHelpEmptyState() {
 export function GlobalSiteHelpChat() {
   const { session, isAuthenticated } = useAuth();
   const permission = useInferencePermission(isAuthenticated);
+  const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed);
   const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed);
   const [open, setOpen] = useState(false);
+  const [debugEnabled, setDebugEnabled] = useState(false);
   const createRequest = useCallback((input: Parameters<typeof buildSiteHelpRunRequest>[0]) => {
     if (!selection.connectionId || !selection.modelId) throw new Error("Select an AI connection and model first.");
-    return buildSiteHelpRunRequest(input, { connectionId: selection.connectionId, modelId: selection.modelId });
-  }, [selection.connectionId, selection.modelId]);
+    return buildSiteHelpRunRequest(input, { connectionId: selection.connectionId, modelId: selection.modelId }, debugEnabled);
+  }, [debugEnabled, selection.connectionId, selection.modelId]);
 
   if (
     !isAuthenticated
@@ -89,6 +92,9 @@ export function GlobalSiteHelpChat() {
       description="Get help navigating Chronicle and understanding its features. Responses can be inaccurate."
       emptyState={<SiteHelpEmptyState />}
       configuration={selection.connections.length > 0 ? <AssistantConfiguration selection={selection} /> : undefined}
+      debugAvailable={debugPermission.allowed}
+      debugEnabled={debugEnabled}
+      onDebugEnabledChange={setDebugEnabled}
       disabled={disconnected || Boolean(selection.error)}
       disabledTitle={selection.error ? "AI configuration unavailable" : "Connect OpenRouter to start chatting"}
       disabledDescription={selection.error?.message ?? "Connect your user-funded OpenRouter account in settings. Chronicle never receives your OpenRouter password."}
@@ -101,9 +107,11 @@ export function GlobalSiteHelpChat() {
 export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId: string; instanceName: string }) {
   const { session, isAuthenticated } = useAuth();
   const permission = useInferencePermission(isAuthenticated);
+  const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed);
   const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed);
   const createThread = useCreateInstanceInferenceThread();
   const [open, setOpen] = useState(false);
+  const [debugEnabled, setDebugEnabled] = useState(false);
   const threadId = createThread.data?.thread.id;
   const threadQuery = useInferenceThread(threadId, { enabled: false });
 
@@ -118,8 +126,8 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
   }, [threadQuery]);
   const createRequest = useCallback((input: Parameters<typeof buildInstanceAnalystRunRequest>[0]) => {
     if (!selection.connectionId || !selection.modelId) throw new Error("Select an AI connection and model first.");
-    return buildInstanceAnalystRunRequest(input, { connectionId: selection.connectionId, modelId: selection.modelId }, instanceId);
-  }, [instanceId, selection.connectionId, selection.modelId]);
+    return buildInstanceAnalystRunRequest(input, { connectionId: selection.connectionId, modelId: selection.modelId }, instanceId, debugEnabled);
+  }, [debugEnabled, instanceId, selection.connectionId, selection.modelId]);
 
   if (
     !isAuthenticated
@@ -147,6 +155,9 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
       description="Analyze this instance with its persisted conversation history. Responses can be inaccurate."
       configuration={selection.connections.length > 0 ? <AssistantConfiguration selection={selection} /> : undefined}
       emptyState={threadLoading ? <div className="text-muted-foreground flex items-center gap-2 text-sm"><LoaderCircle className="size-4 animate-spin" /> Loading conversation…</div> : undefined}
+      debugAvailable={debugPermission.allowed}
+      debugEnabled={debugEnabled}
+      onDebugEnabledChange={setDebugEnabled}
       disabled={disconnected || Boolean(selection.error || createThread.error) || threadLoading}
       disabledTitle={disconnected ? "Connect OpenRouter to analyze this raid" : threadLoading ? "Opening instance assistant" : "Instance assistant unavailable"}
       disabledDescription={selection.error?.message ?? createThread.error?.message ?? (threadLoading ? "Loading persisted conversation history…" : "Connect a provider in account settings, then choose a model.")}

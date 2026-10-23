@@ -53,6 +53,115 @@ function requireString(
   return result;
 }
 
+function requireNumber(
+  value: Record<string, unknown>,
+  field: string,
+  event: SseEvent,
+): number {
+  const result = value[field];
+  if (typeof result !== "number" || !Number.isFinite(result)) {
+    throw new AgUiClientError("parse", `AG-UI event is missing finite number field "${field}".`, { event });
+  }
+  return result;
+}
+
+function requireArray(
+  value: Record<string, unknown>,
+  field: string,
+  event: SseEvent,
+): unknown[] {
+  const result = value[field];
+  if (!Array.isArray(result)) {
+    throw new AgUiClientError("parse", `AG-UI event is missing array field "${field}".`, { event });
+  }
+  return result;
+}
+
+const DEBUG_PHASES = new Set(["request", "tool_results", "response"]);
+const DEBUG_PERSISTENCE = new Set(["ephemeral", "durable"]);
+
+function requireRecord(value: unknown, field: string, event: SseEvent): Record<string, unknown> {
+  if (!isRecord(value)) {
+    throw new AgUiClientError("parse", `AG-UI event is missing object field "${field}".`, { event });
+  }
+  return value;
+}
+
+function requireOptionalString(value: Record<string, unknown>, field: string, event: SseEvent): void {
+  if (value[field] !== undefined && typeof value[field] !== "string") {
+    throw new AgUiClientError("parse", `AG-UI field "${field}" must be a string.`, { event });
+  }
+}
+
+function validateDebugSnapshot(value: Record<string, unknown>, event: SseEvent): void {
+  requireString(value, "runId", event);
+  const iteration = requireNumber(value, "iteration", event);
+  if (!Number.isInteger(iteration) || iteration < 1) {
+    throw new AgUiClientError("parse", "DEBUG_SNAPSHOT iteration must be a positive integer.", { event });
+  }
+  const phase = requireString(value, "phase", event);
+  if (!DEBUG_PHASES.has(phase)) {
+    throw new AgUiClientError("parse", "DEBUG_SNAPSHOT has an unsupported phase.", { event });
+  }
+  requireString(value, "assistantId", event);
+  requireString(value, "model", event);
+  const persistence = requireString(value, "persistence", event);
+  if (!DEBUG_PERSISTENCE.has(persistence)) {
+    throw new AgUiClientError("parse", "DEBUG_SNAPSHOT has an unsupported persistence mode.", { event });
+  }
+  requireOptionalString(value, "contextType", event);
+  requireOptionalString(value, "contextId", event);
+
+  for (const item of requireArray(value, "messages", event)) {
+    const message = requireRecord(item, "messages[]", event);
+    requireString(message, "role", event);
+    requireString(message, "content", event);
+    requireOptionalString(message, "name", event);
+    requireOptionalString(message, "toolCallId", event);
+    if (message.toolCalls !== undefined) {
+      if (!Array.isArray(message.toolCalls)) {
+        throw new AgUiClientError("parse", 'AG-UI field "toolCalls" must be an array.', { event });
+      }
+      for (const item of message.toolCalls) {
+        const toolCall = requireRecord(item, "toolCalls[]", event);
+        requireString(toolCall, "id", event);
+        requireString(toolCall, "name", event);
+        requireString(toolCall, "arguments", event);
+      }
+    }
+  }
+
+  for (const item of requireArray(value, "tools", event)) {
+    const tool = requireRecord(item, "tools[]", event);
+    requireString(tool, "name", event);
+    requireString(tool, "description", event);
+    if (!("parameters" in tool)) {
+      throw new AgUiClientError("parse", 'AG-UI debug tool is missing field "parameters".', { event });
+    }
+  }
+
+  for (const item of requireArray(value, "skills", event)) {
+    const skill = requireRecord(item, "skills[]", event);
+    requireString(skill, "id", event);
+    requireString(skill, "name", event);
+    for (const field of ["version", "source", "promptContribution"]) {
+      requireOptionalString(skill, field, event);
+    }
+    if (skill.tools !== undefined && (!Array.isArray(skill.tools) || skill.tools.some((tool) => typeof tool !== "string"))) {
+      throw new AgUiClientError("parse", 'AG-UI debug skill field "tools" must be a string array.', { event });
+    }
+  }
+
+  const limits = requireRecord(value.limits, "limits", event);
+  for (const field of ["maxHistoryMessages", "maxHistoryBytes", "maxIterations", "maxToolCalls", "maxToolArguments", "maxToolOutput", "maxAssistantText"]) {
+    requireNumber(limits, field, event);
+  }
+  const usage = requireRecord(value.usage, "usage", event);
+  for (const field of ["promptTokens", "completionTokens", "totalTokens"]) {
+    requireNumber(usage, field, event);
+  }
+}
+
 function validateAgUiEvent(value: unknown, transportEvent: SseEvent): AgUiEvent {
   if (!isRecord(value)) {
     throw new AgUiClientError("parse", "AG-UI event data must be a JSON object.", {
@@ -107,6 +216,9 @@ function validateAgUiEvent(value: unknown, transportEvent: SseEvent): AgUiEvent 
     case "TOOL_CALL_ARGS":
       requireString(withTransportType, "toolCallId", transportEvent);
       requireString(withTransportType, "delta", transportEvent);
+      break;
+    case "DEBUG_SNAPSHOT":
+      validateDebugSnapshot(withTransportType, transportEvent);
       break;
     case "TOOL_CALL_END":
       requireString(withTransportType, "toolCallId", transportEvent);

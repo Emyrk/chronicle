@@ -8,6 +8,7 @@ export const AG_UI_EVENT_TYPES = [
   "TOOL_CALL_START",
   "TOOL_CALL_ARGS",
   "TOOL_CALL_END",
+  "DEBUG_SNAPSHOT",
 ] as const;
 
 export type AgUiEventType = (typeof AG_UI_EVENT_TYPES)[number];
@@ -72,6 +73,68 @@ export interface ToolCallEndEvent extends AgUiEventBase {
   toolCallId: string;
 }
 
+export interface DebugToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+export interface DebugMessage {
+  role: string;
+  name?: string;
+  content: string;
+  toolCallId?: string;
+  toolCalls?: DebugToolCall[];
+}
+
+export interface DebugTool {
+  name: string;
+  description: string;
+  parameters: unknown;
+}
+
+export interface DebugSkill {
+  id: string;
+  name: string;
+  version?: string;
+  source?: string;
+  promptContribution?: string;
+  tools?: string[];
+}
+
+export interface DebugLimits {
+  maxHistoryMessages: number;
+  maxHistoryBytes: number;
+  maxIterations: number;
+  maxToolCalls: number;
+  maxToolArguments: number;
+  maxToolOutput: number;
+  maxAssistantText: number;
+}
+
+export interface DebugUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+export interface DebugSnapshotEvent extends AgUiEventBase {
+  type: "DEBUG_SNAPSHOT";
+  runId: string;
+  iteration: number;
+  phase: "request" | "tool_results" | "response";
+  assistantId: string;
+  model: string;
+  persistence: "ephemeral" | "durable";
+  contextType?: string;
+  contextId?: string;
+  messages: DebugMessage[];
+  tools: DebugTool[];
+  skills: DebugSkill[];
+  limits: DebugLimits;
+  usage: DebugUsage;
+}
+
 export type AgUiEvent =
   | RunStartedEvent
   | RunFinishedEvent
@@ -81,7 +144,8 @@ export type AgUiEvent =
   | TextMessageEndEvent
   | ToolCallStartEvent
   | ToolCallArgsEvent
-  | ToolCallEndEvent;
+  | ToolCallEndEvent
+  | DebugSnapshotEvent;
 
 export type ChatRole = "user" | "assistant";
 export type ChatRunStatus = "idle" | "running" | "finished" | "error";
@@ -105,6 +169,7 @@ export interface ChatMessage {
 
 export interface ChatState {
   messages: ChatMessage[];
+  debugSnapshots: DebugSnapshotEvent[];
   runId?: string;
   threadId?: string;
   status: ChatRunStatus;
@@ -122,6 +187,7 @@ export type ChatAction =
 export function createInitialChatState(messages: ChatMessage[] = []): ChatState {
   return {
     messages,
+    debugSnapshots: [],
     status: "idle",
   };
 }
@@ -180,6 +246,7 @@ function applyEvent(state: ChatState, event: AgUiEvent): ChatState {
         threadId: event.threadId,
         status: "running",
         error: undefined,
+        debugSnapshots: [],
       };
     case "RUN_FINISHED":
       return {
@@ -266,6 +333,11 @@ function applyEvent(state: ChatState, event: AgUiEvent): ChatState {
           ...toolCall,
           arguments: toolCall.arguments + event.delta,
         })),
+      };
+    case "DEBUG_SNAPSHOT":
+      return {
+        ...state,
+        debugSnapshots: [...state.debugSnapshots, event],
       };
     case "TOOL_CALL_END":
       return {

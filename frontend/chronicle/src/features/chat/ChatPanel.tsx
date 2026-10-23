@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
-import { AlertCircle, Bot, Check, CircleStop, LoaderCircle, LockKeyhole, Send, Wrench } from "lucide-react";
+import { AlertCircle, Bot, Check, CircleStop, LoaderCircle, LockKeyhole, ScanSearch, Send, Wrench } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert/Alert";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/Switch/Switch";
 import { cn } from "@/lib/utils";
+import { DebugInspector } from "./DebugInspector";
 import type { ChatMessage, ChatToolCall } from "./protocol";
 import type { AssistantChatController } from "./useAssistantChat";
 
@@ -18,6 +20,9 @@ export interface ChatPanelProps {
   disabledTitle?: string;
   disabledDescription?: string;
   disabledAction?: ReactNode;
+  debugAvailable?: boolean;
+  debugEnabled?: boolean;
+  onDebugEnabledChange?: (enabled: boolean) => void;
   className?: string;
 }
 
@@ -125,6 +130,9 @@ export function ChatPanel({
   disabledTitle = "Connect to use the assistant",
   disabledDescription = "Connect the required provider before starting a conversation.",
   disabledAction,
+  debugAvailable = false,
+  debugEnabled = false,
+  onDebugEnabledChange,
   className,
 }: ChatPanelProps) {
   const [composer, setComposer] = useState("");
@@ -158,13 +166,31 @@ export function ChatPanel({
   return (
     <section className={cn("bg-background flex h-full min-h-0 flex-col", className)}>
       <header className="border-b px-5 py-4 pr-12">
-        <div className="flex items-center gap-2">
-          <Bot className="text-primary size-5" />
-          <h2 className="font-semibold tracking-tight">{title}</h2>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Bot className="text-primary size-5" />
+              <h2 className="font-semibold tracking-tight">{title}</h2>
+            </div>
+            <p className="text-muted-foreground mt-1 text-sm">{description}</p>
+          </div>
+          {debugAvailable && (
+            <label className="text-muted-foreground flex shrink-0 items-center gap-2 text-xs" title="Capture the exact provider-neutral prompt, tools, and skills">
+              <ScanSearch className="size-3.5" />
+              Debug
+              <Switch
+                size="sm"
+                checked={debugEnabled}
+                onCheckedChange={onDebugEnabledChange}
+                disabled={controller.isRunning}
+                aria-label="Enable prompt debugging"
+              />
+            </label>
+          )}
         </div>
-        <p className="text-muted-foreground mt-1 text-sm">{description}</p>
       </header>
       {configuration && <div className="border-b px-4 py-3">{configuration}</div>}
+      {debugAvailable && debugEnabled && <DebugInspector snapshots={controller.debugSnapshots} />}
 
       {disabled ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-6">

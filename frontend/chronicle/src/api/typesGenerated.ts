@@ -1923,6 +1923,7 @@ export interface InferenceModelsResponse {
 // From chroniclesdk/inference.go
 export interface InferenceRunRequest {
     readonly run_id: string;
+    readonly debug?: boolean;
     readonly connection_id: string;
     readonly model: string;
     readonly assistant_id: string;

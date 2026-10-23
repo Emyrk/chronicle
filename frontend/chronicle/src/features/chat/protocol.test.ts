@@ -65,6 +65,37 @@ describe("chatReducer", () => {
     expect(state.messages[0].toolCalls?.[0].status).toBe("interrupted");
   });
 
+  it("collects debug snapshots for the active run and resets them on the next run", () => {
+    let state = createInitialChatState();
+    state = apply(state, {
+      type: "DEBUG_SNAPSHOT",
+      runId: "run-1",
+      iteration: 1,
+      phase: "request",
+      assistantId: "site-help",
+      model: "provider/model",
+      persistence: "ephemeral",
+      messages: [{ role: "system", content: "instructions" }],
+      tools: [],
+      skills: [],
+      limits: {
+        maxHistoryMessages: 50,
+        maxHistoryBytes: 262144,
+        maxIterations: 5,
+        maxToolCalls: 10,
+        maxToolArguments: 16384,
+        maxToolOutput: 65536,
+        maxAssistantText: 262144,
+      },
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    });
+    expect(state.debugSnapshots).toHaveLength(1);
+    expect(state.debugSnapshots[0].messages[0].content).toBe("instructions");
+
+    state = apply(state, { type: "RUN_STARTED", threadId: "thread-1", runId: "run-2" });
+    expect(state.debugSnapshots).toEqual([]);
+  });
+
   it("surfaces protocol run errors", () => {
     const state = apply(createInitialChatState(), {
       type: "RUN_ERROR",

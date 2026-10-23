@@ -41,8 +41,11 @@ The browser/backend contract is the Chronicle-owned subset of AG-UI 1.0 over ser
 - `RUN_STARTED`, `RUN_FINISHED`, and `RUN_ERROR`
 - `TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`, and `TEXT_MESSAGE_END`
 - `TOOL_CALL_START`, `TOOL_CALL_ARGS`, and `TOOL_CALL_END`
+- `DEBUG_SNAPSHOT` when an authorized request sets `debug: true`
 
-The frontend client incrementally parses UTF-8 SSE frames and reduces these events into messages and tool-call state. Cancellation aborts the run request. Run finalization uses a detached, bounded context so an ordinary browser disconnect can still update the database. Durable threads reject overlapping active runs, and a 15-minute lease marks abandoned runs terminal after a node crash or failed finalization.
+The frontend client incrementally parses UTF-8 SSE frames and reduces these events into messages, tool-call state, and optional debug snapshots. Cancellation aborts the run request. Run finalization uses a detached, bounded context so an ordinary browser disconnect can still update the database. Durable threads reject overlapping active runs, and a 15-minute lease marks abandoned runs terminal after a node crash or failed finalization.
+
+Debug authorization is enforced again by the backend before connection lookup, credential decryption, run creation, or provider invocation; hiding the frontend toggle is not the security boundary. Each `DEBUG_SNAPSHOT` is generated from the provider-neutral request actually composed by the server and identifies its iteration and phase (`request`, `tool_results`, or `response`). Snapshots include ordered messages, tool definitions and schemas, applied skills, runtime limits, context, model, and accumulated usage. They are streamed only and are never written to inference message or run records. Provider credentials, OAuth material, encryption data, HTTP headers, raw provider events, and hidden provider reasoning are excluded. Until skill composition is implemented, the server explicitly emits `skills: []`.
 
 ## Persistence and limits
 

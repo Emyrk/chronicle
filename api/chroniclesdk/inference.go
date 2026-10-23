@@ -75,6 +75,7 @@ type InferenceThreadsResponse struct {
 
 type InferenceRunRequest struct {
 	RunID        string             `json:"run_id"`
+	Debug        bool               `json:"debug,omitempty"`
 	ConnectionID uuid.UUID          `json:"connection_id"`
 	Model        string             `json:"model"`
 	AssistantID  string             `json:"assistant_id"`

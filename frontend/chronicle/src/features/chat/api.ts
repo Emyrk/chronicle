@@ -46,6 +46,14 @@ export function useInferencePermission(enabled = true) {
   return { ...query, allowed: query.data?.inferenceChat ?? false };
 }
 
+export function useInferenceDebugPermission(enabled = true) {
+  const query = useAuthorizationCheck(
+    { inferenceDebug: "chronicle:chronicle#debug_inference_chat" },
+    { enabled, retry: false },
+  );
+  return { ...query, allowed: query.data?.inferenceDebug ?? false };
+}
+
 export function useInferenceSettings(enabled = true) {
   return useQuery({
     queryKey: inferenceKeys.settings,

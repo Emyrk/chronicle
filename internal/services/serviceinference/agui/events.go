@@ -16,6 +16,7 @@ const (
 	ToolCallStart      EventType = "TOOL_CALL_START"
 	ToolCallArgs       EventType = "TOOL_CALL_ARGS"
 	ToolCallEnd        EventType = "TOOL_CALL_END"
+	DebugSnapshot      EventType = "DEBUG_SNAPSHOT"
 )
 
 // Event is an AG-UI event that can be written to an SSE stream.
@@ -104,3 +105,67 @@ type ToolCallEndEvent struct {
 }
 
 func (ToolCallEndEvent) EventType() EventType { return ToolCallEnd }
+
+type DebugToolCall struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+type DebugMessage struct {
+	Role       string          `json:"role"`
+	Name       string          `json:"name,omitempty"`
+	Content    string          `json:"content"`
+	ToolCallID string          `json:"toolCallId,omitempty"`
+	ToolCalls  []DebugToolCall `json:"toolCalls,omitempty"`
+}
+
+type DebugTool struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Parameters  json.RawMessage `json:"parameters"`
+}
+
+type DebugSkill struct {
+	ID                 string   `json:"id"`
+	Name               string   `json:"name"`
+	Version            string   `json:"version,omitempty"`
+	Source             string   `json:"source,omitempty"`
+	PromptContribution string   `json:"promptContribution,omitempty"`
+	Tools              []string `json:"tools,omitempty"`
+}
+
+type DebugLimits struct {
+	MaxHistoryMessages int `json:"maxHistoryMessages"`
+	MaxHistoryBytes    int `json:"maxHistoryBytes"`
+	MaxIterations      int `json:"maxIterations"`
+	MaxToolCalls       int `json:"maxToolCalls"`
+	MaxToolArguments   int `json:"maxToolArguments"`
+	MaxToolOutput      int `json:"maxToolOutput"`
+	MaxAssistantText   int `json:"maxAssistantText"`
+}
+
+type DebugUsage struct {
+	PromptTokens     int `json:"promptTokens"`
+	CompletionTokens int `json:"completionTokens"`
+	TotalTokens      int `json:"totalTokens"`
+}
+
+type DebugSnapshotEvent struct {
+	BaseEvent
+	RunID       string         `json:"runId"`
+	Iteration   int            `json:"iteration"`
+	Phase       string         `json:"phase"`
+	AssistantID string         `json:"assistantId"`
+	Model       string         `json:"model"`
+	Persistence string         `json:"persistence"`
+	ContextType string         `json:"contextType,omitempty"`
+	ContextID   string         `json:"contextId,omitempty"`
+	Messages    []DebugMessage `json:"messages"`
+	Tools       []DebugTool    `json:"tools"`
+	Skills      []DebugSkill   `json:"skills"`
+	Limits      DebugLimits    `json:"limits"`
+	Usage       DebugUsage     `json:"usage"`
+}
+
+func (DebugSnapshotEvent) EventType() EventType { return DebugSnapshot }
