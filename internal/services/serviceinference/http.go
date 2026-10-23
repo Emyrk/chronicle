@@ -43,6 +43,16 @@ func (s *Service) updateInferenceSettings(w http.ResponseWriter, r *http.Request
 	if !httpapi.Read(r.Context(), w, r, &req) {
 		return
 	}
+	user := policy.New().User(userID(r))
+	available, err := s.zed.CheckOne(r.Context(), nil, policy.New().GlobalChronicle().CanInference_available_User(user))
+	if err != nil {
+		s.internalError(w, "authorize inference preference", err)
+		return
+	}
+	if !available {
+		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "AI features are not enabled for this account."})
+		return
+	}
 	if err := s.zed.SetInferenceDisabled(r.Context(), userID(r), req.Disabled); err != nil {
 		s.internalError(w, "update inference preference", err)
 		return

@@ -1,8 +1,9 @@
 import { useEffect } from "react";
-import { CircleCheck, CircleMinus, ExternalLink, LoaderCircle, ServerOff, Trash2 } from "lucide-react";
+import { ChevronDown, CircleCheck, CircleMinus, ExternalLink, LoaderCircle, ServerOff, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/Collapsible/Collapsible";
 import { Switch } from "@/components/ui/Switch/Switch";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -58,6 +59,35 @@ export function InferenceSettings() {
   const preference = settings.data;
   const status = statusPresentation[preference ? inferenceStatus(preference) : "unavailable"];
   const StatusIcon = status.icon;
+
+  if (preference && !preference.available) {
+    return (
+      <section className="overflow-hidden rounded-lg border">
+        <Collapsible>
+          <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-muted/30">
+            <div className="min-w-0">
+              <h3 className="font-medium">AI assistant</h3>
+              <p className="text-muted-foreground mt-0.5 text-sm">
+                AI features are not enabled for this account.
+              </p>
+            </div>
+            <div className="text-muted-foreground flex shrink-0 items-center gap-2 text-xs font-medium">
+              <CircleMinus className="size-4" />
+              No access
+              <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" />
+            </div>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="bg-muted/20 border-t px-4 py-3">
+              <p className="text-muted-foreground text-sm">
+                Your account has not been granted AI assistant access. There are no AI settings or actions available for this account.
+              </p>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      </section>
+    );
+  }
 
   return (
     <section className="rounded-lg border p-4">

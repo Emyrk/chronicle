@@ -88,6 +88,22 @@ func TestInferenceAccountSettingsOptOutAndBackIn(t *testing.T) {
 	require.True(t, reenabled.Enabled)
 }
 
+func TestInferenceAccountSettingsRejectsOptOutWithoutCapability(t *testing.T) {
+	t.Parallel()
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	userID := uuid.New()
+	service := &Service{zed: zed, enabled: true, logger: slog.Default()}
+
+	req := httptest.NewRequest(http.MethodPut, "/", strings.NewReader(`{"disabled":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(chronauth.WithClaims(req.Context(), &claims.Claims{Subject: userID}))
+	recorder := httptest.NewRecorder()
+	service.AccountRoutes().ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusForbidden, recorder.Code, recorder.Body.String())
+	require.Contains(t, recorder.Body.String(), "not enabled")
+}
+
 func TestInferenceAccountSettingsAvailableWhenServiceDisabled(t *testing.T) {
 	t.Parallel()
 	broker := testservices.Authz(t)
