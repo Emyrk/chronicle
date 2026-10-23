@@ -322,6 +322,45 @@ func boundedHistory(rows []database.InferenceMessage) []Message {
 
 const runLease = 15 * time.Minute
 
+func supersedeAwaitingClientTool(ctx context.Context, tx database.Store, threadID, userID uuid.UUID) error {
+	pending, err := tx.GetPendingInferenceClientToolRequestByThreadForUpdate(ctx, database.GetPendingInferenceClientToolRequestByThreadForUpdateParams{
+		ThreadID: threadID,
+		UserID:   userID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	content, err := boundedJSON(struct {
+		Status string `json:"status"`
+	}{Status: "client_error"})
+	if err != nil {
+		return err
+	}
+	if err := insertInferenceMessages(ctx, tx, threadID, Message{
+		Role:       RoleTool,
+		Name:       pending.ToolName,
+		ToolCallID: pending.ToolCallID,
+		Content:    content,
+	}); err != nil {
+		return err
+	}
+	if _, err := tx.ExpireInferenceClientToolRequest(ctx, database.ExpireInferenceClientToolRequestParams{
+		RunID:      pending.RunID,
+		ToolCallID: pending.ToolCallID,
+	}); err != nil {
+		return err
+	}
+	_, err = tx.AbandonAwaitingInferenceRun(ctx, database.AbandonAwaitingInferenceRunParams{
+		ID:     pending.RunID,
+		UserID: userID,
+	})
+	return err
+}
+
 func (s *Service) createRun(
 	ctx context.Context,
 	params database.InsertInferenceRunParams,
@@ -336,6 +375,9 @@ func (s *Service) createRun(
 
 	var run database.InferenceRun
 	err := s.db.InTx(ctx, func(tx database.Store) error {
+		if err := supersedeAwaitingClientTool(ctx, tx, params.ThreadID.UUID, params.UserID); err != nil {
+			return err
+		}
 		var err error
 		run, err = tx.InsertInferenceRun(ctx, params)
 		if err != nil {

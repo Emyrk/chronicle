@@ -63,8 +63,8 @@ RETURNING *;
 
 -- name: InsertInferenceMessage :one
 WITH inserted AS (
-  INSERT INTO inference_messages (thread_id, role, content, tool_call_id)
-  VALUES ($1, $2, $3, $4)
+  INSERT INTO inference_messages (thread_id, role, content, tool_call_id, created_at)
+  VALUES ($1, $2, $3, $4, clock_timestamp())
   RETURNING *
 ), touched AS (
   UPDATE inference_threads
@@ -148,6 +148,32 @@ WHERE request.run_id = $1
   AND request.tool_call_id = $2
   AND run.user_id = $3
 FOR UPDATE OF request;
+
+-- name: GetPendingInferenceClientToolRequestByThreadForUpdate :one
+SELECT request.*
+FROM inference_client_tool_requests request
+JOIN inference_runs run ON run.id = request.run_id
+WHERE request.thread_id = $1
+  AND request.status = 'pending'
+  AND run.user_id = $2
+  AND run.status = 'awaiting_client_tool'
+FOR UPDATE OF request;
+
+-- name: ExpireInferenceClientToolRequest :one
+UPDATE inference_client_tool_requests
+SET status = 'expired', updated_at = now(), completed_at = now()
+WHERE run_id = $1 AND tool_call_id = $2 AND status = 'pending'
+RETURNING *;
+
+-- name: AbandonAwaitingInferenceRun :one
+UPDATE inference_runs
+SET status = 'abandoned',
+    error_code = 'client_tool_superseded',
+    completed_at = now(),
+    lease_expires_at = NULL,
+    updated_at = now()
+WHERE id = $1 AND user_id = $2 AND status = 'awaiting_client_tool'
+RETURNING *;
 
 -- name: CompleteInferenceClientToolRequest :one
 UPDATE inference_client_tool_requests

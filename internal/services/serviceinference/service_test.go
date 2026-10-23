@@ -13,11 +13,13 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chronauth/claims"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/serviceinference/agui"
 	"github.com/Emyrk/chronicle/internal/services/testservices"
@@ -439,6 +441,81 @@ func TestClientToolContinuationRejectsWrongSessionScopeAndRevision(t *testing.T)
 	require.ErrorIs(t, validateClientToolContinuation(pending, wrongRevision, "instance-1"), errClientToolMismatch)
 	pending.Status = "completed"
 	require.ErrorIs(t, validateClientToolContinuation(pending, valid, "instance-1"), errClientToolMismatch)
+}
+
+func TestCreateRunSupersedesWaitingClientTool(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	store, _ := dbtestutil.NewDB(t)
+	userID := uuid.New()
+	_, err := store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "supersede-" + userID.String()[:8]})
+	require.NoError(t, err)
+	connection, err := store.InsertInferenceConnection(ctx, database.InsertInferenceConnectionParams{
+		UserID: userID, Provider: "openrouter", AuthMode: "oauth", Label: "OpenRouter",
+		EncryptedCredential: []byte("encrypted-secret"), CredentialKeyVersion: "v1", Status: "active",
+	})
+	require.NoError(t, err)
+	thread, err := store.InsertInferenceThread(ctx, database.InsertInferenceThreadParams{
+		UserID: userID, AssistantID: "instance-analyst", Persistence: "durable",
+		ContextType: pgtype.Text{String: "instance", Valid: true},
+		ContextID:   pgtype.Text{String: uuid.NewString(), Valid: true}, Title: "Test",
+	})
+	require.NoError(t, err)
+	oldRun, err := store.InsertInferenceRun(ctx, database.InsertInferenceRunParams{
+		ThreadID: uuid.NullUUID{UUID: thread.ID, Valid: true}, UserID: userID,
+		ConnectionID: connection.ID, AssistantID: "instance-analyst", Model: "model",
+		Status: "running", IdempotencyKey: "old-run",
+		LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Minute), Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, insertInferenceMessages(ctx, store, thread.ID, Message{
+		Role:      RoleAssistant,
+		ToolCalls: []ToolCall{{ID: "call-1", Name: "inspect_instance_ui", Arguments: `{}`}},
+	}))
+	_, err = store.InsertInferenceClientToolRequest(ctx, database.InsertInferenceClientToolRequestParams{
+		RunID: oldRun.ID, ThreadID: thread.ID, ToolCallID: "call-1", ToolName: "inspect_instance_ui",
+		Arguments: []byte(`{}`), CapabilityID: "instance-page", CapabilityVersion: 1,
+		ScopeType: pgtype.Text{String: "instance", Valid: true}, ScopeID: thread.ContextID,
+		ClientSessionID: "session-1", Effect: "read", Confirmation: "never",
+	})
+	require.NoError(t, err)
+	_, err = store.PauseInferenceRun(ctx, database.PauseInferenceRunParams{
+		ID: oldRun.ID, UserID: userID, IterationCount: 1, ToolCallCount: 1,
+		LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Minute), Valid: true},
+	})
+	require.NoError(t, err)
+
+	service := &Service{db: store}
+	input := Message{Role: RoleUser, Content: "new question"}
+	newRun, err := service.createRun(ctx, database.InsertInferenceRunParams{
+		ThreadID: uuid.NullUUID{UUID: thread.ID, Valid: true}, UserID: userID,
+		ConnectionID: connection.ID, AssistantID: "instance-analyst", Model: "model",
+		Status: "running", IdempotencyKey: "new-run",
+		LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Minute), Valid: true},
+	}, &input)
+	require.NoError(t, err)
+	require.Equal(t, "new-run", newRun.IdempotencyKey)
+
+	oldRun, err = store.GetInferenceRunByOwner(ctx, database.GetInferenceRunByOwnerParams{ID: oldRun.ID, UserID: userID})
+	require.NoError(t, err)
+	require.Equal(t, "abandoned", oldRun.Status)
+	require.Equal(t, "client_tool_superseded", oldRun.ErrorCode.String)
+	pending, err := store.GetInferenceClientToolRequestForUpdate(ctx, database.GetInferenceClientToolRequestForUpdateParams{
+		RunID: oldRun.ID, ToolCallID: "call-1", UserID: userID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "expired", pending.Status)
+
+	rows, err := store.ListRecentInferenceMessagesByThread(ctx, database.ListRecentInferenceMessagesByThreadParams{ThreadID: thread.ID, Limit: 10})
+	require.NoError(t, err)
+	require.Len(t, rows, 3)
+	var toolMessage Message
+	require.NoError(t, json.Unmarshal(rows[1].Content, &toolMessage))
+	require.Equal(t, RoleTool, toolMessage.Role)
+	require.JSONEq(t, `{"status":"client_error"}`, toolMessage.Content)
+	var userMessage Message
+	require.NoError(t, json.Unmarshal(rows[2].Content, &userMessage))
+	require.Equal(t, input, userMessage)
 }
 
 func TestAgentLoopPausesAndCanPauseAgainForClientTools(t *testing.T) {

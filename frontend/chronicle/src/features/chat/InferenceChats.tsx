@@ -141,7 +141,9 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
 
   return (
     <AssistantChat
-      key={`${response?.thread.id ?? "pending"}-${response?.thread.updated_at ?? ""}`}
+      // Keep the controller mounted when updated_at changes after a refresh;
+      // remounting aborts in-flight client-tool continuation and closes the sheet.
+      key={response?.thread.id ?? "pending"}
       open={open}
       onOpenChange={setOpen}
       endpoint="/api/v1/inference/runs"
