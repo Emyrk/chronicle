@@ -44,6 +44,7 @@ type sqlcQuerier interface {
 	CompleteDiscordMembershipGrantCheckError(ctx context.Context, arg CompleteDiscordMembershipGrantCheckErrorParams) (DiscordMembershipGrantCheck, error)
 	CompleteDiscordMembershipGrantCheckMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckMemberParams) (DiscordMembershipGrantCheck, error)
 	CompleteDiscordMembershipGrantCheckNonMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckNonMemberParams) (DiscordMembershipGrantCheck, error)
+	CompleteInferenceClientToolRequest(ctx context.Context, arg CompleteInferenceClientToolRequestParams) (InferenceClientToolRequest, error)
 	ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error)
 	ConsumeInferenceOAuthTransaction(ctx context.Context, arg ConsumeInferenceOAuthTransactionParams) (InferenceOauthTransaction, error)
 	CopyLegacySpellEffects(ctx context.Context, arg []CopyLegacySpellEffectsParams) *CopyLegacySpellEffectsBatchResults
@@ -270,6 +271,7 @@ type sqlcQuerier interface {
 	GetGuildPageTab(ctx context.Context, id uuid.UUID) (GuildPageTab, error)
 	// Guild Settings
 	GetGuildSettings(ctx context.Context, guildID uuid.UUID) (GuildSetting, error)
+	GetInferenceClientToolRequestForUpdate(ctx context.Context, arg GetInferenceClientToolRequestForUpdateParams) (InferenceClientToolRequest, error)
 	GetInferenceConnectionByOwner(ctx context.Context, arg GetInferenceConnectionByOwnerParams) (InferenceConnection, error)
 	GetInferenceRunByIdempotencyKey(ctx context.Context, arg GetInferenceRunByIdempotencyKeyParams) (InferenceRun, error)
 	GetInferenceRunByOwner(ctx context.Context, arg GetInferenceRunByOwnerParams) (InferenceRun, error)
@@ -470,6 +472,7 @@ type sqlcQuerier interface {
 	InsertEncounterPhase(ctx context.Context, arg InsertEncounterPhaseParams) error
 	InsertGuildPagePanel(ctx context.Context, arg InsertGuildPagePanelParams) (GuildPagePanel, error)
 	InsertGuildPageTab(ctx context.Context, arg InsertGuildPageTabParams) (GuildPageTab, error)
+	InsertInferenceClientToolRequest(ctx context.Context, arg InsertInferenceClientToolRequestParams) (InferenceClientToolRequest, error)
 	InsertInferenceConnection(ctx context.Context, arg InsertInferenceConnectionParams) (InferenceConnection, error)
 	InsertInferenceMessage(ctx context.Context, arg InsertInferenceMessageParams) (InsertInferenceMessageRow, error)
 	InsertInferenceOAuthTransaction(ctx context.Context, arg InsertInferenceOAuthTransactionParams) (InferenceOauthTransaction, error)
@@ -702,6 +705,7 @@ type sqlcQuerier interface {
 	MarkWhatsNewRead(ctx context.Context, arg MarkWhatsNewReadParams) (UserWhatsNewState, error)
 	MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) (WoWLogGroup, error)
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
+	PauseInferenceRun(ctx context.Context, arg PauseInferenceRunParams) (InferenceRun, error)
 	PruneParsedInstanceFromLogOutput(ctx context.Context, arg PruneParsedInstanceFromLogOutputParams) error
 	// Removes summary cards whose instance/difficulty/player-count combination no
 	// longer has any ranking rows visible to the current tenant context.
@@ -800,6 +804,7 @@ type sqlcQuerier interface {
 	ResolveExternalAPIRealm(ctx context.Context, arg ResolveExternalAPIRealmParams) (ResolveExternalAPIRealmRow, error)
 	ResolveExternalAPIServer(ctx context.Context, server string) (ResolveExternalAPIServerRow, error)
 	ResolveSidekickIssuesExcept(ctx context.Context, arg ResolveSidekickIssuesExceptParams) (int64, error)
+	ResumeInferenceRun(ctx context.Context, arg ResumeInferenceRunParams) (InferenceRun, error)
 	// Returns log groups that have been parsed and still have raw files on storage.
 	// Filtering by parser version is done in Go using semverenc for full
 	// major.minor.patch comparison. The caller deduplicates rows by log group and

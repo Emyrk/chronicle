@@ -87,8 +87,8 @@ ORDER BY created_at, id;
 INSERT INTO inference_runs (
   thread_id, user_id, connection_id, assistant_id, model, status,
   idempotency_key, input_tokens, output_tokens, error_code, completed_at,
-  lease_expires_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+  lease_expires_at, debug, iteration_count, tool_call_count
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 RETURNING *;
 
 -- name: GetInferenceRunByOwner :one
@@ -106,19 +106,72 @@ SET status = $3,
     output_tokens = $5,
     error_code = $6,
     completed_at = $7,
+    iteration_count = $8,
+    tool_call_count = $9,
+    lease_expires_at = NULL,
     updated_at = now()
 WHERE id = $1 AND user_id = $2
 RETURNING *;
 
--- name: ExpireStaleInferenceRuns :execrows
+-- name: ExpireStaleInferenceRuns :one
+WITH stale AS (
+  UPDATE inference_runs
+  SET status = 'abandoned',
+      error_code = 'stale_run',
+      completed_at = now(),
+      updated_at = now()
+  WHERE status IN ('running', 'awaiting_client_tool')
+    AND lease_expires_at IS NOT NULL
+    AND lease_expires_at <= now()
+  RETURNING id
+), expired AS (
+  UPDATE inference_client_tool_requests
+  SET status = 'expired', updated_at = now(), completed_at = now()
+  WHERE status = 'pending' AND run_id IN (SELECT id FROM stale)
+  RETURNING run_id
+)
+SELECT count(*)::bigint FROM stale;
+
+-- name: InsertInferenceClientToolRequest :one
+INSERT INTO inference_client_tool_requests (
+  run_id, thread_id, tool_call_id, tool_name, arguments,
+  capability_id, capability_version, scope_type, scope_id,
+  client_session_id, state_revision, effect, confirmation
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+RETURNING *;
+
+-- name: GetInferenceClientToolRequestForUpdate :one
+SELECT request.*
+FROM inference_client_tool_requests request
+JOIN inference_runs run ON run.id = request.run_id
+WHERE request.run_id = $1
+  AND request.tool_call_id = $2
+  AND run.user_id = $3
+FOR UPDATE OF request;
+
+-- name: CompleteInferenceClientToolRequest :one
+UPDATE inference_client_tool_requests
+SET status = 'completed', updated_at = now(), completed_at = now()
+WHERE run_id = $1 AND tool_call_id = $2 AND status = 'pending'
+RETURNING *;
+
+-- name: PauseInferenceRun :one
 UPDATE inference_runs
-SET status = 'abandoned',
-    error_code = 'stale_run',
-    completed_at = now(),
+SET status = 'awaiting_client_tool',
+    input_tokens = $3,
+    output_tokens = $4,
+    iteration_count = $5,
+    tool_call_count = $6,
+    lease_expires_at = $7,
     updated_at = now()
-WHERE status = 'running'
-  AND lease_expires_at IS NOT NULL
-  AND lease_expires_at <= now();
+WHERE id = $1 AND user_id = $2 AND status = 'running'
+RETURNING *;
+
+-- name: ResumeInferenceRun :one
+UPDATE inference_runs
+SET status = 'running', lease_expires_at = $3, updated_at = now()
+WHERE id = $1 AND user_id = $2 AND status = 'awaiting_client_tool'
+RETURNING *;
 
 -- name: ListInferenceInstanceEncounters :many
 SELECT *

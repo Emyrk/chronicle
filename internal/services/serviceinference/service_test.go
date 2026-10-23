@@ -23,6 +23,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/testservices"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -202,14 +203,14 @@ func TestAgentLoopTextAndToolCall(t *testing.T) {
 	var persisted []Message
 	var persistBatches []int
 	s := &Service{}
-	usage, err := s.agentLoop(context.Background(), writer, provider, nil, "model", assistants["site-help"], []Message{{Role: RoleUser, Content: "Where are rankings?"}}, toolContext{service: s}, debugRunContext{}, func(messages ...Message) error {
+	result, err := s.agentLoop(context.Background(), writer, provider, nil, "model", assistants["site-help"], []Message{{Role: RoleUser, Content: "Where are rankings?"}}, toolContext{service: s}, debugRunContext{}, nil, agentLoopState{}, func(messages ...Message) error {
 		persistBatches = append(persistBatches, len(messages))
 		persisted = append(persisted, messages...)
 		return nil
-	})
+	}, nil)
 	require.NoError(t, err)
 	require.Equal(t, 2, provider.calls)
-	require.Equal(t, 4, usage.PromptTokens)
+	require.Equal(t, 4, result.State.Usage.PromptTokens)
 	require.Equal(t, []int{2, 1}, persistBatches)
 	require.Len(t, persisted, 3)
 	require.Equal(t, RoleTool, persisted[1].Role)
@@ -246,9 +247,9 @@ func TestAgentLoopDebugSnapshotsMatchProviderRequestsAndResults(t *testing.T) {
 	writer := agui.NewStreamWriter(&stream, nil)
 	s := &Service{}
 	debug := debugRunContext{Enabled: true, RunID: "run-1", Persistence: "ephemeral"}
-	usage, err := s.agentLoop(context.Background(), writer, provider, []byte("provider-secret"), "provider/model", assistants["site-help"], []Message{{Role: RoleUser, Content: "Where are rankings?"}}, toolContext{service: s}, debug, func(...Message) error { return nil })
+	result, err := s.agentLoop(context.Background(), writer, provider, []byte("provider-secret"), "provider/model", assistants["site-help"], []Message{{Role: RoleUser, Content: "Where are rankings?"}}, toolContext{service: s}, debug, nil, agentLoopState{}, func(...Message) error { return nil }, nil)
 	require.NoError(t, err)
-	require.Equal(t, Usage{PromptTokens: 7, CompletionTokens: 3, TotalTokens: 10}, usage)
+	require.Equal(t, Usage{PromptTokens: 7, CompletionTokens: 3, TotalTokens: 10}, result.State.Usage)
 	require.NotContains(t, stream.String(), "provider-secret")
 
 	snapshots := debugSnapshots(t, stream.String())
@@ -314,9 +315,9 @@ func TestAgentLoopDoesNotEndMessageBeforePersistence(t *testing.T) {
 	var stream bytes.Buffer
 	writer := agui.NewStreamWriter(&stream, nil)
 	sentinel := errors.New("persist failed")
-	_, err := (&Service{}).agentLoop(context.Background(), writer, provider, nil, "model", assistants["site-help"], []Message{{Role: RoleUser, Content: "question"}}, toolContext{}, debugRunContext{}, func(...Message) error {
+	_, err := (&Service{}).agentLoop(context.Background(), writer, provider, nil, "model", assistants["site-help"], []Message{{Role: RoleUser, Content: "question"}}, toolContext{}, debugRunContext{}, nil, agentLoopState{}, func(...Message) error {
 		return sentinel
-	})
+	}, nil)
 	require.ErrorIs(t, err, sentinel)
 	require.Contains(t, stream.String(), "TEXT_MESSAGE_START")
 	require.Contains(t, stream.String(), "TEXT_MESSAGE_CONTENT")
@@ -375,4 +376,106 @@ func TestToolArgumentsAreStrictAndBounded(t *testing.T) {
 	require.Error(t, err)
 	_, err = s.executeTool(context.Background(), toolContext{service: s}, "unknown", `{}`)
 	require.Error(t, err)
+}
+
+func TestInstancePageClientCapabilityIsBoundToThreadScope(t *testing.T) {
+	t.Parallel()
+	revision := int64(3)
+	client, err := advertisedInstancePageClient(&chroniclesdk.InferenceClient{SessionID: "session-1", Capabilities: []chroniclesdk.InferenceClientCapability{{ID: "instance-page", Version: 1, ScopeType: "instance", ScopeID: "instance-1", StateRevision: &revision}}}, "instance-1")
+	require.NoError(t, err)
+	require.Equal(t, "session-1", client.SessionID)
+	require.Equal(t, revision, *client.StateRevision)
+
+	_, err = advertisedInstancePageClient(&chroniclesdk.InferenceClient{SessionID: "session-1", Capabilities: []chroniclesdk.InferenceClientCapability{{ID: "instance-page", Version: 1, ScopeType: "instance", ScopeID: "other"}}}, "instance-1")
+	require.ErrorContains(t, err, "must match")
+	_, err = advertisedInstancePageClient(&chroniclesdk.InferenceClient{SessionID: strings.Repeat("s", maxClientSessionID+1)}, "instance-1")
+	require.Error(t, err)
+}
+
+func TestClientToolArgumentsAndResultsAreBoundedAndNormalized(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name string
+		args string
+	}{
+		{name: "inspect_instance_ui", args: `{"include":["selection","panels"]}`},
+		{name: "query_panel", args: `{"panel_id":"damage","view":"top_entities","limit":50}`},
+		{name: "update_instance_ui", args: `{"expected_revision":2,"operations":[{"op":"select_players","ids":["player-1"]}]}`},
+	} {
+		validated, err := validateClientToolArguments(test.name, test.args)
+		require.NoError(t, err, test.name)
+		require.JSONEq(t, test.args, string(validated))
+	}
+	_, err := validateClientToolArguments("query_panel", `{"panel_id":"damage","limit":51}`)
+	require.Error(t, err)
+	_, err = validateClientToolArguments("update_instance_ui", `{"operations":[{"op":"not_allowed"}]}`)
+	require.Error(t, err)
+
+	secret := `{"exception":"database password SECRET"}`
+	content, err := normalizedClientToolResult(chroniclesdk.InferenceClientToolResultRequest{Status: "error", Result: json.RawMessage(secret)})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"status":"error"}`, content)
+	require.NotContains(t, content, "SECRET")
+	_, err = normalizedClientToolResult(chroniclesdk.InferenceClientToolResultRequest{Status: "success", Result: json.RawMessage(strings.Repeat("x", maxClientResult+1))})
+	require.ErrorContains(t, err, "too large")
+}
+
+func TestClientToolContinuationRejectsWrongSessionScopeAndRevision(t *testing.T) {
+	t.Parallel()
+	revision := int64(7)
+	pending := database.InferenceClientToolRequest{Status: "pending", ClientSessionID: "session-1", CapabilityID: "instance-page", CapabilityVersion: 1, ScopeType: pgtype.Text{String: "instance", Valid: true}, ScopeID: pgtype.Text{String: "instance-1", Valid: true}, StateRevision: pgtype.Int8{Int64: revision, Valid: true}, Effect: "read"}
+	valid := chroniclesdk.InferenceClientToolResultRequest{ClientSessionID: "session-1", CapabilityID: "instance-page", CapabilityVersion: 1, ScopeType: "instance", ScopeID: "instance-1", StateRevision: &revision, Status: "success", Result: json.RawMessage(`{}`)}
+	require.NoError(t, validateClientToolContinuation(pending, valid, "instance-1"))
+
+	wrongSession := valid
+	wrongSession.ClientSessionID = "session-2"
+	require.ErrorIs(t, validateClientToolContinuation(pending, wrongSession, "instance-1"), errClientToolMismatch)
+	wrongScope := valid
+	wrongScope.ScopeID = "instance-2"
+	require.ErrorIs(t, validateClientToolContinuation(pending, wrongScope, "instance-1"), errClientToolMismatch)
+	wrongRevision := valid
+	otherRevision := int64(8)
+	wrongRevision.StateRevision = &otherRevision
+	require.ErrorIs(t, validateClientToolContinuation(pending, wrongRevision, "instance-1"), errClientToolMismatch)
+	pending.Status = "completed"
+	require.ErrorIs(t, validateClientToolContinuation(pending, valid, "instance-1"), errClientToolMismatch)
+}
+
+func TestAgentLoopPausesAndCanPauseAgainForClientTools(t *testing.T) {
+	t.Parallel()
+	capability := &clientCapability{ID: "instance-page", Version: 1, ScopeType: "instance", ScopeID: "instance-1", SessionID: "session-1"}
+	assistantDefinition := withClientTools(assistants["instance-analyst"], capability)
+	provider := &scriptedProvider{streams: [][]StreamEvent{
+		{{Type: StreamEventToolCallDelta, ToolCall: ToolCallDelta{Index: 0, ID: "call-1", Name: "inspect_instance_ui", Arguments: `{"include":["panels"]}`}}, {Type: StreamEventUsage, Usage: Usage{PromptTokens: 3, CompletionTokens: 1, TotalTokens: 4}}, {Type: StreamEventFinish, FinishReason: FinishReasonToolCalls}},
+		{{Type: StreamEventToolCallDelta, ToolCall: ToolCallDelta{Index: 0, ID: "call-2", Name: "query_panel", Arguments: `{"panel_id":"damage"}`}}, {Type: StreamEventFinish, FinishReason: FinishReasonToolCalls}},
+	}}
+	var stream bytes.Buffer
+	writer := agui.NewStreamWriter(&stream, nil)
+	var pauses []clientToolPause
+	pause := func(_ Message, toolMessages []Message, pending clientToolPause, _ agentLoopState) error {
+		require.Empty(t, toolMessages)
+		pauses = append(pauses, pending)
+		return nil
+	}
+	persist := func(...Message) error {
+		t.Fatal("client tool assistant message must use atomic pause persistence")
+		return nil
+	}
+	debug := debugRunContext{RunID: "run-1", ThreadID: "thread-1", Persistence: "durable"}
+	first, err := (&Service{}).agentLoop(context.Background(), writer, provider, nil, "model", assistantDefinition, []Message{{Role: RoleUser, Content: "inspect"}}, toolContext{}, debug, capability, agentLoopState{}, persist, pause)
+	require.NoError(t, err)
+	require.NotNil(t, first.Paused)
+	require.Equal(t, 1, first.State.IterationCount)
+	require.Equal(t, 1, first.State.ToolCallCount)
+	require.Contains(t, stream.String(), "CLIENT_TOOL_REQUEST")
+	require.Contains(t, stream.String(), `"effect":"read"`)
+	require.NotContains(t, stream.String(), "RUN_FINISHED")
+
+	second, err := (&Service{}).agentLoop(context.Background(), writer, provider, nil, "model", assistantDefinition, []Message{{Role: RoleUser, Content: "inspect"}, {Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "call-1", Name: "inspect_instance_ui", Arguments: `{}`}}}, {Role: RoleTool, Name: "inspect_instance_ui", ToolCallID: "call-1", Content: `{"status":"success","result":{}}`}}, toolContext{}, debug, capability, first.State, persist, pause)
+	require.NoError(t, err)
+	require.NotNil(t, second.Paused)
+	require.Equal(t, 2, second.State.IterationCount)
+	require.Equal(t, 2, second.State.ToolCallCount)
+	require.Len(t, pauses, 2)
+	require.Equal(t, "call-2", pauses[1].Call.ID)
 }

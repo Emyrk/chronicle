@@ -1,6 +1,7 @@
 package chroniclesdk
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -73,6 +74,30 @@ type InferenceThreadsResponse struct {
 	Threads []InferenceThread `json:"threads"`
 }
 
+type InferenceClientCapability struct {
+	ID            string `json:"id"`
+	Version       int    `json:"version"`
+	ScopeType     string `json:"scope_type,omitempty"`
+	ScopeID       string `json:"scope_id,omitempty"`
+	StateRevision *int64 `json:"state_revision,omitempty"`
+}
+
+type InferenceClient struct {
+	SessionID    string                      `json:"session_id"`
+	Capabilities []InferenceClientCapability `json:"capabilities"`
+}
+
+type InferenceClientToolResultRequest struct {
+	ClientSessionID   string          `json:"client_session_id"`
+	CapabilityID      string          `json:"capability_id"`
+	CapabilityVersion int             `json:"capability_version"`
+	ScopeType         string          `json:"scope_type,omitempty"`
+	ScopeID           string          `json:"scope_id,omitempty"`
+	StateRevision     *int64          `json:"state_revision,omitempty"`
+	Status            string          `json:"status"`
+	Result            json.RawMessage `json:"result,omitempty"`
+}
+
 type InferenceRunRequest struct {
 	RunID        string             `json:"run_id"`
 	Debug        bool               `json:"debug,omitempty"`
@@ -81,6 +106,7 @@ type InferenceRunRequest struct {
 	AssistantID  string             `json:"assistant_id"`
 	ThreadID     *uuid.UUID         `json:"thread_id,omitempty"`
 	Instance     string             `json:"instance,omitempty"`
+	Client       *InferenceClient   `json:"client,omitempty"`
 	Messages     []InferenceMessage `json:"messages,omitempty"`
 	Message      *InferenceMessage  `json:"message,omitempty"`
 }

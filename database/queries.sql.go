@@ -8930,6 +8930,43 @@ func (q *sqlQuerier) UpsertGuildSettings(ctx context.Context, arg UpsertGuildSet
 	return i, err
 }
 
+const completeInferenceClientToolRequest = `-- name: CompleteInferenceClientToolRequest :one
+UPDATE inference_client_tool_requests
+SET status = 'completed', updated_at = now(), completed_at = now()
+WHERE run_id = $1 AND tool_call_id = $2 AND status = 'pending'
+RETURNING run_id, thread_id, tool_call_id, tool_name, arguments, capability_id, capability_version, scope_type, scope_id, client_session_id, state_revision, effect, confirmation, status, created_at, updated_at, completed_at
+`
+
+type CompleteInferenceClientToolRequestParams struct {
+	RunID      uuid.UUID `db:"run_id" json:"run_id"`
+	ToolCallID string    `db:"tool_call_id" json:"tool_call_id"`
+}
+
+func (q *sqlQuerier) CompleteInferenceClientToolRequest(ctx context.Context, arg CompleteInferenceClientToolRequestParams) (InferenceClientToolRequest, error) {
+	row := q.db.QueryRow(ctx, completeInferenceClientToolRequest, arg.RunID, arg.ToolCallID)
+	var i InferenceClientToolRequest
+	err := row.Scan(
+		&i.RunID,
+		&i.ThreadID,
+		&i.ToolCallID,
+		&i.ToolName,
+		&i.Arguments,
+		&i.CapabilityID,
+		&i.CapabilityVersion,
+		&i.ScopeType,
+		&i.ScopeID,
+		&i.ClientSessionID,
+		&i.StateRevision,
+		&i.Effect,
+		&i.Confirmation,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
 const consumeInferenceOAuthTransaction = `-- name: ConsumeInferenceOAuthTransaction :one
 DELETE FROM inference_oauth_transactions
 WHERE state_hash = $1 AND user_id = $2 AND expires_at > now()
@@ -8977,23 +9014,72 @@ func (q *sqlQuerier) DeleteInferenceConnectionByOwner(ctx context.Context, arg D
 	return err
 }
 
-const expireStaleInferenceRuns = `-- name: ExpireStaleInferenceRuns :execrows
-UPDATE inference_runs
-SET status = 'abandoned',
-    error_code = 'stale_run',
-    completed_at = now(),
-    updated_at = now()
-WHERE status = 'running'
-  AND lease_expires_at IS NOT NULL
-  AND lease_expires_at <= now()
+const expireStaleInferenceRuns = `-- name: ExpireStaleInferenceRuns :one
+WITH stale AS (
+  UPDATE inference_runs
+  SET status = 'abandoned',
+      error_code = 'stale_run',
+      completed_at = now(),
+      updated_at = now()
+  WHERE status IN ('running', 'awaiting_client_tool')
+    AND lease_expires_at IS NOT NULL
+    AND lease_expires_at <= now()
+  RETURNING id
+), expired AS (
+  UPDATE inference_client_tool_requests
+  SET status = 'expired', updated_at = now(), completed_at = now()
+  WHERE status = 'pending' AND run_id IN (SELECT id FROM stale)
+  RETURNING run_id
+)
+SELECT count(*)::bigint FROM stale
 `
 
 func (q *sqlQuerier) ExpireStaleInferenceRuns(ctx context.Context) (int64, error) {
-	result, err := q.db.Exec(ctx, expireStaleInferenceRuns)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	row := q.db.QueryRow(ctx, expireStaleInferenceRuns)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const getInferenceClientToolRequestForUpdate = `-- name: GetInferenceClientToolRequestForUpdate :one
+SELECT request.run_id, request.thread_id, request.tool_call_id, request.tool_name, request.arguments, request.capability_id, request.capability_version, request.scope_type, request.scope_id, request.client_session_id, request.state_revision, request.effect, request.confirmation, request.status, request.created_at, request.updated_at, request.completed_at
+FROM inference_client_tool_requests request
+JOIN inference_runs run ON run.id = request.run_id
+WHERE request.run_id = $1
+  AND request.tool_call_id = $2
+  AND run.user_id = $3
+FOR UPDATE OF request
+`
+
+type GetInferenceClientToolRequestForUpdateParams struct {
+	RunID      uuid.UUID `db:"run_id" json:"run_id"`
+	ToolCallID string    `db:"tool_call_id" json:"tool_call_id"`
+	UserID     uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) GetInferenceClientToolRequestForUpdate(ctx context.Context, arg GetInferenceClientToolRequestForUpdateParams) (InferenceClientToolRequest, error) {
+	row := q.db.QueryRow(ctx, getInferenceClientToolRequestForUpdate, arg.RunID, arg.ToolCallID, arg.UserID)
+	var i InferenceClientToolRequest
+	err := row.Scan(
+		&i.RunID,
+		&i.ThreadID,
+		&i.ToolCallID,
+		&i.ToolName,
+		&i.Arguments,
+		&i.CapabilityID,
+		&i.CapabilityVersion,
+		&i.ScopeType,
+		&i.ScopeID,
+		&i.ClientSessionID,
+		&i.StateRevision,
+		&i.Effect,
+		&i.Confirmation,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+	)
+	return i, err
 }
 
 const getInferenceConnectionByOwner = `-- name: GetInferenceConnectionByOwner :one
@@ -9027,7 +9113,7 @@ func (q *sqlQuerier) GetInferenceConnectionByOwner(ctx context.Context, arg GetI
 }
 
 const getInferenceRunByIdempotencyKey = `-- name: GetInferenceRunByIdempotencyKey :one
-SELECT id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at FROM inference_runs
+SELECT id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count FROM inference_runs
 WHERE user_id = $1 AND idempotency_key = $2
 `
 
@@ -9055,12 +9141,15 @@ func (q *sqlQuerier) GetInferenceRunByIdempotencyKey(ctx context.Context, arg Ge
 		&i.UpdatedAt,
 		&i.CompletedAt,
 		&i.LeaseExpiresAt,
+		&i.Debug,
+		&i.IterationCount,
+		&i.ToolCallCount,
 	)
 	return i, err
 }
 
 const getInferenceRunByOwner = `-- name: GetInferenceRunByOwner :one
-SELECT id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at FROM inference_runs
+SELECT id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count FROM inference_runs
 WHERE id = $1 AND user_id = $2
 `
 
@@ -9088,6 +9177,9 @@ func (q *sqlQuerier) GetInferenceRunByOwner(ctx context.Context, arg GetInferenc
 		&i.UpdatedAt,
 		&i.CompletedAt,
 		&i.LeaseExpiresAt,
+		&i.Debug,
+		&i.IterationCount,
+		&i.ToolCallCount,
 	)
 	return i, err
 }
@@ -9156,6 +9248,70 @@ func (q *sqlQuerier) GetOrCreateInferenceThread(ctx context.Context, arg GetOrCr
 		&i.Title,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertInferenceClientToolRequest = `-- name: InsertInferenceClientToolRequest :one
+INSERT INTO inference_client_tool_requests (
+  run_id, thread_id, tool_call_id, tool_name, arguments,
+  capability_id, capability_version, scope_type, scope_id,
+  client_session_id, state_revision, effect, confirmation
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+RETURNING run_id, thread_id, tool_call_id, tool_name, arguments, capability_id, capability_version, scope_type, scope_id, client_session_id, state_revision, effect, confirmation, status, created_at, updated_at, completed_at
+`
+
+type InsertInferenceClientToolRequestParams struct {
+	RunID             uuid.UUID   `db:"run_id" json:"run_id"`
+	ThreadID          uuid.UUID   `db:"thread_id" json:"thread_id"`
+	ToolCallID        string      `db:"tool_call_id" json:"tool_call_id"`
+	ToolName          string      `db:"tool_name" json:"tool_name"`
+	Arguments         []byte      `db:"arguments" json:"arguments"`
+	CapabilityID      string      `db:"capability_id" json:"capability_id"`
+	CapabilityVersion int32       `db:"capability_version" json:"capability_version"`
+	ScopeType         pgtype.Text `db:"scope_type" json:"scope_type"`
+	ScopeID           pgtype.Text `db:"scope_id" json:"scope_id"`
+	ClientSessionID   string      `db:"client_session_id" json:"client_session_id"`
+	StateRevision     pgtype.Int8 `db:"state_revision" json:"state_revision"`
+	Effect            string      `db:"effect" json:"effect"`
+	Confirmation      string      `db:"confirmation" json:"confirmation"`
+}
+
+func (q *sqlQuerier) InsertInferenceClientToolRequest(ctx context.Context, arg InsertInferenceClientToolRequestParams) (InferenceClientToolRequest, error) {
+	row := q.db.QueryRow(ctx, insertInferenceClientToolRequest,
+		arg.RunID,
+		arg.ThreadID,
+		arg.ToolCallID,
+		arg.ToolName,
+		arg.Arguments,
+		arg.CapabilityID,
+		arg.CapabilityVersion,
+		arg.ScopeType,
+		arg.ScopeID,
+		arg.ClientSessionID,
+		arg.StateRevision,
+		arg.Effect,
+		arg.Confirmation,
+	)
+	var i InferenceClientToolRequest
+	err := row.Scan(
+		&i.RunID,
+		&i.ThreadID,
+		&i.ToolCallID,
+		&i.ToolName,
+		&i.Arguments,
+		&i.CapabilityID,
+		&i.CapabilityVersion,
+		&i.ScopeType,
+		&i.ScopeID,
+		&i.ClientSessionID,
+		&i.StateRevision,
+		&i.Effect,
+		&i.Confirmation,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
 	)
 	return i, err
 }
@@ -9303,9 +9459,9 @@ const insertInferenceRun = `-- name: InsertInferenceRun :one
 INSERT INTO inference_runs (
   thread_id, user_id, connection_id, assistant_id, model, status,
   idempotency_key, input_tokens, output_tokens, error_code, completed_at,
-  lease_expires_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at
+  lease_expires_at, debug, iteration_count, tool_call_count
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count
 `
 
 type InsertInferenceRunParams struct {
@@ -9321,6 +9477,9 @@ type InsertInferenceRunParams struct {
 	ErrorCode      pgtype.Text        `db:"error_code" json:"error_code"`
 	CompletedAt    pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
 	LeaseExpiresAt pgtype.Timestamptz `db:"lease_expires_at" json:"lease_expires_at"`
+	Debug          bool               `db:"debug" json:"debug"`
+	IterationCount int32              `db:"iteration_count" json:"iteration_count"`
+	ToolCallCount  int32              `db:"tool_call_count" json:"tool_call_count"`
 }
 
 func (q *sqlQuerier) InsertInferenceRun(ctx context.Context, arg InsertInferenceRunParams) (InferenceRun, error) {
@@ -9337,6 +9496,9 @@ func (q *sqlQuerier) InsertInferenceRun(ctx context.Context, arg InsertInference
 		arg.ErrorCode,
 		arg.CompletedAt,
 		arg.LeaseExpiresAt,
+		arg.Debug,
+		arg.IterationCount,
+		arg.ToolCallCount,
 	)
 	var i InferenceRun
 	err := row.Scan(
@@ -9355,6 +9517,9 @@ func (q *sqlQuerier) InsertInferenceRun(ctx context.Context, arg InsertInference
 		&i.UpdatedAt,
 		&i.CompletedAt,
 		&i.LeaseExpiresAt,
+		&i.Debug,
+		&i.IterationCount,
+		&i.ToolCallCount,
 	)
 	return i, err
 }
@@ -9591,6 +9756,102 @@ func (q *sqlQuerier) ListRecentInferenceMessagesByThread(ctx context.Context, ar
 	return items, nil
 }
 
+const pauseInferenceRun = `-- name: PauseInferenceRun :one
+UPDATE inference_runs
+SET status = 'awaiting_client_tool',
+    input_tokens = $3,
+    output_tokens = $4,
+    iteration_count = $5,
+    tool_call_count = $6,
+    lease_expires_at = $7,
+    updated_at = now()
+WHERE id = $1 AND user_id = $2 AND status = 'running'
+RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count
+`
+
+type PauseInferenceRunParams struct {
+	ID             uuid.UUID          `db:"id" json:"id"`
+	UserID         uuid.UUID          `db:"user_id" json:"user_id"`
+	InputTokens    int64              `db:"input_tokens" json:"input_tokens"`
+	OutputTokens   int64              `db:"output_tokens" json:"output_tokens"`
+	IterationCount int32              `db:"iteration_count" json:"iteration_count"`
+	ToolCallCount  int32              `db:"tool_call_count" json:"tool_call_count"`
+	LeaseExpiresAt pgtype.Timestamptz `db:"lease_expires_at" json:"lease_expires_at"`
+}
+
+func (q *sqlQuerier) PauseInferenceRun(ctx context.Context, arg PauseInferenceRunParams) (InferenceRun, error) {
+	row := q.db.QueryRow(ctx, pauseInferenceRun,
+		arg.ID,
+		arg.UserID,
+		arg.InputTokens,
+		arg.OutputTokens,
+		arg.IterationCount,
+		arg.ToolCallCount,
+		arg.LeaseExpiresAt,
+	)
+	var i InferenceRun
+	err := row.Scan(
+		&i.ID,
+		&i.ThreadID,
+		&i.UserID,
+		&i.ConnectionID,
+		&i.AssistantID,
+		&i.Model,
+		&i.Status,
+		&i.IdempotencyKey,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+		&i.LeaseExpiresAt,
+		&i.Debug,
+		&i.IterationCount,
+		&i.ToolCallCount,
+	)
+	return i, err
+}
+
+const resumeInferenceRun = `-- name: ResumeInferenceRun :one
+UPDATE inference_runs
+SET status = 'running', lease_expires_at = $3, updated_at = now()
+WHERE id = $1 AND user_id = $2 AND status = 'awaiting_client_tool'
+RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count
+`
+
+type ResumeInferenceRunParams struct {
+	ID             uuid.UUID          `db:"id" json:"id"`
+	UserID         uuid.UUID          `db:"user_id" json:"user_id"`
+	LeaseExpiresAt pgtype.Timestamptz `db:"lease_expires_at" json:"lease_expires_at"`
+}
+
+func (q *sqlQuerier) ResumeInferenceRun(ctx context.Context, arg ResumeInferenceRunParams) (InferenceRun, error) {
+	row := q.db.QueryRow(ctx, resumeInferenceRun, arg.ID, arg.UserID, arg.LeaseExpiresAt)
+	var i InferenceRun
+	err := row.Scan(
+		&i.ID,
+		&i.ThreadID,
+		&i.UserID,
+		&i.ConnectionID,
+		&i.AssistantID,
+		&i.Model,
+		&i.Status,
+		&i.IdempotencyKey,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+		&i.LeaseExpiresAt,
+		&i.Debug,
+		&i.IterationCount,
+		&i.ToolCallCount,
+	)
+	return i, err
+}
+
 const updateInferenceConnectionLastUsedByOwner = `-- name: UpdateInferenceConnectionLastUsedByOwner :one
 UPDATE inference_connections
 SET last_used_at = now(), updated_at = now()
@@ -9630,19 +9891,24 @@ SET status = $3,
     output_tokens = $5,
     error_code = $6,
     completed_at = $7,
+    iteration_count = $8,
+    tool_call_count = $9,
+    lease_expires_at = NULL,
     updated_at = now()
 WHERE id = $1 AND user_id = $2
-RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at
+RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count
 `
 
 type UpdateInferenceRunParams struct {
-	ID           uuid.UUID          `db:"id" json:"id"`
-	UserID       uuid.UUID          `db:"user_id" json:"user_id"`
-	Status       string             `db:"status" json:"status"`
-	InputTokens  int64              `db:"input_tokens" json:"input_tokens"`
-	OutputTokens int64              `db:"output_tokens" json:"output_tokens"`
-	ErrorCode    pgtype.Text        `db:"error_code" json:"error_code"`
-	CompletedAt  pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+	ID             uuid.UUID          `db:"id" json:"id"`
+	UserID         uuid.UUID          `db:"user_id" json:"user_id"`
+	Status         string             `db:"status" json:"status"`
+	InputTokens    int64              `db:"input_tokens" json:"input_tokens"`
+	OutputTokens   int64              `db:"output_tokens" json:"output_tokens"`
+	ErrorCode      pgtype.Text        `db:"error_code" json:"error_code"`
+	CompletedAt    pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+	IterationCount int32              `db:"iteration_count" json:"iteration_count"`
+	ToolCallCount  int32              `db:"tool_call_count" json:"tool_call_count"`
 }
 
 func (q *sqlQuerier) UpdateInferenceRun(ctx context.Context, arg UpdateInferenceRunParams) (InferenceRun, error) {
@@ -9654,6 +9920,8 @@ func (q *sqlQuerier) UpdateInferenceRun(ctx context.Context, arg UpdateInference
 		arg.OutputTokens,
 		arg.ErrorCode,
 		arg.CompletedAt,
+		arg.IterationCount,
+		arg.ToolCallCount,
 	)
 	var i InferenceRun
 	err := row.Scan(
@@ -9672,6 +9940,9 @@ func (q *sqlQuerier) UpdateInferenceRun(ctx context.Context, arg UpdateInference
 		&i.UpdatedAt,
 		&i.CompletedAt,
 		&i.LeaseExpiresAt,
+		&i.Debug,
+		&i.IterationCount,
+		&i.ToolCallCount,
 	)
 	return i, err
 }

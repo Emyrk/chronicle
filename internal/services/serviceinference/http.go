@@ -98,6 +98,7 @@ func (s *Service) routes() http.Handler {
 	r.Post("/threads/instance/{instance}", s.createInstanceThread)
 	r.Get("/threads", s.listThreads)
 	r.Get("/threads/{threadID}", s.getThread)
+	r.Post("/runs/{runID}/client-tools/{toolCallID}", s.continueClientTool)
 	r.Post("/runs", s.run)
 	return r
 }
