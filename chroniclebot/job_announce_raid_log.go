@@ -306,9 +306,13 @@ func (w *WorkerAnnounceRaidLog) deleteObsoleteMessage(announcement *database.Gui
 	}
 }
 
-func (w *WorkerAnnounceRaidLog) instanceURL(slug, tenantSlug pgtype.Text) string {
-	if !slug.Valid || slug.String == "" {
-		return ""
+func (w *WorkerAnnounceRaidLog) instanceURL(instanceID uuid.UUID, slug, tenantSlug pgtype.Text) string {
+	identifier := slug.String
+	if !slug.Valid || identifier == "" {
+		if instanceID == uuid.Nil {
+			return ""
+		}
+		identifier = instanceID.String()
 	}
 
 	baseURL := strings.TrimRight(w.bot.config.AccessURL, "/")
@@ -320,7 +324,7 @@ func (w *WorkerAnnounceRaidLog) instanceURL(slug, tenantSlug pgtype.Text) string
 			}).String()
 		}
 	}
-	return fmt.Sprintf("%s/instances/%s", baseURL, url.PathEscape(slug.String))
+	return fmt.Sprintf("%s/instances/%s", baseURL, url.PathEscape(identifier))
 }
 
 func formatDuration(duration time.Duration) string {
@@ -460,7 +464,7 @@ func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uui
 				label = log.UploaderName
 			}
 			logName := fmt.Sprintf("Log %d", i+1)
-			if logURL := w.instanceURL(log.HashedSlug, log.TenantSlug); logURL != "" {
+			if logURL := w.instanceURL(log.ID, log.HashedSlug, log.TenantSlug); logURL != "" {
 				logName = fmt.Sprintf("[%s](%s)", logName, logURL)
 			}
 			lines = append(lines, formatUploadedLog(logName, label, announcementDuration(log), encounterCounts[log.ID]))
@@ -484,7 +488,7 @@ func (w *WorkerAnnounceRaidLog) buildAnnouncement(ctx context.Context, runID uui
 	embed := &discordgo.MessageEmbed{
 		Author: &discordgo.MessageEmbedAuthor{Name: category + " UPLOAD"},
 		Title:  title,
-		URL:    w.instanceURL(best.HashedSlug, best.TenantSlug),
+		URL:    w.instanceURL(best.ID, best.HashedSlug, best.TenantSlug),
 		Fields: fields,
 		Color:  announcementColor(best.Name),
 		Footer: &discordgo.MessageEmbedFooter{Text: strings.Join(footerParts, " · ")},
