@@ -1,7 +1,8 @@
 export type TenantLinkPosition =
   | "featured_server_logs"
   | "featured_server_upload"
-  | "server_card";
+  | "server_card"
+  | "support_standing";
 
 export function trackedTenantUrl(
   destination: string,

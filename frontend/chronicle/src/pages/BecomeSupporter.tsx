@@ -3,7 +3,7 @@ import { useBillingSummary } from "@/api/queries"
 import { SupporterOverview, FramePanel, GOLD_BUTTON } from "@/pages/Settings/BillingSettings"
 
 /** Public overview of supporter tiers. Purchasing happens on /account/billing. */
-export function BecomeRevered() {
+export function BecomeSupporter() {
   // Signed-out visitors get no summary and see the Friendly standing.
   const { data: billing } = useBillingSummary()
   const subscribed = billing?.ads_free ?? false

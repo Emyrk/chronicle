@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Heart, X } from "lucide-react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuthorizationCheck, useSession, useSiteConfig } from "@/api/queries";
 import {
@@ -27,6 +28,9 @@ const MIN_ACCOUNT_AGE_DAYS = 90;
 const MIN_ACCOUNT_AGE_MS = MIN_ACCOUNT_AGE_DAYS * ONE_DAY_MS;
 
 const SUPPORT_URL = "https://chronicleclassic.com/support/";
+const BILLING_PATH = "/account/billing";
+
+type BannerVariant = "donate" | "ad-free" | "thanks";
 
 function isDueToShow(): boolean {
   return Date.now() >= readSupportBannerHideUntil();
@@ -36,7 +40,7 @@ function isDueToShow(): boolean {
  * Called on dismiss only — picks how long to stay quiet based on variant,
  * and returns a friendly heads-up for a toast (never pressure, just confirm).
  */
-function scheduleHideAfterDismiss(variant: "donate" | "thanks", primaryDomain?: string): string {
+function scheduleHideAfterDismiss(variant: BannerVariant, primaryDomain?: string): string {
   if (variant === "thanks") {
     writeSupportBannerHideUntil(Date.now() + THANKS_HIDE_DAYS * ONE_DAY_MS, primaryDomain);
     return "Dismissed for 3 months. Thanks again for keeping Chronicle running!";
@@ -51,29 +55,34 @@ function isOldEnough(createdAt: string): boolean {
   return Date.now() - new Date(createdAt).getTime() >= MIN_ACCOUNT_AGE_MS;
 }
 
-/** Medallion that flips between the Chronicle logo and a heart. Links to the support page. */
-function CoinMedallion({ className }: { className: string }) {
-  return (
-    <a
-      href={SUPPORT_URL}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label="Support Chronicle"
-      className={`relative inline-block shrink-0 rounded-full transition-transform hover:scale-105 ${className}`}
-      style={{ perspective: "300px" }}
-    >
-      <span aria-hidden="true" className="support-banner-coin absolute inset-0">
-        <span className="support-banner-coin-face support-banner-coin-front">
-          <img
-            src="/c/chronicle/ChronicleIconSquare.webp"
-            alt=""
-            className="h-full w-full object-contain"
-          />
-        </span>
-        <span className="support-banner-coin-face support-banner-coin-back">
-          <Heart className="h-1/2 w-1/2 fill-current" />
-        </span>
+/** Medallion that flips between the Chronicle logo and a heart. Links to the support page, or billing when given. */
+function CoinMedallion({ className, toBilling = false }: { className: string; toBilling?: boolean }) {
+  const linkProps = {
+    "aria-label": "Support Chronicle",
+    className: `relative inline-block shrink-0 rounded-full transition-transform hover:scale-105 ${className}`,
+    style: { perspective: "300px" },
+  };
+  const face = (
+    <span aria-hidden="true" className="support-banner-coin absolute inset-0">
+      <span className="support-banner-coin-face support-banner-coin-front">
+        <img
+          src="/c/chronicle/ChronicleIconSquare.webp"
+          alt=""
+          className="h-full w-full object-contain"
+        />
       </span>
+      <span className="support-banner-coin-face support-banner-coin-back">
+        <Heart className="h-1/2 w-1/2 fill-current" />
+      </span>
+    </span>
+  );
+
+  if (toBilling) {
+    return <Link to={BILLING_PATH} {...linkProps}>{face}</Link>;
+  }
+  return (
+    <a href={SUPPORT_URL} target="_blank" rel="noopener noreferrer" {...linkProps}>
+      {face}
     </a>
   );
 }
@@ -103,8 +112,9 @@ const THANKS_DISMISS_CLASSES = `${DISMISS_BASE_CLASSES} hover:bg-emerald-500/20`
  * Site-wide reminder that Chronicle's hosting is donor-funded. Shows on every
  * load until dismissed (see scheduleHideAfterDismiss for what happens then).
  * Never shown to a logged-out visitor or to an account younger than
- * MIN_ACCOUNT_AGE_DAYS. Whether someone currently holds the "supporter"
- * SpiceDB role is checked last and decides the message.
+ * MIN_ACCOUNT_AGE_DAYS. Ad-free subscribers and holders of the "supporter"
+ * SpiceDB role are thanked; everyone else is asked to go ad-free when the
+ * deployment serves ads and has billing, or to donate otherwise.
  */
 export function SupportBanner() {
   const { data: session, isLoading: sessionLoading } = useSession();
@@ -129,7 +139,12 @@ export function SupportBanner() {
     return null;
   }
 
-  const variant = authz?.supporter ? "thanks" : "donate";
+  const variant: BannerVariant =
+    session.ads_free || authz?.supporter
+      ? "thanks"
+      : siteConfig?.ads_enabled && siteConfig.billing_enabled
+        ? "ad-free"
+        : "donate";
   const handleDismiss = () => {
     const message = scheduleHideAfterDismiss(variant, primaryDomain);
     toast.success(message);
@@ -153,6 +168,33 @@ export function SupportBanner() {
             </div>
           </div>
           <button onClick={handleDismiss} className={THANKS_DISMISS_CLASSES} aria-label="Dismiss banner">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (variant === "ad-free") {
+    return (
+      <div className={DONATE_BAR_CLASSES}>
+        <div className={CONTENT_ROW_CLASSES}>
+          <div className={ICON_TEXT_CLASSES}>
+            <CoinMedallion className="h-10 w-10" toBilling />
+            <div className="min-w-0 flex-1">
+              <div className={DONATE_HEADING_CLASSES}>
+                <span className="sm:hidden">Go Ad-Free</span>
+                <span className="hidden sm:inline">Go ad-free and help keep Chronicle running.</span>
+              </div>
+              <div className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
+                Earn Honored, Revered, or Exalted standing to remove ads and help cover hosting.
+              </div>
+            </div>
+          </div>
+          <Link to={BILLING_PATH} className={DONATE_BUTTON_CLASSES}>
+            Go Ad-Free
+          </Link>
+          <button onClick={handleDismiss} className={DONATE_DISMISS_CLASSES} aria-label="Dismiss banner">
             <X className="h-4 w-4" />
           </button>
         </div>

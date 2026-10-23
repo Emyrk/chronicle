@@ -146,7 +146,7 @@ describe("AdSlot", () => {
 
   it.each([
     { name: "billing settings for a signed-in user", session: { ads_free: false }, href: "/account/billing" },
-    { name: "the Revered page for a signed-out visitor", session: null, href: "/revered" },
+    { name: "the supporter page for a signed-out visitor", session: null, href: "/supporter" },
   ])("links the label to $name when billing is enabled", ({ session, href }) => {
     const markup = renderAdSlot(
       <AdSlot
@@ -164,7 +164,7 @@ describe("AdSlot", () => {
     )
 
     expect(markup).toContain(`href="${href}"`)
-    expect(markup).toContain('title="Become Revered to remove ads"')
+    expect(markup).toContain('title="Become a supporter to remove ads"')
     expect(markup).toContain("Go ad-free")
   })
 

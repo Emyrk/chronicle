@@ -115,8 +115,8 @@ export function AdSlot({
       <div>
         {siteConfig?.billing_enabled ? (
           <Link
-            to={session ? "/account/billing" : "/revered"}
-            title="Become Revered to remove ads"
+            to={session ? "/account/billing" : "/supporter"}
+            title="Become a supporter to remove ads"
             className="group mb-1.5 grid text-center text-[9px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60 transition-colors hover:text-[#f0c060] focus-visible:text-[#f0c060]"
           >
             {/* Both labels share one grid cell so swapping on hover never shifts layout. */}

@@ -7,7 +7,7 @@ import { RouteLoadingFallback } from "./components/Layout/RouteLoadingFallback"
 
 const Login = lazy(() => import("./pages/Login/Login").then(({ Login }) => ({ default: Login })))
 const Contact = lazy(() => import("./pages/Contact").then(({ Contact }) => ({ default: Contact })))
-const BecomeRevered = lazy(() => import("./pages/BecomeRevered").then(({ BecomeRevered }) => ({ default: BecomeRevered })))
+const BecomeSupporter = lazy(() => import("./pages/BecomeSupporter").then(({ BecomeSupporter }) => ({ default: BecomeSupporter })))
 const Privacy = lazy(() => import("./pages/Privacy").then(({ Privacy }) => ({ default: Privacy })))
 const Disclaimer = lazy(() => import("./pages/Disclaimer").then(({ Disclaimer }) => ({ default: Disclaimer })))
 const SupportedInstances = lazy(() => import("./pages/SupportedInstances").then(({ SupportedInstances }) => ({ default: SupportedInstances })))
@@ -238,7 +238,8 @@ function App() {
           <Route path="miniatures" element={<MiniaturesPage />} />
         </Route>
         <Route path="/contact" element={<Contact />} />
-        <Route path="/revered" element={<BecomeRevered />} />
+        <Route path="/supporter" element={<BecomeSupporter />} />
+        <Route path="/revered" element={<Navigate to="/supporter" replace />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/disclaimer" element={<Disclaimer />} />
         <Route path="/supported" element={<SupportedInstances />} />

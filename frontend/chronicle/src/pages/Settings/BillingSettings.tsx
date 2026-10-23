@@ -139,7 +139,7 @@ export function BillingSignInPrompt() {
   )
 }
 
-/** Shared supporter-tier overview used by account billing and the public /revered route. */
+/** Shared supporter-tier overview used by account billing and the public /supporter route. */
 export function SupporterOverview({ billing, panel }: { billing?: BillingSummary; panel: React.ReactNode }) {
   const hasTierAccess = billing?.ads_free ?? false
   const tierLabel = billingTierLabel(billing?.tier ?? "free")

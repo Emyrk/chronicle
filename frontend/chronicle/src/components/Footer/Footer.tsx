@@ -1,26 +1,14 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Crown } from "lucide-react";
+import { Crown, HandHeart } from "lucide-react";
 import { DiscordIcon } from "@/components/icons/DiscordIcon";
-import { CryptoTipModal } from "./CryptoTipModal";
 import { useSiteConfig } from "@/api/queries";
 import type { Branding, SiteConfig } from "@/api/typesGenerated";
 
 const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
-const PATREON_URL = "https://www.patreon.com/cw/ChronicleClassic";
-const GITHUB_SPONSORS_URL = "https://github.com/sponsors/Emyrk/";
-const BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/chronicleclassic";
 const SUPPORT_URL = "https://chronicleclassic.com/support/";
 const ADS_URL = "https://chronicleclassic.com/ads/";
-const BUY_ME_A_COFFEE_ICON_URL =
-  "https://cdn.brandfetch.io/idiZkYjDE2/w/192/h/192/theme/dark/logo.png?c=1bxid64Mup7aczewSAYMX&t=1708787601888";
-const PATREON_ICON_URL =
-  "https://cdn.brandfetch.io/id5ZYO6A-6/theme/light/symbol.svg?c=1bxid64Mup7aczewSAYMX&t=1697549446035";
-const PATREON_TOOLTIP =
-  "Finantial contributions are greatly appreciated, but never required. Visit the patreon link to learn more!";
 
 export function Footer() {
-  const [cryptoModalOpen, setCryptoModalOpen] = useState(false);
   const { data: siteConfig } = useSiteConfig();
   const tenant = siteConfig?.tenant ?? null;
 
@@ -99,14 +87,6 @@ export function Footer() {
                   Chronicle Discord
                 </a>
               </li>
-              {siteConfig?.billing_enabled && (
-                <li>
-                  <Link to="/revered" className="hover:text-foreground transition-colors inline-flex items-center gap-1">
-                    <Crown className="h-4 w-4 text-[#f0c060]" aria-hidden="true" />
-                    Support Chronicle
-                  </Link>
-                </li>
-              )}
               <li>
                 <Link to="/contact" className="hover:text-foreground transition-colors">
                   About & Contact
@@ -117,74 +97,33 @@ export function Footer() {
 
           {/* Contribute Support */}
           <div>
-            <h4 className="font-semibold mb-3">
-              <a
-                href={SUPPORT_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-foreground transition-colors"
-              >
-                Contribute Support
-              </a>
-            </h4>
+            <h4 className="font-semibold mb-3">Contribute Support</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
+              {siteConfig?.billing_enabled && (
+                <li>
+                  <Link
+                    to="/supporter"
+                    title="Supporter tiers include ad-free browsing, extra storage, and more"
+                    className="hover:text-foreground transition-colors inline-flex items-center gap-1"
+                  >
+                    <Crown className="h-4 w-4 text-[#f0c060]" aria-hidden="true" />
+                    Support Chronicle
+                    <span className="ml-1 rounded-full border border-[#f0c060]/50 bg-[#f0c060]/10 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wider text-[#f0c060]">
+                      Perks
+                    </span>
+                  </Link>
+                </li>
+              )}
               <li>
                 <a
-                  href={PATREON_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={PATREON_TOOLTIP}
-                  className="hover:text-foreground transition-colors inline-flex items-center gap-1"
-                >
-                  <img
-                    src={PATREON_ICON_URL}
-                    alt=""
-                    aria-hidden="true"
-                    className="h-4 w-4"
-                  />
-                  Patreon
-                </a>
-              </li>
-              <li>
-                <a
-                  href={BUY_ME_A_COFFEE_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-foreground transition-colors inline-flex items-center gap-1"
-                >
-                  <img
-                    src={BUY_ME_A_COFFEE_ICON_URL}
-                    alt=""
-                    aria-hidden="true"
-                    className="h-4 w-4"
-                  />
-                  Buy Me a Coffee
-                </a>
-              </li>
-              <li>
-                <a
-                  href={GITHUB_SPONSORS_URL}
+                  href={SUPPORT_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-foreground transition-colors inline-flex items-center gap-1"
                 >
-                  <svg className="h-4 w-4" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                    <path d="M8 .2C3.58.2 0 3.78 0 8.2c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8.2c0-4.42-3.58-8-8-8z" />
-                  </svg>
-                  GitHub Sponsors
+                  <HandHeart className="h-4 w-4" aria-hidden="true" />
+                  Donate to Chronicle
                 </a>
-              </li>
-              <li>
-                <button
-                  onClick={() => setCryptoModalOpen(true)}
-                  className="hover:text-foreground transition-colors inline-flex items-center gap-1"
-                >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M9.5 8h5a2 2 0 0 1 0 4h-5m0-4v8m0-8H8m1.5 4h4.5a2 2 0 0 1 0 4H9.5m0 0H8" />
-                  </svg>
-                  Tip with Crypto
-                </button>
               </li>
             </ul>
           </div>
@@ -231,12 +170,6 @@ export function Footer() {
           </div>
         </div>
       </div>
-      {cryptoModalOpen && (
-        <CryptoTipModal
-          open
-          onClose={() => setCryptoModalOpen(false)}
-        />
-      )}
     </footer>
   );
 }

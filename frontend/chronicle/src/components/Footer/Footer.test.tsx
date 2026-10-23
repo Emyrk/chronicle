@@ -33,23 +33,26 @@ describe("Footer", () => {
     expect(markup).not.toContain('data-router-link="true" href="/blog"');
   });
 
-  it("hides Revered billing when billing is disabled", () => {
+  it("hides supporter billing when billing is disabled", () => {
     vi.stubGlobal("document", { querySelector: () => null });
     mocks.siteConfig = { billing_enabled: false };
 
     const markup = renderToStaticMarkup(<Footer />);
 
     expect(markup).not.toContain("Support Chronicle");
-    expect(markup).not.toContain('href="/revered"');
+    expect(markup).not.toContain('href="/supporter"');
+    expect(markup).toContain("Donate to Chronicle");
+    expect(markup).toContain('href="https://chronicleclassic.com/support/"');
   });
 
-  it("shows Revered billing when billing is enabled", () => {
+  it("shows supporter billing when billing is enabled", () => {
     vi.stubGlobal("document", { querySelector: () => null });
     mocks.siteConfig = { billing_enabled: true };
 
     const markup = renderToStaticMarkup(<Footer />);
 
     expect(markup).toContain("Support Chronicle");
-    expect(markup).toContain('href="/revered"');
+    expect(markup).toContain('href="/supporter"');
+    expect(markup).toContain("Perks");
   });
 });
