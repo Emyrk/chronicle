@@ -7,7 +7,7 @@ import type { SiteConfig } from "@/api/typesGenerated"
 import { describe, expect, it, vi } from "vitest"
 import { AdSlot } from "./AdSlot"
 import { adSizeLabel, adSizesForFormat } from "./adFormats"
-import { clearNitroPayAds } from "./nitroPay"
+import { clearNitroPayAds, nitroPayAdOptions } from "./nitroPay"
 import {
   isLocalAdPreviewHost,
   shouldShowAdPreview,
@@ -187,8 +187,40 @@ describe("AdSlot", () => {
     expect(markup).toContain('data-ad-provider="nitropay"')
     expect(markup).toContain('id="nitropay-leaderboards-right-rail"')
     expect(markup).toContain("min-h-[600px]")
+    expect(markup).toContain("!bg-transparent")
+    expect(markup).toContain("[&amp;&gt;iframe]:!bg-transparent")
     expect(markup).toContain(">Advertisement</div>")
     expect(markup).not.toContain("Ad preview")
+  })
+
+  it("uses NitroPay demo creatives instead of the local placeholder preview", () => {
+    const markup = renderAdSlot(
+      <AdSlot
+        placement="recent-right-rail"
+        format="rail"
+        hostname="localhost"
+        previewEnabled
+        demoEnabled
+      />,
+      {
+        ads_enabled: true,
+        nitropay_site_id: "12345",
+      } as SiteConfig,
+    )
+
+    expect(markup).toContain('data-ad-provider="nitropay"')
+    expect(markup).toContain('data-ad-demo="true"')
+    expect(markup).toContain("NitroPay demo")
+    expect(markup).toContain("160 × 600")
+    expect(markup).toContain("bg-[#f0c060]/5")
+    expect(markup).not.toContain("Ad preview")
+  })
+
+  it("adds NitroPay's demo option only when requested", () => {
+    const sizes = adSizesForFormat("rail", false)
+
+    expect(nitroPayAdOptions(sizes)).not.toHaveProperty("demo")
+    expect(nitroPayAdOptions(sizes, true)).toMatchObject({ demo: true, sizes })
   })
 
   it.each([

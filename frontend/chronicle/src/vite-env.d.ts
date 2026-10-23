@@ -8,6 +8,7 @@ interface Window {
 interface ImportMetaEnv {
   readonly VITE_SERVER_NAME: string;
   readonly CHRONICLE_PREVIEW_ADS: boolean;
+  readonly CHRONICLE_PREVIEW_ADS_DEMO: boolean;
 }
 
 interface ImportMeta {
