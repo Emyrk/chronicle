@@ -13,18 +13,22 @@ func ContentSecurityPolicy(adsEnabled func(*http.Request) bool) func(next http.H
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			httpsSource := ""
 			scriptAdSources := ""
+			styleAdSources := ""
+			fontAdSources := ""
 			mediaSources := "media-src 'self'"
 			if adsEnabled != nil && adsEnabled(r) {
 				httpsSource = " https:"
 				scriptAdSources = " 'unsafe-eval' https:"
+				styleAdSources = " https:"
+				fontAdSources = " https:"
 				mediaSources = "media-src 'self' data: blob: https:"
 			}
 
 			policy := strings.Join([]string{
 				"default-src 'self'",
 				"script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://www.googletagmanager.com https://www.google-analytics.com https://www.youtube.com https://static.cloudflareinsights.com" + scriptAdSources,
-				"style-src 'self' 'unsafe-inline'",
-				"font-src 'self'",
+				"style-src 'self' 'unsafe-inline'" + styleAdSources,
+				"font-src 'self'" + fontAdSources,
 				"img-src 'self' data: blob: https://www.googletagmanager.com https://cdn.brandfetch.io https://icons.chronicleclassic.com https://cdn.discordapp.com https://i.imgur.com https://avatars.githubusercontent.com" + httpsSource,
 				mediaSources,
 				"connect-src 'self' blob: https://raw.githubusercontent.com https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com https://www.google.com https://icons.chronicleclassic.com https://models.chronicleclassic.com" + httpsSource,
