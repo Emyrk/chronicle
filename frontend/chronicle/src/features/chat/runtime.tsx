@@ -10,15 +10,6 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import type { ClientToolRequestEvent } from "./protocol";
 
 const MAX_RESULT_BYTES = 64 * 1024;
@@ -100,6 +91,10 @@ export interface InferenceRuntimeSnapshot extends InferenceRuntimeClient {
   capabilities: InferenceCapabilityDescriptor[];
   yoloEnabled: boolean;
   setYoloEnabled: (enabled: boolean) => void;
+  // The client tool awaiting user approval. Chat panels render it inline so
+  // the prompt follows the chat into a floating or popped-out window.
+  pendingConfirmation: ClientToolRequestEvent | null;
+  resolveConfirmation: (approved: boolean) => void;
   registerCapability: (registration: InferenceCapabilityRegistration) => () => void;
 }
 
@@ -375,39 +370,27 @@ export function InferenceRuntimeProvider({ children }: { children: ReactNode }) 
     yoloRef.current = enabled;
     setYoloEnabled(enabled);
   }, []);
-  const resolveConfirmation = (approved: boolean) => {
-    confirmation?.resolve(approved);
+  const resolveConfirmation = useCallback((approved: boolean) => {
+    confirmationRef.current?.resolve(approved);
     setConfirmation(null);
     queueMicrotask(showNextConfirmation);
-  };
+  }, [showNextConfirmation]);
 
   const value = useMemo<InferenceRuntimeSnapshot>(() => ({
     sessionId: runtime.sessionId,
     capabilities,
     yoloEnabled,
     setYoloEnabled: updateYolo,
+    pendingConfirmation: confirmation?.request ?? null,
+    resolveConfirmation,
     registerCapability: runtime.registerCapability,
     getClientDescriptor: runtime.getClientDescriptor,
     executeClientTool: runtime.executeClientTool,
-  }), [capabilities, runtime, updateYolo, yoloEnabled]);
+  }), [capabilities, confirmation, resolveConfirmation, runtime, updateYolo, yoloEnabled]);
 
   return (
     <InferenceRuntimeContext.Provider value={value}>
       {children}
-      <Dialog open={Boolean(confirmation)} onOpenChange={(open) => !open && resolveConfirmation(false)}>
-        <DialogContent showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>Allow assistant action?</DialogTitle>
-            <DialogDescription>
-              The assistant wants to run <strong>{confirmation?.request.toolName}</strong>, which will change the current view.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => resolveConfirmation(false)}>Reject</Button>
-            <Button onClick={() => resolveConfirmation(true)}>Allow</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </InferenceRuntimeContext.Provider>
   );
 }

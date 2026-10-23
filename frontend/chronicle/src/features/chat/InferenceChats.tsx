@@ -18,6 +18,7 @@ import { shouldCreateInstanceThread } from "./instanceThread";
 import { buildInstanceAnalystRunRequest, buildSiteHelpRunRequest, toChatMessages } from "./inference";
 import { ModelCombobox } from "./ModelCombobox";
 import type { DebugCommandInput } from "./useAssistantChat";
+import { useChatWindow } from "./useChatWindow";
 import { useInferenceSelection } from "./useInferenceSelection";
 
 function AssistantConfiguration({
@@ -72,7 +73,7 @@ export function GlobalSiteHelpChat() {
   const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed);
   const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed);
   const debugPreview = useInferenceDebugPreview();
-  const [open, setOpen] = useState(false);
+  const chatWindow = useChatWindow("site-help", "Chronicle site help");
   const [debugEnabled, setDebugEnabled] = useState(false);
   const previewDebug = useCallback(async () => {
     if (!selection.modelId) throw new Error("Select a model first.");
@@ -97,8 +98,7 @@ export function GlobalSiteHelpChat() {
   const disconnected = selection.connections.length === 0;
   return (
     <AssistantChat
-      open={open}
-      onOpenChange={setOpen}
+      chatWindow={chatWindow}
       endpoint="/api/v1/inference/runs"
       createRequest={createRequest}
       onDebugCommand={debugPermission.allowed ? previewDebug : undefined}
@@ -115,7 +115,6 @@ export function GlobalSiteHelpChat() {
       disabledTitle={selection.error ? "AI configuration unavailable" : "Connect OpenRouter to start chatting"}
       disabledDescription={selection.error?.message ?? "Connect your user-funded OpenRouter account in settings. Chronicle never receives your OpenRouter password."}
       disabledAction={<ConnectRequiredAction />}
-      className="h-dvh sm:h-[min(760px,100vh)]"
     />
   );
 }
@@ -128,7 +127,8 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
   const debugPreview = useInferenceDebugPreview();
   const clearThread = useClearInferenceThread();
   const createThread = useCreateInstanceInferenceThread();
-  const [open, setOpen] = useState(false);
+  const chatWindow = useChatWindow(`instance-${instanceId}`, `${instanceName} assistant`);
+  const open = chatWindow.mode !== "minimized";
   const [debugEnabled, setDebugEnabled] = useState(false);
   const threadId = createThread.data?.thread.id;
   const threadQuery = useInferenceThread(threadId, { enabled: false });
@@ -186,10 +186,9 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
   return (
     <AssistantChat
       // Keep the controller mounted when updated_at changes after a refresh;
-      // remounting aborts in-flight client-tool continuation and closes the sheet.
+      // remounting aborts in-flight client-tool continuation.
       key={response?.thread.id ?? "pending"}
-      open={open}
-      onOpenChange={setOpen}
+      chatWindow={chatWindow}
       endpoint="/api/v1/inference/runs"
       threadId={response?.thread.id}
       initialMessages={response ? toChatMessages(response.messages) : []}
@@ -216,7 +215,6 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
             : "Instance assistant unavailable"}
       disabledDescription={selection.error?.message ?? threadError?.message ?? (threadLoading ? "Loading persisted conversation history…" : "Connect a provider in account settings, then choose a model.")}
       disabledAction={disconnected ? <ConnectRequiredAction /> : undefined}
-      className="h-dvh sm:h-[min(760px,100vh)]"
     />
   );
 }

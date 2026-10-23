@@ -32,8 +32,10 @@ export function ModelCombobox({ models, value, onChange }: ModelComboboxProps) {
         setQuery("");
       }
     };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    // Listen on the owning document so this works when the chat is popped out.
+    const ownerDocument = rootRef.current?.ownerDocument ?? document;
+    ownerDocument.addEventListener("mousedown", close);
+    return () => ownerDocument.removeEventListener("mousedown", close);
   }, []);
 
   const choose = (model: InferenceModel) => {

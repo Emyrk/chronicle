@@ -54,6 +54,8 @@ export type {
   InferenceToolContext,
   InferenceToolHandler,
 } from "./runtime";
+export { useChatWindow } from "./useChatWindow";
+export type { ChatWindowController, ChatWindowMode } from "./useChatWindow";
 export { createDefaultChatRunRequest, useAssistantChat } from "./useAssistantChat";
 export type {
   AssistantChatController,
