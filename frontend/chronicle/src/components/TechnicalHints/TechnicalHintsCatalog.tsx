@@ -10,7 +10,11 @@ const SECTIONS: Array<{ kind: TechnicalHintKind; title: string; description: str
   { kind: "blog", title: "Chronicle articles", description: "Feature announcements, guides, and technical explanations." },
 ];
 
-export function TechnicalHintsCatalog() {
+export function TechnicalHintsCatalog({
+  cardSize,
+}: {
+  cardSize?: { width: number; height: number };
+} = {}) {
   const { data, isLoading } = useTechnicalHints();
 
   if (!data && isLoading) {
@@ -37,9 +41,25 @@ export function TechnicalHintsCatalog() {
           >
             <h2 className="text-lg font-semibold">{section.title}</h2>
             <p className="mb-3 text-sm text-muted-foreground">{section.description}</p>
-            <div className="grid gap-3 md:grid-cols-2">
-              {hints.map((hint) => <TechnicalHintCard key={hint.id} hint={hint} />)}
-            </div>
+            {cardSize ? (
+              <div className="styled-scrollbar overflow-x-auto pb-2">
+                <div className="flex flex-wrap gap-3" style={{ minWidth: `${cardSize.width}px` }}>
+                  {hints.map((hint) => (
+                    <div
+                      key={hint.id}
+                      className="shrink-0 overflow-hidden rounded-md shadow-lg shadow-black/15"
+                      style={{ width: `${cardSize.width}px`, height: `${cardSize.height}px` }}
+                    >
+                      <TechnicalHintCard hint={hint} compact={cardSize.height <= 140} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {hints.map((hint) => <TechnicalHintCard key={hint.id} hint={hint} />)}
+              </div>
+            )}
           </section>
         );
       })}
