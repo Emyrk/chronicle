@@ -8,6 +8,7 @@ import {
   readCachedTechnicalHints,
   writeCachedTechnicalHints,
 } from "./technicalHintsCache";
+import { mergeTechnicalHints } from "./staticTechnicalHints";
 import type { TechnicalHintsResponse } from "./types";
 
 const TECHNICAL_HINTS_STALE_TIME_MS = 15 * 60 * 1000;
@@ -21,19 +22,19 @@ async function fetchTechnicalHints(): Promise<TechnicalHintsResponse> {
     throw new Error("Chronicle tips response was invalid");
   }
 
-  const fresh = filterUnexpiredTechnicalHints(value);
+  const fresh = filterUnexpiredTechnicalHints(mergeTechnicalHints(value));
   writeCachedTechnicalHints(fresh);
   return fresh;
 }
 
 export function useTechnicalHints() {
-  const cached = useMemo(() => readCachedTechnicalHints(), []);
+  const cached = useMemo(() => mergeTechnicalHints(readCachedTechnicalHints()), []);
   const { data: siteConfig } = useSiteConfig();
   const query = useQuery({
     queryKey: ["technical-hints"],
     queryFn: fetchTechnicalHints,
     initialData: cached,
-    initialDataUpdatedAt: cached ? 0 : undefined,
+    initialDataUpdatedAt: 0,
     staleTime: TECHNICAL_HINTS_STALE_TIME_MS,
     refetchOnWindowFocus: false,
   });
