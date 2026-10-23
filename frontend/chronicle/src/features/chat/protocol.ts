@@ -79,10 +79,10 @@ export type ClientToolConfirmation = "never" | "unless_yolo";
 
 export interface ClientToolCapability {
   id: string;
-  version: string;
+  version: number;
   scopeType?: string;
   scopeId?: string;
-  stateRevision?: string;
+  stateRevision?: number;
 }
 
 export interface ClientToolRequestEvent extends AgUiEventBase {

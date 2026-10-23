@@ -29,6 +29,9 @@ export interface InstanceUIState {
   panelTypesById: Record<string, string>;
   panelOptionsById: Record<string, string | null>;
   panelFiltersById: Record<string, PanelFilter[]>;
+  availableEncounterIds: string[];
+  availablePlayerIds: string[];
+  availableEnemyIds: string[];
   availablePanelTypes: string[];
   availablePresets: string[];
 }
@@ -82,7 +85,7 @@ export function buildInstanceUISnapshot(
         };
       });
   }
-  if (sections.has("capabilities") || sections.has("panels")) {
+  if (sections.has("capabilities")) {
     snapshot.capabilities = {
       panelTypes: state.availablePanelTypes,
       presets: state.availablePresets,
@@ -155,6 +158,11 @@ function requirePanel(state: InstanceUIState, panelId: string): void {
   }
 }
 
+function requireKnownIds(ids: string[], availableIds: string[]): void {
+  const available = new Set(availableIds);
+  if (ids.some((id) => !available.has(id))) throw new Error("invalid_selection");
+}
+
 function validateOperation(state: InstanceUIState, operation: InstanceUIOperation): string {
   switch (operation.op) {
     case "apply_preset":
@@ -174,12 +182,15 @@ function validateOperation(state: InstanceUIState, operation: InstanceUIOperatio
       return `Apply ${operation.filters.length} filter${operation.filters.length === 1 ? "" : "s"} to panel ${operation.panel_id}`;
     case "select_encounters":
       if (!Array.isArray(operation.ids) || operation.ids.length === 0 || operation.ids.length > 100) throw new Error("invalid_selection");
+      requireKnownIds(operation.ids, state.availableEncounterIds);
       return `Select ${operation.ids.length} encounter${operation.ids.length === 1 ? "" : "s"}`;
     case "select_players":
       if (!Array.isArray(operation.ids) || operation.ids.length > 100) throw new Error("invalid_selection");
+      requireKnownIds(operation.ids, state.availablePlayerIds);
       return `Select ${operation.ids.length} player${operation.ids.length === 1 ? "" : "s"}`;
     case "select_enemies":
       if (!Array.isArray(operation.ids) || operation.ids.length > 100) throw new Error("invalid_selection");
+      requireKnownIds(operation.ids, state.availableEnemyIds);
       return `Select ${operation.ids.length} enem${operation.ids.length === 1 ? "y" : "ies"}`;
     case "set_time_range":
       if (!Number.isFinite(operation.start_offset_ms) || !Number.isFinite(operation.end_offset_ms)

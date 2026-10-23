@@ -17,10 +17,13 @@ const state: InstanceUIState = {
   includeWipes: false,
   timeRange: { enabled: true, startOffsetMs: 1000, endOffsetMs: 5000 },
   presetId: "damage",
-  layoutItems: [{ id: "panel-1", kind: "panel", x: 0, y: 0, w: 6, h: 4 }],
+  layoutItems: [{ id: "panel-1", kind: "panel", title: "Panel 1", x: 0, y: 0, w: 6, h: 4 }],
   panelTypesById: { "panel-1": "damage_done" },
   panelOptionsById: { "panel-1": "g:merged" },
   panelFiltersById: { "panel-1": [{ type: "ability_name", value: ["Fireball"] }] },
+  availableEncounterIds: ["encounter-1", "encounter-2"],
+  availablePlayerIds: ["player-1"],
+  availableEnemyIds: [],
   availablePanelTypes: ["damage_done", "healing_done"],
   availablePresets: ["summary", "damage", "healing"],
 };
@@ -49,6 +52,8 @@ describe("instance inference tools", () => {
         filters: [{ type: "ability_name", value: ["Fireball"] }],
         queryable: true,
       }],
+    });
+    expect(buildInstanceUISnapshot(state, ["capabilities"])).toMatchObject({
       capabilities: {
         panelTypes: ["damage_done", "healing_done"],
         presets: ["summary", "damage", "healing"],

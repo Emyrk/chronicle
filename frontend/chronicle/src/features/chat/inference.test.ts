@@ -9,7 +9,7 @@ import {
 } from "./inference";
 
 const input = {
-  client: { session_id: "session-1", capabilities: [{ id: "page", version: "1" }] },
+  client: { session_id: "session-1", capabilities: [{ id: "page", version: 1 }] },
   runId: "run-1",
   threadId: "thread-1",
   messages: [

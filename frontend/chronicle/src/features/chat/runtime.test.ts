@@ -11,7 +11,7 @@ function request(overrides: Partial<ClientToolRequestEvent> = {}): ClientToolReq
     toolName: "inspect",
     arguments: '{"value":7}',
     clientSessionId: "session-1",
-    capability: { id: "page", version: "1", scopeType: "route", scopeId: "rankings", stateRevision: "4" },
+    capability: { id: "page", version: 1, scopeType: "route", scopeId: "rankings", stateRevision: 4 },
     effect: "read",
     confirmation: "never",
     ...overrides,
@@ -24,9 +24,9 @@ function register(
 ) {
   return runtime.registerCapability({
     id: "page",
-    version: "1",
+    version: 1,
     scope: { type: "route", id: "rankings" },
-    stateRevision: "4",
+    stateRevision: 4,
     tools: { inspect: handler },
   });
 }
@@ -38,7 +38,7 @@ describe("InferenceRuntime", () => {
     expect(() => register(runtime)).toThrow(/already registered/);
     expect(runtime.getClientDescriptor()).toEqual({
       session_id: "session-1",
-      capabilities: [{ id: "page", version: "1", scope_type: "route", scope_id: "rankings", state_revision: "4" }],
+      capabilities: [{ id: "page", version: 1, scope_type: "route", scope_id: "rankings", state_revision: 4 }],
     });
     unregister();
     expect(runtime.getClientDescriptor().capabilities).toEqual([]);
@@ -47,7 +47,7 @@ describe("InferenceRuntime", () => {
   it("returns unavailable for an unmounted capability and stale_state for a changed revision", async () => {
     const runtime = new InferenceRuntime({ sessionId: "session-1" });
     const unregister = register(runtime);
-    await expect(runtime.executeClientTool(request({ capability: { ...request().capability, stateRevision: "3" } }), new AbortController().signal))
+    await expect(runtime.executeClientTool(request({ capability: { ...request().capability, stateRevision: 3 } }), new AbortController().signal))
       .resolves.toMatchObject({ status: "stale_state" });
     unregister();
     await expect(runtime.executeClientTool(request(), new AbortController().signal))

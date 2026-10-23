@@ -116,7 +116,7 @@ it("keeps a client tool request pending until the server emits TOOL_CALL_END", (
     toolCallId: "tool-1",
     toolName: "change_view",
     arguments: '{"tab":"damage"}',
-    capability: { id: "page", version: "1" },
+    capability: { id: "page", version: 1 },
     effect: "view_mutation",
     confirmation: "unless_yolo",
   });

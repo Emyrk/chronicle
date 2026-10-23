@@ -182,9 +182,18 @@ function validateClientToolRequest(value: Record<string, unknown>, event: SseEve
   }
   const capability = requireRecord(value.capability, "capability", event);
   requireString(capability, "id", event);
-  requireString(capability, "version", event);
-  for (const field of ["scopeType", "scopeId", "stateRevision"]) {
+  const version = requireNumber(capability, "version", event);
+  if (!Number.isInteger(version) || version < 1) {
+    throw new AgUiClientError("parse", "CLIENT_TOOL_REQUEST capability version must be a positive integer.", { event });
+  }
+  for (const field of ["scopeType", "scopeId"]) {
     requireOptionalString(capability, field, event);
+  }
+  if (capability.stateRevision !== undefined) {
+    const stateRevision = requireNumber(capability, "stateRevision", event);
+    if (!Number.isInteger(stateRevision) || stateRevision < 0) {
+      throw new AgUiClientError("parse", "CLIENT_TOOL_REQUEST state revision must be a nonnegative integer.", { event });
+    }
   }
   if ((capability.scopeType === undefined) !== (capability.scopeId === undefined)) {
     throw new AgUiClientError("parse", "CLIENT_TOOL_REQUEST capability scope must include type and id.", { event });

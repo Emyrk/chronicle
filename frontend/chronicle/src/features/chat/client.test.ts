@@ -228,7 +228,7 @@ describe("client tool continuation", () => {
     toolName: "inspect",
     arguments: "{}",
     clientSessionId: "session-1",
-    capability: { id: "page", version: "1", scopeType: "route", scopeId: "rankings", stateRevision: "4" },
+    capability: { id: "page", version: 1, scopeType: "route", scopeId: "rankings", stateRevision: 4 },
     effect: "read",
     confirmation: "never",
   } as const;
@@ -237,7 +237,7 @@ describe("client tool continuation", () => {
     expect(parseAgUiEvent({ data: JSON.stringify(clientRequest) })).toEqual(clientRequest);
     expect(() => parseAgUiEvent({ data: JSON.stringify({ ...clientRequest, effect: "write" }) }))
       .toThrowError(expect.objectContaining<Partial<AgUiClientError>>({ kind: "parse" }));
-    expect(() => parseAgUiEvent({ data: JSON.stringify({ ...clientRequest, capability: { id: "page", version: "1", scopeType: "route" } }) }))
+    expect(() => parseAgUiEvent({ data: JSON.stringify({ ...clientRequest, capability: { id: "page", version: 1, scopeType: "route" } }) }))
       .toThrowError(expect.objectContaining<Partial<AgUiClientError>>({ kind: "parse" }));
   });
 
@@ -255,10 +255,10 @@ describe("client tool continuation", () => {
     const executeClientTool = vi.fn(async () => ({
       client_session_id: "session-1",
       capability_id: "page",
-      capability_version: "1",
+      capability_version: 1,
       scope_type: "route",
       scope_id: "rankings",
-      state_revision: "4",
+      state_revision: 4,
       status: "success" as const,
       result: { ok: true },
     }));

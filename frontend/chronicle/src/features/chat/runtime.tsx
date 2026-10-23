@@ -30,10 +30,10 @@ export interface InferenceCapabilityScope {
 
 export interface InferenceCapabilityDescriptor {
   id: string;
-  version: string;
+  version: number;
   scope_type?: string;
   scope_id?: string;
-  state_revision?: string;
+  state_revision?: number;
 }
 
 export interface InferenceClientDescriptor {
@@ -51,10 +51,10 @@ export type ClientToolResultStatus =
 export interface ClientToolContinuation {
   client_session_id: string;
   capability_id: string;
-  capability_version: string;
+  capability_version: number;
   scope_type?: string;
   scope_id?: string;
-  state_revision?: string;
+  state_revision?: number;
   status: ClientToolResultStatus;
   result: unknown;
 }
@@ -74,9 +74,9 @@ export type InferenceToolHandler<TContext = unknown> = (
 
 export interface InferenceCapabilityRegistration<TContext = unknown> {
   id: string;
-  version: string;
+  version: number;
   scope?: InferenceCapabilityScope;
-  stateRevision?: string;
+  stateRevision?: number;
   available?: boolean | (() => boolean);
   context?: TContext | (() => TContext);
   tools: Record<string, InferenceToolHandler<TContext>>;
@@ -298,6 +298,12 @@ export class InferenceRuntime implements InferenceRuntimeClient {
       return continuation("success", result);
     } catch (error) {
       if (signal.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error;
+      if (error instanceof Error && error.message === "stale_state") {
+        return continuation("stale_state", resultMessage("The page state changed before the tool could run."));
+      }
+      if (error instanceof Error && error.message === "capability_unavailable") {
+        return continuation("capability_unavailable", resultMessage("The requested capability is not currently available."));
+      }
       return continuation("client_error", resultMessage("The client tool could not be completed."));
     }
   };
