@@ -97,6 +97,8 @@ func (s *Service) handleCharacterParseHistory(w http.ResponseWriter, r *http.Req
 			SampleSize:     int(row.SampleSize),
 			Status:         row.Status,
 			KilledAt:       killedAt,
+			PlayerSpec:     row.PlayerSpec,
+			PlayerSubSpec:  row.PlayerSubSpec,
 		})
 	}
 

@@ -1,10 +1,11 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ArrowUpRight } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
+import { AlertTriangle, ArrowUpRight, Layers3 } from "lucide-react";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/Collapsible/Collapsible";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/Table/Table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
+import { specializationIconUrl } from "@/config/specializationIcon";
 import { getInstanceAccentColor } from "@/pages/Logs/utils/instanceImages";
 import { parseColor, parseHexColor } from "@/pages/Instance/parseColors";
 import type { EncounterSummary, RaidSummary } from "../parseAggregation";
@@ -16,11 +17,25 @@ interface RaidScoresCardProps {
   performanceHistoryPath: string;
   /** Total boss count per instance name, from the supported-instances API. */
   bossCounts?: Map<string, number>;
+  playerClass: string;
+  specs: string[];
+  selectedSpec: string | null;
+  onSpecChange: (spec: string | null) => void;
   isLoading: boolean;
 }
 
 /** Per-raid score ledger; expand a raid for its per-boss breakdown. */
-export function RaidScoresCard({ raids, metric, performanceHistoryPath, bossCounts, isLoading }: RaidScoresCardProps) {
+export function RaidScoresCard({
+  raids,
+  metric,
+  performanceHistoryPath,
+  bossCounts,
+  playerClass,
+  specs,
+  selectedSpec,
+  onSpecChange,
+  isLoading,
+}: RaidScoresCardProps) {
   const [open, setOpen] = useState<string | null>(raids[0] ? raidKey(raids[0]) : null);
   // Open the biggest raid once data arrives (state initializes before load).
   const [autoOpened, setAutoOpened] = useState(false);
@@ -47,6 +62,47 @@ export function RaidScoresCard({ raids, metric, performanceHistoryPath, bossCoun
         <CardDescription>
           Best-3 average per boss, last 60 days · expand a raid for its bosses
         </CardDescription>
+        {specs.length > 1 && (
+          <CardAction className="flex items-center gap-1">
+            <button
+              type="button"
+              aria-label="Show overall raid scores"
+              aria-pressed={selectedSpec === null}
+              title="Overall"
+              onClick={() => onSpecChange(null)}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                selectedSpec === null
+                  ? "border-primary/50 bg-primary/15 text-foreground"
+                  : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              <Layers3 className="size-4" />
+              <span className="hidden sm:inline">Overall</span>
+            </button>
+            {specs.map((spec) => (
+              <button
+                key={spec}
+                type="button"
+                aria-label={`Show ${spec} raid scores`}
+                aria-pressed={selectedSpec === spec}
+                title={spec}
+                onClick={() => onSpecChange(spec)}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  selectedSpec === spec
+                    ? "border-primary/50 bg-primary/15 text-foreground"
+                    : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                <img
+                  src={specializationIconUrl(playerClass, spec)}
+                  alt=""
+                  className="size-5 rounded-sm"
+                />
+                <span className="hidden sm:inline">{spec}</span>
+              </button>
+            ))}
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent className="space-y-3 px-0">
         {raids.length === 0 && (

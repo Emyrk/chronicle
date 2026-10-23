@@ -68,6 +68,20 @@ function summarizeEncounter(name: string, parses: CharacterParse[]): EncounterSu
   };
 }
 
+export function performanceSpecs(parses: readonly CharacterParse[]): string[] {
+  return [...new Set(parses
+    .map((parse) => parse.player_spec)
+    .filter((spec) => spec && spec !== "Mixed" && spec !== "Unknown"))].sort();
+}
+
+export function filterParsesBySpec(
+  parses: readonly CharacterParse[],
+  spec: string | null,
+): CharacterParse[] {
+  if (!spec) return [...parses];
+  return parses.filter((parse) => parse.player_spec === spec);
+}
+
 /**
  * Groups parses into raids (instance name + difficulty + size), each with
  * per-encounter summaries. Raids are ordered by parsed-kill count descending;

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { ArmoryLootItem, ArmoryPlayer } from "@/api/typesGenerated";
 import {
@@ -8,7 +8,14 @@ import {
   useSupportedInstanceProgressionBosses,
 } from "@/api/queries";
 import { useCharacterEncounters, useCharacterParses } from "@/api/rankingsQueries";
-import { averageScoreByInstance, bestScoreByInstance, summarizeProgress, summarizeRaids } from "../parseAggregation";
+import {
+  averageScoreByInstance,
+  bestScoreByInstance,
+  filterParsesBySpec,
+  performanceSpecs,
+  summarizeProgress,
+  summarizeRaids,
+} from "../parseAggregation";
 import {
   DEFAULT_PERFORMANCE_COMPARISON_STATE,
   serializePerformanceComparisonState,
@@ -34,6 +41,7 @@ interface OverviewTabProps {
 export function OverviewTab({ player, onOpenTab, metric }: OverviewTabProps) {
   const [searchParams] = useSearchParams();
   const isPerformance = searchParams.get("mode") === "performance";
+  const [raidScoreSpec, setRaidScoreSpec] = useState<string | null>(null);
 
   // Shared data.
   const gearHistory = useArmoryGearHistory(player.realm_name, player.id);
@@ -45,23 +53,27 @@ export function OverviewTab({ player, onOpenTab, metric }: OverviewTabProps) {
 
   // Performance mode: parse scores.
   const parsesQuery = useCharacterParses(player.id, metric);
-  const raids = useMemo(
-    () => summarizeRaids(parsesQuery.data?.parses ?? []),
-    [parsesQuery.data],
+  const parses = useMemo(() => parsesQuery.data?.parses ?? [], [parsesQuery.data]);
+  const specs = useMemo(() => performanceSpecs(parses), [parses]);
+  const selectedSpec = raidScoreSpec && specs.includes(raidScoreSpec) ? raidScoreSpec : null;
+  const raidScoreParses = useMemo(
+    () => filterParsesBySpec(parses, selectedSpec),
+    [parses, selectedSpec],
   );
+  const raids = useMemo(() => summarizeRaids(raidScoreParses), [raidScoreParses]);
   const nightScores = useMemo(
     () =>
       isPerformance
-        ? bestScoreByInstance(parsesQuery.data?.parses ?? [])
+        ? bestScoreByInstance(parses)
         : new Map<string, number>(),
-    [parsesQuery.data, isPerformance],
+    [parses, isPerformance],
   );
   const nightAverages = useMemo(
     () =>
       isPerformance
-        ? averageScoreByInstance(parsesQuery.data?.parses ?? [])
+        ? averageScoreByInstance(parses)
         : new Map<string, number>(),
-    [parsesQuery.data, isPerformance],
+    [parses, isPerformance],
   );
 
   // Journey mode: participation, progression, and loot.
@@ -124,6 +136,10 @@ export function OverviewTab({ player, onOpenTab, metric }: OverviewTabProps) {
               metric={metric}
               performanceHistoryPath={performanceHistoryPath}
               bossCounts={bossCounts}
+              playerClass={player.class}
+              specs={specs}
+              selectedSpec={selectedSpec}
+              onSpecChange={setRaidScoreSpec}
               isLoading={parsesQuery.isLoading}
             />
           </div>

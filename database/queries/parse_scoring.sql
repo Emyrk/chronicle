@@ -163,6 +163,7 @@ SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
     psr.player_name,
     psr.player_class,
     psr.player_spec,
+    psr.player_sub_spec,
     psr.player_role
 FROM parse_score_results psr
 JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
