@@ -62,6 +62,11 @@ type SidekickService interface {
 	RecordUpload(context.Context)
 }
 
+type InferenceService interface {
+	Routes() http.Handler
+	AccountRoutes() http.Handler
+}
+
 type Options struct {
 	Logger                *slog.Logger
 	Storage               storage.ObjectStorage
@@ -81,7 +86,7 @@ type Options struct {
 	OAuth                 OAuthHandler
 	Sidekick              SidekickService
 	Rankings              http.Handler
-	Inference             http.Handler
+	Inference             InferenceService
 	Mailer                *chroniclemail.Mailer
 	ItemPricing           *itempricing.Service
 	CustomPanelHTTPClient *http.Client
@@ -278,6 +283,9 @@ func (api *API) Routes() chi.Router {
 					r.Post("/me/billing/change", api.Opts.Billing.CreateChangePortal)
 					r.Post("/me/billing/cancel", api.Opts.Billing.CreateCancelPortal)
 				}
+				if api.Opts.Inference != nil {
+					r.Mount("/me/inference", api.Opts.Inference.AccountRoutes())
+				}
 				r.Get("/me/custom-panels", api.GetMyCustomPanelSettings)
 				r.Put("/me/custom-panels", api.UpdateMyCustomPanelSettings)
 				r.Patch("/me/preferences", api.UpdateMyPreferences)
@@ -308,7 +316,7 @@ func (api *API) Routes() chi.Router {
 						api.Auth.Authenticated(false),
 						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanUse_inference_chat_User),
 					)
-					r.Mount("/inference", api.Opts.Inference)
+					r.Mount("/inference", api.Opts.Inference.Routes())
 				})
 			}
 			r.Mount("/custom-panels", api.CustomPanels.Routes())

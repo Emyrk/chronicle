@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
 	dbauthz "github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/services/serviceinference/openrouter"
 	"github.com/authzed/gochugaru/rel"
 	"github.com/go-chi/chi/v5"
@@ -25,6 +26,56 @@ import (
 )
 
 const oauthTTL = 10 * time.Minute
+
+func (s *Service) AccountRoutes() http.Handler {
+	r := chi.NewRouter()
+	r.Get("/", s.getInferenceSettings)
+	r.Put("/", s.updateInferenceSettings)
+	return r
+}
+
+func (s *Service) getInferenceSettings(w http.ResponseWriter, r *http.Request) {
+	s.writeInferenceSettings(w, r)
+}
+
+func (s *Service) updateInferenceSettings(w http.ResponseWriter, r *http.Request) {
+	var req chroniclesdk.UpdateInferenceSettingsRequest
+	if !httpapi.Read(r.Context(), w, r, &req) {
+		return
+	}
+	if err := s.zed.SetInferenceDisabled(r.Context(), userID(r), req.Disabled); err != nil {
+		s.internalError(w, "update inference preference", err)
+		return
+	}
+	s.writeInferenceSettings(w, r)
+}
+
+func (s *Service) writeInferenceSettings(w http.ResponseWriter, r *http.Request) {
+	user := policy.New().User(userID(r))
+	chronicle := policy.New().GlobalChronicle()
+	checks, err := s.zed.Check(r.Context(), nil,
+		chronicle.CanInference_available_User(user),
+		rel.Relationship{
+			ResourceType:     "chronicle",
+			ResourceID:       "chronicle",
+			ResourceRelation: "inference_disabled",
+			SubjectType:      "user",
+			SubjectID:        user.Object().ID,
+		},
+		chronicle.CanUse_inference_chat_User(user),
+	)
+	if err != nil {
+		s.internalError(w, "read inference preference", err)
+		return
+	}
+	available, disabled, permitted := checks[0], checks[1], checks[2]
+	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceSettings{
+		Available:        available,
+		Disabled:         disabled,
+		Enabled:          s.enabled && permitted,
+		ServiceAvailable: s.enabled,
+	})
+}
 
 func (s *Service) routes() http.Handler {
 	r := chi.NewRouter()

@@ -50,7 +50,7 @@ const ASSIGNABLE_ROLES = [
   { value: "upload_capable", label: "Upload Capable", icon: Upload, className: "bg-green-500/15 text-green-400" },
   { value: "unlisted_log_capable", label: "Unlisted Logs", icon: LockKeyhole, className: "bg-amber-500/15 text-amber-400" },
   { value: "ad_free_capable", label: "Ad-free", icon: EyeOff, className: "bg-lime-500/15 text-lime-400" },
-  { value: "inference_chat_capable", label: "Inference Chat", icon: MessageSquareText, className: "bg-violet-500/15 text-violet-400" },
+  { value: "inference_capable", label: "Inference Capable", icon: MessageSquareText, className: "bg-violet-500/15 text-violet-400" },
   { value: "moderate_logs", label: "Moderate Logs", icon: Eye, className: "bg-cyan-500/15 text-cyan-400" },
   { value: "moderate_guilds", label: "Moderate Guilds", icon: Megaphone, className: "bg-teal-500/15 text-teal-400" },
   { value: "is_admin_users", label: "Admin Users", icon: Users, className: "bg-indigo-500/15 text-indigo-400" },

@@ -265,7 +265,7 @@ func (s *Service) Start(ctx context.Context) error {
 		Dataset:               datasetSvc,
 		CacheSvc:              servicecache.CacheService(s.broker),
 		WhatsNew:              servicewhatsnew.WhatsNew(s.broker),
-		Inference:             serviceinference.Inference(s.broker).Routes(),
+		Inference:             serviceinference.Inference(s.broker),
 	})
 
 	if err != nil {

@@ -13,7 +13,7 @@ A single HTTP request represents one run. PostgreSQL is authoritative for durabl
 
 ## Authorization and credentials
 
-Every route under `/api/v1/inference` requires authentication and the global `chronicle:chronicle#use_inference_chat` permission. Administrators implicitly receive the permission; other users require the `inference_chat_capable` role. Instance chat also requires `instance:<id>#view` when creating, listing, reading, or running a thread.
+Every route under `/api/v1/inference` requires authentication and the global `chronicle:chronicle#use_inference_chat` permission. Administrators implicitly have inference available; other users require the `inference_capable` role. Any user can self-assign the `inference_disabled` relation from account settings, and `use_inference_chat = inference_available - inference_disabled`, so opting out also applies to administrators. Instance chat additionally requires `instance:<id>#view` when creating, listing, reading, or running a thread. The self-service `/api/v1/me/inference` preference route remains available while opted out and when inference is not configured on the deployment, allowing the account settings page to always report status and restore the preference.
 
 OpenRouter authorization uses PKCE. Chronicle stores the short-lived verifier and resulting provider key encrypted with AES-256-GCM. Ciphertext is bound to its owner and purpose through associated data. Provider keys are decrypted only for the outbound provider request.
 

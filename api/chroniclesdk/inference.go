@@ -6,6 +6,17 @@ import (
 	"github.com/google/uuid"
 )
 
+type InferenceSettings struct {
+	Available        bool `json:"available"`
+	Disabled         bool `json:"disabled"`
+	Enabled          bool `json:"enabled"`
+	ServiceAvailable bool `json:"service_available"`
+}
+
+type UpdateInferenceSettingsRequest struct {
+	Disabled bool `json:"disabled"`
+}
+
 type InferenceConnection struct {
 	ID         uuid.UUID  `json:"id"`
 	Provider   string     `json:"provider"`

@@ -5,10 +5,13 @@ import type {
   InferenceAuthorizeResponse,
   InferenceConnectionsResponse,
   InferenceModelsResponse,
+  InferenceSettings,
   InferenceThreadResponse,
+  UpdateInferenceSettingsRequest,
 } from "@/api/typesGenerated";
 
 const inferenceKeys = {
+  settings: ["inference", "settings"] as const,
   connections: ["inference", "connections"] as const,
   models: (connectionId: string) => ["inference", "connections", connectionId, "models"] as const,
   thread: (threadId: string) => ["inference", "threads", threadId] as const,
@@ -41,6 +44,42 @@ export function useInferencePermission(enabled = true) {
     { enabled, retry: false },
   );
   return { ...query, allowed: query.data?.inferenceChat ?? false };
+}
+
+export function useInferenceSettings(enabled = true) {
+  return useQuery({
+    queryKey: inferenceKeys.settings,
+    queryFn: async () => {
+      const response = await fetch("/api/v1/me/inference", { credentials: "include" });
+      if (!response.ok) throw await readError(response, "Failed to load AI settings");
+      return response.json() as Promise<InferenceSettings>;
+    },
+    enabled,
+    retry: false,
+  });
+}
+
+export function useUpdateInferenceSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (request: UpdateInferenceSettingsRequest) => {
+      const response = await fetch("/api/v1/me/inference", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      });
+      if (!response.ok) throw await readError(response, "Failed to update AI settings");
+      return response.json() as Promise<InferenceSettings>;
+    },
+    onSuccess: (settings) => {
+      queryClient.setQueryData(inferenceKeys.settings, settings);
+      queryClient.invalidateQueries({ queryKey: ["authorizationCheck"] });
+      if (!settings.enabled) {
+        queryClient.removeQueries({ queryKey: inferenceKeys.connections });
+      }
+    },
+  });
 }
 
 export function useInferenceConnections(

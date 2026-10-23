@@ -4,16 +4,24 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/Emyrk/chronicle/api/chronauth"
+	"github.com/Emyrk/chronicle/api/chronauth/claims"
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/serviceinference/agui"
+	"github.com/Emyrk/chronicle/internal/services/testservices"
+	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -37,6 +45,68 @@ func TestDisabledRoutesReturnServiceUnavailable(t *testing.T) {
 	s.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/connections", nil))
 	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 	require.Contains(t, recorder.Body.String(), "not configured")
+}
+
+func TestInferenceAccountSettingsOptOutAndBackIn(t *testing.T) {
+	t.Parallel()
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	userID := uuid.New()
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"inference_capable"}))
+
+	service := &Service{zed: zed, enabled: true, logger: slog.Default()}
+	handler := service.AccountRoutes()
+	request := func(method, body string) chroniclesdk.InferenceSettings {
+		req := httptest.NewRequest(method, "/", strings.NewReader(body))
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		req = req.WithContext(chronauth.WithClaims(req.Context(), &claims.Claims{Subject: userID}))
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, req)
+		require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+		var response chroniclesdk.InferenceSettings
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+		return response
+	}
+
+	initial := request(http.MethodGet, "")
+	require.True(t, initial.Available)
+	require.False(t, initial.Disabled)
+	require.True(t, initial.Enabled)
+	require.True(t, initial.ServiceAvailable)
+
+	disabled := request(http.MethodPut, `{"disabled":true}`)
+	require.True(t, disabled.Available)
+	require.True(t, disabled.Disabled)
+	require.False(t, disabled.Enabled)
+
+	reenabled := request(http.MethodPut, `{"disabled":false}`)
+	require.True(t, reenabled.Available)
+	require.False(t, reenabled.Disabled)
+	require.True(t, reenabled.Enabled)
+}
+
+func TestInferenceAccountSettingsAvailableWhenServiceDisabled(t *testing.T) {
+	t.Parallel()
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	userID := uuid.New()
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"inference_capable"}))
+
+	service := &Service{zed: zed, enabled: false, logger: slog.Default()}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req = req.WithContext(chronauth.WithClaims(req.Context(), &claims.Claims{Subject: userID}))
+	recorder := httptest.NewRecorder()
+	service.AccountRoutes().ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	var response chroniclesdk.InferenceSettings
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.True(t, response.Available)
+	require.False(t, response.ServiceAvailable)
+	require.False(t, response.Enabled)
 }
 
 func TestOpenRouterCallbackURLCarriesState(t *testing.T) {

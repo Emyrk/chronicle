@@ -1933,6 +1933,14 @@ export interface InferenceRunRequest {
 }
 
 // From chroniclesdk/inference.go
+export interface InferenceSettings {
+    readonly available: boolean;
+    readonly disabled: boolean;
+    readonly enabled: boolean;
+    readonly service_available: boolean;
+}
+
+// From chroniclesdk/inference.go
 export interface InferenceThread {
     readonly id: string;
     readonly assistant_id: string;
@@ -4427,6 +4435,11 @@ export interface UpdateGuildPageRequest {
 // From chroniclesdk/guild_page.go
 export interface UpdateGuildSettingsRequest {
     readonly allow_join_requests_until: string | null;
+}
+
+// From chroniclesdk/inference.go
+export interface UpdateInferenceSettingsRequest {
+    readonly disabled: boolean;
 }
 
 // From chroniclesdk/panel_layout.go
