@@ -35,15 +35,6 @@ type Session struct {
 
 type Preferences struct {
 	HelpfulHints bool `json:"helpful_hints"`
-	// RawLogRetentionHours is how long to keep raw log files in object storage
-	// after upload. nil means keep forever.
-	RawLogRetentionHours *int32 `json:"raw_log_retention_hours"`
-}
-
-// UpdatePreferencesRequest is the request body for updating user preferences.
-type UpdatePreferencesRequest struct {
-	// RawLogRetentionHours controls raw log file retention. nil = no change, 0 = keep forever.
-	RawLogRetentionHours *int32 `json:"raw_log_retention_hours"`
 }
 
 type User struct {
@@ -57,15 +48,6 @@ type User struct {
 	MaxStorageBytes        int64     `json:"max_storage_bytes"`
 	MaxStorageBytesUpdated time.Time `json:"max_storage_bytes_updated"`
 	ConsumedStorageBytes   int64     `json:"consumed_storage_bytes"`
-	// RawLogRetentionHours is how long to keep raw log files. nil means keep forever.
-	RawLogRetentionHours *int32 `json:"raw_log_retention_hours"`
-}
-
-// AdminSetUserRetentionRequest is the request body for setting a user's raw log retention.
-type AdminSetUserRetentionRequest struct {
-	// RawLogRetentionHours is the number of hours to retain raw log files.
-	// 0 means keep forever (sets NULL in DB).
-	RawLogRetentionHours int32 `json:"raw_log_retention_hours"`
 }
 
 type AdminUsersResponse struct {

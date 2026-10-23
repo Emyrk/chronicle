@@ -51,6 +51,7 @@ const (
 	CheckLogInstanceEncounterPhasesStartOffsetMsCheck           CheckConstraint = "log_instance_encounter_phases_start_offset_ms_check"           // log_instance_encounter_phases
 	CheckRaidGroupSnapshotEncounterChk                          CheckConstraint = "raid_group_snapshot_encounter_chk"                             // log_instance_raid_group_snapshots
 	CheckLogInstancesCategoryCheck                              CheckConstraint = "log_instances_category_check"                                  // log_instances
+	CheckLogInstancesRetentionPolicyKeyNotEmpty                 CheckConstraint = "log_instances_retention_policy_key_not_empty"                  // log_instances
 	CheckTenantsSlugFormat                                      CheckConstraint = "tenants_slug_format"                                           // tenants
 	CheckTenantsSlugReserved                                    CheckConstraint = "tenants_slug_reserved"                                         // tenants
 	CheckWowServerRealmsPricingAuctionHouseCheck                CheckConstraint = "wow_server_realms_pricing_auction_house_check"                 // wow_server_realms
@@ -65,8 +66,6 @@ const (
 	CheckParseScoreResultsMetricCheck                           CheckConstraint = "parse_score_results_metric_check"                              // parse_score_results
 	CheckRaidCompositionsDataSizeChk                            CheckConstraint = "raid_compositions_data_size_chk"                               // raid_compositions
 	CheckRaidCompositionsNameLengthChk                          CheckConstraint = "raid_compositions_name_length_chk"                             // raid_compositions
-	CheckRetentionPoliciesScope                                 CheckConstraint = "retention_policies_scope"                                      // retention_policies
-	CheckRetentionRulesActionCheck                              CheckConstraint = "retention_rules_action_check"                                  // retention_rules
 	CheckFinalizedOrFinalizedAtNull                             CheckConstraint = "finalized_or_finalized_at_null"                                // river_job
 	CheckKindLength                                             CheckConstraint = "kind_length"                                                   // river_job
 	CheckMaxAttemptsIsPositive                                  CheckConstraint = "max_attempts_is_positive"                                      // river_job

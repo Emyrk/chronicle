@@ -40,6 +40,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/guildrenames"
 	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/ptr"
+	"github.com/Emyrk/chronicle/internal/retentionpolicy"
 	"github.com/Emyrk/chronicle/internal/semverenc"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/slice"
@@ -413,6 +414,17 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		report.Identity = buildIdentityReport(parsed.creaturesState)
 	}
 
+	// Retention is computed from persisted billing entitlements at insertion time.
+	billingEntitlements, err := db.ListBillingEntitlementsByUserID(ctx, lg.Owner)
+	if err != nil {
+		return fmt.Errorf("list billing entitlements for retention: %w", err)
+	}
+	entitlementKeys := make([]string, 0, len(billingEntitlements))
+	for _, entitlement := range billingEntitlements {
+		entitlementKeys = append(entitlementKeys, entitlement.EntitlementKey)
+	}
+	retentionTier := retentionpolicy.ResolveTier(entitlementKeys)
+
 	// Track total finalize and DB insert durations
 	var totalFinalizeDuration time.Duration
 	var totalDBInsertDuration time.Duration
@@ -543,6 +555,18 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			if inst.Category.Valid() {
 				instanceCategory = pgtype.Text{String: string(inst.Category), Valid: true}
 			}
+			retentionPolicyKey := inst.RetentionPolicyKey
+			if retentionPolicyKey == "" {
+				retentionPolicyKey = string(retentionpolicy.PolicyKeyDefault)
+			}
+			retentionExpiresAt := pgtype.Timestamptz{}
+			if instanceEnd.Valid {
+				retentionExpiresAt = pgtype.Timestamptz{
+					Time: retentionpolicy.RetainUntil(instanceEnd.Time, retentionTier,
+						retentionpolicy.Category(inst.Category), retentionpolicy.PolicyKey(retentionPolicyKey)),
+					Valid: true,
+				}
+			}
 
 			insertInstanceParams := database.InsertInstanceParams{
 				ID:         instanceID,
@@ -571,6 +595,8 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 				VehicleControlIntervals: finalized.VehicleMetadata,
 				InvalidatedAt:           lg.InvalidatedAt,
 				InvalidReason:           lg.InvalidReason,
+				RetentionExpiresAt:      retentionExpiresAt,
+				RetentionPolicyKey:      retentionPolicyKey,
 			}
 
 			// InsertInstance atomically declines a colliding non-null slug. Retry

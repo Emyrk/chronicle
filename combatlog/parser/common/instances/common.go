@@ -74,6 +74,10 @@ type CommonFactory struct {
 	Category  InstanceCategory
 	MultiZone bool
 
+	// RetentionPolicyKey resolves an optional flavor-specific parsed-log retention
+	// policy override. Empty values use the central default policy.
+	RetentionPolicyKey func(database.WoWFlavor) string
+
 	// NameFromZone allows changing the instance name from metadata available on
 	// the zone event. It runs when the Hookable is created, before fights are parsed.
 	NameFromZone func(context.Context, zone.Zone, database.WoWFlavor) string

@@ -133,11 +133,10 @@ func (s *Service) Start(ctx context.Context) error {
 
 	// Register retention workers and periodic job.
 	ret := serviceretention.RetentionService(s.broker)
-	ret.Worker.Queue = q
-	ret.RealmWorker.Queue = q
-	riverqueue.AddWorker(q, ret.Worker)
-	riverqueue.AddWorker(q, ret.RealmWorker)
-	riverqueue.AddWorker(q, ret.RawLogWorker)
+	ret.RecalculationWorker.Queue = q
+	ret.DeletionWorker.Queue = q
+	riverqueue.AddWorker(q, ret.RecalculationWorker)
+	riverqueue.AddWorker(q, ret.DeletionWorker)
 	q.AddQueue(riverqueue.QueueRetention, river.QueueConfig{
 		MaxWorkers: 3,
 	})
@@ -146,18 +145,18 @@ func (s *Service) Start(ctx context.Context) error {
 			river.NewPeriodicJob(
 				river.PeriodicInterval(ret.Schedule),
 				func() (river.JobArgs, *river.InsertOpts) {
-					return retention.ArgsRetention{DryRun: false}, nil
+					return retention.ArgsRetentionRecalculation{}, nil
 				},
-				&river.PeriodicJobOpts{RunOnStart: false},
+				&river.PeriodicJobOpts{ID: "parsed-log-retention-recalculation", RunOnStart: false},
 			),
 		)
 		q.AddPeriodicJob(
 			river.NewPeriodicJob(
 				river.PeriodicInterval(ret.Schedule),
 				func() (river.JobArgs, *river.InsertOpts) {
-					return retention.ArgsRawLogRetention{}, nil
+					return retention.ArgsRetentionDeletion{}, nil
 				},
-				&river.PeriodicJobOpts{RunOnStart: false},
+				&river.PeriodicJobOpts{ID: "parsed-log-retention-deletion", RunOnStart: false},
 			),
 		)
 	}

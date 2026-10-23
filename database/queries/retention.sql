@@ -1,130 +1,138 @@
--- name: GetRetentionPolicies :many
-SELECT
-  rp.*
-FROM retention_policies rp
-WHERE rp.enabled = true;
-
--- name: GetRetentionPolicyForRealm :one
--- Returns the realm-specific policy if it exists, otherwise the server-level policy.
-SELECT
-  rp.*
-FROM retention_policies rp
-WHERE rp.enabled = true
-  AND (
-    rp.realm_id = @realm_id
-    OR (
-      rp.server_id = (SELECT server_id FROM wow_server_realms WHERE id = @realm_id)
-      AND NOT EXISTS (
-        SELECT 1 FROM retention_policies rp2
-        WHERE rp2.realm_id = @realm_id AND rp2.enabled = true
-      )
-    )
-  )
-LIMIT 1;
-
--- name: GetRetentionRulesByPolicy :many
-SELECT
-  rr.*
-FROM retention_rules rr
-WHERE rr.policy_id = @policy_id
-ORDER BY rr.priority ASC;
-
--- name: GetInstancesForRetentionCheck :many
--- Fetches all log instances for a given realm with pre-joined speedrun rank data.
--- Used by the preview endpoint (admin-only, synchronous).
+-- name: GetRetentionRecalculationCandidates :many
 SELECT
   li.id,
-  li.name AS instance_name,
-  li.end_time,
   li.log_group_id,
-  gsr.guild_rank
-FROM log_instances li
-LEFT JOIN guild_speedrun_ranks gsr ON gsr.instance_id = li.id
-WHERE li.realm_id = @realm_id
-  AND li.end_time IS NOT NULL;
-
--- name: GetInstancesForRetentionCheckPaged :many
--- Fetches a page of log instances for cursor-based retention processing.
--- Ordered by end_time ASC so older logs are processed first.
-SELECT
-  li.id,
-  li.name AS instance_name,
   li.end_time,
-  li.log_group_id,
-  gsr.guild_rank
+  li.category,
+  li.retention_policy_key,
+  wlg.owner,
+  wlg.flavor,
+  EXISTS (
+    SELECT 1 FROM billing_entitlements be
+    WHERE be.user_id = wlg.owner AND be.entitlement_key = 'chronicle-honored'
+  ) AS has_honored,
+  EXISTS (
+    SELECT 1 FROM billing_entitlements be
+    WHERE be.user_id = wlg.owner AND be.entitlement_key = 'chronicle-revered'
+  ) AS has_revered,
+  EXISTS (
+    SELECT 1 FROM billing_entitlements be
+    WHERE be.user_id = wlg.owner AND be.entitlement_key = 'chronicle-exalted'
+  ) AS has_exalted
 FROM log_instances li
-LEFT JOIN guild_speedrun_ranks gsr ON gsr.instance_id = li.id
-WHERE li.realm_id = @realm_id
-  AND li.end_time IS NOT NULL
-  AND (li.end_time > @cursor_time OR (li.end_time = @cursor_time AND li.id > @cursor_id::uuid))
-ORDER BY li.end_time ASC, li.id ASC
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id
+WHERE li.end_time IS NOT NULL
+  AND li.id > @cursor_id::uuid
+ORDER BY li.id
 LIMIT @page_size;
+
+-- name: UpdateLogInstanceRetentionExpiry :exec
+UPDATE log_instances
+SET retention_expires_at = @retention_expires_at
+WHERE id = @id;
+
+-- name: GetExpiredRetentionCandidates :many
+SELECT id, log_group_id, retention_expires_at
+FROM log_instances
+WHERE retention_expires_at IS NOT NULL
+  AND retention_expires_at <= @now
+  AND (
+    retention_expires_at > @cursor_expires_at
+    OR (retention_expires_at = @cursor_expires_at AND id > @cursor_id::uuid)
+  )
+ORDER BY retention_expires_at, id
+LIMIT @page_size;
+
+-- name: GetAuthoritativeRetentionCandidate :one
+SELECT
+  li.id,
+  li.log_group_id,
+  li.end_time,
+  li.category,
+  li.retention_policy_key,
+  li.retention_expires_at,
+  wlg.owner,
+  wlg.flavor,
+  EXISTS (
+    SELECT 1 FROM billing_entitlements be
+    WHERE be.user_id = wlg.owner AND be.entitlement_key = 'chronicle-honored'
+  ) AS has_honored,
+  EXISTS (
+    SELECT 1 FROM billing_entitlements be
+    WHERE be.user_id = wlg.owner AND be.entitlement_key = 'chronicle-revered'
+  ) AS has_revered,
+  EXISTS (
+    SELECT 1 FROM billing_entitlements be
+    WHERE be.user_id = wlg.owner AND be.entitlement_key = 'chronicle-exalted'
+  ) AS has_exalted
+FROM log_instances li
+JOIN wow_log_groups wlg ON wlg.id = li.log_group_id
+WHERE li.id = @id
+FOR UPDATE OF li, wlg;
+
+-- name: IsRetentionProtectedSpeedrun :one
+-- Protect every tied fastest qualified public speedrun for its guild, realm, or
+-- server board. Boards are split by instance, difficulty, and declared size.
+WITH candidate AS (
+  SELECT
+    sr.instance_id,
+    sr.guild_id,
+    sr.realm_id,
+    wsr.server_id,
+    sr.instance_name,
+    li.difficulty_name,
+    li.max_players,
+    COALESCE(sr.ranked_duration_ms, sr.duration_ms)::bigint AS duration_ms
+  FROM instance_speedruns sr
+  JOIN log_instances li ON li.id = sr.instance_id
+  JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+  JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+  LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
+  WHERE sr.instance_id = @instance_id
+    AND sr.qualified = true
+    AND sr.guild_id IS NOT NULL
+    AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
+    AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
+    AND COALESCE(sr.ranked_duration_ms, sr.duration_ms) > 0
+),
+eligible AS (
+  SELECT
+    sr.guild_id,
+    sr.realm_id,
+    wsr.server_id,
+    COALESCE(sr.ranked_duration_ms, sr.duration_ms)::bigint AS duration_ms
+  FROM candidate c
+  JOIN instance_speedruns sr ON sr.instance_name = c.instance_name
+  JOIN log_instances li ON li.id = sr.instance_id
+  JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+  JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+  LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
+  WHERE li.difficulty_name = c.difficulty_name
+    AND li.max_players = c.max_players
+    AND sr.qualified = true
+    AND sr.guild_id IS NOT NULL
+    AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
+    AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
+    AND COALESCE(sr.ranked_duration_ms, sr.duration_ms) > 0
+)
+SELECT EXISTS (
+  SELECT 1
+  FROM candidate c
+  WHERE c.duration_ms = (
+      SELECT MIN(e.duration_ms) FROM eligible e WHERE e.guild_id = c.guild_id
+    )
+    OR c.duration_ms = (
+      SELECT MIN(e.duration_ms) FROM eligible e WHERE e.realm_id = c.realm_id
+    )
+    OR c.duration_ms = (
+      SELECT MIN(e.duration_ms) FROM eligible e WHERE e.server_id = c.server_id
+    )
+);
 
 -- name: DeleteLogInstancesByIDs :execrows
 DELETE FROM log_instances
 WHERE id = ANY(@ids::uuid[]);
 
--- name: ListAllRetentionPolicies :many
-SELECT
-  rp.*
-FROM retention_policies rp
-ORDER BY rp.created_at ASC;
-
--- name: GetRetentionPolicy :one
-SELECT
-  rp.*
-FROM retention_policies rp
-WHERE rp.id = @id;
-
--- name: UpsertRetentionPolicy :one
-INSERT INTO retention_policies (server_id, realm_id, enabled)
-VALUES (@server_id, @realm_id, @enabled)
-ON CONFLICT ON CONSTRAINT retention_policies_unique_server
-  DO UPDATE SET enabled = @enabled, updated_at = now()
-  WHERE retention_policies.server_id IS NOT NULL
-RETURNING *;
-
--- name: UpsertRetentionPolicyByRealm :one
-INSERT INTO retention_policies (realm_id, enabled)
-VALUES (@realm_id, @enabled)
-ON CONFLICT ON CONSTRAINT retention_policies_unique_realm
-  DO UPDATE SET enabled = @enabled, updated_at = now()
-RETURNING *;
-
--- name: DeleteRetentionPolicy :exec
-DELETE FROM retention_policies
+-- name: DeleteParsedLogInstance :execrows
+DELETE FROM log_instances
 WHERE id = @id;
-
--- name: UpsertRetentionRule :one
-INSERT INTO retention_rules (policy_id, priority, action, conditions, description)
-VALUES (@policy_id, @priority, @action, @conditions, @description)
-ON CONFLICT ON CONSTRAINT retention_rules_unique_priority
-  DO UPDATE SET
-    action = @action,
-    conditions = @conditions,
-    description = @description
-RETURNING *;
-
--- name: DeleteRetentionRule :exec
-DELETE FROM retention_rules
-WHERE id = @id;
-
--- name: UpdateRetentionPolicyStats :exec
-UPDATE retention_policies
-SET
-  last_run_at = now(),
-  total_deleted = total_deleted + @deleted::bigint,
-  total_kept = total_kept + @kept::bigint,
-  updated_at = now()
-WHERE id = @id;
-
--- name: GetRealmsWithRetentionPolicies :many
--- Returns all realm IDs that have an applicable retention policy
--- (either directly or through their server).
-SELECT DISTINCT wsr.id AS realm_id
-FROM wow_server_realms wsr
-WHERE EXISTS (
-  SELECT 1 FROM retention_policies rp
-  WHERE rp.enabled = true
-    AND (rp.realm_id = wsr.id OR rp.server_id = wsr.server_id)
-);
