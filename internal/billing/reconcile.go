@@ -148,12 +148,12 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 				return fmt.Errorf("retrieve discovered Stripe subscription %q: %w", subscriptionID, err)
 			}
 		}
-		userID, product, err := w.Billing.subscriptionOwner(ctx, sub)
+		userID, err := w.Billing.subscriptionOwner(ctx, sub)
 		if err != nil {
 			counts.subscriptionsInvalid++
 			continue
 		}
-		changed, err := w.Billing.upsertSubscriptionIfChanged(ctx, userID, product, sub)
+		changed, err := w.Billing.upsertSubscriptionIfChanged(ctx, userID, sub)
 		if err != nil {
 			return fmt.Errorf("reconcile Stripe subscription %q: %w", sub.ID, err)
 		}
@@ -233,14 +233,14 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 }
 
 func (s *Service) reconcileSubscription(ctx context.Context, sub *stripe.Subscription) (bool, error) {
-	userID, product, err := s.subscriptionOwner(ctx, sub)
+	userID, err := s.subscriptionOwner(ctx, sub)
 	if err != nil {
 		return false, err
 	}
-	return s.upsertSubscriptionIfChanged(ctx, userID, product, sub)
+	return s.upsertSubscriptionIfChanged(ctx, userID, sub)
 }
 
-func (s *Service) upsertSubscriptionIfChanged(ctx context.Context, userID uuid.UUID, product ProductCode, sub *stripe.Subscription) (bool, error) {
+func (s *Service) upsertSubscriptionIfChanged(ctx context.Context, userID uuid.UUID, sub *stripe.Subscription) (bool, error) {
 	if sub.Customer == nil || sub.Customer.ID == "" {
 		return false, fmt.Errorf("subscription missing customer")
 	}
@@ -248,7 +248,8 @@ func (s *Service) upsertSubscriptionIfChanged(ctx context.Context, userID uuid.U
 	if err != nil {
 		return false, err
 	}
-	if err := s.validateSubscriptionPurchase(product, purchase); err != nil {
+	product, err := s.validateSubscriptionPurchase(purchase)
+	if err != nil {
 		return false, err
 	}
 	rows, err := s.store.UpsertBillingSubscriptionIfChanged(ctx, database.UpsertBillingSubscriptionIfChangedParams{

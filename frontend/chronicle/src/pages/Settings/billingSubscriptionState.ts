@@ -1,4 +1,5 @@
 import type { BillingSummary } from "@/api/typesGenerated";
+import { billingTierLabel } from "./billingPricing";
 
 export type SubscriptionDisplayState =
   | "renewing"
@@ -10,7 +11,8 @@ export type SubscriptionDisplayState =
   | "pending";
 
 export type BillingSubscriptionState = {
-  hasReveredAccess: boolean;
+  hasTierAccess: boolean;
+  tierLabel: string;
   displayState: SubscriptionDisplayState;
   subscriptionEnded: boolean;
   cancellationScheduled: boolean;
@@ -25,7 +27,8 @@ const PAYMENT_ISSUE_STATUSES = new Set(["past_due", "unpaid", "incomplete"]);
 export function billingSubscriptionState(
   billing: BillingSummary,
 ): BillingSubscriptionState {
-  const hasReveredAccess = billing.ads_free;
+  const hasTierAccess = billing.ads_free;
+  const tierLabel = billingTierLabel(billing.tier);
   const subscriptionEnded =
     billing.status === "canceled" || billing.status === "incomplete_expired";
   const cancellationScheduled =
@@ -39,7 +42,7 @@ export function billingSubscriptionState(
     statusLabel = "Ended";
   } else if (cancellationScheduled) {
     displayState = "canceling";
-    statusLabel = "Canceling";
+    statusLabel = "Won't renew";
   } else if (billing.status === "active") {
     displayState = "renewing";
     statusLabel = "Active";
@@ -62,24 +65,25 @@ export function billingSubscriptionState(
     : billing.current_period_end;
 
   return {
-    hasReveredAccess,
+    hasTierAccess,
+    tierLabel,
     displayState,
     subscriptionEnded,
     cancellationScheduled,
     statusLabel,
     heading:
-      subscriptionEnded && !hasReveredAccess
+      subscriptionEnded && !hasTierAccess
         ? "Subscription ended"
-        : hasReveredAccess
-          ? "You are Revered"
-          : "Revered access pending",
+        : hasTierAccess
+          ? `You are ${tierLabel}`
+          : `${tierLabel} access pending`,
     periodLabel:
-      subscriptionEnded && !hasReveredAccess
+      subscriptionEnded && !hasTierAccess
         ? "Original period end"
         : subscriptionEnded
-          ? "Revered until"
+          ? `${tierLabel} until`
           : cancellationScheduled
-            ? "Cancels on"
+            ? `${tierLabel} until`
             : displayState === "renewing" || displayState === "trialing"
               ? "Renews"
               : "Current period ends",

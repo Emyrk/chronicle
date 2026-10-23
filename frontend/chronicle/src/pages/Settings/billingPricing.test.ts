@@ -12,6 +12,7 @@ import {
 
 const monthly: BillingPrice = {
   id: "price_monthly",
+  tier: "revered",
   currency: "usd",
   unit_amount: 200,
   interval_months: 1,
@@ -19,6 +20,7 @@ const monthly: BillingPrice = {
 
 const quarterly: BillingPrice = {
   id: "price_quarterly",
+  tier: "revered",
   currency: "usd",
   unit_amount: 500,
   interval_months: 3,
@@ -26,6 +28,7 @@ const quarterly: BillingPrice = {
 
 const annual: BillingPrice = {
   id: "price_annual",
+  tier: "revered",
   currency: "usd",
   unit_amount: 1800,
   interval_months: 12,
@@ -56,8 +59,10 @@ describe("billing pricing", () => {
 })
 
 describe("billingTierLabel", () => {
-  it("presents the supporter product as Revered", () => {
-    expect(billingTierLabel("supporter")).toBe("Revered")
+  it("presents reputation tier labels", () => {
+    expect(billingTierLabel("honored")).toBe("Honored")
+    expect(billingTierLabel("revered")).toBe("Revered")
+    expect(billingTierLabel("exalted")).toBe("Exalted")
     expect(billingTierLabel("free")).toBe("Friendly")
   })
 })

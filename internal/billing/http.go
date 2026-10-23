@@ -32,8 +32,9 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 	if !httpapi.Read(r.Context(), w, r, &req) {
 		return
 	}
-	if !s.priceAllowed(req.PriceID) {
-		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid Supporter billing period."})
+	selectedProduct, priceAllowed := s.productForPrice(req.PriceID)
+	if !priceAllowed {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid billing price."})
 		return
 	}
 	claims := chronauth.MustAuthenticatedClaims(r.Context())
@@ -42,12 +43,12 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 		if sub.Provider == ProviderStripe {
 			providerCustomerID = sub.ProviderCustomerID
 		}
-		hasReveredEntitlement, err := s.HasEntitlement(r.Context(), claims.Subject, EntitlementChronicleRevered)
+		_, hasPaidEntitlement, err := s.paidTier(r.Context(), claims.Subject)
 		if err != nil {
 			httpapi.InternalServerError(w, err)
 			return
 		}
-		if subscriptionBlocksCheckout(time.Now(), sub, hasReveredEntitlement) {
+		if subscriptionBlocksCheckout(time.Now(), sub, hasPaidEntitlement) {
 			httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "You already have an active subscription."})
 			return
 		}
@@ -61,8 +62,8 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	success := s.accessURL.ResolveReference(&url.URL{Path: "/account", RawQuery: "billing=success"}).String()
-	cancel := s.accessURL.ResolveReference(&url.URL{Path: "/account", RawQuery: "billing=cancel"}).String()
+	success := s.accessURL.ResolveReference(&url.URL{Path: "/account/billing", RawQuery: "billing=success"}).String()
+	cancel := s.accessURL.ResolveReference(&url.URL{Path: "/account/billing", RawQuery: "billing=cancel"}).String()
 	params := &stripe.CheckoutSessionCreateParams{
 		ClientReferenceID: stripe.String(claims.Subject.String()),
 		LineItems: []*stripe.CheckoutSessionCreateLineItemParams{{
@@ -75,7 +76,7 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 		CancelURL:       stripe.String(cancel),
 		SubscriptionData: &stripe.CheckoutSessionCreateSubscriptionDataParams{Metadata: map[string]string{
 			"chronicle_user_id":      claims.Subject.String(),
-			"chronicle_product_code": string(ProductSupporter),
+			"chronicle_product_code": string(selectedProduct),
 			"chronicle_price_id":     req.PriceID,
 		}},
 	}
@@ -93,16 +94,21 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) CreatePortal(w http.ResponseWriter, r *http.Request) {
-	s.createPortal(w, r, false)
+	s.createPortal(w, r, "")
+}
+
+// CreateChangePortal opens the Stripe portal directly on the subscription plan picker.
+func (s *Service) CreateChangePortal(w http.ResponseWriter, r *http.Request) {
+	s.createPortal(w, r, stripe.BillingPortalSessionFlowTypeSubscriptionUpdate)
 }
 
 // CreateCancelPortal opens the Stripe portal directly on the subscription
 // cancellation confirmation, returning to /account/billing afterwards.
 func (s *Service) CreateCancelPortal(w http.ResponseWriter, r *http.Request) {
-	s.createPortal(w, r, true)
+	s.createPortal(w, r, stripe.BillingPortalSessionFlowTypeSubscriptionCancel)
 }
 
-func (s *Service) createPortal(w http.ResponseWriter, r *http.Request, cancelFlow bool) {
+func (s *Service) createPortal(w http.ResponseWriter, r *http.Request, flowType stripe.BillingPortalSessionFlowType) {
 	if !s.Enabled() {
 		httpapi.Write(r.Context(), w, http.StatusServiceUnavailable, chroniclesdk.Response{Message: "Billing is not configured."})
 		return
@@ -119,18 +125,15 @@ func (s *Service) createPortal(w http.ResponseWriter, r *http.Request, cancelFlo
 	}
 	params := &stripe.BillingPortalSessionCreateParams{
 		Customer:  stripe.String(sub.ProviderCustomerID),
-		ReturnURL: stripe.String(s.accessURL.ResolveReference(&url.URL{Path: "/account"}).String()),
+		ReturnURL: stripe.String(s.accessURL.ResolveReference(&url.URL{Path: "/account/billing"}).String()),
 	}
-	if cancelFlow {
+	if flowType != "" {
 		if !sub.ProviderSubscriptionID.Valid {
 			httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "No active subscription was found."})
 			return
 		}
 		params.FlowData = &stripe.BillingPortalSessionCreateFlowDataParams{
-			Type: stripe.String(string(stripe.BillingPortalSessionFlowTypeSubscriptionCancel)),
-			SubscriptionCancel: &stripe.BillingPortalSessionCreateFlowDataSubscriptionCancelParams{
-				Subscription: stripe.String(sub.ProviderSubscriptionID.String),
-			},
+			Type: stripe.String(string(flowType)),
 			AfterCompletion: &stripe.BillingPortalSessionCreateFlowDataAfterCompletionParams{
 				Type: stripe.String(string(stripe.BillingPortalSessionFlowAfterCompletionTypeRedirect)),
 				Redirect: &stripe.BillingPortalSessionCreateFlowDataAfterCompletionRedirectParams{
@@ -138,8 +141,18 @@ func (s *Service) createPortal(w http.ResponseWriter, r *http.Request, cancelFlo
 				},
 			},
 		}
+		switch flowType {
+		case stripe.BillingPortalSessionFlowTypeSubscriptionCancel:
+			params.FlowData.SubscriptionCancel = &stripe.BillingPortalSessionCreateFlowDataSubscriptionCancelParams{
+				Subscription: stripe.String(sub.ProviderSubscriptionID.String),
+			}
+		case stripe.BillingPortalSessionFlowTypeSubscriptionUpdate:
+			params.FlowData.SubscriptionUpdate = &stripe.BillingPortalSessionCreateFlowDataSubscriptionUpdateParams{
+				Subscription: stripe.String(sub.ProviderSubscriptionID.String),
+			}
+		}
 	}
-	portal, err := s.stripe.V1BillingPortalSessions.Create(r.Context(), params)
+	portal, err := s.createBillingPortalSession(r.Context(), params)
 	if err != nil {
 		httpapi.InternalServerError(w, fmt.Errorf("create Stripe portal session: %w", err))
 		return
@@ -149,22 +162,22 @@ func (s *Service) createPortal(w http.ResponseWriter, r *http.Request, cancelFlo
 
 func (s *Service) Summary(w http.ResponseWriter, r *http.Request) {
 	claims := chronauth.MustAuthenticatedClaims(r.Context())
-	adFree, err := s.HasEntitlement(r.Context(), claims.Subject, EntitlementChronicleRevered)
+	tier, hasPaidEntitlement, err := s.paidTier(r.Context(), claims.Subject)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	result := chroniclesdk.BillingSummary{Enabled: s.Enabled(), Tier: TierFree, AdsFree: adFree}
-	if adFree {
-		result.Tier = TierRevered
-	}
+	result := chroniclesdk.BillingSummary{Enabled: s.Enabled(), Tier: tier, AdsFree: hasPaidEntitlement}
 	if sub, err := s.store.GetBillingSubscriptionByUserID(r.Context(), claims.Subject); err == nil {
 		result.HasBillingAccount = true
-		result.HasSubscription = subscriptionHasCurrentBillingState(sub, adFree)
-		result.CanCheckout = !subscriptionBlocksCheckout(time.Now(), sub, adFree)
+		result.HasSubscription = subscriptionHasCurrentBillingState(sub, hasPaidEntitlement)
+		result.CanCheckout = !subscriptionBlocksCheckout(time.Now(), sub, hasPaidEntitlement)
 		result.Status = sub.Status
 		result.CancelAtPeriodEnd = sub.CancelAtPeriodEnd
 		result.CustomerID = sub.ProviderCustomerID
+		if !hasPaidEntitlement && isPaidProduct(ProductCode(sub.ProductCode)) {
+			result.Tier = tierForProduct(ProductCode(sub.ProductCode))
+		}
 		if sub.CancelAt.Valid {
 			cancelAt := sub.CancelAt.Time
 			result.CancelAt = &cancelAt
@@ -189,7 +202,7 @@ func (s *Service) Summary(w http.ResponseWriter, r *http.Request) {
 		result.CanCheckout = true
 	}
 	if result.Enabled && result.CanCheckout {
-		result.Prices, err = s.supporterPrices(r.Context())
+		result.Prices, err = s.billingPrices(r.Context())
 		if err != nil {
 			httpapi.InternalServerError(w, err)
 			return
@@ -345,11 +358,7 @@ func (s *Service) processEvent(ctx context.Context, event stripe.Event) error {
 		if err != nil {
 			return fmt.Errorf("retrieve subscription: %w", err)
 		}
-		product := ProductSupporter
-		if metadataProduct := ProductCode(sub.Metadata["chronicle_product_code"]); metadataProduct != "" {
-			product = metadataProduct
-		}
-		if err := s.upsertSubscription(ctx, userID, product, sub); err != nil {
+		if err := s.upsertSubscription(ctx, userID, sub); err != nil {
 			return err
 		}
 		return s.syncStripeEntitlementsIfConfigured(ctx, sub.Customer.ID)
@@ -382,11 +391,11 @@ func (s *Service) processEvent(ctx context.Context, event stripe.Event) error {
 			}
 			return fmt.Errorf("retrieve subscription %q: %w", snapshot.ID, err)
 		}
-		userID, product, err := s.subscriptionOwner(ctx, sub)
+		userID, err := s.subscriptionOwner(ctx, sub)
 		if err != nil {
 			return err
 		}
-		if err := s.upsertSubscription(ctx, userID, product, sub); err != nil {
+		if err := s.upsertSubscription(ctx, userID, sub); err != nil {
 			return err
 		}
 		return s.syncStripeEntitlementsIfConfigured(ctx, sub.Customer.ID)
@@ -400,14 +409,13 @@ func stripeResourceMissing(err error) bool {
 	return errors.As(err, &stripeErr) && stripeErr.Code == stripe.ErrorCodeResourceMissing
 }
 
-func (s *Service) subscriptionOwner(ctx context.Context, sub *stripe.Subscription) (uuid.UUID, ProductCode, error) {
+func (s *Service) subscriptionOwner(ctx context.Context, sub *stripe.Subscription) (uuid.UUID, error) {
 	if sub == nil || sub.ID == "" {
-		return uuid.Nil, "", fmt.Errorf("subscription is missing")
+		return uuid.Nil, fmt.Errorf("subscription is missing")
 	}
 	userID, userErr := uuid.Parse(sub.Metadata["chronicle_user_id"])
-	product := ProductCode(sub.Metadata["chronicle_product_code"])
-	if userErr == nil && product == ProductSupporter {
-		return userID, product, nil
+	if userErr == nil {
+		return userID, nil
 	}
 	row, err := s.store.GetBillingSubscriptionByProviderID(ctx, database.GetBillingSubscriptionByProviderIDParams{
 		Provider:               ProviderStripe,
@@ -415,11 +423,11 @@ func (s *Service) subscriptionOwner(ctx context.Context, sub *stripe.Subscriptio
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return uuid.Nil, "", fmt.Errorf("subscription %q has invalid Chronicle metadata and no local row", sub.ID)
+			return uuid.Nil, fmt.Errorf("subscription %q has invalid Chronicle metadata and no local row", sub.ID)
 		}
-		return uuid.Nil, "", fmt.Errorf("find subscription owner: %w", err)
+		return uuid.Nil, fmt.Errorf("find subscription owner: %w", err)
 	}
-	return row.UserID, ProductCode(row.ProductCode), nil
+	return row.UserID, nil
 }
 
 func (s *Service) markSubscriptionCanceled(ctx context.Context, subscriptionID string) (string, error) {
@@ -494,7 +502,7 @@ func stripeSubscriptionCancelAt(sub *stripe.Subscription) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: time.Unix(sub.CancelAt, 0).UTC(), Valid: true}
 }
 
-func (s *Service) upsertSubscription(ctx context.Context, userID uuid.UUID, product ProductCode, sub *stripe.Subscription) error {
+func (s *Service) upsertSubscription(ctx context.Context, userID uuid.UUID, sub *stripe.Subscription) error {
 	if sub.Customer == nil || sub.Customer.ID == "" {
 		return fmt.Errorf("subscription missing customer")
 	}
@@ -502,7 +510,8 @@ func (s *Service) upsertSubscription(ctx context.Context, userID uuid.UUID, prod
 	if err != nil {
 		return err
 	}
-	if err := s.validateSubscriptionPurchase(product, purchase); err != nil {
+	product, err := s.validateSubscriptionPurchase(purchase)
+	if err != nil {
 		return err
 	}
 	_, err = s.store.UpsertBillingSubscription(ctx, database.UpsertBillingSubscriptionParams{

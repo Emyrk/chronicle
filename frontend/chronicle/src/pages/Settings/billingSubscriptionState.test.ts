@@ -48,11 +48,11 @@ describe("billingSubscriptionState", () => {
     );
 
     expect(state.displayState).toBe("canceling");
-    expect(state.statusLabel).toBe("Canceling");
+    expect(state.statusLabel).toBe("Won't renew");
     expect(state.cancellationScheduled).toBe(true);
-    expect(state.periodLabel).toBe("Cancels on");
+    expect(state.periodLabel).toBe("Revered until");
     expect(state.effectiveDate).toBe("2026-11-15T00:00:00Z");
-    expect(state.hasReveredAccess).toBe(true);
+    expect(state.hasTierAccess).toBe(true);
   });
 
   it("uses an explicit Stripe cancellation date without changing the current period", () => {
@@ -69,8 +69,8 @@ describe("billingSubscriptionState", () => {
     );
 
     expect(state.displayState).toBe("canceling");
-    expect(state.statusLabel).toBe("Canceling");
-    expect(state.periodLabel).toBe("Cancels on");
+    expect(state.statusLabel).toBe("Won't renew");
+    expect(state.periodLabel).toBe("Revered until");
     expect(state.effectiveDate).toBe("2026-11-18T00:00:00Z");
   });
 
@@ -100,7 +100,7 @@ describe("billingSubscriptionState", () => {
     );
 
     expect(state.displayState).toBe("ended");
-    expect(state.hasReveredAccess).toBe(false);
+    expect(state.hasTierAccess).toBe(false);
     expect(state.heading).toBe("Subscription ended");
     expect(state.periodLabel).toBe("Original period end");
   });
@@ -118,9 +118,24 @@ describe("billingSubscriptionState", () => {
 
     expect(state.displayState).toBe("ended");
     expect(state.statusLabel).toBe("Ended");
-    expect(state.hasReveredAccess).toBe(true);
+    expect(state.hasTierAccess).toBe(true);
     expect(state.heading).toBe("You are Revered");
     expect(state.periodLabel).toBe("Revered until");
+  });
+
+  it("uses the active tier in subscriber copy", () => {
+    const state = billingSubscriptionState(
+      billingSummary({
+        tier: "exalted",
+        ads_free: true,
+        status: "active",
+        current_period_end: "2026-11-15T00:00:00Z",
+        entitlements: ["chronicle-exalted"],
+      }),
+    );
+
+    expect(state.tierLabel).toBe("Exalted");
+    expect(state.heading).toBe("You are Exalted");
   });
 
   it("treats incomplete-expired subscriptions as ended", () => {

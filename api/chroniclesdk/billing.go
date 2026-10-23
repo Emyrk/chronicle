@@ -12,6 +12,7 @@ type BillingCheckoutResponse struct {
 
 type BillingPrice struct {
 	ID             string `json:"id"`
+	Tier           string `json:"tier"`
 	Currency       string `json:"currency"`
 	UnitAmount     int64  `json:"unit_amount"`
 	IntervalMonths int64  `json:"interval_months"`

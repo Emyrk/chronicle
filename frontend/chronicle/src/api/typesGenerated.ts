@@ -463,6 +463,7 @@ export interface BillingCheckoutResponse {
 // From chroniclesdk/billing.go
 export interface BillingPrice {
     readonly id: string;
+    readonly tier: string;
     readonly currency: string;
     readonly unit_amount: number;
     readonly interval_months: number;

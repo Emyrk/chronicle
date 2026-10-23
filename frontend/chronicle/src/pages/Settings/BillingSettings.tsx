@@ -1,22 +1,24 @@
 import { useState } from "react"
 import { Link, Navigate } from "react-router-dom"
 import type { BillingPrice, BillingSummary } from "@/api/typesGenerated"
-import { useCreateBillingCancel, useCreateBillingCheckout, useCreateBillingPortal, useBillingSummary, useSiteConfig } from "@/api/queries"
+import { useCreateBillingCancel, useCreateBillingChange, useCreateBillingCheckout, useCreateBillingPortal, useBillingSummary, useSiteConfig } from "@/api/queries"
 import { iconUrl } from "@/config/iconUrl"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/useAuth"
 import { cn } from "@/lib/utils"
-import { LogIn } from "lucide-react"
+import { Check, CircleCheck, CreditCard, LogIn, XCircle } from "lucide-react"
 import { toast } from "sonner"
 import {
-  SUPPORTER_TIER_NAME,
+  PAID_BILLING_TIERS,
   type BillingQuality,
+  type PaidBillingTier,
   bestValuePriceID,
   billingDiscountPercent,
   billingPeriodDescription,
   billingPeriodLabel,
   billingPriceQualities,
   billingTierLabel,
+  billingTierRank,
   formatBillingAmount,
   formatMonthlyAmount,
 } from "./billingPricing"
@@ -28,9 +30,20 @@ const GOLD = "#f0c060"
 const FRAME = "rounded-lg border border-border bg-card shadow-2xl shadow-black/40 ring-1 ring-white/10"
 const TOOLTIP = "rounded-lg border-2 border-[#4a4a6a] bg-[#1a1a2e] shadow-lg"
 
-// WoW reputation standings, in order. Free users sit at Friendly; subscribers reach Revered.
-// Exalted is intentionally left unfilled for a future tier.
-const STANDINGS = ["Hated", "Hostile", "Unfriendly", "Neutral", "Friendly", "Honored", "Revered", "Exalted"] as const
+// Free users sit at the start of the bar; each paid tier fills an equal third.
+const FRIENDLY_FILL = 5
+
+const TIER_COLOR: Record<PaidBillingTier, string> = {
+  honored: "#1eff00",
+  revered: "#0070dd",
+  exalted: "#a335ee",
+}
+
+const TIER_ICON: Record<PaidBillingTier, string> = {
+  honored: "inv_misc_token_argentdawn",
+  revered: "inv_jewelry_talisman_07",
+  exalted: "inv_crown_02",
+}
 
 const QUALITY_COLOR: Record<BillingQuality, string> = {
   uncommon: "#1eff00",
@@ -97,34 +110,23 @@ export function BillingSettings() {
   }
 
   if (billing.has_subscription) {
-    return <ReveredSubscriptionSettings billing={billing} />
+    return <TierSubscriptionSettings billing={billing} />
   }
 
-  return (
-    <ReveredOverview
-      billing={billing}
-      panel={billing.has_billing_account
-        ? <FormerSubscriberPanel billing={billing} />
-        : <PlanPicker prices={billing.prices ?? []} />}
-    />
-  )
+  return <SupporterOverview billing={billing} panel={billing.has_billing_account ? <FormerSubscriberPanel billing={billing} /> : <PlanPicker prices={billing.prices ?? []} />} />
 }
 
 export function BillingSignInPrompt() {
   return (
     <section className="max-w-2xl space-y-5">
       <div>
-        <h2 className="font-wow text-3xl text-[#f0c060]">Become Revered</h2>
-        <p className="mt-2 text-muted-foreground">
-          Sign in to view Revered plans, start a subscription, or open your existing Stripe billing history.
-        </p>
+        <h2 className="font-wow text-3xl text-[#f0c060]">Support Chronicle</h2>
+        <p className="mt-2 text-muted-foreground">Sign in to view Honored, Revered, and Exalted plans, start a subscription, or open your Stripe billing history.</p>
       </div>
       <div className={cn(FRAME, "flex flex-col items-center gap-4 p-6 text-center")}>
         <div>
           <h3 className="font-wow text-xl text-white">Sign in to continue</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Billing and subscription history are connected to your Chronicle account.
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">Billing and subscription history are connected to your Chronicle account.</p>
         </div>
         <Link to="/login?from=/account/billing">
           <Button className="gap-2">
@@ -137,27 +139,16 @@ export function BillingSignInPrompt() {
   )
 }
 
-/**
- * The full Revered pitch: title, achievement, rewards, and comparison. Shared by
- * the account billing page and the public /revered page, which supply their own
- * call-to-action panel.
- */
-export function ReveredOverview({ billing, panel }: { billing?: BillingSummary; panel: React.ReactNode }) {
-  const revered = billing?.ads_free ?? false
+/** Shared supporter-tier overview used by account billing and the public /revered route. */
+export function SupporterOverview({ billing, panel }: { billing?: BillingSummary; panel: React.ReactNode }) {
+  const hasTierAccess = billing?.ads_free ?? false
+  const tierLabel = billingTierLabel(billing?.tier ?? "free")
 
   return (
     <section className="max-w-5xl space-y-8">
-      <div className="space-y-3">
-        <h2 className="font-wow text-3xl leading-tight sm:text-4xl">
-          <span style={{ color: GOLD }}>{revered ? "You are Revered" : "Become Revered"}</span>{" "}
-          <span className="text-white">with Chronicle</span>
-        </h2>
-        <p className="max-w-3xl text-muted-foreground">
-          {SUPPORTER_TIER_NAME} is Chronicle&apos;s optional supporter subscription. It helps cover hosting and
-          development, removes ads, and adds a few extras for your own logs. Everything else on Chronicle stays free
-          for everyone.
-        </p>
-      </div>
+      <h2 className="font-wow text-3xl leading-tight sm:text-4xl">
+        <span style={{ color: GOLD }}>{hasTierAccess ? `You are ${tierLabel}` : "Support Chronicle"}</span> <span className="text-white">and earn reputation</span>
+      </h2>
 
       <Achievement billing={billing} />
 
@@ -165,10 +156,10 @@ export function ReveredOverview({ billing, panel }: { billing?: BillingSummary; 
         {panel}
 
         <div>
-          <h3 className="font-wow text-xl font-semibold">{SUPPORTER_TIER_NAME} Rewards</h3>
+          <h3 className="font-wow text-xl font-semibold">Supporter Rewards</h3>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             {REWARDS.map((reward) => (
-              <RewardTooltip key={reward.title} reward={reward} unlocked={revered} />
+              <RewardTooltip key={reward.title} reward={reward} unlocked={hasTierAccess} tierLabel={tierLabel} />
             ))}
           </div>
         </div>
@@ -182,79 +173,92 @@ export function ReveredOverview({ billing, panel }: { billing?: BillingSummary; 
         .
       </p>
 
-      <ComparisonTable revered={revered} />
+      <ComparisonTable currentTier={hasTierAccess ? (billing?.tier ?? "free") : "free"} />
     </section>
   )
 }
 
-const COMPARISON = [
+const COMPARISON: { feature: string; friendly: string; honored: string; revered?: string; exalted?: string }[] = [
   {
     feature: "Log parsing, panels, rankings, and replays",
     friendly: "Full access. Core analysis is never paywalled.",
-    revered: "Full access, same as everyone.",
+    honored: "Full access, same as everyone.",
   },
   {
     feature: "Advertisements",
     friendly: "Limited ads appear on some pages to help cover hosting costs.",
-    revered: "No ads anywhere on Chronicle.",
+    honored: "No ads anywhere on Chronicle.",
   },
   {
     feature: "Log storage",
     friendly: "The standard storage allowance for your uploads.",
-    revered: "An extra 300 MB on top of the standard allowance.",
+    honored: "An extra 300 MB on top of the standard allowance.",
   },
   {
     feature: "Raw log downloads",
     friendly: "—",
-    revered: "Download the original combat log file behind any of your uploads. Use Chronicle as an archive for your raw data.",
+    honored: "Download the original combat log file behind any of your uploads. Use Chronicle as an archive for your raw data.",
   },
   {
     feature: "Unlisted logs",
     friendly: "Uploads are publicly viewable.",
-    revered: "Keep uploads unlisted so only people with the link can find them.",
+    honored: "Keep uploads unlisted so only people with the link can find them.",
   },
   {
     feature: "Supporting Chronicle",
     friendly: "—",
-    revered: "Your subscription directly funds hosting and ongoing development.",
+    honored: "Your subscription directly funds hosting and ongoing development.",
   },
 ]
 
-/** Plain-language breakdown of what Revered changes compared to the free tier. */
-function ComparisonTable({ revered }: { revered: boolean }) {
+const SAME_AS_HONORED = "Same as Honored."
+
+const COMPARISON_COLUMNS = [
+  { tier: "free", label: "Friendly", color: "#ffffff" },
+  ...PAID_BILLING_TIERS.map((tier) => ({ tier, label: billingTierLabel(tier), color: TIER_COLOR[tier] })),
+] as const
+
+const COMPARISON_GRID = "md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1.3fr)_minmax(0,0.8fr)_minmax(0,0.8fr)]"
+
+/** Plain-language breakdown of what each supporter tier changes compared to free access. */
+function ComparisonTable({ currentTier }: { currentTier: string }) {
   return (
     <div className={FRAME}>
-      <h3
-        className="rounded-t-lg border-b border-border bg-[oklch(0.36_0_0)] px-4 py-2 text-center font-wow text-base font-bold tracking-[0.08em]"
-        style={{ color: GOLD }}
-      >
-        Friendly vs Revered
+      <h3 className="rounded-t-lg border-b border-border bg-[oklch(0.36_0_0)] px-4 py-2 text-center font-wow text-base font-bold tracking-[0.08em]" style={{ color: GOLD }}>
+        Compare Tiers
       </h3>
       <div className="overflow-hidden rounded-b-lg">
-        <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)] gap-4 border-b border-border px-5 py-2.5 font-wow text-sm sm:grid">
+        <div className={cn("hidden gap-4 border-b border-border px-5 py-2.5 font-wow text-sm md:grid", COMPARISON_GRID)}>
           <span className="text-muted-foreground">Feature</span>
-          <span className={cn(revered ? "text-muted-foreground" : "text-[#00c000]")}>
-            Friendly <span className="font-sans text-xs text-muted-foreground">(free)</span>
-          </span>
-          <span style={{ color: GOLD }}>{SUPPORTER_TIER_NAME}</span>
+          {COMPARISON_COLUMNS.map(({ tier, label, color }) => (
+            <span key={tier} style={{ color }}>
+              {label}
+              {tier === "free" ? <span className="ml-1 font-sans text-xs text-muted-foreground">(free)</span> : null}
+              {tier === currentTier ? <span className="ml-1 font-sans text-xs text-white">(you)</span> : null}
+            </span>
+          ))}
         </div>
         <dl className="divide-y divide-white/5">
-          {COMPARISON.map(({ feature, friendly, revered: reveredText }) => (
-            <div
-              key={feature}
-              className="grid gap-2 px-5 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)] sm:gap-4"
-            >
-              <dt className="font-medium text-white">{feature}</dt>
-              <dd className="text-muted-foreground">
-                <span className="mr-1 font-wow text-xs text-[#00c000] sm:hidden">Friendly:</span>
-                {friendly}
-              </dd>
-              <dd className="text-zinc-200">
-                <span className="mr-1 font-wow text-xs sm:hidden" style={{ color: GOLD }}>
-                  {SUPPORTER_TIER_NAME}:
-                </span>
-                {reveredText}
-              </dd>
+          {COMPARISON.map((row) => (
+            <div key={row.feature} className={cn("grid gap-2 px-5 py-3 text-sm md:gap-4", COMPARISON_GRID)}>
+              <dt className="font-medium text-white">{row.feature}</dt>
+              {COMPARISON_COLUMNS.map(({ tier, label, color }) => {
+                const value = tier === "free" ? row.friendly : (row[tier] ?? SAME_AS_HONORED)
+                return (
+                  <dd
+                    key={tier}
+                    className={cn(
+                      value === SAME_AS_HONORED ? "italic text-muted-foreground" : tier === "free" ? "text-muted-foreground" : "text-zinc-200",
+                      tier === currentTier && "-mx-2 rounded bg-white/5 px-2",
+                    )}
+                  >
+                    <span className="mr-1 font-wow text-xs not-italic md:hidden" style={{ color }}>
+                      {label}:
+                    </span>
+                    {value}
+                  </dd>
+                )
+              })}
             </div>
           ))}
         </dl>
@@ -288,13 +292,12 @@ function useOpenBilling() {
 
 /** WoW achievement row: greyed out with a reputation progress bar until earned. */
 function Achievement({ billing }: { billing?: BillingSummary }) {
-  const revered = billing?.ads_free ?? false
+  const hasTierAccess = billing?.ads_free ?? false
   const subscriptionState = billing ? billingSubscriptionState(billing) : null
   const billingDate = subscriptionState?.effectiveDate
-  const standing = revered ? SUPPORTER_TIER_NAME : billingTierLabel(billing?.tier ?? "free")
-  const standingIndex = Math.max(0, STANDINGS.indexOf(standing as (typeof STANDINGS)[number]))
-  // Free users show a sliver of progress into Friendly; subscribers fill through Revered.
-  const fill = ((standingIndex + (revered ? 1 : 0.15)) / STANDINGS.length) * 100
+  const standing = hasTierAccess ? billingTierLabel(billing?.tier ?? "honored") : "Friendly"
+  const tierRank = billingTierRank(billing?.tier ?? "honored")
+  const fill = hasTierAccess && tierRank >= 0 ? ((tierRank + 1) / PAID_BILLING_TIERS.length) * 100 : FRIENDLY_FILL
 
   return (
     <div className={cn(FRAME, "p-4 sm:p-5")}>
@@ -305,23 +308,24 @@ function Achievement({ billing }: { billing?: BillingSummary }) {
           aria-hidden="true"
           width={64}
           height={64}
-          className={cn(
-            "size-14 shrink-0 rounded border-2 sm:size-16",
-            revered ? "border-[#c9a227]" : "border-zinc-600 opacity-60 grayscale",
-          )}
+          className={cn("size-14 shrink-0 rounded border-2 sm:size-16", hasTierAccess ? "border-[#c9a227]" : "border-zinc-600 opacity-60 grayscale")}
         />
         <div className="min-w-0 flex-1 text-center">
-          <p className="font-wow text-xl font-bold sm:text-2xl" style={{ color: revered ? GOLD : "#a1a1aa" }}>
-            {SUPPORTER_TIER_NAME}
+          <p className="font-wow text-xl font-bold sm:text-2xl" style={{ color: hasTierAccess ? GOLD : "#a1a1aa" }}>
+            {hasTierAccess ? standing : "Chronicle Reputation"}
           </p>
-          <p className="mt-0.5 text-sm text-zinc-300">Raise your reputation with Chronicle to Revered.</p>
+          <p className="mt-0.5 text-sm text-zinc-300">Choose Honored, Revered, or Exalted to support Chronicle.</p>
         </div>
         <div className="flex w-16 shrink-0 flex-col items-center gap-1">
-          <PointsShield earned={revered} />
-          {revered && billingDate ? (
+          <PointsShield earned={hasTierAccess} />
+          {hasTierAccess && billingDate ? (
             <span className="text-[10px] text-zinc-400">
               {subscriptionState?.cancellationScheduled || subscriptionState?.subscriptionEnded ? "Ends" : "Renews"}{" "}
-              {new Date(billingDate).toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "2-digit" })}
+              {new Date(billingDate).toLocaleDateString(undefined, {
+                month: "numeric",
+                day: "numeric",
+                year: "2-digit",
+              })}
             </span>
           ) : null}
         </div>
@@ -337,13 +341,16 @@ function Achievement({ billing }: { billing?: BillingSummary }) {
           aria-valuetext={standing}
           className="relative h-5 overflow-hidden rounded-sm border border-black bg-black/60"
         >
-          <div
-            className={cn("h-full", revered ? "bg-[#00aa88]" : "bg-[#00a000]")}
-            style={{ width: `${fill}%` }}
-          />
-          <span className="absolute inset-0 flex items-center justify-center font-wow text-xs text-white [text-shadow:1px_1px_1px_#000]">
-            Chronicle – {standing}
-          </span>
+          <div className={cn("h-full", hasTierAccess ? "bg-[#00aa88]" : "bg-[#00a000]")} style={{ width: `${fill}%` }} />
+          {PAID_BILLING_TIERS.slice(0, -1).map((tier, i) => (
+            <span
+              key={tier}
+              aria-hidden="true"
+              className="absolute inset-y-0 w-px bg-black/70"
+              style={{ left: `${((i + 1) / PAID_BILLING_TIERS.length) * 100}%` }}
+            />
+          ))}
+          <span className="absolute inset-0 flex items-center justify-center font-wow text-xs text-white [text-shadow:1px_1px_1px_#000]">Chronicle – {standing}</span>
         </div>
       </div>
 
@@ -357,21 +364,8 @@ function Achievement({ billing }: { billing?: BillingSummary }) {
 function PointsShield({ earned }: { earned: boolean }) {
   return (
     <svg viewBox="0 0 40 46" className="h-12 w-11" aria-label="10 points">
-      <path
-        d="M20 2 L37 8 V22 C37 33 29 40 20 44 C11 40 3 33 3 22 V8 Z"
-        fill={earned ? "#8a6a1a" : "#3f3f46"}
-        stroke={earned ? "#e8c45a" : "#71717a"}
-        strokeWidth="2.5"
-      />
-      <text
-        x="20"
-        y="28"
-        textAnchor="middle"
-        fontSize="15"
-        fontWeight="bold"
-        fill={earned ? "#fff" : "#a1a1aa"}
-        style={{ textShadow: "1px 1px 1px #000" }}
-      >
+      <path d="M20 2 L37 8 V22 C37 33 29 40 20 44 C11 40 3 33 3 22 V8 Z" fill={earned ? "#8a6a1a" : "#3f3f46"} stroke={earned ? "#e8c45a" : "#71717a"} strokeWidth="2.5" />
+      <text x="20" y="28" textAnchor="middle" fontSize="15" fontWeight="bold" fill={earned ? "#fff" : "#a1a1aa"} style={{ textShadow: "1px 1px 1px #000" }}>
         10
       </text>
     </svg>
@@ -379,7 +373,7 @@ function PointsShield({ earned }: { earned: boolean }) {
 }
 
 /** Reward styled like the /support page's item tooltips. Red requirement lines mean "not yet earned". */
-function RewardTooltip({ reward, unlocked }: { reward: (typeof REWARDS)[number]; unlocked: boolean }) {
+function RewardTooltip({ reward, unlocked, tierLabel }: { reward: (typeof REWARDS)[number]; unlocked: boolean; tierLabel: string }) {
   return (
     <article className={cn(TOOLTIP, "p-3 text-xs leading-snug")}>
       <div className="flex items-center gap-3">
@@ -396,8 +390,8 @@ function RewardTooltip({ reward, unlocked }: { reward: (typeof REWARDS)[number];
         </h4>
       </div>
       <div className="mt-2 space-y-0.5">
-        <div className="text-white">Binds when Revered</div>
-        <div style={{ color: unlocked ? "#ffffff" : "#ff2020" }}>Requires Chronicle – Revered</div>
+        <div className="text-white">Binds to your supporter tier</div>
+        <div style={{ color: unlocked ? "#ffffff" : "#ff2020" }}>{unlocked ? `Requires Chronicle – ${tierLabel}` : "Requires an Honored, Revered, or Exalted subscription"}</div>
         {reward.effects.map((line) => (
           <div key={line} style={{ color: QUALITY_COLOR.uncommon }}>
             {line}
@@ -412,10 +406,7 @@ function RewardTooltip({ reward, unlocked }: { reward: (typeof REWARDS)[number];
 export function FramePanel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className={cn(FRAME, "lg:sticky lg:top-4")}>
-      <h3
-        className="rounded-t-lg border-b border-border bg-[oklch(0.36_0_0)] px-4 py-2 text-center font-wow text-base font-bold tracking-[0.08em]"
-        style={{ color: GOLD }}
-      >
+      <h3 className="rounded-t-lg border-b border-border bg-[oklch(0.36_0_0)] px-4 py-2 text-center font-wow text-base font-bold tracking-[0.08em]" style={{ color: GOLD }}>
         {title}
       </h3>
       <div className="space-y-3 rounded-b-lg p-4">{children}</div>
@@ -438,9 +429,7 @@ function FormerSubscriberPanel({ billing }: { billing: BillingSummary }) {
           onClick={() => setView("plans")}
           className={cn(
             "rounded-md px-3 py-2 text-sm font-medium transition-colors",
-            view === "plans"
-              ? "bg-[#f0c060]/15 text-[#f0c060]"
-              : "text-muted-foreground hover:bg-white/5 hover:text-white",
+            view === "plans" ? "bg-[#f0c060]/15 text-[#f0c060]" : "text-muted-foreground hover:bg-white/5 hover:text-white",
           )}
         >
           Choose a plan
@@ -451,17 +440,13 @@ function FormerSubscriberPanel({ billing }: { billing: BillingSummary }) {
           onClick={() => setView("history")}
           className={cn(
             "rounded-md px-3 py-2 text-sm font-medium transition-colors",
-            view === "history"
-              ? "bg-[#f0c060]/15 text-[#f0c060]"
-              : "text-muted-foreground hover:bg-white/5 hover:text-white",
+            view === "history" ? "bg-[#f0c060]/15 text-[#f0c060]" : "text-muted-foreground hover:bg-white/5 hover:text-white",
           )}
         >
           Subscription history
         </button>
       </div>
-      {view === "plans"
-        ? <PlanPicker prices={billing.prices ?? []} />
-        : <FormerSubscriptionHistory billing={billing} />}
+      {view === "plans" ? <PlanPicker prices={billing.prices ?? []} /> : <FormerSubscriptionHistory billing={billing} />}
     </div>
   )
 }
@@ -477,7 +462,7 @@ function FormerSubscriptionHistory({ billing }: { billing: BillingSummary }) {
       <dl className="space-y-3 text-sm">
         <div className="flex justify-between gap-3">
           <dt className="text-muted-foreground">Plan</dt>
-          <dd className="font-wow text-zinc-200">{SUPPORTER_TIER_NAME}</dd>
+          <dd className="font-wow text-zinc-200">{billingTierLabel(billing.tier)}</dd>
         </div>
         {billing.status ? (
           <div className="flex justify-between gap-3">
@@ -495,12 +480,7 @@ function FormerSubscriptionHistory({ billing }: { billing: BillingSummary }) {
       <p className="border-t border-border pt-3 text-xs leading-5 text-muted-foreground">
         Stripe keeps the complete payment, invoice, refund, and subscription history for this billing account.
       </p>
-      <button
-        type="button"
-        className={GOLD_BUTTON}
-        disabled={portal.isPending}
-        onClick={() => void openBilling(() => portal.mutateAsync(), true)}
-      >
+      <button type="button" className={GOLD_BUTTON} disabled={portal.isPending} onClick={() => void openBilling(() => portal.mutateAsync(), true)}>
         {portal.isPending ? "Opening Stripe…" : "View Stripe Billing History"}
       </button>
     </FramePanel>
@@ -510,19 +490,56 @@ function FormerSubscriptionHistory({ billing }: { billing: BillingSummary }) {
 function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
   const checkout = useCreateBillingCheckout()
   const openBilling = useOpenBilling()
+  const availableTiers = PAID_BILLING_TIERS.filter((tier) => prices.some((price) => price.tier === tier))
+  const defaultTier = availableTiers.includes("revered") ? "revered" : availableTiers[0]
+  const [selectedTier, setSelectedTier] = useState<PaidBillingTier | undefined>(defaultTier)
+  const tier = selectedTier && availableTiers.includes(selectedTier) ? selectedTier : defaultTier
+  const tierPrices = prices.filter((price) => price.tier === tier)
+  const monthlyPrice = tierPrices.find((price) => price.interval_months === 1)
   const [selectedPriceID, setSelectedPriceID] = useState<string | null>(null)
+  const selectedPrice = tierPrices.find((price) => price.id === selectedPriceID) ?? monthlyPrice ?? tierPrices[0]
+  const bestPriceID = bestValuePriceID(tierPrices, monthlyPrice)
+  const qualities = billingPriceQualities(tierPrices)
+  const sorted = [...tierPrices].sort((a, b) => b.interval_months - a.interval_months)
+  const tierLabel = tier ? billingTierLabel(tier) : "Supporter"
 
-  const monthlyPrice = prices.find((price) => price.interval_months === 1)
-  const bestPriceID = bestValuePriceID(prices, monthlyPrice)
-  const selectedPrice = prices.find((price) => price.id === (selectedPriceID ?? monthlyPrice?.id)) ?? prices[0]
-  const qualities = billingPriceQualities(prices)
-  const sorted = [...prices].sort((a, b) => b.interval_months - a.interval_months)
+  const chooseTier = (nextTier: PaidBillingTier) => {
+    setSelectedTier(nextTier)
+    setSelectedPriceID(null)
+  }
 
   return (
-    <FramePanel title="Choose Your Path">
-      <p className="text-center text-xs text-muted-foreground">
-        Every plan grants the same rewards. Longer paths cost less per month.
-      </p>
+    <FramePanel title="Choose Your Standing">
+      <p className="text-center text-xs text-muted-foreground">Every tier currently grants the same complete rewards. Choose how much you would like to support Chronicle.</p>
+
+      {availableTiers.length > 0 ? (
+        <div role="radiogroup" aria-label="Supporter tier" className="grid grid-cols-3 gap-2">
+          {availableTiers.map((option) => {
+            const selected = option === tier
+            return (
+              <button
+                key={option}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => chooseTier(option)}
+                className={cn(
+                  "flex flex-col items-center gap-1 rounded-md border-2 p-2 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300",
+                  selected ? "bg-white/10" : "border-white/10 bg-white/[0.025] hover:bg-white/5",
+                )}
+                style={{
+                  borderColor: selected ? TIER_COLOR[option] : undefined,
+                }}
+              >
+                <img src={iconUrl(TIER_ICON[option])} alt="" aria-hidden="true" width={32} height={32} className="size-8" />
+                <span className="font-wow text-xs font-bold" style={{ color: TIER_COLOR[option] }}>
+                  {billingTierLabel(option)}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
 
       {sorted.length > 0 ? (
         <div role="radiogroup" aria-label="Billing period" className="space-y-2">
@@ -557,14 +574,11 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
                       {billingPeriodLabel(price.interval_months)}
                     </span>
                     {price.id === bestPriceID ? (
-                      <span className="rounded bg-[#ff8000]/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#ff8000]">
-                        Best value
-                      </span>
+                      <span className="rounded bg-[#ff8000]/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#ff8000]">Best value</span>
                     ) : null}
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    {formatBillingAmount(price.unit_amount, price.currency)} ·{" "}
-                    {billingPeriodDescription(price.interval_months).toLowerCase()}
+                    {formatBillingAmount(price.unit_amount, price.currency)} · {billingPeriodDescription(price.interval_months).toLowerCase()}
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
@@ -579,9 +593,7 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
           })}
         </div>
       ) : (
-        <p className="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-          {SUPPORTER_TIER_NAME} pricing is temporarily unavailable.
-        </p>
+        <p className="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">Supporter pricing is temporarily unavailable.</p>
       )}
 
       <button
@@ -591,53 +603,124 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
         onClick={() => selectedPrice && void openBilling(() => checkout.mutateAsync(selectedPrice.id))}
       >
         <span className="flex flex-col items-center leading-tight">
-          <span>Become {SUPPORTER_TIER_NAME}</span>
+          <span>Become {tierLabel}</span>
           {selectedPrice ? (
             <span className="mt-0.5 font-sans text-xs font-medium text-[#f0c060]/80">
-              Buy now · {formatBillingAmount(selectedPrice.unit_amount, selectedPrice.currency)}{" "}
-              {billingPeriodDescription(selectedPrice.interval_months).toLowerCase()}
+              Buy now · {formatBillingAmount(selectedPrice.unit_amount, selectedPrice.currency)} {billingPeriodDescription(selectedPrice.interval_months).toLowerCase()}
             </span>
           ) : null}
         </span>
       </button>
-      <p className="text-center text-xs text-muted-foreground">Secure checkout with Stripe. Cancel anytime.</p>
+      <p className="text-center text-xs text-muted-foreground">Secure checkout with Stripe. Cancel or change tiers anytime.</p>
     </FramePanel>
   )
 }
 
-function ReveredSubscriptionSettings({ billing }: { billing: BillingSummary }) {
+type TimelineStepState = "done" | "current" | "upcoming"
+
+function TimelineStep({ state, title, last, children }: { state: TimelineStepState; title: string; last?: boolean; children: React.ReactNode }) {
+  return (
+    <li className="relative flex gap-4 pb-6 last:pb-0">
+      {last ? null : <span aria-hidden="true" className="absolute left-[11px] top-7 bottom-1 w-px bg-border" />}
+      <span
+        className={cn(
+          "relative flex size-6 shrink-0 items-center justify-center rounded-full border-2",
+          state === "done" && "border-[#1eff00] bg-[#1eff00]/15 text-[#1eff00]",
+          state === "current" && "border-[#f0c060] bg-[#f0c060]/15",
+          state === "upcoming" && "border-zinc-600",
+        )}
+      >
+        {state === "done" ? <Check className="h-3.5 w-3.5" /> : state === "current" ? <span className="size-2 rounded-full bg-[#f0c060]" /> : null}
+      </span>
+      <div className="min-w-0 flex-1">
+        <h4 className={cn("font-wow text-base", state === "upcoming" ? "text-zinc-300" : "text-white")}>{title}</h4>
+        <div className="mt-1 text-sm leading-6 text-muted-foreground">{children}</div>
+      </div>
+    </li>
+  )
+}
+
+/** Explains what a canceled subscription means: no renewal charge, rewards until the period ends, then back to Friendly. */
+function CancellationTimeline({
+  tierLabel,
+  hasTierAccess,
+  subscriptionEnded,
+  displayDate,
+}: {
+  tierLabel: string
+  hasTierAccess: boolean
+  subscriptionEnded: boolean
+  displayDate: string | null
+}) {
+  return (
+    <FramePanel title="What Happens Now">
+      <div className="flex gap-3 rounded-md border border-[#1eff00]/40 bg-[#1eff00]/10 p-3">
+        <CircleCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#1eff00]" />
+        <div>
+          <p className="font-wow text-lg text-white">{subscriptionEnded ? "Your subscription has ended" : "Your subscription has been cancelled"}</p>
+          <p className="mt-0.5 text-sm leading-5 text-zinc-200">
+            {displayDate ? `You won't be charged on ${displayDate}.` : "You won't be charged at renewal."} It will not renew for another billing cycle.
+          </p>
+        </div>
+      </div>
+
+      <ol className="pt-2">
+        <TimelineStep state="done" title={subscriptionEnded ? "Subscription ended" : "Subscription cancelled"}>
+          No renewal is scheduled. Stripe will not start another billing cycle for this subscription.
+        </TimelineStep>
+        <TimelineStep state={hasTierAccess ? "current" : "done"} title={hasTierAccess ? `You're still ${tierLabel}` : `${tierLabel} access ended`}>
+          {hasTierAccess ? (
+            <>
+              <p>You already paid for this period, so every reward stays active{displayDate ? ` until ${displayDate}` : " until it ends"}.</p>
+              <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                {REWARDS.map((reward) => (
+                  <li key={reward.title} className="flex items-center gap-2 rounded border border-white/10 bg-black/20 px-2 py-1.5 text-zinc-200">
+                    <img src={iconUrl(reward.icon)} alt="" aria-hidden="true" width={24} height={24} className="size-6 rounded border border-yellow-600/60" />
+                    <span className="text-xs">{reward.title}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p>Your paid period is over and supporter rewards are no longer active.</p>
+          )}
+        </TimelineStep>
+        <TimelineStep state={hasTierAccess ? "upcoming" : "current"} title={hasTierAccess && displayDate ? `${displayDate}: back to Friendly` : "Back to Friendly"}>
+          Supporter rewards switch off and ads return. Log parsing, panels, rankings, and replays stay free for everyone.
+        </TimelineStep>
+        <TimelineStep state="upcoming" title="Want to come back?" last>
+          Once this subscription fully expires, return here to choose Honored, Revered, or Exalted again.
+        </TimelineStep>
+      </ol>
+    </FramePanel>
+  )
+}
+
+function TierSubscriptionSettings({ billing }: { billing: BillingSummary }) {
   const portal = useCreateBillingPortal()
+  const change = useCreateBillingChange()
   const cancel = useCreateBillingCancel()
   const openBilling = useOpenBilling()
-  const {
-    hasReveredAccess,
-    displayState,
-    subscriptionEnded,
-    cancellationScheduled,
-    statusLabel,
-    heading,
-    periodLabel,
-    effectiveDate,
-  } = billingSubscriptionState(billing)
+  const { hasTierAccess, tierLabel, displayState, subscriptionEnded, cancellationScheduled, statusLabel, heading, periodLabel, effectiveDate } = billingSubscriptionState(billing)
   const displayDate = effectiveDate ? new Date(effectiveDate).toLocaleDateString() : null
 
   return (
     <section className="max-w-5xl space-y-8">
       <div className="space-y-3">
         <h2 className="font-wow text-3xl leading-tight sm:text-4xl">
-          <span style={{ color: hasReveredAccess ? GOLD : "#e4e4e7" }}>{heading}</span>
-          {hasReveredAccess ? <span className="text-white"> with Chronicle</span> : null}
+          <span style={{ color: hasTierAccess ? GOLD : "#e4e4e7" }}>{heading}</span>
+          {hasTierAccess ? <span className="text-white"> with Chronicle</span> : null}
         </h2>
         <p className="max-w-3xl text-muted-foreground">
-          {subscriptionEnded && !hasReveredAccess
-            ? "Your subscription and Revered access have ended. Stripe will not renew or charge this subscription again."
+          {subscriptionEnded && !hasTierAccess
+            ? `Your subscription and ${tierLabel} access have ended. Stripe will not renew or charge this subscription again.`
             : subscriptionEnded
-              ? `Your subscription has ended, but you remain Revered${displayDate ? ` until ${displayDate}` : " while your paid access finishes"}.`
+              ? `Your subscription has ended, but you remain ${tierLabel}${displayDate ? ` until ${displayDate}` : " while your paid access finishes"}.`
               : cancellationScheduled
-                ? `Your subscription will not renew. You remain Revered${displayDate ? ` until ${displayDate}` : " until your paid access finishes"}.`
-                : hasReveredAccess
-                  ? "Thank you for supporting Chronicle. Your Revered rewards stay active through the end of your paid billing period."
-                : "Your subscription is recorded, but Stripe has not granted an active Revered entitlement yet."}
+                ? `Your subscription will not renew. You remain ${tierLabel}${displayDate ? ` until ${displayDate}` : " until your paid access finishes"}.`
+                : hasTierAccess
+                  ? `Thank you for supporting Chronicle. Your ${tierLabel} rewards stay active through the end of your paid billing period.`
+                  : `Your subscription is recorded, but Stripe has not granted an active ${tierLabel} entitlement yet.`}
         </p>
       </div>
 
@@ -648,9 +731,7 @@ function ReveredSubscriptionSettings({ billing }: { billing: BillingSummary }) {
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between gap-3">
               <dt className="text-muted-foreground">Standing</dt>
-              <dd className={cn("font-wow", hasReveredAccess ? "text-[#f0c060]" : "text-[#00c000]")}>
-                {hasReveredAccess ? SUPPORTER_TIER_NAME : "Friendly"}
-              </dd>
+              <dd className={cn("font-wow", hasTierAccess ? "text-[#f0c060]" : "text-white")}>{hasTierAccess ? tierLabel : "Friendly"}</dd>
             </div>
             {billing.status ? (
               <div className="flex justify-between gap-3">
@@ -664,14 +745,21 @@ function ReveredSubscriptionSettings({ billing }: { billing: BillingSummary }) {
                 <dd className="text-white">{displayDate}</dd>
               </div>
             ) : null}
+            {cancellationScheduled || subscriptionEnded ? (
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Next charge</dt>
+                <dd className="font-medium text-[#1eff00]">None</dd>
+              </div>
+            ) : null}
           </dl>
 
+          {subscriptionEnded || cancellationScheduled ? null : (
           <div className="border-t border-border pt-3">
             <h4 className="font-wow text-sm" style={{ color: "#ffd200" }}>
               {subscriptionEnded
-                ? hasReveredAccess
-                  ? "Revered access remains"
-                  : "Revered access ended"
+                ? hasTierAccess
+                  ? `${tierLabel} access remains`
+                  : `${tierLabel} access ended`
                 : cancellationScheduled
                   ? "Cancellation scheduled"
                   : displayState === "payment_issue"
@@ -682,63 +770,79 @@ function ReveredSubscriptionSettings({ billing }: { billing: BillingSummary }) {
             </h4>
             {subscriptionEnded ? (
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                {hasReveredAccess
-                  ? `Stripe will not renew or charge this subscription again. Your existing Revered access remains available${displayDate ? ` until ${displayDate}` : " until the paid period finishes"}. Once this subscription is fully expired, you can return here to choose a new subscription frequency.`
-                  : "Stripe will not renew or charge this subscription again. No active Revered entitlement is recorded, so its rewards are no longer available."}
+                {hasTierAccess
+                  ? `Stripe will not renew or charge this subscription again. Your existing ${tierLabel} access remains available${displayDate ? ` until ${displayDate}` : " until the paid period finishes"}. Once this subscription is fully expired, you can return here to choose a new tier.`
+                  : `Stripe will not renew or charge this subscription again. No active ${tierLabel} entitlement is recorded, so its rewards are no longer available.`}
               </p>
             ) : cancellationScheduled ? (
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                Your subscription will not renew. Your Revered rewards remain available until{displayDate ? ` ${displayDate}` : " the end of your paid access"}. Once this subscription is fully expired, you can return here to choose a new subscription frequency.
+                Your subscription will not renew. Your {tierLabel} rewards remain available until
+                {displayDate ? ` ${displayDate}` : " the end of your paid access"}. Once this subscription is fully expired, you can return here to choose a new tier.
               </p>
             ) : displayState === "payment_issue" ? (
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
                 Stripe could not confirm the latest payment. Open the billing portal to update your payment method or review the invoice.
               </p>
             ) : displayState === "paused" ? (
-              <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                Stripe reports this subscription as paused. Open the billing portal to review its billing state.
-              </p>
+              <p className="mt-1.5 text-xs leading-5 text-muted-foreground">Stripe reports this subscription as paused. Open the billing portal to review its billing state.</p>
             ) : (
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                Update your payment method or view invoices in the Stripe billing portal. If you cancel, your Revered
-                rewards stay active until{displayDate ? ` ${displayDate}` : " the end of your billing period"}.
+                Change tiers, update your payment method, or view invoices in the Stripe billing portal. Stripe shows when a tier change takes effect before you confirm it. If you
+                cancel, your {tierLabel} rewards stay active until
+                {displayDate ? ` ${displayDate}` : " the end of your billing period"}.
               </p>
             )}
           </div>
+          )}
 
-          <button
-            type="button"
-            className={GOLD_BUTTON}
-            disabled={portal.isPending}
-            onClick={() => void openBilling(() => portal.mutateAsync(), true)}
-          >
-            {portal.isPending
-              ? "Opening Stripe…"
-              : subscriptionEnded || cancellationScheduled
-                ? "View Stripe Billing History"
-                : "Open Stripe Billing Portal"}
-          </button>
-          {!subscriptionEnded && !cancellationScheduled ? (
-            <button
-              type="button"
-              className="w-full rounded-md border border-red-500/40 px-4 py-2 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50"
-              disabled={cancel.isPending}
-              onClick={() => void openBilling(() => cancel.mutateAsync())}
-            >
-              {cancel.isPending ? "Opening Stripe…" : "Cancel Subscription"}
+          {subscriptionEnded || cancellationScheduled ? (
+            <button type="button" className={GOLD_BUTTON} disabled={portal.isPending} onClick={() => void openBilling(() => portal.mutateAsync(), true)}>
+              {portal.isPending ? "Opening Stripe…" : "View Stripe Billing History"}
             </button>
-          ) : null}
+          ) : (
+            <>
+              <button type="button" className={GOLD_BUTTON} disabled={change.isPending} onClick={() => void openBilling(() => change.mutateAsync())}>
+                {change.isPending ? "Opening Stripe…" : "Change Tier"}
+              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  className="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-white/5 px-3 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 disabled:opacity-50"
+                  disabled={portal.isPending}
+                  onClick={() => void openBilling(() => portal.mutateAsync(), true)}
+                >
+                  <CreditCard className="h-3.5 w-3.5" />
+                  {portal.isPending ? "Opening…" : "Manage Billing"}
+                </button>
+                <button
+                  type="button"
+                  className="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-red-500/5 px-3 py-2 text-sm font-medium text-red-300/80 transition-colors hover:bg-red-500/15 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50"
+                  disabled={cancel.isPending}
+                  onClick={() => void openBilling(() => cancel.mutateAsync())}
+                >
+                  <XCircle className="h-3.5 w-3.5" />
+                  {cancel.isPending ? "Opening…" : "Cancel Plan"}
+                </button>
+              </div>
+            </>
+          )}
         </FramePanel>
 
-        <div>
-          <h3 className="font-wow text-xl font-semibold">{SUPPORTER_TIER_NAME} Rewards</h3>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            {REWARDS.map((reward) => (
-              <RewardTooltip key={reward.title} reward={reward} unlocked={hasReveredAccess} />
-            ))}
+        {subscriptionEnded || cancellationScheduled ? (
+          <CancellationTimeline tierLabel={tierLabel} hasTierAccess={hasTierAccess} subscriptionEnded={subscriptionEnded} displayDate={displayDate} />
+        ) : (
+          <div>
+            <h3 className="font-wow text-xl font-semibold">{tierLabel} Rewards</h3>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              {REWARDS.map((reward) => (
+                <RewardTooltip key={reward.title} reward={reward} unlocked={hasTierAccess} tierLabel={tierLabel} />
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
+
+      <ComparisonTable currentTier={hasTierAccess ? billing.tier : "free"} />
 
       <details className={cn(FRAME, "group text-sm")}>
         <summary className="cursor-pointer rounded-lg px-4 py-2 font-wow text-sm marker:text-[#f0c060] group-open:rounded-b-none group-open:border-b group-open:border-border">
@@ -748,8 +852,7 @@ function ReveredSubscriptionSettings({ billing }: { billing: BillingSummary }) {
         <div className="space-y-3 p-4">
           {billing.customer_id ? (
             <p className="text-xs text-muted-foreground">
-              Stripe customer{" "}
-              <code className="rounded border border-border bg-black/30 px-2 py-1 text-xs text-zinc-200 select-all">{billing.customer_id}</code>
+              Stripe customer <code className="rounded border border-border bg-black/30 px-2 py-1 text-xs text-zinc-200 select-all">{billing.customer_id}</code>
             </p>
           ) : null}
           {billing.entitlements.length > 0 ? (
@@ -761,9 +864,7 @@ function ReveredSubscriptionSettings({ billing }: { billing: BillingSummary }) {
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-amber-300">
-              No active Stripe feature entitlements are currently recorded for this account.
-            </p>
+            <p className="text-sm text-amber-300">No active Stripe feature entitlements are currently recorded for this account.</p>
           )}
         </div>
       </details>

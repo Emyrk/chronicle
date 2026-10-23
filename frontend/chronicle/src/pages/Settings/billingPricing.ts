@@ -45,13 +45,21 @@ export function bestValuePriceID(prices: readonly BillingPrice[], monthlyPrice?:
   return bestID
 }
 
-export const SUPPORTER_TIER_NAME = "Revered"
+export const PAID_BILLING_TIERS = ["honored", "revered", "exalted"] as const
 
-// The backend product code stays "supporter"; users see it as the Revered tier.
+export type PaidBillingTier = (typeof PAID_BILLING_TIERS)[number]
+
+export function isPaidBillingTier(tier: string): tier is PaidBillingTier {
+  return PAID_BILLING_TIERS.includes(tier as PaidBillingTier)
+}
+
 export function billingTierLabel(tier: string): string {
-  if (tier === "supporter") return SUPPORTER_TIER_NAME
   if (tier === "free") return "Friendly"
   return tier.charAt(0).toUpperCase() + tier.slice(1)
+}
+
+export function billingTierRank(tier: string): number {
+  return PAID_BILLING_TIERS.indexOf(tier as PaidBillingTier)
 }
 
 export type BillingQuality = "uncommon" | "rare" | "epic" | "legendary"

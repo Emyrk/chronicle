@@ -14,14 +14,23 @@ import (
 
 const (
 	TierFree       = "free"
+	TierHonored    = "honored"
 	TierRevered    = "revered"
+	TierExalted    = "exalted"
 	ProviderStripe = "stripe"
 )
+
+var paidProducts = []ProductCode{ProductHonored, ProductRevered, ProductExalted}
+
+func tierForProduct(product ProductCode) string {
+	return string(product)
+}
 
 type accountRetriever func(context.Context, *stripe.AccountRetrieveParams) (*stripe.Account, error)
 type priceRetriever func(context.Context, string, *stripe.PriceRetrieveParams) (*stripe.Price, error)
 type subscriptionRetriever func(context.Context, string, *stripe.SubscriptionRetrieveParams) (*stripe.Subscription, error)
 type checkoutSessionCreator func(context.Context, *stripe.CheckoutSessionCreateParams) (*stripe.CheckoutSession, error)
+type billingPortalSessionCreator func(context.Context, *stripe.BillingPortalSessionCreateParams) (*stripe.BillingPortalSession, error)
 type subscriptionLister func(context.Context) ([]*stripe.Subscription, error)
 type activeEntitlementLister func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error)
 
@@ -31,24 +40,28 @@ type Options struct {
 	RunEntitlementTransaction EntitlementTransactionRunner
 	SecretKey                 string
 	WebhookSecret             string
-	PriceIDs                  []string
+	HonoredPriceIDs           []string
+	ReveredPriceIDs           []string
+	ExaltedPriceIDs           []string
 	AccessURL                 *url.URL
 }
 
 type Service struct {
-	store                     database.Store
-	runEntitlementTransaction EntitlementTransactionRunner
-	stripe                    *stripe.Client
-	webhookSecret             string
-	priceIDs                  []string
-	allowedPrices             map[string]struct{}
-	accessURL                 *url.URL
-	retrieveAccount           accountRetriever
-	retrievePrice             priceRetriever
-	retrieveSubscription      subscriptionRetriever
-	createCheckoutSession     checkoutSessionCreator
-	listSubscriptions         subscriptionLister
-	listActiveEntitlements    activeEntitlementLister
+	store                      database.Store
+	runEntitlementTransaction  EntitlementTransactionRunner
+	stripe                     *stripe.Client
+	webhookSecret              string
+	priceIDs                   map[ProductCode][]string
+	configuredPrices           map[string]ProductCode
+	priceConfigurationErr      error
+	accessURL                  *url.URL
+	retrieveAccount            accountRetriever
+	retrievePrice              priceRetriever
+	retrieveSubscription       subscriptionRetriever
+	createCheckoutSession      checkoutSessionCreator
+	createBillingPortalSession billingPortalSessionCreator
+	listSubscriptions          subscriptionLister
+	listActiveEntitlements     activeEntitlementLister
 
 	pricesMu sync.Mutex
 	prices   []chroniclesdk.BillingPrice
@@ -60,6 +73,7 @@ func New(opts Options) *Service {
 	var retrievePrice priceRetriever
 	var retrieveSubscription subscriptionRetriever
 	var createCheckoutSession checkoutSessionCreator
+	var createBillingPortalSession billingPortalSessionCreator
 	var listSubscriptions subscriptionLister
 	var listActiveEntitlements activeEntitlementLister
 	if opts.SecretKey != "" {
@@ -68,11 +82,9 @@ func New(opts Options) *Service {
 		retrievePrice = client.V1Prices.Retrieve
 		retrieveSubscription = client.V1Subscriptions.Retrieve
 		createCheckoutSession = client.V1CheckoutSessions.Create
+		createBillingPortalSession = client.V1BillingPortalSessions.Create
 		listSubscriptions = func(ctx context.Context) ([]*stripe.Subscription, error) {
 			var subscriptions []*stripe.Subscription
-			// Stripe's default list excludes canceled subscription history. The
-			// reconciliation worker handles known local subscriptions separately, so
-			// discovering every old cancellation would resurrect cleared accounts.
 			params := &stripe.SubscriptionListParams{}
 			for sub, err := range client.V1Subscriptions.List(ctx, params).All(ctx) {
 				if err != nil {
@@ -94,10 +106,21 @@ func New(opts Options) *Service {
 			return entitlements, nil
 		}
 	}
-	priceIDs := uniqueStrings(opts.PriceIDs)
-	allowedPrices := make(map[string]struct{}, len(priceIDs))
-	for _, priceID := range priceIDs {
-		allowedPrices[priceID] = struct{}{}
+	priceIDs := map[ProductCode][]string{
+		ProductHonored: uniqueStrings(opts.HonoredPriceIDs),
+		ProductRevered: uniqueStrings(opts.ReveredPriceIDs),
+		ProductExalted: uniqueStrings(opts.ExaltedPriceIDs),
+	}
+	configuredPrices := make(map[string]ProductCode)
+	var priceConfigurationErr error
+	for _, product := range paidProducts {
+		for _, priceID := range priceIDs[product] {
+			if existing, ok := configuredPrices[priceID]; ok && existing != product {
+				priceConfigurationErr = fmt.Errorf("stripe price %q is configured for both %q and %q", priceID, existing, product)
+				continue
+			}
+			configuredPrices[priceID] = product
+		}
 	}
 	runEntitlementTransaction := opts.RunEntitlementTransaction
 	if runEntitlementTransaction == nil && opts.Store != nil {
@@ -108,19 +131,21 @@ func New(opts Options) *Service {
 		runEntitlementTransaction = NewEntitlementTransactionRunner(opts.Store, roleSetter)
 	}
 	return &Service{
-		store:                     opts.Store,
-		runEntitlementTransaction: runEntitlementTransaction,
-		stripe:                    client,
-		webhookSecret:             opts.WebhookSecret,
-		priceIDs:                  priceIDs,
-		allowedPrices:             allowedPrices,
-		accessURL:                 opts.AccessURL,
-		retrieveAccount:           retrieveAccount,
-		retrievePrice:             retrievePrice,
-		retrieveSubscription:      retrieveSubscription,
-		createCheckoutSession:     createCheckoutSession,
-		listSubscriptions:         listSubscriptions,
-		listActiveEntitlements:    listActiveEntitlements,
+		store:                      opts.Store,
+		runEntitlementTransaction:  runEntitlementTransaction,
+		stripe:                     client,
+		webhookSecret:              opts.WebhookSecret,
+		priceIDs:                   priceIDs,
+		configuredPrices:           configuredPrices,
+		priceConfigurationErr:      priceConfigurationErr,
+		accessURL:                  opts.AccessURL,
+		retrieveAccount:            retrieveAccount,
+		retrievePrice:              retrievePrice,
+		retrieveSubscription:       retrieveSubscription,
+		createCheckoutSession:      createCheckoutSession,
+		createBillingPortalSession: createBillingPortalSession,
+		listSubscriptions:          listSubscriptions,
+		listActiveEntitlements:     listActiveEntitlements,
 	}
 }
 
@@ -151,7 +176,7 @@ func (s *Service) ValidateAccount(ctx context.Context, expectedAccountID string)
 }
 
 func (s *Service) Enabled() bool {
-	return s != nil && s.stripe != nil && s.webhookSecret != "" && len(s.priceIDs) > 0 && s.accessURL != nil
+	return s != nil && s.stripe != nil && s.webhookSecret != "" && len(s.configuredPrices) > 0 && s.priceConfigurationErr == nil && s.accessURL != nil
 }
 
 func uniqueStrings(values []string) []string {
@@ -170,64 +195,100 @@ func uniqueStrings(values []string) []string {
 	return result
 }
 
+func (s *Service) productForPrice(priceID string) (ProductCode, bool) {
+	product, ok := s.configuredPrices[priceID]
+	return product, ok
+}
+
 func (s *Service) priceAllowed(priceID string) bool {
-	_, ok := s.allowedPrices[priceID]
+	_, ok := s.productForPrice(priceID)
 	return ok
 }
 
 func (s *Service) reconciliationEnabled() bool {
-	return s != nil && s.listSubscriptions != nil && len(s.allowedPrices) > 0
+	return s != nil && s.listSubscriptions != nil && len(s.configuredPrices) > 0 && s.priceConfigurationErr == nil
 }
 
-func (s *Service) validateSubscriptionPurchase(product ProductCode, purchase stripePurchase) error {
-	if product != ProductSupporter {
-		return fmt.Errorf("unknown billing product %q", product)
+func (s *Service) validateSubscriptionPurchase(purchase stripePurchase) (ProductCode, error) {
+	if s.priceConfigurationErr != nil {
+		return "", s.priceConfigurationErr
 	}
-	if !s.priceAllowed(purchase.priceID) {
-		return fmt.Errorf("stripe price %q is not configured for product %q", purchase.priceID, product)
+	product, ok := s.productForPrice(purchase.priceID)
+	if !ok {
+		return "", fmt.Errorf("stripe price %q is not configured", purchase.priceID)
 	}
-	return nil
+	return product, nil
 }
 
-func (s *Service) supporterPrices(ctx context.Context) ([]chroniclesdk.BillingPrice, error) {
+func (s *Service) billingPrices(ctx context.Context) ([]chroniclesdk.BillingPrice, error) {
 	s.pricesMu.Lock()
 	defer s.pricesMu.Unlock()
 	if len(s.prices) > 0 {
 		return append([]chroniclesdk.BillingPrice(nil), s.prices...), nil
 	}
+	if s.priceConfigurationErr != nil {
+		return nil, s.priceConfigurationErr
+	}
 
-	prices := make([]chroniclesdk.BillingPrice, 0, len(s.priceIDs))
-	var productID string
-	var currency string
-	seenMonths := make(map[int64]struct{}, len(s.priceIDs))
-	for _, priceID := range s.priceIDs {
-		price, err := s.retrievePrice(ctx, priceID, nil)
-		if err != nil {
-			return nil, fmt.Errorf("retrieve Stripe price %q: %w", priceID, err)
+	prices := make([]chroniclesdk.BillingPrice, 0, len(s.configuredPrices))
+	var catalogCurrency string
+	for _, product := range paidProducts {
+		var productID string
+		var currency string
+		seenMonths := make(map[int64]struct{}, len(s.priceIDs[product]))
+		for _, priceID := range s.priceIDs[product] {
+			price, err := s.retrievePrice(ctx, priceID, nil)
+			if err != nil {
+				return nil, fmt.Errorf("retrieve Stripe price %q: %w", priceID, err)
+			}
+			billingPrice, err := billingPriceFromStripe(price)
+			if err != nil {
+				return nil, fmt.Errorf("validate Stripe price %q: %w", priceID, err)
+			}
+			billingPrice.Tier = tierForProduct(product)
+			if productID == "" {
+				productID = price.Product.ID
+				currency = billingPrice.Currency
+			} else if price.Product.ID != productID {
+				return nil, fmt.Errorf("configured Stripe prices for %s must belong to the same product", product)
+			} else if billingPrice.Currency != currency {
+				return nil, fmt.Errorf("configured Stripe prices for %s must use the same currency", product)
+			}
+			if _, ok := seenMonths[billingPrice.IntervalMonths]; ok {
+				return nil, fmt.Errorf("configured Stripe prices for %s contain duplicate %d-month periods", product, billingPrice.IntervalMonths)
+			}
+			seenMonths[billingPrice.IntervalMonths] = struct{}{}
+			prices = append(prices, billingPrice)
 		}
-		billingPrice, err := billingPriceFromStripe(price)
-		if err != nil {
-			return nil, fmt.Errorf("validate Stripe price %q: %w", priceID, err)
+		if productID != "" {
+			if catalogCurrency == "" {
+				catalogCurrency = currency
+			} else if currency != catalogCurrency {
+				return nil, fmt.Errorf("configured Stripe tier prices must use the same currency")
+			}
 		}
-		if productID == "" {
-			productID = price.Product.ID
-			currency = billingPrice.Currency
-		} else if price.Product.ID != productID {
-			return nil, fmt.Errorf("configured Stripe prices must belong to the same product")
-		} else if billingPrice.Currency != currency {
-			return nil, fmt.Errorf("configured Stripe prices must use the same currency")
-		}
-		if _, ok := seenMonths[billingPrice.IntervalMonths]; ok {
-			return nil, fmt.Errorf("configured Stripe prices contain duplicate %d-month periods", billingPrice.IntervalMonths)
-		}
-		seenMonths[billingPrice.IntervalMonths] = struct{}{}
-		prices = append(prices, billingPrice)
 	}
 	sort.Slice(prices, func(i, j int) bool {
-		return prices[i].IntervalMonths < prices[j].IntervalMonths
+		if prices[i].Tier == prices[j].Tier {
+			return prices[i].IntervalMonths < prices[j].IntervalMonths
+		}
+		return tierRank(prices[i].Tier) < tierRank(prices[j].Tier)
 	})
 	s.prices = prices
 	return append([]chroniclesdk.BillingPrice(nil), prices...), nil
+}
+
+func tierRank(tier string) int {
+	switch tier {
+	case TierHonored:
+		return 1
+	case TierRevered:
+		return 2
+	case TierExalted:
+		return 3
+	default:
+		return 0
+	}
 }
 
 func billingPriceFromStripe(price *stripe.Price) (chroniclesdk.BillingPrice, error) {
