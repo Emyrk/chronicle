@@ -10,6 +10,45 @@ const DERIVED_INSTANCES: Record<string, string[]> = {
   ],
 };
 
+function hashString(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+/**
+ * Return raid counts after which a grid ad should be inserted. The hashed IDs
+ * produce stable pseudo-random gaps, so loading another page never moves ads
+ * that are already visible.
+ */
+export function getRecentRaidAdInsertions(instanceIDs: string[], columnCount: number): number[] {
+  const insertions: number[] = [];
+  const gaps = [4, 5, 6, 7, 8];
+  const eligibleGaps = columnCount <= 1
+    ? gaps
+    : gaps.filter((gap) => (gap + 1) % columnCount !== 0);
+  let raidCount = 0;
+  let adIndex = 0;
+
+  while (raidCount < instanceIDs.length) {
+    const anchorID = instanceIDs[raidCount] ?? instanceIDs[0];
+    // The previous ad also occupies a grid cell, so compare gap + 1 against
+    // the active column count to keep consecutive ads out of the same column.
+    const gap = eligibleGaps[hashString(`${anchorID}:${adIndex}`) % eligibleGaps.length];
+    raidCount += gap;
+
+    if (raidCount > instanceIDs.length) break;
+
+    insertions.push(raidCount);
+    adIndex += 1;
+  }
+
+  return insertions;
+}
+
 /**
  * Expand a list of instance option names so that derived sub-instances
  * appear alongside their parent. Preserves all unrelated names and

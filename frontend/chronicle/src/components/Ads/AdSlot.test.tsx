@@ -96,6 +96,22 @@ describe("AdSlot", () => {
     expect(markup).toContain('data-ad-placement="statistics-encounter-sidebar"')
   })
 
+  it("renders a fixed 300 by 250 card for content grids", () => {
+    const markup = renderAdSlot(
+      <AdSlot placement="recent-grid-card-1" format="card" hostname="localhost" previewEnabled />,
+    )
+
+    expect(adSizesForFormat("card", false)).toEqual([[300, 250]])
+    expect(adSizesForFormat("card", false, true)).toEqual([[300, 100]])
+    expect(adSizeLabel("card", false)).toBe("300 × 250")
+    expect(adSizeLabel("card", false, true)).toBe("300 × 100")
+    expect(markup).toContain("300 × 250")
+    expect(markup).toContain("h-[250px]")
+    expect(markup).toContain("w-[300px]")
+    expect(markup).toContain("flex h-full w-full self-start justify-center")
+    expect(markup).toContain('data-ad-placement="recent-grid-card-1"')
+  })
+
   it("does not render outside local development", () => {
     expect(
       renderAdSlot(

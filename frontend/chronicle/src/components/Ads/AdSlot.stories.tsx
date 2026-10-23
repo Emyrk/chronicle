@@ -67,6 +67,40 @@ export const PairedRails: Story = {
   ),
 }
 
+export const Card: Story = {
+  args: {
+    placement: "recent-grid-card-1",
+    format: "card",
+  },
+  render: (args) => (
+    <div className="min-h-screen bg-background px-6 py-8 text-foreground">
+      <div className="mx-auto grid max-w-7xl grid-cols-4 gap-4">
+        {Array.from({ length: 3 }, (_, index) => (
+          <div key={index} className="h-[266px] rounded-xl border bg-card" />
+        ))}
+        <AdSlot {...args} />
+      </div>
+    </div>
+  ),
+}
+
+export const MobileCard: Story = {
+  args: {
+    placement: "recent-grid-card-1",
+    format: "card",
+  },
+  parameters: {
+    viewport: { defaultViewport: "mobile1" },
+  },
+  render: (args) => (
+    <div className="min-h-screen bg-background p-4 text-foreground">
+      <div className="mb-4 h-[200px] rounded-xl border bg-card" />
+      <AdSlot {...args} />
+      <div className="mt-4 h-[200px] rounded-xl border bg-card" />
+    </div>
+  ),
+}
+
 export const Responsive: Story = {
   args: {
     placement: "statistics-encounter-sidebar",

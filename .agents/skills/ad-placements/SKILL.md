@@ -81,6 +81,7 @@ Do not create a placement-specific wrapper merely to render `AdSlot`. A wrapper 
 |---|---|---|
 | Responsive | `<AdSlot placement="..." />` | Hidden below `lg`; fills available width; minimum preview height 7rem |
 | Rail | `<AdSlot placement="..." format="rail" />` | Hidden below `2xl`; 160px wide by default; expands to 300px when its layout has spare viewport width; 600px minimum height; sticky below navigation |
+| Card | `<AdSlot placement="..." format="card" />` | Fixed 300×100 below `lg`, fixed 300×250 at `lg` and wider; centered within a content-grid cell |
 
 Add a new format only when neither existing format can represent the required dimensions or breakpoint behavior. Format changes belong in `AdSlot.tsx` and require component tests plus a Storybook story.
 
@@ -92,6 +93,7 @@ Add a new format only when neither existing format can represent the required di
 | `statistics-encounter-sidebar` | `pages/Rankings/InstanceView.tsx` | Explicitly non-mobile statistics detail with 1–8 encounter rows; rendered after the keybind help text |
 | `recent-right-rail` | `pages/Recent/RecentRaids.tsx` | Recent uploads; visible at `2xl` |
 | `recent-left-rail` | `pages/Recent/RecentRaids.tsx` | Recent uploads; visible with the right rail at 1800px and wider |
+| `recent-grid-card-*` | `pages/Recent/RecentRaids.tsx` | Recent uploads; 300×100 on mobile and 300×250 on desktop, inserted after pseudo-random groups of 4 to 8 raids |
 | `census-left-rail` | `pages/Census/CensusPage.tsx` | Census statistics; paired left rail visible at `2xl` |
 | `census-right-rail` | `pages/Census/CensusPage.tsx` | Census statistics; paired right rail visible at `2xl` |
 

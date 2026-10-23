@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Loader2, Castle, Search, Check, ChevronsUpDown } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { AdSlot } from "@/components/Ads/AdSlot";
@@ -10,9 +10,35 @@ import { useUrlState, serializers } from "@/hooks/useUrlState";
 import { INSTANCE_CONFIG } from "@/pages/Logs/utils/instanceImages";
 import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory";
 import { RaidCard } from "./RaidCard";
-import { expandInstanceOptions, expandInstanceQuery } from "./recentRaids.utils";
+import { expandInstanceOptions, expandInstanceQuery, getRecentRaidAdInsertions } from "./recentRaids.utils";
 import { groupDuplicateInstances } from "@/utils/groupDuplicates";
 import type { RecentInstance, RecentInstancesResponse } from "@/api/typesGenerated";
+
+function getRecentRaidColumnCount(): number {
+  if (typeof window === "undefined") return 1;
+  if (window.matchMedia("(min-width: 1320px)").matches) return 4;
+  if (window.matchMedia("(min-width: 1024px)").matches) return 3;
+  if (window.matchMedia("(min-width: 640px)").matches) return 2;
+  return 1;
+}
+
+function useRecentRaidColumnCount(): number {
+  const [columnCount, setColumnCount] = useState(getRecentRaidColumnCount);
+
+  useEffect(() => {
+    const mediaQueries = [
+      window.matchMedia("(min-width: 640px)"),
+      window.matchMedia("(min-width: 1024px)"),
+      window.matchMedia("(min-width: 1320px)"),
+    ];
+    const updateColumnCount = () => setColumnCount(getRecentRaidColumnCount());
+
+    mediaQueries.forEach((query) => query.addEventListener("change", updateColumnCount));
+    return () => mediaQueries.forEach((query) => query.removeEventListener("change", updateColumnCount));
+  }, []);
+
+  return columnCount;
+}
 
 function renderItems(names: string[], selected: string[], onToggle: (name: string) => void) {
   return names.map((name) => {
@@ -125,6 +151,8 @@ export function RecentRaids() {
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
 
+  const columnCount = useRecentRaidColumnCount();
+
   const { data: supportedInstances } = useSupportedInstances();
   const { data: bossCounts } = useSupportedInstanceBossCounts();
   const { data: realms } = useRealms();
@@ -203,6 +231,14 @@ export function RecentRaids() {
 
   const PAGE_SIZE = 24;
   const instanceGroups = useMemo(() => groupDuplicateInstances(instances), [instances]);
+
+  const adNumberByRaidCount = useMemo(
+    () => new Map(
+      getRecentRaidAdInsertions(instanceGroups.map((group) => group[0].id), columnCount)
+        .map((raidCount, index) => [raidCount, index + 1]),
+    ),
+    [columnCount, instanceGroups],
+  );
 
   const fetchInstances = useCallback(async (offset?: number) => {
     if (hasConflictingFilters) {
@@ -438,16 +474,21 @@ export function RecentRaids() {
           {/* Raid grid */}
           {instanceGroups.length > 0 && (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {instanceGroups.map((group) => {
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 min-[1320px]:grid-cols-4 gap-4">
+                {instanceGroups.map((group, index) => {
                   const instance = group[0];
+                  const adNumber = adNumberByRaidCount.get(index + 1);
                   return (
-                    <RaidCard
-                      key={instance.id}
-                      instance={instance}
-                      instances={group}
-                      bossCount={bossCounts?.get(instance.name)}
-                    />
+                    <Fragment key={instance.id}>
+                      <RaidCard
+                        instance={instance}
+                        instances={group}
+                        bossCount={bossCounts?.get(instance.name)}
+                      />
+                      {adNumber !== undefined && (
+                        <AdSlot placement={`recent-grid-card-${adNumber}`} format="card" />
+                      )}
+                    </Fragment>
                   );
                 })}
               </div>
