@@ -231,7 +231,6 @@ func (s *Service) billingPrices(ctx context.Context) ([]chroniclesdk.BillingPric
 	}
 
 	prices := make([]chroniclesdk.BillingPrice, 0, len(s.configuredPrices))
-	var catalogProductID string
 	var catalogCurrency string
 	for _, product := range paidProducts {
 		var productID string
@@ -262,11 +261,8 @@ func (s *Service) billingPrices(ctx context.Context) ([]chroniclesdk.BillingPric
 			prices = append(prices, billingPrice)
 		}
 		if productID != "" {
-			if catalogProductID == "" {
-				catalogProductID = productID
+			if catalogCurrency == "" {
 				catalogCurrency = currency
-			} else if productID != catalogProductID {
-				return nil, fmt.Errorf("configured Stripe tier prices must belong to the same product")
 			} else if currency != catalogCurrency {
 				return nil, fmt.Errorf("configured Stripe tier prices must use the same currency")
 			}

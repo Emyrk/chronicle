@@ -165,7 +165,7 @@ func (s *Service) Options() serpent.OptionSet {
 		},
 		{
 			Name:        "Stripe Honored Price IDs",
-			Description: "Optional comma-separated recurring Stripe price IDs for the Honored tier. All tier prices must belong to the same product and currency.",
+			Description: "Optional comma-separated recurring Stripe price IDs for the Honored tier. Prices within the tier must belong to the same product, and all tiers must use the same currency.",
 			Flag:        "stripe-honored-price-ids",
 			Env:         "CHRONICLE_STRIPE_HONORED_PRICE_IDS",
 			Default:     "",
@@ -173,7 +173,7 @@ func (s *Service) Options() serpent.OptionSet {
 		},
 		{
 			Name:        "Stripe Revered Price IDs",
-			Description: "Optional comma-separated recurring Stripe price IDs for the Revered tier. All tier prices must belong to the same product and currency.",
+			Description: "Optional comma-separated recurring Stripe price IDs for the Revered tier. Prices within the tier must belong to the same product, and all tiers must use the same currency.",
 			Flag:        "stripe-revered-price-ids",
 			Env:         "CHRONICLE_STRIPE_REVERED_PRICE_IDS",
 			Default:     "",
@@ -181,7 +181,7 @@ func (s *Service) Options() serpent.OptionSet {
 		},
 		{
 			Name:        "Stripe Exalted Price IDs",
-			Description: "Optional comma-separated recurring Stripe price IDs for the Exalted tier. All tier prices must belong to the same product and currency.",
+			Description: "Optional comma-separated recurring Stripe price IDs for the Exalted tier. Prices within the tier must belong to the same product, and all tiers must use the same currency.",
 			Flag:        "stripe-exalted-price-ids",
 			Env:         "CHRONICLE_STRIPE_EXALTED_PRICE_IDS",
 			Default:     "",

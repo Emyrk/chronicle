@@ -430,15 +430,15 @@ func TestBillingPrices(t *testing.T) {
 	require.Equal(t, 3, retrievals, "validated prices should be cached")
 }
 
-func TestBillingPricesMapConfiguredPricesToTiersAndRequireOneProduct(t *testing.T) {
+func TestBillingPricesMapConfiguredPricesToTiersWithSeparateProducts(t *testing.T) {
 	t.Parallel()
 
 	honored := testStripePrice("price_honored", 200, stripe.PriceRecurringIntervalMonth, 1)
-	honored.Product = &stripe.Product{ID: "prod_supporter"}
+	honored.Product = &stripe.Product{ID: "prod_honored"}
 	revered := testStripePrice("price_revered", 400, stripe.PriceRecurringIntervalMonth, 1)
-	revered.Product = &stripe.Product{ID: "prod_supporter"}
+	revered.Product = &stripe.Product{ID: "prod_revered"}
 	exalted := testStripePrice("price_exalted", 600, stripe.PriceRecurringIntervalMonth, 1)
-	exalted.Product = &stripe.Product{ID: "prod_supporter"}
+	exalted.Product = &stripe.Product{ID: "prod_exalted"}
 	byID := map[string]*stripe.Price{
 		honored.ID: honored,
 		revered.ID: revered,
@@ -466,13 +466,13 @@ func TestBillingPricesMapConfiguredPricesToTiersAndRequireOneProduct(t *testing.
 		require.Equal(t, product, got)
 	}
 
-	exalted.Product = &stripe.Product{ID: "prod_other"}
+	exalted.Currency = stripe.CurrencyEUR
 	s.prices = nil
 	_, err = s.billingPrices(context.Background())
-	require.ErrorContains(t, err, "same product")
+	require.ErrorContains(t, err, "same currency")
 }
 
-func TestBillingPricesRequireOneProductAndUniquePeriods(t *testing.T) {
+func TestBillingPricesRequireOneProductPerTierAndUniquePeriods(t *testing.T) {
 	t.Parallel()
 
 	t.Run("different products", func(t *testing.T) {
