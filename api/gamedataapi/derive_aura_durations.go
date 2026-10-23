@@ -8,6 +8,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/google/uuid"
 )
 
@@ -16,9 +17,12 @@ import (
 // SpellDuration.dbc is uploaded; whichever upload happens second will populate
 // the complete result.
 func (h *Handler) deriveAffectedAuraDurations(ctx context.Context, datasetID uuid.UUID) error {
-	return h.zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+	return h.mutateDatasetAuthz(ctx, datasetID, []servicecache.Namespace{
+		servicecache.NamespaceSpells,
+		servicecache.NamespaceDurationMods,
+	}, func(tx *authz.AuthzTX) error {
 		return deriveAffectedAuraDurations(ctx, tx, datasetID)
-	}, nil)
+	})
 }
 
 func deriveAffectedAuraDurations(ctx context.Context, tx database.Store, datasetID uuid.UUID) error {

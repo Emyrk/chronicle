@@ -54,4 +54,13 @@ func TestItemAndCreatureDatasetInvalidation(t *testing.T) {
 	require.False(t, ok)
 	_, ok = creatureCache.Get(otherCreatureKey)
 	require.True(t, ok)
+
+	idCache.Add(targetIDKey, 0)
+	idCache.Add(otherIDKey, 0)
+	creatureCache.Add(targetCreatureKey, nil)
+	creatureCache.Add(otherCreatureKey, nil)
+	require.NoError(t, cacheSvc.Invalidate(context.Background(), servicecache.GlobalInvalidation(servicecache.NamespaceItems)))
+	require.NoError(t, cacheSvc.Invalidate(context.Background(), servicecache.GlobalInvalidation(servicecache.NamespaceCreatures)))
+	require.Zero(t, idCache.Len())
+	require.Zero(t, creatureCache.Len())
 }

@@ -119,6 +119,11 @@ func (f *Fetcher) RangeSpells(ctx context.Context, datasetID uuid.UUID, fn func(
 	return nil
 }
 
+// InvalidateAll evicts every cached spell entry.
+func (f *Fetcher) InvalidateAll() {
+	f.cache.Purge()
+}
+
 // TotalSpells returns the number of persisted spells in a dataset.
 func (f *Fetcher) TotalSpells(ctx context.Context, datasetID uuid.UUID) (int, error) {
 	if f.pool == nil {

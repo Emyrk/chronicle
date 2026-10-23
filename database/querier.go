@@ -93,6 +93,7 @@ type sqlcQuerier interface {
 	DeleteConsumablesByDataset(ctx context.Context, datasetID uuid.UUID) error
 	DeleteDataGrant(ctx context.Context, arg DeleteDataGrantParams) error
 	DeleteDataset(ctx context.Context, id uuid.UUID) error
+	DeleteDatasetCacheGenerations(ctx context.Context, datasetID uuid.UUID) error
 	DeleteDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) error
 	DeleteDiscordAnnouncement(ctx context.Context, id uuid.UUID) error
 	DeleteDiscordAnnouncementSource(ctx context.Context, arg DeleteDiscordAnnouncementSourceParams) error
@@ -198,6 +199,7 @@ type sqlcQuerier interface {
 	GetBillingSubscriptionByProviderID(ctx context.Context, arg GetBillingSubscriptionByProviderIDParams) (BillingSubscription, error)
 	GetBillingSubscriptionByUserID(ctx context.Context, userID uuid.UUID) (BillingSubscription, error)
 	GetBillingWebhookEvent(ctx context.Context, stripeEventID string) (BillingWebhookEvent, error)
+	GetCacheGeneration(ctx context.Context, arg GetCacheGenerationParams) (CacheGeneration, error)
 	GetCanonicalSpellByID(ctx context.Context, arg GetCanonicalSpellByIDParams) (GetCanonicalSpellByIDRow, error)
 	GetCanonicalSpellsByName(ctx context.Context, arg GetCanonicalSpellsByNameParams) ([]GetCanonicalSpellsByNameRow, error)
 	// Per-encounter kill aggregates for one character across all time.
@@ -554,6 +556,7 @@ type sqlcQuerier interface {
 	ListBillingEntitlementsByUserID(ctx context.Context, userID uuid.UUID) ([]BillingEntitlement, error)
 	ListBillingProviderCustomersForReconciliation(ctx context.Context) ([]ListBillingProviderCustomersForReconciliationRow, error)
 	ListBillingSubscriptionsForReconciliation(ctx context.Context) ([]BillingSubscription, error)
+	ListCacheGenerations(ctx context.Context) ([]CacheGeneration, error)
 	ListClassBuffIgnorePolicies(ctx context.Context) ([]ListClassBuffIgnorePoliciesRow, error)
 	ListClassBuffPoliciesForDataset(ctx context.Context, datasetID uuid.UUID) ([]ListClassBuffPoliciesForDatasetRow, error)
 	ListConsumableDisambiguationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumableDisambiguationsByDatasetRow, error)
@@ -708,6 +711,7 @@ type sqlcQuerier interface {
 	PruneStaleRankingsInstanceSummaries(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	PublicInstance(ctx context.Context, id uuid.UUID) (LogInstancesGuild, error)
 	PublicInstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (LogInstancesGuild, error)
+	PublishCacheGeneration(ctx context.Context, arg PublishCacheGenerationParams) (PublishCacheGenerationRow, error)
 	RankingRunByID(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	RankingRunIdentitiesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]RankingRunIdentitiesByInstanceIDsRow, error)
 	RankingRunIdentitiesByLogGroupID(ctx context.Context, logGroupID uuid.UUID) ([]RankingRunIdentitiesByLogGroupIDRow, error)

@@ -92,8 +92,11 @@ func (h *Handler) persistWowdata(ctx context.Context, datasetID uuid.UUID, p *wo
 		}
 	}
 
-	store := database.New(h.pool)
-	if err := store.InTx(ctx, func(tx database.Store) error {
+	if err := h.mutateDataset(ctx, datasetID, []servicecache.Namespace{
+		servicecache.NamespaceSpells,
+		servicecache.NamespaceItems,
+		servicecache.NamespaceTalents,
+	}, func(tx database.Store) error {
 		const batchSize = 500
 		for i := 0; i < len(p.Spells); i += batchSize {
 			end := min(i+batchSize, len(p.Spells))
@@ -130,7 +133,7 @@ func (h *Handler) persistWowdata(ctx context.Context, datasetID uuid.UUID, p *wo
 			return fmt.Errorf("update dataset metadata: %w", err)
 		}
 		return nil
-	}, nil); err != nil {
+	}); err != nil {
 		return err
 	}
 	if err := h.deriveSpellMetadata(ctx, datasetID, flavor, canonicalSpells); err != nil {
@@ -144,15 +147,6 @@ func (h *Handler) persistWowdata(ctx context.Context, datasetID uuid.UUID, p *wo
 	}
 	if err := h.deriveConsumables(ctx, datasetID); err != nil {
 		return fmt.Errorf("derive consumables: %w", err)
-	}
-	if err := h.invalidateDataset(ctx, datasetID,
-		servicecache.NamespaceTalents,
-		servicecache.NamespaceSpells,
-		servicecache.NamespaceExtraAttacks,
-		servicecache.NamespaceDurationMods,
-		servicecache.NamespacePeriodicSpells,
-	); err != nil {
-		return fmt.Errorf("invalidate imported game-data caches: %w", err)
 	}
 	return nil
 }

@@ -1774,6 +1774,118 @@ func (q *sqlQuerier) UpsertBillingSubscriptionIfChanged(ctx context.Context, arg
 	return result.RowsAffected(), nil
 }
 
+const deleteDatasetCacheGenerations = `-- name: DeleteDatasetCacheGenerations :exec
+DELETE FROM cache_generations
+WHERE scope = 'dataset' AND scope_id = $1
+`
+
+func (q *sqlQuerier) DeleteDatasetCacheGenerations(ctx context.Context, datasetID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteDatasetCacheGenerations, datasetID)
+	return err
+}
+
+const getCacheGeneration = `-- name: GetCacheGeneration :one
+SELECT namespace, scope, scope_id, generation
+FROM cache_generations
+WHERE namespace = $1
+  AND scope = $2
+  AND scope_id = $3
+`
+
+type GetCacheGenerationParams struct {
+	Namespace string    `db:"namespace" json:"namespace"`
+	Scope     string    `db:"scope" json:"scope"`
+	ScopeID   uuid.UUID `db:"scope_id" json:"scope_id"`
+}
+
+func (q *sqlQuerier) GetCacheGeneration(ctx context.Context, arg GetCacheGenerationParams) (CacheGeneration, error) {
+	row := q.db.QueryRow(ctx, getCacheGeneration, arg.Namespace, arg.Scope, arg.ScopeID)
+	var i CacheGeneration
+	err := row.Scan(
+		&i.Namespace,
+		&i.Scope,
+		&i.ScopeID,
+		&i.Generation,
+	)
+	return i, err
+}
+
+const listCacheGenerations = `-- name: ListCacheGenerations :many
+SELECT namespace, scope, scope_id, generation
+FROM cache_generations
+ORDER BY namespace, scope, scope_id
+`
+
+func (q *sqlQuerier) ListCacheGenerations(ctx context.Context) ([]CacheGeneration, error) {
+	rows, err := q.db.Query(ctx, listCacheGenerations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CacheGeneration
+	for rows.Next() {
+		var i CacheGeneration
+		if err := rows.Scan(
+			&i.Namespace,
+			&i.Scope,
+			&i.ScopeID,
+			&i.Generation,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const publishCacheGeneration = `-- name: PublishCacheGeneration :one
+WITH bumped AS (
+    INSERT INTO cache_generations (namespace, scope, scope_id, generation)
+    VALUES ($1, $2, $3, 1)
+    ON CONFLICT (namespace, scope, scope_id)
+    DO UPDATE SET generation = cache_generations.generation + 1
+    RETURNING namespace, scope, scope_id, generation
+)
+SELECT namespace, scope, scope_id, generation,
+       pg_notify('cache_invalidation', json_build_object(
+           'namespace', namespace,
+           'scope', scope,
+           'scope_id', scope_id,
+           'generation', generation
+       )::text) AS notified
+FROM bumped
+`
+
+type PublishCacheGenerationParams struct {
+	Namespace string    `db:"namespace" json:"namespace"`
+	Scope     string    `db:"scope" json:"scope"`
+	ScopeID   uuid.UUID `db:"scope_id" json:"scope_id"`
+}
+
+type PublishCacheGenerationRow struct {
+	Namespace  string      `db:"namespace" json:"namespace"`
+	Scope      string      `db:"scope" json:"scope"`
+	ScopeID    uuid.UUID   `db:"scope_id" json:"scope_id"`
+	Generation int64       `db:"generation" json:"generation"`
+	Notified   interface{} `db:"notified" json:"notified"`
+}
+
+func (q *sqlQuerier) PublishCacheGeneration(ctx context.Context, arg PublishCacheGenerationParams) (PublishCacheGenerationRow, error) {
+	row := q.db.QueryRow(ctx, publishCacheGeneration, arg.Namespace, arg.Scope, arg.ScopeID)
+	var i PublishCacheGenerationRow
+	err := row.Scan(
+		&i.Namespace,
+		&i.Scope,
+		&i.ScopeID,
+		&i.Generation,
+		&i.Notified,
+	)
+	return i, err
+}
+
 const deleteClassBuffIgnore = `-- name: DeleteClassBuffIgnore :exec
 DELETE FROM class_buff_ignores
 WHERE dataset_id = $1

@@ -22,6 +22,7 @@ type TalentFetcher interface {
 	// Results are cached per dataset_id.
 	TalentTrees(ctx context.Context, datasetID uuid.UUID) (*TalentTreeData, error)
 	InvalidateDataset(datasetID uuid.UUID)
+	InvalidateAll()
 }
 
 // TalentQuerier is the narrow DB interface for talent tree data.
@@ -48,6 +49,10 @@ func NewFetcher(db TalentQuerier, cacheSvc *servicecache.Service, cacheSize int)
 
 func (f *fetcher) InvalidateDataset(datasetID uuid.UUID) {
 	f.cache.Remove(datasetID)
+}
+
+func (f *fetcher) InvalidateAll() {
+	f.cache.Purge()
 }
 
 func (f *fetcher) TalentTrees(ctx context.Context, datasetID uuid.UUID) (*TalentTreeData, error) {

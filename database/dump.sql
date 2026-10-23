@@ -256,6 +256,15 @@ CREATE TABLE billing_webhook_events (
     processed_at timestamp with time zone
 );
 
+CREATE TABLE cache_generations (
+    namespace text NOT NULL,
+    scope text NOT NULL,
+    scope_id uuid NOT NULL,
+    generation bigint NOT NULL,
+    CONSTRAINT cache_generations_generation_check CHECK ((generation > 0)),
+    CONSTRAINT cache_generations_scope_check CHECK ((((scope = 'global'::text) AND (scope_id = '00000000-0000-0000-0000-000000000000'::uuid)) OR ((scope = 'dataset'::text) AND (scope_id <> '00000000-0000-0000-0000-000000000000'::uuid))))
+);
+
 CREATE TABLE data_grants (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
@@ -2439,6 +2448,9 @@ ALTER TABLE ONLY billing_subscriptions
 
 ALTER TABLE ONLY billing_webhook_events
     ADD CONSTRAINT billing_webhook_events_pkey PRIMARY KEY (stripe_event_id);
+
+ALTER TABLE ONLY cache_generations
+    ADD CONSTRAINT cache_generations_pkey PRIMARY KEY (namespace, scope, scope_id);
 
 ALTER TABLE ONLY class_buff_ignores
     ADD CONSTRAINT class_buff_ignores_pkey PRIMARY KEY (dataset_id, normalized_name);

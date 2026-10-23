@@ -1,12 +1,14 @@
 package gamedataapi
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/spelldb"
+	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
@@ -109,6 +111,37 @@ func TestPersistLegacySpellsRollsBackWideRowsWhenNormalizedInsertFails(t *testin
 	require.Zero(t, count)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM dbc_spell_effects WHERE dataset_id=$1`, dataset.ID).Scan(&count))
 	require.Zero(t, count)
+}
+
+func TestComplexSpellMutationFailureStillPublishesCommittedGeneration(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	store := database.New(pool)
+	dataset, err := store.InsertDataset(ctx, database.InsertDatasetParams{Name: "Generation gap", Slug: "generation-gap", WowVersion: "1.12.1", BuildVersion: 5875, DefaultFlavor: []string{}, IconBaseUrl: ""})
+	require.NoError(t, err)
+
+	spell := &chrondbc.Spell{ID: 789, Effects: []chrondbc.SpellEffect{{EffectIndex: 0}}}
+	h := New(nil, nil, pool, servicecache.New(nil))
+	laterFailure := errors.New("later derivation failed")
+	err = func() error {
+		if err := h.persistLegacySpells(ctx, dataset.ID, []spelldb.SpellRow{spelldb.FromSpell(dataset.ID, spell)}, []*chrondbc.Spell{spell}); err != nil {
+			return err
+		}
+		return laterFailure
+	}()
+	require.ErrorIs(t, err, laterFailure)
+
+	rows, err := store.ListCacheGenerations(ctx)
+	require.NoError(t, err)
+	require.Len(t, rows, 4)
+	for _, row := range rows {
+		require.Equal(t, dataset.ID, row.ScopeID)
+		require.Positive(t, row.Generation)
+	}
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM dbc_spells WHERE dataset_id=$1 AND spell_id=$2`, dataset.ID, int32(spell.ID)).Scan(&count))
+	require.Equal(t, 1, count)
 }
 
 func TestPersistLegacyNormalizedSpellsReplacesModernRows(t *testing.T) {

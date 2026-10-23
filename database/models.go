@@ -853,6 +853,13 @@ type BillingWebhookEvent struct {
 	ProcessedAt   pgtype.Timestamptz `db:"processed_at" json:"processed_at"`
 }
 
+type CacheGeneration struct {
+	Namespace  string    `db:"namespace" json:"namespace"`
+	Scope      string    `db:"scope" json:"scope"`
+	ScopeID    uuid.UUID `db:"scope_id" json:"scope_id"`
+	Generation int64     `db:"generation" json:"generation"`
+}
+
 type ChronicleUser struct {
 	ID                     uuid.UUID          `db:"id" json:"id"`
 	Username               string             `db:"username" json:"username"`

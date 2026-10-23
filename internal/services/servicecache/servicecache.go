@@ -5,13 +5,19 @@ package servicecache
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/pubsub"
 	"github.com/Emyrk/chronicle/internal/lrucache"
 	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/internal/services/servicelogger"
+	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
 
 	"github.com/coder/serpent"
@@ -65,6 +71,21 @@ const (
 	NamespacePeriodicSpells Namespace = "periodic_spells"
 )
 
+// DatasetNamespaces returns every namespace whose cache entries are partitioned
+// by dataset. Dataset deletion uses global generations for these namespaces so
+// replicas can purge safely before dataset-scoped generation rows are removed.
+func DatasetNamespaces() []Namespace {
+	return []Namespace{
+		NamespaceSpells,
+		NamespaceTalents,
+		NamespaceItems,
+		NamespaceCreatures,
+		NamespaceExtraAttacks,
+		NamespaceDurationMods,
+		NamespacePeriodicSpells,
+	}
+}
+
 // Scope identifies the supported invalidation granularity for a handler.
 type Scope uint8
 
@@ -114,12 +135,57 @@ type Service struct {
 	caches       []lrucache.CacheInfo
 	invalidators map[Namespace][]invalidator
 	metrics      *lrucache.Metrics
+
+	db     database.Store
+	pubsub pubsub.Pubsub
+	logger *slog.Logger
+
+	reconcileMu     sync.Mutex
+	observed        map[handlerGenerationKey]int64
+	serviceCtx      context.Context
+	cancel          context.CancelFunc
+	cancelSubscribe func()
+	periodic        <-chan time.Time
+	reconcileDone   chan<- struct{}
+	loopDone        chan struct{}
+	callbackMu      sync.Mutex
+	callbacks       sync.WaitGroup
+	closing         bool
+	closeTimeout    time.Duration
+	stopPeriodic    func()
 }
+
+type generationKey struct {
+	namespace Namespace
+	scope     Scope
+	scopeID   uuid.UUID
+}
+
+type handlerGenerationKey struct {
+	generationKey
+	handler string
+}
+
+// PublishedGeneration is the durable version created inside a transaction.
+// Call [Service.ApplyPublished] only after that transaction commits.
+type PublishedGeneration struct {
+	Invalidation Invalidation
+	Generation   int64
+}
+
+const (
+	invalidationChannel      = "cache_invalidation"
+	maxNotificationBytes     = 1024
+	reconcileInterval        = time.Minute
+	defaultCloseTimeout      = 5 * time.Second
+	defaultLocalApplyTimeout = 2 * time.Second
+)
 
 func New(broker *services.Services) *Service {
 	return &Service{
 		broker:       broker,
 		invalidators: make(map[Namespace][]invalidator),
+		observed:     make(map[handlerGenerationKey]int64),
 	}
 }
 
@@ -132,16 +198,71 @@ func (s *Service) Options() serpent.OptionSet {
 func (s *Service) DependsOn() []string {
 	return []string{
 		serviceprometheus.OnPrometheus(),
+		servicepgxpool.OnPGXPool(),
+		servicelogger.OnLogger(),
 	}
 }
 
-func (s *Service) Start(_ context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	reg := serviceprometheus.Registry(s.broker)
 	s.metrics = lrucache.NewMetrics(reg)
-	return nil
+	s.db = database.New(servicepgxpool.PGXPool(s.broker))
+	s.pubsub = servicepgxpool.Pubsub(s.broker)
+	s.logger = servicelogger.Logger(s.broker)
+	return s.startReconciler(ctx)
 }
 
-func (s *Service) Close(_ context.Context) error { return nil }
+func (s *Service) Close(ctx context.Context) error {
+	// Stop admitting callbacks before any potentially blocking pubsub teardown.
+	// This also makes Wait safe: no callback can call Add after closing is set.
+	s.callbackMu.Lock()
+	s.closing = true
+	s.callbackMu.Unlock()
+	if s.cancel != nil {
+		s.cancel()
+	}
+	if s.stopPeriodic != nil {
+		s.stopPeriodic()
+	}
+
+	timeout := s.closeTimeout
+	if timeout <= 0 {
+		timeout = defaultCloseTimeout
+	}
+	closeCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	localDone := make(chan struct{})
+	go func() {
+		if s.loopDone != nil {
+			<-s.loopDone
+		}
+		s.callbacks.Wait()
+		close(localDone)
+	}()
+
+	subscriptionDone := make(chan struct{})
+	if s.cancelSubscribe == nil {
+		close(subscriptionDone)
+	} else {
+		go func() {
+			s.cancelSubscribe()
+			close(subscriptionDone)
+		}()
+	}
+
+	for localDone != nil || subscriptionDone != nil {
+		select {
+		case <-localDone:
+			localDone = nil
+		case <-subscriptionDone:
+			subscriptionDone = nil
+		case <-closeCtx.Done():
+			return fmt.Errorf("close cache service: %w", closeCtx.Err())
+		}
+	}
+	return nil
+}
 
 // RegisterInvalidator registers a named handler for a namespace and scope.
 // Handlers run in registration order. Registering the same handler name twice
@@ -150,17 +271,20 @@ func (s *Service) RegisterInvalidator(namespace Namespace, scope Scope, name str
 	if namespace == "" || name == "" || handler == nil {
 		return fmt.Errorf("register cache invalidator: namespace, name, and handler are required")
 	}
+	if !knownNamespace(namespace) {
+		return fmt.Errorf("register cache invalidator %q: %w: %q", name, ErrUnknownNamespace, namespace)
+	}
 	if scope != ScopeGlobal && scope != ScopeDataset {
 		return fmt.Errorf("register cache invalidator %q: %w: %d", name, ErrUnsupportedScope, scope)
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.invalidators == nil {
 		s.invalidators = make(map[Namespace][]invalidator)
 	}
 	for _, registered := range s.invalidators[namespace] {
 		if registered.name == name {
+			s.mu.Unlock()
 			return fmt.Errorf("%w: namespace %q handler %q", ErrDuplicateInvalidator, namespace, name)
 		}
 	}
@@ -169,6 +293,14 @@ func (s *Service) RegisterInvalidator(namespace Namespace, scope Scope, name str
 		scope:   scope,
 		handler: handler,
 	})
+	started := s.serviceCtx != nil && s.db != nil
+	s.mu.Unlock()
+
+	if started {
+		if err := s.reconcileRegistered(s.serviceCtx, namespace, scope); err != nil {
+			return fmt.Errorf("reconcile newly registered invalidator %q: %w", name, err)
+		}
+	}
 	return nil
 }
 
@@ -203,6 +335,348 @@ func (s *Service) Invalidate(ctx context.Context, req Invalidation) error {
 	}
 	if !matched {
 		return fmt.Errorf("invalidate %q: %w: %d", req.Namespace, ErrUnsupportedScope, req.Scope)
+	}
+	return errors.Join(errs...)
+}
+
+// Publish atomically increments the durable generation and sends the NOTIFY
+// hint, then invalidates this process only after the transaction commits.
+func (s *Service) Publish(ctx context.Context, req Invalidation) error {
+	if s.db == nil {
+		return s.Invalidate(ctx, req)
+	}
+	var published PublishedGeneration
+	if err := s.db.InTx(ctx, func(tx database.Store) error {
+		var err error
+		published, err = s.PublishTx(ctx, tx, req)
+		return err
+	}, nil); err != nil {
+		return err
+	}
+	return s.ApplyPublished(ctx, published)
+}
+
+// PublishTx increments a durable generation and queues its NOTIFY inside tx.
+// It never invalidates locally because the caller's transaction has not yet
+// committed. The caller must invoke [Service.ApplyPublished] after commit.
+func (s *Service) PublishTx(ctx context.Context, tx database.Store, req Invalidation) (PublishedGeneration, error) {
+	key, err := keyFromInvalidation(req)
+	if err != nil {
+		return PublishedGeneration{}, err
+	}
+	row, err := tx.PublishCacheGeneration(ctx, database.PublishCacheGenerationParams{
+		Namespace: string(key.namespace),
+		Scope:     key.scope.String(),
+		ScopeID:   key.scopeID,
+	})
+	if err != nil {
+		return PublishedGeneration{}, fmt.Errorf("publish cache generation: %w", err)
+	}
+	return PublishedGeneration{Invalidation: req, Generation: row.Generation}, nil
+}
+
+// ApplyPublished applies a generation returned by PublishTx. Call it only after
+// the transaction that produced the generation has committed.
+func (s *Service) ApplyPublished(ctx context.Context, published ...PublishedGeneration) error {
+	var errs []error
+	for _, generation := range published {
+		key, err := keyFromInvalidation(generation.Invalidation)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if err := s.applyGeneration(ctx, key, generation.Generation); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// ApplyPublishedBestEffort schedules local application of committed
+// generations without delaying the mutation response. Durable reconciliation
+// retries handlers whose observed generation does not advance.
+func (s *Service) ApplyPublishedBestEffort(published ...PublishedGeneration) {
+	if len(published) == 0 {
+		return
+	}
+	s.callbackMu.Lock()
+	if s.closing {
+		s.callbackMu.Unlock()
+		return
+	}
+	s.callbacks.Add(1)
+	s.callbackMu.Unlock()
+
+	baseCtx := s.serviceCtx
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	published = append([]PublishedGeneration(nil), published...)
+	go func() {
+		defer s.callbacks.Done()
+		ctx, cancel := context.WithTimeout(baseCtx, defaultLocalApplyTimeout)
+		defer cancel()
+		if err := s.ApplyPublished(ctx, published...); err != nil {
+			logger := s.logger
+			if logger == nil {
+				logger = slog.Default()
+			}
+			logger.Error("local cache invalidation failed after commit; reconciliation will retry", "error", err)
+		}
+	}()
+}
+
+func (scope Scope) String() string {
+	switch scope {
+	case ScopeGlobal:
+		return "global"
+	case ScopeDataset:
+		return "dataset"
+	default:
+		return "unknown"
+	}
+}
+
+func keyFromInvalidation(req Invalidation) (generationKey, error) {
+	if !knownNamespace(req.Namespace) {
+		return generationKey{}, fmt.Errorf("%w: %q", ErrUnknownNamespace, req.Namespace)
+	}
+	switch req.Scope {
+	case ScopeGlobal:
+		if req.DatasetID != uuid.Nil {
+			return generationKey{}, fmt.Errorf("invalidate %q: global scope must use nil dataset ID", req.Namespace)
+		}
+		return generationKey{namespace: req.Namespace, scope: req.Scope}, nil
+	case ScopeDataset:
+		if req.DatasetID == uuid.Nil {
+			return generationKey{}, fmt.Errorf("invalidate %q: dataset ID is required", req.Namespace)
+		}
+		return generationKey{namespace: req.Namespace, scope: req.Scope, scopeID: req.DatasetID}, nil
+	default:
+		return generationKey{}, fmt.Errorf("invalidate %q: %w: %d", req.Namespace, ErrUnsupportedScope, req.Scope)
+	}
+}
+
+func knownNamespace(namespace Namespace) bool {
+	switch namespace {
+	case NamespaceTenantSlugs, NamespaceSpells, NamespaceTalents, NamespaceItems,
+		NamespaceCreatures, NamespaceExtraAttacks, NamespaceDurationMods, NamespacePeriodicSpells:
+		return true
+	default:
+		return false
+	}
+}
+
+type notification struct {
+	Namespace  string    `json:"namespace"`
+	Scope      string    `json:"scope"`
+	ScopeID    uuid.UUID `json:"scope_id"`
+	Generation int64     `json:"generation"`
+}
+
+func (s *Service) startReconciler(ctx context.Context) error {
+	if s.db == nil || s.pubsub == nil {
+		return nil
+	}
+	if s.logger == nil {
+		s.logger = slog.Default()
+	}
+	s.serviceCtx, s.cancel = context.WithCancel(ctx)
+
+	cancel, err := s.pubsub.SubscribeWithErr(invalidationChannel, func(_ context.Context, message []byte, notifyErr error) {
+		s.callbackMu.Lock()
+		if s.closing {
+			s.callbackMu.Unlock()
+			return
+		}
+		s.callbacks.Add(1)
+		s.callbackMu.Unlock()
+		defer s.callbacks.Done()
+		s.handleNotification(s.serviceCtx, message, notifyErr)
+	})
+	if err != nil {
+		s.cancel()
+		return fmt.Errorf("subscribe to cache invalidations: %w", err)
+	}
+	s.cancelSubscribe = cancel
+
+	// Subscribe before the initial scan so a commit racing startup is observed
+	// either by the scan or by its notification.
+	if err := s.reconcileAll(s.serviceCtx); err != nil {
+		s.cancel()
+		// Pubsub cancellation may wait for PostgreSQL UNLISTEN. Startup must
+		// return its reconciliation failure instead of hanging on listener cleanup.
+		cancelSubscriptionAsync(cancel)
+		return fmt.Errorf("initial cache generation reconciliation: %w", err)
+	}
+
+	if s.periodic == nil {
+		ticker := time.NewTicker(reconcileInterval)
+		s.periodic = ticker.C
+		s.stopPeriodic = ticker.Stop
+	}
+	s.loopDone = make(chan struct{})
+	go s.reconcileLoop(s.serviceCtx)
+	return nil
+}
+
+func cancelSubscriptionAsync(cancel func()) {
+	if cancel != nil {
+		go cancel()
+	}
+}
+
+func (s *Service) reconcileLoop(ctx context.Context) {
+	defer close(s.loopDone)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-s.periodic:
+			if err := s.reconcileAll(ctx); err != nil && !errors.Is(err, context.Canceled) {
+				s.logger.Error("periodic cache generation reconciliation failed", "error", err)
+			}
+			if s.reconcileDone != nil {
+				select {
+				case s.reconcileDone <- struct{}{}:
+				default:
+				}
+			}
+		}
+	}
+}
+
+func (s *Service) handleNotification(ctx context.Context, message []byte, notifyErr error) {
+	if notifyErr != nil {
+		s.logger.Warn("cache invalidation listener uncertainty; reconciling all generations", "error", notifyErr)
+		if err := s.reconcileAll(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			s.logger.Error("cache generation reconciliation after listener error failed", "error", err)
+		}
+		return
+	}
+	if len(message) == 0 || len(message) > maxNotificationBytes {
+		s.logger.Warn("skipping malformed cache invalidation notification", "bytes", len(message))
+		return
+	}
+	var hint notification
+	if err := json.Unmarshal(message, &hint); err != nil {
+		s.logger.Warn("skipping malformed cache invalidation notification", "error", err)
+		return
+	}
+	key, err := keyFromRow(hint.Namespace, hint.Scope, hint.ScopeID, hint.Generation)
+	if err != nil {
+		s.logger.Warn("skipping invalid cache invalidation notification", "error", err)
+		return
+	}
+	if err := s.reconcileKey(ctx, key); err != nil && !errors.Is(err, context.Canceled) {
+		s.logger.Error("targeted cache generation reconciliation failed", "error", err)
+	}
+}
+
+func keyFromRow(namespace, scope string, scopeID uuid.UUID, generation int64) (generationKey, error) {
+	if generation <= 0 {
+		return generationKey{}, fmt.Errorf("generation must be positive")
+	}
+	req := Invalidation{Namespace: Namespace(namespace), DatasetID: scopeID}
+	switch scope {
+	case "global":
+		req.Scope = ScopeGlobal
+	case "dataset":
+		req.Scope = ScopeDataset
+	default:
+		return generationKey{}, fmt.Errorf("unknown cache generation scope %q", scope)
+	}
+	return keyFromInvalidation(req)
+}
+
+func (s *Service) reconcileAll(ctx context.Context) error {
+	rows, err := s.db.ListCacheGenerations(ctx)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, row := range rows {
+		key, err := keyFromRow(row.Namespace, row.Scope, row.ScopeID, row.Generation)
+		if err != nil {
+			s.logger.Warn("skipping invalid cache generation row", "namespace", row.Namespace, "scope", row.Scope, "error", err)
+			continue
+		}
+		if err := s.applyGeneration(ctx, key, row.Generation); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (s *Service) reconcileKey(ctx context.Context, key generationKey) error {
+	row, err := s.db.GetCacheGeneration(ctx, database.GetCacheGenerationParams{
+		Namespace: string(key.namespace), Scope: key.scope.String(), ScopeID: key.scopeID,
+	})
+	if err != nil {
+		return err
+	}
+	validated, err := keyFromRow(row.Namespace, row.Scope, row.ScopeID, row.Generation)
+	if err != nil {
+		return err
+	}
+	return s.applyGeneration(ctx, validated, row.Generation)
+}
+
+func (s *Service) reconcileRegistered(ctx context.Context, namespace Namespace, scope Scope) error {
+	rows, err := s.db.ListCacheGenerations(ctx)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, row := range rows {
+		key, err := keyFromRow(row.Namespace, row.Scope, row.ScopeID, row.Generation)
+		if err != nil {
+			continue
+		}
+		if key.namespace == namespace && key.scope == scope {
+			if err := s.applyGeneration(ctx, key, row.Generation); err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (s *Service) applyGeneration(ctx context.Context, key generationKey, generation int64) error {
+	s.reconcileMu.Lock()
+	defer s.reconcileMu.Unlock()
+
+	s.mu.Lock()
+	handlers := append([]invalidator(nil), s.invalidators[key.namespace]...)
+	s.mu.Unlock()
+
+	req := Invalidation{Namespace: key.namespace, Scope: key.scope, DatasetID: key.scopeID}
+	var errs []error
+	matched := false
+	for _, registered := range handlers {
+		if registered.scope != key.scope {
+			continue
+		}
+		matched = true
+		observedKey := handlerGenerationKey{generationKey: key, handler: registered.name}
+		if generation <= s.observed[observedKey] {
+			continue
+		}
+		if err := registered.handler(ctx, req); err != nil {
+			errs = append(errs, fmt.Errorf("invalidate %q with %q: %w", key.namespace, registered.name, err))
+			continue
+		}
+		s.observed[observedKey] = generation
+	}
+	if len(errs) == 0 && matched && key.scope == ScopeGlobal {
+		// Dataset deletion publishes a persistent global purge before removing
+		// scoped generation rows. Forget scoped observations after that purge so
+		// recreating a dataset with the same UUID can restart at generation 1.
+		for observedKey := range s.observed {
+			if observedKey.namespace == key.namespace && observedKey.scope == ScopeDataset {
+				delete(s.observed, observedKey)
+			}
+		}
 	}
 	return errors.Join(errs...)
 }

@@ -7,10 +7,12 @@ import (
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Gophercraft/core/vsn"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/coder/serpent"
@@ -24,6 +26,7 @@ var DefaultDatasetID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
 // DatasetStore is the narrow query interface for dataset CRUD.
 // database.Store satisfies this implicitly.
 type DatasetStore interface {
+	InTx(ctx context.Context, f func(database.Store) error, opts *pgx.TxOptions) error
 	GetDataset(ctx context.Context, id uuid.UUID) (database.Dataset, error)
 	GetDatasetBySlug(ctx context.Context, slug string) (database.Dataset, error)
 	ListDatasets(ctx context.Context) ([]database.Dataset, error)
@@ -50,7 +53,8 @@ func OnDataset() string {
 type Service struct {
 	broker *services.Services
 
-	db DatasetStore
+	db       DatasetStore
+	cacheSvc *servicecache.Service
 }
 
 func New(broker *services.Services) *Service {
@@ -63,6 +67,7 @@ func (s *Service) Name() string         { return services.ServiceDataset }
 func (s *Service) Configures() []string { return nil }
 func (s *Service) DependsOn() []string {
 	return []string{
+		servicecache.OnCache(),
 		servicelogger.OnLogger(),
 		servicedbstore.OnDatabaseStore(),
 	}
@@ -70,6 +75,7 @@ func (s *Service) DependsOn() []string {
 
 func (s *Service) Start(ctx context.Context) error {
 	s.db = servicedbstore.DatabaseStore(s.broker)
+	s.cacheSvc = servicecache.CacheService(s.broker)
 
 	if err := s.ensureDefaultDataset(ctx); err != nil {
 		return fmt.Errorf("ensure default dataset: %w", err)
