@@ -36,11 +36,11 @@ export function TechnicalHintCard({
         className,
       )}
     >
-      <div className="flex h-full gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center text-primary">
+      <div className={cn("flex h-full", compact ? "items-center gap-3" : "flex-col justify-center gap-3")}>
+        <div className={cn("flex h-10 w-10 shrink-0 items-center text-primary", compact ? "justify-center" : "justify-start")}>
           {hint.icon ? <ItemIcon icon={hint.icon} size={40} /> : fallbackIcon(hint.kind)}
         </div>
-        <div className="min-w-0 self-center">
+        <div className="min-w-0">
           <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-primary/75">
             {hint.kind === "community_fact" ? "Community pulse" : hint.kind === "blog" ? "Chronicle article" : hint.kind === "panel" ? "Panel insight" : "Chronicle tip"}
           </p>
