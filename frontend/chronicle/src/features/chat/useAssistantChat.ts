@@ -6,6 +6,7 @@ import {
   createInitialChatState,
   type AgUiEvent,
   type ChatMessage,
+  type DebugSnapshotEvent,
   type ChatState,
 } from "./protocol";
 
@@ -23,6 +24,16 @@ export interface DefaultChatRunRequest {
   client?: InferenceClientDescriptor;
 }
 
+export interface DebugCommandInput {
+  threadId: string;
+  client?: InferenceClientDescriptor;
+}
+
+export interface DebugCommandResult {
+  snapshot: DebugSnapshotEvent;
+  message?: ChatMessage;
+}
+
 export interface UseAssistantChatOptions {
   endpoint: string;
   headers?: HeadersInit;
@@ -32,6 +43,7 @@ export interface UseAssistantChatOptions {
   onMessagesChange?: (messages: ChatMessage[]) => void;
   onRunComplete?: () => void | Promise<void>;
   onRunSettled?: () => void | Promise<void>;
+  onDebugCommand?: (input: DebugCommandInput) => DebugCommandResult | Promise<DebugCommandResult>;
   onStartNewChat?: () => void | ChatMessage[] | Promise<void | ChatMessage[]>;
   runClient?: (options: RunAgUiOptions) => Promise<void>;
 }
@@ -53,6 +65,10 @@ export function createDefaultChatRunRequest(
   input: CreateChatRunRequestInput,
 ): DefaultChatRunRequest {
   return input;
+}
+
+export function isDebugCommand(content: string): boolean {
+  return content.trim().toLowerCase() === "/debug";
 }
 
 export function isClearCommand(content: string): boolean {
@@ -120,6 +136,32 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
       const trimmedContent = content.trim();
       if (!trimmedContent || activeRunRef.current) {
         return false;
+      }
+
+      if (isDebugCommand(trimmedContent)) {
+        if (!options.onDebugCommand) {
+          dispatch({ type: "run_failed", message: "Prompt debugging is not available for this account." });
+          return false;
+        }
+        try {
+          const result = await options.onDebugCommand({
+            threadId: threadIdRef.current,
+            ...(runtime ? { client: runtime.getClientDescriptor() } : {}),
+          });
+          dispatch({
+            type: "debug_preview",
+            snapshot: result.snapshot,
+            message: result.message ?? {
+              id: createId("debug"),
+              role: "assistant",
+              content: "Debug preview generated locally without contacting the model provider. Open the prompt inspector above to review or download it.",
+            },
+          });
+          return true;
+        } catch (error) {
+          dispatch({ type: "run_failed", message: getErrorMessage(error) });
+          return false;
+        }
       }
 
       if (isClearCommand(trimmedContent)) {

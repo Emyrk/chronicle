@@ -100,6 +100,42 @@ describe("chatReducer", () => {
     expect(state.debugSnapshots).toEqual([]);
   });
 
+  it("shows a provider-free debug preview without entering a running state", () => {
+    const snapshot = {
+      type: "DEBUG_SNAPSHOT" as const,
+      runId: "preview-1",
+      iteration: 0,
+      phase: "request" as const,
+      assistantId: "instance-analyst",
+      model: "provider/model",
+      persistence: "durable" as const,
+      messages: [{ role: "system", content: "instructions" }],
+      tools: [],
+      skills: [],
+      limits: {
+        maxHistoryMessages: 50,
+        maxHistoryBytes: 262144,
+        maxIterations: 5,
+        maxToolCalls: 10,
+        maxToolArguments: 16384,
+        maxToolOutput: 65536,
+        maxAssistantText: 262144,
+      },
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    };
+    const state = chatReducer(createInitialChatState(), {
+      type: "debug_preview",
+      snapshot,
+      message: { id: "debug-1", role: "assistant", content: "Preview ready." },
+    });
+    expect(state).toMatchObject({
+      status: "idle",
+      runId: "preview-1",
+      messages: [{ content: "Preview ready." }],
+      debugSnapshots: [snapshot],
+    });
+  });
+
   it("resets messages and run diagnostics for a new chat", () => {
     const state = chatReducer({
       ...createInitialChatState([{ id: "message-1", role: "user", content: "hello" }]),

@@ -98,6 +98,14 @@ type InferenceClientToolResultRequest struct {
 	Result            json.RawMessage `json:"result,omitempty"`
 }
 
+type InferenceDebugPreviewRequest struct {
+	AssistantID string           `json:"assistant_id"`
+	ThreadID    *uuid.UUID       `json:"thread_id,omitempty"`
+	Instance    string           `json:"instance,omitempty"`
+	Model       string           `json:"model"`
+	Client      *InferenceClient `json:"client,omitempty"`
+}
+
 type InferenceRunRequest struct {
 	RunID        string             `json:"run_id"`
 	Debug        bool               `json:"debug,omitempty"`

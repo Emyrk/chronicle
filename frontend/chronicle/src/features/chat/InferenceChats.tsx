@@ -9,11 +9,13 @@ import {
   useClearInferenceThread,
   useCreateInstanceInferenceThread,
   useInferenceDebugPermission,
+  useInferenceDebugPreview,
   useInferencePermission,
   useInferenceThread,
 } from "./api";
 import { buildInstanceAnalystRunRequest, buildSiteHelpRunRequest, toChatMessages } from "./inference";
 import { ModelCombobox } from "./ModelCombobox";
+import type { DebugCommandInput } from "./useAssistantChat";
 import { useInferenceSelection } from "./useInferenceSelection";
 
 function AssistantConfiguration({
@@ -67,8 +69,18 @@ export function GlobalSiteHelpChat() {
   const permission = useInferencePermission(isAuthenticated);
   const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed);
   const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed);
+  const debugPreview = useInferenceDebugPreview();
   const [open, setOpen] = useState(false);
   const [debugEnabled, setDebugEnabled] = useState(false);
+  const previewDebug = useCallback(async () => {
+    if (!selection.modelId) throw new Error("Select a model first.");
+    const snapshot = await debugPreview.mutateAsync({
+      assistant_id: "site-help",
+      model: selection.modelId,
+    });
+    setDebugEnabled(true);
+    return { snapshot };
+  }, [debugPreview, selection.modelId]);
   const createRequest = useCallback((input: Parameters<typeof buildSiteHelpRunRequest>[0]) => {
     if (!selection.connectionId || !selection.modelId) throw new Error("Select an AI connection and model first.");
     return buildSiteHelpRunRequest(input, { connectionId: selection.connectionId, modelId: selection.modelId }, debugEnabled);
@@ -87,6 +99,7 @@ export function GlobalSiteHelpChat() {
       onOpenChange={setOpen}
       endpoint="/api/v1/inference/runs"
       createRequest={createRequest}
+      onDebugCommand={debugPermission.allowed ? previewDebug : undefined}
       launcherLabel="Ask Chronicle"
       launcherClassName="fixed right-4 bottom-4 z-40 rounded-full shadow-lg sm:right-6 sm:bottom-6"
       title="Chronicle site help"
@@ -110,6 +123,7 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
   const permission = useInferencePermission(isAuthenticated);
   const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed);
   const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed);
+  const debugPreview = useInferenceDebugPreview();
   const clearThread = useClearInferenceThread();
   const createThread = useCreateInstanceInferenceThread();
   const [open, setOpen] = useState(false);
@@ -131,6 +145,18 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
     const cleared = await clearThread.mutateAsync(threadId);
     return toChatMessages(cleared.messages);
   }, [clearThread, threadId]);
+  const previewDebug = useCallback(async (input: DebugCommandInput) => {
+    if (!threadId || !selection.modelId) throw new Error("Open the conversation and select a model first.");
+    const snapshot = await debugPreview.mutateAsync({
+      assistant_id: "instance-analyst",
+      thread_id: threadId,
+      instance: instanceId,
+      model: selection.modelId,
+      ...(input.client ? { client: input.client } : {}),
+    });
+    setDebugEnabled(true);
+    return { snapshot };
+  }, [debugPreview, instanceId, selection.modelId, threadId]);
   const createRequest = useCallback((input: Parameters<typeof buildInstanceAnalystRunRequest>[0]) => {
     if (!selection.connectionId || !selection.modelId) throw new Error("Select an AI connection and model first.");
     return buildInstanceAnalystRunRequest(input, { connectionId: selection.connectionId, modelId: selection.modelId }, instanceId, debugEnabled);
@@ -157,6 +183,7 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
       threadId={response?.thread.id}
       initialMessages={response ? toChatMessages(response.messages) : []}
       createRequest={createRequest}
+      onDebugCommand={debugPermission.allowed ? previewDebug : undefined}
       onStartNewChat={startNewChat}
       onRunSettled={refreshThread}
       launcherLabel="Ask about this raid"

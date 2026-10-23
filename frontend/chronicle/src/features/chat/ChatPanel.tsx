@@ -281,7 +281,9 @@ export function ChatPanel({
                 className="placeholder:text-muted-foreground styled-scrollbar max-h-40 min-h-20 w-full resize-none bg-transparent px-3.5 pt-3 text-sm outline-none disabled:opacity-60"
               />
               <div className="flex items-center justify-between px-2.5 pb-2.5">
-                <span className="text-muted-foreground text-[11px]">Enter to send · Shift+Enter for a new line · /clear starts over</span>
+                <span className="text-muted-foreground text-[11px]">
+                  Enter to send · Shift+Enter for a new line · /clear starts over{debugAvailable ? " · /debug previews the prompt" : ""}
+                </span>
                 {controller.isRunning ? (
                   <Button type="button" variant="outline" size="sm" onClick={controller.cancel}>
                     <CircleStop /> Cancel

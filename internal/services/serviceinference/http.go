@@ -100,6 +100,7 @@ func (s *Service) routes() http.Handler {
 	r.Get("/threads", s.listThreads)
 	r.Get("/threads/{threadID}", s.getThread)
 	r.Delete("/threads/{threadID}/messages", s.clearThread)
+	r.Post("/debug/preview", s.previewDebug)
 	r.Post("/runs/{runID}/client-tools/{toolCallID}", s.continueClientTool)
 	r.Post("/runs", s.run)
 	return r
@@ -404,6 +405,73 @@ func (s *Service) getThread(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.writeThread(w, r, thread)
+}
+
+func (s *Service) previewDebug(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRunBody)
+	var request chroniclesdk.InferenceDebugPreviewRequest
+	if !httpapi.Read(r.Context(), w, r, &request) {
+		return
+	}
+	uid := userID(r)
+	allowed, err := s.zed.CheckOne(r.Context(), nil, policy.New().GlobalChronicle().CanDebug_inference_chat_User(policy.New().User(uid)))
+	if err != nil {
+		s.internalError(w, "authorize inference debug preview", err)
+		return
+	}
+	if !allowed {
+		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "Inference debug access is not enabled for this account."})
+		return
+	}
+	assistantDefinition, ok := assistants[request.AssistantID]
+	if !ok {
+		badRequest(w, r, "Unknown assistant.")
+		return
+	}
+	if request.Model == "" || len(request.Model) > 200 {
+		badRequest(w, r, "A model is required.")
+		return
+	}
+
+	debug := debugRunContext{Enabled: true, RunID: "preview-" + uuid.NewString(), Persistence: "ephemeral"}
+	messages := make([]Message, 0, maxHistoryMessages+1)
+	if assistantDefinition.Durable {
+		if request.ThreadID == nil || request.Instance == "" {
+			badRequest(w, r, "Durable debug previews require thread_id and instance.")
+			return
+		}
+		thread, err := s.db.GetInferenceThreadByOwner(r.Context(), database.GetInferenceThreadByOwnerParams{ID: *request.ThreadID, UserID: uid})
+		if err != nil || thread.AssistantID != assistantDefinition.ID || thread.Persistence != "durable" || thread.ContextType.String != "instance" || thread.ContextID.String != request.Instance {
+			httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Thread not found."})
+			return
+		}
+		instance, err := s.instanceForUser(r, thread.ContextID.String)
+		if err != nil {
+			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "You cannot view this instance."})
+			return
+		}
+		capability, err := advertisedInstancePageClient(request.Client, instance.ID.String())
+		if err != nil {
+			badRequest(w, r, err.Error())
+			return
+		}
+		assistantDefinition = withClientTools(assistantDefinition, capability)
+		rows, err := s.db.ListRecentInferenceMessagesByThread(r.Context(), database.ListRecentInferenceMessagesByThreadParams{ThreadID: thread.ID, Limit: maxHistoryMessages})
+		if err != nil {
+			s.internalError(w, "load inference debug preview history", err)
+			return
+		}
+		messages = append(messages, boundedHistory(rows)...)
+		debug.ThreadID = thread.ID.String()
+		debug.Persistence = "durable"
+		debug.ContextType = thread.ContextType.String
+		debug.ContextID = thread.ContextID.String
+	} else if request.ThreadID != nil || request.Instance != "" || request.Client != nil {
+		badRequest(w, r, "Ephemeral debug previews do not accept thread or client context.")
+		return
+	}
+	messages = append([]Message{{Role: RoleSystem, Content: assistantDefinition.System}}, messages...)
+	httpapi.Write(r.Context(), w, http.StatusOK, debugSnapshotEvent(debug, 0, "request", request.Model, assistantDefinition, messages, Usage{}))
 }
 
 var errInferenceRunInProgress = errors.New("inference run in progress")

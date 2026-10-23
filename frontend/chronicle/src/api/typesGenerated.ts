@@ -1926,6 +1926,15 @@ export interface InferenceConnectionsResponse {
 }
 
 // From chroniclesdk/inference.go
+export interface InferenceDebugPreviewRequest {
+    readonly assistant_id: string;
+    readonly thread_id?: string;
+    readonly instance?: string;
+    readonly model: string;
+    readonly client?: InferenceClient;
+}
+
+// From chroniclesdk/inference.go
 export interface InferenceMessage {
     readonly id?: string;
     readonly role: string;

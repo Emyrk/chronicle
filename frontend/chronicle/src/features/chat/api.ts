@@ -4,11 +4,13 @@ import type {
   InferenceAuthorizeRequest,
   InferenceAuthorizeResponse,
   InferenceConnectionsResponse,
+  InferenceDebugPreviewRequest,
   InferenceModelsResponse,
   InferenceSettings,
   InferenceThreadResponse,
   UpdateInferenceSettingsRequest,
 } from "@/api/typesGenerated";
+import type { DebugSnapshotEvent } from "./protocol";
 
 const inferenceKeys = {
   settings: ["inference", "settings"] as const,
@@ -192,6 +194,21 @@ export function useClearInferenceThread() {
       if (data.thread.context_type === "instance" && data.thread.context_id) {
         queryClient.setQueryData(inferenceKeys.instanceThread(data.thread.context_id), data);
       }
+    },
+  });
+}
+
+export function useInferenceDebugPreview() {
+  return useMutation({
+    mutationFn: async (request: InferenceDebugPreviewRequest) => {
+      const response = await fetch("/api/v1/inference/debug/preview", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      });
+      if (!response.ok) throw await readError(response, "Failed to preview inference debug data");
+      return response.json() as Promise<DebugSnapshotEvent>;
     },
   });
 }

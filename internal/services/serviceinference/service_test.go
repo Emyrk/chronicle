@@ -128,6 +128,33 @@ func TestInferenceAccountSettingsAvailableWhenServiceDisabled(t *testing.T) {
 	require.False(t, response.Enabled)
 }
 
+func TestDebugPreviewDoesNotInvokeProvider(t *testing.T) {
+	t.Parallel()
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	userID := uuid.New()
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"inference_capable", "inference_debug_capable"}))
+
+	service := &Service{zed: zed, enabled: true, logger: slog.Default()}
+	service.router = service.routes()
+	req := httptest.NewRequest(http.MethodPost, "/debug/preview", strings.NewReader(`{"assistant_id":"site-help","model":"provider/model"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(chronauth.WithClaims(req.Context(), &claims.Claims{Subject: userID}))
+	recorder := httptest.NewRecorder()
+	service.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	var snapshot agui.DebugSnapshotEvent
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &snapshot))
+	require.Equal(t, "site-help", snapshot.AssistantID)
+	require.Equal(t, "request", snapshot.Phase)
+	require.Equal(t, "provider/model", snapshot.Model)
+	require.NotEmpty(t, snapshot.Messages)
+	require.Equal(t, "system", snapshot.Messages[0].Role)
+	require.Len(t, snapshot.Tools, len(assistants["site-help"].Tools))
+	require.Empty(t, snapshot.Skills)
+}
+
 func TestOpenRouterCallbackURLCarriesState(t *testing.T) {
 	t.Parallel()
 	accessURL, err := url.Parse("https://chronicle.example/base?tenant=turtle#fragment")

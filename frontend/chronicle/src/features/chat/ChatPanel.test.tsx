@@ -31,6 +31,7 @@ describe("ChatPanel client tool controls", () => {
   it("renders markdown typography, links, and a new chat action", () => {
     const markup = renderToStaticMarkup(
       <ChatPanel
+        debugAvailable
         controller={{
           ...controller,
           messages: [{
@@ -46,6 +47,7 @@ describe("ChatPanel client tool controls", () => {
     expect(markup).toContain("<ul>");
     expect(markup).toContain('href="https://example.com"');
     expect(markup).toContain("New chat");
+    expect(markup).toContain("/debug");
     expect(markup).toContain("/clear");
   });
 });
