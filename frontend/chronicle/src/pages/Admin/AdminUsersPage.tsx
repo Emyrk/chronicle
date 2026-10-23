@@ -23,6 +23,7 @@ import {
   HardDrive,
   Shield,
   ShieldCheck,
+  EyeOff,
   TestTube,
   Calendar,
   Mail,
@@ -53,6 +54,11 @@ const ROLE_CONFIG: Record<string, { icon: React.ReactNode; label: string; classN
     icon: <Shield className="h-3 w-3" />,
     label: "Admin",
     className: "bg-blue-500/15 text-blue-500",
+  },
+  ad_free_capable: {
+    icon: <EyeOff className="h-3 w-3" />,
+    label: "Ad-free",
+    className: "bg-lime-500/15 text-lime-500",
   },
   alpha_tester: {
     icon: <TestTube className="h-3 w-3" />,
@@ -336,16 +342,17 @@ export function AdminUsersPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortField, setSortField] = useState<SortField>("created_at");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+  const users = usersData?.users;
 
   const filteredAndSortedUsers = useMemo(() => {
-    if (!usersData?.users) return [];
+    if (!users) return [];
 
-    let users = [...usersData.users];
+    let filteredUsers = [...users];
 
     // Filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      users = users.filter(
+      filteredUsers = filteredUsers.filter(
         (user) =>
           user.username.toLowerCase().includes(query) ||
           user.email.toLowerCase().includes(query) ||
@@ -354,7 +361,7 @@ export function AdminUsersPage() {
     }
 
     // Sort
-    users.sort((a, b) => {
+    filteredUsers.sort((a, b) => {
       let comparison = 0;
       switch (sortField) {
         case "username":
@@ -373,8 +380,8 @@ export function AdminUsersPage() {
       return sortOrder === "asc" ? comparison : -comparison;
     });
 
-    return users;
-  }, [usersData?.users, searchQuery, sortField, sortOrder]);
+    return filteredUsers;
+  }, [users, searchQuery, sortField, sortOrder]);
 
   if (error) {
     return (

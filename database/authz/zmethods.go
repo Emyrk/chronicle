@@ -268,21 +268,36 @@ func setStripeEntitlementRole(ctx context.Context, authorizer Authorizer, userID
 	return err
 }
 
-// SetUserChronicleRoles replaces all Chronicle roles for a user.
-// It deletes all existing chronicle→user relationships, then writes the new set.
+// SetUserChronicleRoles replaces the administrator-managed Chronicle roles for a user.
+// Roles owned by Discord, billing, or other systems are left untouched.
 func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, roles []string) error {
 	b := policy.New()
 	gChron := b.GlobalChronicle()
 	usr := b.User(userID)
 
-	// Delete all existing chronicle roles for this user
-	f := rel.NewFilter(gChron.Object().Typ, gChron.Object().ID, "")
-	f.WithSubjectFilter(usr.Object().Typ, usr.Object().ID, "")
-	if err := z.Delete(ctx, rel.NewPreconditionedFilter(f)); err != nil {
-		return fmt.Errorf("delete existing roles: %w", err)
+	managedRelations := []string{
+		"technical_admin",
+		"admin",
+		"upload_capable",
+		"unlisted_log_capable",
+		"ad_free_capable",
+		"moderate_logs",
+		"moderate_guilds",
+		"is_admin_users",
+		"is_admin_queues",
+		"is_admin_game_data",
+		"manage_consumables",
+		"is_admin_raid_requirements",
+	}
+	for _, relation := range managedRelations {
+		f := rel.NewFilter(gChron.Object().Typ, gChron.Object().ID, relation)
+		f.WithSubjectFilter(usr.Object().Typ, usr.Object().ID, "")
+		if err := z.Delete(ctx, rel.NewPreconditionedFilter(f)); err != nil {
+			return fmt.Errorf("delete existing %s role: %w", relation, err)
+		}
 	}
 
-	// Re-create builder after delete (fresh txn). The baseline member role is
+	// Re-create builder after deletes (fresh txn). The baseline member role is
 	// always restored, even when the requested optional role set is empty.
 	b = policy.New()
 	gChron = b.GlobalChronicle()
@@ -299,19 +314,21 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 			gChron.Upload_capable(usr)
 		case "unlisted_log_capable":
 			gChron.Unlisted_log_capable(usr)
+		case "ad_free_capable":
+			gChron.Ad_free_capable(usr)
 		case "moderate_logs":
 			gChron.Moderate_logs(usr)
 		case "moderate_guilds":
 			gChron.Moderate_guilds(usr)
-		case "admin_users":
+		case "admin_users", "is_admin_users":
 			gChron.Is_admin_users(usr)
-		case "admin_queues":
+		case "admin_queues", "is_admin_queues":
 			gChron.Is_admin_queues(usr)
-		case "admin_game_data":
+		case "admin_game_data", "is_admin_game_data":
 			gChron.Is_admin_game_data(usr)
 		case "manage_consumables":
 			gChron.Manage_consumables(usr)
-		case "admin_raid_requirements":
+		case "admin_raid_requirements", "is_admin_raid_requirements":
 			gChron.Is_admin_raid_requirements(usr)
 		default:
 			continue
