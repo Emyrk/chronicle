@@ -60,28 +60,38 @@ const QUALITY_ICON: Record<BillingQuality, string> = {
   legendary: "inv_crown_02",
 }
 
-const REWARDS = [
+const REWARDS: {
+  title: string
+  icon: string
+  requiredTier: PaidBillingTier
+  effects: string[]
+  flavor: string
+}[] = [
   {
     title: "Ad-Free Browsing",
     icon: "inv_misc_eye_01",
+    requiredTier: "honored",
     effects: ["Equip: Removes all advertisements from Chronicle."],
     flavor: "Clear line of sight to every pull.",
   },
   {
     title: "Expanded Log Storage",
     icon: "inv_misc_bag_10",
+    requiredTier: "honored",
     effects: ["Equip: Increases your log storage based on your Chronicle standing."],
     flavor: "Holds a whole season of wipes.",
   },
   {
     title: "Raw Log Downloads",
     icon: "inv_scroll_03",
+    requiredTier: "revered",
     effects: ["Use: Download the original combat log file behind any of your uploads."],
     flavor: "Every swing, every wipe, unabridged.",
   },
   {
     title: "Unlisted Logs",
     icon: "ability_stealth",
+    requiredTier: "revered",
     effects: ["Equip: Keeps your uploads out of public view."],
     flavor: "What happens in progression stays in progression.",
   },
@@ -143,7 +153,9 @@ export function BillingSignInPrompt() {
 /** Shared supporter-tier overview used by account billing and the public /supporter route. */
 export function SupporterOverview({ billing, panel }: { billing?: BillingSummary; panel: React.ReactNode }) {
   const hasTierAccess = billing?.ads_free ?? false
-  const tierLabel = billingTierLabel(billing?.tier ?? "free")
+  const currentTier = hasTierAccess ? (billing?.tier ?? "honored") : "free"
+  const tierLabel = billingTierLabel(currentTier)
+  const currentTierRank = billingTierRank(currentTier)
 
   return (
     <section className="max-w-5xl space-y-8">
@@ -160,7 +172,11 @@ export function SupporterOverview({ billing, panel }: { billing?: BillingSummary
           <h3 className="font-wow text-xl font-semibold">Supporter Rewards</h3>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             {REWARDS.map((reward) => (
-              <RewardTooltip key={reward.title} reward={reward} unlocked={hasTierAccess} tierLabel={tierLabel} />
+              <RewardTooltip
+                key={reward.title}
+                reward={reward}
+                unlocked={hasTierAccess && currentTierRank >= billingTierRank(reward.requiredTier)}
+              />
             ))}
           </div>
         </div>
@@ -174,7 +190,7 @@ export function SupporterOverview({ billing, panel }: { billing?: BillingSummary
         .
       </p>
 
-      <ComparisonTable currentTier={hasTierAccess ? (billing?.tier ?? "free") : "free"} />
+      <ComparisonTable currentTier={currentTier} />
     </section>
   )
 }
@@ -200,12 +216,16 @@ const COMPARISON: { feature: string; friendly: string; honored: string; revered?
   {
     feature: "Raw log downloads",
     friendly: "—",
-    honored: "Download the original combat log file behind any of your uploads. Use Chronicle as an archive for your raw data.",
+    honored: "Requires Revered.",
+    revered: "Download the original combat log file behind any of your uploads. Use Chronicle as an archive for your raw data.",
+    exalted: "Same as Revered.",
   },
   {
     feature: "Unlisted logs",
     friendly: "Uploads are publicly viewable.",
-    honored: "Keep uploads unlisted so only people with the link can find them.",
+    honored: "Requires Revered.",
+    revered: "Keep uploads unlisted so only people with the link can find them.",
+    exalted: "Same as Revered.",
   },
   {
     feature: "Supporting Chronicle",
@@ -266,7 +286,7 @@ function ComparisonTable({ currentTier }: { currentTier: string }) {
                   <dd
                     key={tier}
                     className={cn(
-                      value === SAME_AS_HONORED ? "italic text-muted-foreground" : tier === "free" ? "text-muted-foreground" : "text-zinc-200",
+                      value.startsWith("Same as ") ? "italic text-muted-foreground" : tier === "free" ? "text-muted-foreground" : "text-zinc-200",
                       tier === currentTier && "-mx-2 rounded bg-white/5 px-2",
                       emphasized && "flex items-center gap-1.5 font-semibold",
                     )}
@@ -322,6 +342,7 @@ function Achievement({ billing }: { billing?: BillingSummary }) {
   const storageReward = hasTierAccess ? `+${storageLabel}` : "tier-based"
   const tierRank = billingTierRank(tier)
   const fill = hasTierAccess && tierRank >= 0 ? ((tierRank + 1) / PAID_BILLING_TIERS.length) * 100 : FRIENDLY_FILL
+  const hasReveredRewards = hasTierAccess && tierRank >= billingTierRank("revered")
 
   return (
     <div className={cn(FRAME, "p-4 sm:p-5")}>
@@ -379,7 +400,9 @@ function Achievement({ billing }: { billing?: BillingSummary }) {
       </div>
 
       <p className="mt-4 border-t border-border pt-3 text-center font-wow text-sm" style={{ color: "#ffd200" }}>
-        Reward: Ad-free browsing, {storageReward} storage, raw log downloads, and unlisted logs
+        {hasReveredRewards
+          ? `Reward: Ad-free browsing, ${storageReward} storage, raw log downloads, and unlisted logs`
+          : `Reward: Ad-free browsing and ${storageReward} storage`}
       </p>
     </div>
   )
@@ -397,7 +420,7 @@ function PointsShield({ earned }: { earned: boolean }) {
 }
 
 /** Reward styled like the /support page's item tooltips. Red requirement lines mean "not yet earned". */
-function RewardTooltip({ reward, unlocked, tierLabel }: { reward: (typeof REWARDS)[number]; unlocked: boolean; tierLabel: string }) {
+function RewardTooltip({ reward, unlocked }: { reward: (typeof REWARDS)[number]; unlocked: boolean }) {
   return (
     <article className={cn(TOOLTIP, "p-3 text-xs leading-snug")}>
       <div className="flex items-center gap-3">
@@ -415,7 +438,7 @@ function RewardTooltip({ reward, unlocked, tierLabel }: { reward: (typeof REWARD
       </div>
       <div className="mt-2 space-y-0.5">
         <div className="text-white">Binds to your supporter tier</div>
-        <div style={{ color: unlocked ? "#ffffff" : "#ff2020" }}>{unlocked ? `Requires Chronicle – ${tierLabel}` : "Requires an Honored, Revered, or Exalted subscription"}</div>
+        <div style={{ color: unlocked ? "#ffffff" : "#ff2020" }}>Requires Chronicle – {billingTierLabel(reward.requiredTier)}</div>
         {reward.effects.map((line) => (
           <div key={line} style={{ color: QUALITY_COLOR.uncommon }}>
             {line}
@@ -728,6 +751,7 @@ function TierSubscriptionSettings({ billing }: { billing: BillingSummary }) {
   const openBilling = useOpenBilling()
   const { hasTierAccess, tierLabel, displayState, subscriptionEnded, cancellationScheduled, statusLabel, heading, periodLabel, effectiveDate } = billingSubscriptionState(billing)
   const displayDate = effectiveDate ? new Date(effectiveDate).toLocaleDateString() : null
+  const currentTierRank = billingTierRank(hasTierAccess ? billing.tier : "free")
 
   return (
     <section className="max-w-5xl space-y-8">
@@ -860,7 +884,11 @@ function TierSubscriptionSettings({ billing }: { billing: BillingSummary }) {
             <h3 className="font-wow text-xl font-semibold">{tierLabel} Rewards</h3>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               {REWARDS.map((reward) => (
-                <RewardTooltip key={reward.title} reward={reward} unlocked={hasTierAccess} tierLabel={tierLabel} />
+                <RewardTooltip
+                  key={reward.title}
+                  reward={reward}
+                  unlocked={hasTierAccess && currentTierRank >= billingTierRank(reward.requiredTier)}
+                />
               ))}
             </div>
           </div>

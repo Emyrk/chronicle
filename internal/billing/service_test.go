@@ -674,16 +674,17 @@ func TestHasEntitlementUsesPersistedStripeEntitlement(t *testing.T) {
 	}}, store.entitlementChecks)
 }
 
-func TestEveryPaidTierEntitlementGrantsCompletePerks(t *testing.T) {
+func TestPaidTierEntitlementsGrantTierPerks(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
 		entitlement  Entitlement
 		storageBytes int64
+		roles        []string
 	}{
-		{entitlement: EntitlementChronicleHonored, storageBytes: stripeHonoredStorageGrantBytes},
-		{entitlement: EntitlementChronicleRevered, storageBytes: stripeReveredStorageGrantBytes},
-		{entitlement: EntitlementChronicleExalted, storageBytes: stripeExaltedStorageGrantBytes},
+		{entitlement: EntitlementChronicleHonored, storageBytes: stripeHonoredStorageGrantBytes, roles: chronicleHonoredStripeRoles},
+		{entitlement: EntitlementChronicleRevered, storageBytes: stripeReveredStorageGrantBytes, roles: chronicleReveredStripeRoles},
+		{entitlement: EntitlementChronicleExalted, storageBytes: stripeExaltedStorageGrantBytes, roles: chronicleReveredStripeRoles},
 	} {
 		t.Run(string(tc.entitlement), func(t *testing.T) {
 			t.Parallel()
@@ -694,11 +695,12 @@ func TestEveryPaidTierEntitlementGrantsCompletePerks(t *testing.T) {
 			require.NoError(t, behavior.Grant(context.Background(), store, userID))
 			require.Equal(t, stripePaidTierStorageGrantSource, store.dataGrant.Source)
 			require.Equal(t, tc.storageBytes, store.dataGrant.StorageBytes)
-			require.Equal(t, []entitlementRoleChange{
-				{userID: userID, role: stripeRoleAdFree, granted: true},
-				{userID: userID, role: stripeRoleDownloadRawLogs, granted: true},
-				{userID: userID, role: stripeRoleUnlistedLogs, granted: true},
-			}, store.roleChanges)
+
+			expectedRoles := make([]entitlementRoleChange, 0, len(tc.roles))
+			for _, role := range tc.roles {
+				expectedRoles = append(expectedRoles, entitlementRoleChange{userID: userID, role: role, granted: true})
+			}
+			require.Equal(t, expectedRoles, store.roleChanges)
 		})
 	}
 }

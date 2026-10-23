@@ -101,6 +101,7 @@ type StripeEntitlement interface {
 
 type chroniclePaidEntitlement struct {
 	storageBytes int64
+	roles        []string
 }
 
 const (
@@ -115,15 +116,20 @@ const (
 	stripeRoleUnlistedLogs    = "stripe_unlisted_logs"
 )
 
-var chroniclePaidStripeRoles = []string{
-	stripeRoleAdFree,
-	stripeRoleDownloadRawLogs,
-	stripeRoleUnlistedLogs,
-}
+var (
+	chronicleHonoredStripeRoles = []string{
+		stripeRoleAdFree,
+	}
+	chronicleReveredStripeRoles = []string{
+		stripeRoleAdFree,
+		stripeRoleDownloadRawLogs,
+		stripeRoleUnlistedLogs,
+	}
+)
 
-// Grant expands any Chronicle paid-tier Stripe feature into every benefit
-// owned by that tier. Future benefit changes remain application code instead of
-// Stripe catalog changes, so they apply without another Stripe billing cycle.
+// Grant expands a Chronicle paid-tier Stripe feature into the benefits owned by
+// that tier. Future benefit changes remain application code instead of Stripe
+// catalog changes, so they apply without another Stripe billing cycle.
 func (entitlement chroniclePaidEntitlement) Grant(ctx context.Context, tx EntitlementTransaction, userID uuid.UUID) error {
 	if _, err := tx.UpsertDataGrant(ctx, database.UpsertDataGrantParams{
 		UserID:       userID,
@@ -133,7 +139,7 @@ func (entitlement chroniclePaidEntitlement) Grant(ctx context.Context, tx Entitl
 	}); err != nil {
 		return err
 	}
-	for _, role := range chroniclePaidStripeRoles {
+	for _, role := range entitlement.roles {
 		if err := tx.SetStripeEntitlementRole(ctx, userID, role, true); err != nil {
 			return err
 		}
@@ -141,11 +147,8 @@ func (entitlement chroniclePaidEntitlement) Grant(ctx context.Context, tx Entitl
 	return nil
 }
 
-func (chroniclePaidEntitlement) Revoke(ctx context.Context, tx EntitlementTransaction, userID uuid.UUID) error {
-	if err := tx.DeleteDataGrant(ctx, database.DeleteDataGrantParams{UserID: userID, Source: stripePaidTierStorageGrantSource}); err != nil {
-		return err
-	}
-	for _, role := range chroniclePaidStripeRoles {
+func (entitlement chroniclePaidEntitlement) Revoke(ctx context.Context, tx EntitlementTransaction, userID uuid.UUID) error {
+	for _, role := range entitlement.roles {
 		if err := tx.SetStripeEntitlementRole(ctx, userID, role, false); err != nil {
 			return err
 		}
@@ -162,9 +165,30 @@ type stripeEntitlementDefinition struct {
 // stripeEntitlements is the complete, executable definition of known Stripe
 // entitlements. Unknown lookup keys are still persisted, but have no effects.
 var stripeEntitlements = []stripeEntitlementDefinition{
-	{key: EntitlementChronicleHonored, behaviorKey: "chronicle-paid", behavior: chroniclePaidEntitlement{storageBytes: stripeHonoredStorageGrantBytes}},
-	{key: EntitlementChronicleRevered, behaviorKey: "chronicle-paid", behavior: chroniclePaidEntitlement{storageBytes: stripeReveredStorageGrantBytes}},
-	{key: EntitlementChronicleExalted, behaviorKey: "chronicle-paid", behavior: chroniclePaidEntitlement{storageBytes: stripeExaltedStorageGrantBytes}},
+	{
+		key:         EntitlementChronicleHonored,
+		behaviorKey: "chronicle-honored",
+		behavior: chroniclePaidEntitlement{
+			storageBytes: stripeHonoredStorageGrantBytes,
+			roles:        chronicleHonoredStripeRoles,
+		},
+	},
+	{
+		key:         EntitlementChronicleRevered,
+		behaviorKey: "chronicle-revered",
+		behavior: chroniclePaidEntitlement{
+			storageBytes: stripeReveredStorageGrantBytes,
+			roles:        chronicleReveredStripeRoles,
+		},
+	},
+	{
+		key:         EntitlementChronicleExalted,
+		behaviorKey: "chronicle-revered",
+		behavior: chroniclePaidEntitlement{
+			storageBytes: stripeExaltedStorageGrantBytes,
+			roles:        chronicleReveredStripeRoles,
+		},
+	},
 }
 
 func stripeEntitlementBehavior(key Entitlement) (StripeEntitlement, bool) {

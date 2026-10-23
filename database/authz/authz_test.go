@@ -139,9 +139,9 @@ func TestStripeEntitlementRoles(t *testing.T) {
 		role    string
 		allowed []bool
 	}{
-		{role: "stripe_ad_free", allowed: []bool{true, false, false}},
-		{role: "stripe_download_raw_logs", allowed: []bool{false, true, false}},
-		{role: "stripe_unlisted_logs", allowed: []bool{false, false, true}},
+		{role: "stripe_ad_free", allowed: []bool{true, false, false, false}},
+		{role: "stripe_download_raw_logs", allowed: []bool{false, true, false, false}},
+		{role: "stripe_unlisted_logs", allowed: []bool{false, false, true, true}},
 	} {
 		userID := uuid.New()
 		user := policy.New().User(userID)
@@ -150,6 +150,7 @@ func TestStripeEntitlementRoles(t *testing.T) {
 			chronicle.CanAd_free_User(user),
 			chronicle.CanDownload_raw_logs_User(user),
 			chronicle.CanUnlisted_logs_User(user),
+			chronicle.CanMark_log_unlisted_User(user),
 		}
 
 		require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, tc.role, true))
@@ -160,7 +161,7 @@ func TestStripeEntitlementRoles(t *testing.T) {
 		require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, tc.role, false))
 		allowed, err = zed.Check(ctx, nil, permissions...)
 		require.NoError(t, err)
-		require.Equal(t, []bool{false, false, false}, allowed)
+		require.Equal(t, []bool{false, false, false, false}, allowed)
 	}
 
 	userID := uuid.New()

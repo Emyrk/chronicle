@@ -20,7 +20,7 @@ export function BecomeSupporter() {
                 ? "Thank you for supporting Chronicle!"
                 : hasSubscription
                   ? "Your subscription is not currently granting supporter rewards. Review its status in your billing settings."
-                  : "Choose an Honored, Revered, or Exalted monthly or annual plan. Every tier currently grants the same rewards."}
+                  : "Choose an Honored, Revered, or Exalted monthly or annual plan. Revered unlocks raw log downloads and unlisted logs."}
             </p>
             <Link to="/account/billing" className={GOLD_BUTTON}>
               <span className="flex flex-col items-center leading-tight">

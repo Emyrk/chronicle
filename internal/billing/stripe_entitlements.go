@@ -106,6 +106,10 @@ func (s *Service) syncStripeEntitlements(ctx context.Context, customerID string)
 }
 
 func revokeAllStripeEntitlements(ctx context.Context, tx EntitlementTransaction, userID uuid.UUID) error {
+	if err := tx.DeleteDataGrant(ctx, database.DeleteDataGrantParams{UserID: userID, Source: stripePaidTierStorageGrantSource}); err != nil {
+		return fmt.Errorf("revoke storage grant: %w", err)
+	}
+
 	revoked := make(map[string]struct{}, len(stripeEntitlements))
 	for _, entitlement := range stripeEntitlements {
 		if _, alreadyRevoked := revoked[entitlement.behaviorKey]; alreadyRevoked {
