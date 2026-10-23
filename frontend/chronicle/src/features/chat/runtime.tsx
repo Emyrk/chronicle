@@ -121,7 +121,7 @@ function descriptorFor(registration: InferenceCapabilityRegistration): Inference
       scope_type: registration.scope.type,
       scope_id: registration.scope.id,
     } : {}),
-    ...(registration.stateRevision ? { state_revision: registration.stateRevision } : {}),
+    ...(registration.stateRevision !== undefined ? { state_revision: registration.stateRevision } : {}),
   };
 }
 
@@ -205,12 +205,15 @@ export class InferenceRuntime implements InferenceRuntimeClient {
     signal: AbortSignal,
   ): Promise<ClientToolContinuation> => {
     const capability = this.capabilities.get(request.capability.id);
-    const descriptor = capability?.descriptor ?? {
+    // Continuations identify the persisted request, not the capability's latest
+    // page state. In particular, a stale_state result must echo the requested
+    // revision so the server can accept it and let the model recover.
+    const descriptor: InferenceCapabilityDescriptor = {
       id: request.capability.id,
       version: request.capability.version,
       ...(request.capability.scopeType ? { scope_type: request.capability.scopeType } : {}),
       ...(request.capability.scopeId ? { scope_id: request.capability.scopeId } : {}),
-      ...(request.capability.stateRevision ? { state_revision: request.capability.stateRevision } : {}),
+      ...(request.capability.stateRevision !== undefined ? { state_revision: request.capability.stateRevision } : {}),
     };
     const continuation = (status: ClientToolResultStatus, result: unknown): ClientToolContinuation => {
       const normalized = boundedValue(result);
