@@ -60,9 +60,9 @@ describe("spellQueryOptions", () => {
 
 describe("getLogGroupRefetchInterval", () => {
   it.each(["available", "pending", "retryable", "running", "scheduled"])(
-    "polls every 5 seconds while the job is %s",
+    "polls every 10 seconds while the job is %s",
     (state) => {
-      expect(getLogGroupRefetchInterval(logWithJobState(state))).toBe(5_000);
+      expect(getLogGroupRefetchInterval(logWithJobState(state))).toBe(10_000);
     },
   );
 

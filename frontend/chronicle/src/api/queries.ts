@@ -1163,7 +1163,7 @@ export function useLogGroups(options?: Omit<UseQueryOptions<WoWLogGroup[]>, "que
   });
 }
 
-const logGroupPollingInterval = 5_000;
+const logGroupPollingInterval = 10_000;
 const terminalLogJobStates = new Set<RiverJobState>([
   "cancelled",
   "completed",
