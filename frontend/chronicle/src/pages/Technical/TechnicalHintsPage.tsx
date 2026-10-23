@@ -142,7 +142,7 @@ export function TechnicalHintsPage() {
         <h2 className="text-lg font-semibold">Hint catalog</h2>
         <p className="text-sm text-muted-foreground">Every payload currently available to the Recent fallback rotation.</p>
       </div>
-      <TechnicalHintsCatalog />
+      <TechnicalHintsCatalog cardSize={{ width, height }} />
     </div>
   );
 }
