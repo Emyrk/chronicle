@@ -1,10 +1,12 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, userEvent } from "storybook/test";
 import { MemoryRouter } from "react-router-dom";
 import type { CharacterParse } from "@/api/typesGenerated";
 import { TooltipProvider } from "@/components/ui/Tooltip/tooltip";
 import type { EncounterSummary, RaidSummary } from "../parseAggregation";
 import { RaidScoresCard } from "./RaidScoresCard";
+import { ScoreCard } from "./ScoreCard";
 
 function parse(encounterName: string, score: number, metricValue: number): CharacterParse {
   return {
@@ -84,23 +86,45 @@ function MultiSpecRaidScores() {
   const [spec, setSpec] = useState<string | null>(null);
   const raids = spec === "Fire" ? [fireRaid] : spec === "Frost" ? [frostRaid] : [overallRaid];
 
+  const raid = raids[0];
+
   return (
-    <RaidScoresCard
-      raids={raids}
-      metric="dps"
-      performanceHistoryPath="/performance-history"
-      bossCounts={new Map([["Blackwing Lair", 8]])}
-      playerClass="Mage"
-      specs={["Fire", "Frost"]}
-      selectedSpec={spec}
-      onSpecChange={setSpec}
-      isLoading={false}
-    />
+    <div className="space-y-6">
+      <div className="w-full lg:w-[480px]">
+        <ScoreCard
+          score={{
+            value: raid.score,
+            display_value: raid.score,
+            num_parses: raid.kills,
+            encounter_groups: raid.encounters.length,
+          }}
+          top3={raid.encounters}
+          metric="dps"
+          onMetricChange={() => undefined}
+          playerClass="Mage"
+          specs={["Fire", "Frost"]}
+          selectedSpec={spec}
+          onSpecChange={setSpec}
+          isLoading={false}
+        />
+      </div>
+      <RaidScoresCard
+        raids={raids}
+        metric="dps"
+        performanceHistoryPath="/performance-history"
+        bossCounts={new Map([["Blackwing Lair", 8]])}
+        playerClass="Mage"
+        specs={["Fire", "Frost"]}
+        selectedSpec={spec}
+        onSpecChange={setSpec}
+        isLoading={false}
+      />
+    </div>
   );
 }
 
 const meta = {
-  title: "pages/Armory/Raid Scores",
+  title: "pages/Armory/Performance Scores",
   component: MultiSpecRaidScores,
   decorators: [
     (Story) => (
@@ -121,4 +145,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const MultipleSpecs: Story = {};
+export const MultipleSpecs: Story = {
+  play: async ({ canvas }) => {
+    const fireButtons = canvas.getAllByRole("button", { name: "Show Fire performance" });
+    await userEvent.click(fireButtons[0]);
+    fireButtons.forEach((button) => expect(button).toHaveAttribute("aria-pressed", "true"));
+    expect(canvas.getAllByText("89").length).toBeGreaterThan(0);
+  },
+};

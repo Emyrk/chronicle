@@ -26,7 +26,13 @@ import { JourneyStatsCard } from "./overview/JourneyStatsCard";
 import { ScoreCard } from "./overview/ScoreCard";
 import { defaultMetric, type ParseMetric } from "./overview/util";
 import { useRecentActivity } from "./overview/useRecentActivity";
-import { summarizeRaids, topEncounters } from "./parseAggregation";
+import {
+  filterParsesBySpec,
+  performanceSpecs,
+  scoreParses,
+  summarizeRaids,
+  topEncounters,
+} from "./parseAggregation";
 
 type OverviewMode = "journey" | "performance";
 
@@ -103,6 +109,7 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
   const mode: OverviewMode =
     searchParams.get("mode") === "performance" ? "performance" : "journey";
   const [metric, setMetric] = useState<ParseMetric>(() => defaultMetric(player));
+  const [performanceSpec, setPerformanceSpec] = useState<string | null>(null);
   const { isAuthenticated } = useAuth();
   const favorites = useMyFavorites({ enabled: isAuthenticated });
   const toggleFavorite = useToggleFavoritePlayer();
@@ -117,9 +124,17 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
     isOverview && mode === "performance" ? player.id : undefined,
     metric,
   );
+  const parses = useMemo(() => parsesQuery.data?.parses ?? [], [parsesQuery.data]);
+  const specs = useMemo(() => performanceSpecs(parses), [parses]);
+  const selectedSpec = performanceSpec && specs.includes(performanceSpec) ? performanceSpec : null;
+  const selectedParses = useMemo(
+    () => filterParsesBySpec(parses, selectedSpec),
+    [parses, selectedSpec],
+  );
+  const score = useMemo(() => scoreParses(selectedParses), [selectedParses]);
   const top3 = useMemo(
-    () => topEncounters(summarizeRaids(parsesQuery.data?.parses ?? []), 3),
-    [parsesQuery.data],
+    () => topEncounters(summarizeRaids(selectedParses), 3),
+    [selectedParses],
   );
 
   const setMode = (nextMode: OverviewMode) => {
@@ -223,10 +238,14 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
             <div className="w-full lg:w-[480px]">
               {activeTab === "overview" && mode === "performance" && (
                 <ScoreCard
-                  score={parsesQuery.data?.score}
+                  score={score}
                   top3={top3}
                   metric={metric}
                   onMetricChange={setMetric}
+                  playerClass={player.class}
+                  specs={specs}
+                  selectedSpec={selectedSpec}
+                  onSpecChange={setPerformanceSpec}
                   isLoading={parsesQuery.isLoading}
                 />
               )}
@@ -252,7 +271,14 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
         {/* Tab content: overview, gear, and talents stay in center column. */}
         {activeTab === "overview" && (
           <div className="mt-4">
-            <OverviewTab player={player} onOpenTab={openTab} metric={metric} />
+            <OverviewTab
+              player={player}
+              onOpenTab={openTab}
+              metric={metric}
+              selectedSpec={selectedSpec}
+              specs={specs}
+              onSpecChange={setPerformanceSpec}
+            />
           </div>
         )}
         {activeTab === "gear" && (
