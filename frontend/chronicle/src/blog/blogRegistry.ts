@@ -39,8 +39,6 @@ export interface BlogPostDefinition {
   tag: string;
   /** Icon name on the icon CDN, e.g. "inv_misc_map_01". */
   icon: string;
-  /** Whether the post appears in the What's New index and adjacent-post navigation. */
-  showInWhatsNew?: boolean;
   /** Optional item-style flavor text shown on the featured card. */
   flavor?: string;
   /** Optional Remotion video shown at the top of the post. Loaded lazily. */
@@ -89,8 +87,7 @@ export const BLOG_POSTS: readonly BlogPostDefinition[] = [
     description: "Play, pause, scrub, and step through a selected encounter while Chronicle panels follow the combat-log timeline.",
     publishedAt: "2026-10-08",
     rarity: "legendary",
-    tag: "Guide",
-    showInWhatsNew: false,
+    tag: "Feature",
     icon: "ability_rewindtime",
     flavor: "Wait. What happened right there?",
     video: remotionVideo(() => import("@/pages/Instance/videos/ReplayExplainer.video"), 700),
@@ -289,7 +286,6 @@ export function blogPostMatchesFlavor(post: BlogPostDefinition, flavor: readonly
 
 export function blogPostsForFlavor(flavor: readonly string[]): BlogPostDefinition[] {
   return [...BLOG_POSTS]
-    .filter((post) => post.showInWhatsNew !== false)
     .filter((post) => blogPostMatchesFlavor(post, flavor))
     .sort((left, right) =>
       right.publishedAt.localeCompare(left.publishedAt)

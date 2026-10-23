@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blogPostMatchesFlavor, blogPostsForFlavor, findBlogPost, type BlogPostDefinition } from "./blogRegistry";
+import { blogPostMatchesFlavor, type BlogPostDefinition } from "./blogRegistry";
 
 const basePost: BlogPostDefinition = {
   id: "test",
@@ -28,12 +28,5 @@ describe("blogPostMatchesFlavor", () => {
   it("matches flavor tags case-insensitively", () => {
     const post = { ...basePost, flavorSets: [["Turtle"]] };
     expect(blogPostMatchesFlavor(post, ["turtle"])).toBe(true);
-  });
-});
-
-describe("What's New visibility", () => {
-  it("keeps hidden guides directly addressable without listing them in What's New", () => {
-    expect(findBlogPost("replay")?.tag).toBe("Guide");
-    expect(blogPostsForFlavor([]).some((post) => post.id === "replay")).toBe(false);
   });
 });
