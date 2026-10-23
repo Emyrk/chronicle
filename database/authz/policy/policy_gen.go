@@ -895,7 +895,7 @@ func (obj *ObjChronicle) CanShorter_urls_User(sub *ObjUser) rel.Relationship {
 
 // CanAd_free_User checks if the subject has ad_free permission
 // // Object: chronicle:<id>
-// Schema: permission ad_free = stripe_ad_free
+// Schema: permission ad_free = supporter + stripe_ad_free
 func (obj *ObjChronicle) CanAd_free_User(sub *ObjUser) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
@@ -985,7 +985,7 @@ func (obj *ObjChronicle) CanUpload_log_User(sub *ObjUser) rel.Relationship {
 
 // CanMark_log_unlisted_User checks if the subject has mark_log_unlisted permission
 // // Object: chronicle:<id>
-// Schema: permission mark_log_unlisted = unlisted_log_capable + admin_logs
+// Schema: permission mark_log_unlisted = unlisted_log_capable + admin_logs + unlisted_logs
 func (obj *ObjChronicle) CanMark_log_unlisted_User(sub *ObjUser) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
