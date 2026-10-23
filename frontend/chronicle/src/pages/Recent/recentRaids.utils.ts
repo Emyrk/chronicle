@@ -24,18 +24,20 @@ function hashString(value: string): number {
  * produce stable pseudo-random gaps, so loading another page never moves ads
  * that are already visible.
  */
-export function getRecentRaidAdInsertions(instanceIDs: string[]): number[] {
+export function getRecentRaidAdInsertions(instanceIDs: string[], columnCount: number): number[] {
   const insertions: number[] = [];
-  const nonAligningGaps = [4, 6];
+  const gaps = [4, 5, 6, 7, 8];
+  const eligibleGaps = columnCount <= 1
+    ? gaps
+    : gaps.filter((gap) => (gap + 1) % columnCount !== 0);
   let raidCount = 0;
   let adIndex = 0;
 
   while (raidCount < instanceIDs.length) {
     const anchorID = instanceIDs[raidCount] ?? instanceIDs[0];
-    // Each gap also contains the previous ad cell. Gaps of 5 or 8 would align
-    // consecutive ads in a three-column grid, while 7 would align them in a
-    // four-column grid. Randomizing between 4 and 6 avoids both alignments.
-    const gap = nonAligningGaps[hashString(`${anchorID}:${adIndex}`) % nonAligningGaps.length];
+    // The previous ad also occupies a grid cell, so compare gap + 1 against
+    // the active column count to keep consecutive ads out of the same column.
+    const gap = eligibleGaps[hashString(`${anchorID}:${adIndex}`) % eligibleGaps.length];
     raidCount += gap;
 
     if (raidCount > instanceIDs.length) break;

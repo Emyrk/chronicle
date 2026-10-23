@@ -2,20 +2,31 @@ import { describe, it, expect } from "vitest";
 import { expandInstanceOptions, expandInstanceQuery, getRecentRaidAdInsertions } from "./recentRaids.utils";
 
 describe("getRecentRaidAdInsertions", () => {
-  it("keeps every ad four to eight raids after the previous ad", () => {
-    const instanceIDs = Array.from({ length: 100 }, (_, index) => `instance-${index}`);
-    const insertions = getRecentRaidAdInsertions(instanceIDs);
+  it("uses the full four to eight raid range in a single-column grid", () => {
+    const instanceIDs = Array.from({ length: 500 }, (_, index) => `instance-${index}`);
+    const insertions = getRecentRaidAdInsertions(instanceIDs, 1);
     const gaps = insertions.map((raidCount, index) => raidCount - (insertions[index - 1] ?? 0));
 
-    expect(insertions.length).toBeGreaterThan(0);
-    expect(gaps.every((gap) => gap >= 4 && gap <= 8)).toBe(true);
+    expect(new Set(gaps)).toEqual(new Set([4, 5, 6, 7, 8]));
+  });
+
+  it("keeps every ad four to eight raids after the previous ad", () => {
+    const instanceIDs = Array.from({ length: 100 }, (_, index) => `instance-${index}`);
+
+    for (const columnCount of [1, 2, 3, 4]) {
+      const insertions = getRecentRaidAdInsertions(instanceIDs, columnCount);
+      const gaps = insertions.map((raidCount, index) => raidCount - (insertions[index - 1] ?? 0));
+
+      expect(insertions.length).toBeGreaterThan(0);
+      expect(gaps.every((gap) => gap >= 4 && gap <= 8)).toBe(true);
+    }
   });
 
   it("never places consecutive ads in the same grid column", () => {
     const instanceIDs = Array.from({ length: 100 }, (_, index) => `instance-${index}`);
-    const insertions = getRecentRaidAdInsertions(instanceIDs);
 
-    for (const columnCount of [3, 4]) {
+    for (const columnCount of [2, 3, 4]) {
+      const insertions = getRecentRaidAdInsertions(instanceIDs, columnCount);
       const columns = insertions.map(
         (raidCount, adIndex) => (raidCount + adIndex) % columnCount,
       );
@@ -28,8 +39,8 @@ describe("getRecentRaidAdInsertions", () => {
 
   it("keeps existing ad positions stable when more raids load", () => {
     const instanceIDs = Array.from({ length: 48 }, (_, index) => `instance-${index}`);
-    const firstPageInsertions = getRecentRaidAdInsertions(instanceIDs.slice(0, 24));
-    const allInsertions = getRecentRaidAdInsertions(instanceIDs);
+    const firstPageInsertions = getRecentRaidAdInsertions(instanceIDs.slice(0, 24), 4);
+    const allInsertions = getRecentRaidAdInsertions(instanceIDs, 4);
 
     expect(allInsertions.slice(0, firstPageInsertions.length)).toEqual(firstPageInsertions);
   });

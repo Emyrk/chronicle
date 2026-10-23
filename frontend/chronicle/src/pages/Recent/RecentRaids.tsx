@@ -14,6 +14,32 @@ import { expandInstanceOptions, expandInstanceQuery, getRecentRaidAdInsertions }
 import { groupDuplicateInstances } from "@/utils/groupDuplicates";
 import type { RecentInstance, RecentInstancesResponse } from "@/api/typesGenerated";
 
+function getRecentRaidColumnCount(): number {
+  if (typeof window === "undefined") return 1;
+  if (window.matchMedia("(min-width: 1320px)").matches) return 4;
+  if (window.matchMedia("(min-width: 1024px)").matches) return 3;
+  if (window.matchMedia("(min-width: 640px)").matches) return 2;
+  return 1;
+}
+
+function useRecentRaidColumnCount(): number {
+  const [columnCount, setColumnCount] = useState(getRecentRaidColumnCount);
+
+  useEffect(() => {
+    const mediaQueries = [
+      window.matchMedia("(min-width: 640px)"),
+      window.matchMedia("(min-width: 1024px)"),
+      window.matchMedia("(min-width: 1320px)"),
+    ];
+    const updateColumnCount = () => setColumnCount(getRecentRaidColumnCount());
+
+    mediaQueries.forEach((query) => query.addEventListener("change", updateColumnCount));
+    return () => mediaQueries.forEach((query) => query.removeEventListener("change", updateColumnCount));
+  }, []);
+
+  return columnCount;
+}
+
 function renderItems(names: string[], selected: string[], onToggle: (name: string) => void) {
   return names.map((name) => {
     const isSelected = selected.includes(name);
@@ -125,6 +151,8 @@ export function RecentRaids() {
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
 
+  const columnCount = useRecentRaidColumnCount();
+
   const { data: supportedInstances } = useSupportedInstances();
   const { data: bossCounts } = useSupportedInstanceBossCounts();
   const { data: realms } = useRealms();
@@ -206,10 +234,10 @@ export function RecentRaids() {
 
   const adNumberByRaidCount = useMemo(
     () => new Map(
-      getRecentRaidAdInsertions(instanceGroups.map((group) => group[0].id))
+      getRecentRaidAdInsertions(instanceGroups.map((group) => group[0].id), columnCount)
         .map((raidCount, index) => [raidCount, index + 1]),
     ),
-    [instanceGroups],
+    [columnCount, instanceGroups],
   );
 
   const fetchInstances = useCallback(async (offset?: number) => {
