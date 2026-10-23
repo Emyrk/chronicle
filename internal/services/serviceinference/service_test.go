@@ -516,6 +516,20 @@ func TestCreateRunSupersedesWaitingClientTool(t *testing.T) {
 	var userMessage Message
 	require.NoError(t, json.Unmarshal(rows[2].Content, &userMessage))
 	require.Equal(t, input, userMessage)
+
+	_, err = service.clearThreadMessages(ctx, thread.ID, userID)
+	require.ErrorIs(t, err, errInferenceRunInProgress)
+	_, err = store.UpdateInferenceRun(ctx, database.UpdateInferenceRunParams{
+		ID: newRun.ID, UserID: userID, Status: "completed",
+		CompletedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	cleared, err := service.clearThreadMessages(ctx, thread.ID, userID)
+	require.NoError(t, err)
+	require.Equal(t, thread.ID, cleared.ID)
+	rows, err = store.ListRecentInferenceMessagesByThread(ctx, database.ListRecentInferenceMessagesByThreadParams{ThreadID: thread.ID, Limit: 10})
+	require.NoError(t, err)
+	require.Empty(t, rows)
 }
 
 func TestAgentLoopPausesAndCanPauseAgainForClientTools(t *testing.T) {

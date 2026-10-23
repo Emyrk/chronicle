@@ -1,6 +1,7 @@
 package serviceinference
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -98,6 +99,7 @@ func (s *Service) routes() http.Handler {
 	r.Post("/threads/instance/{instance}", s.createInstanceThread)
 	r.Get("/threads", s.listThreads)
 	r.Get("/threads/{threadID}", s.getThread)
+	r.Delete("/threads/{threadID}/messages", s.clearThread)
 	r.Post("/runs/{runID}/client-tools/{toolCallID}", s.continueClientTool)
 	r.Post("/runs", s.run)
 	return r
@@ -403,6 +405,68 @@ func (s *Service) getThread(w http.ResponseWriter, r *http.Request) {
 	}
 	s.writeThread(w, r, thread)
 }
+
+var errInferenceRunInProgress = errors.New("inference run in progress")
+
+func (s *Service) clearThreadMessages(ctx context.Context, threadID, uid uuid.UUID) (database.InferenceThread, error) {
+	var thread database.InferenceThread
+	err := s.db.InTx(ctx, func(tx database.Store) error {
+		active, activeErr := tx.GetActiveInferenceRunByThreadForUpdate(ctx, database.GetActiveInferenceRunByThreadForUpdateParams{
+			ThreadID: uuid.NullUUID{UUID: threadID, Valid: true},
+			UserID:   uid,
+		})
+		if activeErr != nil && !errors.Is(activeErr, pgx.ErrNoRows) {
+			return activeErr
+		}
+		if activeErr == nil {
+			if active.Status == "running" {
+				return errInferenceRunInProgress
+			}
+			if err := supersedeAwaitingClientTool(ctx, tx, threadID, uid); err != nil {
+				return err
+			}
+			if _, err := tx.AbandonAwaitingInferenceRun(ctx, database.AbandonAwaitingInferenceRunParams{ID: active.ID, UserID: uid}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return err
+			}
+		}
+		var err error
+		thread, err = tx.ClearInferenceThreadByOwner(ctx, database.ClearInferenceThreadByOwnerParams{ID: threadID, UserID: uid})
+		return err
+	}, nil)
+	return thread, err
+}
+
+func (s *Service) clearThread(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "threadID"))
+	if err != nil {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid thread ID."})
+		return
+	}
+	uid := userID(r)
+	thread, err := s.db.GetInferenceThreadByOwner(r.Context(), database.GetInferenceThreadByOwnerParams{ID: id, UserID: uid})
+	if err != nil {
+		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Thread not found."})
+		return
+	}
+	if thread.ContextType.String == "instance" {
+		if _, err := s.instanceForUser(r, thread.ContextID.String); err != nil {
+			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "You cannot view this instance."})
+			return
+		}
+	}
+
+	thread, err = s.clearThreadMessages(r.Context(), id, uid)
+	if errors.Is(err, errInferenceRunInProgress) {
+		httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "Wait for the current response to finish before starting a new chat."})
+		return
+	}
+	if err != nil {
+		s.internalError(w, "clear inference thread", err)
+		return
+	}
+	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceThreadResponse{Thread: threadSDK(thread), Messages: []chroniclesdk.InferenceMessage{}})
+}
+
 func threadSDK(t database.InferenceThread) chroniclesdk.InferenceThread {
 	return chroniclesdk.InferenceThread{ID: t.ID, AssistantID: t.AssistantID, Persistence: t.Persistence, ContextType: t.ContextType.String, ContextID: t.ContextID.String, Title: t.Title, CreatedAt: t.CreatedAt.Time, UpdatedAt: t.UpdatedAt.Time}
 }

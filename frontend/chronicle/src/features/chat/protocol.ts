@@ -209,6 +209,7 @@ export type ChatAction =
   | { type: "apply_event"; event: AgUiEvent }
   | { type: "run_failed"; message: string }
   | { type: "run_cancelled" }
+  | { type: "reset_conversation"; messages?: ChatMessage[] }
   | { type: "clear_error" };
 
 export function createInitialChatState(messages: ChatMessage[] = []): ChatState {
@@ -439,6 +440,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, messages: interruptStreamingMessages(state.messages), status: "error", error: action.message };
     case "run_cancelled":
       return { ...state, messages: interruptStreamingMessages(state.messages), status: "idle" };
+    case "reset_conversation":
+      return {
+        messages: action.messages ?? [],
+        debugSnapshots: [],
+        clientToolRequests: [],
+        status: "idle",
+      };
     case "clear_error":
       return { ...state, error: undefined, status: state.status === "error" ? "idle" : state.status };
   }

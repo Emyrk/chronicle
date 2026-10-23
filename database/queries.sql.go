@@ -8972,6 +8972,43 @@ func (q *sqlQuerier) AbandonAwaitingInferenceRun(ctx context.Context, arg Abando
 	return i, err
 }
 
+const clearInferenceThreadByOwner = `-- name: ClearInferenceThreadByOwner :one
+WITH deleted AS (
+  DELETE FROM inference_messages
+  WHERE thread_id = $1
+    AND EXISTS (
+      SELECT 1 FROM inference_threads thread
+      WHERE thread.id = $1 AND thread.user_id = $2
+    )
+)
+UPDATE inference_threads thread
+SET updated_at = clock_timestamp()
+WHERE thread.id = $1 AND thread.user_id = $2
+RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at
+`
+
+type ClearInferenceThreadByOwnerParams struct {
+	ID     uuid.UUID `db:"id" json:"id"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) ClearInferenceThreadByOwner(ctx context.Context, arg ClearInferenceThreadByOwnerParams) (InferenceThread, error) {
+	row := q.db.QueryRow(ctx, clearInferenceThreadByOwner, arg.ID, arg.UserID)
+	var i InferenceThread
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.AssistantID,
+		&i.Persistence,
+		&i.ContextType,
+		&i.ContextID,
+		&i.Title,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const completeInferenceClientToolRequest = `-- name: CompleteInferenceClientToolRequest :one
 UPDATE inference_client_tool_requests
 SET status = 'completed', updated_at = now(), completed_at = now()
@@ -9118,6 +9155,45 @@ func (q *sqlQuerier) ExpireStaleInferenceRuns(ctx context.Context) (int64, error
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const getActiveInferenceRunByThreadForUpdate = `-- name: GetActiveInferenceRunByThreadForUpdate :one
+SELECT id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count FROM inference_runs
+WHERE thread_id = $1
+  AND user_id = $2
+  AND status IN ('running', 'awaiting_client_tool')
+FOR UPDATE
+`
+
+type GetActiveInferenceRunByThreadForUpdateParams struct {
+	ThreadID uuid.NullUUID `db:"thread_id" json:"thread_id"`
+	UserID   uuid.UUID     `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) GetActiveInferenceRunByThreadForUpdate(ctx context.Context, arg GetActiveInferenceRunByThreadForUpdateParams) (InferenceRun, error) {
+	row := q.db.QueryRow(ctx, getActiveInferenceRunByThreadForUpdate, arg.ThreadID, arg.UserID)
+	var i InferenceRun
+	err := row.Scan(
+		&i.ID,
+		&i.ThreadID,
+		&i.UserID,
+		&i.ConnectionID,
+		&i.AssistantID,
+		&i.Model,
+		&i.Status,
+		&i.IdempotencyKey,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+		&i.LeaseExpiresAt,
+		&i.Debug,
+		&i.IterationCount,
+		&i.ToolCallCount,
+	)
+	return i, err
 }
 
 const getInferenceClientToolRequestForUpdate = `-- name: GetInferenceClientToolRequestForUpdate :one

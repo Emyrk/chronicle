@@ -100,6 +100,34 @@ describe("chatReducer", () => {
     expect(state.debugSnapshots).toEqual([]);
   });
 
+  it("resets messages and run diagnostics for a new chat", () => {
+    const state = chatReducer({
+      ...createInitialChatState([{ id: "message-1", role: "user", content: "hello" }]),
+      runId: "run-1",
+      threadId: "thread-1",
+      status: "error",
+      error: "failed",
+      clientToolRequests: [{
+        type: "CLIENT_TOOL_REQUEST",
+        runId: "run-1",
+        threadId: "thread-1",
+        toolCallId: "call-1",
+        toolName: "inspect_instance_ui",
+        arguments: {},
+        capability: { id: "instance-page", version: 1 },
+        effect: "read",
+        confirmation: "never",
+      }],
+    }, { type: "reset_conversation" });
+
+    expect(state).toEqual({
+      messages: [],
+      debugSnapshots: [],
+      clientToolRequests: [],
+      status: "idle",
+    });
+  });
+
   it("surfaces protocol run errors", () => {
     const state = apply(createInitialChatState(), {
       type: "RUN_ERROR",

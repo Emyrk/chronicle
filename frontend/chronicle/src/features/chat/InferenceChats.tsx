@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AssistantChat } from "./AssistantChat";
 import {
   isInferenceServiceUnavailable,
+  useClearInferenceThread,
   useCreateInstanceInferenceThread,
   useInferenceDebugPermission,
   useInferencePermission,
@@ -109,6 +110,7 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
   const permission = useInferencePermission(isAuthenticated);
   const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed);
   const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed);
+  const clearThread = useClearInferenceThread();
   const createThread = useCreateInstanceInferenceThread();
   const [open, setOpen] = useState(false);
   const [debugEnabled, setDebugEnabled] = useState(false);
@@ -124,6 +126,11 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
   const refreshThread = useCallback(async () => {
     await threadQuery.refetch();
   }, [threadQuery]);
+  const startNewChat = useCallback(async () => {
+    if (!threadId) return [];
+    const cleared = await clearThread.mutateAsync(threadId);
+    return toChatMessages(cleared.messages);
+  }, [clearThread, threadId]);
   const createRequest = useCallback((input: Parameters<typeof buildInstanceAnalystRunRequest>[0]) => {
     if (!selection.connectionId || !selection.modelId) throw new Error("Select an AI connection and model first.");
     return buildInstanceAnalystRunRequest(input, { connectionId: selection.connectionId, modelId: selection.modelId }, instanceId, debugEnabled);
@@ -150,6 +157,7 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
       threadId={response?.thread.id}
       initialMessages={response ? toChatMessages(response.messages) : []}
       createRequest={createRequest}
+      onStartNewChat={startNewChat}
       onRunSettled={refreshThread}
       launcherLabel="Ask about this raid"
       launcherClassName="fixed right-4 bottom-20 z-[90] rounded-full shadow-lg sm:right-6 sm:bottom-6"

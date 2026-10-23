@@ -35,6 +35,7 @@ type sqlcQuerier interface {
 	ClaimDiscordAnnouncementDelivery(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error)
 	ClaimDueDiscordMembershipGrantChecks(ctx context.Context, arg ClaimDueDiscordMembershipGrantChecksParams) ([]ClaimDueDiscordMembershipGrantChecksRow, error)
 	ClearDiscordMembershipGrantCheckClaim(ctx context.Context, arg ClearDiscordMembershipGrantCheckClaimParams) (int64, error)
+	ClearInferenceThreadByOwner(ctx context.Context, arg ClearInferenceThreadByOwnerParams) (InferenceThread, error)
 	ClearResetToken(ctx context.Context, userAuthID uuid.UUID) error
 	// Canonical normalized rows produced by legacy Spell.dbc imports.
 	ClearSpellEffectsForDataset(ctx context.Context, datasetID uuid.UUID) error
@@ -194,6 +195,7 @@ type sqlcQuerier interface {
 	// Item name/quality/icon/level are read from the snapshot jsonb itself,
 	// so results are self-contained.
 	GearTrendsSlotItems(ctx context.Context, arg GearTrendsSlotItemsParams) ([]GearTrendsSlotItemsRow, error)
+	GetActiveInferenceRunByThreadForUpdate(ctx context.Context, arg GetActiveInferenceRunByThreadForUpdateParams) (InferenceRun, error)
 	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg GetAnyParseScoreReceiptForTenantInstanceParams) (ParseScoreReceipt, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
 	GetBillingEntitlementOwnerByProviderCustomerID(ctx context.Context, arg GetBillingEntitlementOwnerByProviderCustomerIDParams) (uuid.UUID, error)

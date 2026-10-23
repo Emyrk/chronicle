@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
-import { AlertCircle, Bot, Check, CircleStop, LoaderCircle, LockKeyhole, ScanSearch, Send, ShieldAlert, Wrench } from "lucide-react";
+import { AlertCircle, Bot, Check, CircleStop, LoaderCircle, LockKeyhole, RotateCcw, ScanSearch, Send, ShieldAlert, Wrench } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert/Alert";
 import { Button } from "@/components/ui/button";
@@ -78,15 +78,17 @@ function Message({ message }: { message: ChatMessage }) {
       >
         {assistant ? (
           message.content ? (
-            <ReactMarkdown
-              components={{
-                a: ({ children }) => (
-                  <span className="text-primary underline underline-offset-2">{children}</span>
-                ),
-              }}
-            >
-              {message.content}
-            </ReactMarkdown>
+            <div className="prose prose-sm dark:prose-invert max-w-none break-words prose-headings:mb-2 prose-headings:mt-4 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-pre:my-3 prose-pre:max-w-full prose-pre:overflow-auto prose-code:break-words prose-a:text-primary prose-a:underline prose-a:underline-offset-2">
+              <ReactMarkdown
+                components={{
+                  a: ({ children, ...props }) => (
+                    <a {...props} target="_blank" rel="noopener noreferrer">{children}</a>
+                  ),
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+            </div>
           ) : message.streaming && !message.toolCalls?.length ? (
             <span className="text-muted-foreground flex items-center gap-2">
               <LoaderCircle className="size-3.5 animate-spin" /> Thinking…
@@ -153,6 +155,13 @@ export function ChatPanel({
     void controller.submit(content);
   };
 
+  const startNewChat = () => {
+    if (controller.isRunning) return;
+    if (controller.messages.length > 0 && !window.confirm("Start a new chat? This clears the persisted conversation history.")) return;
+    setComposer("");
+    void controller.startNewChat();
+  };
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     send();
@@ -177,6 +186,18 @@ export function ChatPanel({
             <p className="text-muted-foreground mt-1 text-sm">{description}</p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-xs"
+              onClick={startNewChat}
+              disabled={controller.isRunning}
+              title="Clear this conversation and start over. You can also type /clear."
+            >
+              <RotateCcw className="size-3.5" />
+              New chat
+            </Button>
             {runtime && (
               <label className="text-muted-foreground flex items-center gap-2 text-xs" title="Allow view-changing client tools without confirmation for this session">
                 <ShieldAlert className="size-3.5" />
@@ -260,7 +281,7 @@ export function ChatPanel({
                 className="placeholder:text-muted-foreground styled-scrollbar max-h-40 min-h-20 w-full resize-none bg-transparent px-3.5 pt-3 text-sm outline-none disabled:opacity-60"
               />
               <div className="flex items-center justify-between px-2.5 pb-2.5">
-                <span className="text-muted-foreground text-[11px]">Enter to send · Shift+Enter for a new line</span>
+                <span className="text-muted-foreground text-[11px]">Enter to send · Shift+Enter for a new line · /clear starts over</span>
                 {controller.isRunning ? (
                   <Button type="button" variant="outline" size="sm" onClick={controller.cancel}>
                     <CircleStop /> Cancel

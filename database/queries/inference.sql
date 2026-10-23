@@ -55,6 +55,27 @@ SELECT * FROM inference_threads
 WHERE user_id = $1
 ORDER BY updated_at DESC;
 
+-- name: ClearInferenceThreadByOwner :one
+WITH deleted AS (
+  DELETE FROM inference_messages
+  WHERE thread_id = $1
+    AND EXISTS (
+      SELECT 1 FROM inference_threads thread
+      WHERE thread.id = $1 AND thread.user_id = $2
+    )
+)
+UPDATE inference_threads thread
+SET updated_at = clock_timestamp()
+WHERE thread.id = $1 AND thread.user_id = $2
+RETURNING *;
+
+-- name: GetActiveInferenceRunByThreadForUpdate :one
+SELECT * FROM inference_runs
+WHERE thread_id = $1
+  AND user_id = $2
+  AND status IN ('running', 'awaiting_client_tool')
+FOR UPDATE;
+
 -- name: UpdateInferenceThreadTitleByOwner :one
 UPDATE inference_threads
 SET title = $3, updated_at = now()

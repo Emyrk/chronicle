@@ -32,12 +32,14 @@ export interface UseAssistantChatOptions {
   onMessagesChange?: (messages: ChatMessage[]) => void;
   onRunComplete?: () => void | Promise<void>;
   onRunSettled?: () => void | Promise<void>;
+  onStartNewChat?: () => void | ChatMessage[] | Promise<void | ChatMessage[]>;
   runClient?: (options: RunAgUiOptions) => Promise<void>;
 }
 
 export interface AssistantChatController extends ChatState {
   isRunning: boolean;
   submit: (content: string) => Promise<boolean>;
+  startNewChat: () => Promise<boolean>;
   cancel: () => void;
   clearError: () => void;
 }
@@ -51,6 +53,10 @@ export function createDefaultChatRunRequest(
   input: CreateChatRunRequestInput,
 ): DefaultChatRunRequest {
   return input;
+}
+
+export function isClearCommand(content: string): boolean {
+  return content.trim().toLowerCase() === "/clear";
 }
 
 function getErrorMessage(error: unknown): string {
@@ -97,11 +103,27 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
     dispatch({ type: "clear_error" });
   }, []);
 
+  const startNewChat = useCallback(async (): Promise<boolean> => {
+    if (activeRunRef.current) return false;
+    try {
+      const messages = await options.onStartNewChat?.();
+      dispatch({ type: "reset_conversation", messages: messages ?? [] });
+      return true;
+    } catch (error) {
+      dispatch({ type: "run_failed", message: getErrorMessage(error) });
+      return false;
+    }
+  }, [options]);
+
   const submit = useCallback(
     async (content: string): Promise<boolean> => {
       const trimmedContent = content.trim();
       if (!trimmedContent || activeRunRef.current) {
         return false;
+      }
+
+      if (isClearCommand(trimmedContent)) {
+        return startNewChat();
       }
 
       const userMessage: ChatMessage = {
@@ -159,13 +181,14 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
         }
       }
     },
-    [options, runtime],
+    [options, runtime, startNewChat],
   );
 
   return {
     ...state,
     isRunning: state.status === "running",
     submit,
+    startNewChat,
     cancel,
     clearError,
   };

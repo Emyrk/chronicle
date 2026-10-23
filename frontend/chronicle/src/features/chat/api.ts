@@ -176,6 +176,26 @@ export function useCreateInstanceInferenceThread() {
   });
 }
 
+export function useClearInferenceThread() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (threadId: string) => {
+      const response = await fetch(`/api/v1/inference/threads/${encodeURIComponent(threadId)}/messages`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!response.ok) throw await readError(response, "Failed to start a new chat");
+      return response.json() as Promise<InferenceThreadResponse>;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(inferenceKeys.thread(data.thread.id), data);
+      if (data.thread.context_type === "instance" && data.thread.context_id) {
+        queryClient.setQueryData(inferenceKeys.instanceThread(data.thread.context_id), data);
+      }
+    },
+  });
+}
+
 export function useInferenceThread(
   threadId: string | undefined,
   options?: Omit<UseQueryOptions<InferenceThreadResponse>, "queryKey" | "queryFn">,
