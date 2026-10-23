@@ -90,6 +90,7 @@ function MultiSpecRaidScores() {
       metric="dps"
       performanceHistoryPath="/performance-history"
       bossCounts={new Map([["Blackwing Lair", 8]])}
+      playerClass="Mage"
       specs={["Fire", "Frost"]}
       selectedSpec={spec}
       onSpecChange={setSpec}

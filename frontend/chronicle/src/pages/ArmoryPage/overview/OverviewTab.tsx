@@ -136,6 +136,7 @@ export function OverviewTab({ player, onOpenTab, metric }: OverviewTabProps) {
               metric={metric}
               performanceHistoryPath={performanceHistoryPath}
               bossCounts={bossCounts}
+              playerClass={player.class}
               specs={specs}
               selectedSpec={selectedSpec}
               onSpecChange={setRaidScoreSpec}
