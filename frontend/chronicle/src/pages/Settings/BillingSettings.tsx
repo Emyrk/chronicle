@@ -195,61 +195,76 @@ export function SupporterOverview({ billing, panel }: { billing?: BillingSummary
   )
 }
 
-const COMPARISON: { feature: string; friendly: string; honored: string; revered?: string; exalted?: string; highlight?: boolean }[] = [
+const INCLUDED = "included"
+
+const COMPARISON: { feature: string; description: string; friendly: string; honored: string; revered?: string; exalted?: string; highlight?: boolean }[] = [
   {
     feature: "Log parsing, panels, rankings, and replays",
-    friendly: "Full access. Core analysis is never paywalled.",
-    honored: "Full access, same as everyone.",
+    description: "Full access for everyone. Core analysis is never paywalled.",
+    friendly: INCLUDED,
+    honored: INCLUDED,
   },
   {
     feature: "Advertisements",
-    friendly: "Limited ads appear on some pages to help cover hosting costs.",
-    honored: "No ads anywhere on Chronicle.",
+    description: "Limited ads appear on some pages to help cover hosting costs.",
+    friendly: "Limited ads",
+    honored: "No ads",
   },
   {
     feature: "Log storage",
-    friendly: "The standard storage allowance for your uploads.",
-    honored: "An extra 300 MB on top of the standard allowance.",
-    revered: "An extra 1 GB on top of the standard allowance.",
-    exalted: "An extra 2 GB on top of the standard allowance.",
+    description: "Extra storage on top of the standard allowance for your uploads.",
+    friendly: "Standard",
+    honored: "+300 MB",
+    revered: "+1 GB",
+    exalted: "+2 GB",
   },
   {
     feature: "Raw log downloads",
+    description: "Download the original combat log file behind any of your uploads. Use Chronicle as an archive for your raw data.",
     friendly: "—",
-    honored: "Requires Revered.",
-    revered: "Download the original combat log file behind any of your uploads. Use Chronicle as an archive for your raw data.",
-    exalted: "Same as Revered.",
+    honored: "—",
+    revered: INCLUDED,
   },
   {
     feature: "Unlisted logs",
-    friendly: "Uploads are publicly viewable.",
-    honored: "Requires Revered.",
-    revered: "Keep uploads unlisted so only people with the link can find them.",
-    exalted: "Same as Revered.",
+    description: "Keep uploads unlisted so only people with the link can find them. Otherwise uploads are publicly viewable.",
+    friendly: "—",
+    honored: "—",
+    revered: INCLUDED,
   },
   {
     feature: "Supporting Chronicle",
+    description: "Your subscription directly funds hosting and ongoing development.",
     friendly: "—",
-    honored: "Your subscription directly funds hosting and ongoing development.",
+    honored: INCLUDED,
   },
   {
     feature: "Future perks",
+    description: "More perks are on the way.",
     friendly: "—",
     honored: "—",
-    revered: "More perks coming soon.",
-    exalted: "More perks coming soon.",
+    revered: "Coming soon",
     highlight: true,
   },
 ]
 
-const SAME_AS_HONORED = "Same as Honored."
+/** Higher tiers inherit the value of the tier below unless they override it. */
+function comparisonValue(row: (typeof COMPARISON)[number], tier: string): string {
+  if (tier === "free") return row.friendly
+  if (tier === "exalted") return row.exalted ?? row.revered ?? row.honored
+  if (tier === "revered") return row.revered ?? row.honored
+  return row.honored
+}
 
 const COMPARISON_COLUMNS = [
   { tier: "free", label: "Friendly", color: "#ffffff" },
   ...PAID_BILLING_TIERS.map((tier) => ({ tier, label: billingTierLabel(tier), color: TIER_COLOR[tier] })),
 ] as const
 
-const COMPARISON_GRID = "md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1.3fr)_minmax(0,0.8fr)_minmax(0,0.8fr)]"
+/** Shades the viewer's tier; cells stretch the full row height so the shading reads as one column on desktop. */
+const CURRENT_TIER_COLUMN = "-mx-2 bg-white/[0.06] px-2"
+
+const COMPARISON_GRID = "md:grid-cols-[minmax(0,2.4fr)_repeat(4,minmax(0,1fr))]"
 
 /** Plain-language breakdown of what each supporter tier changes compared to free access. */
 function ComparisonTable({ currentTier }: { currentTier: string }) {
@@ -259,10 +274,10 @@ function ComparisonTable({ currentTier }: { currentTier: string }) {
         Compare Tiers
       </h3>
       <div className="overflow-hidden rounded-b-lg">
-        <div className={cn("hidden gap-4 border-b border-border px-5 py-2.5 font-wow text-sm md:grid", COMPARISON_GRID)}>
-          <span className="text-muted-foreground">Feature</span>
+        <div className={cn("hidden gap-4 border-b border-border px-5 font-wow text-sm md:grid", COMPARISON_GRID)}>
+          <span className="py-2.5 text-muted-foreground">Feature</span>
           {COMPARISON_COLUMNS.map(({ tier, label, color }) => (
-            <span key={tier} style={{ color }}>
+            <span key={tier} className={cn("py-2.5", tier === currentTier && CURRENT_TIER_COLUMN)} style={{ color }}>
               {label}
               {tier === "free" ? <span className="ml-1 font-sans text-xs text-muted-foreground">(free)</span> : null}
               {tier === currentTier ? <span className="ml-1 font-sans text-xs text-white">(you)</span> : null}
@@ -273,30 +288,41 @@ function ComparisonTable({ currentTier }: { currentTier: string }) {
           {COMPARISON.map((row) => (
             <div
               key={row.feature}
-              className={cn("grid gap-2 px-5 py-3 text-sm md:gap-4", COMPARISON_GRID, row.highlight && "bg-gradient-to-r from-[#f0c060]/10 via-[#0070dd]/10 to-[#a335ee]/20")}
+              className={cn("grid gap-2 px-5 py-3 text-sm md:gap-4 md:py-0", COMPARISON_GRID, row.highlight && "bg-gradient-to-r from-[#f0c060]/10 via-[#0070dd]/10 to-[#a335ee]/20")}
             >
-              <dt className={cn("font-medium text-white", row.highlight && "flex items-center gap-1.5 font-wow")} style={row.highlight ? { color: GOLD } : undefined}>
-                {row.highlight ? <Sparkles className="size-4 shrink-0" aria-hidden="true" /> : null}
-                {row.feature}
+              <dt className="md:py-3">
+                <span className={cn("font-medium text-white", row.highlight && "flex items-center gap-1.5 font-wow")} style={row.highlight ? { color: GOLD } : undefined}>
+                  {row.highlight ? <Sparkles className="size-4 shrink-0" aria-hidden="true" /> : null}
+                  {row.feature}
+                </span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">{row.description}</span>
               </dt>
               {COMPARISON_COLUMNS.map(({ tier, label, color }) => {
-                const value = tier === "free" ? row.friendly : (row[tier] ?? SAME_AS_HONORED)
-                const emphasized = row.highlight && tier !== "free" && row[tier] !== undefined && value !== "—"
+                const value = comparisonValue(row, tier)
+                const emphasized = row.highlight && tier !== "free" && value !== "—"
                 return (
                   <dd
                     key={tier}
                     className={cn(
-                      value.startsWith("Same as ") ? "italic text-muted-foreground" : tier === "free" ? "text-muted-foreground" : "text-zinc-200",
-                      tier === currentTier && "-mx-2 rounded bg-white/5 px-2",
+                      "md:flex md:items-center md:py-3",
+                      value === "—" || tier === "free" ? "text-muted-foreground" : "text-zinc-200",
+                      tier === currentTier && cn(CURRENT_TIER_COLUMN, "rounded md:rounded-none"),
                       emphasized && "flex items-center gap-1.5 font-semibold",
                     )}
                     style={emphasized ? { color } : undefined}
                   >
-                    <span className="mr-1 font-wow text-xs not-italic md:hidden" style={{ color }}>
+                    <span className="mr-1 font-wow text-xs md:hidden" style={{ color }}>
                       {label}:
                     </span>
                     {emphasized ? <Sparkles className="size-3.5 shrink-0 animate-pulse" aria-hidden="true" /> : null}
-                    {value}
+                    {value === INCLUDED ? (
+                      <>
+                        <Check className="inline size-4 text-emerald-400" aria-hidden="true" />
+                        <span className="sr-only">Included</span>
+                      </>
+                    ) : (
+                      value
+                    )}
                   </dd>
                 )
               })}
