@@ -52,16 +52,17 @@ function useMediaQuery(query: string | undefined): boolean {
   return matches
 }
 
-function useAvailableViewportHeight(enabled: boolean, element: RefObject<HTMLElement | null>): number | undefined {
+function useSidebarViewportHeight(enabled: boolean, element: RefObject<HTMLElement | null>): number | undefined {
   const [availableHeight, setAvailableHeight] = useState<number>()
 
   useEffect(() => {
     if (!enabled) return
 
     const update = () => {
-      if (!element.current) return
+      const scrollContainer = element.current?.parentElement
+      if (!scrollContainer) return
       setAvailableHeight(
-        Math.max(0, Math.floor(window.innerHeight - element.current.getBoundingClientRect().top - SIDEBAR_VERTICAL_GUTTER)),
+        Math.max(0, Math.floor(window.innerHeight - scrollContainer.getBoundingClientRect().top - SIDEBAR_VERTICAL_GUTTER)),
       )
     }
 
@@ -112,7 +113,7 @@ export function AdSlot({
   const { data: siteConfig } = useSiteConfig()
   const { data: session, isLoading: sessionLoading } = useSession()
   const slotRef = useRef<HTMLElement>(null)
-  const measuredAvailableHeight = useAvailableViewportHeight(format === "sidebar", slotRef)
+  const measuredAvailableHeight = useSidebarViewportHeight(format === "sidebar", slotRef)
   const sidebarAvailableHeight = availableHeight ?? measuredAvailableHeight
   const showPreview = shouldShowAdPreview(hostname, previewEnabled)
   const siteID = siteConfig?.ads_enabled ? siteConfig.nitropay_site_id : undefined

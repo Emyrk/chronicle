@@ -11,7 +11,7 @@ import { clearNitroPayAds } from "./nitroPay"
 import {
   isLocalAdPreviewHost,
   shouldShowAdPreview,
-  shouldShowCompactEncounterAd,
+  shouldShowEncounterAd,
 } from "./adPreview"
 
 function renderAdSlot(
@@ -264,9 +264,9 @@ describe("AdSlot", () => {
     expect(shouldShowAdPreview("chronicleclassic.com", true)).toBe(false)
   })
 
-  it("uses the compact slot only for short encounter lists", () => {
-    expect(shouldShowCompactEncounterAd(0)).toBe(false)
-    expect(shouldShowCompactEncounterAd(8)).toBe(true)
-    expect(shouldShowCompactEncounterAd(9)).toBe(false)
+  it("shows the sidebar placement for any non-empty encounter list", () => {
+    expect(shouldShowEncounterAd(0)).toBe(false)
+    expect(shouldShowEncounterAd(8)).toBe(true)
+    expect(shouldShowEncounterAd(40)).toBe(true)
   })
 })

@@ -22,7 +22,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages"
 import { cn } from "@/lib/utils"
 import { AdSlot } from "@/components/Ads/AdSlot"
-import { shouldShowCompactEncounterAd } from "@/components/Ads/adPreview"
+import { shouldShowEncounterAd } from "@/components/Ads/adPreview"
 import type { RankingsKillTimeStats, RankingsSuccessRate } from "@/api/typesGenerated"
 import {
   useSiteConfig,
@@ -809,7 +809,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         Metrics reflect the selected encounters. Ctrl+Click to toggle individual encounters.
       </p>
 
-      {!isMobile && shouldShowCompactEncounterAd(encounterNames.length) && (
+      {!isMobile && shouldShowEncounterAd(encounterNames.length) && (
         <AdSlot placement="statistics-encounter-sidebar" format="sidebar" className="mt-5" />
       )}
     </>
