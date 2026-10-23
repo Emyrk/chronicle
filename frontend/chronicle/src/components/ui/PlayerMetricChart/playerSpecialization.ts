@@ -72,9 +72,11 @@ export function resolvePlayerSpecialization(
     return talent !== undefined && Number(ranks[talent.tabIndex] ?? "0") > 0;
   }));
 
+  const subSpec = rule ? (hasAllMarkers ? rule.detectedSubspec : rule.fallback) : "";
+
   return {
     name: tab.name,
     iconUrl: specializationIconUrl(snapshot.heroClass, tab.name),
-    ...(rule ? { subSpec: hasAllMarkers ? rule.detectedSubspec : rule.fallback } : {}),
+    ...(subSpec ? { subSpec } : {}),
   };
 }

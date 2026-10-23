@@ -28,7 +28,7 @@ describe("subspecRulesForFlavor", () => {
       className: "Warrior",
       spec: "Fury",
       detectedSubspec: "Fury Prot",
-      fallback: "Fury",
+      fallback: "",
     })
     expect(rules[2].detection).toEqual(["Defiance", "Bloodthirst"])
   })
