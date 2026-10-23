@@ -8930,6 +8930,782 @@ func (q *sqlQuerier) UpsertGuildSettings(ctx context.Context, arg UpsertGuildSet
 	return i, err
 }
 
+const consumeInferenceOAuthTransaction = `-- name: ConsumeInferenceOAuthTransaction :one
+DELETE FROM inference_oauth_transactions
+WHERE state_hash = $1 AND user_id = $2 AND expires_at > now()
+RETURNING id, user_id, provider, state_hash, encrypted_verifier, verifier_key_version, return_path, expires_at, created_at
+`
+
+type ConsumeInferenceOAuthTransactionParams struct {
+	StateHash []byte    `db:"state_hash" json:"state_hash"`
+	UserID    uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) ConsumeInferenceOAuthTransaction(ctx context.Context, arg ConsumeInferenceOAuthTransactionParams) (InferenceOauthTransaction, error) {
+	row := q.db.QueryRow(ctx, consumeInferenceOAuthTransaction, arg.StateHash, arg.UserID)
+	var i InferenceOauthTransaction
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.StateHash,
+		&i.EncryptedVerifier,
+		&i.VerifierKeyVersion,
+		&i.ReturnPath,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const deleteInferenceConnectionByOwner = `-- name: DeleteInferenceConnectionByOwner :exec
+UPDATE inference_connections
+SET status = 'deleted',
+    encrypted_credential = NULL,
+    provider_account_key_hash = NULL,
+    updated_at = now()
+WHERE id = $1 AND user_id = $2
+`
+
+type DeleteInferenceConnectionByOwnerParams struct {
+	ID     uuid.UUID `db:"id" json:"id"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) DeleteInferenceConnectionByOwner(ctx context.Context, arg DeleteInferenceConnectionByOwnerParams) error {
+	_, err := q.db.Exec(ctx, deleteInferenceConnectionByOwner, arg.ID, arg.UserID)
+	return err
+}
+
+const expireStaleInferenceRuns = `-- name: ExpireStaleInferenceRuns :execrows
+UPDATE inference_runs
+SET status = 'abandoned',
+    error_code = 'stale_run',
+    completed_at = now(),
+    updated_at = now()
+WHERE status = 'running'
+  AND lease_expires_at IS NOT NULL
+  AND lease_expires_at <= now()
+`
+
+func (q *sqlQuerier) ExpireStaleInferenceRuns(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, expireStaleInferenceRuns)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getInferenceConnectionByOwner = `-- name: GetInferenceConnectionByOwner :one
+SELECT id, user_id, provider, auth_mode, label, encrypted_credential, credential_key_version, provider_account_key_hash, status, created_at, updated_at, last_used_at FROM inference_connections
+WHERE id = $1 AND user_id = $2 AND status <> 'deleted'
+`
+
+type GetInferenceConnectionByOwnerParams struct {
+	ID     uuid.UUID `db:"id" json:"id"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) GetInferenceConnectionByOwner(ctx context.Context, arg GetInferenceConnectionByOwnerParams) (InferenceConnection, error) {
+	row := q.db.QueryRow(ctx, getInferenceConnectionByOwner, arg.ID, arg.UserID)
+	var i InferenceConnection
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.AuthMode,
+		&i.Label,
+		&i.EncryptedCredential,
+		&i.CredentialKeyVersion,
+		&i.ProviderAccountKeyHash,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
+const getInferenceRunByIdempotencyKey = `-- name: GetInferenceRunByIdempotencyKey :one
+SELECT id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at FROM inference_runs
+WHERE user_id = $1 AND idempotency_key = $2
+`
+
+type GetInferenceRunByIdempotencyKeyParams struct {
+	UserID         uuid.UUID `db:"user_id" json:"user_id"`
+	IdempotencyKey string    `db:"idempotency_key" json:"idempotency_key"`
+}
+
+func (q *sqlQuerier) GetInferenceRunByIdempotencyKey(ctx context.Context, arg GetInferenceRunByIdempotencyKeyParams) (InferenceRun, error) {
+	row := q.db.QueryRow(ctx, getInferenceRunByIdempotencyKey, arg.UserID, arg.IdempotencyKey)
+	var i InferenceRun
+	err := row.Scan(
+		&i.ID,
+		&i.ThreadID,
+		&i.UserID,
+		&i.ConnectionID,
+		&i.AssistantID,
+		&i.Model,
+		&i.Status,
+		&i.IdempotencyKey,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+		&i.LeaseExpiresAt,
+	)
+	return i, err
+}
+
+const getInferenceRunByOwner = `-- name: GetInferenceRunByOwner :one
+SELECT id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at FROM inference_runs
+WHERE id = $1 AND user_id = $2
+`
+
+type GetInferenceRunByOwnerParams struct {
+	ID     uuid.UUID `db:"id" json:"id"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) GetInferenceRunByOwner(ctx context.Context, arg GetInferenceRunByOwnerParams) (InferenceRun, error) {
+	row := q.db.QueryRow(ctx, getInferenceRunByOwner, arg.ID, arg.UserID)
+	var i InferenceRun
+	err := row.Scan(
+		&i.ID,
+		&i.ThreadID,
+		&i.UserID,
+		&i.ConnectionID,
+		&i.AssistantID,
+		&i.Model,
+		&i.Status,
+		&i.IdempotencyKey,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+		&i.LeaseExpiresAt,
+	)
+	return i, err
+}
+
+const getInferenceThreadByOwner = `-- name: GetInferenceThreadByOwner :one
+SELECT id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at FROM inference_threads
+WHERE id = $1 AND user_id = $2
+`
+
+type GetInferenceThreadByOwnerParams struct {
+	ID     uuid.UUID `db:"id" json:"id"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) GetInferenceThreadByOwner(ctx context.Context, arg GetInferenceThreadByOwnerParams) (InferenceThread, error) {
+	row := q.db.QueryRow(ctx, getInferenceThreadByOwner, arg.ID, arg.UserID)
+	var i InferenceThread
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.AssistantID,
+		&i.Persistence,
+		&i.ContextType,
+		&i.ContextID,
+		&i.Title,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getOrCreateInferenceThread = `-- name: GetOrCreateInferenceThread :one
+INSERT INTO inference_threads (
+  user_id, assistant_id, persistence, context_type, context_id, title
+) VALUES ($1, $2, 'durable', $3, $4, $5)
+ON CONFLICT (user_id, assistant_id, context_type, context_id)
+  WHERE persistence = 'durable' AND context_type IS NOT NULL
+DO UPDATE SET updated_at = inference_threads.updated_at
+RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at
+`
+
+type GetOrCreateInferenceThreadParams struct {
+	UserID      uuid.UUID   `db:"user_id" json:"user_id"`
+	AssistantID string      `db:"assistant_id" json:"assistant_id"`
+	ContextType pgtype.Text `db:"context_type" json:"context_type"`
+	ContextID   pgtype.Text `db:"context_id" json:"context_id"`
+	Title       string      `db:"title" json:"title"`
+}
+
+func (q *sqlQuerier) GetOrCreateInferenceThread(ctx context.Context, arg GetOrCreateInferenceThreadParams) (InferenceThread, error) {
+	row := q.db.QueryRow(ctx, getOrCreateInferenceThread,
+		arg.UserID,
+		arg.AssistantID,
+		arg.ContextType,
+		arg.ContextID,
+		arg.Title,
+	)
+	var i InferenceThread
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.AssistantID,
+		&i.Persistence,
+		&i.ContextType,
+		&i.ContextID,
+		&i.Title,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertInferenceConnection = `-- name: InsertInferenceConnection :one
+INSERT INTO inference_connections (
+  user_id, provider, auth_mode, label, encrypted_credential,
+  credential_key_version, provider_account_key_hash, status
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, user_id, provider, auth_mode, label, encrypted_credential, credential_key_version, provider_account_key_hash, status, created_at, updated_at, last_used_at
+`
+
+type InsertInferenceConnectionParams struct {
+	UserID                 uuid.UUID `db:"user_id" json:"user_id"`
+	Provider               string    `db:"provider" json:"provider"`
+	AuthMode               string    `db:"auth_mode" json:"auth_mode"`
+	Label                  string    `db:"label" json:"label"`
+	EncryptedCredential    []byte    `db:"encrypted_credential" json:"encrypted_credential"`
+	CredentialKeyVersion   string    `db:"credential_key_version" json:"credential_key_version"`
+	ProviderAccountKeyHash []byte    `db:"provider_account_key_hash" json:"provider_account_key_hash"`
+	Status                 string    `db:"status" json:"status"`
+}
+
+func (q *sqlQuerier) InsertInferenceConnection(ctx context.Context, arg InsertInferenceConnectionParams) (InferenceConnection, error) {
+	row := q.db.QueryRow(ctx, insertInferenceConnection,
+		arg.UserID,
+		arg.Provider,
+		arg.AuthMode,
+		arg.Label,
+		arg.EncryptedCredential,
+		arg.CredentialKeyVersion,
+		arg.ProviderAccountKeyHash,
+		arg.Status,
+	)
+	var i InferenceConnection
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.AuthMode,
+		&i.Label,
+		&i.EncryptedCredential,
+		&i.CredentialKeyVersion,
+		&i.ProviderAccountKeyHash,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
+const insertInferenceMessage = `-- name: InsertInferenceMessage :one
+WITH inserted AS (
+  INSERT INTO inference_messages (thread_id, role, content, tool_call_id)
+  VALUES ($1, $2, $3, $4)
+  RETURNING id, thread_id, role, content, tool_call_id, created_at
+), touched AS (
+  UPDATE inference_threads
+  SET updated_at = now()
+  WHERE id = $1
+)
+SELECT id, thread_id, role, content, tool_call_id, created_at FROM inserted
+`
+
+type InsertInferenceMessageParams struct {
+	ThreadID   uuid.UUID   `db:"thread_id" json:"thread_id"`
+	Role       string      `db:"role" json:"role"`
+	Content    []byte      `db:"content" json:"content"`
+	ToolCallID pgtype.Text `db:"tool_call_id" json:"tool_call_id"`
+}
+
+type InsertInferenceMessageRow struct {
+	ID         uuid.UUID          `db:"id" json:"id"`
+	ThreadID   uuid.UUID          `db:"thread_id" json:"thread_id"`
+	Role       string             `db:"role" json:"role"`
+	Content    []byte             `db:"content" json:"content"`
+	ToolCallID pgtype.Text        `db:"tool_call_id" json:"tool_call_id"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+func (q *sqlQuerier) InsertInferenceMessage(ctx context.Context, arg InsertInferenceMessageParams) (InsertInferenceMessageRow, error) {
+	row := q.db.QueryRow(ctx, insertInferenceMessage,
+		arg.ThreadID,
+		arg.Role,
+		arg.Content,
+		arg.ToolCallID,
+	)
+	var i InsertInferenceMessageRow
+	err := row.Scan(
+		&i.ID,
+		&i.ThreadID,
+		&i.Role,
+		&i.Content,
+		&i.ToolCallID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const insertInferenceOAuthTransaction = `-- name: InsertInferenceOAuthTransaction :one
+INSERT INTO inference_oauth_transactions (
+  user_id, provider, state_hash, encrypted_verifier, verifier_key_version,
+  return_path, expires_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, user_id, provider, state_hash, encrypted_verifier, verifier_key_version, return_path, expires_at, created_at
+`
+
+type InsertInferenceOAuthTransactionParams struct {
+	UserID             uuid.UUID          `db:"user_id" json:"user_id"`
+	Provider           string             `db:"provider" json:"provider"`
+	StateHash          []byte             `db:"state_hash" json:"state_hash"`
+	EncryptedVerifier  []byte             `db:"encrypted_verifier" json:"encrypted_verifier"`
+	VerifierKeyVersion string             `db:"verifier_key_version" json:"verifier_key_version"`
+	ReturnPath         string             `db:"return_path" json:"return_path"`
+	ExpiresAt          pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+}
+
+func (q *sqlQuerier) InsertInferenceOAuthTransaction(ctx context.Context, arg InsertInferenceOAuthTransactionParams) (InferenceOauthTransaction, error) {
+	row := q.db.QueryRow(ctx, insertInferenceOAuthTransaction,
+		arg.UserID,
+		arg.Provider,
+		arg.StateHash,
+		arg.EncryptedVerifier,
+		arg.VerifierKeyVersion,
+		arg.ReturnPath,
+		arg.ExpiresAt,
+	)
+	var i InferenceOauthTransaction
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.StateHash,
+		&i.EncryptedVerifier,
+		&i.VerifierKeyVersion,
+		&i.ReturnPath,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const insertInferenceRun = `-- name: InsertInferenceRun :one
+INSERT INTO inference_runs (
+  thread_id, user_id, connection_id, assistant_id, model, status,
+  idempotency_key, input_tokens, output_tokens, error_code, completed_at,
+  lease_expires_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at
+`
+
+type InsertInferenceRunParams struct {
+	ThreadID       uuid.NullUUID      `db:"thread_id" json:"thread_id"`
+	UserID         uuid.UUID          `db:"user_id" json:"user_id"`
+	ConnectionID   uuid.UUID          `db:"connection_id" json:"connection_id"`
+	AssistantID    string             `db:"assistant_id" json:"assistant_id"`
+	Model          string             `db:"model" json:"model"`
+	Status         string             `db:"status" json:"status"`
+	IdempotencyKey string             `db:"idempotency_key" json:"idempotency_key"`
+	InputTokens    int64              `db:"input_tokens" json:"input_tokens"`
+	OutputTokens   int64              `db:"output_tokens" json:"output_tokens"`
+	ErrorCode      pgtype.Text        `db:"error_code" json:"error_code"`
+	CompletedAt    pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+	LeaseExpiresAt pgtype.Timestamptz `db:"lease_expires_at" json:"lease_expires_at"`
+}
+
+func (q *sqlQuerier) InsertInferenceRun(ctx context.Context, arg InsertInferenceRunParams) (InferenceRun, error) {
+	row := q.db.QueryRow(ctx, insertInferenceRun,
+		arg.ThreadID,
+		arg.UserID,
+		arg.ConnectionID,
+		arg.AssistantID,
+		arg.Model,
+		arg.Status,
+		arg.IdempotencyKey,
+		arg.InputTokens,
+		arg.OutputTokens,
+		arg.ErrorCode,
+		arg.CompletedAt,
+		arg.LeaseExpiresAt,
+	)
+	var i InferenceRun
+	err := row.Scan(
+		&i.ID,
+		&i.ThreadID,
+		&i.UserID,
+		&i.ConnectionID,
+		&i.AssistantID,
+		&i.Model,
+		&i.Status,
+		&i.IdempotencyKey,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+		&i.LeaseExpiresAt,
+	)
+	return i, err
+}
+
+const insertInferenceThread = `-- name: InsertInferenceThread :one
+INSERT INTO inference_threads (
+  user_id, assistant_id, persistence, context_type, context_id, title
+) VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at
+`
+
+type InsertInferenceThreadParams struct {
+	UserID      uuid.UUID   `db:"user_id" json:"user_id"`
+	AssistantID string      `db:"assistant_id" json:"assistant_id"`
+	Persistence string      `db:"persistence" json:"persistence"`
+	ContextType pgtype.Text `db:"context_type" json:"context_type"`
+	ContextID   pgtype.Text `db:"context_id" json:"context_id"`
+	Title       string      `db:"title" json:"title"`
+}
+
+func (q *sqlQuerier) InsertInferenceThread(ctx context.Context, arg InsertInferenceThreadParams) (InferenceThread, error) {
+	row := q.db.QueryRow(ctx, insertInferenceThread,
+		arg.UserID,
+		arg.AssistantID,
+		arg.Persistence,
+		arg.ContextType,
+		arg.ContextID,
+		arg.Title,
+	)
+	var i InferenceThread
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.AssistantID,
+		&i.Persistence,
+		&i.ContextType,
+		&i.ContextID,
+		&i.Title,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listInferenceConnectionsByOwner = `-- name: ListInferenceConnectionsByOwner :many
+SELECT id, user_id, provider, auth_mode, label, encrypted_credential, credential_key_version, provider_account_key_hash, status, created_at, updated_at, last_used_at FROM inference_connections
+WHERE user_id = $1 AND status <> 'deleted'
+ORDER BY created_at DESC
+`
+
+func (q *sqlQuerier) ListInferenceConnectionsByOwner(ctx context.Context, userID uuid.UUID) ([]InferenceConnection, error) {
+	rows, err := q.db.Query(ctx, listInferenceConnectionsByOwner, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InferenceConnection
+	for rows.Next() {
+		var i InferenceConnection
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Provider,
+			&i.AuthMode,
+			&i.Label,
+			&i.EncryptedCredential,
+			&i.CredentialKeyVersion,
+			&i.ProviderAccountKeyHash,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LastUsedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInferenceInstanceEncounters = `-- name: ListInferenceInstanceEncounters :many
+SELECT id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id
+FROM log_instance_encounters
+WHERE instance_id = $1
+ORDER BY start_time, id
+LIMIT 100
+`
+
+func (q *sqlQuerier) ListInferenceInstanceEncounters(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounter, error) {
+	rows, err := q.db.Query(ctx, listInferenceInstanceEncounters, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogInstanceEncounter
+	for rows.Next() {
+		var i LogInstanceEncounter
+		if err := rows.Scan(
+			&i.ID,
+			&i.InstanceID,
+			&i.Name,
+			&i.Remaining,
+			&i.Boss,
+			&i.StartTime,
+			&i.EndTime,
+			&i.KillType,
+			&i.MapID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInferenceInstancePlayers = `-- name: ListInferenceInstancePlayers :many
+SELECT instance_id, unit_guid, name, level, class, race, guild_id
+FROM log_instance_players
+WHERE instance_id = $1
+ORDER BY name, unit_guid
+LIMIT 100
+`
+
+func (q *sqlQuerier) ListInferenceInstancePlayers(ctx context.Context, instanceID uuid.UUID) ([]LogInstancePlayer, error) {
+	rows, err := q.db.Query(ctx, listInferenceInstancePlayers, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogInstancePlayer
+	for rows.Next() {
+		var i LogInstancePlayer
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.UnitGuid,
+			&i.Name,
+			&i.Level,
+			&i.Class,
+			&i.Race,
+			&i.GuildID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInferenceThreadsByOwner = `-- name: ListInferenceThreadsByOwner :many
+SELECT id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at FROM inference_threads
+WHERE user_id = $1
+ORDER BY updated_at DESC
+`
+
+func (q *sqlQuerier) ListInferenceThreadsByOwner(ctx context.Context, userID uuid.UUID) ([]InferenceThread, error) {
+	rows, err := q.db.Query(ctx, listInferenceThreadsByOwner, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InferenceThread
+	for rows.Next() {
+		var i InferenceThread
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.AssistantID,
+			&i.Persistence,
+			&i.ContextType,
+			&i.ContextID,
+			&i.Title,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentInferenceMessagesByThread = `-- name: ListRecentInferenceMessagesByThread :many
+SELECT id, thread_id, role, content, tool_call_id, created_at
+FROM (
+  SELECT id, thread_id, role, content, tool_call_id, created_at FROM inference_messages
+  WHERE thread_id = $1
+  ORDER BY created_at DESC, id DESC
+  LIMIT $2
+) recent
+ORDER BY created_at, id
+`
+
+type ListRecentInferenceMessagesByThreadParams struct {
+	ThreadID uuid.UUID `db:"thread_id" json:"thread_id"`
+	Limit    int32     `db:"limit" json:"limit"`
+}
+
+func (q *sqlQuerier) ListRecentInferenceMessagesByThread(ctx context.Context, arg ListRecentInferenceMessagesByThreadParams) ([]InferenceMessage, error) {
+	rows, err := q.db.Query(ctx, listRecentInferenceMessagesByThread, arg.ThreadID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InferenceMessage
+	for rows.Next() {
+		var i InferenceMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.ThreadID,
+			&i.Role,
+			&i.Content,
+			&i.ToolCallID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateInferenceConnectionLastUsedByOwner = `-- name: UpdateInferenceConnectionLastUsedByOwner :one
+UPDATE inference_connections
+SET last_used_at = now(), updated_at = now()
+WHERE id = $1 AND user_id = $2
+RETURNING id, user_id, provider, auth_mode, label, encrypted_credential, credential_key_version, provider_account_key_hash, status, created_at, updated_at, last_used_at
+`
+
+type UpdateInferenceConnectionLastUsedByOwnerParams struct {
+	ID     uuid.UUID `db:"id" json:"id"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) UpdateInferenceConnectionLastUsedByOwner(ctx context.Context, arg UpdateInferenceConnectionLastUsedByOwnerParams) (InferenceConnection, error) {
+	row := q.db.QueryRow(ctx, updateInferenceConnectionLastUsedByOwner, arg.ID, arg.UserID)
+	var i InferenceConnection
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.AuthMode,
+		&i.Label,
+		&i.EncryptedCredential,
+		&i.CredentialKeyVersion,
+		&i.ProviderAccountKeyHash,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
+const updateInferenceRun = `-- name: UpdateInferenceRun :one
+UPDATE inference_runs
+SET status = $3,
+    input_tokens = $4,
+    output_tokens = $5,
+    error_code = $6,
+    completed_at = $7,
+    updated_at = now()
+WHERE id = $1 AND user_id = $2
+RETURNING id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at
+`
+
+type UpdateInferenceRunParams struct {
+	ID           uuid.UUID          `db:"id" json:"id"`
+	UserID       uuid.UUID          `db:"user_id" json:"user_id"`
+	Status       string             `db:"status" json:"status"`
+	InputTokens  int64              `db:"input_tokens" json:"input_tokens"`
+	OutputTokens int64              `db:"output_tokens" json:"output_tokens"`
+	ErrorCode    pgtype.Text        `db:"error_code" json:"error_code"`
+	CompletedAt  pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+}
+
+func (q *sqlQuerier) UpdateInferenceRun(ctx context.Context, arg UpdateInferenceRunParams) (InferenceRun, error) {
+	row := q.db.QueryRow(ctx, updateInferenceRun,
+		arg.ID,
+		arg.UserID,
+		arg.Status,
+		arg.InputTokens,
+		arg.OutputTokens,
+		arg.ErrorCode,
+		arg.CompletedAt,
+	)
+	var i InferenceRun
+	err := row.Scan(
+		&i.ID,
+		&i.ThreadID,
+		&i.UserID,
+		&i.ConnectionID,
+		&i.AssistantID,
+		&i.Model,
+		&i.Status,
+		&i.IdempotencyKey,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.ErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+		&i.LeaseExpiresAt,
+	)
+	return i, err
+}
+
+const updateInferenceThreadTitleByOwner = `-- name: UpdateInferenceThreadTitleByOwner :one
+UPDATE inference_threads
+SET title = $3, updated_at = now()
+WHERE id = $1 AND user_id = $2
+RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at
+`
+
+type UpdateInferenceThreadTitleByOwnerParams struct {
+	ID     uuid.UUID `db:"id" json:"id"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+	Title  string    `db:"title" json:"title"`
+}
+
+func (q *sqlQuerier) UpdateInferenceThreadTitleByOwner(ctx context.Context, arg UpdateInferenceThreadTitleByOwnerParams) (InferenceThread, error) {
+	row := q.db.QueryRow(ctx, updateInferenceThreadTitleByOwner, arg.ID, arg.UserID, arg.Title)
+	var i InferenceThread
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.AssistantID,
+		&i.Persistence,
+		&i.ContextType,
+		&i.ContextID,
+		&i.Title,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getItemPricingConfigByRealm = `-- name: GetItemPricingConfigByRealm :one
 SELECT
     ws.pricing_provider,

@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { NavBar } from "../NavBar/NavBar";
 import { Footer } from "../Footer/Footer";
 import { SupportBanner } from "../SupportBanner";
@@ -9,6 +9,7 @@ import { usePageTracking } from "@/hooks/usePageTracking";
 import { usePublicTelemetryNotices } from "@/api/queries";
 import { NoticeBanner } from "../NoticeBanner/NoticeBanner";
 import { useHideSiteChrome } from "@/hooks/useFocusMode";
+import { GlobalSiteHelpChat } from "@/features/chat/InferenceChats";
 import { RouteLoadingFallback } from "./RouteLoadingFallback";
 
 export function Layout() {
@@ -16,6 +17,8 @@ export function Layout() {
   const { data: noticeResponse } = usePublicTelemetryNotices();
   // Focus mode on an instance page: only the page itself.
   const hideChrome = useHideSiteChrome();
+  const location = useLocation();
+  const isInstancePage = location.pathname.startsWith("/instances/");
 
   return (
     <TooltipProvider>
@@ -32,6 +35,7 @@ export function Layout() {
         </Suspense>
       </main>
       {!hideChrome && <Footer />}
+      {!hideChrome && !isInstancePage && <GlobalSiteHelpChat />}
       <Toaster />
     </TooltipProvider>
   );

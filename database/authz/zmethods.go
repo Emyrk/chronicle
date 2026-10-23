@@ -268,6 +268,21 @@ func setStripeEntitlementRole(ctx context.Context, authorizer Authorizer, userID
 	return err
 }
 
+// SetInferenceDisabled lets a user opt out of inference without changing the
+// administrator-managed capability that makes inference available to them.
+func (z *Authz) SetInferenceDisabled(ctx context.Context, userID uuid.UUID, disabled bool) error {
+	b := policy.New()
+	chronicle := b.GlobalChronicle()
+	user := b.User(userID)
+	if disabled {
+		chronicle.Inference_disabled(user)
+	} else {
+		chronicle.Delete().Inference_disabled(user)
+	}
+	_, err := z.Write(ctx, *b.Txn())
+	return err
+}
+
 // SetUserChronicleRoles replaces the administrator-managed Chronicle roles for a user.
 // Roles owned by Discord, billing, or other systems are left untouched.
 func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, roles []string) error {
@@ -281,6 +296,8 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 		"upload_capable",
 		"unlisted_log_capable",
 		"ad_free_capable",
+		"inference_capable",
+		"inference_debug_capable",
 		"moderate_logs",
 		"moderate_guilds",
 		"is_admin_users",
@@ -316,6 +333,10 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 			gChron.Unlisted_log_capable(usr)
 		case "ad_free_capable":
 			gChron.Ad_free_capable(usr)
+		case "inference_capable":
+			gChron.Inference_capable(usr)
+		case "inference_debug_capable":
+			gChron.Inference_debug_capable(usr)
 		case "moderate_logs":
 			gChron.Moderate_logs(usr)
 		case "moderate_guilds":

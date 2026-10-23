@@ -13,6 +13,9 @@ definition chronicle {
   relation upload_capable: user
   relation unlisted_log_capable: user
   relation ad_free_capable: user
+  relation inference_capable: user
+  relation inference_debug_capable: user
+  relation inference_disabled: user
   relation technical_user: user
   relation supporter: user
 
@@ -56,6 +59,9 @@ definition chronicle {
 
   permission upload_log = upload_capable + administer + supporter + chronicle_guild_member + chronicle_member
   permission mark_log_unlisted = unlisted_log_capable + admin_logs + unlisted_logs
+  permission inference_available = inference_capable + administer
+  permission debug_inference_chat = inference_debug_capable + administer
+  permission use_inference_chat = inference_available - inference_disabled
   permission create_layout = chronicle_guild_member + chronicle_member
   permission admin_world_data = technical_admin + is_admin_game_data
   permission admin_consumables = administer + manage_consumables

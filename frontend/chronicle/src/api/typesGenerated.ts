@@ -1872,6 +1872,98 @@ export interface IdentitySpell {
     readonly count: number;
 }
 
+// From chroniclesdk/inference.go
+export interface InferenceAuthorizeRequest {
+    readonly return_path: string;
+}
+
+// From chroniclesdk/inference.go
+export interface InferenceAuthorizeResponse {
+    readonly authorize_url: string;
+}
+
+// From chroniclesdk/inference.go
+export interface InferenceConnection {
+    readonly id: string;
+    readonly provider: string;
+    readonly auth_mode: string;
+    readonly label: string;
+    readonly status: string;
+    readonly created_at: string;
+    readonly last_used_at?: string;
+}
+
+// From chroniclesdk/inference.go
+export interface InferenceConnectionsResponse {
+    readonly connections: readonly InferenceConnection[];
+}
+
+// From chroniclesdk/inference.go
+export interface InferenceMessage {
+    readonly id?: string;
+    readonly role: string;
+    readonly content: string;
+    readonly name?: string;
+    readonly tool_call_id?: string;
+}
+
+// From chroniclesdk/inference.go
+export interface InferenceModel {
+    readonly id: string;
+    readonly name: string;
+    readonly description?: string;
+    readonly context_length: number;
+}
+
+// From chroniclesdk/inference.go
+export interface InferenceModelsResponse {
+    readonly models: readonly InferenceModel[];
+}
+
+// From chroniclesdk/inference.go
+export interface InferenceRunRequest {
+    readonly run_id: string;
+    readonly debug?: boolean;
+    readonly connection_id: string;
+    readonly model: string;
+    readonly assistant_id: string;
+    readonly thread_id?: string;
+    readonly instance?: string;
+    readonly messages?: readonly InferenceMessage[];
+    readonly message?: InferenceMessage;
+}
+
+// From chroniclesdk/inference.go
+export interface InferenceSettings {
+    readonly available: boolean;
+    readonly disabled: boolean;
+    readonly enabled: boolean;
+    readonly service_available: boolean;
+}
+
+// From chroniclesdk/inference.go
+export interface InferenceThread {
+    readonly id: string;
+    readonly assistant_id: string;
+    readonly persistence: string;
+    readonly context_type?: string;
+    readonly context_id?: string;
+    readonly title: string;
+    readonly created_at: string;
+    readonly updated_at: string;
+}
+
+// From chroniclesdk/inference.go
+export interface InferenceThreadResponse {
+    readonly thread: InferenceThread;
+    readonly messages: readonly InferenceMessage[];
+}
+
+// From chroniclesdk/inference.go
+export interface InferenceThreadsResponse {
+    readonly threads: readonly InferenceThread[];
+}
+
 // From chroniclesdk/panel_layout.go
 /**
  * InstanceDefaultsResponse provides everything needed by the instance page in one request.
@@ -4344,6 +4436,11 @@ export interface UpdateGuildPageRequest {
 // From chroniclesdk/guild_page.go
 export interface UpdateGuildSettingsRequest {
     readonly allow_join_requests_until: string | null;
+}
+
+// From chroniclesdk/inference.go
+export interface UpdateInferenceSettingsRequest {
+    readonly disabled: boolean;
 }
 
 // From chroniclesdk/panel_layout.go

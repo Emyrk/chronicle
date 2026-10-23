@@ -30,6 +30,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceexternalapi"
 	"github.com/Emyrk/chronicle/internal/services/servicegamedata"
 	"github.com/Emyrk/chronicle/internal/services/servicegithub"
+	"github.com/Emyrk/chronicle/internal/services/serviceinference"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicemail"
 	"github.com/Emyrk/chronicle/internal/services/serviceoauth"
@@ -129,6 +130,7 @@ func (s *Service) DependsOn() []string {
 		servicegithub.OnGitHub(),
 		serviceexternalapi.OnExternalAPI(),
 		serviceoauth.OnOAuth(),
+		serviceinference.OnInference(),
 		servicesidekick.OnSidekick(),
 	}
 }
@@ -263,6 +265,7 @@ func (s *Service) Start(ctx context.Context) error {
 		Dataset:               datasetSvc,
 		CacheSvc:              servicecache.CacheService(s.broker),
 		WhatsNew:              servicewhatsnew.WhatsNew(s.broker),
+		Inference:             serviceinference.Inference(s.broker),
 	})
 
 	if err != nil {

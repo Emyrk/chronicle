@@ -45,6 +45,7 @@ type sqlcQuerier interface {
 	CompleteDiscordMembershipGrantCheckMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckMemberParams) (DiscordMembershipGrantCheck, error)
 	CompleteDiscordMembershipGrantCheckNonMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckNonMemberParams) (DiscordMembershipGrantCheck, error)
 	ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error)
+	ConsumeInferenceOAuthTransaction(ctx context.Context, arg ConsumeInferenceOAuthTransactionParams) (InferenceOauthTransaction, error)
 	CopyLegacySpellEffects(ctx context.Context, arg []CopyLegacySpellEffectsParams) *CopyLegacySpellEffectsBatchResults
 	CopyLegacySpellPowers(ctx context.Context, arg []CopyLegacySpellPowersParams) *CopyLegacySpellPowersBatchResults
 	CopyLegacySpellVariants(ctx context.Context, arg []CopyLegacySpellVariantsParams) *CopyLegacySpellVariantsBatchResults
@@ -111,6 +112,7 @@ type sqlcQuerier interface {
 	DeleteGuildPagePanelsByTab(ctx context.Context, tabID uuid.UUID) error
 	DeleteGuildPageTab(ctx context.Context, id uuid.UUID) error
 	DeleteGuildPageTabsByPage(ctx context.Context, pageID uuid.UUID) error
+	DeleteInferenceConnectionByOwner(ctx context.Context, arg DeleteInferenceConnectionByOwnerParams) error
 	DeleteLogInstanceByIDAndGroup(ctx context.Context, arg DeleteLogInstanceByIDAndGroupParams) (uuid.UUID, error)
 	DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
 	DeleteModificationRequest(ctx context.Context, id uuid.UUID) error
@@ -159,6 +161,7 @@ type sqlcQuerier interface {
 	DisconnectSidekickInstallation(ctx context.Context, arg DisconnectSidekickInstallationParams) (SidekickInstallation, error)
 	EncountersByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounter, error)
 	EnsureDeploymentToken(ctx context.Context, deploymentToken pgtype.Text) (pgtype.Text, error)
+	ExpireStaleInferenceRuns(ctx context.Context) (int64, error)
 	ExpireStaleLogFileParts(ctx context.Context, arg ExpireStaleLogFilePartsParams) ([]LogFilePart, error)
 	FinalizeLogFilePart(ctx context.Context, arg FinalizeLogFilePartParams) (LogFilePart, error)
 	FinalizeParsedLogGroup(ctx context.Context, arg FinalizeParsedLogGroupParams) (pgtype.Timestamptz, error)
@@ -266,6 +269,10 @@ type sqlcQuerier interface {
 	GetGuildPageTab(ctx context.Context, id uuid.UUID) (GuildPageTab, error)
 	// Guild Settings
 	GetGuildSettings(ctx context.Context, guildID uuid.UUID) (GuildSetting, error)
+	GetInferenceConnectionByOwner(ctx context.Context, arg GetInferenceConnectionByOwnerParams) (InferenceConnection, error)
+	GetInferenceRunByIdempotencyKey(ctx context.Context, arg GetInferenceRunByIdempotencyKeyParams) (InferenceRun, error)
+	GetInferenceRunByOwner(ctx context.Context, arg GetInferenceRunByOwnerParams) (InferenceRun, error)
+	GetInferenceThreadByOwner(ctx context.Context, arg GetInferenceThreadByOwnerParams) (InferenceThread, error)
 	// Returns only clean boss kills for an instance, excluding partial kills.
 	// Used by the time-parse handler so the primary instance is scored against
 	// the clean-only snapshot cohort consistently.
@@ -313,6 +320,7 @@ type sqlcQuerier interface {
 	GetModificationRequestByID(ctx context.Context, id uuid.UUID) (ApplicationModificationRequest, error)
 	GetOAuthDeviceSession(ctx context.Context, signature string) (GetOAuthDeviceSessionRow, error)
 	GetOAuthTokenSession(ctx context.Context, arg GetOAuthTokenSessionParams) ([]byte, error)
+	GetOrCreateInferenceThread(ctx context.Context, arg GetOrCreateInferenceThreadParams) (InferenceThread, error)
 	GetOrCreateOAuthServerSecret(ctx context.Context, secret []byte) ([]byte, error)
 	GetPanelLayoutByCode(ctx context.Context, code pgtype.Text) (GetPanelLayoutByCodeRow, error)
 	GetPanelLayoutByID(ctx context.Context, id uuid.UUID) (GetPanelLayoutByIDRow, error)
@@ -458,6 +466,11 @@ type sqlcQuerier interface {
 	InsertEncounterPhase(ctx context.Context, arg InsertEncounterPhaseParams) error
 	InsertGuildPagePanel(ctx context.Context, arg InsertGuildPagePanelParams) (GuildPagePanel, error)
 	InsertGuildPageTab(ctx context.Context, arg InsertGuildPageTabParams) (GuildPageTab, error)
+	InsertInferenceConnection(ctx context.Context, arg InsertInferenceConnectionParams) (InferenceConnection, error)
+	InsertInferenceMessage(ctx context.Context, arg InsertInferenceMessageParams) (InsertInferenceMessageRow, error)
+	InsertInferenceOAuthTransaction(ctx context.Context, arg InsertInferenceOAuthTransactionParams) (InferenceOauthTransaction, error)
+	InsertInferenceRun(ctx context.Context, arg InsertInferenceRunParams) (InferenceRun, error)
+	InsertInferenceThread(ctx context.Context, arg InsertInferenceThreadParams) (InferenceThread, error)
 	InsertInstance(ctx context.Context, arg InsertInstanceParams) (LogInstance, error)
 	InsertInstanceLoot(ctx context.Context, arg []InsertInstanceLootParams) *InsertInstanceLootBatchResults
 	InsertInstancePlayers(ctx context.Context, arg []InsertInstancePlayersParams) *InsertInstancePlayersBatchResults
@@ -569,6 +582,10 @@ type sqlcQuerier interface {
 	// Guild Page Tabs
 	ListGuildPageTabs(ctx context.Context, pageID uuid.UUID) ([]GuildPageTab, error)
 	ListGuildsWithPages(ctx context.Context, arg ListGuildsWithPagesParams) ([]ListGuildsWithPagesRow, error)
+	ListInferenceConnectionsByOwner(ctx context.Context, userID uuid.UUID) ([]InferenceConnection, error)
+	ListInferenceInstanceEncounters(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounter, error)
+	ListInferenceInstancePlayers(ctx context.Context, instanceID uuid.UUID) ([]LogInstancePlayer, error)
+	ListInferenceThreadsByOwner(ctx context.Context, userID uuid.UUID) ([]InferenceThread, error)
 	ListInstancesByDuplicateGroup(ctx context.Context, duplicateGroupID uuid.NullUUID) ([]ListInstancesByDuplicateGroupRow, error)
 	ListInstancesByParserVersion(ctx context.Context, parserVersion string) ([]ListInstancesByParserVersionRow, error)
 	ListInstancesByTimeRange(ctx context.Context, arg ListInstancesByTimeRangeParams) ([]ListInstancesByTimeRangeRow, error)
@@ -609,6 +626,7 @@ type sqlcQuerier interface {
 	ListRecentBillingReconciliationRuns(ctx context.Context, limit int32) ([]BillingReconciliationRun, error)
 	ListRecentBillingSubscriptions(ctx context.Context, limit int32) ([]BillingSubscription, error)
 	ListRecentBillingWebhookEvents(ctx context.Context, limit int32) ([]BillingWebhookEvent, error)
+	ListRecentInferenceMessagesByThread(ctx context.Context, arg ListRecentInferenceMessagesByThreadParams) ([]InferenceMessage, error)
 	// Pages logical runs, then returns every upload in each selected duplicate group.
 	// The first row for each run is its representative: most boss encounters, then
 	// most total encounters, then the duplicate-group anchor and stable tie-breakers.
@@ -872,6 +890,9 @@ type sqlcQuerier interface {
 	UpdateGuildDiscordRaidLogAnnouncements(ctx context.Context, arg UpdateGuildDiscordRaidLogAnnouncementsParams) (GuildDiscordInstallation, error)
 	UpdateGuildPagePanel(ctx context.Context, arg UpdateGuildPagePanelParams) (GuildPagePanel, error)
 	UpdateGuildPageTab(ctx context.Context, arg UpdateGuildPageTabParams) (GuildPageTab, error)
+	UpdateInferenceConnectionLastUsedByOwner(ctx context.Context, arg UpdateInferenceConnectionLastUsedByOwnerParams) (InferenceConnection, error)
+	UpdateInferenceRun(ctx context.Context, arg UpdateInferenceRunParams) (InferenceRun, error)
+	UpdateInferenceThreadTitleByOwner(ctx context.Context, arg UpdateInferenceThreadTitleByOwnerParams) (InferenceThread, error)
 	UpdateModificationRequestPayload(ctx context.Context, arg UpdateModificationRequestPayloadParams) error
 	UpdateModificationRequestStatus(ctx context.Context, arg UpdateModificationRequestStatusParams) error
 	UpdateOAuthDeviceSessionByUserSignature(ctx context.Context, arg UpdateOAuthDeviceSessionByUserSignatureParams) (string, error)

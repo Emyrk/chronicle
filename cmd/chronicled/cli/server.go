@@ -21,6 +21,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceexternalapi"
 	"github.com/Emyrk/chronicle/internal/services/servicegamedata"
 	"github.com/Emyrk/chronicle/internal/services/servicegithub"
+	"github.com/Emyrk/chronicle/internal/services/serviceinference"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicemail"
 	"github.com/Emyrk/chronicle/internal/services/serviceoauth"
@@ -74,6 +75,7 @@ func ServerCmd() *serpent.Command {
 		serviceexternalapi.New(srvs),
 		servicestripecli.New(srvs),
 		serviceoauth.New(srvs),
+		serviceinference.New(srvs),
 		servicesidekick.New(srvs),
 		apiService,
 	)
