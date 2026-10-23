@@ -1804,6 +1804,20 @@ CREATE TABLE shared_views (
     CONSTRAINT shared_views_payload_max_10kb CHECK ((octet_length((payload)::text) <= 10240))
 );
 
+CREATE TABLE sidekick_account_configs (
+    user_id uuid NOT NULL,
+    config jsonb NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT sidekick_account_configs_config_object CHECK ((jsonb_typeof(config) = 'object'::text))
+);
+
+CREATE TABLE sidekick_config_overrides (
+    sidekick_id uuid NOT NULL,
+    config jsonb NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT sidekick_config_overrides_config_object CHECK ((jsonb_typeof(config) = 'object'::text))
+);
+
 CREATE TABLE sidekick_installations (
     id uuid NOT NULL,
     user_id uuid NOT NULL,
@@ -2795,6 +2809,12 @@ ALTER TABLE ONLY shared_views
 ALTER TABLE ONLY shared_views
     ADD CONSTRAINT shared_views_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY sidekick_account_configs
+    ADD CONSTRAINT sidekick_account_configs_pkey PRIMARY KEY (user_id);
+
+ALTER TABLE ONLY sidekick_config_overrides
+    ADD CONSTRAINT sidekick_config_overrides_pkey PRIMARY KEY (sidekick_id);
+
 ALTER TABLE ONLY sidekick_installations
     ADD CONSTRAINT sidekick_installations_pkey PRIMARY KEY (id);
 
@@ -3614,6 +3634,12 @@ ALTER TABLE ONLY shared_views
 
 ALTER TABLE ONLY shared_views
     ADD CONSTRAINT shared_views_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY sidekick_account_configs
+    ADD CONSTRAINT sidekick_account_configs_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY sidekick_config_overrides
+    ADD CONSTRAINT sidekick_config_overrides_sidekick_id_fkey FOREIGN KEY (sidekick_id) REFERENCES sidekick_installations(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY sidekick_installations
     ADD CONSTRAINT sidekick_installations_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;

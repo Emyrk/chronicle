@@ -2590,6 +2590,7 @@ export interface ListRaidCompositionsResponse {
 
 // From chroniclesdk/sidekick.go
 export interface ListSidekicksResponse {
+    readonly account_config: SidekickAccountConfigResponse;
     readonly sidekicks: readonly SidekickInstallation[];
 }
 
@@ -3625,6 +3626,34 @@ export interface SharedViewResponse {
 }
 
 // From chroniclesdk/sidekick.go
+export interface SidekickAccountConfigResponse {
+    readonly config: SidekickConfig;
+    readonly hash: string;
+}
+
+// From chroniclesdk/sidekick.go
+export interface SidekickAutoUploadConfig {
+    readonly enabled: boolean;
+}
+
+// From chroniclesdk/sidekick.go
+export interface SidekickConfig {
+    readonly version: number;
+    readonly auto_upload: SidekickAutoUploadConfig;
+}
+
+// From chroniclesdk/sidekick.go
+export interface SidekickConfigState {
+    readonly inherited: boolean;
+    readonly override?: SidekickConfig;
+    readonly effective: SidekickConfig;
+    readonly effective_hash: string;
+}
+
+// From chroniclesdk/sidekick.go
+export const SidekickConfigVersion = 1;
+
+// From chroniclesdk/sidekick.go
 export interface SidekickInstallation {
     readonly id: string;
     readonly name: string;
@@ -3637,6 +3666,7 @@ export interface SidekickInstallation {
     readonly created_at: string;
     readonly wow_directories: readonly SidekickWoWDirectory[];
     readonly issues: readonly SidekickIssue[];
+    readonly configuration?: SidekickConfigState;
 }
 
 // From chroniclesdk/sidekick.go
@@ -3661,8 +3691,15 @@ export interface SidekickIssueReport {
 export interface SidekickStatusRequest {
     readonly platform?: string;
     readonly version?: string;
+    readonly config_hash?: string;
     readonly wow_directories: readonly SidekickWoWDirectory[];
     readonly issues: readonly SidekickIssueReport[];
+}
+
+// From chroniclesdk/sidekick.go
+export interface SidekickStatusResponse extends SidekickInstallation {
+    readonly config_hash: string;
+    readonly config?: SidekickConfig;
 }
 
 // From chroniclesdk/sidekick.go

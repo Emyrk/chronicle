@@ -65,6 +65,10 @@ func (s *Service) sidekickInstallation(ctx context.Context, installation databas
 	for i, issue := range issues {
 		convertedIssues[i] = sidekickIssue(issue)
 	}
+	configState, err := s.sidekickConfigState(ctx, installation.UserID, installation.ID)
+	if err != nil {
+		return chroniclesdk.SidekickInstallation{}, err
+	}
 	lastSeenAt := pgTime(installation.LastSeenAt)
 	disconnectedAt := pgTime(installation.DisconnectedAt)
 	return chroniclesdk.SidekickInstallation{
@@ -79,6 +83,7 @@ func (s *Service) sidekickInstallation(ctx context.Context, installation databas
 		CreatedAt:      installation.CreatedAt.Time,
 		WoWDirectories: convertedDirectories,
 		Issues:         convertedIssues,
+		Configuration:  &configState,
 	}, nil
 }
 
@@ -87,7 +92,14 @@ func (s *Service) listSidekicks(ctx context.Context, userID uuid.UUID) (chronicl
 	if err != nil {
 		return chroniclesdk.ListSidekicksResponse{}, err
 	}
-	response := chroniclesdk.ListSidekicksResponse{Sidekicks: make([]chroniclesdk.SidekickInstallation, len(installations))}
+	accountConfig, err := s.accountConfig(ctx, userID)
+	if err != nil {
+		return chroniclesdk.ListSidekicksResponse{}, err
+	}
+	response := chroniclesdk.ListSidekicksResponse{
+		AccountConfig: accountConfig,
+		Sidekicks:     make([]chroniclesdk.SidekickInstallation, len(installations)),
+	}
 	for i, installation := range installations {
 		response.Sidekicks[i], err = s.sidekickInstallation(ctx, installation)
 		if err != nil {
@@ -206,7 +218,8 @@ func (s *Service) UpdateSidekickStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	request.Platform = strings.TrimSpace(request.Platform)
 	request.Version = strings.TrimSpace(request.Version)
-	if len(request.Platform) > 100 || len(request.Version) > 100 || len(request.Issues) > 20 {
+	request.ConfigHash = strings.TrimSpace(request.ConfigHash)
+	if len(request.Platform) > 100 || len(request.Version) > 100 || len(request.ConfigHash) > 128 || len(request.Issues) > 20 {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Sidekick status payload is too large."})
 		return
 	}
@@ -306,7 +319,7 @@ func (s *Service) UpdateSidekickStatus(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	httpapi.Write(r.Context(), w, http.StatusOK, response)
+	httpapi.Write(r.Context(), w, http.StatusOK, sidekickStatusResponse(response, request.ConfigHash))
 }
 
 func (s *Service) RecordUpload(ctx context.Context) {

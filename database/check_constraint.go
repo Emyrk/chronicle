@@ -76,6 +76,8 @@ const (
 	CheckVersionGte1                                            CheckConstraint = "version_gte_1"                                                 // river_migration
 	CheckTopicLength                                            CheckConstraint = "topic_length"                                                  // river_notification
 	CheckSharedViewsPayloadMax10Kb                              CheckConstraint = "shared_views_payload_max_10kb"                                 // shared_views
+	CheckSidekickAccountConfigsConfigObject                     CheckConstraint = "sidekick_account_configs_config_object"                        // sidekick_account_configs
+	CheckSidekickConfigOverridesConfigObject                    CheckConstraint = "sidekick_config_overrides_config_object"                       // sidekick_config_overrides
 	CheckSidekickInstallationsNameCheck                         CheckConstraint = "sidekick_installations_name_check"                             // sidekick_installations
 	CheckSidekickInstallationsPlatformCheck                     CheckConstraint = "sidekick_installations_platform_check"                         // sidekick_installations
 	CheckSidekickInstallationsVersionCheck                      CheckConstraint = "sidekick_installations_version_check"                          // sidekick_installations

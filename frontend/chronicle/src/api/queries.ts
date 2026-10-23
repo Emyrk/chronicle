@@ -1,5 +1,5 @@
 import { useQueries, useQuery, useMutation, useQueryClient, keepPreviousData, type UseQueryOptions } from "@tanstack/react-query";
-import type { ListSidekicksResponse, RenameSidekickRequest, SidekickInstallation, WhatsNewStatus } from "./typesGenerated";
+import type { ListSidekicksResponse, RenameSidekickRequest, SidekickAccountConfigResponse, SidekickConfig, SidekickConfigState, SidekickInstallation, WhatsNewStatus } from "./typesGenerated";
 import type { WoWSpell } from "./wowdb";
 import {
   recordPublicNoticeResult,
@@ -221,6 +221,64 @@ export function useMySidekicks() {
       return response.json() as Promise<ListSidekicksResponse>;
     },
     refetchInterval: 30_000,
+  });
+}
+
+export function useSidekickAccountConfig() {
+  return useQuery({
+    queryKey: ["sidekicks", "config"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/me/sidekicks/config");
+      if (!response.ok) throw new Error("Failed to fetch Sidekick configuration");
+      return response.json() as Promise<SidekickAccountConfigResponse>;
+    },
+  });
+}
+
+export function useUpdateSidekickAccountConfig() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (config: SidekickConfig) => {
+      const response = await fetch("/api/v1/me/sidekicks/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config),
+      });
+      if (!response.ok) throw new Error("Failed to update Sidekick configuration");
+      return response.json() as Promise<SidekickAccountConfigResponse>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sidekicks", "config"] });
+      queryClient.invalidateQueries({ queryKey: ["sidekicks", "me"] });
+    },
+  });
+}
+
+export function useUpdateSidekickOverride() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, config }: { id: string; config: SidekickConfig }) => {
+      const response = await fetch(`/api/v1/me/sidekicks/${id}/config`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config),
+      });
+      if (!response.ok) throw new Error("Failed to update Sidekick override");
+      return response.json() as Promise<SidekickConfigState>;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sidekicks", "me"] }),
+  });
+}
+
+export function useDeleteSidekickOverride() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(`/api/v1/me/sidekicks/${id}/config`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Failed to reset Sidekick override");
+      return response.json() as Promise<SidekickConfigState>;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sidekicks", "me"] }),
   });
 }
 

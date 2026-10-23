@@ -39,6 +39,53 @@ FROM sidekick_installations
 WHERE user_id = @user_id
 ORDER BY disconnected_at NULLS FIRST, created_at DESC;
 
+-- name: GetSidekickInstallationByUser :one
+SELECT *
+FROM sidekick_installations
+WHERE id = @sidekick_id
+  AND user_id = @user_id;
+
+-- name: GetSidekickAccountConfig :one
+SELECT config
+FROM sidekick_account_configs
+WHERE user_id = @user_id;
+
+-- name: UpsertSidekickAccountConfig :one
+INSERT INTO sidekick_account_configs (user_id, config)
+VALUES (@user_id, @config::jsonb)
+ON CONFLICT (user_id) DO UPDATE SET
+  config = EXCLUDED.config,
+  updated_at = NOW()
+RETURNING config;
+
+-- name: GetSidekickConfigOverride :one
+SELECT sco.config
+FROM sidekick_config_overrides sco
+JOIN sidekick_installations si ON si.id = sco.sidekick_id
+WHERE sco.sidekick_id = @sidekick_id
+  AND si.user_id = @user_id;
+
+-- name: UpsertSidekickConfigOverride :one
+INSERT INTO sidekick_config_overrides (sidekick_id, config)
+SELECT id, @config::jsonb
+FROM sidekick_installations
+WHERE id = @sidekick_id
+  AND user_id = @user_id
+  AND disconnected_at IS NULL
+ON CONFLICT (sidekick_id) DO UPDATE SET
+  config = EXCLUDED.config,
+  updated_at = NOW()
+RETURNING config;
+
+-- name: DeleteSidekickConfigOverride :one
+DELETE FROM sidekick_config_overrides sco
+USING sidekick_installations si
+WHERE sco.sidekick_id = @sidekick_id
+  AND si.id = sco.sidekick_id
+  AND si.user_id = @user_id
+  AND si.disconnected_at IS NULL
+RETURNING sco.config;
+
 -- name: RenameSidekickInstallation :one
 UPDATE sidekick_installations
 SET name = @name,
