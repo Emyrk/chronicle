@@ -362,7 +362,6 @@ func (z *interceptor) InsertUserAuthSession(ctx context.Context, arg database.In
 
 	// First user auth link = first real signup → technical_admin
 	count, err := z.CountUserAuthLinks(ctx)
-	fmt.Println(count)
 	if err != nil {
 		return session, fmt.Errorf("count user auth links: %w", err)
 	}
