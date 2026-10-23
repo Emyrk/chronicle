@@ -143,6 +143,35 @@ func TestInferenceChatPermission(t *testing.T) {
 	require.True(t, allowed)
 }
 
+func TestInferenceDebugPermission(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	ctx := testutil.Context(t, testutil.WaitLong)
+
+	for _, tc := range []struct {
+		name    string
+		roles   []string
+		allowed bool
+	}{
+		{name: "dedicated debug capability", roles: []string{"inference_debug_capable"}, allowed: true},
+		{name: "admin", roles: []string{"admin"}, allowed: true},
+		{name: "technical admin", roles: []string{"technical_admin"}, allowed: true},
+		{name: "inference only", roles: []string{"inference_capable"}, allowed: false},
+		{name: "ordinary user", roles: nil, allowed: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			userID := uuid.New()
+			require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, tc.roles))
+
+			allowed, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanDebug_inference_chat_User(policy.New().User(userID)))
+			require.NoError(t, err)
+			require.Equal(t, tc.allowed, allowed)
+		})
+	}
+}
+
 func TestInvalidateLogsPermission(t *testing.T) {
 	t.Parallel()
 

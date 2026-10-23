@@ -35,6 +35,7 @@ import {
   FlaskConical,
   LockKeyhole,
   MessageSquareText,
+  ScanSearch,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,7 @@ const ASSIGNABLE_ROLES = [
   { value: "unlisted_log_capable", label: "Unlisted Logs", icon: LockKeyhole, className: "bg-amber-500/15 text-amber-400" },
   { value: "ad_free_capable", label: "Ad-free", icon: EyeOff, className: "bg-lime-500/15 text-lime-400" },
   { value: "inference_capable", label: "Inference Capable", icon: MessageSquareText, className: "bg-violet-500/15 text-violet-400" },
+  { value: "inference_debug_capable", label: "Inference Debug", icon: ScanSearch, className: "bg-fuchsia-500/15 text-fuchsia-400" },
   { value: "moderate_logs", label: "Moderate Logs", icon: Eye, className: "bg-cyan-500/15 text-cyan-400" },
   { value: "moderate_guilds", label: "Moderate Guilds", icon: Megaphone, className: "bg-teal-500/15 text-teal-400" },
   { value: "is_admin_users", label: "Admin Users", icon: Users, className: "bg-indigo-500/15 text-indigo-400" },

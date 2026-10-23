@@ -32,6 +32,8 @@ The equivalent encryption-key flag is `--inference-credential-encryption-key`. W
 
 Disconnecting a provider connection immediately erases Chronicle's encrypted credential and account-key hash while retaining non-secret connection metadata needed by historical run rows. It does not currently revoke the generated key at OpenRouter, so users who need upstream revocation must also remove it from their OpenRouter account.
 
+The separate `chronicle:chronicle#debug_inference_chat` permission is granted by the administrator-managed `inference_debug_capable` role or by `administer`. It is reserved for the prompt, tool, and future skill inspector; ordinary `inference_capable` users do not receive debug access.
+
 ## Streaming contract
 
 The browser/backend contract is the Chronicle-owned subset of AG-UI 1.0 over server-sent events. Supported events are:
