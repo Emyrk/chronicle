@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/wdb"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -101,6 +102,16 @@ func (h *Handler) handleCreatureUpload(ctx context.Context, w http.ResponseWrite
 		if err := upsertCreatures(ctx, h.pool, datasetID, toUpsert); err != nil {
 			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 				Message: "Failed to upsert creatures",
+				Detail:  err.Error(),
+			})
+			return
+		}
+	}
+
+	if len(toUpsert) > 0 {
+		if err := h.invalidateDataset(ctx, datasetID, servicecache.NamespaceCreatures); err != nil {
+			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+				Message: "Creatures imported but cache invalidation failed",
 				Detail:  err.Error(),
 			})
 			return

@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/spelldb"
 	"github.com/Emyrk/chronicle/internal/gamedataoverrides"
+	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Gophercraft/core/format/dbc"
 	"github.com/google/uuid"
 )
@@ -104,13 +105,17 @@ func (h *Handler) handleSpellUpload(ctx context.Context, w http.ResponseWriter, 
 		return
 	}
 
-	// Invalidate the spell cache so subsequent lookups for this dataset
-	// hit the freshly-imported DB data instead of stale cache entries.
-	if h.wowDB != nil {
-		h.wowDB.InvalidateSpellCache(datasetID)
-		h.wowDB.InvalidateExtraAttacks(datasetID)
-		h.wowDB.InvalidateDurationModifiers(datasetID)
-		h.wowDB.InvalidatePeriodicSpells(datasetID)
+	if err := h.invalidateDataset(ctx, datasetID,
+		servicecache.NamespaceSpells,
+		servicecache.NamespaceExtraAttacks,
+		servicecache.NamespaceDurationMods,
+		servicecache.NamespacePeriodicSpells,
+	); err != nil {
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+			Message: "Spells imported but cache invalidation failed",
+			Detail:  err.Error(),
+		})
+		return
 	}
 
 	resp.Inserted = len(spells)

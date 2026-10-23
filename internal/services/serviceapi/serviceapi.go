@@ -237,7 +237,6 @@ func (s *Service) Start(ctx context.Context) error {
 		SaffronURL:            saffronURL,
 		OCRURL:                ocrURL,
 		WoWDB:                 wowdb,
-		GameDB:                wowDBSvc.GameDB(),
 		Assets:                assets,
 		InternalGameData:      gamedata,
 		ExternalAPI:           externalAPI,

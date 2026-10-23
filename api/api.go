@@ -28,7 +28,6 @@ import (
 	"github.com/Emyrk/chronicle/chroniclemail"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
-	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/pubsub"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/frontend"
@@ -79,7 +78,6 @@ type Options struct {
 	SaffronURL            *url.URL
 	OCRURL                *url.URL
 	WoWDB                 http.Handler
-	GameDB                *gamedb.WoWDB // For cache invalidation on DBC import
 	Assets                http.Handler
 	InternalGameData      http.Handler
 	ExternalAPI           http.Handler
@@ -325,7 +323,7 @@ func (api *API) Routes() chi.Router {
 			r.Mount("/gear-progressions", gearprogressionapi.New(api.Opts.Zed, api.Auth).Routes())
 			// Account↔character link management.
 			r.Mount("/linked", linkedapi.New(api.Opts.Zed, api.Auth, api.Opts.ExternalVerification).Routes())
-			gameDataHandler := gamedataapi.New(api.Opts.Zed, api.Auth, api.Opts.Pool, api.Opts.GameDB)
+			gameDataHandler := gamedataapi.New(api.Opts.Zed, api.Auth, api.Opts.Pool, api.Opts.CacheSvc)
 			r.Mount("/game-data", gameDataHandler.Routes())
 			r.Mount("/azerothcore", serviceazerothcore.New(api.Opts.Logger, api.Opts.Zed, api.Auth, api.Chronicle).Routes())
 			if api.Opts.Application != nil {

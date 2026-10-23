@@ -1,6 +1,7 @@
 package servicetenant
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -94,7 +95,10 @@ func (s *Service) Upsert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.InvalidateCache()
+	if err := s.invalidateCache(ctx); err != nil {
+		httpapi.InternalServerError(w, fmt.Errorf("reload tenant cache: %w", err))
+		return
+	}
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.TenantFromDB(t))
 }
 
@@ -112,7 +116,10 @@ func (s *Service) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.InvalidateCache()
+	if err := s.invalidateCache(ctx); err != nil {
+		httpapi.InternalServerError(w, fmt.Errorf("reload tenant cache: %w", err))
+		return
+	}
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "deleted"})
 }
 
@@ -198,6 +205,9 @@ func (s *Service) SetTenantDataset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.InvalidateCache()
+	if err := s.invalidateCache(ctx); err != nil {
+		httpapi.InternalServerError(w, fmt.Errorf("reload tenant cache: %w", err))
+		return
+	}
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "updated"})
 }

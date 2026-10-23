@@ -2,6 +2,7 @@ package gamedataapi
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
@@ -10,7 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/api/httpmw"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
-	"github.com/Emyrk/chronicle/database/gamedb"
+	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/go-chi/chi/v5"
@@ -19,14 +20,27 @@ import (
 )
 
 type Handler struct {
-	zed   *authz.Authz
-	auth  *chronauth.Service
-	pool  *pgxpool.Pool
-	wowDB *gamedb.WoWDB
+	zed      *authz.Authz
+	auth     *chronauth.Service
+	pool     *pgxpool.Pool
+	cacheSvc *servicecache.Service
 }
 
-func New(zed *authz.Authz, auth *chronauth.Service, pool *pgxpool.Pool, wowDB *gamedb.WoWDB) *Handler {
-	return &Handler{zed: zed, auth: auth, pool: pool, wowDB: wowDB}
+func New(zed *authz.Authz, auth *chronauth.Service, pool *pgxpool.Pool, cacheSvc *servicecache.Service) *Handler {
+	return &Handler{zed: zed, auth: auth, pool: pool, cacheSvc: cacheSvc}
+}
+
+func (h *Handler) invalidateDataset(ctx context.Context, datasetID uuid.UUID, namespaces ...servicecache.Namespace) error {
+	if h.cacheSvc == nil {
+		return nil
+	}
+	var errs []error
+	for _, namespace := range namespaces {
+		if err := h.cacheSvc.Invalidate(ctx, servicecache.DatasetInvalidation(namespace, datasetID)); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // datasetIDFromQuery parses the optional ?dataset_id= query param.
