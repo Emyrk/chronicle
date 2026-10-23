@@ -107,8 +107,10 @@ describe("resolvePlayerSpecialization", () => {
       name: "Fury",
       subSpec: "Fury Prot",
     });
-    expect(resolveWarrior(["", "1", "0"])).toMatchObject({ name: "Fury", subSpec: "Fury" });
-    expect(resolveWarrior(["", "0", "1"])).toMatchObject({ name: "Fury", subSpec: "Fury" });
+    expect(resolveWarrior(["", "1", "0"])).toMatchObject({ name: "Fury" });
+    expect(resolveWarrior(["", "1", "0"])?.subSpec).toBeUndefined();
+    expect(resolveWarrior(["", "0", "1"])).toMatchObject({ name: "Fury" });
+    expect(resolveWarrior(["", "0", "1"])?.subSpec).toBeUndefined();
     expect(resolveWarrior(["", "1", "1"], [31, 20, 0])).toMatchObject({ name: "Arms" });
     expect(resolveWarrior(["", "1", "1"], [31, 20, 0])?.subSpec).toBeUndefined();
   });

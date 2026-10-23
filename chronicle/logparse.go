@@ -1888,8 +1888,7 @@ func inferTalentSubSpec(className, spec string, playerTalents *combatant.Talents
 				{treeIndex: 2, tabNames: []string{"Protection"}, name: "Defiance"},
 				{treeIndex: 1, tabNames: []string{"Fury"}, name: "Bloodthirst"},
 			},
-			matched:  "Fury Prot",
-			fallback: "Fury",
+			matched: "Fury Prot",
 		}
 	default:
 		return ""

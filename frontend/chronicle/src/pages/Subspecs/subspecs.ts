@@ -57,14 +57,10 @@ const SUBSPEC_RULES: readonly SubspecRule[] = [
         name: "Fury Prot",
         description: "Fury builds that combine Bloodthirst with Defiance.",
       },
-      {
-        name: "Fury",
-        description: "All other Fury builds, including two-handed and dual-wield variants.",
-      },
     ],
     detection: ["Defiance", "Bloodthirst"],
     detectedSubspec: "Fury Prot",
-    fallback: "Fury",
+    fallback: "",
   },
 ]
 
