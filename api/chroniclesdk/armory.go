@@ -29,6 +29,8 @@ type ArmoryPlayer struct {
 	// use it to fetch icons matching the realm's game data instead of the
 	// compiled-in default.
 	IconBaseURL string `json:"icon_base_url,omitempty"`
+	// OwnerAdsFree is true when this character is linked to an account with ad-free access.
+	OwnerAdsFree bool `json:"owner_ads_free"`
 }
 
 // PlayerTalents represents a player's talent allocation across three trees.

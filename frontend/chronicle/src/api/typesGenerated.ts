@@ -386,6 +386,10 @@ export interface ArmoryPlayer {
      * compiled-in default.
      */
     readonly icon_base_url?: string;
+    /**
+     * OwnerAdsFree is true when this character is linked to an account with ad-free access.
+     */
+    readonly owner_ads_free: boolean;
 }
 
 // From chroniclesdk/armory.go

@@ -1,11 +1,14 @@
 package api
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -13,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 )
 
 func parseArmoryPlayerGUID(player string) guid.GUID {
@@ -74,13 +78,44 @@ func (api *API) GetArmoryPlayer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ownerAdsFree, err := api.characterOwnerAdsFree(ctx, player.ID, realmID)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to resolve character advertising policy",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
 	out := db2sdk.ArmoryPlayer(player)
+	out.OwnerAdsFree = ownerAdsFree
 	out.DatasetID = api.Opts.Dataset.ResolveDatasetForRealm(ctx, realmID)
 	if ds, err := api.Opts.Dataset.GetDataset(ctx, out.DatasetID); err == nil {
 		out.IconBaseURL = ds.IconBaseUrl
 	}
 	w.Header().Set(httpapi.DatasetHeader, out.DatasetID.String())
 	httpapi.Write(ctx, w, http.StatusOK, out)
+}
+
+func (api *API) characterOwnerAdsFree(ctx context.Context, characterGUID guid.GUID, realmID uuid.UUID) (bool, error) {
+	link, err := api.Opts.Zed.GetUserCharacterLink(ctx, database.GetUserCharacterLinkParams{
+		CharacterGuid: characterGUID,
+		RealmID:       realmID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+
+	return api.Opts.Zed.CheckOne(
+		ctx,
+		nil,
+		policy.New().GlobalChronicle().CanAd_free_User(policy.New().User(link.UserID)),
+	)
 }
 
 // GetArmoryPlayerGearHistory returns per-instance gear snapshots for a

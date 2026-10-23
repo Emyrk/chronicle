@@ -77,6 +77,39 @@ describe("AdSlot", () => {
     expect(markup).not.toContain("min-[1920px]:w-[300px]")
   })
 
+  it("can widen paired rails earlier around narrower page content", () => {
+    const markup = renderAdSlot(
+      <AdSlot
+        placement="armory-left-rail"
+        format="rail"
+        railLayout="paired-wide"
+        hostname="localhost"
+        previewEnabled
+      />,
+    )
+
+    expect(markup).toContain("min-[1840px]:w-[300px]")
+    expect(markup).not.toContain("min-[2080px]:w-[300px]")
+  })
+
+  it("can expose a single rail at xl before paired rails fit", () => {
+    const markup = renderAdSlot(
+      <AdSlot
+        placement="armory-right-rail"
+        format="rail"
+        railLayout="paired-wide"
+        railBreakpoint="xl"
+        hostname="localhost"
+        previewEnabled
+      />,
+    )
+
+    expect(markup).toContain("xl:block")
+    expect(markup).toContain("xl:sticky")
+    expect(markup).toContain("xl:top-20")
+    expect(markup).not.toContain("2xl:sticky")
+  })
+
   it("keeps compact rails fixed at 160 × 600 on wide screens", () => {
     const markup = renderAdSlot(
       <AdSlot
@@ -199,6 +232,25 @@ describe("AdSlot", () => {
     expect(markup).toContain("w-[300px]")
     expect(markup).toContain("flex h-full w-full self-start justify-center")
     expect(markup).toContain('data-ad-placement="recent-grid-card-1"')
+  })
+
+  it("uses a compact mobile creative and wide desktop sizes for adaptive content", () => {
+    const markup = renderAdSlot(
+      <AdSlot placement="armory-search-empty" format="adaptive" hostname="localhost" previewEnabled />,
+    )
+
+    expect(adSizesForFormat("adaptive", false, true)).toEqual([[300, 100]])
+    expect(adSizesForFormat("adaptive", false, false)).toEqual([
+      [728, 90],
+      [970, 90],
+      [970, 250],
+      [300, 250],
+    ])
+    expect(adSizeLabel("adaptive", false, true)).toBe("300 × 100")
+    expect(adSizeLabel("adaptive", false, false)).toBe("responsive")
+    expect(markup).toContain("w-[300px] lg:w-full")
+    expect(markup).toContain("h-[250px]")
+    expect(markup).toContain('data-ad-placement="armory-search-empty"')
   })
 
   it("does not render outside local development", () => {

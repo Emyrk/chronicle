@@ -11,6 +11,8 @@ import {
 } from "@/api/queries";
 import { useCharacterParses } from "@/api/rankingsQueries";
 import { Button } from "@/components/ui/button";
+import { AdSlot } from "@/components/Ads/AdSlot";
+import { AdSuppressionProvider } from "@/components/Ads/AdSuppressionProvider";
 import { FavoriteButton } from "@/components/Favorites";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent } from "@/components/ui/Card/Card";
@@ -97,9 +99,11 @@ export function ArmoryPage() {
   }
 
   return (
-    <DatasetProvider datasetId={player.dataset_id} iconBaseUrl={player.icon_base_url}>
-      <ArmoryPageContent player={player} />
-    </DatasetProvider>
+    <AdSuppressionProvider suppressed={player.owner_ads_free}>
+      <DatasetProvider datasetId={player.dataset_id} iconBaseUrl={player.icon_base_url}>
+        <ArmoryPageContent player={player} />
+      </DatasetProvider>
+    </AdSuppressionProvider>
   );
 }
 
@@ -203,114 +207,125 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
   ) : undefined;
 
   return (
-    <div className="grid w-full grid-cols-[1fr_minmax(0,72rem)_1fr] px-1 py-8 sm:gap-x-4 sm:px-4">
-      {/* Left placeholder column */}
-      <div />
-
-      {/* Center column */}
-      <div>
-        <AdminLinkControls player={player} />
-
-        {/* Tab navigation */}
-        <div className="grid grid-cols-4 border-b border-border sm:flex sm:gap-1">
-          {TABS.map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              onClick={() => openTab(key)}
-              className={`
-                flex min-w-0 items-center justify-center gap-1 px-1 py-2 text-xs font-medium transition-colors
-                border-b-2 -mb-px sm:justify-start sm:gap-1.5 sm:px-4 sm:text-sm
-                ${activeTab === key
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-                }
-              `}
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* Keep one identity header mounted while its tab-specific controls change. */}
-        <div className="mt-8">
-          <IdentityHeader player={player} titleAction={favoriteButton} actions={modeSelector}>
-            <div className="w-full lg:w-[480px]">
-              {activeTab === "overview" && mode === "performance" && (
-                <ScoreCard
-                  score={score}
-                  top3={top3}
-                  metric={metric}
-                  onMetricChange={setMetric}
-                  playerClass={player.class}
-                  specs={specs}
-                  selectedSpec={selectedSpec}
-                  onSpecChange={setPerformanceSpec}
-                  isLoading={parsesQuery.isLoading}
-                />
-              )}
-              {activeTab === "overview" && mode === "journey" && (
-                <JourneyStatsCard
-                  timeInRaid={formatHours(activity.stats.combatMs)}
-                  itemsLooted={
-                    lootQuery.data
-                      ? lootQuery.data.items.length >= 200
-                        ? "200+"
-                        : String(lootQuery.data.items.length)
-                      : null
-                  }
-                />
-              )}
-              {activeTab === "gear" && <GearHeaderCard player={player} />}
-              {activeTab === "talents" && <TalentsHeaderCard player={player} />}
-              {activeTab === "activity" && <ActivityHeaderCard player={player} />}
-            </div>
-          </IdentityHeader>
-        </div>
-
-        {/* Tab content: overview, gear, and talents stay in center column. */}
-        {activeTab === "overview" && (
-          <div className="mt-4">
-            <OverviewTab
-              player={player}
-              onOpenTab={openTab}
-              metric={metric}
-              selectedSpec={selectedSpec}
-              specs={specs}
-              onSpecChange={setPerformanceSpec}
-            />
+    <div className="w-full px-1 py-8 sm:px-4">
+      <div className="flex w-full items-start justify-center gap-4">
+        {activeTab !== "activity" && (
+          <div className="hidden justify-end 2xl:flex">
+            <AdSlot placement="armory-left-rail" format="rail" railLayout="paired-wide" />
           </div>
         )}
-        {activeTab === "gear" && (
-          <Card className="mt-4 py-8">
-            <CardContent>
-              <GearDisplay gear={player.gear} race={player.race} gender={player.gender} />
-            </CardContent>
-          </Card>
-        )}
-        {activeTab === "talents" && (
-          <div className="mt-4">
-            {talentBuilderUrl(player) && (
-              <div className="mb-3 flex justify-end">
-                <Button variant="outline" size="sm" asChild>
-                  <Link to={talentBuilderUrl(player)!}>
-                    <Hammer className="h-4 w-4" />
-                    Open in Talent Builder
-                  </Link>
-                </Button>
+
+        <main className="min-w-0 w-full max-w-[72rem]">
+          <AdminLinkControls player={player} />
+
+          {/* Tab navigation */}
+          <div className="grid grid-cols-4 border-b border-border sm:flex sm:gap-1">
+            {TABS.map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => openTab(key)}
+                className={`
+                  flex min-w-0 items-center justify-center gap-1 px-1 py-2 text-xs font-medium transition-colors
+                  border-b-2 -mb-px sm:justify-start sm:gap-1.5 sm:px-4 sm:text-sm
+                  ${activeTab === key
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                  }
+                `}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Keep one identity header mounted while its tab-specific controls change. */}
+          <div className="mt-8">
+            <IdentityHeader player={player} titleAction={favoriteButton} actions={modeSelector}>
+              <div className="w-full lg:w-[480px]">
+                {activeTab === "overview" && mode === "performance" && (
+                  <ScoreCard
+                    score={score}
+                    top3={top3}
+                    metric={metric}
+                    onMetricChange={setMetric}
+                    playerClass={player.class}
+                    specs={specs}
+                    selectedSpec={selectedSpec}
+                    onSpecChange={setPerformanceSpec}
+                    isLoading={parsesQuery.isLoading}
+                  />
+                )}
+                {activeTab === "overview" && mode === "journey" && (
+                  <JourneyStatsCard
+                    timeInRaid={formatHours(activity.stats.combatMs)}
+                    itemsLooted={
+                      lootQuery.data
+                        ? lootQuery.data.items.length >= 200
+                          ? "200+"
+                          : String(lootQuery.data.items.length)
+                        : null
+                    }
+                  />
+                )}
+                {activeTab === "gear" && <GearHeaderCard player={player} />}
+                {activeTab === "talents" && <TalentsHeaderCard player={player} />}
+                {activeTab === "activity" && <ActivityHeaderCard player={player} />}
               </div>
-            )}
-            <TalentsTab player={player} />
+            </IdentityHeader>
+          </div>
+
+          {/* Tab content: overview, gear, and talents stay in center column. */}
+          {activeTab === "overview" && (
+            <div className="mt-4">
+              <OverviewTab
+                player={player}
+                onOpenTab={openTab}
+                metric={metric}
+                selectedSpec={selectedSpec}
+                specs={specs}
+                onSpecChange={setPerformanceSpec}
+              />
+            </div>
+          )}
+          {activeTab === "gear" && (
+            <Card className="mt-4 py-8">
+              <CardContent>
+                <GearDisplay gear={player.gear} race={player.race} gender={player.gender} />
+              </CardContent>
+            </Card>
+          )}
+          {activeTab === "talents" && (
+            <div className="mt-4">
+              {talentBuilderUrl(player) && (
+                <div className="mb-3 flex justify-end">
+                  <Button variant="outline" size="sm" asChild>
+                    <Link to={talentBuilderUrl(player)!}>
+                      <Hammer className="h-4 w-4" />
+                      Open in Talent Builder
+                    </Link>
+                  </Button>
+                </div>
+              )}
+              <TalentsTab player={player} />
+            </div>
+          )}
+        </main>
+
+        {activeTab !== "activity" && (
+          <div className="hidden justify-start xl:flex">
+            <AdSlot
+              placement="armory-right-rail"
+              format="rail"
+              railLayout="paired-wide"
+              railBreakpoint="xl"
+            />
           </div>
         )}
       </div>
 
-      {/* Right placeholder column */}
-      <div />
-
-      {/* Activity tab spans full width (all 3 columns) */}
       {activeTab === "activity" && (
-        <div className="col-span-3 mt-6">
+        <div className="mt-6">
           <ActivityTab player={player} />
         </div>
       )}

@@ -93,6 +93,26 @@ export const PairedRails: Story = {
   ),
 }
 
+export const ArmoryPairedRails: Story = {
+  args: {
+    placement: "armory-right-rail",
+    railLayout: "paired-wide",
+  },
+  render: (args) => (
+    <div className="min-h-screen bg-background px-4 py-8 text-foreground">
+      <div className="flex w-full items-start justify-center gap-4">
+        <div className="hidden justify-end 2xl:flex">
+          <AdSlot {...args} placement="armory-left-rail" />
+        </div>
+        <main className="h-[720px] min-w-0 w-full max-w-[72rem] rounded-xl border bg-card" />
+        <div className="hidden justify-start xl:flex">
+          <AdSlot {...args} railBreakpoint="xl" />
+        </div>
+      </div>
+    </div>
+  ),
+}
+
 export const Card: Story = {
   args: {
     placement: "recent-grid-card-1",
@@ -104,6 +124,21 @@ export const Card: Story = {
         {Array.from({ length: 3 }, (_, index) => (
           <div key={index} className="h-[266px] rounded-xl border bg-card" />
         ))}
+        <AdSlot {...args} />
+      </div>
+    </div>
+  ),
+}
+
+export const AdaptiveContent: Story = {
+  args: {
+    placement: "armory-search-empty",
+    format: "adaptive",
+  },
+  render: (args) => (
+    <div className="min-h-screen bg-background px-4 py-16 text-foreground">
+      <div className="mx-auto max-w-5xl text-center">
+        <div className="mb-10 text-sm text-muted-foreground">Type at least 2 characters to search.</div>
         <AdSlot {...args} />
       </div>
     </div>

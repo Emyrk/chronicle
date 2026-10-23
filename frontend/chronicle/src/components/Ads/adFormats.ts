@@ -1,15 +1,18 @@
 import type { NitroPaySize } from "./nitroPay"
 
-export type AdFormat = "responsive" | "rail" | "card" | "sidebar"
-export type RailLayout = "single" | "paired" | "compact"
+export type AdFormat = "responsive" | "adaptive" | "rail" | "card" | "sidebar"
+export type RailLayout = "single" | "paired" | "paired-wide" | "compact"
+
+const responsiveSizes: NitroPaySize[] = [
+  [728, 90],
+  [970, 90],
+  [970, 250],
+  [300, 250],
+]
 
 const formatSizes: Record<AdFormat, NitroPaySize[]> = {
-  responsive: [
-    [728, 90],
-    [970, 90],
-    [970, 250],
-    [300, 250],
-  ],
+  responsive: responsiveSizes,
+  adaptive: responsiveSizes,
   rail: [[160, 600]],
   card: [[300, 250]],
   sidebar: [
@@ -33,7 +36,7 @@ export function adSizesForFormat(
       [160, 600],
     ]
   }
-  if (format === "card" && compactCard) return compactCardSizes
+  if ((format === "card" || format === "adaptive") && compactCard) return compactCardSizes
   if (format === "sidebar") {
     if (availableHeight === undefined) return []
     return formatSizes.sidebar.filter(([, height]) => height <= availableHeight)
@@ -48,7 +51,8 @@ export function adSizeLabel(
   availableHeight?: number,
 ): string {
   if (format === "responsive") return "responsive"
-  if (format === "card") return compactCard ? "300 × 100" : "300 × 250"
+  if (format === "adaptive" && !compactCard) return "responsive"
+  if (format === "card" || format === "adaptive") return compactCard ? "300 × 100" : "300 × 250"
   return adSizesForFormat(format, wideRail, compactCard, availableHeight)
     .map(([width, height]) => `${width} × ${height}`)
     .join(" / ")

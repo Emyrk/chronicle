@@ -19,25 +19,34 @@ export type { AdPlacement } from "./adPolicy"
 
 const formatClasses: Record<AdFormat, string> = {
   responsive: "hidden w-full lg:block",
-  rail: "hidden w-40 shrink-0 self-start 2xl:sticky 2xl:top-20 2xl:block",
+  adaptive: "flex h-full w-full self-start justify-center",
+  rail: "hidden w-40 shrink-0 self-start",
   card: "flex h-full w-full self-start justify-center",
   sidebar: "hidden w-[250px] lg:block",
 }
 
+const railBreakpointClasses = {
+  xl: "xl:sticky xl:top-20 xl:block",
+  "2xl": "2xl:sticky 2xl:top-20 2xl:block",
+} as const
+
 const railLayoutClasses: Record<RailLayout, string> = {
   single: "min-[1920px]:w-[300px]",
   paired: "min-[2080px]:w-[300px]",
+  "paired-wide": "min-[1840px]:w-[300px]",
   compact: "",
 }
 
 const railLayoutQueries: Record<RailLayout, string | undefined> = {
   single: "(min-width: 1920px)",
   paired: "(min-width: 2080px)",
+  "paired-wide": "(min-width: 1840px)",
   compact: undefined,
 }
 
 const frameClasses: Record<AdFormat, string> = {
   responsive: "min-h-28",
+  adaptive: "w-[300px] lg:w-full",
   rail: "min-h-[600px]",
   card: "w-[300px]",
   sidebar: "min-h-[250px]",
@@ -104,6 +113,7 @@ export function AdSlot({
   placement,
   format = "responsive",
   railLayout = "single",
+  railBreakpoint = "2xl",
   hostname = window.location.hostname,
   previewEnabled = import.meta.env.DEV && import.meta.env.CHRONICLE_PREVIEW_ADS,
   demoEnabled = import.meta.env.CHRONICLE_PREVIEW_ADS_DEMO,
@@ -115,8 +125,10 @@ export function AdSlot({
   /** Stable hyphenated identifier; use kebab-case for reporting and placement-specific policy. */
   placement: AdPlacement
   format?: AdFormat
-  /** Paired rails wait for extra width; compact rails remain fixed at 160px. */
+  /** Paired rails wait for extra width; paired-wide suits narrower content; compact stays 160px. */
   railLayout?: RailLayout
+  /** Rails default to 2xl; use xl when the page intentionally falls back to a single rail. */
+  railBreakpoint?: keyof typeof railBreakpointClasses
   hostname?: string
   /** Test seam for preview eligibility. Product callers should use the environment flag. */
   previewEnabled?: boolean
@@ -142,7 +154,9 @@ export function AdSlot({
   const siteID = adSiteConfig?.ads_enabled ? adSiteConfig.nitropay_site_id : undefined
   const adID = `nitropay-${placement}`
   const wideRail = useMediaQuery(format === "rail" ? railLayoutQueries[railLayout] : undefined)
-  const compactCard = useMediaQuery(format === "card" ? "(max-width: 1023px)" : undefined)
+  const compactCard = useMediaQuery(
+    format === "card" || format === "adaptive" ? "(max-width: 1023px)" : undefined,
+  )
   const measuredViewportHeightEligible = useMediaQuery(
     minViewportHeight === undefined ? undefined : `(min-height: ${minViewportHeight}px)`,
   )
@@ -207,7 +221,12 @@ export function AdSlot({
   return (
     <aside
       ref={slotRef}
-      className={cn(formatClasses[format], format === "rail" && railLayoutClasses[railLayout], className)}
+      className={cn(
+        formatClasses[format],
+        format === "rail" && railLayoutClasses[railLayout],
+        format === "rail" && railBreakpointClasses[railBreakpoint],
+        className,
+      )}
       aria-label={showPreview ? "Advertisement preview" : "Advertisement"}
       data-ad-placement={placement}
       data-ad-provider={showPreview ? "preview" : "nitropay"}
@@ -256,7 +275,7 @@ export function AdSlot({
                   ),
             format === "sidebar" && "flex justify-center",
             (showPreview || showDemo || format !== "responsive") && frameClasses[format],
-            format === "card" && (compactCard ? "h-[100px]" : "h-[250px]"),
+            (format === "card" || format === "adaptive") && (compactCard ? "h-[100px]" : "h-[250px]"),
           )}
         >
           {(showPreview || showDemo) && (

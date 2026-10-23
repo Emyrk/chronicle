@@ -30,7 +30,7 @@ Wide-screen rail:
 <AdSlot placement="leaderboards-right-rail" format="rail" />
 ```
 
-Use `railLayout="paired"` when a page renders rails on both sides. Single rails reserve 300px at 1920px; paired rails wait until 2080px so the page can reserve 300px on both sides without reducing the primary content width. Use `railLayout="compact"` for a rail that must remain fixed at 160×600 at every eligible viewport width.
+Use `railLayout="paired"` when a page renders rails on both sides. Single rails reserve 300px at 1920px; paired rails wait until 2080px so the page can reserve 300px on both sides without reducing the primary content width. Pages whose primary content is no wider than 72rem may use `railLayout="paired-wide"` to reserve 300px on both sides at 1840px. Use `railLayout="compact"` for a rail that must remain fixed at 160×600 at every eligible viewport width.
 
 Fixed-width content sidebar:
 
@@ -88,7 +88,8 @@ Do not create a placement-specific wrapper merely to render `AdSlot`. A wrapper 
 | Format | Component usage | Current layout contract |
 |---|---|---|
 | Responsive | `<AdSlot placement="..." />` | Hidden below `lg`; fills available width; minimum preview height 7rem |
-| Rail | `<AdSlot placement="..." format="rail" />` | Hidden below `2xl`; 160px wide by default; expands to 300px when its layout has spare viewport width unless `railLayout="compact"`; 600px minimum height; sticky below navigation |
+| Adaptive | `<AdSlot placement="..." format="adaptive" />` | Centered 300×100 below `lg`; fills available width at `lg` and offers 728×90, 970×90, 970×250, and 300×250 |
+| Rail | `<AdSlot placement="..." format="rail" />` | Hidden below `2xl` by default, or below `xl` with `railBreakpoint="xl"`; 160px wide by default; expands to 300px when its layout has spare viewport width unless `railLayout="compact"`; 600px minimum height; sticky below navigation |
 | Card | `<AdSlot placement="..." format="card" />` | Fixed 300×100 below `lg`, fixed 300×250 at `lg` and wider; centered within a content-grid cell |
 | Sidebar | `<AdSlot placement="..." format="sidebar" />` | Hidden below `lg`; fixed at 250px wide; offers 250×250, 240×400, and 160×600 according to the scrollable sidebar's viewport height |
 
@@ -107,6 +108,11 @@ Add a new format only when neither existing format can represent the required di
 | `recent-grid-card-*` | `pages/Recent/RecentRaids.tsx` | Recent uploads; 300×100 on mobile and 300×250 on desktop, inserted after pseudo-random groups of 4 to 8 raids |
 | `census-left-rail` | `pages/Census/CensusPage.tsx` | Census statistics; paired left rail visible at `2xl` |
 | `census-right-rail` | `pages/Census/CensusPage.tsx` | Census statistics; paired right rail visible at `2xl` |
+| `armory-left-rail` | `pages/ArmoryPage/ArmoryPage.tsx` | Character armory outside Activity; joins the right rail at `2xl`, widening at 1840px; suppressed when the linked account is ad-free |
+| `armory-right-rail` | `pages/ArmoryPage/ArmoryPage.tsx` | Character armory outside Activity; single rail from `xl`, paired at `2xl`, widening at 1840px; suppressed when the linked account is ad-free |
+| `armory-search-left-rail` | `pages/ArmorySearch/ArmorySearchPage.tsx` | Armory character and guild search; joins the right rail at `2xl`, widening at 1840px |
+| `armory-search-right-rail` | `pages/ArmorySearch/ArmorySearchPage.tsx` | Armory character and guild search; single rail from `xl`, paired at `2xl`, widening at 1840px |
+| `armory-search-empty` | `pages/ArmorySearch/ArmorySearchPage.tsx` | Centered adaptive placement on the Characters tab before a valid search value is entered; 300×100 on mobile and responsive sizes through 970×250 from `lg` |
 
 ## Enablement model
 
