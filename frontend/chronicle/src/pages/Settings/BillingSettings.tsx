@@ -19,6 +19,7 @@ import {
   billingPriceQualities,
   billingTierLabel,
   billingTierRank,
+  billingTierStorageLabel,
   formatBillingAmount,
   formatMonthlyAmount,
 } from "./billingPricing"
@@ -69,7 +70,7 @@ const REWARDS = [
   {
     title: "Expanded Log Storage",
     icon: "inv_misc_bag_10",
-    effects: ["Equip: Increases your log storage by 300 MB."],
+    effects: ["Equip: Increases your log storage based on your Chronicle standing."],
     flavor: "Holds a whole season of wipes.",
   },
   {
@@ -193,6 +194,8 @@ const COMPARISON: { feature: string; friendly: string; honored: string; revered?
     feature: "Log storage",
     friendly: "The standard storage allowance for your uploads.",
     honored: "An extra 300 MB on top of the standard allowance.",
+    revered: "An extra 1 GB on top of the standard allowance.",
+    exalted: "An extra 2 GB on top of the standard allowance.",
   },
   {
     feature: "Raw log downloads",
@@ -295,8 +298,11 @@ function Achievement({ billing }: { billing?: BillingSummary }) {
   const hasTierAccess = billing?.ads_free ?? false
   const subscriptionState = billing ? billingSubscriptionState(billing) : null
   const billingDate = subscriptionState?.effectiveDate
-  const standing = hasTierAccess ? billingTierLabel(billing?.tier ?? "honored") : "Friendly"
-  const tierRank = billingTierRank(billing?.tier ?? "honored")
+  const tier = billing?.tier ?? "honored"
+  const standing = hasTierAccess ? billingTierLabel(tier) : "Friendly"
+  const storageLabel = billingTierStorageLabel(tier) ?? "300 MB"
+  const storageReward = hasTierAccess ? `+${storageLabel}` : "tier-based"
+  const tierRank = billingTierRank(tier)
   const fill = hasTierAccess && tierRank >= 0 ? ((tierRank + 1) / PAID_BILLING_TIERS.length) * 100 : FRIENDLY_FILL
 
   return (
@@ -355,7 +361,7 @@ function Achievement({ billing }: { billing?: BillingSummary }) {
       </div>
 
       <p className="mt-4 border-t border-border pt-3 text-center font-wow text-sm" style={{ color: "#ffd200" }}>
-        Reward: Ad-free browsing, +300 MB storage, raw log downloads, and unlisted logs
+        Reward: Ad-free browsing, {storageReward} storage, raw log downloads, and unlisted logs
       </p>
     </div>
   )
@@ -510,7 +516,7 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
 
   return (
     <FramePanel title="Choose Your Standing">
-      <p className="text-center text-xs text-muted-foreground">Every tier currently grants the same complete rewards. Choose how much you would like to support Chronicle.</p>
+      <p className="text-center text-xs text-muted-foreground">Every tier includes ad-free browsing, raw log downloads, and unlisted logs. Higher standings include more log storage.</p>
 
       {availableTiers.length > 0 ? (
         <div role="radiogroup" aria-label="Supporter tier" className="grid grid-cols-3 gap-2">
@@ -535,6 +541,7 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
                 <span className="font-wow text-xs font-bold" style={{ color: TIER_COLOR[option] }}>
                   {billingTierLabel(option)}
                 </span>
+                <span className="text-[10px] text-muted-foreground">+{billingTierStorageLabel(option)} storage</span>
               </button>
             )
           })}

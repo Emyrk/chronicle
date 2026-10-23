@@ -677,20 +677,23 @@ func TestHasEntitlementUsesPersistedStripeEntitlement(t *testing.T) {
 func TestEveryPaidTierEntitlementGrantsCompletePerks(t *testing.T) {
 	t.Parallel()
 
-	for _, entitlement := range []Entitlement{
-		EntitlementChronicleHonored,
-		EntitlementChronicleRevered,
-		EntitlementChronicleExalted,
+	for _, tc := range []struct {
+		entitlement  Entitlement
+		storageBytes int64
+	}{
+		{entitlement: EntitlementChronicleHonored, storageBytes: stripeHonoredStorageGrantBytes},
+		{entitlement: EntitlementChronicleRevered, storageBytes: stripeReveredStorageGrantBytes},
+		{entitlement: EntitlementChronicleExalted, storageBytes: stripeExaltedStorageGrantBytes},
 	} {
-		t.Run(string(entitlement), func(t *testing.T) {
+		t.Run(string(tc.entitlement), func(t *testing.T) {
 			t.Parallel()
 			userID := uuid.New()
 			store := &entitlementStore{}
-			behavior, ok := stripeEntitlementBehavior(entitlement)
+			behavior, ok := stripeEntitlementBehavior(tc.entitlement)
 			require.True(t, ok)
 			require.NoError(t, behavior.Grant(context.Background(), store, userID))
-			require.Equal(t, stripeStorageGrantSource, store.dataGrant.Source)
-			require.Equal(t, stripeStorageGrantBytes, store.dataGrant.StorageBytes)
+			require.Equal(t, stripePaidTierStorageGrantSource, store.dataGrant.Source)
+			require.Equal(t, tc.storageBytes, store.dataGrant.StorageBytes)
 			require.Equal(t, []entitlementRoleChange{
 				{userID: userID, role: stripeRoleAdFree, granted: true},
 				{userID: userID, role: stripeRoleDownloadRawLogs, granted: true},
@@ -739,9 +742,9 @@ func TestSyncStripeEntitlementsPersistsAuthoritativeSnapshotAndStorageGrant(t *t
 	require.NoError(t, err)
 	require.Equal(t, database.DeleteBillingEntitlementsByProviderCustomerIDParams{Provider: ProviderStripe, ProviderCustomerID: "cus_123"}, store.deletedCustomer)
 	require.Len(t, store.persisted, 2, "unknown entitlements remain visible in the persisted snapshot")
-	require.Equal(t, stripeStorageGrantBytes, store.dataGrant.StorageBytes)
-	require.Equal(t, stripeStorageGrantSource, store.dataGrant.Source)
-	require.Equal(t, stripeStorageGrantSource, store.deletedDataGrant.Source)
+	require.Equal(t, stripeReveredStorageGrantBytes, store.dataGrant.StorageBytes)
+	require.Equal(t, stripePaidTierStorageGrantSource, store.dataGrant.Source)
+	require.Equal(t, stripePaidTierStorageGrantSource, store.deletedDataGrant.Source)
 	require.Equal(t, []entitlementRoleChange{
 		{userID: userID, role: stripeRoleAdFree, granted: true},
 		{userID: userID, role: stripeRoleDownloadRawLogs, granted: true},
@@ -777,7 +780,7 @@ func TestSyncStripeEntitlementsRemovesStorageGrantWhenAbsent(t *testing.T) {
 	err := s.syncStripeEntitlements(context.Background(), "cus_123")
 	require.NoError(t, err)
 	require.Empty(t, store.persisted)
-	require.Equal(t, database.DeleteDataGrantParams{UserID: userID, Source: stripeStorageGrantSource}, store.deletedDataGrant)
+	require.Equal(t, database.DeleteDataGrantParams{UserID: userID, Source: stripePaidTierStorageGrantSource}, store.deletedDataGrant)
 }
 
 func TestSyncStripeEntitlementsTransfersOwnerAndAppliesRolePerEntitlement(t *testing.T) {
@@ -800,8 +803,8 @@ func TestSyncStripeEntitlementsTransfersOwnerAndAppliesRolePerEntitlement(t *tes
 	require.NoError(t, s.syncStripeEntitlements(context.Background(), "cus_123"))
 	require.Len(t, store.persisted, 2, "unknown entitlements remain visible in the persisted snapshot")
 	require.Equal(t, []database.DeleteDataGrantParams{
-		{UserID: previousOwner, Source: stripeStorageGrantSource},
-		{UserID: currentOwner, Source: stripeStorageGrantSource},
+		{UserID: previousOwner, Source: stripePaidTierStorageGrantSource},
+		{UserID: currentOwner, Source: stripePaidTierStorageGrantSource},
 	}, store.deletedDataGrants)
 	require.Equal(t, []entitlementRoleChange{
 		{userID: previousOwner, role: stripeRoleAdFree, granted: false},

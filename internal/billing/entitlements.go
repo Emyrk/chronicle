@@ -99,13 +99,16 @@ type StripeEntitlement interface {
 	Revoke(context.Context, EntitlementTransaction, uuid.UUID) error
 }
 
-type chroniclePaidEntitlement struct{}
+type chroniclePaidEntitlement struct {
+	storageBytes int64
+}
 
 const (
-	// Keep the established source key so upgrading the Stripe feature model does
-	// not create a second storage grant for existing supporters.
-	stripeStorageGrantSource       = "billing:stripe:+300mb-storage"
-	stripeStorageGrantBytes  int64 = 300_000_000
+	stripePaidTierStorageGrantSource = "billing:stripe:paid-tier-storage"
+
+	stripeHonoredStorageGrantBytes int64 = 300_000_000
+	stripeReveredStorageGrantBytes int64 = 1_000_000_000
+	stripeExaltedStorageGrantBytes int64 = 2_000_000_000
 
 	stripeRoleAdFree          = "stripe_ad_free"
 	stripeRoleDownloadRawLogs = "stripe_download_raw_logs"
@@ -121,11 +124,11 @@ var chroniclePaidStripeRoles = []string{
 // Grant expands any Chronicle paid-tier Stripe feature into every benefit
 // owned by that tier. Future benefit changes remain application code instead of
 // Stripe catalog changes, so they apply without another Stripe billing cycle.
-func (chroniclePaidEntitlement) Grant(ctx context.Context, tx EntitlementTransaction, userID uuid.UUID) error {
+func (entitlement chroniclePaidEntitlement) Grant(ctx context.Context, tx EntitlementTransaction, userID uuid.UUID) error {
 	if _, err := tx.UpsertDataGrant(ctx, database.UpsertDataGrantParams{
 		UserID:       userID,
-		Source:       stripeStorageGrantSource,
-		StorageBytes: stripeStorageGrantBytes,
+		Source:       stripePaidTierStorageGrantSource,
+		StorageBytes: entitlement.storageBytes,
 		Description:  pgtype.Text{String: "Stripe Chronicle paid tier entitlement", Valid: true},
 	}); err != nil {
 		return err
@@ -139,7 +142,7 @@ func (chroniclePaidEntitlement) Grant(ctx context.Context, tx EntitlementTransac
 }
 
 func (chroniclePaidEntitlement) Revoke(ctx context.Context, tx EntitlementTransaction, userID uuid.UUID) error {
-	if err := tx.DeleteDataGrant(ctx, database.DeleteDataGrantParams{UserID: userID, Source: stripeStorageGrantSource}); err != nil {
+	if err := tx.DeleteDataGrant(ctx, database.DeleteDataGrantParams{UserID: userID, Source: stripePaidTierStorageGrantSource}); err != nil {
 		return err
 	}
 	for _, role := range chroniclePaidStripeRoles {
@@ -159,9 +162,9 @@ type stripeEntitlementDefinition struct {
 // stripeEntitlements is the complete, executable definition of known Stripe
 // entitlements. Unknown lookup keys are still persisted, but have no effects.
 var stripeEntitlements = []stripeEntitlementDefinition{
-	{key: EntitlementChronicleHonored, behaviorKey: "chronicle-paid", behavior: chroniclePaidEntitlement{}},
-	{key: EntitlementChronicleRevered, behaviorKey: "chronicle-paid", behavior: chroniclePaidEntitlement{}},
-	{key: EntitlementChronicleExalted, behaviorKey: "chronicle-paid", behavior: chroniclePaidEntitlement{}},
+	{key: EntitlementChronicleHonored, behaviorKey: "chronicle-paid", behavior: chroniclePaidEntitlement{storageBytes: stripeHonoredStorageGrantBytes}},
+	{key: EntitlementChronicleRevered, behaviorKey: "chronicle-paid", behavior: chroniclePaidEntitlement{storageBytes: stripeReveredStorageGrantBytes}},
+	{key: EntitlementChronicleExalted, behaviorKey: "chronicle-paid", behavior: chroniclePaidEntitlement{storageBytes: stripeExaltedStorageGrantBytes}},
 }
 
 func stripeEntitlementBehavior(key Entitlement) (StripeEntitlement, bool) {

@@ -58,6 +58,19 @@ export function billingTierLabel(tier: string): string {
   return tier.charAt(0).toUpperCase() + tier.slice(1)
 }
 
+export function billingTierStorageLabel(tier: string): string | undefined {
+  switch (tier) {
+    case "honored":
+      return "300 MB"
+    case "revered":
+      return "1 GB"
+    case "exalted":
+      return "2 GB"
+    default:
+      return undefined
+  }
+}
+
 export function billingTierRank(tier: string): number {
   return PAID_BILLING_TIERS.indexOf(tier as PaidBillingTier)
 }
