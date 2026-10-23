@@ -175,7 +175,17 @@ func TestInferTalentSubSpec(t *testing.T) {
 		{Name: "Spirit Armor", TabIndex: 2},
 		{Name: "Flurry", TabIndex: 3},
 	}
+	warriorFuryTalents := []talents.TalentEntry{
+		{Name: "Bloodthirst", TabIndex: 0},
+	}
+	warriorProtectionTalents := []talents.TalentEntry{
+		{Name: "Defiance", TabIndex: 0},
+	}
 	treeData := &talents.TalentTreeData{Classes: map[int32]talents.ClassTalentData{
+		1: {Tabs: []talents.TalentTabData{
+			{Name: "Fury", Talents: warriorFuryTalents},
+			{Name: "Protection", Talents: warriorProtectionTalents},
+		}},
 		7:  {Tabs: []talents.TalentTabData{{Name: "Enhancement", Talents: enhancementTalents}}},
 		11: {Tabs: []talents.TalentTabData{{Name: "Feral Combat", Talents: feralTalents}}},
 	}}
@@ -201,6 +211,13 @@ func TestInferTalentSubSpec(t *testing.T) {
 		{name: "missing ancestral guardian is dps", class: "SHAMAN", spec: "Enhancement", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1, 0, 1, 0}, nil}}, want: "DPS"},
 		{name: "missing spirit armor is dps", class: "SHAMAN", spec: "Enhancement", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1, 1, 0, 0}, nil}}, want: "DPS"},
 		{name: "otherwise enhancement dps", class: "SHAMAN", spec: "Enhancement", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {0, 0, 0, 1}, nil}}, want: "DPS"},
+		{name: "defiance and bloodthirst is fury prot", class: "WARRIOR", spec: "Fury", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1}, {1}}}, want: "Fury Prot"},
+		{name: "missing defiance is fury", class: "WARRIOR", spec: "Fury", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1}, {0}}}, want: "Fury"},
+		{name: "missing bloodthirst is fury", class: "WARRIOR", spec: "Fury", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {0}, {1}}}, want: "Fury"},
+		{name: "otherwise fury", class: "WARRIOR", spec: "Fury", flavor: flavor, talents: &combatant.Talents{}, want: "Fury"},
+		{name: "arms warrior has no sub spec", class: "WARRIOR", spec: "Arms", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1}, {1}}}},
+		{name: "protection warrior has no sub spec", class: "WARRIOR", spec: "Protection", flavor: flavor, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1}, {1}}}},
+		{name: "non nightmare warrior has no sub spec", class: "WARRIOR", spec: "Fury", flavor: database.WoWFlavor{database.FlavorVanilla}, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1}, {1}}}},
 		{name: "non nightmare has no sub spec", class: "DRUID", spec: "Feral", flavor: database.WoWFlavor{database.FlavorVanilla}, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1}, nil}}},
 		{name: "non nightmare enhancement has no sub spec", class: "SHAMAN", spec: "Enhancement", flavor: database.WoWFlavor{database.FlavorVanilla}, talents: &combatant.Talents{Trees: [3][]uint8{nil, {1, 1, 1}, nil}}},
 		{name: "non feral has no sub spec", class: "DRUID", spec: "Balance", flavor: flavor, talents: &combatant.Talents{}},

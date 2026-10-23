@@ -1845,11 +1845,14 @@ func inferTalentSubSpec(className, spec string, playerTalents *combatant.Talents
 		return ""
 	}
 
+	type talentMarker struct {
+		treeIndex int
+		tabNames  []string
+		name      string
+	}
 	type subSpecRule struct {
 		classID       int32
-		treeIndex     int
-		tabNames      []string
-		markerTalents []string
+		markerTalents []talentMarker
 		matched       string
 		fallback      string
 	}
@@ -1858,21 +1861,35 @@ func inferTalentSubSpec(className, spec string, playerTalents *combatant.Talents
 	switch {
 	case className == "DRUID" && spec == "Feral":
 		rule = subSpecRule{
-			classID:       11,
-			treeIndex:     1,
-			tabNames:      []string{"Feral", "Feral Combat"},
-			markerTalents: []string{"Thick Hide", "Feral Charge", "Feral Instinct"},
-			matched:       "Bear",
-			fallback:      "Cat",
+			classID: 11,
+			markerTalents: []talentMarker{
+				{treeIndex: 1, tabNames: []string{"Feral", "Feral Combat"}, name: "Thick Hide"},
+				{treeIndex: 1, tabNames: []string{"Feral", "Feral Combat"}, name: "Feral Charge"},
+				{treeIndex: 1, tabNames: []string{"Feral", "Feral Combat"}, name: "Feral Instinct"},
+			},
+			matched:  "Bear",
+			fallback: "Cat",
 		}
 	case className == "SHAMAN" && spec == "Enhancement":
 		rule = subSpecRule{
-			classID:       7,
-			treeIndex:     1,
-			tabNames:      []string{"Enhancement"},
-			markerTalents: []string{"Totemic Alignment", "Ancestral Guardian", "Spirit Armor"},
-			matched:       "Tank",
-			fallback:      "DPS",
+			classID: 7,
+			markerTalents: []talentMarker{
+				{treeIndex: 1, tabNames: []string{"Enhancement"}, name: "Totemic Alignment"},
+				{treeIndex: 1, tabNames: []string{"Enhancement"}, name: "Ancestral Guardian"},
+				{treeIndex: 1, tabNames: []string{"Enhancement"}, name: "Spirit Armor"},
+			},
+			matched:  "Tank",
+			fallback: "DPS",
+		}
+	case className == "WARRIOR" && spec == "Fury":
+		rule = subSpecRule{
+			classID: 1,
+			markerTalents: []talentMarker{
+				{treeIndex: 2, tabNames: []string{"Protection"}, name: "Defiance"},
+				{treeIndex: 1, tabNames: []string{"Fury"}, name: "Bloodthirst"},
+			},
+			matched:  "Fury Prot",
+			fallback: "Fury",
 		}
 	default:
 		return ""
@@ -1885,17 +1902,17 @@ func inferTalentSubSpec(className, spec string, playerTalents *combatant.Talents
 	markers := make(map[string]bool, len(rule.markerTalents))
 	if treeData != nil {
 		if classData, ok := treeData.Classes[rule.classID]; ok {
-			for _, tab := range classData.Tabs {
-				if !slices.ContainsFunc(rule.tabNames, func(name string) bool { return strings.EqualFold(name, tab.Name) }) {
-					continue
-				}
-				for _, talent := range tab.Talents {
-					if talent.TabIndex < 0 || int(talent.TabIndex) >= len(playerTalents.Trees[rule.treeIndex]) || playerTalents.Trees[rule.treeIndex][talent.TabIndex] == 0 {
+			for _, marker := range rule.markerTalents {
+				for _, tab := range classData.Tabs {
+					if !slices.ContainsFunc(marker.tabNames, func(name string) bool { return strings.EqualFold(name, tab.Name) }) {
 						continue
 					}
-					for _, marker := range rule.markerTalents {
-						if strings.EqualFold(talent.Name, marker) {
-							markers[marker] = true
+					for _, talent := range tab.Talents {
+						if talent.TabIndex < 0 || int(talent.TabIndex) >= len(playerTalents.Trees[marker.treeIndex]) || playerTalents.Trees[marker.treeIndex][talent.TabIndex] == 0 {
+							continue
+						}
+						if strings.EqualFold(talent.Name, marker.name) {
+							markers[marker.name] = true
 						}
 					}
 				}
@@ -1903,7 +1920,7 @@ func inferTalentSubSpec(className, spec string, playerTalents *combatant.Talents
 		}
 	}
 	for _, marker := range rule.markerTalents {
-		if !markers[marker] {
+		if !markers[marker.name] {
 			return rule.fallback
 		}
 	}
