@@ -368,42 +368,6 @@ export function AdSlot({
             )}
           </div>
         )}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div
-            id={adID}
-            onClickCapture={(event) => guardNitroPayReportFrameAccess(event.currentTarget, event.target)}
-            className={cn(
-              showPreview
-                ? "relative flex items-center justify-center overflow-hidden rounded-md border border-dashed border-border/60 bg-muted/10"
-                : showDemo
-                  ? "relative flex items-center justify-center overflow-hidden rounded-md border border-dashed border-[#f0c060]/35 bg-[#f0c060]/5 [&>iframe]:relative [&>iframe]:z-10 [&>iframe]:!bg-transparent"
-                  : cn(
-                      "!bg-transparent [&>iframe]:!bg-transparent",
-                      liveCreativeRendered ? "opacity-100" : "pointer-events-none opacity-0",
-                    ),
-              format === "sidebar" && "flex justify-center",
-              (showPreview || showDemo || format !== "responsive") && frameClasses[format],
-              format === "card" && (compactCard ? "h-[100px]" : "h-[250px]"),
-            )}
-          >
-            {(showPreview || showDemo) && (
-              <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
-                <div className="absolute inset-0 opacity-[0.025] [background-image:linear-gradient(135deg,currentColor_12.5%,transparent_12.5%,transparent_50%,currentColor_50%,currentColor_62.5%,transparent_62.5%,transparent)] [background-size:12px_12px]" />
-                <div className={cn("relative text-center", showDemo ? "text-[#f0c060]/70" : "text-muted-foreground/55")}>
-                  <p className="text-[10px] font-medium uppercase tracking-[0.16em]">
-                    {showDemo ? "NitroPay demo" : "Ad preview"}
-                  </p>
-                  <p className="mt-1 font-mono text-[10px]">
-                    {adSizeLabel(format, wideRail, compactCard, sidebarAvailableHeight)}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </aside>
   )
