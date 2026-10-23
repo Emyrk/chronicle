@@ -1163,10 +1163,25 @@ export function useLogGroups(options?: Omit<UseQueryOptions<WoWLogGroup[]>, "que
   });
 }
 
+const logGroupPollingInterval = 5_000;
+const terminalLogJobStates = new Set<RiverJobState>([
+  "cancelled",
+  "completed",
+  "discarded",
+]);
+
+export function getLogGroupRefetchInterval(log: WoWLogGroupState | undefined): number | false {
+  if (!log || terminalLogJobStates.has(log.status.state)) {
+    return false;
+  }
+  return logGroupPollingInterval;
+}
+
 export function useLogGroup(logId: string, options?: Omit<UseQueryOptions<WoWLogGroupState>, "queryKey" | "queryFn">) {
   return useQuery({
     queryKey: ["logGroup", logId],
     retry: false,
+    refetchInterval: (query) => getLogGroupRefetchInterval(query.state.data),
     queryFn: async () => {
       const response = await fetch(`/api/v1/raidlogs/logs/${logId}`);
       if (!response.ok) throw new Error("Failed to fetch log details");
@@ -1180,6 +1195,7 @@ export function useLogGroupByFileHash(fileHash: string, options?: Omit<UseQueryO
   return useQuery({
     queryKey: ["logGroupByFile", fileHash],
     retry: false,
+    refetchInterval: (query) => getLogGroupRefetchInterval(query.state.data),
     queryFn: async () => {
       const response = await fetch(`/api/v1/raidlogs/logs/by-file-hash/${fileHash}`);
       if (!response.ok) throw new Error("Failed to fetch log details");

@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { 
@@ -57,6 +57,7 @@ import {
   useDeleteLogInstance,
   useAuthorizationCheck,
   useUploadInstanceYoutube,
+  getLogGroupRefetchInterval,
   type WoWLogGroupState, 
   type WoWLogFile, 
   type RiverJobState,
@@ -210,7 +211,7 @@ function StatusBadge({ state, errors }: { state: RiverJobState; errors?: readonl
     case RIVER_STATES.scheduled:
       return (
         <div className="flex items-center gap-2 text-muted-foreground">
-          <Clock className="h-4 w-4" />
+          <Clock className="h-4 w-4 animate-pulse" />
           <span className="text-sm font-medium">Scheduled</span>
         </div>
       );
@@ -219,7 +220,7 @@ function StatusBadge({ state, errors }: { state: RiverJobState; errors?: readonl
     default:
       return (
         <div className="flex items-center gap-2 text-muted-foreground">
-          <Clock className="h-4 w-4" />
+          <Clock className="h-4 w-4 animate-pulse" />
           <span className="text-sm font-medium">Pending</span>
         </div>
       );
@@ -951,8 +952,70 @@ function isProcessingDone(log: WoWLogGroupState): boolean {
     (log.status.state === RIVER_STATES.discarded && log.status.errors.length === 0);
 }
 
+/** Countdown to the next automatic status poll. Hidden once the job stops polling. */
+function NextCheckIndicator({
+  log,
+  lastCheckedAt,
+  isChecking,
+}: {
+  log: WoWLogGroupState;
+  lastCheckedAt?: number;
+  isChecking: boolean;
+}) {
+  const interval = getLogGroupRefetchInterval(log);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!interval) return;
+    const id = window.setInterval(() => setNow(Date.now()), 200);
+    return () => window.clearInterval(id);
+  }, [interval]);
+  if (!interval || !lastCheckedAt) return null;
+
+  const remainingMs = Math.min(interval, Math.max(0, lastCheckedAt + interval - now));
+  const checking = isChecking || remainingMs === 0;
+  // Ring drains from full to empty over the interval.
+  const radius = 6;
+  const circumference = 2 * Math.PI * radius;
+  const offset = checking ? 0 : circumference * (1 - remainingMs / interval);
+  return (
+    <span
+      className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums whitespace-nowrap"
+      title={`Status refreshes automatically every ${interval / 1000}s`}
+    >
+      {checking ? (
+        <Loader2 className="h-3 w-3 animate-spin" />
+      ) : (
+        <svg className="h-3 w-3 -rotate-90" viewBox="0 0 16 16" aria-hidden="true">
+          <circle cx="8" cy="8" r={radius} fill="none" stroke="currentColor" strokeOpacity={0.25} strokeWidth={2} />
+          <circle
+            cx="8"
+            cy="8"
+            r={radius}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            className="text-primary transition-[stroke-dashoffset] duration-200 ease-linear"
+          />
+        </svg>
+      )}
+      {checking ? "Checking for updates…" : `Next check in ${Math.ceil(remainingMs / 1000)}s`}
+    </span>
+  );
+}
+
 /** Job status for the log. Collapsed to a one-line summary once processing succeeded. */
-function ProcessingStatusCard({ log }: { log: WoWLogGroupState }) {
+function ProcessingStatusCard({
+  log,
+  lastCheckedAt,
+  isChecking = false,
+}: {
+  log: WoWLogGroupState;
+  lastCheckedAt?: number;
+  isChecking?: boolean;
+}) {
   const done = isProcessingDone(log);
   const summary = log.status.finalized_at && (
     <span className="text-sm font-normal text-muted-foreground whitespace-nowrap">
@@ -967,6 +1030,7 @@ function ProcessingStatusCard({ log }: { log: WoWLogGroupState }) {
         <div>
           <p className="text-sm text-muted-foreground">Status</p>
           <StatusBadge state={log.status.state} errors={log.status.errors} />
+          <NextCheckIndicator log={log} lastCheckedAt={lastCheckedAt} isChecking={isChecking} />
         </div>
         <div>
           <p className="text-sm text-muted-foreground">Attempt</p>
@@ -1142,6 +1206,8 @@ export interface LogDetailViewProps {
   isDeletingInstance: boolean;
   onRefresh: () => void;
   isRefreshing: boolean;
+  /** When the log was last fetched (ms since epoch); drives the next-poll countdown. */
+  lastCheckedAt?: number;
   canMarkUnlisted: boolean;
   onMarkUnlisted: () => void;
   isMarkingUnlisted: boolean;
@@ -1169,6 +1235,7 @@ export function LogDetailView({
   isDeletingInstance,
   onRefresh,
   isRefreshing,
+  lastCheckedAt,
   canMarkUnlisted,
   onMarkUnlisted,
   isMarkingUnlisted,
@@ -1435,7 +1502,9 @@ export function LogDetailView({
 
 
 
-          {!processingDone && <ProcessingStatusCard log={log} />}
+          {!processingDone && (
+            <ProcessingStatusCard log={log} lastCheckedAt={lastCheckedAt} isChecking={isRefreshing} />
+          )}
 
           {/* Parsed Instances Section - only shows for log-parse jobs with output */}
           <ParsedInstancesSection
@@ -1631,6 +1700,7 @@ export function LogDetail() {
     error: logError,
     refetch,
     isRefetching,
+    dataUpdatedAt,
   } = useLogGroup(logId || "", {
     enabled: !!logId,
   });
@@ -1770,6 +1840,7 @@ export function LogDetail() {
       isDeletingInstance={deleteLogInstance.isPending}
       onRefresh={handleRefresh}
       isRefreshing={isRefetching}
+      lastCheckedAt={dataUpdatedAt}
       canMarkUnlisted={canMarkUnlisted}
       onMarkUnlisted={handleMarkUnlisted}
       isMarkingUnlisted={markUnlisted.isPending}
@@ -1789,6 +1860,7 @@ export function LogDetailByHash() {
     error: logError,
     refetch,
     isRefetching,
+    dataUpdatedAt,
   } = useLogGroupByFileHash(fileHash || "", {
     enabled: !!fileHash,
   });
@@ -1930,6 +2002,7 @@ export function LogDetailByHash() {
       isDeletingInstance={deleteLogInstance.isPending}
       onRefresh={handleRefresh}
       isRefreshing={isRefetching}
+      lastCheckedAt={dataUpdatedAt}
       canMarkUnlisted={canMarkUnlisted}
       onMarkUnlisted={handleMarkUnlisted}
       isMarkingUnlisted={markUnlisted.isPending}

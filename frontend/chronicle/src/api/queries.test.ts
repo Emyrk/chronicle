@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { spellQueryOptions } from "./queries";
+import {
+  getLogGroupRefetchInterval,
+  spellQueryOptions,
+  type RiverJobState,
+  type WoWLogGroupState,
+} from "./queries";
+
+function logWithJobState(state: RiverJobState): WoWLogGroupState {
+  return { status: { state } } as WoWLogGroupState;
+}
 
 describe("spellQueryOptions", () => {
   afterEach(() => {
@@ -46,5 +55,25 @@ describe("spellQueryOptions", () => {
       "Spell not found",
     );
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/wowdb/spell/456");
+  });
+});
+
+describe("getLogGroupRefetchInterval", () => {
+  it.each(["available", "pending", "retryable", "running", "scheduled"])(
+    "polls every 5 seconds while the job is %s",
+    (state) => {
+      expect(getLogGroupRefetchInterval(logWithJobState(state))).toBe(5_000);
+    },
+  );
+
+  it.each(["cancelled", "completed", "discarded"])(
+    "stops polling when the job is %s",
+    (state) => {
+      expect(getLogGroupRefetchInterval(logWithJobState(state))).toBe(false);
+    },
+  );
+
+  it("does not poll before log data is available", () => {
+    expect(getLogGroupRefetchInterval(undefined)).toBe(false);
   });
 });
