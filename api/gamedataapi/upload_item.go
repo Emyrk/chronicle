@@ -117,9 +117,13 @@ func (h *Handler) handleItemUpload(ctx context.Context, w http.ResponseWriter, m
 		}
 	}
 
-	// Perform upserts if requested.
+	// Perform upserts and durable publication in one transaction. Applying the
+	// committed generation before derivation ensures a later derivation failure
+	// cannot leave committed item data without invalidation.
 	if (mode == "upsert" || mode == "insert") && len(toUpsert) > 0 {
-		if err := upsertItems(ctx, h.pool, datasetID, toUpsert); err != nil {
+		if err := h.mutateDataset(ctx, datasetID, []servicecache.Namespace{servicecache.NamespaceItems}, func(tx database.Store) error {
+			return upsertItems(ctx, tx, datasetID, toUpsert)
+		}); err != nil {
 			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 				Message: "Failed to upsert items",
 				Detail:  err.Error(),
@@ -132,16 +136,6 @@ func (h *Handler) handleItemUpload(ctx context.Context, w http.ResponseWriter, m
 		if err := h.deriveConsumables(ctx, datasetID); err != nil {
 			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 				Message: "Items imported but consumable generation failed",
-				Detail:  err.Error(),
-			})
-			return
-		}
-	}
-
-	if len(toUpsert) > 0 {
-		if err := h.invalidateDataset(ctx, datasetID, servicecache.NamespaceItems); err != nil {
-			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-				Message: "Items imported but cache invalidation failed",
 				Detail:  err.Error(),
 			})
 			return

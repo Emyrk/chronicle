@@ -9,7 +9,6 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/spelldb"
 	"github.com/Emyrk/chronicle/internal/gamedataoverrides"
-	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Gophercraft/core/format/dbc"
 	"github.com/google/uuid"
 )
@@ -100,19 +99,6 @@ func (h *Handler) handleSpellUpload(ctx context.Context, w http.ResponseWriter, 
 	if err := h.deriveConsumables(ctx, datasetID); err != nil {
 		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 			Message: "Spells imported but consumable generation failed",
-			Detail:  err.Error(),
-		})
-		return
-	}
-
-	if err := h.invalidateDataset(ctx, datasetID,
-		servicecache.NamespaceSpells,
-		servicecache.NamespaceExtraAttacks,
-		servicecache.NamespaceDurationMods,
-		servicecache.NamespacePeriodicSpells,
-	); err != nil {
-		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
-			Message: "Spells imported but cache invalidation failed",
 			Detail:  err.Error(),
 		})
 		return

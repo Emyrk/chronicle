@@ -140,12 +140,15 @@ func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 	// Create tenant (non-discoverable, branding empty — populated via approved mod requests).
 	bypassCtx := servicetenant.AdminBypass(ctx)
 	tenantID := uuid.New()
-	_, err := s.Zed.InsertTenant(bypassCtx, database.InsertTenantParams{
-		ID:               tenantID,
-		Name:             req.Name,
-		IncludeInAll:     false,
-		Discoverable:     false,
-		AvailableFormats: []string{},
+	err := s.mutateTenant(bypassCtx, func(tx *authz.AuthzTX) error {
+		_, err := tx.InsertTenant(bypassCtx, database.InsertTenantParams{
+			ID:               tenantID,
+			Name:             req.Name,
+			IncludeInAll:     false,
+			Discoverable:     false,
+			AvailableFormats: []string{},
+		})
+		return err
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -155,10 +158,6 @@ func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		httpapi.InternalServerError(w, fmt.Errorf("create tenant: %w", err))
-		return
-	}
-	if err := s.invalidateTenantCache(ctx); err != nil {
-		httpapi.InternalServerError(w, fmt.Errorf("reload tenant cache: %w", err))
 		return
 	}
 

@@ -172,8 +172,19 @@ func registerCacheInvalidator(cacheSvc *servicecache.Service, refresh func(conte
 	)
 }
 
-func (s *Service) invalidateCache(ctx context.Context) error {
-	return s.cacheSvc.Invalidate(ctx, servicecache.GlobalInvalidation(servicecache.NamespaceTenantSlugs))
+func (s *Service) mutateAndPublish(ctx context.Context, mutate func(database.Store) error) error {
+	var published servicecache.PublishedGeneration
+	if err := s.db.InTx(ctx, func(tx database.Store) error {
+		if err := mutate(tx); err != nil {
+			return err
+		}
+		var err error
+		published, err = s.cacheSvc.PublishTx(ctx, tx, servicecache.GlobalInvalidation(servicecache.NamespaceTenantSlugs))
+		return err
+	}, nil); err != nil {
+		return err
+	}
+	return s.cacheSvc.ApplyPublished(ctx, published)
 }
 
 // IsAllowedOrigin checks if the given origin is a valid tenant subdomain

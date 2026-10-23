@@ -49,6 +49,13 @@ func (f *creatureFetcher) invalidateDataset(datasetID uuid.UUID) {
 	})
 }
 
+func (f *creatureFetcher) invalidateAll() {
+	if f == nil {
+		return
+	}
+	f.cache.Purge()
+}
+
 // Creature returns the creature template for the given entry ID and dataset.
 // Returns (nil, false) if the creature is not found or the DB is unavailable.
 func (f *creatureFetcher) Creature(datasetID uuid.UUID, entry int32) (*database.WorldCreatureTemplate, bool) {

@@ -72,6 +72,14 @@ func (f *itemFetcher) invalidateDataset(datasetID uuid.UUID) {
 	})
 }
 
+func (f *itemFetcher) invalidateAll() {
+	if f == nil {
+		return
+	}
+	f.idCache.Purge()
+	f.nameCache.Purge()
+}
+
 // ResolveGear fixes item IDs in a gear slice in-place for the given dataset.
 // Items whose ID is already cached (or found by ID in DB) are left as-is.
 // Items whose ID is unknown are resolved by name if unique.

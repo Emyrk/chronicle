@@ -1,7 +1,6 @@
 package servicetenant
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -73,17 +72,21 @@ func (s *Service) Upsert(w http.ResponseWriter, r *http.Request) {
 		req.ID = uuid.NullUUID{UUID: parsed, Valid: true}
 	}
 
-	var t database.Tenant
-	var err error
-	if req.IsCreate() {
-		if req.Name == "" {
-			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "name is required"})
-			return
-		}
-		t, err = s.db.InsertTenant(ctx, req.ToInsertParams())
-	} else {
-		t, err = s.db.UpdateTenant(ctx, req.ToUpdateParams())
+	if req.IsCreate() && req.Name == "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "name is required"})
+		return
 	}
+
+	var t database.Tenant
+	err := s.mutateAndPublish(ctx, func(tx database.Store) error {
+		var err error
+		if req.IsCreate() {
+			t, err = tx.InsertTenant(ctx, req.ToInsertParams())
+		} else {
+			t, err = tx.UpdateTenant(ctx, req.ToUpdateParams())
+		}
+		return err
+	})
 	if err != nil {
 		if database.IsUniqueViolation(err) {
 			httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{
@@ -95,10 +98,6 @@ func (s *Service) Upsert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.invalidateCache(ctx); err != nil {
-		httpapi.InternalServerError(w, fmt.Errorf("reload tenant cache: %w", err))
-		return
-	}
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.TenantFromDB(t))
 }
 
@@ -110,14 +109,11 @@ func (s *Service) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.db.DeleteTenant(ctx, id)
+	err = s.mutateAndPublish(ctx, func(tx database.Store) error {
+		return tx.DeleteTenant(ctx, id)
+	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
-		return
-	}
-
-	if err := s.invalidateCache(ctx); err != nil {
-		httpapi.InternalServerError(w, fmt.Errorf("reload tenant cache: %w", err))
 		return
 	}
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "deleted"})
@@ -200,13 +196,10 @@ func (s *Service) SetTenantDataset(w http.ResponseWriter, r *http.Request) {
 		params.DefaultDatasetID = uuid.NullUUID{UUID: *req.DatasetID, Valid: true}
 	}
 
-	if err := s.db.SetTenantDataset(ctx, params); err != nil {
+	if err := s.mutateAndPublish(ctx, func(tx database.Store) error {
+		return tx.SetTenantDataset(ctx, params)
+	}); err != nil {
 		httpapi.InternalServerError(w, err)
-		return
-	}
-
-	if err := s.invalidateCache(ctx); err != nil {
-		httpapi.InternalServerError(w, fmt.Errorf("reload tenant cache: %w", err))
 		return
 	}
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "updated"})
