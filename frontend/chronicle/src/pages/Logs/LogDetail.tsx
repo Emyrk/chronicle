@@ -968,28 +968,17 @@ function useNextCheckIn(log: WoWLogGroupState | undefined, lastCheckedAt: number
   };
 }
 
-/** Refresh icon wrapped in a ring that drains until the next automatic poll. */
+/** Refresh icon whose arrows fill in clockwise as the next automatic poll approaches. */
 function RefreshCountdownIcon({ progress, spinning }: { progress: number; spinning: boolean }) {
-  const radius = 10;
-  const circumference = 2 * Math.PI * radius;
+  if (spinning) return <RefreshCw className="h-4 w-4 animate-spin text-primary" />;
+  const mask = `conic-gradient(#000 ${progress * 360}deg, transparent 0)`;
   return (
-    <span className="relative inline-flex h-6 w-6 items-center justify-center">
-      <svg className="absolute inset-0 -rotate-90" viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="12" cy="12" r={radius} fill="none" stroke="currentColor" strokeOpacity={0.15} strokeWidth={2} />
-        <circle
-          cx="12"
-          cy="12"
-          r={radius}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - progress)}
-          className="text-primary transition-[stroke-dashoffset] duration-200 ease-linear"
-        />
-      </svg>
-      <RefreshCw className={`h-3 w-3 ${spinning ? "animate-spin" : ""}`} />
+    <span className="relative inline-flex h-4 w-4">
+      <RefreshCw className="absolute inset-0 h-4 w-4 opacity-30" />
+      <RefreshCw
+        className="absolute inset-0 h-4 w-4 text-primary"
+        style={{ maskImage: mask, WebkitMaskImage: mask }}
+      />
     </span>
   );
 }
@@ -1326,12 +1315,12 @@ export function LogDetailView({
                 title={nextCheck
                   ? `Refresh (auto-refreshes every ${nextCheck.interval / 1000}s)`
                   : "Refresh"}
-                className={nextCheck ? "gap-1.5 pl-1.5 tabular-nums" : undefined}
+                className={nextCheck ? "gap-1.5 tabular-nums" : undefined}
               >
                 {nextCheck ? (
                   <>
                     <RefreshCountdownIcon
-                      progress={isRefreshing || nextCheck.remainingMs === 0 ? 1 : nextCheck.remainingMs / nextCheck.interval}
+                      progress={1 - nextCheck.remainingMs / nextCheck.interval}
                       spinning={isRefreshing || nextCheck.remainingMs === 0}
                     />
                     <span className="text-xs text-muted-foreground" aria-hidden="true">
