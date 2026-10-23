@@ -234,16 +234,28 @@ func (s *Service) listModels(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(r.Context(), w, http.StatusBadGateway, chroniclesdk.Response{Message: "Provider model lookup failed."})
 		return
 	}
-	out := make([]chroniclesdk.InferenceModel, 0, 20)
-	for _, m := range models {
-		if m.Capabilities.Streaming && m.Capabilities.Tools {
-			out = append(out, chroniclesdk.InferenceModel{ID: m.ID, Name: m.Name, Description: m.Description, ContextLength: m.ContextLength})
-			if len(out) == 20 {
-				break
-			}
+	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceModelsResponse{Models: selectableInferenceModels(models)})
+}
+
+func selectableInferenceModels(models []ModelDescriptor) []chroniclesdk.InferenceModel {
+	out := make([]chroniclesdk.InferenceModel, 0, len(models))
+	for _, model := range models {
+		if model.Capabilities.Streaming && model.Capabilities.Tools {
+			out = append(out, chroniclesdk.InferenceModel{
+				ID:            model.ID,
+				Name:          model.Name,
+				Description:   model.Description,
+				ContextLength: model.ContextLength,
+			})
 		}
 	}
-	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceModelsResponse{Models: out})
+	slices.SortFunc(out, func(left, right chroniclesdk.InferenceModel) int {
+		if byName := strings.Compare(strings.ToLower(left.Name), strings.ToLower(right.Name)); byName != 0 {
+			return byName
+		}
+		return strings.Compare(left.ID, right.ID)
+	})
+	return out
 }
 
 func (s *Service) instanceForUser(r *http.Request, identifier string) (database.LogInstancesGuild, error) {

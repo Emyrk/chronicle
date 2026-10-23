@@ -11,6 +11,7 @@ import {
   useInferenceThread,
 } from "./api";
 import { buildInstanceAnalystRunRequest, buildSiteHelpRunRequest, toChatMessages } from "./inference";
+import { ModelCombobox } from "./ModelCombobox";
 import { useInferenceSelection } from "./useInferenceSelection";
 
 function AssistantConfiguration({
@@ -33,16 +34,14 @@ function AssistantConfiguration({
           {selection.connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.label}</option>)}
         </select>
       </label>
-      <label className="text-muted-foreground text-xs">
-        Model
-        <select
-          className="border-input bg-background mt-1 h-9 w-full rounded-md border px-2 text-sm"
-          value={selection.modelId ?? ""}
-          onChange={(event) => selection.setModelId(event.target.value || undefined)}
-        >
-          {selection.models.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}
-        </select>
-      </label>
+      <div className="text-muted-foreground min-w-0 text-xs">
+        <span>Model</span>
+        <ModelCombobox
+          models={selection.models}
+          value={selection.modelId}
+          onChange={selection.setModelId}
+        />
+      </div>
     </div>
   );
 }

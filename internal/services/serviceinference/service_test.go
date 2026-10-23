@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -50,6 +51,28 @@ func TestOpenRouterCallbackURLCarriesState(t *testing.T) {
 	require.Equal(t, "turtle", callback.Query().Get("tenant"))
 	require.Equal(t, "state-token", callback.Query().Get("state"))
 	require.Empty(t, callback.Fragment)
+}
+
+func TestSelectableInferenceModelsReturnsEveryToolCapableModel(t *testing.T) {
+	t.Parallel()
+	models := make([]ModelDescriptor, 0, 26)
+	for index := 24; index >= 0; index-- {
+		models = append(models, ModelDescriptor{
+			ID:           fmt.Sprintf("provider/model-%02d", index),
+			Name:         fmt.Sprintf("Model %02d", index),
+			Capabilities: ModelCapabilities{Streaming: true, Tools: true},
+		})
+	}
+	models = append(models, ModelDescriptor{
+		ID:           "provider/text-only",
+		Name:         "Text only",
+		Capabilities: ModelCapabilities{Streaming: true},
+	})
+
+	selectable := selectableInferenceModels(models)
+	require.Len(t, selectable, 25)
+	require.Equal(t, "provider/model-00", selectable[0].ID)
+	require.Equal(t, "provider/model-24", selectable[24].ID)
 }
 
 func TestValidateLocalReturnPath(t *testing.T) {
