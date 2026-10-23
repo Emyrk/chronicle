@@ -1,7 +1,6 @@
 package characterset
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
@@ -26,17 +25,23 @@ type IsActive interface {
 	ID() guid.GUID
 }
 
+type awakeEntry[T IsActive] struct {
+	character T
+	touchedAt time.Time
+	dormancy  time.Duration
+}
+
 type Set[T IsActive] struct {
 	// characters are all characters ever seen.
 	characters *orderedmap.OrderedMap[guid.GUID, T]
 	// awake is any non-dormant character.
-	awake *orderedmap.OrderedMap[guid.GUID, time.Time]
+	awake *orderedmap.OrderedMap[guid.GUID, awakeEntry[T]]
 }
 
 func New[T IsActive]() *Set[T] {
 	return &Set[T]{
 		characters: orderedmap.New[guid.GUID, T](),
-		awake:      orderedmap.New[guid.GUID, time.Time](),
+		awake:      orderedmap.New[guid.GUID, awakeEntry[T]](),
 	}
 }
 
@@ -58,23 +63,22 @@ func (s *Set[T]) ForEach(f func(T) error) error {
 func (s *Set[T]) ForEachAwake(now time.Time, f func(T) error) error {
 	var remove []guid.GUID
 	for pair := s.awake.Oldest(); pair != nil; pair = pair.Next() {
-		char, exists := s.Get(pair.Key)
-		if !exists {
-			return fmt.Errorf("character with ID %s in awake map but not in characters map", pair.Key)
-		}
-		if err := f(char); err != nil {
+		entry := &pair.Value
+		if err := f(entry.character); err != nil {
 			return err
 		}
 
-		if char.IsActive() {
-			// Keep awake time updated for active characters
-			s.awake.Set(pair.Key, now)
+		if entry.character.IsActive() {
+			entry.touchedAt = now
+			entry.dormancy = 0
 		} else {
-			dormancy := Dormancy
-			if char.LastEndState() == period.EndStateSlain {
-				dormancy = SlainDormancy
+			if entry.dormancy == 0 {
+				entry.dormancy = Dormancy
+				if entry.character.LastEndState() == period.EndStateSlain {
+					entry.dormancy = SlainDormancy
+				}
 			}
-			if now.Sub(pair.Value) > dormancy {
+			if now.Sub(entry.touchedAt) > entry.dormancy {
 				remove = append(remove, pair.Key)
 			}
 		}
@@ -92,12 +96,18 @@ func (s *Set[T]) Len() int {
 
 func (s *Set[T]) Add(char T, now time.Time) {
 	s.characters.Set(char.ID(), char)
-	s.awake.Set(char.ID(), now)
+	s.awake.Set(char.ID(), awakeEntry[T]{character: char, touchedAt: now})
 }
 
 func (s *Set[T]) Touch(id guid.GUID, now time.Time) {
-	if _, exists := s.characters.Get(id); !exists {
+	char, exists := s.characters.Get(id)
+	if !exists {
 		panic("NOO")
 	}
-	s.awake.Set(id, now)
+	if pair := s.awake.GetPair(id); pair != nil {
+		pair.Value.touchedAt = now
+		pair.Value.dormancy = 0
+		return
+	}
+	s.awake.Set(id, awakeEntry[T]{character: char, touchedAt: now})
 }
