@@ -42,7 +42,7 @@ export function billingSubscriptionState(
     statusLabel = "Ended";
   } else if (cancellationScheduled) {
     displayState = "canceling";
-    statusLabel = "Canceling";
+    statusLabel = "Won't renew";
   } else if (billing.status === "active") {
     displayState = "renewing";
     statusLabel = "Active";
@@ -83,7 +83,7 @@ export function billingSubscriptionState(
         : subscriptionEnded
           ? `${tierLabel} until`
           : cancellationScheduled
-            ? "Cancels on"
+            ? `${tierLabel} until`
             : displayState === "renewing" || displayState === "trialing"
               ? "Renews"
               : "Current period ends",

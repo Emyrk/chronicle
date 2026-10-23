@@ -48,9 +48,9 @@ describe("billingSubscriptionState", () => {
     );
 
     expect(state.displayState).toBe("canceling");
-    expect(state.statusLabel).toBe("Canceling");
+    expect(state.statusLabel).toBe("Won't renew");
     expect(state.cancellationScheduled).toBe(true);
-    expect(state.periodLabel).toBe("Cancels on");
+    expect(state.periodLabel).toBe("Revered until");
     expect(state.effectiveDate).toBe("2026-11-15T00:00:00Z");
     expect(state.hasTierAccess).toBe(true);
   });
@@ -69,8 +69,8 @@ describe("billingSubscriptionState", () => {
     );
 
     expect(state.displayState).toBe("canceling");
-    expect(state.statusLabel).toBe("Canceling");
-    expect(state.periodLabel).toBe("Cancels on");
+    expect(state.statusLabel).toBe("Won't renew");
+    expect(state.periodLabel).toBe("Revered until");
     expect(state.effectiveDate).toBe("2026-11-18T00:00:00Z");
   });
 
