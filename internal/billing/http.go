@@ -62,8 +62,8 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	success := s.accessURL.ResolveReference(&url.URL{Path: "/account", RawQuery: "billing=success"}).String()
-	cancel := s.accessURL.ResolveReference(&url.URL{Path: "/account", RawQuery: "billing=cancel"}).String()
+	success := s.accessURL.ResolveReference(&url.URL{Path: "/account/billing", RawQuery: "billing=success"}).String()
+	cancel := s.accessURL.ResolveReference(&url.URL{Path: "/account/billing", RawQuery: "billing=cancel"}).String()
 	params := &stripe.CheckoutSessionCreateParams{
 		ClientReferenceID: stripe.String(claims.Subject.String()),
 		LineItems: []*stripe.CheckoutSessionCreateLineItemParams{{
@@ -94,16 +94,21 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) CreatePortal(w http.ResponseWriter, r *http.Request) {
-	s.createPortal(w, r, false)
+	s.createPortal(w, r, "")
+}
+
+// CreateChangePortal opens the Stripe portal directly on the subscription plan picker.
+func (s *Service) CreateChangePortal(w http.ResponseWriter, r *http.Request) {
+	s.createPortal(w, r, stripe.BillingPortalSessionFlowTypeSubscriptionUpdate)
 }
 
 // CreateCancelPortal opens the Stripe portal directly on the subscription
 // cancellation confirmation, returning to /account/billing afterwards.
 func (s *Service) CreateCancelPortal(w http.ResponseWriter, r *http.Request) {
-	s.createPortal(w, r, true)
+	s.createPortal(w, r, stripe.BillingPortalSessionFlowTypeSubscriptionCancel)
 }
 
-func (s *Service) createPortal(w http.ResponseWriter, r *http.Request, cancelFlow bool) {
+func (s *Service) createPortal(w http.ResponseWriter, r *http.Request, flowType stripe.BillingPortalSessionFlowType) {
 	if !s.Enabled() {
 		httpapi.Write(r.Context(), w, http.StatusServiceUnavailable, chroniclesdk.Response{Message: "Billing is not configured."})
 		return
@@ -120,18 +125,15 @@ func (s *Service) createPortal(w http.ResponseWriter, r *http.Request, cancelFlo
 	}
 	params := &stripe.BillingPortalSessionCreateParams{
 		Customer:  stripe.String(sub.ProviderCustomerID),
-		ReturnURL: stripe.String(s.accessURL.ResolveReference(&url.URL{Path: "/account"}).String()),
+		ReturnURL: stripe.String(s.accessURL.ResolveReference(&url.URL{Path: "/account/billing"}).String()),
 	}
-	if cancelFlow {
+	if flowType != "" {
 		if !sub.ProviderSubscriptionID.Valid {
 			httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "No active subscription was found."})
 			return
 		}
 		params.FlowData = &stripe.BillingPortalSessionCreateFlowDataParams{
-			Type: stripe.String(string(stripe.BillingPortalSessionFlowTypeSubscriptionCancel)),
-			SubscriptionCancel: &stripe.BillingPortalSessionCreateFlowDataSubscriptionCancelParams{
-				Subscription: stripe.String(sub.ProviderSubscriptionID.String),
-			},
+			Type: stripe.String(string(flowType)),
 			AfterCompletion: &stripe.BillingPortalSessionCreateFlowDataAfterCompletionParams{
 				Type: stripe.String(string(stripe.BillingPortalSessionFlowAfterCompletionTypeRedirect)),
 				Redirect: &stripe.BillingPortalSessionCreateFlowDataAfterCompletionRedirectParams{
@@ -139,8 +141,18 @@ func (s *Service) createPortal(w http.ResponseWriter, r *http.Request, cancelFlo
 				},
 			},
 		}
+		switch flowType {
+		case stripe.BillingPortalSessionFlowTypeSubscriptionCancel:
+			params.FlowData.SubscriptionCancel = &stripe.BillingPortalSessionCreateFlowDataSubscriptionCancelParams{
+				Subscription: stripe.String(sub.ProviderSubscriptionID.String),
+			}
+		case stripe.BillingPortalSessionFlowTypeSubscriptionUpdate:
+			params.FlowData.SubscriptionUpdate = &stripe.BillingPortalSessionCreateFlowDataSubscriptionUpdateParams{
+				Subscription: stripe.String(sub.ProviderSubscriptionID.String),
+			}
+		}
 	}
-	portal, err := s.stripe.V1BillingPortalSessions.Create(r.Context(), params)
+	portal, err := s.createBillingPortalSession(r.Context(), params)
 	if err != nil {
 		httpapi.InternalServerError(w, fmt.Errorf("create Stripe portal session: %w", err))
 		return

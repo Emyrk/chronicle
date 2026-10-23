@@ -328,6 +328,43 @@ func TestCreateCheckoutUsesEmailWithoutExistingStripeCustomer(t *testing.T) {
 	require.Equal(t, "price_monthly", checkoutParams.SubscriptionData.Metadata["chronicle_price_id"])
 }
 
+func TestCreateChangePortalOpensSubscriptionUpdateFlow(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	store := &entitlementStore{subscription: database.BillingSubscription{
+		UserID:                 userID,
+		Provider:               ProviderStripe,
+		ProviderCustomerID:     "cus_existing",
+		ProviderSubscriptionID: pgtype.Text{String: "sub_existing", Valid: true},
+	}}
+	var portalParams *stripe.BillingPortalSessionCreateParams
+	service := &Service{
+		store:            store,
+		stripe:           &stripe.Client{},
+		webhookSecret:    "whsec_test",
+		configuredPrices: map[string]ProductCode{"price_honored": ProductHonored},
+		accessURL:        &url.URL{Scheme: "https", Host: "example.com"},
+		createBillingPortalSession: func(_ context.Context, params *stripe.BillingPortalSessionCreateParams) (*stripe.BillingPortalSession, error) {
+			portalParams = params
+			return &stripe.BillingPortalSession{URL: "https://billing.stripe.test/session"}, nil
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/me/billing/change", nil)
+	req = req.WithContext(chronauth.WithClaims(req.Context(), &claims.Claims{Subject: userID}))
+	rec := httptest.NewRecorder()
+	service.CreateChangePortal(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, portalParams)
+	require.Equal(t, "cus_existing", stripe.StringValue(portalParams.Customer))
+	require.NotNil(t, portalParams.FlowData)
+	require.Equal(t, string(stripe.BillingPortalSessionFlowTypeSubscriptionUpdate), stripe.StringValue(portalParams.FlowData.Type))
+	require.NotNil(t, portalParams.FlowData.SubscriptionUpdate)
+	require.Equal(t, "sub_existing", stripe.StringValue(portalParams.FlowData.SubscriptionUpdate.Subscription))
+}
+
 func TestValidateAccount(t *testing.T) {
 	t.Parallel()
 
@@ -393,15 +430,15 @@ func TestBillingPrices(t *testing.T) {
 	require.Equal(t, 3, retrievals, "validated prices should be cached")
 }
 
-func TestBillingPricesMapConfiguredPricesToTiersAndRequireDistinctProducts(t *testing.T) {
+func TestBillingPricesMapConfiguredPricesToTiersAndRequireOneProduct(t *testing.T) {
 	t.Parallel()
 
 	honored := testStripePrice("price_honored", 200, stripe.PriceRecurringIntervalMonth, 1)
-	honored.Product = &stripe.Product{ID: "prod_honored"}
+	honored.Product = &stripe.Product{ID: "prod_supporter"}
 	revered := testStripePrice("price_revered", 400, stripe.PriceRecurringIntervalMonth, 1)
-	revered.Product = &stripe.Product{ID: "prod_revered"}
+	revered.Product = &stripe.Product{ID: "prod_supporter"}
 	exalted := testStripePrice("price_exalted", 600, stripe.PriceRecurringIntervalMonth, 1)
-	exalted.Product = &stripe.Product{ID: "prod_exalted"}
+	exalted.Product = &stripe.Product{ID: "prod_supporter"}
 	byID := map[string]*stripe.Price{
 		honored.ID: honored,
 		revered.ID: revered,
@@ -429,10 +466,10 @@ func TestBillingPricesMapConfiguredPricesToTiersAndRequireDistinctProducts(t *te
 		require.Equal(t, product, got)
 	}
 
-	exalted.Product = &stripe.Product{ID: "prod_revered"}
+	exalted.Product = &stripe.Product{ID: "prod_other"}
 	s.prices = nil
 	_, err = s.billingPrices(context.Background())
-	require.ErrorContains(t, err, "must use distinct products")
+	require.ErrorContains(t, err, "same product")
 }
 
 func TestBillingPricesRequireOneProductAndUniquePeriods(t *testing.T) {

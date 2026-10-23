@@ -30,6 +30,7 @@ type accountRetriever func(context.Context, *stripe.AccountRetrieveParams) (*str
 type priceRetriever func(context.Context, string, *stripe.PriceRetrieveParams) (*stripe.Price, error)
 type subscriptionRetriever func(context.Context, string, *stripe.SubscriptionRetrieveParams) (*stripe.Subscription, error)
 type checkoutSessionCreator func(context.Context, *stripe.CheckoutSessionCreateParams) (*stripe.CheckoutSession, error)
+type billingPortalSessionCreator func(context.Context, *stripe.BillingPortalSessionCreateParams) (*stripe.BillingPortalSession, error)
 type subscriptionLister func(context.Context) ([]*stripe.Subscription, error)
 type activeEntitlementLister func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error)
 
@@ -46,20 +47,21 @@ type Options struct {
 }
 
 type Service struct {
-	store                     database.Store
-	runEntitlementTransaction EntitlementTransactionRunner
-	stripe                    *stripe.Client
-	webhookSecret             string
-	priceIDs                  map[ProductCode][]string
-	configuredPrices          map[string]ProductCode
-	priceConfigurationErr     error
-	accessURL                 *url.URL
-	retrieveAccount           accountRetriever
-	retrievePrice             priceRetriever
-	retrieveSubscription      subscriptionRetriever
-	createCheckoutSession     checkoutSessionCreator
-	listSubscriptions         subscriptionLister
-	listActiveEntitlements    activeEntitlementLister
+	store                      database.Store
+	runEntitlementTransaction  EntitlementTransactionRunner
+	stripe                     *stripe.Client
+	webhookSecret              string
+	priceIDs                   map[ProductCode][]string
+	configuredPrices           map[string]ProductCode
+	priceConfigurationErr      error
+	accessURL                  *url.URL
+	retrieveAccount            accountRetriever
+	retrievePrice              priceRetriever
+	retrieveSubscription       subscriptionRetriever
+	createCheckoutSession      checkoutSessionCreator
+	createBillingPortalSession billingPortalSessionCreator
+	listSubscriptions          subscriptionLister
+	listActiveEntitlements     activeEntitlementLister
 
 	pricesMu sync.Mutex
 	prices   []chroniclesdk.BillingPrice
@@ -71,6 +73,7 @@ func New(opts Options) *Service {
 	var retrievePrice priceRetriever
 	var retrieveSubscription subscriptionRetriever
 	var createCheckoutSession checkoutSessionCreator
+	var createBillingPortalSession billingPortalSessionCreator
 	var listSubscriptions subscriptionLister
 	var listActiveEntitlements activeEntitlementLister
 	if opts.SecretKey != "" {
@@ -79,6 +82,7 @@ func New(opts Options) *Service {
 		retrievePrice = client.V1Prices.Retrieve
 		retrieveSubscription = client.V1Subscriptions.Retrieve
 		createCheckoutSession = client.V1CheckoutSessions.Create
+		createBillingPortalSession = client.V1BillingPortalSessions.Create
 		listSubscriptions = func(ctx context.Context) ([]*stripe.Subscription, error) {
 			var subscriptions []*stripe.Subscription
 			params := &stripe.SubscriptionListParams{}
@@ -127,20 +131,21 @@ func New(opts Options) *Service {
 		runEntitlementTransaction = NewEntitlementTransactionRunner(opts.Store, roleSetter)
 	}
 	return &Service{
-		store:                     opts.Store,
-		runEntitlementTransaction: runEntitlementTransaction,
-		stripe:                    client,
-		webhookSecret:             opts.WebhookSecret,
-		priceIDs:                  priceIDs,
-		configuredPrices:          configuredPrices,
-		priceConfigurationErr:     priceConfigurationErr,
-		accessURL:                 opts.AccessURL,
-		retrieveAccount:           retrieveAccount,
-		retrievePrice:             retrievePrice,
-		retrieveSubscription:      retrieveSubscription,
-		createCheckoutSession:     createCheckoutSession,
-		listSubscriptions:         listSubscriptions,
-		listActiveEntitlements:    listActiveEntitlements,
+		store:                      opts.Store,
+		runEntitlementTransaction:  runEntitlementTransaction,
+		stripe:                     client,
+		webhookSecret:              opts.WebhookSecret,
+		priceIDs:                   priceIDs,
+		configuredPrices:           configuredPrices,
+		priceConfigurationErr:      priceConfigurationErr,
+		accessURL:                  opts.AccessURL,
+		retrieveAccount:            retrieveAccount,
+		retrievePrice:              retrievePrice,
+		retrieveSubscription:       retrieveSubscription,
+		createCheckoutSession:      createCheckoutSession,
+		createBillingPortalSession: createBillingPortalSession,
+		listSubscriptions:          listSubscriptions,
+		listActiveEntitlements:     listActiveEntitlements,
 	}
 }
 
@@ -226,7 +231,8 @@ func (s *Service) billingPrices(ctx context.Context) ([]chroniclesdk.BillingPric
 	}
 
 	prices := make([]chroniclesdk.BillingPrice, 0, len(s.configuredPrices))
-	seenProducts := make(map[string]ProductCode, len(paidProducts))
+	var catalogProductID string
+	var catalogCurrency string
 	for _, product := range paidProducts {
 		var productID string
 		var currency string
@@ -256,10 +262,14 @@ func (s *Service) billingPrices(ctx context.Context) ([]chroniclesdk.BillingPric
 			prices = append(prices, billingPrice)
 		}
 		if productID != "" {
-			if other, ok := seenProducts[productID]; ok {
-				return nil, fmt.Errorf("configured Stripe tiers %q and %q must use distinct products", other, product)
+			if catalogProductID == "" {
+				catalogProductID = productID
+				catalogCurrency = currency
+			} else if productID != catalogProductID {
+				return nil, fmt.Errorf("configured Stripe tier prices must belong to the same product")
+			} else if currency != catalogCurrency {
+				return nil, fmt.Errorf("configured Stripe tier prices must use the same currency")
 			}
-			seenProducts[productID] = product
 		}
 	}
 	sort.Slice(prices, func(i, j int) bool {

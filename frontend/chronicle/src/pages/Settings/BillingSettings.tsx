@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { Link, Navigate } from "react-router-dom"
 import type { BillingPrice, BillingSummary } from "@/api/typesGenerated"
-import { useCreateBillingCancel, useCreateBillingCheckout, useCreateBillingPortal, useBillingSummary, useSiteConfig } from "@/api/queries"
+import { useCreateBillingCancel, useCreateBillingChange, useCreateBillingCheckout, useCreateBillingPortal, useBillingSummary, useSiteConfig } from "@/api/queries"
 import { iconUrl } from "@/config/iconUrl"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/useAuth"
@@ -33,9 +33,9 @@ const TOOLTIP = "rounded-lg border-2 border-[#4a4a6a] bg-[#1a1a2e] shadow-lg"
 const STANDINGS = ["Hated", "Hostile", "Unfriendly", "Neutral", "Friendly", "Honored", "Revered", "Exalted"] as const
 
 const TIER_COLOR: Record<PaidBillingTier, string> = {
-  honored: "#0070dd",
-  revered: "#a335ee",
-  exalted: "#ff8000",
+  honored: "#1eff00",
+  revered: "#0070dd",
+  exalted: "#a335ee",
 }
 
 const TIER_ICON: Record<PaidBillingTier, string> = {
@@ -596,6 +596,7 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
 
 function TierSubscriptionSettings({ billing }: { billing: BillingSummary }) {
   const portal = useCreateBillingPortal()
+  const change = useCreateBillingChange()
   const cancel = useCreateBillingCancel()
   const openBilling = useOpenBilling()
   const { hasTierAccess, tierLabel, displayState, subscriptionEnded, cancellationScheduled, statusLabel, heading, periodLabel, effectiveDate } = billingSubscriptionState(billing)
@@ -684,19 +685,33 @@ function TierSubscriptionSettings({ billing }: { billing: BillingSummary }) {
             )}
           </div>
 
-          <button type="button" className={GOLD_BUTTON} disabled={portal.isPending} onClick={() => void openBilling(() => portal.mutateAsync(), true)}>
-            {portal.isPending ? "Opening Stripe…" : subscriptionEnded || cancellationScheduled ? "View Stripe Billing History" : "Change or Manage Subscription"}
-          </button>
-          {!subscriptionEnded && !cancellationScheduled ? (
-            <button
-              type="button"
-              className="w-full rounded-md border border-red-500/40 px-4 py-2 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50"
-              disabled={cancel.isPending}
-              onClick={() => void openBilling(() => cancel.mutateAsync())}
-            >
-              {cancel.isPending ? "Opening Stripe…" : "Cancel Subscription"}
+          {subscriptionEnded || cancellationScheduled ? (
+            <button type="button" className={GOLD_BUTTON} disabled={portal.isPending} onClick={() => void openBilling(() => portal.mutateAsync(), true)}>
+              {portal.isPending ? "Opening Stripe…" : "View Stripe Billing History"}
             </button>
-          ) : null}
+          ) : (
+            <>
+              <button type="button" className={GOLD_BUTTON} disabled={change.isPending} onClick={() => void openBilling(() => change.mutateAsync())}>
+                {change.isPending ? "Opening Stripe…" : "Change Tier"}
+              </button>
+              <button
+                type="button"
+                className="w-full rounded-md border border-border px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 disabled:opacity-50"
+                disabled={portal.isPending}
+                onClick={() => void openBilling(() => portal.mutateAsync(), true)}
+              >
+                {portal.isPending ? "Opening Stripe…" : "Manage Billing"}
+              </button>
+              <button
+                type="button"
+                className="w-full rounded-md border border-red-500/40 px-4 py-2 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50"
+                disabled={cancel.isPending}
+                onClick={() => void openBilling(() => cancel.mutateAsync())}
+              >
+                {cancel.isPending ? "Opening Stripe…" : "Cancel Subscription"}
+              </button>
+            </>
+          )}
         </FramePanel>
 
         <div>
