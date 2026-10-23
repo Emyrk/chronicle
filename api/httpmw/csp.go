@@ -11,12 +11,16 @@ import (
 func ContentSecurityPolicy(adsEnabled func(*http.Request) bool) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defaultSources := "default-src 'self'"
 			httpsSource := ""
 			scriptAdSources := ""
 			styleAdSources := ""
 			fontAdSources := ""
 			mediaSources := "media-src 'self'"
 			if adsEnabled != nil && adsEnabled(r) {
+				// NitroPay and its demand partners use resource hints whose requests
+				// fall back to default-src instead of the type-specific directives.
+				defaultSources += " https:"
 				httpsSource = " https:"
 				scriptAdSources = " 'unsafe-eval' https:"
 				styleAdSources = " https:"
@@ -25,7 +29,7 @@ func ContentSecurityPolicy(adsEnabled func(*http.Request) bool) func(next http.H
 			}
 
 			policy := strings.Join([]string{
-				"default-src 'self'",
+				defaultSources,
 				"script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://www.googletagmanager.com https://www.google-analytics.com https://www.youtube.com https://static.cloudflareinsights.com" + scriptAdSources,
 				"style-src 'self' 'unsafe-inline'" + styleAdSources,
 				"font-src 'self'" + fontAdSources,

@@ -65,6 +65,7 @@ func TestContentSecurityPolicyAllowsAdResourcesOnlyWhenEnabled(t *testing.T) {
 
 			csp := rec.Header().Get("Content-Security-Policy")
 			scriptPolicy := strings.Split(csp, "; ")[1]
+			assert.Equal(t, test.allowsHTTPS, strings.Contains(csp, "default-src 'self' https:"))
 			assert.Equal(t, test.allowsHTTPS, strings.HasSuffix(scriptPolicy, " https:"))
 			assert.Equal(t, test.allowsHTTPS, strings.Contains(scriptPolicy, "'unsafe-eval'"))
 			assert.Equal(t, test.allowsHTTPS, strings.Contains(csp, "style-src 'self' 'unsafe-inline' https:"))
