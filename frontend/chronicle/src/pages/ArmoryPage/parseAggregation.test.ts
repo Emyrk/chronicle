@@ -3,6 +3,9 @@ import type { CharacterEncounterStats, CharacterParse, PlayerOutfit } from "@/ap
 import {
   averageItemLevel,
   bestScoreByInstance,
+  filterParsesBySpec,
+  performanceSpecs,
+  scoreParses,
   summarizeProgress,
   summarizeRaids,
   topEncounters,
@@ -24,9 +27,39 @@ function parse(overrides: Partial<CharacterParse>): CharacterParse {
     sample_size: 100,
     status: "ok",
     killed_at: "2026-08-01T20:00:00Z",
+    player_spec: "Fire",
     ...overrides,
   };
 }
+
+describe("performance spec selection", () => {
+  const parses = [
+    parse({ run_id: "fire-1", player_spec: "Fire", precise_score: 90 }),
+    parse({ run_id: "fire-2", player_spec: "Fire", precise_score: 70 }),
+    parse({ run_id: "frost-1", player_spec: "Frost", precise_score: 40 }),
+    parse({ run_id: "mixed", player_spec: "Mixed", precise_score: 100 }),
+  ];
+
+  it("lists playable specs without synthetic mixed values", () => {
+    expect(performanceSpecs(parses)).toEqual(["Fire", "Frost"]);
+  });
+
+  it("defaults to every parse and filters exact specs when selected", () => {
+    expect(filterParsesBySpec(parses, null)).toHaveLength(4);
+    expect(filterParsesBySpec(parses, "Fire").map((item) => item.run_id)).toEqual([
+      "fire-1",
+      "fire-2",
+    ]);
+  });
+
+  it("calculates the player score from only the selected spec parses", () => {
+    expect(scoreParses(filterParsesBySpec(parses, "Fire"))).toMatchObject({
+      display_value: 80,
+      num_parses: 2,
+      encounter_groups: 1,
+    });
+  });
+});
 
 describe("summarizeRaids", () => {
   it("averages the best 3 parses per encounter", () => {

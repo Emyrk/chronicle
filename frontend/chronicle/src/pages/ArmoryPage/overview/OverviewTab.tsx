@@ -8,7 +8,13 @@ import {
   useSupportedInstanceProgressionBosses,
 } from "@/api/queries";
 import { useCharacterEncounters, useCharacterParses } from "@/api/rankingsQueries";
-import { averageScoreByInstance, bestScoreByInstance, summarizeProgress, summarizeRaids } from "../parseAggregation";
+import {
+  averageScoreByInstance,
+  bestScoreByInstance,
+  filterParsesBySpec,
+  summarizeProgress,
+  summarizeRaids,
+} from "../parseAggregation";
 import {
   DEFAULT_PERFORMANCE_COMPARISON_STATE,
   serializePerformanceComparisonState,
@@ -29,9 +35,10 @@ interface OverviewTabProps {
   player: ArmoryPlayer;
   onOpenTab: (tab: "gear" | "talents" | "activity") => void;
   metric: ParseMetric;
+  selectedSpec: string | null;
 }
 
-export function OverviewTab({ player, onOpenTab, metric }: OverviewTabProps) {
+export function OverviewTab({ player, onOpenTab, metric, selectedSpec }: OverviewTabProps) {
   const [searchParams] = useSearchParams();
   const isPerformance = searchParams.get("mode") === "performance";
 
@@ -45,23 +52,24 @@ export function OverviewTab({ player, onOpenTab, metric }: OverviewTabProps) {
 
   // Performance mode: parse scores.
   const parsesQuery = useCharacterParses(player.id, metric);
-  const raids = useMemo(
-    () => summarizeRaids(parsesQuery.data?.parses ?? []),
-    [parsesQuery.data],
+  const parses = useMemo(
+    () => filterParsesBySpec(parsesQuery.data?.parses ?? [], selectedSpec),
+    [parsesQuery.data, selectedSpec],
   );
+  const raids = useMemo(() => summarizeRaids(parses), [parses]);
   const nightScores = useMemo(
     () =>
       isPerformance
-        ? bestScoreByInstance(parsesQuery.data?.parses ?? [])
+        ? bestScoreByInstance(parses)
         : new Map<string, number>(),
-    [parsesQuery.data, isPerformance],
+    [parses, isPerformance],
   );
   const nightAverages = useMemo(
     () =>
       isPerformance
-        ? averageScoreByInstance(parsesQuery.data?.parses ?? [])
+        ? averageScoreByInstance(parses)
         : new Map<string, number>(),
-    [parsesQuery.data, isPerformance],
+    [parses, isPerformance],
   );
 
   // Journey mode: participation, progression, and loot.
@@ -89,7 +97,7 @@ export function OverviewTab({ player, onOpenTab, metric }: OverviewTabProps) {
   const performanceHistoryPath = `/performance-history?${serializePerformanceComparisonState({
     ...DEFAULT_PERFORMANCE_COMPARISON_STATE,
     realmName: player.realm_name,
-    players: [{ id: player.id, spec: null, subSpec: null, hidden: false }],
+    players: [{ id: player.id, spec: selectedSpec, subSpec: null, hidden: false }],
     metric,
   }).toString()}`;
 

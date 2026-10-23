@@ -45,6 +45,8 @@ type CharacterParse struct {
 	SampleSize     int        `json:"sample_size"`
 	Status         string     `json:"status"`
 	KilledAt       time.Time  `json:"killed_at"`
+	PlayerSpec     string     `json:"player_spec"`
+	PlayerSubSpec  string     `json:"player_sub_spec,omitempty"`
 }
 
 // CharacterPerformanceResponse contains canonical ranking runs for one selected

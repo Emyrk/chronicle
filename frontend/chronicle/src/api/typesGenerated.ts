@@ -584,6 +584,8 @@ export interface CharacterParse {
     readonly sample_size: number;
     readonly status: string;
     readonly killed_at: string;
+    readonly player_spec: string;
+    readonly player_sub_spec?: string;
 }
 
 // From chroniclesdk/parse_scores.go

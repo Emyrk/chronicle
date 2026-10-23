@@ -12969,6 +12969,7 @@ SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
     psr.player_name,
     psr.player_class,
     psr.player_spec,
+    psr.player_sub_spec,
     psr.player_role
 FROM parse_score_results psr
 JOIN log_instances visibility_instance ON visibility_instance.id = psr.instance_id
@@ -13008,6 +13009,7 @@ type GetCharacterParseHistoryRow struct {
 	PlayerName     string             `db:"player_name" json:"player_name"`
 	PlayerClass    string             `db:"player_class" json:"player_class"`
 	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec  string             `db:"player_sub_spec" json:"player_sub_spec"`
 	PlayerRole     string             `db:"player_role" json:"player_role"`
 }
 
@@ -13052,6 +13054,7 @@ func (q *sqlQuerier) GetCharacterParseHistory(ctx context.Context, arg GetCharac
 			&i.PlayerName,
 			&i.PlayerClass,
 			&i.PlayerSpec,
+			&i.PlayerSubSpec,
 			&i.PlayerRole,
 		); err != nil {
 			return nil, err
