@@ -1,5 +1,39 @@
 import { describe, it, expect } from "vitest";
-import { expandInstanceOptions, expandInstanceQuery } from "./recentRaids.utils";
+import { expandInstanceOptions, expandInstanceQuery, getRecentRaidAdInsertions } from "./recentRaids.utils";
+
+describe("getRecentRaidAdInsertions", () => {
+  it("keeps every ad four to eight raids after the previous ad", () => {
+    const instanceIDs = Array.from({ length: 100 }, (_, index) => `instance-${index}`);
+    const insertions = getRecentRaidAdInsertions(instanceIDs);
+    const gaps = insertions.map((raidCount, index) => raidCount - (insertions[index - 1] ?? 0));
+
+    expect(insertions.length).toBeGreaterThan(0);
+    expect(gaps.every((gap) => gap >= 4 && gap <= 8)).toBe(true);
+  });
+
+  it("never places consecutive ads in the same grid column", () => {
+    const instanceIDs = Array.from({ length: 100 }, (_, index) => `instance-${index}`);
+    const insertions = getRecentRaidAdInsertions(instanceIDs);
+
+    for (const columnCount of [3, 4]) {
+      const columns = insertions.map(
+        (raidCount, adIndex) => (raidCount + adIndex) % columnCount,
+      );
+
+      for (let index = 1; index < columns.length; index += 1) {
+        expect(columns[index]).not.toBe(columns[index - 1]);
+      }
+    }
+  });
+
+  it("keeps existing ad positions stable when more raids load", () => {
+    const instanceIDs = Array.from({ length: 48 }, (_, index) => `instance-${index}`);
+    const firstPageInsertions = getRecentRaidAdInsertions(instanceIDs.slice(0, 24));
+    const allInsertions = getRecentRaidAdInsertions(instanceIDs);
+
+    expect(allInsertions.slice(0, firstPageInsertions.length)).toEqual(firstPageInsertions);
+  });
+});
 
 describe("expandInstanceOptions", () => {
   it("inserts Lower and Upper when Tower of Karazhan is present", () => {

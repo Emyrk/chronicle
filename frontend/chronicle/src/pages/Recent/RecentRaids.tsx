@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Loader2, Castle, Search, Check, ChevronsUpDown } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { AdSlot } from "@/components/Ads/AdSlot";
@@ -10,7 +10,7 @@ import { useUrlState, serializers } from "@/hooks/useUrlState";
 import { INSTANCE_CONFIG } from "@/pages/Logs/utils/instanceImages";
 import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory";
 import { RaidCard } from "./RaidCard";
-import { expandInstanceOptions, expandInstanceQuery } from "./recentRaids.utils";
+import { expandInstanceOptions, expandInstanceQuery, getRecentRaidAdInsertions } from "./recentRaids.utils";
 import { groupDuplicateInstances } from "@/utils/groupDuplicates";
 import type { RecentInstance, RecentInstancesResponse } from "@/api/typesGenerated";
 
@@ -203,6 +203,14 @@ export function RecentRaids() {
 
   const PAGE_SIZE = 24;
   const instanceGroups = useMemo(() => groupDuplicateInstances(instances), [instances]);
+
+  const adNumberByRaidCount = useMemo(
+    () => new Map(
+      getRecentRaidAdInsertions(instanceGroups.map((group) => group[0].id))
+        .map((raidCount, index) => [raidCount, index + 1]),
+    ),
+    [instanceGroups],
+  );
 
   const fetchInstances = useCallback(async (offset?: number) => {
     if (hasConflictingFilters) {
@@ -438,16 +446,21 @@ export function RecentRaids() {
           {/* Raid grid */}
           {instanceGroups.length > 0 && (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {instanceGroups.map((group) => {
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 min-[1320px]:grid-cols-4 gap-4">
+                {instanceGroups.map((group, index) => {
                   const instance = group[0];
+                  const adNumber = adNumberByRaidCount.get(index + 1);
                   return (
-                    <RaidCard
-                      key={instance.id}
-                      instance={instance}
-                      instances={group}
-                      bossCount={bossCounts?.get(instance.name)}
-                    />
+                    <Fragment key={instance.id}>
+                      <RaidCard
+                        instance={instance}
+                        instances={group}
+                        bossCount={bossCounts?.get(instance.name)}
+                      />
+                      {adNumber !== undefined && (
+                        <AdSlot placement={`recent-grid-card-${adNumber}`} format="card" />
+                      )}
+                    </Fragment>
                   );
                 })}
               </div>

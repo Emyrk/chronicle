@@ -11,6 +11,7 @@ export type AdPlacement = `${string}-${string}`
 const formatClasses: Record<AdFormat, string> = {
   responsive: "hidden w-full lg:block",
   rail: "hidden w-40 shrink-0 self-start 2xl:sticky 2xl:top-20 2xl:block",
+  card: "flex h-full w-full self-start justify-center",
 }
 
 const railLayoutClasses: Record<RailLayout, string> = {
@@ -26,6 +27,7 @@ const railLayoutQueries: Record<RailLayout, string> = {
 const frameClasses: Record<AdFormat, string> = {
   responsive: "min-h-28",
   rail: "min-h-[600px]",
+  card: "w-[300px]",
 }
 
 function useMediaQuery(query: string | undefined): boolean {
@@ -75,6 +77,7 @@ export function AdSlot({
   const siteID = siteConfig?.ads_enabled ? siteConfig.nitropay_site_id : undefined
   const adID = `nitropay-${placement}`
   const wideRail = useMediaQuery(format === "rail" ? railLayoutQueries[railLayout] : undefined)
+  const compactCard = useMediaQuery(format === "card" ? "(max-width: 1023px)" : undefined)
   const adsAllowed = !sessionLoading && !session?.ads_free
 
   useEffect(() => {
@@ -82,7 +85,7 @@ export function AdSlot({
 
     let active = true
     let ads: NitroPayAd[] = []
-    void requestNitroPayAd(siteID, adID, adSizesForFormat(format, wideRail))
+    void requestNitroPayAd(siteID, adID, adSizesForFormat(format, wideRail, compactCard))
       .then((createdAds) => {
         if (!active) {
           clearNitroPayAds(createdAds)
@@ -98,7 +101,7 @@ export function AdSlot({
       active = false
       clearNitroPayAds(ads)
     }
-  }, [adID, adsAllowed, format, placement, showPreview, siteID, wideRail])
+  }, [adID, adsAllowed, compactCard, format, placement, showPreview, siteID, wideRail])
 
   // Fail closed while deciding so paid supporters never see an ad flash.
   if (!adsAllowed || (!showPreview && !siteID)) {
@@ -137,7 +140,8 @@ export function AdSlot({
           className={cn(
             showPreview &&
               "relative flex items-center justify-center overflow-hidden rounded-md border border-dashed border-border/60 bg-muted/10",
-            (showPreview || format === "rail") && frameClasses[format],
+            (showPreview || format !== "responsive") && frameClasses[format],
+            format === "card" && (compactCard ? "h-[100px]" : "h-[250px]"),
           )}
         >
           {showPreview && (
@@ -146,7 +150,7 @@ export function AdSlot({
               <div className="relative text-center text-muted-foreground/55">
                 <p className="text-[10px] font-medium uppercase tracking-[0.16em]">Ad preview</p>
                 <p className="mt-1 font-mono text-[10px]">
-                  {adSizeLabel(format, wideRail)}
+                  {adSizeLabel(format, wideRail, compactCard)}
                 </p>
               </div>
             </>
