@@ -119,7 +119,8 @@ func (s *Service) mutateTenant(ctx context.Context, mutate func(*authz.AuthzTX) 
 	}, nil); err != nil {
 		return err
 	}
-	return s.Cache.ApplyPublished(ctx, published)
+	s.Cache.ApplyPublishedBestEffort(published)
+	return nil
 }
 
 func (s *Service) Close(_ context.Context) error { return nil }

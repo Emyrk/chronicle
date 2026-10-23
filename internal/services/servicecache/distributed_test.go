@@ -333,6 +333,107 @@ func TestLateInvalidatorRegistrationCatchesUp(t *testing.T) {
 	}
 }
 
+func TestApplyPublishedBestEffortDoesNotReportCommittedMutationFailure(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	svc := New(nil)
+	svc.logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	datasetID := uuid.New()
+	var attempts atomic.Int32
+	done := make(chan struct{})
+	require.NoError(t, svc.RegisterInvalidator(NamespaceItems, ScopeDataset, "failing", func(context.Context, Invalidation) error {
+		defer close(done)
+		attempts.Add(1)
+		return errors.New("temporary eviction failure")
+	}))
+
+	svc.ApplyPublishedBestEffort(PublishedGeneration{
+		Invalidation: DatasetInvalidation(NamespaceItems, datasetID),
+		Generation:   1,
+	})
+	select {
+	case <-done:
+	case <-ctx.Done():
+		require.FailNow(t, "timed out waiting for best-effort invalidation", ctx.Err().Error())
+	}
+
+	require.EqualValues(t, 1, attempts.Load())
+	key := handlerGenerationKey{
+		generationKey: generationKey{namespace: NamespaceItems, scope: ScopeDataset, scopeID: datasetID},
+		handler:       "failing",
+	}
+	require.Zero(t, svc.observed[key], "failed eviction must remain eligible for reconciliation retry")
+}
+
+func TestApplyPublishedBestEffortDoesNotBlockMutationResponse(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	svc := New(nil)
+	svc.logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	started := make(chan struct{})
+	release := make(chan struct{})
+	require.NoError(t, svc.RegisterInvalidator(NamespaceItems, ScopeDataset, "blocking", func(context.Context, Invalidation) error {
+		close(started)
+		<-release
+		return nil
+	}))
+
+	returned := make(chan struct{})
+	go func() {
+		svc.ApplyPublishedBestEffort(PublishedGeneration{
+			Invalidation: DatasetInvalidation(NamespaceItems, uuid.New()),
+			Generation:   1,
+		})
+		close(returned)
+	}()
+	select {
+	case <-returned:
+	case <-ctx.Done():
+		close(release)
+		require.FailNow(t, "best-effort invalidation blocked the mutation response", ctx.Err().Error())
+	}
+	select {
+	case <-started:
+	case <-ctx.Done():
+		close(release)
+		require.FailNow(t, "timed out waiting for asynchronous invalidation", ctx.Err().Error())
+	}
+	close(release)
+	require.NoError(t, svc.Close(context.Background()))
+}
+
+func TestCancelSubscriptionAsyncDoesNotBlockStartupError(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	cancelSubscriptionAsync(func() {
+		close(started)
+		<-release
+	})
+
+	select {
+	case <-started:
+	case <-ctx.Done():
+		close(release)
+		require.FailNow(t, "subscription cleanup did not start", ctx.Err().Error())
+	}
+	close(release)
+}
+
+func TestCloseHonorsCanceledContextWhenSubscriptionTeardownBlocks(t *testing.T) {
+	t.Parallel()
+	svc := New(nil)
+	release := make(chan struct{})
+	svc.cancelSubscribe = func() { <-release }
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := svc.Close(ctx)
+	close(release)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
 func TestCloseWaitsForInFlightNotification(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitLong)

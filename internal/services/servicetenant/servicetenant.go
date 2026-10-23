@@ -184,7 +184,8 @@ func (s *Service) mutateAndPublish(ctx context.Context, mutate func(database.Sto
 	}, nil); err != nil {
 		return err
 	}
-	return s.cacheSvc.ApplyPublished(ctx, published)
+	s.cacheSvc.ApplyPublishedBestEffort(published)
+	return nil
 }
 
 // IsAllowedOrigin checks if the given origin is a valid tenant subdomain

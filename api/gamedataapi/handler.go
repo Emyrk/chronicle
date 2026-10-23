@@ -54,7 +54,8 @@ func (h *Handler) mutateDataset(ctx context.Context, datasetID uuid.UUID, namesp
 	if h.cacheSvc == nil {
 		return nil
 	}
-	return h.cacheSvc.ApplyPublished(ctx, published...)
+	h.cacheSvc.ApplyPublishedBestEffort(published...)
+	return nil
 }
 
 func (h *Handler) mutateDatasetAuthz(ctx context.Context, datasetID uuid.UUID, namespaces []servicecache.Namespace, mutate func(*authz.AuthzTX) error) error {
@@ -80,7 +81,8 @@ func (h *Handler) mutateDatasetAuthz(ctx context.Context, datasetID uuid.UUID, n
 	if h.cacheSvc == nil {
 		return nil
 	}
-	return h.cacheSvc.ApplyPublished(ctx, published...)
+	h.cacheSvc.ApplyPublishedBestEffort(published...)
+	return nil
 }
 
 // datasetIDFromQuery parses the optional ?dataset_id= query param.
