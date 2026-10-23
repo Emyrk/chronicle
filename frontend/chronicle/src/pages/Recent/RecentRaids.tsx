@@ -1,7 +1,7 @@
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Loader2, Castle, Search, Check, ChevronsUpDown } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
-import { AdSlot } from "@/components/Ads/AdSlot";
+import { AdSlot, type AdFallbackRenderer } from "@/components/Ads/AdSlot";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 
@@ -123,6 +123,10 @@ function InstanceCombobox({
     </PopoverPrimitive.Root>
   );
 }
+
+// Recent card placements opt into the fixed fallback frame now. Technical-hint
+// data and rendering will replace this no-op in the separate hints implementation.
+const renderRecentAdFallback: AdFallbackRenderer = () => null;
 
 const API_BASE = "/api/v1/raidlogs";
 const RECENT_WINDOW_DAYS = 30;
@@ -486,7 +490,11 @@ export function RecentRaids() {
                         bossCount={bossCounts?.get(instance.name)}
                       />
                       {adNumber !== undefined && (
-                        <AdSlot placement={`recent-grid-card-${adNumber}`} format="card" />
+                        <AdSlot
+                          placement={`recent-grid-card-${adNumber}`}
+                          format="card"
+                          renderFallback={renderRecentAdFallback}
+                        />
                       )}
                     </Fragment>
                   );

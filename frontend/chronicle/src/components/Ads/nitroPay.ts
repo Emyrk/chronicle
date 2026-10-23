@@ -128,14 +128,21 @@ export function guardNitroPayReportFrameAccess(holder: HTMLElement, eventTarget:
   holder.prepend(guard)
 }
 
-export function isNitroPayRenderedEventForPlacement(event: Event, id: string): boolean {
+export type NitroPayRenderedEventResult = "filled" | "no_fill" | "unrelated"
+
+export function classifyNitroPayRenderedEvent(event: Event, id: string): NitroPayRenderedEventResult {
   const renderedEvent = event as NitroPayRenderedEvent
   const adInfo = renderedEvent.adInfo ?? renderedEvent.detail?.adInfo
 
-  // NitroPay emits `nitroAds.rendered` for its no-bid fallback too. That
-  // payload uses bidder="blank" with an empty creative, which must remain
-  // hidden just like any other unfilled placement.
-  return adInfo?.adUnitCode === id && Boolean(adInfo.bidder && adInfo.bidder !== "blank")
+  if (adInfo?.adUnitCode !== id || !adInfo.bidder) return "unrelated"
+
+  // NitroPay emits `nitroAds.rendered` for its no-bid fallback too. Matching
+  // bidder="blank" events confirm that this request has no creative.
+  return adInfo.bidder === "blank" ? "no_fill" : "filled"
+}
+
+export function isNitroPayRenderedEventForPlacement(event: Event, id: string): boolean {
+  return classifyNitroPayRenderedEvent(event, id) === "filled"
 }
 
 export async function requestNitroPayAd(

@@ -6,10 +6,12 @@ import type { Session } from "@/api/queries"
 import type { SiteConfig } from "@/api/typesGenerated"
 import { describe, expect, it, vi } from "vitest"
 import { AdSlot } from "./AdSlot"
+import { adFallbackPresentation, adRequestStateForKey } from "./adRequestState"
 import { AdSuppressionProvider } from "./AdSuppressionProvider"
 import { adSizeLabel, adSizesForFormat } from "./adFormats"
 import { isAdPlacementDisabled } from "./adPolicy"
 import {
+  classifyNitroPayRenderedEvent,
   clearNitroPayAds,
   isNitroPayRenderedEventForPlacement,
   nitroPayAdOptions,
@@ -307,6 +309,69 @@ describe("AdSlot", () => {
     expect(markup).not.toContain("Ad preview")
   })
 
+  it("keys request state so a changed request returns to pending", () => {
+    expect(adRequestStateForKey({ key: "request-a", state: "filled" }, "request-a")).toBe("filled")
+    expect(adRequestStateForKey({ key: "request-a", state: "filled" }, "request-b")).toBe("pending")
+    expect(adRequestStateForKey(undefined, "request-a")).toBe("pending")
+  })
+
+  it("activates fallback content only after a confirmed no-fill", () => {
+    expect(adFallbackPresentation("pending")).toEqual({
+      visible: true,
+      interactive: false,
+      ariaHidden: true,
+      inert: true,
+    })
+    expect(adFallbackPresentation("error")).toEqual({
+      visible: true,
+      interactive: false,
+      ariaHidden: true,
+      inert: true,
+    })
+    expect(adFallbackPresentation("no_fill")).toEqual({
+      visible: true,
+      interactive: true,
+      ariaHidden: false,
+      inert: false,
+    })
+    expect(adFallbackPresentation("filled")).toEqual({
+      visible: false,
+      interactive: false,
+      ariaHidden: true,
+      inert: true,
+    })
+  })
+
+  it("keeps a pending card fallback inert inside the fixed creative frame", () => {
+    const markup = renderAdSlot(
+      <AdSlot
+        placement="recent-grid-card-1"
+        format="card"
+        hostname="turtle.chronicleclassic.com"
+        previewEnabled={false}
+        renderFallback={({ state, interactive }) => (
+          <a href="/technical-hint" data-state={state} data-interactive={interactive}>
+            Technical hint
+          </a>
+        )}
+      />,
+      {
+        ads_enabled: true,
+        nitropay_site_id: "12345",
+      } as SiteConfig,
+    )
+
+    expect(markup).toContain('data-ad-request-state="pending"')
+    expect(markup).toContain('data-ad-fallback-interactive="false"')
+    expect(markup).toContain('aria-hidden="true"')
+    expect(markup).toContain(" inert=\"\"")
+    expect(markup).toContain("pointer-events-none select-none")
+    expect(markup).toContain("h-[250px]")
+    expect(markup).toContain("w-[300px]")
+    expect(markup).toContain("absolute inset-0")
+    expect(markup).toContain('href="/technical-hint"')
+  })
+
   it("uses NitroPay demo creatives instead of the local placeholder preview", () => {
     const markup = renderAdSlot(
       <AdSlot
@@ -363,9 +428,14 @@ describe("AdSlot", () => {
       },
     })
 
+    expect(classifyNitroPayRenderedEvent(directEvent, "nitropay-recent-right-rail")).toBe("filled")
+    expect(classifyNitroPayRenderedEvent(customEvent, "nitropay-recent-left-rail")).toBe("filled")
+    expect(classifyNitroPayRenderedEvent(blankEvent, "nitropay-recent-right-rail")).toBe("no_fill")
+    expect(classifyNitroPayRenderedEvent(directEvent, "nitropay-recent-left-rail")).toBe("unrelated")
+    expect(classifyNitroPayRenderedEvent(new Event("nitroAds.rendered"), "nitropay-recent-right-rail")).toBe(
+      "unrelated",
+    )
     expect(isNitroPayRenderedEventForPlacement(directEvent, "nitropay-recent-right-rail")).toBe(true)
-    expect(isNitroPayRenderedEventForPlacement(customEvent, "nitropay-recent-left-rail")).toBe(true)
-    expect(isNitroPayRenderedEventForPlacement(directEvent, "nitropay-recent-left-rail")).toBe(false)
     expect(isNitroPayRenderedEventForPlacement(blankEvent, "nitropay-recent-right-rail")).toBe(false)
   })
 
@@ -427,6 +497,7 @@ describe("AdSlot", () => {
         format="rail"
         hostname="turtle.chronicleclassic.com"
         previewEnabled={false}
+        renderFallback={() => <a href="/technical-hint">Technical hint</a>}
       />,
       {
         ads_enabled: false,
@@ -440,7 +511,13 @@ describe("AdSlot", () => {
   it("does not render for an ad-free user", () => {
     expect(
       renderAdSlot(
-        <AdSlot placement="leaderboards-right-rail" hostname="localhost" previewEnabled />,
+        <AdSlot
+          placement="leaderboards-right-rail"
+          format="rail"
+          hostname="localhost"
+          previewEnabled
+          renderFallback={() => <a href="/technical-hint">Technical hint</a>}
+        />,
         undefined,
         { ads_free: true },
       ),
