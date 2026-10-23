@@ -13,6 +13,7 @@ import {
   type NitroPayAd,
 } from "./nitroPay"
 import { useAdSiteConfig } from "./useAdSiteConfig"
+import { useAdsSuppressed } from "./adSuppression"
 
 export type { AdPlacement } from "./adPolicy"
 
@@ -26,11 +27,13 @@ const formatClasses: Record<AdFormat, string> = {
 const railLayoutClasses: Record<RailLayout, string> = {
   single: "min-[1920px]:w-[300px]",
   paired: "min-[2080px]:w-[300px]",
+  compact: "",
 }
 
-const railLayoutQueries: Record<RailLayout, string> = {
+const railLayoutQueries: Record<RailLayout, string | undefined> = {
   single: "(min-width: 1920px)",
   paired: "(min-width: 2080px)",
+  compact: undefined,
 }
 
 const frameClasses: Record<AdFormat, string> = {
@@ -104,25 +107,32 @@ export function AdSlot({
   hostname = window.location.hostname,
   previewEnabled = import.meta.env.DEV && import.meta.env.CHRONICLE_PREVIEW_ADS,
   demoEnabled = import.meta.env.CHRONICLE_PREVIEW_ADS_DEMO,
+  minViewportHeight,
+  viewportHeight,
   availableHeight,
   className,
 }: {
   /** Stable hyphenated identifier; use kebab-case for reporting and placement-specific policy. */
   placement: AdPlacement
   format?: AdFormat
-  /** Paired rails wait for a wider viewport before reserving 300px per side. */
+  /** Paired rails wait for extra width; compact rails remain fixed at 160px. */
   railLayout?: RailLayout
   hostname?: string
   /** Test seam for preview eligibility. Product callers should use the environment flag. */
   previewEnabled?: boolean
   /** Test seam for NitroPay demo creatives. Product callers should use the environment flag. */
   demoEnabled?: boolean
+  /** Do not render or request the placement below this viewport height. */
+  minViewportHeight?: number
+  /** Test seam for minimum viewport-height eligibility. Product callers should omit it. */
+  viewportHeight?: number
   /** Test seam for sidebar size eligibility. Product callers should use viewport measurement. */
   availableHeight?: number
   className?: string
 }) {
   const adSiteConfig = useAdSiteConfig()
   const { data: session, isLoading: sessionLoading } = useSession()
+  const adsSuppressed = useAdsSuppressed()
   const [renderedRequestKey, setRenderedRequestKey] = useState<string>()
   const slotRef = useRef<HTMLElement>(null)
   const measuredAvailableHeight = useSidebarViewportHeight(format === "sidebar", slotRef)
@@ -133,12 +143,23 @@ export function AdSlot({
   const adID = `nitropay-${placement}`
   const wideRail = useMediaQuery(format === "rail" ? railLayoutQueries[railLayout] : undefined)
   const compactCard = useMediaQuery(format === "card" ? "(max-width: 1023px)" : undefined)
+  const measuredViewportHeightEligible = useMediaQuery(
+    minViewportHeight === undefined ? undefined : `(min-height: ${minViewportHeight}px)`,
+  )
+  const viewportHeightEligible =
+    minViewportHeight === undefined ||
+    (viewportHeight === undefined ? measuredViewportHeightEligible : viewportHeight >= minViewportHeight)
   const eligibleSizes = useMemo(
     () => adSizesForFormat(format, wideRail, compactCard, sidebarAvailableHeight),
     [compactCard, format, sidebarAvailableHeight, wideRail],
   )
   const placementDisabled = isAdPlacementDisabled(adSiteConfig?.disabled_ads, placement, format)
-  const adsAllowed = !sessionLoading && !session?.ads_free && !placementDisabled
+  const adsAllowed =
+    !adsSuppressed &&
+    !sessionLoading &&
+    !session?.ads_free &&
+    !placementDisabled &&
+    viewportHeightEligible
   const requestKey = `${adID}:${eligibleSizes.map((size) => size.join("x")).join(",")}`
   const liveCreativeRendered = renderedRequestKey === requestKey
   const adLabelVisible = showPreview || showDemo || liveCreativeRendered

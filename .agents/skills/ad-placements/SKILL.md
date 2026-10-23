@@ -30,7 +30,7 @@ Wide-screen rail:
 <AdSlot placement="leaderboards-right-rail" format="rail" />
 ```
 
-Use `railLayout="paired"` when a page renders rails on both sides. Single rails reserve 300px at 1920px; paired rails wait until 2080px so the page can reserve 300px on both sides without reducing the primary content width.
+Use `railLayout="paired"` when a page renders rails on both sides. Single rails reserve 300px at 1920px; paired rails wait until 2080px so the page can reserve 300px on both sides without reducing the primary content width. Use `railLayout="compact"` for a rail that must remain fixed at 160×600 at every eligible viewport width.
 
 Fixed-width content sidebar:
 
@@ -88,7 +88,7 @@ Do not create a placement-specific wrapper merely to render `AdSlot`. A wrapper 
 | Format | Component usage | Current layout contract |
 |---|---|---|
 | Responsive | `<AdSlot placement="..." />` | Hidden below `lg`; fills available width; minimum preview height 7rem |
-| Rail | `<AdSlot placement="..." format="rail" />` | Hidden below `2xl`; 160px wide by default; expands to 300px when its layout has spare viewport width; 600px minimum height; sticky below navigation |
+| Rail | `<AdSlot placement="..." format="rail" />` | Hidden below `2xl`; 160px wide by default; expands to 300px when its layout has spare viewport width unless `railLayout="compact"`; 600px minimum height; sticky below navigation |
 | Card | `<AdSlot placement="..." format="card" />` | Fixed 300×100 below `lg`, fixed 300×250 at `lg` and wider; centered within a content-grid cell |
 | Sidebar | `<AdSlot placement="..." format="sidebar" />` | Hidden below `lg`; fixed at 250px wide; offers 250×250, 240×400, and 160×600 according to the scrollable sidebar's viewport height |
 
@@ -98,6 +98,8 @@ Add a new format only when neither existing format can represent the required di
 
 | Placement | Caller | Eligibility |
 |---|---|---|
+| `instance-right-rail` | `pages/Instance/InstancePage.tsx` | Upper instance-detail rail outside focus mode; fixed 160×600 and visible at `2xl`; suppressed when the upload owner is ad-free |
+| `instance-right-rail-lower` | `pages/Instance/InstancePage.tsx` | Lower instance-detail rail; fixed 160×600 and mounted only at `2xl` with at least 1360px viewport height; suppressed when the upload owner is ad-free |
 | `leaderboards-right-rail` | `pages/Leaderboards/LeaderboardsPage.tsx` | Leaderboard landing and detail layouts; visible at `2xl` |
 | `statistics-encounter-sidebar` | `pages/Rankings/InstanceView.tsx` | Non-mobile statistics detail with any non-empty encounter list; fixed 250px width and scrolls below the encounters |
 | `recent-right-rail` | `pages/Recent/RecentRaids.tsx` | Recent uploads; visible at `2xl` |
@@ -140,6 +142,7 @@ At minimum, `AdSlot.test.tsx` must cover:
 - Rail preview dimensions, sticky behavior, and single/paired width breakpoints.
 - NitroPay rail size eligibility: 160×600 normally and both 300×600 plus 160×600 only after 300px is reserved; the local preview label must reflect the same eligible set.
 - Sidebar size eligibility: 250×250, 240×400, and 160×600 are offered only when the scrollable sidebar viewport can contain them.
+- Optional minimum viewport-height eligibility prevents hidden placements from rendering or requesting ads.
 - Stable `data-ad-placement` output.
 - No rendering without the preview flag or on a non-local hostname while live serving is unavailable.
 - Effective tenant enablement for both disabled and live NitroPay branches.

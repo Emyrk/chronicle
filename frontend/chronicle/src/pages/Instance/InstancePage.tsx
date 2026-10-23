@@ -24,6 +24,8 @@ import { TimeRangeController } from "./TimeRangeController";
 import { useTenantGate } from "./TenantGate";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import { InstanceAssistantChat } from "@/features/chat/InferenceChats";
+import { AdSuppressionProvider } from "@/components/Ads/AdSuppressionProvider";
+import { AdSlot } from "@/components/Ads/AdSlot";
 import { getReplayResetTimestamp, type SelectedEncounterTimes } from "./replaySelection";
 
 // Types for the Instance page
@@ -133,6 +135,7 @@ function transformToInstance(
   apiInstance: {
     id: string;
     slug?: string;
+    owner_ads_free: boolean;
     log_group_id: string;
     name: string;
     start_time?: string;
@@ -512,6 +515,7 @@ export function InstancePage() {
   }
 
   return (
+    <AdSuppressionProvider suppressed={apiInstance?.owner_ads_free === true}>
     <DatasetProvider datasetId={instance.datasetId} iconBaseUrl={instance.iconBaseUrl}>
     <SyncModeProvider>
       <LiveSessionProvider>
@@ -522,24 +526,45 @@ export function InstancePage() {
             flavor={instance.flavor ?? []}
             selectedEncounterIds={selectedEncounterIds}
           >
-            {tenantGate.banner && !focused && (
-              <div className="w-full px-4 pt-4">
-                {tenantGate.banner}
+            <div className="flex w-full gap-6">
+              <div className="min-w-0 flex-1">
+                {tenantGate.banner && !focused && (
+                  <div className="w-full px-4 pt-4">
+                    {tenantGate.banner}
+                  </div>
+                )}
+                {!focused && <AddonMissingBanner instance={instance} />}
+                <InstancePageInner
+                  instance={instance}
+                  selectedEncounterIds={selectedEncounterIds}
+                  onSelectEncounters={setUserSelectedEncounterIds}
+                  youtubeData={youtubeData}
+                  selectedEncounterTimes={selectedEncounterTimes}
+                  logDetailUrl={logDetailUrl}
+                  rawEncounters={apiInstance?.encounters}
+                  canAdminLogs={canAdminLogs}
+                  canInvalidateLogs={canInvalidateLogs}
+                  duplicateGroupId={apiInstance?.duplicate_group_id}
+                />
               </div>
-            )}
-            {!focused && <AddonMissingBanner instance={instance} />}
-            <InstancePageInner
-              instance={instance}
-              selectedEncounterIds={selectedEncounterIds}
-              onSelectEncounters={setUserSelectedEncounterIds}
-              youtubeData={youtubeData}
-              selectedEncounterTimes={selectedEncounterTimes}
-              logDetailUrl={logDetailUrl}
-              rawEncounters={apiInstance?.encounters}
-              canAdminLogs={canAdminLogs}
-              canInvalidateLogs={canInvalidateLogs}
-              duplicateGroupId={apiInstance?.duplicate_group_id}
-            />
+              {!focused && (
+                <div className="hidden w-40 shrink-0 self-start 2xl:sticky 2xl:top-20 2xl:block">
+                  <AdSlot
+                    placement="instance-right-rail"
+                    format="rail"
+                    railLayout="compact"
+                    className="2xl:static"
+                  />
+                  <AdSlot
+                    placement="instance-right-rail-lower"
+                    format="rail"
+                    railLayout="compact"
+                    minViewportHeight={1360}
+                    className="mt-6 2xl:static"
+                  />
+                </div>
+              )}
+            </div>
             <InstanceAssistantChat key={instance.id} instanceId={instance.id} instanceName={instance.name} />
           </PlayerSpecializationProvider>
         </InstanceEventsProvider>
@@ -547,6 +572,7 @@ export function InstancePage() {
       </LiveSessionProvider>
     </SyncModeProvider>
     </DatasetProvider>
+    </AdSuppressionProvider>
   );
 }
 

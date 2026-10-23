@@ -6,6 +6,7 @@ import type { Session } from "@/api/queries"
 import type { SiteConfig } from "@/api/typesGenerated"
 import { describe, expect, it, vi } from "vitest"
 import { AdSlot } from "./AdSlot"
+import { AdSuppressionProvider } from "./AdSuppressionProvider"
 import { adSizeLabel, adSizesForFormat } from "./adFormats"
 import { isAdPlacementDisabled } from "./adPolicy"
 import {
@@ -74,6 +75,57 @@ describe("AdSlot", () => {
 
     expect(markup).toContain("min-[2080px]:w-[300px]")
     expect(markup).not.toContain("min-[1920px]:w-[300px]")
+  })
+
+  it("keeps compact rails fixed at 160 × 600 on wide screens", () => {
+    const markup = renderAdSlot(
+      <AdSlot
+        placement="instance-right-rail"
+        format="rail"
+        railLayout="compact"
+        hostname="localhost"
+        previewEnabled
+      />,
+    )
+
+    expect(markup).toContain("160 × 600")
+    expect(markup).not.toContain("300 × 600")
+    expect(markup).not.toContain("min-[1920px]:w-[300px]")
+    expect(markup).not.toContain("min-[2080px]:w-[300px]")
+    expect(markup).toContain("2xl:block")
+  })
+
+  it("does not render a height-gated rail below its minimum viewport height", () => {
+    expect(
+      renderAdSlot(
+        <AdSlot
+          placement="instance-right-rail-lower"
+          format="rail"
+          railLayout="compact"
+          minViewportHeight={1360}
+          viewportHeight={1200}
+          hostname="localhost"
+          previewEnabled
+        />,
+      ),
+    ).toBe("")
+  })
+
+  it("renders a height-gated rail when the viewport is tall enough", () => {
+    const markup = renderAdSlot(
+      <AdSlot
+        placement="instance-right-rail-lower"
+        format="rail"
+        railLayout="compact"
+        minViewportHeight={1360}
+        viewportHeight={1360}
+        hostname="localhost"
+        previewEnabled
+      />,
+    )
+
+    expect(markup).toContain('data-ad-placement="instance-right-rail-lower"')
+    expect(markup).toContain("160 × 600")
   })
 
   it("offers both rail sizes only when 300px is reserved", () => {
@@ -339,6 +391,21 @@ describe("AdSlot", () => {
         <AdSlot placement="leaderboards-right-rail" hostname="localhost" previewEnabled />,
         undefined,
         { ads_free: true },
+      ),
+    ).toBe("")
+  })
+
+  it.each([
+    { name: "anonymous viewers", session: null },
+    { name: "signed-in viewers", session: { ads_free: false } },
+  ])("does not render when the page suppresses ads for $name", ({ session }) => {
+    expect(
+      renderAdSlot(
+        <AdSuppressionProvider suppressed>
+          <AdSlot placement="instance-overview-summary" hostname="localhost" previewEnabled />
+        </AdSuppressionProvider>,
+        undefined,
+        session,
       ),
     ).toBe("")
   })

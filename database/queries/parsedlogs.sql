@@ -167,6 +167,12 @@ JOIN wow_log_groups ON wow_log_groups.id = log_instances_guild.log_group_id
 WHERE log_instances_guild.hashed_slug = $1
   AND log_instances_guild.hashed_slug != '';
 
+-- name: GetInstanceLogOwner :one
+SELECT wow_log_groups.owner
+FROM log_instances_guild
+JOIN wow_log_groups ON wow_log_groups.id = log_instances_guild.log_group_id
+WHERE log_instances_guild.id = $1;
+
 -- name: EncountersByInstanceID :many
 SELECT
   *
