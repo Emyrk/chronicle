@@ -107,6 +107,8 @@ export function AdSlot({
   hostname = window.location.hostname,
   previewEnabled = import.meta.env.DEV && import.meta.env.CHRONICLE_PREVIEW_ADS,
   demoEnabled = import.meta.env.CHRONICLE_PREVIEW_ADS_DEMO,
+  minViewportHeight,
+  viewportHeight,
   availableHeight,
   className,
 }: {
@@ -120,6 +122,10 @@ export function AdSlot({
   previewEnabled?: boolean
   /** Test seam for NitroPay demo creatives. Product callers should use the environment flag. */
   demoEnabled?: boolean
+  /** Do not render or request the placement below this viewport height. */
+  minViewportHeight?: number
+  /** Test seam for minimum viewport-height eligibility. Product callers should omit it. */
+  viewportHeight?: number
   /** Test seam for sidebar size eligibility. Product callers should use viewport measurement. */
   availableHeight?: number
   className?: string
@@ -137,12 +143,23 @@ export function AdSlot({
   const adID = `nitropay-${placement}`
   const wideRail = useMediaQuery(format === "rail" ? railLayoutQueries[railLayout] : undefined)
   const compactCard = useMediaQuery(format === "card" ? "(max-width: 1023px)" : undefined)
+  const measuredViewportHeightEligible = useMediaQuery(
+    minViewportHeight === undefined ? undefined : `(min-height: ${minViewportHeight}px)`,
+  )
+  const viewportHeightEligible =
+    minViewportHeight === undefined ||
+    (viewportHeight === undefined ? measuredViewportHeightEligible : viewportHeight >= minViewportHeight)
   const eligibleSizes = useMemo(
     () => adSizesForFormat(format, wideRail, compactCard, sidebarAvailableHeight),
     [compactCard, format, sidebarAvailableHeight, wideRail],
   )
   const placementDisabled = isAdPlacementDisabled(adSiteConfig?.disabled_ads, placement, format)
-  const adsAllowed = !adsSuppressed && !sessionLoading && !session?.ads_free && !placementDisabled
+  const adsAllowed =
+    !adsSuppressed &&
+    !sessionLoading &&
+    !session?.ads_free &&
+    !placementDisabled &&
+    viewportHeightEligible
   const requestKey = `${adID}:${eligibleSizes.map((size) => size.join("x")).join(",")}`
   const liveCreativeRendered = renderedRequestKey === requestKey
   const adLabelVisible = showPreview || showDemo || liveCreativeRendered

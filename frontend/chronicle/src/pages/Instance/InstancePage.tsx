@@ -547,7 +547,23 @@ export function InstancePage() {
                   duplicateGroupId={apiInstance?.duplicate_group_id}
                 />
               </div>
-              {!focused && <AdSlot placement="instance-right-rail" format="rail" railLayout="compact" />}
+              {!focused && (
+                <div className="hidden w-40 shrink-0 self-start 2xl:sticky 2xl:top-20 2xl:block">
+                  <AdSlot
+                    placement="instance-right-rail"
+                    format="rail"
+                    railLayout="compact"
+                    className="2xl:static"
+                  />
+                  <AdSlot
+                    placement="instance-right-rail-lower"
+                    format="rail"
+                    railLayout="compact"
+                    minViewportHeight={1360}
+                    className="mt-6 2xl:static"
+                  />
+                </div>
+              )}
             </div>
             <InstanceAssistantChat key={instance.id} instanceId={instance.id} instanceName={instance.name} />
           </PlayerSpecializationProvider>

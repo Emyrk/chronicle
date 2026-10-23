@@ -95,6 +95,39 @@ describe("AdSlot", () => {
     expect(markup).toContain("2xl:block")
   })
 
+  it("does not render a height-gated rail below its minimum viewport height", () => {
+    expect(
+      renderAdSlot(
+        <AdSlot
+          placement="instance-right-rail-lower"
+          format="rail"
+          railLayout="compact"
+          minViewportHeight={1360}
+          viewportHeight={1200}
+          hostname="localhost"
+          previewEnabled
+        />,
+      ),
+    ).toBe("")
+  })
+
+  it("renders a height-gated rail when the viewport is tall enough", () => {
+    const markup = renderAdSlot(
+      <AdSlot
+        placement="instance-right-rail-lower"
+        format="rail"
+        railLayout="compact"
+        minViewportHeight={1360}
+        viewportHeight={1360}
+        hostname="localhost"
+        previewEnabled
+      />,
+    )
+
+    expect(markup).toContain('data-ad-placement="instance-right-rail-lower"')
+    expect(markup).toContain("160 × 600")
+  })
+
   it("offers both rail sizes only when 300px is reserved", () => {
     expect(adSizesForFormat("rail", false)).toEqual([[160, 600]])
     expect(adSizesForFormat("rail", true)).toEqual([

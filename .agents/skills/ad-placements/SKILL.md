@@ -98,7 +98,8 @@ Add a new format only when neither existing format can represent the required di
 
 | Placement | Caller | Eligibility |
 |---|---|---|
-| `instance-right-rail` | `pages/Instance/InstancePage.tsx` | Instance detail outside focus mode; fixed 160×600 and visible at `2xl`; suppressed when the upload owner is ad-free |
+| `instance-right-rail` | `pages/Instance/InstancePage.tsx` | Upper instance-detail rail outside focus mode; fixed 160×600 and visible at `2xl`; suppressed when the upload owner is ad-free |
+| `instance-right-rail-lower` | `pages/Instance/InstancePage.tsx` | Lower instance-detail rail; fixed 160×600 and mounted only at `2xl` with at least 1360px viewport height; suppressed when the upload owner is ad-free |
 | `leaderboards-right-rail` | `pages/Leaderboards/LeaderboardsPage.tsx` | Leaderboard landing and detail layouts; visible at `2xl` |
 | `statistics-encounter-sidebar` | `pages/Rankings/InstanceView.tsx` | Non-mobile statistics detail with any non-empty encounter list; fixed 250px width and scrolls below the encounters |
 | `recent-right-rail` | `pages/Recent/RecentRaids.tsx` | Recent uploads; visible at `2xl` |
@@ -141,6 +142,7 @@ At minimum, `AdSlot.test.tsx` must cover:
 - Rail preview dimensions, sticky behavior, and single/paired width breakpoints.
 - NitroPay rail size eligibility: 160×600 normally and both 300×600 plus 160×600 only after 300px is reserved; the local preview label must reflect the same eligible set.
 - Sidebar size eligibility: 250×250, 240×400, and 160×600 are offered only when the scrollable sidebar viewport can contain them.
+- Optional minimum viewport-height eligibility prevents hidden placements from rendering or requesting ads.
 - Stable `data-ad-placement` output.
 - No rendering without the preview flag or on a non-local hostname while live serving is unavailable.
 - Effective tenant enablement for both disabled and live NitroPay branches.
