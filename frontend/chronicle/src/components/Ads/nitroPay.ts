@@ -31,6 +31,7 @@ interface NitroPayAPI {
 
 interface NitroPayAdOptions {
   demo?: boolean
+  outstream: "never"
   refreshLimit: number
   refreshTime: number
   report: {
@@ -92,6 +93,8 @@ export function loadNitroPay(siteID: string): Promise<void> {
 export function nitroPayAdOptions(sizes: NitroPaySize[], demo = false): NitroPayAdOptions {
   return {
     ...(demo && { demo: true }),
+    // NitroPay enables outstream video automatically unless a placement opts out.
+    outstream: "never",
     refreshLimit: 10,
     refreshTime: 30,
     report: {
