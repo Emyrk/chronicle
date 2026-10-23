@@ -105,6 +105,7 @@ const defaultProps = {
   onReparse: () => console.log("Reparse clicked"),
   isReparsing: false,
   canReparse: true,
+  canProfile: true,
   onDeleteFiles: () => console.log("Delete files clicked"),
   isDeletingFiles: false,
   canDeleteFiles: true,

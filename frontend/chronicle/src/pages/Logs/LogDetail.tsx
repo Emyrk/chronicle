@@ -26,6 +26,7 @@ import {
   ChevronRight,
   AlertTriangle,
   Fingerprint,
+  Flame,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
@@ -234,7 +235,37 @@ function formatMs(ms: Duration): string {
   return `${minutes}m ${seconds}s`;
 }
 
-function TimingSection({ report }: { report: LogParseReport }) {
+function TimingSection({ report, logId }: { report: LogParseReport; logId: string }) {
+  const [profileDownloading, setProfileDownloading] = useState(false);
+  const [profileUnavailable, setProfileUnavailable] = useState(false);
+
+  const downloadCPUProfile = async () => {
+    setProfileDownloading(true);
+    try {
+      const response = await fetch(`/api/v1/raidlogs/logs/${logId}/profile/download`);
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: "Failed to download CPU profile" }));
+        if (response.status === 404) {
+          setProfileUnavailable(true);
+        }
+        throw new Error(error.message || "Failed to download CPU profile");
+      }
+
+      const href = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = `parse-${logId}-cpu.pprof`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(href), 0);
+    } catch (error) {
+      toast.error("Failed to download CPU profile", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    } finally {
+      setProfileDownloading(false);
+    }
+  };
+
   return (
     <Card className="p-6">
       <details className="group">
@@ -262,6 +293,30 @@ function TimingSection({ report }: { report: LogParseReport }) {
               </div>
             )}
           </div>
+
+          {report.cpu_profile_available && (
+            <div className="flex items-center justify-between gap-4 rounded-lg border border-orange-500/30 bg-orange-500/5 p-3">
+              <div>
+                <p className="text-sm font-medium">CPU profile captured</p>
+                <p className="text-xs text-muted-foreground">
+                  Open it with <code>go tool pprof</code> or a compatible flamegraph viewer.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={downloadCPUProfile}
+                disabled={profileDownloading || profileUnavailable}
+              >
+                {profileDownloading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                {profileUnavailable ? "Profile unavailable" : "Download .pprof"}
+              </Button>
+            </div>
+          )}
 
           {/* Parse Axes */}
           {(report.format || report.flavor?.length) && (
@@ -1073,9 +1128,10 @@ export interface LogDetailViewProps {
   isDeleting: boolean;
   showDeleteConfirm: boolean;
   setShowDeleteConfirm: (show: boolean) => void;
-  onReparse: (verbose: boolean, identityMode?: boolean, logType?: string, format?: string, flavor?: string) => void;
+  onReparse: (verbose: boolean, identityMode?: boolean, logType?: string, format?: string, flavor?: string, profile?: boolean) => void;
   isReparsing: boolean;
   canReparse: boolean;
+  canProfile: boolean;
   onDeleteFiles: () => void;
   isDeletingFiles: boolean;
   canDeleteFiles: boolean;
@@ -1102,6 +1158,7 @@ export function LogDetailView({
   onReparse,
   isReparsing,
   canReparse,
+  canProfile,
   onDeleteFiles,
   isDeletingFiles,
   canDeleteFiles,
@@ -1253,6 +1310,12 @@ export function LogDetailView({
                       <Play className="h-4 w-4 mr-2 text-yellow-500" />
                       Reparse (Verbose)
                     </DropdownMenuItem>
+                    {canProfile && (
+                      <DropdownMenuItem onClick={() => onReparse(false, false, undefined, undefined, undefined, true)}>
+                        <Flame className="h-4 w-4 mr-2 text-orange-500" />
+                        Reparse (CPU Profile)
+                      </DropdownMenuItem>
+                    )}
                     {canDownloadFiles && (
                       <>
                         <DropdownMenuItem onClick={() => onReparse(false, true)}>
@@ -1491,7 +1554,7 @@ export function LogDetailView({
           {/* Timing Report - only shows for completed log-parse jobs with report */}
           {parsedOutput?.report && (
             <>
-              <TimingSection report={parsedOutput.report} />
+              <TimingSection report={parsedOutput.report} logId={log.id} />
               {parsedOutput.report.identity && (
                 <IdentitySection identity={parsedOutput.report.identity} />
               )}
@@ -1591,6 +1654,7 @@ export function LogDetail() {
     enabled: isAuthenticated && !!logId,
   });
   const canReparse = authz?.reparse ?? false;
+  const canProfile = authz?.adminLogs ?? false;
   const canDeleteFiles = authz?.deleteFiles ?? false;
   const canDeleteInstance = authz?.delete ?? false;
   const canDownloadFiles = (authz?.adminLogs ?? false) || (session?.can_download_raw_logs ?? false);
@@ -1619,19 +1683,21 @@ export function LogDetail() {
     });
   };
 
-  const handleReparse = (withDebug = false, identityMode = false, logType?: string, format?: string, flavor?: string) => {
+  const handleReparse = (withDebug = false, identityMode = false, logType?: string, format?: string, flavor?: string, profile = false) => {
     if (!logId) return;
-    reparseLogGroup.mutate({ logId, withDebug, identityMode, logType, format, flavor }, {
+    reparseLogGroup.mutate({ logId, withDebug, identityMode, profile, logType, format, flavor }, {
       onSuccess: () => {
         const axis = logType ?? format ?? flavor;
         const label = axis
           ? `Reparse as ${axis} started`
-          : identityMode ? "Identity reparse started" : withDebug ? "Debug reparse started" : "Reparse started";
+          : profile ? "Profiled reparse started" : identityMode ? "Identity reparse started" : withDebug ? "Debug reparse started" : "Reparse started";
         const desc = axis
           ? `Your log is being reprocessed as ${axis}.`
-          : identityMode
-            ? "Your log is being reprocessed to collect all creatures and spells."
-            : withDebug
+          : profile
+            ? "Your log is being reprocessed while capturing a parse-only CPU profile."
+            : identityMode
+              ? "Your log is being reprocessed to collect all creatures and spells."
+              : withDebug
               ? "Your log is being reprocessed with debug annotations."
               : "Your log is being reprocessed.";
         toast.success(label, { description: desc });
@@ -1693,6 +1759,7 @@ export function LogDetail() {
       onReparse={handleReparse}
       isReparsing={reparseLogGroup.isPending}
       canReparse={canReparse}
+      canProfile={canProfile}
       onDeleteFiles={handleDeleteFiles}
       isDeletingFiles={deleteLogFiles.isPending}
       canDeleteFiles={canDeleteFiles}
@@ -1762,6 +1829,7 @@ export function LogDetailByHash() {
     enabled: isAuthenticated && !!logId,
   });
   const canReparse = authz?.reparse ?? false;
+  const canProfile = authz?.adminLogs ?? false;
   const canDeleteFiles = authz?.deleteFiles ?? false;
   const canDeleteInstance = authz?.delete ?? false;
   const canDownloadFiles = (authz?.adminLogs ?? false) || (session?.can_download_raw_logs ?? false);
@@ -1790,19 +1858,21 @@ export function LogDetailByHash() {
     });
   };
 
-  const handleReparse = (withDebug = false, identityMode = false, logType?: string, format?: string, flavor?: string) => {
+  const handleReparse = (withDebug = false, identityMode = false, logType?: string, format?: string, flavor?: string, profile = false) => {
     if (!logId) return;
-    reparseLogGroup.mutate({ logId, withDebug, identityMode, logType, format, flavor }, {
+    reparseLogGroup.mutate({ logId, withDebug, identityMode, profile, logType, format, flavor }, {
       onSuccess: () => {
         const axis = logType ?? format ?? flavor;
         const label = axis
           ? `Reparse as ${axis} started`
-          : identityMode ? "Identity reparse started" : withDebug ? "Debug reparse started" : "Reparse started";
+          : profile ? "Profiled reparse started" : identityMode ? "Identity reparse started" : withDebug ? "Debug reparse started" : "Reparse started";
         const desc = axis
           ? `Your log is being reprocessed as ${axis}.`
-          : identityMode
-            ? "Your log is being reprocessed to collect all creatures and spells."
-            : withDebug
+          : profile
+            ? "Your log is being reprocessed while capturing a parse-only CPU profile."
+            : identityMode
+              ? "Your log is being reprocessed to collect all creatures and spells."
+              : withDebug
               ? "Your log is being reprocessed with debug annotations."
               : "Your log is being reprocessed.";
         toast.success(label, { description: desc });
@@ -1849,6 +1919,7 @@ export function LogDetailByHash() {
       onReparse={handleReparse}
       isReparsing={reparseLogGroup.isPending}
       canReparse={canReparse}
+      canProfile={canProfile}
       onDeleteFiles={handleDeleteFiles}
       isDeletingFiles={deleteLogFiles.isPending}
       canDeleteFiles={canDeleteFiles}

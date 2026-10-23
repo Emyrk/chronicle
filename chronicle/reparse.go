@@ -27,6 +27,7 @@ type ArgsLogReparse struct {
 	TenantID        uuid.UUID `json:"tenant_id,omitempty"`
 	Verbose         bool      `json:"verbose,omitempty"`
 	IdentityMode    bool      `json:"identity_mode,omitempty"`
+	Profile         bool      `json:"profile,omitempty"`
 }
 
 type logReparseMetadata struct {
@@ -101,7 +102,7 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 	if job.Args.TenantID != uuid.Nil {
 		parseCtx = servicetenant.WithTenantID(ctx, job.Args.TenantID)
 	}
-	parseArgs := newReplacementArgsLogParse(parseCtx, job.Args.LogID, parseGeneration, job.Args.Verbose, job.Args.IdentityMode, job.Args.RealmID, previousRankingRunIDs)
+	parseArgs := newReplacementArgsLogParse(parseCtx, job.Args.LogID, parseGeneration, job.Args.Verbose, job.Args.IdentityMode, job.Args.Profile, job.Args.RealmID, previousRankingRunIDs)
 	insertOpts := parseArgs.InsertOpts()
 	insertOpts.Pending = true
 	insertOpts.Tags = []string{fmt.Sprintf("owner_%s", logGroup.WoWLogGroup.Owner.String())}
@@ -120,7 +121,7 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 	return nil
 }
 
-func (c *Chronicle) EnqueueReParseLog(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
+func (c *Chronicle) EnqueueReParseLog(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, profile bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
 	var result *rivertype.JobInsertResult
 	err := c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
 		pgxTx, ok := tx.PGXTx()
@@ -128,13 +129,13 @@ func (c *Chronicle) EnqueueReParseLog(ctx context.Context, logID uuid.UUID, verb
 			return errors.New("reparse transaction does not expose pgx transaction")
 		}
 		var err error
-		result, err = c.enqueueReParseLog(ctx, tx, pgxTx, logID, verbose, identityMode, realmID)
+		result, err = c.enqueueReParseLog(ctx, tx, pgxTx, logID, verbose, identityMode, profile, realmID)
 		return err
 	}, nil)
 	return result, err
 }
 
-func (c *Chronicle) enqueueReParseLog(ctx context.Context, db database.Store, tx pgx.Tx, logID uuid.UUID, verbose bool, identityMode bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
+func (c *Chronicle) enqueueReParseLog(ctx context.Context, db database.Store, tx pgx.Tx, logID uuid.UUID, verbose bool, identityMode bool, profile bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
 	identities, err := db.RankingRunIdentitiesByLogGroupID(ctx, logID)
 	if err != nil {
 		return nil, fmt.Errorf("load ranking run identities: %w", err)
@@ -160,6 +161,7 @@ func (c *Chronicle) enqueueReParseLog(ctx context.Context, db database.Store, tx
 		TenantID:        t,
 		Verbose:         verbose,
 		IdentityMode:    identityMode,
+		Profile:         profile,
 	}
 	opts := &river.InsertOpts{Tags: []string{}, Metadata: metadata}
 	if tx != nil {
