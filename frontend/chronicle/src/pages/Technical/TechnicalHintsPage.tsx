@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ArrowLeft, Lightbulb, Ruler } from "lucide-react";
 import { Link } from "react-router-dom";
 import { TechnicalHintCard } from "@/components/TechnicalHints/TechnicalHintCard";
@@ -17,15 +17,11 @@ export function TechnicalHintsPage() {
   const [width, setWidth] = useState(300);
   const [height, setHeight] = useState(250);
   const [hintID, setHintID] = useState("");
-  const hints = data?.payloads ?? [];
+  const hints = useMemo(() => data?.payloads ?? [], [data]);
   const hint = useMemo(
     () => hints.find((candidate) => candidate.id === hintID) ?? hints[0],
     [hintID, hints],
   );
-
-  useEffect(() => {
-    if (!hintID && hints[0]) setHintID(hints[0].id);
-  }, [hintID, hints]);
 
   const applyPreset = (nextID: string) => {
     setPresetID(nextID);
@@ -127,9 +123,9 @@ export function TechnicalHintsPage() {
             </div>
           </div>
 
-          <div className="styled-scrollbar overflow-auto rounded-md border border-dashed border-border/80 bg-black/10 p-4">
+          <div className="styled-scrollbar flex overflow-auto rounded-md border border-dashed border-border/80 bg-black/10 p-6">
             <div
-              className="overflow-hidden rounded-md shadow-lg shadow-black/20"
+              className="m-auto shrink-0 overflow-hidden rounded-md shadow-lg shadow-black/20"
               style={{ width: `${width}px`, height: `${height}px` }}
             >
               {hint && <TechnicalHintCard hint={hint} compact={height <= 140} />}
