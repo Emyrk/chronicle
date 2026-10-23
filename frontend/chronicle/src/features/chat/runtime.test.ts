@@ -44,16 +44,22 @@ describe("InferenceRuntime", () => {
     expect(runtime.getClientDescriptor().capabilities).toEqual([]);
   });
 
-  it("advertises revision zero instead of dropping it", () => {
+  it("preserves revision zero in advertisements and continuations", async () => {
     const runtime = new InferenceRuntime({ sessionId: "session-1" });
     runtime.registerCapability({
       id: "page",
       version: 1,
       scope: { type: "route", id: "rankings" },
       stateRevision: 0,
-      tools: { inspect: vi.fn() },
+      tools: { inspect: vi.fn(() => ({ ok: true })) },
     });
     expect(runtime.getClientDescriptor().capabilities[0]).toMatchObject({ state_revision: 0 });
+    await expect(runtime.executeClientTool(request({
+      capability: { ...request().capability, stateRevision: 0 },
+    }), new AbortController().signal)).resolves.toMatchObject({
+      status: "success",
+      state_revision: 0,
+    });
   });
 
   it("returns unavailable for an unmounted capability and stale_state for a changed revision", async () => {

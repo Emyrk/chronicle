@@ -147,7 +147,7 @@ export interface DebugSnapshotEvent extends AgUiEventBase {
   type: "DEBUG_SNAPSHOT";
   runId: string;
   iteration: number;
-  phase: "request" | "tool_results" | "response";
+  phase: "request" | "tool_results" | "client_tool_request" | "response";
   assistantId: string;
   model: string;
   persistence: "ephemeral" | "durable";
@@ -196,6 +196,7 @@ export interface ChatMessage {
 export interface ChatState {
   messages: ChatMessage[];
   debugSnapshots: DebugSnapshotEvent[];
+  clientToolRequests: ClientToolRequestEvent[];
   runId?: string;
   threadId?: string;
   status: ChatRunStatus;
@@ -214,6 +215,7 @@ export function createInitialChatState(messages: ChatMessage[] = []): ChatState 
   return {
     messages,
     debugSnapshots: [],
+    clientToolRequests: [],
     status: "idle",
   };
 }
@@ -265,15 +267,18 @@ function interruptStreamingMessages(messages: ChatMessage[]): ChatMessage[] {
 
 function applyEvent(state: ChatState, event: AgUiEvent): ChatState {
   switch (event.type) {
-    case "RUN_STARTED":
+    case "RUN_STARTED": {
+      const continuingRun = state.runId === event.runId;
       return {
         ...state,
         runId: event.runId,
         threadId: event.threadId,
         status: "running",
         error: undefined,
-        debugSnapshots: [],
+        debugSnapshots: continuingRun ? state.debugSnapshots : [],
+        clientToolRequests: continuingRun ? state.clientToolRequests : [],
       };
+    }
     case "RUN_FINISHED":
       return {
         ...state,
@@ -361,6 +366,7 @@ function applyEvent(state: ChatState, event: AgUiEvent): ChatState {
         })),
       };
     case "CLIENT_TOOL_REQUEST": {
+      const clientToolRequests = [...state.clientToolRequests, event];
       const argumentsText = JSON.stringify(event.arguments ?? null);
       const hasToolCall = state.messages.some((message) =>
         message.toolCalls?.some((toolCall) => toolCall.id === event.toolCallId),
@@ -368,6 +374,7 @@ function applyEvent(state: ChatState, event: AgUiEvent): ChatState {
       if (hasToolCall) {
         return {
           ...state,
+          clientToolRequests,
           messages: updateToolCall(state.messages, event.toolCallId, (toolCall) => ({
             ...toolCall,
             name: event.toolName,
@@ -385,6 +392,7 @@ function applyEvent(state: ChatState, event: AgUiEvent): ChatState {
       if (!fallbackMessage) {
         return {
           ...state,
+          clientToolRequests,
           messages: [...state.messages, {
             id: `tool-message-${event.toolCallId}`,
             role: "assistant",
@@ -396,6 +404,7 @@ function applyEvent(state: ChatState, event: AgUiEvent): ChatState {
       }
       return {
         ...state,
+        clientToolRequests,
         messages: updateMessage(state.messages, fallbackMessage.id, (message) => ({
           ...message,
           toolCalls: [...(message.toolCalls ?? []), toolCall],

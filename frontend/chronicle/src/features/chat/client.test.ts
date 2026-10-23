@@ -68,12 +68,12 @@ describe("parseAgUiEvent", () => {
     ).toEqual({ type: "TEXT_MESSAGE_END", messageId: "message-1" });
   });
 
-  it("validates and returns a complete debug snapshot", () => {
+  it("validates and returns a complete client-tool debug snapshot", () => {
     const snapshot = {
       type: "DEBUG_SNAPSHOT",
       runId: "run-1",
       iteration: 1,
-      phase: "request",
+      phase: "client_tool_request",
       assistantId: "site-help",
       model: "provider/model",
       persistence: "ephemeral",

@@ -7,6 +7,7 @@ import type { AssistantChatController } from "./useAssistantChat";
 const controller: AssistantChatController = {
   messages: [],
   debugSnapshots: [],
+  clientToolRequests: [],
   status: "idle",
   isRunning: false,
   submit: vi.fn(async () => true),

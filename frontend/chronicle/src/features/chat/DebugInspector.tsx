@@ -1,12 +1,31 @@
-import { Braces, FileText, Gauge, Puzzle, Wrench } from "lucide-react";
-import type { DebugSnapshotEvent } from "./protocol";
+import { Braces, Download, FileText, Gauge, Puzzle, Wrench } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { serializeInferenceDebug } from "./debugExport";
+import type { ClientToolRequestEvent, DebugSnapshotEvent } from "./protocol";
 
 interface DebugInspectorProps {
   snapshots: readonly DebugSnapshotEvent[];
+  clientToolRequests: readonly ClientToolRequestEvent[];
+  error?: string;
 }
 
 function formattedJSON(value: unknown): string {
   return JSON.stringify(value, null, 2);
+}
+
+function downloadDebugSnapshots(
+  snapshots: readonly DebugSnapshotEvent[],
+  clientToolRequests: readonly ClientToolRequestEvent[],
+  error?: string,
+): void {
+  const runId = snapshots.at(-1)?.runId ?? clientToolRequests.at(-1)?.runId ?? "run";
+  const blob = new Blob([serializeInferenceDebug(snapshots, clientToolRequests, error)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `chronicle-inference-debug-${runId}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function bytes(value: number): string {
@@ -104,7 +123,7 @@ function Snapshot({ snapshot, latest }: { snapshot: DebugSnapshotEvent; latest: 
   );
 }
 
-export function DebugInspector({ snapshots }: DebugInspectorProps) {
+export function DebugInspector({ snapshots, clientToolRequests, error }: DebugInspectorProps) {
   return (
     <div className="border-b bg-muted/10 px-4 py-3">
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -112,7 +131,20 @@ export function DebugInspector({ snapshots }: DebugInspectorProps) {
           <p className="text-xs font-semibold">Prompt inspector</p>
           <p className="text-muted-foreground text-[11px]">Server-generated provider requests. Credentials and headers are never included.</p>
         </div>
-        <span className="text-muted-foreground text-[10px]">{snapshots.length} snapshot{snapshots.length === 1 ? "" : "s"}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground text-[10px]">{snapshots.length} snapshot{snapshots.length === 1 ? "" : "s"}</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1.5 px-2 text-[10px]"
+            disabled={snapshots.length === 0 && clientToolRequests.length === 0}
+            onClick={() => downloadDebugSnapshots(snapshots, clientToolRequests, error)}
+          >
+            <Download className="size-3" />
+            Download JSON
+          </Button>
+        </div>
       </div>
       <div className="styled-scrollbar max-h-[42vh] space-y-2 overflow-y-auto pr-1">
         {snapshots.length > 0 ? snapshots.map((snapshot, index) => (

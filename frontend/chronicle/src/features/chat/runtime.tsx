@@ -223,7 +223,7 @@ export class InferenceRuntime implements InferenceRuntimeClient {
         capability_version: descriptor.version,
         ...(descriptor.scope_type ? { scope_type: descriptor.scope_type } : {}),
         ...(descriptor.scope_id ? { scope_id: descriptor.scope_id } : {}),
-        ...(descriptor.state_revision ? { state_revision: descriptor.state_revision } : {}),
+        ...(descriptor.state_revision !== undefined ? { state_revision: descriptor.state_revision } : {}),
         status: status === "success" && !normalized.ok ? "client_error" : status,
         result: normalized.value,
       };

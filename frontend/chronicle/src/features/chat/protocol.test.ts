@@ -67,6 +67,7 @@ describe("chatReducer", () => {
 
   it("collects debug snapshots for the active run and resets them on the next run", () => {
     let state = createInitialChatState();
+    state = apply(state, { type: "RUN_STARTED", threadId: "thread-1", runId: "run-1" });
     state = apply(state, {
       type: "DEBUG_SNAPSHOT",
       runId: "run-1",
@@ -91,6 +92,9 @@ describe("chatReducer", () => {
     });
     expect(state.debugSnapshots).toHaveLength(1);
     expect(state.debugSnapshots[0].messages[0].content).toBe("instructions");
+
+    state = apply(state, { type: "RUN_STARTED", threadId: "thread-1", runId: "run-1" });
+    expect(state.debugSnapshots).toHaveLength(1);
 
     state = apply(state, { type: "RUN_STARTED", threadId: "thread-1", runId: "run-2" });
     expect(state.debugSnapshots).toEqual([]);
@@ -120,6 +124,7 @@ it("keeps a client tool request pending until the server emits TOOL_CALL_END", (
     effect: "view_mutation",
     confirmation: "unless_yolo",
   });
+  expect(state.clientToolRequests).toHaveLength(1);
   expect(state.messages[0].toolCalls?.[0]).toMatchObject({ status: "streaming", arguments: '{"tab":"damage"}' });
   state = apply(state, { type: "TOOL_CALL_END", toolCallId: "tool-1" });
   expect(state.messages[0].toolCalls?.[0].status).toBe("complete");

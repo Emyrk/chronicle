@@ -206,7 +206,13 @@ export function ChatPanel({
         </div>
       </header>
       {configuration && <div className="border-b px-4 py-3">{configuration}</div>}
-      {debugAvailable && debugEnabled && <DebugInspector snapshots={controller.debugSnapshots} />}
+      {debugAvailable && debugEnabled && (
+        <DebugInspector
+          snapshots={controller.debugSnapshots}
+          error={controller.error}
+          clientToolRequests={controller.clientToolRequests}
+        />
+      )}
 
       {disabled ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-6">

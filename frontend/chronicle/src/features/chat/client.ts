@@ -79,7 +79,7 @@ function requireArray(
   return result;
 }
 
-const DEBUG_PHASES = new Set(["request", "tool_results", "response"]);
+const DEBUG_PHASES = new Set(["request", "tool_results", "client_tool_request", "response"]);
 const DEBUG_PERSISTENCE = new Set(["ephemeral", "durable"]);
 
 function requireRecord(value: unknown, field: string, event: SseEvent): Record<string, unknown> {
