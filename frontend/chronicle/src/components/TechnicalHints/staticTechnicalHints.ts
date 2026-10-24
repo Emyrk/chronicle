@@ -17,7 +17,6 @@ export const STATIC_TECHNICAL_HINTS: readonly TechnicalHint[] = [
     kind: "tip",
     title: humanize(tip.id),
     body: tip.content,
-    href: "/technical/hints#chronicle-tips",
     tags: ["tip"],
   })),
   ...(panelHintsJSON as PanelHintAsset[]).map((hint): TechnicalHint => ({
@@ -25,8 +24,6 @@ export const STATIC_TECHNICAL_HINTS: readonly TechnicalHint[] = [
     kind: "panel",
     title: humanize(hint.panelID),
     body: hint.content,
-    href: "/technical/hints#panel-insights",
-    action_label: "See panel insights",
     panel: hint.panelID,
     tags: ["panel", hint.panelID],
   })),
