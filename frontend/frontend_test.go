@@ -10,6 +10,33 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestHandlerRedirectsLegacyYouTubeSyncRoutes(t *testing.T) {
+	t.Parallel()
+
+	siteFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte(`<html></html>`)}}
+	handler := Handler(siteFS, nil, nil, nil)
+
+	for _, requestPath := range []string{
+		"/youtube-sync",
+		"/youtube-sync-v2?session=test-session",
+	} {
+		requestPath := requestPath
+		t.Run(requestPath, func(t *testing.T) {
+			t.Parallel()
+
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, requestPath, nil))
+
+			require.Equal(t, http.StatusMovedPermanently, recorder.Code)
+			expectedLocation := "/youtube-sync-v3"
+			if requestPath == "/youtube-sync-v2?session=test-session" {
+				expectedLocation += "?session=test-session"
+			}
+			require.Equal(t, expectedLocation, recorder.Header().Get("Location"))
+		})
+	}
+}
+
 func TestHandlerRendersSEOMetadata(t *testing.T) {
 	t.Parallel()
 

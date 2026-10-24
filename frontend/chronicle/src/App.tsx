@@ -24,8 +24,6 @@ const PopulationComparisonPage = lazy(() => import("./pages/Instance/Overview/Po
 const SharedViewRedirect = lazy(() => import("./pages/SharedViewRedirect").then(({ SharedViewRedirect }) => ({ default: SharedViewRedirect })))
 const RecentRaids = lazy(() => import("./pages/Recent/RecentRaids").then(({ RecentRaids }) => ({ default: RecentRaids })))
 const ProtoDecode = lazy(() => import("./pages/Debug/ProtoDecode").then(({ ProtoDecode }) => ({ default: ProtoDecode })))
-const YouTubeSyncPage = lazy(() => import("./pages/YouTubeSync/YouTubeSyncPage").then(({ YouTubeSyncPage }) => ({ default: YouTubeSyncPage })))
-const YouTubeSyncV2Page = lazy(() => import("./pages/YouTubeSyncV2/YouTubeSyncV2Page").then(({ YouTubeSyncV2Page }) => ({ default: YouTubeSyncV2Page })))
 const YouTubeSyncV3Page = lazy(() => import("./pages/YouTubeSyncV3/YouTubeSyncV3Page").then(({ YouTubeSyncV3Page }) => ({ default: YouTubeSyncV3Page })))
 const AdminLayout = lazy(() => import("./pages/Admin/AdminLayout").then(({ AdminLayout }) => ({ default: AdminLayout })))
 const AdminUsersOverview = lazy(() => import("./pages/Admin/AdminUsersOverview").then(({ AdminUsersOverview }) => ({ default: AdminUsersOverview })))
@@ -122,6 +120,11 @@ const TenantDatasetLayout = lazy(() => import("./components/Layout/TenantDataset
 // Backend-handled paths that should bypass React Router
 const BACKEND_PATHS = ["/saffron", "/river", "/api", "/auth"]
 
+function LegacyYouTubeSyncRedirect() {
+  const location = useLocation()
+  return <Navigate to={`/youtube-sync-v3${location.search}${location.hash}`} replace />
+}
+
 function CatchAllRoute() {
   const location = useLocation()
   
@@ -142,8 +145,8 @@ function App() {
       <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/youtube-sync" element={<YouTubeSyncPage />} />
-      <Route path="/youtube-sync-v2" element={<YouTubeSyncV2Page />} />
+      <Route path="/youtube-sync" element={<LegacyYouTubeSyncRedirect />} />
+      <Route path="/youtube-sync-v2" element={<LegacyYouTubeSyncRedirect />} />
       <Route path="/youtube-sync-v3" element={<YouTubeSyncV3Page />} />
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />

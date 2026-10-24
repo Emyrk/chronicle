@@ -162,6 +162,16 @@ func (h *handler) resolveOG(req *http.Request) *OGData {
 }
 
 func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
+	switch path.Clean(req.URL.Path) {
+	case "/youtube-sync", "/youtube-sync-v2":
+		target := "/youtube-sync-v3"
+		if req.URL.RawQuery != "" {
+			target += "?" + req.URL.RawQuery
+		}
+		http.Redirect(resp, req, target, http.StatusMovedPermanently)
+		return
+	}
+
 	flavor := []string(nil)
 	if h.blogFlavorResolver != nil {
 		flavor = h.blogFlavorResolver(req)
