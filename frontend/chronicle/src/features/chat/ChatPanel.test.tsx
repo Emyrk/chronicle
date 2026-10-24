@@ -50,4 +50,23 @@ describe("ChatPanel client tool controls", () => {
     expect(markup).toContain("/debug");
     expect(markup).toContain("/clear");
   });
+
+  it("renders GitHub-flavored markdown tables and strikethrough", () => {
+    const markup = renderToStaticMarkup(
+      <ChatPanel
+        controller={{
+          ...controller,
+          messages: [{
+            id: "assistant-1",
+            role: "assistant",
+            content: "| Player | DPS |\n| --- | ---: |\n| Kresh | 1200 |\n\n~~old~~",
+          }],
+        }}
+      />,
+    );
+    expect(markup).toContain("overflow-x-auto");
+    expect(markup).toContain("<th>Player</th>");
+    expect(markup).toContain("<td>Kresh</td>");
+    expect(markup).toContain("<del>old</del>");
+  });
 });

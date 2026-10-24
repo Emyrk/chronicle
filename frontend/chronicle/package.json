@@ -55,6 +55,7 @@
     "react-grid-layout": "^2.2.2",
     "react-markdown": "^10.1.0",
     "react-router-dom": "~7.15.1",
+    "remark-gfm": "^4.0.1",
     "remotion": "4.0.505",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { AlertCircle, Bot, Check, CircleStop, LoaderCircle, LockKeyhole, RotateCcw, ScanSearch, Send, ShieldAlert, SlidersHorizontal, Wrench } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert/Alert";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/Switch/Switch";
@@ -80,9 +81,16 @@ function Message({ message }: { message: ChatMessage }) {
       >
         {assistant ? (
           message.content ? (
-            <div className="prose prose-sm dark:prose-invert max-w-none break-words prose-headings:mb-2 prose-headings:mt-4 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-pre:my-3 prose-pre:max-w-full prose-pre:overflow-auto prose-code:break-words prose-a:text-primary prose-a:underline prose-a:underline-offset-2">
+            <div className="prose prose-sm dark:prose-invert max-w-none break-words prose-headings:mb-2 prose-headings:mt-4 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-pre:my-3 prose-pre:max-w-full prose-pre:overflow-auto prose-code:break-words prose-a:text-primary prose-a:underline prose-a:underline-offset-2 prose-table:my-0 prose-table:text-xs prose-th:px-2 prose-th:py-1.5 prose-th:text-left prose-td:px-2 prose-td:py-1 prose-th:bg-muted/50 prose-thead:border-border prose-tr:border-border prose-code:font-normal prose-code:before:content-none prose-code:after:content-none [&_:not(pre)>code]:bg-muted [&_:not(pre)>code]:rounded [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:py-0.5">
               <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
                 components={{
+                  // Wide tables scroll inside the bubble instead of overflowing the chat.
+                  table: ({ children, ...props }) => (
+                    <div className="styled-scrollbar my-3 overflow-x-auto rounded-md border">
+                      <table {...props}>{children}</table>
+                    </div>
+                  ),
                   a: ({ children, ...props }) => (
                     <a {...props} target="_blank" rel="noopener noreferrer">{children}</a>
                   ),
