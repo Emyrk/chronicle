@@ -17,7 +17,7 @@ import (
 
 func setupDPSTracker() (*DPSTracker, *unitdb.Units) {
 	units := newTestUnits()
-	tracker := NewDPSTracker(units, nil)
+	tracker := NewDPSTracker(units, DamageRuleNone)
 	return tracker, units
 }
 
@@ -54,13 +54,21 @@ func TestDPSTracker_BasicDamage(t *testing.T) {
 	assert.Nil(t, results[encID].Units[player].OwnerGUID)
 }
 
+func TestDPSTrackerAssemblyOfIronTargets(t *testing.T) {
+	t.Parallel()
+
+	tracker := newDPSTrackerAssemblyOfIron()
+	for _, entry := range []uint32{32857, 32867, 32927, 33692, 33693, 33694} {
+		require.True(t, tracker.isPhaseTarget(makeCreatureGUID(entry, 1)), "entry %d", entry)
+	}
+	require.False(t, tracker.isPhaseTarget(makeCreatureGUID(33113, 1)))
+}
+
 func TestDPSTracker_PhaseTargetsCommitOnlySlainTarget(t *testing.T) {
 	t.Parallel()
 
 	units := newTestUnits()
-	tracker := NewDPSTracker(units, &DamageRules{
-		PhaseTargetEntries: []uint32{32857, 32867, 32927},
-	})
+	tracker := NewDPSTracker(units, DamageRuleAssemblyOfIron)
 	player := makePlayerGUID(1)
 	steelbreaker := makeCreatureGUID(32867, 1)
 	molgeim := makeCreatureGUID(32927, 2)
@@ -87,9 +95,7 @@ func TestDPSTracker_PhaseTargetsCommitUnresolvedDamageAtFightEnd(t *testing.T) {
 	t.Parallel()
 
 	units := newTestUnits()
-	tracker := NewDPSTracker(units, &DamageRules{
-		PhaseTargetEntries: []uint32{32857, 32867, 32927},
-	})
+	tracker := NewDPSTracker(units, DamageRuleAssemblyOfIron)
 	player := makePlayerGUID(1)
 	steelbreaker := makeCreatureGUID(32867, 1)
 	molgeim := makeCreatureGUID(32927, 2)

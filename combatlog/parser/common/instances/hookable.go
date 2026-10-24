@@ -379,7 +379,7 @@ func (h *Hookable) initDerivedRankings(flavor database.WoWFlavor, derivedRanking
 
 	// Ensure a shared DPS tracker exists (created once, shared across all derived sub-instances).
 	if h.dpsTracker == nil {
-		h.dpsTracker = rankings.NewDPSTracker(h.units, nil)
+		h.dpsTracker = rankings.NewDPSTracker(h.units, rankings.DamageRuleNone)
 		h.hooks = append(h.hooks, h.dpsTracker)
 	}
 	if h.survivabilityTracker == nil {

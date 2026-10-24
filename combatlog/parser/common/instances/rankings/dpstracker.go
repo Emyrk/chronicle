@@ -42,15 +42,14 @@ type DPSResult struct {
 // results keyed by encounter ID.
 type DPSTracker struct {
 	instancehook.BaseHook
-	units              *unitdb.Units
-	phaseTargetEntries map[uint32]struct{}
+	units          *unitdb.Units
+	assemblyOfIron *DPSTrackerAssemblyOfIron
 
 	// Per-encounter state, reset on FightStarted.
 	damageDone  map[guid.GUID]int64
 	damageTaken map[guid.GUID]int64
 	healingDone map[guid.GUID]int64
 	absorbDone  map[guid.GUID]int64
-	phaseDamage map[guid.GUID]map[guid.GUID]int64
 
 	// Results across all encounters.
 	results map[uuid.UUID]*DPSResult
@@ -58,23 +57,19 @@ type DPSTracker struct {
 
 // NewDPSTracker creates a DPS tracker that uses the given unit database for
 // classifying GUIDs at fight end.
-func NewDPSTracker(units *unitdb.Units, rules *DamageRules) *DPSTracker {
-	phaseTargetEntries := make(map[uint32]struct{})
-	if rules != nil {
-		for _, entry := range rules.PhaseTargetEntries {
-			phaseTargetEntries[entry] = struct{}{}
-		}
+func NewDPSTracker(units *unitdb.Units, rule DamageRule) *DPSTracker {
+	tracker := &DPSTracker{
+		units:       units,
+		damageDone:  make(map[guid.GUID]int64),
+		damageTaken: make(map[guid.GUID]int64),
+		healingDone: make(map[guid.GUID]int64),
+		absorbDone:  make(map[guid.GUID]int64),
+		results:     make(map[uuid.UUID]*DPSResult),
 	}
-	return &DPSTracker{
-		units:              units,
-		phaseTargetEntries: phaseTargetEntries,
-		damageDone:         make(map[guid.GUID]int64),
-		damageTaken:        make(map[guid.GUID]int64),
-		healingDone:        make(map[guid.GUID]int64),
-		absorbDone:         make(map[guid.GUID]int64),
-		phaseDamage:        make(map[guid.GUID]map[guid.GUID]int64),
-		results:            make(map[uuid.UUID]*DPSResult),
+	if rule == DamageRuleAssemblyOfIron {
+		tracker.assemblyOfIron = newDPSTrackerAssemblyOfIron()
 	}
+	return tracker
 }
 
 func (t *DPSTracker) FightStarted(_ uuid.UUID, _ messages.Message) {
@@ -82,7 +77,9 @@ func (t *DPSTracker) FightStarted(_ uuid.UUID, _ messages.Message) {
 	t.damageTaken = make(map[guid.GUID]int64)
 	t.healingDone = make(map[guid.GUID]int64)
 	t.absorbDone = make(map[guid.GUID]int64)
-	t.phaseDamage = make(map[guid.GUID]map[guid.GUID]int64)
+	if t.assemblyOfIron != nil {
+		t.assemblyOfIron.reset()
+	}
 }
 
 func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message) error {
@@ -139,22 +136,14 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 		}
 
 		if targetCls.Affiliation == unitdb.AffiliationHostile {
-			if t.isPhaseTarget(msg.Target) {
-				bucket := t.phaseDamage[msg.Target]
-				if bucket == nil {
-					bucket = make(map[guid.GUID]int64)
-					t.phaseDamage[msg.Target] = bucket
-				}
-				bucket[creditGUID] += effectiveDamage
-			} else {
+			if t.assemblyOfIron == nil || !t.assemblyOfIron.trackDamage(msg.Target, creditGUID, effectiveDamage) {
 				t.damageDone[creditGUID] += effectiveDamage
 			}
 		}
 
 	case *messages.Slain:
-		if t.isPhaseTarget(msg.Victim) {
-			t.commitPhaseTarget(msg.Victim)
-			clear(t.phaseDamage)
+		if t.assemblyOfIron != nil {
+			t.assemblyOfIron.commitSlainTarget(msg.Victim, t.damageDone)
 		}
 
 	case *messages.Heal:
@@ -182,30 +171,10 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 	return nil
 }
 
-func (t *DPSTracker) isPhaseTarget(id guid.GUID) bool {
-	entry, ok := id.GetEntry()
-	if !ok {
-		return false
-	}
-	_, ok = t.phaseTargetEntries[entry]
-	return ok
-}
-
-func (t *DPSTracker) commitPhaseTarget(target guid.GUID) {
-	for creditGUID, amount := range t.phaseDamage[target] {
-		t.damageDone[creditGUID] += amount
-	}
-}
-
-func (t *DPSTracker) commitUnresolvedPhase() {
-	for target := range t.phaseDamage {
-		t.commitPhaseTarget(target)
-	}
-	clear(t.phaseDamage)
-}
-
 func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
-	t.commitUnresolvedPhase()
+	if t.assemblyOfIron != nil {
+		t.assemblyOfIron.commitUnresolved(t.damageDone)
+	}
 
 	// Merge all GUIDs seen across all three metric maps.
 	allGUIDs := make(map[guid.GUID]struct{})
