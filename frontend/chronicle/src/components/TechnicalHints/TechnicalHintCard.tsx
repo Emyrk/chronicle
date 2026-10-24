@@ -21,6 +21,10 @@ function kindLabel(kind: TechnicalHint["kind"]): string {
   }
 }
 
+function isBlogHref(href: string): boolean {
+  return href === "/blog" || href.startsWith("/blog/") || href.startsWith("/blog?");
+}
+
 function HintIcon({ hint, size }: { hint: TechnicalHint; size: number }) {
   if (hint.icon) return <ItemIcon icon={hint.icon} size={size} className="border-white/20" />;
   return (
@@ -107,5 +111,7 @@ export function TechnicalHintCard({
   );
 
   if (!linked || !hint.href) return content;
+  // The blog is served outside the SPA, so it needs a full document navigation.
+  if (isBlogHref(hint.href)) return <a href={hint.href} className="block h-full">{content}</a>;
   return <Link to={hint.href} className="block h-full">{content}</Link>;
 }
