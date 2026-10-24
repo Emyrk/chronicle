@@ -7,15 +7,15 @@ import { useTechnicalHints } from "@/components/TechnicalHints/useTechnicalHints
 import { Card } from "@/components/ui/Card/Card";
 
 const SIZE_PRESETS = [
-  { id: "recent-mobile", label: "Recent mobile ad", width: 300, height: 100 },
-  { id: "recent-desktop", label: "Recent desktop ad", width: 300, height: 250 },
+  { id: "recent-mobile", label: "Recent mobile card", width: 360, height: 100 },
+  { id: "recent-desktop", label: "Recent desktop card", width: 340, height: 200 },
 ] as const;
 
 export function TechnicalHintsPage() {
   const { data } = useTechnicalHints();
   const [presetID, setPresetID] = useState<string>("recent-desktop");
-  const [width, setWidth] = useState(300);
-  const [height, setHeight] = useState(250);
+  const [width, setWidth] = useState(340);
+  const [height, setHeight] = useState(200);
   const [hintID, setHintID] = useState("");
   const hints = useMemo(() => data?.payloads ?? [], [data]);
   const hint = useMemo(
@@ -60,7 +60,7 @@ export function TechnicalHintsPage() {
             <h2 className="text-sm font-semibold">Recent placeholder preview</h2>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            Recent reserves 300 × 100 on smaller screens and 300 × 250 on desktop.
+            Unfilled Recent ads show a hint that fills the grid cell: raid-card height on desktop, 100px tall and full width on smaller screens.
           </p>
         </div>
 

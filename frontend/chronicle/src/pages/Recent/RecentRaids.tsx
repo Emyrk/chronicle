@@ -145,13 +145,8 @@ function RecentAdSlot({ adNumber }: { adNumber: number }) {
     [data, placement],
   );
   const renderFallback = useCallback<AdFallbackRenderer>(
-    ({ interactive }) => (
-      <TechnicalHintCard
-        hint={hint}
-        interactive={interactive}
-        compact
-        className="rounded-none border-0"
-      />
+    ({ interactive, compact }) => (
+      <TechnicalHintCard hint={hint} interactive={interactive} compact={compact} />
     ),
     [hint],
   );

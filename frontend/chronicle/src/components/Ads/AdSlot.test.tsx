@@ -342,7 +342,7 @@ describe("AdSlot", () => {
     })
   })
 
-  it("keeps a pending card fallback inert inside the fixed creative frame", () => {
+  it("keeps a pending card fallback inert while it fills the grid cell", () => {
     const markup = renderAdSlot(
       <AdSlot
         placement="recent-grid-card-1"
@@ -366,8 +366,9 @@ describe("AdSlot", () => {
     expect(markup).toContain('aria-hidden="true"')
     expect(markup).toContain(" inert=\"\"")
     expect(markup).toContain("pointer-events-none select-none")
-    expect(markup).toContain("h-[250px]")
-    expect(markup).toContain("w-[300px]")
+    expect(markup).toContain("w-full h-full min-h-[200px]")
+    expect(markup).not.toContain("w-[300px]")
+    expect(markup).not.toContain(">Advertisement</div>")
     expect(markup).toContain("absolute inset-0")
     expect(markup).toContain('href="/technical-hint"')
   })
