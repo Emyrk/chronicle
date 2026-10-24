@@ -1,8 +1,12 @@
 export type TechnicalHintKind = "tip" | "panel" | "blog";
 
+/** Where the hinted feature lives, so cards can say where to try it. */
+export type TechnicalHintContext = "instance";
+
 export interface TechnicalHint {
   id: string;
   kind: TechnicalHintKind;
+  context?: TechnicalHintContext;
   title: string;
   body: string;
   href?: string;

@@ -1,34 +1,42 @@
 [
   {
     "id": "encounter-multi-select",
-    "content": "Ctrl/Cmd+click encounters to select several fights and combine their metrics."
+    "content": "Ctrl/Cmd+click encounters to select several fights and combine their metrics.",
+    "context": "instance"
   },
   {
     "id": "boss-encounter-filter",
-    "content": "Use the Bosses filter to hide trash encounters and focus on boss pulls."
+    "content": "Use the Bosses filter to hide trash encounters and focus on boss pulls.",
+    "context": "instance"
   },
   {
     "id": "encounter-order-toggle",
-    "content": "Switch encounter ordering to move between grouped fights and the chronological raid timeline."
+    "content": "Switch encounter ordering to move between grouped fights and the chronological raid timeline.",
+    "context": "instance"
   },
   {
     "id": "entity-selection",
-    "content": "Select players or enemies to filter panels to damage, healing, and events involving those units."
+    "content": "Select players or enemies to filter panels to damage, healing, and events involving those units.",
+    "context": "instance"
   },
   {
     "id": "role-selection",
-    "content": "Use the Roles panel to select all tanks, healers, or damage dealers at once."
+    "content": "Use the Roles panel to select all tanks, healers, or damage dealers at once.",
+    "context": "instance"
   },
   {
     "id": "panel-focus",
-    "content": "Right-click a supported player row to focus it and open a per-ability breakdown."
+    "content": "Right-click a supported player row to focus it and open a per-ability breakdown.",
+    "context": "instance"
   },
   {
     "id": "share-layout",
-    "content": "Layouts can be shared so everyone in a raid can start from the same panel setup."
+    "content": "Layouts can be shared so everyone in a raid can start from the same panel setup.",
+    "context": "instance"
   },
   {
     "id": "url-state",
-    "content": "Chronicle stores encounter, entity, and panel selections in the URL so you can share the exact view."
+    "content": "Chronicle stores encounter, entity, and panel selections in the URL so you can share the exact view.",
+    "context": "instance"
   }
 ]

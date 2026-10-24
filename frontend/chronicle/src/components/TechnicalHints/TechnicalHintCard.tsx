@@ -1,9 +1,9 @@
-import { BookOpen, ChevronRight, Lightbulb, PanelsTopLeft } from "lucide-react";
+import { BookOpen, ChevronRight, Lightbulb, PanelsTopLeft, ScrollText } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ItemIcon } from "@/components/ui/ItemIcon/ItemIcon";
 import { cn } from "@/lib/utils";
-import type { TechnicalHint } from "./types";
+import type { TechnicalHint, TechnicalHintContext } from "./types";
 
 function fallbackIcon(kind: TechnicalHint["kind"], className: string): ReactNode {
   switch (kind) {
@@ -23,6 +23,25 @@ function kindLabel(kind: TechnicalHint["kind"]): string {
 
 function isBlogHref(href: string): boolean {
   return href === "/blog" || href.startsWith("/blog/") || href.startsWith("/blog?");
+}
+
+const CONTEXT_LABELS: Record<TechnicalHintContext, string> = {
+  instance: "When on an instance page",
+};
+
+/** Shared chip telling readers where a hinted feature can be used. */
+function HintContextFlair({ context, compact }: { context: TechnicalHintContext; compact: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex w-fit shrink-0 items-center gap-1 rounded bg-black/40 text-white/80",
+        compact ? "px-1.5 py-px text-[10px]" : "px-2 py-0.5 text-xs",
+      )}
+    >
+      <ScrollText className={compact ? "h-2.5 w-2.5" : "h-3 w-3"} />
+      {CONTEXT_LABELS[context]}
+    </span>
+  );
 }
 
 function HintIcon({ hint, size }: { hint: TechnicalHint; size: number }) {
@@ -78,7 +97,10 @@ export function TechnicalHintCard({
         <div className="relative z-10 flex h-full items-center gap-3 p-3">
           <HintIcon hint={hint} size={36} />
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-amber-300/80">{kindLabel(hint.kind)}</p>
+            <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+              <p className="shrink-0 text-[10px] font-medium uppercase tracking-[0.14em] text-amber-300/80">{kindLabel(hint.kind)}</p>
+              {hint.context && <HintContextFlair context={hint.context} compact />}
+            </div>
             <h3 className="truncate text-sm font-bold text-white drop-shadow-lg transition-colors group-hover:text-amber-300">
               {hint.title}
             </h3>
@@ -99,6 +121,7 @@ export function TechnicalHintCard({
           </div>
           <p className="mt-3 line-clamp-4 text-sm text-white/80 drop-shadow">{hint.body}</p>
           <div className="flex-1" />
+          {hint.context && <HintContextFlair context={hint.context} compact={false} />}
           {linked && (
             <div className="mt-2 flex items-center justify-between border-t border-white/20 pt-2 text-xs font-medium text-white/70 transition-colors group-hover:text-amber-300">
               <span className="truncate">{action}</span>
