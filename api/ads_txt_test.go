@@ -30,7 +30,7 @@ func TestAdsTxtHandler(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		adsTxtHandler(canonicalURL).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/ads.txt", nil))
 
-		require.Equal(t, http.StatusTemporaryRedirect, recorder.Code)
+		require.Equal(t, http.StatusMovedPermanently, recorder.Code)
 		require.Equal(t, canonicalURL.String(), recorder.Header().Get("Location"))
 	})
 }

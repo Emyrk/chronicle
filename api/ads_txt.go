@@ -11,6 +11,6 @@ func adsTxtHandler(canonicalURL *url.URL) http.HandlerFunc {
 			http.NotFound(w, r)
 			return
 		}
-		http.Redirect(w, r, canonicalURL.String(), http.StatusTemporaryRedirect)
+		http.Redirect(w, r, canonicalURL.String(), http.StatusMovedPermanently)
 	}
 }
