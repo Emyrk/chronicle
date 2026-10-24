@@ -124,6 +124,25 @@ func TestGuardianActivityStartsAndBumpsSara(t *testing.T) {
 	}
 }
 
+func TestYoggSaronGuardianTimeoutCountsAsDeath(t *testing.T) {
+	t.Parallel()
+
+	all := newYoggSaronTestCharacters()
+	player := guid.GUID(1)
+	guardian := creatureGUID(yoggSaronGuardianEntry)
+	start := time.Date(2026, time.August, 26, 12, 0, 0, 0, time.UTC)
+
+	_, err := all.Process(testDamage(start, player, guardian))
+	require.NoError(t, err)
+	_, err = all.Process(messages.TimedOut(start.Add(characters.InactivityTimeout + time.Second)))
+	require.NoError(t, err)
+
+	guardianCharacter, ok := all.Get(guardian)
+	require.True(t, ok)
+	require.False(t, guardianCharacter.IsActive())
+	require.Equal(t, period.EndStateSlain, guardianCharacter.LastEndState())
+}
+
 func TestGuardianActivityDoesNotRestartOldSaraSpawn(t *testing.T) {
 	t.Parallel()
 

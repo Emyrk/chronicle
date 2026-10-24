@@ -86,7 +86,7 @@ func NewYoggSaronGuardian(id guid.GUID, all *characters.Characters) (characters.
 		return nil, false
 	}
 	return &yoggSaronGuardian{
-		Common: characters.NewCommonCharacter(id, all),
+		Common: characters.NewCommonCharacter(id, all).WithTimeoutAsDeath(),
 		state:  loadYoggSaronState(all),
 	}, true
 }
