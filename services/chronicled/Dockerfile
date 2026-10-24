@@ -14,6 +14,10 @@ RUN pnpm install --frozen-lockfile
 COPY frontend/chronicle-panel-sdk/ /chronicle/frontend/chronicle-panel-sdk/
 COPY frontend/wow-tooltip-renderer/ /chronicle/frontend/wow-tooltip-renderer/
 
+# Static technical content is shared across server flavors and imported from
+# the canonical Turtle assets directory during the frontend build.
+COPY assets/turtle/generated/ /chronicle/assets/turtle/generated/
+
 COPY frontend/chronicle/ ./
 RUN pnpm build
 
