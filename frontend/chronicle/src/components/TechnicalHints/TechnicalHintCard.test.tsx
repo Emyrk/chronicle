@@ -35,6 +35,15 @@ describe("TechnicalHintCard", () => {
     expect(markup).toContain('data-router-link="true" href="/technical/hints"');
   });
 
+  it("marks instance-page hints with the shared flair", () => {
+    const markup = renderToStaticMarkup(<TechnicalHintCard hint={hint({ context: "instance" })} />);
+    const compactMarkup = renderToStaticMarkup(<TechnicalHintCard hint={hint({ context: "instance" })} compact />);
+
+    expect(markup).toContain("When on an instance page");
+    expect(compactMarkup).toContain("When on an instance page");
+    expect(renderToStaticMarkup(<TechnicalHintCard hint={hint({})} />)).not.toContain("instance page");
+  });
+
   it("omits the call to action without a link", () => {
     const markup = renderToStaticMarkup(<TechnicalHintCard hint={hint({})} />);
 

@@ -1,9 +1,9 @@
 import generalTipsJSON from "../../../../../assets/turtle/generated/general-tips.json";
 import panelHintsJSON from "../../../../../assets/turtle/generated/panel-hints.json";
 import { BLOG_POSTS, blogPostPath } from "@/blog/blogRegistry";
-import type { TechnicalHint, TechnicalHintsResponse } from "./types";
+import type { TechnicalHint, TechnicalHintContext, TechnicalHintsResponse } from "./types";
 
-type GeneralTipAsset = { id: string; content: string };
+type GeneralTipAsset = { id: string; content: string; context?: TechnicalHintContext };
 type PanelHintAsset = { id: string; panelID: string; content: string };
 
 function humanize(value: string): string {
@@ -15,6 +15,7 @@ export const STATIC_TECHNICAL_HINTS: readonly TechnicalHint[] = [
   ...(generalTipsJSON as GeneralTipAsset[]).map((tip): TechnicalHint => ({
     id: `tip-${tip.id}`,
     kind: "tip",
+    ...(tip.context ? { context: tip.context } : {}),
     title: humanize(tip.id),
     body: tip.content,
     tags: ["tip"],
@@ -22,6 +23,8 @@ export const STATIC_TECHNICAL_HINTS: readonly TechnicalHint[] = [
   ...(panelHintsJSON as PanelHintAsset[]).map((hint): TechnicalHint => ({
     id: `panel-${hint.id}`,
     kind: "panel",
+    // Analysis panels only exist on instance pages.
+    context: "instance",
     title: humanize(hint.panelID),
     body: hint.content,
     panel: hint.panelID,
