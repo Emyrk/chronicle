@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Menu, FileText, Copy, Upload, Download, RotateCcw, LayoutGrid, Clock, Share2, Unlink, ExternalLink, BarChart3, Check, List, Ban, Loader2 } from "lucide-react";
+import { Menu, FileText, Copy, Upload, Download, RotateCcw, LayoutGrid, Clock, Share2, Unlink, ExternalLink, BarChart3, Check, List, Ban, Loader2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { useAdminClearLogInvalidation, useAdminInvalidateLogs } from "@/api/queries";
@@ -14,12 +14,15 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuLabel,
+  DropdownMenuShortcut,
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 interface InstanceMenuProps {
   onImportLayout?: () => void;
   onExportLayout?: () => void;
   onPopOutLayout?: () => void;
   layoutPoppedOut?: boolean;
+  /** Enters layout Edit Mode; omitted when the layout can't be edited. */
+  onEditLayout?: () => void;
   onResetView?: () => void;
   onOpenTimeRange?: () => void;
   instanceId: string;
@@ -51,6 +54,7 @@ export function InstanceMenu({
   onExportLayout,
   onPopOutLayout,
   layoutPoppedOut = false,
+  onEditLayout,
   onResetView,
   onOpenTimeRange,
   instanceId,
@@ -204,6 +208,13 @@ export function InstanceMenu({
 
         {/* Layout section */}
         <DropdownMenuLabel className="text-xs text-muted-foreground">Actions</DropdownMenuLabel>
+        {onEditLayout && (
+          <DropdownMenuItem onClick={onEditLayout}>
+            <Pencil className="h-4 w-4 mr-2" />
+            Edit Layout
+            <DropdownMenuShortcut>⇧E</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        )}
         {onImportLayout && (
           <DropdownMenuItem onClick={onImportLayout}>
             <Upload className="h-4 w-4 mr-2" />

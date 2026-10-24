@@ -4083,6 +4083,7 @@ function InstancePageViewContent({
                 onImportLayout={isEncounterView && canEditSharedView ? handleImportLayout : undefined}
                 onExportLayout={isEncounterView && !activePageType ? handleExportLayout : undefined}
                 onPopOutLayout={isEncounterView && canEditSharedView ? popOutLayout : undefined}
+                onEditLayout={canEditLayout && !layoutEditActive ? enterLayoutEdit : undefined}
                 layoutPoppedOut={isEncounterView && layoutPopup !== null}
                 onResetView={isEncounterView && canEditSharedView ? resetView : undefined}
                 onOpenTimeRange={isEncounterView && canEditSharedView ? onOpenTimeRange : undefined}
@@ -4262,6 +4263,7 @@ function InstancePageViewContent({
                 onImportLayout={isEncounterView && canEditSharedView ? handleImportLayout : undefined}
                 onExportLayout={isEncounterView && !activePageType ? handleExportLayout : undefined}
                 onPopOutLayout={isEncounterView && canEditSharedView ? popOutLayout : undefined}
+                onEditLayout={canEditLayout && !layoutEditActive ? enterLayoutEdit : undefined}
                 layoutPoppedOut={isEncounterView && layoutPopup !== null}
                 onResetView={isEncounterView && canEditSharedView ? resetView : undefined}
                 onOpenTimeRange={isEncounterView && canEditSharedView ? onOpenTimeRange : undefined}
