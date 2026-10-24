@@ -50,6 +50,7 @@ import EncounterPhasesDiscordVideo from "../../../frontend/chronicle/src/pages/I
 import RankedSpeedrunTimingVideo from "../../../frontend/chronicle/src/pages/Instance/videos/RankedSpeedrunTiming.video";
 import FocusModeVideo from "../../../frontend/chronicle/src/pages/Instance/videos/FocusMode.video";
 import ReplayExplainerVideo from "../../../frontend/chronicle/src/pages/Instance/videos/ReplayExplainer.video";
+import LayoutEditingVideo from "../../../frontend/chronicle/src/pages/Instance/videos/LayoutEditing.video";
 import FavoritesPromo from "./FavoritesPromo";
 import CooldownUsagePromo from "./CooldownUsagePromo";
 
@@ -70,6 +71,7 @@ export const RemotionRoot: React.FC = () => {
         <Composition id="RankedSpeedrunTiming" component={RankedSpeedrunTimingVideo} durationInFrames={710} fps={30} width={1280} height={720} />
         <Composition id="FocusMode" component={FocusModeVideo} durationInFrames={630} fps={30} width={1280} height={720} />
         <Composition id="ReplayExplainer" component={ReplayExplainerVideo} durationInFrames={700} fps={30} width={1280} height={720} />
+        <Composition id="LayoutEditing" component={LayoutEditingVideo} durationInFrames={700} fps={30} width={1280} height={720} />
       </Folder>
       <Folder name="DamageDoneLessons">
       <Composition

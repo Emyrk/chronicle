@@ -27,7 +27,7 @@ const basePost: BlogPostDefinition = {
 
 describe("blog registry", () => {
   it("hydrates every JSON metadata item with its runtime component", () => {
-    expect(BLOG_POSTS).toHaveLength(19);
+    expect(BLOG_POSTS).toHaveLength(20);
     expect(new Set(BLOG_POSTS.map((post) => post.id)).size).toBe(BLOG_POSTS.length);
     expect(BLOG_POSTS.every((post) => typeof post.component === "function")).toBe(true);
   });
