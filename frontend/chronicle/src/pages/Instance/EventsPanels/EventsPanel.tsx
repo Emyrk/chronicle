@@ -35,14 +35,14 @@ import { hasExplainer } from "./explainers";
 import type { PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { useChartDataActions } from "./ChartDataRegistry";
 import { openPanelPopup, syncPopupAppearance, type PanelPopup } from "./panelPopup";
-import { hasRequiredPanelCapabilities, hasRequiredPanelFlavors } from "./panelAvailability";
+import { hasRequiredPanelCapabilities } from "./panelAvailability";
 import { useRegisterInstanceKeybinds, type InstanceKeybind } from "../InstanceKeybinds";
 
 import { isCustomPanelRef, type CustomPanelRef } from "./custom/pluginTypes";
 
 // Import panel definitions
-import { createAssemblyRankedDamagePanel } from "./AssemblyRankedDamage/AssemblyRankedDamage";
 import { createDamageDonePanel } from "./DamageDone/DamageDone";
+import { assemblyDamageDoneProcessor } from "./DamageDone/assemblyDamageDone.processor";
 import { createVulnerabilityEffectPanel } from "./VulnerabilityEffect/VulnerabilityEffect";
 import { createDamageTakenPanel } from "./DamageTaken/DamageTaken";
 import { createHealingDonePanel } from "./HealingDone/HealingDone";
@@ -104,7 +104,6 @@ const NO_KEYBINDS: readonly InstanceKeybind[] = [];
 // Using `any` here to allow different result types per panel.
 // Type safety is maintained within each panel definition.
 const BUILTIN_PANELS = {
-  assembly_ranked_damage: createAssemblyRankedDamagePanel(),
   damage_done: createDamageDonePanel("players"),
   vulnerability_effect: createVulnerabilityEffectPanel(),
   enemy_damage_done: createDamageDonePanel("enemies"),
@@ -188,6 +187,9 @@ export const PANELS: typeof BUILTIN_PANELS & Record<string, PanelDefinition<any,
 export function isBuiltinPanelType(panelType: string): panelType is BuiltinPanelType {
   return Object.prototype.hasOwnProperty.call(PANELS, panelType);
 }
+
+const ASSEMBLY_ENCOUNTER_NAME = "Assembly of Iron";
+const ASSEMBLY_DAMAGE_DONE_PANEL = createDamageDonePanel("players", assemblyDamageDoneProcessor);
 
 export type BuiltinPanelType = keyof typeof BUILTIN_PANELS;
 export type EventsPanelType = BuiltinPanelType | CustomPanelRef;
@@ -458,9 +460,19 @@ function BuiltinEventsPanel({
 }: EventsPanelProps) {
   const isMobile = useIsMobile();
   const inheritedPortalContainer = usePortalContainer();
-  // Fall back to the empty panel for types that no longer exist (e.g. a
-  // saved layout or share link referencing a removed panel).
-  const rawPanel = PANELS[panelType] ?? PANELS.empty;
+  const assemblyEncounterIds = useMemo(
+    () => context.instance.encounters
+      .filter((encounter) => encounter.name === ASSEMBLY_ENCOUNTER_NAME)
+      .map((encounter) => encounter.id),
+    [context.instance.encounters],
+  );
+  // Ulduar uses the Assembly-aware processor behind the ordinary Damage Done UI.
+  // The panel type remains stable, so switching replay on or off does not remount it.
+  const rawPanel = panelType === "damage_done" && assemblyEncounterIds.length > 0
+    ? ASSEMBLY_DAMAGE_DONE_PANEL
+    // Fall back to the empty panel for types that no longer exist (e.g. a
+    // saved layout or share link referencing a removed panel).
+    : PANELS[panelType] ?? PANELS.empty;
 
   // Inject a default time_range controller filter for all panels that support filtering,
   // unless the panel already defines its own time_range default.
@@ -481,7 +493,7 @@ function BuiltinEventsPanel({
   const panelAvailable = hasRequiredPanelCapabilities(
     panel,
     context.instance.capabilities ?? [],
-  ) && hasRequiredPanelFlavors(panel, context.instance.flavor ?? []);
+  );
 
   // Determine checkbox label first (needed for storage key)
   const checkboxLabel = panel.checkboxLabel || "Per second";
@@ -855,6 +867,18 @@ function BuiltinEventsPanel({
   // Only show explainer button on desktop, if hints are enabled, and if panel has an explainer
   const showExplainerButton = showHints && !isMobile && hasExplainer(panelType) && onExplainerClick;
 
+  const aggregationPanelContext = useMemo(() => {
+    if (panel.id !== assemblyDamageDoneProcessor.id) return panelContext;
+    return {
+      ...(panelContext ?? {}),
+      assemblyEncounterIds,
+      assemblyStaticMode: !isSyncActive,
+    };
+  }, [assemblyEncounterIds, isSyncActive, panel.id, panelContext]);
+  const aggregationPanelContextKey = panel.id === assemblyDamageDoneProcessor.id
+    ? `${panelContextVersion}:${isSyncActive ? "replay" : "static"}`
+    : panelContextVersion;
+
   // Only run aggregation if panel doesn't manage its own
   const {
     loading,
@@ -868,8 +892,8 @@ function BuiltinEventsPanel({
     panel,
     context,
     panelOption: aggregationPanelOption,
-    panelContext,
-    panelContextKey: panelContextVersion,
+    panelContext: aggregationPanelContext,
+    panelContextKey: aggregationPanelContextKey,
     panelIndex,
     enabled: panelAvailable && !panel.selfManagesAggregation,
   });
@@ -946,7 +970,6 @@ function BuiltinEventsPanel({
                       <PanelSelector
                         value={panelType}
                         onChange={onPanelTypeChange}
-                        flavors={context.instance.flavor}
                       />
                     </span>
                   </>
@@ -954,7 +977,6 @@ function BuiltinEventsPanel({
                   <PanelSelector
                     value={panelType}
                     onChange={onPanelTypeChange}
-                    flavors={context.instance.flavor}
                   />
                 )}
                 <DropdownMenu modal={false}>

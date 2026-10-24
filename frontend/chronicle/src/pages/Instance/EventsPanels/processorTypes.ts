@@ -665,6 +665,16 @@ export interface PanelProcessor<TResult, TEvent extends ProcessorEvent = Process
     streamType: StreamType,
     context: ProcessorContext,
   ) => void;
+
+  /**
+   * Called after the worker has processed every event for an encounter.
+   * Batch-only processors can use this to flush encounter-local buffered state.
+   */
+  finalizeEncounter?: (
+    state: TResult,
+    encounterID: string,
+    context: ProcessorContext,
+  ) => void;
 }
 
 /**

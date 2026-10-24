@@ -10,7 +10,7 @@ import { useCachedValue } from "@/hooks/useCachedValue";
 import { useDamageDoneBreakout } from "./DamageDoneBreakout";
 import { formatNumber } from "@/lib/format";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
-import { ChevronLeft, Layers } from "lucide-react";
+import { AlertTriangle, ChevronLeft, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useParsePills } from "../parsePills";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
@@ -53,21 +53,26 @@ function aggregateForEncounters(
   
   for (const encounterId of selectedEncounterIds) {
     const encounterDamage = result.EncounterDamage.get(encounterId);
-    if (!encounterDamage) continue;
-    
-    for (const [playerId, data] of encounterDamage) {
-      // Sum all damage (target filtering handled by panel filters)
-      let damageValue = 0;
-      for (const amount of data.target.values()) {
-        damageValue += amount;
-      }
-      
-      // Skip players with zero damage after filtering
-      if (damageValue === 0) continue;
-      
+    const encounterExcluded = result.EncounterExcludedDamage?.get(encounterId);
+    const playerIds = new Set([
+      ...(encounterDamage?.keys() ?? []),
+      ...(encounterExcluded?.keys() ?? []),
+    ]);
+
+    for (const playerId of playerIds) {
+      const data = encounterDamage?.get(playerId) ?? encounterExcluded?.get(playerId);
+      if (!data) continue;
+
+      const damageValue = Array.from(encounterDamage?.get(playerId)?.target.values() ?? [])
+        .reduce((sum, amount) => sum + amount, 0);
+      const excludedValue = Array.from(encounterExcluded?.get(playerId)?.target.values() ?? [])
+        .reduce((sum, amount) => sum + amount, 0);
+      if (damageValue === 0 && excludedValue === 0) continue;
+
       const existing = aggregated.get(playerId);
       if (existing) {
         existing.value += damageValue;
+        existing.stackedValue = (existing.stackedValue ?? 0) + excludedValue;
       } else {
         aggregated.set(playerId, {
           playerID: data.playerID,
@@ -75,6 +80,7 @@ function aggregateForEncounters(
           className: data.className,
           specialization: data.specialization,
           value: damageValue,
+          stackedValue: excludedValue || undefined,
           dimmed: hasSubjectSelection && !subjects.has(playerId),
         });
       }
@@ -107,6 +113,13 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
   const groupingDefault = sourceType === "pets" ? "default" : "merged";
   const grouping = extractGroupingFromPanelOption(panelOption, groupingDefault);
   const petMode = extractPetModeFromPanelOption(panelOption);
+
+  const replayingAssembly = sourceType === "players"
+    && syncMode?.enabled === true
+    && context.instance.encounters.some(
+      (encounter) => encounter.name === "Assembly of Iron"
+        && context.selectedEncounterIds.includes(encounter.id),
+    );
 
   // Map standard token values to display-level names used in this component
   const enemyGrouping = grouping;
@@ -291,6 +304,23 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
         </div>
         
         <div className="flex items-center gap-2">
+          {replayingAssembly && (
+            <TooltipProvider>
+              <Tooltip delayDuration={200}>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex text-amber-400" aria-label="Assembly replay damage warning">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[260px]">
+                  <p className="text-xs">
+                    Replay shows raw Assembly damage. Exit replay to see ranking damage with excluded damage separated.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
           {/* Show ranks toggle */}
           <TooltipProvider>
             <Tooltip delayDuration={300}>
@@ -436,6 +466,7 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
           perSecond={props.perSecond}
           animateValues={!syncMode?.enabled}
           breakout={breakout}
+          stackedLabel="Excluded"
           onRowCtrlClick={handleRowCtrlClick}
           disableInteractions={props.context.renderMode === "layout_lab"}
           parsePills={parsePills}
