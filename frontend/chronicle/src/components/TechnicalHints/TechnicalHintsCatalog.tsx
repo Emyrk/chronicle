@@ -4,7 +4,6 @@ import { useTechnicalHints } from "./useTechnicalHints";
 import type { TechnicalHintKind } from "./types";
 
 const SECTIONS: Array<{ kind: TechnicalHintKind; title: string; description: string }> = [
-  { kind: "community_fact", title: "Community activity", description: "A recent snapshot of public Chronicle activity." },
   { kind: "tip", title: "Chronicle tips", description: "Useful features and analysis techniques you may have missed." },
   { kind: "panel", title: "Panel insights", description: "Distinctive ways to get more value from individual analysis panels." },
   { kind: "blog", title: "Chronicle articles", description: "Feature announcements, guides, and technical explanations." },

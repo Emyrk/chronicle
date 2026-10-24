@@ -133,7 +133,7 @@ const DEFAULT_RECENT_HINT: TechnicalHint = {
   kind: "tip",
   title: "Explore Chronicle",
   body: "Discover analysis tips, panel insights, and technical guides.",
-  href: "/technical",
+  href: "/technical/hints",
   action_label: "Browse Chronicle tips",
 };
 
@@ -156,7 +156,7 @@ function RecentAdSlot({ adNumber }: { adNumber: number }) {
     [hint],
   );
 
-  return <AdSlot placement={placement} format="card" renderFallback={renderFallback} />;
+  return <AdSlot placement={placement} format="card" renderFallback={renderFallback} previewFallback />;
 }
 
 const API_BASE = "/api/v1/raidlogs";

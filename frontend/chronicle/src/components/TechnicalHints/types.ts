@@ -1,4 +1,4 @@
-export type TechnicalHintKind = "tip" | "panel" | "blog" | "community_fact";
+export type TechnicalHintKind = "tip" | "panel" | "blog";
 
 export interface TechnicalHint {
   id: string;

@@ -372,6 +372,27 @@ describe("AdSlot", () => {
     expect(markup).toContain('href="/technical-hint"')
   })
 
+  it("can show an interactive fallback instead of the local ad preview", () => {
+    const markup = renderAdSlot(
+      <AdSlot
+        placement="recent-grid-card-1"
+        format="card"
+        hostname="localhost"
+        previewEnabled
+        previewFallback
+        renderFallback={({ interactive }) => (
+          <a href="/technical/hints" data-interactive={interactive}>Technical hint</a>
+        )}
+      />,
+    )
+
+    expect(markup).toContain('aria-label="Technical hint preview"')
+    expect(markup).toContain('data-ad-provider="fallback-preview"')
+    expect(markup).toContain('data-ad-fallback-interactive="true"')
+    expect(markup).toContain('href="/technical/hints"')
+    expect(markup).not.toContain("Ad preview")
+  })
+
   it("uses NitroPay demo creatives instead of the local placeholder preview", () => {
     const markup = renderAdSlot(
       <AdSlot

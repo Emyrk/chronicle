@@ -4159,43 +4159,6 @@ export interface TalentBuild {
     readonly talent_layout: string;
 }
 
-// From chroniclesdk/technical_hints.go
-/**
- * TechnicalHint is a static hint or dynamically generated community fact.
- */
-export interface TechnicalHint {
-    readonly id: string;
-    readonly kind: TechnicalHintKind;
-    readonly title: string;
-    readonly body: string;
-    readonly href?: string;
-    readonly action_label?: string;
-    readonly icon?: string;
-    readonly image_url?: string;
-    readonly panel?: string;
-    readonly blog_id?: string;
-    readonly tags?: readonly string[];
-    readonly generated_at?: string;
-    readonly expires_at?: string;
-}
-
-// From chroniclesdk/technical_hints.go
-export type TechnicalHintKind = "blog" | "community_fact" | "panel" | "tip";
-
-export const TechnicalHintKinds: TechnicalHintKind[] = ["blog", "community_fact", "panel", "tip"];
-
-// From chroniclesdk/technical_hints.go
-/**
- * TechnicalHintsResponse is the cacheable payload returned by the public
- * technical-hints endpoint.
- */
-export interface TechnicalHintsResponse {
-    readonly version: string;
-    readonly generated_at: string;
-    readonly refresh_after: string;
-    readonly payloads: readonly TechnicalHint[];
-}
-
 // From chroniclesdk/telemetry_notice.go
 export interface TelemetryNotice {
     readonly id: string;

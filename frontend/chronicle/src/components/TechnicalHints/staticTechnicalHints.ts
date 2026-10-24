@@ -11,10 +11,6 @@ function humanize(value: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-const DISABLED_TECHNICAL_HINT_IDS = new Set(
-  BLOG_POSTS.filter((post) => post.hintEnabled === false).map((post) => `blog-${post.id}`),
-);
-
 export const STATIC_TECHNICAL_HINTS: readonly TechnicalHint[] = [
   ...(generalTipsJSON as GeneralTipAsset[]).map((tip): TechnicalHint => ({
     id: `tip-${tip.id}`,
@@ -47,19 +43,9 @@ export const STATIC_TECHNICAL_HINTS: readonly TechnicalHint[] = [
   })),
 ];
 
-export function mergeTechnicalHints(
-  dynamic: TechnicalHintsResponse | undefined,
-): TechnicalHintsResponse {
-  const payloads = new Map(STATIC_TECHNICAL_HINTS.map((hint) => [hint.id, hint]));
-  for (const hint of dynamic?.payloads ?? []) {
-    if (DISABLED_TECHNICAL_HINT_IDS.has(hint.id)) continue;
-    if (hint.kind === "community_fact" || !payloads.has(hint.id)) payloads.set(hint.id, hint);
-  }
-
-  return {
-    version: dynamic?.version ?? "static-v1",
-    generated_at: dynamic?.generated_at ?? new Date(0).toISOString(),
-    refresh_after: dynamic?.refresh_after ?? new Date(0).toISOString(),
-    payloads: [...payloads.values()],
-  };
-}
+export const STATIC_TECHNICAL_HINTS_RESPONSE: TechnicalHintsResponse = {
+  version: "static-v1",
+  generated_at: new Date(0).toISOString(),
+  refresh_after: new Date(0).toISOString(),
+  payloads: [...STATIC_TECHNICAL_HINTS],
+};
