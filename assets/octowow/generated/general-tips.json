@@ -39,10 +39,5 @@
     "id": "share-layout",
     "content": "Layouts can be shared so everyone in a raid can start from the same panel setup.",
     "context": "instance"
-  },
-  {
-    "id": "url-state",
-    "content": "Chronicle stores encounter, entity, and panel selections in the URL so you can share the exact view.",
-    "context": "instance"
   }
 ]
