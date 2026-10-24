@@ -56,6 +56,14 @@ type SpeedrunRules struct {
 // Nil sub-fields mean that ranking category doesn't apply.
 type Rankings struct {
 	Speedrun *SpeedrunRules `json:"speedrun,omitempty"`
+	Damage   *DamageRules   `json:"-"`
+}
+
+// DamageRules configures encounter-specific damage aggregation behavior.
+type DamageRules struct {
+	// PhaseTargetEntries identifies council-style targets where damage only counts
+	// for the member that dies in each phase. An unresolved phase counts in full.
+	PhaseTargetEntries []uint32
 }
 
 // --- Proof (output, JSON-serializable) ---

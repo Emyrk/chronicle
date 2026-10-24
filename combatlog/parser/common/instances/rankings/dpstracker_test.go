@@ -17,7 +17,7 @@ import (
 
 func setupDPSTracker() (*DPSTracker, *unitdb.Units) {
 	units := newTestUnits()
-	tracker := NewDPSTracker(units)
+	tracker := NewDPSTracker(units, nil)
 	return tracker, units
 }
 
@@ -52,6 +52,63 @@ func TestDPSTracker_BasicDamage(t *testing.T) {
 	assert.Equal(t, int64(800), results[encID].Units[player].DamageDone)
 	assert.True(t, results[encID].Units[player].IsPlayer)
 	assert.Nil(t, results[encID].Units[player].OwnerGUID)
+}
+
+func TestDPSTracker_PhaseTargetsCommitOnlySlainTarget(t *testing.T) {
+	t.Parallel()
+
+	units := newTestUnits()
+	tracker := NewDPSTracker(units, &DamageRules{
+		PhaseTargetEntries: []uint32{32857, 32867, 32927},
+	})
+	player := makePlayerGUID(1)
+	steelbreaker := makeCreatureGUID(32867, 1)
+	molgeim := makeCreatureGUID(32927, 2)
+	encID := uuid.New()
+	units.Info[player] = unitinfo.Info{Guid: player, Name: "Warrior", IsPlayer: true, CanCooperate: true}
+	units.Info[steelbreaker] = unitinfo.Info{Guid: steelbreaker, Name: "Steelbreaker", CanCooperate: false}
+	units.Info[molgeim] = unitinfo.Info{Guid: molgeim, Name: "Runemaster Molgeim", CanCooperate: false}
+
+	tracker.FightStarted(encID, nil)
+	caster := player
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Damage{
+		Caster: &caster, Target: steelbreaker, Amount: 500,
+	}))
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Damage{
+		Caster: &caster, Target: molgeim, Amount: 80,
+	}))
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Slain{Victim: steelbreaker}))
+	tracker.FightEnded(encID, nil)
+
+	require.Equal(t, int64(500), tracker.Result()[encID].Units[player].DamageDone)
+}
+
+func TestDPSTracker_PhaseTargetsCommitUnresolvedDamageAtFightEnd(t *testing.T) {
+	t.Parallel()
+
+	units := newTestUnits()
+	tracker := NewDPSTracker(units, &DamageRules{
+		PhaseTargetEntries: []uint32{32857, 32867, 32927},
+	})
+	player := makePlayerGUID(1)
+	steelbreaker := makeCreatureGUID(32867, 1)
+	molgeim := makeCreatureGUID(32927, 2)
+	encID := uuid.New()
+	units.Info[player] = unitinfo.Info{Guid: player, Name: "Warrior", IsPlayer: true, CanCooperate: true}
+	units.Info[steelbreaker] = unitinfo.Info{Guid: steelbreaker, Name: "Steelbreaker", CanCooperate: false}
+	units.Info[molgeim] = unitinfo.Info{Guid: molgeim, Name: "Runemaster Molgeim", CanCooperate: false}
+
+	tracker.FightStarted(encID, nil)
+	caster := player
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Damage{
+		Caster: &caster, Target: steelbreaker, Amount: 500,
+	}))
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Damage{
+		Caster: &caster, Target: molgeim, Amount: 80,
+	}))
+	tracker.FightEnded(encID, nil)
+
+	require.Equal(t, int64(580), tracker.Result()[encID].Units[player].DamageDone)
 }
 
 func TestDPSTracker_IncludesInjectedHostileVehicleDamage(t *testing.T) {

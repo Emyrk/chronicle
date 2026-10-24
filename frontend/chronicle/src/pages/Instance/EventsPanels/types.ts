@@ -108,6 +108,9 @@ export interface PanelDefinition<TResult, TEvent extends ProcessorEvent = Proces
    */
   requiredCapabilities?: string[];
   
+  /** Instance flavor tags required before this panel is selectable or processed. */
+  requiredFlavors?: string[];
+
   /** Custom label for the checkbox (defaults to "Per second" when supportsPerSecond is true) */
   checkboxLabel?: string;
   

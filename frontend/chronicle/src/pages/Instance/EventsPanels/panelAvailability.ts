@@ -12,3 +12,10 @@ export function hasRequiredPanelCapabilities(
     capabilities.includes(capability),
   );
 }
+
+export function hasRequiredPanelFlavors(
+  panel: Pick<PanelDefinition<unknown>, "requiredFlavors">,
+  flavors: readonly string[],
+): boolean {
+  return (panel.requiredFlavors ?? []).every((flavor) => flavors.includes(flavor));
+}

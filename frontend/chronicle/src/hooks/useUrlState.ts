@@ -609,6 +609,7 @@ export function useUrlStateMulti<T extends Record<string, unknown>>(
 export type PanelType = EventsPanelType;
 
 const PANEL_CODES: Record<PanelType, string> = {
+  assembly_ranked_damage: 'ard',
   damage_done: 'dd',
   vulnerability_effect: 've',
   enemy_damage_done: 'edd',

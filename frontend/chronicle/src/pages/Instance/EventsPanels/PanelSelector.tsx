@@ -11,6 +11,7 @@ import { usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { PANELS, type EventsPanelType } from "./EventsPanel";
 
+import { hasRequiredPanelFlavors } from "./panelAvailability";
 import { listSelectableCustomPanels, resolveCustomPanel, useCustomPanelRegistry } from "./custom/pluginRegistry";
 import { isCustomPanelRef } from "./custom/pluginTypes";
 
@@ -79,6 +80,15 @@ const PANEL_CATEGORIES: PanelCategory[] = [
         label: "Paladin",
         items: ["judgement"],
         icon: <Scale className="h-4 w-4" />,
+      },
+    ],
+  },
+  {
+    label: "Boss Mechanics",
+    subcategories: [
+      {
+        label: "Ulduar",
+        items: ["assembly_ranked_damage"],
       },
     ],
   },
@@ -286,9 +296,10 @@ export interface PanelSelectorProps {
   onChange: (value: EventsPanelType) => void;
   className?: string;
   excludedValues?: ReadonlySet<EventsPanelType>;
+  flavors?: readonly string[];
 }
 
-export function PanelSelector({ value, onChange, className, excludedValues }: PanelSelectorProps) {
+export function PanelSelector({ value, onChange, className, excludedValues, flavors = [] }: PanelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const customRegistry = useCustomPanelRegistry(isOpen || isCustomPanelRef(value));
   const customPanels = useMemo(() => listSelectableCustomPanels(customRegistry), [customRegistry]);
@@ -301,8 +312,10 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
   const portalWindow = portalContainer?.ownerDocument.defaultView;
   const isDebug = searchParams.get("debug") === "true";
   const isPanelVisible = useCallback(
-    (key: EventsPanelType) => !excludedValues?.has(key) && (!PANELS[key].hidden || isDebug),
-    [excludedValues, isDebug],
+    (key: EventsPanelType) => !excludedValues?.has(key)
+      && (!PANELS[key].hidden || isDebug)
+      && hasRequiredPanelFlavors(PANELS[key], flavors),
+    [excludedValues, flavors, isDebug],
   );
   const [searchQuery, setSearchQuery] = useState("");
   // Track expanded categories by their path (e.g., "Class" or "Class/Druid")
@@ -539,7 +552,9 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
               ) : (
                 // Category tree (recursive)
                 <>
-                  {PANEL_CATEGORIES.map((category) => (
+                  {PANEL_CATEGORIES.filter((category) =>
+                    getAllCategoryItems(category).some(({ panelKey }) => isPanelVisible(panelKey)),
+                  ).map((category) => (
                     <CategoryNode
                       key={category.label}
                       category={category}

@@ -2,6 +2,7 @@ import type { BuiltinPanelType } from "./EventsPanel";
 
 /** Human-readable panel purposes exposed to the inference assistant. */
 export const PANEL_AI_DESCRIPTIONS: Record<BuiltinPanelType, string> = {
+  assembly_ranked_damage: "Recomputes Assembly of Iron ranked player damage phase by phase and validates it against persisted ranking records.",
   damage_done: "Compares player damage dealt, with totals, DPS, and ability or target breakdowns.",
   vulnerability_effect: "Measures extra damage attributable to configured vulnerability debuffs or effects.",
   enemy_damage_done: "Shows damage dealt by enemies to other units, useful for analyzing enemy output.",

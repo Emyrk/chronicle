@@ -201,7 +201,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 	var survivabilityTracker *rankings.SurvivabilityTracker
 	var speedrunTracker *rankings.SpeedrunTracker
 	if ip.Rankings != nil {
-		dpsTracker = rankings.NewDPSTracker(db)
+		dpsTracker = rankings.NewDPSTracker(db, ip.Rankings.Damage)
 		survivabilityTracker = rankings.NewSurvivabilityTracker()
 		if ip.Rankings.Speedrun != nil {
 			speedrunTracker = rankings.NewSpeedrunTracker(*ip.Rankings.Speedrun, db, engagementTracker)
@@ -379,7 +379,7 @@ func (h *Hookable) initDerivedRankings(flavor database.WoWFlavor, derivedRanking
 
 	// Ensure a shared DPS tracker exists (created once, shared across all derived sub-instances).
 	if h.dpsTracker == nil {
-		h.dpsTracker = rankings.NewDPSTracker(h.units)
+		h.dpsTracker = rankings.NewDPSTracker(h.units, nil)
 		h.hooks = append(h.hooks, h.dpsTracker)
 	}
 	if h.survivabilityTracker == nil {
