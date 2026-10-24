@@ -137,6 +137,7 @@ export function AdSlot({
   viewportHeight,
   availableHeight,
   renderFallback,
+  previewFallback = false,
   className,
 }: {
   /** Stable hyphenated identifier; use kebab-case for reporting and placement-specific policy. */
@@ -159,6 +160,8 @@ export function AdSlot({
   availableHeight?: number
   /** Render fixed-format content while a live request is unfilled. AdSlot owns its interactivity. */
   renderFallback?: AdFallbackRenderer
+  /** In local ad-preview mode, show the fallback instead of the provider placeholder. */
+  previewFallback?: boolean
   className?: string
 }) {
   const adSiteConfig = useAdSiteConfig()
@@ -196,12 +199,15 @@ export function AdSlot({
   const requestKey = `${adID}:${eligibleSizes.map((size) => size.join("x")).join(",")}`
   const requestState = adRequestStateForKey(requestSnapshot, requestKey)
   const liveCreativeRendered = requestState === "filled"
-  const usesFallbackFrame = Boolean(renderFallback) && format !== "responsive" && !showPreview && !showDemo
-  const fallbackPresentation = adFallbackPresentation(requestState)
+  const showFallbackPreview = Boolean(renderFallback) && previewFallback && showPreview && !showDemo
+  const usesFallbackFrame =
+    Boolean(renderFallback) && format !== "responsive" && !showDemo && (!showPreview || showFallbackPreview)
+  const effectiveFallbackState = showFallbackPreview ? "no_fill" : requestState
+  const fallbackPresentation = adFallbackPresentation(effectiveFallbackState)
   const fallbackVisible = usesFallbackFrame && fallbackPresentation.visible
-  const fallbackState = requestState === "filled" ? undefined : requestState
+  const fallbackState = effectiveFallbackState === "filled" ? undefined : effectiveFallbackState
   const fallbackInteractive = fallbackPresentation.interactive
-  const adLabelVisible = showPreview || showDemo || liveCreativeRendered
+  const adLabelVisible = (showPreview && !showFallbackPreview) || showDemo || liveCreativeRendered
 
   useEffect(() => {
     if (!adsAllowed || !siteID || showPreview || eligibleSizes.length === 0) return
@@ -268,9 +274,9 @@ export function AdSlot({
         format === "rail" && railBreakpointClasses[railBreakpoint],
         className,
       )}
-      aria-label={showPreview ? "Advertisement preview" : "Advertisement"}
+      aria-label={showFallbackPreview ? "Technical hint preview" : showPreview ? "Advertisement preview" : "Advertisement"}
       data-ad-placement={placement}
-      data-ad-provider={showPreview ? "preview" : "nitropay"}
+      data-ad-provider={showFallbackPreview ? "fallback-preview" : showPreview ? "preview" : "nitropay"}
       data-ad-demo={showDemo || undefined}
       data-ad-rendered={!showPreview && !showDemo ? liveCreativeRendered : undefined}
       data-ad-request-state={!showPreview && !showDemo ? requestState : undefined}

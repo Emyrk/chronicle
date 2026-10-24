@@ -867,12 +867,6 @@ type sqlcQuerier interface {
 	SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeaderboardParams) ([]SpeedrunLeaderboardRow, error)
 	// Returns distinct realm names that have at least one qualified speedrun.
 	SpeedrunRealmNames(ctx context.Context) ([]string, error)
-	// Counts public, finalized activity in a bounded window. Joining realms applies
-	// the same tenant RLS scope as the public recent-instances endpoint.
-	TechnicalHintActivityTotals(ctx context.Context, arg TechnicalHintActivityTotalsParams) (TechnicalHintActivityTotalsRow, error)
-	// Instance names are normalized the same way as the public recent-instances
-	// query, and each duplicate group contributes exactly one logical run.
-	TechnicalHintMostActiveInstances(ctx context.Context, arg TechnicalHintMostActiveInstancesParams) ([]TechnicalHintMostActiveInstancesRow, error)
 	TelemetryGetActiveFileBytes(ctx context.Context) (int64, error)
 	TelemetryGetDeletedFileBytes(ctx context.Context) (int64, error)
 	TelemetryGetLogCountByZone(ctx context.Context) ([]TelemetryGetLogCountByZoneRow, error)

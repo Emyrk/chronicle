@@ -1,4 +1,4 @@
-import { BookOpen, ChartNoAxesColumnIncreasing, Lightbulb, PanelsTopLeft } from "lucide-react";
+import { BookOpen, Lightbulb, PanelsTopLeft } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/Card/Card";
@@ -11,7 +11,6 @@ function fallbackIcon(kind: TechnicalHint["kind"]): ReactNode {
   switch (kind) {
     case "blog": return <BookOpen className={className} />;
     case "panel": return <PanelsTopLeft className={className} />;
-    case "community_fact": return <ChartNoAxesColumnIncreasing className={className} />;
     default: return <Lightbulb className={className} />;
   }
 }
@@ -42,7 +41,7 @@ export function TechnicalHintCard({
         </div>
         <div className="min-w-0">
           <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-primary/75">
-            {hint.kind === "community_fact" ? "Community pulse" : hint.kind === "blog" ? "Chronicle article" : hint.kind === "panel" ? "Panel insight" : "Chronicle tip"}
+            {hint.kind === "blog" ? "Chronicle article" : hint.kind === "panel" ? "Panel insight" : "Chronicle tip"}
           </p>
           <h3 className={cn("font-semibold leading-tight", compact ? "text-sm" : "text-base")}>{hint.title}</h3>
           <p className={cn("mt-1 text-muted-foreground", compact ? "line-clamp-2 text-xs" : "text-sm")}>{hint.body}</p>
