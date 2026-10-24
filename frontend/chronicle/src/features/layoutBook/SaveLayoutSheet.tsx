@@ -22,7 +22,7 @@ import type { LayoutLabExportV1 } from "./parseLayout";
 import { fromActionBarResponse, toActionBarResponse } from "./actionBarSlots";
 import { LAYOUT_ACTION_BAR_KEYS, type LayoutActionBarKey, type LayoutActionBarSlots } from "./layoutBookStore";
 import { LayoutMetadataFields } from "./LayoutMetadataFields";
-import { DEFAULT_LAYOUT_ICON, LAYOUT_TITLE_ERROR, isValidLayoutTitle } from "./layoutMetadata";
+import { DEFAULT_LAYOUT_ICON, LAYOUT_TITLE_ERROR, findLayoutTitleConflict, isValidLayoutTitle, uniqueLayoutTitle } from "./layoutMetadata";
 
 const NEW_LAYOUT = "new";
 
@@ -78,6 +78,8 @@ function SaveLayoutSheetBody({ getLayout, activeLayoutId, onSaved }: SaveLayoutS
 
   const layouts = layoutsQuery.data?.layouts ?? [];
   const isOwned = (layout: UserPanelLayout) => layout.owner_id === userId;
+  // Titles are unique among the user's own layouts; tracked layouts belong to others.
+  const ownLayouts = layouts.filter(isOwned);
   const activeLayout = layouts.find((layout) => layout.id === activeLayoutId) ?? null;
 
   // Until the user picks, target the layout on screen when they own it.
@@ -91,8 +93,8 @@ function SaveLayoutSheetBody({ getLayout, activeLayoutId, onSaved }: SaveLayoutS
     ?? (selected
       ? metadataFor(selected)
       : activeLayout
-        ? { ...metadataFor(activeLayout), title: isOwned(activeLayout) ? activeLayout.title : `Copy of ${activeLayout.title}`.slice(0, 64) }
-        : { title: "My layout", description: "", icon: DEFAULT_LAYOUT_ICON });
+        ? { ...metadataFor(activeLayout), title: isOwned(activeLayout) ? activeLayout.title : uniqueLayoutTitle(`Copy of ${activeLayout.title}`.slice(0, 64), ownLayouts) }
+        : { title: uniqueLayoutTitle("My layout", ownLayouts), description: "", icon: DEFAULT_LAYOUT_ICON });
   const updateMetadata = (patch: Partial<LayoutMetadata>) => setMetadata({ ...metadata, ...patch });
 
   // Optimistic copy of the action bar so assignments feel immediate.
@@ -103,8 +105,12 @@ function SaveLayoutSheetBody({ getLayout, activeLayoutId, onSaved }: SaveLayoutS
   const pick = (id: string) => {
     setPickedId(id);
     const layout = layouts.find((candidate) => candidate.id === id);
-    // Picking "New" keeps the form so it can seed the new layout.
+    // Picking "New" keeps the form so it can seed the new layout, renaming
+    // it when the title is already taken (e.g. copying one of your layouts).
     if (layout) setMetadata(metadataFor(layout));
+    else if (findLayoutTitleConflict(metadata.title, ownLayouts)) {
+      setMetadata({ ...metadata, title: uniqueLayoutTitle(metadata.title.trim(), ownLayouts) });
+    }
     setJustSavedId(null);
   };
 
@@ -120,10 +126,20 @@ function SaveLayoutSheetBody({ getLayout, activeLayoutId, onSaved }: SaveLayoutS
 
   const saving = createLayout.isPending || updateLayout.isPending;
   const titleValid = isValidLayoutTitle(metadata.title) && metadata.title.trim().length > 0;
+  const newTitleConflict = findLayoutTitleConflict(metadata.title, ownLayouts);
+  const overwriteTitleConflict = canOverwrite ? findLayoutTitleConflict(metadata.title, ownLayouts, selected.id) : undefined;
+  const titleConflict = canOverwrite ? overwriteTitleConflict : newTitleConflict;
+  const titleConflictMessage = (conflict: UserPanelLayout) =>
+    `You already have a layout named “${conflict.title}”. Choose a different title.`;
 
   const save = async (mode: "overwrite" | "new") => {
     if (!titleValid) {
       toast.error(LAYOUT_TITLE_ERROR);
+      return;
+    }
+    const conflict = mode === "overwrite" ? overwriteTitleConflict : newTitleConflict;
+    if (conflict) {
+      toast.error(titleConflictMessage(conflict));
       return;
     }
     const request = {
@@ -216,7 +232,7 @@ function SaveLayoutSheetBody({ getLayout, activeLayoutId, onSaved }: SaveLayoutS
                 className="mt-2"
                 onClick={() => {
                   setPickedId(NEW_LAYOUT);
-                  setMetadata({ ...metadataFor(selected), title: `Copy of ${selected.title}`.slice(0, 64) });
+                  setMetadata({ ...metadataFor(selected), title: uniqueLayoutTitle(`Copy of ${selected.title}`.slice(0, 64), ownLayouts) });
                 }}
               >
                 <Copy /> Save as my own copy
@@ -234,6 +250,7 @@ function SaveLayoutSheetBody({ getLayout, activeLayoutId, onSaved }: SaveLayoutS
               onDescriptionChange={(description) => updateMetadata({ description })}
               icon={metadata.icon}
               onIconChange={(icon) => updateMetadata({ icon })}
+              titleError={titleConflict ? titleConflictMessage(titleConflict) : undefined}
             />
           </section>
         )}
@@ -263,15 +280,20 @@ function SaveLayoutSheetBody({ getLayout, activeLayoutId, onSaved }: SaveLayoutS
       <SheetFooter className="flex-row flex-wrap justify-end gap-2 border-t">
         {canOverwrite ? (
           <>
-            <Button variant="outline" onClick={() => void save("new")} disabled={saving || !titleValid}>
+            <Button
+              variant="outline"
+              onClick={() => void save("new")}
+              disabled={saving || !titleValid || Boolean(newTitleConflict)}
+              title={newTitleConflict ? "Give the copy a title you have not used yet" : undefined}
+            >
               <Plus /> Save as new
             </Button>
-            <Button onClick={() => void save("overwrite")} disabled={saving || !titleValid}>
+            <Button onClick={() => void save("overwrite")} disabled={saving || !titleValid || Boolean(overwriteTitleConflict)}>
               {saving ? <LoaderCircle className="animate-spin" /> : <Save />} Overwrite “{selected.title}”
             </Button>
           </>
         ) : selected ? null : (
-          <Button onClick={() => void save("new")} disabled={saving || !titleValid}>
+          <Button onClick={() => void save("new")} disabled={saving || !titleValid || Boolean(newTitleConflict)}>
             {saving ? <LoaderCircle className="animate-spin" /> : <Save />} Save as new layout
           </Button>
         )}

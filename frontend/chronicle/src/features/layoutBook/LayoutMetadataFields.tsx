@@ -47,6 +47,8 @@ interface LayoutMetadataFieldsProps {
   layout?: "split" | "stacked";
   /** Rendered under the description (e.g. ownership details). */
   descriptionFooter?: ReactNode;
+  /** A title problem found by the caller, such as a duplicate name. */
+  titleError?: string;
 }
 
 /** Title, description, and icon fields for a Layout Book layout. */
@@ -60,6 +62,7 @@ export function LayoutMetadataFields({
   readOnly = false,
   layout = "split",
   descriptionFooter,
+  titleError,
 }: LayoutMetadataFieldsProps) {
   const iconBaseUrl = useIconBaseUrl();
   const iconOptions = useLayoutIconOptions(iconBaseUrl);
@@ -87,10 +90,12 @@ export function LayoutMetadataFields({
             onChange={(event) => onTitleChange(event.target.value)}
             placeholder="Layout title"
             aria-label="Layout title"
+            aria-invalid={Boolean(titleError) || !isValidLayoutTitle(title)}
             disabled={readOnly}
           />
         </div>
         {!isValidLayoutTitle(title) ? <p className="text-xs text-destructive">{LAYOUT_TITLE_ERROR}</p> : null}
+        {titleError ? <p className="text-xs text-destructive">{titleError}</p> : null}
       </div>
 
       <div className={cn("grid items-start gap-3", layout === "split" && "lg:grid-cols-2")}>
