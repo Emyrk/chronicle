@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
 func newUlduarTestInstance(t *testing.T) *commoninstances.Hookable {
@@ -154,6 +155,43 @@ func TestThorimArenaStarterCombatIgnoresNPCDamage(t *testing.T) {
 		require.True(t, ignored)
 		require.Equal(t, "scripted Thorim arena combat", reason)
 	}
+}
+
+func TestThorimRuneDetonationAfterGiantDeathStillClassifiesClean(t *testing.T) {
+	t.Parallel()
+
+	instance := newUlduarTestInstance(t)
+	player := guid.GUID(1)
+	giant := creatureGUID(32873)
+	thorim := creatureGUID(32865)
+	start := time.Date(2026, time.October, 24, 10, 21, 34, 52_000_000, time.UTC)
+
+	bossHit := damageEvent(player, thorim, 1)
+	bossHit.MessageBase = messages.Base(start)
+	require.NoError(t, instance.Process(bossHit))
+	giantHit := damageEvent(player, giant, 1)
+	giantHit.MessageBase = messages.Base(start.Add(time.Second))
+	require.NoError(t, instance.Process(giantHit))
+	require.NoError(t, instance.Process(&messages.Slain{
+		MessageBase: messages.Base(start.Add(24*time.Second + 686*time.Millisecond)),
+		Victim:      giant,
+	}))
+
+	detonation := damageEvent(giant, player, 10_679)
+	detonation.MessageBase = messages.Base(start.Add(28*time.Second + 96*time.Millisecond))
+	detonation.SpellData = &chrondbc.Spell{ID: 62527} // Rune Detonation
+	require.NoError(t, instance.Process(detonation))
+
+	defeat := damageEvent(player, thorim, 1)
+	defeat.MessageBase = messages.Base(start.Add(40 * time.Second))
+	defeat.Overkill = 1
+	require.NoError(t, instance.Process(defeat))
+
+	result, err := instance.Finalize(t.Context())
+	require.NoError(t, err)
+	require.Len(t, result.Encounters, 1)
+	require.Equal(t, encounter.KillTypeClean, result.Encounters[0].KillType)
+	require.Empty(t, result.Encounters[0].Remaining)
 }
 
 func TestThorimArenaStarterCombatIgnoresNPCAuras(t *testing.T) {
