@@ -4,7 +4,7 @@ import { BLOG_POSTS, blogPostPath } from "@/blog/blogRegistry";
 import type { TechnicalHint, TechnicalHintContext, TechnicalHintsResponse } from "./types";
 
 type GeneralTipAsset = { id: string; content: string; context?: TechnicalHintContext };
-type PanelHintAsset = { id: string; panelID: string; content: string };
+type PanelHintAsset = { id: string; panelID: string; panelLabel: string; content: string };
 
 function humanize(value: string): string {
   const words = value.replaceAll(/[-_]/g, " ");
@@ -25,7 +25,7 @@ export const STATIC_TECHNICAL_HINTS: readonly TechnicalHint[] = [
     kind: "panel",
     // Analysis panels only exist on instance pages.
     context: "instance",
-    title: humanize(hint.panelID),
+    title: `Check out the ${hint.panelLabel} panel`,
     body: hint.content,
     panel: hint.panelID,
     tags: ["panel", hint.panelID],

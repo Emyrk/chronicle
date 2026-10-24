@@ -51,6 +51,12 @@ describe("static technical assets", () => {
     expect(panelHints.length).toBeLessThan(Object.keys(PANELS).length);
   });
 
+  it("labels panel hints with the panel's own label", () => {
+    for (const hint of panelHints) {
+      expect(hint.panelLabel).toBe(PANELS[hint.panelID as keyof typeof PANELS].label);
+    }
+  });
+
   it("rejects duplicate IDs", () => {
     expect(() => validateHints(
       [{ id: "duplicate", content: "First" }],
