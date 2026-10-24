@@ -224,15 +224,17 @@ func TestValidateLocalReturnPath(t *testing.T) {
 }
 
 type scriptedProvider struct {
-	streams [][]StreamEvent
-	calls   int
+	streams  [][]StreamEvent
+	requests []ChatRequest
+	calls    int
 }
 
 func (*scriptedProvider) ID() ProviderID { return "test" }
 func (*scriptedProvider) ListModels(context.Context, []byte) ([]ModelDescriptor, error) {
 	return nil, nil
 }
-func (p *scriptedProvider) StreamChat(_ context.Context, _ []byte, _ ChatRequest, callback StreamCallback) error {
+func (p *scriptedProvider) StreamChat(_ context.Context, _ []byte, request ChatRequest, callback StreamCallback) error {
+	p.requests = append(p.requests, request)
 	stream := p.streams[p.calls]
 	p.calls++
 	for _, event := range stream {
@@ -272,6 +274,40 @@ func TestAgentLoopTextAndToolCall(t *testing.T) {
 		require.True(t, strings.Contains(body, event), event)
 	}
 	require.NotContains(t, body, "DEBUG_SNAPSHOT")
+}
+
+func TestAgentLoopUsesARequiredFinalResponseAfterToolStepLimit(t *testing.T) {
+	t.Parallel()
+	toolStep := []StreamEvent{
+		{Type: StreamEventToolCallDelta, ToolCall: ToolCallDelta{Index: 0, ID: "call", Name: "list_pages", Arguments: "{}"}},
+		{Type: StreamEventFinish, FinishReason: FinishReasonToolCalls},
+	}
+	provider := &scriptedProvider{streams: [][]StreamEvent{
+		toolStep,
+		toolStep,
+		toolStep,
+		toolStep,
+		toolStep,
+		{{Type: StreamEventTextDelta, Text: "I couldn't make further changes, but here is what I found."}, {Type: StreamEventFinish, FinishReason: FinishReasonStop}},
+	}}
+	var stream bytes.Buffer
+	writer := agui.NewStreamWriter(&stream, nil)
+	var persisted []Message
+	result, err := (&Service{}).agentLoop(
+		context.Background(), writer, provider, nil, "model", assistants["site-help"],
+		[]Message{{Role: RoleUser, Content: "keep checking"}}, toolContext{service: &Service{}},
+		debugRunContext{}, nil, agentLoopState{},
+		func(messages ...Message) error {
+			persisted = append(persisted, messages...)
+			return nil
+		}, nil,
+	)
+	require.NoError(t, err)
+	require.Equal(t, maxIterations, result.State.IterationCount)
+	require.Equal(t, maxIterations+1, provider.calls)
+	require.Empty(t, provider.requests[len(provider.requests)-1].Tools)
+	require.Equal(t, RoleSystem, provider.requests[len(provider.requests)-1].Messages[len(provider.requests[len(provider.requests)-1].Messages)-1].Role)
+	require.Equal(t, "I couldn't make further changes, but here is what I found.", persisted[len(persisted)-1].Content)
 }
 
 func debugSnapshots(t *testing.T, stream string) []agui.DebugSnapshotEvent {
