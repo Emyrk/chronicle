@@ -417,12 +417,25 @@ describe("AdSlot", () => {
     expect(markup).not.toContain("Ad preview")
   })
 
-  it("disables outstream video and adds NitroPay's demo option only when requested", () => {
+  it("defers offscreen rendering and adds NitroPay's demo option only when requested", () => {
     const sizes = adSizesForFormat("rail", false)
 
-    expect(nitroPayAdOptions(sizes)).toMatchObject({ outstream: "never", sizes })
+    expect(nitroPayAdOptions(sizes)).toMatchObject({
+      outstream: "never",
+      refreshLimit: 10,
+      refreshTime: 30,
+      renderVisibleOnly: true,
+      sizes,
+    })
     expect(nitroPayAdOptions(sizes)).not.toHaveProperty("demo")
-    expect(nitroPayAdOptions(sizes, true)).toMatchObject({ demo: true, outstream: "never", sizes })
+    expect(nitroPayAdOptions(sizes, true)).toMatchObject({
+      demo: true,
+      outstream: "never",
+      refreshLimit: 10,
+      refreshTime: 30,
+      renderVisibleOnly: true,
+      sizes,
+    })
   })
 
   it("guards NitroPay reporting for direct non-URL creative frames", () => {

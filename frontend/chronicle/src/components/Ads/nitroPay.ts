@@ -37,6 +37,7 @@ interface NitroPayAdOptions {
   outstream: "never"
   refreshLimit: number
   refreshTime: number
+  renderVisibleOnly: boolean
   report: {
     enabled: boolean
     icon: boolean
@@ -100,6 +101,8 @@ export function nitroPayAdOptions(sizes: NitroPaySize[], demo = false): NitroPay
     outstream: "never",
     refreshLimit: 10,
     refreshTime: 30,
+    // Do not start bidder and creative work for placements that are still offscreen.
+    renderVisibleOnly: true,
     report: {
       enabled: true,
       icon: true,

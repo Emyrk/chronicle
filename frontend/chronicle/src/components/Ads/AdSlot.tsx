@@ -227,11 +227,10 @@ export function AdSlot({
 
       const result = classifyNitroPayRenderedEvent(event, adID)
       if (result === "no_fill") {
-        // A confirmed no-fill makes the fallback interactive. Stop NitroPay
-        // refreshes first so a later creative cannot replace a user's click target.
+        // A confirmed no-fill makes the fallback interactive. Do not call
+        // onNavigate here: NitroPay treats it as a request to start a new auction,
+        // which doubles every no-fill request while the slot is still mounted.
         noFill = true
-        clearNitroPayAds(ads)
-        ads = []
         setRequestSnapshot({ key: requestKey, state: result })
       } else if (result === "filled") {
         setRequestSnapshot({ key: requestKey, state: result })
