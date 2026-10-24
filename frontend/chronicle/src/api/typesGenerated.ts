@@ -1065,6 +1065,12 @@ export interface DatasetTenantSummary {
     readonly slug: string;
 }
 
+// From chroniclesdk/proofs.go
+export interface DecideProofRequest {
+    readonly message: string;
+    readonly decisions: readonly ProofDecision[];
+}
+
 // From chroniclesdk/server_application.go
 /**
  * DeleteRealmPayload requests removal of a realm.
@@ -3017,6 +3023,41 @@ export interface Preferences {
 export type PricingAuctionHouse = "merged" | "split";
 
 export const PricingAuctionHouses: PricingAuctionHouse[] = ["merged", "split"];
+
+// From chroniclesdk/proofs.go
+/**
+ * ProofCharacter identifies one same-realm character in a photo proof request.
+ */
+export interface ProofCharacter {
+    readonly realm_id: string;
+    readonly character_guid: string;
+}
+
+// From chroniclesdk/proofs.go
+export interface ProofDecision extends ProofCharacter {
+    readonly approved: boolean;
+}
+
+// From chroniclesdk/proofs.go
+export interface ProofRequest {
+    readonly id: string;
+    readonly applicant_id: string;
+    readonly purpose: string;
+    readonly status: string;
+    readonly message: string;
+    readonly response: string;
+    readonly created_at: string;
+    readonly reviewed_at?: string;
+    readonly subjects: readonly ProofSubject[];
+}
+
+// From chroniclesdk/proofs.go
+export interface ProofSubject extends ProofCharacter {
+    readonly name: string;
+    readonly realm_name: string;
+    readonly status: string;
+    readonly warning?: string;
+}
 
 // From chroniclesdk/raid_compositions.go
 /**

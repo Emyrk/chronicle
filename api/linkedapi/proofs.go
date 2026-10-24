@@ -85,14 +85,9 @@ func (h *Handler) SubmitProof(w http.ResponseWriter, r *http.Request) {
 		proofError(w, r, 400, "Select between 1 and 10 characters")
 		return
 	}
-	seen := map[string]bool{}
-	for _, c := range choices {
-		k := c.RealmID.String() + "/" + c.CharacterGUID.String()
-		if c.RealmID == uuid.Nil || c.CharacterGUID == 0 || seen[k] {
-			proofError(w, r, 400, "Invalid or duplicate character selection")
-			return
-		}
-		seen[k] = true
+	if !validProofCharacters(choices) {
+		proofError(w, r, 400, "Select distinct characters from a single realm")
+		return
 	}
 	f, header, err := r.FormFile("photo")
 	if err != nil || header.Size > maxProofImage {
@@ -159,6 +154,22 @@ func (h *Handler) SubmitProof(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.Write(ctx, w, http.StatusCreated, result)
+}
+
+func validProofCharacters(choices []chroniclesdk.ProofCharacter) bool {
+	if len(choices) == 0 || len(choices) > 10 {
+		return false
+	}
+	seen := map[string]bool{}
+	realmID := choices[0].RealmID
+	for _, c := range choices {
+		key := c.RealmID.String() + "/" + c.CharacterGUID.String()
+		if c.RealmID == uuid.Nil || c.RealmID != realmID || c.CharacterGUID == 0 || seen[key] {
+			return false
+		}
+		seen[key] = true
+	}
+	return true
 }
 
 func isProofPendingConflict(err error) bool {

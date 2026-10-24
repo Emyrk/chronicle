@@ -11,6 +11,7 @@ import {
 } from "@/api/queries";
 import { Card } from "@/components/ui/Card/Card";
 import { UserCharactersSection } from "./UserCharactersSection";
+import { ProofReview } from "./ProofReview";
 import { SidekickCards } from "@/pages/Settings/SidekickSettings";
 import { Button } from "@/components/ui/button";
 import {
@@ -404,6 +405,8 @@ export function AdminUsersPage() {
           View and manage users, roles, and storage allocations.
         </p>
       </div>
+
+      <ProofReview />
 
       {/* Search and sort controls */}
       <div className="flex flex-col sm:flex-row gap-3 mb-4">

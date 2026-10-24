@@ -72,7 +72,7 @@ import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
 import { InferenceSettings } from "@/features/chat/InferenceSettings";
 import { FavoritesList } from "@/components/Favorites";
-import { PhotoProofCard } from "./Settings/PhotoProof";
+import { PhotoProofCard, PhotoProofHistory } from "./Settings/PhotoProof";
 
 export { BillingSettings } from "./Settings/BillingSettings";
 export { CustomPanelSettings } from "./Settings/CustomPanelSettings";
@@ -482,14 +482,15 @@ export function CharacterSettings() {
 
       <ExternalVerificationCard />
       {photoProof?.enabled && <PhotoProofCard callout={photoProof.callout} />}
+      <PhotoProofHistory />
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading characters...</p>
       ) : !characters || characters.length === 0 ? (
         <div className="rounded-lg border p-4">
           <p className="text-sm text-muted-foreground">
-            No characters are linked to your account yet. Character linking is currently managed
-            by site administrators.
+            No characters are linked to your account yet. Use an available method above to link them,
+            or contact a site administrator for help.
           </p>
         </div>
       ) : (
