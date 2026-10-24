@@ -37,7 +37,7 @@ async function get(url) {
 // fields map.processor.ts reads; `g` maps a GUID to its index in `guids`.
 const round = (value, digits) => Math.round(value * 10 ** digits) / 10 ** digits
 const STREAMS = [
-  ["p", "unit_position", "FastUnitPositionCursor", (e, g) => [g(e.unit), round(e.x, 2), round(e.y, 2), e.mapId, round(e.facing, 3)]],
+  ["p", "unit_position", "FastUnitPositionCursor", (e, g) => [g(e.unit), round(e.x, 2), round(e.y, 2), e.z == null ? null : round(e.z, 2), e.mapId, e.facing == null ? null : round(e.facing, 3)]],
   ["r", "unit_resources", "FastUnitResourcesCursor", (e, g) => [g(e.unit), e.currentHealth, e.maximumHealth, e.absorb, e.currentPower, e.maximumPower, e.powerType]],
   ["d", "damage", "FastDamageCursor", (e, g) => [g(e.caster), g(e.target), e.amount, e.hitType, e.schools[0] ?? 0, e.spellId, e.sourceName]],
   ["h", "heal", "FastHealCursor", (e, g) => [g(e.caster), g(e.target), e.amount, e.hitType, e.schools[0] ?? 0, e.spellId, e.sourceName]],
