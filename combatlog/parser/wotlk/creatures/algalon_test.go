@@ -83,6 +83,28 @@ func TestAlgalonAuraCleanupWithOneLivingPlayerMarksDefeat(t *testing.T) {
 	require.Equal(t, period.EndStateReset, add.LastEndState())
 }
 
+func TestAlgalonDelayedAuraCleanupMarksDefeat(t *testing.T) {
+	t.Parallel()
+
+	all := newAlgalonTestCharacters()
+	player := guid.GUID(1)
+	algalon := creatureGUID(algalonEntry)
+	all.DB().Update(unitinfo.Info{Guid: algalon, MaxHealth: 1})
+	lastDamage := time.Date(2026, time.October, 24, 5, 8, 22, 609000000, time.UTC)
+
+	_, err := all.Process(testDamage(lastDamage, player, algalon))
+	require.NoError(t, err)
+
+	cleanupAt := lastDamage.Add(901 * time.Millisecond)
+	processAlgalonAuraCleanup(t, all, algalon, cleanupAt)
+
+	boss, ok := all.Get(algalon)
+	require.True(t, ok)
+	require.False(t, boss.IsActive())
+	require.Equal(t, period.EndStateSlain, boss.LastEndState())
+	require.Equal(t, cleanupAt, boss.Periods()[0].End.Timestamp.Date())
+}
+
 func TestAlgalonPositiveOverkillMarksDefeat(t *testing.T) {
 	t.Parallel()
 
