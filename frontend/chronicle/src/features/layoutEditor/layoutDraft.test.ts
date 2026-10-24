@@ -11,6 +11,7 @@ import {
   moveIntoGroup,
   moveOutOfGroup,
   removeItem,
+  setPanelOption,
   setPanelFilters,
   setPanelType,
   setStripType,
@@ -113,6 +114,13 @@ describe("layoutDraft", () => {
     const shrunk = { ...withStrip.draft, items: withStrip.draft.items.map((item) => item.id === "strip-1" ? { ...item, w: 2 } : item) };
     const next = setStripType(shrunk, catalog, "strip-1", "raid_durability");
     expect(next.items.find((item) => item.id === "strip-1")).toMatchObject({ w: 6, stripType: "raid_durability" });
+  });
+
+  it("ignores repeated panel option writes", () => {
+    const original = draft();
+    expect(setPanelOption(original, "panel-1", "opt")).toBe(original);
+    expect(setPanelOption(original, "panel-2", null)).toBe(original);
+    expect(setPanelOption(original, "panel-1", "next")).not.toBe(original);
   });
 
   it("drops empty filter lists", () => {

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parsePlayerTimelineState } from "./playerTimelineState";
+import {
+  encodePlayerTimelinePanelOption,
+  playerTimelinePanelOptionFromPageState,
+  parsePlayerTimelinePanelOption,
+  parsePlayerTimelineState,
+} from "./playerTimelineState";
 
 describe("parsePlayerTimelineState", () => {
   it("round-trips a valid state", () => {
@@ -14,6 +19,24 @@ describe("parsePlayerTimelineState", () => {
       debuffTarget: "boss",
     };
     expect(parsePlayerTimelineState(state)).toEqual(state);
+  });
+
+  it("round-trips panel-option state", () => {
+    const state = {
+      encounterId: "enc",
+      players: ["a", "b"] as [string, string],
+      align: "pull" as const,
+      metric: "damage" as const,
+      window: null,
+      pinnedMs: 5000,
+      follow: false,
+      debuffTarget: null,
+    };
+
+    expect(parsePlayerTimelinePanelOption(playerTimelinePanelOptionFromPageState(state))).toEqual(state);
+    expect(playerTimelinePanelOptionFromPageState({ players: [] })).toBeNull();
+    expect(parsePlayerTimelinePanelOption(encodePlayerTimelinePanelOption(state))).toEqual(state);
+    expect(parsePlayerTimelinePanelOption("pt:not-base64")).toBeNull();
   });
 
   it("rejects state without an encounter", () => {

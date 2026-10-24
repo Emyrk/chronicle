@@ -249,6 +249,9 @@ export function setStripType(
 }
 
 export function setPanelOption(draft: LayoutDraft, itemId: string, option: string | null): LayoutDraft {
+  // Controlled panels may report their current option from an effect. Preserve
+  // draft identity for an identical write so Edit Mode cannot enter a render loop.
+  if ((draft.panelOptionsById[itemId] ?? null) === option) return draft;
   return { ...draft, panelOptionsById: { ...draft.panelOptionsById, [itemId]: option } };
 }
 

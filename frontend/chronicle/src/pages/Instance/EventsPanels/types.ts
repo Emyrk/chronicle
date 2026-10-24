@@ -132,6 +132,18 @@ export interface PanelDefinition<TResult, TEvent extends ProcessorEvent = Proces
    */
   syncDataMode?: "incremental" | "full";
   
+  /**
+   * Layout height behavior. Grid panels fill their configured row span. Content
+   * panels participate in normal document flow and grow to their intrinsic height.
+   */
+  heightMode?: "grid" | "content";
+
+  /** If true, omit the standard panel title row. */
+  hideHeader?: boolean;
+
+  /** If true, remove the standard panel-card padding without enabling a hover header. */
+  contentBleed?: boolean;
+
   /** If true, shows a warning indicator that this panel is experimental */
   underConstruction?: boolean;
 

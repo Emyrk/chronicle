@@ -61,6 +61,8 @@ import { layoutDraftToExport, type LayoutDraft } from "@/features/layoutEditor/l
 import { useLayoutDraft, type LayoutDraftController } from "@/features/layoutEditor/useLayoutDraft";
 import type { InstanceUIState } from "./inference/instanceInferenceTools";
 import { PanelExplainerView } from "./PanelExplainer";
+import { PANEL_GRID_ROW_HEIGHT_PX, panelGridTemplateRows } from "./panelGridRows";
+import { playerTimelinePanelOptionFromPageState } from "./Pages/PlayerTimelinePage/playerTimelineState";
 import { PlayerTimelineHelp } from "./Pages/PlayerTimelinePage/help/PlayerTimelineHelp";
 import { PLAYER_TIMELINE_HELP } from "./Pages/PlayerTimelinePage/help/callouts";
 import { RandomTip } from "@/components/RandomTip";
@@ -996,8 +998,6 @@ export interface SharedViewPayload {
   };
 }
 
-const PANEL_ROW_HEIGHT_PX = 96;
-
 const EMPTY_LAYOUT_DRAFT: LayoutDraft = {
   items: [],
   panelTypesById: {},
@@ -1095,20 +1095,6 @@ interface EventsPanelGridProps {
 
 function renderableLayoutItems(items: readonly GridEditorItem[]): GridEditorItem[] {
   return items.filter((item) => item.kind !== "group");
-}
-
-/**
- * Row template that fills the grid's height: rows holding a panel share the
- * spare height (never below a normal row), rows holding only strips keep the
- * normal row height.
- */
-function fitGridRows(items: readonly GridEditorItem[]): string {
-  const rowCount = Math.max(0, ...items.map((item) => item.y + item.h));
-  return Array.from({ length: rowCount }, (_, row) => {
-    const covering = items.filter((item) => row >= item.y && row < item.y + item.h);
-    const stripOnly = covering.length > 0 && covering.every((item) => item.kind === "strip");
-    return stripOnly ? `${PANEL_ROW_HEIGHT_PX}px` : `minmax(${PANEL_ROW_HEIGHT_PX}px, 1fr)`;
-  }).join(" ");
 }
 
 function EventsPanelGrid({
@@ -1262,28 +1248,38 @@ function EventsPanelGrid({
     );
   }
 
-  const fitRows = fit && !isMobile ? fitGridRows(layoutItems) : null;
+  const contentHeightItemIds = new Set(
+    layoutItems
+      .filter((item) => item.kind !== "strip" && PANELS[panelTypesById[item.id]]?.heightMode === "content")
+      .map((item) => item.id),
+  );
+  const gridRows = panelGridTemplateRows(layoutItems, contentHeightItemIds, fit && !isMobile);
   return (
     <SeamlessLayoutContext.Provider value={seamless}>
     <div
-      className={cn("grid grid-cols-1 sm:grid-cols-12", seamless ? "gap-0" : "gap-3", fitRows && "h-full")}
-      style={fitRows ? { gridTemplateRows: fitRows } : { gridAutoRows: `${PANEL_ROW_HEIGHT_PX}px` }}
+      className={cn("grid grid-cols-1 sm:grid-cols-12", seamless ? "gap-0" : "gap-3", fit && !isMobile && "h-full")}
+      style={gridRows ? { gridTemplateRows: gridRows } : { gridAutoRows: `${PANEL_GRID_ROW_HEIGHT_PX}px` }}
     >
       {layoutItems.map((item, index) => {
         const panelType = panelTypesById[item.id] ?? "empty";
         const stripType = item.kind === "strip" ? resolveStripType(item.stripType) : null;
         const isStrip = stripType !== null;
+        const isContentHeight = !isStrip && contentHeightItemIds.has(item.id);
         return (
           <div
             data-live-panel-viewport={item.id}
             data-live-cursor-surface={`panel:${item.id}`}
             key={item.id}
-            className="relative min-h-0"
+            className={cn("relative", !isContentHeight && "min-h-0")}
             style={{
               gridColumn: isMobile ? "1 / -1" : `${item.x + 1} / span ${item.w}`,
               gridRow: isMobile
-                ? `auto / span ${!isStrip && panelType === "timeline" && context.selectedEncounterIds.length > 1 ? 1 : item.h}`
-                : `${item.y + 1} / span ${item.h}`,
+                ? isContentHeight
+                  ? "auto"
+                  : `auto / span ${!isStrip && panelType === "timeline" && context.selectedEncounterIds.length > 1 ? 1 : item.h}`
+                : isContentHeight
+                  ? `${item.y + 1}`
+                  : `${item.y + 1} / span ${item.h}`,
             }}
           >
             {isStrip ? (
@@ -3278,6 +3274,8 @@ function InstancePageViewContent({
   const applySharedViewPayload = useCallback((payload: SharedViewPayload) => {
     const sharedPageLayout = readSharedPageLayout(payload);
     const sharedPageType = sharedPageLayout?.pageType ?? null;
+    const migratesPlayerTimelinePage = sharedPageType === "player_timeline";
+    const usesPanelLayout = sharedPageType === null || migratesPlayerTimelinePage;
 
     const sharedFocus = readSharedFocus(payload);
     if (sharedFocus !== undefined) applyFocused(sharedFocus);
@@ -3285,8 +3283,23 @@ function InstancePageViewContent({
     let orderedItems: GridEditorItem[] = [];
     let orderedPanels: PanelType[] = [];
     let orderedOptions: Array<string | null> = [];
+    let importedAppearance = readLayoutAppearance(payload.layout);
 
-    if (!sharedPageType) {
+    if (migratesPlayerTimelinePage) {
+      const preset = presetLayoutById("player_timeline", instance.capabilities ?? [], isMobile);
+      if (!preset || !isPanelPresetLayout(preset)) {
+        throw new Error("Player Timeline preset is unavailable");
+      }
+      orderedItems = orderLayoutItems(normalizeLayoutItems(preset.layoutItems));
+      orderedPanels = orderedItems.map((item) => (preset.panelTypes[item.id] ?? "empty") as PanelType);
+      const timelineOption = playerTimelinePanelOptionFromPageState(sharedPageLayout?.pageState);
+      orderedOptions = orderedItems.map((item) =>
+        preset.panelTypes[item.id] === "player_timeline"
+          ? timelineOption
+          : preset.panelOptions[item.id] ?? null,
+      );
+      importedAppearance = readLayoutAppearance(preset);
+    } else if (usesPanelLayout) {
       const layoutItems = payload.layout?.items ?? payload.items ?? [];
       const panelTypesById = payload.layout?.panelTypesById ?? payload.panelTypesById ?? {};
       const normalizedItems = normalizeLayoutItems(layoutItems);
@@ -3352,7 +3365,7 @@ function InstancePageViewContent({
 
     setViewState((prev) => ({
       ...prev,
-      ...(!sharedPageType ? { panels: orderedPanels, panelOptions: orderedOptions } : {}),
+      ...(usesPanelLayout ? { panels: orderedPanels, panelOptions: orderedOptions } : {}),
       encounters: resolvedEncounters,
       enemies: enemyIDs,
       players: playerIDs,
@@ -3361,11 +3374,15 @@ function InstancePageViewContent({
     // Sync the parent so its encounter state matches, preventing the
     // parent→child sync effect from overwriting the shared-link selection.
     onSelectEncounters?.(resolvedEncounters);
-    setActiveLayoutId(sharedPageType ? null : typeof payload.layoutId === "string" ? payload.layoutId : null);
-    if (!sharedPageType) {
+    setActiveLayoutId(usesPanelLayout ? (typeof payload.layoutId === "string" && !migratesPlayerTimelinePage ? payload.layoutId : null) : null);
+    if (usesPanelLayout) {
       setImportedLayoutItems(orderedItems);
-      setImportedLayoutAppearance(readLayoutAppearance(payload.layout));
-      setActivePresetId(null);
+      setImportedLayoutAppearance(importedAppearance);
+      setActivePresetId(migratesPlayerTimelinePage ? "player_timeline" : null);
+      if (migratesPlayerTimelinePage) {
+        setPageState(undefined);
+        setImportedPageState(undefined);
+      }
     } else {
       const requestedPreset = sharedPageLayout?.presetId
         ? PRESET_LAYOUTS_BY_ID[sharedPageLayout.presetId]
@@ -3397,7 +3414,7 @@ function InstancePageViewContent({
     if (!sharedTimeRange) {
       timeRange?.reset();
     }
-  }, [allMergedEnemies, applyFocused, instance.encounters, instance.players, onSelectEncounters, setViewState, timeRange]);
+  }, [allMergedEnemies, applyFocused, instance.capabilities, instance.encounters, instance.players, isMobile, onSelectEncounters, setViewState, timeRange]);
 
   const handleExportLayout = useCallback(() => {
     const payload = {

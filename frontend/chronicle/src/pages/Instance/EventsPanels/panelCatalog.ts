@@ -59,6 +59,7 @@ export const PANEL_AI_DESCRIPTIONS: Record<BuiltinPanelType, string> = {
   resists: "Summarizes fully and partially resisted damage plus related spell and hit outcomes.",
   guilds: "Groups or lists raid participants by guild affiliation.",
   companion_stats: "Displays stat snapshots and diagnostics relayed by the companion addon; use to inspect addon-provided data availability.",
+  player_timeline: "Compares one or two players across an intrinsic-height cast, cooldown, aura, damage, and healing timeline.",
   pulls_and_cleanup: "Identifies pulls, wipes or cleanup periods, kill outcomes, and idle gaps between combat activity.",
 };
 
