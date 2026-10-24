@@ -25,12 +25,14 @@ function isBlogHref(href: string): boolean {
   return href === "/blog" || href.startsWith("/blog/") || href.startsWith("/blog?");
 }
 
-const CONTEXT_LABELS: Record<TechnicalHintContext, string> = {
-  instance: "When on an instance page",
+const CONTEXTS: Record<TechnicalHintContext, { label: string; Icon: typeof ScrollText }> = {
+  instance: { label: "When on an instance page", Icon: ScrollText },
+  instance_panel: { label: "Panel on an instance page", Icon: PanelsTopLeft },
 };
 
 /** Shared chip telling readers where a hinted feature can be used. */
 function HintContextFlair({ context, compact }: { context: TechnicalHintContext; compact: boolean }) {
+  const { label, Icon } = CONTEXTS[context];
   return (
     <span
       className={cn(
@@ -38,8 +40,8 @@ function HintContextFlair({ context, compact }: { context: TechnicalHintContext;
         compact ? "px-1.5 py-px text-[10px]" : "px-2 py-0.5 text-xs",
       )}
     >
-      <ScrollText className={compact ? "h-2.5 w-2.5" : "h-3 w-3"} />
-      {CONTEXT_LABELS[context]}
+      <Icon className={compact ? "h-2.5 w-2.5" : "h-3 w-3"} />
+      {label}
     </span>
   );
 }
