@@ -102,6 +102,54 @@ describe("InferenceRuntime", () => {
     expect(yoloConfirm).not.toHaveBeenCalled();
   });
 
+  it("returns stale_state when the capability revision changes during confirmation", async () => {
+    let resolveConfirmation!: (approved: boolean) => void;
+    const runtime = new InferenceRuntime({
+      sessionId: "session-1",
+      confirm: () => new Promise((resolve) => { resolveConfirmation = resolve; }),
+    });
+    const handler = vi.fn(() => ({ ok: true }));
+    const unregister = register(runtime, handler);
+    const pending = runtime.executeClientTool(
+      request({ effect: "view_mutation", confirmation: "unless_yolo" }),
+      new AbortController().signal,
+    );
+
+    unregister();
+    runtime.registerCapability({
+      id: "page",
+      version: 1,
+      scope: { type: "route", id: "rankings" },
+      stateRevision: 5,
+      tools: { inspect: handler },
+    });
+    resolveConfirmation(true);
+
+    await expect(pending).resolves.toMatchObject({ status: "stale_state", state_revision: 4 });
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("keeps a successful result when the mutation re-registers its capability", async () => {
+    const runtime = new InferenceRuntime({ sessionId: "session-1" });
+    const handler = vi.fn(() => {
+      unregister();
+      runtime.registerCapability({
+        id: "page",
+        version: 1,
+        scope: { type: "route", id: "rankings" },
+        stateRevision: 5,
+        tools: { inspect: handler },
+      });
+      return { applied: true };
+    });
+    const unregister = register(runtime, handler);
+
+    await expect(runtime.executeClientTool(request(), new AbortController().signal)).resolves.toMatchObject({
+      status: "success",
+      result: { applied: true },
+    });
+  });
+
   it("normalizes handler failures without exposing stack details", async () => {
     const runtime = new InferenceRuntime({ sessionId: "session-1" });
     register(runtime, vi.fn(() => { throw new Error("secret stack detail"); }));
