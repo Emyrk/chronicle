@@ -372,8 +372,8 @@ export function LayoutEditingPost({ post }: PostProps) {
         casts it on any raid.
       </p>
       <p>
-        Edits are kept in memory until you save them, and Chronicle warns you before you close a tab with unsaved
-        changes. Layout editing works on desktop, and only for the person in control of the view during a live session.
+        Edits are kept in memory until you save them. Layout editing works on desktop, and only for the person in control
+        of the view during a live session.
       </p>
     </ShortPost>
   );
