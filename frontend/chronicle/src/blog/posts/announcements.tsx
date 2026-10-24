@@ -348,6 +348,37 @@ export function CooldownUsagePost({ post }: PostProps) {
   );
 }
 
+export function LayoutEditingPost({ post }: PostProps) {
+  return (
+    <ShortPost post={post}>
+      <p>
+        You no longer need to leave the raid to change your layout. Press <kbd>Shift</kbd> + <kbd>E</kbd>, or choose{" "}
+        <strong>Edit Layout</strong> from the raid menu, and the panels you are looking at become editable in place, with
+        your real raid data still in them.
+      </p>
+      <ul>
+        <li>Drag panels to move them and pull their edges to resize them</li>
+        <li>Add panels, strips, and group rows, or remove the ones you do not need</li>
+        <li>
+          Press <kbd>Shift</kbd> + <kbd>E</kbd> again (or <strong>Done</strong>) to apply your changes, or <kbd>Esc</kbd>{" "}
+          to throw them away
+        </li>
+      </ul>
+      <p>
+        To keep a layout, click <strong>Save as…</strong> in the editing toolbar or <strong>Save Layout…</strong> in the
+        raid menu. The drawer lists your Layout Book: save a new layout, or overwrite one of your own. Layouts you track
+        from other players are marked, since only their owner can change them; save your own copy instead. The same
+        drawer sets the title, description, and icon, and lets you put the layout on your action bar so a number key
+        casts it on any raid.
+      </p>
+      <p>
+        Edits are kept in memory until you save them. Layout editing works on desktop, and only for the person in control
+        of the view during a live session.
+      </p>
+    </ShortPost>
+  );
+}
+
 export function FocusModePost({ post }: PostProps) {
   return (
     <ShortPost post={post}>

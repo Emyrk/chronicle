@@ -14,6 +14,7 @@ import {
   GearProgressionPost,
   GuildPagesPost,
   HistoricalPerformancePost,
+  LayoutEditingPost,
   ParsingPost,
   PhaseSelectionsPost,
   PlayerTimelinePost,
@@ -59,6 +60,7 @@ export interface BlogPostDefinition extends BlogPostMetadata {
 }
 
 const BLOG_COMPONENTS = {
+  "layout-editing": LayoutEditingPost,
   "focus-mode": FocusModePost,
   "player-timeline": PlayerTimelinePost,
   replay: ReplayPost,
@@ -91,6 +93,7 @@ function remotionVideo(load: LessonVideo["load"], durationInFrames: number): Les
 }
 
 const BLOG_VIDEOS = {
+  "layout-editing": remotionVideo(() => import("@/pages/Instance/videos/LayoutEditing.video"), 700),
   "focus-mode": remotionVideo(() => import("@/pages/Instance/videos/FocusMode.video"), 630),
   replay: remotionVideo(() => import("@/pages/Instance/videos/ReplayExplainer.video"), 700),
   "phase-selections": remotionVideo(() => import("@/pages/Instance/videos/EncounterPhasesDiscord.video"), 650),

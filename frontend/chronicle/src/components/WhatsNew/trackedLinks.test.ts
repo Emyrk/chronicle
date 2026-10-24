@@ -3,8 +3,8 @@ import { whatsNewLink } from "./trackedLinks";
 
 describe("whatsNewLink", () => {
   it("tags the primary announcement link", () => {
-    expect(whatsNewLink("/blog/focus-mode", "whats_new_primary", "focus-mode", "turtle")).toBe(
-      "/blog/focus-mode?chr_src=turtle&chr_pos=whats_new_primary&chr_cmp=focus_mode",
+    expect(whatsNewLink("/blog/layout-editing", "whats_new_primary", "layout-editing", "turtle")).toBe(
+      "/blog/layout-editing?chr_src=turtle&chr_pos=whats_new_primary&chr_cmp=layout_editing",
     );
   });
 

@@ -15,18 +15,17 @@ interface WhatsNewDialogProps {
 }
 
 const HIGHLIGHTS = [
-  "Hide the navbar, raid header, filters, and footer so your panels get the whole screen.",
-  "Keep the encounter list and layout presets right where they are.",
-  "Stays on through a refresh, and shared links open straight into it.",
+  "Move, resize, add, and remove panels right on the raid you are viewing.",
+  "Save as… keeps the layout in your Layout Book, or overwrites one of your own.",
+  "Put it on your action bar and cast it on any raid with a number key.",
 ];
 
 const SHORTCUTS: { keys: string[]; label: string }[] = [
-  { keys: ["Shift", "F"], label: "Toggle focus" },
-  { keys: ["Ctrl", "Shift", "F"], label: "Focus + fullscreen" },
-  { keys: ["Esc"], label: "Exit focus" },
+  { keys: ["Shift", "E"], label: "Edit layout / Done" },
+  { keys: ["Esc"], label: "Discard changes" },
 ];
 
-// Styled as an uncommon item tooltip: a smaller feature than a legendary launch.
+// Styled as a rare item tooltip: a meaningful feature, short of a legendary launch.
 export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
   const close = () => onOpenChange(false);
 
@@ -35,26 +34,26 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
       <DialogContent className="w-[calc(100%-2rem)] max-w-[480px] gap-0 overflow-hidden rounded-md border border-[#5c6670] bg-[linear-gradient(180deg,rgba(10,16,28,0.98),rgba(6,8,16,0.98))] p-0 shadow-[0_24px_60px_rgba(0,0,0,0.7)] sm:max-w-[480px]">
         <div className="grid grid-cols-[56px_minmax(0,1fr)] items-center gap-4 px-6 pt-[22px]">
           <img
-            src={iconUrl("spell_holy_mindvision")}
+            src={iconUrl("inv_misc_book_09")}
             alt=""
             width={56}
             height={56}
-            className="h-14 w-14 rounded border-2 border-quality-uncommon bg-[#0b1408]"
+            className="h-14 w-14 rounded border-2 border-quality-rare bg-[#08101c]"
           />
           <div className="flex flex-col gap-1">
-            <span className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-quality-uncommon">
-              Uncommon feature
+            <span className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-quality-rare">
+              Rare feature
             </span>
-            <DialogTitle className="font-wow text-[28px] font-normal leading-tight text-quality-uncommon">
-              Focus mode
+            <DialogTitle className="font-wow text-[28px] font-normal leading-tight text-quality-rare">
+              Layout editing
             </DialogTitle>
           </div>
         </div>
 
         <div className="flex flex-col gap-1 px-6 pb-6 pt-4 text-sm leading-relaxed">
-          <p className="text-foreground">Use: Clears the raid page down to your layout</p>
+          <p className="text-foreground">Use: Rearranges the raid page around your panels</p>
 
-          <div aria-hidden className="mt-3 flex flex-col gap-2 rounded border border-quality-uncommon/30 bg-black/35 p-3 shadow-inner">
+          <div aria-hidden className="mt-3 flex flex-col gap-2 rounded border border-quality-rare/30 bg-black/35 p-3 shadow-inner">
             {SHORTCUTS.map(({ keys, label }) => (
               <div key={label} className="flex items-center justify-between gap-3">
                 <span className="flex items-center gap-1">
@@ -74,27 +73,27 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
             <ul>
               {HIGHLIGHTS.map((text) => (
                 <li key={text} className="grid grid-cols-[14px_minmax(0,1fr)] gap-2.5">
-                  <span aria-hidden className="text-[10px] leading-6 text-quality-uncommon">◆</span>
+                  <span aria-hidden className="text-[10px] leading-6 text-quality-rare">◆</span>
                   <span>{text}</span>
                 </li>
               ))}
             </ul>
           </DialogDescription>
 
-          <p className="mt-2 italic text-[#ffd100]">&ldquo;Nothing but the fight.&rdquo;</p>
+          <p className="mt-2 italic text-[#ffd100]">&ldquo;Measure twice, cast once.&rdquo;</p>
 
           <div className="mt-5 flex flex-wrap items-center gap-5">
             {/* Blog routes mount a separate app entry, so these links must reload the document. */}
             <a
-              href={whatsNewLink("/blog/focus-mode", "whats_new_primary", "focus-mode")}
+              href={whatsNewLink("/blog/layout-editing", "whats_new_primary", "layout-editing")}
               onClick={close}
-              className="inline-flex items-center gap-2 rounded border border-quality-uncommon/80 bg-[linear-gradient(180deg,#2f8f1c,#1c5a10)] px-[18px] py-2.5 text-sm font-semibold text-white transition-[filter] hover:brightness-110"
+              className="inline-flex items-center gap-2 rounded border border-quality-rare/80 bg-[linear-gradient(180deg,#1f6fc4,#0f4a8a)] px-[18px] py-2.5 text-sm font-semibold text-white transition-[filter] hover:brightness-110"
             >
-              Watch Focus mode
+              Watch layout editing
               <ArrowRight className="h-4 w-4" />
             </a>
             <a
-              href={whatsNewLink("/blog", "whats_new_archive", "focus-mode")}
+              href={whatsNewLink("/blog", "whats_new_archive", "layout-editing")}
               onClick={close}
               className="text-sm text-muted-foreground transition-colors hover:text-foreground"
             >

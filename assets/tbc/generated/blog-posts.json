@@ -1,5 +1,17 @@
 [
   {
+    "id": "layout-editing",
+    "title": "Edit and save layouts on the raid page",
+    "description": "Press Shift+E to move, resize, add, and remove panels on the raid you are viewing, then save the layout to your Layout Book and action bar.",
+    "publishedAt": "2026-10-24",
+    "rarity": "rare",
+    "tag": "Feature",
+    "icon": "inv_misc_book_09",
+    "flavor": "Measure twice, cast once.",
+    "hintTitle": "Edit layouts in place",
+    "hintDescription": "Press Shift+E on any raid to rearrange its panels, then use Save as… to keep the layout and put it on your action bar."
+  },
+  {
     "id": "focus-mode",
     "title": "Focus mode",
     "description": "Hide everything but the encounters, presets, and your layout. Shift+F to toggle, Ctrl+Shift+F for fullscreen too.",

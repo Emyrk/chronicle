@@ -26,6 +26,7 @@ var releaseIDs = []string{
 	"custom-panels",
 	"player-timeline",
 	"focus-mode",
+	"layout-editing",
 }
 
 func CurrentID() string {
