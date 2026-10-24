@@ -1,6 +1,8 @@
 package creatures
 
 import (
+	"time"
+
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
@@ -8,8 +10,9 @@ import (
 )
 
 const (
-	algalonEntry                  = 32871
-	algalonSurrenderHealthPercent = 95
+	algalonEntry                   = 32871
+	algalonSurrenderHealthPercent  = 95
+	algalonAuraCleanupDamageWindow = 2 * time.Second
 )
 
 var algalonAddEntries = []uint32{
@@ -29,6 +32,12 @@ type algalonCharacter struct {
 	incomingDamage int64
 }
 
+func algalonDefeatConfig() characters.ScriptedDefeatConfig {
+	config := scriptedSurrenderWithAuraCleanupConfig(algalonAuraCleanupThreshold)
+	config.AuraCleanup.DamageWindow = algalonAuraCleanupDamageWindow
+	return config
+}
+
 func NewAlgalon(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
 	entry, ok := id.GetEntry()
 	if !ok || entry != algalonEntry {
@@ -38,7 +47,7 @@ func NewAlgalon(id guid.GUID, all *characters.Characters) (characters.Character,
 	return &algalonCharacter{
 		Common:      characters.NewCommonCharacter(id, all),
 		all:         all,
-		defeat:      characters.NewScriptedDefeatDetector(id, scriptedSurrenderWithAuraCleanupConfig(algalonAuraCleanupThreshold)),
+		defeat:      characters.NewScriptedDefeatDetector(id, algalonDefeatConfig()),
 		seenPlayers: make(map[guid.GUID]struct{}),
 		deadPlayers: make(map[guid.GUID]struct{}),
 	}, true
