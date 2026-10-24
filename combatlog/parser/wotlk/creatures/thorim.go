@@ -9,6 +9,7 @@ import (
 )
 
 const thorimEntry = 32865
+const thorimRuneDetonationSpellID = 62527
 
 const (
 	ThorimPhaseKeyP1 = "thorim_p1"
@@ -121,6 +122,10 @@ func NewThorimEncounterCharacter(id guid.GUID, all *characters.Characters) (char
 		c.defeat = characters.NewScriptedDefeatDetector(id, config)
 	}
 	c.state.characters[id] = c
+	if entry == 32873 { // Ancient Rune Giant
+		ignored := characters.NewIgnoreCastCharacter(c, thorimRuneDetonationSpellID)
+		return characters.WrapPhaseProvider(c, ignored), true
+	}
 	return c, true
 }
 
