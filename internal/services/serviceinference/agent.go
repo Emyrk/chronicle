@@ -747,10 +747,22 @@ type pauseClientToolFunc func(Message, []Message, clientToolPause, agentLoopStat
 func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provider, credential []byte, model string, a assistant, messages []Message, tc toolContext, debug debugRunContext, capability *clientCapability, state agentLoopState, persist func(...Message) error, pause pauseClientToolFunc) (agentLoopResult, error) {
 	messages = append([]Message{{Role: RoleSystem, Content: a.System}}, messages...)
 	usedCallIDs := usedToolCallIDs(messages)
-	for state.IterationCount < maxIterations {
-		state.IterationCount++
-		iteration := state.IterationCount
-		if err := writeDebugSnapshot(w, debug, iteration, "request", model, a, messages, state.Usage); err != nil {
+	for state.IterationCount <= maxIterations {
+		finalizationOnly := state.IterationCount == maxIterations
+		iteration := state.IterationCount + 1
+		requestAssistant := a
+		requestMessages := messages
+		if finalizationOnly {
+			requestAssistant.Tools = nil
+			requestMessages = append(slices.Clone(messages), Message{
+				Role:    RoleSystem,
+				Content: "The tool-step limit has been reached. Respond to the user now using the available results. Do not call any more tools.",
+			})
+		} else {
+			state.IterationCount++
+			iteration = state.IterationCount
+		}
+		if err := writeDebugSnapshot(w, debug, iteration, "request", model, requestAssistant, requestMessages, state.Usage); err != nil {
 			return agentLoopResult{State: state}, err
 		}
 		messageID := uuid.NewString()
@@ -758,7 +770,7 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 		calls := map[int]*toolCallAccumulator{}
 		started := false
 		finish := FinishReasonOther
-		err := provider.StreamChat(ctx, credential, ChatRequest{Model: model, Messages: messages, Tools: a.Tools}, func(event StreamEvent) error {
+		err := provider.StreamChat(ctx, credential, ChatRequest{Model: model, Messages: requestMessages, Tools: requestAssistant.Tools}, func(event StreamEvent) error {
 			switch event.Type {
 			case StreamEventTextDelta:
 				if !started {
@@ -801,8 +813,8 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 			if err := persist(assistantMessage); err != nil {
 				return agentLoopResult{State: state}, err
 			}
-			completedMessages := append(slices.Clone(messages), assistantMessage)
-			if err := writeDebugSnapshot(w, debug, iteration, "response", model, a, completedMessages, state.Usage); err != nil {
+			completedMessages := append(slices.Clone(requestMessages), assistantMessage)
+			if err := writeDebugSnapshot(w, debug, iteration, "response", model, requestAssistant, completedMessages, state.Usage); err != nil {
 				return agentLoopResult{State: state}, err
 			}
 			if started {
@@ -811,6 +823,9 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 				}
 			}
 			return agentLoopResult{State: state}, nil
+		}
+		if finalizationOnly {
+			return agentLoopResult{State: state}, errAgentIterationLimit
 		}
 		for i := 0; i < len(calls); i++ {
 			c := calls[i]

@@ -199,7 +199,7 @@ export class InferenceRuntime implements InferenceRuntimeClient {
     request: ClientToolRequestEvent,
     signal: AbortSignal,
   ): Promise<ClientToolContinuation> => {
-    const capability = this.capabilities.get(request.capability.id);
+    let capability = this.capabilities.get(request.capability.id);
     // Continuations identify the persisted request, not the capability's latest
     // page state. In particular, a stale_state result must echo the requested
     // revision so the server can accept it and let the model recover.
@@ -243,7 +243,7 @@ export class InferenceRuntime implements InferenceRuntimeClient {
     if (!capability.isAvailable()) {
       return continuation("capability_unavailable", resultMessage("The requested capability is not currently available."));
     }
-    const handler = capability.tools[request.toolName];
+    let handler = capability.tools[request.toolName];
     if (!handler) {
       return continuation("capability_unavailable", resultMessage("The requested client tool is unavailable."));
     }
@@ -272,8 +272,24 @@ export class InferenceRuntime implements InferenceRuntimeClient {
       }
     }
 
-    if (this.capabilities.get(request.capability.id)?.token !== capability.token || !capability.isAvailable()) {
+    const currentCapability = this.capabilities.get(request.capability.id);
+    if (!currentCapability || !currentCapability.isAvailable()) {
       return continuation("capability_unavailable", resultMessage("The requested capability is no longer available."));
+    }
+    if (
+      currentCapability.descriptor.version !== request.capability.version
+      || currentCapability.descriptor.scope_type !== request.capability.scopeType
+      || currentCapability.descriptor.scope_id !== request.capability.scopeId
+    ) {
+      return continuation("capability_unavailable", resultMessage("The requested capability scope is no longer available."));
+    }
+    if (currentCapability.descriptor.state_revision !== request.capability.stateRevision) {
+      return continuation("stale_state", resultMessage("The page state changed while the tool was waiting to run."));
+    }
+    capability = currentCapability;
+    handler = capability.tools[request.toolName];
+    if (!handler) {
+      return continuation("capability_unavailable", resultMessage("The requested client tool is no longer available."));
     }
 
     try {
@@ -285,8 +301,16 @@ export class InferenceRuntime implements InferenceRuntimeClient {
         context: capability.getContext(),
       });
       if (signal.aborted) throw signal.reason ?? new DOMException("Aborted", "AbortError");
-      if (this.capabilities.get(request.capability.id)?.token !== capability.token || !capability.isAvailable()) {
+      const capabilityAfterExecution = this.capabilities.get(request.capability.id);
+      if (!capabilityAfterExecution || !capabilityAfterExecution.isAvailable()) {
         return continuation("capability_unavailable", resultMessage("The requested capability is no longer available."));
+      }
+      if (
+        capabilityAfterExecution.descriptor.version !== request.capability.version
+        || capabilityAfterExecution.descriptor.scope_type !== request.capability.scopeType
+        || capabilityAfterExecution.descriptor.scope_id !== request.capability.scopeId
+      ) {
+        return continuation("capability_unavailable", resultMessage("The requested capability scope is no longer available."));
       }
       return continuation("success", result);
     } catch (error) {

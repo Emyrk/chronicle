@@ -1,5 +1,5 @@
 import type { GridEditorItem, StripOrientation } from "@/components/layout/GridLayoutEditor";
-import { placeLayoutItem } from "@/components/layout/layoutGroups";
+import { compactLayoutItems, normalizeGroupedLayoutItems, placeLayoutItem } from "@/components/layout/layoutGroups";
 import { readLayoutAppearance, serializeLayoutLab, type LayoutAppearance, type LayoutLabExportV1 } from "@/features/layoutBook/parseLayout";
 import type { EventsPanelType } from "@/pages/Instance/EventsPanels";
 import type { PanelFilter } from "@/pages/Instance/EventsPanels/processors/filters";
@@ -34,6 +34,46 @@ export interface LayoutDraftCatalog {
 }
 
 export const MAX_LAYOUT_PANELS = 8;
+
+const LAYOUT_COLUMNS = 12;
+
+/** Applies the same bounds, group sizing, and vertical compaction used when a draft is rendered. */
+export function normalizeLayoutDraftItems(items: readonly GridEditorItem[]): GridEditorItem[] {
+  const normalizedWithGroups = items.map((item) => {
+    const isStrip = item.kind === "strip";
+    const isGroup = item.kind === "group";
+    const minW = isGroup ? LAYOUT_COLUMNS : item.minW ?? (isStrip ? 1 : 4);
+    const minH = isGroup ? item.minH ?? 1 : item.minH ?? (isStrip ? 1 : 4);
+    const w = isGroup ? LAYOUT_COLUMNS : Math.max(minW, Math.min(item.w, LAYOUT_COLUMNS));
+    const h = Math.max(minH, item.h);
+    const x = isGroup ? 0 : Math.max(0, Math.min(item.x, LAYOUT_COLUMNS - w));
+    const y = Math.max(0, item.y);
+    return {
+      ...item,
+      kind: isGroup ? "group" as const : isStrip ? "strip" as const : "panel" as const,
+      ...(isStrip ? { orientation: item.orientation ?? "horizontal" as const } : {}),
+      x,
+      y,
+      w,
+      h,
+      minW,
+      minH,
+      maxW: isGroup ? LAYOUT_COLUMNS : item.maxW ?? LAYOUT_COLUMNS,
+      maxH: isGroup ? item.maxH ?? h : item.maxH ?? 20,
+    };
+  });
+  const normalized = normalizeGroupedLayoutItems(normalizedWithGroups);
+  const scopes = new Map<string, GridEditorItem[]>();
+  for (const item of normalized) {
+    const scope = item.groupId ?? "__outer";
+    scopes.set(scope, [...(scopes.get(scope) ?? []), item]);
+  }
+  const out: GridEditorItem[] = [];
+  for (const [scope, scopedItems] of scopes) {
+    out.push(...compactLayoutItems(scopedItems, scope !== "__outer"));
+  }
+  return out.sort((left, right) => left.y - right.y || left.x - right.x || left.id.localeCompare(right.id));
+}
 
 /** Builds a draft from layout export JSON (Layout Book payloads, imports, exports). */
 export function layoutDraftFromExport(layout: LayoutLabExportV1): LayoutDraft {

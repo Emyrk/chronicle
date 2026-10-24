@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -14,11 +15,13 @@ import (
 
 const (
 	instancePageCapabilityID      = "instance-page"
-	instancePageCapabilityVersion = 1
+	instancePageCapabilityVersion = 2
 	maxClientCapabilities         = 8
 	maxClientSessionID            = 128
 	maxClientResult               = 64 << 10
 )
+
+var clientLayoutItemIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 
 type clientCapability struct {
 	ID            string
@@ -45,6 +48,10 @@ var instancePageClientTools = []clientToolDefinition{
 	{
 		ToolDefinition: ToolDefinition{Name: "query_panel", Description: "Query bounded data from a panel on the current authorized instance page.", Parameters: json.RawMessage(`{"type":"object","properties":{"panel_id":{"type":"string"},"view":{"type":"string","enum":["summary","top_entities"],"default":"top_entities"},"limit":{"type":"integer","minimum":1,"maximum":50}},"required":["panel_id"],"additionalProperties":false}`)},
 		CapabilityID:   instancePageCapabilityID, CapabilityVersion: instancePageCapabilityVersion, Effect: "read", Confirmation: "never",
+	},
+	{
+		ToolDefinition: ToolDefinition{Name: "update_instance_layout", Description: "Atomically edit the current authorized instance layout with explicit panel, strip, and group operations. Use IDs, panel types, strip types, and geometry from inspect_instance_ui. Installed custom panels are valid panel types. Nested groups, overlapping geometry, and fit changes are not supported. If the result is user_rejected or capability_unavailable, do not retry. After stale_state, inspect fresh UI state before retrying once.", Parameters: json.RawMessage(`{"type":"object","properties":{"expected_revision":{"type":"integer","minimum":0},"operations":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","properties":{"op":{"type":"string","enum":["add_panel","add_strip","remove_item","move_item","resize_item","add_group","update_group","move_into_group","move_out_of_group","set_appearance"]},"item_id":{"type":"string","pattern":"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"},"panel_type":{"type":"string","minLength":1,"maxLength":200},"strip_type":{"type":"string","minLength":1,"maxLength":100},"orientation":{"type":"string","enum":["horizontal","vertical"]},"group_id":{"type":"string","pattern":"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"},"title":{"type":"string","maxLength":100},"description":{"type":"string","maxLength":500},"accent_color":{"type":["string","null"],"maxLength":100},"collapsed_by_default":{"type":"boolean"},"x":{"type":"integer","minimum":0,"maximum":11},"y":{"type":"integer","minimum":0},"w":{"type":"integer","minimum":1,"maximum":12},"h":{"type":"integer","minimum":1,"maximum":100},"seamless":{"type":"boolean"}},"required":["op"],"additionalProperties":false}}},"required":["operations"],"additionalProperties":false}`)},
+		CapabilityID:   instancePageCapabilityID, CapabilityVersion: instancePageCapabilityVersion, Effect: "view_mutation", Confirmation: "unless_yolo",
 	},
 	{
 		ToolDefinition: ToolDefinition{Name: "update_instance_ui", Description: "Apply bounded view mutations to the current authorized instance page. If the result is user_rejected or capability_unavailable, do not retry the same mutation. After stale_state, inspect fresh UI state before retrying once.", Parameters: json.RawMessage(`{"type":"object","properties":{"expected_revision":{"type":"integer","minimum":0},"operations":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","properties":{"op":{"type":"string","enum":["apply_preset","set_panel","set_panel_option","set_panel_filters","select_encounters","select_players","select_enemies","set_time_range","clear_time_range"]},"preset_id":{"type":"string"},"panel_id":{"type":"string"},"panel_type":{"type":"string"},"option":{"type":["string","null"]},"filters":{"type":"array","maxItems":20},"ids":{"type":"array","items":{"type":"string"},"maxItems":100},"start_offset_ms":{"type":"integer","minimum":0},"end_offset_ms":{"type":"integer","minimum":0}},"required":["op"],"additionalProperties":false}}},"required":["operations"],"additionalProperties":false}`)},
@@ -130,6 +137,89 @@ func validateClientToolArguments(name, raw string) (json.RawMessage, error) {
 		}
 		if input.Limit < 0 || input.Limit > 50 {
 			return nil, errors.New("invalid query_panel limit")
+		}
+	case "update_instance_layout":
+		var input struct {
+			ExpectedRevision *int64            `json:"expected_revision"`
+			Operations       []json.RawMessage `json:"operations"`
+		}
+		if err := decodeStrict(raw, &input); err != nil || len(input.Operations) < 1 || len(input.Operations) > 20 || (input.ExpectedRevision != nil && *input.ExpectedRevision < 0) {
+			return nil, errors.New("invalid update_instance_layout arguments")
+		}
+		allowedOps := map[string]bool{"add_panel": true, "add_strip": true, "remove_item": true, "move_item": true, "resize_item": true, "add_group": true, "update_group": true, "move_into_group": true, "move_out_of_group": true, "set_appearance": true}
+		validID := clientLayoutItemIDPattern.MatchString
+		validCoordinate := func(value *int64) bool { return value != nil && *value >= 0 }
+		validWidth := func(value *int64) bool { return value != nil && *value >= 1 && *value <= 12 }
+		validHeight := func(value *int64) bool { return value != nil && *value >= 1 && *value <= 100 }
+		for _, rawOperation := range input.Operations {
+			var operation struct {
+				Op                 string          `json:"op"`
+				ItemID             string          `json:"item_id"`
+				PanelType          string          `json:"panel_type"`
+				StripType          string          `json:"strip_type"`
+				Orientation        string          `json:"orientation"`
+				GroupID            string          `json:"group_id"`
+				Title              *string         `json:"title"`
+				Description        *string         `json:"description"`
+				AccentColor        json.RawMessage `json:"accent_color"`
+				CollapsedByDefault *bool           `json:"collapsed_by_default"`
+				X                  *int64          `json:"x"`
+				Y                  *int64          `json:"y"`
+				W                  *int64          `json:"w"`
+				H                  *int64          `json:"h"`
+				Seamless           *bool           `json:"seamless"`
+			}
+			if err := decodeStrict(string(rawOperation), &operation); err != nil || !allowedOps[operation.Op] || len(operation.PanelType) > 200 || len(operation.StripType) > 100 || (operation.Orientation != "" && operation.Orientation != "horizontal" && operation.Orientation != "vertical") || (operation.Title != nil && len(*operation.Title) > 100) || (operation.Description != nil && len(*operation.Description) > 500) {
+				return nil, errors.New("invalid update_instance_layout operation")
+			}
+			var operationFields map[string]json.RawMessage
+			if json.Unmarshal(rawOperation, &operationFields) != nil || string(operationFields["title"]) == "null" || string(operationFields["description"]) == "null" {
+				return nil, errors.New("invalid update_instance_layout text")
+			}
+			if len(operation.AccentColor) > 0 && string(operation.AccentColor) != "null" {
+				var accentColor string
+				if json.Unmarshal(operation.AccentColor, &accentColor) != nil || len(accentColor) > 100 {
+					return nil, errors.New("invalid update_instance_layout accent color")
+				}
+			}
+			switch operation.Op {
+			case "add_panel":
+				if !validID(operation.ItemID) || strings.TrimSpace(operation.PanelType) == "" || !validCoordinate(operation.X) || operation.X == nil || *operation.X > 11 || !validCoordinate(operation.Y) || !validWidth(operation.W) || !validHeight(operation.H) || *operation.X+*operation.W > 12 {
+					return nil, errors.New("invalid add_panel operation")
+				}
+			case "add_strip":
+				if !validID(operation.ItemID) || strings.TrimSpace(operation.StripType) == "" || !validCoordinate(operation.X) || operation.X == nil || *operation.X > 11 || !validCoordinate(operation.Y) || (operation.W != nil && !validWidth(operation.W)) || (operation.H != nil && !validHeight(operation.H)) || (operation.W != nil && *operation.X+*operation.W > 12) {
+					return nil, errors.New("invalid add_strip operation")
+				}
+			case "remove_item":
+				if !validID(operation.ItemID) {
+					return nil, errors.New("invalid remove_item operation")
+				}
+			case "move_item", "move_out_of_group":
+				if !validID(operation.ItemID) || !validCoordinate(operation.X) || operation.X == nil || *operation.X > 11 || !validCoordinate(operation.Y) {
+					return nil, errors.New("invalid move operation")
+				}
+			case "resize_item":
+				if !validID(operation.ItemID) || !validWidth(operation.W) || !validHeight(operation.H) {
+					return nil, errors.New("invalid resize_item operation")
+				}
+			case "add_group":
+				if !validID(operation.ItemID) || operation.Title == nil || strings.TrimSpace(*operation.Title) == "" || !validCoordinate(operation.X) || *operation.X != 0 || !validCoordinate(operation.Y) {
+					return nil, errors.New("invalid add_group operation")
+				}
+			case "update_group":
+				if !validID(operation.ItemID) || (operation.Title == nil && operation.Description == nil && len(operation.AccentColor) == 0 && operation.CollapsedByDefault == nil) {
+					return nil, errors.New("invalid update_group operation")
+				}
+			case "move_into_group":
+				if !validID(operation.ItemID) || !validID(operation.GroupID) || !validCoordinate(operation.X) || operation.X == nil || *operation.X > 11 || !validCoordinate(operation.Y) {
+					return nil, errors.New("invalid move_into_group operation")
+				}
+			case "set_appearance":
+				if operation.Seamless == nil {
+					return nil, errors.New("invalid set_appearance operation")
+				}
+			}
 		}
 	case "update_instance_ui":
 		var input struct {
