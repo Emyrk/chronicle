@@ -106,10 +106,11 @@ function Content() {
   const trash = stage(deaths.left + deaths.width - 20, deaths.top + 16);
   const resizeFrom = stage(timelineStart.left + timelineStart.width - 8, timelineStart.top + timelineStart.height - 8);
   const resizeTo = stage(timelineEnd.left + timelineEnd.width - 8, timelineEnd.top + timelineEnd.height - 8);
-  const addPanel = stage(PAD + 196, GRID_TOP + 20);
-  const saveAs = stage(WINDOW.width - PAD - 236, GRID_TOP + 20);
+  // Centers of the toolbar's "+ Panel" and "Save as…" buttons.
+  const addPanel = stage(PAD + 263, GRID_TOP + 20);
+  const saveAs = stage(WINDOW.width - PAD - 276, GRID_TOP + 20);
   const saveButton = stage(DRAWER.left + DRAWER.width - 100, WINDOW.height - 26);
-  const slotButton = stage(DRAWER.left + DRAWER.width - 92, LIST_TOP + ROW * 4 + 90);
+  const slotButton = stage(DRAWER.left + DRAWER.width - 65, LIST_TOP + ROW * 4 + 90);
   const closeButton = stage(DRAWER.left + DRAWER.width - 22, BROWSER_BAR + 22);
 
   const keys = [0, 110, REMOVE - 22, REMOVE, RESIZE - 6, RESIZE, RESIZE_END, ADD - 24, ADD, SAVE_AS - 24, SAVE_AS, SAVE - 30, SAVE, SLOT - 26, SLOT, CLOSE - 22, CLOSE];
