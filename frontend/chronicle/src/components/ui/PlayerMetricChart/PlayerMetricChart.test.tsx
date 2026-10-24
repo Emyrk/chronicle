@@ -19,6 +19,7 @@ const player: PlayerMetricChartRow = {
 function renderRow(
   animateValues: boolean,
   rowPlayer: PlayerMetricChartRow = player,
+  showStackedColumn = false,
 ): string {
   return renderToStaticMarkup(
     <PlayerMetricRow
@@ -28,6 +29,7 @@ function renderRow(
       summedValue={1_000}
       showRank
       type="damage"
+      showStackedColumn={showStackedColumn}
       animateValues={animateValues}
     />,
   );
@@ -73,6 +75,27 @@ describe("PlayerMetricRow", () => {
     const markup = renderRow(false);
 
     expect(markup).not.toContain("min-width:88px");
+  });
+
+  it("reserves an empty stacked percentage column for rows without a stacked value", () => {
+    const markup = renderRow(false, {
+      ...player,
+      stackedValue: undefined,
+      displayStackedValue: undefined,
+    }, true);
+
+    expect(markup).toContain("data-stacked-percentage");
+    expect(markup).not.toContain("% overheal");
+  });
+
+  it("does not reserve the stacked percentage column when the chart does not need it", () => {
+    const markup = renderRow(false, {
+      ...player,
+      stackedValue: undefined,
+      displayStackedValue: undefined,
+    });
+
+    expect(markup).not.toContain("data-stacked-percentage");
   });
 
   it("renders the display value instead of the raw geometry value", () => {

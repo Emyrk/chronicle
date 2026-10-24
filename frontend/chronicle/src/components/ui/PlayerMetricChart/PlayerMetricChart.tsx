@@ -150,6 +150,10 @@ export function PlayerMetricChart({
     [enrichedData, perSecond, duration_millis],
   )
 
+  const showStackedColumn = !dense && chartData.some(
+    (player) => player.stackedValue !== undefined && player.stackedValue > 0,
+  )
+
   const handleTogglePin = (playerId: string) => {
     setPinnedPlayerIds(prev => {
       const next = new Set(prev)
@@ -195,6 +199,7 @@ export function PlayerMetricChart({
             onTogglePin={() => handleTogglePin(player.playerID)}
             panelTitle={panelTitle}
             breakout={disableInteractions ? undefined : breakout}
+            showStackedColumn={showStackedColumn}
             stackedLabel={stackedLabel}
             isFirstRow={index === 0}
             onCtrlClick={onRowCtrlClick ? (e) => onRowCtrlClick(player.playerID, e) : undefined}
@@ -225,6 +230,8 @@ export interface PlayerMetricRowProps {
   onTogglePin?: () => void
   panelTitle?: string
   breakout?: BreakoutFn
+  /** Reserve the stacked percentage column so values align across every row. */
+  showStackedColumn?: boolean
   stackedLabel?: string
   /** Whether this is the first row (used for tutorial highlight) */
   isFirstRow?: boolean
@@ -417,6 +424,7 @@ export function PlayerMetricRow({
   onTogglePin,
   panelTitle,
   breakout,
+  showStackedColumn = false,
   stackedLabel = 'Overheal',
   isFirstRow = false,
   onCtrlClick: onCtrlClickProp,
@@ -752,12 +760,14 @@ export function PlayerMetricRow({
           {((player.value/summedValue)*100).toFixed(dense ? 1 : 2)}%
         </span>
 
-        {/* Stacked percentage - shown when stackedValue exists */}
-        {!dense && player.stackedValue !== undefined && player.stackedValue > 0 && (() => {
-          const totalWithStacked = player.value + player.stackedValue;
-          const stackedPct = totalWithStacked > 0 ? (player.stackedValue / totalWithStacked) * 100 : 0;
+        {/* Reserve this column for every row when any row has a stacked value. */}
+        {!dense && showStackedColumn && (() => {
+          const hasStackedValue = player.stackedValue !== undefined && player.stackedValue > 0;
+          const totalWithStacked = player.value + (player.stackedValue ?? 0);
+          const stackedPct = totalWithStacked > 0 ? ((player.stackedValue ?? 0) / totalWithStacked) * 100 : 0;
           return (
             <span
+              data-stacked-percentage
               className='text-2xs tabular-nums'
               style={{
                 width: '50px',
@@ -767,9 +777,9 @@ export function PlayerMetricRow({
                 opacity: 0.7,
                 fontFamily: 'var(--font-mono)',
               }}
-              title={`${stackedPct.toFixed(1)}% ${stackedLabel.toLowerCase()}`}
+              title={hasStackedValue ? `${stackedPct.toFixed(1)}% ${stackedLabel.toLowerCase()}` : undefined}
             >
-              ({stackedPct.toFixed(0)}%)
+              {hasStackedValue ? `(${stackedPct.toFixed(0)}%)` : null}
             </span>
           );
         })()}
