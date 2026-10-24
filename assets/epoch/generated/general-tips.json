@@ -31,9 +31,9 @@
   },
   {
     "id": "custom-layouts",
-    "content": "Arrange panels into your own layout in the Layout Lab, then use it on any raid you open.",
-    "href": "/account/layout-lab",
-    "actionLabel": "Open the Layout Lab"
+    "content": "Save your own panel layouts in the Layout Book and assign them to hotkeys for any raid.",
+    "href": "/account/layout-book",
+    "actionLabel": "Open the Layout Book"
   },
   {
     "id": "share-layout",

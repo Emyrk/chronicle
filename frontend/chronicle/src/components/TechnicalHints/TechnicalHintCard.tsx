@@ -51,7 +51,7 @@ function HintTitle({ hint }: { hint: TechnicalHint }) {
   if (!hint.panel_label) return <span className="font-bold">{hint.title}</span>;
   return (
     <>
-      <span className="font-normal text-white/75">Check out the </span>
+      <span className="font-normal text-white/75">The </span>
       <strong className="font-bold">{hint.panel_label}</strong>
       <span className="font-normal text-white/75"> panel</span>
     </>
