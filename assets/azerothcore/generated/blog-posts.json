@@ -89,7 +89,8 @@
     "rarity": "rare",
     "tag": "Integration",
     "icon": "inv_misc_coin_01",
-    "flavor": "That pull was expensive!"
+    "flavor": "That pull was expensive!",
+    "hintEnabled": false
   },
   {
     "id": "gear-bis-progression",
@@ -200,6 +201,7 @@
     "publishedAt": "2026-07-20",
     "rarity": "rare",
     "tag": "Feature",
-    "icon": "spell_holy_powerwordshield"
+    "icon": "spell_holy_powerwordshield",
+    "hintEnabled": false
   }
 ]
