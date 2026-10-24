@@ -26,7 +26,7 @@ function hashString(value: string): number {
  */
 export function getRecentRaidAdInsertions(instanceIDs: string[], columnCount: number): number[] {
   const insertions: number[] = [];
-  const gaps = [4, 5, 6, 7, 8];
+  const gaps = [5, 6, 7, 8, 9, 10];
   const eligibleGaps = columnCount <= 1
     ? gaps
     : gaps.filter((gap) => (gap + 1) % columnCount !== 0);
