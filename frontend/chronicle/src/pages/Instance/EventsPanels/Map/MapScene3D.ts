@@ -4,6 +4,7 @@ import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import type { MeshBVH } from "three-mesh-bvh";
 import { mapAssetUrl, type WowMapFloorBounds, type WowMapLayer, type WowMapMeshLiquid } from "@/pages/Technical/mapGallery";
+import type { MapCameraPose } from "./cameraPath";
 import { CAPSULE_AVATAR, WALK_AVATAR_CLIPS, walkAvatarUrl, type WalkAvatarState } from "./walkAvatars";
 import {
   AIM_AHEAD_FRACTION,
@@ -877,6 +878,8 @@ export class MapScene3D {
   private readonly keyWindow: Window;
   private readonly heldActions = new Set<MapControlAction>();
   private mobileInput: MobileMapInput = IDLE_MOBILE_MAP_INPUT;
+  private walkCaptureActive = false;
+  private walkCaptureElapsedMs: number | null = null;
   private walk: WalkState | null = null;
   private walkAvatarId = CAPSULE_AVATAR;
   private adStrafe = DEFAULT_AD_STRAFE;
@@ -1424,6 +1427,38 @@ export class MapScene3D {
   /** Whether the Director is the one moving the camera right now. */
   private directing(): boolean {
     return this.director !== null && this.dungeonMesh !== null && !this.directorPaused && this.cameraMove === null && this.walk === null;
+  }
+
+  /** Captures the exact orbit-camera pose for camera marks and authored paths. */
+  captureCameraPose(): MapCameraPose {
+    return {
+      position: this.camera.position.toArray(),
+      target: this.controls.target.toArray(),
+      fov: this.camera.fov,
+      near: this.camera.near,
+      far: this.camera.far,
+    };
+  }
+
+  /** Applies an authored orbit-camera pose and takes control from automated camera modes. */
+  applyCameraPose(pose: MapCameraPose, options: { pauseDirector?: boolean; constrain?: boolean } = {}) {
+    if (this.walk) this.stopWalk();
+    if (options.pauseDirector !== false) {
+      this.directorPaused = true;
+      this.directorRunning = false;
+    }
+    this.cameraMove = null;
+    this.viewAnimation = null;
+    this.camera.position.fromArray(pose.position);
+    this.controls.target.fromArray(pose.target);
+    if (pose.fov !== undefined) this.camera.fov = pose.fov;
+    if (pose.near !== undefined) this.camera.near = pose.near;
+    if (pose.far !== undefined) this.camera.far = pose.far;
+    this.camera.updateProjectionMatrix();
+    this.controls.update();
+    if (options.constrain !== false) this.constrainCamera();
+    this.updateUnitScale();
+    this.requestRender();
   }
 
   /**
@@ -3861,6 +3896,8 @@ export class MapScene3D {
   }
 
   setWalking(on: boolean) {
+    this.walkCaptureActive = false;
+    this.walkCaptureElapsedMs = null;
     if (on === (this.walk !== null)) return;
     if (on) this.startWalk();
     else this.stopWalk();
@@ -3952,6 +3989,45 @@ export class MapScene3D {
     this.constrainCamera();
     this.updateUnitScale();
     this.onWalkChange(false);
+    this.requestRender();
+  }
+
+  /** Deterministically advances first-person walking for frame-by-frame capture. */
+  setWalkCaptureFrame(elapsedMs: number, input: MobileMapInput, startGuid?: string, lookAtGuid?: string, preRollMs = 0, preRollInput: MobileMapInput = IDLE_MOBILE_MAP_INPUT) {
+    const restart = this.walk === null || this.walkCaptureElapsedMs === null || elapsedMs < this.walkCaptureElapsedMs;
+    if (restart) {
+      if (this.walk) this.stopWalk();
+      this.startWalk();
+      const walk = this.walk;
+      const start = startGuid ? this.units.get(startGuid) : null;
+      const lookAt = lookAtGuid ? this.units.get(lookAtGuid) : null;
+      const scale = this.yardScale();
+      if (walk && start && lookAt && scale !== null) {
+        const away = new THREE.Vector3().copy(start.base).sub(lookAt.base).setY(0);
+        if (away.lengthSq() > 1e-6) away.normalize().multiplyScalar(1.5 * scale);
+        walk.position.copy(start.base).add(away);
+        walk.position.y = this.floorHeights.heightAt("walk-capture", walk.position.x, walk.position.z, this.cameraCeiling());
+        const dx = lookAt.base.x - walk.position.x;
+        const dz = lookAt.base.z - walk.position.z;
+        walk.yaw = Math.atan2(-dx, -dz);
+        walk.camYaw = walk.yaw;
+      }
+      this.walkCaptureElapsedMs = 0;
+      if (this.walk) {
+        this.mobileInput = clampMobileMapInput(preRollInput);
+        this.walk.lastMs = 1;
+        for (let at = 101; at <= preRollMs + 1; at += 100) this.updateWalk(at);
+        this.walk.lastMs = elapsedMs + 1;
+      }
+    }
+    const walk = this.walk;
+    if (!walk) return;
+    this.walkCaptureActive = true;
+    this.mobileInput = clampMobileMapInput(input);
+    walk.camDistance = 0;
+    walk.camPitch = 0;
+    this.updateWalk(elapsedMs + 1);
+    this.walkCaptureElapsedMs = elapsedMs;
     this.requestRender();
   }
 
@@ -4155,13 +4231,13 @@ export class MapScene3D {
       const moving = this.updateCameraMove(now);
       const directing = this.updateDirector(now);
       const keyMoving = this.updateKeyboardCamera(now);
-      const walking = this.updateWalk(now);
+      const walking = this.walkCaptureActive ? this.walk !== null : this.updateWalk(now);
       const presencesMoving = this.updateRemotePresences(now);
       // Damping coasts the camera to a stop after a gesture; update() reports
       // whether it is still moving, so the loop idles again once it settles.
       // Walking, the character places the camera; OrbitControls would clamp it back.
       const damping = !walking && this.controls.update();
-      const animating = this.updateEffects(now) || reframing || moving || directing || keyMoving || walking || presencesMoving || damping;
+      const animating = this.updateEffects(now) || reframing || moving || directing || keyMoving || (!this.walkCaptureActive && walking) || presencesMoving || damping;
       this.updateTokens(now);
       this.updateBars();
       this.updateEffectHover();

@@ -52,6 +52,7 @@ import FocusModeVideo from "../../../frontend/chronicle/src/pages/Instance/video
 import ReplayExplainerVideo from "../../../frontend/chronicle/src/pages/Instance/videos/ReplayExplainer.video";
 import FavoritesPromo from "./FavoritesPromo";
 import CooldownUsagePromo from "./CooldownUsagePromo";
+import Maps3DAnnouncement, { MAPS_3D_ANNOUNCEMENT_DURATION } from "./Maps3DAnnouncement";
 
 /**
  * Studio registration for Chronicle's feature demos and in-app explainer
@@ -66,6 +67,7 @@ export const RemotionRoot: React.FC = () => {
       <Folder name="FeatureDemos">
         <Composition id="FavoritesPromo" component={FavoritesPromo} durationInFrames={620} fps={30} width={1280} height={720} />
         <Composition id="CooldownUsagePromo" component={CooldownUsagePromo} durationInFrames={800} fps={30} width={1280} height={720} />
+        <Composition id="Maps3DAnnouncement" component={Maps3DAnnouncement} durationInFrames={MAPS_3D_ANNOUNCEMENT_DURATION} fps={30} width={1280} height={720} />
         <Composition id="EncounterPhasesDiscord" component={EncounterPhasesDiscordVideo} durationInFrames={650} fps={30} width={1280} height={720} />
         <Composition id="RankedSpeedrunTiming" component={RankedSpeedrunTimingVideo} durationInFrames={710} fps={30} width={1280} height={720} />
         <Composition id="FocusMode" component={FocusModeVideo} durationInFrames={630} fps={30} width={1280} height={720} />
