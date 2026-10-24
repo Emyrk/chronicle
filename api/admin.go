@@ -858,13 +858,15 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 		resp.AvailableFormats = config.AvailableFormats
 	}
 
-	// External linking is advertised only when the deployment has a provider
-	// AND the tenant opted in to showing it.
+	// The zug-zug sync card requires both tenant opt-in and a configured
+	// deployment provider. Photo proof uses the tenant config directly.
 	if t != nil {
-		if el := chroniclesdk.ParseExternalLinking(t.ExternalLinking); el != nil && el.Show {
-			if pub := a.Opts.ExternalVerification.Public(); pub != nil {
-				pub.Callout = el.Callout
-				resp.ExternalVerification = pub
+		if el := chroniclesdk.ParseExternalLinking(t.ExternalLinking); el != nil {
+			if method := el.Methods["zug-zug"]; method.Enabled {
+				if pub := a.Opts.ExternalVerification.Public(); pub != nil && pub.Type == "zug-zug" {
+					pub.Callout = method.Callout
+					resp.ExternalVerification = pub
+				}
 			}
 		}
 	}

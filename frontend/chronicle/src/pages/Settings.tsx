@@ -72,6 +72,7 @@ import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
 import { InferenceSettings } from "@/features/chat/InferenceSettings";
 import { FavoritesList } from "@/components/Favorites";
+import { PhotoProofCard } from "./Settings/PhotoProof";
 
 export { BillingSettings } from "./Settings/BillingSettings";
 export { CustomPanelSettings } from "./Settings/CustomPanelSettings";
@@ -442,6 +443,8 @@ function ExternalVerificationCard() {
 }
 
 export function CharacterSettings() {
+  const { data: siteConfig } = useSiteConfig();
+  const photoProof = siteConfig?.tenant?.external_linking?.methods?.["photo-proof"];
   const { data: characters, isLoading } = useMyCharacters();
   const favorites = useMyFavorites();
   const setPrimary = useSetPrimaryCharacter();
@@ -478,6 +481,7 @@ export function CharacterSettings() {
       <FavoritesList data={favorites.data} isLoading={favorites.isLoading} />
 
       <ExternalVerificationCard />
+      {photoProof?.enabled && <PhotoProofCard callout={photoProof.callout} />}
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading characters...</p>

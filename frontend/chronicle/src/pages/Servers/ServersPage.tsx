@@ -207,9 +207,11 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
   const [additionalFlavor, setAdditionalFlavor] = useState<string[]>([...(tenant?.additional_flavor ?? [])]);
   const { data: allFlavors = [] } = useFlavors();
 
-  // External character linking visibility
-  const [showExternalLinking, setShowExternalLinking] = useState(tenant?.external_linking?.show ?? false);
-  const [externalLinkingCallout, setExternalLinkingCallout] = useState(tenant?.external_linking?.callout ?? "");
+  // Each character linking method has independent visibility and callout.
+  const [zugZugEnabled, setZugZugEnabled] = useState(tenant?.external_linking?.methods?.["zug-zug"]?.enabled ?? false);
+  const [zugZugCallout, setZugZugCallout] = useState(tenant?.external_linking?.methods?.["zug-zug"]?.callout ?? "");
+  const [photoProofEnabled, setPhotoProofEnabled] = useState(tenant?.external_linking?.methods?.["photo-proof"]?.enabled ?? false);
+  const [photoProofCallout, setPhotoProofCallout] = useState(tenant?.external_linking?.methods?.["photo-proof"]?.callout ?? "");
 
   // Branding fields
   const [squareLogo, setSquareLogo] = useState(tenant?.branding?.square_logo ?? "");
@@ -254,8 +256,10 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
         available_formats: availableFormats,
         additional_flavor: additionalFlavor,
         external_linking: {
-          show: showExternalLinking,
-          callout: externalLinkingCallout.trim() || undefined,
+          methods: {
+            "zug-zug": { enabled: zugZugEnabled, callout: zugZugCallout.trim() || undefined },
+            "photo-proof": { enabled: photoProofEnabled, callout: photoProofCallout.trim() || undefined },
+          },
         },
       },
       { onSuccess: onDone },
@@ -404,21 +408,37 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
           </p>
         </div>
       </div>
-      <div className="pt-2 border-t space-y-2">
+      <div className="pt-2 border-t space-y-3">
         <p className="text-xs font-medium text-muted-foreground">External Character Linking</p>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={showExternalLinking} onChange={(e) => setShowExternalLinking(e.target.checked)} />
-          Show external linking on the account characters page
-        </label>
-        <input
-          className={inputClass}
-          placeholder='Callout (optional), e.g. Linking is only supported for members of the guild "Zug Zug"'
-          value={externalLinkingCallout}
-          onChange={(e) => setExternalLinkingCallout(e.target.value)}
-        />
-        <p className="text-[10px] text-muted-foreground">
-          Only takes effect when the deployment has an external verification provider configured.
-        </p>
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={zugZugEnabled} onChange={(e) => setZugZugEnabled(e.target.checked)} />
+            Zug Zug verification
+          </label>
+          <input
+            className={inputClass}
+            aria-label="Zug Zug linking callout"
+            placeholder="Zug Zug callout (optional)"
+            value={zugZugCallout}
+            onChange={(e) => setZugZugCallout(e.target.value)}
+          />
+          <p className="text-[10px] text-muted-foreground">
+            Only shown when the deployment has a Zug Zug verification provider configured.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={photoProofEnabled} onChange={(e) => setPhotoProofEnabled(e.target.checked)} />
+            Photo proof
+          </label>
+          <input
+            className={inputClass}
+            aria-label="Photo proof linking callout"
+            placeholder="Photo proof callout (optional)"
+            value={photoProofCallout}
+            onChange={(e) => setPhotoProofCallout(e.target.value)}
+          />
+        </div>
       </div>
       <div className="pt-2 border-t space-y-2">
         <p className="text-xs font-medium text-muted-foreground">Branding</p>

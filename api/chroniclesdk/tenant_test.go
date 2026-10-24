@@ -62,3 +62,26 @@ func TestTenantAdsEnabled(t *testing.T) {
 	require.False(t, unchangedParams.AdsEnabled.Valid)
 	require.Nil(t, unchangedParams.DisabledAds)
 }
+
+func TestTenantExternalLinkingMethods(t *testing.T) {
+	t.Parallel()
+
+	methods := map[string]chroniclesdk.ExternalLinkingMethod{
+		"zug-zug":     {Enabled: true, Callout: "Guild only"},
+		"photo-proof": {Enabled: false, Callout: "Upload a photo"},
+	}
+	req := chroniclesdk.UpsertTenantRequest{
+		ExternalLinking: &chroniclesdk.ExternalLinking{Methods: methods},
+	}
+	stored := req.ToInsertParams().ExternalLinking
+	parsed := chroniclesdk.ParseExternalLinking(stored)
+	require.NotNil(t, parsed)
+	require.Equal(t, methods, parsed.Methods)
+	require.Equal(t, stored, req.ToUpdateParams().ExternalLinking)
+
+	converted := chroniclesdk.TenantFromDB(database.Tenant{ExternalLinking: stored})
+	require.Equal(t, methods, converted.ExternalLinking.Methods)
+	require.Nil(t, chroniclesdk.ParseExternalLinking(nil))
+	require.Nil(t, chroniclesdk.ParseExternalLinking([]byte("null")))
+	require.Nil(t, chroniclesdk.ParseExternalLinking([]byte("{")))
+}

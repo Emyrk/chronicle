@@ -1176,19 +1176,19 @@ export const EndStates: EndState[] = ["reset", "slain", "timeout"];
 
 // From chroniclesdk/tenant.go
 /**
- * ExternalLinking is a tenant's visibility settings for external character
- * linking. The provider itself is deployment-level (env vars); tenants opt
- * in to showing the linking UI.
+ * ExternalLinking configures each character linking method for a tenant.
+ * The zug-zug provider credentials remain deployment-level (env vars).
  */
 export interface ExternalLinking {
-    /**
-     * Show enables the external linking card on the account characters page.
-     */
-    readonly show: boolean;
-    /**
-     * Callout is an optional message shown alongside the linking card, e.g.
-     * "Linking is only supported for members of the guild Zug Zug".
-     */
+    readonly methods: Record<string, ExternalLinkingMethod>;
+}
+
+// From chroniclesdk/tenant.go
+/**
+ * ExternalLinkingMethod controls a method's visibility and its own callout.
+ */
+export interface ExternalLinkingMethod {
+    readonly enabled: boolean;
     readonly callout?: string;
 }
 
