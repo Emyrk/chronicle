@@ -44,6 +44,18 @@ function HintContextFlair({ context, compact }: { context: TechnicalHintContext;
   );
 }
 
+/** Panel hints bold only the panel name so readers know exactly what to open. */
+function HintTitle({ hint }: { hint: TechnicalHint }) {
+  if (!hint.panel_label) return <span className="font-bold">{hint.title}</span>;
+  return (
+    <>
+      <span className="font-normal text-white/75">Check out the </span>
+      <strong className="font-bold">{hint.panel_label}</strong>
+      <span className="font-normal text-white/75"> panel</span>
+    </>
+  );
+}
+
 function HintIcon({ hint, size }: { hint: TechnicalHint; size: number }) {
   if (hint.icon) return <ItemIcon icon={hint.icon} size={size} className="border-white/20" />;
   return (
@@ -101,8 +113,8 @@ export function TechnicalHintCard({
               <p className="shrink-0 text-[10px] font-medium uppercase tracking-[0.14em] text-amber-300/80">{kindLabel(hint.kind)}</p>
               {hint.context && <HintContextFlair context={hint.context} compact />}
             </div>
-            <h3 className="truncate text-sm font-bold text-white drop-shadow-lg transition-colors group-hover:text-amber-300">
-              {hint.title}
+            <h3 className="truncate text-sm text-white drop-shadow-lg transition-colors group-hover:text-amber-300">
+              <HintTitle hint={hint} />
             </h3>
             <p className="line-clamp-2 text-xs text-white/70 drop-shadow">{hint.body}</p>
           </div>
@@ -113,8 +125,8 @@ export function TechnicalHintCard({
           <div className="flex items-start gap-3">
             <HintIcon hint={hint} size={36} />
             <div className="min-w-0">
-              <h3 className="font-bold text-base leading-tight text-white drop-shadow-lg transition-colors group-hover:text-amber-300">
-                {hint.title}
+              <h3 className="text-base leading-tight text-white drop-shadow-lg transition-colors group-hover:text-amber-300">
+                <HintTitle hint={hint} />
               </h3>
               <p className="mt-0.5 text-xs text-amber-300/90 drop-shadow">{kindLabel(hint.kind)}</p>
             </div>

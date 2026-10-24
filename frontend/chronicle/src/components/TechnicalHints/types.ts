@@ -14,6 +14,8 @@ export interface TechnicalHint {
   icon?: string;
   image_url?: string;
   panel?: string;
+  /** The panel name as shown in the panel picker, emphasized in the card title. */
+  panel_label?: string;
   blog_id?: string;
   tags?: string[];
   generated_at?: string;
