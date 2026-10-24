@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue, ty
 import { createPortal } from "react-dom";
 import { useSearchParams, Link } from "react-router-dom";
 import { useSession, useCreateShare, fetchSharedView, toastError, type UserPanelLayout } from "@/api/queries";
-import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, LayoutPanelTop, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown, RotateCcw, Maximize2, Minimize2, LockKeyhole } from "lucide-react";
+import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, LayoutPanelTop, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown, RotateCcw, Maximize2, Minimize2, LockKeyhole, Pencil } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -54,6 +54,10 @@ import type { StripType } from "./EventsPanels/Strips/types";
 import { PanelTimingProvider, PanelTimingDisplay, PanelTimingResetter } from "./EventsPanels/PanelTimingContext";
 import { ChartDataRegistryProvider } from "./EventsPanels/ChartDataRegistry";
 import { InstanceInferenceCapability } from "./inference/InstanceInferenceCapability";
+import { LayoutEditorCanvas } from "@/features/layoutEditor/LayoutEditorCanvas";
+import { LayoutEditToolbar } from "@/features/layoutEditor/LayoutEditToolbar";
+import { layoutDraftToExport, type LayoutDraft } from "@/features/layoutEditor/layoutDraft";
+import { useLayoutDraft, type LayoutDraftController } from "@/features/layoutEditor/useLayoutDraft";
 import type { InstanceUIState } from "./inference/instanceInferenceTools";
 import { PanelExplainerView } from "./PanelExplainer";
 import { PlayerTimelineHelp } from "./Pages/PlayerTimelinePage/help/PlayerTimelineHelp";
@@ -89,7 +93,7 @@ import { DuplicatesBadge } from "./DuplicatesBadge";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import { formatClassLabel, formatRaceLabel } from "../ArmoryPage/characterDisplay";
 import { LAYOUT_ACTION_BAR_KEYS, type LayoutActionBarSlots } from "@/features/layoutBook/layoutBookStore";
-import { parsePanelLayout, readLayoutAppearance, type LayoutAppearance } from "@/features/layoutBook/parseLayout";
+import { parsePanelLayout, readLayoutAppearance, type LayoutAppearance, type LayoutLabExportV1 } from "@/features/layoutBook/parseLayout";
 import {
   ALTERNATE_INSTANCE_LAYOUT_ITEMS,
   DEFAULT_INSTANCE_PANEL_FILTERS,
@@ -997,6 +1001,14 @@ export interface SharedViewPayload {
 }
 
 const PANEL_ROW_HEIGHT_PX = 96;
+
+const EMPTY_LAYOUT_DRAFT: LayoutDraft = {
+  items: [],
+  panelTypesById: {},
+  panelOptionsById: {},
+  panelFiltersById: {},
+  appearance: {},
+};
 const GRID_COLS = 12;
 
 function orderLayoutItems(items: GridEditorItem[]): GridEditorItem[] {
@@ -1568,6 +1580,15 @@ interface EncounterDetailProps {
   layoutPopup: LayoutPopupSession | null;
   actionBarSlots: LayoutActionBarSlots;
   layouts: readonly UserPanelLayout[];
+  /** Enters layout Edit Mode; omitted when the layout can't be edited here. */
+  onEditLayout?: () => void;
+  /** Present while in layout Edit Mode: the grid is replaced by the editor. */
+  layoutEditor?: {
+    controller: LayoutDraftController;
+    dirty: boolean;
+    onCancel: () => void;
+    onDone: () => void;
+  };
 }
 
 function EncounterDetail({
@@ -1606,6 +1627,8 @@ function EncounterDetail({
   layoutPopup,
   actionBarSlots,
   layouts,
+  onEditLayout,
+  layoutEditor,
 }: EncounterDetailProps) {
   const availablePresetLayouts = getAvailablePresetLayouts(instance.capabilities ?? [], isMobile);
   const viewportHeight = useViewportHeight(typeof window === "undefined" ? null : window);
@@ -2175,8 +2198,10 @@ function EncounterDetail({
             key={preset.id}
             type="button"
             onClick={() => onPresetChange(preset.id)}
+            disabled={Boolean(layoutEditor)}
+            title={layoutEditor ? "Finish editing the layout to switch presets" : undefined}
             className={cn(
-              "px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors",
+              "px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors disabled:pointer-events-none disabled:opacity-50",
               activePresetId === preset.id
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted",
@@ -2189,6 +2214,17 @@ function EncounterDetail({
         {!isMobile && (
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
           {focused && focusActions}
+          {onEditLayout && !layoutEditor && (
+            <button
+              type="button"
+              onClick={onEditLayout}
+              title="Edit layout: move, resize, add, and remove panels (Shift+E)"
+              className="flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <Pencil className="h-4 w-4" />
+              Edit layout
+            </button>
+          )}
           <button
             type="button"
             onClick={() => onFocusedChange(!focused)}
@@ -2214,6 +2250,56 @@ function EncounterDetail({
           <PanelTimingResetter encounters={encounters} />
 
           <PortalContainerProvider container={typeof document === "undefined" ? null : document.body}>
+            {layoutEditor ? (
+              <div className={cn("space-y-3", focused && "min-h-0 flex-1 overflow-auto styled-scrollbar")}>
+                <LayoutEditToolbar
+                  controller={layoutEditor.controller}
+                  dirty={layoutEditor.dirty}
+                  onCancel={layoutEditor.onCancel}
+                  onDone={layoutEditor.onDone}
+                  className="sticky top-0 z-40 backdrop-blur"
+                />
+                <LayoutEditorCanvas
+                  controller={layoutEditor.controller}
+                  renderTile={(item) => {
+                    const { controller } = layoutEditor;
+                    const stripType = item.kind === "strip" ? resolveStripType(item.stripType) : null;
+                    const index = renderableLayoutItems(controller.draft.items).findIndex((candidate) => candidate.id === item.id);
+                    return stripType ? (
+                      <Strip
+                        stripType={stripType}
+                        orientation={item.orientation ?? "horizontal"}
+                        durationMs={totalDurationMs}
+                        context={panelContext}
+                        stripIndex={index}
+                        stripId={item.id}
+                        onStripTypeChange={(nextType) => controller.setStripType(item.id, nextType)}
+                        panelOption={controller.draft.panelOptionsById[item.id] ?? null}
+                        onPanelOptionChange={(nextOption) => controller.setPanelOption(item.id, nextOption)}
+                        seedFilters={controller.seedFiltersById[item.id]}
+                        seedFiltersVersion={controller.seedFiltersVersion}
+                        onFiltersChange={(filters) => controller.setPanelFilters(item.id, filters)}
+                      />
+                    ) : (
+                      <EventsPanel
+                        panelType={controller.draft.panelTypesById[item.id] ?? "empty"}
+                        onPanelTypeChange={(nextType) => controller.setPanelType(item.id, nextType)}
+                        durationMs={totalDurationMs}
+                        context={panelContext}
+                        panelIndex={index}
+                        panelId={item.id}
+                        showHints={false}
+                        panelOption={controller.draft.panelOptionsById[item.id] ?? null}
+                        onPanelOptionChange={(nextOption) => controller.setPanelOption(item.id, nextOption)}
+                        seedFilters={controller.seedFiltersById[item.id]}
+                        seedFiltersVersion={controller.seedFiltersVersion}
+                        onFiltersChange={(filters) => controller.setPanelFilters(item.id, filters)}
+                      />
+                    );
+                  }}
+                />
+              </div>
+            ) : (
             <div className={cn(focused && "min-h-0 flex-1 overflow-auto styled-scrollbar")}>
             <EventsPanelGrid
               layoutItems={visibleLayoutItems}
@@ -2234,6 +2320,7 @@ function EncounterDetail({
               fit={focused && layoutAppearance.fit}
             />
             </div>
+            )}
           </PortalContainerProvider>
 
           {!focused && (
@@ -2297,6 +2384,8 @@ const INSTANCE_PAGE_KEYBINDS = [
   { keys: "Shift + F", action: "Toggle focus mode" },
   { keys: "Ctrl/Cmd + Shift + F", action: "Toggle focus mode with browser fullscreen" },
   { keys: "Esc", action: "Leave focus mode when no dialog or menu is open" },
+  { keys: "Shift + E", action: "Edit the layout, or finish editing and apply it" },
+  { keys: "Esc (while editing)", action: "Cancel layout editing" },
   { keys: "Shift + click panel", action: "Edit that panel's options" },
   { keys: "Click metric row", action: "Open its breakout" },
   { keys: "Ctrl/Cmd + click metric row", action: "Open its actions menu" },
@@ -2419,6 +2508,8 @@ function InstancePageViewContent({
 
   const liveSession = useLiveSession();
   const canEditSharedView = liveSession.canEditSharedView;
+  // Read by keyboard handlers declared before the layout edit state below.
+  const layoutEditActiveRef = useRef(false);
   const [focusParam, setFocusParam] = useFocusMode();
   const focused = focusParam && isEncounterView && !isMobile;
   // Leaving focus also leaves browser fullscreen, if Ctrl+Shift+F entered it.
@@ -2451,7 +2542,7 @@ function InstancePageViewContent({
       } else if (event.code === "KeyF" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
         event.preventDefault();
         setFocused(!focused);
-      } else if (event.key === "Escape" && focused && !document.querySelector("[role=dialog], [role=menu], [role=listbox]")) {
+      } else if (event.key === "Escape" && focused && !layoutEditActiveRef.current && !document.querySelector("[role=dialog], [role=menu], [role=listbox]")) {
         setFocused(false);
       }
     };
@@ -3329,6 +3420,43 @@ function InstancePageViewContent({
     });
   }, [activeLayoutItems, layoutAppearance, panelTypesByID, panelOptionsByID, panelFiltersByID]);
 
+  /** Applies an id-keyed layout (import, Edit Mode) and returns the items it rendered. */
+  const applyLayoutExport = useCallback((parsed: LayoutLabExportV1): GridEditorItem[] => {
+    const normalizedItems = normalizeLayoutItems(parsed.items);
+    const importedTypes: Record<string, EventsPanelType> = {};
+    normalizedItems.forEach((item) => {
+      const candidate = parsed.panelTypesById?.[item.id] ?? "empty";
+      importedTypes[item.id] = candidate in PANELS || isCustomPanelRef(candidate) ? candidate : "empty";
+    });
+
+    const orderedItems = orderLayoutItems(normalizedItems);
+    const orderedPanels = orderedItems.map((item) => (importedTypes[item.id] ?? "empty") as PanelType);
+    const orderedOptions = orderedItems.map((item) => {
+      const option = parsed.panelOptionsById?.[item.id];
+      return typeof option === "string" ? option : null;
+    });
+    setPanels(orderedPanels, orderedOptions);
+
+    setActiveLayoutId(null);
+    setImportedLayoutItems(orderedItems);
+    setImportedLayoutAppearance(readLayoutAppearance(parsed));
+    setActivePresetId(null);
+
+    // Restore per-panel filters from imported layout.
+    const importedFilters: Record<string, PanelFilter[]> = {};
+    if (parsed.panelFiltersById) {
+      for (const [id, filters] of Object.entries(parsed.panelFiltersById)) {
+        if (Array.isArray(filters) && filters.length > 0) {
+          importedFilters[id] = filters;
+        }
+      }
+    }
+    setSeedFiltersByID(importedFilters);
+    setPanelFiltersByID(importedFilters);
+    setSeedFiltersVersion((v) => v + 1);
+    return orderedItems;
+  }, [setPanels]);
+
   const handleImportLayout = useCallback(() => {
     if (!canEditSharedView) return;
     const raw = window.prompt("Paste exported layout JSON");
@@ -3355,45 +3483,86 @@ function InstancePageViewContent({
         throw new Error("Missing panelTypesById");
       }
 
-      const normalizedItems = normalizeLayoutItems(parsed.items);
-      const importedTypes: Record<string, EventsPanelType> = {};
-      normalizedItems.forEach((item) => {
-        const candidate = parsed.panelTypesById?.[item.id] ?? "empty";
-        importedTypes[item.id] = candidate in PANELS || isCustomPanelRef(candidate) ? candidate : "empty";
-      });
-
-      const orderedItems = orderLayoutItems(normalizedItems);
-      const orderedPanels = orderedItems.map((item) => (importedTypes[item.id] ?? "empty") as PanelType);
-      const orderedOptions = orderedItems.map((item) => {
-        const option = parsed.panelOptionsById?.[item.id];
-        return typeof option === "string" ? option : null;
-      });
-      setPanels(orderedPanels, orderedOptions);
-
-      setActiveLayoutId(null);
-      setImportedLayoutItems(orderedItems);
-      setImportedLayoutAppearance(readLayoutAppearance(parsed));
-      setActivePresetId(null);
-
-      // Restore per-panel filters from imported layout.
-      const importedFilters: Record<string, PanelFilter[]> = {};
-      if (parsed.panelFiltersById) {
-        for (const [id, filters] of Object.entries(parsed.panelFiltersById)) {
-          if (Array.isArray(filters) && filters.length > 0) {
-            importedFilters[id] = filters;
-          }
-        }
-      }
-      setSeedFiltersByID(importedFilters);
-      setPanelFiltersByID(importedFilters);
-      setSeedFiltersVersion((v) => v + 1);
-
-      toast.success("Imported layout", { description: `Applied ${orderedItems.length} panel${orderedItems.length === 1 ? "" : "s"}` });
+      applyLayoutExport(parsed as LayoutLabExportV1);
+      toast.success("Imported layout", { description: `Applied ${parsed.items.length} panel${parsed.items.length === 1 ? "" : "s"}` });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid layout JSON";
       toast.error("Import failed", { description: message });
     }
-  }, [canEditSharedView, setPanels]);
+  }, [applyLayoutExport, canEditSharedView]);
+
+  // ── Layout Edit Mode ────────────────────────────────────────────────────
+  // Edits happen on an in-memory draft of the current layout. Done applies it
+  // like an import; Cancel discards it. Nothing is persisted.
+  const layoutDraft = useLayoutDraft(EMPTY_LAYOUT_DRAFT);
+  const resetLayoutDraft = layoutDraft.reset;
+  const [layoutEditing, setLayoutEditing] = useState(false);
+  const [layoutEditBaseline, setLayoutEditBaseline] = useState("");
+  // The items Done last applied. While they are still on screen the page has
+  // unsaved layout edits; applying any other layout replaces them.
+  const [editedLayoutItems, setEditedLayoutItems] = useState<GridEditorItem[] | null>(null);
+  const canEditLayout = isEncounterView && !isMobile && canEditSharedView && !activePageType;
+  const layoutEditActive = layoutEditing && canEditLayout;
+  layoutEditActiveRef.current = layoutEditActive;
+  const layoutDraftSignature = layoutEditActive ? JSON.stringify(layoutDraftToExport(layoutDraft.draft)) : "";
+  const layoutDirty = layoutEditActive && layoutDraftSignature !== layoutEditBaseline;
+  const hasUnsavedLayoutEdits = layoutDirty || (editedLayoutItems !== null && editedLayoutItems === importedLayoutItems);
+
+  const enterLayoutEdit = useCallback(() => {
+    if (!canEditLayout) return;
+    const current: LayoutDraft = {
+      items: activeLayoutItems,
+      panelTypesById: panelTypesByID,
+      panelOptionsById: panelOptionsByID,
+      panelFiltersById: panelFiltersByID,
+      appearance: layoutAppearance,
+    };
+    resetLayoutDraft(current);
+    setLayoutEditBaseline(JSON.stringify(layoutDraftToExport(current)));
+    setLayoutEditing(true);
+  }, [activeLayoutItems, canEditLayout, layoutAppearance, panelFiltersByID, panelOptionsByID, panelTypesByID, resetLayoutDraft]);
+
+  const finishLayoutEdit = useCallback(() => {
+    if (layoutDirty) {
+      setEditedLayoutItems(applyLayoutExport(layoutDraftToExport(layoutDraft.draft)));
+    }
+    setLayoutEditing(false);
+  }, [applyLayoutExport, layoutDirty, layoutDraft.draft]);
+
+  const cancelLayoutEdit = useCallback(() => {
+    if (layoutDirty && !window.confirm("Discard your layout changes?")) return;
+    setLayoutEditing(false);
+  }, [layoutDirty]);
+
+  useEffect(() => {
+    if (!canEditLayout) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      if (event.code === "KeyE" && event.shiftKey && !event.repeat) {
+        event.preventDefault();
+        if (layoutEditActive) finishLayoutEdit();
+        else enterLayoutEdit();
+      } else if (event.key === "Escape" && layoutEditActive && !document.querySelector("[role=dialog], [role=menu], [role=listbox]")) {
+        event.preventDefault();
+        cancelLayoutEdit();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [canEditLayout, cancelLayoutEdit, enterLayoutEdit, finishLayoutEdit, layoutEditActive]);
+
+  // Edits live only in memory, so warn before the tab reloads or closes.
+  useEffect(() => {
+    if (!hasUnsavedLayoutEdits) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedLayoutEdits]);
+
 
   const buildSharedViewPayload = useCallback((): SharedViewPayload => {
     const view: NonNullable<SharedViewPayload["view"]> = {
@@ -3614,6 +3783,10 @@ function InstancePageViewContent({
       if (event.key < "0" || event.key > "9") {
         return;
       }
+      // Casting would change the live layout under an open edit draft.
+      if (layoutEditActiveRef.current) {
+        return;
+      }
 
       // Still allow casting layouts while the action bar is suppressed
       // (replay overlay occupies the same space), just don't pop it up.
@@ -3817,7 +3990,8 @@ function InstancePageViewContent({
     >
       <InstanceInferenceCapability
         state={inferenceState}
-        canMutate={canEditSharedView}
+        canMutate={canEditSharedView && !layoutEditActive}
+        readOnlyReason={layoutEditActive ? "The user is editing this layout; view changes are paused until they finish." : undefined}
         onApplyPreset={applyPreset}
         onSetPanel={(panelId, panelType) => handlePanelTypeChangeByID(panelId, panelType as EventsPanelType)}
         onSetPanelOption={handlePanelOptionChangeByID}
@@ -4262,6 +4436,13 @@ function InstancePageViewContent({
             actionBarSlots={actionBarSlots}
             layouts={instanceDefaults?.action_bar_layouts ?? []}
             onPresetChange={applyPreset}
+            onEditLayout={canEditLayout ? enterLayoutEdit : undefined}
+            layoutEditor={layoutEditActive ? {
+              controller: layoutDraft,
+              dirty: layoutDirty,
+              onCancel: cancelLayoutEdit,
+              onDone: finishLayoutEdit,
+            } : undefined}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center">

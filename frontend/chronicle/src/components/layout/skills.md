@@ -78,3 +78,14 @@ When reusing for guild pages:
 - Shared interaction model, page-specific content.
 - Minimal coupling between grid mechanics and product features.
 - Easy to apply the same editor to user and guild workflows.
+
+## Shared Draft Editor (`features/layoutEditor`)
+
+Layout Lab and the instance page's Edit Mode share one editor:
+
+- `layoutDraft.ts` – pure, id-keyed draft operations (add/remove panel, strip, group; type changes; group moves) plus `layoutDraftFromExport` / `layoutDraftToExport` for the version-1 export JSON. Panel/strip metadata is injected via `LayoutDraftCatalog` so the module is unit-testable in Node.
+- `useLayoutDraft.ts` – React state for a draft, including seed filters, wired to the real `PANELS` / `STRIPS` registries.
+- `LayoutEditorCanvas.tsx` – the `GridLayoutEditor` surface: outer grid, group rows with nested grids, drag into/out of groups, per-tile remove. Callers supply tile content with `renderTile`.
+- `LayoutEditToolbar.tsx` – add/spacing/cancel/done controls for Edit Mode.
+
+Instance Edit Mode (`InstancePageView.tsx`): Shift+E or **Edit layout** snapshots the current view into a draft; **Done** (Shift+E) applies it through the same path as Import Layout; **Cancel** (Esc) discards it. Edits are in memory only, so the page warns before unload while a draft is dirty or applied edits are still on screen. Layout-cast hotkeys and the assistant's view-changing tools are paused while editing.

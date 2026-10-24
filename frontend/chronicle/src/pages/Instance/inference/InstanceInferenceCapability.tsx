@@ -15,6 +15,8 @@ import {
 interface InstanceInferenceCapabilityProps {
   state: InstanceUIState;
   canMutate: boolean;
+  /** Why mutations are refused when canMutate is false (defaults to live-session following). */
+  readOnlyReason?: string;
   onApplyPreset: (presetId: string) => void;
   onSetPanel: (panelId: string, panelType: string) => void;
   onSetPanelOption: (panelId: string, option: string | null) => void;
@@ -29,6 +31,7 @@ interface InstanceInferenceCapabilityProps {
 export function InstanceInferenceCapability({
   state,
   canMutate,
+  readOnlyReason,
   onApplyPreset,
   onSetPanel,
   onSetPanelOption,
@@ -89,7 +92,7 @@ export function InstanceInferenceCapability({
       ),
       update_instance_ui: (argumentsValue) => {
         if (!canMutate) {
-          throw new Error("capability_unavailable: This instance view is read-only while following a live session.");
+          throw new Error(`capability_unavailable: ${readOnlyReason ?? "This instance view is read-only while following a live session."}`);
         }
         const plan = planInstanceUIUpdate(state, argumentsValue as UpdateInstanceUIArguments);
         for (const operation of plan.operations) applyOperation(operation);
