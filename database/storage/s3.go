@@ -165,7 +165,7 @@ func (s *S3Storage) RemoveFile(ctx context.Context, bucketId string, paths []str
 		}
 	}
 
-	_, err := s.client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+	output, err := s.client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
 		Bucket: aws.String(bucket),
 		Delete: &types.Delete{
 			Objects: objects,
@@ -174,6 +174,9 @@ func (s *S3Storage) RemoveFile(ctx context.Context, bucketId string, paths []str
 	})
 	if err != nil {
 		return nil, fmt.Errorf("delete objects: %w", err)
+	}
+	if len(output.Errors) > 0 {
+		return nil, fmt.Errorf("delete objects: %d object(s) failed: %s", len(output.Errors), aws.ToString(output.Errors[0].Key))
 	}
 
 	responses := make([]FileUploadResponse, len(paths))

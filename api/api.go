@@ -149,6 +149,11 @@ type API struct {
 }
 
 func New(ctx context.Context, opts Options) (*API, error) {
+	if opts.Storage != nil {
+		if _, err := opts.Storage.CreateBucket(ctx, linkedapi.ProofBucket, storage.BucketOptions{Public: false, AllowedMimeTypes: []string{"image/jpeg"}}); err != nil && err.Error() != "The resource already exists" {
+			return nil, err
+		}
+	}
 	if opts.Registry == nil {
 		opts.Registry = prometheus.NewRegistry()
 	}
@@ -322,7 +327,7 @@ func (api *API) Routes() chi.Router {
 			r.Mount("/gear-builder", gearbuilderapi.New(api.Opts.Zed, api.Auth, api.Opts.CacheSvc).Routes())
 			r.Mount("/gear-progressions", gearprogressionapi.New(api.Opts.Zed, api.Auth).Routes())
 			// Account↔character link management.
-			r.Mount("/linked", linkedapi.New(api.Opts.Zed, api.Auth, api.Opts.ExternalVerification).Routes())
+			r.Mount("/linked", linkedapi.New(api.Opts.Zed, api.Auth, api.Opts.ExternalVerification, api.Opts.Storage).Routes())
 			gameDataHandler := gamedataapi.New(api.Opts.Zed, api.Auth, api.Opts.Pool, api.Opts.CacheSvc)
 			r.Mount("/game-data", gameDataHandler.Routes())
 			r.Mount("/azerothcore", serviceazerothcore.New(api.Opts.Logger, api.Opts.Zed, api.Auth, api.Chronicle).Routes())

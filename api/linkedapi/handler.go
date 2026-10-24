@@ -20,18 +20,24 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/database/storage"
 )
 
 type Handler struct {
-	zed  *authz.Authz
-	auth *chronauth.Service
+	zed     *authz.Authz
+	storage storage.ObjectStorage
+	auth    *chronauth.Service
 	// externalVerification is the deployment's external verification
 	// provider config (nil when disabled).
 	externalVerification *chroniclesdk.ExternalVerification
 }
 
-func New(zed *authz.Authz, auth *chronauth.Service, externalVerification *chroniclesdk.ExternalVerification) *Handler {
-	return &Handler{zed: zed, auth: auth, externalVerification: externalVerification}
+func New(zed *authz.Authz, auth *chronauth.Service, externalVerification *chroniclesdk.ExternalVerification, objectStorage ...storage.ObjectStorage) *Handler {
+	h := &Handler{zed: zed, auth: auth, externalVerification: externalVerification}
+	if len(objectStorage) > 0 {
+		h.storage = objectStorage[0]
+	}
+	return h
 }
 
 // Routes returns the router for the linked service, mounted at /linked.
@@ -51,6 +57,8 @@ func (h *Handler) Routes() http.Handler {
 
 		r.Route("/me", func(r chi.Router) {
 			r.Get("/", h.ListMyCharacters)
+			r.Post("/proofs", h.SubmitProof)
+			r.Get("/proofs", h.ListMyProofs)
 			r.Put("/primary", h.SetMyPrimaryCharacter)
 			// Sync links from the deployment's external verification
 			// provider, and fetch the cached result of the last sync.
@@ -67,6 +75,9 @@ func (h *Handler) Routes() http.Handler {
 				httpmw.Can(h.zed, policy.New().GlobalChronicle().CanAdmin_users_User),
 			)
 			r.Get("/characters/{realmID}/{characterGUID}", h.AdminGetCharacterLink)
+			r.Get("/admin/proofs", h.ListAdminProofs)
+			r.Get("/admin/proofs/{id}/image", h.ProofImage)
+			r.Post("/admin/proofs/{id}/decision", h.DecideProof)
 			r.Route("/users/{userID}", func(r chi.Router) {
 				r.Get("/", h.AdminListUserCharacters)
 				r.Post("/", h.AdminLinkUserCharacter)

@@ -1642,6 +1642,38 @@ CREATE TABLE parse_score_results (
     CONSTRAINT parse_score_results_metric_check CHECK ((metric = ANY (ARRAY['dps'::text, 'hps'::text])))
 );
 
+CREATE TABLE proof_request_subjects (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    request_id uuid NOT NULL,
+    subject_type text NOT NULL,
+    realm_id uuid,
+    character_guid wow_guid,
+    name text NOT NULL,
+    realm_name text DEFAULT ''::text NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    warning text DEFAULT ''::text NOT NULL,
+    CONSTRAINT proof_request_subjects_check CHECK (((subject_type <> 'character'::text) OR ((realm_id IS NOT NULL) AND (character_guid IS NOT NULL)))),
+    CONSTRAINT proof_request_subjects_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text]))),
+    CONSTRAINT proof_request_subjects_subject_type_check CHECK ((subject_type <> ''::text))
+);
+
+CREATE TABLE proof_requests (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    applicant_id uuid NOT NULL,
+    purpose text NOT NULL,
+    evidence_key text NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    message text DEFAULT ''::text NOT NULL,
+    response text DEFAULT ''::text NOT NULL,
+    reviewer_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    reviewed_at timestamp with time zone,
+    evidence_delete_pending boolean DEFAULT false NOT NULL,
+    CONSTRAINT proof_requests_check CHECK (((status = 'pending'::text) OR (reviewed_at IS NOT NULL))),
+    CONSTRAINT proof_requests_purpose_check CHECK ((purpose <> ''::text)),
+    CONSTRAINT proof_requests_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'partial'::text])))
+);
+
 CREATE TABLE raid_compositions (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
@@ -2777,6 +2809,15 @@ ALTER TABLE ONLY parse_score_results
 ALTER TABLE ONLY parsed_log_group
     ADD CONSTRAINT parsed_log_group_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY proof_request_subjects
+    ADD CONSTRAINT proof_request_subjects_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY proof_request_subjects
+    ADD CONSTRAINT proof_request_subjects_request_id_realm_id_character_guid_key UNIQUE (request_id, realm_id, character_guid);
+
+ALTER TABLE ONLY proof_requests
+    ADD CONSTRAINT proof_requests_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY raid_compositions
     ADD CONSTRAINT raid_compositions_pkey PRIMARY KEY (id);
 
@@ -3237,6 +3278,14 @@ CREATE INDEX oauth_token_sessions_expires_at_idx ON oauth_token_sessions USING b
 
 CREATE INDEX oauth_token_sessions_request_id_idx ON oauth_token_sessions USING btree (request_id, token_type);
 
+CREATE UNIQUE INDEX proof_request_subjects_pending_character ON proof_request_subjects USING btree (realm_id, character_guid) WHERE ((subject_type = 'character'::text) AND (status = 'pending'::text));
+
+CREATE INDEX proof_requests_applicant_created ON proof_requests USING btree (applicant_id, created_at DESC);
+
+CREATE INDEX proof_requests_evidence_cleanup ON proof_requests USING btree (id) WHERE evidence_delete_pending;
+
+CREATE INDEX proof_requests_status_created ON proof_requests USING btree (status, created_at DESC);
+
 CREATE INDEX raid_compositions_user_tenant_idx ON raid_compositions USING btree (user_id, tenant_id);
 
 CREATE INDEX ranking_runs_instance_filter_idx ON ranking_runs USING btree (instance_name, difficulty_name, max_players, realm_id);
@@ -3625,6 +3674,18 @@ ALTER TABLE ONLY parse_score_results
 
 ALTER TABLE ONLY parsed_log_group
     ADD CONSTRAINT parsed_log_group_id_fkey FOREIGN KEY (id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY proof_request_subjects
+    ADD CONSTRAINT proof_request_subjects_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY proof_request_subjects
+    ADD CONSTRAINT proof_request_subjects_request_id_fkey FOREIGN KEY (request_id) REFERENCES proof_requests(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY proof_requests
+    ADD CONSTRAINT proof_requests_applicant_id_fkey FOREIGN KEY (applicant_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY proof_requests
+    ADD CONSTRAINT proof_requests_reviewer_id_fkey FOREIGN KEY (reviewer_id) REFERENCES users(id) ON DELETE SET NULL;
 
 ALTER TABLE ONLY raid_compositions
     ADD CONSTRAINT raid_compositions_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE SET NULL;

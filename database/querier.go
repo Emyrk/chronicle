@@ -47,6 +47,7 @@ type sqlcQuerier interface {
 	CompleteDiscordMembershipGrantCheckMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckMemberParams) (DiscordMembershipGrantCheck, error)
 	CompleteDiscordMembershipGrantCheckNonMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckNonMemberParams) (DiscordMembershipGrantCheck, error)
 	CompleteInferenceClientToolRequest(ctx context.Context, arg CompleteInferenceClientToolRequestParams) (InferenceClientToolRequest, error)
+	CompleteProofEvidenceCleanup(ctx context.Context, id uuid.UUID) error
 	ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error)
 	ConsumeInferenceOAuthTransaction(ctx context.Context, arg ConsumeInferenceOAuthTransactionParams) (InferenceOauthTransaction, error)
 	CopyLegacySpellEffects(ctx context.Context, arg []CopyLegacySpellEffectsParams) *CopyLegacySpellEffectsBatchResults
@@ -84,6 +85,8 @@ type sqlcQuerier interface {
 	CreateSharedView(ctx context.Context, arg CreateSharedViewParams) (SharedView, error)
 	CreateUserPanelLayout(ctx context.Context, arg CreateUserPanelLayoutParams) (UserPanelLayout, error)
 	CreateUserTalentBuild(ctx context.Context, arg CreateUserTalentBuildParams) (UserTalentBuild, error)
+	DecideProofRequest(ctx context.Context, arg DecideProofRequestParams) (int64, error)
+	DecideProofSubject(ctx context.Context, arg DecideProofSubjectParams) (int64, error)
 	DeleteAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) error
 	DeleteAllParsedLogsByGroupID(ctx context.Context, id uuid.UUID) error
 	DeleteAllTelemetryNotices(ctx context.Context) error
@@ -343,6 +346,7 @@ type sqlcQuerier interface {
 	GetParsedLogGroupByID(ctx context.Context, id uuid.UUID) (ParsedLogGroup, error)
 	GetPendingInferenceClientToolRequestByThreadForUpdate(ctx context.Context, arg GetPendingInferenceClientToolRequestByThreadForUpdateParams) (InferenceClientToolRequest, error)
 	GetPlayerGearHistory(ctx context.Context, arg GetPlayerGearHistoryParams) ([]GetPlayerGearHistoryRow, error)
+	GetProofRequest(ctx context.Context, id uuid.UUID) (ProofRequest, error)
 	GetRaidCompositionByID(ctx context.Context, id uuid.UUID) (RaidComposition, error)
 	// Returns all realm IDs that have an applicable retention policy
 	// (either directly or through their server).
@@ -499,6 +503,8 @@ type sqlcQuerier interface {
 	// No unique constraint: duplicate uploads are collapsed at read time via run_id DISTINCT ON.
 	InsertParseScoreResult(ctx context.Context, arg InsertParseScoreResultParams) error
 	InsertParsedLogGroup(ctx context.Context, id uuid.UUID) error
+	InsertProofCharacterSubject(ctx context.Context, arg InsertProofCharacterSubjectParams) error
+	InsertProofRequest(ctx context.Context, arg InsertProofRequestParams) (ProofRequest, error)
 	InsertRegressionFixture(ctx context.Context, arg InsertRegressionFixtureParams) (RegressionFixture, error)
 	InsertRegressionSnapshot(ctx context.Context, arg InsertRegressionSnapshotParams) (RegressionSnapshot, error)
 	// Server Applications
@@ -552,6 +558,7 @@ type sqlcQuerier interface {
 	ListActiveAdminTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListActivePublicTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListAdminActiveCustomPanelInstallations(ctx context.Context) ([]ListAdminActiveCustomPanelInstallationsRow, error)
+	ListAdminProofRequests(ctx context.Context) ([]ProofRequest, error)
 	ListAffectedAuraDurationCandidates(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationCandidatesRow, error)
 	ListAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationsByDatasetRow, error)
 	ListAllRetentionPolicies(ctx context.Context) ([]RetentionPolicy, error)
@@ -612,6 +619,7 @@ type sqlcQuerier interface {
 	ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error)
 	ListLogFilePartsForDeletion(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)
+	ListMyProofRequests(ctx context.Context, applicantID uuid.UUID) ([]ProofRequest, error)
 	ListObservedItemIDsForDate(ctx context.Context, arg ListObservedItemIDsForDateParams) ([]int32, error)
 	ListParseScoreCohortBuckets(ctx context.Context, arg ListParseScoreCohortBucketsParams) ([]ListParseScoreCohortBucketsRow, error)
 	ListParseScoreMemberships(ctx context.Context, arg ListParseScoreMembershipsParams) ([]ParseScoreMembership, error)
@@ -629,6 +637,8 @@ type sqlcQuerier interface {
 	// Receipt-less results are authoritative historical data. Read them without
 	// joining snapshot tables or score memberships so they can never be recomputed.
 	ListPersistedParseScoreResultsForInstance(ctx context.Context, arg ListPersistedParseScoreResultsForInstanceParams) ([]ParseScoreResult, error)
+	ListProofEvidenceCleanup(ctx context.Context) ([]ProofRequest, error)
+	ListProofSubjects(ctx context.Context, requestID uuid.UUID) ([]ProofRequestSubject, error)
 	ListRaidCompositionsByUser(ctx context.Context, arg ListRaidCompositionsByUserParams) ([]RaidComposition, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
 	// Used by the parses handler to get the viewed instance's own metric values
@@ -704,6 +714,7 @@ type sqlcQuerier interface {
 	ListWoWServersByTenantID(ctx context.Context, tenantID uuid.NullUUID) ([]WowServer, error)
 	ListWorlds(ctx context.Context) ([]World, error)
 	LockLogFilePartSequence(ctx context.Context, logFileID uuid.UUID) (uuid.UUID, error)
+	LockPendingProofRequest(ctx context.Context, id uuid.UUID) (ProofRequest, error)
 	LockWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
 	MarkBillingWebhookEventProcessed(ctx context.Context, stripeEventID string) error
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
