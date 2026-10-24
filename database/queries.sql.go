@@ -15142,30 +15142,6 @@ func (q *sqlQuerier) GetProofRequest(ctx context.Context, id uuid.UUID) (ProofRe
 	return i, err
 }
 
-const insertProofCharacterSubject = `-- name: InsertProofCharacterSubject :exec
-INSERT INTO proof_request_subjects (request_id, subject_type, realm_id, character_guid, name, realm_name)
-VALUES ($1, 'character', $2, $3, $4, $5)
-`
-
-type InsertProofCharacterSubjectParams struct {
-	RequestID     uuid.UUID     `db:"request_id" json:"request_id"`
-	RealmID       uuid.NullUUID `db:"realm_id" json:"realm_id"`
-	CharacterGuid *guid.GUID    `db:"character_guid" json:"character_guid"`
-	Name          string        `db:"name" json:"name"`
-	RealmName     string        `db:"realm_name" json:"realm_name"`
-}
-
-func (q *sqlQuerier) InsertProofCharacterSubject(ctx context.Context, arg InsertProofCharacterSubjectParams) error {
-	_, err := q.db.Exec(ctx, insertProofCharacterSubject,
-		arg.RequestID,
-		arg.RealmID,
-		arg.CharacterGuid,
-		arg.Name,
-		arg.RealmName,
-	)
-	return err
-}
-
 const insertProofRequest = `-- name: InsertProofRequest :one
 INSERT INTO proof_requests (id, applicant_id, purpose, evidence_key, message)
 VALUES ($1, $2, $3, $4, $5) RETURNING id, applicant_id, purpose, evidence_key, status, message, response, reviewer_id, created_at, reviewed_at, evidence_delete_pending
@@ -15202,6 +15178,32 @@ func (q *sqlQuerier) InsertProofRequest(ctx context.Context, arg InsertProofRequ
 		&i.EvidenceDeletePending,
 	)
 	return i, err
+}
+
+const insertProofSubject = `-- name: InsertProofSubject :exec
+INSERT INTO proof_request_subjects (request_id, subject_type, realm_id, character_guid, name, realm_name)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertProofSubjectParams struct {
+	RequestID     uuid.UUID     `db:"request_id" json:"request_id"`
+	SubjectType   string        `db:"subject_type" json:"subject_type"`
+	RealmID       uuid.NullUUID `db:"realm_id" json:"realm_id"`
+	CharacterGuid *guid.GUID    `db:"character_guid" json:"character_guid"`
+	Name          string        `db:"name" json:"name"`
+	RealmName     string        `db:"realm_name" json:"realm_name"`
+}
+
+func (q *sqlQuerier) InsertProofSubject(ctx context.Context, arg InsertProofSubjectParams) error {
+	_, err := q.db.Exec(ctx, insertProofSubject,
+		arg.RequestID,
+		arg.SubjectType,
+		arg.RealmID,
+		arg.CharacterGuid,
+		arg.Name,
+		arg.RealmName,
+	)
+	return err
 }
 
 const listAdminProofRequests = `-- name: ListAdminProofRequests :many

@@ -503,8 +503,8 @@ type sqlcQuerier interface {
 	// No unique constraint: duplicate uploads are collapsed at read time via run_id DISTINCT ON.
 	InsertParseScoreResult(ctx context.Context, arg InsertParseScoreResultParams) error
 	InsertParsedLogGroup(ctx context.Context, id uuid.UUID) error
-	InsertProofCharacterSubject(ctx context.Context, arg InsertProofCharacterSubjectParams) error
 	InsertProofRequest(ctx context.Context, arg InsertProofRequestParams) (ProofRequest, error)
+	InsertProofSubject(ctx context.Context, arg InsertProofSubjectParams) error
 	InsertRegressionFixture(ctx context.Context, arg InsertRegressionFixtureParams) (RegressionFixture, error)
 	InsertRegressionSnapshot(ctx context.Context, arg InsertRegressionSnapshotParams) (RegressionSnapshot, error)
 	// Server Applications

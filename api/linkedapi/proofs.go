@@ -1,77 +1,45 @@
 package linkedapi
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"image/jpeg"
 	"io"
 	"net/http"
-	"strings"
-	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
-	"github.com/Emyrk/chronicle/database/storage"
+	"github.com/Emyrk/chronicle/internal/services/serviceproof"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-const ProofBucket = "proof-evidence"
-const maxProofImage = 8 << 20
-const maxProofPixels = 20_000_000
-
 func proofError(w http.ResponseWriter, r *http.Request, status int, message string) {
 	httpapi.Write(r.Context(), w, status, chroniclesdk.Response{Message: message})
 }
 
-func validateJPEG(data []byte) error {
-	if len(data) < 4 || len(data) > maxProofImage || !bytes.HasPrefix(data, []byte{0xff, 0xd8, 0xff}) {
-		return errors.New("photo must be a JPEG no larger than 8 MB")
-	}
-	cfg, err := jpeg.DecodeConfig(bytes.NewReader(data))
-	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 || int64(cfg.Width)*int64(cfg.Height) > maxProofPixels {
-		return errors.New("invalid JPEG or image exceeds 20 megapixels")
-	}
-	if _, err := jpeg.Decode(bytes.NewReader(data)); err != nil {
-		return errors.New("invalid JPEG image")
-	}
-	return nil
-}
-
-// SubmitProof accepts photo, characters (JSON array), and message multipart fields.
+// SubmitProof validates character-specific selections before handing the
+// evidence and request lifecycle to the shared proof service.
 func (h *Handler) SubmitProof(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	// Require explicit tenant opt-in. Decode the stable JSON field directly so
-	// this backend can land independently of the tenant settings UI changes.
 	tenant := servicetenant.TenantFromContext(ctx)
 	if tenant == nil {
 		proofError(w, r, http.StatusForbidden, "Photo proof is not enabled for this site")
 		return
 	}
-	var config struct {
-		Methods map[string]struct {
-			Enabled bool `json:"enabled"`
-		} `json:"methods"`
-	}
-	if json.Unmarshal(tenant.ExternalLinking, &config) != nil || !config.Methods["photo-proof"].Enabled {
+	config := chroniclesdk.ParseExternalLinking(tenant.ExternalLinking)
+	if config == nil || !config.Methods["photo-proof"].Enabled {
 		proofError(w, r, http.StatusForbidden, "Photo proof is not enabled for this site")
 		return
 	}
-	if h.storage == nil {
-		httpapi.InternalServerError(w, errors.New("proof storage unavailable"))
-		return
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxProofImage+64*1024)
-	if err := r.ParseMultipartForm(maxProofImage); err != nil {
+	r.Body = http.MaxBytesReader(w, r.Body, serviceproof.MaxImage+64*1024)
+	if err := r.ParseMultipartForm(serviceproof.MaxImage); err != nil {
 		proofError(w, r, http.StatusBadRequest, "Invalid or oversized multipart submission")
 		return
 	}
@@ -90,18 +58,16 @@ func (h *Handler) SubmitProof(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f, header, err := r.FormFile("photo")
-	if err != nil || header.Size > maxProofImage {
+	if err != nil || header.Size > serviceproof.MaxImage {
 		proofError(w, r, 400, "A JPEG photo no larger than 8 MB is required")
 		return
 	}
 	defer func() { _ = f.Close() }()
-	data, err := io.ReadAll(io.LimitReader(f, maxProofImage+1))
-	if err != nil || validateJPEG(data) != nil {
-		proofError(w, r, 400, "Invalid JPEG photo (maximum 8 MB and 20 megapixels)")
+	image, err := io.ReadAll(io.LimitReader(f, serviceproof.MaxImage+1))
+	if err != nil || serviceproof.ValidateJPEG(image) != nil {
+		proofError(w, r, 400, serviceproof.ErrInvalidImage.Error())
 		return
 	}
-	user := chronauth.AuthenticationState(r).Claims.Subject
-	// Resolve selections before writing evidence; never accept a cross-realm GUID.
 	players := make([]database.GetGamePlayerByGUIDRow, 0, len(choices))
 	for _, c := range choices {
 		player, err := h.zed.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{RealmID: c.RealmID, Identifier: c.CharacterGUID})
@@ -115,36 +81,20 @@ func (h *Handler) SubmitProof(w http.ResponseWriter, r *http.Request) {
 		}
 		players = append(players, player)
 	}
-	id := uuid.New()
-	key := id.String() + ".jpg"
-	mime := "image/jpeg"
-	if _, err := h.storage.UploadFile(ctx, ProofBucket, key, bytes.NewReader(data), storage.FileOptions{ContentType: &mime}); err != nil {
-		httpapi.InternalServerError(w, err)
+	subjects := make([]serviceproof.Subject, len(choices))
+	for i, c := range choices {
+		subjects[i] = serviceproof.Subject{
+			Type: "character", RealmID: uuid.NullUUID{UUID: c.RealmID, Valid: true},
+			CharacterGUID: &choices[i].CharacterGUID, Name: players[i].Name, RealmName: players[i].RealmName,
+		}
+	}
+	user := chronauth.AuthenticationState(r).Claims.Subject
+	id, err := h.proofs.Create(ctx, user, "character-link", r.FormValue("message"), image, subjects)
+	if isProofPendingConflict(err) {
+		proofError(w, r, http.StatusConflict, "A selected character already has a pending proof request")
 		return
 	}
-	err = h.zed.InTx(ctx, func(tx *authz.AuthzTX) error {
-		if _, err := tx.InsertProofRequest(ctx, database.InsertProofRequestParams{ID: id, ApplicantID: user, Purpose: "character-link", EvidenceKey: key, Message: r.FormValue("message")}); err != nil {
-			return err
-		}
-		for i, c := range choices {
-			if err := tx.InsertProofCharacterSubject(ctx, database.InsertProofCharacterSubjectParams{RequestID: id, RealmID: uuid.NullUUID{UUID: c.RealmID, Valid: true}, CharacterGuid: &choices[i].CharacterGUID, Name: players[i].Name, RealmName: players[i].RealmName}); err != nil {
-				return err
-			}
-		}
-		return nil
-	}, nil)
 	if err != nil {
-		// The object was written before the transaction. Cleanup uses a fresh
-		// context even when the client disconnected; log failures for operations.
-		cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if _, removeErr := h.storage.RemoveFile(cleanup, ProofBucket, []string{key}); removeErr != nil {
-			err = errors.Join(err, fmt.Errorf("orphan proof evidence %s: %w", key, removeErr))
-		}
-		if isProofPendingConflict(err) {
-			proofError(w, r, http.StatusConflict, "A selected character already has a pending proof request")
-			return
-		}
 		httpapi.InternalServerError(w, err)
 		return
 	}
@@ -178,11 +128,7 @@ func isProofPendingConflict(err error) bool {
 }
 
 func (h *Handler) proofResponse(ctx context.Context, id uuid.UUID) (chroniclesdk.ProofRequest, error) {
-	row, err := h.zed.GetProofRequest(ctx, id)
-	if err != nil {
-		return chroniclesdk.ProofRequest{}, err
-	}
-	subjects, err := h.zed.ListProofSubjects(ctx, id)
+	row, subjects, err := h.proofs.Get(ctx, id)
 	if err != nil {
 		return chroniclesdk.ProofRequest{}, err
 	}
@@ -209,22 +155,23 @@ func (h *Handler) proofResponse(ctx context.Context, id uuid.UUID) (chroniclesdk
 }
 
 func (h *Handler) ListMyProofs(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.zed.ListMyProofRequests(r.Context(), chronauth.AuthenticationState(r).Claims.Subject)
+	rows, err := h.proofs.ListMine(r.Context(), chronauth.AuthenticationState(r).Claims.Subject)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 	h.writeProofs(w, r, rows)
 }
+
 func (h *Handler) ListAdminProofs(w http.ResponseWriter, r *http.Request) {
-	h.retryProofCleanup(r.Context())
-	rows, err := h.zed.ListAdminProofRequests(r.Context())
+	rows, err := h.proofs.ListForReview(r.Context())
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 	h.writeProofs(w, r, rows)
 }
+
 func (h *Handler) writeProofs(w http.ResponseWriter, r *http.Request, rows []database.ProofRequest) {
 	result := make([]chroniclesdk.ProofRequest, 0, len(rows))
 	for _, row := range rows {
@@ -237,32 +184,25 @@ func (h *Handler) writeProofs(w http.ResponseWriter, r *http.Request, rows []dat
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, result)
 }
+
 func proofID(r *http.Request) (uuid.UUID, error) { return uuid.Parse(chi.URLParam(r, "id")) }
+
 func (h *Handler) ProofImage(w http.ResponseWriter, r *http.Request) {
 	id, err := proofID(r)
 	if err != nil {
 		proofError(w, r, 400, "Invalid proof ID")
 		return
 	}
-	if h.storage == nil {
-		httpapi.InternalServerError(w, errors.New("proof storage unavailable"))
-		return
-	}
-	row, err := h.zed.GetProofRequest(r.Context(), id)
+	data, err := h.proofs.Evidence(r.Context(), id)
 	if errors.Is(err, sql.ErrNoRows) {
 		proofError(w, r, 404, "Proof not found")
 		return
 	}
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-	if row.Status != "pending" || row.EvidenceKey == "" {
+	if errors.Is(err, serviceproof.ErrEvidenceDeleted) {
 		proofError(w, r, 404, "Evidence has been deleted")
 		return
 	}
-	data, err := h.storage.DownloadFile(r.Context(), ProofBucket, row.EvidenceKey)
-	if errors.Is(err, storage.ErrFileNotFound) {
+	if errors.Is(err, serviceproof.ErrEvidenceNotFound) {
 		proofError(w, r, 404, "Evidence not found")
 		return
 	}
@@ -276,8 +216,6 @@ func (h *Handler) ProofImage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
 }
-
-var errProofConflict = errors.New("proof changed or character already linked")
 
 func (h *Handler) DecideProof(w http.ResponseWriter, r *http.Request) {
 	id, err := proofID(r)
@@ -293,89 +231,10 @@ func (h *Handler) DecideProof(w http.ResponseWriter, r *http.Request) {
 		proofError(w, r, 400, "Invalid proof decision")
 		return
 	}
-	reviewer := chronauth.AuthenticationState(r).Claims.Subject
-	err = h.zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
-		row, err := tx.LockPendingProofRequest(r.Context(), id)
-		if errors.Is(err, sql.ErrNoRows) {
-			return errProofConflict
-		}
-		if err != nil {
-			return err
-		}
-		if row.Purpose != "character-link" {
-			return errProofConflict
-		}
-		subjects, err := tx.ListProofSubjects(r.Context(), id)
-		if err != nil {
-			return err
-		}
-		if len(subjects) != len(input.Decisions) {
-			return errProofConflict
-		}
-		choices := map[string]bool{}
-		for _, d := range input.Decisions {
-			k := d.RealmID.String() + "/" + d.CharacterGUID.String()
-			if _, ok := choices[k]; ok {
-				return errProofConflict
-			}
-			choices[k] = d.Approved
-		}
-		approved := 0
-		for _, s := range subjects {
-			if !s.RealmID.Valid || s.CharacterGuid == nil {
-				return errProofConflict
-			}
-			key := s.RealmID.UUID.String() + "/" + s.CharacterGuid.String()
-			accept, ok := choices[key]
-			if !ok || s.Status != "pending" {
-				return errProofConflict
-			}
-			status := "rejected"
-			warning := ""
-			if accept {
-				// Protect existing links. A concurrent claim is also rejected by the
-				// unique index; the entire decision transaction rolls back.
-				existing, err := tx.GetUserCharacterLink(r.Context(), database.GetUserCharacterLinkParams{RealmID: s.RealmID.UUID, CharacterGuid: *s.CharacterGuid})
-				if err == nil {
-					_ = existing
-					return errProofConflict
-				}
-				if !errors.Is(err, sql.ErrNoRows) {
-					return err
-				}
-				if _, err = tx.InsertUserCharacterLink(r.Context(), database.InsertUserCharacterLinkParams{UserID: row.ApplicantID, RealmID: s.RealmID.UUID, CharacterGuid: *s.CharacterGuid, LinkedBy: uuid.NullUUID{UUID: reviewer, Valid: true}, LinkSource: "photo-proof"}); err != nil {
-					if database.IsUniqueViolation(err, database.UniqueUserCharacterLinksCharacterGuidRealmIDKey) {
-						return errProofConflict
-					}
-					return err
-				}
-				status = "approved"
-				approved++
-			}
-			n, err := tx.DecideProofSubject(r.Context(), database.DecideProofSubjectParams{ID: s.ID, Status: status, Warning: warning})
-			if err != nil {
-				return err
-			}
-			if n != 1 {
-				return errProofConflict
-			}
-		}
-		status := "partial"
-		if approved == 0 {
-			status = "rejected"
-		} else if approved == len(subjects) {
-			status = "approved"
-		}
-		n, err := tx.DecideProofRequest(r.Context(), database.DecideProofRequestParams{ID: id, Status: status, Response: strings.TrimSpace(input.Message), ReviewerID: uuid.NullUUID{UUID: reviewer, Valid: true}})
-		if err != nil {
-			return err
-		}
-		if n != 1 {
-			return errProofConflict
-		}
-		return nil
-	}, nil)
-	if errors.Is(err, errProofConflict) || (err != nil && database.IsUniqueViolation(err, database.UniqueUserCharacterLinksCharacterGuidRealmIDKey)) {
+	// Resolve the API's realm/GUID identities into subject IDs. The service
+	// rechecks this exact set after locking the pending request.
+	_, subjects, err := h.proofs.Get(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
 		proofError(w, r, http.StatusConflict, "Proof already decided or character already linked")
 		return
 	}
@@ -383,32 +242,61 @@ func (h *Handler) DecideProof(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	// Audit and links are durable. Attempt deletion even if the client leaves;
-	// failed evidence deletion stays queued in DB for the next admin request.
-	cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	h.retryProofCleanup(cleanupCtx)
+	byCharacter := make(map[string]uuid.UUID, len(subjects))
+	for _, subject := range subjects {
+		if !subject.RealmID.Valid || subject.CharacterGuid == nil {
+			proofError(w, r, http.StatusConflict, "Invalid character proof")
+			return
+		}
+		byCharacter[subject.RealmID.UUID.String()+"/"+subject.CharacterGuid.String()] = subject.ID
+	}
+	decisions := make(map[uuid.UUID]bool, len(input.Decisions))
+	for _, decision := range input.Decisions {
+		key := decision.RealmID.String() + "/" + decision.CharacterGUID.String()
+		subjectID, ok := byCharacter[key]
+		if !ok {
+			proofError(w, r, http.StatusConflict, "Invalid character proof decision")
+			return
+		}
+		if _, exists := decisions[subjectID]; exists {
+			proofError(w, r, http.StatusConflict, "Duplicate character proof decision")
+			return
+		}
+		decisions[subjectID] = decision.Approved
+	}
+	reviewer := chronauth.AuthenticationState(r).Claims.Subject
+	err = h.proofs.Decide(r.Context(), id, reviewer, "character-link", input.Message, decisions, func(ctx context.Context, tx *authz.AuthzTX, row database.ProofRequest, subject database.ProofRequestSubject) error {
+		if !subject.RealmID.Valid || subject.CharacterGuid == nil || subject.SubjectType != "character" {
+			return serviceproof.ErrConflict
+		}
+		existing, err := tx.GetUserCharacterLink(ctx, database.GetUserCharacterLinkParams{RealmID: subject.RealmID.UUID, CharacterGuid: *subject.CharacterGuid})
+		if err == nil {
+			_ = existing
+			return serviceproof.ErrConflict
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if _, err := tx.InsertUserCharacterLink(ctx, database.InsertUserCharacterLinkParams{UserID: row.ApplicantID, RealmID: subject.RealmID.UUID, CharacterGuid: *subject.CharacterGuid, LinkedBy: uuid.NullUUID{UUID: reviewer, Valid: true}, LinkSource: "photo-proof"}); err != nil {
+			if database.IsUniqueViolation(err, database.UniqueUserCharacterLinksCharacterGuidRealmIDKey) {
+				return serviceproof.ErrConflict
+			}
+			return err
+		}
+		return nil
+	})
+	if errors.Is(err, serviceproof.ErrConflict) || (err != nil && database.IsUniqueViolation(err, database.UniqueUserCharacterLinksCharacterGuidRealmIDKey)) {
+		proofError(w, r, http.StatusConflict, "Proof already decided or character already linked")
+		return
+	}
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
 	result, err := h.proofResponse(r.Context(), id)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, result)
-}
-func (h *Handler) retryProofCleanup(ctx context.Context) {
-	if h.storage == nil {
-		return
-	}
-	rows, err := h.zed.ListProofEvidenceCleanup(ctx)
-	if err != nil {
-		return
-	}
-	for _, row := range rows {
-		if row.EvidenceKey != "" {
-			if _, err := h.storage.RemoveFile(ctx, ProofBucket, []string{row.EvidenceKey}); err != nil {
-				continue
-			}
-		}
-		_ = h.zed.CompleteProofEvidenceCleanup(ctx, row.ID)
-	}
 }

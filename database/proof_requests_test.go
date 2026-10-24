@@ -57,7 +57,7 @@ func TestProofPendingCharacterIsExclusive(t *testing.T) {
 		require.NoError(t, err)
 	}
 	insert := func(id uuid.UUID) error {
-		return db.InsertProofCharacterSubject(ctx, database.InsertProofCharacterSubjectParams{RequestID: id, RealmID: uuid.NullUUID{UUID: realmID, Valid: true}, CharacterGuid: &character, Name: "Tester", RealmName: "test-realm"})
+		return db.InsertProofSubject(ctx, database.InsertProofSubjectParams{RequestID: id, SubjectType: "character", RealmID: uuid.NullUUID{UUID: realmID, Valid: true}, CharacterGuid: &character, Name: "Tester", RealmName: "test-realm"})
 	}
 	require.NoError(t, insert(ids[0]))
 	require.True(t, database.IsUniqueViolation(insert(ids[1])))

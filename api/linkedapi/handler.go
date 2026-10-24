@@ -21,23 +21,24 @@ import (
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/database/storage"
+	"github.com/Emyrk/chronicle/internal/services/serviceproof"
 )
 
 type Handler struct {
-	zed     *authz.Authz
-	storage storage.ObjectStorage
-	auth    *chronauth.Service
+	zed    *authz.Authz
+	proofs *serviceproof.Service
+	auth   *chronauth.Service
 	// externalVerification is the deployment's external verification
 	// provider config (nil when disabled).
 	externalVerification *chroniclesdk.ExternalVerification
 }
 
 func New(zed *authz.Authz, auth *chronauth.Service, externalVerification *chroniclesdk.ExternalVerification, objectStorage ...storage.ObjectStorage) *Handler {
-	h := &Handler{zed: zed, auth: auth, externalVerification: externalVerification}
+	var objects storage.ObjectStorage
 	if len(objectStorage) > 0 {
-		h.storage = objectStorage[0]
+		objects = objectStorage[0]
 	}
-	return h
+	return &Handler{zed: zed, auth: auth, externalVerification: externalVerification, proofs: serviceproof.New(zed, objects)}
 }
 
 // Routes returns the router for the linked service, mounted at /linked.

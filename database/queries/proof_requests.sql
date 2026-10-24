@@ -2,9 +2,9 @@
 INSERT INTO proof_requests (id, applicant_id, purpose, evidence_key, message)
 VALUES ($1, $2, $3, $4, $5) RETURNING *;
 
--- name: InsertProofCharacterSubject :exec
+-- name: InsertProofSubject :exec
 INSERT INTO proof_request_subjects (request_id, subject_type, realm_id, character_guid, name, realm_name)
-VALUES ($1, 'character', $2, $3, $4, $5);
+VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: ListMyProofRequests :many
 SELECT * FROM proof_requests WHERE applicant_id = $1 ORDER BY created_at DESC LIMIT 100;

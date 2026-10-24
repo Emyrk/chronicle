@@ -37,6 +37,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicelivesession"
+	"github.com/Emyrk/chronicle/internal/services/serviceproof"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewhatsnew"
 	"github.com/authzed/gochugaru/rel"
@@ -149,10 +150,8 @@ type API struct {
 }
 
 func New(ctx context.Context, opts Options) (*API, error) {
-	if opts.Storage != nil {
-		if _, err := opts.Storage.CreateBucket(ctx, linkedapi.ProofBucket, storage.BucketOptions{Public: false, AllowedMimeTypes: []string{"image/jpeg"}}); err != nil && err.Error() != "The resource already exists" {
-			return nil, err
-		}
+	if err := serviceproof.EnsureBucket(ctx, opts.Storage); err != nil {
+		return nil, err
 	}
 	if opts.Registry == nil {
 		opts.Registry = prometheus.NewRegistry()
