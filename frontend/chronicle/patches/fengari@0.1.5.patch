@@ -1,0 +1,94 @@
+diff --git a/src/linit.js b/src/linit.js
+index 8f461a4..816d793 100644
+--- a/src/linit.js
++++ b/src/linit.js
+@@ -2,0 +3,2 @@
++const is_browser = typeof window !== "undefined" || typeof WorkerGlobalScope !== "undefined";
++
+@@ -20,9 +22,5 @@ const lualib = require('./lualib.js');
+-const { luaopen_base }      = require('./lbaselib.js');
+-const { luaopen_coroutine } = require('./lcorolib.js');
+-const { luaopen_debug }     = require('./ldblib.js');
+-const { luaopen_math }      = require('./lmathlib.js');
+-const { luaopen_package }   = require('./loadlib.js');
+-const { luaopen_os }        = require('./loslib.js');
+-const { luaopen_string }    = require('./lstrlib.js');
+-const { luaopen_table }     = require('./ltablib.js');
+-const { luaopen_utf8 }      = require('./lutf8lib.js');
++const { luaopen_base }   = require('./lbaselib.js');
++const { luaopen_math }   = require('./lmathlib.js');
++const { luaopen_string } = require('./lstrlib.js');
++const { luaopen_table }  = require('./ltablib.js');
++const { luaopen_utf8 }   = require('./lutf8lib.js');
+@@ -30,3 +28 @@ const { luaopen_utf8 }      = require('./lutf8lib.js');
+-loadedlibs["_G"] = luaopen_base,
+-loadedlibs[lualib.LUA_LOADLIBNAME] = luaopen_package;
+-loadedlibs[lualib.LUA_COLIBNAME] = luaopen_coroutine;
++loadedlibs["_G"] = luaopen_base;
+@@ -34 +29,0 @@ loadedlibs[lualib.LUA_TABLIBNAME] = luaopen_table;
+-loadedlibs[lualib.LUA_OSLIBNAME] = luaopen_os;
+@@ -38,3 +32,0 @@ loadedlibs[lualib.LUA_UTF8LIBNAME] = luaopen_utf8;
+-loadedlibs[lualib.LUA_DBLIBNAME] = luaopen_debug;
+-if (typeof process !== "undefined")
+-    loadedlibs[lualib.LUA_IOLIBNAME] = require('./liolib.js').luaopen_io;
+@@ -42,3 +34,9 @@ if (typeof process !== "undefined")
+-/* Extension: fengari library */
+-const { luaopen_fengari } = require('./fengarilib.js');
+-loadedlibs[lualib.LUA_FENGARILIBNAME] = luaopen_fengari;
++if (!is_browser) {
++    loadedlibs[lualib.LUA_LOADLIBNAME] = require('./loadlib.js').luaopen_package;
++    loadedlibs[lualib.LUA_COLIBNAME] = require('./lcorolib.js').luaopen_coroutine;
++    loadedlibs[lualib.LUA_OSLIBNAME] = require('./loslib.js').luaopen_os;
++    loadedlibs[lualib.LUA_DBLIBNAME] = require('./ldblib.js').luaopen_debug;
++    if (typeof process !== "undefined")
++        loadedlibs[lualib.LUA_IOLIBNAME] = require('./liolib.js').luaopen_io;
++    loadedlibs[lualib.LUA_FENGARILIBNAME] = require('./fengarilib.js').luaopen_fengari;
++}
+diff --git a/src/luaconf.js b/src/luaconf.js
+index 5fb91cd..b646834 100644
+--- a/src/luaconf.js
++++ b/src/luaconf.js
+@@ -3 +3,3 @@
+-const conf = (process.env.FENGARICONF ? JSON.parse(process.env.FENGARICONF) : {});
++const is_browser = typeof window !== "undefined" || typeof WorkerGlobalScope !== "undefined";
++const config_json = !is_browser && typeof process !== "undefined" ? process.env.FENGARICONF : undefined;
++const conf = config_json && config_json !== "undefined" ? JSON.parse(config_json) : {};
+@@ -39 +41 @@ module.exports.LUA_VDIR = LUA_VDIR;
+-if (typeof process === "undefined") {
++if (is_browser || typeof process === "undefined") {
+diff --git a/src/lualib.js b/src/lualib.js
+index fa30268..6f8bd29 100644
+--- a/src/lualib.js
++++ b/src/lualib.js
+@@ -2,0 +3,2 @@
++const is_browser = typeof window !== "undefined" || typeof WorkerGlobalScope !== "undefined";
++
+@@ -17 +19,2 @@ module.exports.LUA_COLIBNAME = LUA_COLIBNAME;
+-module.exports.luaopen_coroutine = require("./lcorolib.js").luaopen_coroutine;
++if (!is_browser)
++    module.exports.luaopen_coroutine = require("./lcorolib.js").luaopen_coroutine;
+@@ -23,3 +26,3 @@ module.exports.luaopen_table = require("./ltablib.js").luaopen_table;
+-if (typeof process !== "undefined") {
+-    const LUA_IOLIBNAME = "io";
+-    module.exports.LUA_IOLIBNAME = LUA_IOLIBNAME;
++const LUA_IOLIBNAME = "io";
++module.exports.LUA_IOLIBNAME = LUA_IOLIBNAME;
++if (!is_browser && typeof process !== "undefined")
+@@ -27 +29,0 @@ if (typeof process !== "undefined") {
+-}
+@@ -31 +33,2 @@ module.exports.LUA_OSLIBNAME = LUA_OSLIBNAME;
+-module.exports.luaopen_os = require("./loslib.js").luaopen_os;
++if (!is_browser)
++    module.exports.luaopen_os = require("./loslib.js").luaopen_os;
+@@ -51 +54,2 @@ module.exports.LUA_DBLIBNAME = LUA_DBLIBNAME;
+-module.exports.luaopen_debug = require("./ldblib.js").luaopen_debug;
++if (!is_browser)
++    module.exports.luaopen_debug = require("./ldblib.js").luaopen_debug;
+@@ -55 +59,2 @@ module.exports.LUA_LOADLIBNAME = LUA_LOADLIBNAME;
+-module.exports.luaopen_package = require("./loadlib.js").luaopen_package;
++if (!is_browser)
++    module.exports.luaopen_package = require("./loadlib.js").luaopen_package;
+@@ -59 +64,2 @@ module.exports.LUA_FENGARILIBNAME = LUA_FENGARILIBNAME;
+-module.exports.luaopen_fengari = require("./fengarilib.js").luaopen_fengari;
++if (!is_browser)
++    module.exports.luaopen_fengari = require("./fengarilib.js").luaopen_fengari;
