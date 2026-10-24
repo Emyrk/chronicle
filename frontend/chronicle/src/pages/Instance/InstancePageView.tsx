@@ -13,12 +13,7 @@ import { useInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
 import { type LayoutType, type PanelType } from "@/hooks/useUrlState";
 import { useTimeRangeContextOptional } from "./TimeRangeContext";
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
-import {
-  buildLayoutSections,
-  compactLayoutItems,
-  normalizeGroupedLayoutItems,
-  type LayoutSection,
-} from "@/components/layout/layoutGroups";
+import { buildLayoutSections, type LayoutSection } from "@/components/layout/layoutGroups";
 import type { ActivityPeriod, InstancePlayer, SpeedrunResult } from "@/api/typesGenerated";
 import { PeriodMomentDisplay } from "@/components/PeriodMomentDisplay";
 import { Card } from "@/components/ui/Card/Card";
@@ -45,6 +40,7 @@ import type { Instance, Encounter, EncounterPhase, EnemyUnit } from "./InstanceP
 import { activePhaseForTimeRange, phaseTimeRangeSelection, phaseWidthPercent } from "./phaseTimeRange";
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
 import type { PanelFilter } from "./EventsPanels/processors/filters";
+import { listSelectableCustomPanels, useCustomPanelRegistry } from "./EventsPanels/custom/pluginRegistry";
 import { canonicalizeCustomPanelRef, isCustomPanelRef } from "./EventsPanels/custom/pluginTypes";
 import { PANELS, type BuiltinPanelType } from "./EventsPanels/EventsPanel";
 import { isQueryablePanelType, PANEL_AI_DESCRIPTIONS } from "./EventsPanels/panelCatalog";
@@ -57,7 +53,7 @@ import { InstanceInferenceCapability } from "./inference/InstanceInferenceCapabi
 import { LayoutEditorCanvas } from "@/features/layoutEditor/LayoutEditorCanvas";
 import { LayoutEditToolbar } from "@/features/layoutEditor/LayoutEditToolbar";
 import { SaveLayoutSheet } from "@/features/layoutBook/SaveLayoutSheet";
-import { layoutDraftToExport, type LayoutDraft } from "@/features/layoutEditor/layoutDraft";
+import { layoutDraftToExport, normalizeLayoutDraftItems, type LayoutDraft } from "@/features/layoutEditor/layoutDraft";
 import { useLayoutDraft, type LayoutDraftController } from "@/features/layoutEditor/useLayoutDraft";
 import type { InstanceUIState } from "./inference/instanceInferenceTools";
 import { PanelExplainerView } from "./PanelExplainer";
@@ -1005,53 +1001,12 @@ const EMPTY_LAYOUT_DRAFT: LayoutDraft = {
   panelFiltersById: {},
   appearance: {},
 };
-const GRID_COLS = 12;
-
 function orderLayoutItems(items: GridEditorItem[]): GridEditorItem[] {
   return [...items].sort((a, b) => a.y - b.y || a.x - b.x || a.id.localeCompare(b.id));
 }
 
 function normalizeLayoutItems(items: GridEditorItem[]): GridEditorItem[] {
-  const normalizedWithGroups = items.map((item) => {
-    const isStrip = item.kind === "strip";
-    const isGroup = item.kind === "group";
-    const minW = isGroup ? GRID_COLS : item.minW ?? (isStrip ? 1 : 4);
-    const minH = isGroup ? item.minH ?? 1 : item.minH ?? (isStrip ? 1 : 4);
-    const w = isGroup ? GRID_COLS : Math.max(minW, Math.min(item.w, GRID_COLS));
-    const h = Math.max(minH, item.h);
-    const x = isGroup ? 0 : Math.max(0, Math.min(item.x, GRID_COLS - w));
-    const y = Math.max(0, item.y);
-    return {
-      ...item,
-      kind: isGroup ? "group" as const : isStrip ? "strip" as const : "panel" as const,
-      ...(isStrip ? { orientation: item.orientation ?? "horizontal" as const } : {}),
-      x,
-      y,
-      w,
-      h,
-      minW,
-      minH,
-      maxW: isGroup ? GRID_COLS : item.maxW ?? GRID_COLS,
-      maxH: isGroup ? item.maxH ?? h : item.maxH ?? 20,
-    };
-  });
-
-  const normalized = normalizeGroupedLayoutItems(normalizedWithGroups);
-
-  // Match the editor: compact the outer grid vertically, while preserving
-  // intentional local spacing inside groups. Both scopes still resolve collisions.
-  const scopes = new Map<string, GridEditorItem[]>();
-  for (const item of normalized) {
-    const scope = item.groupId ?? "__outer";
-    scopes.set(scope, [...(scopes.get(scope) ?? []), item]);
-  }
-
-  const out: GridEditorItem[] = [];
-  for (const [scope, scopedItems] of scopes) {
-    out.push(...compactLayoutItems(scopedItems, scope !== "__outer"));
-  }
-
-  return orderLayoutItems(out);
+  return normalizeLayoutDraftItems(items);
 }
 
 interface LayoutSnapshot {
@@ -3938,6 +3893,25 @@ function InstancePageViewContent({
     onTogglePlayers: togglePlayersSelection,
   }), [instance, selectedEncounters, viewState.enemies, viewState.players, setInternalSelectedIds, togglePlayerSelection, togglePlayersSelection]);
   
+  const customPanelRegistry = useCustomPanelRegistry();
+  const selectableCustomPanels = useMemo(
+    () => listSelectableCustomPanels(customPanelRegistry).map(({ ref, panel, installation }) => ({
+      id: canonicalizeCustomPanelRef(ref) ?? ref,
+      label: panel.name,
+      description: panel.description ?? installation.manifest.plugin.description ?? `Custom panel from ${installation.repository}`,
+      queryable: false,
+      hidden: false,
+    })),
+    [customPanelRegistry],
+  );
+  const availableStripCatalog = useMemo(() => Object.entries(STRIPS).map(([id, strip]) => ({
+    id,
+    label: strip.label,
+    defaultOrientation: strip.defaultOrientation,
+    supportedOrientations: [...strip.supportedOrientations],
+    size: strip.size,
+  })), []);
+
   const inferenceStateSignature = JSON.stringify({
     instanceId: instance.id,
     selectedIds,
@@ -3947,9 +3921,12 @@ function InstancePageViewContent({
     timeRange: timeRange ? [timeRange.enabled, timeRange.startOffsetMs, timeRange.endOffsetMs] : null,
     activePresetId,
     activeLayoutItems,
+    layoutAppearance,
     panelTypesByID,
     panelOptionsByID,
     panelFiltersByID,
+    selectableCustomPanelIds: selectableCustomPanels.map((panel) => panel.id),
+    availableStripCatalog,
   });
   const inferenceRevisionRef = useRef({ signature: inferenceStateSignature, revision: 0 });
   if (inferenceRevisionRef.current.signature !== inferenceStateSignature) {
@@ -3972,6 +3949,7 @@ function InstancePageViewContent({
       endOffsetMs: timeRange?.endOffsetMs ?? null,
     },
     presetId: activePresetId,
+    layoutAppearance,
     layoutItems: activeLayoutItems,
     panelTypesById: panelTypesByID,
     panelOptionsById: panelOptionsByID,
@@ -3979,14 +3957,18 @@ function InstancePageViewContent({
     availableEncounterIds: instance.encounters.map((encounter) => encounter.id),
     availablePlayerIds: Object.keys(instance.players ?? {}).sort(),
     availableEnemyIds: allMergedEnemies.map((enemy) => enemy.id),
-    availablePanelCatalog: Object.entries(PANELS).map(([id, panel]) => ({
-      id,
-      label: panel.label,
-      description: PANEL_AI_DESCRIPTIONS[id as BuiltinPanelType],
-      queryable: isQueryablePanelType(id),
-      hidden: panel.hidden === true,
-    })),
-    availablePanelTypes: Object.keys(PANELS),
+    availablePanelCatalog: [
+      ...Object.entries(PANELS).map(([id, panel]) => ({
+        id,
+        label: panel.label,
+        description: PANEL_AI_DESCRIPTIONS[id as BuiltinPanelType],
+        queryable: isQueryablePanelType(id),
+        hidden: panel.hidden === true,
+      })),
+      ...selectableCustomPanels,
+    ],
+    availablePanelTypes: [...Object.keys(PANELS), ...selectableCustomPanels.map((panel) => panel.id)],
+    availableStripCatalog,
     availablePresets: getAvailablePresetLayouts(instance.capabilities ?? [], isMobile).map((preset) => preset.id),
   };
   const setInferencePanelFilters = (panelId: string, filters: PanelFilter[]) => {
@@ -4035,8 +4017,17 @@ function InstancePageViewContent({
       <InstanceInferenceCapability
         state={inferenceState}
         canMutate={canEditSharedView && !layoutEditActive}
+        canMutateLayout={canEditLayout && !layoutEditActive}
         readOnlyReason={layoutEditActive ? "The user is editing this layout; view changes are paused until they finish." : undefined}
+        layoutReadOnlyReason={layoutEditActive
+          ? "The user is editing this layout; layout changes are paused until they finish."
+          : isMobile
+            ? "Layouts cannot be edited on mobile."
+            : activePageType
+              ? "Page-style layouts cannot be edited by the assistant."
+              : undefined}
         onApplyPreset={applyPreset}
+        onApplyLayout={(layout) => { applyLayoutExport(layout); }}
         onSetPanel={(panelId, panelType) => handlePanelTypeChangeByID(panelId, panelType as EventsPanelType)}
         onSetPanelOption={handlePanelOptionChangeByID}
         onSetPanelFilters={setInferencePanelFilters}

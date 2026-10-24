@@ -432,19 +432,25 @@ func TestToolArgumentsAreStrictAndBounded(t *testing.T) {
 func TestInstancePageClientCapabilityIsBoundToThreadScope(t *testing.T) {
 	t.Parallel()
 	revision := int64(3)
-	client, err := advertisedInstancePageClient(&chroniclesdk.InferenceClient{SessionID: "session-1", Capabilities: []chroniclesdk.InferenceClientCapability{{ID: "instance-page", Version: 1, ScopeType: "instance", ScopeID: "instance-1", StateRevision: &revision}}}, "instance-1")
+	client, err := advertisedInstancePageClient(&chroniclesdk.InferenceClient{SessionID: "session-1", Capabilities: []chroniclesdk.InferenceClientCapability{{ID: "instance-page", Version: 2, ScopeType: "instance", ScopeID: "instance-1", StateRevision: &revision}}}, "instance-1")
 	require.NoError(t, err)
 	require.Equal(t, "session-1", client.SessionID)
 	require.Equal(t, revision, *client.StateRevision)
 
-	_, err = advertisedInstancePageClient(&chroniclesdk.InferenceClient{SessionID: "session-1", Capabilities: []chroniclesdk.InferenceClientCapability{{ID: "instance-page", Version: 1, ScopeType: "instance", ScopeID: "other"}}}, "instance-1")
+	_, err = advertisedInstancePageClient(&chroniclesdk.InferenceClient{SessionID: "session-1", Capabilities: []chroniclesdk.InferenceClientCapability{{ID: "instance-page", Version: 2, ScopeType: "instance", ScopeID: "other"}}}, "instance-1")
 	require.ErrorContains(t, err, "must match")
+	legacy, err := advertisedInstancePageClient(&chroniclesdk.InferenceClient{SessionID: "session-1", Capabilities: []chroniclesdk.InferenceClientCapability{{ID: "instance-page", Version: 1, ScopeType: "instance", ScopeID: "instance-1"}}}, "instance-1")
+	require.NoError(t, err)
+	require.Nil(t, legacy)
 	_, err = advertisedInstancePageClient(&chroniclesdk.InferenceClient{SessionID: strings.Repeat("s", maxClientSessionID+1)}, "instance-1")
 	require.Error(t, err)
 }
 
 func TestClientToolArgumentsAndResultsAreBoundedAndNormalized(t *testing.T) {
 	t.Parallel()
+	for _, tool := range instancePageClientTools {
+		require.True(t, json.Valid(tool.Parameters), tool.Name)
+	}
 	for _, test := range []struct {
 		name string
 		args string
@@ -452,6 +458,7 @@ func TestClientToolArgumentsAndResultsAreBoundedAndNormalized(t *testing.T) {
 		{name: "inspect_instance_ui", args: `{"include":["selection","panels"]}`},
 		{name: "query_panel", args: `{"panel_id":"damage","view":"top_entities","limit":50}`},
 		{name: "update_instance_ui", args: `{"expected_revision":2,"operations":[{"op":"select_players","ids":["player-1"]}]}`},
+		{name: "update_instance_layout", args: `{"expected_revision":2,"operations":[{"op":"add_panel","item_id":"panel-2","panel_type":"custom:github:owner/repo:meter","x":0,"y":4,"w":6,"h":4},{"op":"add_strip","item_id":"strip-1","strip_type":"raid_durability","orientation":"horizontal","x":0,"y":8},{"op":"update_group","item_id":"group-1","accent_color":null},{"op":"set_appearance","seamless":true}]}`},
 	} {
 		validated, err := validateClientToolArguments(test.name, test.args)
 		require.NoError(t, err, test.name)
@@ -460,6 +467,14 @@ func TestClientToolArgumentsAndResultsAreBoundedAndNormalized(t *testing.T) {
 	_, err := validateClientToolArguments("query_panel", `{"panel_id":"damage","limit":51}`)
 	require.Error(t, err)
 	_, err = validateClientToolArguments("update_instance_ui", `{"operations":[{"op":"not_allowed"}]}`)
+	require.Error(t, err)
+	_, err = validateClientToolArguments("update_instance_layout", `{"operations":[{"op":"add_strip","item_id":"strip-1"}]}`)
+	require.Error(t, err)
+	_, err = validateClientToolArguments("update_instance_layout", `{"operations":[{"op":"add_panel","item_id":"panel 2","panel_type":"damage_done","x":0,"y":0,"w":6,"h":4}]}`)
+	require.Error(t, err)
+	_, err = validateClientToolArguments("update_instance_layout", `{"operations":[{"op":"update_group","item_id":"group-1","title":null,"collapsed_by_default":true}]}`)
+	require.Error(t, err)
+	_, err = validateClientToolArguments("update_instance_layout", `{"operations":[{"op":"add_panel","item_id":"panel-2","panel_type":"damage_done","x":0,"y":0,"w":13,"h":4}]}`)
 	require.Error(t, err)
 
 	secret := `{"exception":"database password SECRET"}`
@@ -594,7 +609,7 @@ func TestCreateRunSupersedesWaitingClientTool(t *testing.T) {
 
 func TestAgentLoopPausesAndCanPauseAgainForClientTools(t *testing.T) {
 	t.Parallel()
-	capability := &clientCapability{ID: "instance-page", Version: 1, ScopeType: "instance", ScopeID: "instance-1", SessionID: "session-1"}
+	capability := &clientCapability{ID: "instance-page", Version: instancePageCapabilityVersion, ScopeType: "instance", ScopeID: "instance-1", SessionID: "session-1"}
 	assistantDefinition := withClientTools(assistants["instance-analyst"], capability)
 	provider := &scriptedProvider{streams: [][]StreamEvent{
 		{{Type: StreamEventToolCallDelta, ToolCall: ToolCallDelta{Index: 0, ID: "call-1", Name: "inspect_instance_ui", Arguments: `{"include":["panels"]}`}}, {Type: StreamEventUsage, Usage: Usage{PromptTokens: 3, CompletionTokens: 1, TotalTokens: 4}}, {Type: StreamEventFinish, FinishReason: FinishReasonToolCalls}},

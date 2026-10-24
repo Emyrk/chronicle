@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ChartDataEntry } from "../EventsPanels/ChartDataRegistry";
 import {
   buildInstanceUISnapshot,
+  planInstanceLayoutUpdate,
   planInstanceUIUpdate,
   queryMetricPanel,
   type InstanceUIState,
@@ -17,6 +18,7 @@ const state: InstanceUIState = {
   includeWipes: false,
   timeRange: { enabled: true, startOffsetMs: 1000, endOffsetMs: 5000 },
   presetId: "damage",
+  layoutAppearance: { seamless: false },
   layoutItems: [{ id: "panel-1", kind: "panel", title: "Panel 1", x: 0, y: 0, w: 6, h: 4 }],
   panelTypesById: { "panel-1": "damage_done" },
   panelOptionsById: { "panel-1": "g:merged" },
@@ -39,8 +41,22 @@ const state: InstanceUIState = {
       queryable: true,
       hidden: false,
     },
+    {
+      id: "custom:github:owner/repo:meter",
+      label: "Custom Meter",
+      description: "An installed custom panel.",
+      queryable: false,
+      hidden: false,
+    },
   ],
-  availablePanelTypes: ["damage_done", "healing_done"],
+  availablePanelTypes: ["damage_done", "healing_done", "custom:github:owner/repo:meter"],
+  availableStripCatalog: [{
+    id: "raid_durability",
+    label: "Raid Durability",
+    defaultOrientation: "horizontal",
+    supportedOrientations: ["horizontal"],
+    size: { minLength: 6, preferredLength: 12, minThickness: 1, preferredThickness: 1, maxThickness: 2 },
+  }],
   availablePresets: ["summary", "damage", "healing"],
 };
 
@@ -59,6 +75,7 @@ describe("instance inference tools", () => {
       },
       layout: {
         presetId: "damage",
+        appearance: { seamless: false },
         items: state.layoutItems,
       },
       panels: [{
@@ -71,8 +88,9 @@ describe("instance inference tools", () => {
     });
     expect(buildInstanceUISnapshot(state, ["capabilities"])).toMatchObject({
       capabilities: {
-        panelTypes: ["damage_done", "healing_done"],
+        panelTypes: ["damage_done", "healing_done", "custom:github:owner/repo:meter"],
         panelCatalog: state.availablePanelCatalog,
+        stripCatalog: state.availableStripCatalog,
         presets: ["summary", "damage", "healing"],
       },
     });
@@ -100,6 +118,107 @@ describe("instance inference tools", () => {
       totalRows: 2,
       rows: [{ entityId: "a", name: "Alpha", className: "Warrior", specialization: "Fury", value: 20, secondaryValue: 2 }],
     });
+  });
+
+  it("plans an atomic layout replacement from sequential operations", () => {
+    const plan = planInstanceLayoutUpdate(state, {
+      expected_revision: 4,
+      operations: [
+        { op: "add_group", item_id: "group-1", title: "Throughput", x: 0, y: 4 },
+        { op: "add_panel", item_id: "panel-2", panel_type: "healing_done", x: 0, y: 0, w: 6, h: 4 },
+        { op: "move_into_group", item_id: "panel-2", group_id: "group-1", x: 0, y: 0 },
+        { op: "move_item", item_id: "panel-1", x: 6, y: 0 },
+        { op: "set_appearance", seamless: true },
+      ],
+    });
+
+    expect(plan.expectedRevision).toBe(4);
+    expect(plan.layout).toMatchObject({
+      version: 1,
+      seamless: true,
+      panelTypesById: { "panel-1": "damage_done", "panel-2": "healing_done" },
+    });
+    expect(plan.layout.items.find((item) => item.id === "group-1")).toMatchObject({
+      kind: "group",
+      title: "Throughput",
+      x: 0,
+      y: 4,
+      w: 12,
+    });
+    expect(plan.layout.items.find((item) => item.id === "panel-2")).toMatchObject({
+      groupId: "group-1",
+      x: 0,
+      y: 0,
+      w: 6,
+      h: 4,
+    });
+    expect(plan.summaries).toHaveLength(5);
+  });
+
+  it("returns geometry after the same outer-grid compaction used when applying", () => {
+    const plan = planInstanceLayoutUpdate(state, {
+      operations: [{ op: "move_item", item_id: "panel-1", x: 0, y: 100 }],
+    });
+    expect(plan.layout.items.find((item) => item.id === "panel-1")).toMatchObject({ x: 0, y: 0 });
+  });
+
+  it("adds strips and installed custom panels and preserves existing ones", () => {
+    const plan = planInstanceLayoutUpdate(state, {
+      operations: [
+        { op: "add_strip", item_id: "strip-1", strip_type: "raid_durability", x: 0, y: 4 },
+        { op: "add_panel", item_id: "custom-1", panel_type: "custom:github:owner/repo:meter", x: 0, y: 5, w: 6, h: 4 },
+        { op: "set_appearance", seamless: true },
+      ],
+    });
+    expect(plan.layout.items.find((item) => item.id === "strip-1")).toMatchObject({
+      kind: "strip",
+      stripType: "raid_durability",
+      orientation: "horizontal",
+      w: 12,
+      h: 1,
+    });
+    expect(plan.layout.items.find((item) => item.id === "custom-1")).toMatchObject({ kind: "panel", title: "Custom Meter" });
+    expect(plan.layout.panelTypesById["custom-1"]).toBe("custom:github:owner/repo:meter");
+
+    const existingCustom = planInstanceLayoutUpdate({
+      ...state,
+      panelTypesById: { "panel-1": "custom:github:owner/repo:meter" },
+    }, { operations: [{ op: "set_appearance", seamless: true }] });
+    expect(existingCustom.layout.panelTypesById["panel-1"]).toBe("custom:github:owner/repo:meter");
+    const existing = planInstanceLayoutUpdate({
+      ...state,
+      layoutItems: [{ ...state.layoutItems[0], kind: "strip", stripType: "raid_durability", h: 1, minW: 6, minH: 1, maxH: 2 }],
+      panelTypesById: {},
+    }, { operations: [{ op: "set_appearance", seamless: true }] });
+    expect(existing.layout.items[0]).toMatchObject({ kind: "strip", stripType: "raid_durability" });
+  });
+
+  it("rejects invalid layout operations without producing a partial layout", () => {
+    expect(() => planInstanceLayoutUpdate(state, {
+      expected_revision: 3,
+      operations: [{ op: "remove_item", item_id: "panel-1" }],
+    })).toThrow("stale_state");
+    expect(() => planInstanceLayoutUpdate(state, {
+      operations: [{ op: "add_panel", item_id: "panel-2", panel_type: "missing", x: 0, y: 4, w: 6, h: 4 }],
+    })).toThrow("unknown_panel_type");
+    expect(() => planInstanceLayoutUpdate(state, {
+      operations: [{ op: "add_panel", item_id: "panel-2", panel_type: "healing_done", x: 5, y: 0, w: 6, h: 4 }],
+    })).toThrow("overlapping_layout_items");
+    expect(() => planInstanceLayoutUpdate(state, {
+      operations: [{ op: "add_strip", item_id: "strip-1", strip_type: "missing", x: 0, y: 4 }],
+    })).toThrow("unknown_strip_type");
+    expect(() => planInstanceLayoutUpdate(state, {
+      operations: [{ op: "add_strip", item_id: "strip-1", strip_type: "raid_durability", orientation: "vertical", x: 0, y: 4 }],
+    })).toThrow("unsupported_strip_orientation");
+    expect(() => planInstanceLayoutUpdate(state, {
+      operations: [{ op: "add_panel", item_id: "panel 2", panel_type: "healing_done", x: 0, y: 4, w: 6, h: 4 }],
+    })).toThrow("invalid_item_id");
+    expect(() => planInstanceLayoutUpdate(state, {
+      operations: [{ op: "add_group", item_id: "group-1", title: null as unknown as string, x: 0, y: 4 }],
+    })).toThrow("invalid_layout_text");
+    expect(() => planInstanceLayoutUpdate(state, {
+      operations: [{ op: "add_group", item_id: "group-1", title: "Nested", x: 0, y: 4 }, { op: "move_into_group", item_id: "group-1", group_id: "group-1", x: 0, y: 0 }],
+    })).toThrow("invalid_group_membership");
   });
 
   it("validates an atomic mutation plan without applying partial changes", () => {

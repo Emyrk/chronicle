@@ -10,6 +10,7 @@ import {
   layoutDraftToExport,
   moveIntoGroup,
   moveOutOfGroup,
+  normalizeLayoutDraftItems,
   removeItem,
   setPanelOption,
   setPanelFilters,
@@ -125,6 +126,17 @@ describe("layoutDraft", () => {
 
   it("drops empty filter lists", () => {
     expect(setPanelFilters(draft(), "panel-2", []).panelFiltersById).not.toHaveProperty("panel-2");
+  });
+
+  it("normalizes items with the same outer compaction used by the rendered layout", () => {
+    const normalized = normalizeLayoutDraftItems([
+      { id: "panel-1", title: "First", x: -1, y: 10, w: 2, h: 2 },
+      { id: "panel-2", title: "Second", x: 6, y: 20, w: 6, h: 4 },
+    ]);
+    expect(normalized).toEqual([
+      expect.objectContaining({ id: "panel-1", kind: "panel", x: 0, y: 0, w: 4, h: 4 }),
+      expect.objectContaining({ id: "panel-2", kind: "panel", x: 6, y: 0, w: 6, h: 4 }),
+    ]);
   });
 
   it("round-trips through the layout export shape", () => {
