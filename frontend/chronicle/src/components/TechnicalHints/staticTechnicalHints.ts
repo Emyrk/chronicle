@@ -28,6 +28,7 @@ export const STATIC_TECHNICAL_HINTS: readonly TechnicalHint[] = [
     title: `Check out the ${hint.panelLabel} panel`,
     body: hint.content,
     panel: hint.panelID,
+    panel_label: hint.panelLabel,
     tags: ["panel", hint.panelID],
   })),
   ...BLOG_POSTS.filter((post) => post.hintEnabled !== false).map((post): TechnicalHint => ({

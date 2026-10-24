@@ -44,6 +44,15 @@ describe("TechnicalHintCard", () => {
     expect(renderToStaticMarkup(<TechnicalHintCard hint={hint({})} />)).not.toContain("instance page");
   });
 
+  it("bolds only the panel name for panel hints", () => {
+    const markup = renderToStaticMarkup(
+      <TechnicalHintCard hint={hint({ kind: "panel", title: "Check out the Death Log panel", panel_label: "Death Log" })} />,
+    );
+
+    expect(markup).toContain('<strong class="font-bold">Death Log</strong>');
+    expect(markup).toContain("Check out the ");
+  });
+
   it("omits the call to action without a link", () => {
     const markup = renderToStaticMarkup(<TechnicalHintCard hint={hint({})} />);
 
