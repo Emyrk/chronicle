@@ -472,6 +472,12 @@ func TestClientToolArgumentsAndResultsAreBoundedAndNormalized(t *testing.T) {
 	require.JSONEq(t, `{"status":"capability_unavailable","result":{"message":"This instance view is read-only while following a live session."}}`, content)
 	require.NotContains(t, content, "SECRET")
 
+	message, terminal := terminalClientToolFailureMessage(chroniclesdk.InferenceClientToolResultRequest{Status: "capability_unavailable", Result: json.RawMessage(`{"message":"This instance view is read-only while following a live session."}`)})
+	require.True(t, terminal)
+	require.Equal(t, "I couldn't complete that request: This instance view is read-only while following a live session.", message)
+	_, terminal = terminalClientToolFailureMessage(chroniclesdk.InferenceClientToolResultRequest{Status: "stale_state", Result: json.RawMessage(`{"message":"changed"}`)})
+	require.False(t, terminal)
+
 	_, err = normalizedClientToolResult(chroniclesdk.InferenceClientToolResultRequest{Status: "success", Result: json.RawMessage(strings.Repeat("x", maxClientResult+1))})
 	require.ErrorContains(t, err, "too large")
 }

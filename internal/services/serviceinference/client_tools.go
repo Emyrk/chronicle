@@ -186,6 +186,40 @@ func validateClientToolContinuation(pending database.InferenceClientToolRequest,
 	return nil
 }
 
+func clientToolFailureMessage(request chroniclesdk.InferenceClientToolResultRequest) string {
+	var failure struct {
+		Message string `json:"message"`
+	}
+	if len(request.Result) == 0 || !json.Valid(request.Result) || json.Unmarshal(request.Result, &failure) != nil {
+		return ""
+	}
+	failure.Message = strings.TrimSpace(failure.Message)
+	if runes := []rune(failure.Message); len(runes) > 500 {
+		failure.Message = string(runes[:500])
+	}
+	return failure.Message
+}
+
+func terminalClientToolFailureMessage(request chroniclesdk.InferenceClientToolResultRequest) (string, bool) {
+	detail := clientToolFailureMessage(request)
+	switch request.Status {
+	case "user_rejected":
+		return "I didn't make that change because you declined it.", true
+	case "capability_unavailable":
+		if detail != "" {
+			return "I couldn't complete that request: " + detail, true
+		}
+		return "I couldn't complete that request because the required page capability is unavailable.", true
+	case "client_error":
+		if detail != "" {
+			return "I couldn't complete that request: " + detail, true
+		}
+		return "I couldn't complete that request because the page tool failed. Refresh the page and try again.", true
+	default:
+		return "", false
+	}
+}
+
 func normalizedClientToolResult(request chroniclesdk.InferenceClientToolResultRequest) (string, error) {
 	if len(request.Result) > maxClientResult {
 		return "", errors.New("client tool result too large")
@@ -200,17 +234,10 @@ func normalizedClientToolResult(request chroniclesdk.InferenceClientToolResultRe
 			return "", errors.New("invalid client tool result")
 		}
 	case "user_rejected", "capability_unavailable", "stale_state", "client_error":
-		var failure struct {
-			Message string `json:"message"`
-		}
-		if len(request.Result) > 0 && json.Valid(request.Result) && json.Unmarshal(request.Result, &failure) == nil {
-			failure.Message = strings.TrimSpace(failure.Message)
-			if runes := []rune(failure.Message); len(runes) > 500 {
-				failure.Message = string(runes[:500])
-			}
-			if failure.Message != "" {
-				payload = failure
-			}
+		if message := clientToolFailureMessage(request); message != "" {
+			payload = struct {
+				Message string `json:"message"`
+			}{Message: message}
 		}
 	default:
 		return "", errors.New("invalid client tool status")

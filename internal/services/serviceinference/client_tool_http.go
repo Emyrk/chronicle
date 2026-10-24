@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/services/serviceinference/agui"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -71,16 +72,6 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Inference connection not found."})
 		return
 	}
-	provider, ok := s.registry.Provider(ProviderID(connection.Provider))
-	if !ok {
-		badRequest(w, r, "Unsupported provider.")
-		return
-	}
-	credential, err := s.cipher.Decrypt(connection.EncryptedCredential, credentialAAD(uid.String(), "provider-credential"))
-	if err != nil {
-		s.internalError(w, "decrypt inference credential", err)
-		return
-	}
 
 	var pending database.InferenceClientToolRequest
 	err = s.db.InTx(r.Context(), func(tx database.Store) error {
@@ -128,11 +119,59 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 		_ = s.finishRun(r.Context(), run, "error", agentLoopState{Usage: Usage{PromptTokens: int(run.InputTokens), CompletionTokens: int(run.OutputTokens), TotalTokens: int(run.InputTokens + run.OutputTokens)}, IterationCount: int(run.IterationCount), ToolCallCount: int(run.ToolCallCount)}, "stream_error")
 		return
 	}
+	if err := writer.Write(agui.ToolCallEndEvent{ToolCallID: pending.ToolCallID}); err != nil {
+		_ = s.finishRun(r.Context(), run, "error", agentLoopState{Usage: Usage{PromptTokens: int(run.InputTokens), CompletionTokens: int(run.OutputTokens), TotalTokens: int(run.InputTokens + run.OutputTokens)}, IterationCount: int(run.IterationCount), ToolCallCount: int(run.ToolCallCount)}, "stream_error")
+		return
+	}
 	debug := debugRunContext{Enabled: run.Debug, RunID: run.IdempotencyKey, ThreadID: thread.ID.String(), Persistence: "durable", ContextType: thread.ContextType.String, ContextID: thread.ContextID.String}
 	state := agentLoopState{Usage: Usage{PromptTokens: int(run.InputTokens), CompletionTokens: int(run.OutputTokens), TotalTokens: int(run.InputTokens + run.OutputTokens)}, IterationCount: int(run.IterationCount), ToolCallCount: int(run.ToolCallCount)}
 	persist := func(messages ...Message) error {
 		return s.persistInferenceMessages(r.Context(), thread.ID, messages...)
 	}
+	if terminalMessage, terminal := terminalClientToolFailureMessage(request); terminal {
+		message := Message{ID: uuid.NewString(), Role: RoleAssistant, Content: terminalMessage}
+		if err := writer.Write(agui.TextMessageStartEvent{MessageID: message.ID, Role: "assistant"}); err != nil {
+			_ = s.finishRun(r.Context(), run, "error", state, "stream_error")
+			return
+		}
+		if err := writer.Write(agui.TextMessageContentEvent{MessageID: message.ID, Delta: message.Content}); err != nil {
+			_ = s.finishRun(r.Context(), run, "error", state, "stream_error")
+			return
+		}
+		if err := persist(message); err != nil {
+			_ = s.finishRun(r.Context(), run, "error", state, "persistence_error")
+			_ = writer.Write(agui.RunErrorEvent{Message: "The inference run could not be finalized.", Code: "persistence_error"})
+			return
+		}
+		debugMessages := append([]Message{{Role: RoleSystem, Content: assistantDefinition.System}}, history...)
+		debugMessages = append(debugMessages, message)
+		if err := writeDebugSnapshot(writer, debug, state.IterationCount, "response", run.Model, assistantDefinition, debugMessages, state.Usage); err != nil {
+			_ = s.finishRun(r.Context(), run, "error", state, "stream_error")
+			return
+		}
+		if err := writer.Write(agui.TextMessageEndEvent{MessageID: message.ID}); err != nil {
+			_ = s.finishRun(r.Context(), run, "error", state, "stream_error")
+			return
+		}
+		if err := s.finishRun(r.Context(), run, "completed", state, ""); err != nil {
+			_ = writer.Write(agui.RunErrorEvent{Message: "The inference run could not be finalized.", Code: "persistence_error"})
+			return
+		}
+		_ = writer.Write(agui.RunFinishedEvent{ThreadID: thread.ID.String(), RunID: run.IdempotencyKey})
+		return
+	}
+
+	provider, ok := s.registry.Provider(ProviderID(connection.Provider))
+	if !ok {
+		badRequest(w, r, "Unsupported provider.")
+		return
+	}
+	credential, err := s.cipher.Decrypt(connection.EncryptedCredential, credentialAAD(uid.String(), "provider-credential"))
+	if err != nil {
+		s.internalError(w, "decrypt inference credential", err)
+		return
+	}
+
 	pause := func(assistantMessage Message, toolMessages []Message, next clientToolPause, nextState agentLoopState) error {
 		return s.pauseForClientTool(r.Context(), run, thread.ID, assistantMessage, toolMessages, next, nextState)
 	}
