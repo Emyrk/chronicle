@@ -14,6 +14,7 @@ func TestUlduarSpeedrunRequirements(t *testing.T) {
 
 	rules := UlduarFactory.FlavoredRankings(database.WoWFlavor{database.FlavorWrath})
 	require.NotNil(t, rules)
+	require.Equal(t, rankings.DamageRuleAssemblyOfIron, rules.Damage)
 	require.NotNil(t, rules.Speedrun)
 	require.Equal(t, "Flame Leviathan", rules.Speedrun.RankedStartAfterRequirement)
 	require.Equal(t, []rankings.SpeedrunRequirement{

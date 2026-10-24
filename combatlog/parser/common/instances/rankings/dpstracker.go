@@ -42,7 +42,8 @@ type DPSResult struct {
 // results keyed by encounter ID.
 type DPSTracker struct {
 	instancehook.BaseHook
-	units *unitdb.Units
+	units          *unitdb.Units
+	assemblyOfIron *DPSTrackerAssemblyOfIron
 
 	// Per-encounter state, reset on FightStarted.
 	damageDone  map[guid.GUID]int64
@@ -56,8 +57,8 @@ type DPSTracker struct {
 
 // NewDPSTracker creates a DPS tracker that uses the given unit database for
 // classifying GUIDs at fight end.
-func NewDPSTracker(units *unitdb.Units) *DPSTracker {
-	return &DPSTracker{
+func NewDPSTracker(units *unitdb.Units, rule DamageRule) *DPSTracker {
+	tracker := &DPSTracker{
 		units:       units,
 		damageDone:  make(map[guid.GUID]int64),
 		damageTaken: make(map[guid.GUID]int64),
@@ -65,6 +66,10 @@ func NewDPSTracker(units *unitdb.Units) *DPSTracker {
 		absorbDone:  make(map[guid.GUID]int64),
 		results:     make(map[uuid.UUID]*DPSResult),
 	}
+	if rule == DamageRuleAssemblyOfIron {
+		tracker.assemblyOfIron = newDPSTrackerAssemblyOfIron()
+	}
+	return tracker
 }
 
 func (t *DPSTracker) FightStarted(_ uuid.UUID, _ messages.Message) {
@@ -72,6 +77,9 @@ func (t *DPSTracker) FightStarted(_ uuid.UUID, _ messages.Message) {
 	t.damageTaken = make(map[guid.GUID]int64)
 	t.healingDone = make(map[guid.GUID]int64)
 	t.absorbDone = make(map[guid.GUID]int64)
+	if t.assemblyOfIron != nil {
+		t.assemblyOfIron.reset()
+	}
 }
 
 func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message) error {
@@ -128,7 +136,14 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 		}
 
 		if targetCls.Affiliation == unitdb.AffiliationHostile {
-			t.damageDone[creditGUID] += effectiveDamage
+			if t.assemblyOfIron == nil || !t.assemblyOfIron.trackDamage(msg.Target, creditGUID, effectiveDamage) {
+				t.damageDone[creditGUID] += effectiveDamage
+			}
+		}
+
+	case *messages.Slain:
+		if t.assemblyOfIron != nil {
+			t.assemblyOfIron.commitSlainTarget(msg.Victim, t.damageDone)
 		}
 
 	case *messages.Heal:
@@ -157,6 +172,10 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 }
 
 func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
+	if t.assemblyOfIron != nil {
+		t.assemblyOfIron.commitUnresolved(t.damageDone)
+	}
+
 	// Merge all GUIDs seen across all three metric maps.
 	allGUIDs := make(map[guid.GUID]struct{})
 	for g := range t.damageDone {

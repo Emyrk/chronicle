@@ -6,6 +6,7 @@
 
 import { Swords, Skull, PawPrint, Flame } from "lucide-react";
 import type { PanelDefinition, PanelRenderProps } from "../types";
+import type { PanelProcessor } from "../processorTypes";
 import type { PanelFilter } from "../processors/filters";
 import { MERGED_GROUPING_OPTIONS, PET_PANEL_GROUPING_OPTIONS, PET_GROUPING_OPTIONS } from "../processors/resolveEntity";
 import {
@@ -56,8 +57,11 @@ const DAMAGE_SOURCE_CONFIGS: Record<DamageSourceType, DamageSourceConfig> = {
 export function createDamageDonePanel(
   sourceType: DamageSourceType,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  processorOverride?: PanelProcessor<any, any>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): PanelDefinition<DamageDoneState, any> {
   const config = DAMAGE_SOURCE_CONFIGS[sourceType];
+  const processor = processorOverride ?? config.processor;
   const fixedFilters: PanelFilter[] = (() => {
     const dmg = ["damage"] as string[];
     switch (sourceType) {
@@ -101,7 +105,7 @@ export function createDamageDonePanel(
 
   // { type: "time_range" as const, value: "controller", applyTo:[]}
   return {
-    ...config.processor,
+    ...processor,
     label: config.label,
     icon: config.icon,
     keybinds: [{ keys: "Esc", action: "Return from a focused player to the player list" }],

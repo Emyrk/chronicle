@@ -53,10 +53,19 @@ type SpeedrunRules struct {
 }
 
 // Rankings holds all rule sets for an instance.
-// Nil sub-fields mean that ranking category doesn't apply.
+// Nil pointers and zero-valued rules mean that ranking category doesn't apply.
 type Rankings struct {
 	Speedrun *SpeedrunRules `json:"speedrun,omitempty"`
+	Damage   DamageRule     `json:"-"`
 }
+
+// DamageRule selects encounter-specific damage aggregation behavior.
+type DamageRule uint8
+
+const (
+	DamageRuleNone DamageRule = iota
+	DamageRuleAssemblyOfIron
+)
 
 // --- Proof (output, JSON-serializable) ---
 

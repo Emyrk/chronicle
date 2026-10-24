@@ -4,6 +4,7 @@ import "github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 
 func UlduarSpeedrunRequirements() *rankings.Rankings {
 	return &rankings.Rankings{
+		Damage: rankings.DamageRuleAssemblyOfIron,
 		Speedrun: &rankings.SpeedrunRules{
 			Requirements: []rankings.SpeedrunRequirement{
 				{Name: "Flame Leviathan", EntryIDs: []uint32{33113, 34003}, Count: 1, Category: rankings.SpeedrunCategoryBosses},

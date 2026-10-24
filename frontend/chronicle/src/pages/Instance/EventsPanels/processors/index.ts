@@ -4,6 +4,7 @@
 
 import type { PanelProcessor } from "../processorTypes";
 import { rotationTimelineProcessor } from "../RotationTimeline/rotationTimeline.processor";
+import { assemblyDamageDoneProcessor } from "../DamageDone/assemblyDamageDone.processor";
 import { damageDoneProcessor, vulnerabilityEffectProcessor, enemyDamageDoneProcessor, petDamageDoneProcessor, friendlyFireProcessor } from "../DamageDone/damageDone.processor";
 import { damageTakenProcessor, enemyDamageTakenProcessor } from "../DamageTaken/damageTaken.processor";
 import { extraAttacksProcessor } from "../ExtraAttacks/extraAttacks.processor";
@@ -55,6 +56,7 @@ import { raidFramesProcessor } from "../RaidFrames/raidFrames.processor";
 import { activityLogProcessor } from "../ActivityLog/activityLog.processor";
 
 // Export individual processors
+export { assemblyDamageDoneProcessor } from "../DamageDone/assemblyDamageDone.processor";
 export { damageDoneProcessor, vulnerabilityEffectProcessor, enemyDamageDoneProcessor, petDamageDoneProcessor, friendlyFireProcessor } from "../DamageDone/damageDone.processor";
 export { damageTakenProcessor, enemyDamageTakenProcessor } from "../DamageTaken/damageTaken.processor";
 export { extraAttacksProcessor } from "../ExtraAttacks/extraAttacks.processor";
@@ -164,6 +166,7 @@ export { isResourceChangeEvent, isHealingEvent, isDamageEvent } from "./events";
 export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   player_life_state: playerLifeStateProcessor,
   friendly_class_buffs: friendlyClassBuffsProcessor,
+  damage_done_assembly: assemblyDamageDoneProcessor,
   damage_done: damageDoneProcessor,
   vulnerability_effect: vulnerabilityEffectProcessor,
   damage_done_enemies: enemyDamageDoneProcessor,

@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { AbilityTable, type AbilityData } from "./AbilityBreakout";
+import { AbilityBreakout, AbilityTable, type AbilityData } from "./AbilityBreakout";
 
 const ability: AbilityData = {
   name: "Healing Touch",
@@ -52,6 +52,35 @@ describe("AbilityTable stacked column order", () => {
   });
 });
 
+
+describe("AbilityBreakout deferred stacked detail", () => {
+  it("hides Excluded until More detail is expanded", () => {
+    const collapsed = renderToStaticMarkup(
+      <AbilityBreakout
+        abilities={[ability]}
+        totalValue={ability.value}
+        showOverheal
+        stackedLabel="Excluded"
+        showStackedOnlyWhenExpanded
+        expanded={false}
+      />,
+    );
+    const expanded = renderToStaticMarkup(
+      <AbilityBreakout
+        abilities={[ability]}
+        totalValue={ability.value}
+        showOverheal
+        stackedLabel="Excluded"
+        showStackedOnlyWhenExpanded
+        expanded
+      />,
+    );
+
+    expect(collapsed).not.toContain("Excluded");
+    expect(expanded).toContain("Excluded");
+    expect(expanded).toContain("250");
+  });
+});
 
 describe("AbilityTable detail controls", () => {
   it("shows More detail when hit outcome data is available", () => {

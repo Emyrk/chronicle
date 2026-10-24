@@ -54,12 +54,40 @@ export type DamageDoneResult = {
   VulnerabilityByTargetBonus: Map<string, Map<string, number>>;
   VulnerabilityByTargetBase: Map<string, Map<string, number>>;
 
+  // Assembly of Iron damage excluded from ranking totals, retained for display.
+  EncounterExcludedDamage?: Map<string, UnitDamage>;
+
+  // Assembly of Iron breakouts excluded from ranking totals.
+  ExcludedByAbility?: Map<string, Map<string, DamageAbilityBreakout>>;
+  ExcludedByAbilityBySpellId?: Map<string, Map<number, SpellIdAbilityBreakout>>;
+  ExcludedByTarget?: Map<string, Map<string, number>>;
+
   // GUID cache for performance (avoids repeated parsing)
   GuidCache: GuidCache;
   // Aura state used for inline aura-aware decisions
   AuraState: AuraProcessorState;
   // Internal metric for tests/debugging - does not affect displayed aggregation
   _damageEventsWithSunderArmor: number;
+}
+
+export function createDamageDoneResult(): DamageDoneResult {
+  return {
+    EncounterDamage: new Map<string, UnitDamage>(),
+    ByAbility: new Map<string, Map<string, DamageAbilityBreakout>>(),
+    ByAbilityBySpellId: new Map<string, Map<number, SpellIdAbilityBreakout>>(),
+    ByTarget: new Map<string, Map<string, number>>(),
+    EncounterVulnerabilityBonus: new Map<string, EncounterUnitTargetValue>(),
+    EncounterVulnerabilityBase: new Map<string, EncounterUnitTargetValue>(),
+    VulnerabilityByAbilityBonus: new Map<string, Map<string, DamageAbilityBreakout>>(),
+    VulnerabilityByAbilityBase: new Map<string, Map<string, DamageAbilityBreakout>>(),
+    VulnerabilityByAbilityBySpellIdBonus: new Map<string, Map<number, SpellIdAbilityBreakout>>(),
+    VulnerabilityByAbilityBySpellIdBase: new Map<string, Map<number, SpellIdAbilityBreakout>>(),
+    VulnerabilityByTargetBonus: new Map<string, Map<string, number>>(),
+    VulnerabilityByTargetBase: new Map<string, Map<string, number>>(),
+    GuidCache: createGuidCache(),
+    AuraState: createAuraProcessorState(),
+    _damageEventsWithSunderArmor: 0,
+  };
 }
 
 interface DamageDoneProcessorOptions {
@@ -184,23 +212,7 @@ export function createDamageDoneProcessor(
     id,
     streams: vulnerabilityMode ? ["damage", "aura", "slain"] : ["damage"],
 
-    createState: () => ({
-      EncounterDamage: new Map<string, UnitDamage>(),
-      ByAbility: new Map<string, Map<string, DamageAbilityBreakout>>(),
-      ByAbilityBySpellId: new Map<string, Map<number, SpellIdAbilityBreakout>>(),
-      ByTarget: new Map<string, Map<string, number>>(),
-      EncounterVulnerabilityBonus: new Map<string, EncounterUnitTargetValue>(),
-      EncounterVulnerabilityBase: new Map<string, EncounterUnitTargetValue>(),
-      VulnerabilityByAbilityBonus: new Map<string, Map<string, DamageAbilityBreakout>>(),
-      VulnerabilityByAbilityBase: new Map<string, Map<string, DamageAbilityBreakout>>(),
-      VulnerabilityByAbilityBySpellIdBonus: new Map<string, Map<number, SpellIdAbilityBreakout>>(),
-      VulnerabilityByAbilityBySpellIdBase: new Map<string, Map<number, SpellIdAbilityBreakout>>(),
-      VulnerabilityByTargetBonus: new Map<string, Map<string, number>>(),
-      VulnerabilityByTargetBase: new Map<string, Map<string, number>>(),
-      GuidCache: createGuidCache(),
-      AuraState: createAuraProcessorState(),
-      _damageEventsWithSunderArmor: 0,
-    }),
+    createState: createDamageDoneResult,
 
     processEvent: (
       state: DamageDoneResult,

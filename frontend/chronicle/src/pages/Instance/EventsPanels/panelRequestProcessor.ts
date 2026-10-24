@@ -262,6 +262,8 @@ function processStreams<TResult>(
       // Consume the peeked event
       consumePeeked(minCursor);
     }
+
+    processor.finalizeEncounter?.(state, currentEncounterID, context);
   }
   
   return { result: state, totalEvents };
