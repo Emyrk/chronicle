@@ -1,0 +1,20 @@
+import { describe, expect, it } from "vitest";
+import { seoProductName } from "./seo";
+
+describe("seoProductName", () => {
+  it.each([
+    [["vanilla", "wow-forever"], "WoW Forever"],
+    [["vanilla", "kronos"], "Kronos"],
+    [["wrath", "azerothcore", "chromiecraft"], "ChromieCraft"],
+    [["vanilla", "vanillaplus"], "VanillaPlus"],
+    [["vanilla", "octowow"], "OctoWoW"],
+    [["vanilla", "capybara"], "CapybaraCraft"],
+  ])("maps %j to %s", (flavor, expected) => {
+    expect(seoProductName(flavor)).toBe(expected);
+  });
+
+  it("keeps unsupported flavors on generic SEO copy", () => {
+    expect(seoProductName(["vanilla", "turtle"])).toBe("");
+    expect(seoProductName(undefined)).toBe("");
+  });
+});

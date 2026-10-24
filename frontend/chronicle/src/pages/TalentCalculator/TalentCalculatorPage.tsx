@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Link, useParams, Navigate, useSearchParams } from "react-router-dom";
 import { ChevronLeft, EyeOff, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { seoProductName } from "@/lib/seo";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useSiteConfig } from "@/api/queries";
 import { useRankingsEncounters, useRankingsInstances, useRankingsLeaderboard } from "@/api/rankingsQueries";
@@ -121,11 +122,11 @@ export function TalentCalculatorPage() {
         ? talentData?.classes?.[String(selectedClassId)]
         : undefined;
 
-  const seoProductName = siteConfig?.dataset_flavor?.includes("wow-forever") ? "WoW Forever" : "";
-  const talentPageTitle = [seoProductName, selectedOption?.name, "Talent Calculator"].filter(Boolean).join(" ");
+  const productName = seoProductName(siteConfig?.dataset_flavor);
+  const talentPageTitle = [productName, selectedOption?.name, "Talent Calculator"].filter(Boolean).join(" ");
   const talentPageDescription = selectedOption
-    ? `Plan, compare, and share ${seoProductName ? `${seoProductName} ` : ""}${selectedOption.name} talent builds.`
-    : `Plan, compare, and share ${seoProductName ? `${seoProductName} ` : ""}class talent builds.`;
+    ? `Plan, compare, and share ${productName ? `${productName} ` : ""}${selectedOption.name} talent builds.`
+    : `Plan, compare, and share ${productName ? `${productName} ` : ""}class talent builds.`;
 
   const isMobile = useIsMobile();
 

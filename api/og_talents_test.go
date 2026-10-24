@@ -9,8 +9,26 @@ import (
 
 func TestSEOProductName(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, "WoW Forever", seoProductName(database.WoWFlavor{database.FlavorVanilla, database.FlavorWoWForever}))
-	require.Empty(t, seoProductName(database.WoWFlavor{database.FlavorVanilla, database.FlavorTurtle}))
+
+	cases := []struct {
+		name   string
+		flavor database.WoWFlavor
+		want   string
+	}{
+		{"WoWForever", database.WoWFlavor{database.FlavorVanilla, database.FlavorWoWForever}, "WoW Forever"},
+		{"Kronos", database.WoWFlavor{database.FlavorVanilla, database.FlavorKronos}, "Kronos"},
+		{"ChromieCraft", database.WoWFlavor{database.FlavorWrath, database.FlavorAzerothcore, database.FlavorChromieCraft}, "ChromieCraft"},
+		{"VanillaPlus", database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}, "VanillaPlus"},
+		{"OctoWoW", database.WoWFlavor{database.FlavorVanilla, database.FlavorOctoWoW}, "OctoWoW"},
+		{"CapybaraCraft", database.WoWFlavor{database.FlavorVanilla, database.FlavorCapybara}, "CapybaraCraft"},
+		{"Generic", database.WoWFlavor{database.FlavorVanilla, database.FlavorTurtle}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, seoProductName(tc.flavor))
+		})
+	}
 }
 
 func TestFlavorStaticOG(t *testing.T) {
