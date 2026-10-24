@@ -62,4 +62,15 @@ describe("TechnicalHintCard", () => {
     expect(markup).not.toContain("Learn more");
     expect(markup).not.toContain("href=");
   });
+
+  it("renders key combos in the body as keycaps", () => {
+    const markup = renderToStaticMarkup(<TechnicalHintCard hint={hint({ body: "Ctrl/Cmd+click encounters, or press Shift+F." })} />);
+
+    expect(markup).toContain(">Ctrl</kbd>");
+    expect(markup).toContain(">Cmd</kbd>");
+    expect(markup).toContain(">Shift</kbd>");
+    expect(markup).toContain(">F</kbd>");
+    expect(markup).not.toContain(">click</kbd>");
+    expect(markup).toContain(" encounters, or press ");
+  });
 });
