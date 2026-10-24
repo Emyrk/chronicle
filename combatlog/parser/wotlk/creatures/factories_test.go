@@ -95,6 +95,53 @@ func TestWotLKEncounterFactoriesKillTempestMinionsWithEmalon(t *testing.T) {
 	}
 }
 
+func TestWotLKEncounterFactoriesKillSteelforgedDefendersWithFlameLeviathan(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name          string
+		bossEntry     uint32
+		defenderEntry uint32
+	}{
+		{name: "10 player", bossEntry: 33113, defenderEntry: 33236},
+		{name: "25 player", bossEntry: 34003, defenderEntry: 34113},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			all := characters.NewCharacters(
+				unitdb.New(),
+				NewCharacterFactories(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
+				identifier.NewIdentifier(map[uint32]identifier.Identity{}),
+			)
+			player := guid.GUID(1)
+			leviathanID := wotlkEntryGUID(0xF150000000000000, test.bossEntry)
+			defenderID := wotlkEntryGUID(0xF130000000000000, test.defenderEntry)
+			start := time.Date(2026, time.October, 24, 12, 0, 0, 0, time.UTC)
+
+			_, err := all.Process(testDamage(start, defenderID, player))
+			require.NoError(t, err)
+			_, err = all.Process(testDamage(start, leviathanID, player))
+			require.NoError(t, err)
+			_, err = all.Process(&messages.Slain{
+				MessageBase: messages.Base(start.Add(30 * time.Second)),
+				Killer:      &player,
+				Victim:      leviathanID,
+			})
+			require.NoError(t, err)
+
+			leviathan, ok := all.Get(leviathanID)
+			require.True(t, ok)
+			require.IsType(t, &characters.AdsGoWithBoss{}, leviathan)
+
+			defender, ok := all.Get(defenderID)
+			require.True(t, ok)
+			require.False(t, defender.IsActive())
+			require.Equal(t, period.EndStateSlain, defender.LastEndState())
+		})
+	}
+}
+
 func TestWotLKEncounterFactoriesRejectPetEntries(t *testing.T) {
 	t.Parallel()
 
