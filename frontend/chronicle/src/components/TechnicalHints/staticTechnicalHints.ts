@@ -33,7 +33,7 @@ export const STATIC_TECHNICAL_HINTS: readonly TechnicalHint[] = [
     kind: "panel",
     // Analysis panels only exist on instance pages.
     context: "instance_panel",
-    title: `Check out the ${hint.panelLabel} panel`,
+    title: `The ${hint.panelLabel} panel`,
     body: hint.content,
     panel: hint.panelID,
     panel_label: hint.panelLabel,

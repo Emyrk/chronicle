@@ -49,11 +49,11 @@ describe("TechnicalHintCard", () => {
 
   it("bolds only the panel name for panel hints", () => {
     const markup = renderToStaticMarkup(
-      <TechnicalHintCard hint={hint({ kind: "panel", title: "Check out the Death Log panel", panel_label: "Death Log" })} />,
+      <TechnicalHintCard hint={hint({ kind: "panel", title: "The Death Log panel", panel_label: "Death Log" })} />,
     );
 
     expect(markup).toContain('<strong class="font-bold">Death Log</strong>');
-    expect(markup).toContain("Check out the ");
+    expect(markup).toContain(">The </span>");
   });
 
   it("omits the call to action without a link", () => {
