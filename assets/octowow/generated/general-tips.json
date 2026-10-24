@@ -30,6 +30,12 @@
     "context": "instance"
   },
   {
+    "id": "custom-layouts",
+    "content": "Arrange panels into your own layout in the Layout Lab, then use it on any raid you open.",
+    "href": "/account/layout-lab",
+    "actionLabel": "Open the Layout Lab"
+  },
+  {
     "id": "share-layout",
     "content": "Layouts can be shared so everyone in a raid can start from the same panel setup.",
     "context": "instance"
