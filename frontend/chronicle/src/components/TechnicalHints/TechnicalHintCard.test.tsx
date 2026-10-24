@@ -41,6 +41,9 @@ describe("TechnicalHintCard", () => {
 
     expect(markup).toContain("When on an instance page");
     expect(compactMarkup).toContain("When on an instance page");
+    expect(renderToStaticMarkup(<TechnicalHintCard hint={hint({ context: "instance_panel" })} />)).toContain(
+      "Panel on an instance page",
+    );
     expect(renderToStaticMarkup(<TechnicalHintCard hint={hint({})} />)).not.toContain("instance page");
   });
 
