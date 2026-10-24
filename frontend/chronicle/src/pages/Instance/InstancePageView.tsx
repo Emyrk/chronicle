@@ -2768,6 +2768,8 @@ function InstancePageViewContent({
 
     setImportedLayoutItems(items);
     setImportedLayoutAppearance(readLayoutAppearance(preset));
+    // The preset replaces any Layout Book layout that was on screen.
+    setActiveLayoutId(null);
     setViewState((prev) => ({
       ...prev,
       panels,
