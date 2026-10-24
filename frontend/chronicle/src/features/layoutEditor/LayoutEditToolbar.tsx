@@ -1,4 +1,4 @@
-import { Check, LayoutPanelTop, Plus, X } from "lucide-react";
+import { Check, LayoutPanelTop, Plus, Save, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -10,6 +10,8 @@ interface LayoutEditToolbarProps {
   dirty: boolean;
   onCancel: () => void;
   onDone: () => void;
+  /** Opens the Save As drawer. */
+  onSave?: () => void;
   className?: string;
 }
 
@@ -18,7 +20,7 @@ function Kbd({ children }: { children: React.ReactNode }) {
 }
 
 /** Controls shown while a page's layout is in Edit Mode. */
-export function LayoutEditToolbar({ controller, dirty, onCancel, onDone, className }: LayoutEditToolbarProps) {
+export function LayoutEditToolbar({ controller, dirty, onCancel, onDone, onSave, className }: LayoutEditToolbarProps) {
   const atLimit = controller.panelCount >= MAX_LAYOUT_PANELS;
   const seamless = controller.draft.appearance.seamless === true;
   return (
@@ -77,6 +79,11 @@ export function LayoutEditToolbar({ controller, dirty, onCancel, onDone, classNa
         ))}
       </div>
       <div className="ml-auto flex items-center gap-2">
+        {onSave && (
+          <Button type="button" variant="outline" size="sm" onClick={onSave} title="Save to your Layout Book and action bar">
+            <Save /> Save as…
+          </Button>
+        )}
         <Button type="button" variant="ghost" size="sm" onClick={onCancel} title="Discard changes and leave Edit Mode">
           <X /> Cancel <Kbd>Esc</Kbd>
         </Button>

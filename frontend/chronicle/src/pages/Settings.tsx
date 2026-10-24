@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { iconListUrl } from "@/config/iconUrl";
 import { toast } from "sonner";
-import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop } from "lucide-react";
+import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
@@ -27,9 +26,7 @@ import {
   useUpdateActionBarSlots,
   useLogGroups,
   useSiteConfig,
-  type ActionBarSlotsResponse,
   type UserPanelLayout,
-  type RequestError,
 } from "@/api/queries";
 import type { CreateUserPanelLayoutRequest, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles } from "@/api/typesGenerated";
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
@@ -63,6 +60,10 @@ import {
 } from "@/pages/Instance/viewDefaults";
 import { InstanceActionBar } from "@/components/InstanceActionBar/InstanceActionBar";
 import { LAYOUT_ACTION_BAR_KEYS, type LayoutActionBarKey, type LayoutActionBarSlots } from "@/features/layoutBook/layoutBookStore";
+import { fromActionBarResponse, toActionBarResponse } from "@/features/layoutBook/actionBarSlots";
+import { showRequestErrorToast } from "@/lib/requestErrorToast";
+import { LayoutMetadataFields } from "@/features/layoutBook/LayoutMetadataFields";
+import { LAYOUT_TITLE_PATTERN } from "@/features/layoutBook/layoutMetadata";
 import { buildLayoutSpellTooltip } from "@/features/layoutBook/buildLayoutSpellTooltip";
 import { parseLayoutLab, parsePanelLayout, serializeLayoutLab } from "@/features/layoutBook/parseLayout";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
@@ -103,56 +104,10 @@ function setStoredLayoutLabResizeHintDismissed() {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(LAYOUT_LAB_RESIZE_HINT_DISMISSED_STORAGE_KEY, "1");
 }
-const ICON_PAGE_SIZE = 24;
 // Color inputs need a hex value; mirrors the default --primary.
-const LAYOUT_TITLE_PATTERN = /^[A-Za-z0-9_\-\s]+$/;
 
 function createEmptyActionBarSlots(): LayoutActionBarSlots {
   return Object.fromEntries(LAYOUT_ACTION_BAR_KEYS.map((key) => [key, null])) as LayoutActionBarSlots;
-}
-
-function fromActionBarResponse(slots: ActionBarSlotsResponse | null | undefined): LayoutActionBarSlots {
-  return {
-    "1": slots?.slot_1 ?? null,
-    "2": slots?.slot_2 ?? null,
-    "3": slots?.slot_3 ?? null,
-    "4": slots?.slot_4 ?? null,
-    "5": slots?.slot_5 ?? null,
-    "6": slots?.slot_6 ?? null,
-    "7": slots?.slot_7 ?? null,
-    "8": slots?.slot_8 ?? null,
-    "9": slots?.slot_9 ?? null,
-    "0": slots?.slot_0 ?? null,
-  };
-}
-
-function toActionBarResponse(slots: LayoutActionBarSlots): ActionBarSlotsResponse {
-  return {
-    slot_1: slots["1"],
-    slot_2: slots["2"],
-    slot_3: slots["3"],
-    slot_4: slots["4"],
-    slot_5: slots["5"],
-    slot_6: slots["6"],
-    slot_7: slots["7"],
-    slot_8: slots["8"],
-    slot_9: slots["9"],
-    slot_0: slots["0"],
-  };
-}
-
-function showRequestErrorToast(fallbackMessage: string, error: unknown) {
-  const requestError = error as RequestError;
-  const message = requestError?.message || fallbackMessage;
-  const detail = requestError?.detail;
-
-  toast.error(message, {
-    description: detail ? (
-      <span className="mt-1 block font-mono text-xs whitespace-pre-wrap break-all">
-        {detail}
-      </span>
-    ) : undefined,
-  });
 }
 
 type Tab = {
@@ -1170,12 +1125,12 @@ export function LayoutLabSettings() {
       datasetId={tenantDatasetScope.datasetId}
       iconBaseUrl={tenantDatasetScope.iconBaseUrl}
     >
-      <LayoutLabSettingsContent iconBaseUrl={tenantDatasetScope.iconBaseUrl} />
+      <LayoutLabSettingsContent />
     </DatasetProvider>
   );
 }
 
-function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
+function LayoutLabSettingsContent() {
   const [searchParams] = useSearchParams();
   const editingLayoutID = searchParams.get("layoutId");
   const sharedLayoutID = searchParams.get("shared");
@@ -1213,10 +1168,7 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
 
   const [metaTitle, setMetaTitle] = useState("Layout");
   const [metaDescription, setMetaDescription] = useState("");
-  const [iconSearch, setIconSearch] = useState("");
-  const [iconPage, setIconPage] = useState(0);
   const [metaIcon, setMetaIcon] = useState("INV_Misc_Book_09");
-  const [iconOptions, setIconOptions] = useState<string[]>([]);
 
   const layoutDraft = useLayoutDraft(() => ({
     items: DEFAULT_INSTANCE_LAYOUT_ITEMS,
@@ -1234,22 +1186,6 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
   const [importError, setImportError] = useState<string | null>(null);
 
   const panelItemCount = layoutDraft.panelCount;
-
-  const filteredIcons = useMemo(() => {
-    const source = iconOptions.length > 0 ? iconOptions : [metaIcon];
-    const q = iconSearch.trim().toLowerCase();
-    if (!q) return source;
-    return source.filter((icon) => icon.toLowerCase().includes(q));
-  }, [iconOptions, metaIcon, iconSearch]);
-
-  const iconPageCount = Math.max(1, Math.ceil(filteredIcons.length / ICON_PAGE_SIZE));
-
-  const currentIconPage = Math.min(iconPage, iconPageCount - 1);
-
-  const pagedIcons = useMemo(() => {
-    const start = currentIconPage * ICON_PAGE_SIZE;
-    return filteredIcons.slice(start, start + ICON_PAGE_SIZE);
-  }, [filteredIcons, currentIconPage]);
 
   const normalizedReference = useMemo(
     () => normalizeInstanceReference(instanceReferenceInput),
@@ -1334,26 +1270,6 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
       },
     };
   }, [instance, selectedEncounterIds]);
-
-  useEffect(() => {
-    void fetch(iconListUrl(iconBaseUrl))
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("failed"))))
-      .then((data: unknown) => {
-        if (Array.isArray(data)) {
-          setIconOptions(data.filter((v): v is string => typeof v === "string"));
-          return;
-        }
-        if (data && typeof data === "object" && "names" in data) {
-          const names = (data as { names?: unknown }).names;
-          if (Array.isArray(names)) {
-            setIconOptions(names.filter((v): v is string => typeof v === "string"));
-            return;
-          }
-        }
-        setIconOptions([]);
-      })
-      .catch(() => setIconOptions([]));
-  }, [iconBaseUrl]);
 
   useEffect(() => {
     if (!activeLayout) return;
@@ -1546,109 +1462,21 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
 
       <div className="rounded-lg border p-4 space-y-3">
         <h3 className="text-sm font-medium">Metadata</h3>
-        <div className="space-y-2">
-          <label className="text-xs text-muted-foreground">Title</label>
-          <div className="flex items-center gap-2">
-            <img
-              src={getSpellIconUrl(
-                { ID: 1, TextureFilename: metaIcon || "INV_Misc_Book_09" },
-                iconBaseUrl,
-              )}
-              alt=""
-              className="h-8 w-8 rounded border border-border"
-            />
-            <Input value={metaTitle} onChange={(e) => setMetaTitle(e.target.value)} placeholder="Layout title" disabled={readOnly} />
-          </div>
-          {metaTitle && !LAYOUT_TITLE_PATTERN.test(metaTitle) ? (
-            <p className="text-xs text-destructive">Title can only contain letters, numbers, spaces, hyphens, and underscores</p>
-          ) : null}
-        </div>
-
-        <div className="grid gap-3 lg:grid-cols-2 items-start">
-          <div className="space-y-2">
-            <label className="text-xs text-muted-foreground">Description</label>
-            <textarea
-              className="min-h-[223px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              value={metaDescription}
-              onChange={(e) => setMetaDescription(e.target.value)}
-              placeholder="Describe what this layout is for"
-              disabled={readOnly}
-              maxLength={500}
-            />
-            {!readOnly ? <div className="text-right text-xs text-muted-foreground">{metaDescription.length}/500</div> : null}
-
-            {readOnly && !isActiveLayoutOwnedByCurrentUser ? (
-              <div className="text-xs text-muted-foreground">
-                <div>Created by {activeLayout.owner_username ?? "Unknown user"}</div>
-                <div>Saved by {activeLayoutOtherTrackerCount} other users</div>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs text-muted-foreground">Icon</label>
-            <div className="space-y-2 rounded-md border border-border/70 p-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Input
-                  value={iconSearch}
-                  onChange={(e) => {
-                    setIconSearch(e.target.value);
-                    setIconPage(0);
-                  }}
-                  placeholder="Search icons (e.g. INV_Misc_Book_09)"
-                  className="min-w-[260px] flex-1"
-                  disabled={readOnly}
-                />
-                <div className="text-xs text-muted-foreground">
-                  {filteredIcons.length} icons • Page {currentIconPage + 1}/{iconPageCount}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 gap-1.5">
-                {pagedIcons.map((icon) => (
-                  <button
-                    key={icon}
-                    type="button"
-                    title={icon}
-                    onClick={() => setMetaIcon(icon)}
-                    disabled={readOnly}
-                    className={`h-9 w-9 rounded border p-0.5 ${metaIcon === icon ? "border-primary bg-primary/10" : "border-border hover:border-primary/60"}`}
-                  >
-                    <img
-                      src={getSpellIconUrl({ ID: 1, TextureFilename: icon }, iconBaseUrl)}
-                      alt=""
-                      className="h-full w-full rounded object-cover"
-                    />
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex items-center justify-between">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIconPage(Math.max(0, currentIconPage - 1))}
-                  disabled={currentIconPage === 0 || readOnly}
-                  className="gap-1"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" /> Prev
-                </Button>
-                <span className="text-xs text-muted-foreground">Selected: {metaIcon}</span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIconPage(Math.min(iconPageCount - 1, currentIconPage + 1))}
-                  disabled={currentIconPage >= iconPageCount - 1 || readOnly}
-                  className="gap-1"
-                >
-                  Next <ChevronRight className="h-3.5 w-3.5" />
-                </Button>
-              </div>
+        <LayoutMetadataFields
+          title={metaTitle}
+          onTitleChange={setMetaTitle}
+          description={metaDescription}
+          onDescriptionChange={setMetaDescription}
+          icon={metaIcon}
+          onIconChange={setMetaIcon}
+          readOnly={readOnly}
+          descriptionFooter={readOnly && !isActiveLayoutOwnedByCurrentUser ? (
+            <div className="text-xs text-muted-foreground">
+              <div>Created by {activeLayout.owner_username ?? "Unknown user"}</div>
+              <div>Saved by {activeLayoutOtherTrackerCount} other users</div>
             </div>
-          </div>
-        </div>
+          ) : null}
+        />
 
         <div className="space-y-3 border-t border-border/60 pt-3">
           <div>

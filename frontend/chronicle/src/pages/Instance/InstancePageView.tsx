@@ -19,7 +19,7 @@ import {
   normalizeGroupedLayoutItems,
   type LayoutSection,
 } from "@/components/layout/layoutGroups";
-import type { ActionBarSlotsResponse, ActivityPeriod, InstancePlayer, SpeedrunResult } from "@/api/typesGenerated";
+import type { ActivityPeriod, InstancePlayer, SpeedrunResult } from "@/api/typesGenerated";
 import { PeriodMomentDisplay } from "@/components/PeriodMomentDisplay";
 import { Card } from "@/components/ui/Card/Card";
 import { PortalContainerProvider } from "@/components/ui/PortalContainerContext";
@@ -56,6 +56,7 @@ import { ChartDataRegistryProvider } from "./EventsPanels/ChartDataRegistry";
 import { InstanceInferenceCapability } from "./inference/InstanceInferenceCapability";
 import { LayoutEditorCanvas } from "@/features/layoutEditor/LayoutEditorCanvas";
 import { LayoutEditToolbar } from "@/features/layoutEditor/LayoutEditToolbar";
+import { SaveLayoutSheet } from "@/features/layoutBook/SaveLayoutSheet";
 import { layoutDraftToExport, type LayoutDraft } from "@/features/layoutEditor/layoutDraft";
 import { useLayoutDraft, type LayoutDraftController } from "@/features/layoutEditor/useLayoutDraft";
 import type { InstanceUIState } from "./inference/instanceInferenceTools";
@@ -92,7 +93,8 @@ import { isHeroic } from "@/lib/wowUtils";
 import { DuplicatesBadge } from "./DuplicatesBadge";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import { formatClassLabel, formatRaceLabel } from "../ArmoryPage/characterDisplay";
-import { LAYOUT_ACTION_BAR_KEYS, type LayoutActionBarSlots } from "@/features/layoutBook/layoutBookStore";
+import type { LayoutActionBarSlots } from "@/features/layoutBook/layoutBookStore";
+import { fromActionBarResponse } from "@/features/layoutBook/actionBarSlots";
 import { parsePanelLayout, readLayoutAppearance, type LayoutAppearance, type LayoutLabExportV1 } from "@/features/layoutBook/parseLayout";
 import {
   ALTERNATE_INSTANCE_LAYOUT_ITEMS,
@@ -150,12 +152,6 @@ function markEncounterSelectorSeen(): void {
     ENCOUNTER_SELECTOR_SEEN_KEY,
     JSON.stringify({ expiresAt: Date.now() + SEVEN_DAYS_MS })
   );
-}
-
-function toLayoutActionBarSlots(slots: ActionBarSlotsResponse | null | undefined): LayoutActionBarSlots {
-  return Object.fromEntries(
-    LAYOUT_ACTION_BAR_KEYS.map((key) => [key, slots?.[`slot_${key}`] ?? null]),
-  ) as LayoutActionBarSlots;
 }
 
 type LocalInstanceViewState = {
@@ -1588,6 +1584,7 @@ interface EncounterDetailProps {
     dirty: boolean;
     onCancel: () => void;
     onDone: () => void;
+    onSave: () => void;
   };
 }
 
@@ -2257,6 +2254,7 @@ function EncounterDetail({
                   dirty={layoutEditor.dirty}
                   onCancel={layoutEditor.onCancel}
                   onDone={layoutEditor.onDone}
+                  onSave={layoutEditor.onSave}
                   className="sticky top-0 z-40 backdrop-blur"
                 />
                 <LayoutEditorCanvas
@@ -3123,7 +3121,7 @@ function InstancePageViewContent({
   }, [isMobile]);
   
   const actionBarSlots = useMemo(
-    () => toLayoutActionBarSlots(instanceDefaults?.action_bar_slots),
+    () => fromActionBarResponse(instanceDefaults?.action_bar_slots),
     [instanceDefaults?.action_bar_slots],
   );
 
@@ -3563,6 +3561,26 @@ function InstancePageViewContent({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedLayoutEdits]);
 
+  // ── Save As ─────────────────────────────────────────────────────────────
+  const [saveLayoutOpen, setSaveLayoutOpen] = useState(false);
+  // Saves the open draft while editing, otherwise the layout on screen.
+  const getLayoutToSave = useCallback(() => layoutDraftToExport(layoutEditActive ? layoutDraft.draft : {
+    items: activeLayoutItems,
+    panelTypesById: panelTypesByID,
+    panelOptionsById: panelOptionsByID,
+    panelFiltersById: panelFiltersByID,
+    appearance: layoutAppearance,
+  }), [activeLayoutItems, layoutAppearance, layoutDraft.draft, layoutEditActive, panelFiltersByID, panelOptionsByID, panelTypesByID]);
+  const handleLayoutSaved = useCallback((saved: UserPanelLayout) => {
+    // What was saved is now on screen and in the Layout Book: nothing unsaved remains.
+    if (layoutEditActive) {
+      applyLayoutExport(layoutDraftToExport(layoutDraft.draft));
+      setLayoutEditing(false);
+    }
+    setEditedLayoutItems(null);
+    setActiveLayoutId(saved.id);
+  }, [applyLayoutExport, layoutDraft.draft, layoutEditActive]);
+
 
   const buildSharedViewPayload = useCallback((): SharedViewPayload => {
     const view: NonNullable<SharedViewPayload["view"]> = {
@@ -3988,6 +4006,13 @@ function InstancePageViewContent({
         !focused && (isMobile ? "px-2" : "px-4"),
       )}
     >
+      <SaveLayoutSheet
+        open={saveLayoutOpen}
+        onOpenChange={setSaveLayoutOpen}
+        getLayout={getLayoutToSave}
+        activeLayoutId={activeLayoutId}
+        onSaved={handleLayoutSaved}
+      />
       <InstanceInferenceCapability
         state={inferenceState}
         canMutate={canEditSharedView && !layoutEditActive}
@@ -4084,6 +4109,7 @@ function InstancePageViewContent({
                 onExportLayout={isEncounterView && !activePageType ? handleExportLayout : undefined}
                 onPopOutLayout={isEncounterView && canEditSharedView ? popOutLayout : undefined}
                 onEditLayout={canEditLayout && !layoutEditActive ? enterLayoutEdit : undefined}
+                onSaveLayout={isEncounterView && !activePageType ? () => setSaveLayoutOpen(true) : undefined}
                 layoutPoppedOut={isEncounterView && layoutPopup !== null}
                 onResetView={isEncounterView && canEditSharedView ? resetView : undefined}
                 onOpenTimeRange={isEncounterView && canEditSharedView ? onOpenTimeRange : undefined}
@@ -4264,6 +4290,7 @@ function InstancePageViewContent({
                 onExportLayout={isEncounterView && !activePageType ? handleExportLayout : undefined}
                 onPopOutLayout={isEncounterView && canEditSharedView ? popOutLayout : undefined}
                 onEditLayout={canEditLayout && !layoutEditActive ? enterLayoutEdit : undefined}
+                onSaveLayout={isEncounterView && !activePageType ? () => setSaveLayoutOpen(true) : undefined}
                 layoutPoppedOut={isEncounterView && layoutPopup !== null}
                 onResetView={isEncounterView && canEditSharedView ? resetView : undefined}
                 onOpenTimeRange={isEncounterView && canEditSharedView ? onOpenTimeRange : undefined}
@@ -4444,6 +4471,7 @@ function InstancePageViewContent({
               dirty: layoutDirty,
               onCancel: cancelLayoutEdit,
               onDone: finishLayoutEdit,
+              onSave: () => setSaveLayoutOpen(true),
             } : undefined}
           />
         ) : (

@@ -808,6 +808,8 @@ export function useUpdateActionBarSlots() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user-panel-layouts"] });
+      // Instance pages read their action bar from the defaults response.
+      queryClient.invalidateQueries({ queryKey: ["instance-defaults"] });
     },
   });
 }

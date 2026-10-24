@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Menu, FileText, Copy, Upload, Download, RotateCcw, LayoutGrid, Clock, Share2, Unlink, ExternalLink, BarChart3, Check, List, Ban, Loader2, Pencil } from "lucide-react";
+import { Menu, FileText, Copy, Upload, Download, RotateCcw, LayoutGrid, Clock, Share2, Unlink, ExternalLink, BarChart3, Check, List, Ban, Loader2, Pencil, Save } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { useAdminClearLogInvalidation, useAdminInvalidateLogs } from "@/api/queries";
@@ -23,6 +23,8 @@ interface InstanceMenuProps {
   layoutPoppedOut?: boolean;
   /** Enters layout Edit Mode; omitted when the layout can't be edited. */
   onEditLayout?: () => void;
+  /** Opens the Save As drawer for the current layout. */
+  onSaveLayout?: () => void;
   onResetView?: () => void;
   onOpenTimeRange?: () => void;
   instanceId: string;
@@ -55,6 +57,7 @@ export function InstanceMenu({
   onPopOutLayout,
   layoutPoppedOut = false,
   onEditLayout,
+  onSaveLayout,
   onResetView,
   onOpenTimeRange,
   instanceId,
@@ -213,6 +216,12 @@ export function InstanceMenu({
             <Pencil className="h-4 w-4 mr-2" />
             Edit Layout
             <DropdownMenuShortcut>⇧E</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        )}
+        {onSaveLayout && (
+          <DropdownMenuItem onClick={onSaveLayout}>
+            <Save className="h-4 w-4 mr-2" />
+            Save Layout…
           </DropdownMenuItem>
         )}
         {onImportLayout && (
