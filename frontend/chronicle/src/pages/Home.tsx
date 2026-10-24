@@ -33,6 +33,7 @@ import {
   getInstanceBackground,
 } from "@/pages/Logs/utils/instanceImages";
 import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory";
+import { seoProductName } from "@/lib/seo";
 import { Podium } from "@/pages/Leaderboard/Podium";
 import { RaidCard } from "@/pages/Recent/RaidCard";
 
@@ -182,7 +183,7 @@ function HeroSection() {
   const { isAuthenticated } = useAuth();
   const { data: siteConfig } = useSiteConfig();
   const showUpload = !siteConfig?.client_uploads_disabled;
-  const seoProductName = siteConfig?.dataset_flavor?.includes("wow-forever") ? "WoW Forever" : "";
+  const productName = seoProductName(siteConfig?.dataset_flavor);
 
   return (
     <section
@@ -193,15 +194,15 @@ function HeroSection() {
       <div className="relative max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-10">
         <div className="max-w-2xl text-center md:text-left">
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
-            {seoProductName ? `${seoProductName} Combat Logs` : "Every raid tells a story."}
+            {productName ? `${productName} Combat Logs` : "Every raid tells a story."}
             <br />
             <span className="text-(--tertiary)">
-              {seoProductName ? "Raid analysis by Chronicle." : "Chronicle helps you read it."}
+              {productName ? "Raid analysis by Chronicle." : "Chronicle helps you read it."}
             </span>
           </h1>
           <p className="mt-4 text-lg text-muted-foreground">
-            {seoProductName
-              ? `Upload and analyze ${seoProductName} combat logs. Review damage, healing, deaths, rankings, and raid performance.`
+            {productName
+              ? `Upload and analyze ${productName} combat logs. Review damage, healing, deaths, rankings, and raid performance.`
               : "Logs in, insight out. Easy to read, easy to share."}
           </p>
         </div>

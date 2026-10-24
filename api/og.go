@@ -70,10 +70,22 @@ type staticOGMetadata struct {
 }
 
 func seoProductName(flavor database.WoWFlavor) string {
-	if flavor.Has(database.FlavorWoWForever) {
+	switch {
+	case flavor.Has(database.FlavorWoWForever):
 		return "WoW Forever"
+	case flavor.Has(database.FlavorKronos):
+		return "Kronos"
+	case flavor.Has(database.FlavorChromieCraft):
+		return "ChromieCraft"
+	case flavor.Has(database.FlavorVanillaPlus):
+		return "VanillaPlus"
+	case flavor.Has(database.FlavorOctoWoW):
+		return "OctoWoW"
+	case flavor.Has(database.FlavorCapybara):
+		return "CapybaraCraft"
+	default:
+		return ""
 	}
-	return ""
 }
 
 func flavorStaticOG(pattern, productName string, metadata staticOGMetadata, canonicalURL string) *frontend.OGData {
