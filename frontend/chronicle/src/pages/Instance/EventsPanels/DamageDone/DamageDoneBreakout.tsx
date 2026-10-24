@@ -6,8 +6,65 @@ import { AbilityBreakout, type AbilityData, type TargetData, type BreakoutTab } 
 import type { DamageDoneResult } from "./damageDone.processor";
 import type { PanelContext } from "../types";
 import type { WoWSpell } from "@/api/wowdb";
-import { realSpellId } from "../processors/abilityBreakout";
+import { realSpellId, type DamageAbilityBreakout, type HitTypeStats } from "../processors/abilityBreakout";
 import { getBreakoutProgressLabel } from "../breakoutProgress";
+
+const HIT_OUTCOME_KEYS = [
+  "Absorbs",
+  "Dodges",
+  "Parries",
+  "FullResist",
+  "Immunes",
+  "FullBlocks",
+  "Reflects",
+  "Glancing",
+  "Crushing",
+  "Unknown",
+] as const;
+
+function mergeHitTypeStats(
+  included: HitTypeStats | undefined,
+  excluded: HitTypeStats | undefined,
+): HitTypeStats | undefined {
+  if (!excluded) return included;
+  if (!included) return { ...excluded };
+  return {
+    count: included.count + excluded.count,
+    total: included.total + excluded.total,
+    min: Math.min(included.min, excluded.min),
+    max: Math.max(included.max, excluded.max),
+  };
+}
+
+/**
+ * Keep excluded damage in its own value column, but include its real combat
+ * outcomes in hit counts, crit rate, and min/avg/max details.
+ */
+export function withExcludedHitDetails<T extends DamageAbilityBreakout>(
+  included: T,
+  excluded: DamageAbilityBreakout | undefined,
+): T {
+  if (!excluded) return included;
+
+  const combined = {
+    ...included,
+    Count: included.Count + excluded.Count,
+    Crits: included.Crits + excluded.Crits,
+    Hits: included.Hits + excluded.Hits,
+    Misses: included.Misses + excluded.Misses,
+    HitStats: mergeHitTypeStats(included.HitStats, excluded.HitStats),
+    CritStats: mergeHitTypeStats(included.CritStats, excluded.CritStats),
+    GlancingStats: mergeHitTypeStats(included.GlancingStats, excluded.GlancingStats),
+    CrushingStats: mergeHitTypeStats(included.CrushingStats, excluded.CrushingStats),
+    AbsorbStats: mergeHitTypeStats(included.AbsorbStats, excluded.AbsorbStats),
+  };
+
+  for (const key of HIT_OUTCOME_KEYS) {
+    combined[key] = (included[key] ?? 0) + (excluded[key] ?? 0);
+  }
+
+  return combined;
+}
 
 /**
  * Convert the ByAbility map for a specific unit into AbilityData[] for the breakout.
@@ -30,15 +87,16 @@ function getAbilitiesForUnit(
   for (const abilityName of abilityNames) {
     const data = unitAbilities?.get(abilityName);
     const excluded = excludedAbilities?.get(abilityName);
+    const included = data ?? {
+      Total: 0,
+      Count: 0,
+      Crits: 0,
+      Hits: 0,
+      Misses: 0,
+      spellId: excluded?.spellId,
+    };
     abilities.push({
-      ...(data ?? {
-        Total: 0,
-        Count: 0,
-        Crits: 0,
-        Hits: 0,
-        Misses: 0,
-        spellId: excluded?.spellId,
-      }),
+      ...withExcludedHitDetails(included, excluded),
       name: abilityName,
       value: data ? data.Total - (data.Absorbed || 0) : 0,
       absorbed: data?.Absorbed,
@@ -76,15 +134,16 @@ function getAbilitiesBySpellIdForUnit(
   for (const compositeId of compositeIds) {
     const data = unitAbilities?.get(compositeId);
     const excluded = excludedAbilities?.get(compositeId);
+    const included = data ?? {
+      Total: 0,
+      Count: 0,
+      Crits: 0,
+      Hits: 0,
+      Misses: 0,
+      spellName: excluded?.spellName ?? `Spell ${realSpellId(compositeId)}`,
+    };
     abilities.push({
-      ...(data ?? {
-        Total: 0,
-        Count: 0,
-        Crits: 0,
-        Hits: 0,
-        Misses: 0,
-        spellName: excluded?.spellName ?? `Spell ${realSpellId(compositeId)}`,
-      }),
+      ...withExcludedHitDetails(included, excluded),
       name: data?.spellName ?? excluded?.spellName ?? `Spell ${realSpellId(compositeId)}`,
       value: data ? data.Total - (data.Absorbed || 0) : 0,
       absorbed: data?.Absorbed,

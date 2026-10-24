@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HitTypePartialAbsorb } from "@/lib/hittype/hittype";
+import { HitTypeCrit, HitTypeHit, HitTypePartialAbsorb } from "@/lib/hittype/hittype";
 import type { DamageProcessorEvent, ProcessorContext, SlainProcessorEvent } from "../processorTypes";
 import { assemblyDamageDoneProcessor } from "./assemblyDamageDone.processor";
 
@@ -84,12 +84,17 @@ describe("assemblyDamageDoneProcessor", () => {
     const state = assemblyDamageDoneProcessor.createState();
     const ctx = context();
 
-    assemblyDamageDoneProcessor.processEvent(state, damage({ amount: 500 }), ENCOUNTER, new Date(), "damage", ctx);
-    assemblyDamageDoneProcessor.processEvent(state, damage({ target: MOLGEIM, amount: 80 }), ENCOUNTER, new Date(), "damage", ctx);
+    assemblyDamageDoneProcessor.processEvent(state, damage({ amount: 500, hitType: HitTypeHit }), ENCOUNTER, new Date(), "damage", ctx);
+    assemblyDamageDoneProcessor.processEvent(state, damage({ target: MOLGEIM, amount: 80, hitType: HitTypeCrit }), ENCOUNTER, new Date(), "damage", ctx);
     assemblyDamageDoneProcessor.processEvent(state, slain(STEELBREAKER), ENCOUNTER, new Date(), "slain", ctx);
 
     expect(encounterDamage(state)).toBe(500);
-    expect(state.ExcludedByAbility?.get(PLAYER)?.get("Attack")?.Total).toBe(80);
+    expect(state.ExcludedByAbility?.get(PLAYER)?.get("Attack")).toMatchObject({
+      Total: 80,
+      Count: 1,
+      Hits: 1,
+      Crits: 1,
+    });
     expect(state.ExcludedByTarget?.get(PLAYER)?.get(MOLGEIM)).toBe(80);
     expect(encounterDamage(state, true)).toBe(80);
   });
