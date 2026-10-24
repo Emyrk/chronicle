@@ -58,6 +58,48 @@ function HintTitle({ hint }: { hint: TechnicalHint }) {
   );
 }
 
+// Matches key combos like "Shift+F" or "Ctrl/Cmd+click" so they render as keycaps.
+const KEYBIND = /\b(?:(?:Ctrl|Cmd|Shift|Alt|Option)(?:\/(?:Ctrl|Cmd|Shift|Alt|Option))*\+)+(?:click|[A-Z0-9]\b|Esc|Enter|Tab|Space)/g;
+
+function Key({ children }: { children: ReactNode }) {
+  return (
+    <kbd className="mx-px inline-flex min-w-5 items-center justify-center rounded border border-zinc-500 border-b-2 bg-zinc-800 px-1 font-mono text-[0.85em] font-semibold leading-tight text-zinc-100 not-italic">
+      {children}
+    </kbd>
+  );
+}
+
+function Keybind({ combo }: { combo: string }) {
+  const keys = combo.split("+");
+  return (
+    <span className="whitespace-nowrap">
+      {keys.map((key, i) => (
+        <span key={i}>
+          {i > 0 && <span className="mx-0.5 text-white/50">+</span>}
+          {key === "click"
+            ? key
+            : key.split("/").map((alt, j) => (
+              <span key={j}>{j > 0 && <span className="text-white/50">/</span>}<Key>{alt}</Key></span>
+            ))}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** Hint bodies are plain text; key combos inside them are shown as keycaps. */
+function HintBody({ text }: { text: string }) {
+  const parts: ReactNode[] = [];
+  let last = 0;
+  for (const match of text.matchAll(KEYBIND)) {
+    parts.push(text.slice(last, match.index));
+    parts.push(<Keybind key={match.index} combo={match[0]} />);
+    last = match.index + match[0].length;
+  }
+  parts.push(text.slice(last));
+  return <>{parts}</>;
+}
+
 function HintIcon({ hint, size }: { hint: TechnicalHint; size: number }) {
   if (hint.icon) return <ItemIcon icon={hint.icon} size={size} className="border-white/20" />;
   return (
@@ -118,7 +160,7 @@ export function TechnicalHintCard({
             <h3 className="truncate text-sm text-white drop-shadow-lg transition-colors group-hover:text-amber-300">
               <HintTitle hint={hint} />
             </h3>
-            <p className="line-clamp-2 text-xs text-white/70 drop-shadow">{hint.body}</p>
+            <p className="line-clamp-2 text-xs text-white/70 drop-shadow"><HintBody text={hint.body} /></p>
           </div>
           {linked && <ChevronRight className="h-4 w-4 shrink-0 text-white/50 transition-colors group-hover:text-amber-300" />}
         </div>
@@ -133,7 +175,7 @@ export function TechnicalHintCard({
               <p className="mt-0.5 text-xs text-amber-300/90 drop-shadow">{kindLabel(hint.kind)}</p>
             </div>
           </div>
-          <p className="mt-3 line-clamp-4 text-sm text-white/80 drop-shadow">{hint.body}</p>
+          <p className="mt-3 line-clamp-4 text-sm text-white/80 drop-shadow"><HintBody text={hint.body} /></p>
           <div className="flex-1" />
           {hint.context && <HintContextFlair context={hint.context} compact={false} />}
           {linked && (
