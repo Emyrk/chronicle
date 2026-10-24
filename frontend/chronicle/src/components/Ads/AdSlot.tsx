@@ -29,6 +29,8 @@ export interface AdFallbackRenderProps {
   state: Exclude<AdRequestState, "filled">
   /** True only after NitroPay confirms bidder="blank" for this request. */
   interactive: boolean
+  /** True when the slot is using its reduced-height mobile size. */
+  compact: boolean
 }
 
 export type AdFallbackRenderer = (props: AdFallbackRenderProps) => ReactNode
@@ -208,6 +210,9 @@ export function AdSlot({
   const fallbackState = effectiveFallbackState === "filled" ? undefined : effectiveFallbackState
   const fallbackInteractive = fallbackPresentation.interactive
   const adLabelVisible = (showPreview && !showFallbackPreview) || showDemo || liveCreativeRendered
+  // Grid cards let the fallback fill the cell like its neighbours; only a
+  // rendered creative needs the fixed frame and the advertisement label.
+  const fallbackFillsCell = format === "card" && fallbackVisible
 
   useEffect(() => {
     if (!adsAllowed || !siteID || showPreview || eligibleSizes.length === 0) return
@@ -281,8 +286,8 @@ export function AdSlot({
       data-ad-rendered={!showPreview && !showDemo ? liveCreativeRendered : undefined}
       data-ad-request-state={!showPreview && !showDemo ? requestState : undefined}
     >
-      <div>
-        {adSiteConfig?.billing_enabled ? (
+      <div className={cn(fallbackFillsCell && "h-full w-full")}>
+        {fallbackFillsCell ? null : adSiteConfig?.billing_enabled ? (
           <Link
             to={session ? "/account/billing" : "/supporter"}
             title="Become a supporter to remove ads"
@@ -314,8 +319,12 @@ export function AdSlot({
             className={cn(
               "relative overflow-hidden",
               format === "sidebar" && "flex justify-center",
-              frameClasses[format],
-              (format === "card" || format === "adaptive") && (compactCard ? "h-[100px]" : "h-[250px]"),
+              fallbackFillsCell
+                ? cn("w-full", compactCard ? "h-[100px]" : "h-full min-h-[200px]")
+                : cn(
+                    frameClasses[format],
+                    (format === "card" || format === "adaptive") && (compactCard ? "h-[100px]" : "h-[250px]"),
+                  ),
             )}
           >
             <div
@@ -337,7 +346,7 @@ export function AdSlot({
                   !fallbackInteractive && "pointer-events-none select-none",
                 )}
               >
-                {renderFallback({ state: fallbackState, interactive: fallbackInteractive })}
+                {renderFallback({ state: fallbackState, interactive: fallbackInteractive, compact: compactCard })}
               </div>
             )}
           </div>
