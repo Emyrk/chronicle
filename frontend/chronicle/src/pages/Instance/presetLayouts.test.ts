@@ -69,6 +69,24 @@ describe("preset layout availability", () => {
   });
 });
 
+describe("Player Timeline preset", () => {
+  it("uses a seamless panel layout with grouped panels above an intrinsic timeline", () => {
+    const preset = PRESET_LAYOUTS_BY_ID.player_timeline;
+    if (!isPanelPresetLayout(preset)) throw new Error("Player Timeline should be a panels preset");
+
+    expect(preset.seamless).toBe(true);
+    const group = preset.layoutItems.find((item) => item.kind === "group");
+    const timelineId = Object.entries(preset.panelTypes).find(([, type]) => type === "player_timeline")?.[0];
+    const timeline = preset.layoutItems.find((item) => item.id === timelineId);
+    const groupedPanels = preset.layoutItems.filter((item) => item.groupId === group?.id);
+
+    expect(group).toMatchObject({ y: 0, collapsedByDefault: true });
+    expect(groupedPanels).toHaveLength(2);
+    expect(groupedPanels.every((item) => item.y < (timeline?.y ?? 0))).toBe(true);
+    expect(timeline).toMatchObject({ w: 12, h: 1, minH: 1, maxH: 1 });
+  });
+});
+
 describe("Map preset", () => {
   it("follows Player Timeline and stacks the replay strip above the map seamlessly", () => {
     const ids = PRESET_LAYOUTS.map((preset) => preset.id);

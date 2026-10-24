@@ -93,6 +93,7 @@ import { createResistsPanel } from "./ResistsPanel/Resists";
 import { createDispelLogPanel } from "./Dispel/DispelLog";
 import { createGuildsPanel } from "./Guilds/Guilds";
 import { createCompanionStatsPanel } from "./CompanionStats/CompanionStats";
+import { createPlayerTimelinePanel } from "./PlayerTimeline/PlayerTimeline";
 import { createPullsAndCleanupPanel } from "./PullsAndCleanup/PullsAndCleanup";
 // TODO: Avoidance panel requires spell school data which isn't available yet
 // import { createAvoidancePanel } from "./Avoidance/Avoidance";
@@ -175,6 +176,7 @@ const BUILTIN_PANELS = {
   resists: createResistsPanel(),
   guilds: createGuildsPanel(),
   companion_stats: createCompanionStatsPanel(),
+  player_timeline: createPlayerTimelinePanel(),
   pulls_and_cleanup: createPullsAndCleanupPanel(),
 } satisfies Record<string, PanelDefinition<any, any>>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -921,13 +923,14 @@ function BuiltinEventsPanel({
         onMouseDown={onPanelMouseDown}
         underConstruction={panel.underConstruction}
         borderColor={borderColor}
-        bleed={hoverHeader}
+        bleed={hoverHeader || panel.contentBleed}
+        contentHeight={panel.heightMode === "content"}
         front={(
           <>
             {/* hoverHeader: a thin strip along the top edge reveals the title row; once shown it
                 stays while the cursor is on it. Hidden, it lets clicks through to the content. */}
             {hoverHeader && <div aria-hidden className="peer/header-trigger absolute inset-x-0 top-0 z-50 h-3" />}
-            <div
+            {!panel.hideHeader && <div
               data-hover-header={hoverHeader || undefined}
               className={cn(
                 "flex items-center justify-between",
@@ -1058,9 +1061,9 @@ function BuiltinEventsPanel({
                   />
                 </label>
               )}
-            </div>
+            </div>}
 
-            <div className="flex-1 min-h-0">
+            <div className={cn(panel.heightMode !== "content" && "flex-1 min-h-0")}>
               {panel.render({
                 result,
                 totalEvents,
@@ -1087,7 +1090,7 @@ function BuiltinEventsPanel({
             </div>
           </>
         )}
-        back={panel.renderCardBack
+        back={panel.disableCardFlip ? null : panel.renderCardBack
           ? panel.renderCardBack({
               panelContext,
               setPanelContext: setPanelContextWithKey,

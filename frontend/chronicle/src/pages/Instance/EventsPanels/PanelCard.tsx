@@ -17,23 +17,37 @@ interface PanelCardProps {
    * `group-has-[[data-hover-header]:hover]/panel:*`.
    */
   bleed?: boolean;
+  /** Let the card's faces establish their own height instead of filling a grid slot. */
+  contentHeight?: boolean;
 }
 
-export function PanelCard({ flipped, onMouseDown, underConstruction, borderColor, front, back, bleed = false }: PanelCardProps) {
+export function PanelCard({
+  flipped,
+  onMouseDown,
+  underConstruction,
+  borderColor,
+  front,
+  back,
+  bleed = false,
+  contentHeight = false,
+}: PanelCardProps) {
   const seamless = useSeamlessLayout();
   return (
-    <div className="h-full [perspective:1400px]" onMouseDown={onMouseDown}>
+    <div className={cn("[perspective:1400px]", !contentHeight && "h-full")} onMouseDown={onMouseDown}>
       <div
         className={cn(
-          "relative h-full transition-transform duration-300 [transform-style:preserve-3d]",
+          "relative transition-transform duration-300 [transform-style:preserve-3d]",
+          contentHeight ? "grid" : "h-full",
           flipped && "[transform:rotateY(180deg)]",
         )}
       >
-        {/* overflow-hidden: content (e.g. a chart that mis-measured during the
-            flip) must never paint outside the card. */}
+        {/* Fixed-height cards clip content to their layout slot. Content-height
+            cards keep both faces in one grid cell so either face can establish
+            the natural height while preserving the flip animation. */}
         <Card
           className={cn(
-            "group/panel absolute inset-0 gap-2 h-full mb-0 flex flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(0deg)]",
+            "group/panel gap-2 mb-0 flex flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(0deg)]",
+            contentHeight ? "[grid-area:1/1]" : "absolute inset-0 h-full",
             bleed ? "p-0" : "p-2 sm:p-4",
             underConstruction && "border-yellow-500/50",
             flipped && "pointer-events-none",
@@ -43,13 +57,14 @@ export function PanelCard({ flipped, onMouseDown, underConstruction, borderColor
         >
           {front}
         </Card>
-        <Card className={cn(
-          "absolute inset-0 p-2 sm:p-4 gap-2 h-full mb-0 flex flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)]",
+        {back != null && <Card className={cn(
+          "p-2 sm:p-4 gap-2 mb-0 flex flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)]",
+          contentHeight ? "[grid-area:1/1]" : "absolute inset-0 h-full",
           !flipped && "pointer-events-none",
           seamless && "rounded-none shadow-none",
         )}>
           {back}
-        </Card>
+        </Card>}
       </div>
     </div>
   );

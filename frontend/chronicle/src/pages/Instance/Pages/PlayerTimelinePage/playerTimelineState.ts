@@ -19,6 +19,29 @@ export interface PlayerTimelineState {
   debuffTarget: string | null;
 }
 
+const PANEL_OPTION_PREFIX = "pt:";
+
+/** Encode Player Timeline state into the standard panel-option payload. */
+export function encodePlayerTimelinePanelOption(state: PlayerTimelineState): string {
+  return `${PANEL_OPTION_PREFIX}${btoa(JSON.stringify(state))}`;
+}
+
+/** Migrate the legacy page-state payload into the standard panel option. */
+export function playerTimelinePanelOptionFromPageState(raw: unknown): string | null {
+  const state = parsePlayerTimelineState(raw);
+  return state ? encodePlayerTimelinePanelOption(state) : null;
+}
+
+/** Decode Player Timeline state from a standard panel option. */
+export function parsePlayerTimelinePanelOption(option: string | null | undefined): PlayerTimelineState | null {
+  if (!option?.startsWith(PANEL_OPTION_PREFIX)) return null;
+  try {
+    return parsePlayerTimelineState(JSON.parse(atob(option.slice(PANEL_OPTION_PREFIX.length))));
+  } catch {
+    return null;
+  }
+}
+
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const guid = (v: unknown): string | null => (typeof v === "string" && v.length > 0 ? v : null);

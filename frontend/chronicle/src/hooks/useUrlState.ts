@@ -675,6 +675,7 @@ const PANEL_CODES: Record<PanelType, string> = {
   resists: 'rs',
   guilds: 'gld',
   companion_stats: 'cs',
+  player_timeline: 'ptl',
   pulls_and_cleanup: 'pac',
   raid_composition: 'rc',
 };
