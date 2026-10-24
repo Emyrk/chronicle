@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-r
 import { cn } from "@/lib/utils";
 import { iconListUrl } from "@/config/iconUrl";
 import { toast } from "sonner";
-import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop } from "lucide-react";
+import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
@@ -32,21 +32,22 @@ import {
   type RequestError,
 } from "@/api/queries";
 import type { CreateUserPanelLayoutRequest, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles } from "@/api/typesGenerated";
-import { GridLayoutEditor, type GridEditorItem } from "@/components/layout/GridLayoutEditor";
-import { groupEditorHeightRows, placeLayoutItem } from "@/components/layout/layoutGroups";
+import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
+import { LayoutEditorCanvas } from "@/features/layoutEditor/LayoutEditorCanvas";
+import { MAX_LAYOUT_PANELS, layoutDraftFromExport, layoutDraftToExport } from "@/features/layoutEditor/layoutDraft";
+import { useLayoutDraft } from "@/features/layoutEditor/useLayoutDraft";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { InstanceEventsProvider } from "@/hooks/instanceEvents";
 import { DatasetProvider, useTenantDatasetScope } from "@/hooks/useDatasetId";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
-import { SeamlessLayoutContext } from "@/pages/Instance/EventsPanels/SeamlessLayoutContext";
 import { EventsPanel, type EventsPanelType } from "@/pages/Instance/EventsPanels";
 import { isCustomPanelRef } from "@/pages/Instance/EventsPanels/custom/pluginTypes";
 import { PANELS } from "@/pages/Instance/EventsPanels/EventsPanel";
 import { Strip } from "@/pages/Instance/EventsPanels/Strips/Strip";
-import { STRIPS, resolveStripType } from "@/pages/Instance/EventsPanels/Strips/strips";
-import { resolveStripSize, type StripType } from "@/pages/Instance/EventsPanels/Strips/types";
+import { resolveStripType } from "@/pages/Instance/EventsPanels/Strips/strips";
+import type { StripType } from "@/pages/Instance/EventsPanels/Strips/types";
 import type { PanelContext } from "@/pages/Instance/EventsPanels/types";
 import type { PanelFilter } from "@/pages/Instance/EventsPanels/processors/filters";
 import { resolveInstanceUnits, type ResolvedInstanceUnit } from "@/pages/Instance/instanceUnits";
@@ -63,7 +64,7 @@ import {
 import { InstanceActionBar } from "@/components/InstanceActionBar/InstanceActionBar";
 import { LAYOUT_ACTION_BAR_KEYS, type LayoutActionBarKey, type LayoutActionBarSlots } from "@/features/layoutBook/layoutBookStore";
 import { buildLayoutSpellTooltip } from "@/features/layoutBook/buildLayoutSpellTooltip";
-import { parseLayoutLab, parsePanelLayout, readLayoutAppearance, serializeLayoutLab, type LayoutAppearance } from "@/features/layoutBook/parseLayout";
+import { parseLayoutLab, parsePanelLayout, serializeLayoutLab } from "@/features/layoutBook/parseLayout";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { getSpellIconUrl } from "@/api/wowdb";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
@@ -103,9 +104,7 @@ function setStoredLayoutLabResizeHintDismissed() {
   window.localStorage.setItem(LAYOUT_LAB_RESIZE_HINT_DISMISSED_STORAGE_KEY, "1");
 }
 const ICON_PAGE_SIZE = 24;
-const MAX_PANELS = 8;
 // Color inputs need a hex value; mirrors the default --primary.
-const DEFAULT_GROUP_ACCENT = "#5F8FA6";
 const LAYOUT_TITLE_PATTERN = /^[A-Za-z0-9_\-\s]+$/;
 
 function createEmptyActionBarSlots(): LayoutActionBarSlots {
@@ -1219,111 +1218,22 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
   const [metaIcon, setMetaIcon] = useState("INV_Misc_Book_09");
   const [iconOptions, setIconOptions] = useState<string[]>([]);
 
-  const [items, setItems] = useState<GridEditorItem[]>(DEFAULT_INSTANCE_LAYOUT_ITEMS);
-  const [panelTypesById, setPanelTypesById] = useState<Record<string, EventsPanelType>>(DEFAULT_INSTANCE_PANEL_TYPES);
-  const [panelOptionsById, setPanelOptionsById] = useState<Record<string, string | null>>({});
-  const [panelFiltersById, setPanelFiltersById] = useState<Record<string, PanelFilter[]>>({});
-  // Kept so saving here never drops it; there is no control for it yet.
-  const [appearance, setAppearance] = useState<LayoutAppearance>({});
-  // Separate seed state: only set on load/import, not from live editing feedback.
-  const [seedFiltersById, setSeedFiltersById] = useState<Record<string, PanelFilter[]>>({});
-  const [seedFiltersVersion, setSeedFiltersVersion] = useState(0);
+  const layoutDraft = useLayoutDraft(() => ({
+    items: DEFAULT_INSTANCE_LAYOUT_ITEMS,
+    panelTypesById: DEFAULT_INSTANCE_PANEL_TYPES,
+    panelOptionsById: {},
+    panelFiltersById: {},
+    appearance: {},
+  }));
+  const { items, appearance } = layoutDraft.draft;
+  const resetLayoutDraft = layoutDraft.reset;
   const [instanceReferenceInput, setInstanceReferenceInput] = useState<string>(() => getStoredLayoutLabInstanceReference());
   const [instanceReference, setInstanceReference] = useState<string>(() => normalizeInstanceReference(getStoredLayoutLabInstanceReference()));
   const [hasDismissedResizeHint, setHasDismissedResizeHint] = useState<boolean>(() => getStoredLayoutLabResizeHintDismissed());
-  const [activeDropGroupId, setActiveDropGroupId] = useState<string | null>(null);
   const [importText, setImportText] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
 
-  const panelItemCount = items.filter((item) => item.kind !== "group").length;
-
-  const outerLayoutItems = items
-    .filter((item) => !item.groupId)
-    .map((item) => {
-      if (item.kind !== "group") return item;
-      const requiredHeight = groupEditorHeightRows(items.filter((candidate) => candidate.groupId === item.id));
-      return {
-        ...item,
-        h: requiredHeight,
-        minH: requiredHeight,
-        maxH: requiredHeight,
-      };
-    });
-
-  const mergePositionedItems = (positionedItems: GridEditorItem[]) => {
-    const byId = new Map(positionedItems.map((item) => [item.id, item]));
-    setItems((previous) => previous.map((item) => byId.get(item.id) ?? item));
-  };
-
-  const groupDropTargetAtEvent = (event: Event): HTMLElement | null => {
-    if (!("clientX" in event) || !("clientY" in event)) return null;
-    for (const element of document.elementsFromPoint(event.clientX as number, event.clientY as number)) {
-      const target = element.closest<HTMLElement>("[data-layout-group-drop-id]");
-      if (target) return target;
-    }
-    return null;
-  };
-
-  const localPositionForGroupDrop = (target: HTMLElement, event: Event) => {
-    const rect = target.getBoundingClientRect();
-    const clientX = "clientX" in event ? event.clientX as number : rect.left;
-    const clientY = "clientY" in event ? event.clientY as number : rect.top;
-    const gridMargin = 10;
-    const columnStride = (rect.width + gridMargin) / 12;
-    const rowStride = 96 + gridMargin;
-    return {
-      x: Math.floor((clientX - rect.left + target.scrollLeft) / columnStride),
-      y: Math.floor((clientY - rect.top + target.scrollTop) / rowStride),
-    };
-  };
-
-  const handleLayoutItemDrag = (_item: GridEditorItem, event: Event) => {
-    setActiveDropGroupId(groupDropTargetAtEvent(event)?.dataset.layoutGroupDropId ?? null);
-  };
-
-  const handleLayoutItemDragStop = (item: GridEditorItem, event: Event) => {
-    const target = groupDropTargetAtEvent(event);
-    const nextGroupId = target?.dataset.layoutGroupDropId;
-    setActiveDropGroupId(null);
-
-    if (nextGroupId && nextGroupId === item.groupId) return;
-
-    if (nextGroupId && item.kind !== "group") {
-      const desired = localPositionForGroupDrop(target, event);
-      // Let the source grid finish its drag cleanup before moving the item into
-      // another GridLayout. Synchronous cross-grid remounting leaves RGL's drag
-      // transform attached to the newly mounted item.
-      requestAnimationFrame(() => {
-        setItems((previous) => {
-          const position = placeLayoutItem(
-            item,
-            previous.filter((candidate) => candidate.groupId === nextGroupId && candidate.id !== item.id),
-            desired,
-          );
-          return previous.map((candidate) =>
-            candidate.id === item.id ? { ...candidate, groupId: nextGroupId, ...position } : candidate,
-          );
-        });
-        toast.success(`${item.title} added to group`);
-      });
-      return;
-    }
-
-    if (item.groupId) {
-      requestAnimationFrame(() => {
-        setItems((previous) => {
-          const outerItems = previous.filter((candidate) => !candidate.groupId && candidate.id !== item.id);
-          const nextY = outerItems.reduce((max, candidate) => Math.max(max, candidate.y + candidate.h), 0);
-          return previous.map((candidate) =>
-            candidate.id === item.id
-              ? { ...candidate, groupId: undefined, x: 0, y: nextY }
-              : candidate,
-          );
-        });
-        toast.success(`${item.title} removed from group`);
-      });
-    }
-  };
+  const panelItemCount = layoutDraft.panelCount;
 
   const filteredIcons = useMemo(() => {
     const source = iconOptions.length > 0 ? iconOptions : [metaIcon];
@@ -1449,20 +1359,12 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
     if (!activeLayout) return;
     const parsed = parsePanelLayout(activeLayout);
     queueMicrotask(() => {
-      setItems(parsed.items);
-      setPanelTypesById(parsed.panelTypesById);
-      setPanelOptionsById(Object.fromEntries(
-        Object.entries(parsed.panelOptionsById ?? {}).map(([itemId, value]) => [itemId, value ?? null]),
-      ));
-      setPanelFiltersById(parsed.panelFiltersById ?? {});
-      setAppearance(readLayoutAppearance(parsed));
-      setSeedFiltersById(parsed.panelFiltersById ?? {});
-      setSeedFiltersVersion((v) => v + 1);
+      resetLayoutDraft(layoutDraftFromExport(parsed));
       setMetaTitle(activeLayout.title);
       setMetaDescription(activeLayout.description ?? "");
       setMetaIcon(activeLayout.icon || "INV_Misc_Book_09");
     });
-  }, [activeLayout]);
+  }, [activeLayout, resetLayoutDraft]);
 
   const handleSave = async () => {
     if (!editingLayout) {
@@ -1482,7 +1384,7 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
         title: trimmedTitle || editingLayout.title,
         description: metaDescription,
         icon: metaIcon,
-        payload: JSON.parse(serializeLayoutLab(items, panelTypesById, panelOptionsById, panelFiltersById, appearance)),
+        payload: layoutDraftToExport(layoutDraft.draft),
       } as never);
       toast.success("Layout saved", { description: trimmedTitle || editingLayout.title });
     } catch (error) {
@@ -1523,193 +1425,22 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
   };
 
 
-  const handlePanelTypeChange = (itemId: string, nextType: EventsPanelType) => {
-    if (readOnly) return;
-    setPanelTypesById((prev) => ({ ...prev, [itemId]: nextType }));
-    setPanelOptionsById((prev) => ({ ...prev, [itemId]: null }));
-    // Set the new panel type's default filters (or clear stale ones).
-    const newPanel = PANELS[nextType as keyof typeof PANELS];
-    const defaults = newPanel?.defaultFilters;
-    setPanelFiltersById((prev) => {
-      if (defaults && defaults.length > 0) {
-        return { ...prev, [itemId]: defaults };
-      }
-      const rest = { ...prev };
-      delete rest[itemId];
-      return rest;
-    });
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === itemId
-          ? {
-              ...item,
-              title: PANELS[nextType]?.label ?? item.title,
-            }
-          : item,
-      ),
-    );
-  };
-
-  const handleStripTypeChange = (itemId: string, nextType: StripType) => {
-    if (readOnly) return;
-    const definition = STRIPS[nextType];
-    const defaults = definition.defaultFilters ?? [];
-    setPanelFiltersById((prev) => ({ ...prev, [itemId]: defaults }));
-    setSeedFiltersById((prev) => ({ ...prev, [itemId]: defaults }));
-    setSeedFiltersVersion((version) => version + 1);
-    setItems((prev) => prev.map((item) => {
-      if (item.id !== itemId || item.kind !== "strip") return item;
-      const orientation = item.orientation ?? definition.defaultOrientation;
-      const size = resolveStripSize(definition.size, orientation);
-      return {
-        ...item,
-        title: definition.label,
-        stripType: nextType,
-        orientation,
-        minW: size.minW,
-        minH: size.minH,
-        maxW: size.maxW,
-        maxH: size.maxH,
-        w: Math.max(item.w, size.minW),
-        h: Math.max(item.h, size.minH),
-      };
-    }));
-  };
-
-  const handleRemovePanel = (itemId: string) => {
-    if (readOnly) return;
-    setItems((previous) => {
-      const removed = previous.find((item) => item.id === itemId);
-      const remaining = previous.filter((item) => item.id !== itemId);
-      if (removed?.kind !== "group") return remaining;
-
-      let nextY = remaining
-        .filter((item) => !item.groupId)
-        .reduce((max, item) => Math.max(max, item.y + item.h), 0);
-      return remaining.map((item) => {
-        if (item.groupId !== itemId) return item;
-        const next = { ...item, groupId: undefined, x: 0, y: nextY };
-        nextY += item.h;
-        return next;
-      });
-    });
-    setPanelTypesById((prev) => {
-      const next = { ...prev };
-      delete next[itemId];
-      return next;
-    });
-    setPanelFiltersById((prev) => {
-      const next = { ...prev };
-      delete next[itemId];
-      return next;
-    });
-    setPanelOptionsById((prev) => {
-      const next = { ...prev };
-      delete next[itemId];
-      return next;
-    });
-  };
-
-  const announceAddedLayoutItem = (label: string) => {
-    toast.success(`${label} added below`);
-  };
-
   const handleAddPanel = () => {
     if (readOnly) return;
-    if (panelItemCount >= MAX_PANELS) return;
-    const nextIndex = items.reduce((max, item) => {
-      const match = item.id.match(/^panel-(\d+)$/);
-      const n = match ? Number(match[1]) : 0;
-      return Math.max(max, n);
-    }, 0) + 1;
-
-    const maxY = items.reduce((max, item) => Math.max(max, item.y + item.h), 0);
-    const newId = `panel-${nextIndex}`;
-    const newType: EventsPanelType = "damage_done";
-
-    setItems((prev) => [
-      ...prev,
-      {
-        id: newId,
-        title: PANELS[newType].label,
-        x: 0,
-        y: maxY,
-        w: 6,
-        h: 4,
-        minW: 4,
-        minH: 4,
-      },
-    ]);
-    setPanelTypesById((prev) => ({ ...prev, [newId]: newType }));
-    setPanelOptionsById((prev) => ({ ...prev, [newId]: null }));
-    announceAddedLayoutItem("Panel");
+    if (layoutDraft.addPanel()) toast.success("Panel added below");
   };
 
   const handleAddStrip = () => {
-    if (readOnly || panelItemCount >= MAX_PANELS) return;
-    const nextIndex = items.reduce((max, item) => {
-      const match = item.id.match(/^strip-(\d+)$/);
-      return Math.max(max, match ? Number(match[1]) : 0);
-    }, 0) + 1;
-    const stripType: StripType = "raid_durability";
-    const definition = STRIPS[stripType];
-    const orientation = definition.defaultOrientation;
-    const size = resolveStripSize(definition.size, orientation);
-    const maxY = items.reduce((max, item) => Math.max(max, item.y + item.h), 0);
-    const newId = `strip-${nextIndex}`;
-
-    setItems((prev) => [
-      ...prev,
-      {
-        id: newId,
-        kind: "strip",
-        stripType,
-        orientation,
-        title: definition.label,
-        x: 0,
-        y: maxY,
-        w: size.preferredW,
-        h: size.preferredH,
-        minW: size.minW,
-        minH: size.minH,
-        maxW: size.maxW,
-        maxH: size.maxH,
-      },
-    ]);
-    announceAddedLayoutItem("Strip");
+    if (readOnly) return;
+    if (layoutDraft.addStrip()) toast.success("Strip added below");
   };
 
   const handleAddGroup = () => {
     if (readOnly) return;
-
-    const nextIndex = items.reduce((max, item) => {
-      const match = item.id.match(/^group-(\d+)$/);
-      return Math.max(max, match ? Number(match[1]) : 0);
-    }, 0) + 1;
-    const maxY = items.reduce((max, item) => Math.max(max, item.y + item.h), 0);
-    const newId = `group-${nextIndex}`;
-
-    setItems((previous) => [...previous, {
-      id: newId,
-      kind: "group",
-      title: "Panels",
-      description: "Drag panels and strips into this group.",
-      x: 0,
-      y: maxY,
-      w: 12,
-      h: 4,
-      minW: 12,
-      maxW: 12,
-      minH: 4,
-      maxH: 4,
-    }]);
-    announceAddedLayoutItem("Group row");
+    layoutDraft.addGroup();
+    toast.success("Group row added below");
   };
 
-  const handlePanelOptionChange = (itemId: string, option: string | null) => {
-    if (readOnly) return;
-    setPanelOptionsById((prev) => ({ ...prev, [itemId]: option }));
-  };
 
   const handleResizeStop = () => {
     if (hasDismissedResizeHint) return;
@@ -1718,7 +1449,7 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
   };
 
   const handleExport = async () => {
-    const serialized = serializeLayoutLab(items, panelTypesById, panelOptionsById, panelFiltersById, appearance);
+    const serialized = JSON.stringify(layoutDraftToExport(layoutDraft.draft), null, 2);
     await navigator.clipboard.writeText(serialized);
     toast.success("Layout copied to clipboard");
   };
@@ -1727,71 +1458,29 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
     if (readOnly) return;
     try {
       const parsed = parseLayoutLab(importText);
-      setItems(parsed.items);
-      setPanelTypesById(parsed.panelTypesById);
-      setPanelOptionsById(Object.fromEntries(
-        Object.entries(parsed.panelOptionsById ?? {}).map(([itemId, value]) => [itemId, value ?? null]),
-      ));
-      setPanelFiltersById(parsed.panelFiltersById ?? {});
-      setAppearance(readLayoutAppearance(parsed));
-      setSeedFiltersById(parsed.panelFiltersById ?? {});
-      setSeedFiltersVersion((v) => v + 1);
+      layoutDraft.reset(layoutDraftFromExport(parsed));
       setImportError(null);
     } catch (error) {
       setImportError(error instanceof Error ? error.message : "Invalid layout JSON");
     }
   };
 
-  const renderLayoutPanel = (item: GridEditorItem) => {
-    const panelType = panelTypesById[item.id] ?? "damage_done";
-    return (
-      <div className="group relative h-full">
-        <LivePanelTile
-          item={item}
-          panelType={panelType}
-          panelOption={panelOptionsById[item.id] ?? null}
-          context={context!}
-          durationMs={durationMs}
-          onPanelTypeChange={(next) => handlePanelTypeChange(item.id, next)}
-          onStripTypeChange={(next) => handleStripTypeChange(item.id, next)}
-          onPanelOptionChange={(option) => handlePanelOptionChange(item.id, option)}
-          seedFilters={seedFiltersById[item.id]}
-          seedFiltersVersion={seedFiltersVersion}
-          onFiltersChange={(filters) => {
-            setPanelFiltersById((previous) => {
-              if (filters.length === 0) {
-                const next = { ...previous };
-                delete next[item.id];
-                return next;
-              }
-              return { ...previous, [item.id]: filters };
-            });
-          }}
-        />
+  const renderLayoutTile = (item: GridEditorItem) => (
+    <LivePanelTile
+      item={item}
+      panelType={layoutDraft.draft.panelTypesById[item.id] ?? "damage_done"}
+      panelOption={layoutDraft.draft.panelOptionsById[item.id] ?? null}
+      context={context!}
+      durationMs={durationMs}
+      onPanelTypeChange={(next) => !readOnly && layoutDraft.setPanelType(item.id, next)}
+      onStripTypeChange={(next) => !readOnly && layoutDraft.setStripType(item.id, next)}
+      onPanelOptionChange={(option) => !readOnly && layoutDraft.setPanelOption(item.id, option)}
+      seedFilters={layoutDraft.seedFiltersById[item.id]}
+      seedFiltersVersion={layoutDraft.seedFiltersVersion}
+      onFiltersChange={(filters) => layoutDraft.setPanelFilters(item.id, filters)}
+    />
+  );
 
-        {!readOnly ? (
-          <>
-            <div className="pointer-events-none absolute inset-0 z-20 rounded-md bg-background/20 opacity-0 transition-opacity group-hover:opacity-100" />
-            <div className="pointer-events-none absolute right-2 top-2 z-30 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                className="pointer-events-auto h-8 px-2"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  handleRemovePanel(item.id);
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          </>
-        ) : null}
-      </div>
-    );
-  };
 
   if (!session?.user_id && !isSharedMode) {
     return (
@@ -1978,7 +1667,7 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
                   type="button"
                   disabled={readOnly}
                   aria-pressed={selected}
-                  onClick={() => setAppearance((previous) => ({
+                  onClick={() => layoutDraft.setAppearance((previous) => ({
                     ...previous,
                     seamless: option.value ? true : undefined,
                   }))}
@@ -2114,7 +1803,7 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
                   variant="outline"
                   onClick={handleAddPanel}
                   className="gap-1.5"
-                  disabled={readOnly || panelItemCount >= MAX_PANELS}
+                  disabled={readOnly || panelItemCount >= MAX_LAYOUT_PANELS}
                 >
                   <Plus className="h-4 w-4" />
                   Add panel
@@ -2124,7 +1813,7 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
                   variant="outline"
                   onClick={handleAddStrip}
                   className="gap-1.5"
-                  disabled={readOnly || panelItemCount >= MAX_PANELS}
+                  disabled={readOnly || panelItemCount >= MAX_LAYOUT_PANELS}
                 >
                   <Plus className="h-4 w-4" />
                   Add strip
@@ -2138,7 +1827,7 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
                   <LayoutPanelTop className="h-4 w-4" />
                   Add group row
                 </Button>
-                <span className="text-xs text-muted-foreground">Panels: {panelItemCount} / {MAX_PANELS}</span>
+                <span className="text-xs text-muted-foreground">Panels: {panelItemCount} / {MAX_LAYOUT_PANELS}</span>
               </div>
             ) : <div />}
 
@@ -2162,15 +1851,7 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
                       return;
                     }
                     const parsed = parsePanelLayout(activeLayout);
-                    setItems(parsed.items);
-                    setPanelTypesById(parsed.panelTypesById);
-                    setPanelOptionsById(Object.fromEntries(
-                      Object.entries(parsed.panelOptionsById ?? {}).map(([itemId, value]) => [itemId, value ?? null]),
-                    ));
-                    setPanelFiltersById(parsed.panelFiltersById ?? {});
-                    setAppearance(readLayoutAppearance(parsed));
-                    setSeedFiltersById(parsed.panelFiltersById ?? {});
-                    setSeedFiltersVersion((v) => v + 1);
+                    layoutDraft.reset(layoutDraftFromExport(parsed));
                   }}
                 >
                   Reset layout
@@ -2251,143 +1932,13 @@ function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
           <InstanceEventsProvider instanceId={instance.id}>
             <PanelTimingProvider panelCount={items.filter((item) => item.kind !== "group").length}>
             <ChartDataRegistryProvider>
-              <SeamlessLayoutContext.Provider value={appearance.seamless === true}>
-              <GridLayoutEditor
-                cols={12}
-                rowHeight={96}
-                items={outerLayoutItems}
-                onItemsChange={mergePositionedItems}
-                showItemHeader={false}
-                editable={!readOnly}
-                seamless={appearance.seamless === true}
+              <LayoutEditorCanvas
+                controller={layoutDraft}
+                renderTile={renderLayoutTile}
+                readOnly={readOnly}
                 pulseFirstResizeHandle={!readOnly && !hasDismissedResizeHint}
                 onResizeStop={handleResizeStop}
-                onItemDrag={handleLayoutItemDrag}
-                onItemDragStop={handleLayoutItemDragStop}
-                renderItem={(item) => {
-                  if (item.kind !== "group") return renderLayoutPanel(item);
-
-                  const groupedItems = items.filter((candidate) => candidate.groupId === item.id);
-                  const isDropTarget = activeDropGroupId === item.id;
-                  return (
-                    <div
-                      className={cn(
-                        "flex h-full flex-col bg-card/40 transition-colors",
-                        isDropTarget && "bg-primary/10 ring-2 ring-inset ring-primary",
-                      )}
-                    >
-                      <div
-                        className="flex shrink-0 items-center gap-3 border-b border-border px-3 py-2 pl-12"
-                        style={{
-                          backgroundColor: `color-mix(in oklab, ${item.accentColor || "var(--primary)"} 14%, transparent)`,
-                          boxShadow: `inset 3px 0 0 ${item.accentColor || "var(--primary)"}`,
-                        }}
-                      >
-                        <LayoutPanelTop className="h-5 w-5 shrink-0" style={{ color: item.accentColor || "var(--primary)" }} />
-                        <div className="grid min-w-0 flex-1 gap-2 md:grid-cols-2">
-                          <Input
-                            aria-label="Group title"
-                            value={item.title}
-                            disabled={readOnly}
-                            onChange={(event) => setItems((previous) => previous.map((candidate) =>
-                              candidate.id === item.id ? { ...candidate, title: event.target.value } : candidate,
-                            ))}
-                            className="h-9 bg-background/80 font-medium"
-                          />
-                          <Input
-                            aria-label="Group description"
-                            value={item.description ?? ""}
-                            placeholder="Description"
-                            disabled={readOnly}
-                            onChange={(event) => setItems((previous) => previous.map((candidate) =>
-                              candidate.id === item.id ? { ...candidate, description: event.target.value } : candidate,
-                            ))}
-                            className="h-9 bg-background/80 text-muted-foreground"
-                          />
-                        </div>
-                        <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-                          <input
-                            type="color"
-                            aria-label="Group color"
-                            value={item.accentColor ?? DEFAULT_GROUP_ACCENT}
-                            disabled={readOnly}
-                            onChange={(event) => setItems((previous) => previous.map((candidate) =>
-                              candidate.id === item.id ? { ...candidate, accentColor: event.target.value } : candidate,
-                            ))}
-                            className="h-7 w-7 cursor-pointer rounded border border-border bg-transparent p-0"
-                          />
-                          Color
-                        </label>
-                        {item.accentColor && !readOnly ? (
-                          <button
-                            type="button"
-                            className="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                            onClick={() => setItems((previous) => previous.map((candidate) =>
-                              candidate.id === item.id ? { ...candidate, accentColor: undefined } : candidate,
-                            ))}
-                          >
-                            Reset
-                          </button>
-                        ) : null}
-                        <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-                          <input
-                            type="checkbox"
-                            checked={item.collapsedByDefault === true}
-                            disabled={readOnly}
-                            onChange={(event) => setItems((previous) => previous.map((candidate) =>
-                              candidate.id === item.id
-                                ? { ...candidate, collapsedByDefault: event.target.checked }
-                                : candidate,
-                            ))}
-                          />
-                          Start collapsed
-                        </label>
-                        {!readOnly ? (
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            className="h-8 shrink-0 px-2"
-                            onClick={() => handleRemovePanel(item.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        ) : null}
-                      </div>
-                      <div
-                        data-layout-group-drop-id={item.id}
-                        data-layout-group-content
-                        className="min-h-0 flex-1 overflow-auto p-3 styled-scrollbar"
-                      >
-                        {groupedItems.length === 0 ? (
-                          <div className={cn(
-                            "flex h-full min-h-40 items-center justify-center rounded-md border border-dashed border-border text-sm text-muted-foreground",
-                            isDropTarget && "border-primary text-foreground",
-                          )}>
-                            Drag panels or strips here to add them to this group.
-                          </div>
-                        ) : (
-                          <GridLayoutEditor
-                            cols={12}
-                            rowHeight={96}
-                            items={groupedItems}
-                            onItemsChange={mergePositionedItems}
-                            showItemHeader={false}
-                            editable={!readOnly}
-                            seamless={appearance.seamless === true}
-                            onResizeStop={handleResizeStop}
-                            preservePositions
-                            onItemDrag={handleLayoutItemDrag}
-                            onItemDragStop={handleLayoutItemDragStop}
-                            renderItem={renderLayoutPanel}
-                          />
-                        )}
-                      </div>
-                    </div>
-                  );
-                }}
               />
-              </SeamlessLayoutContext.Provider>
             </ChartDataRegistryProvider>
             </PanelTimingProvider>
           </InstanceEventsProvider>
