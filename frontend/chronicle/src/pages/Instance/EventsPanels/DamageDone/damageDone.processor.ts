@@ -57,6 +57,11 @@ export type DamageDoneResult = {
   // Assembly of Iron damage excluded from ranking totals, retained for display.
   EncounterExcludedDamage?: Map<string, UnitDamage>;
 
+  // Assembly of Iron breakouts excluded from ranking totals.
+  ExcludedByAbility?: Map<string, Map<string, DamageAbilityBreakout>>;
+  ExcludedByAbilityBySpellId?: Map<string, Map<number, SpellIdAbilityBreakout>>;
+  ExcludedByTarget?: Map<string, Map<string, number>>;
+
   // GUID cache for performance (avoids repeated parsing)
   GuidCache: GuidCache;
   // Aura state used for inline aura-aware decisions

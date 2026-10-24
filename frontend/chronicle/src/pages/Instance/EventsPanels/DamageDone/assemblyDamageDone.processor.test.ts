@@ -89,6 +89,8 @@ describe("assemblyDamageDoneProcessor", () => {
     assemblyDamageDoneProcessor.processEvent(state, slain(STEELBREAKER), ENCOUNTER, new Date(), "slain", ctx);
 
     expect(encounterDamage(state)).toBe(500);
+    expect(state.ExcludedByAbility?.get(PLAYER)?.get("Attack")?.Total).toBe(80);
+    expect(state.ExcludedByTarget?.get(PLAYER)?.get(MOLGEIM)).toBe(80);
     expect(encounterDamage(state, true)).toBe(80);
   });
 

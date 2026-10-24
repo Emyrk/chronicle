@@ -19,15 +19,30 @@ function getAbilitiesForUnit(
   unitId: string
 ): AbilityData[] {
   const unitAbilities = result.ByAbility.get(unitId);
-  if (!unitAbilities) return [];
+  const excludedAbilities = result.ExcludedByAbility?.get(unitId);
+  if (!unitAbilities && !excludedAbilities) return [];
 
+  const abilityNames = new Set([
+    ...(unitAbilities?.keys() ?? []),
+    ...(excludedAbilities?.keys() ?? []),
+  ]);
   const abilities: AbilityData[] = [];
-  for (const [abilityName, data] of unitAbilities) {
+  for (const abilityName of abilityNames) {
+    const data = unitAbilities?.get(abilityName);
+    const excluded = excludedAbilities?.get(abilityName);
     abilities.push({
-      ...data,
+      ...(data ?? {
+        Total: 0,
+        Count: 0,
+        Crits: 0,
+        Hits: 0,
+        Misses: 0,
+        spellId: excluded?.spellId,
+      }),
       name: abilityName,
-      value: data.Total - (data.Absorbed || 0),
-      absorbed: data.Absorbed,
+      value: data ? data.Total - (data.Absorbed || 0) : 0,
+      absorbed: data?.Absorbed,
+      overheal: excluded?.Total,
     });
   }
 
@@ -50,15 +65,30 @@ function getAbilitiesBySpellIdForUnit(
   unitId: string
 ): AbilityDataWithSpellId[] {
   const unitAbilities = result.ByAbilityBySpellId.get(unitId);
-  if (!unitAbilities) return [];
+  const excludedAbilities = result.ExcludedByAbilityBySpellId?.get(unitId);
+  if (!unitAbilities && !excludedAbilities) return [];
 
+  const compositeIds = new Set([
+    ...(unitAbilities?.keys() ?? []),
+    ...(excludedAbilities?.keys() ?? []),
+  ]);
   const abilities: AbilityDataWithSpellId[] = [];
-  for (const [compositeId, data] of unitAbilities) {
+  for (const compositeId of compositeIds) {
+    const data = unitAbilities?.get(compositeId);
+    const excluded = excludedAbilities?.get(compositeId);
     abilities.push({
-      ...data,
-      name: data.spellName,
-      value: data.Total - (data.Absorbed || 0),
-      absorbed: data.Absorbed,
+      ...(data ?? {
+        Total: 0,
+        Count: 0,
+        Crits: 0,
+        Hits: 0,
+        Misses: 0,
+        spellName: excluded?.spellName ?? `Spell ${realSpellId(compositeId)}`,
+      }),
+      name: data?.spellName ?? excluded?.spellName ?? `Spell ${realSpellId(compositeId)}`,
+      value: data ? data.Total - (data.Absorbed || 0) : 0,
+      absorbed: data?.Absorbed,
+      overheal: excluded?.Total,
       spellId: realSpellId(compositeId),
     });
   }
@@ -78,6 +108,10 @@ function getAllSpellIds(result: DamageDoneResult | undefined): number[] {
     for (const id of unitMap.keys()) spellIds.add(realSpellId(id));
   }
   
+  for (const unitMap of result.ExcludedByAbilityBySpellId?.values() ?? []) {
+    for (const id of unitMap.keys()) spellIds.add(realSpellId(id));
+  }
+
   return Array.from(spellIds);
 }
 
@@ -107,10 +141,16 @@ function getTargetsForUnit(
   context: PanelContext
 ): TargetData[] {
   const unitTargets = result.ByTarget.get(unitId);
-  if (!unitTargets) return [];
-  
+  const excludedTargets = result.ExcludedByTarget?.get(unitId);
+  if (!unitTargets && !excludedTargets) return [];
+
+  const targetIds = new Set([
+    ...(unitTargets?.keys() ?? []),
+    ...(excludedTargets?.keys() ?? []),
+  ]);
   const targets: TargetData[] = [];
-  for (const [targetId, value] of unitTargets) {
+  for (const targetId of targetIds) {
+    const value = unitTargets?.get(targetId) ?? 0;
     // Try to resolve target name from players or units
     // Fall back to GUID if name is unknown or empty
     let targetName: string | undefined;
@@ -124,6 +164,7 @@ function getTargetsForUnit(
       targetId,
       targetName: targetName || targetId, // Show GUID if name is unknown
       value,
+      overheal: excludedTargets?.get(targetId),
       hitCount: 0, // TODO: Track hit counts per target in processor
       critCount: 0,
     });
@@ -230,19 +271,8 @@ export function useDamageDoneBreakout({
         });
         // Pet abilities in merged mode are excluded from ByAbilityBySpellId (different
         // pets share spell IDs, e.g. Auto Attack=6603). Pull them from ByAbility instead.
-        const byAbility = result.ByAbility.get(playerID);
-        if (byAbility) {
-          for (const [name, data] of byAbility) {
-            if (name.includes("(by pet")) {
-              abilities.push({
-                ...data,
-                name,
-                value: data.Total - (data.Absorbed || 0),
-                absorbed: data.Absorbed,
-                spellId: data.spellId,
-              });
-            }
-          }
+        for (const ability of getAbilitiesForUnit(result, playerID)) {
+          if (ability.name.includes("(by pet")) abilities.push(ability);
         }
       } else {
         abilities = getAbilitiesForUnit(result, playerID);
@@ -269,6 +299,7 @@ export function useDamageDoneBreakout({
         ? abilities.map((a) => ({
             ...a,
             value: (a.value / durationMs) * 1000,
+            overheal: a.overheal !== undefined ? (a.overheal / durationMs) * 1000 : undefined,
             absorbed: a.absorbed !== undefined ? (a.absorbed / durationMs) * 1000 : undefined,
           }))
         : abilities;
@@ -276,6 +307,7 @@ export function useDamageDoneBreakout({
       const displayTargets = perSecond && durationMs
         ? targets.map((t) => ({
             ...t,
+            overheal: t.overheal !== undefined ? (t.overheal / durationMs) * 1000 : undefined,
             value: (t.value / durationMs) * 1000,
           }))
         : targets;
@@ -296,6 +328,10 @@ export function useDamageDoneBreakout({
           pinned={pinned}
           activeTab={activeTab}
           onTabChange={setActiveTab}
+          showOverheal
+          stackedLabel="Excluded"
+          valueBeforeStacked
+          showStackedOnlyWhenExpanded
           showAbsorbed
           absorbedIsAdditive
         />

@@ -182,6 +182,21 @@ function mergeDamageDoneResult(destination: DamageDoneResult, source: DamageDone
   destination._damageEventsWithSunderArmor += source._damageEventsWithSunderArmor;
 }
 
+function mergeExcludedBreakouts(
+  state: AssemblyDamageDoneResult,
+  source: DamageDoneResult,
+): void {
+  state.ExcludedByAbility ??= new Map();
+  state.ExcludedByAbilityBySpellId ??= new Map();
+  state.ExcludedByTarget ??= new Map();
+  mergeBreakoutMap(state.ExcludedByAbility, source.ByAbility);
+  mergeBreakoutMap<number, SpellIdAbilityBreakout>(
+    state.ExcludedByAbilityBySpellId,
+    source.ByAbilityBySpellId,
+  );
+  mergeOwnerTargetValues(state.ExcludedByTarget, source.ByTarget);
+}
+
 function phaseDamage(
   state: AssemblyDamageDoneResult,
   encounterID: string,
@@ -207,7 +222,9 @@ function commitSlainTarget(
   const excludedByEncounter = state.EncounterExcludedDamage ?? new Map<string, UnitDamage>();
   const encounterExcluded = excludedByEncounter.get(encounterID) ?? new Map<string, DamageDoneData>();
   for (const [phaseTargetID, result] of phase) {
-    if (phaseTargetID !== targetID) mergeEncounterDamage(encounterExcluded, result, encounterID);
+    if (phaseTargetID === targetID) continue;
+    mergeEncounterDamage(encounterExcluded, result, encounterID);
+    mergeExcludedBreakouts(state, result);
   }
   if (encounterExcluded.size > 0) {
     excludedByEncounter.set(encounterID, encounterExcluded);
@@ -225,6 +242,9 @@ export const assemblyDamageDoneProcessor: PanelProcessor<
   createState: () => ({
     ...createDamageDoneResult(),
     EncounterExcludedDamage: new Map(),
+    ExcludedByAbility: new Map(),
+    ExcludedByAbilityBySpellId: new Map(),
+    ExcludedByTarget: new Map(),
     _assemblyPhaseDamage: new Map(),
   }),
   processEvent: (state, event, encounterID, firstTimestamp, streamType, context) => {

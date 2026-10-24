@@ -333,6 +333,8 @@ export interface AbilityTableProps {
   showAbsorbed?: boolean
   /** Whether absorbed damage is additive to value instead of a subset of it. */
   absorbedIsAdditive?: boolean
+  /** Called when the More detail expansion changes. */
+  onExpandedChange?: (expanded: boolean) => void
   /** Controlled "More detail" expansion (optional - defaults to internal state) */
   expanded?: boolean
   /** Controlled expanded view mode (optional - defaults to internal state) */
@@ -353,6 +355,7 @@ export function AbilityTable({
   showAbsorbed = false,
   absorbedIsAdditive = false,
   expanded: controlledExpanded,
+  onExpandedChange,
   expandedViewMode: controlledViewMode,
 }: AbilityTableProps) {
   const { hover, setHover, clearHover, selectedAbilities, toggleAbilitySelection, clearSelection } = useBreakoutHover()
@@ -466,7 +469,11 @@ export function AbilityTable({
           )}
           {hasDetailedData && (
             <button
-              onClick={() => setInternalExpanded(!isExpanded)}
+              onClick={() => {
+                const nextExpanded = !isExpanded;
+                setInternalExpanded(nextExpanded);
+                onExpandedChange?.(nextExpanded);
+              }}
               className="text-muted-foreground hover:text-foreground p-0.5"
               title={isExpanded ? "Collapse hit breakdown" : "Expand hit breakdown"}
               data-more-detail={!isExpanded ? true : undefined}
@@ -843,12 +850,14 @@ export function TargetTable({
     [groupByName, targets]
   )
   
-  if (!displayTargets || displayTargets.length === 0) {
+  // Hide stacked-only rows until the stacked detail column is enabled.
+  const sorted = [...displayTargets]
+    .filter(target => target.value > 0 || (showOverheal && (target.overheal ?? 0) > 0))
+    .sort((a, b) => b.value - a.value)
+
+  if (sorted.length === 0) {
     return <p className="text-xs p-2 text-muted-foreground">No target breakdown available</p>
   }
-
-  // Sort by value descending
-  const sorted = [...displayTargets].sort((a, b) => b.value - a.value)
   
   // Check if any target has overheal data
   const hasOverhealData = showOverheal && sorted.some(t => t.overheal !== undefined && t.overheal > 0)
@@ -973,6 +982,8 @@ export interface AbilityBreakoutProps {
   showOverheal?: boolean
   /** Label for the stacked secondary column */
   stackedLabel?: string
+  /** Only show the stacked column after More detail is expanded. */
+  showStackedOnlyWhenExpanded?: boolean
   /** Move the primary value before the stacked column */
   valueBeforeStacked?: boolean
   /** Whether to show the absorbed column */
@@ -1011,12 +1022,14 @@ export function AbilityBreakout({
   showHits = true,
   showOverheal = false,
   stackedLabel = 'Overheal',
+  showStackedOnlyWhenExpanded = false,
   valueBeforeStacked = false,
   showAbsorbed = false,
   absorbedIsAdditive = false,
   expanded,
   expandedViewMode,
 }: AbilityBreakoutProps) {
+  const [internalExpanded, setInternalExpanded] = useState(false)
   const [internalTab, setInternalTab] = useState<BreakoutTab>('ability')
   const [groupTargets, setGroupTargets] = useLocalStorage<boolean>(GROUP_TARGETS_STORAGE_KEY, false)
 
@@ -1029,6 +1042,8 @@ export function AbilityBreakout({
     return new URLSearchParams(window.location.search).get('debug') === 'true'
   }, [])
   
+  const isExpanded = expanded ?? internalExpanded
+  const showStacked = showOverheal && (!showStackedOnlyWhenExpanded || isExpanded)
   const hasTargets = targets && targets.length > 0
   
   const tabClass = "px-2 py-1 text-2xs font-medium transition-colors"
@@ -1061,12 +1076,13 @@ export function AbilityBreakout({
           totalValue={totalValue}
           valueLabel={valueLabel}
           showHits={showHits}
-          showOverheal={showOverheal}
+          showOverheal={showStacked}
           stackedLabel={stackedLabel}
           valueBeforeStacked={valueBeforeStacked}
           showAbsorbed={showAbsorbed}
           absorbedIsAdditive={absorbedIsAdditive}
-          expanded={expanded}
+          expanded={isExpanded}
+          onExpandedChange={setInternalExpanded}
           expandedViewMode={expandedViewMode}
         />
       </div>
@@ -1111,12 +1127,13 @@ export function AbilityBreakout({
           totalValue={totalValue}
           valueLabel={valueLabel}
           showHits={showHits}
-          showOverheal={showOverheal}
+          showOverheal={showStacked}
           stackedLabel={stackedLabel}
           valueBeforeStacked={valueBeforeStacked}
           showAbsorbed={showAbsorbed}
           absorbedIsAdditive={absorbedIsAdditive}
-          expanded={expanded}
+          expanded={isExpanded}
+          onExpandedChange={setInternalExpanded}
           expandedViewMode={expandedViewMode}
         />
       ) : (
@@ -1124,7 +1141,7 @@ export function AbilityBreakout({
           targets={targets}
           totalValue={totalValue}
           valueLabel={valueLabel}
-          showOverheal={showOverheal}
+          showOverheal={showStacked}
           stackedLabel={stackedLabel}
           groupByName={groupTargets}
         />
