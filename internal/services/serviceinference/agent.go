@@ -125,6 +125,38 @@ type toolContext struct {
 	service    *Service
 	instanceID uuid.UUID
 }
+
+func usedToolCallIDs(messages []Message) map[string]struct{} {
+	used := make(map[string]struct{})
+	for _, message := range messages {
+		if message.ToolCallID != "" {
+			used[message.ToolCallID] = struct{}{}
+		}
+		for _, call := range message.ToolCalls {
+			if call.ID != "" {
+				used[call.ID] = struct{}{}
+			}
+		}
+	}
+	return used
+}
+
+func reserveToolCallID(candidate string, used map[string]struct{}) string {
+	if candidate != "" && len(candidate) <= 200 {
+		if _, exists := used[candidate]; !exists {
+			used[candidate] = struct{}{}
+			return candidate
+		}
+	}
+	for {
+		generated := "call-" + uuid.NewString()
+		if _, exists := used[generated]; !exists {
+			used[generated] = struct{}{}
+			return generated
+		}
+	}
+}
+
 type toolCallAccumulator struct {
 	ID, Name string
 	Args     strings.Builder
@@ -714,6 +746,7 @@ type pauseClientToolFunc func(Message, []Message, clientToolPause, agentLoopStat
 
 func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provider, credential []byte, model string, a assistant, messages []Message, tc toolContext, debug debugRunContext, capability *clientCapability, state agentLoopState, persist func(...Message) error, pause pauseClientToolFunc) (agentLoopResult, error) {
 	messages = append([]Message{{Role: RoleSystem, Content: a.System}}, messages...)
+	usedCallIDs := usedToolCallIDs(messages)
 	for state.IterationCount < maxIterations {
 		state.IterationCount++
 		iteration := state.IterationCount
@@ -781,10 +814,11 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 		}
 		for i := 0; i < len(calls); i++ {
 			c := calls[i]
-			if c == nil || c.ID == "" || c.Name == "" {
+			if c == nil || c.Name == "" {
 				return agentLoopResult{State: state}, errors.New("invalid tool call")
 			}
-			assistantMessage.ToolCalls = append(assistantMessage.ToolCalls, ToolCall{ID: c.ID, Name: c.Name, Arguments: c.Args.String()})
+			callID := reserveToolCallID(c.ID, usedCallIDs)
+			assistantMessage.ToolCalls = append(assistantMessage.ToolCalls, ToolCall{ID: callID, Name: c.Name, Arguments: c.Args.String()})
 		}
 		toolMessages := make([]Message, 0, len(assistantMessage.ToolCalls))
 		var pending *clientToolPause

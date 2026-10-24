@@ -598,7 +598,10 @@ func TestAgentLoopPausesAndCanPauseAgainForClientTools(t *testing.T) {
 	assistantDefinition := withClientTools(assistants["instance-analyst"], capability)
 	provider := &scriptedProvider{streams: [][]StreamEvent{
 		{{Type: StreamEventToolCallDelta, ToolCall: ToolCallDelta{Index: 0, ID: "call-1", Name: "inspect_instance_ui", Arguments: `{"include":["panels"]}`}}, {Type: StreamEventUsage, Usage: Usage{PromptTokens: 3, CompletionTokens: 1, TotalTokens: 4}}, {Type: StreamEventFinish, FinishReason: FinishReasonToolCalls}},
-		{{Type: StreamEventToolCallDelta, ToolCall: ToolCallDelta{Index: 0, ID: "call-2", Name: "query_panel", Arguments: `{"panel_id":"damage"}`}}, {Type: StreamEventFinish, FinishReason: FinishReasonToolCalls}},
+		// Some provider routes reuse a tool-call ID on a later completion. The
+		// runtime must rewrite it before persistence because request IDs are unique
+		// within a durable run.
+		{{Type: StreamEventToolCallDelta, ToolCall: ToolCallDelta{Index: 0, ID: "call-1", Name: "query_panel", Arguments: `{"panel_id":"damage"}`}}, {Type: StreamEventFinish, FinishReason: FinishReasonToolCalls}},
 	}}
 	var stream bytes.Buffer
 	writer := agui.NewStreamWriter(&stream, nil)
@@ -628,5 +631,8 @@ func TestAgentLoopPausesAndCanPauseAgainForClientTools(t *testing.T) {
 	require.Equal(t, 2, second.State.IterationCount)
 	require.Equal(t, 2, second.State.ToolCallCount)
 	require.Len(t, pauses, 2)
-	require.Equal(t, "call-2", pauses[1].Call.ID)
+	require.Equal(t, "call-1", pauses[0].Call.ID)
+	require.NotEqual(t, "call-1", pauses[1].Call.ID)
+	require.NotEmpty(t, pauses[1].Call.ID)
+	require.Contains(t, stream.String(), pauses[1].Call.ID)
 }
