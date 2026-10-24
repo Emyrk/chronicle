@@ -1,18 +1,20 @@
 import type { ChartDataEntry } from "../EventsPanels/ChartDataRegistry";
 import type { PanelFilter } from "../EventsPanels/processors/filters";
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
-
-const QUERYABLE_METRIC_PANELS = new Set([
-  "damage_done",
-  "damage_taken",
-  "healing_done",
-  "healing_taken",
-]);
+import { isQueryablePanelType } from "../EventsPanels/panelCatalog";
 
 export interface InstanceUITimeRange {
   enabled: boolean;
   startOffsetMs: number | null;
   endOffsetMs: number | null;
+}
+
+export interface InstanceUIPanelCatalogEntry {
+  id: string;
+  label: string;
+  description: string;
+  queryable: boolean;
+  hidden: boolean;
 }
 
 export interface InstanceUIState {
@@ -32,6 +34,7 @@ export interface InstanceUIState {
   availableEncounterIds: string[];
   availablePlayerIds: string[];
   availableEnemyIds: string[];
+  availablePanelCatalog: InstanceUIPanelCatalogEntry[];
   availablePanelTypes: string[];
   availablePresets: string[];
 }
@@ -81,13 +84,14 @@ export function buildInstanceUISnapshot(
           type: panelType,
           option: state.panelOptionsById[item.id] ?? null,
           filters: state.panelFiltersById[item.id] ?? [],
-          queryable: QUERYABLE_METRIC_PANELS.has(panelType),
+          queryable: isQueryablePanelType(panelType),
         };
       });
   }
   if (sections.has("capabilities")) {
     snapshot.capabilities = {
       panelTypes: state.availablePanelTypes,
+      panelCatalog: state.availablePanelCatalog,
       presets: state.availablePresets,
     };
   }
@@ -106,7 +110,7 @@ export function queryMetricPanel(
 ): Record<string, unknown> {
   const entry = entries.get(args.panel_id);
   if (!entry) throw new Error("panel_not_ready");
-  if (!QUERYABLE_METRIC_PANELS.has(entry.panelType)) throw new Error("panel_not_queryable");
+  if (!isQueryablePanelType(entry.panelType)) throw new Error("panel_not_queryable");
   const limit = Math.min(50, Math.max(1, Math.trunc(args.limit ?? 10)));
   const rows = [...entry.data]
     .sort((left, right) => right.value - left.value || left.playerID.localeCompare(right.playerID));

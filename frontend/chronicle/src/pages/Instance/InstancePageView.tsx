@@ -46,7 +46,8 @@ import { activePhaseForTimeRange, phaseTimeRangeSelection, phaseWidthPercent } f
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
 import type { PanelFilter } from "./EventsPanels/processors/filters";
 import { canonicalizeCustomPanelRef, isCustomPanelRef } from "./EventsPanels/custom/pluginTypes";
-import { PANELS } from "./EventsPanels/EventsPanel";
+import { PANELS, type BuiltinPanelType } from "./EventsPanels/EventsPanel";
+import { isQueryablePanelType, PANEL_AI_DESCRIPTIONS } from "./EventsPanels/panelCatalog";
 import { Strip } from "./EventsPanels/Strips/Strip";
 import { STRIPS, resolveStripType } from "./EventsPanels/Strips/strips";
 import type { StripType } from "./EventsPanels/Strips/types";
@@ -2795,7 +2796,7 @@ function InstancePageViewContent({
       const panelParts = (panelPart || "").split("-").filter(Boolean).map(parseLegacyPanelCode);
       const parsedPanels: PanelType[] = Array.from({ length: Math.max(panelParts.length, defaultOrderedPanels.length) }, (_, i) => {
         const code = panelParts[i]?.code;
-        return (code && LEGACY_PANEL_CODE_TO_TYPE[code]) ?? defaultOrderedPanels[i] ?? "empty";
+        return (code ? LEGACY_PANEL_CODE_TO_TYPE[code] : undefined) ?? defaultOrderedPanels[i] ?? "empty";
       });
       const parsedPanelOptions = Array.from({ length: parsedPanels.length }, (_, i) => panelParts[i]?.option ?? null);
 
@@ -3768,6 +3769,13 @@ function InstancePageViewContent({
     availableEncounterIds: instance.encounters.map((encounter) => encounter.id),
     availablePlayerIds: Object.keys(instance.players ?? {}).sort(),
     availableEnemyIds: allMergedEnemies.map((enemy) => enemy.id),
+    availablePanelCatalog: Object.entries(PANELS).map(([id, panel]) => ({
+      id,
+      label: panel.label,
+      description: PANEL_AI_DESCRIPTIONS[id as BuiltinPanelType],
+      queryable: isQueryablePanelType(id),
+      hidden: panel.hidden === true,
+    })),
     availablePanelTypes: Object.keys(PANELS),
     availablePresets: getAvailablePresetLayouts(instance.capabilities ?? [], isMobile).map((preset) => preset.id),
   };

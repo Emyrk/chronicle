@@ -39,7 +39,7 @@ type clientToolDefinition struct {
 
 var instancePageClientTools = []clientToolDefinition{
 	{
-		ToolDefinition: ToolDefinition{Name: "inspect_instance_ui", Description: "Inspect the current authorized instance page UI selection, layout, panels, and available capabilities.", Parameters: json.RawMessage(`{"type":"object","properties":{"include":{"type":"array","items":{"type":"string","enum":["selection","layout","panels","capabilities"]},"maxItems":4}},"additionalProperties":false}`)},
+		ToolDefinition: ToolDefinition{Name: "inspect_instance_ui", Description: "Inspect the current authorized instance page UI selection, layout, panels, and available capabilities. The capabilities section includes every panel type with its human label, purpose, visibility, and whether query_panel supports it.", Parameters: json.RawMessage(`{"type":"object","properties":{"include":{"type":"array","items":{"type":"string","enum":["selection","layout","panels","capabilities"]},"maxItems":4}},"additionalProperties":false}`)},
 		CapabilityID:   instancePageCapabilityID, CapabilityVersion: instancePageCapabilityVersion, Effect: "read", Confirmation: "never",
 	},
 	{

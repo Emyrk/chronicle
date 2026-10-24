@@ -24,6 +24,22 @@ const state: InstanceUIState = {
   availableEncounterIds: ["encounter-1", "encounter-2"],
   availablePlayerIds: ["player-1"],
   availableEnemyIds: [],
+  availablePanelCatalog: [
+    {
+      id: "damage_done",
+      label: "Damage Done",
+      description: "Compares player damage dealt.",
+      queryable: true,
+      hidden: false,
+    },
+    {
+      id: "healing_done",
+      label: "Healing Done",
+      description: "Compares effective healing performed.",
+      queryable: true,
+      hidden: false,
+    },
+  ],
   availablePanelTypes: ["damage_done", "healing_done"],
   availablePresets: ["summary", "damage", "healing"],
 };
@@ -56,6 +72,7 @@ describe("instance inference tools", () => {
     expect(buildInstanceUISnapshot(state, ["capabilities"])).toMatchObject({
       capabilities: {
         panelTypes: ["damage_done", "healing_done"],
+        panelCatalog: state.availablePanelCatalog,
         presets: ["summary", "damage", "healing"],
       },
     });
