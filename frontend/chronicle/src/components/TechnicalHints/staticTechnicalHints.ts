@@ -3,7 +3,13 @@ import panelHintsJSON from "../../../../../assets/turtle/generated/panel-hints.j
 import { BLOG_POSTS, blogPostPath } from "@/blog/blogRegistry";
 import type { TechnicalHint, TechnicalHintContext, TechnicalHintsResponse } from "./types";
 
-type GeneralTipAsset = { id: string; content: string; context?: TechnicalHintContext };
+type GeneralTipAsset = {
+  id: string;
+  content: string;
+  context?: TechnicalHintContext;
+  href?: string;
+  actionLabel?: string;
+};
 type PanelHintAsset = { id: string; panelID: string; panelLabel: string; content: string };
 
 function humanize(value: string): string {
@@ -16,6 +22,8 @@ export const STATIC_TECHNICAL_HINTS: readonly TechnicalHint[] = [
     id: `tip-${tip.id}`,
     kind: "tip",
     ...(tip.context ? { context: tip.context } : {}),
+    ...(tip.href ? { href: tip.href } : {}),
+    ...(tip.actionLabel ? { action_label: tip.actionLabel } : {}),
     title: humanize(tip.id),
     body: tip.content,
     tags: ["tip"],
