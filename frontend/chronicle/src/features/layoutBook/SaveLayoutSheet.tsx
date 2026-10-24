@@ -295,7 +295,7 @@ function LayoutOption({ selected, onSelect, icon, title, subtitle, badges }: {
       aria-checked={selected}
       onClick={onSelect}
       className={cn(
-        "flex w-full items-center gap-3 px-3 py-2 text-left transition-colors",
+        "flex w-full cursor-pointer items-center gap-3 px-3 py-2 text-left transition-colors",
         selected ? "bg-primary/10 shadow-[inset_3px_0_0_var(--primary)]" : "hover:bg-muted/50",
       )}
     >
