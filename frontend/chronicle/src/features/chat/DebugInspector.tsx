@@ -1,12 +1,33 @@
-import { Braces, FileText, Gauge, Puzzle, Wrench } from "lucide-react";
-import type { DebugSnapshotEvent } from "./protocol";
+import { useState } from "react";
+import { Braces, ChevronRight, Download, FileText, Gauge, Puzzle, Wrench } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { serializeInferenceDebug } from "./debugExport";
+import type { ClientToolRequestEvent, DebugSnapshotEvent } from "./protocol";
 
 interface DebugInspectorProps {
   snapshots: readonly DebugSnapshotEvent[];
+  clientToolRequests: readonly ClientToolRequestEvent[];
+  error?: string;
 }
 
 function formattedJSON(value: unknown): string {
   return JSON.stringify(value, null, 2);
+}
+
+function downloadDebugSnapshots(
+  snapshots: readonly DebugSnapshotEvent[],
+  clientToolRequests: readonly ClientToolRequestEvent[],
+  error?: string,
+): void {
+  const runId = snapshots.at(-1)?.runId ?? clientToolRequests.at(-1)?.runId ?? "run";
+  const blob = new Blob([serializeInferenceDebug(snapshots, clientToolRequests, error)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `chronicle-inference-debug-${runId}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function bytes(value: number): string {
@@ -104,25 +125,44 @@ function Snapshot({ snapshot, latest }: { snapshot: DebugSnapshotEvent; latest: 
   );
 }
 
-export function DebugInspector({ snapshots }: DebugInspectorProps) {
+export function DebugInspector({ snapshots, clientToolRequests, error }: DebugInspectorProps) {
+  const [expanded, setExpanded] = useState(false);
+  const empty = snapshots.length === 0;
   return (
-    <div className="border-b bg-muted/10 px-4 py-3">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold">Prompt inspector</p>
-          <p className="text-muted-foreground text-[11px]">Server-generated provider requests. Credentials and headers are never included.</p>
+    <div className="bg-muted/10 border-b">
+      <div className="flex items-center gap-2 px-4 py-1">
+        <button
+          type="button"
+          className="text-muted-foreground hover:text-foreground flex min-w-0 flex-1 items-center gap-1.5 text-left text-[11px] disabled:pointer-events-none"
+          onClick={() => setExpanded((value) => !value)}
+          disabled={empty}
+          aria-expanded={expanded}
+          title="Server-generated provider requests. Credentials and headers are never included."
+        >
+          <ChevronRight className={cn("size-3.5 shrink-0 transition-transform", expanded && !empty && "rotate-90")} />
+          <span className="text-foreground font-medium">Prompt inspector</span>
+          <span>· {snapshots.length} snapshot{snapshots.length === 1 ? "" : "s"}</span>
+        </button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-6"
+          disabled={empty && clientToolRequests.length === 0}
+          onClick={() => downloadDebugSnapshots(snapshots, clientToolRequests, error)}
+          title="Download JSON"
+          aria-label="Download JSON"
+        >
+          <Download className="size-3.5" />
+        </Button>
+      </div>
+      {expanded && !empty && (
+        <div className="styled-scrollbar max-h-[42vh] space-y-2 overflow-y-auto px-4 pb-3">
+          {snapshots.map((snapshot, index) => (
+            <Snapshot key={`${snapshot.runId}-${snapshot.iteration}-${snapshot.phase}`} snapshot={snapshot} latest={index === snapshots.length - 1} />
+          ))}
         </div>
-        <span className="text-muted-foreground text-[10px]">{snapshots.length} snapshot{snapshots.length === 1 ? "" : "s"}</span>
-      </div>
-      <div className="styled-scrollbar max-h-[42vh] space-y-2 overflow-y-auto pr-1">
-        {snapshots.length > 0 ? snapshots.map((snapshot, index) => (
-          <Snapshot key={`${snapshot.runId}-${snapshot.iteration}-${snapshot.phase}`} snapshot={snapshot} latest={index === snapshots.length - 1} />
-        )) : (
-          <div className="text-muted-foreground rounded-lg border border-dashed px-3 py-5 text-center text-xs">
-            Debug capture is enabled. Send a message to inspect the composed prompt, tools, and skills.
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }

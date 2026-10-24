@@ -941,7 +941,7 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
       const panels: PanelType[] = Array.from({ length: minCount }, (_, i) => {
         const parsedCode = parsedPanels[i]?.code;
         if (parsedCode?.startsWith("x")) return decodeCustomPanelToken(parsedCode) ?? (`custom:invalid:${parsedCode.slice(1)}` as CustomPanelRef);
-        return (parsedCode && CODE_TO_PANEL[parsedCode]) ?? fallbackPanels[i] ?? 'empty';
+        return (parsedCode ? CODE_TO_PANEL[parsedCode] : undefined) ?? fallbackPanels[i] ?? 'empty';
       });
 
       const panelOptions: PanelOptions = Array.from({ length: panels.length }, (_, i) => parsedPanels[i]?.option ?? null);

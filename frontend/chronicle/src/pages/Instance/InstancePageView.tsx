@@ -46,12 +46,15 @@ import { activePhaseForTimeRange, phaseTimeRangeSelection, phaseWidthPercent } f
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
 import type { PanelFilter } from "./EventsPanels/processors/filters";
 import { canonicalizeCustomPanelRef, isCustomPanelRef } from "./EventsPanels/custom/pluginTypes";
-import { PANELS } from "./EventsPanels/EventsPanel";
+import { PANELS, type BuiltinPanelType } from "./EventsPanels/EventsPanel";
+import { isQueryablePanelType, PANEL_AI_DESCRIPTIONS } from "./EventsPanels/panelCatalog";
 import { Strip } from "./EventsPanels/Strips/Strip";
 import { STRIPS, resolveStripType } from "./EventsPanels/Strips/strips";
 import type { StripType } from "./EventsPanels/Strips/types";
 import { PanelTimingProvider, PanelTimingDisplay, PanelTimingResetter } from "./EventsPanels/PanelTimingContext";
 import { ChartDataRegistryProvider } from "./EventsPanels/ChartDataRegistry";
+import { InstanceInferenceCapability } from "./inference/InstanceInferenceCapability";
+import type { InstanceUIState } from "./inference/instanceInferenceTools";
 import { PanelExplainerView } from "./PanelExplainer";
 import { PlayerTimelineHelp } from "./Pages/PlayerTimelinePage/help/PlayerTimelineHelp";
 import { PLAYER_TIMELINE_HELP } from "./Pages/PlayerTimelinePage/help/callouts";
@@ -2210,30 +2213,28 @@ function EncounterDetail({
         <PanelTimingProvider panelCount={renderableLayoutItems(visibleLayoutItems).length}>
           <PanelTimingResetter encounters={encounters} />
 
-          <ChartDataRegistryProvider>
-            <PortalContainerProvider container={typeof document === "undefined" ? null : document.body}>
-              <div className={cn(focused && "min-h-0 flex-1 overflow-auto styled-scrollbar")}>
-              <EventsPanelGrid
-                layoutItems={visibleLayoutItems}
-                panelTypesById={panelTypesById}
-                panelOptionsById={panelOptionsById}
-                seedFiltersByID={seedFiltersByID}
-                seedFiltersVersion={seedFiltersVersion}
-                durationMs={totalDurationMs}
-                context={panelContext}
-                showHints={showHints}
-                isMobile={isMobile}
-                onPanelTypeChange={onPanelTypeChange}
-                onStripTypeChange={onStripTypeChange}
-                onPanelOptionChange={onPanelOptionChange}
-                onPanelFiltersChange={onPanelFiltersChange}
-                onExplainerClick={onExplainerClick}
-                seamless={layoutAppearance.seamless}
-                fit={focused && layoutAppearance.fit}
-              />
-              </div>
-            </PortalContainerProvider>
-          </ChartDataRegistryProvider>
+          <PortalContainerProvider container={typeof document === "undefined" ? null : document.body}>
+            <div className={cn(focused && "min-h-0 flex-1 overflow-auto styled-scrollbar")}>
+            <EventsPanelGrid
+              layoutItems={visibleLayoutItems}
+              panelTypesById={panelTypesById}
+              panelOptionsById={panelOptionsById}
+              seedFiltersByID={seedFiltersByID}
+              seedFiltersVersion={seedFiltersVersion}
+              durationMs={totalDurationMs}
+              context={panelContext}
+              showHints={showHints}
+              isMobile={isMobile}
+              onPanelTypeChange={onPanelTypeChange}
+              onStripTypeChange={onStripTypeChange}
+              onPanelOptionChange={onPanelOptionChange}
+              onPanelFiltersChange={onPanelFiltersChange}
+              onExplainerClick={onExplainerClick}
+              seamless={layoutAppearance.seamless}
+              fit={focused && layoutAppearance.fit}
+            />
+            </div>
+          </PortalContainerProvider>
 
           {!focused && (
             <div className="mt-4 flex justify-end">
@@ -2304,7 +2305,9 @@ const INSTANCE_PAGE_KEYBINDS = [
 export function InstancePageView(props: InstancePageViewProps) {
   return (
     <InstanceKeybindProvider>
-      <InstancePageViewContent {...props} />
+      <ChartDataRegistryProvider>
+        <InstancePageViewContent {...props} />
+      </ChartDataRegistryProvider>
     </InstanceKeybindProvider>
   );
 }
@@ -2793,7 +2796,7 @@ function InstancePageViewContent({
       const panelParts = (panelPart || "").split("-").filter(Boolean).map(parseLegacyPanelCode);
       const parsedPanels: PanelType[] = Array.from({ length: Math.max(panelParts.length, defaultOrderedPanels.length) }, (_, i) => {
         const code = panelParts[i]?.code;
-        return (code && LEGACY_PANEL_CODE_TO_TYPE[code]) ?? defaultOrderedPanels[i] ?? "empty";
+        return (code ? LEGACY_PANEL_CODE_TO_TYPE[code] : undefined) ?? defaultOrderedPanels[i] ?? "empty";
       });
       const parsedPanelOptions = Array.from({ length: parsedPanels.length }, (_, i) => panelParts[i]?.option ?? null);
 
@@ -3725,6 +3728,64 @@ function InstancePageViewContent({
     onTogglePlayers: togglePlayersSelection,
   }), [instance, selectedEncounters, viewState.enemies, viewState.players, setInternalSelectedIds, togglePlayerSelection, togglePlayersSelection]);
   
+  const inferenceStateSignature = JSON.stringify({
+    instanceId: instance.id,
+    selectedIds,
+    players: [...viewState.players].sort(),
+    enemies: [...viewState.enemies].sort(),
+    includeWipes: viewState.includeWipes,
+    timeRange: timeRange ? [timeRange.enabled, timeRange.startOffsetMs, timeRange.endOffsetMs] : null,
+    activePresetId,
+    activeLayoutItems,
+    panelTypesByID,
+    panelOptionsByID,
+    panelFiltersByID,
+  });
+  const inferenceRevisionRef = useRef({ signature: inferenceStateSignature, revision: 0 });
+  if (inferenceRevisionRef.current.signature !== inferenceStateSignature) {
+    inferenceRevisionRef.current = {
+      signature: inferenceStateSignature,
+      revision: inferenceRevisionRef.current.revision + 1,
+    };
+  }
+  const inferenceState: InstanceUIState = {
+    revision: inferenceRevisionRef.current.revision,
+    instanceId: instance.id,
+    instanceName: instance.name,
+    selectedEncounterIds: selectedIds,
+    selectedPlayerIds: [...viewState.players].sort(),
+    selectedEnemyIds: [...viewState.enemies].sort(),
+    includeWipes: viewState.includeWipes,
+    timeRange: {
+      enabled: timeRange?.enabled ?? false,
+      startOffsetMs: timeRange?.startOffsetMs ?? null,
+      endOffsetMs: timeRange?.endOffsetMs ?? null,
+    },
+    presetId: activePresetId,
+    layoutItems: activeLayoutItems,
+    panelTypesById: panelTypesByID,
+    panelOptionsById: panelOptionsByID,
+    panelFiltersById: panelFiltersByID,
+    availableEncounterIds: instance.encounters.map((encounter) => encounter.id),
+    availablePlayerIds: Object.keys(instance.players ?? {}).sort(),
+    availableEnemyIds: allMergedEnemies.map((enemy) => enemy.id),
+    availablePanelCatalog: Object.entries(PANELS).map(([id, panel]) => ({
+      id,
+      label: panel.label,
+      description: PANEL_AI_DESCRIPTIONS[id as BuiltinPanelType],
+      queryable: isQueryablePanelType(id),
+      hidden: panel.hidden === true,
+    })),
+    availablePanelTypes: Object.keys(PANELS),
+    availablePresets: getAvailablePresetLayouts(instance.capabilities ?? [], isMobile).map((preset) => preset.id),
+  };
+  const setInferencePanelFilters = (panelId: string, filters: PanelFilter[]) => {
+    setPanelFiltersByID((previous) => ({ ...previous, [panelId]: filters }));
+    setSeedFiltersByID((previous) => ({ ...previous, [panelId]: filters }));
+    setSeedFiltersVersion((version) => version + 1);
+    setActivePresetId(null);
+  };
+
   // The Player Timeline page's help uses the same ?explain= URL, with its own view.
   if ((explainerPanelType as string | null) === PLAYER_TIMELINE_HELP) {
     return <PlayerTimelineHelp onExit={handleExplainerExit} />;
@@ -3754,6 +3815,19 @@ function InstancePageViewContent({
         !focused && (isMobile ? "px-2" : "px-4"),
       )}
     >
+      <InstanceInferenceCapability
+        state={inferenceState}
+        canMutate={canEditSharedView}
+        onApplyPreset={applyPreset}
+        onSetPanel={(panelId, panelType) => handlePanelTypeChangeByID(panelId, panelType as EventsPanelType)}
+        onSetPanelOption={handlePanelOptionChangeByID}
+        onSetPanelFilters={setInferencePanelFilters}
+        onSelectEncounters={setInternalSelectedIds}
+        onSelectPlayers={(ids) => setPlayers(new Set(ids))}
+        onSelectEnemies={(ids) => setEnemies(new Set(ids))}
+        onSetTimeRange={(startOffsetMs, endOffsetMs) => timeRange?.setRange(startOffsetMs, endOffsetMs)}
+        onClearTimeRange={() => timeRange?.reset()}
+      />
       {!focused && (<>
       {/* Header */}
       <div className={cn("mb-6 rounded-lg border relative", heroic && "border-purple-500/30")}>

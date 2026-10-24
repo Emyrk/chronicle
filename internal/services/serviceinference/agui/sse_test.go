@@ -54,6 +54,26 @@ func TestWriterSerializesDebugSnapshot(t *testing.T) {
 	require.Contains(t, body, `"promptTokens":7`)
 }
 
+func TestWriterSerializesClientToolRequest(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+	writer := NewStreamWriter(&output, nil)
+	revision := int64(4)
+	require.NoError(t, writer.Write(ClientToolRequestEvent{
+		RunID: "run-1", ThreadID: "thread-1", ToolCallID: "call-1", ToolName: "query_panel",
+		Arguments:       []byte(`{"panel_id":"damage"}`),
+		Capability:      ClientToolCapability{ID: "instance-page", Version: 1, ScopeType: "instance", ScopeID: "instance-1", StateRevision: &revision},
+		ClientSessionID: "session-1", Effect: "read", Confirmation: "never",
+	}))
+	body := output.String()
+	require.Contains(t, body, "event: CLIENT_TOOL_REQUEST\n")
+	require.Contains(t, body, `"runId":"run-1"`)
+	require.Contains(t, body, `"arguments":{"panel_id":"damage"}`)
+	require.Contains(t, body, `"capability":{"id":"instance-page","version":1,"scopeType":"instance","scopeId":"instance-1","stateRevision":4}`)
+	require.Contains(t, body, `"clientSessionId":"session-1"`)
+}
+
 func TestWriterEscapesDataNewlines(t *testing.T) {
 	t.Parallel()
 

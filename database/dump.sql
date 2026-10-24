@@ -1125,6 +1125,31 @@ CREATE TABLE guilds (
     created_at timestamp with time zone DEFAULT now()
 );
 
+CREATE TABLE inference_client_tool_requests (
+    run_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    tool_call_id text NOT NULL,
+    tool_name text NOT NULL,
+    arguments jsonb NOT NULL,
+    capability_id text NOT NULL,
+    capability_version integer NOT NULL,
+    scope_type text,
+    scope_id text,
+    client_session_id text NOT NULL,
+    state_revision bigint,
+    effect text NOT NULL,
+    confirmation text NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    completed_at timestamp with time zone,
+    CONSTRAINT inference_client_tool_requests_check CHECK (((scope_type IS NULL) = (scope_id IS NULL))),
+    CONSTRAINT inference_client_tool_requests_confirmation_check CHECK ((confirmation = ANY (ARRAY['never'::text, 'unless_yolo'::text]))),
+    CONSTRAINT inference_client_tool_requests_effect_check CHECK ((effect = ANY (ARRAY['read'::text, 'view_mutation'::text]))),
+    CONSTRAINT inference_client_tool_requests_state_revision_check CHECK (((state_revision IS NULL) OR (state_revision >= 0))),
+    CONSTRAINT inference_client_tool_requests_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'completed'::text, 'expired'::text])))
+);
+
 CREATE TABLE inference_connections (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
@@ -1176,7 +1201,10 @@ CREATE TABLE inference_runs (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     completed_at timestamp with time zone,
-    lease_expires_at timestamp with time zone
+    lease_expires_at timestamp with time zone,
+    debug boolean DEFAULT false NOT NULL,
+    iteration_count integer DEFAULT 0 NOT NULL,
+    tool_call_count integer DEFAULT 0 NOT NULL
 );
 
 CREATE TABLE inference_threads (
@@ -2635,6 +2663,9 @@ ALTER TABLE ONLY guilds
 ALTER TABLE ONLY guilds
     ADD CONSTRAINT guilds_realm_id_name_key UNIQUE (realm_id, name);
 
+ALTER TABLE ONLY inference_client_tool_requests
+    ADD CONSTRAINT inference_client_tool_requests_pkey PRIMARY KEY (run_id, tool_call_id);
+
 ALTER TABLE ONLY inference_connections
     ADD CONSTRAINT inference_connections_pkey PRIMARY KEY (id);
 
@@ -3154,6 +3185,8 @@ CREATE UNIQUE INDEX idx_wow_server_realms_name_unique ON wow_server_realms USING
 
 CREATE UNIQUE INDEX idx_wow_servers_name_unique ON wow_servers USING btree (lower(name));
 
+CREATE UNIQUE INDEX inference_client_tool_requests_one_pending_per_run_idx ON inference_client_tool_requests USING btree (run_id) WHERE (status = 'pending'::text);
+
 CREATE UNIQUE INDEX inference_connections_active_openrouter_key_idx ON inference_connections USING btree (user_id, provider_account_key_hash) WHERE ((provider = 'openrouter'::text) AND (status = 'active'::text) AND (provider_account_key_hash IS NOT NULL));
 
 CREATE INDEX inference_connections_user_idx ON inference_connections USING btree (user_id, created_at DESC);
@@ -3164,9 +3197,9 @@ CREATE INDEX inference_oauth_transactions_expires_idx ON inference_oauth_transac
 
 CREATE INDEX inference_oauth_transactions_user_idx ON inference_oauth_transactions USING btree (user_id, created_at DESC);
 
-CREATE UNIQUE INDEX inference_runs_one_running_per_thread_idx ON inference_runs USING btree (thread_id) WHERE ((status = 'running'::text) AND (thread_id IS NOT NULL));
+CREATE UNIQUE INDEX inference_runs_one_active_per_thread_idx ON inference_runs USING btree (thread_id) WHERE ((status = ANY (ARRAY['running'::text, 'awaiting_client_tool'::text])) AND (thread_id IS NOT NULL));
 
-CREATE INDEX inference_runs_stale_idx ON inference_runs USING btree (lease_expires_at) WHERE (status = 'running'::text);
+CREATE INDEX inference_runs_stale_idx ON inference_runs USING btree (lease_expires_at) WHERE (status = ANY (ARRAY['running'::text, 'awaiting_client_tool'::text]));
 
 CREATE INDEX inference_runs_thread_idx ON inference_runs USING btree (thread_id, created_at);
 
@@ -3472,6 +3505,12 @@ ALTER TABLE ONLY guild_settings
 
 ALTER TABLE ONLY guilds
     ADD CONSTRAINT guilds_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY inference_client_tool_requests
+    ADD CONSTRAINT inference_client_tool_requests_run_id_fkey FOREIGN KEY (run_id) REFERENCES inference_runs(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY inference_client_tool_requests
+    ADD CONSTRAINT inference_client_tool_requests_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES inference_threads(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY inference_connections
     ADD CONSTRAINT inference_connections_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;

@@ -16,6 +16,7 @@ const (
 	ToolCallStart      EventType = "TOOL_CALL_START"
 	ToolCallArgs       EventType = "TOOL_CALL_ARGS"
 	ToolCallEnd        EventType = "TOOL_CALL_END"
+	ClientToolRequest  EventType = "CLIENT_TOOL_REQUEST"
 	DebugSnapshot      EventType = "DEBUG_SNAPSHOT"
 )
 
@@ -105,6 +106,29 @@ type ToolCallEndEvent struct {
 }
 
 func (ToolCallEndEvent) EventType() EventType { return ToolCallEnd }
+
+type ClientToolCapability struct {
+	ID            string `json:"id"`
+	Version       int    `json:"version"`
+	ScopeType     string `json:"scopeType,omitempty"`
+	ScopeID       string `json:"scopeId,omitempty"`
+	StateRevision *int64 `json:"stateRevision,omitempty"`
+}
+
+type ClientToolRequestEvent struct {
+	BaseEvent
+	RunID           string               `json:"runId"`
+	ThreadID        string               `json:"threadId"`
+	ToolCallID      string               `json:"toolCallId"`
+	ToolName        string               `json:"toolName"`
+	Arguments       json.RawMessage      `json:"arguments"`
+	Capability      ClientToolCapability `json:"capability"`
+	ClientSessionID string               `json:"clientSessionId"`
+	Effect          string               `json:"effect"`
+	Confirmation    string               `json:"confirmation"`
+}
+
+func (ClientToolRequestEvent) EventType() EventType { return ClientToolRequest }
 
 type DebugToolCall struct {
 	ID        string `json:"id"`

@@ -102,8 +102,7 @@ const NO_KEYBINDS: readonly InstanceKeybind[] = [];
 // Registry of all available panels
 // Using `any` here to allow different result types per panel.
 // Type safety is maintained within each panel definition.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any, react-refresh/only-export-components
-export const PANELS: Record<string, PanelDefinition<any, any>> = {
+const BUILTIN_PANELS = {
   damage_done: createDamageDonePanel("players"),
   vulnerability_effect: createVulnerabilityEffectPanel(),
   enemy_damage_done: createDamageDonePanel("enemies"),
@@ -177,14 +176,18 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   guilds: createGuildsPanel(),
   companion_stats: createCompanionStatsPanel(),
   pulls_and_cleanup: createPullsAndCleanupPanel(),
-};
+} satisfies Record<string, PanelDefinition<any, any>>; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+// Keep string indexing for custom-panel call sites while deriving built-in keys
+// from the exact registry above.
+export const PANELS: typeof BUILTIN_PANELS & Record<string, PanelDefinition<any, any>> = BUILTIN_PANELS; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function isBuiltinPanelType(panelType: string): panelType is BuiltinPanelType {
   return Object.prototype.hasOwnProperty.call(PANELS, panelType);
 }
 
-export type BuiltinPanelType = keyof typeof PANELS;
+export type BuiltinPanelType = keyof typeof BUILTIN_PANELS;
 export type EventsPanelType = BuiltinPanelType | CustomPanelRef;
 
 const LazyCustomEventsPanel = lazy(() => import("./custom/CustomEventsPanel"));

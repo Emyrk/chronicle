@@ -1621,6 +1621,26 @@ type GuildSpeedrunRank struct {
 	GuildRank    int64         `db:"guild_rank" json:"guild_rank"`
 }
 
+type InferenceClientToolRequest struct {
+	RunID             uuid.UUID          `db:"run_id" json:"run_id"`
+	ThreadID          uuid.UUID          `db:"thread_id" json:"thread_id"`
+	ToolCallID        string             `db:"tool_call_id" json:"tool_call_id"`
+	ToolName          string             `db:"tool_name" json:"tool_name"`
+	Arguments         []byte             `db:"arguments" json:"arguments"`
+	CapabilityID      string             `db:"capability_id" json:"capability_id"`
+	CapabilityVersion int32              `db:"capability_version" json:"capability_version"`
+	ScopeType         pgtype.Text        `db:"scope_type" json:"scope_type"`
+	ScopeID           pgtype.Text        `db:"scope_id" json:"scope_id"`
+	ClientSessionID   string             `db:"client_session_id" json:"client_session_id"`
+	StateRevision     pgtype.Int8        `db:"state_revision" json:"state_revision"`
+	Effect            string             `db:"effect" json:"effect"`
+	Confirmation      string             `db:"confirmation" json:"confirmation"`
+	Status            string             `db:"status" json:"status"`
+	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	CompletedAt       pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+}
+
 type InferenceConnection struct {
 	ID                     uuid.UUID          `db:"id" json:"id"`
 	UserID                 uuid.UUID          `db:"user_id" json:"user_id"`
@@ -1673,6 +1693,9 @@ type InferenceRun struct {
 	UpdatedAt      pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	CompletedAt    pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
 	LeaseExpiresAt pgtype.Timestamptz `db:"lease_expires_at" json:"lease_expires_at"`
+	Debug          bool               `db:"debug" json:"debug"`
+	IterationCount int32              `db:"iteration_count" json:"iteration_count"`
+	ToolCallCount  int32              `db:"tool_call_count" json:"tool_call_count"`
 }
 
 type InferenceThread struct {

@@ -5,14 +5,20 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { AssistantChat } from "./AssistantChat";
 import {
+  isInferenceAuthorizationError,
   isInferenceServiceUnavailable,
+  useClearInferenceThread,
   useCreateInstanceInferenceThread,
   useInferenceDebugPermission,
+  useInferenceDebugPreview,
   useInferencePermission,
   useInferenceThread,
 } from "./api";
+import { shouldCreateInstanceThread } from "./instanceThread";
 import { buildInstanceAnalystRunRequest, buildSiteHelpRunRequest, toChatMessages } from "./inference";
 import { ModelCombobox } from "./ModelCombobox";
+import type { DebugCommandInput } from "./useAssistantChat";
+import { useChatWindow } from "./useChatWindow";
 import { useInferenceSelection } from "./useInferenceSelection";
 
 function AssistantConfiguration({
@@ -66,8 +72,18 @@ export function GlobalSiteHelpChat() {
   const permission = useInferencePermission(isAuthenticated);
   const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed);
   const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed);
-  const [open, setOpen] = useState(false);
+  const debugPreview = useInferenceDebugPreview();
+  const chatWindow = useChatWindow("site-help", "Chronicle site help");
   const [debugEnabled, setDebugEnabled] = useState(false);
+  const previewDebug = useCallback(async () => {
+    if (!selection.modelId) throw new Error("Select a model first.");
+    const snapshot = await debugPreview.mutateAsync({
+      assistant_id: "site-help",
+      model: selection.modelId,
+    });
+    setDebugEnabled(true);
+    return { snapshot };
+  }, [debugPreview, selection.modelId]);
   const createRequest = useCallback((input: Parameters<typeof buildSiteHelpRunRequest>[0]) => {
     if (!selection.connectionId || !selection.modelId) throw new Error("Select an AI connection and model first.");
     return buildSiteHelpRunRequest(input, { connectionId: selection.connectionId, modelId: selection.modelId }, debugEnabled);
@@ -82,10 +98,10 @@ export function GlobalSiteHelpChat() {
   const disconnected = selection.connections.length === 0;
   return (
     <AssistantChat
-      open={open}
-      onOpenChange={setOpen}
+      chatWindow={chatWindow}
       endpoint="/api/v1/inference/runs"
       createRequest={createRequest}
+      onDebugCommand={debugPermission.allowed ? previewDebug : undefined}
       launcherLabel="Ask Chronicle"
       launcherClassName="fixed right-4 bottom-4 z-40 rounded-full shadow-lg sm:right-6 sm:bottom-6"
       title="Chronicle site help"
@@ -99,7 +115,6 @@ export function GlobalSiteHelpChat() {
       disabledTitle={selection.error ? "AI configuration unavailable" : "Connect OpenRouter to start chatting"}
       disabledDescription={selection.error?.message ?? "Connect your user-funded OpenRouter account in settings. Chronicle never receives your OpenRouter password."}
       disabledAction={<ConnectRequiredAction />}
-      className="h-dvh sm:h-[min(760px,100vh)]"
     />
   );
 }
@@ -109,14 +124,24 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
   const permission = useInferencePermission(isAuthenticated);
   const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed);
   const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed);
+  const debugPreview = useInferenceDebugPreview();
+  const clearThread = useClearInferenceThread();
   const createThread = useCreateInstanceInferenceThread();
-  const [open, setOpen] = useState(false);
+  const chatWindow = useChatWindow(`instance-${instanceId}`, `${instanceName} assistant`);
+  const open = chatWindow.mode !== "minimized";
   const [debugEnabled, setDebugEnabled] = useState(false);
   const threadId = createThread.data?.thread.id;
   const threadQuery = useInferenceThread(threadId, { enabled: false });
 
   useEffect(() => {
-    if (open && permission.allowed && selection.ready && !createThread.data && !createThread.isPending) {
+    if (shouldCreateInstanceThread({
+      open,
+      allowed: permission.allowed,
+      ready: selection.ready,
+      hasData: Boolean(createThread.data),
+      pending: createThread.isPending,
+      error: Boolean(createThread.error),
+    })) {
       createThread.mutate(instanceId);
     }
   }, [open, permission.allowed, selection.ready, createThread, instanceId]);
@@ -124,6 +149,23 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
   const refreshThread = useCallback(async () => {
     await threadQuery.refetch();
   }, [threadQuery]);
+  const startNewChat = useCallback(async () => {
+    if (!threadId) return [];
+    const cleared = await clearThread.mutateAsync(threadId);
+    return toChatMessages(cleared.messages);
+  }, [clearThread, threadId]);
+  const previewDebug = useCallback(async (input: DebugCommandInput) => {
+    if (!threadId || !selection.modelId) throw new Error("Open the conversation and select a model first.");
+    const snapshot = await debugPreview.mutateAsync({
+      assistant_id: "instance-analyst",
+      thread_id: threadId,
+      instance: instanceId,
+      model: selection.modelId,
+      ...(input.client ? { client: input.client } : {}),
+    });
+    setDebugEnabled(true);
+    return { snapshot };
+  }, [debugPreview, instanceId, selection.modelId, threadId]);
   const createRequest = useCallback((input: Parameters<typeof buildInstanceAnalystRunRequest>[0]) => {
     if (!selection.connectionId || !selection.modelId) throw new Error("Select an AI connection and model first.");
     return buildInstanceAnalystRunRequest(input, { connectionId: selection.connectionId, modelId: selection.modelId }, instanceId, debugEnabled);
@@ -137,17 +179,22 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
   ) return null;
   const response = threadQuery.data ?? createThread.data;
   const disconnected = selection.connections.length === 0;
-  const threadLoading = open && selection.ready && !response && !createThread.error;
+  const threadError = createThread.error ?? threadQuery.error;
+  const authorizationFailed = isInferenceAuthorizationError(threadError);
+  const threadLoading = open && selection.ready && !response && !threadError;
 
   return (
     <AssistantChat
-      key={`${response?.thread.id ?? "pending"}-${response?.thread.updated_at ?? ""}`}
-      open={open}
-      onOpenChange={setOpen}
+      // Keep the controller mounted when updated_at changes after a refresh;
+      // remounting aborts in-flight client-tool continuation.
+      key={response?.thread.id ?? "pending"}
+      chatWindow={chatWindow}
       endpoint="/api/v1/inference/runs"
       threadId={response?.thread.id}
       initialMessages={response ? toChatMessages(response.messages) : []}
       createRequest={createRequest}
+      onDebugCommand={debugPermission.allowed ? previewDebug : undefined}
+      onStartNewChat={startNewChat}
       onRunSettled={refreshThread}
       launcherLabel="Ask about this raid"
       launcherClassName="fixed right-4 bottom-20 z-[90] rounded-full shadow-lg sm:right-6 sm:bottom-6"
@@ -158,11 +205,16 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
       debugAvailable={debugPermission.allowed}
       debugEnabled={debugEnabled}
       onDebugEnabledChange={setDebugEnabled}
-      disabled={disconnected || Boolean(selection.error || createThread.error) || threadLoading}
-      disabledTitle={disconnected ? "Connect OpenRouter to analyze this raid" : threadLoading ? "Opening instance assistant" : "Instance assistant unavailable"}
-      disabledDescription={selection.error?.message ?? createThread.error?.message ?? (threadLoading ? "Loading persisted conversation history…" : "Connect a provider in account settings, then choose a model.")}
+      disabled={disconnected || Boolean(selection.error || threadError) || threadLoading}
+      disabledTitle={disconnected
+        ? "Connect OpenRouter to analyze this raid"
+        : threadLoading
+          ? "Opening instance assistant"
+          : authorizationFailed
+            ? "Assistant authorization expired"
+            : "Instance assistant unavailable"}
+      disabledDescription={selection.error?.message ?? threadError?.message ?? (threadLoading ? "Loading persisted conversation history…" : "Connect a provider in account settings, then choose a model.")}
       disabledAction={disconnected ? <ConnectRequiredAction /> : undefined}
-      className="h-dvh sm:h-[min(760px,100vh)]"
     />
   );
 }

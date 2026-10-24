@@ -2,6 +2,10 @@ import type { InferenceMessage, InferenceModel, InferenceRunRequest } from "@/ap
 import type { ChatMessage } from "./protocol";
 import type { CreateChatRunRequestInput } from "./useAssistantChat";
 
+export type FrontendInferenceRunRequest = InferenceRunRequest & {
+  client?: CreateChatRunRequestInput["client"];
+};
+
 export interface InferenceSelection {
   connectionId: string;
   modelId: string;
@@ -11,9 +15,10 @@ export function buildSiteHelpRunRequest(
   input: CreateChatRunRequestInput,
   selection: InferenceSelection,
   debug = false,
-): InferenceRunRequest {
+): FrontendInferenceRunRequest {
   return {
     run_id: input.runId,
+    ...(input.client ? { client: input.client } : {}),
     connection_id: selection.connectionId,
     model: selection.modelId,
     assistant_id: "site-help",
@@ -27,13 +32,14 @@ export function buildInstanceAnalystRunRequest(
   selection: InferenceSelection,
   instanceId: string,
   debug = false,
-): InferenceRunRequest {
+): FrontendInferenceRunRequest {
   const message = input.messages.at(-1);
   if (!message || message.role !== "user") {
     throw new Error("An instance assistant run requires a new user message.");
   }
   return {
     run_id: input.runId,
+    ...(input.client ? { client: input.client } : {}),
     connection_id: selection.connectionId,
     model: selection.modelId,
     assistant_id: "instance-analyst",

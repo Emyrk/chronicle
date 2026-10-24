@@ -52,7 +52,7 @@ var assistants = map[string]assistant{
 		{Name: "find_pages", Description: "Find Chronicle pages by name or description.", Parameters: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","maxLength":100}},"required":["query"],"additionalProperties":false}`)},
 		{Name: "query_rankings", Description: "Query a bounded Chronicle player leaderboard.", Parameters: json.RawMessage(`{"type":"object","properties":{"instance_name":{"type":"string","maxLength":100},"encounter":{"type":"string","maxLength":100},"class":{"type":"string","maxLength":30},"spec":{"type":"string","maxLength":50},"role":{"type":"string","maxLength":30},"metric":{"type":"string","enum":["dps","hps"]},"limit":{"type":"integer","minimum":1,"maximum":10}},"required":["instance_name"],"additionalProperties":false}`)},
 	}},
-	"instance-analyst": {ID: "instance-analyst", Durable: true, System: "You are a read-only Chronicle raid instance analyst. Use the instance_summary tool for bounded metadata, encounter, and roster context. Do not claim access to raw event streams.", Tools: []ToolDefinition{
+	"instance-analyst": {ID: "instance-analyst", Durable: true, System: "You are a Chronicle raid instance analyst. Use instance_summary for bounded metadata, encounter, and roster context. You may inspect, query, or update the current instance UI only through advertised client tools. Do not claim access to raw event streams. If a client tool returns user_rejected or capability_unavailable, do not retry the same mutation; explain why it could not be completed. After stale_state, inspect once for fresh state before retrying at most once.", Tools: []ToolDefinition{
 		{Name: "instance_summary", Description: "Return bounded metadata, encounters, and players for this authorized raid instance.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
 	}},
 }
@@ -60,6 +60,7 @@ var assistants = map[string]assistant{
 type debugRunContext struct {
 	Enabled     bool
 	RunID       string
+	ThreadID    string
 	Persistence string
 	ContextType string
 	ContextID   string
@@ -321,6 +322,45 @@ func boundedHistory(rows []database.InferenceMessage) []Message {
 
 const runLease = 15 * time.Minute
 
+func supersedeAwaitingClientTool(ctx context.Context, tx database.Store, threadID, userID uuid.UUID) error {
+	pending, err := tx.GetPendingInferenceClientToolRequestByThreadForUpdate(ctx, database.GetPendingInferenceClientToolRequestByThreadForUpdateParams{
+		ThreadID: threadID,
+		UserID:   userID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	content, err := boundedJSON(struct {
+		Status string `json:"status"`
+	}{Status: "client_error"})
+	if err != nil {
+		return err
+	}
+	if err := insertInferenceMessages(ctx, tx, threadID, Message{
+		Role:       RoleTool,
+		Name:       pending.ToolName,
+		ToolCallID: pending.ToolCallID,
+		Content:    content,
+	}); err != nil {
+		return err
+	}
+	if _, err := tx.ExpireInferenceClientToolRequest(ctx, database.ExpireInferenceClientToolRequestParams{
+		RunID:      pending.RunID,
+		ToolCallID: pending.ToolCallID,
+	}); err != nil {
+		return err
+	}
+	_, err = tx.AbandonAwaitingInferenceRun(ctx, database.AbandonAwaitingInferenceRunParams{
+		ID:     pending.RunID,
+		UserID: userID,
+	})
+	return err
+}
+
 func (s *Service) createRun(
 	ctx context.Context,
 	params database.InsertInferenceRunParams,
@@ -335,6 +375,9 @@ func (s *Service) createRun(
 
 	var run database.InferenceRun
 	err := s.db.InTx(ctx, func(tx database.Store) error {
+		if err := supersedeAwaitingClientTool(ctx, tx, params.ThreadID.UUID, params.UserID); err != nil {
+			return err
+		}
 		var err error
 		run, err = tx.InsertInferenceRun(ctx, params)
 		if err != nil {
@@ -407,6 +450,7 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 	var threadID uuid.NullUUID
 	var history []Message
 	var input Message
+	var client *clientCapability
 	var tc toolContext
 	tc.service = s
 	if a.Durable {
@@ -428,6 +472,12 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "You cannot view this instance."})
 			return
 		}
+		client, err = advertisedInstancePageClient(req.Client, inst.ID.String())
+		if err != nil {
+			badRequest(w, r, err.Error())
+			return
+		}
+		a = withClientTools(a, client)
 		tc.instanceID = inst.ID
 		threadID = uuid.NullUUID{UUID: thread.ID, Valid: true}
 		rows, err := s.db.ListRecentInferenceMessagesByThread(r.Context(), database.ListRecentInferenceMessagesByThreadParams{ThreadID: thread.ID, Limit: maxHistoryMessages})
@@ -443,6 +493,10 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 		}
 		history = append(history, input)
 	} else {
+		if req.Client != nil {
+			badRequest(w, r, "Client tools are not supported for this assistant.")
+			return
+		}
 		if req.ThreadID != nil || req.Message != nil || len(req.Messages) == 0 || len(req.Messages) > maxHistoryMessages {
 			badRequest(w, r, "Ephemeral runs require 1-50 browser messages and no thread.")
 			return
@@ -469,6 +523,7 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 		Model:          req.Model,
 		Status:         "running",
 		IdempotencyKey: req.RunID,
+		Debug:          req.Debug,
 		LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(runLease), Valid: true},
 	}
 	var durableInput *Message
@@ -477,7 +532,7 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 	}
 	runRow, err := s.createRun(r.Context(), runParams, durableInput)
 	if err != nil {
-		if database.IsUniqueViolation(err, database.UniqueConstraint("inference_runs_one_running_per_thread_idx")) {
+		if database.IsUniqueViolation(err, database.UniqueConstraint("inference_runs_one_active_per_thread_idx")) {
 			httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "This thread already has a run in progress."})
 			return
 		}
@@ -497,12 +552,13 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 		streamThread = threadID.UUID.String()
 	}
 	if err = writer.Write(agui.RunStartedEvent{ThreadID: streamThread, RunID: req.RunID, ProtocolVersion: "1.0"}); err != nil {
-		_ = s.finishRun(r.Context(), runRow, "error", Usage{}, "stream_error")
+		_ = s.finishRun(r.Context(), runRow, "error", agentLoopState{}, "stream_error")
 		return
 	}
 	debug := debugRunContext{
 		Enabled:     req.Debug,
 		RunID:       req.RunID,
+		ThreadID:    streamThread,
 		Persistence: "ephemeral",
 	}
 	if a.Durable {
@@ -510,38 +566,88 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 		debug.ContextType = thread.ContextType.String
 		debug.ContextID = thread.ContextID.String
 	}
-	usage, err := s.agentLoop(r.Context(), writer, provider, cred, req.Model, a, history, tc, debug, func(messages ...Message) error {
+	persist := func(messages ...Message) error {
 		if !a.Durable {
 			return nil
 		}
-		return s.db.InTx(r.Context(), func(tx database.Store) error {
-			for _, message := range messages {
-				if _, err := tx.InsertInferenceMessage(r.Context(), database.InsertInferenceMessageParams{ThreadID: thread.ID, Role: string(message.Role), Content: writeJSONMessage(message), ToolCallID: pgtype.Text{String: message.ToolCallID, Valid: message.ToolCallID != ""}}); err != nil {
-					return err
-				}
-			}
-			return nil
-		}, nil)
-	})
+		return s.persistInferenceMessages(r.Context(), thread.ID, messages...)
+	}
+	pause := func(assistantMessage Message, toolMessages []Message, pending clientToolPause, state agentLoopState) error {
+		return s.pauseForClientTool(r.Context(), runRow, thread.ID, assistantMessage, toolMessages, pending, state)
+	}
+	result, err := s.agentLoop(r.Context(), writer, provider, cred, req.Model, a, history, tc, debug, client, agentLoopState{}, persist, pause)
 	if err != nil {
-		_ = s.finishRun(r.Context(), runRow, "error", usage, "provider_error")
-		_ = writer.Write(agui.RunErrorEvent{Message: "The inference run failed.", Code: "provider_error"})
+		if s.logger != nil {
+			s.logger.Warn("inference run failed", "run_id", req.RunID, "error", err)
+		}
+		_ = s.finishRun(r.Context(), runRow, "error", result.State, inferenceRunErrorCode(err))
+		_ = writer.Write(inferenceRunErrorEvent(err))
 		return
 	}
-	if err := s.finishRun(r.Context(), runRow, "completed", usage, ""); err != nil {
+	if result.Paused != nil {
+		return
+	}
+	if err := s.finishRun(r.Context(), runRow, "completed", result.State, ""); err != nil {
 		_ = writer.Write(agui.RunErrorEvent{Message: "The inference run could not be finalized.", Code: "persistence_error"})
 		return
 	}
 	_ = writer.Write(agui.RunFinishedEvent{ThreadID: streamThread, RunID: req.RunID})
 }
+func insertInferenceMessages(ctx context.Context, store database.Store, threadID uuid.UUID, messages ...Message) error {
+	for _, message := range messages {
+		if _, err := store.InsertInferenceMessage(ctx, database.InsertInferenceMessageParams{ThreadID: threadID, Role: string(message.Role), Content: writeJSONMessage(message), ToolCallID: pgtype.Text{String: message.ToolCallID, Valid: message.ToolCallID != ""}}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) persistInferenceMessages(ctx context.Context, threadID uuid.UUID, messages ...Message) error {
+	return s.db.InTx(ctx, func(tx database.Store) error {
+		return insertInferenceMessages(ctx, tx, threadID, messages...)
+	}, nil)
+}
+
+func (s *Service) pauseForClientTool(ctx context.Context, run database.InferenceRun, threadID uuid.UUID, assistantMessage Message, toolMessages []Message, pending clientToolPause, state agentLoopState) error {
+	return s.db.InTx(ctx, func(tx database.Store) error {
+		messages := append([]Message{assistantMessage}, toolMessages...)
+		if err := insertInferenceMessages(ctx, tx, threadID, messages...); err != nil {
+			return err
+		}
+		if _, err := tx.InsertInferenceClientToolRequest(ctx, database.InsertInferenceClientToolRequestParams{
+			RunID: run.ID, ThreadID: threadID, ToolCallID: pending.Call.ID, ToolName: pending.Call.Name,
+			Arguments: pending.Arguments, CapabilityID: pending.Capability.ID, CapabilityVersion: int32(pending.Capability.Version),
+			ScopeType:       pgtype.Text{String: pending.Capability.ScopeType, Valid: pending.Capability.ScopeType != ""},
+			ScopeID:         pgtype.Text{String: pending.Capability.ScopeID, Valid: pending.Capability.ScopeID != ""},
+			ClientSessionID: pending.Capability.SessionID, StateRevision: int64PointerPG(pending.Capability.StateRevision),
+			Effect: pending.Effect, Confirmation: pending.Confirmation,
+		}); err != nil {
+			return err
+		}
+		_, err := tx.PauseInferenceRun(ctx, database.PauseInferenceRunParams{
+			ID: run.ID, UserID: run.UserID, InputTokens: int64(state.Usage.PromptTokens), OutputTokens: int64(state.Usage.CompletionTokens),
+			IterationCount: int32(state.IterationCount), ToolCallCount: int32(state.ToolCallCount),
+			LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(runLease), Valid: true},
+		})
+		return err
+	}, nil)
+}
+
+func int64PointerPG(value *int64) pgtype.Int8 {
+	if value == nil {
+		return pgtype.Int8{}
+	}
+	return pgtype.Int8{Int64: *value, Valid: true}
+}
+
 func finalizationContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 }
 
-func (s *Service) finishRun(ctx context.Context, row database.InferenceRun, status string, usage Usage, code string) error {
+func (s *Service) finishRun(ctx context.Context, row database.InferenceRun, status string, state agentLoopState, code string) error {
 	ctx, cancel := finalizationContext(ctx)
 	defer cancel()
-	_, err := s.db.UpdateInferenceRun(ctx, database.UpdateInferenceRunParams{ID: row.ID, UserID: row.UserID, Status: status, InputTokens: int64(usage.PromptTokens), OutputTokens: int64(usage.CompletionTokens), ErrorCode: pgtype.Text{String: code, Valid: code != ""}, CompletedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}})
+	_, err := s.db.UpdateInferenceRun(ctx, database.UpdateInferenceRunParams{ID: row.ID, UserID: row.UserID, Status: status, InputTokens: int64(state.Usage.PromptTokens), OutputTokens: int64(state.Usage.CompletionTokens), ErrorCode: pgtype.Text{String: code, Valid: code != ""}, CompletedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}, IterationCount: int32(state.IterationCount), ToolCallCount: int32(state.ToolCallCount)})
 	if err != nil {
 		s.logger.Error("update inference run", "error", err)
 	}
@@ -555,13 +661,64 @@ func writeDebugSnapshot(w *agui.Writer, debug debugRunContext, iteration int, ph
 	return w.Write(debugSnapshotEvent(debug, iteration, phase, model, a, messages, usage))
 }
 
-func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provider, credential []byte, model string, a assistant, messages []Message, tc toolContext, debug debugRunContext, persist func(...Message) error) (Usage, error) {
+var (
+	errAgentIterationLimit = errors.New("agent iteration limit reached")
+	errAgentToolLimit      = errors.New("agent tool-call limit reached")
+)
+
+func inferenceRunErrorCode(err error) string {
+	var providerErr *ProviderError
+	if errors.As(err, &providerErr) && strings.TrimSpace(providerErr.Code) != "" {
+		return strings.TrimSpace(providerErr.Code)
+	}
+	if errors.Is(err, errAgentIterationLimit) || errors.Is(err, errAgentToolLimit) {
+		return "agent_limit"
+	}
+	return "provider_error"
+}
+
+func inferenceRunErrorEvent(err error) agui.RunErrorEvent {
+	var providerErr *ProviderError
+	if errors.As(err, &providerErr) && strings.TrimSpace(providerErr.UserMessage) != "" {
+		return agui.RunErrorEvent{Message: providerErr.UserMessage, Code: inferenceRunErrorCode(err)}
+	}
+	if errors.Is(err, errAgentIterationLimit) || errors.Is(err, errAgentToolLimit) {
+		return agui.RunErrorEvent{
+			Message: "The assistant could not finish within the tool-step limit. The page may be read-only or changing; review the last tool result and try again.",
+			Code:    "agent_limit",
+		}
+	}
+	return agui.RunErrorEvent{Message: "The inference run failed. Please try again.", Code: "provider_error"}
+}
+
+type agentLoopState struct {
+	Usage          Usage
+	IterationCount int
+	ToolCallCount  int
+}
+
+type clientToolPause struct {
+	Call         ToolCall
+	Arguments    json.RawMessage
+	Capability   clientCapability
+	Effect       string
+	Confirmation string
+}
+
+type agentLoopResult struct {
+	State  agentLoopState
+	Paused *clientToolPause
+}
+
+type pauseClientToolFunc func(Message, []Message, clientToolPause, agentLoopState) error
+
+func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provider, credential []byte, model string, a assistant, messages []Message, tc toolContext, debug debugRunContext, capability *clientCapability, state agentLoopState, persist func(...Message) error, pause pauseClientToolFunc) (agentLoopResult, error) {
 	messages = append([]Message{{Role: RoleSystem, Content: a.System}}, messages...)
-	var usage Usage
-	toolCount := 0
-	for iteration := 0; iteration < maxIterations; iteration++ {
-		if err := writeDebugSnapshot(w, debug, iteration+1, "request", model, a, messages, usage); err != nil {
-			return usage, err
+	for state.IterationCount < maxIterations {
+		state.IterationCount++
+		iteration := state.IterationCount
+		if err := writeDebugSnapshot(w, debug, iteration, "request", model, a, messages, state.Usage); err != nil {
+			return agentLoopResult{State: state}, err
 		}
 		messageID := uuid.NewString()
 		var content strings.Builder
@@ -594,53 +751,64 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 				if c.Args.Len() > maxToolArguments {
 					return errors.New("tool arguments too large")
 				}
-				return nil
 			case StreamEventFinish:
 				finish = event.FinishReason
 			case StreamEventUsage:
-				usage.PromptTokens += event.Usage.PromptTokens
-				usage.CompletionTokens += event.Usage.CompletionTokens
-				usage.TotalTokens += event.Usage.TotalTokens
+				state.Usage.PromptTokens += event.Usage.PromptTokens
+				state.Usage.CompletionTokens += event.Usage.CompletionTokens
+				state.Usage.TotalTokens += event.Usage.TotalTokens
 			}
 			return nil
 		})
 		if err != nil {
-			return usage, err
+			return agentLoopResult{State: state}, err
 		}
 		assistantMessage := Message{ID: messageID, Role: RoleAssistant, Content: content.String()}
 		if finish != FinishReasonToolCalls || len(calls) == 0 {
 			if err := persist(assistantMessage); err != nil {
-				return usage, err
+				return agentLoopResult{State: state}, err
 			}
 			completedMessages := append(slices.Clone(messages), assistantMessage)
-			if err := writeDebugSnapshot(w, debug, iteration+1, "response", model, a, completedMessages, usage); err != nil {
-				return usage, err
+			if err := writeDebugSnapshot(w, debug, iteration, "response", model, a, completedMessages, state.Usage); err != nil {
+				return agentLoopResult{State: state}, err
 			}
 			if started {
 				if err := w.Write(agui.TextMessageEndEvent{MessageID: messageID}); err != nil {
-					return usage, err
+					return agentLoopResult{State: state}, err
 				}
 			}
-			return usage, nil
+			return agentLoopResult{State: state}, nil
 		}
 		for i := 0; i < len(calls); i++ {
 			c := calls[i]
 			if c == nil || c.ID == "" || c.Name == "" {
-				return usage, errors.New("invalid tool call")
+				return agentLoopResult{State: state}, errors.New("invalid tool call")
 			}
 			assistantMessage.ToolCalls = append(assistantMessage.ToolCalls, ToolCall{ID: c.ID, Name: c.Name, Arguments: c.Args.String()})
 		}
 		toolMessages := make([]Message, 0, len(assistantMessage.ToolCalls))
+		var pending *clientToolPause
 		for _, call := range assistantMessage.ToolCalls {
-			toolCount++
-			if toolCount > maxToolCalls {
-				return usage, errors.New("too many tool calls")
+			state.ToolCallCount++
+			if state.ToolCallCount > maxToolCalls {
+				return agentLoopResult{State: state}, errAgentToolLimit
+			}
+			if clientTool, ok := clientToolByName(call.Name); ok && capability != nil {
+				if pending != nil {
+					return agentLoopResult{State: state}, errors.New("multiple client tool calls are not supported")
+				}
+				arguments, err := validateClientToolArguments(call.Name, call.Arguments)
+				if err != nil {
+					return agentLoopResult{State: state}, err
+				}
+				pending = &clientToolPause{Call: call, Arguments: arguments, Capability: *capability, Effect: clientTool.Effect, Confirmation: clientTool.Confirmation}
+				continue
 			}
 			if err := w.Write(agui.ToolCallStartEvent{ToolCallID: call.ID, ToolCallName: call.Name, ParentMessageID: messageID}); err != nil {
-				return usage, err
+				return agentLoopResult{State: state}, err
 			}
 			if err := w.Write(agui.ToolCallArgsEvent{ToolCallID: call.ID, Delta: call.Arguments}); err != nil {
-				return usage, err
+				return agentLoopResult{State: state}, err
 			}
 			output, err := s.executeTool(ctx, tc, call.Name, call.Arguments)
 			if err != nil {
@@ -649,23 +817,50 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 			toolMessages = append(toolMessages, Message{Role: RoleTool, Name: call.Name, ToolCallID: call.ID, Content: output})
 		}
 		persistedMessages := append([]Message{assistantMessage}, toolMessages...)
-		if err := persist(persistedMessages...); err != nil {
-			return usage, err
+		if pending != nil {
+			if pause == nil {
+				return agentLoopResult{State: state}, errors.New("client tool pause is unavailable")
+			}
+			if err := pause(assistantMessage, toolMessages, *pending, state); err != nil {
+				return agentLoopResult{State: state}, err
+			}
+		} else if err := persist(persistedMessages...); err != nil {
+			return agentLoopResult{State: state}, err
 		}
 		if started {
 			if err := w.Write(agui.TextMessageEndEvent{MessageID: messageID}); err != nil {
-				return usage, err
+				return agentLoopResult{State: state}, err
 			}
 		}
 		messages = append(messages, persistedMessages...)
-		if err := writeDebugSnapshot(w, debug, iteration+1, "tool_results", model, a, messages, usage); err != nil {
-			return usage, err
+		phase := "tool_results"
+		if pending != nil {
+			phase = "client_tool_request"
+		}
+		if err := writeDebugSnapshot(w, debug, iteration, phase, model, a, messages, state.Usage); err != nil {
+			return agentLoopResult{State: state}, err
 		}
 		for _, toolMessage := range toolMessages {
 			if err := w.Write(agui.ToolCallEndEvent{ToolCallID: toolMessage.ToolCallID}); err != nil {
-				return usage, err
+				return agentLoopResult{State: state}, err
 			}
 		}
+		if pending != nil {
+			if err := w.Write(agui.ClientToolRequestEvent{
+				RunID: debug.RunID, ThreadID: debug.ThreadID, ToolCallID: pending.Call.ID,
+				ToolName: pending.Call.Name, Arguments: pending.Arguments,
+				Capability: agui.ClientToolCapability{
+					ID: pending.Capability.ID, Version: pending.Capability.Version,
+					ScopeType: pending.Capability.ScopeType, ScopeID: pending.Capability.ScopeID,
+					StateRevision: pending.Capability.StateRevision,
+				},
+				ClientSessionID: pending.Capability.SessionID,
+				Effect:          pending.Effect, Confirmation: pending.Confirmation,
+			}); err != nil {
+				return agentLoopResult{State: state}, err
+			}
+			return agentLoopResult{State: state, Paused: pending}, nil
+		}
 	}
-	return usage, errors.New("agent iteration limit reached")
+	return agentLoopResult{State: state}, errAgentIterationLimit
 }

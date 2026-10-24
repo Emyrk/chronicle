@@ -8,6 +8,7 @@ export const AG_UI_EVENT_TYPES = [
   "TOOL_CALL_START",
   "TOOL_CALL_ARGS",
   "TOOL_CALL_END",
+  "CLIENT_TOOL_REQUEST",
   "DEBUG_SNAPSHOT",
 ] as const;
 
@@ -73,6 +74,30 @@ export interface ToolCallEndEvent extends AgUiEventBase {
   toolCallId: string;
 }
 
+export type ClientToolEffect = "read" | "view_mutation";
+export type ClientToolConfirmation = "never" | "unless_yolo";
+
+export interface ClientToolCapability {
+  id: string;
+  version: number;
+  scopeType?: string;
+  scopeId?: string;
+  stateRevision?: number;
+}
+
+export interface ClientToolRequestEvent extends AgUiEventBase {
+  type: "CLIENT_TOOL_REQUEST";
+  runId: string;
+  threadId: string;
+  toolCallId: string;
+  toolName: string;
+  arguments: unknown;
+  capability: ClientToolCapability;
+  clientSessionId?: string;
+  effect: ClientToolEffect;
+  confirmation: ClientToolConfirmation;
+}
+
 export interface DebugToolCall {
   id: string;
   name: string;
@@ -122,7 +147,7 @@ export interface DebugSnapshotEvent extends AgUiEventBase {
   type: "DEBUG_SNAPSHOT";
   runId: string;
   iteration: number;
-  phase: "request" | "tool_results" | "response";
+  phase: "request" | "tool_results" | "client_tool_request" | "response";
   assistantId: string;
   model: string;
   persistence: "ephemeral" | "durable";
@@ -145,6 +170,7 @@ export type AgUiEvent =
   | ToolCallStartEvent
   | ToolCallArgsEvent
   | ToolCallEndEvent
+  | ClientToolRequestEvent
   | DebugSnapshotEvent;
 
 export type ChatRole = "user" | "assistant";
@@ -170,6 +196,7 @@ export interface ChatMessage {
 export interface ChatState {
   messages: ChatMessage[];
   debugSnapshots: DebugSnapshotEvent[];
+  clientToolRequests: ClientToolRequestEvent[];
   runId?: string;
   threadId?: string;
   status: ChatRunStatus;
@@ -182,12 +209,15 @@ export type ChatAction =
   | { type: "apply_event"; event: AgUiEvent }
   | { type: "run_failed"; message: string }
   | { type: "run_cancelled" }
+  | { type: "debug_preview"; snapshot: DebugSnapshotEvent; message: ChatMessage }
+  | { type: "reset_conversation"; messages?: ChatMessage[] }
   | { type: "clear_error" };
 
 export function createInitialChatState(messages: ChatMessage[] = []): ChatState {
   return {
     messages,
     debugSnapshots: [],
+    clientToolRequests: [],
     status: "idle",
   };
 }
@@ -239,15 +269,18 @@ function interruptStreamingMessages(messages: ChatMessage[]): ChatMessage[] {
 
 function applyEvent(state: ChatState, event: AgUiEvent): ChatState {
   switch (event.type) {
-    case "RUN_STARTED":
+    case "RUN_STARTED": {
+      const continuingRun = state.runId === event.runId;
       return {
         ...state,
         runId: event.runId,
         threadId: event.threadId,
         status: "running",
         error: undefined,
-        debugSnapshots: [],
+        debugSnapshots: continuingRun ? state.debugSnapshots : [],
+        clientToolRequests: continuingRun ? state.clientToolRequests : [],
       };
+    }
     case "RUN_FINISHED":
       return {
         ...state,
@@ -334,6 +367,52 @@ function applyEvent(state: ChatState, event: AgUiEvent): ChatState {
           arguments: toolCall.arguments + event.delta,
         })),
       };
+    case "CLIENT_TOOL_REQUEST": {
+      const clientToolRequests = [...state.clientToolRequests, event];
+      const argumentsText = JSON.stringify(event.arguments ?? null);
+      const hasToolCall = state.messages.some((message) =>
+        message.toolCalls?.some((toolCall) => toolCall.id === event.toolCallId),
+      );
+      if (hasToolCall) {
+        return {
+          ...state,
+          clientToolRequests,
+          messages: updateToolCall(state.messages, event.toolCallId, (toolCall) => ({
+            ...toolCall,
+            name: event.toolName,
+            arguments: argumentsText,
+          })),
+        };
+      }
+      const fallbackMessage = [...state.messages].reverse().find((message) => message.role === "assistant");
+      const toolCall: ChatToolCall = {
+        id: event.toolCallId,
+        name: event.toolName,
+        arguments: argumentsText,
+        status: "streaming",
+      };
+      if (!fallbackMessage) {
+        return {
+          ...state,
+          clientToolRequests,
+          messages: [...state.messages, {
+            id: `tool-message-${event.toolCallId}`,
+            role: "assistant",
+            content: "",
+            streaming: true,
+            toolCalls: [toolCall],
+          }],
+        };
+      }
+      return {
+        ...state,
+        clientToolRequests,
+        messages: updateMessage(state.messages, fallbackMessage.id, (message) => ({
+          ...message,
+          toolCalls: [...(message.toolCalls ?? []), toolCall],
+        })),
+      };
+    }
     case "DEBUG_SNAPSHOT":
       return {
         ...state,
@@ -362,6 +441,23 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, messages: interruptStreamingMessages(state.messages), status: "error", error: action.message };
     case "run_cancelled":
       return { ...state, messages: interruptStreamingMessages(state.messages), status: "idle" };
+    case "debug_preview":
+      return {
+        ...state,
+        messages: [...state.messages, action.message],
+        debugSnapshots: [action.snapshot],
+        clientToolRequests: [],
+        runId: action.snapshot.runId,
+        status: "idle",
+        error: undefined,
+      };
+    case "reset_conversation":
+      return {
+        messages: action.messages ?? [],
+        debugSnapshots: [],
+        clientToolRequests: [],
+        status: "idle",
+      };
     case "clear_error":
       return { ...state, error: undefined, status: state.status === "error" ? "idle" : state.status };
   }

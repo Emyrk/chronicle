@@ -1887,6 +1887,33 @@ export interface InferenceAuthorizeResponse {
 }
 
 // From chroniclesdk/inference.go
+export interface InferenceClient {
+    readonly session_id: string;
+    readonly capabilities: readonly InferenceClientCapability[];
+}
+
+// From chroniclesdk/inference.go
+export interface InferenceClientCapability {
+    readonly id: string;
+    readonly version: number;
+    readonly scope_type?: string;
+    readonly scope_id?: string;
+    readonly state_revision?: number;
+}
+
+// From chroniclesdk/inference.go
+export interface InferenceClientToolResultRequest {
+    readonly client_session_id: string;
+    readonly capability_id: string;
+    readonly capability_version: number;
+    readonly scope_type?: string;
+    readonly scope_id?: string;
+    readonly state_revision?: number;
+    readonly status: string;
+    readonly result?: Record<string, string>;
+}
+
+// From chroniclesdk/inference.go
 export interface InferenceConnection {
     readonly id: string;
     readonly provider: string;
@@ -1900,6 +1927,15 @@ export interface InferenceConnection {
 // From chroniclesdk/inference.go
 export interface InferenceConnectionsResponse {
     readonly connections: readonly InferenceConnection[];
+}
+
+// From chroniclesdk/inference.go
+export interface InferenceDebugPreviewRequest {
+    readonly assistant_id: string;
+    readonly thread_id?: string;
+    readonly instance?: string;
+    readonly model: string;
+    readonly client?: InferenceClient;
 }
 
 // From chroniclesdk/inference.go
@@ -1933,6 +1969,7 @@ export interface InferenceRunRequest {
     readonly assistant_id: string;
     readonly thread_id?: string;
     readonly instance?: string;
+    readonly client?: InferenceClient;
     readonly messages?: readonly InferenceMessage[];
     readonly message?: InferenceMessage;
 }

@@ -9,6 +9,7 @@ import {
 } from "./inference";
 
 const input = {
+  client: { session_id: "session-1", capabilities: [{ id: "page", version: 1 }] },
   runId: "run-1",
   threadId: "thread-1",
   messages: [
@@ -23,6 +24,7 @@ describe("inference request builders", () => {
   it("sends full browser history for ephemeral site help", () => {
     expect(buildSiteHelpRunRequest(input, selection)).toEqual({
       run_id: "run-1",
+      client: input.client,
       connection_id: "connection-1",
       model: "model-1",
       assistant_id: "site-help",
@@ -33,6 +35,7 @@ describe("inference request builders", () => {
   it("sends only the new message and durable thread for instance analysis", () => {
     expect(buildInstanceAnalystRunRequest(input, selection, "instance-1")).toEqual({
       run_id: "run-1",
+      client: input.client,
       connection_id: "connection-1",
       model: "model-1",
       assistant_id: "instance-analyst",

@@ -126,3 +126,33 @@ export function openLayoutPopup(
     "auto",
   );
 }
+
+export const CHAT_POPUP_FEATURES = [
+  "popup=yes",
+  "width=480",
+  "height=820",
+  "resizable=yes",
+  "scrollbars=yes",
+].join(",");
+
+export function openChatPopup(
+  ownerWindow: Window,
+  name: string,
+  title: string,
+): PanelPopup | null {
+  const popup = openPopup(
+    ownerWindow,
+    `chronicle-chat-${name}`,
+    title,
+    CHAT_POPUP_FEATURES,
+    "chronicle-chat-popup-root",
+    "hidden",
+  );
+  if (popup) {
+    // The chat scrolls internally; drop the site's always-on page scrollbar.
+    const chatStyles = popup.window.document.createElement("style");
+    chatStyles.textContent = "html { overflow: hidden; scrollbar-gutter: auto; }";
+    popup.window.document.head.appendChild(chatStyles);
+  }
+  return popup;
+}

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { AgUiClientError, runAgUi, type RunAgUiOptions } from "./client";
+import { useOptionalInferenceRuntime, type InferenceClientDescriptor } from "./runtime";
 import {
   chatReducer,
   createInitialChatState,
   type AgUiEvent,
   type ChatMessage,
+  type DebugSnapshotEvent,
   type ChatState,
 } from "./protocol";
 
@@ -12,12 +14,24 @@ export interface CreateChatRunRequestInput {
   messages: ChatMessage[];
   runId: string;
   threadId: string;
+  client?: InferenceClientDescriptor;
 }
 
 export interface DefaultChatRunRequest {
   messages: ChatMessage[];
   runId: string;
   threadId: string;
+  client?: InferenceClientDescriptor;
+}
+
+export interface DebugCommandInput {
+  threadId: string;
+  client?: InferenceClientDescriptor;
+}
+
+export interface DebugCommandResult {
+  snapshot: DebugSnapshotEvent;
+  message?: ChatMessage;
 }
 
 export interface UseAssistantChatOptions {
@@ -29,12 +43,15 @@ export interface UseAssistantChatOptions {
   onMessagesChange?: (messages: ChatMessage[]) => void;
   onRunComplete?: () => void | Promise<void>;
   onRunSettled?: () => void | Promise<void>;
+  onDebugCommand?: (input: DebugCommandInput) => DebugCommandResult | Promise<DebugCommandResult>;
+  onStartNewChat?: () => void | ChatMessage[] | Promise<void | ChatMessage[]>;
   runClient?: (options: RunAgUiOptions) => Promise<void>;
 }
 
 export interface AssistantChatController extends ChatState {
   isRunning: boolean;
   submit: (content: string) => Promise<boolean>;
+  startNewChat: () => Promise<boolean>;
   cancel: () => void;
   clearError: () => void;
 }
@@ -50,6 +67,14 @@ export function createDefaultChatRunRequest(
   return input;
 }
 
+export function isDebugCommand(content: string): boolean {
+  return content.trim().toLowerCase() === "/debug";
+}
+
+export function isClearCommand(content: string): boolean {
+  return content.trim().toLowerCase() === "/clear";
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof AgUiClientError) {
     return error.message;
@@ -61,6 +86,7 @@ function getErrorMessage(error: unknown): string {
 }
 
 export function useAssistantChat(options: UseAssistantChatOptions): AssistantChatController {
+  const runtime = useOptionalInferenceRuntime();
   const [state, dispatch] = useReducer(
     chatReducer,
     options.initialMessages ?? [],
@@ -93,11 +119,53 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
     dispatch({ type: "clear_error" });
   }, []);
 
+  const startNewChat = useCallback(async (): Promise<boolean> => {
+    if (activeRunRef.current) return false;
+    try {
+      const messages = await options.onStartNewChat?.();
+      dispatch({ type: "reset_conversation", messages: messages ?? [] });
+      return true;
+    } catch (error) {
+      dispatch({ type: "run_failed", message: getErrorMessage(error) });
+      return false;
+    }
+  }, [options]);
+
   const submit = useCallback(
     async (content: string): Promise<boolean> => {
       const trimmedContent = content.trim();
       if (!trimmedContent || activeRunRef.current) {
         return false;
+      }
+
+      if (isDebugCommand(trimmedContent)) {
+        if (!options.onDebugCommand) {
+          dispatch({ type: "run_failed", message: "Prompt debugging is not available for this account." });
+          return false;
+        }
+        try {
+          const result = await options.onDebugCommand({
+            threadId: threadIdRef.current,
+            ...(runtime ? { client: runtime.getClientDescriptor() } : {}),
+          });
+          dispatch({
+            type: "debug_preview",
+            snapshot: result.snapshot,
+            message: result.message ?? {
+              id: createId("debug"),
+              role: "assistant",
+              content: "Debug preview generated locally without contacting the model provider. Open the prompt inspector above to review or download it.",
+            },
+          });
+          return true;
+        } catch (error) {
+          dispatch({ type: "run_failed", message: getErrorMessage(error) });
+          return false;
+        }
+      }
+
+      if (isClearCommand(trimmedContent)) {
+        return startNewChat();
       }
 
       const userMessage: ChatMessage = {
@@ -117,7 +185,12 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
         event: { type: "RUN_STARTED", runId, threadId },
       });
 
-      const requestInput = { messages, runId, threadId };
+      const requestInput = {
+        messages,
+        runId,
+        threadId,
+        ...(runtime ? { client: runtime.getClientDescriptor() } : {}),
+      };
       const onEvent = (event: AgUiEvent) => dispatch({ type: "apply_event", event });
 
       try {
@@ -127,6 +200,7 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
           body,
           headers: options.headers,
           signal: abortController.signal,
+          runtime: runtime ?? undefined,
           onEvent,
         });
         await options.onRunComplete?.();
@@ -149,13 +223,14 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
         }
       }
     },
-    [options],
+    [options, runtime, startNewChat],
   );
 
   return {
     ...state,
     isRunning: state.status === "running",
     submit,
+    startNewChat,
     cancel,
     clearError,
   };
