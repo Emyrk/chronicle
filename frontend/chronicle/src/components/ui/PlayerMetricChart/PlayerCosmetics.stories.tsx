@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import { useState } from 'react'
-import { Check, Crown, Lock, RotateCcw, Sparkles, Swords, Wand2 } from 'lucide-react'
+import { Check, Crown, Heart, Lock, RotateCcw, Sparkles, Swords, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/Switch/Switch'
@@ -786,6 +786,81 @@ function CosmeticEditorDialog({ character, tier, saved, onSave, onClose }: {
   )
 }
 
+const PAID_TIERS = ['Honored', 'Revered', 'Exalted'] as const
+
+/** Supporter rank, styled like a WoW reputation bar, shown at the top of Account → Characters. */
+function SupporterStatusCard({ tier }: { tier: Tier }) {
+  const nextTier = PAID_TIERS.find((t) => TIER_RANK[t] > TIER_RANK[tier])
+  const allPresets = SLOTS.flatMap((slot) => Object.values(slot.presets).filter((preset) => preset.tier !== 'Free'))
+  const unlocked = allPresets.filter((preset) => TIER_RANK[preset.tier] <= TIER_RANK[tier]).length
+
+  return (
+    <section className="space-y-4 rounded-xl border border-border bg-card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h3 className="flex items-center gap-2 text-lg font-semibold">
+            <Heart className="size-5 text-primary" />
+            Chronicle Supporter
+            {tier === 'Free' ? (
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">Not a supporter</span>
+            ) : (
+              <TierBadge tier={tier} />
+            )}
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            {tier === 'Free'
+              ? 'Support Chronicle to style how your characters appear in logs.'
+              : `Supporter since March 2026 · ${unlocked} of ${allPresets.length} styles unlocked`}
+          </p>
+        </div>
+        {tier === 'Free' ? (
+          <Button size="sm"><Sparkles className="size-3.5" />Become a supporter</Button>
+        ) : (
+          <div className="flex items-center gap-1">
+            {nextTier && <Button size="sm"><Sparkles className="size-3.5" />Become {nextTier}</Button>}
+            <Button variant="outline" size="sm">Manage</Button>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        <div className="grid grid-cols-3 gap-1">
+          {PAID_TIERS.map((t) => {
+            const reached = TIER_RANK[tier] >= TIER_RANK[t]
+            return (
+              <div
+                key={t}
+                className="h-2.5 rounded-sm border border-black/40"
+                style={{
+                  background: reached ? `linear-gradient(to bottom, color-mix(in oklch, ${TIER_COLORS[t]} 70%, white), ${TIER_COLORS[t]})` : 'var(--muted)',
+                  boxShadow: t === tier ? `0 0 8px ${TIER_COLORS[t]}` : undefined,
+                }}
+              />
+            )
+          })}
+        </div>
+        <div className="grid grid-cols-3 gap-1 text-xs">
+          {PAID_TIERS.map((t) => {
+            const reached = TIER_RANK[tier] >= TIER_RANK[t]
+            const slot = SLOTS.find((x) => x.unlock === t)
+            return (
+              <div key={t} className="space-y-0.5">
+                <div className="font-medium" style={{ color: reached ? TIER_COLORS[t] : 'var(--muted-foreground)' }}>{t}</div>
+                <div className="flex items-center gap-1 text-muted-foreground">
+                  {reached ? <Check className="size-3" /> : <Lock className="size-3" />}
+                  {t === 'Honored' && 'Name styles'}
+                  {t === 'Revered' && 'Animated names, backgrounds'}
+                  {t === 'Exalted' && `Showpiece names, ${slot?.label.toLowerCase()}s`}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function LinkedCharactersWithCosmetics() {
   const [tier, setTier] = useState<Tier>('Revered')
   const [editing, setEditing] = useState<string | null>(null)
@@ -810,6 +885,8 @@ function LinkedCharactersWithCosmetics() {
         ))}
       </div>
 
+      <SupporterStatusCard tier={tier} />
+
       <section className="overflow-hidden rounded-xl border border-primary/30">
         <div className="space-y-1 border-b border-primary/30 bg-primary/5 px-5 py-4">
           <h3 className="flex items-center gap-2 text-lg font-semibold">
@@ -823,37 +900,43 @@ function LinkedCharactersWithCosmetics() {
           {DEMO_CHARACTERS.map((character) => {
             const live = effectiveSelection(saved[character.name] ?? DEFAULT_SELECTION, tier)
             return (
-              <div key={character.name} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-                <img src={`/c/icons/class_${character.className.toLowerCase()}.png`} alt="" className="size-9 shrink-0 rounded border border-border bg-muted" />
-                <div className="min-w-0 flex-1 basis-56">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate font-medium" style={{ color: `var(--color-class-${character.className.toLowerCase()})` }}>{character.name}</span>
-                    {character.isPrimary && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">
-                        <Crown className="size-3" />
-                        Primary
-                      </span>
-                    )}
+              <div key={character.name} className="space-y-2 px-4 py-3">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <img src={`/c/icons/class_${character.className.toLowerCase()}.png`} alt="" className="size-9 shrink-0 rounded border border-border bg-muted" />
+                  <div className="min-w-0 flex-1 basis-56">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-medium" style={{ color: `var(--color-class-${character.className.toLowerCase()})` }}>{character.name}</span>
+                      {character.isPrimary && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">
+                          <Crown className="size-3" />
+                          Primary
+                        </span>
+                      )}
+                    </div>
+                    <p className="truncate text-xs text-muted-foreground">{character.detail}</p>
                   </div>
-                  <p className="truncate text-xs text-muted-foreground">{character.detail}</p>
-                  {!isDefaultSelection(live) && (
-                    <p className="truncate text-xs text-muted-foreground/70">Cosmetics: {selectionSummary(live)}</p>
-                  )}
+                  <div className="ml-auto flex shrink-0 items-center gap-1">
+                    <Button variant="outline" size="sm" onClick={() => setEditing(character.name)}>
+                      <Sparkles className="size-3.5" />
+                      Customize
+                    </Button>
+                    <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive">Unlink</Button>
+                  </div>
                 </div>
-                <button
-                  type="button"
+                {/* How this character currently looks in logs; click to customize. */}
+                <div
+                  className="cursor-pointer space-y-1 rounded-md sm:pl-[3.25rem]"
                   onClick={() => setEditing(character.name)}
-                  className="hidden w-44 shrink-0 rounded-md sm:block"
                   title={`Customize ${character.name}`}
                 >
-                  <MiniRow character={character} cosmetic={selectionCosmetic(live)} />
-                </button>
-                <div className="ml-auto flex shrink-0 items-center gap-1">
-                  <Button variant="outline" size="sm" onClick={() => setEditing(character.name)}>
-                    <Sparkles className="size-3.5" />
-                    Customize
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive">Unlink</Button>
+                  <PlayerMetricChart
+                    type="damage"
+                    style={{ height: 34 }}
+                    data={[{ playerID: character.name, playerName: character.name, className: character.className, specialization: character.specialization, value: 1089, cosmetic: selectionCosmetic(live) }]}
+                  />
+                  <p className="text-xs text-muted-foreground/70">
+                    {isDefaultSelection(live) ? 'Default look' : selectionSummary(live)}
+                  </p>
                 </div>
               </div>
             )
