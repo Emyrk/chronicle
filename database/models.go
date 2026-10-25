@@ -1982,6 +1982,30 @@ type LogInstancesGuild struct {
 	Flavor                  []string           `db:"flavor" json:"flavor"`
 }
 
+type LuaProject struct {
+	ID                  uuid.UUID          `db:"id" json:"id"`
+	OwnerID             uuid.UUID          `db:"owner_id" json:"owner_id"`
+	Kind                string             `db:"kind" json:"kind"`
+	Name                string             `db:"name" json:"name"`
+	Slug                string             `db:"slug" json:"slug"`
+	Revision            int64              `db:"revision" json:"revision"`
+	DraftHash           pgtype.Text        `db:"draft_hash" json:"draft_hash"`
+	UnstableHash        pgtype.Text        `db:"unstable_hash" json:"unstable_hash"`
+	StableHash          pgtype.Text        `db:"stable_hash" json:"stable_hash"`
+	UnstablePublishedAt pgtype.Timestamptz `db:"unstable_published_at" json:"unstable_published_at"`
+	UnstablePublishedBy uuid.NullUUID      `db:"unstable_published_by" json:"unstable_published_by"`
+	StablePublishedAt   pgtype.Timestamptz `db:"stable_published_at" json:"stable_published_at"`
+	StablePublishedBy   uuid.NullUUID      `db:"stable_published_by" json:"stable_published_by"`
+	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type LuaProjectArtifact struct {
+	ProjectID uuid.UUID `db:"project_id" json:"project_id"`
+	Hash      string    `db:"hash" json:"hash"`
+	Bytes     []byte    `db:"bytes" json:"bytes"`
+}
+
 type OauthDeviceSession struct {
 	DeviceSignature              string             `db:"device_signature" json:"device_signature"`
 	UserSignature                string             `db:"user_signature" json:"user_signature"`

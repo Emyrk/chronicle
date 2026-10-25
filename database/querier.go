@@ -79,6 +79,7 @@ type sqlcQuerier interface {
 	CreateGuildDiscordInstallState(ctx context.Context, arg CreateGuildDiscordInstallStateParams) (GuildDiscordInstallState, error)
 	// Guild Join Requests
 	CreateGuildJoinRequest(ctx context.Context, arg CreateGuildJoinRequestParams) (GuildJoinRequest, error)
+	CreateLuaProject(ctx context.Context, arg CreateLuaProjectParams) (LuaProject, error)
 	CreateOAuthDeviceSession(ctx context.Context, arg CreateOAuthDeviceSessionParams) error
 	CreateOAuthTokenSession(ctx context.Context, arg CreateOAuthTokenSessionParams) error
 	CreateRaidComposition(ctx context.Context, arg CreateRaidCompositionParams) (RaidComposition, error)
@@ -334,11 +335,14 @@ type sqlcQuerier interface {
 	// Return the start_time for a log instance. Used by the parses handler
 	// to resolve which snapshot cutoff applies to the instance.
 	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
+	GetLuaProjectArtifact(ctx context.Context, arg GetLuaProjectArtifactParams) ([]byte, error)
 	GetModificationRequestByID(ctx context.Context, id uuid.UUID) (ApplicationModificationRequest, error)
 	GetOAuthDeviceSession(ctx context.Context, signature string) (GetOAuthDeviceSessionRow, error)
 	GetOAuthTokenSession(ctx context.Context, arg GetOAuthTokenSessionParams) ([]byte, error)
 	GetOrCreateInferenceThread(ctx context.Context, arg GetOrCreateInferenceThreadParams) (InferenceThread, error)
 	GetOrCreateOAuthServerSecret(ctx context.Context, secret []byte) ([]byte, error)
+	GetOwnerLuaProject(ctx context.Context, arg GetOwnerLuaProjectParams) (LuaProject, error)
+	GetOwnerLuaProjectDraftPackage(ctx context.Context, arg GetOwnerLuaProjectDraftPackageParams) (GetOwnerLuaProjectDraftPackageRow, error)
 	GetPanelLayoutByCode(ctx context.Context, code pgtype.Text) (GetPanelLayoutByCodeRow, error)
 	GetPanelLayoutByID(ctx context.Context, id uuid.UUID) (GetPanelLayoutByIDRow, error)
 	GetParseScoreCohortEntries(ctx context.Context, arg GetParseScoreCohortEntriesParams) ([]GetParseScoreCohortEntriesRow, error)
@@ -357,6 +361,8 @@ type sqlcQuerier interface {
 	// The existing proof_requests_applicant_created index supports this lookup.
 	GetProofCooldown(ctx context.Context, arg GetProofCooldownParams) (pgtype.Timestamptz, error)
 	GetProofRequest(ctx context.Context, id uuid.UUID) (ProofRequest, error)
+	GetPublicLuaProject(ctx context.Context, id uuid.UUID) (LuaProject, error)
+	GetPublishedLuaProjectPackage(ctx context.Context, arg GetPublishedLuaProjectPackageParams) (GetPublishedLuaProjectPackageRow, error)
 	GetRaidCompositionByID(ctx context.Context, id uuid.UUID) (RaidComposition, error)
 	// Returns all realm IDs that have an applicable retention policy
 	// (either directly or through their server).
@@ -640,6 +646,7 @@ type sqlcQuerier interface {
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)
 	ListMyProofRequests(ctx context.Context, arg ListMyProofRequestsParams) ([]ProofRequest, error)
 	ListObservedItemIDsForDate(ctx context.Context, arg ListObservedItemIDsForDateParams) ([]int32, error)
+	ListOwnerLuaProjects(ctx context.Context, ownerID uuid.UUID) ([]LuaProject, error)
 	ListParseScoreCohortBuckets(ctx context.Context, arg ListParseScoreCohortBucketsParams) ([]ListParseScoreCohortBucketsRow, error)
 	ListParseScoreMemberships(ctx context.Context, arg ListParseScoreMembershipsParams) ([]ParseScoreMembership, error)
 	// Read one persisted legacy result per player and encounter for the snapshot ID
@@ -661,6 +668,7 @@ type sqlcQuerier interface {
 	// requests and characters removed from the armory still render without them.
 	ListProofSubjectClasses(ctx context.Context, requestID uuid.UUID) ([]ListProofSubjectClassesRow, error)
 	ListProofSubjects(ctx context.Context, requestID uuid.UUID) ([]ProofRequestSubject, error)
+	ListPublicLuaProjects(ctx context.Context) ([]LuaProject, error)
 	ListRaidCompositionsByUser(ctx context.Context, arg ListRaidCompositionsByUserParams) ([]RaidComposition, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
 	// Used by the parses handler to get the viewed instance's own metric values
@@ -753,6 +761,8 @@ type sqlcQuerier interface {
 	MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) (WoWLogGroup, error)
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
 	PauseInferenceRun(ctx context.Context, arg PauseInferenceRunParams) (InferenceRun, error)
+	PromoteLuaProjectStable(ctx context.Context, arg PromoteLuaProjectStableParams) (LuaProject, error)
+	PruneLuaProjectArtifacts(ctx context.Context, arg PruneLuaProjectArtifactsParams) error
 	PruneParsedInstanceFromLogOutput(ctx context.Context, arg PruneParsedInstanceFromLogOutputParams) error
 	// Removes summary cards whose instance/difficulty/player-count combination no
 	// longer has any ranking rows visible to the current tenant context.
@@ -760,6 +770,8 @@ type sqlcQuerier interface {
 	PublicInstance(ctx context.Context, id uuid.UUID) (LogInstancesGuild, error)
 	PublicInstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (LogInstancesGuild, error)
 	PublishCacheGeneration(ctx context.Context, arg PublishCacheGenerationParams) (PublishCacheGenerationRow, error)
+	PublishLuaProjectUnstable(ctx context.Context, arg PublishLuaProjectUnstableParams) (LuaProject, error)
+	PutLuaProjectArtifact(ctx context.Context, arg PutLuaProjectArtifactParams) error
 	RankingRunByID(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	RankingRunIdentitiesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]RankingRunIdentitiesByInstanceIDsRow, error)
 	RankingRunIdentitiesByLogGroupID(ctx context.Context, logGroupID uuid.UUID) ([]RankingRunIdentitiesByLogGroupIDRow, error)
@@ -878,6 +890,7 @@ type sqlcQuerier interface {
 	SetDiscordAnnouncementDeliveryError(ctx context.Context, arg SetDiscordAnnouncementDeliveryErrorParams) error
 	SetDiscordAnnouncementMessage(ctx context.Context, arg SetDiscordAnnouncementMessageParams) (GuildDiscordLogAnnouncement, error)
 	SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateGroupIDsParams) error
+	SetLuaProjectDraft(ctx context.Context, arg SetLuaProjectDraftParams) (LuaProject, error)
 	SetPanelLayoutCode(ctx context.Context, arg SetPanelLayoutCodeParams) (int64, error)
 	SetPrimaryUserCharacter(ctx context.Context, arg SetPrimaryUserCharacterParams) (UserCharacterLink, error)
 	SetResetToken(ctx context.Context, arg SetResetTokenParams) error

@@ -1,0 +1,24 @@
+# Lua panel host v1
+
+Lua runs only in `Guides/runtime/panelWorker.ts` (Fengari), not the page. The ZIP
+loader accepts `project.json` with `kind: "panel"`, `.lua` entrypoint, declared
+assets, capabilities `ui`/`input`, and at most the `damage` stream. Packages may
+`require("chronicle.v1.ui")` and `require("chronicle.v1.events.damage")`; host
+modules are never copied into or resolved from the uploaded ZIP. Reserved
+`chronicle/` and `chronicle.` paths are rejected. No Lua network API exists.
+
+`chronicle.v1.events.damage` offers `onEvent(callback)` and
+`bySource(onUpdate)`. Events contain only `stream`, `source`, `target`, `amount`,
+`offsetMs`. Chronicle fetches its cached damage stream, decodes it in the Lua
+worker and selects only current encounter IDs. The worker caps event count and
+operation output. `chronicle.v1.ui` provides `metric`, `table`, `bars`, each
+creating retained UI operations validated by the Guide scene protocol.
+
+Public catalog: `GET /api/v1/lua-projects` (array of entries with `id`, `kind`,
+`name`, `stable` and optional `unstable`). ZIP:
+`GET /api/v1/lua-projects/{id}/package?channel=stable|unstable`.
+Panel refs are `lua:{uuid}:{channel}`. A missing channel/package remains a
+non-executing error placeholder. Backend must validate package manifests and
+capabilities on publication; this client validates independently. Future work:
+URL/layout serialization outside this directory, verified catalog digest for
+immutable release pinning, richer event projections and sync playback policy.

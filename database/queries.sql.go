@@ -11334,6 +11334,435 @@ func (q *sqlQuerier) GetInstanceLoot(ctx context.Context, arg GetInstanceLootPar
 	return items, nil
 }
 
+const createLuaProject = `-- name: CreateLuaProject :one
+INSERT INTO lua_projects (owner_id, kind, name, slug) VALUES ($1, $2, $3, $4) RETURNING id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at
+`
+
+type CreateLuaProjectParams struct {
+	OwnerID uuid.UUID `db:"owner_id" json:"owner_id"`
+	Kind    string    `db:"kind" json:"kind"`
+	Name    string    `db:"name" json:"name"`
+	Slug    string    `db:"slug" json:"slug"`
+}
+
+func (q *sqlQuerier) CreateLuaProject(ctx context.Context, arg CreateLuaProjectParams) (LuaProject, error) {
+	row := q.db.QueryRow(ctx, createLuaProject,
+		arg.OwnerID,
+		arg.Kind,
+		arg.Name,
+		arg.Slug,
+	)
+	var i LuaProject
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Kind,
+		&i.Name,
+		&i.Slug,
+		&i.Revision,
+		&i.DraftHash,
+		&i.UnstableHash,
+		&i.StableHash,
+		&i.UnstablePublishedAt,
+		&i.UnstablePublishedBy,
+		&i.StablePublishedAt,
+		&i.StablePublishedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getLuaProjectArtifact = `-- name: GetLuaProjectArtifact :one
+SELECT bytes FROM lua_project_artifacts WHERE project_id = $1 AND hash = $2
+`
+
+type GetLuaProjectArtifactParams struct {
+	ProjectID uuid.UUID `db:"project_id" json:"project_id"`
+	Hash      string    `db:"hash" json:"hash"`
+}
+
+func (q *sqlQuerier) GetLuaProjectArtifact(ctx context.Context, arg GetLuaProjectArtifactParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getLuaProjectArtifact, arg.ProjectID, arg.Hash)
+	var bytes []byte
+	err := row.Scan(&bytes)
+	return bytes, err
+}
+
+const getOwnerLuaProject = `-- name: GetOwnerLuaProject :one
+SELECT id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at FROM lua_projects WHERE id = $1 AND owner_id = $2
+`
+
+type GetOwnerLuaProjectParams struct {
+	ID      uuid.UUID `db:"id" json:"id"`
+	OwnerID uuid.UUID `db:"owner_id" json:"owner_id"`
+}
+
+func (q *sqlQuerier) GetOwnerLuaProject(ctx context.Context, arg GetOwnerLuaProjectParams) (LuaProject, error) {
+	row := q.db.QueryRow(ctx, getOwnerLuaProject, arg.ID, arg.OwnerID)
+	var i LuaProject
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Kind,
+		&i.Name,
+		&i.Slug,
+		&i.Revision,
+		&i.DraftHash,
+		&i.UnstableHash,
+		&i.StableHash,
+		&i.UnstablePublishedAt,
+		&i.UnstablePublishedBy,
+		&i.StablePublishedAt,
+		&i.StablePublishedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getOwnerLuaProjectDraftPackage = `-- name: GetOwnerLuaProjectDraftPackage :one
+SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.unstable_hash, p.stable_hash, p.unstable_published_at, p.unstable_published_by, p.stable_published_at, p.stable_published_by, p.created_at, p.updated_at, a.bytes
+FROM lua_projects p
+JOIN lua_project_artifacts a ON a.project_id = p.id AND a.hash = p.draft_hash
+WHERE p.id = $1 AND p.owner_id = $2
+`
+
+type GetOwnerLuaProjectDraftPackageParams struct {
+	ID      uuid.UUID `db:"id" json:"id"`
+	OwnerID uuid.UUID `db:"owner_id" json:"owner_id"`
+}
+
+type GetOwnerLuaProjectDraftPackageRow struct {
+	LuaProject LuaProject `db:"lua_project" json:"lua_project"`
+	Bytes      []byte     `db:"bytes" json:"bytes"`
+}
+
+func (q *sqlQuerier) GetOwnerLuaProjectDraftPackage(ctx context.Context, arg GetOwnerLuaProjectDraftPackageParams) (GetOwnerLuaProjectDraftPackageRow, error) {
+	row := q.db.QueryRow(ctx, getOwnerLuaProjectDraftPackage, arg.ID, arg.OwnerID)
+	var i GetOwnerLuaProjectDraftPackageRow
+	err := row.Scan(
+		&i.LuaProject.ID,
+		&i.LuaProject.OwnerID,
+		&i.LuaProject.Kind,
+		&i.LuaProject.Name,
+		&i.LuaProject.Slug,
+		&i.LuaProject.Revision,
+		&i.LuaProject.DraftHash,
+		&i.LuaProject.UnstableHash,
+		&i.LuaProject.StableHash,
+		&i.LuaProject.UnstablePublishedAt,
+		&i.LuaProject.UnstablePublishedBy,
+		&i.LuaProject.StablePublishedAt,
+		&i.LuaProject.StablePublishedBy,
+		&i.LuaProject.CreatedAt,
+		&i.LuaProject.UpdatedAt,
+		&i.Bytes,
+	)
+	return i, err
+}
+
+const getPublicLuaProject = `-- name: GetPublicLuaProject :one
+SELECT id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at FROM lua_projects WHERE id = $1 AND (stable_hash IS NOT NULL OR unstable_hash IS NOT NULL)
+`
+
+func (q *sqlQuerier) GetPublicLuaProject(ctx context.Context, id uuid.UUID) (LuaProject, error) {
+	row := q.db.QueryRow(ctx, getPublicLuaProject, id)
+	var i LuaProject
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Kind,
+		&i.Name,
+		&i.Slug,
+		&i.Revision,
+		&i.DraftHash,
+		&i.UnstableHash,
+		&i.StableHash,
+		&i.UnstablePublishedAt,
+		&i.UnstablePublishedBy,
+		&i.StablePublishedAt,
+		&i.StablePublishedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getPublishedLuaProjectPackage = `-- name: GetPublishedLuaProjectPackage :one
+SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.unstable_hash, p.stable_hash, p.unstable_published_at, p.unstable_published_by, p.stable_published_at, p.stable_published_by, p.created_at, p.updated_at, a.bytes
+FROM lua_projects p
+JOIN lua_project_artifacts a ON a.project_id = p.id
+ AND a.hash = CASE WHEN $1::text = 'stable' THEN p.stable_hash ELSE p.unstable_hash END
+WHERE p.id = $2 AND $1::text IN ('stable', 'unstable')
+`
+
+type GetPublishedLuaProjectPackageParams struct {
+	Channel string    `db:"channel" json:"channel"`
+	ID      uuid.UUID `db:"id" json:"id"`
+}
+
+type GetPublishedLuaProjectPackageRow struct {
+	LuaProject LuaProject `db:"lua_project" json:"lua_project"`
+	Bytes      []byte     `db:"bytes" json:"bytes"`
+}
+
+func (q *sqlQuerier) GetPublishedLuaProjectPackage(ctx context.Context, arg GetPublishedLuaProjectPackageParams) (GetPublishedLuaProjectPackageRow, error) {
+	row := q.db.QueryRow(ctx, getPublishedLuaProjectPackage, arg.Channel, arg.ID)
+	var i GetPublishedLuaProjectPackageRow
+	err := row.Scan(
+		&i.LuaProject.ID,
+		&i.LuaProject.OwnerID,
+		&i.LuaProject.Kind,
+		&i.LuaProject.Name,
+		&i.LuaProject.Slug,
+		&i.LuaProject.Revision,
+		&i.LuaProject.DraftHash,
+		&i.LuaProject.UnstableHash,
+		&i.LuaProject.StableHash,
+		&i.LuaProject.UnstablePublishedAt,
+		&i.LuaProject.UnstablePublishedBy,
+		&i.LuaProject.StablePublishedAt,
+		&i.LuaProject.StablePublishedBy,
+		&i.LuaProject.CreatedAt,
+		&i.LuaProject.UpdatedAt,
+		&i.Bytes,
+	)
+	return i, err
+}
+
+const listOwnerLuaProjects = `-- name: ListOwnerLuaProjects :many
+SELECT id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at FROM lua_projects WHERE owner_id = $1 ORDER BY updated_at DESC LIMIT 100
+`
+
+func (q *sqlQuerier) ListOwnerLuaProjects(ctx context.Context, ownerID uuid.UUID) ([]LuaProject, error) {
+	rows, err := q.db.Query(ctx, listOwnerLuaProjects, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LuaProject
+	for rows.Next() {
+		var i LuaProject
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Kind,
+			&i.Name,
+			&i.Slug,
+			&i.Revision,
+			&i.DraftHash,
+			&i.UnstableHash,
+			&i.StableHash,
+			&i.UnstablePublishedAt,
+			&i.UnstablePublishedBy,
+			&i.StablePublishedAt,
+			&i.StablePublishedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPublicLuaProjects = `-- name: ListPublicLuaProjects :many
+SELECT id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at FROM lua_projects WHERE stable_hash IS NOT NULL ORDER BY stable_published_at DESC LIMIT 100
+`
+
+func (q *sqlQuerier) ListPublicLuaProjects(ctx context.Context) ([]LuaProject, error) {
+	rows, err := q.db.Query(ctx, listPublicLuaProjects)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LuaProject
+	for rows.Next() {
+		var i LuaProject
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Kind,
+			&i.Name,
+			&i.Slug,
+			&i.Revision,
+			&i.DraftHash,
+			&i.UnstableHash,
+			&i.StableHash,
+			&i.UnstablePublishedAt,
+			&i.UnstablePublishedBy,
+			&i.StablePublishedAt,
+			&i.StablePublishedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const promoteLuaProjectStable = `-- name: PromoteLuaProjectStable :one
+UPDATE lua_projects SET stable_hash = unstable_hash, stable_published_at = now(), stable_published_by = $1,
+ revision = revision + 1, updated_at = now()
+WHERE id = $2 AND owner_id = $1 AND kind = 'panel' AND revision = $3
+ AND unstable_hash = $4 AND unstable_hash IS NOT NULL
+RETURNING id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at
+`
+
+type PromoteLuaProjectStableParams struct {
+	OwnerID          uuid.NullUUID `db:"owner_id" json:"owner_id"`
+	ID               uuid.UUID     `db:"id" json:"id"`
+	ExpectedRevision int64         `db:"expected_revision" json:"expected_revision"`
+	TestedSha256     pgtype.Text   `db:"tested_sha256" json:"tested_sha256"`
+}
+
+func (q *sqlQuerier) PromoteLuaProjectStable(ctx context.Context, arg PromoteLuaProjectStableParams) (LuaProject, error) {
+	row := q.db.QueryRow(ctx, promoteLuaProjectStable,
+		arg.OwnerID,
+		arg.ID,
+		arg.ExpectedRevision,
+		arg.TestedSha256,
+	)
+	var i LuaProject
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Kind,
+		&i.Name,
+		&i.Slug,
+		&i.Revision,
+		&i.DraftHash,
+		&i.UnstableHash,
+		&i.StableHash,
+		&i.UnstablePublishedAt,
+		&i.UnstablePublishedBy,
+		&i.StablePublishedAt,
+		&i.StablePublishedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const pruneLuaProjectArtifacts = `-- name: PruneLuaProjectArtifacts :exec
+DELETE FROM lua_project_artifacts a USING lua_projects p
+WHERE a.project_id = p.id AND p.id = $1 AND p.owner_id = $2
+ AND a.hash IS DISTINCT FROM p.draft_hash AND a.hash IS DISTINCT FROM p.unstable_hash
+ AND a.hash IS DISTINCT FROM p.stable_hash
+`
+
+type PruneLuaProjectArtifactsParams struct {
+	ID      uuid.UUID `db:"id" json:"id"`
+	OwnerID uuid.UUID `db:"owner_id" json:"owner_id"`
+}
+
+func (q *sqlQuerier) PruneLuaProjectArtifacts(ctx context.Context, arg PruneLuaProjectArtifactsParams) error {
+	_, err := q.db.Exec(ctx, pruneLuaProjectArtifacts, arg.ID, arg.OwnerID)
+	return err
+}
+
+const publishLuaProjectUnstable = `-- name: PublishLuaProjectUnstable :one
+UPDATE lua_projects SET unstable_hash = draft_hash, unstable_published_at = now(), unstable_published_by = $1,
+ revision = revision + 1, updated_at = now()
+WHERE id = $2 AND owner_id = $1 AND kind = 'panel' AND revision = $3 AND draft_hash IS NOT NULL
+RETURNING id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at
+`
+
+type PublishLuaProjectUnstableParams struct {
+	OwnerID          uuid.NullUUID `db:"owner_id" json:"owner_id"`
+	ID               uuid.UUID     `db:"id" json:"id"`
+	ExpectedRevision int64         `db:"expected_revision" json:"expected_revision"`
+}
+
+func (q *sqlQuerier) PublishLuaProjectUnstable(ctx context.Context, arg PublishLuaProjectUnstableParams) (LuaProject, error) {
+	row := q.db.QueryRow(ctx, publishLuaProjectUnstable, arg.OwnerID, arg.ID, arg.ExpectedRevision)
+	var i LuaProject
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Kind,
+		&i.Name,
+		&i.Slug,
+		&i.Revision,
+		&i.DraftHash,
+		&i.UnstableHash,
+		&i.StableHash,
+		&i.UnstablePublishedAt,
+		&i.UnstablePublishedBy,
+		&i.StablePublishedAt,
+		&i.StablePublishedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const putLuaProjectArtifact = `-- name: PutLuaProjectArtifact :exec
+INSERT INTO lua_project_artifacts (project_id, hash, bytes) VALUES ($1, $2, $3)
+ON CONFLICT (project_id, hash) DO NOTHING
+`
+
+type PutLuaProjectArtifactParams struct {
+	ProjectID uuid.UUID `db:"project_id" json:"project_id"`
+	Hash      string    `db:"hash" json:"hash"`
+	Bytes     []byte    `db:"bytes" json:"bytes"`
+}
+
+func (q *sqlQuerier) PutLuaProjectArtifact(ctx context.Context, arg PutLuaProjectArtifactParams) error {
+	_, err := q.db.Exec(ctx, putLuaProjectArtifact, arg.ProjectID, arg.Hash, arg.Bytes)
+	return err
+}
+
+const setLuaProjectDraft = `-- name: SetLuaProjectDraft :one
+UPDATE lua_projects SET draft_hash = $1, revision = revision + 1, updated_at = now()
+WHERE id = $2 AND owner_id = $3 AND revision = $4 RETURNING id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at
+`
+
+type SetLuaProjectDraftParams struct {
+	Hash             pgtype.Text `db:"hash" json:"hash"`
+	ID               uuid.UUID   `db:"id" json:"id"`
+	OwnerID          uuid.UUID   `db:"owner_id" json:"owner_id"`
+	ExpectedRevision int64       `db:"expected_revision" json:"expected_revision"`
+}
+
+func (q *sqlQuerier) SetLuaProjectDraft(ctx context.Context, arg SetLuaProjectDraftParams) (LuaProject, error) {
+	row := q.db.QueryRow(ctx, setLuaProjectDraft,
+		arg.Hash,
+		arg.ID,
+		arg.OwnerID,
+		arg.ExpectedRevision,
+	)
+	var i LuaProject
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Kind,
+		&i.Name,
+		&i.Slug,
+		&i.Revision,
+		&i.DraftHash,
+		&i.UnstableHash,
+		&i.StableHash,
+		&i.UnstablePublishedAt,
+		&i.UnstablePublishedBy,
+		&i.StablePublishedAt,
+		&i.StablePublishedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const deleteExpiredOAuthRelayCodes = `-- name: DeleteExpiredOAuthRelayCodes :execrows
 DELETE FROM oauth_relay_codes
 WHERE expires_at <= NOW()

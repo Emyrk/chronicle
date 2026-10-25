@@ -41,6 +41,7 @@ import { activePhaseForTimeRange, phaseTimeRangeSelection, phaseWidthPercent } f
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
 import type { PanelFilter } from "./EventsPanels/processors/filters";
 import { listSelectableCustomPanels, useCustomPanelRegistry } from "./EventsPanels/custom/pluginRegistry";
+import { isLuaPanelRef, useLuaPanelCatalog } from "./EventsPanels/LuaPanel/luaPanelRegistry";
 import { canonicalizeCustomPanelRef, isCustomPanelRef } from "./EventsPanels/custom/pluginTypes";
 import { PANELS, type BuiltinPanelType } from "./EventsPanels/EventsPanel";
 import { isQueryablePanelType, PANEL_AI_DESCRIPTIONS } from "./EventsPanels/panelCatalog";
@@ -1356,7 +1357,7 @@ function PoppedOutLayoutContent({
       setPanelTypesById(Object.fromEntries(
         items.map((item) => {
           const candidate = parsed.panelTypesById[item.id] ?? "empty";
-          return [item.id, candidate in PANELS || isCustomPanelRef(candidate) ? candidate : "empty"];
+          return [item.id, candidate in PANELS || isCustomPanelRef(candidate) || isLuaPanelRef(candidate) ? candidate : "empty"];
         }),
       ));
       setPanelOptionsById(Object.fromEntries(
@@ -2896,7 +2897,7 @@ function InstancePageViewContent({
       const urlType = viewState.panels[index];
       const defaultType = (defaultPanelTypesByID[item.id] ?? "empty") as EventsPanelType;
       const resolved = (urlType ?? defaultType) as EventsPanelType;
-      const valid = resolved in PANELS || isCustomPanelRef(resolved);
+      const valid = resolved in PANELS || isCustomPanelRef(resolved) || isLuaPanelRef(resolved);
       next[item.id] = valid ? resolved : "empty";
     });
     return next;
@@ -3277,7 +3278,7 @@ function InstancePageViewContent({
       const importedTypes: Record<string, EventsPanelType> = {};
       normalizedItems.forEach((item) => {
         const candidate = panelTypesById[item.id] ?? "empty";
-        importedTypes[item.id] = candidate in PANELS || isCustomPanelRef(candidate) ? candidate : "empty";
+        importedTypes[item.id] = candidate in PANELS || isCustomPanelRef(candidate) || isLuaPanelRef(candidate) ? candidate : "empty";
       });
 
       orderedItems = orderLayoutItems(normalizedItems);
@@ -3410,7 +3411,7 @@ function InstancePageViewContent({
     const importedTypes: Record<string, EventsPanelType> = {};
     normalizedItems.forEach((item) => {
       const candidate = parsed.panelTypesById?.[item.id] ?? "empty";
-      importedTypes[item.id] = candidate in PANELS || isCustomPanelRef(candidate) ? candidate : "empty";
+      importedTypes[item.id] = candidate in PANELS || isCustomPanelRef(candidate) || isLuaPanelRef(candidate) ? candidate : "empty";
     });
 
     const orderedItems = orderLayoutItems(normalizedItems);
@@ -3739,7 +3740,7 @@ function InstancePageViewContent({
       const castTypes: Record<string, EventsPanelType> = {};
       normalizedItems.forEach((item) => {
         const candidate = parsed.panelTypesById?.[item.id] ?? "empty";
-        castTypes[item.id] = candidate in PANELS || isCustomPanelRef(candidate) ? candidate : "empty";
+        castTypes[item.id] = candidate in PANELS || isCustomPanelRef(candidate) || isLuaPanelRef(candidate) ? candidate : "empty";
       });
 
       const orderedItems = orderLayoutItems(normalizedItems);
@@ -3916,6 +3917,16 @@ function InstancePageViewContent({
     })),
     [customPanelRegistry],
   );
+  const luaPanelCatalog = useLuaPanelCatalog();
+  const selectableLuaPanels = useMemo(() => (luaPanelCatalog.data ?? [])
+    .filter((project) => project.stable)
+    .map((project) => ({
+      id: `lua:${project.id}:stable`,
+      label: project.name,
+      description: "Sandboxed Lua panel (automatically follows its Stable release)",
+      queryable: false,
+      hidden: false,
+    })), [luaPanelCatalog.data]);
   const availableStripCatalog = useMemo(() => Object.entries(STRIPS).map(([id, strip]) => ({
     id,
     label: strip.label,
@@ -3938,6 +3949,7 @@ function InstancePageViewContent({
     panelOptionsByID,
     panelFiltersByID,
     selectableCustomPanelIds: selectableCustomPanels.map((panel) => panel.id),
+    selectableLuaPanelIds: selectableLuaPanels.map((panel) => panel.id),
     availableStripCatalog,
   });
   const inferenceRevisionRef = useRef({ signature: inferenceStateSignature, revision: 0 });
@@ -3978,8 +3990,9 @@ function InstancePageViewContent({
         hidden: panel.hidden === true,
       })),
       ...selectableCustomPanels,
+      ...selectableLuaPanels,
     ],
-    availablePanelTypes: [...Object.keys(PANELS), ...selectableCustomPanels.map((panel) => panel.id)],
+    availablePanelTypes: [...Object.keys(PANELS), ...selectableCustomPanels.map((panel) => panel.id), ...selectableLuaPanels.map((panel) => panel.id)],
     availableStripCatalog,
     availablePresets: getAvailablePresetLayouts(instance.capabilities ?? [], isMobile).map((preset) => preset.id),
   };

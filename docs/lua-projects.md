@@ -1,0 +1,37 @@
+# Lua projects (initial panel release)
+
+Lua projects are account-owned source packages. A project has one editable draft and two channel-following published releases, `unstable` and `stable`. Published releases are identified by the SHA-256 of their deterministic ZIP bytes. Uploading a draft does not affect either channel; publishing replaces Unstable; promoting copies the exact tested Unstable hash to Stable without rebuilding. Unreferenced package bytes are deleted. Historical artifact bytes are not retained, so restoring an older release requires uploading and publishing it again.
+
+## Authoring and sharing
+
+Create a panel at `/lua-projects`. Upload an uncompressed `.tar` with `project.json` and `main.lua`, or use the separate ephemeral inference author to propose `main.lua`, review its text, and explicitly upload it as a private draft. The model cannot publish a project. Preview loads the owner-only draft ZIP in the same sandbox as installed panels, but has no instance event data. Test data-driven behavior by adding the Unstable panel reference to an instance layout before promoting it.
+
+A minimal manifest is:
+
+```json
+{"manifest_version":1,"kind":"panel","name":"Example","slug":"example","entrypoint":"main.lua","capabilities":["ui"],"streams":[],"assets":[]}
+```
+
+The manifest name, slug, and kind must match the project record. Supported capabilities are `ui` and `input`; the only available event stream in this release is `damage`. An Unstable reference is `lua:<project UUID>:unstable`, and Stable uses `:stable`. Stable appears in the panel catalog by default. Anyone with an Unstable reference can paste it into the panel selector search box. A saved layout stores the channel reference, **not** a specific digest. Active panels check their channel for updates periodically.
+
+Use `require("chronicle.v1.ui")` for shared metric, table, and bar helpers and `require("chronicle.v1.events.damage")` for `onEvent`/`bySource`. These modules ship with Chronicle, not in each project ZIP. The `chronicle` namespace is reserved; package-local Lua modules can be required from other names. Host-owned processing passes bounded event records to the worker. There is no Lua network, DOM, JS interop, or generic HTTP function.
+
+For a simple damage panel, declare `"streams":["damage"]` and write:
+
+```lua
+local ui = require("chronicle.v1.ui")
+local damage = require("chronicle.v1.events.damage")
+local metric = ui.metric(UIParent, "damage-total", "Damage", 0, 16, -16)
+local total = 0
+damage.onEvent(function(event)
+  -- A host-bounded record: source, target, amount and offsetMs.
+  total = total + event.amount
+  metric.set(total)
+end)
+```
+
+## Boundaries and limitations
+
+The server accepts only regular tar files, bounded to 8 MiB upload, 16 MiB expanded data, and 128 files. It rejects links, traversal, duplicate paths, unknown package file types, and reserved module paths; raster assets must be declared and have matching PNG/JPEG/WebP signatures. It repackages validated files as a sorted ZIP. The panel loader independently validates the ZIP before starting a dedicated Fengari worker. Lua callbacks have instruction limits, scene messages have size and geometry checks, damage projection has event and output limits, and the host terminates a worker that exceeds its time budget. Workers are not an OS memory sandbox; a malicious script can still consume CPU/memory up to browser limits.
+
+Public Stable releases appear in the project catalog. Unstable is link-only. Guide projects can be created and drafted but **cannot yet be published** through this project system; PR #1217's built-in guide format remains separate. There is currently no general network/API capability, no durable inference project conversation, and no byte-accurate heap quota. Sharing a channel means the author's next publish can change what viewers run; there is no stored old artifact for rollback.

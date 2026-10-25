@@ -144,6 +144,9 @@ export function CustomPanelsPage() {
             <Link to="/account/custom-panels" className="rounded-md bg-primary px-4 py-2 font-semibold text-primary-foreground hover:bg-primary/90">
               Manage panels
             </Link>
+            <Link to="/lua-projects" className="rounded-md border px-4 py-2 font-semibold hover:bg-accent">
+              Create a sandboxed Lua panel
+            </Link>
             <a
               href="https://github.com/Emyrk/chronicle-panel"
               target="_blank"
