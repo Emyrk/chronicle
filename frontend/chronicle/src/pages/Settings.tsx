@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop, BadgeCheck, Crown, Camera, RefreshCw } from "lucide-react";
+import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop, BadgeCheck, Crown, Camera, RefreshCw, Info } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
@@ -385,7 +385,8 @@ function ExternalVerificationCard() {
         {providerName ? `Sync from ${providerName}` : "Sync from your community"}
       </h3>
       {provider.callout && (
-        <p className="text-sm rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-yellow-500">
+        <p className="flex gap-2 text-sm text-muted-foreground">
+          <Info className="mt-0.5 size-4 shrink-0" />
           {provider.callout}
         </p>
       )}
@@ -409,7 +410,6 @@ function ExternalVerificationCard() {
         <p className="text-sm text-yellow-500">Must be authenticated with Discord to link characters.</p>
       ) : (
         <Button
-          variant="outline"
           size="sm"
           disabled={syncMutation.isPending || throttled}
           onClick={handleSync}
@@ -471,30 +471,24 @@ function SectionHeader({ icon: Icon, iconClassName, title, count, description }:
 
 function LinkedVsFavoritesExplainer() {
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-2">
+    <div className="grid gap-4 rounded-lg bg-muted/40 p-4 text-sm sm:grid-cols-2 sm:gap-0 sm:divide-x sm:divide-border">
+      <div className="space-y-1 sm:pr-4">
         <div className="flex items-center gap-2 font-medium">
           <BadgeCheck className="size-4 text-primary" />
-          Linked characters
-          <span className="text-xs font-normal text-muted-foreground">— characters you play</span>
+          Linked: characters you play
         </div>
-        <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-          <li>Verified as yours. A character can only be linked to one account.</li>
-          <li>Requires proof, such as a guild sync or a screenshot.</li>
-          <li>Choose one as your primary character.</li>
-        </ul>
+        <p className="text-muted-foreground">
+          Verified as yours with proof. A character can only be linked to one account.
+        </p>
       </div>
-      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 space-y-2">
+      <div className="space-y-1 sm:pl-4">
         <div className="flex items-center gap-2 font-medium">
           <Star className="size-4 fill-amber-400 text-amber-400" />
-          Favorites
-          <span className="text-xs font-normal text-muted-foreground">— characters you follow</span>
+          Favorites: characters you follow
         </div>
-        <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-          <li>Bookmarks to any character or guild, including other players'.</li>
-          <li>No verification. Add one with the star on its armory or guild page.</li>
-          <li>Private to you. Favoriting does not claim a character.</li>
-        </ul>
+        <p className="text-muted-foreground">
+          Private bookmarks to any character or guild. No proof needed, and favoriting does not claim a character.
+        </p>
       </div>
     </div>
   );

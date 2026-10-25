@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Camera, Search } from "lucide-react";
+import { Camera, Info, Search } from "lucide-react";
 import { useArmorySearch } from "@/api/queries";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -120,9 +120,9 @@ export function PhotoProofCard({ callout }: { callout?: string }) {
     <section className="rounded-lg border p-4 space-y-4">
       <div className="space-y-3">
         <h3 className="flex items-center gap-2 text-sm font-medium"><Camera className="size-4 text-muted-foreground" />Link with photo proof</h3>
-        {callout && <p className="text-sm rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-yellow-500">{callout}</p>}
+        {callout && <p className="flex gap-2 text-sm text-muted-foreground"><Info className="mt-0.5 size-4 shrink-0" />{callout}</p>}
         <p className="text-sm text-muted-foreground">Upload a screenshot of your character selection screen with the realm name and every character you claim visible. An administrator reviews it, and the screenshot is deleted after review.</p>
-        {!open && <Button variant="outline" size="sm" onClick={() => setOpen(true)}>Start a request</Button>}
+        {!open && <Button size="sm" onClick={() => setOpen(true)}>Start a request</Button>}
       </div>
       {open && <div className="space-y-4 border-t pt-4">
       <label className="block text-sm space-y-1">
