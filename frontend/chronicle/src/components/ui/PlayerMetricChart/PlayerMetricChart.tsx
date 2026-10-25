@@ -15,6 +15,7 @@ import { playerClassLabel } from '@/components/ui/BreakoutPanel/playerClassLabel
 import { usePortalContainer } from '@/components/ui/PortalContainerContext';
 import { X, GripHorizontal } from 'lucide-react';
 import { usePlayerSpecializations } from './PlayerSpecializationContext';
+import { mergePlayerCosmetics, usePlayerCosmetics } from './PlayerCosmeticsContext';
 import { usePanelVariant } from '@/pages/Instance/EventsPanels/PanelVariantContext';
 import {
   createPlayerMetricChartModel,
@@ -126,8 +127,9 @@ export function PlayerMetricChart({
   // Embedded as an overlay (a meter over the map): dense rows, no icons or pills.
   const dense = usePanelVariant() === 'overlay';
   const playerSpecializations = usePlayerSpecializations();
+  const playerCosmetics = usePlayerCosmetics();
   const enrichedData = useMemo(
-    () => data.map((player) => {
+    () => mergePlayerCosmetics(data.map((player) => {
       const specialization = playerSpecializations.get(player.playerID);
       if (!specialization) return player;
       return {
@@ -136,8 +138,8 @@ export function PlayerMetricChart({
         subSpec: specialization.subSpec,
         specializationIconUrl: specialization.iconUrl,
       };
-    }),
-    [data, playerSpecializations],
+    }), playerCosmetics),
+    [data, playerCosmetics, playerSpecializations],
   );
 
   // Track which rows have pinned tooltips (multiple allowed)
