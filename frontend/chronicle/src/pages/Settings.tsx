@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -448,24 +448,35 @@ function linkSourceLabel(source: string): string {
   return "Linked";
 }
 
-function SectionHeader({ icon: Icon, iconClassName, title, count, description }: {
+const SECTION_ACCENTS = {
+  linked: { border: "border-primary/30", header: "bg-primary/5" },
+  favorites: { border: "border-amber-500/30", header: "bg-amber-500/5" },
+};
+
+function CharacterSection({ accent, icon: Icon, iconClassName, title, count, description, children }: {
+  accent: keyof typeof SECTION_ACCENTS;
   icon: LucideIcon;
   iconClassName?: string;
   title: string;
   count?: number;
   description: string;
+  children: ReactNode;
 }) {
+  const { border, header } = SECTION_ACCENTS[accent];
   return (
-    <div className="space-y-1">
-      <h3 className="flex items-center gap-2 text-base font-semibold">
-        <Icon className={cn("size-4", iconClassName)} />
-        {title}
-        {count !== undefined && count > 0 && (
-          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{count}</span>
-        )}
-      </h3>
-      <p className="text-sm text-muted-foreground">{description}</p>
-    </div>
+    <section className={cn("overflow-hidden rounded-xl border", border)}>
+      <div className={cn("space-y-1 border-b px-5 py-4", border, header)}>
+        <h3 className="flex items-center gap-2 text-lg font-semibold">
+          <Icon className={cn("size-5", iconClassName)} />
+          {title}
+          {count !== undefined && count > 0 && (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{count}</span>
+          )}
+        </h3>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
+      <div className="space-y-4 p-5">{children}</div>
+    </section>
   );
 }
 
@@ -597,7 +608,7 @@ export function CharacterSettings() {
   };
 
   return (
-    <div className="max-w-4xl space-y-10">
+    <div className="max-w-4xl space-y-8">
       <div className="space-y-4">
         <div>
           <h2 className="text-xl font-semibold">Characters</h2>
@@ -606,14 +617,14 @@ export function CharacterSettings() {
         <LinkedVsFavoritesExplainer />
       </div>
 
-      <section className="space-y-4">
-        <SectionHeader
-          icon={BadgeCheck}
-          iconClassName="text-primary"
-          title="Linked characters"
-          count={characters?.length}
-          description="Characters verified as yours."
-        />
+      <CharacterSection
+        accent="linked"
+        icon={BadgeCheck}
+        iconClassName="text-primary"
+        title="Linked characters"
+        count={characters?.length}
+        description="Characters verified as yours."
+      >
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading characters...</p>
         ) : sortedCharacters.length === 0 ? (
@@ -654,18 +665,18 @@ export function CharacterSettings() {
           </div>
         )}
         <PhotoProofHistory />
-      </section>
+      </CharacterSection>
 
-      <section className="space-y-4">
-        <SectionHeader
-          icon={Star}
-          iconClassName="fill-amber-400 text-amber-400"
-          title="Favorites"
-          count={favoriteCount}
-          description="Quick links to characters and guilds you follow. These are not linked to your account."
-        />
+      <CharacterSection
+        accent="favorites"
+        icon={Star}
+        iconClassName="fill-amber-400 text-amber-400"
+        title="Favorites"
+        count={favoriteCount}
+        description="Quick links to characters and guilds you follow. These are not linked to your account."
+      >
         <FavoritesList data={favorites.data} isLoading={favorites.isLoading} />
-      </section>
+      </CharacterSection>
     </div>
   );
 }
