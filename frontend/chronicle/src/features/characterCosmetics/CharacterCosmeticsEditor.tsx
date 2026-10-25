@@ -240,6 +240,7 @@ export interface CharacterCosmeticsEditorProps {
   allowedIDs?: readonly string[] | null;
   open: boolean;
   saving: boolean;
+  previewOnly?: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (selection: CosmeticStyleSelection, applyToAll: boolean) => void;
 }
@@ -251,6 +252,7 @@ export function CharacterCosmeticsEditor({
   allowedIDs,
   open,
   saving,
+  previewOnly = false,
   onOpenChange,
   onSave,
 }: CharacterCosmeticsEditorProps) {
@@ -301,7 +303,11 @@ export function CharacterCosmeticsEditor({
               <DialogTitle>
                 Customize <span style={{ color: `var(--color-class-${character.class.toLowerCase()})` }}>{character.name}</span>
               </DialogTitle>
-              <DialogDescription>Choose how {character.name} appears wherever they show up in logs.</DialogDescription>
+              <DialogDescription>
+                {previewOnly
+                  ? "Try every cosmetic combination in this sandbox. Nothing you choose here will be saved."
+                  : `Choose how ${character.name} appears wherever they show up in logs.`}
+              </DialogDescription>
             </div>
           </div>
 
@@ -349,7 +355,7 @@ export function CharacterCosmeticsEditor({
                   </span>
                 );
               })}
-              <span className="ml-auto text-muted-foreground">Currently active: {selectionSummary(active)}</span>
+              {!previewOnly && <span className="ml-auto text-muted-foreground">Currently active: {selectionSummary(active)}</span>}
             </div>
           </div>
 
@@ -396,24 +402,30 @@ export function CharacterCosmeticsEditor({
               Reset to default
             </Button>
             <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
-              {!requiredTier && safeAllowedIDs.length > 0 && (
-                <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Switch checked={applyToAll} onCheckedChange={setApplyToAll} />
-                  Apply to all linked characters
-                </label>
-              )}
-              <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
-              {requiredTier || safeAllowedIDs.length === 0 ? (
-                <Button size="sm" asChild>
-                  <Link to="/account/billing" onClick={() => onOpenChange(false)}>
-                    <Sparkles className="size-3.5" />
-                    {requiredTier ? `Become ${requiredTier}` : "Become a supporter"}
-                  </Link>
-                </Button>
+              {previewOnly ? (
+                <Button size="sm" onClick={() => onOpenChange(false)}>Done</Button>
               ) : (
-                <Button size="sm" disabled={saving || (!dirty && !applyToAll)} onClick={() => onSave(draft, applyToAll)}>
-                  {saving ? "Saving..." : "Save"}
-                </Button>
+                <>
+                  {!requiredTier && safeAllowedIDs.length > 0 && (
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Switch checked={applyToAll} onCheckedChange={setApplyToAll} />
+                      Apply to all linked characters
+                    </label>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
+                  {requiredTier || safeAllowedIDs.length === 0 ? (
+                    <Button size="sm" asChild>
+                      <Link to="/account/billing" onClick={() => onOpenChange(false)}>
+                        <Sparkles className="size-3.5" />
+                        {requiredTier ? `Become ${requiredTier}` : "Become a supporter"}
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button size="sm" disabled={saving || (!dirty && !applyToAll)} onClick={() => onSave(draft, applyToAll)}>
+                      {saving ? "Saving..." : "Save"}
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           </div>
