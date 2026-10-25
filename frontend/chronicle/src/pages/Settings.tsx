@@ -559,15 +559,22 @@ function LinkedCharacterRow({ character, cosmeticSummary, onCustomize, onSetPrim
         </p>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1">
+        {!character.is_primary && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-amber-500/50 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200"
+            disabled={busy}
+            onClick={onSetPrimary}
+          >
+            <Crown className="size-3.5" />
+            Make Primary
+          </Button>
+        )}
         <Button variant="outline" size="sm" disabled={customizeDisabled} onClick={onCustomize}>
           <Sparkles className="size-3.5" />
           Customize
         </Button>
-        {!character.is_primary && (
-          <Button variant="outline" size="sm" disabled={busy} onClick={onSetPrimary}>
-            Make primary
-          </Button>
-        )}
         <Button
           variant="ghost"
           size="sm"
