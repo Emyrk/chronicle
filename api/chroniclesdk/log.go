@@ -123,6 +123,14 @@ type VehicleControlDiagnostic struct {
 	ActiveControllerGUID *GUIDString `json:"active_controller_guid,omitempty"`
 }
 
+// PositionCoordinateSpace describes how unit-position X/Y values map to artwork.
+type PositionCoordinateSpace string
+
+const (
+	PositionCoordinateSpaceWorld           PositionCoordinateSpace = "world"
+	PositionCoordinateSpaceUIMapNormalized PositionCoordinateSpace = "ui-map-normalized"
+)
+
 type WoWInstance struct {
 	ID      uuid.UUID `json:"id"`
 	RealmID uuid.UUID `json:"realm_id"`
@@ -150,6 +158,7 @@ type WoWInstance struct {
 	EndTime                 *time.Time              `json:"end_time,omitempty"`
 	Guild                   *Guild                  `json:"guild,omitempty"`
 	Capabilities            []string                `json:"capabilities"`
+	PositionCoordinateSpace PositionCoordinateSpace `json:"position_coordinate_space,omitempty"`
 	Versions                map[string]string       `json:"versions"`
 	RecorderName            string                  `json:"recorder_name"`
 	RecorderGUID            string                  `json:"recorder_guid"`

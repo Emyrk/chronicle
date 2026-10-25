@@ -526,6 +526,14 @@ function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, value * 100));
 }
 
+/** Projects GetPlayerMapPosition coordinates directly onto their native UI map artwork. */
+export function uiMapPoint(sample: MapPositionSample): MapPoint {
+  return {
+    leftPercent: clampPercent(sample.x),
+    topPercent: clampPercent(sample.y),
+  };
+}
+
 export function zoneMapPoint(sample: MapPositionSample, assignment: WowMapAssignment): MapPoint | null {
   const [minWorldX, minWorldY, , maxWorldX, maxWorldY] = assignment.region;
   if (maxWorldX === minWorldX || maxWorldY === minWorldY) return null;

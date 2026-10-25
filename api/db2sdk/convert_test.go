@@ -9,6 +9,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestPositionCoordinateSpace(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		format database.NullLogFormat
+		want   string
+	}{
+		{name: "missing", want: ""},
+		{name: "TBC companion", format: database.NullLogFormat{LogFormat: database.LogFormat243CcAddon, Valid: true}, want: "ui-map-normalized"},
+		{name: "Wrath companion", format: database.NullLogFormat{LogFormat: database.LogFormat335aCcAddon, Valid: true}, want: "ui-map-normalized"},
+		{name: "world positions", format: database.NullLogFormat{LogFormat: database.LogFormatAzerothcoreMod, Valid: true}, want: "world"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, test.want, string(positionCoordinateSpace(test.format)))
+		})
+	}
+}
+
 func TestUser(t *testing.T) {
 	t.Parallel()
 

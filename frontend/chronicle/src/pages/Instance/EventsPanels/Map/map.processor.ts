@@ -20,6 +20,7 @@ import {
   type HealProcessorEvent,
   type InterruptProcessorEvent,
   type PanelProcessor,
+  type ProcessorContext,
   type ResurrectionProcessorEvent,
   type SlainProcessorEvent,
   type SpellGoProcessorEvent,
@@ -127,20 +128,38 @@ function effectEvent(timestampMs: number, kind: ReplayEffectEvent["kind"], sourc
 
 // Caster-target distance in yards from the latest positions at the event,
 // or null when either is unknown or they are on different maps.
-function unitDistance(encounter: MapEncounterPositions, source: string, target: string, timestampMs: number): number | null {
+function unitDistance(
+  encounter: MapEncounterPositions,
+  source: string,
+  target: string,
+  timestampMs: number,
+  positionCoordinateSpace: "world" | "ui-map-normalized" | undefined,
+): number | null {
+  if (positionCoordinateSpace === "ui-map-normalized") return null;
   const from = latestPositionAt(encounter.positionsByUnit.get(source) ?? [], timestampMs);
   const to = latestPositionAt(encounter.positionsByUnit.get(target) ?? [], timestampMs);
   if (!from || !to || from.mapId !== to.mapId) return null;
   return Math.hypot(from.x - to.x, from.y - to.y);
 }
 
-function classifyAttack(event: DamageProcessorEvent, encounter: MapEncounterPositions, timestampMs: number): ReplayAttackKind {
+function classifyAttack(
+  event: DamageProcessorEvent,
+  encounter: MapEncounterPositions,
+  timestampMs: number,
+  context: ProcessorContext,
+): ReplayAttackKind {
   const { spellId } = event;
   if (spellId === AUTO_ATTACK_SPELL_ID) return "swing";
   if (spellId != null && RANGED_AUTO_SPELL_IDS.has(spellId)) return "ranged_auto";
   // The vanilla and WotLK parsers flag the weapon hand on swings only.
   if ((event.hitType & (HitTypeMainHand | HitTypeOffHand)) !== 0) return "swing";
-  const distance = unitDistance(encounter, event.caster, event.target, timestampMs);
+  const distance = unitDistance(
+    encounter,
+    event.caster,
+    event.target,
+    timestampMs,
+    context.positionCoordinateSpace,
+  );
   // No spell data: assume a swing unless the units are clearly apart.
   if (spellId == null) return distance !== null && distance > MELEE_RANGE_YARDS ? "ranged_auto" : "swing";
   if ((event.schools[0] ?? 0) === PHYSICAL_SCHOOL && distance !== null && distance <= MELEE_RANGE_YARDS) return "melee_ability";
@@ -149,7 +168,12 @@ function classifyAttack(event: DamageProcessorEvent, encounter: MapEncounterPosi
 
 // Copies the (reused) stream event into a compact effect event, or null
 // when it has no visual.
-function toEffectEvent(event: MapProcessorEvent, timestampMs: number, encounter: MapEncounterPositions): ReplayEffectEvent | null {
+function toEffectEvent(
+  event: MapProcessorEvent,
+  timestampMs: number,
+  encounter: MapEncounterPositions,
+  context: ProcessorContext,
+): ReplayEffectEvent | null {
   switch (event.type) {
     case "damage":
     case "heal": {
@@ -164,7 +188,7 @@ function toEffectEvent(event: MapProcessorEvent, timestampMs: number, encounter:
       }
       fx.crit = (event.hitType & HitTypeCrit) !== 0;
       fx.periodic = (event.hitType & HitTypePeriodic) !== 0;
-      if (event.type === "damage") fx.attack = classifyAttack(event, encounter, timestampMs);
+      if (event.type === "damage") fx.attack = classifyAttack(event, encounter, timestampMs, context);
       fx.spellId = event.spellId;
       fx.spellName = event.sourceName;
       return fx;
@@ -226,7 +250,7 @@ export const mapProcessor: PanelProcessor<MapResult, MapProcessorEvent> = {
       return;
     }
     if (event.type !== "unit_position") {
-      const fx = toEffectEvent(event, timestampMs, encounter);
+      const fx = toEffectEvent(event, timestampMs, encounter, context);
       if (fx) addEffectEvent(encounter.effects, fx);
       return;
     }

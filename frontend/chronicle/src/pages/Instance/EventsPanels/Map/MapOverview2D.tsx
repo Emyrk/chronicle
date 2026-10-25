@@ -30,6 +30,7 @@ import {
   resolveDungeonMapCalibration,
   resolveMapArtwork,
   selectMapJourneyEncounters,
+  uiMapPoint,
   zoneMapPoint,
   zoomFreeMapCamera,
   type MapCamera,
@@ -379,8 +380,14 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
   const representativeSample = representativeSamples.find((sample) => sample.mapId === mapId);
   const encounterMapId = selectedEncounters.find(({ encounter }) => encounter.mapId !== 0)?.encounter.mapId ?? 0;
   const artworkMapId = encounterMapId || mapId;
+  const normalizedUIMap = props.context.instance.positionCoordinateSpace === "ui-map-normalized";
   const artwork = manifestQuery.data && artworkMapId !== null
-    ? resolveMapArtwork(manifestQuery.data, artworkMapId, representativeSample, props.context.instance.name)
+    ? resolveMapArtwork(
+      manifestQuery.data,
+      artworkMapId,
+      normalizedUIMap ? undefined : representativeSample,
+      props.context.instance.name,
+    )
     : null;
   const [floorNumber, setFloorNumber] = useState<number | null>(null);
   const [mapSource, setMapSource] = useState<"styled" | "renders" | "art">("renders");
@@ -397,7 +404,7 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
     ? artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0]
     : undefined;
   const instanceCanvas = artwork?.kind === "instance"
-    ? overviewDungeonCanvas(artwork.instance, selectedFloor, mapSource)
+    ? overviewDungeonCanvas(artwork.instance, selectedFloor, normalizedUIMap ? "art" : mapSource)
     : null;
   const canvas = artwork?.kind === "zone" ? zoneSelection?.layer : instanceCanvas?.canvas;
   // Image bounds belong to that image alone; never substitute floor or mesh bounds.
@@ -413,10 +420,11 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
 
   const projectSample = useCallback((sample: MapPositionSample, calibration: ReturnType<typeof resolveDungeonMapCalibration>): MapPoint | null => {
     if (!artwork || sample.mapId !== mapId) return null;
+    if (normalizedUIMap) return uiMapPoint(sample);
     if (artwork.kind === "zone") return zoneMapPoint(sample, artwork.assignment);
     if (!dungeonBounds) return null;
     return projectDungeonMapPoint(sample, dungeonBounds, artwork.instance.mapID, calibration, imageProjection);
-  }, [artwork, dungeonBounds, imageProjection, mapId]);
+  }, [artwork, dungeonBounds, imageProjection, mapId, normalizedUIMap]);
 
   const journeyRoutes = useMemo<EncounterRoute[]>(() => {
     if (!artwork || selectedEncounters.length === 0) return [];
@@ -542,7 +550,7 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
           <span className="ml-1.5 font-mono">world {displayedMapId}</span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {artwork.kind === "instance" && [artwork.instance.renders, artwork.instance.styled, selectedFloor].filter(Boolean).length > 1 && (
+          {!normalizedUIMap && artwork.kind === "instance" && [artwork.instance.renders, artwork.instance.styled, selectedFloor].filter(Boolean).length > 1 && (
             <select
               aria-label="Map source"
               value={instanceCanvas?.source}

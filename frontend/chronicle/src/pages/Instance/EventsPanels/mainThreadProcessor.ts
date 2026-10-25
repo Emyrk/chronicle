@@ -164,6 +164,7 @@ function deserializeContext(ctx: SerializableProcessorContext): ProcessorContext
     panelOption: ctx.panelOption,
     panelContext: ctx.panelContext,
     capabilities: ctx.capabilities,
+    positionCoordinateSpace: ctx.positionCoordinateSpace,
     filters: ctx.filters,
   };
 }

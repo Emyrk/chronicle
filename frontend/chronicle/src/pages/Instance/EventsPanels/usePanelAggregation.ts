@@ -95,6 +95,7 @@ function toSerializableContext(
     panelOption,
     panelContext,
     capabilities: ctx.instance.capabilities ?? [],
+    positionCoordinateSpace: ctx.instance.positionCoordinateSpace,
   };
 }
 

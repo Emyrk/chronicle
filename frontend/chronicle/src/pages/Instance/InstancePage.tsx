@@ -30,6 +30,7 @@ import { shouldShowAdPreview } from "@/components/Ads/adPreview";
 import { useAdSiteConfig } from "@/components/Ads/useAdSiteConfig";
 import { getReplayResetTimestamp, type SelectedEncounterTimes } from "./replaySelection";
 import { shouldShowInstanceAdRail } from "./instanceAdRail";
+import { defaultPositionCoordinateSpace, type PositionCoordinateSpace } from "./positionCoordinateSpace";
 
 // Types for the Instance page
 export interface EnemyUnit {
@@ -89,6 +90,8 @@ export interface Instance {
   units?: Record<string, ResolvedInstanceUnit>;
   // Server-computed feature flags for this instance
   capabilities: readonly string[];
+  // Coordinate system used by unit-position telemetry.
+  positionCoordinateSpace?: PositionCoordinateSpace;
   // Unlisted logs preserve combat analysis for authorized users but omit public ranking features.
   unlisted?: boolean;
   // Parse format and server-mechanics flavor of the source log group
@@ -153,6 +156,7 @@ function transformToInstance(
     names_by_entry?: Record<number, string>;
     summons_by_owner?: Record<string, readonly string[]>;
     capabilities?: readonly string[];
+    position_coordinate_space?: PositionCoordinateSpace;
     unlisted?: boolean;
     format?: string;
     flavor?: readonly string[];
@@ -243,6 +247,8 @@ function transformToInstance(
     players,
     units,
     capabilities: apiInstance.capabilities ?? [],
+    positionCoordinateSpace: apiInstance.position_coordinate_space
+      ?? defaultPositionCoordinateSpace(apiInstance.format),
     unlisted: apiInstance.unlisted,
     format: apiInstance.format,
     flavor: apiInstance.flavor,
