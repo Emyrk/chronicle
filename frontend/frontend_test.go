@@ -67,6 +67,30 @@ func TestHandlerRendersSEOMetadata(t *testing.T) {
 	require.Contains(t, body, `type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite"}</script>`)
 }
 
+func TestHandlerRouteMetadataOverridesSocialImage(t *testing.T) {
+	t.Parallel()
+
+	indexHTML, err := os.ReadFile("chronicle/index.html")
+	require.NoError(t, err)
+	siteFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: indexHTML}}
+	handler := Handler(siteFS, []OGRoute{{
+		Pattern: "/instances/{id}",
+		Resolve: func(_ *http.Request) *OGData {
+			return &OGData{ImageURL: "https://everlook.example/molten-core.webp"}
+		},
+	}}, func(_ *http.Request) *HTMLBranding {
+		return &HTMLBranding{ImageURL: "https://everlook.example/banner.png"}
+	}, nil)
+
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/instances/example", nil))
+
+	body := recorder.Body.String()
+	require.Contains(t, body, `property="og:image" content="https://everlook.example/molten-core.webp"`)
+	require.Contains(t, body, `name="twitter:image" content="https://everlook.example/molten-core.webp"`)
+	require.NotContains(t, body, `content="https://everlook.example/banner.png"`)
+}
+
 func TestHandlerGoogleAnalyticsMetadata(t *testing.T) {
 	t.Parallel()
 

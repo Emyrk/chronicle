@@ -345,11 +345,21 @@ func (api *API) buildInstanceOG(ctx context.Context, host string, inst database.
 	if inst.TenantSlug.Valid && inst.TenantSlug.String != "" && api.Opts.Tenant != nil && api.Opts.Tenant.PrimaryDomain() != "" {
 		host = inst.TenantSlug.String + "." + api.Opts.Tenant.PrimaryDomain()
 	}
+
 	return &frontend.OGData{
 		Title:       title.String(),
 		Description: desc.String(),
 		URL:         fmt.Sprintf("https://%s/instances/%s", host, identifier),
+		ImageURL:    instanceOGImageURL(host, inst.Name),
 	}
+}
+
+func instanceOGImageURL(host, instanceName string) string {
+	background, ok := frontend.InstanceBackground(instanceName)
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("https://%s%s", host, background)
 }
 
 func (api *API) armoryOG(host, realm, player string) *frontend.OGData {

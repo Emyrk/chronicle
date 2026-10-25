@@ -27,6 +27,7 @@ type OGData struct {
 	Title       string
 	Description string
 	URL         string
+	ImageURL    string
 }
 
 // OGRoute registers a chi route pattern that resolves Open Graph metadata.
@@ -219,6 +220,9 @@ func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		state.OGURL = og.URL
 		if og.URL != "" {
 			state.CanonicalURL = og.URL
+		}
+		if og.ImageURL != "" {
+			state.ImageURL = og.ImageURL
 		}
 		if og.Title != "" {
 			state.Title = og.Title
