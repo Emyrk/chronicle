@@ -88,6 +88,7 @@ import { OwnerAdFreeBadge } from "@/components/Ads/OwnerAdFreeBadge";
 import { useInstanceTimeParses } from "./Overview/overviewQueries";
 import { bossKillParsesByEncounter, killParseEdgeStyle, scopedClearParses, scopedKillParsesByEncounter } from "./Overview/encounterKillTimePopulation";
 import { HeroicBadge } from "@/components/HeroicBadge";
+import { AdSlot } from "@/components/Ads/AdSlot";
 import { isHeroic } from "@/lib/wowUtils";
 import { DuplicatesBadge } from "./DuplicatesBadge";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
@@ -113,6 +114,7 @@ import {
 } from "./presetLayouts";
 import { openLayoutPopup, syncPopupAppearance, type LayoutPopup } from "./EventsPanels/panelPopup";
 import { InstanceKeybindProvider, useRegisterInstanceKeybinds } from "./InstanceKeybinds";
+import { shouldShowEncounterSidebarAd } from "./encounterSidebarAd";
 
 function useViewportHeight(targetWindow: Window | null): number {
   const [height, setHeight] = useState(() => targetWindow?.innerHeight ?? 1080);
@@ -518,6 +520,12 @@ function EncounterSidebar({
   const isDebug = searchParams.get("debug") === "true";
 
   const effectiveTrashOpen = trashOpen || hasSelectedTrash;
+  const showEncounterAd = shouldShowEncounterSidebarAd({
+    isMobile,
+    showChronological,
+    trashOpen: effectiveTrashOpen,
+    totalTrash,
+  });
   
   // Sort encounters by start time for chronological view
   const chronologicalEncounters = useMemo(() => 
@@ -542,7 +550,7 @@ function EncounterSidebar({
     <div 
       data-help-encounter-sidebar
       className={cn(
-        "pt-1 w-64 shrink-0 border-r pr-4 overflow-y-auto styled-scrollbar",
+        "pt-1 w-[267px] shrink-0 border-r pr-4 overflow-y-auto styled-scrollbar",
         // Desktop: sticky sidebar that scrolls independently
         !isMobile && "sticky top-4 max-h-[calc(100vh-2rem)]",
         // Mobile: fixed overlay with background
@@ -955,6 +963,9 @@ function EncounterSidebar({
         </Collapsible>
       )}
       </>
+      )}
+      {showEncounterAd && (
+        <AdSlot placement="instance-encounter-sidebar" format="sidebar" className="mt-5" />
       )}
     </div>
   );

@@ -6,6 +6,19 @@ describe("shouldShowInstanceAdRail", () => {
     expect(
       shouldShowInstanceAdRail({
         adsEnabled: true,
+        previewEnabled: false,
+        focused: false,
+        ownerAdsFree: false,
+        viewerAdsFree: false,
+      }),
+    ).toBe(true)
+  })
+
+  it("shows the rail in local ad preview when deployment ads are disabled", () => {
+    expect(
+      shouldShowInstanceAdRail({
+        adsEnabled: false,
+        previewEnabled: true,
         focused: false,
         ownerAdsFree: false,
         viewerAdsFree: false,
@@ -17,6 +30,7 @@ describe("shouldShowInstanceAdRail", () => {
     expect(
       shouldShowInstanceAdRail({
         adsEnabled: false,
+        previewEnabled: false,
         focused: false,
         ownerAdsFree: false,
         viewerAdsFree: false,
@@ -28,6 +42,7 @@ describe("shouldShowInstanceAdRail", () => {
     expect(
       shouldShowInstanceAdRail({
         adsEnabled: true,
+        previewEnabled: false,
         focused: false,
         ownerAdsFree: true,
         viewerAdsFree: false,
@@ -39,6 +54,7 @@ describe("shouldShowInstanceAdRail", () => {
     expect(
       shouldShowInstanceAdRail({
         adsEnabled: true,
+        previewEnabled: false,
         focused: false,
         ownerAdsFree: false,
         viewerAdsFree: true,
@@ -50,6 +66,7 @@ describe("shouldShowInstanceAdRail", () => {
     expect(
       shouldShowInstanceAdRail({
         adsEnabled: true,
+        previewEnabled: false,
         focused: true,
         ownerAdsFree: false,
         viewerAdsFree: false,
