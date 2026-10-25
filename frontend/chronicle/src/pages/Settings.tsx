@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop } from "lucide-react";
+import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop, BadgeCheck, Crown, Camera, RefreshCw } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
@@ -380,12 +380,10 @@ function ExternalVerificationCard() {
 
   return (
     <div className="rounded-lg border p-4 space-y-3">
-      <h3 className="text-sm font-medium">
-        {providerName ? `Link characters via ${providerName}` : "Link characters"}
+      <h3 className="flex items-center gap-2 text-sm font-medium">
+        <RefreshCw className="size-4 text-muted-foreground" />
+        {providerName ? `Sync from ${providerName}` : "Sync from your community"}
       </h3>
-      {providerName && (
-        <p className="text-sm text-muted-foreground">Character linking is provided by {providerName}.</p>
-      )}
       {provider.callout && (
         <p className="text-sm rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-yellow-500">
           {provider.callout}
@@ -443,6 +441,122 @@ function ExternalVerificationCard() {
   );
 }
 
+function linkSourceLabel(source: string): string {
+  if (source === "manual") return "Linked by an administrator";
+  if (source === "photo-proof") return "Linked with photo proof";
+  if (source.startsWith("zug-zug/")) return 'Linked via the Guild "Zug Zug"';
+  return "Linked";
+}
+
+function SectionHeader({ icon: Icon, iconClassName, title, count, description }: {
+  icon: LucideIcon;
+  iconClassName?: string;
+  title: string;
+  count?: number;
+  description: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <h3 className="flex items-center gap-2 text-base font-semibold">
+        <Icon className={cn("size-4", iconClassName)} />
+        {title}
+        {count !== undefined && count > 0 && (
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{count}</span>
+        )}
+      </h3>
+      <p className="text-sm text-muted-foreground">{description}</p>
+    </div>
+  );
+}
+
+function LinkedVsFavoritesExplainer() {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-2">
+        <div className="flex items-center gap-2 font-medium">
+          <BadgeCheck className="size-4 text-primary" />
+          Linked characters
+          <span className="text-xs font-normal text-muted-foreground">— characters you play</span>
+        </div>
+        <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+          <li>Verified as yours. A character can only be linked to one account.</li>
+          <li>Requires proof, such as a guild sync or a screenshot.</li>
+          <li>Choose one as your primary character.</li>
+        </ul>
+      </div>
+      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 space-y-2">
+        <div className="flex items-center gap-2 font-medium">
+          <Star className="size-4 fill-amber-400 text-amber-400" />
+          Favorites
+          <span className="text-xs font-normal text-muted-foreground">— characters you follow</span>
+        </div>
+        <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+          <li>Bookmarks to any character or guild, including other players'.</li>
+          <li>No verification. Add one with the star on its armory or guild page.</li>
+          <li>Private to you. Favoriting does not claim a character.</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function LinkedCharacterRow({ character, onSetPrimary, onUnlink, busy }: {
+  character: LinkedCharacter;
+  onSetPrimary: () => void;
+  onUnlink: () => void;
+  busy: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+      <img
+        src={`/c/icons/class_${character.class.toLowerCase()}.png`}
+        alt=""
+        className="size-9 shrink-0 rounded border border-border bg-muted"
+      />
+      <div className="min-w-0 flex-1 basis-56">
+        <div className="flex items-center gap-2">
+          <Link
+            to={`/armory/${encodeURIComponent(character.realm_name)}/${character.character_guid}`}
+            className="truncate font-medium hover:underline"
+            style={{ color: getClassColorVar(character.class) }}
+          >
+            {character.name}
+          </Link>
+          {character.is_primary && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">
+              <Crown className="size-3" />
+              Primary
+            </span>
+          )}
+        </div>
+        <p className="truncate text-xs text-muted-foreground">
+          {character.guild_name ? `<${character.guild_name}> · ` : ""}
+          Level {character.level} {character.race} {character.class} · {character.realm_name}
+        </p>
+        <p className="truncate text-xs text-muted-foreground/70">
+          {linkSourceLabel(character.link_source)} · {new Date(character.linked_at).toLocaleDateString()}
+        </p>
+      </div>
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        {!character.is_primary && (
+          <Button variant="outline" size="sm" disabled={busy} onClick={onSetPrimary}>
+            Make primary
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground hover:text-destructive"
+          disabled={busy}
+          onClick={onUnlink}
+        >
+          Unlink
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function CharacterSettings() {
   const { data: siteConfig } = useSiteConfig();
   const photoProof = siteConfig?.tenant?.external_linking?.methods?.["photo-proof"];
@@ -454,6 +568,12 @@ export function CharacterSettings() {
   const favorites = useMyFavorites();
   const setPrimary = useSetPrimaryCharacter();
   const unlink = useUnlinkMyCharacter();
+  const sortedCharacters = useMemo(
+    () => [...(characters ?? [])].sort((a, b) => Number(b.is_primary) - Number(a.is_primary)),
+    [characters],
+  );
+  const hasLinkMethod = !!siteConfig?.external_verification || !!photoProof?.enabled;
+  const favoriteCount = (favorites.data?.guilds.length ?? 0) + (favorites.data?.players.length ?? 0);
 
   const handleSetPrimary = (character: LinkedCharacter) => {
     setPrimary.mutate(
@@ -477,92 +597,76 @@ export function CharacterSettings() {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold">Characters</h2>
-        <p className="text-muted-foreground">In-game characters linked to your account.</p>
+    <div className="max-w-4xl space-y-10">
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-xl font-semibold">Characters</h2>
+          <p className="text-muted-foreground">The characters you play, and the ones you keep an eye on.</p>
+        </div>
+        <LinkedVsFavoritesExplainer />
       </div>
 
-      <FavoritesList data={favorites.data} isLoading={favorites.isLoading} />
+      <section className="space-y-4">
+        <SectionHeader
+          icon={BadgeCheck}
+          iconClassName="text-primary"
+          title="Linked characters"
+          count={characters?.length}
+          description="Characters verified as yours."
+        />
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading characters...</p>
+        ) : sortedCharacters.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+            No characters are linked to your account yet.
+            {hasLinkMethod
+              ? " Use one of the methods below to link them."
+              : " Contact a site administrator to link them."}
+          </div>
+        ) : (
+          <div className="divide-y rounded-lg border">
+            {sortedCharacters.map((character) => (
+              <LinkedCharacterRow
+                key={`${character.realm_id}-${character.character_guid}`}
+                character={character}
+                busy={setPrimary.isPending || unlink.isPending}
+                onSetPrimary={() => handleSetPrimary(character)}
+                onUnlink={() => handleUnlink(character)}
+              />
+            ))}
+          </div>
+        )}
 
-      <ExternalVerificationCard />
-      {photoProof?.enabled && (proofAccessLoading ? (
-        <p className="text-sm text-muted-foreground">Checking photo proof access...</p>
-      ) : proofAccess?.submit ? (
-        <PhotoProofCard callout={photoProof.callout} />
-      ) : (
-        <div className="rounded-lg border p-4 space-y-2">
-          <h3 className="font-medium">Link with photo proof</h3>
-          {photoProof.callout && <p className="text-sm text-muted-foreground">{photoProof.callout}</p>}
-          <p className="text-sm text-muted-foreground">Photo proof applications are not available to your account yet.</p>
-        </div>
-      ))}
-      <PhotoProofHistory />
+        {hasLinkMethod && (
+          <div className="space-y-3 pt-2">
+            <h4 className="text-sm font-medium">Link more characters</h4>
+            <ExternalVerificationCard />
+            {photoProof?.enabled && (proofAccessLoading ? (
+              <p className="text-sm text-muted-foreground">Checking photo proof access...</p>
+            ) : proofAccess?.submit ? (
+              <PhotoProofCard callout={photoProof.callout} />
+            ) : (
+              <div className="rounded-lg border p-4 space-y-2">
+                <h3 className="flex items-center gap-2 text-sm font-medium"><Camera className="size-4 text-muted-foreground" />Link with photo proof</h3>
+                {photoProof.callout && <p className="text-sm text-muted-foreground">{photoProof.callout}</p>}
+                <p className="text-sm text-muted-foreground">Photo proof applications are not available to your account yet.</p>
+              </div>
+            ))}
+          </div>
+        )}
+        <PhotoProofHistory />
+      </section>
 
-      {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading characters...</p>
-      ) : !characters || characters.length === 0 ? (
-        <div className="rounded-lg border p-4">
-          <p className="text-sm text-muted-foreground">
-            No characters are linked to your account yet. Use an available method above to link them,
-            or contact a site administrator for help.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {characters.map((character) => (
-            <div
-              key={`${character.realm_id}-${character.character_guid}`}
-              className="rounded-lg border p-4 flex items-center justify-between gap-4"
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <Link
-                    to={`/armory/${encodeURIComponent(character.realm_name)}/${character.character_guid}`}
-                    className="text-sm font-medium hover:underline"
-                    style={{ color: getClassColorVar(character.class) }}
-                  >
-                    {character.name}
-                  </Link>
-                  {character.is_primary && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-500">
-                      <Star className="h-3 w-3" />
-                      Primary
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground truncate">
-                  Level {character.level} {character.race} {character.class}
-                  {" · "}
-                  {character.realm_name}
-                  {character.guild_name ? ` · <${character.guild_name}>` : ""}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {!character.is_primary && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={setPrimary.isPending}
-                    onClick={() => handleSetPrimary(character)}
-                  >
-                    Set as primary
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground hover:text-destructive"
-                  disabled={unlink.isPending}
-                  onClick={() => handleUnlink(character)}
-                >
-                  Unlink
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <section className="space-y-4">
+        <SectionHeader
+          icon={Star}
+          iconClassName="fill-amber-400 text-amber-400"
+          title="Favorites"
+          count={favoriteCount}
+          description="Quick links to characters and guilds you follow. These are not linked to your account."
+        />
+        <FavoritesList data={favorites.data} isLoading={favorites.isLoading} />
+      </section>
     </div>
   );
 }

@@ -75,6 +75,7 @@ async function encodeScreenshot(file: File): Promise<Blob> {
 
 export function PhotoProofCard({ callout }: { callout?: string }) {
   const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [query, setQuery] = useState("");
@@ -98,6 +99,7 @@ export function PhotoProofCard({ callout }: { callout?: string }) {
       setFileInputKey((key) => key + 1);
       setSelected([]);
       setMessage("");
+      setOpen(false);
       queryClient.invalidateQueries({ queryKey: ["my-proofs"] });
     },
     onError: (error) => toast.error(error.message),
@@ -116,9 +118,13 @@ export function PhotoProofCard({ callout }: { callout?: string }) {
 
   return (
     <section className="rounded-lg border p-4 space-y-4">
-      <div className="flex items-center gap-2"><Camera className="h-5 w-5 text-primary" /><h3 className="font-medium">Link with photo proof</h3></div>
-      {callout && <p className="text-sm rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-yellow-500">{callout}</p>}
-      <p className="text-sm text-muted-foreground">Show your character selection screen with the realm name and every character you claim visible. Only administrators can view the screenshot. It is deleted after review.</p>
+      <div className="space-y-3">
+        <h3 className="flex items-center gap-2 text-sm font-medium"><Camera className="size-4 text-muted-foreground" />Link with photo proof</h3>
+        {callout && <p className="text-sm rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-yellow-500">{callout}</p>}
+        <p className="text-sm text-muted-foreground">Upload a screenshot of your character selection screen with the realm name and every character you claim visible. An administrator reviews it, and the screenshot is deleted after review.</p>
+        {!open && <Button variant="outline" size="sm" onClick={() => setOpen(true)}>Start a request</Button>}
+      </div>
+      {open && <div className="space-y-4 border-t pt-4">
       <label className="block text-sm space-y-1">
         <span>Character selection screenshot</span>
         <Input key={fileInputKey} type="file" accept="image/*" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
@@ -134,23 +140,49 @@ export function PhotoProofCard({ callout }: { callout?: string }) {
         {selected.map((entry) => <div key={`${entry.realm_id}-${entry.character_guid}`} className="flex items-center justify-between rounded border px-3 py-2 text-sm"><span>{entry.name} · {entry.realm_name}</span><button className="text-destructive hover:underline" type="button" onClick={() => setSelected(selected.filter((item) => item !== entry))}>Remove</button></div>)}
       </div>
       <label className="block text-sm space-y-1"><span>Message to reviewer (optional)</span><textarea className="w-full min-h-20 rounded-md border bg-background p-2" maxLength={2000} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Any context that helps verify your characters" /></label>
-      <Button disabled={!file || !selected.length || submit.isPending} onClick={() => submit.mutate()}>{submit.isPending ? "Preparing screenshot..." : "Submit proof"}</Button>
+      <div className="flex gap-2">
+        <Button disabled={!file || !selected.length || submit.isPending} onClick={() => submit.mutate()}>{submit.isPending ? "Preparing screenshot..." : "Submit proof"}</Button>
+        <Button variant="ghost" disabled={submit.isPending} onClick={() => setOpen(false)}>Cancel</Button>
+      </div>
+      </div>}
     </section>
   );
+}
+
+const PROOF_STATUS_STYLES: Record<string, string> = {
+  pending: "bg-yellow-500/15 text-yellow-500",
+  approved: "bg-green-500/15 text-green-500",
+  partial: "bg-blue-500/15 text-blue-400",
+  rejected: "bg-destructive/15 text-destructive",
+};
+
+function ProofStatus({ status }: { status: string }) {
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${PROOF_STATUS_STYLES[status] ?? "bg-muted text-muted-foreground"}`}>{status.replaceAll("_", " ")}</span>;
 }
 
 export function PhotoProofHistory() {
   const { data: history, isLoading, error } = useMyProofs();
   if (!isLoading && !error && !history?.length) return null;
-  return <section className="rounded-lg border p-4 space-y-2">
-    <h3 className="text-sm font-medium">Your photo proof requests</h3>
+  return <div className="space-y-2">
+    <h4 className="text-sm font-medium">Your photo proof requests</h4>
     {isLoading && <p className="text-sm text-muted-foreground">Loading requests...</p>}
     {error && <p className="text-sm text-destructive">Could not load request history.</p>}
-    {history?.map((request) => <div key={request.id} className="rounded border px-3 py-2 text-sm space-y-1">
-      <div className="flex justify-between gap-3"><span>{new Date(request.created_at).toLocaleDateString()} · {request.subjects.map((subject) => subject.name).join(", ")}</span><span className="capitalize text-muted-foreground">{request.status.replaceAll("_", " ")}</span></div>
-      {request.message && <p className="text-muted-foreground">Your message: {request.message}</p>}
-      {request.response && <p className="text-muted-foreground">Reviewer: {request.response}</p>}
-      {request.subjects.map((subject) => <p key={`${subject.realm_id}-${subject.character_guid}`} className="text-xs"><Link className="hover:underline" to={`/armory/${encodeURIComponent(subject.realm_name)}/${subject.character_guid}`}>{subject.name}</Link>: {subject.status}{subject.warning ? ` · ${subject.warning}` : ""}</p>)}
-    </div>)}
-  </section>;
+    {!!history?.length && <div className="divide-y rounded-lg border">
+      {history.map((request) => <div key={request.id} className="px-4 py-3 text-sm space-y-1.5">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-muted-foreground">Submitted {new Date(request.created_at).toLocaleDateString()}</span>
+          <ProofStatus status={request.status} />
+        </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {request.subjects.map((subject) => <span key={`${subject.realm_id}-${subject.character_guid}`} className="inline-flex items-center gap-1.5">
+            <Link className="font-medium hover:underline" to={`/armory/${encodeURIComponent(subject.realm_name)}/${subject.character_guid}`}>{subject.name}</Link>
+            {subject.status !== request.status && <ProofStatus status={subject.status} />}
+            {subject.warning && <span className="text-xs text-yellow-500">{subject.warning}</span>}
+          </span>)}
+        </div>
+        {request.message && <p className="text-xs text-muted-foreground">Your message: {request.message}</p>}
+        {request.response && <p className="text-xs text-muted-foreground">Reviewer: {request.response}</p>}
+      </div>)}
+    </div>}
+  </div>;
 }
