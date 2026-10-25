@@ -154,6 +154,22 @@ func (a *API) canLuaProject(w http.ResponseWriter, r *http.Request, id uuid.UUID
 	return true
 }
 
+// SQL keeps the owner predicate as defense in depth. Only a verified site
+// technical administrator may bypass it after the project permission check.
+func (a *API) luaProjectTechnicalAdmin(w http.ResponseWriter, r *http.Request) (bool, bool) {
+	actor, ok := authz.ActorFromContext(r.Context())
+	if !ok {
+		httpapi.Forbidden(w, nil)
+		return false, false
+	}
+	allowed, err := a.Opts.Zed.CheckOne(r.Context(), nil, policy.New().GlobalChronicle().CanAdminister_authz_User(actor))
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return false, false
+	}
+	return allowed, true
+}
+
 func (a *API) CreateLuaProject(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	var req chroniclesdk.CreateLuaProjectRequest
@@ -200,7 +216,11 @@ func (a *API) GetMyLuaProject(w http.ResponseWriter, r *http.Request) {
 	if !ok || !a.canLuaProject(w, r, id, false) {
 		return
 	}
-	p, err := a.Opts.Zed.GetOwnerLuaProject(r.Context(), database.GetOwnerLuaProjectParams{ID: id, OwnerID: chronauth.MustAuthenticatedClaims(r.Context()).Subject})
+	technicalAdmin, ok := a.luaProjectTechnicalAdmin(w, r)
+	if !ok {
+		return
+	}
+	p, err := a.Opts.Zed.GetOwnerLuaProject(r.Context(), database.GetOwnerLuaProjectParams{ID: id, OwnerID: chronauth.MustAuthenticatedClaims(r.Context()).Subject, TechnicalAdmin: technicalAdmin})
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Project not found."})
 		return
@@ -223,7 +243,11 @@ func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	owner := chronauth.MustAuthenticatedClaims(r.Context()).Subject
-	current, err := a.Opts.Zed.GetOwnerLuaProject(r.Context(), database.GetOwnerLuaProjectParams{ID: id, OwnerID: owner})
+	technicalAdmin, ok := a.luaProjectTechnicalAdmin(w, r)
+	if !ok {
+		return
+	}
+	current, err := a.Opts.Zed.GetOwnerLuaProject(r.Context(), database.GetOwnerLuaProjectParams{ID: id, OwnerID: owner, TechnicalAdmin: technicalAdmin})
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Project not found."})
 		return
@@ -256,7 +280,7 @@ func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 	var storedKey pgtype.Text
 	err = a.Opts.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
 		var err error
-		project, err = tx.SetLuaProjectDraft(r.Context(), database.SetLuaProjectDraftParams{ID: id, OwnerID: owner, Hash: pgtype.Text{String: digest, Valid: true}, ExpectedRevision: revision})
+		project, err = tx.SetLuaProjectDraft(r.Context(), database.SetLuaProjectDraftParams{ID: id, OwnerID: owner, TechnicalAdmin: technicalAdmin, Hash: pgtype.Text{String: digest, Valid: true}, ExpectedRevision: revision})
 		if err != nil {
 			return err
 		}
@@ -264,7 +288,7 @@ func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		return tx.PruneLuaProjectArtifacts(r.Context(), database.PruneLuaProjectArtifactsParams{ID: id, OwnerID: owner})
+		return tx.PruneLuaProjectArtifacts(r.Context(), database.PruneLuaProjectArtifactsParams{ID: id, OwnerID: owner, TechnicalAdmin: technicalAdmin})
 	}, nil)
 	if err != nil || !storedKey.Valid || storedKey.String != key {
 		a.discardLuaObject(key)
@@ -291,18 +315,22 @@ func (a *API) PublishLuaProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	owner := chronauth.MustAuthenticatedClaims(r.Context()).Subject
+	technicalAdmin, ok := a.luaProjectTechnicalAdmin(w, r)
+	if !ok {
+		return
+	}
 	var project database.LuaProject
 	err := a.Opts.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
 		var err error
 		if channel == "stable" {
-			project, err = tx.PromoteLuaProjectStable(r.Context(), database.PromoteLuaProjectStableParams{ID: id, OwnerID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: req.ExpectedRevision, TestedSha256: pgtype.Text{String: req.TestedSHA256, Valid: true}})
+			project, err = tx.PromoteLuaProjectStable(r.Context(), database.PromoteLuaProjectStableParams{ID: id, OwnerID: uuid.NullUUID{UUID: owner, Valid: true}, TechnicalAdmin: technicalAdmin, ExpectedRevision: req.ExpectedRevision, TestedSha256: pgtype.Text{String: req.TestedSHA256, Valid: true}})
 		} else {
-			project, err = tx.PublishLuaProjectUnstable(r.Context(), database.PublishLuaProjectUnstableParams{ID: id, OwnerID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: req.ExpectedRevision})
+			project, err = tx.PublishLuaProjectUnstable(r.Context(), database.PublishLuaProjectUnstableParams{ID: id, OwnerID: uuid.NullUUID{UUID: owner, Valid: true}, TechnicalAdmin: technicalAdmin, ExpectedRevision: req.ExpectedRevision})
 		}
 		if err != nil {
 			return err
 		}
-		return tx.PruneLuaProjectArtifacts(r.Context(), database.PruneLuaProjectArtifactsParams{ID: id, OwnerID: owner})
+		return tx.PruneLuaProjectArtifacts(r.Context(), database.PruneLuaProjectArtifactsParams{ID: id, OwnerID: owner, TechnicalAdmin: technicalAdmin})
 	}, nil)
 	if err == nil {
 		a.drainLuaArtifactGarbageAfterWrite()
@@ -404,7 +432,11 @@ func (a *API) DownloadMyLuaProjectDraft(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	owner := chronauth.MustAuthenticatedClaims(r.Context()).Subject
-	result, err := a.Opts.Zed.GetOwnerLuaProjectDraftPackage(r.Context(), database.GetOwnerLuaProjectDraftPackageParams{ID: id, OwnerID: owner})
+	technicalAdmin, ok := a.luaProjectTechnicalAdmin(w, r)
+	if !ok {
+		return
+	}
+	result, err := a.Opts.Zed.GetOwnerLuaProjectDraftPackage(r.Context(), database.GetOwnerLuaProjectDraftPackageParams{ID: id, OwnerID: owner, TechnicalAdmin: technicalAdmin})
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Draft package not found."})
 		return

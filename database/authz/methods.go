@@ -385,7 +385,7 @@ func (z *interceptor) CreateLuaProject(ctx context.Context, arg database.CreateL
 		return project, err
 	}
 	b := policy.New()
-	b.Lua_project(project.ID).Owner(b.User(arg.OwnerID)).Public_viewerWildcard()
+	b.Lua_project(project.ID).Owner(b.User(arg.OwnerID)).Chronicle(b.GlobalChronicle()).Public_viewerWildcard()
 	if _, err := z.Write(ctx, *b.Txn()); err != nil {
 		return database.LuaProject{}, fmt.Errorf("write lua project relations: %w", err)
 	}

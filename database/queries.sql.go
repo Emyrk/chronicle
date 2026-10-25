@@ -11399,16 +11399,17 @@ func (q *sqlQuerier) GetLuaProjectArtifact(ctx context.Context, arg GetLuaProjec
 }
 
 const getOwnerLuaProject = `-- name: GetOwnerLuaProject :one
-SELECT id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at FROM lua_projects WHERE id = $1 AND owner_id = $2
+SELECT id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at FROM lua_projects WHERE id = $1 AND (owner_id = $2 OR $3::boolean)
 `
 
 type GetOwnerLuaProjectParams struct {
-	ID      uuid.UUID `db:"id" json:"id"`
-	OwnerID uuid.UUID `db:"owner_id" json:"owner_id"`
+	ID             uuid.UUID `db:"id" json:"id"`
+	OwnerID        uuid.UUID `db:"owner_id" json:"owner_id"`
+	TechnicalAdmin bool      `db:"technical_admin" json:"technical_admin"`
 }
 
 func (q *sqlQuerier) GetOwnerLuaProject(ctx context.Context, arg GetOwnerLuaProjectParams) (LuaProject, error) {
-	row := q.db.QueryRow(ctx, getOwnerLuaProject, arg.ID, arg.OwnerID)
+	row := q.db.QueryRow(ctx, getOwnerLuaProject, arg.ID, arg.OwnerID, arg.TechnicalAdmin)
 	var i LuaProject
 	err := row.Scan(
 		&i.ID,
@@ -11434,12 +11435,13 @@ const getOwnerLuaProjectDraftPackage = `-- name: GetOwnerLuaProjectDraftPackage 
 SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.unstable_hash, p.stable_hash, p.unstable_published_at, p.unstable_published_by, p.stable_published_at, p.stable_published_by, p.created_at, p.updated_at, a.bytes, a.object_key
 FROM lua_projects p
 JOIN lua_project_artifacts a ON a.project_id = p.id AND a.hash = p.draft_hash
-WHERE p.id = $1 AND p.owner_id = $2
+WHERE p.id = $1 AND (p.owner_id = $2 OR $3::boolean)
 `
 
 type GetOwnerLuaProjectDraftPackageParams struct {
-	ID      uuid.UUID `db:"id" json:"id"`
-	OwnerID uuid.UUID `db:"owner_id" json:"owner_id"`
+	ID             uuid.UUID `db:"id" json:"id"`
+	OwnerID        uuid.UUID `db:"owner_id" json:"owner_id"`
+	TechnicalAdmin bool      `db:"technical_admin" json:"technical_admin"`
 }
 
 type GetOwnerLuaProjectDraftPackageRow struct {
@@ -11449,7 +11451,7 @@ type GetOwnerLuaProjectDraftPackageRow struct {
 }
 
 func (q *sqlQuerier) GetOwnerLuaProjectDraftPackage(ctx context.Context, arg GetOwnerLuaProjectDraftPackageParams) (GetOwnerLuaProjectDraftPackageRow, error) {
-	row := q.db.QueryRow(ctx, getOwnerLuaProjectDraftPackage, arg.ID, arg.OwnerID)
+	row := q.db.QueryRow(ctx, getOwnerLuaProjectDraftPackage, arg.ID, arg.OwnerID, arg.TechnicalAdmin)
 	var i GetOwnerLuaProjectDraftPackageRow
 	err := row.Scan(
 		&i.LuaProject.ID,
@@ -11660,14 +11662,15 @@ func (q *sqlQuerier) MarkLuaProjectArtifactGarbageAttempt(ctx context.Context, o
 const promoteLuaProjectStable = `-- name: PromoteLuaProjectStable :one
 UPDATE lua_projects SET stable_hash = unstable_hash, stable_published_at = now(), stable_published_by = $1,
  revision = revision + 1, updated_at = now()
-WHERE id = $2 AND owner_id = $1 AND kind = 'panel' AND revision = $3
- AND unstable_hash = $4 AND unstable_hash IS NOT NULL
+WHERE id = $2 AND (owner_id = $1 OR $3::boolean) AND kind = 'panel' AND revision = $4
+ AND unstable_hash = $5 AND unstable_hash IS NOT NULL
 RETURNING id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at
 `
 
 type PromoteLuaProjectStableParams struct {
 	OwnerID          uuid.NullUUID `db:"owner_id" json:"owner_id"`
 	ID               uuid.UUID     `db:"id" json:"id"`
+	TechnicalAdmin   bool          `db:"technical_admin" json:"technical_admin"`
 	ExpectedRevision int64         `db:"expected_revision" json:"expected_revision"`
 	TestedSha256     pgtype.Text   `db:"tested_sha256" json:"tested_sha256"`
 }
@@ -11676,6 +11679,7 @@ func (q *sqlQuerier) PromoteLuaProjectStable(ctx context.Context, arg PromoteLua
 	row := q.db.QueryRow(ctx, promoteLuaProjectStable,
 		arg.OwnerID,
 		arg.ID,
+		arg.TechnicalAdmin,
 		arg.ExpectedRevision,
 		arg.TestedSha256,
 	)
@@ -11703,7 +11707,7 @@ func (q *sqlQuerier) PromoteLuaProjectStable(ctx context.Context, arg PromoteLua
 const pruneLuaProjectArtifacts = `-- name: PruneLuaProjectArtifacts :exec
 WITH removed AS (
   DELETE FROM lua_project_artifacts a USING lua_projects p
-  WHERE a.project_id = p.id AND p.id = $1 AND p.owner_id = $2
+  WHERE a.project_id = p.id AND p.id = $1 AND (p.owner_id = $2 OR $3::boolean)
    AND a.hash IS DISTINCT FROM p.draft_hash AND a.hash IS DISTINCT FROM p.unstable_hash
    AND a.hash IS DISTINCT FROM p.stable_hash
   RETURNING a.object_key
@@ -11714,30 +11718,37 @@ ON CONFLICT DO NOTHING
 `
 
 type PruneLuaProjectArtifactsParams struct {
-	ID      uuid.UUID `db:"id" json:"id"`
-	OwnerID uuid.UUID `db:"owner_id" json:"owner_id"`
+	ID             uuid.UUID `db:"id" json:"id"`
+	OwnerID        uuid.UUID `db:"owner_id" json:"owner_id"`
+	TechnicalAdmin bool      `db:"technical_admin" json:"technical_admin"`
 }
 
 func (q *sqlQuerier) PruneLuaProjectArtifacts(ctx context.Context, arg PruneLuaProjectArtifactsParams) error {
-	_, err := q.db.Exec(ctx, pruneLuaProjectArtifacts, arg.ID, arg.OwnerID)
+	_, err := q.db.Exec(ctx, pruneLuaProjectArtifacts, arg.ID, arg.OwnerID, arg.TechnicalAdmin)
 	return err
 }
 
 const publishLuaProjectUnstable = `-- name: PublishLuaProjectUnstable :one
 UPDATE lua_projects SET unstable_hash = draft_hash, unstable_published_at = now(), unstable_published_by = $1,
  revision = revision + 1, updated_at = now()
-WHERE id = $2 AND owner_id = $1 AND kind = 'panel' AND revision = $3 AND draft_hash IS NOT NULL
+WHERE id = $2 AND (owner_id = $1 OR $3::boolean) AND kind = 'panel' AND revision = $4 AND draft_hash IS NOT NULL
 RETURNING id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at
 `
 
 type PublishLuaProjectUnstableParams struct {
 	OwnerID          uuid.NullUUID `db:"owner_id" json:"owner_id"`
 	ID               uuid.UUID     `db:"id" json:"id"`
+	TechnicalAdmin   bool          `db:"technical_admin" json:"technical_admin"`
 	ExpectedRevision int64         `db:"expected_revision" json:"expected_revision"`
 }
 
 func (q *sqlQuerier) PublishLuaProjectUnstable(ctx context.Context, arg PublishLuaProjectUnstableParams) (LuaProject, error) {
-	row := q.db.QueryRow(ctx, publishLuaProjectUnstable, arg.OwnerID, arg.ID, arg.ExpectedRevision)
+	row := q.db.QueryRow(ctx, publishLuaProjectUnstable,
+		arg.OwnerID,
+		arg.ID,
+		arg.TechnicalAdmin,
+		arg.ExpectedRevision,
+	)
 	var i LuaProject
 	err := row.Scan(
 		&i.ID,
@@ -11780,13 +11791,14 @@ func (q *sqlQuerier) PutLuaProjectArtifact(ctx context.Context, arg PutLuaProjec
 
 const setLuaProjectDraft = `-- name: SetLuaProjectDraft :one
 UPDATE lua_projects SET draft_hash = $1, revision = revision + 1, updated_at = now()
-WHERE id = $2 AND owner_id = $3 AND revision = $4 RETURNING id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at
+WHERE id = $2 AND (owner_id = $3 OR $4::boolean) AND revision = $5 RETURNING id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at
 `
 
 type SetLuaProjectDraftParams struct {
 	Hash             pgtype.Text `db:"hash" json:"hash"`
 	ID               uuid.UUID   `db:"id" json:"id"`
 	OwnerID          uuid.UUID   `db:"owner_id" json:"owner_id"`
+	TechnicalAdmin   bool        `db:"technical_admin" json:"technical_admin"`
 	ExpectedRevision int64       `db:"expected_revision" json:"expected_revision"`
 }
 
@@ -11795,6 +11807,7 @@ func (q *sqlQuerier) SetLuaProjectDraft(ctx context.Context, arg SetLuaProjectDr
 		arg.Hash,
 		arg.ID,
 		arg.OwnerID,
+		arg.TechnicalAdmin,
 		arg.ExpectedRevision,
 	)
 	var i LuaProject
