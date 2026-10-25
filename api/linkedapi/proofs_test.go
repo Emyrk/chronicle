@@ -2,14 +2,18 @@ package linkedapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"image"
 	"image/jpeg"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
@@ -21,8 +25,47 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/testservices"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/require"
 )
+
+type proofNotificationQueue struct {
+	args chroniclebot.ArgsNotifyAdmin
+	err  error
+}
+
+func (q *proofNotificationQueue) Insert(_ context.Context, args river.JobArgs, _ *river.InsertOpts) (*rivertype.JobInsertResult, error) {
+	q.args = args.(chroniclebot.ArgsNotifyAdmin)
+	return nil, q.err
+}
+
+func TestProofNotificationIsBestEffort(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(testservices.Authz(t))
+	applicantID := uuid.New()
+	_, err := zed.InsertUser(ctx, database.InsertUserParams{ID: applicantID, Username: "applicant-" + applicantID.String()[:8]})
+	require.NoError(t, err)
+	bot, err := chroniclebot.New(ctx, testutil.Logger(t), chroniclebot.Config{Token: "test", AdminNotificationsChannelID: "review-channel"})
+	require.NoError(t, err)
+	queue := &proofNotificationQueue{err: errors.New("queue unavailable")}
+	h := &Handler{zed: zed, bot: bot, queue: queue, accessURL: &url.URL{Scheme: "https", Host: "chronicle.example"}}
+	requestID := uuid.New()
+	subjects := []serviceproof.Subject{{Type: "character", Name: "Example", RealmName: "Realm"}}
+	// A failed queue insertion has no error return to propagate to the applicant.
+	h.notifyPhotoProof(ctx, requestID, applicantID, "Turtle", subjects)
+	require.Equal(t, "New character-link photo proof", queue.args.Title)
+	require.Contains(t, queue.args.Fields[0].Value, applicantID.String())
+	require.Equal(t, "Turtle", queue.args.Fields[1].Value)
+	require.Equal(t, "Example (Realm)", queue.args.Fields[2].Value)
+	require.Equal(t, requestID.String(), queue.args.Fields[3].Value)
+	require.Equal(t, "https://chronicle.example/admin/photo-proofs", queue.args.URL)
+	require.Equal(t, "review-channel", queue.args.ChannelID)
+	// Missing queue configuration is equally non-fatal.
+	h.queue = nil
+	h.notifyPhotoProof(ctx, requestID, applicantID, "Turtle", subjects)
+}
 
 func TestValidProofCharacters(t *testing.T) {
 	t.Parallel()

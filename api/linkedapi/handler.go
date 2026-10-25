@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"net/url"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -16,6 +17,8 @@ import (
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue"
+	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
@@ -25,20 +28,19 @@ import (
 )
 
 type Handler struct {
-	zed    *authz.Authz
-	proofs *serviceproof.Service
-	auth   *chronauth.Service
+	zed       *authz.Authz
+	proofs    *serviceproof.Service
+	auth      *chronauth.Service
+	queue     chroniclebot.AdminNotificationInserter
+	bot       *chroniclebot.Bot
+	accessURL *url.URL
 	// externalVerification is the deployment's external verification
 	// provider config (nil when disabled).
 	externalVerification *chroniclesdk.ExternalVerification
 }
 
-func New(zed *authz.Authz, auth *chronauth.Service, externalVerification *chroniclesdk.ExternalVerification, objectStorage ...storage.ObjectStorage) *Handler {
-	var objects storage.ObjectStorage
-	if len(objectStorage) > 0 {
-		objects = objectStorage[0]
-	}
-	return &Handler{zed: zed, auth: auth, externalVerification: externalVerification, proofs: serviceproof.New(zed, objects)}
+func New(zed *authz.Authz, auth *chronauth.Service, externalVerification *chroniclesdk.ExternalVerification, objects storage.ObjectStorage, queue *riverqueue.Queues, bot *chroniclebot.Bot, accessURL *url.URL) *Handler {
+	return &Handler{zed: zed, auth: auth, externalVerification: externalVerification, proofs: serviceproof.New(zed, objects), queue: queue, bot: bot, accessURL: accessURL}
 }
 
 // Routes returns the router for the linked service, mounted at /linked.

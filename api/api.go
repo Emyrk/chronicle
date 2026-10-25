@@ -326,7 +326,7 @@ func (api *API) Routes() chi.Router {
 			r.Mount("/gear-builder", gearbuilderapi.New(api.Opts.Zed, api.Auth, api.Opts.CacheSvc).Routes())
 			r.Mount("/gear-progressions", gearprogressionapi.New(api.Opts.Zed, api.Auth).Routes())
 			// Account↔character link management.
-			r.Mount("/linked", linkedapi.New(api.Opts.Zed, api.Auth, api.Opts.ExternalVerification, api.Opts.Storage).Routes())
+			r.Mount("/linked", linkedapi.New(api.Opts.Zed, api.Auth, api.Opts.ExternalVerification, api.Opts.Storage, api.Opts.RiverQueue, api.Opts.Bot, api.Opts.AccessURL).Routes())
 			gameDataHandler := gamedataapi.New(api.Opts.Zed, api.Auth, api.Opts.Pool, api.Opts.CacheSvc)
 			r.Mount("/game-data", gameDataHandler.Routes())
 			r.Mount("/azerothcore", serviceazerothcore.New(api.Opts.Logger, api.Opts.Zed, api.Auth, api.Chronicle).Routes())

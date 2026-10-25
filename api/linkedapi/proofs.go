@@ -5,15 +5,19 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
@@ -172,12 +176,52 @@ func (h *Handler) SubmitProof(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
+	h.notifyPhotoProof(ctx, id, user, tenant.Name, subjects)
 	result, err := h.proofResponse(ctx, serviceproof.Scope{TenantID: tenant.ID}, id)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 	httpapi.Write(ctx, w, http.StatusCreated, result)
+}
+
+// notifyPhotoProof is best effort: a Discord or River failure never reverses a
+// submitted proof or changes its HTTP response.
+func (h *Handler) notifyPhotoProof(ctx context.Context, id, applicantID uuid.UUID, tenantName string, subjects []serviceproof.Subject) {
+	if h.bot == nil || h.bot.Disabled() || h.bot.AdminNotificationsChannelID() == "" {
+		return
+	}
+	if h.accessURL == nil {
+		slog.ErrorContext(ctx, "photo proof notification URL unavailable", "request_id", id)
+		return
+	}
+	// The proof has committed. A disconnected client should not cancel the
+	// short attempt to enqueue its notification.
+	notifyCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	applicantName := applicantID.String()
+	if applicant, err := h.zed.GetUserByID(notifyCtx, applicantID); err != nil {
+		slog.WarnContext(notifyCtx, "photo proof applicant lookup failed", "request_id", id, "error", err)
+	} else if applicant.Username != "" {
+		applicantName = fmt.Sprintf("%s (%s)", applicant.Username, applicantID)
+	}
+	characters := make([]string, len(subjects))
+	for i, subject := range subjects {
+		characters[i] = fmt.Sprintf("%s (%s)", subject.Name, subject.RealmName)
+	}
+	err := chroniclebot.EnqueueAdminNotification(notifyCtx, h.queue, h.bot, chroniclebot.ArgsNotifyAdmin{
+		Title: "New character-link photo proof",
+		URL:   strings.TrimRight(h.accessURL.String(), "/") + "/admin/photo-proofs",
+		Fields: []chroniclebot.AdminNotificationField{
+			{Name: "Applicant", Value: applicantName, Inline: true},
+			{Name: "Tenant", Value: tenantName, Inline: true},
+			{Name: "Characters", Value: strings.Join(characters, "\n")},
+			{Name: "Request", Value: id.String()},
+		},
+	})
+	if err != nil {
+		slog.ErrorContext(notifyCtx, "failed to enqueue photo proof notification", "request_id", id, "error", err)
+	}
 }
 
 func validProofCharacters(choices []chroniclesdk.ProofCharacter) bool {

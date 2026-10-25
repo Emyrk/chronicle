@@ -22,6 +22,7 @@ type Config struct {
 	Token string
 	// GuildID is your Discord server ID. If empty, commands are registered globally.
 	GuildID                      string
+	AdminNotificationsChannelID  string
 	Disabled                     bool
 	MembershipGrantChecksPerHour int64
 	DB                           database.Store
@@ -103,6 +104,14 @@ func (b *Bot) Session() *discordgo.Session {
 
 func (b *Bot) ChronicleGuildID() string {
 	return b.config.GuildID
+}
+
+// AdminNotificationsChannelID is the configured private admin notification channel.
+func (b *Bot) AdminNotificationsChannelID() string {
+	if b == nil {
+		return ""
+	}
+	return b.config.AdminNotificationsChannelID
 }
 
 // JobInserter is the interface for inserting River jobs.
