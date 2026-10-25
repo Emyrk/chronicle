@@ -3010,6 +3010,11 @@ export interface PlayerTalents {
     ];
 }
 
+// From chroniclesdk/log.go
+export type PositionCoordinateSpace = "ui-map-normalized" | "world";
+
+export const PositionCoordinateSpaces: PositionCoordinateSpace[] = ["ui-map-normalized", "world"];
+
 // From chroniclesdk/user.go
 export interface Preferences {
     readonly helpful_hints: boolean;
@@ -5103,6 +5108,7 @@ export interface WoWInstance {
     readonly end_time?: string;
     readonly guild?: Guild;
     readonly capabilities: readonly string[];
+    readonly position_coordinate_space?: PositionCoordinateSpace;
     readonly versions: Record<string, string>;
     readonly recorder_name: string;
     readonly recorder_guid: string;

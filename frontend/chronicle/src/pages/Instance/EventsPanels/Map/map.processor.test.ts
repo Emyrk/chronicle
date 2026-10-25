@@ -126,13 +126,18 @@ describe("mapProcessor", () => {
       };
 
       // Places the attacker `distance` yards from the boss before the hit.
-      function attackOf(event: DamageProcessorEvent, distance: number | null) {
+      function attackOf(
+        event: DamageProcessorEvent,
+        distance: number | null,
+        positionCoordinateSpace: ProcessorContext["positionCoordinateSpace"] = "world",
+      ) {
         const state = mapProcessor.createState();
+        const attackContext = { ...context, positionCoordinateSpace };
         if (distance !== null) {
-          mapProcessor.processEvent(state, position("boss", 100, 0, 0), "encounter", start, "unit_position", context);
-          mapProcessor.processEvent(state, position("attacker", 100, distance, 0), "encounter", start, "unit_position", context);
+          mapProcessor.processEvent(state, position("boss", 100, 0, 0), "encounter", start, "unit_position", attackContext);
+          mapProcessor.processEvent(state, position("attacker", 100, distance, 0), "encounter", start, "unit_position", attackContext);
         }
-        mapProcessor.processEvent(state, event, "encounter", start, "damage", context);
+        mapProcessor.processEvent(state, event, "encounter", start, "damage", attackContext);
         return state.encounters.get("encounter")!.effects.events[0].attack;
       }
 
@@ -149,6 +154,14 @@ describe("mapProcessor", () => {
         { name: "a hit without spell data or positions", event: hit, distance: null, attack: "swing" },
       ])("classifies $name as $attack", ({ event, distance, attack }) => {
         expect(attackOf(event, distance)).toBe(attack);
+      });
+
+      it("does not treat normalized UI map deltas as yard distances", () => {
+        expect(attackOf(
+          { ...hit, spellId: 78, sourceName: "Heroic Strike" },
+          0.04,
+          "ui-map-normalized",
+        )).toBe("spell");
       });
     });
 

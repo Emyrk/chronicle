@@ -575,6 +575,9 @@ export interface SerializableProcessorContext {
   /** Server-computed feature flags for this instance (e.g., "overheal"). */
   capabilities?: readonly string[];
 
+  /** Coordinate system used by unit-position telemetry. */
+  positionCoordinateSpace?: "world" | "ui-map-normalized";
+
   /** Optional event filters evaluated before processor.processEvent. */
   filters?: PanelFilter[];
 }
@@ -609,6 +612,9 @@ export interface ProcessorContext {
 
   /** Server-computed feature flags for this instance (e.g., "overheal"). */
   capabilities?: readonly string[];
+
+  /** Coordinate system used by unit-position telemetry. */
+  positionCoordinateSpace?: "world" | "ui-map-normalized";
 
   /** Optional event filters evaluated before processor.processEvent. */
   filters?: PanelFilter[];

@@ -34,6 +34,7 @@ import {
   selectHealthBars,
   selectMapEncounter,
   unitFocusBounds,
+  uiMapPoint,
   zoneMapPoint,
   type MapPoint,
   type MapPointBounds,
@@ -342,8 +343,14 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     : props.context.instance.encounters.find((candidate) => candidate.id === encounter?.encounterId);
   const encounterMapId = instanceEncounter?.mapId ?? 0;
   const artworkMapId = encounterMapId || mapId;
+  const normalizedUIMap = props.context.instance.positionCoordinateSpace === "ui-map-normalized";
   const artwork = manifestQuery.data && artworkMapId !== null
-    ? resolveMapArtwork(manifestQuery.data, artworkMapId, representativeSample, props.context.instance.name)
+    ? resolveMapArtwork(
+      manifestQuery.data,
+      artworkMapId,
+      normalizedUIMap ? undefined : representativeSample,
+      props.context.instance.name,
+    )
     : null;
   const [floorNumber, setFloorNumber] = useState<number | null>(null);
 
@@ -353,7 +360,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     // name its mesh so the (large) download can start now.
     const selectedMapId = props.context.instance.encounters.find((candidate) => candidate.id === props.context.selectedEncounterIds[0])?.mapId;
     const hintArtwork = manifestQuery.data && selectedMapId ? resolveMapArtwork(manifestQuery.data, selectedMapId, undefined, props.context.instance.name) : null;
-    const meshHint = hintArtwork?.kind === "instance" ? placeableDungeonMesh(hintArtwork.instance.mesh) : null;
+    const meshHint = !normalizedUIMap && hintArtwork?.kind === "instance" ? placeableDungeonMesh(hintArtwork.instance.mesh) : null;
     return { status: "message", title: "Loading map", detail: "Fetching artwork and position telemetry…", meshHint };
   }
   if (manifestQuery.error) return { status: "message", title: "Map artwork unavailable", detail: manifestQuery.error.message };
@@ -373,7 +380,8 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const selectedFloor = artwork.kind === "instance"
     ? artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0]
     : undefined;
-  const mesh = artwork.kind === "instance" ? placeableDungeonMesh(artwork.instance.mesh) : null;
+  // GetPlayerMapPosition coordinates only place units on 2D UI map artwork.
+  const mesh = !normalizedUIMap && artwork.kind === "instance" ? placeableDungeonMesh(artwork.instance.mesh) : null;
   // A mesh-only instance has no floor to fall back on, so its mesh is the
   // canvas from the start (while the mesh loads too), not only once asked.
   // Replay uses native floors or the mesh, never an uncalibrated manual image.
@@ -381,7 +389,9 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const meshOnly = artwork.kind === "instance" && (isMeshOnlyInstance(artwork.instance) || (!selectedFloor && mesh !== null));
   const rawProjection = (Boolean(options.rawDungeonProjection) || meshOnly) && mesh !== null;
   const meshCanvas = rawProjection && mesh ? dungeonMeshCanvas(mesh) : null;
-  const renderCanvas = artwork.kind === "instance" && !meshCanvas && !selectedFloor?.bounds ? boundedRenderCanvas(artwork.instance) : null;
+  const renderCanvas = !normalizedUIMap && artwork.kind === "instance" && !meshCanvas && !selectedFloor?.bounds
+    ? boundedRenderCanvas(artwork.instance)
+    : null;
   const canvas = artwork.kind === "zone" ? zoneSelection?.layer : meshCanvas ?? renderCanvas ?? selectedFloor;
   if (!canvas) return { status: "message", title: "Map artwork unavailable", detail: "No renderable map layer was published." };
 
@@ -393,17 +403,19 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       (guid) => props.context.instance.units?.[guid]?.entry,
     )
     : null;
-  const overlayAvailable = Boolean(dungeonBounds)
-    && (artwork.kind !== "instance" || artwork.instance.mapID !== 43 || rawProjection || renderCanvas !== null || dungeonCalibration !== null);
-  const projectSample = (sample: MapPositionSample): MapPoint | null => artwork.kind === "zone"
-    ? zoneMapPoint(sample, artwork.assignment)
-    : dungeonBounds && overlayAvailable
-      ? meshCanvas || renderCanvas
-        ? renderedDungeonMapPoint(sample, dungeonBounds)
-        : dungeonCalibration
-          ? calibratedDungeonMapPoint(sample, dungeonBounds, dungeonCalibration)
-          : dungeonMapPoint(sample, dungeonBounds)
-      : null;
+  const overlayAvailable = normalizedUIMap || (Boolean(dungeonBounds)
+    && (artwork.kind !== "instance" || artwork.instance.mapID !== 43 || rawProjection || renderCanvas !== null || dungeonCalibration !== null));
+  const projectSample = (sample: MapPositionSample): MapPoint | null => normalizedUIMap
+    ? uiMapPoint(sample)
+    : artwork.kind === "zone"
+      ? zoneMapPoint(sample, artwork.assignment)
+      : dungeonBounds && overlayAvailable
+        ? meshCanvas || renderCanvas
+          ? renderedDungeonMapPoint(sample, dungeonBounds)
+          : dungeonCalibration
+            ? calibratedDungeonMapPoint(sample, dungeonBounds, dungeonCalibration)
+            : dungeonMapPoint(sample, dungeonBounds)
+        : null;
 
   const selectedPlayers = props.context.entitySelection.playerIds;
   const bossGuids = new Set((wholeRun ? props.context.instance.encounters : instanceEncounter ? [instanceEncounter] : [])
@@ -455,7 +467,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   }
   const projectionKey = artwork.kind === "zone"
     ? `zone:${artwork.map.id}:${artwork.assignment.id}`
-    : `instance:${artwork.instance.mapID}:${selectedFloorNumber}:${overlayAvailable}:${meshCanvas ? "mesh" : renderCanvas ? "render" : "calibrated"}`;
+    : `instance:${artwork.instance.mapID}:${selectedFloorNumber}:${overlayAvailable}:${normalizedUIMap ? "ui-map" : meshCanvas ? "mesh" : renderCanvas ? "render" : "calibrated"}`;
   // The run's camera follows the party, so the bounds scan of the whole run is skipped.
   const focus = wholeRun ? null : cachedFocusBounds(
     encounter.positionsByUnit,
@@ -469,7 +481,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
         bounds,
         autoFit: autoFitViewport(bounds, {
           minSpanYards: AUTO_FIT_MIN_SPAN_YARDS,
-          scale: projectionScale(projectSample, centre.sample),
+          scale: normalizedUIMap ? null : projectionScale(projectSample, centre.sample),
           centre: centrePoint,
         }),
         centre: centrePoint,
@@ -487,7 +499,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       followCentre = { leftPercent: snap(centre.leftPercent), topPercent: snap(centre.topPercent) };
       followViewport = autoFitViewport(
         { minLeft: followCentre.leftPercent, maxLeft: followCentre.leftPercent, minTop: followCentre.topPercent, maxTop: followCentre.topPercent },
-        { minSpanYards: FOLLOW_SPAN_YARDS, scale: projectionScale(projectSample, reference), centre: followCentre },
+        { minSpanYards: FOLLOW_SPAN_YARDS, scale: normalizedUIMap ? null : projectionScale(projectSample, reference), centre: followCentre },
       );
     }
   }

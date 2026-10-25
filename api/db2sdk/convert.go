@@ -253,6 +253,18 @@ func WoWInstanceWithGuild(instance database.LogInstance, dbG *database.Guild) ch
 	return ret
 }
 
+func positionCoordinateSpace(format database.NullLogFormat) chroniclesdk.PositionCoordinateSpace {
+	if !format.Valid {
+		return ""
+	}
+	switch format.LogFormat {
+	case database.LogFormat243CcAddon, database.LogFormat335aCcAddon:
+		return chroniclesdk.PositionCoordinateSpaceUIMapNormalized
+	default:
+		return chroniclesdk.PositionCoordinateSpaceWorld
+	}
+}
+
 func WoWInstance(instance database.LogInstancesGuild) chroniclesdk.WoWInstance {
 	invalidatedAt, invalidReason := invalidation(instance.InvalidatedAt, instance.InvalidReason)
 	var g *chroniclesdk.Guild
@@ -271,6 +283,7 @@ func WoWInstance(instance database.LogInstancesGuild) chroniclesdk.WoWInstance {
 		Slug:                    instance.HashedSlug.String,
 		Guild:                   g,
 		Capabilities:            instance.Capabilities,
+		PositionCoordinateSpace: positionCoordinateSpace(instance.Format),
 		Versions:                map[string]string(instance.Versions),
 		RecorderName:            instance.RecorderName,
 		RecorderGUID:            instance.RecorderGuid,

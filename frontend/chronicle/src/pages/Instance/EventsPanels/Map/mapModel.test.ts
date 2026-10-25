@@ -36,6 +36,7 @@ import {
   resolveMapArtwork,
   selectHealthBars,
   selectMapEncounter,
+  uiMapPoint,
   zoneMapPoint,
   type MapViewport,
 } from "./mapModel";
@@ -276,6 +277,13 @@ describe("map replay model", () => {
       mapId: 0,
       facing: 0,
     }, "Emerald Sanctum")).toMatchObject({ kind: "zone", map: { id: 678, name: "Emerald Sanctum" } });
+  });
+
+  it("projects normalized UI map coordinates directly onto the artwork", () => {
+    expect(uiMapPoint({ timestampMs: 0, x: 0.3582, y: 0.8466, mapId: 521 })).toEqual({
+      leftPercent: 35.82,
+      topPercent: 84.66,
+    });
   });
 
   it("converts world coordinates using UiMapAssignment axis order", () => {
