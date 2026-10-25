@@ -33,6 +33,13 @@ type ProofRequest struct {
 	Subjects    []ProofSubject `json:"subjects"`
 }
 
+// ProofCooldownResponse is the account's next eligible submission time for
+// character-link photo proof, regardless of which tenant receives the request.
+type ProofCooldownResponse struct {
+	NextSubmissionAt *time.Time `json:"next_submission_at,omitempty"`
+	Message          string     `json:"message,omitempty"`
+}
+
 // TenantProofGrant assigns photo-proof permissions to one user on one tenant.
 type TenantProofGrant struct {
 	UserID uuid.UUID `json:"user_id"`

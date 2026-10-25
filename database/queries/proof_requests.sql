@@ -1,3 +1,18 @@
+-- name: LockProofApplicant :one
+-- Serialize submissions by the same account across all tenants. Locking the
+-- applicant, not a proof row, also works for their first request.
+SELECT id FROM users WHERE id = $1 FOR UPDATE;
+
+-- name: GetProofCooldown :one
+-- Do not tenant-filter: switching sites must not bypass the account limit.
+-- Limit per workflow so future guild proofs have an independent cooldown.
+-- The existing proof_requests_applicant_created index supports this lookup.
+SELECT (created_at + interval '24 hours')::timestamptz AS next_submission_at
+FROM proof_requests
+WHERE applicant_id = $1 AND purpose = $2 AND created_at > now() - interval '24 hours'
+ORDER BY created_at DESC
+LIMIT 1;
+
 -- name: InsertProofRequest :one
 INSERT INTO proof_requests (id, applicant_id, purpose, evidence_key, message, tenant_id)
 VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;

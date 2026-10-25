@@ -18,6 +18,7 @@ import (
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const Bucket = "proof-evidence"
@@ -42,6 +43,37 @@ func (scope Scope) context(ctx context.Context) context.Context {
 		return servicetenant.AdminBypass(ctx)
 	}
 	return ctx
+}
+
+// CooldownError reports when the applicant can submit another proof of this
+// purpose. It is returned only after a successful submission has committed.
+type CooldownError struct {
+	NextSubmissionAt time.Time
+}
+
+func (e *CooldownError) Error() string { return "proof submission is on cooldown" }
+
+// Cooldown is account-wide across tenants, but independent per proof purpose.
+// Callers may use the time to display the remaining wait before submission.
+func (s *Service) Cooldown(ctx context.Context, applicant uuid.UUID, purpose string) (*time.Time, error) {
+	return proofCooldown(ctx, s.db, applicant, purpose)
+}
+
+func proofCooldown(ctx context.Context, db interface {
+	GetProofCooldown(context.Context, database.GetProofCooldownParams) (pgtype.Timestamptz, error)
+}, applicant uuid.UUID, purpose string) (*time.Time, error) {
+	next, err := db.GetProofCooldown(ctx, database.GetProofCooldownParams{ApplicantID: applicant, Purpose: purpose})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !next.Valid || !next.Time.After(time.Now()) {
+		return nil, nil
+	}
+	t := next.Time
+	return &t, nil
 }
 
 // Service stores and reviews evidence independent of the kind of ownership
@@ -119,6 +151,13 @@ func (s *Service) Create(ctx context.Context, tenantID, applicant uuid.UUID, pur
 	if err := ValidateJPEG(image); err != nil {
 		return uuid.Nil, err
 	}
+	// Avoid uploading evidence for an account already on cooldown. The
+	// transaction below rechecks under an applicant row lock for races.
+	if next, err := s.Cooldown(ctx, applicant, purpose); err != nil {
+		return uuid.Nil, err
+	} else if next != nil {
+		return uuid.Nil, &CooldownError{NextSubmissionAt: *next}
+	}
 	id := uuid.New()
 	key := id.String() + ".jpg"
 	mime := "image/jpeg"
@@ -126,6 +165,16 @@ func (s *Service) Create(ctx context.Context, tenantID, applicant uuid.UUID, pur
 		return uuid.Nil, err
 	}
 	err := s.db.InTx(ctx, func(tx *authz.AuthzTX) error {
+		if _, err := tx.LockProofApplicant(ctx, applicant); err != nil {
+			return err
+		}
+		next, err := proofCooldown(ctx, tx, applicant, purpose)
+		if err != nil {
+			return err
+		}
+		if next != nil {
+			return &CooldownError{NextSubmissionAt: *next}
+		}
 		if _, err := tx.InsertProofRequest(ctx, database.InsertProofRequestParams{ID: id, TenantID: tenantID, ApplicantID: applicant, Purpose: purpose, EvidenceKey: key, Message: message}); err != nil {
 			return err
 		}

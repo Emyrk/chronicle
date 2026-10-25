@@ -59,6 +59,7 @@ func (h *Handler) Routes() http.Handler {
 		r.Route("/me", func(r chi.Router) {
 			r.Get("/", h.ListMyCharacters)
 			r.With(h.proofPermission(false)).Post("/proofs", h.SubmitProof)
+			r.Get("/proofs/cooldown", h.GetMyProofCooldown)
 			r.Get("/proofs", h.ListMyProofs)
 			r.Put("/primary", h.SetMyPrimaryCharacter)
 			// Sync links from the deployment's external verification

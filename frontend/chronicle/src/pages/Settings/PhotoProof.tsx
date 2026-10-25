@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Camera, Check, ImageUp, Maximize2, Search } from "lucide-react";
 import { useArmorySearch } from "@/api/queries";
-import type { ArmorySearchResult } from "@/api/typesGenerated";
+import type { ArmorySearchResult, ProofCooldownResponse } from "@/api/typesGenerated";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,6 +52,25 @@ function useMyProofs() {
       return response.json() as Promise<ProofRequest[]>;
     },
   });
+}
+
+function useProofCooldown() {
+  return useQuery({
+    queryKey: ["proof-cooldown"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/linked/me/proofs/cooldown", { credentials: "include" });
+      if (!response.ok) throw new Error("Could not check proof cooldown");
+      return response.json() as Promise<ProofCooldownResponse>;
+    },
+    staleTime: 30_000,
+  });
+}
+
+function cooldownText(remainingMs: number) {
+  const minutes = Math.ceil(remainingMs / 60_000);
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return hours ? `${hours}h${rest ? ` ${rest}m` : ""}` : `${minutes}m`;
 }
 
 // The browser handles source formats (PNG, WebP, HEIC where supported). Never
@@ -151,6 +170,15 @@ function ProofExample() {
 
 export function PhotoProofCard({ callout }: { callout?: string }) {
   const queryClient = useQueryClient();
+  const cooldown = useProofCooldown();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const nextSubmissionAt = cooldown.data?.next_submission_at;
+  const remainingMs = Math.max(0, (nextSubmissionAt ? Date.parse(nextSubmissionAt) : 0) - now);
+  const cannotSubmit = cooldown.isLoading || cooldown.isError || remainingMs > 0;
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
@@ -165,7 +193,13 @@ export function PhotoProofCard({ callout }: { callout?: string }) {
       form.append("photo", await encodeScreenshot(file), "character-select.jpg");
       form.append("characters", JSON.stringify(selected.map(({ realm_id, character_guid }) => ({ realm_id, character_guid }))));
       form.append("message", message.trim());
-      return proofResponse(await fetch("/api/v1/linked/me/proofs", { method: "POST", credentials: "include", body: form }));
+      const response = await fetch("/api/v1/linked/me/proofs", { method: "POST", credentials: "include", body: form });
+      if (response.status === 429) {
+        const body = await response.json().catch(() => null) as ProofCooldownResponse | null;
+        if (body?.next_submission_at) queryClient.setQueryData<ProofCooldownResponse>(["proof-cooldown"], body);
+        throw new Error(body?.message ?? "Only one photo proof request is allowed every 24 hours");
+      }
+      return proofResponse(response);
     },
     onSuccess: (request) => {
       toast.success("Proof submitted for review");
@@ -176,6 +210,10 @@ export function PhotoProofCard({ callout }: { callout?: string }) {
       setSelected([]);
       setMessage("");
       setOpen(false);
+      queryClient.setQueryData<ProofCooldownResponse>(["proof-cooldown"], {
+        next_submission_at: new Date(Date.parse(request.created_at) + 24 * 60 * 60_000).toISOString(),
+      });
+      queryClient.invalidateQueries({ queryKey: ["proof-cooldown"] });
       queryClient.invalidateQueries({ queryKey: ["my-proofs"] });
     },
     onError: (error) => toast.error(error.message),
@@ -198,7 +236,10 @@ export function PhotoProofCard({ callout }: { callout?: string }) {
         <h3 className="flex items-center gap-2 text-sm font-medium"><Camera className="size-4 text-muted-foreground" />Link with photo proof</h3>
         {callout && <p className="text-sm rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-yellow-500">{callout}</p>}
         <p className="text-sm text-muted-foreground">Upload a screenshot of your character selection screen with the realm name and every character you claim visible. An administrator reviews it, and the screenshot is deleted after review.</p>
-        {!open && <Button variant="outline" size="sm" onClick={() => setOpen(true)}>Start a request</Button>}
+        {cooldown.isLoading && <p className="text-sm text-muted-foreground">Checking your submission cooldown...</p>}
+        {cooldown.isError && <p className="text-sm text-destructive">Could not check your cooldown. Refresh the page to try again.</p>}
+        {remainingMs > 0 && nextSubmissionAt && <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-500">Cooldown: {cooldownText(remainingMs)} remaining. You can submit another request after {new Date(nextSubmissionAt).toLocaleString()}.</p>}
+        {!open && <Button variant="outline" size="sm" disabled={cannotSubmit} onClick={() => setOpen(true)}>Start a request</Button>}
       </div>
       {open && <div className="space-y-6 border-t pt-4">
       <div className="space-y-2">
@@ -235,7 +276,7 @@ export function PhotoProofCard({ callout }: { callout?: string }) {
         <StepLabel step={3} title="Submit for review" htmlFor="proof-message" />
         <textarea id="proof-message" className="w-full min-h-20 rounded-md border bg-background p-2 text-sm" maxLength={2000} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Optional message to the reviewer, with any context that helps verify your characters" />
         <div className="flex gap-2">
-          <Button disabled={!file || !selected.length || submit.isPending} onClick={() => submit.mutate()}>{submit.isPending ? "Preparing screenshot..." : "Submit proof"}</Button>
+          <Button disabled={!file || !selected.length || submit.isPending || cannotSubmit} onClick={() => submit.mutate()}>{submit.isPending ? "Preparing screenshot..." : "Submit proof"}</Button>
           <Button variant="ghost" disabled={submit.isPending} onClick={() => setOpen(false)}>Cancel</Button>
         </div>
       </div>

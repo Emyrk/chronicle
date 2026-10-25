@@ -7,6 +7,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -71,6 +73,14 @@ func proofError(w http.ResponseWriter, r *http.Request, status int, message stri
 	httpapi.Write(r.Context(), w, status, chroniclesdk.Response{Message: message})
 }
 
+func writeProofCooldown(w http.ResponseWriter, r *http.Request, next time.Time) {
+	w.Header().Set("Retry-After", strconv.Itoa(max(1, int(time.Until(next).Seconds())+1)))
+	httpapi.Write(r.Context(), w, http.StatusTooManyRequests, chroniclesdk.ProofCooldownResponse{
+		Message:          "Only one photo proof request is allowed every 24 hours",
+		NextSubmissionAt: &next,
+	})
+}
+
 // SubmitProof validates character-specific selections before handing the
 // evidence and request lifecycle to the shared proof service.
 func (h *Handler) SubmitProof(w http.ResponseWriter, r *http.Request) {
@@ -83,6 +93,18 @@ func (h *Handler) SubmitProof(w http.ResponseWriter, r *http.Request) {
 	config := chroniclesdk.ParseExternalLinking(tenant.ExternalLinking)
 	if config == nil || !config.Methods["photo-proof"].Enabled {
 		proofError(w, r, http.StatusForbidden, "Photo proof is not enabled for this site")
+		return
+	}
+	user := chronauth.AuthenticationState(r).Claims.Subject
+	// Reject an existing cooldown before reading and decoding an image. The
+	// proof service rechecks under the applicant row lock before insertion.
+	next, err := h.proofs.Cooldown(ctx, user, "character-link")
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if next != nil {
+		writeProofCooldown(w, r, *next)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, serviceproof.MaxImage+64*1024)
@@ -135,8 +157,12 @@ func (h *Handler) SubmitProof(w http.ResponseWriter, r *http.Request) {
 			CharacterGUID: &choices[i].CharacterGUID, Name: players[i].Name, RealmName: players[i].RealmName,
 		}
 	}
-	user := chronauth.AuthenticationState(r).Claims.Subject
 	id, err := h.proofs.Create(ctx, tenant.ID, user, "character-link", r.FormValue("message"), image, subjects)
+	var cooldown *serviceproof.CooldownError
+	if errors.As(err, &cooldown) {
+		writeProofCooldown(w, r, cooldown.NextSubmissionAt)
+		return
+	}
 	if isProofPendingConflict(err) {
 		proofError(w, r, http.StatusConflict, "A selected character already has a pending proof request")
 		return
@@ -210,6 +236,15 @@ func (h *Handler) proofResponse(ctx context.Context, scope serviceproof.Scope, i
 		out.Subjects = append(out.Subjects, chroniclesdk.ProofSubject{ProofCharacter: chroniclesdk.ProofCharacter{RealmID: s.RealmID.UUID, CharacterGUID: *s.CharacterGuid}, Name: s.Name, RealmName: s.RealmName, Class: classBySubject[s.ID], Status: s.Status, Warning: warning})
 	}
 	return out, nil
+}
+
+func (h *Handler) GetMyProofCooldown(w http.ResponseWriter, r *http.Request) {
+	next, err := h.proofs.Cooldown(r.Context(), chronauth.AuthenticationState(r).Claims.Subject, "character-link")
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.ProofCooldownResponse{NextSubmissionAt: next})
 }
 
 func (h *Handler) ListMyProofs(w http.ResponseWriter, r *http.Request) {

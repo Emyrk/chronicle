@@ -10,6 +10,15 @@ import (
 	"image/color"
 	"image/jpeg"
 	"testing"
+	"time"
+
+	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/storage"
+	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/Emyrk/chronicle/internal/services/testservices"
+	"github.com/Emyrk/chronicle/internal/testutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateSubjects(t *testing.T) {
@@ -69,4 +78,63 @@ func TestValidateJPEG(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestProofCooldownSerializesConcurrentTenants(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(testservices.Authz(t))
+	objects, err := storage.NewLocalStorageAt(t.TempDir())
+	require.NoError(t, err)
+	svc := New(zed, objects)
+	applicant := uuid.New()
+	_, err = zed.InsertUser(ctx, database.InsertUserParams{ID: applicant, Username: "cooldown-" + applicant.String()[:8]})
+	require.NoError(t, err)
+	initial, err := svc.Cooldown(ctx, applicant, "character-link")
+	require.NoError(t, err)
+	require.Nil(t, initial)
+
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	img.Set(0, 0, color.RGBA{R: 255, A: 255})
+	var photo bytes.Buffer
+	require.NoError(t, jpeg.Encode(&photo, img, nil))
+	subjects := []Subject{{Type: "guild", Name: "Example"}}
+	type outcome struct {
+		id  uuid.UUID
+		err error
+	}
+	results := make(chan outcome, 2)
+	start := make(chan struct{})
+	for range 2 {
+		go func() {
+			<-start
+			id, err := svc.Create(ctx, uuid.New(), applicant, "character-link", "", photo.Bytes(), subjects)
+			results <- outcome{id, err}
+		}()
+	}
+	close(start)
+	var created uuid.UUID
+	for range 2 {
+		result := <-results
+		if result.err == nil {
+			require.NotEqual(t, uuid.Nil, result.id)
+			created = result.id
+			continue
+		}
+		var cooldown *CooldownError
+		require.ErrorAs(t, result.err, &cooldown)
+		require.WithinDuration(t, time.Now().Add(24*time.Hour), cooldown.NextSubmissionAt, time.Minute)
+	}
+	require.NotEqual(t, uuid.Nil, created)
+	rows, err := zed.ListAllProofRequests(servicetenant.AdminBypass(ctx))
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, created, rows[0].ID)
+	next, err := svc.Cooldown(ctx, applicant, "character-link")
+	require.NoError(t, err)
+	require.NotNil(t, next)
+	require.WithinDuration(t, rows[0].CreatedAt.Time.Add(24*time.Hour), *next, time.Second)
+	independent, err := svc.Cooldown(ctx, applicant, "guild-ownership")
+	require.NoError(t, err)
+	require.Nil(t, independent)
 }

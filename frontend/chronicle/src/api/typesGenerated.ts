@@ -3034,6 +3034,16 @@ export interface ProofCharacter {
 }
 
 // From chroniclesdk/proofs.go
+/**
+ * ProofCooldownResponse is the account's next eligible submission time for
+ * character-link photo proof, regardless of which tenant receives the request.
+ */
+export interface ProofCooldownResponse {
+    readonly next_submission_at?: string;
+    readonly message?: string;
+}
+
+// From chroniclesdk/proofs.go
 export interface ProofDecision extends ProofCharacter {
     readonly approved: boolean;
 }

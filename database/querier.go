@@ -346,6 +346,10 @@ type sqlcQuerier interface {
 	GetParsedLogGroupByID(ctx context.Context, id uuid.UUID) (ParsedLogGroup, error)
 	GetPendingInferenceClientToolRequestByThreadForUpdate(ctx context.Context, arg GetPendingInferenceClientToolRequestByThreadForUpdateParams) (InferenceClientToolRequest, error)
 	GetPlayerGearHistory(ctx context.Context, arg GetPlayerGearHistoryParams) ([]GetPlayerGearHistoryRow, error)
+	// Do not tenant-filter: switching sites must not bypass the account limit.
+	// Limit per workflow so future guild proofs have an independent cooldown.
+	// The existing proof_requests_applicant_created index supports this lookup.
+	GetProofCooldown(ctx context.Context, arg GetProofCooldownParams) (pgtype.Timestamptz, error)
 	GetProofRequest(ctx context.Context, id uuid.UUID) (ProofRequest, error)
 	GetRaidCompositionByID(ctx context.Context, id uuid.UUID) (RaidComposition, error)
 	// Returns all realm IDs that have an applicable retention policy
@@ -725,6 +729,9 @@ type sqlcQuerier interface {
 	LockPendingProofRequest(ctx context.Context, arg LockPendingProofRequestParams) (ProofRequest, error)
 	// Root-domain site admins only (AdminBypass context).
 	LockPendingProofRequestByID(ctx context.Context, id uuid.UUID) (ProofRequest, error)
+	// Serialize submissions by the same account across all tenants. Locking the
+	// applicant, not a proof row, also works for their first request.
+	LockProofApplicant(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	LockWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
 	MarkBillingWebhookEventProcessed(ctx context.Context, stripeEventID string) error
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error

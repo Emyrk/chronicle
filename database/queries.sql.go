@@ -15124,6 +15124,29 @@ func (q *sqlQuerier) DecideProofSubject(ctx context.Context, arg DecideProofSubj
 	return result.RowsAffected(), nil
 }
 
+const getProofCooldown = `-- name: GetProofCooldown :one
+SELECT (created_at + interval '24 hours')::timestamptz AS next_submission_at
+FROM proof_requests
+WHERE applicant_id = $1 AND purpose = $2 AND created_at > now() - interval '24 hours'
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type GetProofCooldownParams struct {
+	ApplicantID uuid.UUID `db:"applicant_id" json:"applicant_id"`
+	Purpose     string    `db:"purpose" json:"purpose"`
+}
+
+// Do not tenant-filter: switching sites must not bypass the account limit.
+// Limit per workflow so future guild proofs have an independent cooldown.
+// The existing proof_requests_applicant_created index supports this lookup.
+func (q *sqlQuerier) GetProofCooldown(ctx context.Context, arg GetProofCooldownParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getProofCooldown, arg.ApplicantID, arg.Purpose)
+	var next_submission_at pgtype.Timestamptz
+	err := row.Scan(&next_submission_at)
+	return next_submission_at, err
+}
+
 const getProofRequest = `-- name: GetProofRequest :one
 SELECT id, applicant_id, purpose, evidence_key, status, message, response, reviewer_id, created_at, reviewed_at, evidence_delete_pending, tenant_id FROM proof_requests WHERE id = $1
 `
@@ -15556,6 +15579,19 @@ func (q *sqlQuerier) LockPendingProofRequestByID(ctx context.Context, id uuid.UU
 		&i.TenantID,
 	)
 	return i, err
+}
+
+const lockProofApplicant = `-- name: LockProofApplicant :one
+SELECT id FROM users WHERE id = $1 FOR UPDATE
+`
+
+// Serialize submissions by the same account across all tenants. Locking the
+// applicant, not a proof row, also works for their first request.
+func (q *sqlQuerier) LockProofApplicant(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockProofApplicant, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
 }
 
 const countRaidCompositionsByUser = `-- name: CountRaidCompositionsByUser :one
