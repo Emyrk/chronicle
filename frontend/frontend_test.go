@@ -1,6 +1,8 @@
 package frontend
 
 import (
+	"bytes"
+	"image"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,6 +11,27 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestHandlerServesCroppedOGLoadingScreen(t *testing.T) {
+	t.Parallel()
+
+	handler := Handler(os.DirFS("chronicle/public"), nil, nil, nil)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/c/images/og/loadingscreens/LoadScreenBlackWingLair.jpg", nil),
+	)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "image/jpeg", recorder.Header().Get("Content-Type"))
+	require.Equal(t, "public, max-age=31536000, immutable", recorder.Header().Get("Cache-Control"))
+
+	config, format, err := image.DecodeConfig(bytes.NewReader(recorder.Body.Bytes()))
+	require.NoError(t, err)
+	require.Equal(t, "jpeg", format)
+	require.Equal(t, 512, config.Width)
+	require.Equal(t, 341, config.Height)
+}
 
 func TestHandlerRedirectsLegacyYouTubeSyncRoutes(t *testing.T) {
 	t.Parallel()

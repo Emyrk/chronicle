@@ -21,3 +21,19 @@ func TestInstanceBackground(t *testing.T) {
 	require.False(t, ok)
 	require.Empty(t, background)
 }
+
+func TestInstanceOGImage(t *testing.T) {
+	t.Parallel()
+
+	imagePath, ok := InstanceOGImage("Molten Core")
+	require.True(t, ok)
+	require.Equal(t, "/c/images/og/loadingscreens/LoadScreenMoltenCore.jpg", imagePath)
+
+	imagePath, ok = InstanceOGImage("molten core")
+	require.True(t, ok)
+	require.Equal(t, "/c/images/og/loadingscreens/LoadScreenMoltenCore.jpg", imagePath)
+
+	imagePath, ok = InstanceOGImage("Unknown Instance")
+	require.False(t, ok)
+	require.Empty(t, imagePath)
+}

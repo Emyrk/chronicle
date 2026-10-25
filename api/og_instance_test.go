@@ -11,7 +11,7 @@ func TestInstanceOGImageURL(t *testing.T) {
 
 	require.Equal(
 		t,
-		"https://capy.chronicleclassic.com/c/images/loadingscreens/LoadScreenMoltenCore.webp",
+		"https://capy.chronicleclassic.com/c/images/og/loadingscreens/LoadScreenMoltenCore.jpg",
 		instanceOGImageURL("capy.chronicleclassic.com", "Molten Core"),
 	)
 	require.Empty(t, instanceOGImageURL("capy.chronicleclassic.com", "Unknown Instance"))

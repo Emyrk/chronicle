@@ -21,6 +21,11 @@ var instanceConfigs = func() map[string]instanceConfig {
 	return configs
 }()
 
+const (
+	loadingScreenPrefix   = "/c/images/loadingscreens/"
+	ogLoadingScreenPrefix = "/c/images/og/loadingscreens/"
+)
+
 // InstanceBackground returns the configured loading-screen path for an instance.
 func InstanceBackground(name string) (string, bool) {
 	if config, ok := instanceConfigs[name]; ok {
@@ -33,4 +38,18 @@ func InstanceBackground(name string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// InstanceOGImage returns a wide, cropped loading-screen path for social previews.
+func InstanceOGImage(name string) (string, bool) {
+	background, ok := InstanceBackground(name)
+	if !ok || !strings.HasPrefix(background, loadingScreenPrefix) || !strings.HasSuffix(background, ".webp") {
+		return "", false
+	}
+
+	filename := strings.TrimSuffix(strings.TrimPrefix(background, loadingScreenPrefix), ".webp")
+	if filename == "" || strings.Contains(filename, "/") {
+		return "", false
+	}
+	return ogLoadingScreenPrefix + filename + ".jpg", true
 }

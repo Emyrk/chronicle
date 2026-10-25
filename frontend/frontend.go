@@ -163,6 +163,10 @@ func (h *handler) resolveOG(req *http.Request) *OGData {
 }
 
 func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
+	if h.serveOGLoadingScreen(resp, req) {
+		return
+	}
+
 	switch path.Clean(req.URL.Path) {
 	case "/youtube-sync", "/youtube-sync-v2":
 		target := "/youtube-sync-v3"

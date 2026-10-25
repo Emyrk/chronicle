@@ -355,11 +355,11 @@ func (api *API) buildInstanceOG(ctx context.Context, host string, inst database.
 }
 
 func instanceOGImageURL(host, instanceName string) string {
-	background, ok := frontend.InstanceBackground(instanceName)
+	imagePath, ok := frontend.InstanceOGImage(instanceName)
 	if !ok {
 		return ""
 	}
-	return fmt.Sprintf("https://%s%s", host, background)
+	return fmt.Sprintf("https://%s%s", host, imagePath)
 }
 
 func (api *API) armoryOG(host, realm, player string) *frontend.OGData {
