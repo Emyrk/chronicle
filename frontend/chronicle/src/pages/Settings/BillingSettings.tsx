@@ -4,6 +4,7 @@ import type { BillingPrice, BillingSummary } from "@/api/typesGenerated"
 import { useCreateBillingCancel, useCreateBillingChange, useCreateBillingCheckout, useCreateBillingPortal, useBillingSummary, useSiteConfig } from "@/api/queries"
 import { iconUrl } from "@/config/iconUrl"
 import { Button } from "@/components/ui/button"
+import { BACKGROUND_STYLES, BORDER_STYLES, NAME_STYLES, TIER_RANK, type Preset, type Tier } from "@/components/ui/PlayerMetricChart/PlayerCosmetics"
 import { useAuth } from "@/hooks/useAuth"
 import { cn } from "@/lib/utils"
 import { Check, CircleCheck, CreditCard, LogIn, Sparkles, XCircle } from "lucide-react"
@@ -229,6 +230,12 @@ export function SupporterOverview({ billing, panel }: { billing?: BillingSummary
 
 const INCLUDED = "included"
 
+/** Counts unlocked presets from the cosmetics catalog so the table tracks new styles. */
+function cosmeticStyles(styles: Record<string, Preset>, tier: Tier): string {
+  const count = Object.values(styles).filter((style) => style.tier !== "Free" && TIER_RANK[style.tier] <= TIER_RANK[tier]).length
+  return count === 0 ? "—" : `${count} style${count === 1 ? "" : "s"}`
+}
+
 const COMPARISON: { feature: string; description: string; friendly: string; honored: string; revered?: string; exalted?: string; highlight?: boolean }[] = [
   {
     feature: "Log parsing, panels, rankings, and replays",
@@ -263,6 +270,30 @@ const COMPARISON: { feature: string; description: string; friendly: string; hono
     friendly: "—",
     honored: "—",
     revered: INCLUDED,
+  },
+  {
+    feature: "Character name styles",
+    description: "Animated and colored name treatments shown on your characters' player rows across raid analysis.",
+    friendly: "—",
+    honored: cosmeticStyles(NAME_STYLES, "Honored"),
+    revered: cosmeticStyles(NAME_STYLES, "Revered"),
+    exalted: cosmeticStyles(NAME_STYLES, "Exalted"),
+  },
+  {
+    feature: "Player row backgrounds",
+    description: "Background effects behind your characters' player rows.",
+    friendly: "—",
+    honored: cosmeticStyles(BACKGROUND_STYLES, "Honored"),
+    revered: cosmeticStyles(BACKGROUND_STYLES, "Revered"),
+    exalted: cosmeticStyles(BACKGROUND_STYLES, "Exalted"),
+  },
+  {
+    feature: "Player row borders",
+    description: "Border effects framing your characters' player rows.",
+    friendly: "—",
+    honored: cosmeticStyles(BORDER_STYLES, "Honored"),
+    revered: cosmeticStyles(BORDER_STYLES, "Revered"),
+    exalted: cosmeticStyles(BORDER_STYLES, "Exalted"),
   },
   {
     feature: "Supporting Chronicle",
