@@ -24,6 +24,7 @@ var migrations = []AuthzMigration{
 	{Version: 4, Run: migration004},
 	{Version: 5, Run: noop},
 	{Version: 6, Run: migration006},
+	{Version: 7, Run: migration007},
 }
 
 // RunSchemaMigrations runs any authz migrations not yet recorded in the
@@ -205,4 +206,10 @@ func migration006(ctx context.Context, az *Authz) error {
 		}
 	}
 	return nil
+}
+
+// migration007 replays the finalized pre-release cosmetic catalog for local and
+// preview databases that recorded migration 6 before every editor option was added.
+func migration007(ctx context.Context, az *Authz) error {
+	return migration006(ctx, az)
 }
