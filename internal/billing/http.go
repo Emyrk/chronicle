@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -22,6 +23,14 @@ import (
 )
 
 const maxWebhookBody = 1 << 20
+
+func (s *Service) returnURL(r *http.Request, rawQuery string) string {
+	base := *s.accessURL
+	if servicetenant.TenantFromContext(r.Context()) != nil {
+		base.Host = r.Host
+	}
+	return base.ResolveReference(&url.URL{Path: "/account/billing", RawQuery: rawQuery}).String()
+}
 
 func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 	if !s.Enabled() {
@@ -67,8 +76,8 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	success := s.accessURL.ResolveReference(&url.URL{Path: "/account/billing", RawQuery: "billing=success"}).String()
-	cancel := s.accessURL.ResolveReference(&url.URL{Path: "/account/billing", RawQuery: "billing=cancel"}).String()
+	success := s.returnURL(r, "billing=success")
+	cancel := s.returnURL(r, "billing=cancel")
 	params := &stripe.CheckoutSessionCreateParams{
 		AllowPromotionCodes: stripe.Bool(true),
 		ClientReferenceID:   stripe.String(claims.Subject.String()),
@@ -132,7 +141,7 @@ func (s *Service) createPortal(w http.ResponseWriter, r *http.Request, flowType 
 	}
 	params := &stripe.BillingPortalSessionCreateParams{
 		Customer:  stripe.String(sub.ProviderCustomerID),
-		ReturnURL: stripe.String(s.accessURL.ResolveReference(&url.URL{Path: "/account/billing"}).String()),
+		ReturnURL: stripe.String(s.returnURL(r, "")),
 	}
 	if flowType != "" {
 		// A plan change lands before the Stripe webhook updates the tier, so
@@ -150,7 +159,7 @@ func (s *Service) createPortal(w http.ResponseWriter, r *http.Request, flowType 
 			AfterCompletion: &stripe.BillingPortalSessionCreateFlowDataAfterCompletionParams{
 				Type: stripe.String(string(stripe.BillingPortalSessionFlowAfterCompletionTypeRedirect)),
 				Redirect: &stripe.BillingPortalSessionCreateFlowDataAfterCompletionRedirectParams{
-					ReturnURL: stripe.String(s.accessURL.ResolveReference(&url.URL{Path: "/account/billing", RawQuery: afterCompletionQuery}).String()),
+					ReturnURL: stripe.String(s.returnURL(r, afterCompletionQuery)),
 				},
 			},
 		}
