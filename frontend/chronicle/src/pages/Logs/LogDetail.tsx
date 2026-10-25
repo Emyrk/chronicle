@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 import { useAuth } from "@/hooks/useAuth";
 import { shouldShowChronicleCompanionWarning } from "@/lib/logReliability";
+import { formatBytes } from "@/lib/format";
 import { LOG_FORMAT_OPTIONS } from "@/config/serverCapabilities";
 import { useMarkLogUnlisted } from "@/api/unlistedLogs";
 import { UploadSyncDialog } from "./components/UploadSyncDialog";
@@ -80,14 +81,6 @@ function formatDate(timestamp: unknown): string {
     return new Date(ts.Time).toLocaleString();
   }
   return "Unknown";
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
 
 interface UploadedArtifactRowProps {

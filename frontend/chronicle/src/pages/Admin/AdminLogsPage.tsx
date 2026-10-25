@@ -16,15 +16,8 @@ import { FileText, Loader2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRig
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/Checkbox/Checkbox";
+import { formatBytes } from "@/lib/format";
 import { toast } from "sonner";
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
 
 interface LogRowProps {
   log: AdminLog;

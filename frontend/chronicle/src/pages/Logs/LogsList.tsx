@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { formatBytes } from "@/lib/format";
 import { Link, useSearchParams } from "react-router-dom";
 import { LogIn, Loader2, Upload as UploadIcon, HardDrive, HelpCircle } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
@@ -15,14 +16,6 @@ import {
   getUniqueInstanceNames,
   dateKey,
 } from "./utils/calendarUtils";
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-}
 
 function StorageUsageCard({ consumed, max }: { consumed: number; max: number }) {
   const percentage = max > 0 ? Math.min((consumed / max) * 100, 100) : 0;

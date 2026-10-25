@@ -13,6 +13,7 @@ import { compressFile } from "@/api/compress";
 import { VisibilityPicker } from "./VisibilityPicker";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
+import { formatBytes } from "@/lib/format";
 
 type FileStatus = "pending" | "compressing" | "uploading" | "done" | "error";
 
@@ -23,11 +24,6 @@ interface UploadEntry {
   progress: number;
   logId?: string;
   error?: string;
-}
-
-function formatSize(bytes: number) {
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function statusIcon(status: FileStatus) {
@@ -328,7 +324,7 @@ export function MultiUpload({ format, unlistedLog, canMarkUnlisted, onUnlistedLo
                 <div className="flex items-center gap-2">
                   <span className="truncate font-medium">{entry.file.name}</span>
                   <span className="text-xs text-muted-foreground shrink-0">
-                    {formatSize(entry.file.size)}
+                    {formatBytes(entry.file.size)}
                   </span>
                 </div>
                 {entry.status === "uploading" && (

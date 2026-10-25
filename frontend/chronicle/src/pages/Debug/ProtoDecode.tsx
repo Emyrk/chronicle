@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card"
 import { Button } from "@/components/ui/button"
+import { formatBytes } from "@/lib/format"
 import { decodePayload, decodeAllPayloads, decodeDelimitedMessages, decompressGzip, isGzipped, FastDamageCursor, parseAllHeaders, type PayloadHeader, type DecodedPayload } from "@/api/protodecode/decode"
 import { DamageSchema, type Damage, ExtraAttackSchema, type ExtraAttack, HealSchema, type Heal, ResourceChangeSchema, type ResourceChange, SlainSchema, type Slain, School } from "@/api/proto/chronicle_pb"
 import type { GenMessage } from "@bufbuild/protobuf/codegenv1"
@@ -21,12 +22,6 @@ const eventSchemas: Record<EventType, GenMessage<Message>> = {
 // Union type for all message types
 type AnyEventMessage = Damage | ExtraAttack | Heal | ResourceChange | Slain
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
-}
-
 interface BenchmarkResult {
   name: string;
   events: number;
@@ -41,7 +36,7 @@ export function ProtoDecode() {
   const [mode, setMode] = useState<DecodeMode>("payload")
   const [eventType, setEventType] = useState<EventType>("damage")
   const [allPayloads, setAllPayloads] = useState<DecodedPayload<AnyEventMessage>[]>([])
-  const [_header, setHeader] = useState<PayloadHeader | null>(null)
+  const [, setHeader] = useState<PayloadHeader | null>(null)
   const [messages, setMessages] = useState<AnyEventMessage[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)

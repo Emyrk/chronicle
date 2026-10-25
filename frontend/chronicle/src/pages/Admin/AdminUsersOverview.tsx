@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
+import { formatBytes } from "@/lib/format";
 import { toast } from "sonner";
 
 // ---------------------------------------------------------------------------
@@ -76,20 +77,12 @@ type SortOrder = "asc" | "desc";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
-
 function bytesToMB(bytes: number): number {
-  return Math.round(bytes / (1024 * 1024));
+  return Math.round(bytes / 1_000_000);
 }
 
 function mbToBytes(mb: number): number {
-  return mb * 1024 * 1024;
+  return mb * 1_000_000;
 }
 
 function storagePct(user: User): number {

@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert/Alert
 import { Switch } from "@/components/ui/Switch/Switch";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
+import { formatBytes } from "@/lib/format";
 import { useAuthorizationCheck, useSiteConfig, useFlavors } from "@/api/queries";
 import {
   serverCapabilities,
@@ -36,11 +37,6 @@ function FileDropZone({
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
-
-  const formatSize = (bytes: number) =>
-    bytes < 1024 * 1024
-      ? `${(bytes / 1024).toFixed(1)} KB`
-      : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
@@ -101,7 +97,7 @@ function FileDropZone({
           <FileText className="h-8 w-8 shrink-0 text-primary" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{file.name}</p>
-            <p className="text-xs text-muted-foreground">{formatSize(file.size)}</p>
+            <p className="text-xs text-muted-foreground">{formatBytes(file.size)}</p>
           </div>
           <span className="shrink-0 text-xs text-muted-foreground">Click or drop to replace</span>
         </div>

@@ -9,6 +9,7 @@ import {
 } from "@/api/queries";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
+import { formatBytes } from "@/lib/format";
 import {
   HardDrive,
   Plus,
@@ -23,20 +24,12 @@ import {
   Clock,
 } from "lucide-react";
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-}
-
 function bytesToMB(bytes: number): number {
-  return Math.round(bytes / (1024 * 1024));
+  return Math.round(bytes / 1_000_000);
 }
 
 function mbToBytes(mb: number): number {
-  return mb * 1024 * 1024;
+  return mb * 1_000_000;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -520,18 +513,19 @@ function UserGrantsRow({ user }: UserGrantsRowProps) {
 export function AdminStoragePage() {
   const { data: usersData, isLoading, error } = useAdminUsers();
   const [searchQuery, setSearchQuery] = useState("");
+  const users = usersData?.users;
 
   const filteredUsers = useMemo(() => {
-    if (!usersData?.users) return [];
-    if (!searchQuery.trim()) return usersData.users;
+    if (!users) return [];
+    if (!searchQuery.trim()) return users;
 
     const query = searchQuery.toLowerCase();
-    return usersData.users.filter(
+    return users.filter(
       (user) =>
         user.username.toLowerCase().includes(query) ||
         user.email.toLowerCase().includes(query)
     );
-  }, [usersData?.users, searchQuery]);
+  }, [users, searchQuery]);
 
   // Sort by consumed storage descending
   const sortedUsers = useMemo(() => {

@@ -1,18 +1,11 @@
 import { Link } from "react-router-dom";
 import { ArrowUpDown, Eye, Castle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatBytes } from "@/lib/format";
 import type { WoWLogGroup } from "@/api/queries";
 import type { WoWSimpleParsedInstance } from "@/api/typesGenerated";
 import { UnlistedBadge } from "./UnlistedBadge";
 import { parseParsedOutput, format } from "../utils/calendarUtils";
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-}
 
 interface FileSizes {
   stored: number;

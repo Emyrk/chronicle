@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/Card/Card";
 import { UserCharactersSection } from "./UserCharactersSection";
 import { SidekickCards } from "@/pages/Settings/SidekickSettings";
 import { Button } from "@/components/ui/button";
+import { formatBytes } from "@/lib/format";
 import {
   Users,
   Search,
@@ -35,14 +36,6 @@ import {
   ExternalLink,
   Laptop,
 } from "lucide-react";
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-}
 
 const ROLE_CONFIG: Record<string, { icon: React.ReactNode; label: string; className: string }> = {
   technical_admin: {
