@@ -69,6 +69,9 @@ jobs:
         run: make test-postgres-docker
 
       - name: Run tests with gotestsum
+        env:
+          # The race detector otherwise sleeps for one second as every package exits.
+          GORACE: atexit_sleep_ms=100
         run: |
           make test
 

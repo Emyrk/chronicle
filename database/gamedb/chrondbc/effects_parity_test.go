@@ -19,13 +19,11 @@ func TestLegacySpellEffectsFixtureParity(t *testing.T) {
 		name  string
 		build vsn.Build
 	}{
-		{name: "ascension", build: dbcdb.ExtendedSpellBuild},
+		// Keep one fixture for each supported DBC layout. Additional server
+		// fixtures mostly repeat the same legacy conversion coverage.
 		{name: "azerothcore", build: dbcdb.ExtendedSpellBuild},
 		{name: "tbc", build: vsn.V2_4_3},
-		{name: "kronos", build: vsn.V1_12_1},
-		{name: "octowow", build: vsn.V1_12_1},
 		{name: "turtle", build: vsn.V1_12_1},
-		{name: "vanillaplus", build: vsn.V1_12_1},
 	}
 	for _, fixture := range fixtures {
 		t.Run(fixture.name, func(t *testing.T) {

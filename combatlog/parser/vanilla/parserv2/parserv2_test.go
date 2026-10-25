@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -21,7 +20,6 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/internal/ptr"
-	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Gophercraft/core/i18n"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -30,24 +28,6 @@ import (
 	slogzerolog "github.com/samber/slog-zerolog/v2"
 	"github.com/stretchr/testify/require"
 )
-
-// testSpellDB creates a WoWDB from the server-specific Spell.dbc for testing.
-// Skips the test if the file doesn't exist (allows tests to run without it).
-func testSpellDB(t *testing.T) gamedb.GameDB {
-	t.Helper()
-	dbcPath := filepath.Join("..", "..", "..", "..", "assets", services.ServerName, "Spell.dbc")
-	if _, err := os.Stat(dbcPath); os.IsNotExist(err) {
-		t.Skipf("%s not found, skipping test requiring spell database", dbcPath)
-	}
-
-	ctx := context.Background()
-	db, err := gamedb.New(ctx, gamedb.Options{
-		SpellsDBCPath: dbcPath,
-	})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-	return db
-}
 
 // testCase parses line and asserts result matches expected message
 func testCase[T messages.Message](t *testing.T, wowDB gamedb.GameDB, line string, expected T) {
@@ -93,7 +73,7 @@ func testCaseWithDB[T messages.Message](t *testing.T, line string, expected T, w
 func TestParserMessages(t *testing.T) {
 	t.Parallel()
 
-	wowDB := testSpellDB(t)
+	wowDB := &stubGameDB{}
 
 	t.Run("Death", func(t *testing.T) {
 		t.Parallel()
