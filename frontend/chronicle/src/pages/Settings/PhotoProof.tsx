@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Camera, ImageUp, Maximize2, Search } from "lucide-react";
+import { Camera, Check, ImageUp, Maximize2, Search } from "lucide-react";
 import { useArmorySearch } from "@/api/queries";
 import type { ArmorySearchResult } from "@/api/typesGenerated";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
@@ -119,6 +119,15 @@ function ScreenshotDropzone({ file, onChange }: { file: File | null; onChange: (
   </label>;
 }
 
+function StepLabel({ step, title, done, htmlFor }: { step: number; title: string; done?: boolean; htmlFor?: string }) {
+  return <label htmlFor={htmlFor} className="flex items-center gap-2 text-sm font-medium">
+    <span className={`flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${done ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary"}`}>
+      {done ? <Check className="size-3.5" /> : step}
+    </span>
+    <span><span className="text-muted-foreground">Step {step}:</span> {title}</span>
+  </label>;
+}
+
 function ProofExample() {
   const [expanded, setExpanded] = useState(false);
   return <>
@@ -191,16 +200,16 @@ export function PhotoProofCard({ callout }: { callout?: string }) {
         <p className="text-sm text-muted-foreground">Upload a screenshot of your character selection screen with the realm name and every character you claim visible. An administrator reviews it, and the screenshot is deleted after review.</p>
         {!open && <Button variant="outline" size="sm" onClick={() => setOpen(true)}>Start a request</Button>}
       </div>
-      {open && <div className="space-y-4 border-t pt-4">
+      {open && <div className="space-y-6 border-t pt-4">
       <div className="space-y-2">
-        <span className="block text-sm font-medium">Character selection screenshot</span>
+        <StepLabel step={1} title="Upload your character selection screenshot" done={!!file} />
         <div className="grid gap-3 sm:grid-cols-2">
           <ScreenshotDropzone key={fileInputKey} file={file} onChange={setFile} />
           <ProofExample />
         </div>
       </div>
       <div className="space-y-2">
-        <label className="block text-sm font-medium" htmlFor="proof-character-search">Select characters</label>
+        <StepLabel step={2} title="Select every character shown in the screenshot" done={selected.length > 0} htmlFor="proof-character-search" />
         <div className="relative"><Search className="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" /><Input id="proof-character-search" className="pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search the armory by character name" /></div>
         {query.length >= 2 && <div className="max-h-48 overflow-y-auto styled-scrollbar rounded border divide-y">
           {isFetching && <p className="px-3 py-2 text-sm text-muted-foreground">Searching...</p>}
@@ -222,10 +231,13 @@ export function PhotoProofCard({ callout }: { callout?: string }) {
           <button className="shrink-0 text-destructive hover:underline" type="button" onClick={() => setSelected(selected.filter((item) => item !== entry))}>Remove</button>
         </div>)}
       </div>
-      <label className="block text-sm space-y-1"><span>Message to reviewer (optional)</span><textarea className="w-full min-h-20 rounded-md border bg-background p-2" maxLength={2000} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Any context that helps verify your characters" /></label>
-      <div className="flex gap-2">
-        <Button disabled={!file || !selected.length || submit.isPending} onClick={() => submit.mutate()}>{submit.isPending ? "Preparing screenshot..." : "Submit proof"}</Button>
-        <Button variant="ghost" disabled={submit.isPending} onClick={() => setOpen(false)}>Cancel</Button>
+      <div className="space-y-2">
+        <StepLabel step={3} title="Submit for review" htmlFor="proof-message" />
+        <textarea id="proof-message" className="w-full min-h-20 rounded-md border bg-background p-2 text-sm" maxLength={2000} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Optional message to the reviewer, with any context that helps verify your characters" />
+        <div className="flex gap-2">
+          <Button disabled={!file || !selected.length || submit.isPending} onClick={() => submit.mutate()}>{submit.isPending ? "Preparing screenshot..." : "Submit proof"}</Button>
+          <Button variant="ghost" disabled={submit.isPending} onClick={() => setOpen(false)}>Cancel</Button>
+        </div>
       </div>
       </div>}
     </section>
