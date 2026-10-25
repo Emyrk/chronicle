@@ -98,6 +98,17 @@ describe("PlayerMetricRow", () => {
     expect(markup).not.toContain("data-stacked-percentage");
   });
 
+  it("does not render a literal zero before rows with a zero stacked value", () => {
+    const markup = renderRow(false, {
+      ...player,
+      stackedValue: 0,
+      displayStackedValue: 0,
+    });
+    const text = markup.replace(/<[^>]+>/g, "");
+
+    expect(text).toMatch(/^#1Replay Tester/);
+  });
+
   it("renders the display value instead of the raw geometry value", () => {
     const markup = renderRow(false);
 

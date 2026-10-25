@@ -587,7 +587,7 @@ export function PlayerMetricRow({
       />
       
       {/* Stacked secondary value - fills remaining space, stripes at end when overflow */}
-      {player.stackedValue && player.stackedValue > 0 && (() => {
+      {player.stackedValue !== undefined && player.stackedValue > 0 && (() => {
         const mainBarEnd = (player.value / maximumValue) * 100;
         const stackedWidth = (player.stackedValue / maximumValue) * 100;
         const availableSpace = 100 - mainBarEnd;
