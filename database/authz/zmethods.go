@@ -254,6 +254,8 @@ func setStripeEntitlementRole(ctx context.Context, authorizer Authorizer, userID
 			chronicle.Stripe_download_raw_logs(user)
 		case "stripe_unlisted_logs":
 			chronicle.Stripe_unlisted_logs(user)
+		case "stripe_submit_photo_proof":
+			chronicle.Stripe_submit_photo_proof(user)
 		case "stripe_honored":
 			chronicle.Stripe_honored(user)
 		case "stripe_revered":
@@ -271,6 +273,8 @@ func setStripeEntitlementRole(ctx context.Context, authorizer Authorizer, userID
 			chronicle.Delete().Stripe_download_raw_logs(user)
 		case "stripe_unlisted_logs":
 			chronicle.Delete().Stripe_unlisted_logs(user)
+		case "stripe_submit_photo_proof":
+			chronicle.Delete().Stripe_submit_photo_proof(user)
 		case "stripe_honored":
 			chronicle.Delete().Stripe_honored(user)
 		case "stripe_revered":

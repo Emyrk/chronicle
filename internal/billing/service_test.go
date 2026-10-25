@@ -796,6 +796,7 @@ func TestSyncStripeEntitlementsPersistsAuthoritativeSnapshotAndStorageGrant(t *t
 	require.Equal(t, stripePaidTierStorageGrantSource, store.deletedDataGrant.Source)
 	require.Equal(t, []entitlementRoleChange{
 		{userID: userID, role: stripeRoleAdFree, granted: true},
+		{userID: userID, role: stripeRoleSubmitPhotoProof, granted: true},
 		{userID: userID, role: stripeRoleHonored, granted: true},
 		{userID: userID, role: stripeRoleDownloadRawLogs, granted: true},
 		{userID: userID, role: stripeRoleUnlistedLogs, granted: true},
@@ -864,12 +865,14 @@ func TestSyncStripeEntitlementsTransfersOwnerAndAppliesRolePerEntitlement(t *tes
 	}, store.deletedDataGrants)
 	require.Equal(t, []entitlementRoleChange{
 		{userID: previousOwner, role: stripeRoleAdFree, granted: false},
+		{userID: previousOwner, role: stripeRoleSubmitPhotoProof, granted: false},
 		{userID: previousOwner, role: stripeRoleHonored, granted: false},
 		{userID: previousOwner, role: stripeRoleDownloadRawLogs, granted: false},
 		{userID: previousOwner, role: stripeRoleUnlistedLogs, granted: false},
 		{userID: previousOwner, role: stripeRoleRevered, granted: false},
 		{userID: previousOwner, role: stripeRoleExalted, granted: false},
 		{userID: currentOwner, role: stripeRoleAdFree, granted: true},
+		{userID: currentOwner, role: stripeRoleSubmitPhotoProof, granted: true},
 		{userID: currentOwner, role: stripeRoleHonored, granted: true},
 		{userID: currentOwner, role: stripeRoleDownloadRawLogs, granted: true},
 		{userID: currentOwner, role: stripeRoleUnlistedLogs, granted: true},

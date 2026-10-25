@@ -111,21 +111,24 @@ const (
 	stripeReveredStorageGrantBytes int64 = 1_000_000_000
 	stripeExaltedStorageGrantBytes int64 = 2_000_000_000
 
-	stripeRoleAdFree          = "stripe_ad_free"
-	stripeRoleDownloadRawLogs = "stripe_download_raw_logs"
-	stripeRoleUnlistedLogs    = "stripe_unlisted_logs"
-	stripeRoleHonored         = "stripe_honored"
-	stripeRoleRevered         = "stripe_revered"
-	stripeRoleExalted         = "stripe_exalted"
+	stripeRoleAdFree           = "stripe_ad_free"
+	stripeRoleDownloadRawLogs  = "stripe_download_raw_logs"
+	stripeRoleUnlistedLogs     = "stripe_unlisted_logs"
+	stripeRoleSubmitPhotoProof = "stripe_submit_photo_proof"
+	stripeRoleHonored          = "stripe_honored"
+	stripeRoleRevered          = "stripe_revered"
+	stripeRoleExalted          = "stripe_exalted"
 )
 
 var (
 	chronicleHonoredStripeRoles = []string{
 		stripeRoleAdFree,
+		stripeRoleSubmitPhotoProof,
 		stripeRoleHonored,
 	}
 	chronicleReveredStripeRoles = []string{
 		stripeRoleAdFree,
+		stripeRoleSubmitPhotoProof,
 		stripeRoleDownloadRawLogs,
 		stripeRoleUnlistedLogs,
 		stripeRoleHonored,
@@ -133,6 +136,7 @@ var (
 	}
 	chronicleExaltedStripeRoles = []string{
 		stripeRoleAdFree,
+		stripeRoleSubmitPhotoProof,
 		stripeRoleDownloadRawLogs,
 		stripeRoleUnlistedLogs,
 		stripeRoleHonored,

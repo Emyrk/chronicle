@@ -211,9 +211,10 @@ func TestStripeEntitlementRoles(t *testing.T) {
 		role    string
 		allowed []bool
 	}{
-		{role: "stripe_ad_free", allowed: []bool{true, false, false, false}},
-		{role: "stripe_download_raw_logs", allowed: []bool{false, true, false, false}},
-		{role: "stripe_unlisted_logs", allowed: []bool{false, false, true, true}},
+		{role: "stripe_ad_free", allowed: []bool{true, false, false, false, false}},
+		{role: "stripe_download_raw_logs", allowed: []bool{false, true, false, false, false}},
+		{role: "stripe_unlisted_logs", allowed: []bool{false, false, true, true, false}},
+		{role: "stripe_submit_photo_proof", allowed: []bool{false, false, false, false, true}},
 	} {
 		userID := uuid.New()
 		user := policy.New().User(userID)
@@ -223,6 +224,7 @@ func TestStripeEntitlementRoles(t *testing.T) {
 			chronicle.CanDownload_raw_logs_User(user),
 			chronicle.CanUnlisted_logs_User(user),
 			chronicle.CanMark_log_unlisted_User(user),
+			chronicle.CanSubmit_photo_proof_User(user),
 		}
 
 		require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, tc.role, true))
@@ -233,7 +235,7 @@ func TestStripeEntitlementRoles(t *testing.T) {
 		require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, tc.role, false))
 		allowed, err = zed.Check(ctx, nil, permissions...)
 		require.NoError(t, err)
-		require.Equal(t, []bool{false, false, false, false}, allowed)
+		require.Equal(t, []bool{false, false, false, false, false}, allowed)
 	}
 
 	userID := uuid.New()
@@ -385,6 +387,35 @@ func TestPhotoProofPermissions(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, []bool{true, false, false, true, false, true, true, true, true}, globalAllowed)
+
+	// Discord supporters and paid Stripe users can submit in every tenant,
+	// while the site-wide ban overrides either grant source.
+	supporterSubmitter, stripeSubmitter := uuid.New(), uuid.New()
+	supporterGrant := policy.New()
+	supporterGrant.GlobalChronicle().Supporter(supporterGrant.User(supporterSubmitter))
+	_, err = zed.Write(ctx, *supporterGrant.Txn())
+	require.NoError(t, err)
+	require.NoError(t, zed.SetStripeEntitlementRole(ctx, stripeSubmitter, "stripe_submit_photo_proof", true))
+	additionalSubmitters := policy.New()
+	allowedSubmitters, err := zed.Check(ctx, nil,
+		additionalSubmitters.GlobalChronicle().CanSubmit_photo_proof_User(additionalSubmitters.User(supporterSubmitter)),
+		additionalSubmitters.Wow_tenant(tenantA).CanSubmit_photo_proof_User(additionalSubmitters.User(supporterSubmitter)),
+		additionalSubmitters.GlobalChronicle().CanSubmit_photo_proof_User(additionalSubmitters.User(stripeSubmitter)),
+		additionalSubmitters.Wow_tenant(tenantB).CanSubmit_photo_proof_User(additionalSubmitters.User(stripeSubmitter)),
+	)
+	require.NoError(t, err)
+	require.Equal(t, []bool{true, true, true, true}, allowedSubmitters)
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, supporterSubmitter, []string{"supporter", "photo_proof_banned"}))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, stripeSubmitter, []string{"photo_proof_banned"}))
+	bannedSubmitters, err := zed.Check(ctx, nil,
+		additionalSubmitters.GlobalChronicle().CanSubmit_photo_proof_User(additionalSubmitters.User(supporterSubmitter)),
+		additionalSubmitters.Wow_tenant(tenantA).CanSubmit_photo_proof_User(additionalSubmitters.User(supporterSubmitter)),
+		additionalSubmitters.GlobalChronicle().CanSubmit_photo_proof_User(additionalSubmitters.User(stripeSubmitter)),
+		additionalSubmitters.Wow_tenant(tenantB).CanSubmit_photo_proof_User(additionalSubmitters.User(stripeSubmitter)),
+	)
+	require.NoError(t, err)
+	require.Equal(t, []bool{false, false, false, false}, bannedSubmitters)
+
 	require.NoError(t, zed.SetUserChronicleRoles(ctx, siteReviewer, nil))
 	globalReview, err := zed.CheckOne(ctx, nil, global.GlobalChronicle().CanReview_photo_proof_User(global.User(siteReviewer)))
 	require.NoError(t, err)

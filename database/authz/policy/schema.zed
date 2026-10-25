@@ -29,6 +29,7 @@ definition chronicle {
   relation stripe_ad_free: user
   relation stripe_download_raw_logs: user
   relation stripe_unlisted_logs: user
+  relation stripe_submit_photo_proof: user
 
   // Administrator-managed and Stripe-owned supporter tiers stay distinct.
   relation honored: user
@@ -83,7 +84,7 @@ definition chronicle {
   permission admin_servers = technical_admin
 
   // A site-wide ban overrides every site-wide submission grant.
-  permission submit_photo_proof = photo_proof_submitter - photo_proof_banned
+  permission submit_photo_proof = (photo_proof_submitter + stripe_submit_photo_proof + supporter) - photo_proof_banned
   permission review_photo_proof = photo_proof_reviewer + technical_admin
 
   permission create_tenant_application = technical_admin + chronicle_guild_member
