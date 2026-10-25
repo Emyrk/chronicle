@@ -9,6 +9,7 @@ It includes rows for:
 - Parser stage and consumer bottlenecks
 - River queue depth, job age, saturation, retries, and durations
 - Cache effectiveness and capacity
+- Billing reconciliation and Stripe entitlement synchronization
 - Authentication activity and leader election
 
 The dashboard targets Grafana 10 or newer and uses only built-in panels.
@@ -84,6 +85,7 @@ Panel thresholds are starting points, not service-level objectives. In particula
 - API latency thresholds assume a one-second warning and two-second critical boundary.
 - Parsing backlog age warns at five minutes and becomes critical at fifteen minutes.
 - Worker saturation warns at 80% and becomes critical at 95%.
+- Billing reconciliation age warns at 30 minutes and becomes critical at 45 minutes.
 - Parser failure ratio warns at 1% and becomes critical at 5%.
 
 Tune these values for upload volume, worker capacity, PostgreSQL performance, and the expected response time for each deployment.

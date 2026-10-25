@@ -32,6 +32,11 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 	if !httpapi.Read(r.Context(), w, r, &req) {
 		return
 	}
+	operationID, err := uuid.Parse(req.OperationID)
+	if err != nil {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid checkout operation."})
+		return
+	}
 	selectedProduct, priceAllowed := s.productForPrice(req.PriceID)
 	if !priceAllowed {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid billing price."})
@@ -80,6 +85,7 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 			"chronicle_price_id":     req.PriceID,
 		}},
 	}
+	params.SetIdempotencyKey(fmt.Sprintf("chronicle-checkout:%s:%s", claims.Subject, operationID))
 	if providerCustomerID != "" {
 		params.Customer = stripe.String(providerCustomerID)
 	} else {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -18,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"github.com/stripe/stripe-go/v87"
 )
@@ -256,6 +258,7 @@ func TestCreateCheckoutReusesExistingStripeCustomer(t *testing.T) {
 	t.Parallel()
 
 	userID := uuid.New()
+	operationID := uuid.New()
 	store := &entitlementStore{
 		subscription: database.BillingSubscription{
 			UserID:             userID,
@@ -280,7 +283,7 @@ func TestCreateCheckoutReusesExistingStripeCustomer(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/me/billing/checkout", strings.NewReader(`{"price_id":"price_monthly"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/me/billing/checkout", strings.NewReader(fmt.Sprintf(`{"price_id":"price_monthly","operation_id":%q}`, operationID)))
 	req.Header.Set("Content-Type", "application/json")
 	req = req.WithContext(chronauth.WithClaims(req.Context(), &claims.Claims{Subject: userID}))
 	rec := httptest.NewRecorder()
@@ -288,6 +291,7 @@ func TestCreateCheckoutReusesExistingStripeCustomer(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.NotNil(t, checkoutParams)
+	require.Equal(t, fmt.Sprintf("chronicle-checkout:%s:%s", userID, operationID), stripe.StringValue(checkoutParams.IdempotencyKey))
 	require.Equal(t, "cus_existing", stripe.StringValue(checkoutParams.Customer))
 	require.Nil(t, checkoutParams.CustomerEmail)
 }
@@ -296,6 +300,7 @@ func TestCreateCheckoutUsesEmailWithoutExistingStripeCustomer(t *testing.T) {
 	t.Parallel()
 
 	userID := uuid.New()
+	operationID := uuid.New()
 	store := &entitlementStore{
 		subscriptionErr: pgx.ErrNoRows,
 		user:            database.ChronicleUser{ID: userID, Email: "new-supporter@example.com"},
@@ -314,7 +319,7 @@ func TestCreateCheckoutUsesEmailWithoutExistingStripeCustomer(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/me/billing/checkout", strings.NewReader(`{"price_id":"price_monthly"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/me/billing/checkout", strings.NewReader(fmt.Sprintf(`{"price_id":"price_monthly","operation_id":%q}`, operationID)))
 	req.Header.Set("Content-Type", "application/json")
 	req = req.WithContext(chronauth.WithClaims(req.Context(), &claims.Claims{Subject: userID}))
 	rec := httptest.NewRecorder()
@@ -322,10 +327,37 @@ func TestCreateCheckoutUsesEmailWithoutExistingStripeCustomer(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.NotNil(t, checkoutParams)
+	require.Equal(t, fmt.Sprintf("chronicle-checkout:%s:%s", userID, operationID), stripe.StringValue(checkoutParams.IdempotencyKey))
 	require.Nil(t, checkoutParams.Customer)
 	require.Equal(t, "new-supporter@example.com", stripe.StringValue(checkoutParams.CustomerEmail))
 	require.Equal(t, string(ProductHonored), checkoutParams.SubscriptionData.Metadata["chronicle_product_code"])
 	require.Equal(t, "price_monthly", checkoutParams.SubscriptionData.Metadata["chronicle_price_id"])
+}
+
+func TestCreateCheckoutRejectsInvalidOperationID(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	checkoutCalled := false
+	service := &Service{
+		stripe:           &stripe.Client{},
+		webhookSecret:    "whsec_test",
+		configuredPrices: map[string]ProductCode{"price_monthly": ProductHonored},
+		accessURL:        &url.URL{Scheme: "https", Host: "example.com"},
+		createCheckoutSession: func(context.Context, *stripe.CheckoutSessionCreateParams) (*stripe.CheckoutSession, error) {
+			checkoutCalled = true
+			return nil, nil
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/me/billing/checkout", strings.NewReader(`{"price_id":"price_monthly","operation_id":"not-a-uuid"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(chronauth.WithClaims(req.Context(), &claims.Claims{Subject: userID}))
+	rec := httptest.NewRecorder()
+	service.CreateCheckout(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.False(t, checkoutCalled)
 }
 
 func TestCreateChangePortalOpensSubscriptionUpdateFlow(t *testing.T) {
@@ -732,7 +764,9 @@ func TestSyncStripeEntitlementsPersistsAuthoritativeSnapshotAndStorageGrant(t *t
 
 	userID := uuid.New()
 	store := &entitlementStore{providerCustomer: database.BillingSubscription{UserID: userID}}
-	s := New(Options{Store: store})
+	metrics, err := NewMetrics(prometheus.NewRegistry())
+	require.NoError(t, err)
+	s := New(Options{Store: store, Metrics: metrics})
 	s.listActiveEntitlements = func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error) {
 		return []*stripe.EntitlementsActiveEntitlement{
 			{ID: "ent_revered", LookupKey: string(EntitlementChronicleRevered)},
@@ -740,7 +774,7 @@ func TestSyncStripeEntitlementsPersistsAuthoritativeSnapshotAndStorageGrant(t *t
 		}, nil
 	}
 
-	err := s.syncStripeEntitlements(context.Background(), "cus_123")
+	err = s.syncStripeEntitlements(context.Background(), "cus_123")
 	require.NoError(t, err)
 	require.Equal(t, database.DeleteBillingEntitlementsByProviderCustomerIDParams{Provider: ProviderStripe, ProviderCustomerID: "cus_123"}, store.deletedCustomer)
 	require.Len(t, store.persisted, 2, "unknown entitlements remain visible in the persisted snapshot")
@@ -752,6 +786,9 @@ func TestSyncStripeEntitlementsPersistsAuthoritativeSnapshotAndStorageGrant(t *t
 		{userID: userID, role: stripeRoleDownloadRawLogs, granted: true},
 		{userID: userID, role: stripeRoleUnlistedLogs, granted: true},
 	}, store.roleChanges)
+	require.Equal(t, float64(1), metricValue(t, metrics.entitlementSyncs.WithLabelValues("success")))
+	require.Error(t, s.syncStripeEntitlements(context.Background(), ""))
+	require.Equal(t, float64(1), metricValue(t, metrics.entitlementSyncs.WithLabelValues("error")))
 }
 
 func TestSyncStripeEntitlementsUsesPersistedOwnerWithoutSubscription(t *testing.T) {

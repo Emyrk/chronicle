@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  billingCheckoutOperationID,
   getLogGroupRefetchInterval,
   spellQueryOptions,
   type RiverJobState,
@@ -55,6 +56,31 @@ describe("spellQueryOptions", () => {
       "Spell not found",
     );
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/wowdb/spell/456");
+  });
+});
+
+describe("billingCheckoutOperationID", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("reuses one operation ID for retries of the same price", () => {
+    const randomUUID = vi.fn()
+      .mockReturnValueOnce("11111111-1111-4111-8111-111111111111")
+      .mockReturnValueOnce("22222222-2222-4222-8222-222222222222");
+    vi.stubGlobal("crypto", { randomUUID });
+    const operationIDs = new Map<string, string>();
+
+    expect(billingCheckoutOperationID(operationIDs, "price_monthly")).toBe(
+      "11111111-1111-4111-8111-111111111111",
+    );
+    expect(billingCheckoutOperationID(operationIDs, "price_monthly")).toBe(
+      "11111111-1111-4111-8111-111111111111",
+    );
+    expect(billingCheckoutOperationID(operationIDs, "price_annual")).toBe(
+      "22222222-2222-4222-8222-222222222222",
+    );
+    expect(randomUUID).toHaveBeenCalledTimes(2);
   });
 });
 

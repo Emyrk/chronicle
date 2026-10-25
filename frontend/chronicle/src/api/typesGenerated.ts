@@ -457,6 +457,7 @@ export interface AzerothCorePingResponse {
 // From chroniclesdk/billing.go
 export interface BillingCheckoutRequest {
     readonly price_id: string;
+    readonly operation_id: string;
 }
 
 // From chroniclesdk/billing.go

@@ -18,7 +18,10 @@ func (s *Service) syncStripeEntitlementsIfConfigured(ctx context.Context, custom
 	return s.syncStripeEntitlements(ctx, customerID)
 }
 
-func (s *Service) syncStripeEntitlements(ctx context.Context, customerID string) error {
+func (s *Service) syncStripeEntitlements(ctx context.Context, customerID string) (syncErr error) {
+	defer func() {
+		s.metrics.observeEntitlementSync(syncErr)
+	}()
 	if customerID == "" {
 		return fmt.Errorf("stripe entitlement summary missing customer ID")
 	}

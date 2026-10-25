@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
+	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
 	"github.com/coder/serpent"
 )
 
@@ -67,6 +68,7 @@ func (s *Service) DependsOn() []string {
 		servicedbstore.OnDatabaseStore(),
 		serviceauthz.OnAuthz(),
 		serviceaccessurl.OnAccessURL(),
+		serviceprometheus.OnPrometheus(),
 	}
 }
 
@@ -88,9 +90,14 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	store := servicedbstore.DatabaseStore(s.broker)
 	zed := serviceauthz.Authz(s.broker)
+	metrics, err := billing.NewMetrics(serviceprometheus.Registry(s.broker))
+	if err != nil {
+		return err
+	}
 	s.Billing = billing.New(billing.Options{
 		Store:                  store,
 		StripeEntitlementRoles: zed,
+		Metrics:                metrics,
 		SecretKey:              s.stripeSecretKey,
 		WebhookSecret:          s.stripeWebhookSecret,
 		HonoredPriceIDs:        s.stripeHonoredPrices,

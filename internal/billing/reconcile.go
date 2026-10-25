@@ -62,6 +62,8 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 	}
 	counts := reconciliationCounts{}
 	var partialErr error
+	var subscriptionErrorCount int
+	var entitlementErrorCount int
 	defer func() {
 		status := "completed"
 		errorText := ""
@@ -73,6 +75,7 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 			status = "failed"
 			errorText = runErr.Error()
 		}
+		completedAt := time.Now()
 		completionCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		if err := w.Store.CompleteBillingReconciliationRun(completionCtx, database.CompleteBillingReconciliationRunParams{
@@ -93,6 +96,11 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 				w.Logger.ErrorContext(ctx, "failed to record billing reconciliation failure", "error", err)
 			}
 		}
+		metricStatus := status
+		if workErr != nil {
+			metricStatus = "failed"
+		}
+		w.Billing.metrics.observeReconciliation(metricStatus, completedAt, counts, subscriptionErrorCount, entitlementErrorCount)
 	}()
 
 	providerCustomers, err := w.Store.ListBillingProviderCustomersForReconciliation(ctx)
@@ -127,6 +135,16 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 		return fmt.Errorf("list Stripe subscriptions: %w", err)
 	}
 	seen := make(map[string]struct{}, len(subscriptions))
+	subscriptionErrors := make([]error, 0)
+	recordSubscriptionError := func(subscriptionID string, err error) {
+		counts.subscriptionsInvalid++
+		subscriptionErrorCount++
+		subscriptionErr := fmt.Errorf("reconcile Stripe subscription %q: %w", subscriptionID, err)
+		subscriptionErrors = append(subscriptionErrors, subscriptionErr)
+		if w.Logger != nil {
+			w.Logger.WarnContext(ctx, "skipping Stripe subscription", slog.String("subscription_id", subscriptionID), "error", err)
+		}
+	}
 	// Users whose single subscription row was just written from Stripe's list.
 	// Their pre-run local snapshot is stale and must not be written back.
 	reconciledUsers := make(map[uuid.UUID]struct{}, len(subscriptions))
@@ -145,7 +163,8 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 					counts.subscriptionsInvalid++
 					continue
 				}
-				return fmt.Errorf("retrieve discovered Stripe subscription %q: %w", subscriptionID, err)
+				recordSubscriptionError(subscriptionID, fmt.Errorf("retrieve authoritative state: %w", err))
+				continue
 			}
 		}
 		userID, err := w.Billing.subscriptionOwner(ctx, sub)
@@ -155,7 +174,8 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 		}
 		changed, err := w.Billing.upsertSubscriptionIfChanged(ctx, userID, sub)
 		if err != nil {
-			return fmt.Errorf("reconcile Stripe subscription %q: %w", sub.ID, err)
+			recordSubscriptionError(sub.ID, err)
+			continue
 		}
 		reconciledUsers[userID] = struct{}{}
 		if sub.Customer != nil && sub.Customer.ID != "" {
@@ -176,11 +196,13 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 		sub, err := w.Billing.retrieveAuthoritativeSubscription(ctx, subscriptionID)
 		if err != nil {
 			if !stripeResourceMissing(err) {
-				return fmt.Errorf("retrieve locally missing Stripe subscription %q: %w", subscriptionID, err)
+				recordSubscriptionError(subscriptionID, fmt.Errorf("retrieve locally missing subscription: %w", err))
+				continue
 			}
 			changed, cancelErr := w.Billing.cancelSubscriptionIfChanged(ctx, local)
 			if cancelErr != nil {
-				return fmt.Errorf("cancel deleted Stripe subscription %q: %w", subscriptionID, cancelErr)
+				recordSubscriptionError(subscriptionID, fmt.Errorf("mark deleted subscription canceled: %w", cancelErr))
+				continue
 			}
 			if changed {
 				counts.subscriptionsChanged++
@@ -192,7 +214,8 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 		}
 		changed, err := w.Billing.reconcileSubscription(ctx, sub)
 		if err != nil {
-			return fmt.Errorf("reconcile locally missing Stripe subscription %q: %w", subscriptionID, err)
+			recordSubscriptionError(subscriptionID, fmt.Errorf("reconcile locally missing subscription: %w", err))
+			continue
 		}
 		if sub.Customer != nil && sub.Customer.ID != "" {
 			customers[sub.Customer.ID] = struct{}{}
@@ -205,6 +228,7 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 	customerErrors := make([]error, 0, len(customers))
 	for customerID := range customers {
 		if err := w.Billing.syncStripeEntitlementsIfConfigured(ctx, customerID); err != nil {
+			entitlementErrorCount++
 			customerErr := fmt.Errorf("reconcile Stripe entitlements for customer %q: %w", customerID, err)
 			customerErrors = append(customerErrors, customerErr)
 			if w.Logger != nil {
@@ -214,8 +238,9 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 		}
 		counts.entitlementCustomersSynced++
 	}
-	if len(customerErrors) > 0 {
-		partialErr = errors.Join(customerErrors...)
+	partialErrors := append(subscriptionErrors, customerErrors...)
+	if len(partialErrors) > 0 {
+		partialErr = errors.Join(partialErrors...)
 	}
 	if w.Logger != nil {
 		w.Logger.InfoContext(ctx, "billing reconciliation finished",
@@ -226,6 +251,7 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 			slog.Int("subscriptions_skipped_invalid", int(counts.subscriptionsInvalid)),
 			slog.Int("entitlement_customers_found", int(counts.entitlementCustomersFound)),
 			slog.Int("entitlement_customers_synced", int(counts.entitlementCustomersSynced)),
+			slog.Int("subscription_errors", len(subscriptionErrors)),
 			slog.Int("entitlement_customer_errors", len(customerErrors)),
 		)
 	}

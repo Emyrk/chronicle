@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/riverqueue/river"
 	"github.com/stretchr/testify/require"
 	"github.com/stripe/stripe-go/v87"
@@ -188,6 +189,59 @@ func TestReconciliationCountsChangedNoopAndInvalidMetadata(t *testing.T) {
 	require.Equal(t, pgtype.Timestamptz{Time: cancelAt, Valid: true}, store.conditionalUpserts[0].CancelAt)
 	require.Equal(t, int32(3), store.completion.EntitlementCustomersFound)
 	require.Equal(t, int32(3), store.completion.EntitlementCustomersSynced)
+}
+
+func TestReconciliationContinuesAfterSubscriptionError(t *testing.T) {
+	t.Parallel()
+
+	periodEnd := time.Date(2026, time.November, 19, 0, 0, 0, 0, time.UTC)
+	failed := testStripeSubscription("prod_supporter", "price_monthly", periodEnd)
+	failed.ID = "sub_failed"
+	failed.Customer = &stripe.Customer{ID: "cus_failed"}
+	failed.Metadata = map[string]string{"chronicle_user_id": uuid.NewString()}
+	succeeded := testStripeSubscription("prod_supporter", "price_monthly", periodEnd)
+	succeeded.ID = "sub_succeeded"
+	succeeded.Customer = &stripe.Customer{ID: "cus_succeeded"}
+	succeeded.Metadata = map[string]string{"chronicle_user_id": uuid.NewString()}
+
+	store := &reconciliationStore{changedRows: []int64{1}}
+	metrics, err := NewMetrics(prometheus.NewRegistry())
+	require.NoError(t, err)
+	svc := New(Options{Store: store, Metrics: metrics, ReveredPriceIDs: []string{"price_monthly"}})
+	svc.listSubscriptions = func(context.Context) ([]*stripe.Subscription, error) {
+		return []*stripe.Subscription{failed, succeeded}, nil
+	}
+	svc.retrieveSubscription = func(_ context.Context, id string, _ *stripe.SubscriptionRetrieveParams) (*stripe.Subscription, error) {
+		switch id {
+		case failed.ID:
+			return nil, errors.New("temporary Stripe failure")
+		case succeeded.ID:
+			return succeeded, nil
+		default:
+			t.Fatalf("unexpected subscription %q", id)
+			return nil, nil
+		}
+	}
+
+	err = (&ReconciliationWorker{Billing: svc, Store: store}).Work(context.Background(), &river.Job[ArgsReconcileSubscriptions]{})
+	require.NoError(t, err, "a subscription-level failure must not fail or retry the River job")
+	require.Equal(t, "failed", store.completion.Status)
+	require.Contains(t, store.completion.ErrorText, `reconcile Stripe subscription "sub_failed"`)
+	require.Contains(t, store.completion.ErrorText, "temporary Stripe failure")
+	require.Equal(t, int32(2), store.completion.SubscriptionsSeen)
+	require.Equal(t, int32(1), store.completion.SubscriptionsSkippedInvalid)
+	require.Equal(t, int32(1), store.completion.SubscriptionsChanged)
+	require.Len(t, store.conditionalUpserts, 1)
+	require.Equal(t, succeeded.ID, store.conditionalUpserts[0].ProviderSubscriptionID.String)
+	require.Equal(t, int32(1), store.completion.EntitlementCustomersFound)
+	require.Equal(t, float64(1), metricValue(t, metrics.reconciliationRuns.WithLabelValues("failed")))
+	require.Positive(t, metricValue(t, metrics.reconciliationLastCompleted))
+	require.Zero(t, metricValue(t, metrics.reconciliationLastSuccess))
+	require.Equal(t, float64(1), metricValue(t, metrics.reconciliationSubscriptionErrors))
+	require.Equal(t, float64(0), metricValue(t, metrics.reconciliationEntitlementErrors))
+	require.Equal(t, float64(1), metricValue(t, metrics.reconciliationCustomersFound))
+	require.Equal(t, float64(1), metricValue(t, metrics.reconciliationCustomersSynced))
+	require.Equal(t, int32(1), store.completion.EntitlementCustomersSynced)
 }
 
 func TestReconciliationRetrievesLocalSubscriptionMissingFromList(t *testing.T) {

@@ -38,6 +38,7 @@ type Options struct {
 	Store                     database.Store
 	StripeEntitlementRoles    StripeEntitlementRoleSetter
 	RunEntitlementTransaction EntitlementTransactionRunner
+	Metrics                   *Metrics
 	SecretKey                 string
 	WebhookSecret             string
 	HonoredPriceIDs           []string
@@ -49,6 +50,7 @@ type Options struct {
 type Service struct {
 	store                      database.Store
 	runEntitlementTransaction  EntitlementTransactionRunner
+	metrics                    *Metrics
 	stripe                     *stripe.Client
 	webhookSecret              string
 	priceIDs                   map[ProductCode][]string
@@ -133,6 +135,7 @@ func New(opts Options) *Service {
 	return &Service{
 		store:                      opts.Store,
 		runEntitlementTransaction:  runEntitlementTransaction,
+		metrics:                    opts.Metrics,
 		stripe:                     client,
 		webhookSecret:              opts.WebhookSecret,
 		priceIDs:                   priceIDs,

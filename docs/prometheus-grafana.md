@@ -1,6 +1,6 @@
 # Prometheus metrics and Grafana dashboards
 
-Chronicle exposes application, parser, queue, cache, authentication, and leader-election metrics for Prometheus. This guide is written for operators building Grafana dashboards and alerts.
+Chronicle exposes application, parser, queue, cache, billing, authentication, and leader-election metrics for Prometheus. This guide is written for operators building Grafana dashboards and alerts.
 
 ## Enable the metrics listener
 
@@ -82,7 +82,8 @@ A useful top-level dashboard answers these questions:
 5. Are workers saturated, waiting on PostgreSQL, or spending time in application code?
 6. Which parser stage or consumer is the bottleneck?
 7. Are caches effective and within capacity?
-8. Does the expected replica hold each leader-election lock?
+8. Is billing reconciliation current and successfully synchronizing entitlements?
+9. Does the expected replica hold each leader-election lock?
 
 The sections below provide panels and alert candidates for each area.
 
@@ -580,6 +581,59 @@ Cache hit ratio is usually better as a dashboard and regression signal than a pa
 
 Aggregate by `cache` for alerts to avoid one alert per dataset.
 
+## Billing reconciliation
+
+Billing reconciliation runs once at startup and every 15 minutes. It preserves the last successfully synchronized entitlement snapshot when Stripe is unavailable, so these metrics are operational signals rather than an authorization expiry mechanism.
+
+Reconciliation outcomes by status:
+
+```promql
+sum by (status) (
+  increase(chronicle_billing_reconciliation_runs_total[$__rate_interval])
+)
+```
+
+Time since the most recent successful reconciliation across replicas:
+
+```promql
+time() - max(chronicle_billing_reconciliation_last_success_timestamp_seconds)
+```
+
+Alert when no replica has completed a successful reconciliation for longer than the normal schedule plus a deployment-specific grace period. For example, 45 minutes allows two missed 15-minute intervals:
+
+```promql
+time() - max(chronicle_billing_reconciliation_last_success_timestamp_seconds) > 2700
+```
+
+Entitlement synchronization attempts by result:
+
+```promql
+sum by (result) (
+  increase(chronicle_billing_entitlement_syncs_total[$__rate_interval])
+)
+```
+
+The last-run error and customer gauges are process-local. In a multi-replica deployment, select the replica with the newest completion timestamp before reading them:
+
+```promql
+sum(
+  chronicle_billing_reconciliation_subscription_errors
+  and on(instance)
+  topk(1, chronicle_billing_reconciliation_last_completed_timestamp_seconds)
+)
+```
+
+Use the same pattern for `chronicle_billing_reconciliation_entitlement_errors`, `chronicle_billing_reconciliation_entitlement_customers_found`, and `chronicle_billing_reconciliation_entitlement_customers_synced`.
+
+The metrics intentionally omit Stripe customer, subscription, and Chronicle user identifiers. Use `/admin/billing`, reconciliation run error text, and application logs to identify the affected records.
+
+### Billing alert ideas
+
+- **Reconciliation stale:** no successful reconciliation for 30 to 45 minutes.
+- **Reconciliation failed:** `increase(chronicle_billing_reconciliation_runs_total{status="failed"}[30m]) > 0`.
+- **Entitlement synchronization failing:** `increase(chronicle_billing_entitlement_syncs_total{result="error"}[30m]) > 0`.
+- **Partial customer coverage:** the latest run synchronized fewer entitlement customers than it found.
+
 ## Authentication activity
 
 Session creation activity:
@@ -701,6 +755,21 @@ groups:
           severity: warning
         annotations:
           summary: Chronicle cannot collect River queue state
+
+      - alert: ChronicleBillingReconciliationStale
+        expr: time() - max(chronicle_billing_reconciliation_last_success_timestamp_seconds) > 2700
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Chronicle billing reconciliation has not succeeded for 45 minutes
+
+      - alert: ChronicleBillingEntitlementSyncFailing
+        expr: increase(chronicle_billing_entitlement_syncs_total{result="error"}[30m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: Chronicle cannot synchronize one or more Stripe entitlement customers
 ```
 
 For low-traffic deployments, count-based alerts are often more reliable than ratios. A ratio can become noisy when only one or two jobs run in the alert window.
@@ -714,6 +783,19 @@ For low-traffic deployments, count-based alerts are often more reliable than rat
 | `chronicle_api_requests_processed_total` | Counter | `method`, `path` | API requests whose handler returned |
 | `chronicle_api_concurrent_requests` | Gauge | none | API requests currently executing |
 | `chronicle_api_request_latencies_seconds` | Histogram | `method`, `path` | End-to-end API handler latency |
+
+### Billing
+
+| Metric | Type | Labels | Meaning |
+| --- | --- | --- | --- |
+| `chronicle_billing_entitlement_syncs_total` | Counter | `result` | Stripe entitlement synchronization attempts |
+| `chronicle_billing_reconciliation_runs_total` | Counter | `status` | Reconciliation runs by completed or failed status |
+| `chronicle_billing_reconciliation_last_completed_timestamp_seconds` | Gauge | none | Unix timestamp of the last reconciliation completed by this replica |
+| `chronicle_billing_reconciliation_last_success_timestamp_seconds` | Gauge | none | Unix timestamp of the last error-free reconciliation completed by this replica |
+| `chronicle_billing_reconciliation_subscription_errors` | Gauge | none | Subscription errors in this replica's last reconciliation run |
+| `chronicle_billing_reconciliation_entitlement_errors` | Gauge | none | Entitlement customer errors in this replica's last reconciliation run |
+| `chronicle_billing_reconciliation_entitlement_customers_found` | Gauge | none | Entitlement customers found in this replica's last reconciliation run |
+| `chronicle_billing_reconciliation_entitlement_customers_synced` | Gauge | none | Entitlement customers synchronized in this replica's last reconciliation run |
 
 ### Authentication
 
