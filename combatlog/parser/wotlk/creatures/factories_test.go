@@ -304,7 +304,7 @@ func TestWotLKEncounterFactoriesAcceptMimironVehicle(t *testing.T) {
 		}
 	}
 
-	require.IsType(t, &mimironCharacter{}, matched)
+	require.IsType(t, &characters.AdsGoWithBoss{}, matched)
 	require.Equal(t, leviathan, matched.ID())
 }
 

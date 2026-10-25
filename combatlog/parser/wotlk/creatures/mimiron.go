@@ -16,8 +16,11 @@ const (
 	mimironLeviathanMkIIAltEntry    = 34106
 	mimironVX001Entry               = 33651
 	mimironAerialCommandEntry       = 33670
+	mimironBoomerXP500Entry         = 34192
+	mimironBoomerXP500AltEntry      = 34216
 	mimironSelfRepairSpellID        = 64383
 	mimironRecentlySlainSuppression = 10 * time.Second
+	mimironBoomerTimeout            = 10 * time.Second
 )
 
 const (
@@ -97,7 +100,24 @@ func NewMimironEncounterCharacter(id guid.GUID, all *characters.Characters) (cha
 		state:  state,
 	}
 	state.characters[id] = character
-	return character, true
+	return characters.NewAdsGoWithBossCustomCharacter(
+		character,
+		all,
+		entry,
+		mimironBoomerXP500Entry,
+		mimironBoomerXP500AltEntry,
+	), true
+}
+
+func NewMimironBoomerXP500(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
+	entry, ok := id.GetEntry()
+	if !ok || (entry != mimironBoomerXP500Entry && entry != mimironBoomerXP500AltEntry) {
+		return nil, false
+	}
+
+	return characters.NewCommonCharacter(id, all).
+		WithTimeout(mimironBoomerTimeout).
+		WithTimeoutAsDeath(), true
 }
 
 func (c *mimironCharacter) PhaseDefinitions() *phases.EncounterPhases {
