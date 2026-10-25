@@ -571,13 +571,19 @@ function LinkedCharacterRow({ character, onSetPrimary, onUnlink, busy }: {
 export function CharacterSettings() {
   const { data: siteConfig } = useSiteConfig();
   const photoProof = siteConfig?.tenant?.external_linking?.methods?.["photo-proof"];
-  const { data: proofAccess, isLoading: proofAccessLoading } = useAuthorizationCheck(
-    {
-      tenantSubmit: `wow_tenant:${siteConfig?.tenant?.id ?? ""}#submit_photo_proof`,
-      siteSubmit: "chronicle:chronicle#submit_photo_proof",
-    },
+  // Keep the site-wide check independent: a tenant check failing during a
+  // schema rollout must not mask a valid site-wide submit grant.
+  const { data: siteProofAccess, isLoading: siteProofLoading, error: siteProofError } = useAuthorizationCheck(
+    { submit: "chronicle:chronicle#submit_photo_proof" },
     { enabled: !!photoProof?.enabled && !!siteConfig?.tenant?.id },
   );
+  const { data: tenantProofAccess, isLoading: tenantProofLoading, error: tenantProofError } = useAuthorizationCheck(
+    { submit: `wow_tenant:${siteConfig?.tenant?.id ?? ""}#submit_photo_proof` },
+    { enabled: !!photoProof?.enabled && !!siteConfig?.tenant?.id && !siteProofLoading && !siteProofAccess?.submit },
+  );
+  const canSubmitProof = !!(siteProofAccess?.submit || tenantProofAccess?.submit);
+  const proofAccessLoading = !canSubmitProof && (siteProofLoading || tenantProofLoading);
+  const proofAccessError = !canSubmitProof && (siteProofError || tenantProofError);
   const { data: characters, isLoading } = useMyCharacters();
   const favorites = useMyFavorites();
   const setPrimary = useSetPrimaryCharacter();
@@ -656,13 +662,15 @@ export function CharacterSettings() {
             <ExternalVerificationCard />
             {photoProof?.enabled && (proofAccessLoading ? (
               <p className="text-sm text-muted-foreground">Checking photo proof access...</p>
-            ) : proofAccess?.tenantSubmit || proofAccess?.siteSubmit ? (
+            ) : canSubmitProof ? (
               <PhotoProofCard callout={photoProof.callout} />
             ) : (
               <div className="rounded-lg border p-4 space-y-2">
                 <h3 className="flex items-center gap-2 text-sm font-medium"><Camera className="size-4 text-muted-foreground" />Link with photo proof</h3>
                 {photoProof.callout && <p className="text-sm text-muted-foreground">{photoProof.callout}</p>}
-                <p className="text-sm text-muted-foreground">Photo proof applications are not available to your account yet.</p>
+                <p className="text-sm text-muted-foreground">{proofAccessError
+                  ? "Could not verify photo proof access. Please refresh the page or try again shortly."
+                  : "Photo proof applications are not available to your account yet."}</p>
               </div>
             ))}
           </div>

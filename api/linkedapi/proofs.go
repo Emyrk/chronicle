@@ -16,7 +16,6 @@ import (
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/services/serviceproof"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
-	"github.com/authzed/gochugaru/rel"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -41,26 +40,33 @@ func (h *Handler) proofPermission(review bool) func(http.Handler) http.Handler {
 				httpapi.Forbidden(w, nil)
 				return
 			}
-			var checks []rel.Interface
+			var allowed bool
+			var err error
 			if review {
-				checks = append(checks, b.GlobalChronicle().CanReview_photo_proof_User(actor))
-				if tenant == nil {
-					checks = append(checks, b.GlobalChronicle().CanAdmin_users_User(actor))
-				} else {
-					checks = append(checks, b.Wow_tenant(tenant.ID).CanReview_photo_proof_User(actor))
-				}
+				allowed, err = h.zed.CheckOne(ctx, nil, b.GlobalChronicle().CanReview_photo_proof_User(actor))
 			} else {
-				checks = append(checks,
-					b.GlobalChronicle().CanSubmit_photo_proof_User(actor),
-					b.Wow_tenant(tenant.ID).CanSubmit_photo_proof_User(actor),
-				)
+				allowed, err = h.zed.CheckOne(ctx, nil, b.GlobalChronicle().CanSubmit_photo_proof_User(actor))
 			}
-			allowed, err := h.zed.Check(ctx, nil, checks...)
 			if err != nil {
 				httpapi.InternalServerError(w, err)
 				return
 			}
-			if !allowed[0] && !allowed[1] {
+			// A site-wide grant is sufficient; don't make it depend on the
+			// tenant-specific check (which may be unavailable during rollout).
+			if !allowed {
+				if tenant == nil {
+					allowed, err = h.zed.CheckOne(ctx, nil, b.GlobalChronicle().CanAdmin_users_User(actor))
+				} else if review {
+					allowed, err = h.zed.CheckOne(ctx, nil, b.Wow_tenant(tenant.ID).CanReview_photo_proof_User(actor))
+				} else {
+					allowed, err = h.zed.CheckOne(ctx, nil, b.Wow_tenant(tenant.ID).CanSubmit_photo_proof_User(actor))
+				}
+				if err != nil {
+					httpapi.InternalServerError(w, err)
+					return
+				}
+			}
+			if !allowed {
 				httpapi.Forbidden(w, nil)
 				return
 			}
