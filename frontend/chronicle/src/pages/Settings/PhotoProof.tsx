@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Camera, Search } from "lucide-react";
+import { Camera, ImageUp, Maximize2, Search } from "lucide-react";
 import { useArmorySearch } from "@/api/queries";
 import type { ArmorySearchResult } from "@/api/typesGenerated";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export type ProofSubject = {
   realm_id: string;
@@ -79,6 +80,66 @@ async function encodeScreenshot(file: File): Promise<Blob> {
   }
 }
 
+const EXAMPLE_SCREENSHOT = "/c/images/photo-proof-example.webp";
+
+// Remount (via key) to clear the selection.
+function ScreenshotDropzone({ file, onChange }: { file: File | null; onChange: (file: File | null) => void }) {
+  const [preview, setPreview] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const previewRef = useRef<string | null>(null);
+  useEffect(() => () => { if (previewRef.current) URL.revokeObjectURL(previewRef.current); }, []);
+  const choose = (next: File | null) => {
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    previewRef.current = next ? URL.createObjectURL(next) : null;
+    setPreview(previewRef.current);
+    onChange(next);
+  };
+
+  return <label
+    className={`relative flex aspect-[4/3] cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-lg border-2 border-dashed p-4 text-center transition-colors ${dragging ? "border-primary bg-primary/10" : "border-border hover:border-primary/60 hover:bg-muted/40"}`}
+    onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+    onDragLeave={() => setDragging(false)}
+    onDrop={(event) => {
+      event.preventDefault();
+      setDragging(false);
+      const dropped = event.dataTransfer.files?.[0];
+      if (dropped?.type.startsWith("image/")) choose(dropped);
+      else toast.error("Drop an image file.");
+    }}
+  >
+    <input type="file" accept="image/*" className="sr-only" onChange={(event) => choose(event.target.files?.[0] ?? null)} />
+    {preview ? <>
+      <img src={preview} alt="Selected screenshot" className="absolute inset-0 size-full bg-black object-contain" />
+      <span className="absolute inset-x-0 bottom-0 truncate bg-black/70 px-3 py-1.5 text-xs text-white">{file?.name} · Click to change</span>
+    </> : <>
+      <ImageUp className="size-8 text-muted-foreground" />
+      <span className="text-sm font-medium">Upload your screenshot</span>
+      <span className="text-xs text-muted-foreground">Click to browse or drag an image here</span>
+    </>}
+  </label>;
+}
+
+function ProofExample() {
+  const [expanded, setExpanded] = useState(false);
+  return <>
+    <button type="button" onClick={() => setExpanded(true)} className="group relative aspect-[4/3] overflow-hidden rounded-lg border text-left">
+      <img src={EXAMPLE_SCREENSHOT} alt="Example character selection screenshot" className="size-full object-cover object-right-top transition-transform group-hover:scale-105" />
+      <span className="absolute top-2 left-2 rounded bg-black/70 px-2 py-0.5 text-xs font-medium text-white">Example</span>
+      <span className="absolute top-2 right-2 rounded bg-black/70 p-1 text-white opacity-80 group-hover:opacity-100"><Maximize2 className="size-3.5" /></span>
+      <span className="absolute inset-x-0 bottom-0 bg-black/70 px-3 py-1.5 text-xs text-white">Realm name and every claimed character visible</span>
+    </button>
+    <Dialog open={expanded} onOpenChange={setExpanded}>
+      <DialogContent className="max-w-5xl sm:max-w-5xl">
+        <DialogHeader>
+          <DialogTitle>Example screenshot</DialogTitle>
+          <DialogDescription>Take it on the character selection screen. The realm name (circled) and every character you claim (boxed) must be visible.</DialogDescription>
+        </DialogHeader>
+        <img src={EXAMPLE_SCREENSHOT} alt="Example character selection screenshot with the realm name circled and the character list boxed" className="max-h-[75vh] w-full rounded object-contain" />
+      </DialogContent>
+    </Dialog>
+  </>;
+}
+
 export function PhotoProofCard({ callout }: { callout?: string }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -131,10 +192,13 @@ export function PhotoProofCard({ callout }: { callout?: string }) {
         {!open && <Button variant="outline" size="sm" onClick={() => setOpen(true)}>Start a request</Button>}
       </div>
       {open && <div className="space-y-4 border-t pt-4">
-      <label className="block text-sm space-y-1">
-        <span>Character selection screenshot</span>
-        <Input key={fileInputKey} type="file" accept="image/*" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
-      </label>
+      <div className="space-y-2">
+        <span className="block text-sm font-medium">Character selection screenshot</span>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <ScreenshotDropzone key={fileInputKey} file={file} onChange={setFile} />
+          <ProofExample />
+        </div>
+      </div>
       <div className="space-y-2">
         <label className="block text-sm font-medium" htmlFor="proof-character-search">Select characters</label>
         <div className="relative"><Search className="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" /><Input id="proof-character-search" className="pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search the armory by character name" /></div>
