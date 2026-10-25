@@ -1,0 +1,10 @@
+# machine-local settings and rules (committed examples: local.example.yaml, LOCAL.example.md)
+local.yaml
+LOCAL.md
+.venv/
+__pycache__/
+# second line of defence: Blizzard-derived assets never belong in this repo (they live in the workdir)
+*.glb
+*.png
+*.webp
+*.blp
