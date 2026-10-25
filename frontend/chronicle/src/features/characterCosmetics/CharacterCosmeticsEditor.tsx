@@ -1,8 +1,9 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
-import { Check, Lock, RotateCcw, Sparkles, Wand2 } from "lucide-react";
+import { Check, EyeOff, Lock, Pause, RotateCcw, Sparkles, Wand2 } from "lucide-react";
 import type {
   CharacterCosmetics,
+  CharacterCosmeticsDisplayMode,
   CosmeticDefinition,
   LinkedCharacter,
 } from "@/api/typesGenerated";
@@ -31,6 +32,7 @@ import {
   TIER_COLORS,
   combineCosmetics,
   isDefaultSelection,
+  limitedTreatment,
   selectionFromAPI,
   selectionSummary,
   type CosmeticStyleSelection,
@@ -58,6 +60,16 @@ const SLOT_CONFIG: {
 ];
 
 const TIER_ORDER: PaidTier[] = ["Honored", "Revered", "Exalted"];
+
+const PREVIEW_MODES: { mode: CharacterCosmeticsDisplayMode; label: string }[] = [
+  { mode: "enabled", label: "All effects" },
+  { mode: "limited", label: "Limited" },
+];
+
+const LIMITED_NOTES = {
+  still: { icon: Pause, short: "Still", text: "Limited viewers see a still version." },
+  hidden: { icon: EyeOff, short: "Hidden", text: "Hidden for Limited viewers." },
+} as const;
 
 function tierLabel(tier?: string): PaidTier | null {
   switch (tier) {
@@ -156,6 +168,7 @@ function OptionTile({
   slot,
   selected,
   locked,
+  mode,
   onSelect,
 }: {
   option: EditorOption;
@@ -163,10 +176,14 @@ function OptionTile({
   slot: Slot;
   selected: boolean;
   locked: boolean;
+  mode: CharacterCosmeticsDisplayMode;
   onSelect: () => void;
 }) {
-  const cosmetic = combineCosmetics({ ...DEFAULT_COSMETIC_SELECTION, [slot]: option.key });
-  const animated = isAnimated(cosmetic);
+  const selection = { ...DEFAULT_COSMETIC_SELECTION, [slot]: option.key };
+  const cosmetic = combineCosmetics(selection, mode);
+  const animated = isAnimated(combineCosmetics(selection));
+  const treatment = limitedTreatment(option.preset);
+  const limitedNote = treatment === "unchanged" ? null : LIMITED_NOTES[treatment];
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -190,6 +207,12 @@ function OptionTile({
             {selected && !locked && <Check className="ml-auto size-3.5 shrink-0 text-primary" />}
             {selected && locked && <span className="ml-auto shrink-0 text-[10px] font-medium uppercase text-destructive">Preview</span>}
           </div>
+          {mode === "limited" && limitedNote && (
+            <span className="absolute right-1.5 top-1.5 z-10 inline-flex items-center gap-0.5 rounded bg-black/70 px-1 py-px text-[9px] font-medium uppercase tracking-wide text-zinc-200">
+              <limitedNote.icon className="size-2.5" />
+              {limitedNote.short}
+            </span>
+          )}
         </button>
       </TooltipTrigger>
       <TooltipContent side="top" sideOffset={6} className="max-w-60 space-y-1.5 px-3 py-2 text-left">
@@ -198,9 +221,10 @@ function OptionTile({
           {option.tier !== "Free" && <TierBadge tier={option.tier} />}
         </div>
         <p className="text-xs text-zinc-300">{option.preset.description}</p>
-        {(animated || locked) && (
+        {(animated || locked || limitedNote) && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-white/10 pt-1.5 text-[11px] text-zinc-400">
             {animated && <span className="inline-flex items-center gap-1"><Wand2 className="size-3" />Animated</span>}
+            {limitedNote && <span className="inline-flex items-center gap-1"><limitedNote.icon className="size-3" />{limitedNote.text}</span>}
             {locked && <span className="inline-flex items-center gap-1" style={{ color: TIER_COLORS[option.tier] }}><Lock className="size-3" />Unlocks at {option.tier} · click to preview</span>}
           </div>
         )}
@@ -237,6 +261,7 @@ export function CharacterCosmeticsEditor({
   const [draft, setDraft] = useState(saved);
   const [applyToAll, setApplyToAll] = useState(false);
   const [barLength, setBarLength] = useState<"long" | "short">("long");
+  const [previewMode, setPreviewMode] = useState<CharacterCosmeticsDisplayMode>("enabled");
   const allowed = useMemo(() => new Set(safeAllowedIDs), [safeAllowedIDs]);
   const optionsBySlot = useMemo(
     () => Object.fromEntries(SLOT_CONFIG.map((slot) => [slot.key, slotOptions(slot, safeCatalog)])) as Record<Slot, EditorOption[]>,
@@ -260,7 +285,7 @@ export function CharacterCosmeticsEditor({
       className: character.class,
       specialization: "",
       value: barLength === "long" ? 940 : 380,
-      cosmetic: combineCosmetics(draft),
+      cosmetic: combineCosmetics(draft, previewMode),
     },
     { playerID: "below", playerName: "Raidmate", className: "Mage", specialization: "", value: barLength === "long" ? 720 : 300 },
   ];
@@ -282,7 +307,23 @@ export function CharacterCosmeticsEditor({
 
           <div className="space-y-2 border-b border-border bg-muted/20 px-6 py-4">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Preview</span>
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Preview
+                {previewMode === "limited" && <span className="ml-1.5 normal-case tracking-normal">· as viewers with Limited cosmetics see it</span>}
+              </span>
+              <div className="ml-auto inline-flex rounded-md border border-border p-0.5 text-xs">
+                {PREVIEW_MODES.map(({ mode, label }) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setPreviewMode(mode)}
+                    aria-pressed={previewMode === mode}
+                    className={cn("rounded px-2 py-0.5", previewMode === mode ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <div className="inline-flex rounded-md border border-border p-0.5 text-xs">
                 {(["long", "short"] as const).map((length) => (
                   <button
@@ -337,6 +378,7 @@ export function CharacterCosmeticsEditor({
                             slot={slot.key}
                             selected={draft[slot.key] === option.key}
                             locked={!!option.id && !allowed.has(option.id)}
+                            mode={previewMode}
                             onSelect={() => setDraft({ ...draft, [slot.key]: option.key })}
                           />
                         ))}

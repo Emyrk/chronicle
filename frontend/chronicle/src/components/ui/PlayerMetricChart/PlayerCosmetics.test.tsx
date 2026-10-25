@@ -7,7 +7,7 @@ import {
   BORDER_STYLES,
   NAME_STYLES,
   combineCosmetics,
-  filterCosmeticSelection,
+  limitedTreatment,
   selectionFromAPI,
   selectionSummary,
   selectionToAPI,
@@ -76,34 +76,25 @@ describe("player cosmetics", () => {
     });
   });
 
-  it("keeps static slots while removing only flashy slots in limited mode", () => {
-    expect(filterCosmeticSelection({
-      name: "gilded",
-      background: "embers",
-      border: "elite",
-    }, "limited")).toEqual({
-      name: "gilded",
-      background: "none",
-      border: "none",
+  it("freezes still presets and hides the rest in limited mode", () => {
+    expect(combineCosmetics({ name: "gilded", background: "embers", border: "elite" }, "limited")).toEqual({
+      ...NAME_STYLES.gilded.cosmetic,
+      ...BACKGROUND_STYLES.embers.cosmetic,
+      barClassName: "cosmetic-bar-embers cosmetic-still",
+      borderClassName: "cosmetic-border-elite cosmetic-still",
     });
 
-    expect(filterCosmeticSelection({
-      name: "holy",
-      background: "satin",
-      border: "none",
-    }, "limited")).toEqual({
-      name: "none",
-      background: "satin",
-      border: "none",
-    });
+    expect(combineCosmetics({ name: "shimmer", background: "gleam", border: "chasing" }, "limited")).toEqual({});
   });
 
   it("removes every slot in disabled mode", () => {
-    expect(filterCosmeticSelection({
-      name: "gilded",
-      background: "satin",
-      border: "elite",
-    }, "disabled")).toEqual({ name: "none", background: "none", border: "none" });
+    expect(combineCosmetics({ name: "gilded", background: "satin", border: "elite" }, "disabled")).toEqual({});
+  });
+
+  it("gives every flashy preset a limited treatment and leaves static ones unchanged", () => {
+    for (const preset of [...Object.values(NAME_STYLES), ...Object.values(BACKGROUND_STYLES), ...Object.values(BORDER_STYLES)]) {
+      expect(limitedTreatment(preset)).toBe("flashy" in preset ? ("limited" in preset ? "still" : "hidden") : "unchanged");
+    }
   });
 
   it("summarizes only non-default selections", () => {

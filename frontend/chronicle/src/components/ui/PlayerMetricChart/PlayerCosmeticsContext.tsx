@@ -9,7 +9,6 @@ import type {
 import {
   COSMETIC_CSS,
   combineCosmetics,
-  filterCosmeticSelection,
   selectionFromAPI,
 } from "./PlayerCosmetics";
 import type { PlayerMetricChartData, PlayerRowCosmetic } from "./PlayerMetricChartModel";
@@ -24,7 +23,7 @@ export function mapInstancePlayerCosmetics(
   if (!players || mode === "disabled") return mapped;
 
   for (const [guid, selection] of Object.entries(players)) {
-    mapped.set(guid, combineCosmetics(filterCosmeticSelection(selectionFromAPI(selection), mode)));
+    mapped.set(guid, combineCosmetics(selectionFromAPI(selection), mode));
   }
   return mapped;
 }

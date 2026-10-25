@@ -8,8 +8,10 @@ export interface Preset {
   tier: Tier
   description: string
   cosmetic: PlayerRowCosmetic
-  /** Suppressed when viewers choose the Limited display mode. */
+  /** Toned down when viewers choose the Limited display mode: hidden, or frozen when `limited` is 'still'. */
   flashy?: boolean
+  /** Limited mode freezes the preset on its resting frame instead of hiding it. */
+  limited?: 'still'
 }
 
 export const DEFAULT_BAR = 'linear-gradient(to right, oklch(0 0 0 / 0.3), oklch(0 0 0 / 0.15)), var(--bar-color)'
@@ -58,6 +60,7 @@ export const NAME_STYLES = {
     description: 'Flickering green fel flame.',
     cosmetic: { nameClassName: 'cosmetic-name-fel' },
     flashy: true,
+    limited: 'still',
   },
   shimmer: {
     label: 'Shimmer',
@@ -72,6 +75,7 @@ export const NAME_STYLES = {
     description: 'Slow-cycling rainbow gradient.',
     cosmetic: { nameClassName: 'cosmetic-name-prismatic' },
     flashy: true,
+    limited: 'still',
   },
   storm: {
     label: 'Stormcaller',
@@ -79,6 +83,7 @@ export const NAME_STYLES = {
     description: 'Electric blue lettering that crackles with lightning.',
     cosmetic: { nameClassName: 'cosmetic-name-storm' },
     flashy: true,
+    limited: 'still',
   },
   legendary: {
     label: 'Legendary',
@@ -86,6 +91,7 @@ export const NAME_STYLES = {
     description: 'Legendary-quality orange with a bright sweep.',
     cosmetic: { nameClassName: 'cosmetic-name-legendary' },
     flashy: true,
+    limited: 'still',
   },
   holy: {
     label: 'Holy Light',
@@ -93,6 +99,7 @@ export const NAME_STYLES = {
     description: 'Pale gold lettering with a slow, radiant pulse.',
     cosmetic: { nameClassName: 'cosmetic-name-holy' },
     flashy: true,
+    limited: 'still',
   },
   arcane: {
     label: 'Arcane',
@@ -100,6 +107,7 @@ export const NAME_STYLES = {
     description: 'Violet lettering with a sweeping highlight and an arcane pulse.',
     cosmetic: { nameClassName: 'cosmetic-name-arcane' },
     flashy: true,
+    limited: 'still',
   },
   thunderfury: {
     label: 'Thunderfury',
@@ -107,6 +115,7 @@ export const NAME_STYLES = {
     description: 'Storm blue and gold bands roll through the name, with lightning flashes.',
     cosmetic: { nameClassName: 'cosmetic-name-thunderfury' },
     flashy: true,
+    limited: 'still',
   },
   molten: {
     label: 'Molten',
@@ -114,6 +123,7 @@ export const NAME_STYLES = {
     description: 'Lava rises through the letters under a heat glow.',
     cosmetic: { nameClassName: 'cosmetic-name-molten' },
     flashy: true,
+    limited: 'still',
   },
 } satisfies Record<string, Preset>
 
@@ -204,6 +214,7 @@ export const BACKGROUND_STYLES = {
     description: 'The class color drifts through a complementary hue.',
     cosmetic: { barClassName: 'cosmetic-bar-arcane', barBackground: 'linear-gradient(to right, oklch(0 0 0 / 0.3), oklch(0 0 0 / 0.15)), linear-gradient(90deg, var(--bar-color), color-mix(in oklch, var(--bar-color) 65%, #a855f7), var(--bar-color))' },
     flashy: true,
+    limited: 'still',
   },
   embers: {
     label: 'Embers',
@@ -211,6 +222,7 @@ export const BACKGROUND_STYLES = {
     description: 'Small sparks rise over the class color.',
     cosmetic: { barClassName: 'cosmetic-bar-embers', barBackground: DEFAULT_BAR },
     flashy: true,
+    limited: 'still',
   },
   snowfall: {
     label: 'Snowfall',
@@ -218,6 +230,7 @@ export const BACKGROUND_STYLES = {
     description: 'Soft flakes drift down over the class color.',
     cosmetic: { barClassName: 'cosmetic-bar-snowfall', barBackground: DEFAULT_BAR },
     flashy: true,
+    limited: 'still',
   },
   starfall: {
     label: 'Starfall',
@@ -225,6 +238,7 @@ export const BACKGROUND_STYLES = {
     description: 'Stars twinkle in and out across the background.',
     cosmetic: { barClassName: 'cosmetic-bar-starfall', barBackground: `radial-gradient(circle at 28% 46%, oklch(1 0 0 / 0.45) 0 0.6px, transparent 1.2px) 0 0 / 236px 100%, radial-gradient(circle at 45% 13%, oklch(1 0 0 / 0.45) 0 0.5px, transparent 1.1px) 0 0 / 254px 100%, radial-gradient(circle at 18% 29%, oklch(1 0 0 / 0.45) 0 0.7px, transparent 1.3px) 0 0 / 213px 100%, radial-gradient(circle at 4% 19%, oklch(1 0 0 / 0.45) 0 0.6px, transparent 1.2px) 0 0 / 269px 100%, radial-gradient(circle at 25% 83%, oklch(1 0 0 / 0.45) 0 0.7px, transparent 1.3px) 0 0 / 198px 100%, radial-gradient(circle at 27% 28%, oklch(1 0 0 / 0.45) 0 0.6px, transparent 1.2px) 0 0 / 257px 100%, ${DEFAULT_BAR}` },
     flashy: true,
+    limited: 'still',
   },
 } satisfies Record<string, Preset>
 
@@ -236,6 +250,7 @@ export const BORDER_STYLES = {
     description: 'Every few seconds, gold elite-frame brackets glint at the corners.',
     cosmetic: { borderClassName: 'cosmetic-border-elite' },
     flashy: true,
+    limited: 'still',
   },
   chasing: {
     label: 'Chasing Light',
@@ -520,6 +535,9 @@ export const COSMETIC_CSS = `
   89% { opacity: 1; filter: brightness(1.4); }
   91% { opacity: 0.4; }
 }
+/* Limited mode: still presets hold their resting frame. */
+.cosmetic-still, .cosmetic-still::before, .cosmetic-still::after { animation-name: none !important; }
+.cosmetic-still.cosmetic-border-elite { opacity: 0.8; }
 @media (prefers-reduced-motion: reduce) {
   [class*='cosmetic-'], [class*='cosmetic-']::before, [class*='cosmetic-']::after { animation: none !important; }
 }
@@ -551,29 +569,46 @@ export const DEFAULT_COSMETIC_SELECTION: CosmeticStyleSelection = {
   border: 'none',
 }
 
-function isFlashyPreset(preset: Preset): boolean {
-  return preset.flashy === true
+export type LimitedTreatment = 'unchanged' | 'still' | 'hidden'
+
+/** How a preset appears to viewers who choose the Limited display mode. */
+export function limitedTreatment(preset: Preset): LimitedTreatment {
+  if (!preset.flashy) return 'unchanged'
+  return preset.limited === 'still' ? 'still' : 'hidden'
 }
 
-export function filterCosmeticSelection(
-  selection: CosmeticStyleSelection,
-  mode: CharacterCosmeticsDisplayMode,
-): CosmeticStyleSelection {
-  if (mode === 'disabled') return DEFAULT_COSMETIC_SELECTION
-  if (mode === 'enabled') return selection
+const STILL_CLASS = 'cosmetic-still'
 
-  return {
-    name: isFlashyPreset(NAME_STYLES[selection.name]) ? 'none' : selection.name,
-    background: isFlashyPreset(BACKGROUND_STYLES[selection.background]) ? 'none' : selection.background,
-    border: isFlashyPreset(BORDER_STYLES[selection.border]) ? 'none' : selection.border,
+const CLASS_KEYS = ['nameClassName', 'barClassName', 'borderClassName'] as const
+
+/** Adds the still class to each class the preset sets; unset keys stay absent so slots combine cleanly. */
+function stillCosmetic(cosmetic: PlayerRowCosmetic): PlayerRowCosmetic {
+  const still = { ...cosmetic }
+  for (const key of CLASS_KEYS) {
+    if (still[key]) still[key] = `${still[key]} ${STILL_CLASS}`
+  }
+  return still
+}
+
+function presetCosmetic(preset: Preset, mode: CharacterCosmeticsDisplayMode): PlayerRowCosmetic {
+  if (mode === 'disabled') return {}
+  if (mode === 'enabled') return preset.cosmetic
+  switch (limitedTreatment(preset)) {
+    case 'unchanged':
+      return preset.cosmetic
+    case 'hidden':
+      return {}
+    case 'still':
+      return stillCosmetic(preset.cosmetic)
   }
 }
 
-export function combineCosmetics(selection: CosmeticStyleSelection): PlayerRowCosmetic {
+/** Combines a selection's slots as a viewer with the given display mode sees them. */
+export function combineCosmetics(selection: CosmeticStyleSelection, mode: CharacterCosmeticsDisplayMode = 'enabled'): PlayerRowCosmetic {
   return {
-    ...NAME_STYLES[selection.name].cosmetic,
-    ...BACKGROUND_STYLES[selection.background].cosmetic,
-    ...BORDER_STYLES[selection.border].cosmetic,
+    ...presetCosmetic(NAME_STYLES[selection.name], mode),
+    ...presetCosmetic(BACKGROUND_STYLES[selection.background], mode),
+    ...presetCosmetic(BORDER_STYLES[selection.border], mode),
   }
 }
 

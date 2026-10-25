@@ -244,7 +244,7 @@ const CHARACTER_COSMETICS_OPTIONS: readonly {
   {
     value: "limited",
     label: "Limited",
-    description: "Show static cosmetics only. Animated and flashy effects are hidden.",
+    description: "Calm cosmetics only. Most animated effects hold still; the flashiest are hidden.",
   },
   {
     value: "disabled",

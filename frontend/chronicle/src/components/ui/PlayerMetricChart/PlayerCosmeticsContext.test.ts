@@ -11,7 +11,7 @@ const player: PlayerMetricChartData = {
 };
 
 describe("PlayerCosmeticsContext helpers", () => {
-  it("maps API selections by GUID and applies limited filtering", () => {
+  it("maps API selections by GUID and applies the limited treatment", () => {
     const cosmetics = mapInstancePlayerCosmetics({
       "player-1": {
         name_id: "name_gilded",
@@ -22,6 +22,9 @@ describe("PlayerCosmeticsContext helpers", () => {
 
     expect(cosmetics.get("player-1")).toEqual({
       nameClassName: "cosmetic-name-gilded",
+      barClassName: "cosmetic-bar-embers cosmetic-still",
+      barBackground: expect.any(String),
+      borderClassName: "cosmetic-border-elite cosmetic-still",
     });
   });
 
