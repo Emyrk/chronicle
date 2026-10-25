@@ -536,6 +536,8 @@ function BuiltinEventsPanel({
   const [panelContext, setPanelContext] = useState<Record<string, unknown> | null>(null);
   const [panelContextVersion, setPanelContextVersion] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  const [openedCardBackPanelType, setOpenedCardBackPanelType] = useState<string | null>(null);
+  const hasOpenedCardBack = openedCardBackPanelType === panelType;
   // Panels portal their own controls into the title row (PanelRenderProps.headerSlot).
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
   const [filterContextMenu, setFilterContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -791,23 +793,22 @@ function BuiltinEventsPanel({
   }, [onPanelTypeChange, onPanelOptionChange, applyFilters]);
 
   const flipCard = useCallback(() => {
-    setFlipped((prev) => {
-      if (prev) {
-        // Flipping back — apply buffered filters (only for standard panels;
-        // panels with renderCardBack manage their own panelContext updates)
-        if (!panel.renderCardBack && pendingFilters !== null) {
-          applyFilters(pendingFilters);
-          setPendingFilters(null);
-        }
-      } else {
-        // Flipping open — seed buffer with current filters
-        if (!panel.renderCardBack) {
-          setPendingFilters(userFilters);
-        }
+    if (flipped) {
+      // Flipping back — apply buffered filters (only for standard panels;
+      // panels with renderCardBack manage their own panelContext updates)
+      if (!panel.renderCardBack && pendingFilters !== null) {
+        applyFilters(pendingFilters);
+        setPendingFilters(null);
       }
-      return !prev;
-    });
-  }, [pendingFilters, applyFilters, userFilters, panel.renderCardBack]);
+    } else {
+      // Flipping open — mount the settings face and seed the filter buffer.
+      setOpenedCardBackPanelType(panelType);
+      if (!panel.renderCardBack) {
+        setPendingFilters(userFilters);
+      }
+    }
+    setFlipped(!flipped);
+  }, [flipped, pendingFilters, applyFilters, userFilters, panel.renderCardBack, panelType]);
 
   const closeFilterEditor = useCallback(() => {
     if (!panel.renderCardBack && pendingFilters !== null) {
@@ -837,6 +838,7 @@ function BuiltinEventsPanel({
     }
     setPanelContextVersion((version) => version + 1);
     setFlipped(false);
+    setOpenedCardBackPanelType(null);
     setPendingFilters(null);
     // NOTE: We intentionally do NOT call onFiltersChange here. The parent owns
     // panelFiltersByID and sets default filters itself when the panel type changes.
@@ -1116,7 +1118,8 @@ function BuiltinEventsPanel({
             </div>
           </>
         )}
-        back={panel.disableCardFlip ? null : panel.renderCardBack
+        mountBack={hasOpenedCardBack}
+        back={!hasOpenedCardBack || panel.disableCardFlip ? null : panel.renderCardBack
           ? panel.renderCardBack({
               panelContext,
               setPanelContext: setPanelContextWithKey,

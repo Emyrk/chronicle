@@ -11,6 +11,8 @@ interface PanelCardProps {
   borderColor?: string | null;
   front: ReactNode;
   back: ReactNode;
+  /** Defer mounting expensive settings until the card has been opened. */
+  mountBack?: boolean;
   /**
    * The front has no padding: content runs to the edges (the panel's hoverHeader
    * floats over it). Content can react to the header showing with
@@ -28,10 +30,13 @@ export function PanelCard({
   borderColor,
   front,
   back,
+  mountBack = true,
   bleed = false,
   contentHeight = false,
 }: PanelCardProps) {
   const seamless = useSeamlessLayout();
+  const shouldMountBack = back != null && mountBack;
+
   return (
     <div className={cn("[perspective:1400px]", !contentHeight && "h-full")} onMouseDown={onMouseDown}>
       <div
@@ -57,7 +62,10 @@ export function PanelCard({
         >
           {front}
         </Card>
-        {back != null && <Card className={cn(
+        {/* The settings face can be expensive and may start data queries. Mount it
+            on the first flip, then retain it so editor state and the return
+            animation survive subsequent flips. */}
+        {shouldMountBack && <Card className={cn(
           "p-2 sm:p-4 gap-2 mb-0 flex flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)]",
           contentHeight ? "[grid-area:1/1]" : "absolute inset-0 h-full",
           !flipped && "pointer-events-none",
