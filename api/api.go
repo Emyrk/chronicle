@@ -225,6 +225,22 @@ func New(ctx context.Context, opts Options) (*API, error) {
 	gcCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	api.drainLuaArtifactGarbage(gcCtx)
 	cancel()
+	// Upload intents become eligible after their I/O grace period; a one-off
+	// startup sweep would miss intents that age while the service stays up.
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				gcCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				api.drainLuaArtifactGarbage(gcCtx)
+				cancel()
+			}
+		}
+	}()
 	return api, nil
 }
 

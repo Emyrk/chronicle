@@ -2010,6 +2010,7 @@ type LuaProjectArtifact struct {
 type LuaProjectArtifactGc struct {
 	ObjectKey   string             `db:"object_key" json:"object_key"`
 	AttemptedAt pgtype.Timestamptz `db:"attempted_at" json:"attempted_at"`
+	ReadyAt     pgtype.Timestamptz `db:"ready_at" json:"ready_at"`
 }
 
 type OauthDeviceSession struct {

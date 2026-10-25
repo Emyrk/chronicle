@@ -1576,7 +1576,8 @@ CREATE VIEW log_instances_guild AS
 
 CREATE TABLE lua_project_artifact_gc (
     object_key text NOT NULL,
-    attempted_at timestamp with time zone
+    attempted_at timestamp with time zone,
+    ready_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 CREATE TABLE lua_project_artifacts (

@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
@@ -151,6 +152,119 @@ func TestLuaArtifactGarbageRemoval(t *testing.T) {
 	pending, err := zed.ListLuaProjectArtifactGarbage(ctx)
 	require.NoError(t, err)
 	require.NotContains(t, pending, key)
+}
+
+type failingLuaRemoval struct {
+	storage.ObjectStorage
+	fail bool
+}
+
+func (s *failingLuaRemoval) RemoveFile(ctx context.Context, bucket string, paths []string) ([]storage.FileUploadResponse, error) {
+	if s.fail {
+		return nil, errors.New("injected object delete failure")
+	}
+	return s.ObjectStorage.RemoveFile(ctx, bucket, paths)
+}
+
+func TestLuaUploadIntentRecovery(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(testservices.Authz(t))
+	objects, err := storage.NewLocalStorageAt(t.TempDir())
+	require.NoError(t, err)
+	_, err = objects.CreateBucket(ctx, luaProjectBucket, storage.BucketOptions{Public: false})
+	require.NoError(t, err)
+	storageWithFailure := &failingLuaRemoval{ObjectStorage: objects, fail: true}
+	api := &API{Opts: &Options{Zed: zed, Storage: storageWithFailure, Logger: slog.Default()}}
+	key := luaProjectObjectKey(uuid.New())
+	require.NoError(t, zed.RegisterLuaProjectUpload(ctx, key))
+	_, err = objects.UploadFile(ctx, luaProjectBucket, key, bytes.NewReader([]byte("uncommitted")))
+	require.NoError(t, err)
+
+	// A failed best-effort delete must retain the intent, even if the request
+	// (or process) never makes it as far as writing an artifact.
+	api.discardLuaObject(key)
+	pending, err := zed.ListLuaProjectArtifactGarbage(ctx)
+	require.NoError(t, err)
+	require.Contains(t, pending, key)
+	api.drainLuaArtifactGarbage(ctx)
+	_, err = objects.DownloadFile(ctx, luaProjectBucket, key)
+	require.NoError(t, err, "an active upload must not be collected")
+
+	// Advance only the SQL selection cutoff, not wall-clock time. A failed
+	// deletion remains claimed and is retried after the two-minute lease.
+	future := time.Now().Add(11 * time.Minute)
+	api.drainLuaArtifactGarbageAt(ctx, future)
+	storageWithFailure.fail = false
+	api.drainLuaArtifactGarbageAt(ctx, future.Add(time.Minute))
+	_, err = objects.DownloadFile(ctx, luaProjectBucket, key)
+	require.NoError(t, err, "the first claim must exclude another replica")
+	api.drainLuaArtifactGarbageAt(ctx, future.Add(3*time.Minute))
+	_, err = objects.DownloadFile(ctx, luaProjectBucket, key)
+	require.ErrorIs(t, err, storage.ErrFileNotFound)
+	pending, err = zed.ListLuaProjectArtifactGarbage(ctx)
+	require.NoError(t, err)
+	require.NotContains(t, pending, key)
+}
+
+func TestLuaUploadIntentFinalization(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed, _ := dbtestutil.NewDB(t)
+	owner := uuid.New()
+	_, err := zed.InsertUser(ctx, database.InsertUserParams{ID: owner, Username: "intent-" + owner.String()})
+	require.NoError(t, err)
+	project, err := zed.CreateLuaProject(ctx, database.CreateLuaProjectParams{OwnerID: owner, Kind: "panel", Name: "Intent", Slug: "intent"})
+	require.NoError(t, err)
+	key := luaProjectObjectKey(project.ID)
+	require.NoError(t, zed.RegisterLuaProjectUpload(ctx, key))
+	hash := strings.Repeat("a", 64)
+	require.NoError(t, zed.InTx(ctx, func(tx database.Store) error {
+		if _, err := tx.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, OwnerID: owner, Hash: pgtype.Text{String: hash, Valid: true}, ExpectedRevision: 1}); err != nil {
+			return err
+		}
+		if _, err := tx.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: project.ID, Hash: hash, ObjectKey: pgtype.Text{String: key, Valid: true}}); err != nil {
+			return err
+		}
+		_, err := tx.ConsumeLuaProjectUpload(ctx, key)
+		return err
+	}, nil))
+	pending, err := zed.ListLuaProjectArtifactGarbage(ctx)
+	require.NoError(t, err)
+	require.NotContains(t, pending, key)
+	claimed, err := zed.ClaimLuaProjectArtifactGarbage(ctx, pgtype.Timestamptz{Time: time.Now().Add(11 * time.Minute), Valid: true})
+	require.NoError(t, err)
+	require.NotContains(t, claimed, key)
+
+	// Even an erroneous tombstone must never remove a referenced artifact.
+	require.NoError(t, zed.RegisterLuaProjectUpload(ctx, key))
+	claimed, err = zed.ClaimLuaProjectArtifactGarbage(ctx, pgtype.Timestamptz{Time: time.Now().Add(11 * time.Minute), Valid: true})
+	require.NoError(t, err)
+	require.NotContains(t, claimed, key)
+	_, err = zed.ConsumeLuaProjectUpload(ctx, key)
+	require.NoError(t, err)
+
+	// If a collector claims an expired upload first, the SQL artifact write
+	// and draft revision must roll back rather than reference a deleted key.
+	staleKey := luaProjectObjectKey(project.ID)
+	require.NoError(t, zed.RegisterLuaProjectUpload(ctx, staleKey))
+	claimed, err = zed.ClaimLuaProjectArtifactGarbage(ctx, pgtype.Timestamptz{Time: time.Now().Add(11 * time.Minute), Valid: true})
+	require.NoError(t, err)
+	require.Contains(t, claimed, staleKey)
+	err = zed.InTx(ctx, func(tx database.Store) error {
+		if _, err := tx.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, OwnerID: owner, Hash: pgtype.Text{String: strings.Repeat("b", 64), Valid: true}, ExpectedRevision: 2}); err != nil {
+			return err
+		}
+		if _, err := tx.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: project.ID, Hash: strings.Repeat("b", 64), ObjectKey: pgtype.Text{String: staleKey, Valid: true}}); err != nil {
+			return err
+		}
+		_, err := tx.ConsumeLuaProjectUpload(ctx, staleKey)
+		return err
+	}, nil)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	unchanged, err := zed.GetOwnerLuaProject(ctx, database.GetOwnerLuaProjectParams{ID: project.ID, OwnerID: owner})
+	require.NoError(t, err)
+	require.EqualValues(t, 2, unchanged.Revision)
 }
 
 func TestLuaZIPObjectStorage(t *testing.T) {

@@ -11334,6 +11334,51 @@ func (q *sqlQuerier) GetInstanceLoot(ctx context.Context, arg GetInstanceLootPar
 	return items, nil
 }
 
+const claimLuaProjectArtifactGarbage = `-- name: ClaimLuaProjectArtifactGarbage :many
+WITH candidates AS (
+  SELECT gc.object_key FROM lua_project_artifact_gc gc
+  WHERE gc.ready_at <= $1::timestamptz AND (gc.attempted_at IS NULL OR gc.attempted_at + interval '2 minutes' < $1::timestamptz)
+    AND NOT EXISTS (SELECT 1 FROM lua_project_artifacts a WHERE a.object_key = gc.object_key)
+  ORDER BY gc.attempted_at NULLS FIRST, gc.object_key LIMIT 50 FOR UPDATE SKIP LOCKED
+)
+UPDATE lua_project_artifact_gc gc SET attempted_at = $1::timestamptz
+FROM candidates c WHERE gc.object_key = c.object_key
+RETURNING gc.object_key
+`
+
+func (q *sqlQuerier) ClaimLuaProjectArtifactGarbage(ctx context.Context, asOf pgtype.Timestamptz) ([]string, error) {
+	rows, err := q.db.Query(ctx, claimLuaProjectArtifactGarbage, asOf)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var object_key string
+		if err := rows.Scan(&object_key); err != nil {
+			return nil, err
+		}
+		items = append(items, object_key)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const consumeLuaProjectUpload = `-- name: ConsumeLuaProjectUpload :one
+DELETE FROM lua_project_artifact_gc
+WHERE object_key = $1 AND attempted_at IS NULL AND ready_at > now()
+RETURNING object_key
+`
+
+func (q *sqlQuerier) ConsumeLuaProjectUpload(ctx context.Context, objectKey string) (string, error) {
+	row := q.db.QueryRow(ctx, consumeLuaProjectUpload, objectKey)
+	var object_key string
+	err := row.Scan(&object_key)
+	return object_key, err
+}
+
 const createLuaProject = `-- name: CreateLuaProject :one
 INSERT INTO lua_projects (owner_id, kind, name, slug) VALUES ($1, $2, $3, $4) RETURNING id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at
 `
@@ -11547,7 +11592,7 @@ func (q *sqlQuerier) GetPublishedLuaProjectPackage(ctx context.Context, arg GetP
 }
 
 const listLuaProjectArtifactGarbage = `-- name: ListLuaProjectArtifactGarbage :many
-SELECT object_key FROM lua_project_artifact_gc ORDER BY attempted_at NULLS FIRST, object_key LIMIT 50
+SELECT object_key FROM lua_project_artifact_gc ORDER BY object_key LIMIT 100
 `
 
 func (q *sqlQuerier) ListLuaProjectArtifactGarbage(ctx context.Context) ([]string, error) {
@@ -11648,15 +11693,6 @@ func (q *sqlQuerier) ListPublicLuaProjects(ctx context.Context) ([]LuaProject, e
 		return nil, err
 	}
 	return items, nil
-}
-
-const markLuaProjectArtifactGarbageAttempt = `-- name: MarkLuaProjectArtifactGarbageAttempt :exec
-UPDATE lua_project_artifact_gc SET attempted_at = now() WHERE object_key = $1
-`
-
-func (q *sqlQuerier) MarkLuaProjectArtifactGarbageAttempt(ctx context.Context, objectKey string) error {
-	_, err := q.db.Exec(ctx, markLuaProjectArtifactGarbageAttempt, objectKey)
-	return err
 }
 
 const promoteLuaProjectStable = `-- name: PromoteLuaProjectStable :one
@@ -11787,6 +11823,16 @@ func (q *sqlQuerier) PutLuaProjectArtifact(ctx context.Context, arg PutLuaProjec
 	var object_key pgtype.Text
 	err := row.Scan(&object_key)
 	return object_key, err
+}
+
+const registerLuaProjectUpload = `-- name: RegisterLuaProjectUpload :exec
+INSERT INTO lua_project_artifact_gc (object_key, ready_at)
+VALUES ($1, now() + interval '10 minutes')
+`
+
+func (q *sqlQuerier) RegisterLuaProjectUpload(ctx context.Context, objectKey string) error {
+	_, err := q.db.Exec(ctx, registerLuaProjectUpload, objectKey)
+	return err
 }
 
 const setLuaProjectDraft = `-- name: SetLuaProjectDraft :one

@@ -47,11 +47,28 @@ INSERT INTO lua_project_artifact_gc (object_key)
 SELECT object_key FROM removed WHERE object_key IS NOT NULL
 ON CONFLICT DO NOTHING;
 
--- name: ListLuaProjectArtifactGarbage :many
-SELECT object_key FROM lua_project_artifact_gc ORDER BY attempted_at NULLS FIRST, object_key LIMIT 50;
+-- name: RegisterLuaProjectUpload :exec
+INSERT INTO lua_project_artifact_gc (object_key, ready_at)
+VALUES (@object_key, now() + interval '10 minutes');
 
--- name: MarkLuaProjectArtifactGarbageAttempt :exec
-UPDATE lua_project_artifact_gc SET attempted_at = now() WHERE object_key = @object_key;
+-- name: ConsumeLuaProjectUpload :one
+DELETE FROM lua_project_artifact_gc
+WHERE object_key = @object_key AND attempted_at IS NULL AND ready_at > now()
+RETURNING object_key;
+
+-- name: ClaimLuaProjectArtifactGarbage :many
+WITH candidates AS (
+  SELECT gc.object_key FROM lua_project_artifact_gc gc
+  WHERE gc.ready_at <= @as_of::timestamptz AND (gc.attempted_at IS NULL OR gc.attempted_at + interval '2 minutes' < @as_of::timestamptz)
+    AND NOT EXISTS (SELECT 1 FROM lua_project_artifacts a WHERE a.object_key = gc.object_key)
+  ORDER BY gc.attempted_at NULLS FIRST, gc.object_key LIMIT 50 FOR UPDATE SKIP LOCKED
+)
+UPDATE lua_project_artifact_gc gc SET attempted_at = @as_of::timestamptz
+FROM candidates c WHERE gc.object_key = c.object_key
+RETURNING gc.object_key;
+
+-- name: ListLuaProjectArtifactGarbage :many
+SELECT object_key FROM lua_project_artifact_gc ORDER BY object_key LIMIT 100;
 
 -- name: DeleteLuaProjectArtifactGarbage :exec
 DELETE FROM lua_project_artifact_gc WHERE object_key = @object_key;

@@ -40,16 +40,25 @@ func (a *API) discardLuaObject(key string) {
 	defer cancel()
 	if _, err := a.Opts.Storage.RemoveFile(ctx, luaProjectBucket, []string{key}); err != nil {
 		a.Opts.Logger.Error("failed to discard unreferenced Lua ZIP", "key", key, "error", err)
+		return // Keep the durable intent for a later retry.
+	}
+	if err := a.Opts.Zed.DeleteLuaProjectArtifactGarbage(ctx, key); err != nil {
+		a.Opts.Logger.Error("failed to acknowledge discarded Lua ZIP", "key", key, "error", err)
 	}
 }
 
-// A garbage row is committed with each pruned artifact. Deletion happens only
-// after commit and can be retried on a later write or service restart.
+// A garbage row is committed with each pruned artifact. Upload intents are
+// recorded before object I/O. Only unreferenced, eligible keys are claimed
+// for deletion, retried on writes and by the periodic service collector.
 func (a *API) drainLuaArtifactGarbage(ctx context.Context) {
+	a.drainLuaArtifactGarbageAt(ctx, time.Now())
+}
+
+func (a *API) drainLuaArtifactGarbageAt(ctx context.Context, asOf time.Time) {
 	if a.Opts.Storage == nil || a.Opts.Zed == nil {
 		return
 	}
-	keys, err := a.Opts.Zed.ListLuaProjectArtifactGarbage(ctx)
+	keys, err := a.Opts.Zed.ClaimLuaProjectArtifactGarbage(ctx, pgtype.Timestamptz{Time: asOf, Valid: true})
 	if err != nil {
 		a.Opts.Logger.Error("list Lua ZIP garbage", "error", err)
 		return
@@ -57,10 +66,6 @@ func (a *API) drainLuaArtifactGarbage(ctx context.Context) {
 	for _, key := range keys {
 		if ctx.Err() != nil {
 			return
-		}
-		if err := a.Opts.Zed.MarkLuaProjectArtifactGarbageAttempt(ctx, key); err != nil {
-			a.Opts.Logger.Error("mark Lua ZIP garbage attempt", "key", key, "error", err)
-			continue
 		}
 		if _, err := a.Opts.Storage.RemoveFile(ctx, luaProjectBucket, []string{key}); err != nil {
 			a.Opts.Logger.Error("remove Lua ZIP garbage", "key", key, "error", err)
@@ -267,11 +272,18 @@ func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, errors.New("lua project object storage is unavailable"))
 		return
 	}
-	// Write the immutable ZIP before opening the SQL transaction. Each upload
-	// gets a unique key; a competing upload of the same digest keeps its own key.
+	// Commit the prospective key before object I/O, so crashes and failed
+	// best-effort deletes leave a recoverable record. GC cannot claim it until
+	// after the bounded upload window, and finalization must consume that record.
 	key := luaProjectObjectKey(id)
+	if err := a.Opts.Zed.RegisterLuaProjectUpload(r.Context(), key); err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
 	contentType := "application/zip"
-	if _, err := a.Opts.Storage.UploadFile(r.Context(), luaProjectBucket, key, bytes.NewReader(archive), storage.FileOptions{ContentType: &contentType}); err != nil {
+	uploadCtx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+	if _, err := a.Opts.Storage.UploadFile(uploadCtx, luaProjectBucket, key, bytes.NewReader(archive), storage.FileOptions{ContentType: &contentType}); err != nil {
 		a.discardLuaObject(key) // A failed upload may still have created the object.
 		httpapi.InternalServerError(w, err)
 		return
@@ -288,7 +300,14 @@ func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		return tx.PruneLuaProjectArtifacts(r.Context(), database.PruneLuaProjectArtifactsParams{ID: id, OwnerID: owner, TechnicalAdmin: technicalAdmin})
+		if err := tx.PruneLuaProjectArtifacts(r.Context(), database.PruneLuaProjectArtifactsParams{ID: id, OwnerID: owner, TechnicalAdmin: technicalAdmin}); err != nil {
+			return err
+		}
+		if storedKey.Valid && storedKey.String == key {
+			_, err = tx.ConsumeLuaProjectUpload(r.Context(), key)
+			return err // Roll back the artifact if GC has already claimed the key.
+		}
+		return nil // Existing identical bytes keep their prior object key.
 	}, nil)
 	if err != nil || !storedKey.Valid || storedKey.String != key {
 		a.discardLuaObject(key)

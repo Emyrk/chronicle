@@ -34,6 +34,7 @@ type sqlcQuerier interface {
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
 	ClaimDiscordAnnouncementDelivery(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error)
 	ClaimDueDiscordMembershipGrantChecks(ctx context.Context, arg ClaimDueDiscordMembershipGrantChecksParams) ([]ClaimDueDiscordMembershipGrantChecksRow, error)
+	ClaimLuaProjectArtifactGarbage(ctx context.Context, asOf pgtype.Timestamptz) ([]string, error)
 	ClearDiscordMembershipGrantCheckClaim(ctx context.Context, arg ClearDiscordMembershipGrantCheckClaimParams) (int64, error)
 	ClearInferenceThreadByOwner(ctx context.Context, arg ClearInferenceThreadByOwnerParams) (InferenceThread, error)
 	ClearResetToken(ctx context.Context, userAuthID uuid.UUID) error
@@ -50,6 +51,7 @@ type sqlcQuerier interface {
 	CompleteProofEvidenceCleanup(ctx context.Context, arg CompleteProofEvidenceCleanupParams) error
 	ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error)
 	ConsumeInferenceOAuthTransaction(ctx context.Context, arg ConsumeInferenceOAuthTransactionParams) (InferenceOauthTransaction, error)
+	ConsumeLuaProjectUpload(ctx context.Context, objectKey string) (string, error)
 	CopyLegacySpellEffects(ctx context.Context, arg []CopyLegacySpellEffectsParams) *CopyLegacySpellEffectsBatchResults
 	CopyLegacySpellPowers(ctx context.Context, arg []CopyLegacySpellPowersParams) *CopyLegacySpellPowersBatchResults
 	CopyLegacySpellVariants(ctx context.Context, arg []CopyLegacySpellVariantsParams) *CopyLegacySpellVariantsBatchResults
@@ -759,7 +761,6 @@ type sqlcQuerier interface {
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
 	MarkLogFilePartFailed(ctx context.Context, arg MarkLogFilePartFailedParams) error
 	MarkLogGroupArtifactsStorageDeleted(ctx context.Context, arg MarkLogGroupArtifactsStorageDeletedParams) ([]LogGroupArtifact, error)
-	MarkLuaProjectArtifactGarbageAttempt(ctx context.Context, objectKey string) error
 	MarkWhatsNewRead(ctx context.Context, arg MarkWhatsNewReadParams) (UserWhatsNewState, error)
 	MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) (WoWLogGroup, error)
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
@@ -850,6 +851,7 @@ type sqlcQuerier interface {
 	RefreshParseScoreMembershipsForLogGroup(ctx context.Context, arg RefreshParseScoreMembershipsForLogGroupParams) (RefreshParseScoreMembershipsForLogGroupRow, error)
 	RefreshTimeParseBossKillMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseBossKillMembershipsForLogGroupParams) (RefreshTimeParseBossKillMembershipsForLogGroupRow, error)
 	RefreshTimeParseClearTimeMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseClearTimeMembershipsForLogGroupParams) (RefreshTimeParseClearTimeMembershipsForLogGroupRow, error)
+	RegisterLuaProjectUpload(ctx context.Context, objectKey string) error
 	ReleaseAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)
 	RenameSidekickInstallation(ctx context.Context, arg RenameSidekickInstallationParams) (SidekickInstallation, error)
 	RepairDiscordMembershipGrantChecks(ctx context.Context, arg RepairDiscordMembershipGrantChecksParams) ([]DiscordMembershipGrantCheck, error)
