@@ -4,6 +4,7 @@ import blogPostMetadataJSON from "../../../../assets/turtle/generated/blog-posts
 import {
   AbsorbAttributionPost,
   ArmoryRefreshPost,
+  CharacterCosmeticsPost,
   CommunitySupportPost,
   ConsumablePricingPost,
   ConsumablesPost,
@@ -60,6 +61,7 @@ export interface BlogPostDefinition extends BlogPostMetadata {
 }
 
 const BLOG_COMPONENTS = {
+  "character-cosmetics": CharacterCosmeticsPost,
   "layout-editing": LayoutEditingPost,
   "focus-mode": FocusModePost,
   "player-timeline": PlayerTimelinePost,
@@ -93,6 +95,7 @@ function remotionVideo(load: LessonVideo["load"], durationInFrames: number): Les
 }
 
 const BLOG_VIDEOS = {
+  "character-cosmetics": remotionVideo(() => import("@/pages/Instance/videos/CharacterCosmetics.video"), 720),
   "layout-editing": remotionVideo(() => import("@/pages/Instance/videos/LayoutEditing.video"), 700),
   "focus-mode": remotionVideo(() => import("@/pages/Instance/videos/FocusMode.video"), 630),
   replay: remotionVideo(() => import("@/pages/Instance/videos/ReplayExplainer.video"), 700),
