@@ -13,6 +13,7 @@ RUN pnpm install --frozen-lockfile
 # runtime dependencies, so copying their source is enough for tsc and Vite.
 COPY frontend/chronicle-panel-sdk/ /chronicle/frontend/chronicle-panel-sdk/
 COPY frontend/wow-tooltip-renderer/ /chronicle/frontend/wow-tooltip-renderer/
+COPY frontend/instance-config.json /chronicle/frontend/instance-config.json
 
 # Static technical content is shared across server flavors and imported from
 # the canonical Turtle assets directory during the frontend build.
