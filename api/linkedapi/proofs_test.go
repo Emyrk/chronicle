@@ -1,15 +1,22 @@
 package linkedapi
 
 import (
+	"bytes"
+	"encoding/json"
+	"image"
+	"image/jpeg"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
+	"github.com/Emyrk/chronicle/internal/services/serviceproof"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/testservices"
 	"github.com/Emyrk/chronicle/internal/testutil"
@@ -114,4 +121,34 @@ func TestProofPermissionScopes(t *testing.T) {
 		})).ServeHTTP(rec, req)
 		require.Equal(t, http.StatusForbidden, rec.Code)
 	}
+}
+
+func TestAdminProofsIncludeRootDomainRequests(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(testservices.Authz(t))
+	objects, err := storage.NewLocalStorageAt(t.TempDir())
+	require.NoError(t, err)
+	h := &Handler{zed: zed, proofs: serviceproof.New(zed, objects)}
+	applicant := uuid.New()
+	_, err = zed.InsertUser(ctx, database.InsertUserParams{ID: applicant, Username: "root-" + applicant.String()[:8]})
+	require.NoError(t, err)
+
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	var photo bytes.Buffer
+	require.NoError(t, jpeg.Encode(&photo, img, nil))
+	id, err := h.proofs.Create(ctx, uuid.Nil, applicant, "character-link", "", photo.Bytes(), []serviceproof.Subject{{Type: "guild", Name: "Example"}})
+	require.NoError(t, err)
+
+	r := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
+	w := httptest.NewRecorder()
+	h.writeProofs(w, r, serviceproof.Scope{AllTenants: true}, []database.ProofRequest{{ID: id, ApplicantID: applicant}}, true)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var proofs []chroniclesdk.ProofRequest
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &proofs))
+	require.Len(t, proofs, 1)
+	require.Equal(t, "Main site", proofs[0].TenantName)
+	require.NotNil(t, proofs[0].Applicant)
+	require.Equal(t, "root-"+applicant.String()[:8], proofs[0].Applicant.Username)
+	require.False(t, proofs[0].Applicant.DiscordLinked)
 }

@@ -214,12 +214,19 @@ func (h *Handler) proofResponse(ctx context.Context, scope serviceproof.Scope, i
 		t := row.ReviewedAt.Time
 		out.ReviewedAt = &t
 	}
-	tenant, err := h.zed.GetTenantByID(servicetenant.AdminBypass(ctx), row.TenantID)
-	if err != nil {
-		return chroniclesdk.ProofRequest{}, err
+	// Requests made on the root domain have no tenant row.
+	if row.TenantID == uuid.Nil {
+		out.TenantName = "Main site"
+	} else {
+		tenant, err := h.zed.GetTenantByID(servicetenant.AdminBypass(ctx), row.TenantID)
+		switch {
+		case err == nil:
+			out.TenantName = tenant.Name
+			out.TenantSlug = tenant.Slug.String
+		case !errors.Is(err, sql.ErrNoRows):
+			return chroniclesdk.ProofRequest{}, err
+		}
 	}
-	out.TenantName = tenant.Name
-	out.TenantSlug = tenant.Slug.String
 	classes, err := h.zed.ListProofSubjectClasses(ctx, id)
 	if err != nil {
 		return chroniclesdk.ProofRequest{}, err
