@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop, BadgeCheck, Crown, Camera, RefreshCw } from "lucide-react";
+import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop, BadgeCheck, Crown, Camera, RefreshCw, Lock } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
@@ -656,12 +656,15 @@ export function CharacterSettings() {
             ) : proofAccess?.submit ? (
               <PhotoProofCard callout={photoProof.callout} />
             ) : (
-              <div className="rounded-lg border p-4 space-y-2">
-                <h3 className="flex items-center gap-2 text-sm font-medium"><Camera className="size-4 text-muted-foreground" />Link with photo proof</h3>
+              <div className={cn("rounded-lg border p-4 space-y-2", !proofAccessError && "border-destructive/40 bg-destructive/5")}>
+                <h3 className="flex items-center gap-2 text-sm font-medium">
+                  {proofAccessError ? <Camera className="size-4 text-muted-foreground" /> : <Lock className="size-4 text-destructive" />}
+                  Link with photo proof
+                </h3>
                 {photoProof.callout && <p className="text-sm text-muted-foreground">{photoProof.callout}</p>}
-                <p className="text-sm text-muted-foreground">{proofAccessError
-                  ? "Could not verify photo proof access. Please refresh the page or try again shortly."
-                  : "Photo proof applications are not available to your account yet."}</p>
+                {proofAccessError
+                  ? <p className="text-sm text-muted-foreground">Could not verify photo proof access. Please refresh the page or try again shortly.</p>
+                  : <p className="text-sm text-destructive/90">You do not have permission to submit photo proof on this server, so this method is unavailable for your account.</p>}
               </div>
             ))}
           </div>

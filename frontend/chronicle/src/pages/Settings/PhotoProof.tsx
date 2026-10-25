@@ -335,19 +335,17 @@ function ProofStatus({ status }: { status: string }) {
 }
 
 export function PhotoProofHistory() {
-  const { data: history, isLoading, error } = useMyProofs();
+  const { data: history } = useMyProofs();
   const [expanded, setExpanded] = useState(false);
-  if (!isLoading && !error && !history?.length) return null;
-  const pendingCount = history?.filter((request) => request.status === "pending").length ?? 0;
+  if (!history?.length) return null;
+  const pendingCount = history.filter((request) => request.status === "pending").length;
   return <div className="space-y-2">
     <button type="button" onClick={() => setExpanded(!expanded)} aria-expanded={expanded} className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
       <ChevronRight className={`size-4 transition-transform ${expanded ? "rotate-90" : ""}`} />
-      Your photo proof requests{history ? ` (${history.length})` : ""}
+      Your photo proof requests ({history.length})
       {pendingCount > 0 && <ProofStatus status="pending" />}
     </button>
-    {expanded && isLoading && <p className="text-sm text-muted-foreground">Loading requests...</p>}
-    {expanded && error && <p className="text-sm text-destructive">Could not load request history.</p>}
-    {expanded && !!history?.length && <div className="divide-y rounded-lg border">
+    {expanded && <div className="divide-y rounded-lg border">
       {history.map((request) => <div key={request.id} className="px-4 py-3 text-sm space-y-1.5">
         <div className="flex items-center justify-between gap-3">
           <span className="text-muted-foreground">Submitted {new Date(request.created_at).toLocaleDateString()}</span>
