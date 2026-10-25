@@ -296,6 +296,8 @@ func TestCreateCheckoutReusesExistingStripeCustomer(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.NotNil(t, checkoutParams)
 	require.Equal(t, fmt.Sprintf("chronicle-checkout:%s:%s", userID, operationID), stripe.StringValue(checkoutParams.IdempotencyKey))
+	require.NotNil(t, checkoutParams.ManagedPayments)
+	require.True(t, stripe.BoolValue(checkoutParams.ManagedPayments.Enabled))
 	require.Equal(t, "cus_existing", stripe.StringValue(checkoutParams.Customer))
 	require.Nil(t, checkoutParams.CustomerEmail)
 }
@@ -332,6 +334,8 @@ func TestCreateCheckoutUsesEmailWithoutExistingStripeCustomer(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.NotNil(t, checkoutParams)
 	require.Equal(t, fmt.Sprintf("chronicle-checkout:%s:%s", userID, operationID), stripe.StringValue(checkoutParams.IdempotencyKey))
+	require.NotNil(t, checkoutParams.ManagedPayments)
+	require.True(t, stripe.BoolValue(checkoutParams.ManagedPayments.Enabled))
 	require.Nil(t, checkoutParams.Customer)
 	require.Equal(t, "new-supporter@example.com", stripe.StringValue(checkoutParams.CustomerEmail))
 	require.Equal(t, string(ProductHonored), checkoutParams.SubscriptionData.Metadata["chronicle_product_code"])
