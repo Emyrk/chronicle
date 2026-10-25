@@ -363,17 +363,50 @@ export const COSMETIC_CSS = `
   animation: cosmetic-rise 2.2s linear infinite;
   opacity: 0.75;
 }
+/* One flake per gradient on a wide tile of its own height, so every flake falls at its own speed and no rows line up. */
+.cosmetic-bar-snowfall::before,
 .cosmetic-bar-snowfall::after {
   content: '';
   position: absolute;
   inset: 0;
+}
+.cosmetic-bar-snowfall::before {
   background-image:
-    radial-gradient(circle at 25% 40%, #ffffff 0 1.2px, transparent 1.8px),
-    radial-gradient(circle at 75% 20%, #dff4ff 0 1px, transparent 1.5px),
-    radial-gradient(circle at 50% 70%, #ffffff 0 0.8px, transparent 1.2px);
-  background-size: 37px 30px, 59px 30px, 23px 30px;
-  animation: cosmetic-rise 4.5s linear infinite reverse;
-  opacity: 0.8;
+    radial-gradient(circle at 22% 55%, #ffffff 0 0.7px, transparent 1.2px),
+    radial-gradient(circle at 71% 17%, #dff4ff 0 0.6px, transparent 1.1px),
+    radial-gradient(circle at 30% 9%, #ffffff 0 0.9px, transparent 1.4px),
+    radial-gradient(circle at 33% 16%, #dff4ff 0 0.7px, transparent 1.2px),
+    radial-gradient(circle at 75% 20%, #ffffff 0 0.6px, transparent 1.1px),
+    radial-gradient(circle at 53% 11%, #dff4ff 0 0.8px, transparent 1.3px),
+    radial-gradient(circle at 20% 42%, #ffffff 0 0.8px, transparent 1.3px),
+    radial-gradient(circle at 76% 44%, #dff4ff 0 0.8px, transparent 1.3px),
+    radial-gradient(circle at 76% 86%, #ffffff 0 0.6px, transparent 1.1px),
+    radial-gradient(circle at 94% 13%, #dff4ff 0 0.6px, transparent 1.1px),
+    radial-gradient(circle at 66% 92%, #ffffff 0 0.8px, transparent 1.3px),
+    radial-gradient(circle at 62% 79%, #dff4ff 0 0.8px, transparent 1.3px),
+    radial-gradient(circle at 26% 94%, #ffffff 0 0.7px, transparent 1.2px),
+    radial-gradient(circle at 70% 68%, #dff4ff 0 0.8px, transparent 1.3px),
+    radial-gradient(circle at 12% 20%, #ffffff 0 0.7px, transparent 1.2px);
+  background-size: 306px 31px, 233px 31px, 162px 43px, 281px 43px, 197px 31px, 196px 31px, 247px 34px, 283px 35px, 188px 41px, 284px 31px, 276px 43px, 256px 41px, 202px 32px, 227px 44px, 271px 43px;
+  animation: cosmetic-snow-far 10s linear infinite;
+  opacity: 0.55;
+}
+.cosmetic-bar-snowfall::after {
+  background-image:
+    radial-gradient(circle at 46% 24%, #ffffff 0 1.1px, transparent 1.6px),
+    radial-gradient(circle at 88% 14%, #ffffff 0 1.0px, transparent 1.5px),
+    radial-gradient(circle at 43% 48%, #dff4ff 0 1.3px, transparent 1.8px),
+    radial-gradient(circle at 77% 63%, #ffffff 0 1.2px, transparent 1.7px),
+    radial-gradient(circle at 37% 65%, #ffffff 0 1.0px, transparent 1.5px),
+    radial-gradient(circle at 96% 94%, #dff4ff 0 1.0px, transparent 1.5px),
+    radial-gradient(circle at 90% 62%, #ffffff 0 1.2px, transparent 1.7px),
+    radial-gradient(circle at 88% 49%, #ffffff 0 1.2px, transparent 1.7px),
+    radial-gradient(circle at 81% 19%, #dff4ff 0 1.1px, transparent 1.6px),
+    radial-gradient(circle at 39% 21%, #ffffff 0 1.1px, transparent 1.6px),
+    radial-gradient(circle at 66% 15%, #ffffff 0 1.2px, transparent 1.7px);
+  background-size: 285px 49px, 302px 54px, 337px 47px, 177px 62px, 338px 57px, 239px 56px, 232px 58px, 165px 50px, 286px 37px, 223px 48px, 202px 50px;
+  animation: cosmetic-snow-near 6s linear infinite;
+  opacity: 0.85;
 }
 .cosmetic-bar-starfall::before,
 .cosmetic-bar-starfall::after {
@@ -448,6 +481,8 @@ export const COSMETIC_CSS = `
 }
 /* 200% tall: 0% to 200% is one 2-box tile, moving upward. */
 @keyframes cosmetic-lava { from { background-position: 0 0%; } to { background-position: 0 200%; } }
+@keyframes cosmetic-snow-far { from { background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0; } to { background-position: 0 31px, 0 31px, 0 43px, 0 43px, 0 31px, 0 31px, 0 34px, 0 35px, 0 41px, 0 31px, 0 43px, 0 41px, 0 32px, 0 44px, 0 43px; } }
+@keyframes cosmetic-snow-near { from { background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0; } to { background-position: 0 49px, 0 54px, 0 47px, 0 62px, 0 57px, 0 56px, 0 58px, 0 50px, 0 37px, 0 48px, 0 50px; } }
 @keyframes cosmetic-twinkle { 0%, 100% { opacity: 0.15; } 50% { opacity: 0.9; } }
 /* One pass of both comets, then a rest with both off the row. The layer is hidden while resting so no
    stale filtered pixels can linger where a comet exited. */
