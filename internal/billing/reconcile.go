@@ -62,6 +62,8 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 	}
 	counts := reconciliationCounts{}
 	var partialErr error
+	var subscriptionErrorCount int
+	var entitlementErrorCount int
 	defer func() {
 		status := "completed"
 		errorText := ""
@@ -73,6 +75,7 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 			status = "failed"
 			errorText = runErr.Error()
 		}
+		completedAt := time.Now()
 		completionCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		if err := w.Store.CompleteBillingReconciliationRun(completionCtx, database.CompleteBillingReconciliationRunParams{
@@ -93,6 +96,11 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 				w.Logger.ErrorContext(ctx, "failed to record billing reconciliation failure", "error", err)
 			}
 		}
+		metricStatus := status
+		if workErr != nil {
+			metricStatus = "failed"
+		}
+		w.Billing.metrics.observeReconciliation(metricStatus, completedAt, counts, subscriptionErrorCount, entitlementErrorCount)
 	}()
 
 	providerCustomers, err := w.Store.ListBillingProviderCustomersForReconciliation(ctx)
@@ -130,6 +138,7 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 	subscriptionErrors := make([]error, 0)
 	recordSubscriptionError := func(subscriptionID string, err error) {
 		counts.subscriptionsInvalid++
+		subscriptionErrorCount++
 		subscriptionErr := fmt.Errorf("reconcile Stripe subscription %q: %w", subscriptionID, err)
 		subscriptionErrors = append(subscriptionErrors, subscriptionErr)
 		if w.Logger != nil {
@@ -219,6 +228,7 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 	customerErrors := make([]error, 0, len(customers))
 	for customerID := range customers {
 		if err := w.Billing.syncStripeEntitlementsIfConfigured(ctx, customerID); err != nil {
+			entitlementErrorCount++
 			customerErr := fmt.Errorf("reconcile Stripe entitlements for customer %q: %w", customerID, err)
 			customerErrors = append(customerErrors, customerErr)
 			if w.Logger != nil {

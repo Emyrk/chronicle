@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/riverqueue/river"
 	"github.com/stretchr/testify/require"
 	"github.com/stripe/stripe-go/v87"
@@ -204,7 +205,9 @@ func TestReconciliationContinuesAfterSubscriptionError(t *testing.T) {
 	succeeded.Metadata = map[string]string{"chronicle_user_id": uuid.NewString()}
 
 	store := &reconciliationStore{changedRows: []int64{1}}
-	svc := New(Options{Store: store, ReveredPriceIDs: []string{"price_monthly"}})
+	metrics, err := NewMetrics(prometheus.NewRegistry())
+	require.NoError(t, err)
+	svc := New(Options{Store: store, Metrics: metrics, ReveredPriceIDs: []string{"price_monthly"}})
 	svc.listSubscriptions = func(context.Context) ([]*stripe.Subscription, error) {
 		return []*stripe.Subscription{failed, succeeded}, nil
 	}
@@ -220,7 +223,7 @@ func TestReconciliationContinuesAfterSubscriptionError(t *testing.T) {
 		}
 	}
 
-	err := (&ReconciliationWorker{Billing: svc, Store: store}).Work(context.Background(), &river.Job[ArgsReconcileSubscriptions]{})
+	err = (&ReconciliationWorker{Billing: svc, Store: store}).Work(context.Background(), &river.Job[ArgsReconcileSubscriptions]{})
 	require.NoError(t, err, "a subscription-level failure must not fail or retry the River job")
 	require.Equal(t, "failed", store.completion.Status)
 	require.Contains(t, store.completion.ErrorText, `reconcile Stripe subscription "sub_failed"`)
@@ -231,6 +234,13 @@ func TestReconciliationContinuesAfterSubscriptionError(t *testing.T) {
 	require.Len(t, store.conditionalUpserts, 1)
 	require.Equal(t, succeeded.ID, store.conditionalUpserts[0].ProviderSubscriptionID.String)
 	require.Equal(t, int32(1), store.completion.EntitlementCustomersFound)
+	require.Equal(t, float64(1), metricValue(t, metrics.reconciliationRuns.WithLabelValues("failed")))
+	require.Positive(t, metricValue(t, metrics.reconciliationLastCompleted))
+	require.Zero(t, metricValue(t, metrics.reconciliationLastSuccess))
+	require.Equal(t, float64(1), metricValue(t, metrics.reconciliationSubscriptionErrors))
+	require.Equal(t, float64(0), metricValue(t, metrics.reconciliationEntitlementErrors))
+	require.Equal(t, float64(1), metricValue(t, metrics.reconciliationCustomersFound))
+	require.Equal(t, float64(1), metricValue(t, metrics.reconciliationCustomersSynced))
 	require.Equal(t, int32(1), store.completion.EntitlementCustomersSynced)
 }
 

@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"github.com/stripe/stripe-go/v87"
 )
@@ -732,7 +733,9 @@ func TestSyncStripeEntitlementsPersistsAuthoritativeSnapshotAndStorageGrant(t *t
 
 	userID := uuid.New()
 	store := &entitlementStore{providerCustomer: database.BillingSubscription{UserID: userID}}
-	s := New(Options{Store: store})
+	metrics, err := NewMetrics(prometheus.NewRegistry())
+	require.NoError(t, err)
+	s := New(Options{Store: store, Metrics: metrics})
 	s.listActiveEntitlements = func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error) {
 		return []*stripe.EntitlementsActiveEntitlement{
 			{ID: "ent_revered", LookupKey: string(EntitlementChronicleRevered)},
@@ -740,7 +743,7 @@ func TestSyncStripeEntitlementsPersistsAuthoritativeSnapshotAndStorageGrant(t *t
 		}, nil
 	}
 
-	err := s.syncStripeEntitlements(context.Background(), "cus_123")
+	err = s.syncStripeEntitlements(context.Background(), "cus_123")
 	require.NoError(t, err)
 	require.Equal(t, database.DeleteBillingEntitlementsByProviderCustomerIDParams{Provider: ProviderStripe, ProviderCustomerID: "cus_123"}, store.deletedCustomer)
 	require.Len(t, store.persisted, 2, "unknown entitlements remain visible in the persisted snapshot")
@@ -752,6 +755,9 @@ func TestSyncStripeEntitlementsPersistsAuthoritativeSnapshotAndStorageGrant(t *t
 		{userID: userID, role: stripeRoleDownloadRawLogs, granted: true},
 		{userID: userID, role: stripeRoleUnlistedLogs, granted: true},
 	}, store.roleChanges)
+	require.Equal(t, float64(1), metricValue(t, metrics.entitlementSyncs.WithLabelValues("success")))
+	require.Error(t, s.syncStripeEntitlements(context.Background(), ""))
+	require.Equal(t, float64(1), metricValue(t, metrics.entitlementSyncs.WithLabelValues("error")))
 }
 
 func TestSyncStripeEntitlementsUsesPersistedOwnerWithoutSubscription(t *testing.T) {
