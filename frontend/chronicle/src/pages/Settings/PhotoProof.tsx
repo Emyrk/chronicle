@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Camera, Check, ImageUp, Maximize2, Search } from "lucide-react";
+import { Camera, Check, Clock, ImageUp, Maximize2, Search, Users } from "lucide-react";
 import { useArmorySearch } from "@/api/queries";
 import type { ArmorySearchResult, ProofCooldownResponse } from "@/api/typesGenerated";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export type ProofSubject = {
   realm_id: string;
@@ -180,6 +180,7 @@ export function PhotoProofCard({ callout }: { callout?: string }) {
   const remainingMs = Math.max(0, (nextSubmissionAt ? Date.parse(nextSubmissionAt) : 0) - now);
   const cannotSubmit = cooldown.isLoading || cooldown.isError || remainingMs > 0;
   const [open, setOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [query, setQuery] = useState("");
@@ -251,6 +252,7 @@ export function PhotoProofCard({ callout }: { callout?: string }) {
       </div>
       <div className="space-y-2">
         <StepLabel step={2} title="Select every character shown in the screenshot" done={selected.length > 0} htmlFor="proof-character-search" />
+        <p className="text-xs text-muted-foreground">One request can claim up to 10 characters on the same realm.</p>
         <div className="relative"><Search className="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" /><Input id="proof-character-search" className="pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search the armory by character name" /></div>
         {query.length >= 2 && <div className="max-h-48 overflow-y-auto styled-scrollbar rounded border divide-y">
           {isFetching && <p className="px-3 py-2 text-sm text-muted-foreground">Searching...</p>}
@@ -276,11 +278,44 @@ export function PhotoProofCard({ callout }: { callout?: string }) {
         <StepLabel step={3} title="Submit for review" htmlFor="proof-message" />
         <textarea id="proof-message" className="w-full min-h-20 rounded-md border bg-background p-2 text-sm" maxLength={2000} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Optional message to the reviewer, with any context that helps verify your characters" />
         <div className="flex gap-2">
-          <Button disabled={!file || !selected.length || submit.isPending || cannotSubmit} onClick={() => submit.mutate()}>{submit.isPending ? "Preparing screenshot..." : "Submit proof"}</Button>
+          <Button disabled={!file || !selected.length || submit.isPending || cannotSubmit} onClick={() => setConfirming(true)}>{submit.isPending ? "Preparing screenshot..." : "Submit proof"}</Button>
           <Button variant="ghost" disabled={submit.isPending} onClick={() => setOpen(false)}>Cancel</Button>
         </div>
       </div>
       </div>}
+      <Dialog open={confirming} onOpenChange={(next) => !submit.isPending && setConfirming(next)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Submit photo proof?</DialogTitle>
+            <DialogDescription>Double-check your request before sending it.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="flex gap-2 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-yellow-500">
+              <Clock className="mt-0.5 size-4 shrink-0" />
+              You can only submit one photo proof request every 24 hours.
+            </p>
+            <p className="flex gap-2 text-muted-foreground">
+              <Users className="mt-0.5 size-4 shrink-0" />
+              Have more characters on this realm? Add them all to this request instead of sending another one.
+            </p>
+            <div className="rounded-md border">
+              <p className="border-b px-3 py-1.5 text-xs text-muted-foreground">Claiming {selected.length} character{selected.length === 1 ? "" : "s"}</p>
+              <ul className="max-h-40 divide-y overflow-y-auto styled-scrollbar">
+                {selected.map((entry) => <li key={`${entry.realm_id}-${entry.character_guid}`} className="px-3 py-1.5">
+                  <span className="font-medium" style={{ color: getClassColorVar(entry.class) }}>{entry.name}</span>
+                  <span className="ml-2 text-xs text-muted-foreground">{entry.realm_name}</span>
+                </li>)}
+              </ul>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" disabled={submit.isPending} onClick={() => setConfirming(false)}>Add more characters</Button>
+            <Button disabled={submit.isPending} onClick={() => submit.mutate(undefined, { onSettled: () => setConfirming(false) })}>
+              {submit.isPending ? "Preparing screenshot..." : "Submit proof"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
