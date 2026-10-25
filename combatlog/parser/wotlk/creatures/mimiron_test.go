@@ -83,6 +83,10 @@ func TestMimironRequiresAllFourPhasesForDefeat(t *testing.T) {
 	}
 	require.Equal(t, []string{MimironPhaseKeyP2, MimironPhaseKeyP3, MimironPhaseKeyP4}, transitionKeys(transitions))
 
+	boomer := creatureGUID(mimironBoomerXP500Entry)
+	_, err = all.Process(testDamage(start.Add(39*time.Second), player, boomer))
+	require.NoError(t, err)
+
 	for i, id := range []guid.GUID{leviathan, vx001} {
 		_, err = all.Process(&messages.Slain{
 			MessageBase: messages.Base(start.Add(40*time.Second + time.Duration(i)*time.Second)),
@@ -99,7 +103,7 @@ func TestMimironRequiresAllFourPhasesForDefeat(t *testing.T) {
 		Victim:      aerial,
 	})
 	require.NoError(t, err)
-	for _, id := range []guid.GUID{leviathan, vx001, aerial} {
+	for _, id := range []guid.GUID{leviathan, vx001, aerial, boomer} {
 		character, found := all.Get(id)
 		require.True(t, found)
 		require.False(t, character.IsActive())
@@ -166,7 +170,29 @@ func TestMimironFactoryMatchesBothLeviathanEntries(t *testing.T) {
 		mimironAerialCommandEntry,
 	} {
 		character, _ := all.Add(creatureGUID(entry), time.Time{})
-		require.IsType(t, &mimironCharacter{}, character)
+		require.IsType(t, &characters.AdsGoWithBoss{}, character)
+	}
+}
+
+func TestMimironBoomerXP500TimesOutAsDeath(t *testing.T) {
+	t.Parallel()
+
+	all := newMimironTestCharacters()
+	player := guid.GUID(1)
+	start := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+
+	for _, entry := range []uint32{mimironBoomerXP500Entry, mimironBoomerXP500AltEntry} {
+		boomer := creatureGUID(entry)
+		_, err := all.Process(testDamage(start, player, boomer))
+		require.NoError(t, err)
+
+		_, err = all.Process(messages.TimedOut(start.Add(mimironBoomerTimeout + time.Second)))
+		require.NoError(t, err)
+
+		character, found := all.Get(boomer)
+		require.True(t, found)
+		require.False(t, character.IsActive())
+		require.Equal(t, period.EndStateSlain, character.LastEndState())
 	}
 }
 

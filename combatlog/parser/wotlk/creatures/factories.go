@@ -76,6 +76,7 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 			NewKologarnEncounterCharacter,
 			NewSif,
 			NewThorimEncounterCharacter,
+			NewMimironBoomerXP500,
 			NewMimironEncounterCharacter,
 			NewYoggSaronGuardian,
 			NewYoggSaronEncounterCharacter,
