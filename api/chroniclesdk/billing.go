@@ -3,7 +3,8 @@ package chroniclesdk
 import "time"
 
 type BillingCheckoutRequest struct {
-	PriceID string `json:"price_id"`
+	PriceID     string `json:"price_id"`
+	OperationID string `json:"operation_id"`
 }
 
 type BillingCheckoutResponse struct {

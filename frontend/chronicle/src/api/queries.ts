@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useQueries, useQuery, useMutation, useQueryClient, keepPreviousData, type UseQueryOptions } from "@tanstack/react-query";
 import type { ListSidekicksResponse, RenameSidekickRequest, SidekickAccountConfigResponse, SidekickConfig, SidekickConfigState, SidekickInstallation, WhatsNewStatus } from "./typesGenerated";
 import type { WoWSpell } from "./wowdb";
@@ -181,9 +182,25 @@ async function createBillingRedirect(path: string, body?: unknown): Promise<stri
   return redirect.url
 }
 
+export function billingCheckoutOperationID(operationIDs: Map<string, string>, priceID: string): string {
+  let operationID = operationIDs.get(priceID)
+  if (!operationID) {
+    operationID = globalThis.crypto.randomUUID()
+    operationIDs.set(priceID, operationID)
+  }
+  return operationID
+}
+
 export function useCreateBillingCheckout() {
+  const operationIDs = useRef(new Map<string, string>())
   return useMutation({
-    mutationFn: (priceID: string) => createBillingRedirect("/api/v1/me/billing/checkout", { price_id: priceID }),
+    mutationFn: (priceID: string) => {
+      const operationID = billingCheckoutOperationID(operationIDs.current, priceID)
+      return createBillingRedirect("/api/v1/me/billing/checkout", {
+        price_id: priceID,
+        operation_id: operationID,
+      })
+    },
   })
 }
 
