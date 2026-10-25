@@ -15460,19 +15460,21 @@ func (q *sqlQuerier) ListProofEvidenceCleanup(ctx context.Context, tenantID uuid
 }
 
 const listProofSubjectClasses = `-- name: ListProofSubjectClasses :many
-SELECT s.id AS subject_id, gp.class
+SELECT s.id AS subject_id, gp.class, g.name AS guild_name
 FROM proof_request_subjects s
 JOIN game_players gp ON gp.realm_id = s.realm_id AND gp.id = s.character_guid
+LEFT JOIN guilds g ON g.id = gp.guild_id
 WHERE s.request_id = $1
 `
 
 type ListProofSubjectClassesRow struct {
 	SubjectID uuid.UUID        `db:"subject_id" json:"subject_id"`
 	Class     WowPlayableClass `db:"class" json:"class"`
+	GuildName pgtype.Text      `db:"guild_name" json:"guild_name"`
 }
 
-// Resolve current armory classes in one query per request; old requests and
-// characters removed from the armory still render without a class color.
+// Resolve current armory classes and guilds in one query per request; old
+// requests and characters removed from the armory still render without them.
 func (q *sqlQuerier) ListProofSubjectClasses(ctx context.Context, requestID uuid.UUID) ([]ListProofSubjectClassesRow, error) {
 	rows, err := q.db.Query(ctx, listProofSubjectClasses, requestID)
 	if err != nil {
@@ -15482,7 +15484,7 @@ func (q *sqlQuerier) ListProofSubjectClasses(ctx context.Context, requestID uuid
 	var items []ListProofSubjectClassesRow
 	for rows.Next() {
 		var i ListProofSubjectClassesRow
-		if err := rows.Scan(&i.SubjectID, &i.Class); err != nil {
+		if err := rows.Scan(&i.SubjectID, &i.Class, &i.GuildName); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

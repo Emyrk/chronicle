@@ -49,11 +49,12 @@ SELECT * FROM proof_requests WHERE id = $1 AND status = 'pending' FOR UPDATE;
 SELECT * FROM proof_request_subjects WHERE request_id = $1 ORDER BY id;
 
 -- name: ListProofSubjectClasses :many
--- Resolve current armory classes in one query per request; old requests and
--- characters removed from the armory still render without a class color.
-SELECT s.id AS subject_id, gp.class
+-- Resolve current armory classes and guilds in one query per request; old
+-- requests and characters removed from the armory still render without them.
+SELECT s.id AS subject_id, gp.class, g.name AS guild_name
 FROM proof_request_subjects s
 JOIN game_players gp ON gp.realm_id = s.realm_id AND gp.id = s.character_guid
+LEFT JOIN guilds g ON g.id = gp.guild_id
 WHERE s.request_id = $1;
 
 -- name: DecideProofSubject :execrows

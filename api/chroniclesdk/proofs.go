@@ -16,6 +16,7 @@ type ProofSubject struct {
 	Name      string `json:"name"`
 	RealmName string `json:"realm_name"`
 	Class     string `json:"class,omitempty"`
+	GuildName string `json:"guild_name,omitempty"`
 	Status    string `json:"status"`
 	Warning   string `json:"warning,omitempty"`
 }

@@ -3084,6 +3084,7 @@ export interface ProofSubject extends ProofCharacter {
     readonly name: string;
     readonly realm_name: string;
     readonly class?: string;
+    readonly guild_name?: string;
     readonly status: string;
     readonly warning?: string;
 }

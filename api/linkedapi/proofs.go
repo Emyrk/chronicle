@@ -232,8 +232,10 @@ func (h *Handler) proofResponse(ctx context.Context, scope serviceproof.Scope, i
 		return chroniclesdk.ProofRequest{}, err
 	}
 	classBySubject := make(map[uuid.UUID]string, len(classes))
+	guildBySubject := make(map[uuid.UUID]string, len(classes))
 	for _, subject := range classes {
 		classBySubject[subject.SubjectID] = string(subject.Class)
+		guildBySubject[subject.SubjectID] = subject.GuildName.String
 	}
 	for _, s := range subjects {
 		if !s.RealmID.Valid || s.CharacterGuid == nil {
@@ -247,7 +249,7 @@ func (h *Handler) proofResponse(ctx context.Context, scope serviceproof.Scope, i
 		if linkErr != nil && !errors.Is(linkErr, sql.ErrNoRows) {
 			return chroniclesdk.ProofRequest{}, linkErr
 		}
-		out.Subjects = append(out.Subjects, chroniclesdk.ProofSubject{ProofCharacter: chroniclesdk.ProofCharacter{RealmID: s.RealmID.UUID, CharacterGUID: *s.CharacterGuid}, Name: s.Name, RealmName: s.RealmName, Class: classBySubject[s.ID], Status: s.Status, Warning: warning})
+		out.Subjects = append(out.Subjects, chroniclesdk.ProofSubject{ProofCharacter: chroniclesdk.ProofCharacter{RealmID: s.RealmID.UUID, CharacterGUID: *s.CharacterGuid}, Name: s.Name, RealmName: s.RealmName, Class: classBySubject[s.ID], GuildName: guildBySubject[s.ID], Status: s.Status, Warning: warning})
 	}
 	return out, nil
 }

@@ -68,7 +68,7 @@ func TestProofRequestLifecycle(t *testing.T) {
 
 func TestProofPendingCharacterIsExclusive(t *testing.T) {
 	t.Parallel()
-	_, db, realmID := setupParsesTest(t)
+	pool, db, realmID := setupParsesTest(t)
 	ctx := testutil.Context(t, testutil.WaitShort)
 	userID := uuid.New()
 	_, err := db.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "proof-" + userID.String()[:8]})
@@ -84,8 +84,11 @@ func TestProofPendingCharacterIsExclusive(t *testing.T) {
 	}
 	// The class query joins armory data for both old and new requests,
 	// without another lookup for every subject in a review.
+	guildID := uuid.New()
+	_, err = pool.Exec(ctx, "INSERT INTO guilds (id, realm_id, name) VALUES ($1, $2, $3)", guildID, realmID, "Proof Guild")
+	require.NoError(t, err)
 	players := db.UpsertPlayers(ctx, []database.UpsertPlayersParams{{
-		ID: character, RealmID: realmID, Name: "Tester",
+		ID: character, RealmID: realmID, Name: "Tester", GuildID: uuid.NullUUID{UUID: guildID, Valid: true},
 		Class: database.WowPlayableClassWARRIOR, Gender: database.WowPlayableGenderMale,
 		Race: database.WowPlayableRaceHuman, Level: 60,
 		UpdatedAt: database.Timestamptz(time.Now()),
@@ -96,6 +99,7 @@ func TestProofPendingCharacterIsExclusive(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, classes, 1)
 	require.Equal(t, database.WowPlayableClassWARRIOR, classes[0].Class)
+	require.Equal(t, "Proof Guild", classes[0].GuildName.String)
 	otherClasses, err := db.ListProofSubjectClasses(ctx, ids[1])
 	require.NoError(t, err)
 	require.Empty(t, otherClasses)

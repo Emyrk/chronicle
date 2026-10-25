@@ -16,6 +16,7 @@ export type ProofSubject = {
   name: string;
   realm_name: string;
   class?: string;
+  guild_name?: string;
   status: string;
   warning?: string;
 };

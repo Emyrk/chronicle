@@ -42,6 +42,7 @@ function ApplicantPanel({ request }: { request: ProofRequest }) {
         : <ul className="max-h-32 space-y-0.5 overflow-y-auto styled-scrollbar">
           {applicant.linked_characters.map((character) => <li key={character.link_id} className="text-xs">
             <Link to={`/armory/${encodeURIComponent(character.realm_name)}/${character.character_guid}`} target="_blank" className="font-medium hover:underline" style={{ color: getClassColorVar(character.class) }}>{character.name}</Link>
+            {character.guild_name && <span className="text-foreground/80"> &lt;{character.guild_name}&gt;</span>}
             <span className="text-muted-foreground"> · {character.level} {character.class} · {character.realm_name}{character.is_primary ? " · Primary" : ""}</span>
           </li>)}
         </ul>}
@@ -122,6 +123,7 @@ function Review({ request, draft, onDraftChange }: { request: ProofRequest; draf
               <Link className="font-medium hover:underline" to={`/armory/${encodeURIComponent(subject.realm_name)}/${subject.character_guid}`} target="_blank">
                 <span style={subject.class ? { color: getClassColorVar(subject.class) } : undefined}>{subject.name}</span> <span className="text-muted-foreground">· {subject.realm_name}</span>
               </Link>
+              <p className={cn("text-xs", subject.guild_name ? "text-foreground/80" : "text-muted-foreground")}>{subject.guild_name ? `<${subject.guild_name}>` : "No guild"}</p>
               {subject.warning && <p className="text-amber-500">{subject.warning}</p>}
               <div className="flex gap-2">
                 <Button size="sm" variant={choice === true ? "default" : "outline"} className={cn(choice === true && "bg-green-600 hover:bg-green-600/90 text-white")} onClick={() => setChoice(key, true)}><Check className="size-3.5" />Approve</Button>
