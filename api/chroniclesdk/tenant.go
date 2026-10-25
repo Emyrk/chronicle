@@ -183,7 +183,6 @@ type SetDatasetRequest struct {
 }
 
 // UpsertTenantRequest is the request body for creating or updating a tenant.
-// UpsertTenantRequest is the request body for creating or updating a tenant.
 // Pointer fields are optional — if nil on update, no change occurs (COALESCE
 // preserves the existing value).
 type UpsertTenantRequest struct {
@@ -203,6 +202,13 @@ type UpsertTenantRequest struct {
 	// ExternalLinking updates the tenant's external character linking
 	// visibility. Omit to keep the existing value.
 	ExternalLinking *ExternalLinking `json:"external_linking,omitempty"`
+}
+
+// BulkUpdateTenantsRequest applies partial updates to several existing
+// tenants in a single transaction. Each entry must carry an ID; nil fields
+// keep their existing value, same as a single-tenant update.
+type BulkUpdateTenantsRequest struct {
+	Tenants []UpsertTenantRequest `json:"tenants"`
 }
 
 // IsCreate returns true when the request should insert a new tenant.

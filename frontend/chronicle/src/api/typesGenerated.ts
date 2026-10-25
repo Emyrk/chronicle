@@ -527,6 +527,16 @@ export interface Branding {
     readonly theme?: Record<string, string>; // CSS color overrides keyed by knob name (hex "#RRGGBB")
 }
 
+// From chroniclesdk/tenant.go
+/**
+ * BulkUpdateTenantsRequest applies partial updates to several existing
+ * tenants in a single transaction. Each entry must carry an ID; nil fields
+ * keep their existing value, same as a single-tenant update.
+ */
+export interface BulkUpdateTenantsRequest {
+    readonly tenants: readonly UpsertTenantRequest[];
+}
+
 // From chroniclesdk/census.go
 /**
  * CensusEntry represents a count of unique players for a given class/race pair.
@@ -4811,7 +4821,6 @@ export interface UpsertRetentionRuleRequest {
 
 // From chroniclesdk/tenant.go
 /**
- * UpsertTenantRequest is the request body for creating or updating a tenant.
  * UpsertTenantRequest is the request body for creating or updating a tenant.
  * Pointer fields are optional — if nil on update, no change occurs (COALESCE
  * preserves the existing value).

@@ -1,6 +1,7 @@
 package servicetenant
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // Routes returns the tenant admin CRUD router.
@@ -17,6 +19,7 @@ func (s *Service) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", s.List)
 	r.Post("/", s.Upsert)
+	r.Put("/bulk", s.BulkUpdate)
 	r.Get("/{tenantID}", s.Get)
 	r.Put("/{tenantID}", s.Upsert)
 	r.Put("/{tenantID}/dataset", s.SetTenantDataset)
@@ -99,6 +102,52 @@ func (s *Service) Upsert(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.TenantFromDB(t))
+}
+
+// BulkUpdate applies partial updates to several existing tenants atomically.
+func (s *Service) BulkUpdate(w http.ResponseWriter, r *http.Request) {
+	ctx := AdminBypass(r.Context())
+	var req chroniclesdk.BulkUpdateTenantsRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+	if len(req.Tenants) == 0 {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "no tenants to update"})
+		return
+	}
+	for _, t := range req.Tenants {
+		if t.IsCreate() {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "every tenant update requires an id"})
+			return
+		}
+	}
+
+	out := make([]chroniclesdk.Tenant, 0, len(req.Tenants))
+	err := s.mutateAndPublish(ctx, func(tx database.Store) error {
+		out = out[:0]
+		for _, t := range req.Tenants {
+			updated, err := tx.UpdateTenant(ctx, t.ToUpdateParams())
+			if err != nil {
+				return err
+			}
+			out = append(out, chroniclesdk.TenantFromDB(updated))
+		}
+		return nil
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{Message: "tenant not found"})
+			return
+		}
+		if database.IsUniqueViolation(err) {
+			httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{Message: "tenant name already exists"})
+			return
+		}
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, out)
 }
 
 func (s *Service) Delete(w http.ResponseWriter, r *http.Request) {

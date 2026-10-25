@@ -13,6 +13,7 @@ import {
   X,
   Loader2,
   Shield,
+  Building2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -27,6 +28,7 @@ const baseTabs: Tab[] = [
   { path: "/servers/keys", label: "Upload Keys", icon: Key },
 ];
 
+const tenantsTab: Tab = { path: "/servers/tenants", label: "Tenants", icon: Building2 };
 const retentionTab: Tab = { path: "/servers/retention", label: "Log Retention", icon: Archive };
 
 export function ServersLayout() {
@@ -38,6 +40,7 @@ export function ServersLayout() {
 
   const authzChecks = useMemo(() => ({
     adminServers: "chronicle:chronicle#admin_servers",
+    adminTenants: "chronicle:chronicle#admin_tenants",
     canAdminSomeServer: "lookup:wow_server#administer",
     canManageRetention: "lookup:wow_server#manage_log_retention",
   }), []);
@@ -49,9 +52,10 @@ export function ServersLayout() {
 
   const tabs = useMemo(() => {
     const t = [...baseTabs];
+    if (authz?.adminTenants) t.splice(1, 0, tenantsTab);
     if (canManageRetention) t.push(retentionTab);
     return t;
-  }, [canManageRetention]);
+  }, [canManageRetention, authz?.adminTenants]);
 
   const sessionLoading = authLoading || authzLoading;
 
