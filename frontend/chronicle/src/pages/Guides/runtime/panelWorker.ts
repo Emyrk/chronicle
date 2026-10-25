@@ -3,10 +3,11 @@ import { createGuideRuntime } from "./runtime"
 import { PANEL_STREAMS, type PanelStream } from "./panelEvents"
 import { FastDamageCursor } from "@/api/protodecode/decode"
 import { parseWorkerMessage } from "../protocol/protocol"
+import type { GuideCapability } from "../protocol/types"
 
 // Dedicated worker entry. The caller owns termination and treats all returned scene batches as untrusted.
 type Input =
-  | { type: "start"; entrypoint: string; sources: Record<string, string>; streams: PanelStream[] }
+  | { type: "start"; entrypoint: string; sources: Record<string, string>; streams: PanelStream[]; capabilities: GuideCapability[] }
   | { type: "event"; event: unknown }
   | { type: "damage-stream"; data: Uint8Array; encounterIds: string[] }
   | { type: "click"; nodeId: string }
@@ -23,8 +24,9 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
       if (input.type === "stop" || input.type === "start") { runtime?.stop(); runtime = null }
       if (input.type === "start") {
         if (!Array.isArray(input.streams) || input.streams.some((s) => !PANEL_STREAMS.includes(s))) throw new Error("unsupported streams")
+        if (!Array.isArray(input.capabilities) || input.capabilities.some((cap) => cap !== "ui" && cap !== "input")) throw new Error("unsupported capabilities")
         runtime = createGuideRuntime({ entrypoint: input.entrypoint, sources: input.sources,
-          capabilities: ["ui", "input"], panelStreams: input.streams })
+          capabilities: input.capabilities, panelStreams: input.streams })
         const initial = runtime.start(); send({ type: "ready", protocolVersion: 1 }); flush(initial)
       } else if (input.type === "event") {
         if (!runtime) throw new Error("panel not started")

@@ -3,12 +3,14 @@ import { inspectArchive, normalizeExtractedFiles } from "./archive"
 import { normalizePackagePath } from "./paths"
 import { isReservedLuaPath } from "../runtime/trustedModules"
 import type { PanelStream } from "../runtime/panelEvents"
+import type { GuideCapability } from "../protocol/types"
 
 export interface PanelPackage {
   name: string
   entrypoint: string
   sources: Record<string, string>
   streams: PanelStream[]
+  capabilities: GuideCapability[]
   assets: ReadonlyMap<string, Uint8Array>
 }
 
@@ -68,5 +70,5 @@ export async function loadPanelPackage(bytes: Uint8Array): Promise<PanelPackage>
     } else if (path !== "project.json") throw new Error(`undeclared panel file: ${path}`)
   }
   if (assetFiles.size !== assets.length) throw new Error("missing panel asset")
-  return { name: data.name, entrypoint, sources, streams: streams as PanelStream[], assets: assetFiles }
+  return { name: data.name, entrypoint, sources, streams: streams as PanelStream[], capabilities: capabilities as GuideCapability[], assets: assetFiles }
 }

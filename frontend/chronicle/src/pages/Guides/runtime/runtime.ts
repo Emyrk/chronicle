@@ -257,10 +257,28 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
     lua.lua_pop(state, 1)
     throw new GuideLuaError(message)
   }
+  let activeBudget: { remaining: number } | null = null
   const protectedCall = (state: LuaState, args: number, results: number, instructionBudget: number) => {
-    let remaining = instructionBudget
-    lua.lua_sethook(state, (hookState: LuaState) => { remaining -= limits.instructionHookCount; if (remaining <= 0) lauxlib.luaL_error(hookState, to_luastring("instruction budget exceeded")) }, lua.LUA_MASKCOUNT, limits.instructionHookCount)
-    const status = lua.lua_pcall(state, args, results, 0); lua.lua_sethook(state, null, 0, 0); if (status !== lua.LUA_OK) throwLuaError(state)
+    // require() re-enters protectedCall on the same Lua state. Nested calls must
+    // share the outer quota and must not clear its hook when they return.
+    const outerBudget = activeBudget
+    if (!outerBudget) {
+      const budget = { remaining: instructionBudget }
+      activeBudget = budget
+      lua.lua_sethook(state, (hookState: LuaState) => {
+        budget.remaining -= limits.instructionHookCount
+        if (budget.remaining <= 0) lauxlib.luaL_error(hookState, to_luastring("instruction budget exceeded"))
+      }, lua.LUA_MASKCOUNT, limits.instructionHookCount)
+    }
+    try {
+      const status = lua.lua_pcall(state, args, results, 0)
+      if (status !== lua.LUA_OK) throwLuaError(state)
+    } finally {
+      if (!outerBudget) {
+        lua.lua_sethook(state, null, 0, 0)
+        activeBudget = null
+      }
+    }
   }
   const loadChunk = (state: LuaState, source: string, filename: string) => {
     const bytes = to_luastring(source); const status = lauxlib.luaL_loadbuffer(state, bytes, bytes.length, to_luastring(`@${filename}`)); if (status !== lua.LUA_OK) throwLuaError(state)

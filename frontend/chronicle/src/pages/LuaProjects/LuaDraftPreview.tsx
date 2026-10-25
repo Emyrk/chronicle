@@ -40,7 +40,7 @@ export function LuaDraftPreview({ projectId, draftHash }: LuaDraftPreviewProps) 
   if (draft.isError) return <p role="alert" className="text-sm text-destructive">{draft.error.message}</p>;
   return <div className="space-y-2">
     <p className="text-xs text-muted-foreground">Worker preview. Instance events are unavailable here; test data-driven behavior from an installed Unstable panel.</p>
-    <LuaPanelHost key={draftHash} entrypoint={draft.data.entrypoint} sources={draft.data.sources}
+    <LuaPanelHost key={draftHash} entrypoint={draft.data.entrypoint} sources={draft.data.sources} capabilities={draft.data.capabilities}
       streams={draft.data.streams} assets={assets} />
   </div>;
 }

@@ -83,6 +83,23 @@ describe("guide Lua runtime", () => {
     }).start()).toThrow(/instruction budget exceeded/)
   })
 
+  it("keeps the instruction hook after nested require returns", () => {
+    expect(() => createGuideRuntime({
+      entrypoint: "main.lua",
+      sources: { "main.lua": `require("safe"); while true do end`, "safe.lua": `return true` },
+      limits: { startupInstructions: 2_000 },
+    }).start()).toThrow(/instruction budget exceeded/)
+
+    const runtime = createGuideRuntime({
+      entrypoint: "main.lua",
+      sources: { "main.lua": `local b=CreateFrame("Button","b",UIParent); b:SetScript("OnClick", function() require("safe"); while true do end end)`, "safe.lua": `return true` },
+      limits: { callbackInstructions: 2_000 },
+    })
+    runtime.start()
+    expect(() => runtime.event({ id: "b", event: "click" })).toThrow(/instruction budget exceeded/)
+    runtime.stop()
+  })
+
   it("emits protocol-valid map creators, aliases, camera, and destroy operations", () => {
     const { runtime, operations } = run(`
       local unit = Map:CreateUnitMarker("boss")

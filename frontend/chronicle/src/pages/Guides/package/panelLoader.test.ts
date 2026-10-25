@@ -14,6 +14,10 @@ describe("Lua panel packages", () => {
     expect(pkg.sources["main.lua"]).toBe("return true")
     expect(pkg.sources["chronicle/v1/events/damage.lua"]).toBeUndefined()
   })
+  it("preserves declared capabilities for the worker", async () => {
+    expect((await loadPanelPackage(archive({ capabilities: [] }))).capabilities).toEqual([])
+    expect((await loadPanelPackage(archive({ capabilities: ["ui"] }))).capabilities).toEqual(["ui"])
+  })
   it("rejects a reserved host module, even if the entrypoint requires it", async () => {
     await expect(loadPanelPackage(archive({}, { "chronicle/v1/ui.lua": strToU8("return {}") }))).rejects.toThrow(/reserved/)
     await expect(loadPanelPackage(archive({}, { "chronicle.v1.ui.lua": strToU8("return {}") }))).rejects.toThrow(/reserved/)

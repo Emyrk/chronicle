@@ -47,7 +47,7 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
     {packageQuery.isPending ? <div className="p-4 text-sm">Loading Lua panel...</div> :
       packageQuery.error || streamError ? <div role="alert" className="p-4 text-sm text-destructive">{String(packageQuery.error ?? streamError)}</div> :
       panel && (panel.streams.includes("damage") && !damage ? <div className="p-4 text-sm">Loading damage...</div> :
-        <LuaPanelHost key={`${ref?.id}:${ref?.channel}`} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams}
+        <LuaPanelHost key={`${ref?.id}:${ref?.channel}`} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} capabilities={panel.capabilities}
           damageStream={damage} encounterIds={selectedIds} assets={assetUrls} />)}
   </div>
 }
