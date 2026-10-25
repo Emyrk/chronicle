@@ -171,6 +171,7 @@ export function AdSlot({
   const adsSuppressed = useAdsSuppressed()
   const [requestSnapshot, setRequestSnapshot] = useState<AdRequestSnapshot>()
   const slotRef = useRef<HTMLElement>(null)
+  const adContainerRef = useRef<HTMLDivElement>(null)
   const measuredAvailableHeight = useSidebarViewportHeight(format === "sidebar", slotRef)
   const sidebarAvailableHeight = availableHeight ?? measuredAvailableHeight
   const showDemo = demoEnabled === true
@@ -215,8 +216,10 @@ export function AdSlot({
   const fallbackFillsCell = format === "card" && fallbackVisible
 
   useEffect(() => {
-    if (!adsAllowed || !siteID || showPreview || eligibleSizes.length === 0) return
+    const adContainer = adContainerRef.current
+    if (!adsAllowed || !siteID || showPreview || eligibleSizes.length === 0 || !adContainer) return
 
+    const controller = new AbortController()
     let active = true
     let noFill = false
     let ads: NitroPayAd[] = []
@@ -238,7 +241,7 @@ export function AdSlot({
     }
     document.addEventListener("nitroAds.rendered", handleRendered)
 
-    void requestNitroPayAd(siteID, adID, eligibleSizes, showDemo)
+    void requestNitroPayAd(siteID, adID, eligibleSizes, showDemo, adContainer, controller.signal)
       .then((createdAds) => {
         if (!active || noFill) {
           clearNitroPayAds(createdAds)
@@ -255,6 +258,7 @@ export function AdSlot({
 
     return () => {
       active = false
+      controller.abort()
       document.removeEventListener("nitroAds.rendered", handleRendered)
       clearNitroPayAds(ads)
     }
@@ -327,6 +331,7 @@ export function AdSlot({
             )}
           >
             <div
+              ref={adContainerRef}
               id={adID}
               onClickCapture={(event) => guardNitroPayReportFrameAccess(event.currentTarget, event.target)}
               className={cn(
@@ -351,6 +356,7 @@ export function AdSlot({
           </div>
         ) : (
           <div
+            ref={adContainerRef}
             id={adID}
             onClickCapture={(event) => guardNitroPayReportFrameAccess(event.currentTarget, event.target)}
             className={cn(

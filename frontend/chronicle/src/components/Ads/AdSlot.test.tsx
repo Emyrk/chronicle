@@ -14,6 +14,7 @@ import {
   classifyNitroPayRenderedEvent,
   clearNitroPayAds,
   configureNitroPayScript,
+  isNitroPayContainerCurrent,
   isNitroPayRenderedEventForPlacement,
   nitroPayAdOptions,
   nitroPayReportNeedsFrameGuard,
@@ -448,6 +449,21 @@ describe("AdSlot", () => {
     expect(script.dataset.cfasync).toBe("false")
     expect(script.dataset.logLevel).toBe("silent")
     expect(script.src).toBe("https://s.nitropay.com/ads-2768.js")
+  })
+
+  it("does not request an ad for an unmounted or replacement container", () => {
+    const container = { id: "nitropay-instance-right-rail-lower", isConnected: true } as HTMLElement
+    const replacement = { id: container.id, isConnected: true } as HTMLElement
+    const controller = new AbortController()
+
+    expect(isNitroPayContainerCurrent(container, controller.signal, container)).toBe(true)
+    expect(isNitroPayContainerCurrent(container, controller.signal, replacement)).toBe(false)
+    expect(isNitroPayContainerCurrent({ ...container, isConnected: false } as HTMLElement, controller.signal, container)).toBe(
+      false,
+    )
+
+    controller.abort()
+    expect(isNitroPayContainerCurrent(container, controller.signal, container)).toBe(false)
   })
 
   it("guards NitroPay reporting for direct non-URL creative frames", () => {

@@ -154,13 +154,25 @@ export function isNitroPayRenderedEventForPlacement(event: Event, id: string): b
   return classifyNitroPayRenderedEvent(event, id) === "filled"
 }
 
+export function isNitroPayContainerCurrent(
+  container: HTMLElement,
+  signal: AbortSignal,
+  currentContainer: HTMLElement | null = document.getElementById(container.id),
+): boolean {
+  return !signal.aborted && container.isConnected && currentContainer === container
+}
+
 export async function requestNitroPayAd(
   siteID: string,
   id: string,
   sizes: NitroPaySize[],
-  demo = false,
+  demo: boolean,
+  container: HTMLElement,
+  signal: AbortSignal,
 ): Promise<NitroPayAd[]> {
   await loadNitroPay(siteID)
+  if (!isNitroPayContainerCurrent(container, signal)) return []
+
   const result = await Promise.resolve(
     window.nitroAds?.createAd(id, nitroPayAdOptions(sizes, demo)) ?? null,
   )
