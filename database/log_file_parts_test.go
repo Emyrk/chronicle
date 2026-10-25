@@ -230,6 +230,68 @@ func TestLogFilePartRejectsDuplicateSourceSequence(t *testing.T) {
 	require.Error(t, reserve(uuid.New()))
 }
 
+func TestLogFilePartsCountTowardUserStorage(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	store, _ := dbtestutil.NewDB(t)
+
+	ownerID := uuid.New()
+	_, err := store.InsertUser(ctx, database.InsertUserParams{
+		ID: ownerID, Username: "part-storage-" + ownerID.String(), Email: ownerID.String() + "@example.com",
+	})
+	require.NoError(t, err)
+
+	now := database.Timestamptz(time.Now())
+	groupID := uuid.New()
+	_, err = store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+		ID: groupID, Owner: ownerID, LogType: database.LogTypeAzerothcore, CreatedAt: now, UpdatedAt: now,
+	})
+	require.NoError(t, err)
+
+	fileID := uuid.New()
+	_, err = store.InsertLogFile(ctx, database.InsertLogFileParams{
+		ID: fileID, Owner: ownerID, Hash: uuid.NewString(), WowLogID: groupID,
+		SizeBytes: 100, MimeType: "text/plain", CreatedAt: now, UpdatedAt: now,
+	})
+	require.NoError(t, err)
+
+	_, err = store.InsertLogGroupArtifact(ctx, database.InsertLogGroupArtifactParams{
+		ID: uuid.New(), LogGroupID: groupID, Kind: "sidekick-storage", SchemaVersion: 1,
+		Hash: uuid.NewString(), SizeBytes: 30, MimeType: "application/octet-stream",
+		ObjectKey: "artifacts/" + uuid.NewString(), CreatedAt: now, UpdatedAt: now,
+	})
+	require.NoError(t, err)
+
+	var part database.LogFilePart
+	require.NoError(t, store.InTx(ctx, func(tx database.Store) error {
+		if _, err := tx.LockLogFilePartSequence(ctx, fileID); err != nil {
+			return err
+		}
+		var reserveErr error
+		part, reserveErr = tx.ReserveLogFilePart(ctx, database.ReserveLogFilePartParams{
+			PartID: uuid.New(), LogFileID: fileID, UploadID: uuid.New(),
+			ReservationID: uuid.New(), ObjectKey: "parts/" + uuid.NewString(),
+		})
+		return reserveErr
+	}, nil))
+
+	_, err = store.FinalizeLogFilePart(ctx, database.FinalizeLogFilePartParams{
+		ID: part.ID, ReservationID: part.ReservationID,
+		Hash:                pgtype.Text{String: uuid.NewString(), Valid: true},
+		SizeBytes:           pgtype.Int8{Int64: 80, Valid: true},
+		CompressedSizeBytes: pgtype.Int8{Int64: 20, Valid: true},
+		ContentEncoding:     pgtype.Text{String: "gzip", Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.AddReadyLogFilePartSizes(ctx, database.AddReadyLogFilePartSizesParams{
+		ID: fileID, SizeBytes: 80, CompressedSizeBytes: pgtype.Int8{Int64: 20, Valid: true},
+	}))
+
+	user, err := store.GetUserByID(ctx, ownerID)
+	require.NoError(t, err)
+	require.Equal(t, int64(150), user.ConsumedStorageBytes)
+}
+
 func insertPartFixture(t *testing.T, ctx context.Context, store database.Store) uuid.UUID {
 	t.Helper()
 	ownerID := uuid.New()
