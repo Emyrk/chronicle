@@ -5,6 +5,8 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
+const flameLeviathanPostDeathCast = 62400
+
 func NewFlameLeviathan(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
 	entry, ok := id.GetEntry()
 	if !ok || (entry != 34003 && entry != 33113) {
@@ -12,7 +14,10 @@ func NewFlameLeviathan(id guid.GUID, all *characters.Characters) (characters.Cha
 	}
 
 	return characters.NewAdsGoWithBossCustomCharacter(
-		characters.NewCommonCharacter(id, all),
+		characters.NewIgnoreCastCharacter(
+			characters.NewCommonCharacter(id, all),
+			flameLeviathanPostDeathCast,
+		),
 		all,
 		entry,
 		33236, // Steelforged Defender

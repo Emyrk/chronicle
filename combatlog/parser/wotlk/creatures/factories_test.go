@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -138,6 +139,52 @@ func TestWotLKEncounterFactoriesKillSteelforgedDefendersWithFlameLeviathan(t *te
 			require.True(t, ok)
 			require.False(t, defender.IsActive())
 			require.Equal(t, period.EndStateSlain, defender.LastEndState())
+		})
+	}
+}
+
+func TestFlameLeviathanIgnoresPostDeathCast(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name      string
+		bossEntry uint32
+	}{
+		{name: "10 player", bossEntry: 33113},
+		{name: "25 player", bossEntry: 34003},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			all := characters.NewCharacters(
+				unitdb.New(),
+				NewCharacterFactories(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}),
+				identifier.NewIdentifier(map[uint32]identifier.Identity{}),
+			)
+			player := guid.GUID(1)
+			leviathanID := wotlkEntryGUID(0xF150000000000000, test.bossEntry)
+			start := time.Date(2026, time.October, 24, 12, 0, 0, 0, time.UTC)
+
+			_, err := all.Process(testDamage(start, player, leviathanID))
+			require.NoError(t, err)
+			_, err = all.Process(&messages.Slain{
+				MessageBase: messages.Base(start.Add(time.Second)),
+				Killer:      &player,
+				Victim:      leviathanID,
+			})
+			require.NoError(t, err)
+
+			// ChromieCraft can emit this spell after the kill. It must not open a
+			// second encounter after the recently-slain grace expires.
+			postDeathCast := testDamage(start.Add(5*time.Second), leviathanID, player)
+			postDeathCast.SpellData = &chrondbc.Spell{ID: flameLeviathanPostDeathCast}
+			_, err = all.Process(postDeathCast)
+			require.NoError(t, err)
+
+			leviathan, ok := all.Get(leviathanID)
+			require.True(t, ok)
+			require.False(t, leviathan.IsActive())
+			require.Len(t, leviathan.Periods(), 1)
 		})
 	}
 }
