@@ -76,7 +76,7 @@ definition chronicle {
 
   // A site-wide ban overrides every site-wide submission grant.
   permission submit_photo_proof = photo_proof_submitter - photo_proof_banned
-  permission review_photo_proof = photo_proof_reviewer
+  permission review_photo_proof = photo_proof_reviewer + technical_admin
 
   permission create_tenant_application = technical_admin + chronicle_guild_member
 }

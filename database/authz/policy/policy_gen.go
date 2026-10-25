@@ -1293,7 +1293,7 @@ func (obj *ObjChronicle) CanSubmit_photo_proof_User(sub *ObjUser) rel.Relationsh
 
 // CanReview_photo_proof_User checks if the subject has review_photo_proof permission
 // // Object: chronicle:<id>
-// Schema: permission review_photo_proof = photo_proof_reviewer
+// Schema: permission review_photo_proof = photo_proof_reviewer + technical_admin
 func (obj *ObjChronicle) CanReview_photo_proof_User(sub *ObjUser) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{

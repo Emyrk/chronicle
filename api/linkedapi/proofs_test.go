@@ -49,10 +49,11 @@ func TestProofPermissionScopes(t *testing.T) {
 	zed := serviceauthz.Authz(testservices.Authz(t))
 	h := &Handler{zed: zed}
 	tenantA, tenantB := uuid.New(), uuid.New()
-	siteSubmitter, siteReviewer, tenantSubmitter, tenantReviewer, userAdmin, tenantAdmin := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	siteSubmitter, siteReviewer, tenantSubmitter, tenantReviewer, userAdmin, tenantAdmin, technicalAdmin := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	require.NoError(t, zed.SetUserChronicleRoles(ctx, siteSubmitter, []string{"photo_proof_submitter"}))
 	require.NoError(t, zed.SetUserChronicleRoles(ctx, siteReviewer, []string{"photo_proof_reviewer"}))
 	require.NoError(t, zed.SetUserChronicleRoles(ctx, userAdmin, []string{"is_admin_users"}))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, technicalAdmin, []string{"technical_admin"}))
 	require.NoError(t, zed.SetTenantProofGrant(ctx, tenantA, tenantSubmitter, true, false))
 	require.NoError(t, zed.SetTenantProofGrant(ctx, tenantA, tenantReviewer, false, true))
 	b := policy.New()
@@ -76,6 +77,10 @@ func TestProofPermissionScopes(t *testing.T) {
 		{"site review on root", siteReviewer, uuid.Nil, true, http.StatusNoContent},
 		{"site review on A", siteReviewer, tenantA, true, http.StatusNoContent},
 		{"site review on B", siteReviewer, tenantB, true, http.StatusNoContent},
+		{"tech admin review on root", technicalAdmin, uuid.Nil, true, http.StatusNoContent},
+		{"tech admin review on A", technicalAdmin, tenantA, true, http.StatusNoContent},
+		{"tech admin review on B", technicalAdmin, tenantB, true, http.StatusNoContent},
+		{"tech admin submit on A", technicalAdmin, tenantA, false, http.StatusForbidden},
 		{"tenant review on A", tenantReviewer, tenantA, true, http.StatusNoContent},
 		{"tenant review on B", tenantReviewer, tenantB, true, http.StatusForbidden},
 		{"tenant review on root", tenantReviewer, uuid.Nil, true, http.StatusForbidden},

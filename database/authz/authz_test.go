@@ -328,10 +328,11 @@ func TestPhotoProofPermissions(t *testing.T) {
 	zed := serviceauthz.Authz(broker)
 	ctx := testutil.Context(t, testutil.WaitLong)
 	tenantA, tenantB := uuid.New(), uuid.New()
-	applicant, reviewer, tenantAdmin, siteAdmin := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	applicant, reviewer, tenantAdmin, siteAdmin, technicalAdmin := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	require.NoError(t, zed.SetTenantProofGrant(ctx, tenantA, applicant, true, false))
 	require.NoError(t, zed.SetTenantProofGrant(ctx, tenantA, reviewer, false, true))
 	require.NoError(t, zed.SetUserChronicleRoles(ctx, siteAdmin, []string{"admin"}))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, technicalAdmin, []string{"technical_admin"}))
 	b := policy.New()
 	b.Wow_tenant(tenantA).Chronicle(b.GlobalChronicle()).Admin(b.User(tenantAdmin))
 	b.Wow_tenant(tenantB).Chronicle(b.GlobalChronicle())
@@ -347,6 +348,7 @@ func TestPhotoProofPermissions(t *testing.T) {
 		{"reviewer", reviewer, false, true, false, false},
 		{"tenant admin", tenantAdmin, false, false, false, false},
 		{"site admin", siteAdmin, false, false, false, false},
+		{"technical admin", technicalAdmin, false, true, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := testutil.Context(t, testutil.WaitLong)
