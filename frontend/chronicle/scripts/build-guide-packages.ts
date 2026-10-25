@@ -9,7 +9,9 @@ import { normalizePackagePath } from "../src/pages/Guides/package/paths";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const guidesDirectory = resolve(root, "public/guides");
-const fixedTime = new Date("2020-01-01T00:00:00.000Z");
+// ZIP stores local DOS time fields, so construct a local timestamp for identical
+// archive bytes in developer environments and UTC CI runners.
+const fixedTime = new Date(2020, 0, 1);
 const guideDefinitions = [{ source: resolve(root, "src/pages/Guides/examples/onyxia"), aliases: ["onyxia"] }];
 const zipOptions = { mtime: fixedTime, level: 9 } as const;
 
