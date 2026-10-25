@@ -72,6 +72,7 @@ func (s *Service) Start(ctx context.Context) error {
 	bot, err := chroniclebot.New(ctx, logger, chroniclebot.Config{
 		Token:                        s.cfg.Token,
 		GuildID:                      s.cfg.GuildID,
+		AdminNotificationsChannelID:  s.cfg.AdminNotificationsChannelID,
 		Disabled:                     s.cfg.Disabled,
 		MembershipGrantChecksPerHour: s.cfg.MembershipGrantChecksPerHour,
 		DB:                           db,
@@ -158,6 +159,15 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_DISCORD_MEMBERSHIP_CHECKS_PER_HOUR",
 			Default:     "100",
 			Value:       serpent.Int64Of(&s.cfg.MembershipGrantChecksPerHour),
+		},
+		{
+			Name:        "Admin Discord notifications channel ID",
+			Description: "Private channel for admin notifications. Empty disables notifications.",
+			Required:    false,
+			Flag:        "discord-admin-notifications-channel-id",
+			Env:         "CHRONICLE_DISCORD_ADMIN_NOTIFICATIONS_CHANNEL_ID",
+			Default:     "1563754609921622016",
+			Value:       serpent.StringOf(&s.cfg.AdminNotificationsChannelID),
 		},
 		{
 			Name:        "Discord Chronicle GuildID",

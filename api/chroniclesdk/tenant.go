@@ -108,21 +108,22 @@ func TenantFromDB(t database.Tenant) Tenant {
 	return out
 }
 
-// ExternalLinking is a tenant's visibility settings for external character
-// linking. The provider itself is deployment-level (env vars); tenants opt
-// in to showing the linking UI.
+// ExternalLinking configures each character linking method for a tenant.
+// The zug-zug provider credentials remain deployment-level (env vars).
 type ExternalLinking struct {
-	// Show enables the external linking card on the account characters page.
-	Show bool `json:"show"`
-	// Callout is an optional message shown alongside the linking card, e.g.
-	// "Linking is only supported for members of the guild Zug Zug".
+	Methods map[string]ExternalLinkingMethod `json:"methods"`
+}
+
+// ExternalLinkingMethod controls a method's visibility and its own callout.
+type ExternalLinkingMethod struct {
+	Enabled bool   `json:"enabled"`
 	Callout string `json:"callout,omitempty"`
 }
 
 // ParseExternalLinking unmarshals a tenant's raw external_linking JSONB
 // column. Returns nil when unset, null, or invalid.
 func ParseExternalLinking(data []byte) *ExternalLinking {
-	if len(data) == 0 {
+	if len(data) == 0 || string(data) == "null" {
 		return nil
 	}
 	var el ExternalLinking

@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"net/url"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -16,22 +17,30 @@ import (
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue"
+	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/database/storage"
+	"github.com/Emyrk/chronicle/internal/services/serviceproof"
 )
 
 type Handler struct {
-	zed  *authz.Authz
-	auth *chronauth.Service
+	zed       *authz.Authz
+	proofs    *serviceproof.Service
+	auth      *chronauth.Service
+	queue     chroniclebot.AdminNotificationInserter
+	bot       *chroniclebot.Bot
+	accessURL *url.URL
 	// externalVerification is the deployment's external verification
 	// provider config (nil when disabled).
 	externalVerification *chroniclesdk.ExternalVerification
 }
 
-func New(zed *authz.Authz, auth *chronauth.Service, externalVerification *chroniclesdk.ExternalVerification) *Handler {
-	return &Handler{zed: zed, auth: auth, externalVerification: externalVerification}
+func New(zed *authz.Authz, auth *chronauth.Service, externalVerification *chroniclesdk.ExternalVerification, objects storage.ObjectStorage, queue *riverqueue.Queues, bot *chroniclebot.Bot, accessURL *url.URL) *Handler {
+	return &Handler{zed: zed, auth: auth, externalVerification: externalVerification, proofs: serviceproof.New(zed, objects), queue: queue, bot: bot, accessURL: accessURL}
 }
 
 // Routes returns the router for the linked service, mounted at /linked.
@@ -51,6 +60,9 @@ func (h *Handler) Routes() http.Handler {
 
 		r.Route("/me", func(r chi.Router) {
 			r.Get("/", h.ListMyCharacters)
+			r.With(h.proofPermission(false)).Post("/proofs", h.SubmitProof)
+			r.Get("/proofs/cooldown", h.GetMyProofCooldown)
+			r.Get("/proofs", h.ListMyProofs)
 			r.Put("/primary", h.SetMyPrimaryCharacter)
 			// Sync links from the deployment's external verification
 			// provider, and fetch the cached result of the last sync.
@@ -59,6 +71,21 @@ func (h *Handler) Routes() http.Handler {
 			// Authorization is the manage_link permission (owner or user
 			// admin), checked in the handler.
 			r.Delete("/{realmID}/{characterGUID}", h.UnlinkMyCharacter)
+		})
+
+		// Proof review can be granted to moderators without granting user admin.
+		r.Group(func(r chi.Router) {
+			r.Use(h.proofPermission(true))
+			r.Get("/admin/proofs", h.ListAdminProofs)
+			r.Get("/admin/proofs/{id}/image", h.ProofImage)
+			r.Post("/admin/proofs/{id}/decision", h.DecideProof)
+		})
+
+		// Root-site administrators assign tenant-specific proof roles.
+		r.Group(func(r chi.Router) {
+			r.Use(httpmw.Can(h.zed, policy.New().GlobalChronicle().CanAdmin_tenants_User))
+			r.Get("/admin/tenants/{tenantID}/proof-grants", h.ListTenantProofGrants)
+			r.Put("/admin/tenants/{tenantID}/proof-grants/{userID}", h.SetTenantProofGrant)
 		})
 
 		// Admin surface.

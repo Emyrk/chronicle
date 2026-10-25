@@ -33,27 +33,30 @@ export function NavBar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
 
+  const { data: siteConfig } = useSiteConfig();
+  const tenantID = siteConfig?.tenant?.id;
   // Check admin permissions via SpiceDB
   const authzChecks = useMemo(() => ({
     admin: "chronicle:chronicle#admin_users",
+    proofReviewer: tenantID ? `wow_tenant:${tenantID}#review_photo_proof` : "chronicle:chronicle#review_photo_proof",
     adminAuthz: "chronicle:chronicle#administer_authz",
     adminWorldData: "chronicle:chronicle#admin_world_data",
     manageConsumables: "chronicle:chronicle#admin_consumables",
     canAdminSomeServer: "lookup:wow_server#administer",
     adminServers: "chronicle:chronicle#admin_servers",
     adminLogs: "chronicle:chronicle#admin_logs",
-  }), []);
+  }), [tenantID]);
   const { data: authz } = useAuthorizationCheck(authzChecks, {
     enabled: isAuthenticated,
   });
   const isAdmin = authz?.admin ?? false;
+  const canReviewProofs = !!(authz?.proofReviewer || (!tenantID && authz?.admin));
   const canAdminAuthz = authz?.adminAuthz ?? false;
   const canAdminWorldData = authz?.adminWorldData ?? false;
   const canManageConsumables = authz?.manageConsumables ?? false;
   const canManageServers = (authz?.canAdminSomeServer ?? false) || (authz?.adminServers ?? false);
   const hasAdminLogs = authz?.adminLogs ?? false;
 
-  const { data: siteConfig } = useSiteConfig();
   const userID = session?.user_id ?? "";
   const whatsNewStatus = useWhatsNewStatus(userID, isAuthenticated);
   const { mutate: markWhatsNewRead, isPending: markingWhatsNewRead } = useMarkWhatsNewRead(userID);
@@ -78,6 +81,7 @@ export function NavBar() {
     ...(uploadsEnabled ? [{ title: "My Logs", href: "/logs", icon: FileText } as NavItem] : []),
     ...(uploadsEnabled ? [{ title: "Upload", href: "/upload", icon: Upload } as NavItem] : []),
     ...(isAdmin ? [{ title: "Admin", href: "/admin", icon: Shield } as NavItem] : []),
+    ...(!isAdmin && canReviewProofs ? [{ title: "Review photo proofs", href: "/admin/photo-proofs", icon: Shield } as NavItem] : []),
     ...(canAdminWorldData ? [{ title: "Game Data", href: "/game-data", icon: Database } as NavItem] : []),
     ...(!canAdminWorldData && canManageConsumables ? [{ title: "Consumables", href: "/technical/consumables", icon: Database } as NavItem] : []),
     ...(canManageServers ? [{ title: "Servers", href: "/servers", icon: Server } as NavItem] : []),

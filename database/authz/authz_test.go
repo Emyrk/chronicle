@@ -322,6 +322,104 @@ func TestGuildDiscordBotPermissions(t *testing.T) {
 	checkManage(t, leaderID, false)
 }
 
+func TestPhotoProofPermissions(t *testing.T) {
+	t.Parallel()
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	tenantA, tenantB := uuid.New(), uuid.New()
+	applicant, reviewer, tenantAdmin, siteAdmin, technicalAdmin := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	require.NoError(t, zed.SetTenantProofGrant(ctx, tenantA, applicant, true, false))
+	require.NoError(t, zed.SetTenantProofGrant(ctx, tenantA, reviewer, false, true))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, siteAdmin, []string{"admin"}))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, technicalAdmin, []string{"technical_admin"}))
+	b := policy.New()
+	b.Wow_tenant(tenantA).Chronicle(b.GlobalChronicle()).Admin(b.User(tenantAdmin))
+	b.Wow_tenant(tenantB).Chronicle(b.GlobalChronicle())
+	_, err := zed.Write(ctx, *b.Txn())
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name                               string
+		user                               uuid.UUID
+		submitA, reviewA, submitB, reviewB bool
+	}{
+		{"applicant", applicant, true, false, false, false},
+		{"reviewer", reviewer, false, true, false, false},
+		{"tenant admin", tenantAdmin, false, false, false, false},
+		{"site admin", siteAdmin, false, false, false, false},
+		{"technical admin", technicalAdmin, false, true, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := testutil.Context(t, testutil.WaitLong)
+			b := policy.New()
+			allowed, err := zed.Check(ctx, nil,
+				b.Wow_tenant(tenantA).CanSubmit_photo_proof_User(b.User(tc.user)),
+				b.Wow_tenant(tenantA).CanReview_photo_proof_User(b.User(tc.user)),
+				b.Wow_tenant(tenantB).CanSubmit_photo_proof_User(b.User(tc.user)),
+				b.Wow_tenant(tenantB).CanReview_photo_proof_User(b.User(tc.user)),
+			)
+			require.NoError(t, err)
+			require.Equal(t, []bool{tc.submitA, tc.reviewA, tc.submitB, tc.reviewB}, allowed)
+		})
+	}
+
+	// Global grants flow through each tenant's Chronicle relationship without
+	// changing its direct roles. Root review separately accepts the global
+	// reviewer permission or admin_users.
+	siteSubmitter, siteReviewer := uuid.New(), uuid.New()
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, siteSubmitter, []string{"photo_proof_submitter"}))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, siteReviewer, []string{"photo_proof_reviewer"}))
+	global := policy.New()
+	globalAllowed, err := zed.Check(ctx, nil,
+		global.GlobalChronicle().CanSubmit_photo_proof_User(global.User(siteSubmitter)),
+		global.GlobalChronicle().CanReview_photo_proof_User(global.User(siteSubmitter)),
+		global.GlobalChronicle().CanSubmit_photo_proof_User(global.User(siteReviewer)),
+		global.GlobalChronicle().CanReview_photo_proof_User(global.User(siteReviewer)),
+		global.GlobalChronicle().CanReview_photo_proof_User(global.User(siteAdmin)),
+		global.Wow_tenant(tenantA).CanSubmit_photo_proof_User(global.User(siteSubmitter)),
+		global.Wow_tenant(tenantB).CanSubmit_photo_proof_User(global.User(siteSubmitter)),
+		global.Wow_tenant(tenantA).CanReview_photo_proof_User(global.User(siteReviewer)),
+		global.Wow_tenant(tenantB).CanReview_photo_proof_User(global.User(siteReviewer)),
+	)
+	require.NoError(t, err)
+	require.Equal(t, []bool{true, false, false, true, false, true, true, true, true}, globalAllowed)
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, siteReviewer, nil))
+	globalReview, err := zed.CheckOne(ctx, nil, global.GlobalChronicle().CanReview_photo_proof_User(global.User(siteReviewer)))
+	require.NoError(t, err)
+	require.False(t, globalReview)
+
+	// The negative role wins even when a user has both site-wide and
+	// tenant-specific submit grants. It does not remove their reviewer grant.
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, siteSubmitter, []string{"photo_proof_submitter", "photo_proof_banned"}))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, applicant, []string{"photo_proof_banned", "photo_proof_reviewer"}))
+	banChecks := policy.New()
+	banned, err := zed.Check(ctx, nil,
+		banChecks.GlobalChronicle().CanSubmit_photo_proof_User(banChecks.User(siteSubmitter)),
+		banChecks.Wow_tenant(tenantA).CanSubmit_photo_proof_User(banChecks.User(siteSubmitter)),
+		banChecks.Wow_tenant(tenantB).CanSubmit_photo_proof_User(banChecks.User(siteSubmitter)),
+		banChecks.Wow_tenant(tenantA).CanSubmit_photo_proof_User(banChecks.User(applicant)),
+		banChecks.Wow_tenant(tenantA).CanReview_photo_proof_User(banChecks.User(applicant)),
+	)
+	require.NoError(t, err)
+	require.Equal(t, []bool{false, false, false, false, true}, banned)
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, applicant, nil))
+	restored, err := zed.CheckOne(ctx, nil, banChecks.Wow_tenant(tenantA).CanSubmit_photo_proof_User(banChecks.User(applicant)))
+	require.NoError(t, err)
+	require.True(t, restored)
+
+	grants, err := zed.TenantProofGrants(ctx, tenantA)
+	require.NoError(t, err)
+	require.Len(t, grants, 2)
+	require.NoError(t, zed.SetTenantProofGrant(ctx, tenantA, applicant, false, false))
+	allowed, err := zed.CheckOne(ctx, nil, policy.New().Wow_tenant(tenantA).CanSubmit_photo_proof_User(policy.New().User(applicant)))
+	require.NoError(t, err)
+	require.False(t, allowed)
+	allowed, err = zed.CheckOne(ctx, nil, policy.New().Wow_tenant(tenantA).CanReview_photo_proof_User(policy.New().User(reviewer)))
+	require.NoError(t, err)
+	require.True(t, allowed)
+}
+
 func TestSetUserChronicleRolesSupportsAdFreeCapability(t *testing.T) {
 	t.Parallel()
 

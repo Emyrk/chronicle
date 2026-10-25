@@ -67,23 +67,15 @@ export function FavoritesList({
   const grouped = data ? groupFavorites(data) : undefined;
 
   return (
-    <section className="rounded-lg border p-4">
-      <div className="flex items-center gap-2">
-        <Star className="size-4 fill-amber-400 text-amber-400" />
-        <h3 className="text-sm font-medium">Favorites</h3>
-      </div>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Quick links to your favorite guilds and characters.
-      </p>
-
+    <section className="rounded-lg border p-2">
       {isLoading ? (
-        <p className="mt-4 text-sm text-muted-foreground">Loading favorites...</p>
+        <p className="px-3 py-2 text-sm text-muted-foreground">Loading favorites...</p>
       ) : !hasFavorites || !grouped ? (
-        <p className="mt-4 rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-          You have not added any favorites yet.
+        <p className="px-3 py-2 text-sm text-muted-foreground">
+          No favorites yet. Click the <Star className="inline size-3.5 align-[-2px]" /> on an armory or guild page to add one.
         </p>
       ) : (
-        <div className="mt-3 grid gap-1 sm:grid-cols-2">
+        <div className="grid gap-1 sm:grid-cols-2">
           {grouped.guilds.map(({ guild, players }) => (
             <div key={guild.id} className="min-w-0">
               <GuildFavorite guild={guild} />

@@ -19,6 +19,12 @@ definition chronicle {
   relation technical_user: user
   relation supporter: user
 
+  // Site-wide proof grants supplement tenant-specific grants. The ban
+  // overrides all submit grants but does not affect review permissions.
+  relation photo_proof_submitter: user
+  relation photo_proof_reviewer: user
+  relation photo_proof_banned: user
+
   // Stripe-owned feature roles granted by Chronicle billing entitlements.
   relation stripe_ad_free: user
   relation stripe_download_raw_logs: user
@@ -68,6 +74,10 @@ definition chronicle {
 
   permission admin_servers = technical_admin
 
+  // A site-wide ban overrides every site-wide submission grant.
+  permission submit_photo_proof = photo_proof_submitter - photo_proof_banned
+  permission review_photo_proof = photo_proof_reviewer + technical_admin
+
   permission create_tenant_application = technical_admin + chronicle_guild_member
 }
 
@@ -77,8 +87,16 @@ definition wow_server_upload_key {}
 definition wow_tenant {
   relation chronicle: chronicle
   relation admin: user
+  relation photo_proof_submitter: user
+  relation photo_proof_reviewer: user
 
   permission administer = admin + chronicle->admin_tenants + chronicle->admin_tenants
+  // Site-wide proof grants flow through chronicle; tenant admins do not
+  // implicitly receive either proof permission.
+  // Subtract after combining tenant and site-wide grants, so a ban also
+  // overrides tenant grants (and future site-wide grant sources).
+  permission submit_photo_proof = (photo_proof_submitter + chronicle->submit_photo_proof) - chronicle->photo_proof_banned
+  permission review_photo_proof = photo_proof_reviewer + chronicle->review_photo_proof
 }
 
 definition wow_tenant_application {

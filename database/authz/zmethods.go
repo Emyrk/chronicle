@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"sort"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz/policy"
@@ -301,6 +302,9 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 		"moderate_logs",
 		"moderate_guilds",
 		"is_admin_users",
+		"photo_proof_submitter",
+		"photo_proof_reviewer",
+		"photo_proof_banned",
 		"is_admin_queues",
 		"is_admin_game_data",
 		"manage_consumables",
@@ -343,6 +347,12 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 			gChron.Moderate_guilds(usr)
 		case "admin_users", "is_admin_users":
 			gChron.Is_admin_users(usr)
+		case "photo_proof_submitter":
+			gChron.Photo_proof_submitter(usr)
+		case "photo_proof_reviewer":
+			gChron.Photo_proof_reviewer(usr)
+		case "photo_proof_banned":
+			gChron.Photo_proof_banned(usr)
 		case "admin_queues", "is_admin_queues":
 			gChron.Is_admin_queues(usr)
 		case "admin_game_data", "is_admin_game_data":
@@ -356,6 +366,79 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 		}
 	}
 
+	_, err := z.Write(ctx, *b.Txn())
+	return err
+}
+
+// TenantProofGrant lists direct tenant-scoped photo proof permissions. These
+// relationships are not global Chronicle roles and are not inherited by tenant
+// administrators.
+type TenantProofGrant struct {
+	UserID uuid.UUID
+	Submit bool
+	Review bool
+}
+
+func (z *Authz) TenantProofGrants(ctx context.Context, tenantID uuid.UUID) ([]TenantProofGrant, error) {
+	grants := map[uuid.UUID]*TenantProofGrant{}
+	for _, entry := range []struct {
+		relation string
+		review   bool
+	}{
+		{"photo_proof_submitter", false}, {"photo_proof_reviewer", true},
+	} {
+		filter := rel.NewFilter("wow_tenant", tenantID.String(), entry.relation)
+		filter.WithSubjectFilter("user", "", "")
+		for relation, err := range z.spice.ReadRelationships(ctx, z.DefaultConsistencyStrategy(), filter) {
+			if err != nil {
+				return nil, err
+			}
+			id, err := uuid.Parse(relation.SubjectID)
+			if err != nil {
+				continue
+			}
+			grant := grants[id]
+			if grant == nil {
+				grant = &TenantProofGrant{UserID: id}
+				grants[id] = grant
+			}
+			if entry.review {
+				grant.Review = true
+			} else {
+				grant.Submit = true
+			}
+		}
+	}
+	result := make([]TenantProofGrant, 0, len(grants))
+	for _, grant := range grants {
+		result = append(result, *grant)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].UserID.String() < result[j].UserID.String() })
+	return result, nil
+}
+
+// SetTenantProofGrant replaces both direct proof permissions for one user on
+// one tenant. It does not affect the user's grants on other tenants.
+func (z *Authz) SetTenantProofGrant(ctx context.Context, tenantID, userID uuid.UUID, submit, review bool) error {
+	for _, relation := range []string{"photo_proof_submitter", "photo_proof_reviewer"} {
+		filter := rel.NewFilter("wow_tenant", tenantID.String(), relation)
+		filter.WithSubjectFilter("user", userID.String(), "")
+		if err := z.Delete(ctx, rel.NewPreconditionedFilter(filter)); err != nil {
+			return err
+		}
+	}
+	b := policy.New()
+	tenant := b.Wow_tenant(tenantID)
+	user := b.User(userID)
+	if submit {
+		tenant.Photo_proof_submitter(user)
+	}
+	if review {
+		tenant.Photo_proof_reviewer(user)
+	}
+	if !submit && !review {
+		return nil
+	}
 	_, err := z.Write(ctx, *b.Txn())
 	return err
 }

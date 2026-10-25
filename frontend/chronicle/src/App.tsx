@@ -32,6 +32,7 @@ const AdminLeaderboardPage = lazy(() => import("./pages/Admin/AdminLeaderboardPa
 const AdminSiteSettingsPage = lazy(() => import("./pages/Admin/AdminSiteSettingsPage").then(({ AdminSiteSettingsPage }) => ({ default: AdminSiteSettingsPage })))
 const AdminStoragePage = lazy(() => import("./pages/Admin/AdminStoragePage").then(({ AdminStoragePage }) => ({ default: AdminStoragePage })))
 const AdminUsersPage = lazy(() => import("./pages/Admin/AdminUsersPage").then(({ AdminUsersPage }) => ({ default: AdminUsersPage })))
+const ProofReview = lazy(() => import("./pages/Admin/ProofReview").then(({ ProofReview }) => ({ default: ProofReview })))
 const RegressionPage = lazy(() => import("./pages/Admin/RegressionPage").then(({ RegressionPage }) => ({ default: RegressionPage })))
 const AdminOutdatedInstancesPage = lazy(() => import("./pages/Admin/AdminOutdatedInstancesPage").then(({ AdminOutdatedInstancesPage }) => ({ default: AdminOutdatedInstancesPage })))
 const AdminApplicationsListPage = lazy(() => import("./pages/Admin/AdminApplicationsListPage").then(({ AdminApplicationsListPage }) => ({ default: AdminApplicationsListPage })))
@@ -185,6 +186,7 @@ function App() {
           <Route path="logs" element={<AdminLogsPage />} />
           <Route path="leaderboard" element={<AdminLeaderboardPage />} />
           <Route path="site-settings" element={<AdminSiteSettingsPage />} />
+          <Route path="photo-proofs" element={<ProofReview />} />
           <Route path="users" element={<AdminUsersPage />} />
           <Route path="storage" element={<AdminStoragePage />} />
           <Route path="regression" element={<RegressionPage />} />

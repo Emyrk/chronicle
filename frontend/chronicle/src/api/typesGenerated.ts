@@ -1066,6 +1066,12 @@ export interface DatasetTenantSummary {
     readonly slug: string;
 }
 
+// From chroniclesdk/proofs.go
+export interface DecideProofRequest {
+    readonly message: string;
+    readonly decisions: readonly ProofDecision[];
+}
+
 // From chroniclesdk/server_application.go
 /**
  * DeleteRealmPayload requests removal of a realm.
@@ -1177,19 +1183,19 @@ export const EndStates: EndState[] = ["reset", "slain", "timeout"];
 
 // From chroniclesdk/tenant.go
 /**
- * ExternalLinking is a tenant's visibility settings for external character
- * linking. The provider itself is deployment-level (env vars); tenants opt
- * in to showing the linking UI.
+ * ExternalLinking configures each character linking method for a tenant.
+ * The zug-zug provider credentials remain deployment-level (env vars).
  */
 export interface ExternalLinking {
-    /**
-     * Show enables the external linking card on the account characters page.
-     */
-    readonly show: boolean;
-    /**
-     * Callout is an optional message shown alongside the linking card, e.g.
-     * "Linking is only supported for members of the guild Zug Zug".
-     */
+    readonly methods: Record<string, ExternalLinkingMethod>;
+}
+
+// From chroniclesdk/tenant.go
+/**
+ * ExternalLinkingMethod controls a method's visibility and its own callout.
+ */
+export interface ExternalLinkingMethod {
+    readonly enabled: boolean;
     readonly callout?: string;
 }
 
@@ -3019,6 +3025,71 @@ export type PricingAuctionHouse = "merged" | "split";
 
 export const PricingAuctionHouses: PricingAuctionHouse[] = ["merged", "split"];
 
+// From chroniclesdk/proofs.go
+/**
+ * ProofApplicant gives reviewers context about who submitted a proof.
+ */
+export interface ProofApplicant {
+    readonly username: string;
+    readonly discord_linked: boolean;
+    readonly discord_id?: string;
+    readonly linked_characters: readonly LinkedCharacter[];
+}
+
+// From chroniclesdk/proofs.go
+/**
+ * ProofCharacter identifies one same-realm character in a photo proof request.
+ */
+export interface ProofCharacter {
+    readonly realm_id: string;
+    readonly character_guid: string;
+}
+
+// From chroniclesdk/proofs.go
+/**
+ * ProofCooldownResponse is the account's next eligible submission time for
+ * character-link photo proof, regardless of which tenant receives the request.
+ */
+export interface ProofCooldownResponse {
+    readonly next_submission_at?: string;
+    readonly message?: string;
+}
+
+// From chroniclesdk/proofs.go
+export interface ProofDecision extends ProofCharacter {
+    readonly approved: boolean;
+}
+
+// From chroniclesdk/proofs.go
+export interface ProofRequest {
+    readonly id: string;
+    readonly applicant_id: string;
+    readonly tenant_id: string;
+    readonly tenant_name: string;
+    readonly tenant_slug?: string;
+    readonly purpose: string;
+    readonly status: string;
+    readonly message: string;
+    readonly response: string;
+    readonly created_at: string;
+    readonly reviewed_at?: string;
+    readonly subjects: readonly ProofSubject[];
+    /**
+     * Applicant is only populated for reviewers.
+     */
+    readonly applicant?: ProofApplicant;
+}
+
+// From chroniclesdk/proofs.go
+export interface ProofSubject extends ProofCharacter {
+    readonly name: string;
+    readonly realm_name: string;
+    readonly class?: string;
+    readonly guild_name?: string;
+    readonly status: string;
+    readonly warning?: string;
+}
+
 // From chroniclesdk/raid_compositions.go
 /**
  * RaidCompData is the typed payload of a saved raid composition. The board
@@ -4259,6 +4330,16 @@ export interface Tenant {
     readonly external_linking?: ExternalLinking;
     readonly created_at: string;
     readonly updated_at: string;
+}
+
+// From chroniclesdk/proofs.go
+/**
+ * TenantProofGrant assigns photo-proof permissions to one user on one tenant.
+ */
+export interface TenantProofGrant {
+    readonly user_id: string;
+    readonly submit: boolean;
+    readonly review: boolean;
 }
 
 // From chroniclesdk/server_application.go

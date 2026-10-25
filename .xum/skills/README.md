@@ -10,6 +10,7 @@ Agent Skills is an open specification (Apache 2.0) for extending AI agent capabi
 
 | Skill | Use When |
 |-------|----------|
+| [admin-discord-notifications](./admin-discord-notifications/) | Adding admin Discord alerts through the shared River job and channel |
 | [combat-log-parsing](./combat-log-parsing/) | Adding/fixing combat log event parsing, understanding GUID format |
 | [events-panels](./events-panels/) | Creating new metrics panels in the frontend |
 | [database-sqlc-patterns](./database-sqlc-patterns/) | Database queries, migrations, schema changes |

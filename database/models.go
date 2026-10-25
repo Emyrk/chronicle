@@ -2071,6 +2071,33 @@ type ParsedLogGroup struct {
 	FinalizedAt     pgtype.Timestamptz `db:"finalized_at" json:"finalized_at"`
 }
 
+type ProofRequest struct {
+	ID                    uuid.UUID          `db:"id" json:"id"`
+	ApplicantID           uuid.UUID          `db:"applicant_id" json:"applicant_id"`
+	Purpose               string             `db:"purpose" json:"purpose"`
+	EvidenceKey           string             `db:"evidence_key" json:"evidence_key"`
+	Status                string             `db:"status" json:"status"`
+	Message               string             `db:"message" json:"message"`
+	Response              string             `db:"response" json:"response"`
+	ReviewerID            uuid.NullUUID      `db:"reviewer_id" json:"reviewer_id"`
+	CreatedAt             pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ReviewedAt            pgtype.Timestamptz `db:"reviewed_at" json:"reviewed_at"`
+	EvidenceDeletePending bool               `db:"evidence_delete_pending" json:"evidence_delete_pending"`
+	TenantID              uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+}
+
+type ProofRequestSubject struct {
+	ID            uuid.UUID     `db:"id" json:"id"`
+	RequestID     uuid.UUID     `db:"request_id" json:"request_id"`
+	SubjectType   string        `db:"subject_type" json:"subject_type"`
+	RealmID       uuid.NullUUID `db:"realm_id" json:"realm_id"`
+	CharacterGuid *guid.GUID    `db:"character_guid" json:"character_guid"`
+	Name          string        `db:"name" json:"name"`
+	RealmName     string        `db:"realm_name" json:"realm_name"`
+	Status        string        `db:"status" json:"status"`
+	Warning       string        `db:"warning" json:"warning"`
+}
+
 type RaidComposition struct {
 	ID         uuid.UUID          `db:"id" json:"id"`
 	UserID     uuid.UUID          `db:"user_id" json:"user_id"`
