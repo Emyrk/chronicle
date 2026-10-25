@@ -12,16 +12,20 @@ import (
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/rankingargs"
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/internal/billing"
+	"github.com/Emyrk/chronicle/internal/cosmetics"
 	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicebilling"
 	"github.com/Emyrk/chronicle/internal/services/servicebot"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
+	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/Emyrk/chronicle/internal/services/serviceretention"
 	"github.com/Emyrk/chronicle/internal/services/servicetelemetry"
+	"github.com/google/uuid"
 	"github.com/riverqueue/river"
 
 	"github.com/coder/serpent"
@@ -61,6 +65,8 @@ func (s *Service) DependsOn() []string {
 		servicepgxpool.OnPGXPool(),
 		serviceprometheus.OnPrometheus(),
 		servicebilling.OnBilling(),
+		serviceauthz.OnAuthz(),
+		servicedbstore.OnDatabaseStore(),
 		servicechronicle.OnChronicle(),
 		servicebot.OnDiscordBot(),
 		serviceretention.OnRetention(),
@@ -131,6 +137,27 @@ func (s *Service) Start(ctx context.Context) error {
 			&river.PeriodicJobOpts{ID: "billing-subscription-reconciliation", RunOnStart: true},
 		),
 	)
+
+	// Register character cosmetic audits. The daily dispatcher repairs missed
+	// event-driven audits without producing a deployment-time burst.
+	cosmeticStore := servicedbstore.DatabaseStore(s.broker)
+	cosmeticAuthz := serviceauthz.Authz(s.broker)
+	cosmeticAuditWorker := &cosmetics.WorkerAuditUser{Store: cosmeticStore, Authz: cosmeticAuthz}
+	cosmeticDispatchWorker := &cosmetics.WorkerDispatchAudits{Store: cosmeticStore, Queue: q}
+	riverqueue.AddWorker(q, cosmeticAuditWorker)
+	riverqueue.AddWorker(q, cosmeticDispatchWorker)
+	q.AddPeriodicJob(
+		river.NewPeriodicJob(
+			river.PeriodicInterval(24*time.Hour),
+			func() (river.JobArgs, *river.InsertOpts) {
+				return cosmetics.ArgsDispatchAudits{}, nil
+			},
+			&river.PeriodicJobOpts{ID: "cosmetics-daily-audit", RunOnStart: false},
+		),
+	)
+	billingService.Billing.SetCosmeticAuditEnqueuer(func(ctx context.Context, userID uuid.UUID) error {
+		return cosmetics.EnqueueUserAudit(ctx, q, userID)
+	})
 
 	// Register retention workers and periodic job.
 	ret := serviceretention.RetentionService(s.broker)

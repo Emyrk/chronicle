@@ -24769,6 +24769,43 @@ func (q *sqlQuerier) GetExternalCharacterLinkSync(ctx context.Context, arg GetEx
 	return i, err
 }
 
+const getUserCharacterCosmetics = `-- name: GetUserCharacterCosmetics :many
+SELECT user_character_cosmetics.user_character_link_id, user_character_cosmetics.requested_name_id, user_character_cosmetics.requested_background_id, user_character_cosmetics.requested_border_id, user_character_cosmetics.active_name_id, user_character_cosmetics.active_background_id, user_character_cosmetics.active_border_id
+FROM user_character_cosmetics
+JOIN user_character_links
+  ON user_character_links.id = user_character_cosmetics.user_character_link_id
+WHERE user_character_links.user_id = $1
+ORDER BY user_character_links.created_at ASC
+`
+
+func (q *sqlQuerier) GetUserCharacterCosmetics(ctx context.Context, userID uuid.UUID) ([]UserCharacterCosmetic, error) {
+	rows, err := q.db.Query(ctx, getUserCharacterCosmetics, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserCharacterCosmetic
+	for rows.Next() {
+		var i UserCharacterCosmetic
+		if err := rows.Scan(
+			&i.UserCharacterLinkID,
+			&i.RequestedNameID,
+			&i.RequestedBackgroundID,
+			&i.RequestedBorderID,
+			&i.ActiveNameID,
+			&i.ActiveBackgroundID,
+			&i.ActiveBorderID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserCharacterLink = `-- name: GetUserCharacterLink :one
 SELECT id, user_id, character_guid, realm_id, is_primary, linked_by, created_at, link_source FROM user_character_links
 WHERE character_guid = $1 AND realm_id = $2
@@ -24907,6 +24944,70 @@ func (q *sqlQuerier) InsertUserCharacterLink(ctx context.Context, arg InsertUser
 	return i, err
 }
 
+const listUsersReferencingCosmetic = `-- name: ListUsersReferencingCosmetic :many
+SELECT DISTINCT user_character_links.user_id
+FROM user_character_cosmetics
+JOIN user_character_links
+  ON user_character_links.id = user_character_cosmetics.user_character_link_id
+WHERE $1::text <> '' AND $1::text IN (
+  user_character_cosmetics.requested_name_id,
+  user_character_cosmetics.requested_background_id,
+  user_character_cosmetics.requested_border_id,
+  user_character_cosmetics.active_name_id,
+  user_character_cosmetics.active_background_id,
+  user_character_cosmetics.active_border_id
+)
+ORDER BY user_character_links.user_id
+`
+
+func (q *sqlQuerier) ListUsersReferencingCosmetic(ctx context.Context, cosmeticID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listUsersReferencingCosmetic, cosmeticID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var user_id uuid.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsersWithCharacterCosmetics = `-- name: ListUsersWithCharacterCosmetics :many
+SELECT DISTINCT user_character_links.user_id
+FROM user_character_cosmetics
+JOIN user_character_links
+  ON user_character_links.id = user_character_cosmetics.user_character_link_id
+ORDER BY user_character_links.user_id
+`
+
+func (q *sqlQuerier) ListUsersWithCharacterCosmetics(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listUsersWithCharacterCosmetics)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var user_id uuid.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setPrimaryUserCharacter = `-- name: SetPrimaryUserCharacter :one
 UPDATE user_character_links
 SET is_primary = TRUE
@@ -24964,6 +25065,48 @@ func (q *sqlQuerier) UpdateExternalCharacterLinkSyncResponse(ctx context.Context
 	return err
 }
 
+const updateUserCharacterActiveCosmetics = `-- name: UpdateUserCharacterActiveCosmetics :one
+UPDATE user_character_cosmetics
+SET
+  active_name_id = $1,
+  active_background_id = $2,
+  active_border_id = $3
+FROM user_character_links
+WHERE user_character_cosmetics.user_character_link_id = $4
+  AND user_character_links.id = user_character_cosmetics.user_character_link_id
+  AND user_character_links.user_id = $5
+RETURNING user_character_cosmetics.user_character_link_id, user_character_cosmetics.requested_name_id, user_character_cosmetics.requested_background_id, user_character_cosmetics.requested_border_id, user_character_cosmetics.active_name_id, user_character_cosmetics.active_background_id, user_character_cosmetics.active_border_id
+`
+
+type UpdateUserCharacterActiveCosmeticsParams struct {
+	ActiveNameID        string    `db:"active_name_id" json:"active_name_id"`
+	ActiveBackgroundID  string    `db:"active_background_id" json:"active_background_id"`
+	ActiveBorderID      string    `db:"active_border_id" json:"active_border_id"`
+	UserCharacterLinkID uuid.UUID `db:"user_character_link_id" json:"user_character_link_id"`
+	UserID              uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) UpdateUserCharacterActiveCosmetics(ctx context.Context, arg UpdateUserCharacterActiveCosmeticsParams) (UserCharacterCosmetic, error) {
+	row := q.db.QueryRow(ctx, updateUserCharacterActiveCosmetics,
+		arg.ActiveNameID,
+		arg.ActiveBackgroundID,
+		arg.ActiveBorderID,
+		arg.UserCharacterLinkID,
+		arg.UserID,
+	)
+	var i UserCharacterCosmetic
+	err := row.Scan(
+		&i.UserCharacterLinkID,
+		&i.RequestedNameID,
+		&i.RequestedBackgroundID,
+		&i.RequestedBorderID,
+		&i.ActiveNameID,
+		&i.ActiveBackgroundID,
+		&i.ActiveBorderID,
+	)
+	return i, err
+}
+
 const upsertExternalCharacterLinkSync = `-- name: UpsertExternalCharacterLinkSync :exec
 INSERT INTO external_character_link_syncs (user_id, source, last_synced_at, last_response)
 VALUES ($1, $2, now(), NULL)
@@ -24980,6 +25123,71 @@ type UpsertExternalCharacterLinkSyncParams struct {
 func (q *sqlQuerier) UpsertExternalCharacterLinkSync(ctx context.Context, arg UpsertExternalCharacterLinkSyncParams) error {
 	_, err := q.db.Exec(ctx, upsertExternalCharacterLinkSync, arg.UserID, arg.Source)
 	return err
+}
+
+const upsertUserCharacterCosmetics = `-- name: UpsertUserCharacterCosmetics :one
+INSERT INTO user_character_cosmetics (
+  user_character_link_id,
+  requested_name_id,
+  requested_background_id,
+  requested_border_id,
+  active_name_id,
+  active_background_id,
+  active_border_id
+)
+SELECT
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  $7
+FROM user_character_links
+WHERE id = $1 AND user_id = $8
+ON CONFLICT (user_character_link_id) DO UPDATE SET
+  requested_name_id = EXCLUDED.requested_name_id,
+  requested_background_id = EXCLUDED.requested_background_id,
+  requested_border_id = EXCLUDED.requested_border_id,
+  active_name_id = EXCLUDED.active_name_id,
+  active_background_id = EXCLUDED.active_background_id,
+  active_border_id = EXCLUDED.active_border_id
+RETURNING user_character_link_id, requested_name_id, requested_background_id, requested_border_id, active_name_id, active_background_id, active_border_id
+`
+
+type UpsertUserCharacterCosmeticsParams struct {
+	UserCharacterLinkID   uuid.UUID `db:"user_character_link_id" json:"user_character_link_id"`
+	RequestedNameID       string    `db:"requested_name_id" json:"requested_name_id"`
+	RequestedBackgroundID string    `db:"requested_background_id" json:"requested_background_id"`
+	RequestedBorderID     string    `db:"requested_border_id" json:"requested_border_id"`
+	ActiveNameID          string    `db:"active_name_id" json:"active_name_id"`
+	ActiveBackgroundID    string    `db:"active_background_id" json:"active_background_id"`
+	ActiveBorderID        string    `db:"active_border_id" json:"active_border_id"`
+	UserID                uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) UpsertUserCharacterCosmetics(ctx context.Context, arg UpsertUserCharacterCosmeticsParams) (UserCharacterCosmetic, error) {
+	row := q.db.QueryRow(ctx, upsertUserCharacterCosmetics,
+		arg.UserCharacterLinkID,
+		arg.RequestedNameID,
+		arg.RequestedBackgroundID,
+		arg.RequestedBorderID,
+		arg.ActiveNameID,
+		arg.ActiveBackgroundID,
+		arg.ActiveBorderID,
+		arg.UserID,
+	)
+	var i UserCharacterCosmetic
+	err := row.Scan(
+		&i.UserCharacterLinkID,
+		&i.RequestedNameID,
+		&i.RequestedBackgroundID,
+		&i.RequestedBorderID,
+		&i.ActiveNameID,
+		&i.ActiveBackgroundID,
+		&i.ActiveBorderID,
+	)
+	return i, err
 }
 
 const addUserFavoriteGuild = `-- name: AddUserFavoriteGuild :one

@@ -13,6 +13,10 @@ import (
 	"github.com/google/uuid"
 )
 
+type stringID string
+
+func (id stringID) String() string { return string(id) }
+
 type Authorizer interface {
 	Write(ctx context.Context, txn rel.Txn) (writtenAtRevision string, err error)
 	Delete(ctx context.Context, filter *rel.PreconditionedFilter) error
@@ -250,6 +254,12 @@ func setStripeEntitlementRole(ctx context.Context, authorizer Authorizer, userID
 			chronicle.Stripe_download_raw_logs(user)
 		case "stripe_unlisted_logs":
 			chronicle.Stripe_unlisted_logs(user)
+		case "stripe_honored":
+			chronicle.Stripe_honored(user)
+		case "stripe_revered":
+			chronicle.Stripe_revered(user)
+		case "stripe_exalted":
+			chronicle.Stripe_exalted(user)
 		default:
 			return fmt.Errorf("invalid Stripe entitlement role %q", role)
 		}
@@ -261,6 +271,12 @@ func setStripeEntitlementRole(ctx context.Context, authorizer Authorizer, userID
 			chronicle.Delete().Stripe_download_raw_logs(user)
 		case "stripe_unlisted_logs":
 			chronicle.Delete().Stripe_unlisted_logs(user)
+		case "stripe_honored":
+			chronicle.Delete().Stripe_honored(user)
+		case "stripe_revered":
+			chronicle.Delete().Stripe_revered(user)
+		case "stripe_exalted":
+			chronicle.Delete().Stripe_exalted(user)
 		default:
 			return fmt.Errorf("invalid Stripe entitlement role %q", role)
 		}
@@ -309,6 +325,9 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 		"is_admin_game_data",
 		"manage_consumables",
 		"is_admin_raid_requirements",
+		"honored",
+		"revered",
+		"exalted",
 	}
 	for _, relation := range managedRelations {
 		f := rel.NewFilter(gChron.Object().Typ, gChron.Object().ID, relation)
@@ -361,6 +380,12 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 			gChron.Manage_consumables(usr)
 		case "admin_raid_requirements", "is_admin_raid_requirements":
 			gChron.Is_admin_raid_requirements(usr)
+		case "honored":
+			gChron.Honored(usr)
+		case "revered":
+			gChron.Revered(usr)
+		case "exalted":
+			gChron.Exalted(usr)
 		default:
 			continue
 		}
@@ -368,6 +393,70 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 
 	_, err := z.Write(ctx, *b.Txn())
 	return err
+}
+
+// CosmeticTierAssignment is a cosmetic resource's direct tier relation.
+type CosmeticTierAssignment struct {
+	CosmeticID string
+	Tier       string
+}
+
+// ListAllowedCosmetics returns cosmetic resource IDs the user may use.
+func (z *Authz) ListAllowedCosmetics(ctx context.Context, userID uuid.UUID) ([]string, error) {
+	ids := make([]string, 0)
+	for id, err := range z.LookupResources(ctx, nil, "cosmetic#use", "user:"+userID.String()) {
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids, nil
+}
+
+// SetCosmeticTier replaces a cosmetic's tier assignment. An empty tier leaves it unassigned.
+func (z *Authz) SetCosmeticTier(ctx context.Context, cosmeticID, tier string) error {
+	if tier != "" && tier != "honored" && tier != "revered" && tier != "exalted" {
+		return fmt.Errorf("invalid cosmetic tier %q", tier)
+	}
+	obj := policy.New().Cosmetic(stringID(cosmeticID)).Object()
+	if err := z.Delete(ctx, rel.NewPreconditionedFilter(rel.NewFilter(obj.Typ, obj.ID, ""))); err != nil {
+		return err
+	}
+	if tier == "" {
+		return nil
+	}
+	b := policy.New()
+	cosmetic := b.Cosmetic(stringID(cosmeticID))
+	chronicle := b.GlobalChronicle()
+	switch tier {
+	case "honored":
+		cosmetic.Honored(chronicle)
+	case "revered":
+		cosmetic.Revered(chronicle)
+	case "exalted":
+		cosmetic.Exalted(chronicle)
+	}
+	_, err := z.Write(ctx, *b.Txn())
+	return err
+}
+
+// ListCosmeticTierAssignments returns all direct cosmetic tier assignments.
+func (z *Authz) ListCosmeticTierAssignments(ctx context.Context) ([]CosmeticTierAssignment, error) {
+	f := rel.NewFilter("cosmetic", "", "")
+	f.WithSubjectFilter("chronicle", "chronicle", "")
+	var assignments []CosmeticTierAssignment
+	for r, err := range z.spice.ReadRelationships(ctx, z.DefaultConsistencyStrategy(), f) {
+		if err != nil {
+			return nil, err
+		}
+		if r.ResourceRelation != "honored" && r.ResourceRelation != "revered" && r.ResourceRelation != "exalted" {
+			continue
+		}
+		assignments = append(assignments, CosmeticTierAssignment{CosmeticID: r.ResourceID, Tier: r.ResourceRelation})
+	}
+	sort.Slice(assignments, func(i, j int) bool { return assignments[i].CosmeticID < assignments[j].CosmeticID })
+	return assignments, nil
 }
 
 // TenantProofGrant lists direct tenant-scoped photo proof permissions. These

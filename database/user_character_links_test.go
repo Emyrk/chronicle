@@ -240,4 +240,109 @@ func TestUserCharacterLinks(t *testing.T) {
 		require.Equal(t, charB, rows[0].CharacterGuid)
 		require.True(t, rows[0].IsPrimary)
 	})
+
+	t.Run("CosmeticsPersistence", func(t *testing.T) {
+		userA := newUser(t, "cosmetics-a")
+		userB := newUser(t, "cosmetics-b")
+		charA1 := newPlayer(t, "Cosmeticsaone")
+		charA2 := newPlayer(t, "Cosmeticsatwo")
+		charB := newPlayer(t, "Cosmeticsb")
+
+		linkA1, err := link(t, userA, charA1)
+		require.NoError(t, err)
+		linkA2, err := link(t, userA, charA2)
+		require.NoError(t, err)
+		linkB, err := link(t, userB, charB)
+		require.NoError(t, err)
+
+		rows, err := db.GetUserCharacterCosmetics(ctx, userA)
+		require.NoError(t, err)
+		require.Empty(t, rows)
+
+		_, err = db.UpsertUserCharacterCosmetics(ctx, database.UpsertUserCharacterCosmeticsParams{
+			UserCharacterLinkID: linkA1.ID,
+			UserID:              userB,
+		})
+		require.Error(t, err)
+
+		cosmeticsA1, err := db.UpsertUserCharacterCosmetics(ctx, database.UpsertUserCharacterCosmeticsParams{
+			UserCharacterLinkID:   linkA1.ID,
+			UserID:                userA,
+			RequestedNameID:       "name-a",
+			RequestedBackgroundID: "background-shared",
+			RequestedBorderID:     "border-requested",
+			ActiveNameID:          "name-old",
+			ActiveBackgroundID:    "background-old",
+			ActiveBorderID:        "border-old",
+		})
+		require.NoError(t, err)
+		require.Equal(t, "name-a", cosmeticsA1.RequestedNameID)
+		require.Equal(t, "name-old", cosmeticsA1.ActiveNameID)
+
+		_, err = db.UpsertUserCharacterCosmetics(ctx, database.UpsertUserCharacterCosmeticsParams{
+			UserCharacterLinkID:   linkA2.ID,
+			UserID:                userA,
+			RequestedBackgroundID: "background-shared",
+		})
+		require.NoError(t, err)
+		_, err = db.UpsertUserCharacterCosmetics(ctx, database.UpsertUserCharacterCosmeticsParams{
+			UserCharacterLinkID: linkB.ID,
+			UserID:              userB,
+			ActiveBackgroundID:  "background-shared",
+		})
+		require.NoError(t, err)
+
+		rows, err = db.GetUserCharacterCosmetics(ctx, userA)
+		require.NoError(t, err)
+		require.Len(t, rows, 2)
+		require.ElementsMatch(t, []uuid.UUID{linkA1.ID, linkA2.ID}, []uuid.UUID{
+			rows[0].UserCharacterLinkID,
+			rows[1].UserCharacterLinkID,
+		})
+
+		_, err = db.UpdateUserCharacterActiveCosmetics(ctx, database.UpdateUserCharacterActiveCosmeticsParams{
+			UserCharacterLinkID: linkA1.ID,
+			UserID:              userB,
+		})
+		require.Error(t, err)
+
+		updated, err := db.UpdateUserCharacterActiveCosmetics(ctx, database.UpdateUserCharacterActiveCosmeticsParams{
+			UserCharacterLinkID: linkA1.ID,
+			UserID:              userA,
+			ActiveNameID:        "name-active",
+			ActiveBackgroundID:  "background-active",
+			ActiveBorderID:      "border-active",
+		})
+		require.NoError(t, err)
+		require.Equal(t, "name-a", updated.RequestedNameID)
+		require.Equal(t, "background-shared", updated.RequestedBackgroundID)
+		require.Equal(t, "border-requested", updated.RequestedBorderID)
+		require.Equal(t, "name-active", updated.ActiveNameID)
+		require.Equal(t, "background-active", updated.ActiveBackgroundID)
+		require.Equal(t, "border-active", updated.ActiveBorderID)
+
+		users, err := db.ListUsersWithCharacterCosmetics(ctx)
+		require.NoError(t, err)
+		require.ElementsMatch(t, []uuid.UUID{userA, userB}, users)
+
+		users, err = db.ListUsersReferencingCosmetic(ctx, "background-shared")
+		require.NoError(t, err)
+		require.ElementsMatch(t, []uuid.UUID{userA, userB}, users)
+		users, err = db.ListUsersReferencingCosmetic(ctx, "name-old")
+		require.NoError(t, err)
+		require.Empty(t, users)
+		users, err = db.ListUsersReferencingCosmetic(ctx, "")
+		require.NoError(t, err)
+		require.Empty(t, users)
+
+		_, err = db.DeleteUserCharacterLink(ctx, database.DeleteUserCharacterLinkParams{
+			CharacterGuid: charA1,
+			RealmID:       realm.ID,
+		})
+		require.NoError(t, err)
+		rows, err = db.GetUserCharacterCosmetics(ctx, userA)
+		require.NoError(t, err)
+		require.Len(t, rows, 1)
+		require.Equal(t, linkA2.ID, rows[0].UserCharacterLinkID)
+	})
 }

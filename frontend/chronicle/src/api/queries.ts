@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { useQueries, useQuery, useMutation, useQueryClient, keepPreviousData, type UseQueryOptions } from "@tanstack/react-query";
-import type { ListSidekicksResponse, RenameSidekickRequest, SidekickAccountConfigResponse, SidekickConfig, SidekickConfigState, SidekickInstallation, WhatsNewStatus } from "./typesGenerated";
+import type { CharacterCosmeticsResponse, ListSidekicksResponse, RenameSidekickRequest, SidekickAccountConfigResponse, SidekickConfig, SidekickConfigState, SidekickInstallation, UpdateCharacterCosmeticsRequest, WhatsNewStatus } from "./typesGenerated";
 import type { WoWSpell } from "./wowdb";
 import {
   recordPublicNoticeResult,
@@ -844,6 +844,42 @@ export function useMyCharacters(options?: Omit<UseQueryOptions<LinkedCharacter[]
       return response.json() as Promise<LinkedCharacter[]>;
     },
     ...options,
+  });
+}
+
+export function useMyCharacterCosmetics(options?: Omit<UseQueryOptions<CharacterCosmeticsResponse>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["my-character-cosmetics"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/linked/me/cosmetics", { credentials: "include" });
+      if (!response.ok) {
+        throw buildAPIError("Failed to fetch character cosmetics", await response.json().catch(() => null));
+      }
+      return response.json() as Promise<CharacterCosmeticsResponse>;
+    },
+    ...options,
+  });
+}
+
+export function useUpdateMyCharacterCosmetics() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (request: UpdateCharacterCosmeticsRequest) => {
+      const response = await fetch("/api/v1/linked/me/cosmetics", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw buildAPIError("Failed to update character cosmetics", await response.json().catch(() => null));
+      }
+      return response.json() as Promise<CharacterCosmeticsResponse>;
+    },
+    onSuccess: (response) => {
+      queryClient.setQueryData(["my-character-cosmetics"], response);
+    },
   });
 }
 

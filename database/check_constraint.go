@@ -34,6 +34,12 @@ const (
 	CheckInstanceSpeedrunsBossToBossTimingComplete              CheckConstraint = "instance_speedruns_boss_to_boss_timing_complete"               // instance_speedruns
 	CheckInstanceSpeedrunsRankedDurationNonnegative             CheckConstraint = "instance_speedruns_ranked_duration_nonnegative"                // instance_speedruns
 	CheckInstanceSpeedrunsRankedTimingComplete                  CheckConstraint = "instance_speedruns_ranked_timing_complete"                     // instance_speedruns
+	CheckInferenceClientToolRequestsCheck                       CheckConstraint = "inference_client_tool_requests_check"                          // inference_client_tool_requests
+	CheckInferenceClientToolRequestsConfirmationCheck           CheckConstraint = "inference_client_tool_requests_confirmation_check"             // inference_client_tool_requests
+	CheckInferenceClientToolRequestsEffectCheck                 CheckConstraint = "inference_client_tool_requests_effect_check"                   // inference_client_tool_requests
+	CheckInferenceClientToolRequestsStateRevisionCheck          CheckConstraint = "inference_client_tool_requests_state_revision_check"           // inference_client_tool_requests
+	CheckInferenceClientToolRequestsStatusCheck                 CheckConstraint = "inference_client_tool_requests_status_check"                   // inference_client_tool_requests
+	CheckInferenceThreadsCheck                                  CheckConstraint = "inference_threads_check"                                       // inference_threads
 	CheckInstanceOverviewMetricsBossDurationNonnegative         CheckConstraint = "instance_overview_metrics_boss_duration_nonnegative"           // instance_overview_metrics
 	CheckInstanceOverviewMetricsBossWithinCombat                CheckConstraint = "instance_overview_metrics_boss_within_combat"                  // instance_overview_metrics
 	CheckInstanceOverviewMetricsCombatDurationNonnegative       CheckConstraint = "instance_overview_metrics_combat_duration_nonnegative"         // instance_overview_metrics
@@ -63,6 +69,12 @@ const (
 	CheckOauthServerSecretsIDCheck                              CheckConstraint = "oauth_server_secrets_id_check"                                 // oauth_server_secrets
 	CheckOauthTokenSessionsTokenTypeCheck                       CheckConstraint = "oauth_token_sessions_token_type_check"                         // oauth_token_sessions
 	CheckParseScoreResultsMetricCheck                           CheckConstraint = "parse_score_results_metric_check"                              // parse_score_results
+	CheckProofRequestSubjectsCheck                              CheckConstraint = "proof_request_subjects_check"                                  // proof_request_subjects
+	CheckProofRequestSubjectsStatusCheck                        CheckConstraint = "proof_request_subjects_status_check"                           // proof_request_subjects
+	CheckProofRequestSubjectsSubjectTypeCheck                   CheckConstraint = "proof_request_subjects_subject_type_check"                     // proof_request_subjects
+	CheckProofRequestsCheck                                     CheckConstraint = "proof_requests_check"                                          // proof_requests
+	CheckProofRequestsPurposeCheck                              CheckConstraint = "proof_requests_purpose_check"                                  // proof_requests
+	CheckProofRequestsStatusCheck                               CheckConstraint = "proof_requests_status_check"                                   // proof_requests
 	CheckRaidCompositionsDataSizeChk                            CheckConstraint = "raid_compositions_data_size_chk"                               // raid_compositions
 	CheckRaidCompositionsNameLengthChk                          CheckConstraint = "raid_compositions_name_length_chk"                             // raid_compositions
 	CheckRetentionPoliciesScope                                 CheckConstraint = "retention_policies_scope"                                      // retention_policies

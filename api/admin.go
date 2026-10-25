@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/internal/cosmetics"
 	"github.com/Emyrk/chronicle/internal/semverenc"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
@@ -238,6 +239,8 @@ func (a *API) AdminResyncUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	_ = cosmetics.EnqueueUserAudit(r.Context(), a.Queues, userID)
+
 	// Fetch updated user
 	user, err := a.Opts.Zed.GetUserByID(r.Context(), userID)
 	if err != nil {
@@ -282,6 +285,8 @@ func (a *API) AdminSetUserRoles(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	_ = cosmetics.EnqueueUserAudit(r.Context(), a.Queues, userID)
 
 	// Return updated user
 	user, err := a.Opts.Zed.GetUserByID(r.Context(), userID)

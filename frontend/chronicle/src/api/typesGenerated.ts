@@ -182,6 +182,11 @@ export interface AdminClearLogInvalidationResponse {
     readonly failed: readonly AdminBulkLogFailure[];
 }
 
+// From chroniclesdk/characters.go
+export interface AdminCosmeticsResponse {
+    readonly catalog: readonly CosmeticDefinition[];
+}
+
 // From chroniclesdk/user.go
 export interface AdminInvalidateLogsRequest {
     readonly log_ids: readonly string[];
@@ -532,6 +537,21 @@ export interface CensusEntry {
     readonly count: number;
 }
 
+// From chroniclesdk/characters.go
+export interface CharacterCosmetics {
+    readonly link_id: string;
+    readonly requested: CosmeticSelection;
+    readonly active: CosmeticSelection;
+}
+
+// From chroniclesdk/characters.go
+export interface CharacterCosmeticsResponse {
+    readonly can_customize: boolean;
+    readonly allowed_ids: readonly string[];
+    readonly catalog: readonly CosmeticDefinition[];
+    readonly characters?: readonly CharacterCosmetics[];
+}
+
 // From chroniclesdk/parse_scores.go
 /**
  * CharacterEncounterStats aggregates one character's kills of one encounter.
@@ -710,6 +730,21 @@ export interface CorePayload {
     readonly display_name: string;
     readonly tagline: string;
     readonly tags: readonly string[];
+}
+
+// From chroniclesdk/characters.go
+export interface CosmeticDefinition {
+    readonly id: string;
+    readonly label: string;
+    readonly slot: string;
+    readonly tier?: string;
+}
+
+// From chroniclesdk/characters.go
+export interface CosmeticSelection {
+    readonly name_id: string;
+    readonly background_id: string;
+    readonly border_id: string;
 }
 
 // From chroniclesdk/gear_builder.go
@@ -3689,6 +3724,11 @@ export interface SetCooldownOverridesRequest {
     readonly hide_duration?: boolean;
 }
 
+// From chroniclesdk/characters.go
+export interface SetCosmeticTierRequest {
+    readonly tier: string;
+}
+
 // From chroniclesdk/tenant.go
 /**
  * SetDatasetRequest assigns or removes a default dataset from a server or
@@ -4531,6 +4571,13 @@ export interface UpdateActionBarSlotsRequest {
     readonly slot_8: string | null;
     readonly slot_9: string | null;
     readonly slot_0: string | null;
+}
+
+// From chroniclesdk/characters.go
+export interface UpdateCharacterCosmeticsRequest {
+    readonly link_id: string;
+    readonly selection: CosmeticSelection;
+    readonly apply_to_all: boolean;
 }
 
 // From chroniclesdk/custom_panel.go

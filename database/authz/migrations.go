@@ -23,6 +23,8 @@ var migrations = []AuthzMigration{
 	{Version: 3, Run: migration003},
 	{Version: 4, Run: migration004},
 	{Version: 5, Run: noop},
+	{Version: 6, Run: migration006},
+	{Version: 7, Run: migration007},
 }
 
 // RunSchemaMigrations runs any authz migrations not yet recorded in the
@@ -178,4 +180,36 @@ func migration004(ctx context.Context, az *Authz) error {
 	// TOUCH is idempotent — safe to run on every startup.
 	_, err = az.Write(ctx, *b.Txn())
 	return err
+}
+
+func migration006(ctx context.Context, az *Authz) error {
+	tiers := map[string][]string{
+		"honored": {
+			"name_rare", "name_epic", "name_gilded", "name_frost", "name_ember", "name_argent",
+		},
+		"revered": {
+			"name_shimmer", "name_storm", "name_legendary", "name_holy",
+			"background_glossy", "background_satin", "background_lustre", "background_sunlit", "background_frosted",
+			"background_quilted", "background_pinpoint", "background_inner_glow",
+		},
+		"exalted": {
+			"name_fel", "name_prismatic", "name_arcane", "name_thunderfury", "name_molten",
+			"background_gleam", "background_chainmail", "background_arcane", "background_embers", "background_snowfall", "background_starfall",
+			"border_elite", "border_chasing", "border_storm",
+		},
+	}
+	for tier, ids := range tiers {
+		for _, id := range ids {
+			if err := az.SetCosmeticTier(ctx, id, tier); err != nil {
+				return fmt.Errorf("set cosmetic %q tier: %w", id, err)
+			}
+		}
+	}
+	return nil
+}
+
+// migration007 replays the finalized pre-release cosmetic catalog for local and
+// preview databases that recorded migration 6 before every editor option was added.
+func migration007(ctx context.Context, az *Authz) error {
+	return migration006(ctx, az)
 }

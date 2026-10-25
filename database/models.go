@@ -2521,6 +2521,16 @@ type UserAuthSession struct {
 	JwtID             uuid.UUID          `db:"jwt_id" json:"jwt_id"`
 }
 
+type UserCharacterCosmetic struct {
+	UserCharacterLinkID   uuid.UUID `db:"user_character_link_id" json:"user_character_link_id"`
+	RequestedNameID       string    `db:"requested_name_id" json:"requested_name_id"`
+	RequestedBackgroundID string    `db:"requested_background_id" json:"requested_background_id"`
+	RequestedBorderID     string    `db:"requested_border_id" json:"requested_border_id"`
+	ActiveNameID          string    `db:"active_name_id" json:"active_name_id"`
+	ActiveBackgroundID    string    `db:"active_background_id" json:"active_background_id"`
+	ActiveBorderID        string    `db:"active_border_id" json:"active_border_id"`
+}
+
 type UserCharacterLink struct {
 	ID            uuid.UUID          `db:"id" json:"id"`
 	UserID        uuid.UUID          `db:"user_id" json:"user_id"`

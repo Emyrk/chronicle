@@ -352,6 +352,12 @@ func (api *API) Routes() chi.Router {
 				r.With(
 					httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),
 				).Get("/notices", api.AdminListTelemetryNotices)
+				r.With(
+					httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),
+				).Get("/cosmetics", api.AdminListCosmetics)
+				r.With(
+					httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),
+				).Put("/cosmetics/{cosmeticID}", api.AdminSetCosmeticTier)
 				if api.Opts.Billing != nil {
 					r.With(
 						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),

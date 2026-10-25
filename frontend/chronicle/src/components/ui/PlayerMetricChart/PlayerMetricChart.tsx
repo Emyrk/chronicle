@@ -637,6 +637,21 @@ export function PlayerMetricRow({
         );
       })()}
 
+      {player.cosmetic?.borderClassName || player.cosmetic?.borderStyle ? (
+        <div
+          aria-hidden="true"
+          className={player.cosmetic.borderClassName}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 2,
+            borderRadius: 'inherit',
+            pointerEvents: 'none',
+            ...player.cosmetic.borderStyle,
+          }}
+        />
+      ) : null}
+
       {/* Parse score pill (inside-the-bar variant): right-aligned at the
           bar end. The max() clamp guarantees the pill never overlaps the
           value columns even if a resize races the measurement. */}

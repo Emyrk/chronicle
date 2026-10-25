@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/internal/cosmetics"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
@@ -578,4 +579,78 @@ func TestInTx_NilWrapped(t *testing.T) {
 		return nil
 	}, nil)
 	assert.Error(t, err, "InTx should return an error, not panic")
+}
+
+func TestCosmeticCatalogDefaults(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(broker)
+
+	assignments, err := zed.ListCosmeticTierAssignments(ctx)
+	require.NoError(t, err)
+	assignedTiers := make(map[string]string, len(assignments))
+	for _, assignment := range assignments {
+		assignedTiers[assignment.CosmeticID] = assignment.Tier
+	}
+
+	catalog := cosmetics.Catalog()
+	require.Len(t, assignments, len(catalog), "the fixed catalog and default SpiceDB assignments must stay aligned")
+	for _, definition := range catalog {
+		require.Equal(t, string(definition.Tier), assignedTiers[definition.ID], definition.ID)
+	}
+}
+
+func TestCosmeticTierAuthorization(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(broker)
+
+	ordinaryUser := uuid.New()
+	allowed, err := zed.ListAllowedCosmetics(ctx, ordinaryUser)
+	require.NoError(t, err)
+	require.NotNil(t, allowed)
+	require.Empty(t, allowed)
+
+	honoredUser, reveredUser, exaltedUser, stripeUser := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, honoredUser, []string{"honored"}))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, reveredUser, []string{"revered"}))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, exaltedUser, []string{"exalted"}))
+	require.NoError(t, zed.SetStripeEntitlementRole(ctx, stripeUser, "stripe_revered", true))
+
+	prefix := uuid.NewString()
+	honoredCosmetic, reveredCosmetic, exaltedCosmetic := prefix+"-honored", prefix+"-revered", prefix+"-exalted"
+	require.NoError(t, zed.SetCosmeticTier(ctx, honoredCosmetic, "honored"))
+	require.NoError(t, zed.SetCosmeticTier(ctx, reveredCosmetic, "revered"))
+	require.NoError(t, zed.SetCosmeticTier(ctx, exaltedCosmetic, "exalted"))
+
+	allowed, err = zed.ListAllowedCosmetics(ctx, reveredUser)
+	require.NoError(t, err)
+	assert.Contains(t, allowed, honoredCosmetic)
+	assert.Contains(t, allowed, reveredCosmetic)
+	assert.NotContains(t, allowed, exaltedCosmetic)
+
+	allowed, err = zed.ListAllowedCosmetics(ctx, exaltedUser)
+	require.NoError(t, err)
+	assert.Contains(t, allowed, honoredCosmetic)
+	assert.Contains(t, allowed, reveredCosmetic)
+	assert.Contains(t, allowed, exaltedCosmetic)
+
+	allowed, err = zed.ListAllowedCosmetics(ctx, stripeUser)
+	require.NoError(t, err)
+	assert.Contains(t, allowed, honoredCosmetic)
+	assert.Contains(t, allowed, reveredCosmetic)
+	assert.NotContains(t, allowed, exaltedCosmetic)
+
+	require.NoError(t, zed.SetCosmeticTier(ctx, honoredCosmetic, "exalted"))
+	allowed, err = zed.ListAllowedCosmetics(ctx, honoredUser)
+	require.NoError(t, err)
+	assert.NotContains(t, allowed, honoredCosmetic)
+
+	assignments, err := zed.ListCosmeticTierAssignments(ctx)
+	require.NoError(t, err)
+	assert.Contains(t, assignments, authz.CosmeticTierAssignment{CosmeticID: honoredCosmetic, Tier: "exalted"})
 }
