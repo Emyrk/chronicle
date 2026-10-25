@@ -2129,6 +2129,16 @@ CREATE TABLE user_auth_session (
     jwt_id uuid DEFAULT gen_random_uuid() NOT NULL
 );
 
+CREATE TABLE user_character_cosmetics (
+    user_character_link_id uuid NOT NULL,
+    requested_name_id text DEFAULT ''::text NOT NULL,
+    requested_background_id text DEFAULT ''::text NOT NULL,
+    requested_border_id text DEFAULT ''::text NOT NULL,
+    active_name_id text DEFAULT ''::text NOT NULL,
+    active_background_id text DEFAULT ''::text NOT NULL,
+    active_border_id text DEFAULT ''::text NOT NULL
+);
+
 CREATE TABLE user_character_links (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
@@ -2991,6 +3001,9 @@ ALTER TABLE ONLY user_auth_links
 ALTER TABLE ONLY user_auth_session
     ADD CONSTRAINT user_auth_session_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY user_character_cosmetics
+    ADD CONSTRAINT user_character_cosmetics_pkey PRIMARY KEY (user_character_link_id);
+
 ALTER TABLE ONLY user_character_links
     ADD CONSTRAINT user_character_links_character_guid_realm_id_key UNIQUE (character_guid, realm_id);
 
@@ -3846,6 +3859,9 @@ ALTER TABLE ONLY user_auth_session
 
 ALTER TABLE ONLY user_auth_session
     ADD CONSTRAINT user_auth_session_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id);
+
+ALTER TABLE ONLY user_character_cosmetics
+    ADD CONSTRAINT user_character_cosmetics_user_character_link_id_fkey FOREIGN KEY (user_character_link_id) REFERENCES user_character_links(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY user_character_links
     ADD CONSTRAINT user_character_links_character_guid_realm_id_fkey FOREIGN KEY (character_guid, realm_id) REFERENCES game_players(id, realm_id) ON DELETE CASCADE;

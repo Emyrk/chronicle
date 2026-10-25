@@ -66,3 +66,74 @@ UPDATE user_character_links
 SET is_primary = TRUE
 WHERE user_id = $1 AND character_guid = $2 AND realm_id = $3
 RETURNING *;
+
+-- name: UpsertUserCharacterCosmetics :one
+INSERT INTO user_character_cosmetics (
+  user_character_link_id,
+  requested_name_id,
+  requested_background_id,
+  requested_border_id,
+  active_name_id,
+  active_background_id,
+  active_border_id
+)
+SELECT
+  @user_character_link_id,
+  @requested_name_id,
+  @requested_background_id,
+  @requested_border_id,
+  @active_name_id,
+  @active_background_id,
+  @active_border_id
+FROM user_character_links
+WHERE id = @user_character_link_id AND user_id = @user_id
+ON CONFLICT (user_character_link_id) DO UPDATE SET
+  requested_name_id = EXCLUDED.requested_name_id,
+  requested_background_id = EXCLUDED.requested_background_id,
+  requested_border_id = EXCLUDED.requested_border_id,
+  active_name_id = EXCLUDED.active_name_id,
+  active_background_id = EXCLUDED.active_background_id,
+  active_border_id = EXCLUDED.active_border_id
+RETURNING *;
+
+-- name: GetUserCharacterCosmetics :many
+SELECT user_character_cosmetics.*
+FROM user_character_cosmetics
+JOIN user_character_links
+  ON user_character_links.id = user_character_cosmetics.user_character_link_id
+WHERE user_character_links.user_id = $1
+ORDER BY user_character_links.created_at ASC;
+
+-- name: UpdateUserCharacterActiveCosmetics :one
+UPDATE user_character_cosmetics
+SET
+  active_name_id = @active_name_id,
+  active_background_id = @active_background_id,
+  active_border_id = @active_border_id
+FROM user_character_links
+WHERE user_character_cosmetics.user_character_link_id = @user_character_link_id
+  AND user_character_links.id = user_character_cosmetics.user_character_link_id
+  AND user_character_links.user_id = @user_id
+RETURNING user_character_cosmetics.*;
+
+-- name: ListUsersWithCharacterCosmetics :many
+SELECT DISTINCT user_character_links.user_id
+FROM user_character_cosmetics
+JOIN user_character_links
+  ON user_character_links.id = user_character_cosmetics.user_character_link_id
+ORDER BY user_character_links.user_id;
+
+-- name: ListUsersReferencingCosmetic :many
+SELECT DISTINCT user_character_links.user_id
+FROM user_character_cosmetics
+JOIN user_character_links
+  ON user_character_links.id = user_character_cosmetics.user_character_link_id
+WHERE @cosmetic_id::text <> '' AND @cosmetic_id::text IN (
+  user_character_cosmetics.requested_name_id,
+  user_character_cosmetics.requested_background_id,
+  user_character_cosmetics.requested_border_id,
+  user_character_cosmetics.active_name_id,
+  user_character_cosmetics.active_background_id,
+  user_character_cosmetics.active_border_id
+)
+ORDER BY user_character_links.user_id;

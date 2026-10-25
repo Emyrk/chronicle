@@ -399,6 +399,7 @@ type sqlcQuerier interface {
 	GetUserAuthSessionByID(ctx context.Context, id uuid.UUID) (UserAuthSession, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (ChronicleUser, error)
+	GetUserCharacterCosmetics(ctx context.Context, userID uuid.UUID) ([]UserCharacterCosmetic, error)
 	GetUserCharacterLink(ctx context.Context, arg GetUserCharacterLinkParams) (UserCharacterLink, error)
 	GetUserCharacterLinks(ctx context.Context, userID uuid.UUID) ([]GetUserCharacterLinksRow, error)
 	GetUserCustomPanelSettings(ctx context.Context, userID uuid.UUID) (UserCustomPanelSetting, error)
@@ -724,6 +725,8 @@ type sqlcQuerier interface {
 	ListUserFavoritePlayers(ctx context.Context, userID uuid.UUID) ([]ListUserFavoritePlayersRow, error)
 	ListUserPanelLayouts(ctx context.Context, userID uuid.NullUUID) ([]ListUserPanelLayoutsRow, error)
 	ListUserTalentBuilds(ctx context.Context, arg ListUserTalentBuildsParams) ([]UserTalentBuild, error)
+	ListUsersReferencingCosmetic(ctx context.Context, cosmeticID string) ([]uuid.UUID, error)
+	ListUsersWithCharacterCosmetics(ctx context.Context) ([]uuid.UUID, error)
 	ListVulnerabilitySpellsByDataset(ctx context.Context, arg ListVulnerabilitySpellsByDatasetParams) ([]ListVulnerabilitySpellsByDatasetRow, error)
 	ListWindowedParseScoreResultsForContract(ctx context.Context, arg ListWindowedParseScoreResultsForContractParams) ([]ParseScoreResult, error)
 	// Realms
@@ -960,6 +963,7 @@ type sqlcQuerier interface {
 	// Only non-null params are applied; NULL means "keep existing value".
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Tenant, error)
 	UpdateUserAuthSessionTokens(ctx context.Context, arg UpdateUserAuthSessionTokensParams) (UserAuthSession, error)
+	UpdateUserCharacterActiveCosmetics(ctx context.Context, arg UpdateUserCharacterActiveCosmeticsParams) (UserCharacterCosmetic, error)
 	UpdateUserPanelLayoutByID(ctx context.Context, arg UpdateUserPanelLayoutByIDParams) (UserPanelLayout, error)
 	UpdateUserPanelLayoutDefaults(ctx context.Context, arg UpdateUserPanelLayoutDefaultsParams) (UpdateUserPanelLayoutDefaultsRow, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
@@ -1022,6 +1026,7 @@ type sqlcQuerier interface {
 	// return the existing row's ID.
 	UpsertTalentBuild(ctx context.Context, arg UpsertTalentBuildParams) (uuid.UUID, error)
 	UpsertUserActionBarSlots(ctx context.Context, arg UpsertUserActionBarSlotsParams) (UpsertUserActionBarSlotsRow, error)
+	UpsertUserCharacterCosmetics(ctx context.Context, arg UpsertUserCharacterCosmeticsParams) (UserCharacterCosmetic, error)
 	UpsertUserCustomPanelInstallation(ctx context.Context, arg UpsertUserCustomPanelInstallationParams) (UserCustomPanelInstallation, error)
 	UpsertUserCustomPanelSettings(ctx context.Context, arg UpsertUserCustomPanelSettingsParams) (UserCustomPanelSetting, error)
 }
