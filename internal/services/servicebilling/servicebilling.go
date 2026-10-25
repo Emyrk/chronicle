@@ -3,6 +3,7 @@ package servicebilling
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"strings"
 	"time"
@@ -72,13 +73,18 @@ func (s *Service) DependsOn() []string {
 func (s *Service) Configures() []string { return []string{} }
 
 func (s *Service) Start(ctx context.Context) error {
+	configuredAccessURL := serviceaccessurl.AccessURL(s.broker)
+	enabled, err := s.validateConfiguration(configuredAccessURL)
+	if err != nil {
+		return err
+	}
+
 	var accessURL *url.URL
-	if configuredAccessURL := serviceaccessurl.AccessURL(s.broker); configuredAccessURL != "" {
-		parsed, err := url.Parse(configuredAccessURL)
+	if enabled {
+		accessURL, err = url.Parse(configuredAccessURL)
 		if err != nil {
-			return err
+			return fmt.Errorf("parse CHRONICLE_ACCESS_URL: %w", err)
 		}
-		accessURL = parsed
 	}
 	store := servicedbstore.DatabaseStore(s.broker)
 	zed := serviceauthz.Authz(s.broker)
@@ -106,11 +112,52 @@ func (s *Service) Start(ctx context.Context) error {
 func (s *Service) Close(context.Context) error { return nil }
 
 func (s *Service) hasConfiguredPrice() bool {
-	return len(s.stripeHonoredPrices) > 0 || len(s.stripeReveredPrices) > 0 || len(s.stripeExaltedPrices) > 0
+	for _, prices := range [][]string{s.stripeHonoredPrices, s.stripeReveredPrices, s.stripeExaltedPrices} {
+		for _, price := range prices {
+			if strings.TrimSpace(price) != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (s *Service) hasStripeConfiguration() bool {
+	return strings.TrimSpace(s.stripeSecretKey) != "" ||
+		strings.TrimSpace(s.stripeAccountID) != "" ||
+		strings.TrimSpace(s.stripeWebhookSecret) != "" ||
+		s.hasConfiguredPrice()
+}
+
+func (s *Service) validateConfiguration(accessURL string) (bool, error) {
+	if s == nil || !s.hasStripeConfiguration() {
+		return false, nil
+	}
+
+	var missing []string
+	if strings.TrimSpace(s.stripeSecretKey) == "" {
+		missing = append(missing, "CHRONICLE_STRIPE_SECRET_KEY")
+	}
+	if strings.TrimSpace(s.stripeAccountID) == "" {
+		missing = append(missing, "CHRONICLE_STRIPE_ACCOUNT_ID")
+	}
+	if strings.TrimSpace(s.stripeWebhookSecret) == "" {
+		missing = append(missing, "CHRONICLE_STRIPE_WEBHOOK_SECRET")
+	}
+	if !s.hasConfiguredPrice() {
+		missing = append(missing, "one of CHRONICLE_STRIPE_HONORED_PRICE_IDS, CHRONICLE_STRIPE_REVERED_PRICE_IDS, or CHRONICLE_STRIPE_EXALTED_PRICE_IDS")
+	}
+	if strings.TrimSpace(accessURL) == "" {
+		missing = append(missing, "CHRONICLE_ACCESS_URL")
+	}
+	if len(missing) > 0 {
+		return false, fmt.Errorf("incomplete Stripe billing configuration; missing %s", strings.Join(missing, ", "))
+	}
+	return true, nil
 }
 
 func (s *Service) BillingEnabled() bool {
-	return s != nil && s.stripeAccountID != ""
+	return s != nil && strings.TrimSpace(s.stripeAccountID) != "" && s.Billing != nil && s.Billing.Enabled()
 }
 
 func (s *Service) devStripeAPIKey(devAuth bool) (string, error) {
@@ -141,7 +188,7 @@ func (s *Service) Options() serpent.OptionSet {
 	return serpent.OptionSet{
 		{
 			Name:        "Stripe Secret Key",
-			Description: "Optional Stripe secret key. Billing is enabled when this, the webhook secret, and at least one tier price ID are configured.",
+			Description: "Optional Stripe secret key. Setting any Stripe billing option requires the secret key, account ID, webhook secret, at least one tier price ID, and access URL.",
 			Flag:        "stripe-secret-key",
 			Env:         "CHRONICLE_STRIPE_SECRET_KEY",
 			Default:     "",

@@ -1,8 +1,10 @@
 package servicebilling
 
 import (
+	"net/url"
 	"testing"
 
+	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,11 +35,97 @@ func TestOptionsIncludeStripeConfiguration(t *testing.T) {
 	}
 }
 
-func TestBillingEnabledRequiresStripeAccountID(t *testing.T) {
+func TestValidateConfiguration(t *testing.T) {
 	t.Parallel()
 
-	require.False(t, (&Service{}).BillingEnabled())
-	require.True(t, (&Service{stripeAccountID: "acct_expected"}).BillingEnabled())
+	complete := Service{
+		stripeSecretKey:     "sk_test_example",
+		stripeAccountID:     "acct_expected",
+		stripeWebhookSecret: "whsec_example",
+		stripeHonoredPrices: []string{"price_honored"},
+	}
+	tests := []struct {
+		name        string
+		service     Service
+		accessURL   string
+		wantEnabled bool
+		wantErr     string
+	}{
+		{name: "disabled"},
+		{
+			name:      "missing secret key",
+			service:   Service{stripeAccountID: complete.stripeAccountID, stripeWebhookSecret: complete.stripeWebhookSecret, stripeHonoredPrices: complete.stripeHonoredPrices},
+			accessURL: "https://chronicle.example",
+			wantErr:   "CHRONICLE_STRIPE_SECRET_KEY",
+		},
+		{
+			name:      "missing account ID",
+			service:   Service{stripeSecretKey: complete.stripeSecretKey, stripeWebhookSecret: complete.stripeWebhookSecret, stripeHonoredPrices: complete.stripeHonoredPrices},
+			accessURL: "https://chronicle.example",
+			wantErr:   "CHRONICLE_STRIPE_ACCOUNT_ID",
+		},
+		{
+			name:      "missing webhook secret",
+			service:   Service{stripeSecretKey: complete.stripeSecretKey, stripeAccountID: complete.stripeAccountID, stripeHonoredPrices: complete.stripeHonoredPrices},
+			accessURL: "https://chronicle.example",
+			wantErr:   "CHRONICLE_STRIPE_WEBHOOK_SECRET",
+		},
+		{
+			name:      "missing tier price",
+			service:   Service{stripeSecretKey: complete.stripeSecretKey, stripeAccountID: complete.stripeAccountID, stripeWebhookSecret: complete.stripeWebhookSecret},
+			accessURL: "https://chronicle.example",
+			wantErr:   "CHRONICLE_STRIPE_HONORED_PRICE_IDS",
+		},
+		{
+			name:    "missing access URL",
+			service: complete,
+			wantErr: "CHRONICLE_ACCESS_URL",
+		},
+		{
+			name:        "complete",
+			service:     complete,
+			accessURL:   "https://chronicle.example",
+			wantEnabled: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			enabled, err := tt.service.validateConfiguration(tt.accessURL)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				require.False(t, enabled)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.wantEnabled, enabled)
+		})
+	}
+}
+
+func TestBillingEnabledRequiresValidatedReadiness(t *testing.T) {
+	t.Parallel()
+
+	accessURL := &url.URL{Scheme: "https", Host: "chronicle.example"}
+	readyBilling := billing.New(billing.Options{
+		SecretKey:       "sk_test_example",
+		WebhookSecret:   "whsec_example",
+		HonoredPriceIDs: []string{"price_honored"},
+		AccessURL:       accessURL,
+	})
+	require.False(t, (&Service{stripeAccountID: "acct_expected"}).BillingEnabled())
+	require.False(t, (&Service{Billing: readyBilling}).BillingEnabled())
+	require.True(t, (&Service{stripeAccountID: "acct_expected", Billing: readyBilling}).BillingEnabled())
+
+	invalidCatalog := billing.New(billing.Options{
+		SecretKey:       "sk_test_example",
+		WebhookSecret:   "whsec_example",
+		HonoredPriceIDs: []string{"price_shared"},
+		ReveredPriceIDs: []string{"price_shared"},
+		AccessURL:       accessURL,
+	})
+	require.False(t, (&Service{stripeAccountID: "acct_expected", Billing: invalidCatalog}).BillingEnabled())
 }
 
 func TestDevStripeAPIKey(t *testing.T) {
@@ -53,6 +141,24 @@ func TestDevStripeAPIKey(t *testing.T) {
 
 	_, err = service.devStripeAPIKey(false)
 	require.ErrorContains(t, err, "requires dev auth")
+}
+
+func TestDevStripeWebhookSecretCompletesConfiguration(t *testing.T) {
+	t.Parallel()
+
+	service := Service{
+		stripeSecretKey:     "sk_test_example",
+		stripeAccountID:     "acct_expected",
+		stripeHonoredPrices: []string{"price_honored"},
+	}
+	enabled, err := service.validateConfiguration("http://localhost:4000")
+	require.False(t, enabled)
+	require.ErrorContains(t, err, "CHRONICLE_STRIPE_WEBHOOK_SECRET")
+
+	require.NoError(t, service.configureDevStripeWebhookSecret("whsec_example", true))
+	enabled, err = service.validateConfiguration("http://localhost:4000")
+	require.NoError(t, err)
+	require.True(t, enabled)
 }
 
 func TestConfigureDevStripeWebhookSecret(t *testing.T) {
