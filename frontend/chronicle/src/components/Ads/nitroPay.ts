@@ -68,6 +68,14 @@ function installQueueStub() {
   }
 }
 
+export function configureNitroPayScript(script: HTMLScriptElement, siteID: string) {
+  script.async = true
+  script.dataset.cfasync = "false"
+  // NitroPay defaults to info-level production logging even without its debug query parameter.
+  script.dataset.logLevel = "silent"
+  script.src = `https://s.nitropay.com/ads-${siteID}.js`
+}
+
 export function loadNitroPay(siteID: string): Promise<void> {
   if (scriptPromise) {
     if (configuredSiteID !== siteID) {
@@ -81,9 +89,7 @@ export function loadNitroPay(siteID: string): Promise<void> {
 
   scriptPromise = new Promise((resolve, reject) => {
     const script = document.createElement("script")
-    script.async = true
-    script.dataset.cfasync = "false"
-    script.src = `https://s.nitropay.com/ads-${siteID}.js`
+    configureNitroPayScript(script, siteID)
     script.addEventListener("load", () => resolve(), { once: true })
     script.addEventListener("error", () => reject(new Error("Failed to load NitroPay")), {
       once: true,

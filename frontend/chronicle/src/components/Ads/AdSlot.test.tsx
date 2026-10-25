@@ -13,6 +13,7 @@ import { isAdPlacementDisabled } from "./adPolicy"
 import {
   classifyNitroPayRenderedEvent,
   clearNitroPayAds,
+  configureNitroPayScript,
   isNitroPayRenderedEventForPlacement,
   nitroPayAdOptions,
   nitroPayReportNeedsFrameGuard,
@@ -436,6 +437,17 @@ describe("AdSlot", () => {
       renderVisibleOnly: true,
       sizes,
     })
+  })
+
+  it("silences NitroPay's default production console logging", () => {
+    const script = { dataset: {} } as unknown as HTMLScriptElement
+
+    configureNitroPayScript(script, "2768")
+
+    expect(script.async).toBe(true)
+    expect(script.dataset.cfasync).toBe("false")
+    expect(script.dataset.logLevel).toBe("silent")
+    expect(script.src).toBe("https://s.nitropay.com/ads-2768.js")
   })
 
   it("guards NitroPay reporting for direct non-URL creative frames", () => {
