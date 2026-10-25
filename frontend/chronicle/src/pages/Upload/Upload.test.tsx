@@ -43,10 +43,20 @@ function render(props: Partial<UploadViewProps> = {}) {
 }
 
 describe("UploadView Sidekick storage", () => {
-  it("shows the optional SavedVariables input for 3.3.5a uploads", () => {
+  it("collapses the optional SavedVariables input for 3.3.5a uploads", () => {
     const markup = render({ effectiveFormat: "3.3.5a-cc-addon" });
 
-    expect(markup).toContain("Sidekick SavedVariables");
+    expect(markup).toContain("Attach Sidekick SavedVariables");
+    expect(markup).not.toContain("ChronicleSidekickBridgeWoTLK.lua");
+    expect(markup).not.toContain('accept=".lua"');
+  });
+
+  it("expands the SavedVariables input when a file is attached", () => {
+    const markup = render({
+      effectiveFormat: "3.3.5a-cc-addon",
+      sidekickStorage: new File(["x"], "ChronicleSidekickBridgeWoTLK.lua"),
+    });
+
     expect(markup).toContain("ChronicleSidekickBridgeWoTLK.lua");
     expect(markup).toContain('accept=".lua"');
   });

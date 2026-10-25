@@ -110,3 +110,17 @@ export const UploadSucceeded: Story = {
     },
   },
 }
+
+export const WotlkSidekickCollapsed: Story = {
+  args: {
+    effectiveFormat: "3.3.5a-cc-addon",
+  },
+}
+
+export const WotlkSidekickAttached: Story = {
+  args: {
+    effectiveFormat: "3.3.5a-cc-addon",
+    combatLog: mockFile,
+    sidekickStorage: new File(["content"], "ChronicleSidekickBridgeWoTLK.lua", { type: "text/plain" }),
+  },
+}

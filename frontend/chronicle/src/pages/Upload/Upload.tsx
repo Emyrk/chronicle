@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Upload as UploadIcon, FileText, Info, LogIn, AlertCircle, CheckCircle, FolderOpen, AlertTriangle, ArrowRight } from "lucide-react";
+import { Upload as UploadIcon, FileText, Info, LogIn, AlertCircle, CheckCircle, FolderOpen, AlertTriangle, ArrowRight, Plus, X } from "lucide-react";
 import { compressFile } from "@/api/compress";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
@@ -186,6 +186,9 @@ export function UploadView({
 }: UploadViewProps) {
   // Label for the "Default" format option, so users can see what default means.
   const defaultLabel = selectedFormat ? undefined : LOG_FORMAT_OPTIONS.find((o) => o.value === effectiveFormat)?.label;
+  // Sidekick SavedVariables is a rare, optional attachment; keep it tucked away unless opened or already attached.
+  const [sidekickExpanded, setSidekickExpanded] = useState(false);
+  const showSidekick = sidekickExpanded || sidekickStorage !== null;
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 sm:p-8 space-y-8">
@@ -301,13 +304,27 @@ export function UploadView({
                   onFile={(f) => onFileDrop(f, "combat")}
                   label="Click or drag file here"
                 />
-                {effectiveFormat === "3.3.5a-cc-addon" && (
+                {effectiveFormat === "3.3.5a-cc-addon" && (showSidekick ? (
                   <div className="space-y-3 border-t pt-5 mt-5">
-                    <div>
-                      <h2 className="font-semibold">Sidekick SavedVariables <span className="font-normal text-muted-foreground">(optional)</span></h2>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Attach <code className="break-all">WTF/Account/&lt;ACCOUNT&gt;/SavedVariables/ChronicleSidekickBridgeWoTLK.lua</code> to enrich the log with unit telemetry.
-                      </p>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h2 className="font-semibold">Sidekick SavedVariables <span className="font-normal text-muted-foreground">(optional)</span></h2>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Attach <code className="break-all">WTF/Account/&lt;ACCOUNT&gt;/SavedVariables/ChronicleSidekickBridgeWoTLK.lua</code> to enrich the log with unit telemetry.
+                        </p>
+                      </div>
+                      {sidekickStorage === null && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0 text-muted-foreground"
+                          aria-label="Hide Sidekick SavedVariables"
+                          onClick={() => setSidekickExpanded(false)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                     <FileDropZone
                       file={sidekickStorage}
@@ -316,7 +333,16 @@ export function UploadView({
                       label="Click or drag SavedVariables file here"
                     />
                   </div>
-                )}
+                ) : (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => setSidekickExpanded(true)}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Attach Sidekick SavedVariables
+                  </button>
+                ))}
               </div>
             ) : (
               // V1: Original 2-file upload
