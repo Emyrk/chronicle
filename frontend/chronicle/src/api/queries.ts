@@ -3115,6 +3115,31 @@ export function useUpsertTenant() {
   });
 }
 
+/** A partial tenant update: omitted fields keep their existing value. */
+export type TenantPatch = Partial<UpsertTenantRequest> & { id: string };
+
+/** Applies partial updates to several tenants in one transaction. */
+export function useBulkUpdateTenants() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (tenants: TenantPatch[]) => {
+      const response = await fetch("/api/v1/admin/tenants/bulk", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenants }),
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw new Error(error?.message || "Failed to update tenants");
+      }
+      return response.json() as Promise<Tenant[]>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "tenants"] });
+    },
+  });
+}
+
 export function useDeleteTenant() {
   const queryClient = useQueryClient();
   return useMutation({
