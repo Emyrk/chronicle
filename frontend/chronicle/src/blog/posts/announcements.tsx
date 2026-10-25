@@ -348,6 +348,34 @@ export function CooldownUsagePost({ post }: PostProps) {
   );
 }
 
+export function CharacterCosmeticsPost({ post }: PostProps) {
+  return (
+    <ShortPost post={post}>
+      <p>
+        Supporters can now customize each linked character with separate <strong>Name</strong>,{" "}
+        <strong>Background</strong>, and <strong>Border</strong> treatments. Choose them under{" "}
+        <a href="/account/characters">Account → Characters</a>.
+      </p>
+      <p>
+        These cosmetics are not limited to the account preview. Active selections appear across raid analysis wherever
+        Chronicle uses player metric charts.
+      </p>
+      <p>
+        Chronicle keeps your requested selections, but your current supporter entitlements determine which ones are
+        active. Only active selections are public, so an unavailable request will not appear to other viewers.
+      </p>
+      <p>
+        Every viewer controls how cosmetics appear under <a href="/account/settings">Account → Settings</a>:
+      </p>
+      <ul>
+        <li><strong>Enabled</strong> shows every active cosmetic.</li>
+        <li><strong>Limited</strong> keeps static styles while hiding flashy animation.</li>
+        <li><strong>Disabled</strong> restores standard player rows.</li>
+      </ul>
+    </ShortPost>
+  );
+}
+
 export function LayoutEditingPost({ post }: PostProps) {
   return (
     <ShortPost post={post}>

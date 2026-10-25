@@ -31,7 +31,8 @@ import {
   useAuthorizationCheck,
   type UserPanelLayout,
 } from "@/api/queries";
-import type { CreateUserPanelLayoutRequest, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles } from "@/api/typesGenerated";
+import { useUpdateCharacterCosmeticsPreference } from "@/api/characterCosmetics";
+import type { CharacterCosmeticsDisplayMode, CreateUserPanelLayoutRequest, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles } from "@/api/typesGenerated";
 import { COSMETIC_CSS, combineCosmetics, selectionFromAPI, selectionSummary, selectionToAPI, supporterTier, type CosmeticStyleSelection } from "@/components/ui/PlayerMetricChart/PlayerCosmetics";
 import { CharacterCosmeticsEditor, MiniRow, TierBadge } from "@/features/characterCosmetics/CharacterCosmeticsEditor";
 import type { PlayerRowCosmetic } from "@/components/ui/PlayerMetricChart/PlayerMetricChartModel";
@@ -230,11 +231,37 @@ export function AccountLayout() {
   );
 }
 
+const CHARACTER_COSMETICS_OPTIONS: readonly {
+  value: CharacterCosmeticsDisplayMode;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "enabled",
+    label: "Enabled",
+    description: "Show all character cosmetics, including animated names, backgrounds, and borders.",
+  },
+  {
+    value: "limited",
+    label: "Limited",
+    description: "Show static cosmetics only. Animated and flashy effects are hidden.",
+  },
+  {
+    value: "disabled",
+    label: "Disabled",
+    description: "Hide all character cosmetics and use the standard player-row appearance.",
+  },
+];
+
 export function ProfileSettings() {
   const { data: session } = useSession();
+  const updateCharacterCosmetics = useUpdateCharacterCosmeticsPreference();
   const [resending, setResending] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
 
+  const characterCosmeticsMode = updateCharacterCosmetics.isPending
+    ? updateCharacterCosmetics.variables
+    : session?.preferences.character_cosmetics ?? "enabled";
   const isPasswordAuth = session?.auth_provider === "password";
   const email = session?.email;
   const emailVerified = session?.email_verified ?? false;
@@ -316,6 +343,39 @@ export function ProfileSettings() {
           <span className="text-sm capitalize">{session.auth_provider === "password" ? "Email & Password" : session.auth_provider}</span>
         </div>
       )}
+
+      <div className="rounded-lg border p-4 space-y-3">
+        <div>
+          <h3 className="text-sm font-medium">Character Cosmetics</h3>
+          <p className="text-xs text-muted-foreground">
+            Choose how supporter cosmetics appear on player rows in raid analysis.
+          </p>
+        </div>
+        <div role="radiogroup" aria-label="Character cosmetics display mode" className="grid gap-2 sm:grid-cols-3">
+          {CHARACTER_COSMETICS_OPTIONS.map((option) => {
+            const selected = characterCosmeticsMode === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                disabled={updateCharacterCosmetics.isPending}
+                onClick={() => updateCharacterCosmetics.mutate(option.value, {
+                  onError: () => toast.error("Failed to update character cosmetics preference."),
+                })}
+                className={cn(
+                  "rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60",
+                  selected ? "border-primary bg-primary/5" : "hover:bg-muted/50",
+                )}
+              >
+                <span className="block text-sm font-medium">{option.label}</span>
+                <span className="mt-1 block text-xs text-muted-foreground">{option.description}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       <InferenceSettings />
     </div>

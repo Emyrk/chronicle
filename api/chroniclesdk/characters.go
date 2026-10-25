@@ -32,6 +32,10 @@ type CosmeticSelection struct {
 	BorderID     string `json:"border_id"`
 }
 
+type InstanceCosmeticsResponse struct {
+	Players map[GUIDString]CosmeticSelection `json:"players"`
+}
+
 type CharacterCosmetics struct {
 	LinkID    uuid.UUID         `json:"link_id"`
 	Requested CosmeticSelection `json:"requested"`

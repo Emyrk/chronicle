@@ -294,6 +294,7 @@ type sqlcQuerier interface {
 	GetInstanceLogOwner(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	GetInstanceLoot(ctx context.Context, arg GetInstanceLootParams) ([]GetInstanceLootRow, error)
 	GetInstanceOverviewMetrics(ctx context.Context, arg GetInstanceOverviewMetricsParams) (InstanceOverviewMetric, error)
+	GetInstancePlayerCosmetics(ctx context.Context, instanceID uuid.UUID) ([]GetInstancePlayerCosmeticsRow, error)
 	GetInstanceSpeedrun(ctx context.Context, instanceID uuid.UUID) (GetInstanceSpeedrunRow, error)
 	GetInstanceYoutubeData(ctx context.Context, arg GetInstanceYoutubeDataParams) (LogInstanceYoutubeTimestamped, error)
 	GetInstancesByLogGroupID(ctx context.Context, logGroupID uuid.UUID) ([]LogInstancesGuild, error)
@@ -964,6 +965,7 @@ type sqlcQuerier interface {
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Tenant, error)
 	UpdateUserAuthSessionTokens(ctx context.Context, arg UpdateUserAuthSessionTokensParams) (UserAuthSession, error)
 	UpdateUserCharacterActiveCosmetics(ctx context.Context, arg UpdateUserCharacterActiveCosmeticsParams) (UserCharacterCosmetic, error)
+	UpdateUserCharacterCosmeticsDisplayMode(ctx context.Context, arg UpdateUserCharacterCosmeticsDisplayModeParams) (User, error)
 	UpdateUserPanelLayoutByID(ctx context.Context, arg UpdateUserPanelLayoutByIDParams) (UserPanelLayout, error)
 	UpdateUserPanelLayoutDefaults(ctx context.Context, arg UpdateUserPanelLayoutDefaultsParams) (UpdateUserPanelLayoutDefaultsRow, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error

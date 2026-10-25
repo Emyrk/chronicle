@@ -116,6 +116,28 @@ WHERE user_character_cosmetics.user_character_link_id = @user_character_link_id
   AND user_character_links.user_id = @user_id
 RETURNING user_character_cosmetics.*;
 
+-- name: GetInstancePlayerCosmetics :many
+SELECT
+  log_instance_players.unit_guid,
+  user_character_cosmetics.active_name_id,
+  user_character_cosmetics.active_background_id,
+  user_character_cosmetics.active_border_id
+FROM log_instance_players
+JOIN log_instances
+  ON log_instances.id = log_instance_players.instance_id
+JOIN user_character_links
+  ON user_character_links.character_guid = log_instance_players.unit_guid
+  AND user_character_links.realm_id = log_instances.realm_id
+JOIN user_character_cosmetics
+  ON user_character_cosmetics.user_character_link_id = user_character_links.id
+WHERE log_instance_players.instance_id = @instance_id
+  AND (
+    user_character_cosmetics.active_name_id <> ''
+    OR user_character_cosmetics.active_background_id <> ''
+    OR user_character_cosmetics.active_border_id <> ''
+  )
+ORDER BY log_instance_players.unit_guid;
+
 -- name: ListUsersWithCharacterCosmetics :many
 SELECT DISTINCT user_character_links.user_id
 FROM user_character_cosmetics

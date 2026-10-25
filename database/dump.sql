@@ -330,7 +330,9 @@ CREATE TABLE users (
     updated_at timestamp with time zone,
     default_desktop_layout_id uuid,
     default_mobile_layout_id uuid,
-    raw_log_retention_hours integer
+    raw_log_retention_hours integer,
+    character_cosmetics text DEFAULT 'enabled'::text NOT NULL,
+    CONSTRAINT users_character_cosmetics_check CHECK ((character_cosmetics = ANY (ARRAY['enabled'::text, 'limited'::text, 'disabled'::text])))
 );
 
 CREATE TABLE wow_log_groups (
@@ -356,6 +358,7 @@ CREATE VIEW chronicle_users AS
     u.default_desktop_layout_id,
     u.default_mobile_layout_id,
     u.raw_log_retention_hours,
+    u.character_cosmetics,
     COALESCE(sl.max_storage_bytes, (0)::numeric) AS max_storage_bytes,
     sl.updated_at AS data_limit_updated_at,
     COALESCE(storage.total_size_bytes, (0)::numeric) AS consumed_storage_bytes

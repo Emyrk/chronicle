@@ -51,6 +51,7 @@ import RankedSpeedrunTimingVideo from "../../../frontend/chronicle/src/pages/Ins
 import FocusModeVideo from "../../../frontend/chronicle/src/pages/Instance/videos/FocusMode.video";
 import ReplayExplainerVideo from "../../../frontend/chronicle/src/pages/Instance/videos/ReplayExplainer.video";
 import LayoutEditingVideo from "../../../frontend/chronicle/src/pages/Instance/videos/LayoutEditing.video";
+import CharacterCosmeticsVideo from "../../../frontend/chronicle/src/pages/Instance/videos/CharacterCosmetics.video";
 import FavoritesPromo from "./FavoritesPromo";
 import CooldownUsagePromo from "./CooldownUsagePromo";
 import Maps3DAnnouncement, { MAPS_3D_ANNOUNCEMENT_DURATION } from "./Maps3DAnnouncement";
@@ -74,6 +75,7 @@ export const RemotionRoot: React.FC = () => {
         <Composition id="FocusMode" component={FocusModeVideo} durationInFrames={630} fps={30} width={1280} height={720} />
         <Composition id="ReplayExplainer" component={ReplayExplainerVideo} durationInFrames={700} fps={30} width={1280} height={720} />
         <Composition id="LayoutEditing" component={LayoutEditingVideo} durationInFrames={700} fps={30} width={1280} height={720} />
+        <Composition id="CharacterCosmetics" component={CharacterCosmeticsVideo} durationInFrames={720} fps={30} width={1280} height={720} />
       </Folder>
       <Folder name="DamageDoneLessons">
       <Composition

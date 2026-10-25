@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { useQueries, useQuery, useMutation, useQueryClient, keepPreviousData, type UseQueryOptions } from "@tanstack/react-query";
+import { useQueries, useQuery, useMutation, useQueryClient, keepPreviousData, type QueryClient, type UseQueryOptions } from "@tanstack/react-query";
 import type { CharacterCosmeticsResponse, ListSidekicksResponse, RenameSidekickRequest, SidekickAccountConfigResponse, SidekickConfig, SidekickConfigState, SidekickInstallation, UpdateCharacterCosmeticsRequest, WhatsNewStatus } from "./typesGenerated";
 import type { WoWSpell } from "./wowdb";
 import {
@@ -861,6 +861,16 @@ export function useMyCharacterCosmetics(options?: Omit<UseQueryOptions<Character
   });
 }
 
+export function updateCharacterCosmeticsCaches(
+  queryClient: QueryClient,
+  response: CharacterCosmeticsResponse,
+) {
+  queryClient.setQueryData(["my-character-cosmetics"], response);
+  // Active selections are written before this response returns, so any
+  // previously viewed raid can immediately refetch the updated row style.
+  return queryClient.invalidateQueries({ queryKey: ["instanceCosmetics"] });
+}
+
 export function useUpdateMyCharacterCosmetics() {
   const queryClient = useQueryClient();
 
@@ -877,9 +887,7 @@ export function useUpdateMyCharacterCosmetics() {
       }
       return response.json() as Promise<CharacterCosmeticsResponse>;
     },
-    onSuccess: (response) => {
-      queryClient.setQueryData(["my-character-cosmetics"], response);
-    },
+    onSuccess: (response) => updateCharacterCosmeticsCaches(queryClient, response),
   });
 }
 

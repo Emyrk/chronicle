@@ -1,4 +1,4 @@
-import type { CosmeticDefinition, CosmeticSelection } from '@/api/typesGenerated'
+import type { CharacterCosmeticsDisplayMode, CosmeticDefinition, CosmeticSelection } from '@/api/typesGenerated'
 import type { PlayerRowCosmetic } from './PlayerMetricChartModel'
 
 export type Tier = 'Free' | 'Honored' | 'Revered' | 'Exalted'
@@ -8,6 +8,8 @@ export interface Preset {
   tier: Tier
   description: string
   cosmetic: PlayerRowCosmetic
+  /** Suppressed when viewers choose the Limited display mode. */
+  flashy?: boolean
 }
 
 export const DEFAULT_BAR = 'linear-gradient(to right, oklch(0 0 0 / 0.3), oklch(0 0 0 / 0.15)), var(--bar-color)'
@@ -55,54 +57,63 @@ export const NAME_STYLES = {
     tier: 'Exalted',
     description: 'Flickering green fel flame.',
     cosmetic: { nameClassName: 'cosmetic-name-fel' },
+    flashy: true,
   },
   shimmer: {
     label: 'Shimmer',
     tier: 'Revered',
     description: 'A highlight sweeps across the name.',
     cosmetic: { nameClassName: 'cosmetic-name-shimmer' },
+    flashy: true,
   },
   prismatic: {
     label: 'Prismatic',
     tier: 'Exalted',
     description: 'Slow-cycling rainbow gradient.',
     cosmetic: { nameClassName: 'cosmetic-name-prismatic' },
+    flashy: true,
   },
   storm: {
     label: 'Stormcaller',
     tier: 'Revered',
     description: 'Electric blue lettering that crackles with lightning.',
     cosmetic: { nameClassName: 'cosmetic-name-storm' },
+    flashy: true,
   },
   legendary: {
     label: 'Legendary',
     tier: 'Revered',
     description: 'Legendary-quality orange with a bright sweep.',
     cosmetic: { nameClassName: 'cosmetic-name-legendary' },
+    flashy: true,
   },
   holy: {
     label: 'Holy Light',
     tier: 'Revered',
     description: 'Pale gold lettering with a slow, radiant pulse.',
     cosmetic: { nameClassName: 'cosmetic-name-holy' },
+    flashy: true,
   },
   arcane: {
     label: 'Arcane',
     tier: 'Exalted',
     description: 'Violet lettering with a sweeping highlight and an arcane pulse.',
     cosmetic: { nameClassName: 'cosmetic-name-arcane' },
+    flashy: true,
   },
   thunderfury: {
     label: 'Thunderfury',
     tier: 'Exalted',
     description: 'Storm blue and gold bands roll through the name, with lightning flashes.',
     cosmetic: { nameClassName: 'cosmetic-name-thunderfury' },
+    flashy: true,
   },
   molten: {
     label: 'Molten',
     tier: 'Exalted',
     description: 'Lava rises through the letters under a heat glow.',
     cosmetic: { nameClassName: 'cosmetic-name-molten' },
+    flashy: true,
   },
 } satisfies Record<string, Preset>
 
@@ -121,6 +132,7 @@ export const BACKGROUND_STYLES = {
     tier: 'Exalted',
     description: 'A highlight glints across the background every few seconds.',
     cosmetic: { barBackground: DEFAULT_BAR, barClassName: 'cosmetic-bar-gleam' },
+    flashy: true,
   },
   satin: {
     label: 'Satin',
@@ -191,24 +203,28 @@ export const BACKGROUND_STYLES = {
     tier: 'Exalted',
     description: 'The class color drifts through a complementary hue.',
     cosmetic: { barClassName: 'cosmetic-bar-arcane', barBackground: 'linear-gradient(to right, oklch(0 0 0 / 0.3), oklch(0 0 0 / 0.15)), linear-gradient(90deg, var(--bar-color), color-mix(in oklch, var(--bar-color) 65%, #a855f7), var(--bar-color))' },
+    flashy: true,
   },
   embers: {
     label: 'Embers',
     tier: 'Exalted',
     description: 'Small sparks rise over the class color.',
     cosmetic: { barClassName: 'cosmetic-bar-embers', barBackground: DEFAULT_BAR },
+    flashy: true,
   },
   snowfall: {
     label: 'Snowfall',
     tier: 'Exalted',
     description: 'Soft flakes drift down over the class color.',
     cosmetic: { barClassName: 'cosmetic-bar-snowfall', barBackground: DEFAULT_BAR },
+    flashy: true,
   },
   starfall: {
     label: 'Starfall',
     tier: 'Exalted',
     description: 'Stars twinkle in and out across the background.',
     cosmetic: { barClassName: 'cosmetic-bar-starfall', barBackground: DEFAULT_BAR },
+    flashy: true,
   },
 } satisfies Record<string, Preset>
 
@@ -219,18 +235,21 @@ export const BORDER_STYLES = {
     tier: 'Exalted',
     description: 'Every few seconds, gold elite-frame brackets glint at the corners.',
     cosmetic: { borderClassName: 'cosmetic-border-elite' },
+    flashy: true,
   },
   chasing: {
     label: 'Chasing Light',
     tier: 'Exalted',
     description: 'Every few seconds, class-colored comets race along the top and bottom edges.',
     cosmetic: { borderClassName: 'cosmetic-border-chasing' },
+    flashy: true,
   },
   storm: {
     label: 'Stormcharged',
     tier: 'Exalted',
     description: 'Every few seconds, lightning flickers around the row.',
     cosmetic: { borderClassName: 'cosmetic-border-storm' },
+    flashy: true,
   },
 } satisfies Record<string, Preset>
 
@@ -480,6 +499,24 @@ export const DEFAULT_COSMETIC_SELECTION: CosmeticStyleSelection = {
   name: 'none',
   background: 'none',
   border: 'none',
+}
+
+function isFlashyPreset(preset: Preset): boolean {
+  return preset.flashy === true
+}
+
+export function filterCosmeticSelection(
+  selection: CosmeticStyleSelection,
+  mode: CharacterCosmeticsDisplayMode,
+): CosmeticStyleSelection {
+  if (mode === 'disabled') return DEFAULT_COSMETIC_SELECTION
+  if (mode === 'enabled') return selection
+
+  return {
+    name: isFlashyPreset(NAME_STYLES[selection.name]) ? 'none' : selection.name,
+    background: isFlashyPreset(BACKGROUND_STYLES[selection.background]) ? 'none' : selection.background,
+    border: isFlashyPreset(BORDER_STYLES[selection.border]) ? 'none' : selection.border,
+  }
 }
 
 export function combineCosmetics(selection: CosmeticStyleSelection): PlayerRowCosmetic {

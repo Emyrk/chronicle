@@ -1,5 +1,18 @@
 [
   {
+    "id": "character-cosmetics",
+    "title": "Character cosmetics are live",
+    "description": "Supporters can customize linked characters with separate name, background, and border treatments that appear across raid analysis.",
+    "publishedAt": "2026-10-25",
+    "rarity": "epic",
+    "tag": "Feature",
+    "icon": "inv_misc_gem_amethyst_02",
+    "flavor": "Make the meters remember your name.",
+    "hintTitle": "Character cosmetics",
+    "hintDescription": "Customize linked characters under Account → Characters, then choose Enabled, Limited, or Disabled under Account → Settings.",
+    "hintHref": "/account/characters"
+  },
+  {
     "id": "layout-editing",
     "title": "Edit and save layouts on the raid page",
     "description": "Press Shift+E to move, resize, add, and remove panels on the raid you are viewing, then save the layout to your Layout Book and action bar.",

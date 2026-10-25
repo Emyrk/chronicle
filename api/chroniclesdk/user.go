@@ -33,8 +33,26 @@ type Session struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type CharacterCosmeticsDisplayMode string
+
+const (
+	CharacterCosmeticsEnabled  CharacterCosmeticsDisplayMode = "enabled"
+	CharacterCosmeticsLimited  CharacterCosmeticsDisplayMode = "limited"
+	CharacterCosmeticsDisabled CharacterCosmeticsDisplayMode = "disabled"
+)
+
+func (m CharacterCosmeticsDisplayMode) IsValid() bool {
+	switch m {
+	case CharacterCosmeticsEnabled, CharacterCosmeticsLimited, CharacterCosmeticsDisabled:
+		return true
+	default:
+		return false
+	}
+}
+
 type Preferences struct {
-	HelpfulHints bool `json:"helpful_hints"`
+	HelpfulHints       bool                          `json:"helpful_hints"`
+	CharacterCosmetics CharacterCosmeticsDisplayMode `json:"character_cosmetics"`
 	// RawLogRetentionHours is how long to keep raw log files in object storage
 	// after upload. nil means keep forever.
 	RawLogRetentionHours *int32 `json:"raw_log_retention_hours"`
@@ -44,6 +62,8 @@ type Preferences struct {
 type UpdatePreferencesRequest struct {
 	// RawLogRetentionHours controls raw log file retention. nil = no change, 0 = keep forever.
 	RawLogRetentionHours *int32 `json:"raw_log_retention_hours"`
+	// CharacterCosmetics controls how character cosmetics are displayed. nil means no change.
+	CharacterCosmetics *CharacterCosmeticsDisplayMode `json:"character_cosmetics"`
 }
 
 type User struct {

@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { InstanceEventsProvider } from "@/hooks/instanceEvents";
 import { DatasetProvider } from "@/hooks/useDatasetId";
 import { PlayerSpecializationProvider } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
+import { PlayerCosmeticsProvider } from "@/components/ui/PlayerMetricChart/PlayerCosmeticsContext";
 import type { ActivityPeriod, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles, KillType, VehicleControlMetadata } from "@/api/typesGenerated";
 import { resolveInstanceUnits, type ResolvedInstanceUnit } from "./instanceUnits";
 import { Card } from "@/components/ui/Card/Card";
@@ -544,6 +545,7 @@ export function InstancePage() {
       <LiveSessionProvider>
       <TimeRangeProvider totalDurationMs={totalEncounterDurationMs}>
         <InstanceEventsProvider instanceId={instance.id}>
+          <PlayerCosmeticsProvider instanceId={instance.id}>
           <PlayerSpecializationProvider
             datasetId={instance.datasetId}
             flavor={instance.flavor ?? []}
@@ -590,6 +592,7 @@ export function InstancePage() {
             </div>
             <InstanceAssistantChat key={instance.id} instanceId={instance.id} instanceName={instance.name} />
           </PlayerSpecializationProvider>
+          </PlayerCosmeticsProvider>
         </InstanceEventsProvider>
       </TimeRangeProvider>
       </LiveSessionProvider>

@@ -7,6 +7,7 @@ import {
   BORDER_STYLES,
   NAME_STYLES,
   combineCosmetics,
+  filterCosmeticSelection,
   selectionFromAPI,
   selectionSummary,
   selectionToAPI,
@@ -73,6 +74,36 @@ describe("player cosmetics", () => {
       ...BACKGROUND_STYLES.embers.cosmetic,
       ...BORDER_STYLES.elite.cosmetic,
     });
+  });
+
+  it("keeps static slots while removing only flashy slots in limited mode", () => {
+    expect(filterCosmeticSelection({
+      name: "gilded",
+      background: "embers",
+      border: "elite",
+    }, "limited")).toEqual({
+      name: "gilded",
+      background: "none",
+      border: "none",
+    });
+
+    expect(filterCosmeticSelection({
+      name: "holy",
+      background: "satin",
+      border: "none",
+    }, "limited")).toEqual({
+      name: "none",
+      background: "satin",
+      border: "none",
+    });
+  });
+
+  it("removes every slot in disabled mode", () => {
+    expect(filterCosmeticSelection({
+      name: "gilded",
+      background: "satin",
+      border: "elite",
+    }, "disabled")).toEqual({ name: "none", background: "none", border: "none" });
   });
 
   it("summarizes only non-default selections", () => {
