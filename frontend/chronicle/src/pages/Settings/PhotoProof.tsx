@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Camera, Search } from "lucide-react";
 import { useArmorySearch } from "@/api/queries";
+import type { ArmorySearchResult } from "@/api/typesGenerated";
+import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -15,6 +17,8 @@ export type ProofSubject = {
   status: string;
   warning?: string;
 };
+
+type SelectedProofCharacter = ProofSubject & Pick<ArmorySearchResult, "class" | "guild_name">;
 
 export type ProofRequest = {
   id: string;
@@ -80,7 +84,7 @@ export function PhotoProofCard({ callout }: { callout?: string }) {
   const [file, setFile] = useState<File | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<ProofSubject[]>([]);
+  const [selected, setSelected] = useState<SelectedProofCharacter[]>([]);
   const [message, setMessage] = useState("");
   const { data: search, isFetching } = useArmorySearch({ q: query });
   const submit = useMutation({
@@ -106,14 +110,14 @@ export function PhotoProofCard({ callout }: { callout?: string }) {
     onError: (error) => toast.error(error.message),
   });
 
-  const add = (player: { id: string; realm_id: string; name: string; realm_name: string }) => {
+  const add = (player: ArmorySearchResult) => {
     if (selected.some((entry) => entry.character_guid === player.id && entry.realm_id === player.realm_id)) return;
     if (selected.length >= 10) { toast.error("Select at most 10 characters per request."); return; }
     if (selected.length && selected[0].realm_id !== player.realm_id) {
       toast.error("All characters must be on the same realm and visible in one screenshot.");
       return;
     }
-    setSelected([...selected, { character_guid: player.id, realm_id: player.realm_id, name: player.name, realm_name: player.realm_name, status: "pending" }]);
+    setSelected([...selected, { character_guid: player.id, realm_id: player.realm_id, name: player.name, realm_name: player.realm_name, class: player.class, guild_name: player.guild_name, status: "pending" }]);
     setQuery("");
   };
 
@@ -135,10 +139,23 @@ export function PhotoProofCard({ callout }: { callout?: string }) {
         <div className="relative"><Search className="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" /><Input id="proof-character-search" className="pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search the armory by character name" /></div>
         {query.length >= 2 && <div className="max-h-48 overflow-y-auto styled-scrollbar rounded border divide-y">
           {isFetching && <p className="px-3 py-2 text-sm text-muted-foreground">Searching...</p>}
-          {search?.players.map((player) => <button type="button" key={`${player.realm_id}-${player.id}`} onClick={() => add(player)} className="flex w-full justify-between px-3 py-2 text-left text-sm hover:bg-muted/50"><span>{player.name}</span><span className="text-muted-foreground">{player.realm_name} · {player.level} {player.class}</span></button>)}
+          {search?.players.map((player) => <button type="button" key={`${player.realm_id}-${player.id}`} onClick={() => add(player)} className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-0.5 px-3 py-2 text-left text-sm hover:bg-muted/50">
+            <span className="min-w-0">
+              <span className="font-medium" style={{ color: getClassColorVar(player.class) }}>{player.name}</span>
+              {player.guild_name && <span className="ml-2 text-xs text-muted-foreground">&lt;{player.guild_name}&gt;</span>}
+            </span>
+            <span className="text-xs text-muted-foreground">{player.realm_name} · {player.level} {player.class}</span>
+          </button>)}
           {!isFetching && search?.players.length === 0 && <p className="px-3 py-2 text-sm text-muted-foreground">No matching characters found.</p>}
         </div>}
-        {selected.map((entry) => <div key={`${entry.realm_id}-${entry.character_guid}`} className="flex items-center justify-between rounded border px-3 py-2 text-sm"><span>{entry.name} · {entry.realm_name}</span><button className="text-destructive hover:underline" type="button" onClick={() => setSelected(selected.filter((item) => item !== entry))}>Remove</button></div>)}
+        {selected.map((entry) => <div key={`${entry.realm_id}-${entry.character_guid}`} className="flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm">
+          <span className="min-w-0">
+            <span className="font-medium" style={{ color: getClassColorVar(entry.class) }}>{entry.name}</span>
+            {entry.guild_name && <span className="ml-2 text-xs text-muted-foreground">&lt;{entry.guild_name}&gt;</span>}
+            <span className="ml-2 text-xs text-muted-foreground">· {entry.realm_name}</span>
+          </span>
+          <button className="shrink-0 text-destructive hover:underline" type="button" onClick={() => setSelected(selected.filter((item) => item !== entry))}>Remove</button>
+        </div>)}
       </div>
       <label className="block text-sm space-y-1"><span>Message to reviewer (optional)</span><textarea className="w-full min-h-20 rounded-md border bg-background p-2" maxLength={2000} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Any context that helps verify your characters" /></label>
       <div className="flex gap-2">
