@@ -72,7 +72,7 @@ function tierLabel(tier?: string): PaidTier | null {
   }
 }
 
-function TierBadge({ tier }: { tier: Tier }) {
+export function TierBadge({ tier }: { tier: Tier }) {
   return (
     <span
       className="rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
@@ -83,7 +83,7 @@ function TierBadge({ tier }: { tier: Tier }) {
   );
 }
 
-function MiniRow({ character, cosmetic }: { character: LinkedCharacter; cosmetic: PlayerRowCosmetic }) {
+export function MiniRow({ character, cosmetic }: { character: LinkedCharacter; cosmetic: PlayerRowCosmetic }) {
   return (
     <div
       className="relative flex h-7 items-center overflow-hidden rounded-md px-2"

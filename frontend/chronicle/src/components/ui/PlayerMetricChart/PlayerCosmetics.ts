@@ -1,4 +1,4 @@
-import type { CosmeticSelection } from '@/api/typesGenerated'
+import type { CosmeticDefinition, CosmeticSelection } from '@/api/typesGenerated'
 import type { PlayerRowCosmetic } from './PlayerMetricChartModel'
 
 export type Tier = 'Free' | 'Honored' | 'Revered' | 'Exalted'
@@ -535,4 +535,24 @@ export function isDefaultSelection(selection: CosmeticStyleSelection): boolean {
 
 export function cosmeticIDForSlot(selection: CosmeticStyleSelection, slot: keyof CosmeticStyleSelection): string {
   return keyToID(slot, selection[slot])
+}
+
+const API_TIERS: Record<string, Tier> = { honored: 'Honored', revered: 'Revered', exalted: 'Exalted' }
+
+/** Maps an API tier ("honored") to its display tier; unknown or empty tiers are Free. */
+export function tierFromAPI(tier?: string): Tier {
+  return (tier && API_TIERS[tier]) || 'Free'
+}
+
+/**
+ * The supporter's rank, derived from entitlements: the highest tier among the
+ * cosmetics they are allowed to use. Tiers are granted as whole sets, so any
+ * allowed cosmetic of a tier means that tier is unlocked.
+ */
+export function supporterTier(catalog: readonly CosmeticDefinition[], allowedIDs: readonly string[]): Tier {
+  const allowed = new Set(allowedIDs)
+  return catalog.reduce<Tier>((highest, definition) => {
+    const tier = tierFromAPI(definition.tier)
+    return allowed.has(definition.id) && TIER_RANK[tier] > TIER_RANK[highest] ? tier : highest
+  }, 'Free')
 }

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { CharacterCosmeticsEditor } from "@/features/characterCosmetics/CharacterCosmeticsEditor";
-import type { LinkedCharacter } from "@/api/typesGenerated";
+import type { CosmeticDefinition, LinkedCharacter } from "@/api/typesGenerated";
 import {
   BACKGROUND_STYLES,
   BORDER_STYLES,
@@ -10,6 +10,7 @@ import {
   selectionFromAPI,
   selectionSummary,
   selectionToAPI,
+  supporterTier,
 } from "./PlayerCosmetics";
 
 const character: LinkedCharacter = {
@@ -77,5 +78,20 @@ describe("player cosmetics", () => {
   it("summarizes only non-default selections", () => {
     expect(selectionSummary({ name: "none", background: "none", border: "none" })).toBe("Default");
     expect(selectionSummary({ name: "gilded", background: "satin", border: "none" })).toBe("Gilded · Satin");
+  });
+
+  it("derives the supporter tier from the highest allowed cosmetic", () => {
+    const catalog: CosmeticDefinition[] = [
+      { id: "name_rare", label: "Rare", slot: "name", tier: "honored" },
+      { id: "name_holy", label: "Holy Light", slot: "name", tier: "revered" },
+      { id: "border_elite", label: "Elite", slot: "border", tier: "exalted" },
+      { id: "name_unassigned", label: "Unassigned", slot: "name" },
+    ];
+
+    expect(supporterTier(catalog, [])).toBe("Free");
+    expect(supporterTier(catalog, ["name_unassigned"])).toBe("Free");
+    expect(supporterTier(catalog, ["name_rare"])).toBe("Honored");
+    expect(supporterTier(catalog, ["name_rare", "name_holy"])).toBe("Revered");
+    expect(supporterTier(catalog, ["border_elite", "name_rare"])).toBe("Exalted");
   });
 });

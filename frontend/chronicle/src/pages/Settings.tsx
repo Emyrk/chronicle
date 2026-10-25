@@ -32,8 +32,9 @@ import {
   type UserPanelLayout,
 } from "@/api/queries";
 import type { CreateUserPanelLayoutRequest, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles } from "@/api/typesGenerated";
-import { selectionFromAPI, selectionSummary, selectionToAPI, type CosmeticStyleSelection } from "@/components/ui/PlayerMetricChart/PlayerCosmetics";
-import { CharacterCosmeticsEditor } from "@/features/characterCosmetics/CharacterCosmeticsEditor";
+import { COSMETIC_CSS, combineCosmetics, selectionFromAPI, selectionSummary, selectionToAPI, supporterTier, type CosmeticStyleSelection } from "@/components/ui/PlayerMetricChart/PlayerCosmetics";
+import { CharacterCosmeticsEditor, MiniRow, TierBadge } from "@/features/characterCosmetics/CharacterCosmeticsEditor";
+import type { PlayerRowCosmetic } from "@/components/ui/PlayerMetricChart/PlayerMetricChartModel";
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
 import { LayoutEditorCanvas } from "@/features/layoutEditor/LayoutEditorCanvas";
 import { MAX_LAYOUT_PANELS, layoutDraftFromExport, layoutDraftToExport } from "@/features/layoutEditor/layoutDraft";
@@ -515,8 +516,9 @@ function LinkedVsFavoritesExplainer() {
   );
 }
 
-function LinkedCharacterRow({ character, cosmeticSummary, onCustomize, onSetPrimary, onUnlink, busy, customizeDisabled }: {
+function LinkedCharacterRow({ character, cosmetic, cosmeticSummary, onCustomize, onSetPrimary, onUnlink, busy, customizeDisabled }: {
   character: LinkedCharacter;
+  cosmetic: PlayerRowCosmetic;
   cosmeticSummary: string;
   onCustomize: () => void;
   onSetPrimary: () => void;
@@ -552,11 +554,18 @@ function LinkedCharacterRow({ character, cosmeticSummary, onCustomize, onSetPrim
           Level {character.level} {character.race} {character.class} · {character.realm_name}
         </p>
         <p className="truncate text-xs text-muted-foreground/70">
-          Appearance · {cosmeticSummary}
-        </p>
-        <p className="truncate text-xs text-muted-foreground/70">
           {linkSourceLabel(character.link_source)} · {new Date(character.linked_at).toLocaleDateString()}
         </p>
+        <button
+          type="button"
+          className="mt-2 block w-full max-w-sm rounded-md text-left disabled:cursor-default"
+          disabled={customizeDisabled}
+          onClick={onCustomize}
+          title={`Customize ${character.name}`}
+        >
+          <MiniRow character={character} cosmetic={cosmetic} />
+          <span className="mt-1 block truncate text-xs text-muted-foreground/70">Appearance · {cosmeticSummary}</span>
+        </button>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1">
         {!character.is_primary && (
@@ -612,6 +621,7 @@ export function CharacterSettings() {
     [cosmetics?.characters],
   );
   const editingCharacter = sortedCharacters.find((character) => character.link_id === editingLinkID);
+  const supporter = supporterTier(cosmetics?.catalog ?? [], cosmetics?.allowed_ids ?? []);
   const hasLinkMethod = !!siteConfig?.external_verification || !!photoProof?.enabled;
   const favoriteCount = (favorites.data?.guilds.length ?? 0) + (favorites.data?.players.length ?? 0);
 
@@ -658,7 +668,10 @@ export function CharacterSettings() {
     <div className="max-w-4xl space-y-8">
       <div className="space-y-4">
         <div>
-          <h2 className="text-xl font-semibold">Characters</h2>
+          <h2 className="flex items-center gap-2 text-xl font-semibold">
+            Characters
+            {supporter !== "Free" && <TierBadge tier={supporter} />}
+          </h2>
           <p className="text-muted-foreground">The characters you play, and the ones you keep an eye on.</p>
         </div>
         <LinkedVsFavoritesExplainer />
@@ -682,12 +695,14 @@ export function CharacterSettings() {
           </div>
         ) : (
           <div className="divide-y rounded-lg border">
+            <style>{COSMETIC_CSS}</style>
             {sortedCharacters.map((character) => {
               const characterCosmetics = cosmeticsByLinkID.get(character.link_id);
               return (
                 <LinkedCharacterRow
                   key={character.link_id}
                   character={character}
+                  cosmetic={combineCosmetics(selectionFromAPI(characterCosmetics?.active))}
                   cosmeticSummary={selectionSummary(selectionFromAPI(characterCosmetics?.requested))}
                   busy={setPrimary.isPending || unlink.isPending}
                   customizeDisabled={cosmeticsLoading || !cosmetics}
