@@ -167,3 +167,26 @@ func isSuccessfulIncomingDamage(damage *messages.Damage) bool {
 		!damage.HitType.Has(types.HitTypeImmune) &&
 		!damage.HitType.Has(types.HitTypeEvade)
 }
+
+type scriptedDefeatCharacter struct {
+	Character
+	defeat *ScriptedDefeatDetector
+}
+
+func NewScriptedDefeatCharacter(id guid.GUID, c Character, config ScriptedDefeatConfig) Character {
+	return &scriptedDefeatCharacter{
+		Character: c,
+		defeat:    NewScriptedDefeatDetector(id, config),
+	}
+}
+
+func (c *scriptedDefeatCharacter) Process(m messages.Message) error {
+	if err := c.Character.Process(m); err != nil {
+		return err
+	}
+
+	if signal, defeated := c.defeat.Observe(m, c.IsActive()); defeated {
+		c.Died("scripted_defeat_"+string(signal), m)
+	}
+	return nil
+}

@@ -3,6 +3,7 @@ package instances
 import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database"
 )
 
@@ -309,15 +310,23 @@ func CullingOfStratholmeHostiles() map[uint32]instances.Identity {
 		31057: "Mechanical Greeter RY7R",
 		31126: "Agitated Stratholme Citizen",
 		31127: "Agitated Stratholme Resident",
-		31178: "Enraging Ghoul (1)",
-		31179: "Devouring Ghoul (1)",
-		31187: "Crypt Fiend (1)",
-		31199: "Patchwork Construct (1)",
-		31200: "Bile Golem (1)",
-		31201: "Acolyte (1)",
-		31208: "Risen Zombie (1)",
-		31210: "Arthas (1)",
+
+		27742: "Infinite Adversary",
+		27743: "Infinite Hunter",
+		27744: "Infinite Agent",
+		28199: "Tomb Stalker",
+		28200: "Dark Necromancer",
 	})
+
+	instances.LoadBosses(hostile, map[uint32]string{
+		26529: "Meathook",
+		26530: "Salramm the Fleshcrafter",
+		26532: "Chrono-Lord Epoch",
+		26533: "Mal'Ganis",
+	})
+
+	hostile[26499] = instances.Identity{Affiliation: types.AffiliationFriendly, Name: "Arthas"}
+
 	return hostile
 }
 

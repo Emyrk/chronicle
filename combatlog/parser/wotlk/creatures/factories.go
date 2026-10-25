@@ -66,6 +66,9 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 			NewScionOfEternity,
 			NewPowerSpark,
 
+			// Culling of Strathlome
+			NewMalGanis,
+
 			// Ulduar,
 			NewIgnisIronConstruct,
 			NewAlgalon,
