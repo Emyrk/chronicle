@@ -24,6 +24,7 @@ import {
 import { SPEC_BY_CLASS } from "@/pages/Rankings/classDisplay";
 import { subspecRulesForFlavor } from "@/pages/Subspecs/subspecs";
 import type { TalentClassInfo } from "./MyBuildsDrawer";
+import { topBuildRaidNames } from "./topBuildsModel";
 
 /** "Death Knight" → "DEATHKNIGHT" (the SDK hero-class form the API expects). */
 function toApiClass(name: string): string {
@@ -79,14 +80,11 @@ export function TopBuildsDrawer({ selectedClass, datasetFlavor, onShowAll }: {
   }
 
   const instancesQuery = useRankingsInstances(open);
-  // Unique instance names, in API order. Default to the first raid.
-  const instanceNames = useMemo(() => {
-    const names: string[] = [];
-    for (const instance of instancesQuery.data ?? []) {
-      if (!names.includes(instance.instance_name)) names.push(instance.instance_name);
-    }
-    return names;
-  }, [instancesQuery.data]);
+  // Unique raid names, in API order. Default to the first raid.
+  const instanceNames = useMemo(
+    () => topBuildRaidNames(instancesQuery.data ?? []),
+    [instancesQuery.data],
+  );
   const activeInstance = instanceName ?? instanceNames[0] ?? "";
 
   // Bosses only: 'Trash' is the conventional trash encounter name. The
