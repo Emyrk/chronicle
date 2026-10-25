@@ -297,6 +297,25 @@ COMMENT ON COLUMN log_file.compressed_size_bytes IS 'Compressed file size in byt
 
 COMMENT ON COLUMN log_file.content_encoding IS 'Content encoding used for storage (e.g., gzip), NULL if stored raw';
 
+CREATE TABLE log_file_parts (
+    id uuid NOT NULL,
+    log_file_id uuid NOT NULL,
+    sequence bigint NOT NULL,
+    upload_id uuid NOT NULL,
+    reservation_id uuid NOT NULL,
+    source_sequence bigint,
+    object_key text NOT NULL,
+    status text NOT NULL,
+    hash text,
+    size_bytes bigint,
+    compressed_size_bytes bigint,
+    content_encoding text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    finalized_at timestamp with time zone,
+    CONSTRAINT log_file_parts_sequence_check CHECK ((sequence > 0)),
+    CONSTRAINT log_file_parts_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'ready'::text, 'failed'::text])))
+);
+
 CREATE TABLE log_group_artifacts (
     id uuid NOT NULL,
     log_group_id uuid NOT NULL,
@@ -366,10 +385,18 @@ CREATE VIEW chronicle_users AS
      LEFT JOIN user_storage_limits sl ON ((sl.user_id = u.id)))
      LEFT JOIN ( SELECT stored.owner,
             sum(stored.size_bytes) AS total_size_bytes
-           FROM ( SELECT log_file.owner,
-                    COALESCE(log_file.compressed_size_bytes, log_file.size_bytes) AS size_bytes
-                   FROM log_file
-                  WHERE (log_file.storage_deleted_at IS NULL)
+           FROM ( SELECT files.owner,
+                    (((COALESCE(files.compressed_size_bytes, files.size_bytes))::numeric - COALESCE(parts.rolled_up_size_bytes, (0)::numeric)) + COALESCE(parts.stored_size_bytes, (0)::numeric)) AS size_bytes
+                   FROM (public.log_file files
+                     LEFT JOIN LATERAL ( SELECT sum(
+                                CASE
+                                    WHEN (files.compressed_size_bytes IS NULL) THEN part.size_bytes
+                                    ELSE COALESCE(part.compressed_size_bytes, part.size_bytes)
+                                END) AS rolled_up_size_bytes,
+                            sum(COALESCE(part.compressed_size_bytes, part.size_bytes)) AS stored_size_bytes
+                           FROM log_file_parts part
+                          WHERE ((part.log_file_id = files.id) AND (part.status = 'ready'::text))) parts ON (true))
+                  WHERE (files.storage_deleted_at IS NULL)
                 UNION ALL
                  SELECT groups.owner,
                     artifacts.size_bytes
@@ -1327,25 +1354,6 @@ CREATE TABLE leaderboard_version_requirements (
     min_addon_version text DEFAULT ''::text NOT NULL,
     min_addon_version_num bigint DEFAULT 0 NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-CREATE TABLE log_file_parts (
-    id uuid NOT NULL,
-    log_file_id uuid NOT NULL,
-    sequence bigint NOT NULL,
-    upload_id uuid NOT NULL,
-    reservation_id uuid NOT NULL,
-    source_sequence bigint,
-    object_key text NOT NULL,
-    status text NOT NULL,
-    hash text,
-    size_bytes bigint,
-    compressed_size_bytes bigint,
-    content_encoding text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    finalized_at timestamp with time zone,
-    CONSTRAINT log_file_parts_sequence_check CHECK ((sequence > 0)),
-    CONSTRAINT log_file_parts_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'ready'::text, 'failed'::text])))
 );
 
 CREATE TABLE log_instance_encounter_damage_unit_summary (
