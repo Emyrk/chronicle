@@ -7,6 +7,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -96,18 +97,17 @@ func (s *Service) applyCore(ctx context.Context, app database.GetServerApplicati
 		return err
 	}
 
-	_, err = s.DB.UpdateTenant(bypassCtx, database.UpdateTenantParams{
-		ID:       app.TenantID,
-		Name:     pgtype.Text{String: p.Name, Valid: true},
-		Branding: brandingJSON,
+	return s.mutateTenant(bypassCtx, func(tx *authz.AuthzTX) error {
+		_, err := tx.UpdateTenant(bypassCtx, database.UpdateTenantParams{
+			ID:       app.TenantID,
+			Name:     pgtype.Text{String: p.Name, Valid: true},
+			Branding: brandingJSON,
+		})
+		if err != nil {
+			return fmt.Errorf("update tenant: %w", err)
+		}
+		return nil
 	})
-	if err != nil {
-		return fmt.Errorf("update tenant: %w", err)
-	}
-	if err := s.invalidateTenantCache(ctx); err != nil {
-		return fmt.Errorf("reload tenant cache: %w", err)
-	}
-	return nil
 }
 
 func (s *Service) applySlug(ctx context.Context, app database.GetServerApplicationByIDRow, payload []byte) error {
@@ -117,17 +117,16 @@ func (s *Service) applySlug(ctx context.Context, app database.GetServerApplicati
 	}
 
 	bypassCtx := servicetenant.AdminBypass(ctx)
-	_, err := s.DB.UpdateTenant(bypassCtx, database.UpdateTenantParams{
-		ID:   app.TenantID,
-		Slug: pgtype.Text{String: p.Slug, Valid: true},
+	return s.mutateTenant(bypassCtx, func(tx *authz.AuthzTX) error {
+		_, err := tx.UpdateTenant(bypassCtx, database.UpdateTenantParams{
+			ID:   app.TenantID,
+			Slug: pgtype.Text{String: p.Slug, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("update tenant slug: %w", err)
+		}
+		return nil
 	})
-	if err != nil {
-		return fmt.Errorf("update tenant slug: %w", err)
-	}
-	if err := s.invalidateTenantCache(ctx); err != nil {
-		return fmt.Errorf("reload tenant cache: %w", err)
-	}
-	return nil
 }
 
 func (s *Service) applyDescription(ctx context.Context, app database.GetServerApplicationByIDRow, payload []byte) error {
@@ -153,17 +152,16 @@ func (s *Service) applyDescription(ctx context.Context, app database.GetServerAp
 		return err
 	}
 
-	_, err = s.DB.UpdateTenant(bypassCtx, database.UpdateTenantParams{
-		ID:       app.TenantID,
-		Branding: brandingJSON,
+	return s.mutateTenant(bypassCtx, func(tx *authz.AuthzTX) error {
+		_, err := tx.UpdateTenant(bypassCtx, database.UpdateTenantParams{
+			ID:       app.TenantID,
+			Branding: brandingJSON,
+		})
+		if err != nil {
+			return fmt.Errorf("update tenant: %w", err)
+		}
+		return nil
 	})
-	if err != nil {
-		return fmt.Errorf("update tenant: %w", err)
-	}
-	if err := s.invalidateTenantCache(ctx); err != nil {
-		return fmt.Errorf("reload tenant cache: %w", err)
-	}
-	return nil
 }
 
 func (s *Service) applyLogos(ctx context.Context, app database.GetServerApplicationByIDRow, payload []byte) error {
@@ -192,17 +190,16 @@ func (s *Service) applyLogos(ctx context.Context, app database.GetServerApplicat
 		return err
 	}
 
-	_, err = s.DB.UpdateTenant(bypassCtx, database.UpdateTenantParams{
-		ID:       app.TenantID,
-		Branding: brandingJSON,
+	return s.mutateTenant(bypassCtx, func(tx *authz.AuthzTX) error {
+		_, err := tx.UpdateTenant(bypassCtx, database.UpdateTenantParams{
+			ID:       app.TenantID,
+			Branding: brandingJSON,
+		})
+		if err != nil {
+			return fmt.Errorf("update tenant: %w", err)
+		}
+		return nil
 	})
-	if err != nil {
-		return fmt.Errorf("update tenant: %w", err)
-	}
-	if err := s.invalidateTenantCache(ctx); err != nil {
-		return fmt.Errorf("reload tenant cache: %w", err)
-	}
-	return nil
 }
 
 func (s *Service) applyTheme(ctx context.Context, app database.GetServerApplicationByIDRow, payload []byte) error {
@@ -228,17 +225,16 @@ func (s *Service) applyTheme(ctx context.Context, app database.GetServerApplicat
 		return err
 	}
 
-	_, err = s.DB.UpdateTenant(bypassCtx, database.UpdateTenantParams{
-		ID:       app.TenantID,
-		Branding: brandingJSON,
+	return s.mutateTenant(bypassCtx, func(tx *authz.AuthzTX) error {
+		_, err := tx.UpdateTenant(bypassCtx, database.UpdateTenantParams{
+			ID:       app.TenantID,
+			Branding: brandingJSON,
+		})
+		if err != nil {
+			return fmt.Errorf("update tenant: %w", err)
+		}
+		return nil
 	})
-	if err != nil {
-		return fmt.Errorf("update tenant: %w", err)
-	}
-	if err := s.invalidateTenantCache(ctx); err != nil {
-		return fmt.Errorf("reload tenant cache: %w", err)
-	}
-	return nil
 }
 
 func (s *Service) applyServer(ctx context.Context, app database.GetServerApplicationByIDRow, req database.ApplicationModificationRequest) (*uuid.UUID, error) {
@@ -364,19 +360,18 @@ func (s *Service) applySettings(ctx context.Context, app database.GetServerAppli
 	}
 
 	bypassCtx := servicetenant.AdminBypass(ctx)
-	_, err := s.DB.UpdateTenant(bypassCtx, database.UpdateTenantParams{
-		ID:                  app.TenantID,
-		IncludeInAll:        pgtype.Bool{Bool: p.IncludeInAll, Valid: true},
-		DisableClientUpload: pgtype.Bool{Bool: p.DisableClientUpload, Valid: true},
-		Discoverable:        pgtype.Bool{Bool: p.Discoverable, Valid: true},
+	return s.mutateTenant(bypassCtx, func(tx *authz.AuthzTX) error {
+		_, err := tx.UpdateTenant(bypassCtx, database.UpdateTenantParams{
+			ID:                  app.TenantID,
+			IncludeInAll:        pgtype.Bool{Bool: p.IncludeInAll, Valid: true},
+			DisableClientUpload: pgtype.Bool{Bool: p.DisableClientUpload, Valid: true},
+			Discoverable:        pgtype.Bool{Bool: p.Discoverable, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("update tenant settings: %w", err)
+		}
+		return nil
 	})
-	if err != nil {
-		return fmt.Errorf("update tenant settings: %w", err)
-	}
-	if err := s.invalidateTenantCache(ctx); err != nil {
-		return fmt.Errorf("reload tenant cache: %w", err)
-	}
-	return nil
 }
 
 func (s *Service) applyDeleteServer(ctx context.Context, app database.GetServerApplicationByIDRow, payload []byte) error {

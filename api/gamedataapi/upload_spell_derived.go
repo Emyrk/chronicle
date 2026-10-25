@@ -7,6 +7,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/internal/gamedataoverrides"
+	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -144,115 +145,121 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 		}
 	}
 
-	// Wipe existing derived data for this dataset.
-	for _, table := range []string{
-		"dbc_extra_attack_spells",
-		"dbc_duration_modifiers",
-		"dbc_periodic_spells",
-		"dbc_vulnerability_spells",
-		"dbc_cooldown_spells",
-	} {
-		if _, err := h.pool.Exec(ctx, fmt.Sprintf(`DELETE FROM %s WHERE dataset_id = $1`, table), datasetID); err != nil {
-			return fmt.Errorf("clear %s: %w", table, err)
-		}
-	}
-
-	const batchSize = 500
-
-	// Insert extra attack spells.
-	batch := &pgx.Batch{}
-	for _, r := range extraAttacks {
-		batch.Queue(`INSERT INTO dbc_extra_attack_spells (dataset_id, spell_id, name, num_extra_attacks) VALUES ($1,$2,$3,$4)`,
-			datasetID, r.SpellID, r.Name, r.NumExtraAttacks,
-		)
-		if batch.Len() >= batchSize {
-			if err := flushBatch(ctx, h.pool, batch); err != nil {
-				return fmt.Errorf("insert extra attack spells: %w", err)
+	return h.mutateDataset(ctx, datasetID, []servicecache.Namespace{
+		servicecache.NamespaceExtraAttacks,
+		servicecache.NamespaceDurationMods,
+		servicecache.NamespacePeriodicSpells,
+	}, func(tx database.Store) error {
+		// Wipe existing derived data for this dataset.
+		for _, table := range []string{
+			"dbc_extra_attack_spells",
+			"dbc_duration_modifiers",
+			"dbc_periodic_spells",
+			"dbc_vulnerability_spells",
+			"dbc_cooldown_spells",
+		} {
+			if _, err := tx.Exec(ctx, fmt.Sprintf(`DELETE FROM %s WHERE dataset_id = $1`, table), datasetID); err != nil {
+				return fmt.Errorf("clear %s: %w", table, err)
 			}
-			batch = &pgx.Batch{}
 		}
-	}
-	if batch.Len() > 0 {
-		if err := flushBatch(ctx, h.pool, batch); err != nil {
-			return fmt.Errorf("insert extra attack spells (final): %w", err)
-		}
-	}
 
-	// Insert duration modifiers.
-	batch = &pgx.Batch{}
-	for _, r := range durationMods {
-		batch.Queue(`INSERT INTO dbc_duration_modifiers (dataset_id, spell_id, name, percent, flat, deprecated, spell_class_set, spell_class_mask) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-			datasetID, r.SpellID, r.Name, r.Percent, r.Flat, r.Deprecated, r.SpellClassSet, r.ClassMask,
-		)
-		if batch.Len() >= batchSize {
-			if err := flushBatch(ctx, h.pool, batch); err != nil {
-				return fmt.Errorf("insert duration modifiers: %w", err)
+		const batchSize = 500
+
+		// Insert extra attack spells.
+		batch := &pgx.Batch{}
+		for _, r := range extraAttacks {
+			batch.Queue(`INSERT INTO dbc_extra_attack_spells (dataset_id, spell_id, name, num_extra_attacks) VALUES ($1,$2,$3,$4)`,
+				datasetID, r.SpellID, r.Name, r.NumExtraAttacks,
+			)
+			if batch.Len() >= batchSize {
+				if err := flushBatch(ctx, tx, batch); err != nil {
+					return fmt.Errorf("insert extra attack spells: %w", err)
+				}
+				batch = &pgx.Batch{}
 			}
-			batch = &pgx.Batch{}
 		}
-	}
-	if batch.Len() > 0 {
-		if err := flushBatch(ctx, h.pool, batch); err != nil {
-			return fmt.Errorf("insert duration modifiers (final): %w", err)
-		}
-	}
-
-	// Insert periodic spells.
-	batch = &pgx.Batch{}
-	for _, r := range periodics {
-		batch.Queue(`INSERT INTO dbc_periodic_spells (dataset_id, spell_id, name, has_direct) VALUES ($1,$2,$3,$4)`,
-			datasetID, r.SpellID, r.Name, r.HasDirect,
-		)
-		if batch.Len() >= batchSize {
-			if err := flushBatch(ctx, h.pool, batch); err != nil {
-				return fmt.Errorf("insert periodic spells: %w", err)
+		if batch.Len() > 0 {
+			if err := flushBatch(ctx, tx, batch); err != nil {
+				return fmt.Errorf("insert extra attack spells (final): %w", err)
 			}
-			batch = &pgx.Batch{}
 		}
-	}
-	if batch.Len() > 0 {
-		if err := flushBatch(ctx, h.pool, batch); err != nil {
-			return fmt.Errorf("insert periodic spells (final): %w", err)
-		}
-	}
 
-	// Insert vulnerability spells.
-	batch = &pgx.Batch{}
-	for _, r := range vulnerabilities {
-		batch.Queue(`INSERT INTO dbc_vulnerability_spells (dataset_id, spell_id, name, school_bitmask, percent_affect, flat_affect) VALUES ($1,$2,$3,$4,$5,$6)`,
-			datasetID, r.SpellID, r.Name, r.SchoolBitmask, r.PercentAffect, r.FlatAffect,
-		)
-		if batch.Len() >= batchSize {
-			if err := flushBatch(ctx, h.pool, batch); err != nil {
-				return fmt.Errorf("insert vulnerability spells: %w", err)
+		// Insert duration modifiers.
+		batch = &pgx.Batch{}
+		for _, r := range durationMods {
+			batch.Queue(`INSERT INTO dbc_duration_modifiers (dataset_id, spell_id, name, percent, flat, deprecated, spell_class_set, spell_class_mask) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+				datasetID, r.SpellID, r.Name, r.Percent, r.Flat, r.Deprecated, r.SpellClassSet, r.ClassMask,
+			)
+			if batch.Len() >= batchSize {
+				if err := flushBatch(ctx, tx, batch); err != nil {
+					return fmt.Errorf("insert duration modifiers: %w", err)
+				}
+				batch = &pgx.Batch{}
 			}
-			batch = &pgx.Batch{}
 		}
-	}
-	if batch.Len() > 0 {
-		if err := flushBatch(ctx, h.pool, batch); err != nil {
-			return fmt.Errorf("insert vulnerability spells (final): %w", err)
-		}
-	}
-
-	// Insert major player cooldowns.
-	batch = &pgx.Batch{}
-	for _, r := range cooldowns {
-		batch.Queue(`INSERT INTO dbc_cooldown_spells (dataset_id, spell_id, name, name_subtext, recovery_time_ms, category_recovery_time_ms, spell_class_set, duration_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-			datasetID, r.SpellID, r.Name, r.NameSubtext, r.RecoveryTimeMS, r.CategoryRecoveryTimeMS, r.SpellClassSet, r.DurationMS,
-		)
-		if batch.Len() >= batchSize {
-			if err := flushBatch(ctx, h.pool, batch); err != nil {
-				return fmt.Errorf("insert cooldown spells: %w", err)
+		if batch.Len() > 0 {
+			if err := flushBatch(ctx, tx, batch); err != nil {
+				return fmt.Errorf("insert duration modifiers (final): %w", err)
 			}
-			batch = &pgx.Batch{}
 		}
-	}
-	if batch.Len() > 0 {
-		if err := flushBatch(ctx, h.pool, batch); err != nil {
-			return fmt.Errorf("insert cooldown spells (final): %w", err)
-		}
-	}
 
-	return nil
+		// Insert periodic spells.
+		batch = &pgx.Batch{}
+		for _, r := range periodics {
+			batch.Queue(`INSERT INTO dbc_periodic_spells (dataset_id, spell_id, name, has_direct) VALUES ($1,$2,$3,$4)`,
+				datasetID, r.SpellID, r.Name, r.HasDirect,
+			)
+			if batch.Len() >= batchSize {
+				if err := flushBatch(ctx, tx, batch); err != nil {
+					return fmt.Errorf("insert periodic spells: %w", err)
+				}
+				batch = &pgx.Batch{}
+			}
+		}
+		if batch.Len() > 0 {
+			if err := flushBatch(ctx, tx, batch); err != nil {
+				return fmt.Errorf("insert periodic spells (final): %w", err)
+			}
+		}
+
+		// Insert vulnerability spells.
+		batch = &pgx.Batch{}
+		for _, r := range vulnerabilities {
+			batch.Queue(`INSERT INTO dbc_vulnerability_spells (dataset_id, spell_id, name, school_bitmask, percent_affect, flat_affect) VALUES ($1,$2,$3,$4,$5,$6)`,
+				datasetID, r.SpellID, r.Name, r.SchoolBitmask, r.PercentAffect, r.FlatAffect,
+			)
+			if batch.Len() >= batchSize {
+				if err := flushBatch(ctx, tx, batch); err != nil {
+					return fmt.Errorf("insert vulnerability spells: %w", err)
+				}
+				batch = &pgx.Batch{}
+			}
+		}
+		if batch.Len() > 0 {
+			if err := flushBatch(ctx, tx, batch); err != nil {
+				return fmt.Errorf("insert vulnerability spells (final): %w", err)
+			}
+		}
+
+		// Insert major player cooldowns.
+		batch = &pgx.Batch{}
+		for _, r := range cooldowns {
+			batch.Queue(`INSERT INTO dbc_cooldown_spells (dataset_id, spell_id, name, name_subtext, recovery_time_ms, category_recovery_time_ms, spell_class_set, duration_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+				datasetID, r.SpellID, r.Name, r.NameSubtext, r.RecoveryTimeMS, r.CategoryRecoveryTimeMS, r.SpellClassSet, r.DurationMS,
+			)
+			if batch.Len() >= batchSize {
+				if err := flushBatch(ctx, tx, batch); err != nil {
+					return fmt.Errorf("insert cooldown spells: %w", err)
+				}
+				batch = &pgx.Batch{}
+			}
+		}
+		if batch.Len() > 0 {
+			if err := flushBatch(ctx, tx, batch); err != nil {
+				return fmt.Errorf("insert cooldown spells (final): %w", err)
+			}
+		}
+
+		return nil
+	})
 }

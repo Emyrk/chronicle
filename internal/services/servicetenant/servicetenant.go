@@ -161,19 +161,42 @@ func (s *Service) refreshCache(ctx context.Context) error {
 	return nil
 }
 
+const cacheInvalidationTimeout = 2 * time.Second
+
 func registerCacheInvalidator(cacheSvc *servicecache.Service, refresh func(context.Context) error) error {
+	return registerCacheInvalidatorWithTimeout(cacheSvc, refresh, cacheInvalidationTimeout)
+}
+
+func registerCacheInvalidatorWithTimeout(cacheSvc *servicecache.Service, refresh func(context.Context) error, timeout time.Duration) error {
 	return cacheSvc.RegisterInvalidator(
 		servicecache.NamespaceTenantSlugs,
 		servicecache.ScopeGlobal,
 		"tenant_slug_reload",
 		func(ctx context.Context, _ servicecache.Invalidation) error {
+			// Generation application serializes all invalidators. A stalled tenant
+			// query must not hold that lock indefinitely; a failed refresh leaves
+			// the generation unobserved for the next reconciliation attempt.
+			ctx, cancel := context.WithTimeout(ctx, timeout)
+			defer cancel()
 			return refresh(ctx)
 		},
 	)
 }
 
-func (s *Service) invalidateCache(ctx context.Context) error {
-	return s.cacheSvc.Invalidate(ctx, servicecache.GlobalInvalidation(servicecache.NamespaceTenantSlugs))
+func (s *Service) mutateAndPublish(ctx context.Context, mutate func(database.Store) error) error {
+	var published servicecache.PublishedGeneration
+	if err := s.db.InTx(ctx, func(tx database.Store) error {
+		if err := mutate(tx); err != nil {
+			return err
+		}
+		var err error
+		published, err = s.cacheSvc.PublishTx(ctx, tx, servicecache.GlobalInvalidation(servicecache.NamespaceTenantSlugs))
+		return err
+	}, nil); err != nil {
+		return err
+	}
+	s.cacheSvc.ApplyPublishedBestEffort(published)
+	return nil
 }
 
 // IsAllowedOrigin checks if the given origin is a valid tenant subdomain

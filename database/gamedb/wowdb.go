@@ -82,6 +82,7 @@ type spellSource interface {
 	RangeSpells(context.Context, uuid.UUID, func(*chrondbc.Spell) bool) error
 	TotalSpells(context.Context, uuid.UUID) (int, error)
 	InvalidateDataset(uuid.UUID)
+	InvalidateAll()
 }
 
 // WoWDB holds all game data sources used during parsing and API serving.
@@ -415,33 +416,52 @@ func (w *WoWDB) registerInvalidators(cacheSvc *servicecache.Service) error {
 		return nil
 	}
 	type registration struct {
-		namespace servicecache.Namespace
-		name      string
-		handler   servicecache.InvalidationHandler
+		namespace      servicecache.Namespace
+		name           string
+		datasetHandler servicecache.InvalidationHandler
+		globalHandler  servicecache.InvalidationHandler
 	}
 	registrations := []registration{
 		{servicecache.NamespaceSpells, "wowdb_spells", func(_ context.Context, req servicecache.Invalidation) error {
 			w.spells.InvalidateDataset(req.DatasetID)
 			return nil
+		}, func(context.Context, servicecache.Invalidation) error {
+			w.spells.InvalidateAll()
+			return nil
 		}},
 		{servicecache.NamespaceItems, "wowdb_items", func(_ context.Context, req servicecache.Invalidation) error {
 			w.itemFetcher.invalidateDataset(req.DatasetID)
+			return nil
+		}, func(context.Context, servicecache.Invalidation) error {
+			w.itemFetcher.invalidateAll()
 			return nil
 		}},
 		{servicecache.NamespaceCreatures, "wowdb_creatures", func(_ context.Context, req servicecache.Invalidation) error {
 			w.creatureFetcher.invalidateDataset(req.DatasetID)
 			return nil
+		}, func(context.Context, servicecache.Invalidation) error {
+			w.creatureFetcher.invalidateAll()
+			return nil
 		}},
 		{servicecache.NamespaceExtraAttacks, "wowdb_extra_attacks", func(_ context.Context, req servicecache.Invalidation) error {
 			w.extraAttacks.Remove(req.DatasetID)
+			return nil
+		}, func(context.Context, servicecache.Invalidation) error {
+			w.extraAttacks.Purge()
 			return nil
 		}},
 		{servicecache.NamespaceDurationMods, "wowdb_duration_modifiers", func(_ context.Context, req servicecache.Invalidation) error {
 			w.durationMods.Remove(req.DatasetID)
 			return nil
+		}, func(context.Context, servicecache.Invalidation) error {
+			w.durationMods.Purge()
+			return nil
 		}},
 		{servicecache.NamespacePeriodicSpells, "wowdb_periodic_spells", func(_ context.Context, req servicecache.Invalidation) error {
 			w.periodicSpells.Remove(req.DatasetID)
+			return nil
+		}, func(context.Context, servicecache.Invalidation) error {
+			w.periodicSpells.Purge()
 			return nil
 		}},
 	}
@@ -449,11 +469,17 @@ func (w *WoWDB) registerInvalidators(cacheSvc *servicecache.Service) error {
 		registrations = append(registrations, registration{servicecache.NamespaceTalents, "wowdb_talents", func(_ context.Context, req servicecache.Invalidation) error {
 			w.talents.InvalidateDataset(req.DatasetID)
 			return nil
+		}, func(context.Context, servicecache.Invalidation) error {
+			w.talents.InvalidateAll()
+			return nil
 		}})
 	}
 	for _, registration := range registrations {
-		if err := cacheSvc.RegisterInvalidator(registration.namespace, servicecache.ScopeDataset, registration.name, registration.handler); err != nil {
-			return fmt.Errorf("register %s cache invalidator: %w", registration.namespace, err)
+		if err := cacheSvc.RegisterInvalidator(registration.namespace, servicecache.ScopeDataset, registration.name+"_dataset", registration.datasetHandler); err != nil {
+			return fmt.Errorf("register %s dataset cache invalidator: %w", registration.namespace, err)
+		}
+		if err := cacheSvc.RegisterInvalidator(registration.namespace, servicecache.ScopeGlobal, registration.name+"_global", registration.globalHandler); err != nil {
+			return fmt.Errorf("register %s global cache invalidator: %w", registration.namespace, err)
 		}
 	}
 	return nil

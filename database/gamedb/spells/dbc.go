@@ -64,6 +64,8 @@ func (f *DBCFetcher) TotalSpells(context.Context, uuid.UUID) (int, error) {
 	return f.dbc.Len(), nil
 }
 
+func (f *DBCFetcher) InvalidateAll() {}
+
 func (f *DBCFetcher) InvalidateDataset(uuid.UUID) {}
 
 func (f *DBCFetcher) loadNames() {

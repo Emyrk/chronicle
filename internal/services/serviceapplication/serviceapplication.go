@@ -107,8 +107,20 @@ func (s *Service) Start(_ context.Context) error {
 	return nil
 }
 
-func (s *Service) invalidateTenantCache(ctx context.Context) error {
-	return s.Cache.Invalidate(ctx, servicecache.GlobalInvalidation(servicecache.NamespaceTenantSlugs))
+func (s *Service) mutateTenant(ctx context.Context, mutate func(*authz.AuthzTX) error) error {
+	var published servicecache.PublishedGeneration
+	if err := s.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		if err := mutate(tx); err != nil {
+			return err
+		}
+		var err error
+		published, err = s.Cache.PublishTx(ctx, tx, servicecache.GlobalInvalidation(servicecache.NamespaceTenantSlugs))
+		return err
+	}, nil); err != nil {
+		return err
+	}
+	s.Cache.ApplyPublishedBestEffort(published)
+	return nil
 }
 
 func (s *Service) Close(_ context.Context) error { return nil }

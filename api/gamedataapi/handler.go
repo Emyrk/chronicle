@@ -2,13 +2,13 @@ package gamedataapi
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
@@ -30,17 +30,59 @@ func New(zed *authz.Authz, auth *chronauth.Service, pool *pgxpool.Pool, cacheSvc
 	return &Handler{zed: zed, auth: auth, pool: pool, cacheSvc: cacheSvc}
 }
 
-func (h *Handler) invalidateDataset(ctx context.Context, datasetID uuid.UUID, namespaces ...servicecache.Namespace) error {
+func (h *Handler) mutateDataset(ctx context.Context, datasetID uuid.UUID, namespaces []servicecache.Namespace, mutate func(database.Store) error) error {
+	store := database.New(h.pool)
+	var published []servicecache.PublishedGeneration
+	if err := store.InTx(ctx, func(tx database.Store) error {
+		if err := mutate(tx); err != nil {
+			return err
+		}
+		if h.cacheSvc == nil {
+			return nil
+		}
+		for _, namespace := range namespaces {
+			generation, err := h.cacheSvc.PublishTx(ctx, tx, servicecache.DatasetInvalidation(namespace, datasetID))
+			if err != nil {
+				return err
+			}
+			published = append(published, generation)
+		}
+		return nil
+	}, nil); err != nil {
+		return err
+	}
 	if h.cacheSvc == nil {
 		return nil
 	}
-	var errs []error
-	for _, namespace := range namespaces {
-		if err := h.cacheSvc.Invalidate(ctx, servicecache.DatasetInvalidation(namespace, datasetID)); err != nil {
-			errs = append(errs, err)
+	h.cacheSvc.ApplyPublishedBestEffort(published...)
+	return nil
+}
+
+func (h *Handler) mutateDatasetAuthz(ctx context.Context, datasetID uuid.UUID, namespaces []servicecache.Namespace, mutate func(*authz.AuthzTX) error) error {
+	var published []servicecache.PublishedGeneration
+	if err := h.zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		if err := mutate(tx); err != nil {
+			return err
 		}
+		if h.cacheSvc == nil {
+			return nil
+		}
+		for _, namespace := range namespaces {
+			generation, err := h.cacheSvc.PublishTx(ctx, tx, servicecache.DatasetInvalidation(namespace, datasetID))
+			if err != nil {
+				return err
+			}
+			published = append(published, generation)
+		}
+		return nil
+	}, nil); err != nil {
+		return err
 	}
-	return errors.Join(errs...)
+	if h.cacheSvc == nil {
+		return nil
+	}
+	h.cacheSvc.ApplyPublishedBestEffort(published...)
+	return nil
 }
 
 // datasetIDFromQuery parses the optional ?dataset_id= query param.
