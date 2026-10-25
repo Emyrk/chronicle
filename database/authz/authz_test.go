@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/internal/cosmetics"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
@@ -578,6 +579,27 @@ func TestInTx_NilWrapped(t *testing.T) {
 		return nil
 	}, nil)
 	assert.Error(t, err, "InTx should return an error, not panic")
+}
+
+func TestCosmeticCatalogDefaults(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(broker)
+
+	assignments, err := zed.ListCosmeticTierAssignments(ctx)
+	require.NoError(t, err)
+	assignedTiers := make(map[string]string, len(assignments))
+	for _, assignment := range assignments {
+		assignedTiers[assignment.CosmeticID] = assignment.Tier
+	}
+
+	catalog := cosmetics.Catalog()
+	require.Len(t, assignments, len(catalog), "the fixed catalog and default SpiceDB assignments must stay aligned")
+	for _, definition := range catalog {
+		require.Equal(t, string(definition.Tier), assignedTiers[definition.ID], definition.ID)
+	}
 }
 
 func TestCosmeticTierAuthorization(t *testing.T) {

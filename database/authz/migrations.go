@@ -183,9 +183,18 @@ func migration004(ctx context.Context, az *Authz) error {
 
 func migration006(ctx context.Context, az *Authz) error {
 	tiers := map[string][]string{
-		"honored": {"name-bold", "name-glow", "bar-glossy", "bar-fade"},
-		"revered": {"name-gilded", "name-frost", "bar-edge", "bar-gilded"},
-		"exalted": {"name-fel", "name-shimmer", "name-prismatic", "bar-shimmer", "bar-arcane", "bar-embers"},
+		"honored": {
+			"name_rare", "name_epic", "name_gilded", "name_frost", "name_ember", "name_argent",
+		},
+		"revered": {
+			"name_shimmer", "name_storm", "name_legendary", "name_holy",
+			"background_glossy", "background_gleam", "background_satin",
+		},
+		"exalted": {
+			"name_fel", "name_prismatic", "name_arcane", "name_thunderfury", "name_molten",
+			"background_arcane", "background_embers", "background_snowfall", "background_starfall",
+			"border_elite", "border_chasing", "border_storm",
+		},
 	}
 	for tier, ids := range tiers {
 		for _, id := range ids {

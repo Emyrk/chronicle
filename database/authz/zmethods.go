@@ -254,6 +254,12 @@ func setStripeEntitlementRole(ctx context.Context, authorizer Authorizer, userID
 			chronicle.Stripe_download_raw_logs(user)
 		case "stripe_unlisted_logs":
 			chronicle.Stripe_unlisted_logs(user)
+		case "stripe_honored":
+			chronicle.Stripe_honored(user)
+		case "stripe_revered":
+			chronicle.Stripe_revered(user)
+		case "stripe_exalted":
+			chronicle.Stripe_exalted(user)
 		default:
 			return fmt.Errorf("invalid Stripe entitlement role %q", role)
 		}
@@ -265,6 +271,12 @@ func setStripeEntitlementRole(ctx context.Context, authorizer Authorizer, userID
 			chronicle.Delete().Stripe_download_raw_logs(user)
 		case "stripe_unlisted_logs":
 			chronicle.Delete().Stripe_unlisted_logs(user)
+		case "stripe_honored":
+			chronicle.Delete().Stripe_honored(user)
+		case "stripe_revered":
+			chronicle.Delete().Stripe_revered(user)
+		case "stripe_exalted":
+			chronicle.Delete().Stripe_exalted(user)
 		default:
 			return fmt.Errorf("invalid Stripe entitlement role %q", role)
 		}
@@ -368,6 +380,12 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 			gChron.Manage_consumables(usr)
 		case "admin_raid_requirements", "is_admin_raid_requirements":
 			gChron.Is_admin_raid_requirements(usr)
+		case "honored":
+			gChron.Honored(usr)
+		case "revered":
+			gChron.Revered(usr)
+		case "exalted":
+			gChron.Exalted(usr)
 		default:
 			continue
 		}
@@ -396,14 +414,17 @@ func (z *Authz) ListAllowedCosmetics(ctx context.Context, userID uuid.UUID) ([]s
 	return ids, nil
 }
 
-// SetCosmeticTier replaces a cosmetic's tier assignment. Valid tiers are honored, revered, and exalted.
+// SetCosmeticTier replaces a cosmetic's tier assignment. An empty tier leaves it unassigned.
 func (z *Authz) SetCosmeticTier(ctx context.Context, cosmeticID, tier string) error {
-	if tier != "honored" && tier != "revered" && tier != "exalted" {
+	if tier != "" && tier != "honored" && tier != "revered" && tier != "exalted" {
 		return fmt.Errorf("invalid cosmetic tier %q", tier)
 	}
 	obj := policy.New().Cosmetic(stringID(cosmeticID)).Object()
 	if err := z.Delete(ctx, rel.NewPreconditionedFilter(rel.NewFilter(obj.Typ, obj.ID, ""))); err != nil {
 		return err
+	}
+	if tier == "" {
+		return nil
 	}
 	b := policy.New()
 	cosmetic := b.Cosmetic(stringID(cosmeticID))

@@ -63,7 +63,7 @@ func (s *Service) syncStripeEntitlements(ctx context.Context, customerID string)
 	if s.runEntitlementTransaction == nil {
 		return fmt.Errorf("billing entitlement transactions are not configured")
 	}
-	return s.runEntitlementTransaction(ctx, func(tx EntitlementTransaction) error {
+	if err := s.runEntitlementTransaction(ctx, func(tx EntitlementTransaction) error {
 		if persistedOwner != uuid.Nil && persistedOwner != userID {
 			if err := revokeAllStripeEntitlements(ctx, tx, persistedOwner); err != nil {
 				return fmt.Errorf("revoke previous Stripe owner's entitlements: %w", err)
@@ -105,7 +105,16 @@ func (s *Service) syncStripeEntitlements(ctx context.Context, customerID string)
 			granted[key] = struct{}{}
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+	if s.cosmeticAuditEnqueuer != nil {
+		_ = s.cosmeticAuditEnqueuer(ctx, userID)
+		if persistedOwner != uuid.Nil && persistedOwner != userID {
+			_ = s.cosmeticAuditEnqueuer(ctx, persistedOwner)
+		}
+	}
+	return nil
 }
 
 func revokeAllStripeEntitlements(ctx context.Context, tx EntitlementTransaction, userID uuid.UUID) error {

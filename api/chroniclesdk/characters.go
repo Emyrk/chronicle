@@ -26,6 +26,46 @@ type LinkedCharacter struct {
 	LinkedAt   time.Time `json:"linked_at"`
 }
 
+type CosmeticSelection struct {
+	NameID       string `json:"name_id"`
+	BackgroundID string `json:"background_id"`
+	BorderID     string `json:"border_id"`
+}
+
+type CharacterCosmetics struct {
+	LinkID    uuid.UUID         `json:"link_id"`
+	Requested CosmeticSelection `json:"requested"`
+	Active    CosmeticSelection `json:"active"`
+}
+
+type CosmeticDefinition struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Slot  string `json:"slot"`
+	Tier  string `json:"tier,omitempty"`
+}
+
+type CharacterCosmeticsResponse struct {
+	CanCustomize bool                 `json:"can_customize"`
+	AllowedIDs   []string             `json:"allowed_ids"`
+	Catalog      []CosmeticDefinition `json:"catalog"`
+	Characters   []CharacterCosmetics `json:"characters,omitempty"`
+}
+
+type UpdateCharacterCosmeticsRequest struct {
+	LinkID     uuid.UUID         `json:"link_id"`
+	Selection  CosmeticSelection `json:"selection"`
+	ApplyToAll bool              `json:"apply_to_all"`
+}
+
+type SetCosmeticTierRequest struct {
+	Tier string `json:"tier"`
+}
+
+type AdminCosmeticsResponse struct {
+	Catalog []CosmeticDefinition `json:"catalog"`
+}
+
 // CharacterLinkInfo describes who a character is linked to (admin view).
 type CharacterLinkInfo struct {
 	UserID        uuid.UUID  `json:"user_id"`

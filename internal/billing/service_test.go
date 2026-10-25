@@ -767,6 +767,11 @@ func TestSyncStripeEntitlementsPersistsAuthoritativeSnapshotAndStorageGrant(t *t
 	metrics, err := NewMetrics(prometheus.NewRegistry())
 	require.NoError(t, err)
 	s := New(Options{Store: store, Metrics: metrics})
+	var auditedUsers []uuid.UUID
+	s.SetCosmeticAuditEnqueuer(func(_ context.Context, userID uuid.UUID) error {
+		auditedUsers = append(auditedUsers, userID)
+		return errors.New("best-effort enqueue failure")
+	})
 	s.listActiveEntitlements = func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error) {
 		return []*stripe.EntitlementsActiveEntitlement{
 			{ID: "ent_revered", LookupKey: string(EntitlementChronicleRevered)},
@@ -783,9 +788,13 @@ func TestSyncStripeEntitlementsPersistsAuthoritativeSnapshotAndStorageGrant(t *t
 	require.Equal(t, stripePaidTierStorageGrantSource, store.deletedDataGrant.Source)
 	require.Equal(t, []entitlementRoleChange{
 		{userID: userID, role: stripeRoleAdFree, granted: true},
+		{userID: userID, role: stripeRoleHonored, granted: true},
 		{userID: userID, role: stripeRoleDownloadRawLogs, granted: true},
 		{userID: userID, role: stripeRoleUnlistedLogs, granted: true},
+		{userID: userID, role: stripeRoleRevered, granted: true},
+		{userID: userID, role: stripeRoleExalted, granted: false},
 	}, store.roleChanges)
+	require.Equal(t, []uuid.UUID{userID}, auditedUsers)
 	require.Equal(t, float64(1), metricValue(t, metrics.entitlementSyncs.WithLabelValues("success")))
 	require.Error(t, s.syncStripeEntitlements(context.Background(), ""))
 	require.Equal(t, float64(1), metricValue(t, metrics.entitlementSyncs.WithLabelValues("error")))
@@ -847,11 +856,17 @@ func TestSyncStripeEntitlementsTransfersOwnerAndAppliesRolePerEntitlement(t *tes
 	}, store.deletedDataGrants)
 	require.Equal(t, []entitlementRoleChange{
 		{userID: previousOwner, role: stripeRoleAdFree, granted: false},
+		{userID: previousOwner, role: stripeRoleHonored, granted: false},
 		{userID: previousOwner, role: stripeRoleDownloadRawLogs, granted: false},
 		{userID: previousOwner, role: stripeRoleUnlistedLogs, granted: false},
+		{userID: previousOwner, role: stripeRoleRevered, granted: false},
+		{userID: previousOwner, role: stripeRoleExalted, granted: false},
 		{userID: currentOwner, role: stripeRoleAdFree, granted: true},
+		{userID: currentOwner, role: stripeRoleHonored, granted: true},
 		{userID: currentOwner, role: stripeRoleDownloadRawLogs, granted: true},
 		{userID: currentOwner, role: stripeRoleUnlistedLogs, granted: true},
+		{userID: currentOwner, role: stripeRoleRevered, granted: true},
+		{userID: currentOwner, role: stripeRoleExalted, granted: false},
 	}, store.roleChanges)
 }
 

@@ -10,6 +10,9 @@ export interface PlayerRowCosmetic {
   /** Replaces the default bar fill. */
   barBackground?: string
   barClassName?: string
+  /** Drawn as an inset overlay around the full player row. */
+  borderClassName?: string
+  borderStyle?: CSSProperties
 }
 
 export interface PlayerMetricChartData {

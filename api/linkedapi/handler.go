@@ -24,6 +24,7 @@ import (
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/database/storage"
+	"github.com/Emyrk/chronicle/internal/cosmetics"
 	"github.com/Emyrk/chronicle/internal/services/serviceproof"
 )
 
@@ -31,7 +32,7 @@ type Handler struct {
 	zed       *authz.Authz
 	proofs    *serviceproof.Service
 	auth      *chronauth.Service
-	queue     chroniclebot.AdminNotificationInserter
+	queue     cosmetics.JobInserter
 	bot       *chroniclebot.Bot
 	accessURL *url.URL
 	// externalVerification is the deployment's external verification
@@ -60,6 +61,8 @@ func (h *Handler) Routes() http.Handler {
 
 		r.Route("/me", func(r chi.Router) {
 			r.Get("/", h.ListMyCharacters)
+			r.Get("/cosmetics", h.GetMyCharacterCosmetics)
+			r.Put("/cosmetics", h.UpdateMyCharacterCosmetics)
 			r.With(h.proofPermission(false)).Post("/proofs", h.SubmitProof)
 			r.Get("/proofs/cooldown", h.GetMyProofCooldown)
 			r.Get("/proofs", h.ListMyProofs)

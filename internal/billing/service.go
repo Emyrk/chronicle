@@ -9,6 +9,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/google/uuid"
 	"github.com/stripe/stripe-go/v87"
 )
 
@@ -65,8 +66,18 @@ type Service struct {
 	listSubscriptions          subscriptionLister
 	listActiveEntitlements     activeEntitlementLister
 
+	cosmeticAuditEnqueuer func(context.Context, uuid.UUID) error
+
 	pricesMu sync.Mutex
 	prices   []chroniclesdk.BillingPrice
+}
+
+// SetCosmeticAuditEnqueuer configures best-effort per-user cosmetic repair after
+// Stripe entitlement roles have been applied. The daily audit repairs missed jobs.
+func (s *Service) SetCosmeticAuditEnqueuer(enqueue func(context.Context, uuid.UUID) error) {
+	if s != nil {
+		s.cosmeticAuditEnqueuer = enqueue
+	}
 }
 
 func New(opts Options) *Service {
