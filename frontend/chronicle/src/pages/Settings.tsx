@@ -659,7 +659,7 @@ function LinkedCharacterRow({ character, cosmetic, cosmeticSummary, onCustomize,
 }
 
 export function CharacterSettings() {
-  const { data: siteConfig } = useSiteConfig();
+  const { data: siteConfig, isLoading: siteConfigLoading } = useSiteConfig();
   const photoProof = siteConfig?.tenant?.external_linking?.methods?.["photo-proof"];
   const { data: proofAccess, isLoading: proofAccessLoading, error: proofAccessError } = useAuthorizationCheck(
     { submit: `wow_tenant:${siteConfig?.tenant?.id ?? ""}#submit_photo_proof` },
@@ -745,13 +745,15 @@ export function CharacterSettings() {
         count={characters?.length}
         description="Characters verified as yours."
       >
-        {isLoading ? (
+        {isLoading || siteConfigLoading ? (
           <p className="text-sm text-muted-foreground">Loading characters...</p>
         ) : sortedCharacters.length === 0 ? (
           <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
             {hasLinkMethod
               ? "No characters are linked to your account yet. Use one of the methods below to link them."
-              : "Account linking is not supported for this server."}
+              : siteConfig?.tenant
+                ? "Account linking is not supported for this server."
+                : "No characters are linked to your account yet."}
           </div>
         ) : (
           <div className="divide-y rounded-lg border">
@@ -775,7 +777,7 @@ export function CharacterSettings() {
           </div>
         )}
 
-        {hasLinkMethod && (
+        {hasLinkMethod ? (
           <div className="space-y-3 pt-2">
             <h4 className="text-sm font-medium">Link more characters</h4>
             <ExternalVerificationCard />
@@ -796,7 +798,11 @@ export function CharacterSettings() {
               </div>
             ))}
           </div>
-        )}
+        ) : siteConfig && !siteConfig.tenant ? (
+          <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+            Character linking is configured per server. Visit a specific server&apos;s Chronicle site to link your characters.
+          </div>
+        ) : null}
         <PhotoProofHistory />
       </CharacterSection>
 
