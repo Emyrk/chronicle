@@ -188,11 +188,12 @@ func migration006(ctx context.Context, az *Authz) error {
 		},
 		"revered": {
 			"name_shimmer", "name_storm", "name_legendary", "name_holy",
-			"background_glossy", "background_gleam", "background_satin",
+			"background_glossy", "background_satin", "background_lustre", "background_sunlit", "background_frosted",
+			"background_quilted", "background_pinpoint", "background_inner_glow",
 		},
 		"exalted": {
 			"name_fel", "name_prismatic", "name_arcane", "name_thunderfury", "name_molten",
-			"background_arcane", "background_embers", "background_snowfall", "background_starfall",
+			"background_gleam", "background_chainmail", "background_arcane", "background_embers", "background_snowfall", "background_starfall",
 			"border_elite", "border_chasing", "border_storm",
 		},
 	}
