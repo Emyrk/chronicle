@@ -9,6 +9,7 @@ const Login = lazy(() => import("./pages/Login/Login").then(({ Login }) => ({ de
 const Contact = lazy(() => import("./pages/Contact").then(({ Contact }) => ({ default: Contact })))
 const BecomeSupporter = lazy(() => import("./pages/BecomeSupporter").then(({ BecomeSupporter }) => ({ default: BecomeSupporter })))
 const Privacy = lazy(() => import("./pages/Privacy").then(({ Privacy }) => ({ default: Privacy })))
+const RefundPolicy = lazy(() => import("./pages/RefundPolicy").then(({ RefundPolicy }) => ({ default: RefundPolicy })))
 const Disclaimer = lazy(() => import("./pages/Disclaimer").then(({ Disclaimer }) => ({ default: Disclaimer })))
 const SupportedInstances = lazy(() => import("./pages/SupportedInstances").then(({ SupportedInstances }) => ({ default: SupportedInstances })))
 const Terms = lazy(() => import("./pages/Terms").then(({ Terms }) => ({ default: Terms })))
@@ -248,6 +249,7 @@ function App() {
         <Route path="/supporter" element={<BecomeSupporter />} />
         <Route path="/revered" element={<Navigate to="/supporter" replace />} />
         <Route path="/privacy" element={<Privacy />} />
+        <Route path="/refund-policy" element={<RefundPolicy />} />
         <Route path="/disclaimer" element={<Disclaimer />} />
         <Route path="/supported" element={<SupportedInstances />} />
         <Route path="/terms" element={<Terms />} />

@@ -215,7 +215,7 @@ export function SupporterOverview({ billing, panel }: { billing?: BillingSummary
       </div>
 
       <p className="text-center text-sm text-muted-foreground">
-        For any billing issues, contact{" "}
+        Review our <Link className="text-[#f0c060] underline decoration-[#f0c060]/40 underline-offset-4 hover:text-[#ffd580]" to="/refund-policy">refund policy</Link>. For any billing issues, contact{" "}
         <a className="text-[#f0c060] underline decoration-[#f0c060]/40 underline-offset-4 hover:text-[#ffd580]" href="mailto:support@chronicleclassic.com">
           support@chronicleclassic.com
         </a>
@@ -1016,7 +1016,7 @@ function TierSubscriptionSettings({ billing }: { billing: BillingSummary }) {
       </details>
 
       <p className="text-center text-sm text-muted-foreground">
-        For any billing issues, contact{" "}
+        Review our <Link className="text-[#f0c060] underline decoration-[#f0c060]/40 underline-offset-4 hover:text-[#ffd580]" to="/refund-policy">refund policy</Link>. For any billing issues, contact{" "}
         <a className="text-[#f0c060] underline decoration-[#f0c060]/40 underline-offset-4 hover:text-[#ffd580]" href="mailto:support@chronicleclassic.com">
           support@chronicleclassic.com
         </a>

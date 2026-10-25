@@ -31,6 +31,8 @@ describe("Footer", () => {
 
     expect(markup).toContain('href="/blog"');
     expect(markup).not.toContain('data-router-link="true" href="/blog"');
+    expect(markup).toContain('data-router-link="true" href="/refund-policy"');
+    expect(markup).toContain("Refund Policy");
   });
 
   it("hides supporter billing when billing is disabled", () => {

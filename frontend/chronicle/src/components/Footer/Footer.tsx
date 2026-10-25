@@ -145,6 +145,12 @@ export function Footer() {
               >
                 Terms of Service
               </Link>
+              <Link
+                to="/refund-policy"
+                className="hover:text-foreground transition-colors"
+              >
+                Refund Policy
+              </Link>
               <a
                 href={ADS_URL}
                 className="hover:text-foreground transition-colors"
