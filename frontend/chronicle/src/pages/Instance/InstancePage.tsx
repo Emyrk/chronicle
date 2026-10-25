@@ -26,6 +26,7 @@ import { useFocusMode } from "@/hooks/useFocusMode";
 import { InstanceAssistantChat } from "@/features/chat/InferenceChats";
 import { AdSuppressionProvider } from "@/components/Ads/AdSuppressionProvider";
 import { AdSlot } from "@/components/Ads/AdSlot";
+import { shouldShowAdPreview } from "@/components/Ads/adPreview";
 import { useAdSiteConfig } from "@/components/Ads/useAdSiteConfig";
 import { getReplayResetTimestamp, type SelectedEncounterTimes } from "./replaySelection";
 import { shouldShowInstanceAdRail } from "./instanceAdRail";
@@ -482,8 +483,13 @@ export function InstancePage() {
   const { data: session } = useSession();
   const adSiteConfig = useAdSiteConfig();
   const ownerAdsFree = apiInstance?.owner_ads_free === true;
+  const previewAdsEnabled = shouldShowAdPreview(
+    window.location.hostname,
+    import.meta.env.DEV && import.meta.env.CHRONICLE_PREVIEW_ADS,
+  );
   const showAdRail = shouldShowInstanceAdRail({
     adsEnabled: adSiteConfig?.ads_enabled === true,
+    previewEnabled: previewAdsEnabled,
     focused,
     ownerAdsFree,
     viewerAdsFree: session?.ads_free === true,
