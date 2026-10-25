@@ -846,7 +846,7 @@ function TimelineStep({ state, title, last, children }: { state: TimelineStepSta
 }
 
 /** Explains what a canceled subscription means: no renewal charge, rewards until the period ends, then back to Friendly. */
-function CancellationTimeline({
+export function CancellationTimeline({
   tierLabel,
   hasTierAccess,
   subscriptionEnded,
@@ -875,17 +875,7 @@ function CancellationTimeline({
         </TimelineStep>
         <TimelineStep state={hasTierAccess ? "current" : "done"} title={hasTierAccess ? `You're still ${tierLabel}` : `${tierLabel} access ended`}>
           {hasTierAccess ? (
-            <>
-              <p>You already paid for this period, so every reward stays active{displayDate ? ` until ${displayDate}` : " until it ends"}.</p>
-              <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-                {REWARDS.map((reward) => (
-                  <li key={reward.title} className="flex items-center gap-2 rounded border border-white/10 bg-black/20 px-2 py-1.5 text-zinc-200">
-                    <img src={iconUrl(reward.icon)} alt="" aria-hidden="true" width={24} height={24} className="size-6 rounded border border-yellow-600/60" />
-                    <span className="text-xs">{reward.title}</span>
-                  </li>
-                ))}
-              </ul>
-            </>
+            <p>Your current supporter benefits stay active{displayDate ? ` until ${displayDate}` : " until your paid period ends"}.</p>
           ) : (
             <p>Your paid period is over and supporter rewards are no longer active.</p>
           )}

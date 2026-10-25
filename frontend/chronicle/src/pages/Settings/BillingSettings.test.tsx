@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { MemoryRouter } from "react-router-dom"
 import type { BillingSummary } from "@/api/typesGenerated"
 import { describe, expect, it } from "vitest"
-import { BillingSignInPrompt, SupporterOverview } from "./BillingSettings"
+import { BillingSignInPrompt, CancellationTimeline, SupporterOverview } from "./BillingSettings"
 
 describe("BillingSignInPrompt", () => {
   it("returns signed-out users to billing after sign in", () => {
@@ -35,6 +35,20 @@ function renderSupporterOverview(tier: "honored" | "revered") {
     </MemoryRouter>,
   )
 }
+
+describe("CancellationTimeline", () => {
+  it("describes retained access without listing individual benefits", () => {
+    const markup = renderToStaticMarkup(
+      <CancellationTimeline tierLabel="Revered" hasTierAccess subscriptionEnded={false} displayDate="1/25/2027" />,
+    )
+
+    expect(markup).toContain("Your current supporter benefits stay active until 1/25/2027.")
+    expect(markup).not.toContain("Ad-Free Browsing")
+    expect(markup).not.toContain("Expanded Log Storage")
+    expect(markup).not.toContain("Raw Log Downloads")
+    expect(markup).not.toContain("Unlisted Logs")
+  })
+})
 
 describe("SupporterOverview", () => {
   it("keeps raw downloads and unlisted logs locked at Honored", () => {
