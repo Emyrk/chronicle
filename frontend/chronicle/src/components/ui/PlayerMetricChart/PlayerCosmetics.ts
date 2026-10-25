@@ -223,7 +223,7 @@ export const BACKGROUND_STYLES = {
     label: 'Starfall',
     tier: 'Exalted',
     description: 'Stars twinkle in and out across the background.',
-    cosmetic: { barClassName: 'cosmetic-bar-starfall', barBackground: DEFAULT_BAR },
+    cosmetic: { barClassName: 'cosmetic-bar-starfall', barBackground: `radial-gradient(circle at 28% 46%, oklch(1 0 0 / 0.45) 0 0.6px, transparent 1.2px) 0 0 / 236px 100%, radial-gradient(circle at 45% 13%, oklch(1 0 0 / 0.45) 0 0.5px, transparent 1.1px) 0 0 / 254px 100%, radial-gradient(circle at 18% 29%, oklch(1 0 0 / 0.45) 0 0.7px, transparent 1.3px) 0 0 / 213px 100%, radial-gradient(circle at 4% 19%, oklch(1 0 0 / 0.45) 0 0.6px, transparent 1.2px) 0 0 / 269px 100%, radial-gradient(circle at 25% 83%, oklch(1 0 0 / 0.45) 0 0.7px, transparent 1.3px) 0 0 / 198px 100%, radial-gradient(circle at 27% 28%, oklch(1 0 0 / 0.45) 0 0.6px, transparent 1.2px) 0 0 / 257px 100%, ${DEFAULT_BAR}` },
     flashy: true,
   },
 } satisfies Record<string, Preset>
@@ -413,20 +413,35 @@ export const COSMETIC_CSS = `
   content: '';
   position: absolute;
   inset: 0;
-  animation: cosmetic-twinkle 2.6s ease-in-out infinite;
 }
+/* Scattered single stars on wide tiles; the two layers twinkle on unrelated periods. */
 .cosmetic-bar-starfall::before {
   background-image:
-    radial-gradient(circle at 30% 30%, #fff 0 1px, transparent 1.6px),
-    radial-gradient(circle at 80% 70%, #fff7d6 0 0.8px, transparent 1.3px);
-  background-size: 53px 100%, 31px 100%;
+    radial-gradient(circle at 74% 71%, #ffffff 0 1.0px, transparent 1.6px),
+    radial-gradient(circle at 78% 36%, #fff7d6 0 1.1px, transparent 1.7px),
+    radial-gradient(circle at 63% 35%, #d9e8ff 0 1.2px, transparent 1.8px),
+    radial-gradient(circle at 21% 23%, #ffffff 0 1.0px, transparent 1.6px),
+    radial-gradient(circle at 91% 17%, #fff7d6 0 1.2px, transparent 1.8px),
+    radial-gradient(circle at 60% 32%, #d9e8ff 0 1.3px, transparent 1.9px),
+    radial-gradient(circle at 70% 20%, #ffffff 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 33% 88%, #fff7d6 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 44% 68%, #d9e8ff 0 1.2px, transparent 1.8px);
+  background-size: 265px 100%, 197px 100%, 174px 100%, 287px 100%, 302px 100%, 309px 100%, 165px 100%, 157px 100%, 301px 100%;
+  animation: cosmetic-twinkle 3.1s ease-in-out infinite;
 }
 .cosmetic-bar-starfall::after {
   background-image:
-    radial-gradient(circle at 60% 60%, #fff 0 1.2px, transparent 1.8px),
-    radial-gradient(circle at 15% 80%, #d9e8ff 0 0.8px, transparent 1.3px);
-  background-size: 43px 100%, 71px 100%;
-  animation-delay: -1.3s;
+    radial-gradient(circle at 69% 41%, #ffffff 0 1.1px, transparent 1.7px),
+    radial-gradient(circle at 3% 22%, #d9e8ff 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 55% 82%, #fff7d6 0 1.0px, transparent 1.6px),
+    radial-gradient(circle at 43% 41%, #ffffff 0 1.1px, transparent 1.7px),
+    radial-gradient(circle at 11% 84%, #d9e8ff 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 40% 61%, #fff7d6 0 0.9px, transparent 1.5px),
+    radial-gradient(circle at 90% 12%, #ffffff 0 1.2px, transparent 1.8px),
+    radial-gradient(circle at 9% 72%, #d9e8ff 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 53% 65%, #fff7d6 0 1.2px, transparent 1.8px);
+  background-size: 313px 100%, 267px 100%, 171px 100%, 281px 100%, 177px 100%, 167px 100%, 204px 100%, 246px 100%, 168px 100%;
+  animation: cosmetic-twinkle 4.3s ease-in-out -1.7s infinite;
 }
 .cosmetic-border-elite {
   --elite: #f5d27a;
