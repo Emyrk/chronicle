@@ -199,8 +199,8 @@ type SiteConfig struct {
 	// ClientUploadsDisabled indicates that this server uses server-side logging
 	// and client-side uploads should be hidden from the UI.
 	ClientUploadsDisabled bool `json:"client_uploads_disabled"`
-	// BillingEnabled is true when the deployment has configured its expected
-	// Stripe account ID, allowing billing links to be shown in the UI.
+	// BillingEnabled is true when the deployment has fully configured Stripe
+	// billing, allowing billing links to be shown in the UI.
 	BillingEnabled bool `json:"billing_enabled"`
 	// AdsEnabled is true only when the resolved tenant or root site opted into ads
 	// and the deployment configured both ads.txt and a NitroPay site ID.
