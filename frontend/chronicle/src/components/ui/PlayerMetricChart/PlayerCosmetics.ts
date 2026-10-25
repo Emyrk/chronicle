@@ -1,5 +1,4 @@
-import type { CosmeticDefinition, CosmeticSelection } from '@/api/typesGenerated'
-import type { CharacterCosmeticsDisplayMode } from '@/api/characterCosmetics'
+import type { CharacterCosmeticsDisplayMode, CosmeticDefinition, CosmeticSelection } from '@/api/typesGenerated'
 import type { PlayerRowCosmetic } from './PlayerMetricChartModel'
 
 export type Tier = 'Free' | 'Honored' | 'Revered' | 'Exalted'

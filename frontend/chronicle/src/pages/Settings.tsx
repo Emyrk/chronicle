@@ -31,12 +31,8 @@ import {
   useAuthorizationCheck,
   type UserPanelLayout,
 } from "@/api/queries";
-import {
-  useUpdateCharacterCosmeticsPreference,
-  type CharacterCosmeticsDisplayMode,
-  type SessionWithCharacterCosmetics,
-} from "@/api/characterCosmetics";
-import type { CreateUserPanelLayoutRequest, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles } from "@/api/typesGenerated";
+import { useUpdateCharacterCosmeticsPreference } from "@/api/characterCosmetics";
+import type { CharacterCosmeticsDisplayMode, CreateUserPanelLayoutRequest, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles } from "@/api/typesGenerated";
 import { COSMETIC_CSS, combineCosmetics, selectionFromAPI, selectionSummary, selectionToAPI, supporterTier, type CosmeticStyleSelection } from "@/components/ui/PlayerMetricChart/PlayerCosmetics";
 import { CharacterCosmeticsEditor, MiniRow, TierBadge } from "@/features/characterCosmetics/CharacterCosmeticsEditor";
 import type { PlayerRowCosmetic } from "@/components/ui/PlayerMetricChart/PlayerMetricChartModel";
@@ -258,8 +254,7 @@ const CHARACTER_COSMETICS_OPTIONS: readonly {
 ];
 
 export function ProfileSettings() {
-  const { data: baseSession } = useSession();
-  const session = baseSession as SessionWithCharacterCosmetics | null | undefined;
+  const { data: session } = useSession();
   const updateCharacterCosmetics = useUpdateCharacterCosmeticsPreference();
   const [resending, setResending] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);

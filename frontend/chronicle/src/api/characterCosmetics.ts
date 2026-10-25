@@ -1,21 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CosmeticSelection, Preferences, Session } from "./typesGenerated";
+import type {
+  CharacterCosmeticsDisplayMode,
+  InstanceCosmeticsResponse,
+  Preferences,
+  Session,
+} from "./typesGenerated";
 
-/** Mirrors the generated API contract so this frontend change can build independently. */
-export type CharacterCosmeticsDisplayMode = "enabled" | "limited" | "disabled";
-
-/** Mirrors the compact instance cosmetics API response. */
-export interface InstanceCosmeticsResponse {
-  readonly players: Record<string, CosmeticSelection>;
-}
-
-export type CharacterCosmeticsPreferences = Preferences & {
-  readonly character_cosmetics?: CharacterCosmeticsDisplayMode;
-};
-
-export type SessionWithCharacterCosmetics = Omit<Session, "preferences"> & {
-  readonly preferences: CharacterCosmeticsPreferences;
-};
+export type { CharacterCosmeticsDisplayMode } from "./typesGenerated";
 
 export function useInstanceCosmetics(instanceId: string, enabled: boolean) {
   return useQuery({
@@ -41,10 +32,10 @@ export function useUpdateCharacterCosmeticsPreference() {
         body: JSON.stringify({ character_cosmetics: characterCosmetics }),
       });
       if (!response.ok) throw new Error("Failed to update character cosmetics preference");
-      return response.json() as Promise<CharacterCosmeticsPreferences>;
+      return response.json() as Promise<Preferences>;
     },
     onSuccess: (preferences) => {
-      queryClient.setQueryData<SessionWithCharacterCosmetics | null>(["session"], (session) => (
+      queryClient.setQueryData<Session | null>(["session"], (session) => (
         session ? { ...session, preferences } : session
       ));
       queryClient.invalidateQueries({ queryKey: ["session"] });

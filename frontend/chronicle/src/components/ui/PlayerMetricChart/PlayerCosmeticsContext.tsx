@@ -1,12 +1,11 @@
 /* eslint-disable react-refresh/only-export-components -- Provider and hook are intentionally colocated. */
 import { createContext, useContext, useMemo } from "react";
 import { useSession } from "@/api/queries";
-import {
-  useInstanceCosmetics,
-  type CharacterCosmeticsDisplayMode,
-  type InstanceCosmeticsResponse,
-  type SessionWithCharacterCosmetics,
-} from "@/api/characterCosmetics";
+import { useInstanceCosmetics } from "@/api/characterCosmetics";
+import type {
+  CharacterCosmeticsDisplayMode,
+  InstanceCosmeticsResponse,
+} from "@/api/typesGenerated";
 import {
   COSMETIC_CSS,
   combineCosmetics,
@@ -49,8 +48,7 @@ export function PlayerCosmeticsProvider({
   instanceId: string;
   children: React.ReactNode;
 }) {
-  const { data: baseSession } = useSession();
-  const session = baseSession as SessionWithCharacterCosmetics | null | undefined;
+  const { data: session } = useSession();
   const mode = session?.preferences.character_cosmetics ?? "enabled";
   const { data } = useInstanceCosmetics(instanceId, mode !== "disabled");
   const cosmetics = useMemo(

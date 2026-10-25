@@ -27,6 +27,10 @@ func (api *API) InstanceCosmetics(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Cosmetics can change independently of immutable combat-log data. Keep the
+	// network response fresh and let the frontend's instance-scoped query cache
+	// provide the short-lived reuse needed across panels.
+	w.Header().Set("Cache-Control", "no-store")
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceCosmeticsResponse{
 		Players: players,
 	})

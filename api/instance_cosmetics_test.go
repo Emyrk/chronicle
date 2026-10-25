@@ -120,6 +120,7 @@ func TestInstanceCosmeticsRealmAwareAndActiveOnly(t *testing.T) {
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
 
 	var result chroniclesdk.InstanceCosmeticsResponse
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
