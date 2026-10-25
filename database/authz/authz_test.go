@@ -361,6 +361,22 @@ func TestPhotoProofPermissions(t *testing.T) {
 		})
 	}
 
+	// A cached client can still ask for the removed global permission names.
+	// Existing global relationships must not grant access or turn that check
+	// into a SpiceDB schema error during a rolling deployment.
+	legacy := policy.New()
+	legacy.GlobalChronicle().Photo_proof_submitter(legacy.User(applicant))
+	legacy.GlobalChronicle().Photo_proof_reviewer(legacy.User(reviewer))
+	_, err = zed.Write(ctx, *legacy.Txn())
+	require.NoError(t, err)
+	legacyAllowed, err := zed.Check(ctx, nil,
+		legacy.GlobalChronicle().CanSubmit_photo_proof_User(legacy.User(applicant)),
+		legacy.GlobalChronicle().CanReview_photo_proof_User(legacy.User(reviewer)),
+		legacy.GlobalChronicle().CanReview_photo_proof_User(legacy.User(siteAdmin)),
+	)
+	require.NoError(t, err)
+	require.Equal(t, []bool{false, false, false}, legacyAllowed)
+
 	grants, err := zed.TenantProofGrants(ctx, tenantA)
 	require.NoError(t, err)
 	require.Len(t, grants, 2)

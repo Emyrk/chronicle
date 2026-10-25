@@ -19,6 +19,12 @@ definition chronicle {
   relation technical_user: user
   relation supporter: user
 
+  // Deprecated compatibility names for clients cached before tenant-scoped
+  // proof roles shipped. Never confer access: the current API checks tenant
+  // permissions (or admin_users on the root domain) instead.
+  relation photo_proof_submitter: user
+  relation photo_proof_reviewer: user
+
   // Stripe-owned feature roles granted by Chronicle billing entitlements.
   relation stripe_ad_free: user
   relation stripe_download_raw_logs: user
@@ -67,6 +73,11 @@ definition chronicle {
   permission admin_consumables = administer + manage_consumables
 
   permission admin_servers = technical_admin
+
+  // Old browser bundles may still ask for these global permissions. Return
+  // denied instead of a schema error; never resurrect cross-tenant access.
+  permission submit_photo_proof = photo_proof_submitter - photo_proof_submitter
+  permission review_photo_proof = photo_proof_reviewer - photo_proof_reviewer
 
   permission create_tenant_application = technical_admin + chronicle_guild_member
 }
