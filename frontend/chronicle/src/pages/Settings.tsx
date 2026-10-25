@@ -26,6 +26,7 @@ import {
   useUpdateActionBarSlots,
   useLogGroups,
   useSiteConfig,
+  useAuthorizationCheck,
   type UserPanelLayout,
 } from "@/api/queries";
 import type { CreateUserPanelLayoutRequest, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles } from "@/api/typesGenerated";
@@ -445,6 +446,10 @@ function ExternalVerificationCard() {
 export function CharacterSettings() {
   const { data: siteConfig } = useSiteConfig();
   const photoProof = siteConfig?.tenant?.external_linking?.methods?.["photo-proof"];
+  const { data: proofAccess, isLoading: proofAccessLoading } = useAuthorizationCheck(
+    { submit: "chronicle:chronicle#submit_photo_proof" },
+    { enabled: !!photoProof?.enabled },
+  );
   const { data: characters, isLoading } = useMyCharacters();
   const favorites = useMyFavorites();
   const setPrimary = useSetPrimaryCharacter();
@@ -481,7 +486,17 @@ export function CharacterSettings() {
       <FavoritesList data={favorites.data} isLoading={favorites.isLoading} />
 
       <ExternalVerificationCard />
-      {photoProof?.enabled && <PhotoProofCard callout={photoProof.callout} />}
+      {photoProof?.enabled && (proofAccessLoading ? (
+        <p className="text-sm text-muted-foreground">Checking photo proof access...</p>
+      ) : proofAccess?.submit ? (
+        <PhotoProofCard callout={photoProof.callout} />
+      ) : (
+        <div className="rounded-lg border p-4 space-y-2">
+          <h3 className="font-medium">Link with photo proof</h3>
+          {photoProof.callout && <p className="text-sm text-muted-foreground">{photoProof.callout}</p>}
+          <p className="text-sm text-muted-foreground">Photo proof applications are not available to your account yet.</p>
+        </div>
+      ))}
       <PhotoProofHistory />
 
       {isLoading ? (

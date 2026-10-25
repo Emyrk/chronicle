@@ -322,6 +322,51 @@ func TestGuildDiscordBotPermissions(t *testing.T) {
 	checkManage(t, leaderID, false)
 }
 
+func TestPhotoProofPermissions(t *testing.T) {
+	t.Parallel()
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+
+	for _, tc := range []struct {
+		name   string
+		roles  []string
+		submit bool
+		review bool
+	}{
+		{"member", nil, false, false},
+		{"applicant", []string{"photo_proof_submitter"}, true, false},
+		{"moderator", []string{"photo_proof_reviewer"}, false, true},
+		{"user admin", []string{"is_admin_users"}, false, true},
+		{"site admin", []string{"admin"}, true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := testutil.Context(t, testutil.WaitLong)
+			userID := uuid.New()
+			require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, tc.roles))
+			b := policy.New()
+			allowed, err := zed.Check(ctx, nil,
+				b.GlobalChronicle().CanSubmit_photo_proof_User(b.User(userID)),
+				b.GlobalChronicle().CanReview_photo_proof_User(b.User(userID)),
+			)
+			require.NoError(t, err)
+			require.Equal(t, []bool{tc.submit, tc.review}, allowed)
+			if tc.name == "moderator" {
+				canManageUsers, err := zed.CheckOne(ctx, nil, b.GlobalChronicle().CanAdmin_users_User(b.User(userID)))
+				require.NoError(t, err)
+				require.False(t, canManageUsers)
+			}
+			require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, nil))
+			allowed, err = zed.Check(ctx, nil,
+				b.GlobalChronicle().CanSubmit_photo_proof_User(b.User(userID)),
+				b.GlobalChronicle().CanReview_photo_proof_User(b.User(userID)),
+			)
+			require.NoError(t, err)
+			require.Equal(t, []bool{false, false}, allowed)
+		})
+	}
+}
+
 func TestSetUserChronicleRolesSupportsAdFreeCapability(t *testing.T) {
 	t.Parallel()
 

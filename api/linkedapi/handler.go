@@ -58,7 +58,7 @@ func (h *Handler) Routes() http.Handler {
 
 		r.Route("/me", func(r chi.Router) {
 			r.Get("/", h.ListMyCharacters)
-			r.Post("/proofs", h.SubmitProof)
+			r.With(httpmw.Can(h.zed, policy.New().GlobalChronicle().CanSubmit_photo_proof_User)).Post("/proofs", h.SubmitProof)
 			r.Get("/proofs", h.ListMyProofs)
 			r.Put("/primary", h.SetMyPrimaryCharacter)
 			// Sync links from the deployment's external verification
@@ -70,15 +70,20 @@ func (h *Handler) Routes() http.Handler {
 			r.Delete("/{realmID}/{characterGUID}", h.UnlinkMyCharacter)
 		})
 
+		// Proof review can be granted to moderators without granting user admin.
+		r.Group(func(r chi.Router) {
+			r.Use(httpmw.Can(h.zed, policy.New().GlobalChronicle().CanReview_photo_proof_User))
+			r.Get("/admin/proofs", h.ListAdminProofs)
+			r.Get("/admin/proofs/{id}/image", h.ProofImage)
+			r.Post("/admin/proofs/{id}/decision", h.DecideProof)
+		})
+
 		// Admin surface.
 		r.Group(func(r chi.Router) {
 			r.Use(
 				httpmw.Can(h.zed, policy.New().GlobalChronicle().CanAdmin_users_User),
 			)
 			r.Get("/characters/{realmID}/{characterGUID}", h.AdminGetCharacterLink)
-			r.Get("/admin/proofs", h.ListAdminProofs)
-			r.Get("/admin/proofs/{id}/image", h.ProofImage)
-			r.Post("/admin/proofs/{id}/decision", h.DecideProof)
 			r.Route("/users/{userID}", func(r chi.Router) {
 				r.Get("/", h.AdminListUserCharacters)
 				r.Post("/", h.AdminLinkUserCharacter)

@@ -37,6 +37,7 @@ const tabs: Tab[] = [
   { path: "/admin/logs", label: "Logs", icon: FileText },
   { path: "/admin/leaderboard", label: "Leaderboard", icon: Trophy },
   { path: "/admin/site-settings", label: "Site Settings", icon: Shield },
+  { path: "/admin/photo-proofs", label: "Photo Proof Review", icon: Camera },
   { path: "/admin/users", label: "Manage Users", icon: Users },
   { path: "/admin/storage", label: "Storage Grants", icon: HardDrive },
   { path: "/admin/regression", label: "Regression", icon: FlaskConical },
@@ -58,6 +59,7 @@ export function AdminLayout() {
   const authzChecks = useMemo(
     () => ({
       admin: "chronicle:chronicle#admin_users",
+      proofReviewer: "chronicle:chronicle#review_photo_proof",
     }),
     [],
   );
@@ -65,6 +67,7 @@ export function AdminLayout() {
     enabled: isAuthenticated,
   });
   const isAdmin = authz?.admin ?? false;
+  const canReviewProofs = authz?.proofReviewer ?? false;
   const { data: noticeResponse } = useAdminTelemetryNotices({ enabled: isAdmin });
 
   const sessionLoading = authLoading || authzLoading;
@@ -82,7 +85,7 @@ export function AdminLayout() {
     );
   }
 
-  if (!isAdmin) {
+  if (!isAdmin && (!canReviewProofs || location.pathname !== "/admin/photo-proofs")) {
     return (
       <div className="max-w-4xl mx-auto p-8">
         <Card className="p-6">
@@ -102,7 +105,7 @@ export function AdminLayout() {
 
   const renderNavLinks = (closeOnNavigate: boolean) => (
     <ul className="space-y-1">
-      {tabs.map((tab) => (
+      {tabs.filter((tab) => isAdmin || tab.path === "/admin/photo-proofs").map((tab) => (
         <li key={tab.path}>
           <Link
             to={tab.path}
