@@ -18,6 +18,9 @@ type Inserter struct {
 
 	originalState sourceState
 	insertedState sourceState
+
+	hasOriginalWatermark bool
+	originalWatermark    time.Time
 }
 
 type sourceState struct {
@@ -32,10 +35,10 @@ func NewInserter(original, inserted MessageSource) *Inserter {
 }
 
 func (i *Inserter) Advance(ctx context.Context) ([]messages.Message, error) {
-	if err := fill(ctx, i.original, &i.originalState, "original"); err != nil {
+	if err := fill(ctx, i.original, &i.originalState, "original", false); err != nil {
 		return nil, err
 	}
-	if err := fill(ctx, i.inserted, &i.insertedState, "inserted"); err != nil {
+	if err := fill(ctx, i.inserted, &i.insertedState, "inserted", true); err != nil {
 		return nil, err
 	}
 
@@ -50,8 +53,7 @@ func (i *Inserter) Advance(ctx context.Context) ([]messages.Message, error) {
 		return inserted, nil
 	}
 	if len(inserted) == 0 {
-		i.originalState.buffer = nil
-		return original, nil
+		return i.takeOriginal(len(original)), nil
 	}
 
 	if inserted[0].Date().Before(original[0].Date()) {
@@ -64,18 +66,44 @@ func (i *Inserter) Advance(ctx context.Context) ([]messages.Message, error) {
 		return out, nil
 	}
 
-	// Originals win equal timestamps. Return every original that belongs before
-	// the next inserted message, preserving its batch order.
-	end := 1
-	for end < len(original) && !original[end].Date().After(inserted[0].Date()) {
+	// Originals win equal timestamps. If the original stream regresses, preserve
+	// that regression, but first release inserted messages that were waiting at
+	// the prior original timestamp.
+	end := 0
+	watermark, hasWatermark := i.originalWatermark, i.hasOriginalWatermark
+	for end < len(original) {
+		date := original[end].Date()
+		if hasWatermark && date.Before(watermark) && !inserted[0].Date().After(watermark) {
+			break
+		}
+		if date.After(inserted[0].Date()) {
+			break
+		}
+		watermark, hasWatermark = date, true
 		end++
 	}
-	out := original[:end]
-	i.originalState.buffer = original[end:]
+	if end > 0 {
+		return i.takeOriginal(end), nil
+	}
+
+	end = 1
+	for end < len(inserted) && !inserted[end].Date().After(i.originalWatermark) {
+		end++
+	}
+	out := inserted[:end]
+	i.insertedState.buffer = inserted[end:]
 	return out, nil
 }
 
-func fill(ctx context.Context, source MessageSource, state *sourceState, name string) error {
+func (i *Inserter) takeOriginal(end int) []messages.Message {
+	out := i.originalState.buffer[:end]
+	i.originalState.buffer = i.originalState.buffer[end:]
+	i.originalWatermark = out[len(out)-1].Date()
+	i.hasOriginalWatermark = true
+	return out
+}
+
+func fill(ctx context.Context, source MessageSource, state *sourceState, name string, validateOrder bool) error {
 	for len(state.buffer) == 0 && !state.eof {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -88,7 +116,7 @@ func fill(ctx context.Context, source MessageSource, state *sourceState, name st
 			if message == nil {
 				return fmt.Errorf("%s source returned nil message at batch index %d", name, index)
 			}
-			if state.hasLast && message.Date().Before(state.last) {
+			if validateOrder && state.hasLast && message.Date().Before(state.last) {
 				return fmt.Errorf("%s source timestamp regression: %s before %s", name, message.Date(), state.last)
 			}
 			state.last = message.Date()

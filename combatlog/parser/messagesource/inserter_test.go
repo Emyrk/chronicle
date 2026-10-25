@@ -62,15 +62,21 @@ func TestInserterBatchedAdvanceAndEOF(t *testing.T) {
 	require.Equal(t, []string{"i1", "o2", "i3", "o4", "i5"}, collect(t, messagesource.NewInserter(original, inserted)))
 }
 
-func TestInserterTimestampRegression(t *testing.T) {
+func TestInserterPreservesOriginalTimestampRegression(t *testing.T) {
 	t.Parallel()
-	original := &batchSource{results: []sourceResult{{messages: []messages.Message{msg(2, "o2")}}, {messages: []messages.Message{msg(1, "o1")}}}}
-	inserted := &batchSource{results: []sourceResult{{err: io.EOF}}}
-	source := messagesource.NewInserter(original, inserted)
-	_, err := source.Advance(context.Background())
-	require.NoError(t, err)
-	_, err = source.Advance(context.Background())
-	require.ErrorContains(t, err, "original source timestamp regression")
+	original := &batchSource{results: []sourceResult{
+		{messages: []messages.Message{msg(1, "o1")}},
+		{messages: []messages.Message{msg(0, "o0"), msg(2, "o2")}, err: io.EOF},
+	}}
+	inserted := &batchSource{results: []sourceResult{{messages: []messages.Message{msg(1, "i1")}, err: io.EOF}}}
+	require.Equal(t, []string{"o1", "i1", "o0", "o2"}, collect(t, messagesource.NewInserter(original, inserted)))
+}
+
+func TestInserterPreservesRegressionWithinOriginalBatch(t *testing.T) {
+	t.Parallel()
+	original := &batchSource{results: []sourceResult{{messages: []messages.Message{msg(1, "o1"), msg(0, "o0"), msg(2, "o2")}, err: io.EOF}}}
+	inserted := &batchSource{results: []sourceResult{{messages: []messages.Message{msg(1, "i1")}, err: io.EOF}}}
+	require.Equal(t, []string{"o1", "i1", "o0", "o2"}, collect(t, messagesource.NewInserter(original, inserted)))
 }
 
 func TestInserterInsertedTimestampRegression(t *testing.T) {
