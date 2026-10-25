@@ -32,6 +32,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/cleanup"
 	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/ptr"
+	"github.com/Emyrk/chronicle/internal/slice"
 	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 	"github.com/dustin/go-humanize"
 	"github.com/google/uuid"
@@ -749,6 +750,11 @@ func (c *Chronicle) WoWLogGroup(ctx context.Context, groupID uuid.UUID) (*chroni
 		return nil, fmt.Errorf("fetch log group: %w", err)
 	}
 
+	artifacts, err := c.Zed.GetLogGroupArtifacts(ctx, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("fetch log group artifacts: %w", err)
+	}
+
 	list, err := c.ListLogGroupJobs(ctx, groupID)
 	if err != nil {
 		return nil, fmt.Errorf("fetch log parse jobs: %w", err)
@@ -800,8 +806,10 @@ func (c *Chronicle) WoWLogGroup(ctx context.Context, groupID uuid.UUID) (*chroni
 		}
 	}
 
+	sdkGroup := db2sdk.WoWLogGroupRow(group)
+	sdkGroup.Artifacts = slice.List(artifacts, db2sdk.WoWLogArtifact)
 	return &chroniclesdk.WoWLogGroupState{
-		WoWLogGroup: db2sdk.WoWLogGroupRow(group),
+		WoWLogGroup: sdkGroup,
 		Status:      jobStatus,
 	}, nil
 }

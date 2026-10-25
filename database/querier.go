@@ -321,6 +321,8 @@ type sqlcQuerier interface {
 	GetLeaderboardVersionRequirements(ctx context.Context, instanceName string) (LeaderboardVersionRequirement, error)
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)
 	GetLogFilePart(ctx context.Context, id uuid.UUID) (LogFilePart, error)
+	GetLogGroupArtifact(ctx context.Context, arg GetLogGroupArtifactParams) (LogGroupArtifact, error)
+	GetLogGroupArtifacts(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)
 	GetLogGroupInstanceIDByOrdinal(ctx context.Context, arg GetLogGroupInstanceIDByOrdinalParams) (uuid.UUID, error)
 	GetLogInstanceForDiscordAnnouncement(ctx context.Context, id uuid.UUID) (LogInstance, error)
 	// Fetch instance metadata needed for parse scoring.

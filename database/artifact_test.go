@@ -64,6 +64,17 @@ func TestLogGroupArtifactsLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, artifacts)
 
+	allArtifacts, err := store.GetLogGroupArtifacts(ctx, groupID)
+	require.NoError(t, err)
+	require.Len(t, allArtifacts, 1)
+	require.True(t, allArtifacts[0].StorageDeletedAt.Valid)
+
+	fetched, err := store.GetLogGroupArtifact(ctx, database.GetLogGroupArtifactParams{LogGroupID: groupID, ID: artifactID})
+	require.NoError(t, err)
+	require.Equal(t, artifactID, fetched.ID)
+	_, err = store.GetLogGroupArtifact(ctx, database.GetLogGroupArtifactParams{LogGroupID: uuid.New(), ID: artifactID})
+	require.Error(t, err)
+
 	secondID := uuid.New()
 	_, err = store.InsertLogGroupArtifact(ctx, database.InsertLogGroupArtifactParams{
 		ID: secondID, LogGroupID: groupID, Kind: "sidekick-storage", SchemaVersion: 1,

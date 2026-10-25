@@ -149,6 +149,32 @@ func WoWLogFile(file database.LogFile) chroniclesdk.WoWLogFile {
 	}
 }
 
+func WoWLogArtifact(artifact database.LogGroupArtifact) chroniclesdk.WoWLogArtifact {
+	var contentEncoding *string
+	if artifact.ContentEncoding.Valid {
+		contentEncoding = &artifact.ContentEncoding.String
+	}
+	var originalFilename *string
+	if artifact.OriginalFilename.Valid {
+		originalFilename = &artifact.OriginalFilename.String
+	}
+
+	return chroniclesdk.WoWLogArtifact{
+		ID:               artifact.ID,
+		LogGroupID:       artifact.LogGroupID,
+		Kind:             artifact.Kind,
+		SchemaVersion:    artifact.SchemaVersion,
+		Hash:             artifact.Hash,
+		SizeBytes:        artifact.SizeBytes,
+		MimeType:         artifact.MimeType,
+		ContentEncoding:  contentEncoding,
+		OriginalFilename: originalFilename,
+		StorageDeletedAt: artifact.StorageDeletedAt,
+		CreatedAt:        artifact.CreatedAt,
+		UpdatedAt:        artifact.UpdatedAt,
+	}
+}
+
 func VehicleControlMetadata(metadata vehicles.Metadata) *chroniclesdk.VehicleControlMetadata {
 	if len(metadata.Intervals) == 0 && len(metadata.Diagnostics) == 0 {
 		return nil

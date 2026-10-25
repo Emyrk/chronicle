@@ -588,6 +588,7 @@ func (api *API) Routes() chi.Router {
 								r.Delete("/instances/{instance_id}", api.WoWLogDeleteInstance)
 								r.Put("/unlisted", api.MarkLogUnlisted)
 								r.Get("/files/{fileID}/download", api.WoWLogFileDownload)
+								r.Get("/artifacts/{artifactID}/download", api.WoWLogArtifactDownload)
 								r.Delete("/", api.WoWLogDeleteGroup)
 							})
 						})

@@ -309,6 +309,80 @@ func (q *sqlQuerier) UpsertGuild(ctx context.Context, arg UpsertGuildParams) (Gu
 	return i, err
 }
 
+const getLogGroupArtifact = `-- name: GetLogGroupArtifact :one
+SELECT id, log_group_id, kind, schema_version, hash, size_bytes, mime_type, content_encoding, object_key, original_filename, storage_deleted_at, created_at, updated_at
+FROM log_group_artifacts
+WHERE log_group_id = $1
+  AND id = $2
+`
+
+type GetLogGroupArtifactParams struct {
+	LogGroupID uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	ID         uuid.UUID `db:"id" json:"id"`
+}
+
+func (q *sqlQuerier) GetLogGroupArtifact(ctx context.Context, arg GetLogGroupArtifactParams) (LogGroupArtifact, error) {
+	row := q.db.QueryRow(ctx, getLogGroupArtifact, arg.LogGroupID, arg.ID)
+	var i LogGroupArtifact
+	err := row.Scan(
+		&i.ID,
+		&i.LogGroupID,
+		&i.Kind,
+		&i.SchemaVersion,
+		&i.Hash,
+		&i.SizeBytes,
+		&i.MimeType,
+		&i.ContentEncoding,
+		&i.ObjectKey,
+		&i.OriginalFilename,
+		&i.StorageDeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getLogGroupArtifacts = `-- name: GetLogGroupArtifacts :many
+SELECT id, log_group_id, kind, schema_version, hash, size_bytes, mime_type, content_encoding, object_key, original_filename, storage_deleted_at, created_at, updated_at
+FROM log_group_artifacts
+WHERE log_group_id = $1
+ORDER BY created_at, id
+`
+
+func (q *sqlQuerier) GetLogGroupArtifacts(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error) {
+	rows, err := q.db.Query(ctx, getLogGroupArtifacts, logGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogGroupArtifact
+	for rows.Next() {
+		var i LogGroupArtifact
+		if err := rows.Scan(
+			&i.ID,
+			&i.LogGroupID,
+			&i.Kind,
+			&i.SchemaVersion,
+			&i.Hash,
+			&i.SizeBytes,
+			&i.MimeType,
+			&i.ContentEncoding,
+			&i.ObjectKey,
+			&i.OriginalFilename,
+			&i.StorageDeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertLogGroupArtifact = `-- name: InsertLogGroupArtifact :one
 INSERT INTO log_group_artifacts (
   id,

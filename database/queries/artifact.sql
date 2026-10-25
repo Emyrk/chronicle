@@ -25,6 +25,18 @@ WHERE log_group_id = $1
   AND storage_deleted_at IS NULL
 ORDER BY created_at, id;
 
+-- name: GetLogGroupArtifacts :many
+SELECT *
+FROM log_group_artifacts
+WHERE log_group_id = $1
+ORDER BY created_at, id;
+
+-- name: GetLogGroupArtifact :one
+SELECT *
+FROM log_group_artifacts
+WHERE log_group_id = $1
+  AND id = $2;
+
 -- name: MarkLogGroupArtifactsStorageDeleted :many
 UPDATE log_group_artifacts
 SET storage_deleted_at = $1,
