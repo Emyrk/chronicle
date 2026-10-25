@@ -22,9 +22,9 @@ import (
 )
 
 // proofPermission checks the resolved tenant, never a tenant ID supplied by
-// the client. A site-wide proof grant applies across tenants; tenant grants
-// apply only to their tenant. On root, site-wide reviewers and user admins
-// can review all requests. Tenant admins have no implicit review permission.
+// the client. SpiceDB folds site-wide grants into the tenant permission.
+// Root-domain review accepts the site-wide reviewer or user-admin permission.
+// Tenant admins have no implicit review permission.
 func (h *Handler) proofPermission(review bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -42,29 +42,21 @@ func (h *Handler) proofPermission(review bool) func(http.Handler) http.Handler {
 			}
 			var allowed bool
 			var err error
-			if review {
-				allowed, err = h.zed.CheckOne(ctx, nil, b.GlobalChronicle().CanReview_photo_proof_User(actor))
-			} else {
-				allowed, err = h.zed.CheckOne(ctx, nil, b.GlobalChronicle().CanSubmit_photo_proof_User(actor))
-			}
-			if err != nil {
-				httpapi.InternalServerError(w, err)
-				return
-			}
-			// A site-wide grant is sufficient; don't make it depend on the
-			// tenant-specific check (which may be unavailable during rollout).
-			if !allowed {
-				if tenant == nil {
-					allowed, err = h.zed.CheckOne(ctx, nil, b.GlobalChronicle().CanAdmin_users_User(actor))
-				} else if review {
+			if tenant != nil {
+				if review {
 					allowed, err = h.zed.CheckOne(ctx, nil, b.Wow_tenant(tenant.ID).CanReview_photo_proof_User(actor))
 				} else {
 					allowed, err = h.zed.CheckOne(ctx, nil, b.Wow_tenant(tenant.ID).CanSubmit_photo_proof_User(actor))
 				}
-				if err != nil {
-					httpapi.InternalServerError(w, err)
-					return
+			} else {
+				allowed, err = h.zed.CheckOne(ctx, nil, b.GlobalChronicle().CanReview_photo_proof_User(actor))
+				if err == nil && !allowed {
+					allowed, err = h.zed.CheckOne(ctx, nil, b.GlobalChronicle().CanAdmin_users_User(actor))
 				}
+			}
+			if err != nil {
+				httpapi.InternalServerError(w, err)
+				return
 			}
 			if !allowed {
 				httpapi.Forbidden(w, nil)

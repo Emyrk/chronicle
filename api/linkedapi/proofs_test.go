@@ -56,7 +56,8 @@ func TestProofPermissionScopes(t *testing.T) {
 	require.NoError(t, zed.SetTenantProofGrant(ctx, tenantA, tenantSubmitter, true, false))
 	require.NoError(t, zed.SetTenantProofGrant(ctx, tenantA, tenantReviewer, false, true))
 	b := policy.New()
-	b.Wow_tenant(tenantA).Admin(b.User(tenantAdmin))
+	b.Wow_tenant(tenantA).Chronicle(b.GlobalChronicle()).Admin(b.User(tenantAdmin))
+	b.Wow_tenant(tenantB).Chronicle(b.GlobalChronicle())
 	_, err := zed.Write(ctx, *b.Txn())
 	require.NoError(t, err)
 

@@ -89,9 +89,10 @@ definition wow_tenant {
   relation photo_proof_reviewer: user
 
   permission administer = admin + chronicle->admin_tenants + chronicle->admin_tenants
-  // Tenant admins do not implicitly receive proof review access.
-  permission submit_photo_proof = photo_proof_submitter
-  permission review_photo_proof = photo_proof_reviewer
+  // Site-wide proof grants flow through chronicle; tenant admins do not
+  // implicitly receive either proof permission.
+  permission submit_photo_proof = photo_proof_submitter + chronicle->submit_photo_proof
+  permission review_photo_proof = photo_proof_reviewer + chronicle->review_photo_proof
 }
 
 definition wow_tenant_application {

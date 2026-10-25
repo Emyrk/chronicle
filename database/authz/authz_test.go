@@ -333,7 +333,8 @@ func TestPhotoProofPermissions(t *testing.T) {
 	require.NoError(t, zed.SetTenantProofGrant(ctx, tenantA, reviewer, false, true))
 	require.NoError(t, zed.SetUserChronicleRoles(ctx, siteAdmin, []string{"admin"}))
 	b := policy.New()
-	b.Wow_tenant(tenantA).Admin(b.User(tenantAdmin))
+	b.Wow_tenant(tenantA).Chronicle(b.GlobalChronicle()).Admin(b.User(tenantAdmin))
+	b.Wow_tenant(tenantB).Chronicle(b.GlobalChronicle())
 	_, err := zed.Write(ctx, *b.Txn())
 	require.NoError(t, err)
 
@@ -361,9 +362,9 @@ func TestPhotoProofPermissions(t *testing.T) {
 		})
 	}
 
-	// Global grants are independent of either tenant's direct relationships;
-	// the HTTP layer accepts either permission on tenant hosts and only global
-	// review (or admin_users) on root.
+	// Global grants flow through each tenant's Chronicle relationship without
+	// changing its direct roles. Root review separately accepts the global
+	// reviewer permission or admin_users.
 	siteSubmitter, siteReviewer := uuid.New(), uuid.New()
 	require.NoError(t, zed.SetUserChronicleRoles(ctx, siteSubmitter, []string{"photo_proof_submitter"}))
 	require.NoError(t, zed.SetUserChronicleRoles(ctx, siteReviewer, []string{"photo_proof_reviewer"}))
@@ -374,11 +375,13 @@ func TestPhotoProofPermissions(t *testing.T) {
 		global.GlobalChronicle().CanSubmit_photo_proof_User(global.User(siteReviewer)),
 		global.GlobalChronicle().CanReview_photo_proof_User(global.User(siteReviewer)),
 		global.GlobalChronicle().CanReview_photo_proof_User(global.User(siteAdmin)),
+		global.Wow_tenant(tenantA).CanSubmit_photo_proof_User(global.User(siteSubmitter)),
+		global.Wow_tenant(tenantB).CanSubmit_photo_proof_User(global.User(siteSubmitter)),
 		global.Wow_tenant(tenantA).CanReview_photo_proof_User(global.User(siteReviewer)),
 		global.Wow_tenant(tenantB).CanReview_photo_proof_User(global.User(siteReviewer)),
 	)
 	require.NoError(t, err)
-	require.Equal(t, []bool{true, false, false, true, false, false, false}, globalAllowed)
+	require.Equal(t, []bool{true, false, false, true, false, true, true, true, true}, globalAllowed)
 	require.NoError(t, zed.SetUserChronicleRoles(ctx, siteReviewer, nil))
 	globalReview, err := zed.CheckOne(ctx, nil, global.GlobalChronicle().CanReview_photo_proof_User(global.User(siteReviewer)))
 	require.NoError(t, err)
