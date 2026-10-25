@@ -492,7 +492,7 @@ export function InstancePage() {
   if (isLoading) {
     return (
       <div className="w-full px-4 py-6">
-        <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center">
           <div className="flex flex-col items-center gap-4">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             <p className="text-muted-foreground">Loading instance data...</p>
