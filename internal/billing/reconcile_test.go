@@ -211,6 +211,72 @@ func TestDeletedSubscriptionWebhookNotifiesFromPersistedRow(t *testing.T) {
 	}, notified)
 }
 
+func TestThinSubscriptionWebhookUsesRelatedObject(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	store := &reconciliationStore{providerErr: pgx.ErrNoRows}
+	svc := New(Options{Store: store, ReveredPriceIDs: []string{"price_monthly"}})
+	authoritative := testStripeSubscription("prod_supporter", "price_monthly", time.Now().Add(time.Hour))
+	authoritative.ID = "sub_thin"
+	authoritative.Customer = &stripe.Customer{ID: "cus_thin"}
+	authoritative.Metadata = map[string]string{"chronicle_user_id": userID.String()}
+	svc.retrieveSubscription = func(_ context.Context, id string, _ *stripe.SubscriptionRetrieveParams) (*stripe.Subscription, error) {
+		require.Equal(t, authoritative.ID, id)
+		return authoritative, nil
+	}
+
+	err := svc.processEventNotification(context.Background(), &stripe.V1CustomerSubscriptionUpdatedEventNotification{
+		V2CoreEventNotification: stripe.V2CoreEventNotification{
+			ID:   "evt_thin_subscription",
+			Type: "v1.customer.subscription.updated",
+		},
+		RelatedObject: stripe.V2CoreEventRelatedObject{ID: authoritative.ID},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, store.upserts, 1)
+	require.Equal(t, userID, store.upserts[0].UserID)
+	require.Equal(t, authoritative.ID, store.upserts[0].ProviderSubscriptionID.String)
+}
+
+func TestThinCheckoutWebhookRetrievesRelatedSession(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	store := &reconciliationStore{providerErr: pgx.ErrNoRows}
+	svc := New(Options{Store: store, ExaltedPriceIDs: []string{"price_exalted"}})
+	authoritative := testStripeSubscription("prod_exalted", "price_exalted", time.Now().Add(time.Hour))
+	authoritative.ID = "sub_checkout"
+	authoritative.Customer = &stripe.Customer{ID: "cus_checkout"}
+	authoritative.Metadata = map[string]string{"chronicle_user_id": userID.String()}
+	svc.retrieveCheckoutSession = func(_ context.Context, id string, _ *stripe.CheckoutSessionRetrieveParams) (*stripe.CheckoutSession, error) {
+		require.Equal(t, "cs_thin", id)
+		return &stripe.CheckoutSession{
+			ID:                id,
+			ClientReferenceID: userID.String(),
+			Subscription:      &stripe.Subscription{ID: authoritative.ID},
+		}, nil
+	}
+	svc.retrieveSubscription = func(_ context.Context, id string, _ *stripe.SubscriptionRetrieveParams) (*stripe.Subscription, error) {
+		require.Equal(t, authoritative.ID, id)
+		return authoritative, nil
+	}
+
+	err := svc.processEventNotification(context.Background(), &stripe.V1CheckoutSessionCompletedEventNotification{
+		V2CoreEventNotification: stripe.V2CoreEventNotification{
+			ID:   "evt_thin_checkout",
+			Type: "v1.checkout.session.completed",
+		},
+		RelatedObject: stripe.V2CoreEventRelatedObject{ID: "cs_thin"},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, store.upserts, 1)
+	require.Equal(t, userID, store.upserts[0].UserID)
+	require.Equal(t, authoritative.ID, store.upserts[0].ProviderSubscriptionID.String)
+}
+
 func TestReconciliationCountsChangedNoopAndInvalidMetadata(t *testing.T) {
 	t.Parallel()
 	userID := uuid.New()

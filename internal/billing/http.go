@@ -313,21 +313,65 @@ func (s *Service) Webhook(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid webhook body."})
 		return
 	}
-	event, err := webhook.ConstructEvent(body, r.Header.Get("Stripe-Signature"), s.webhookSecret)
-	if err != nil {
+	if err := webhook.ValidatePayload(body, r.Header.Get("Stripe-Signature"), s.webhookSecret); err != nil {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid webhook signature."})
 		return
 	}
+
+	var envelope struct {
+		Object string `json:"object"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid webhook body."})
+		return
+	}
+
+	var eventID, eventType string
+	var process func(context.Context) error
+	switch envelope.Object {
+	case "v2.core.event":
+		if s.stripe == nil {
+			httpapi.InternalServerError(w, errors.New("stripe client is not configured"))
+			return
+		}
+		notification, err := s.stripe.ParseEventNotificationWithoutVerification(body)
+		if err != nil {
+			httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid webhook body."})
+			return
+		}
+		event := notification.GetEventNotification()
+		eventID = event.ID
+		eventType = event.Type
+		process = func(ctx context.Context) error {
+			return s.processEventNotification(ctx, notification)
+		}
+	default:
+		event, err := s.stripe.ConstructEventWithoutVerification(body)
+		if err != nil {
+			httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid webhook body."})
+			return
+		}
+		eventID = event.ID
+		eventType = string(event.Type)
+		process = func(ctx context.Context) error {
+			return s.processEvent(ctx, event)
+		}
+	}
+	if eventID == "" || eventType == "" {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid webhook body."})
+		return
+	}
+
 	inserted, err := s.store.InsertBillingWebhookEvent(r.Context(), database.InsertBillingWebhookEventParams{
-		StripeEventID: event.ID,
-		EventType:     string(event.Type),
+		StripeEventID: eventID,
+		EventType:     eventType,
 	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 	if inserted == 0 {
-		stored, err := s.store.GetBillingWebhookEvent(r.Context(), event.ID)
+		stored, err := s.store.GetBillingWebhookEvent(r.Context(), eventID)
 		if err != nil {
 			httpapi.InternalServerError(w, err)
 			return
@@ -338,11 +382,11 @@ func (s *Service) Webhook(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := s.processEvent(r.Context(), event); err != nil {
+	if err := process(r.Context()); err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	if err := s.store.MarkBillingWebhookEventProcessed(r.Context(), event.ID); err != nil {
+	if err := s.store.MarkBillingWebhookEventProcessed(r.Context(), eventID); err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
@@ -363,18 +407,7 @@ func (s *Service) processEvent(ctx context.Context, event stripe.Event) error {
 		if err := json.Unmarshal(event.Data.Raw, &session); err != nil {
 			return fmt.Errorf("decode checkout session: %w", err)
 		}
-		userID, err := uuid.Parse(session.ClientReferenceID)
-		if err != nil || session.Subscription == nil {
-			return fmt.Errorf("checkout session missing Chronicle user or subscription")
-		}
-		sub, err := s.retrieveAuthoritativeSubscription(ctx, session.Subscription.ID)
-		if err != nil {
-			return fmt.Errorf("retrieve subscription: %w", err)
-		}
-		if err := s.upsertSubscription(ctx, userID, sub); err != nil {
-			return err
-		}
-		return s.syncStripeEntitlementsIfConfigured(ctx, sub.Customer.ID)
+		return s.processCheckoutSession(ctx, &session)
 	case stripe.EventTypeEntitlementsActiveEntitlementSummaryUpdated:
 		var summary stripe.EntitlementsActiveEntitlementSummary
 		if err := json.Unmarshal(event.Data.Raw, &summary); err != nil {
@@ -390,39 +423,85 @@ func (s *Service) processEvent(ctx context.Context, event stripe.Event) error {
 		if err := json.Unmarshal(event.Data.Raw, &snapshot); err != nil {
 			return fmt.Errorf("decode subscription: %w", err)
 		}
-		if snapshot.ID == "" {
-			return fmt.Errorf("subscription event missing subscription ID")
-		}
-		sub, err := s.retrieveAuthoritativeSubscription(ctx, snapshot.ID)
-		if err != nil {
-			if event.Type == stripe.EventTypeCustomerSubscriptionDeleted && stripeResourceMissing(err) {
-				row, cancelErr := s.markSubscriptionCanceled(ctx, snapshot.ID)
-				if cancelErr != nil {
-					return cancelErr
-				}
-				if err := s.syncStripeEntitlementsIfConfigured(ctx, row.ProviderCustomerID); err != nil {
-					return err
-				}
-				s.notifySubscriptionChange(ctx, deletedSubscriptionChange(event.Type, snapshot, row))
-				return nil
-			}
-			return fmt.Errorf("retrieve subscription %q: %w", snapshot.ID, err)
-		}
-		userID, err := s.subscriptionOwner(ctx, sub)
-		if err != nil {
-			return err
-		}
-		if err := s.upsertSubscription(ctx, userID, sub); err != nil {
-			return err
-		}
-		if err := s.syncStripeEntitlementsIfConfigured(ctx, sub.Customer.ID); err != nil {
-			return err
-		}
-		s.notifySubscriptionChange(ctx, s.stripeSubscriptionChange(event.Type, userID, sub))
-		return nil
+		return s.processSubscriptionEvent(ctx, snapshot.ID, event.Type, event.Type == stripe.EventTypeCustomerSubscriptionDeleted, snapshot)
 	default:
 		return nil
 	}
+}
+
+func (s *Service) processEventNotification(ctx context.Context, notification stripe.EventNotificationContainer) error {
+	switch event := notification.(type) {
+	case *stripe.V2CoreEventDestinationPingEventNotification:
+		return nil
+	case *stripe.V1CheckoutSessionCompletedEventNotification:
+		if s.retrieveCheckoutSession == nil {
+			return errors.New("stripe checkout session retrieval is not configured")
+		}
+		session, err := s.retrieveCheckoutSession(ctx, event.RelatedObject.ID, nil)
+		if err != nil {
+			return fmt.Errorf("retrieve checkout session %q: %w", event.RelatedObject.ID, err)
+		}
+		return s.processCheckoutSession(ctx, session)
+	case *stripe.V1CustomerSubscriptionCreatedEventNotification:
+		return s.processSubscriptionEvent(ctx, event.RelatedObject.ID, stripe.EventType(event.Type), false, stripe.Subscription{ID: event.RelatedObject.ID})
+	case *stripe.V1CustomerSubscriptionUpdatedEventNotification:
+		return s.processSubscriptionEvent(ctx, event.RelatedObject.ID, stripe.EventType(event.Type), false, stripe.Subscription{ID: event.RelatedObject.ID})
+	case *stripe.V1CustomerSubscriptionDeletedEventNotification:
+		return s.processSubscriptionEvent(ctx, event.RelatedObject.ID, stripe.EventType(event.Type), true, stripe.Subscription{ID: event.RelatedObject.ID})
+	default:
+		return nil
+	}
+}
+
+func (s *Service) processCheckoutSession(ctx context.Context, session *stripe.CheckoutSession) error {
+	if session == nil {
+		return errors.New("checkout session is missing")
+	}
+	userID, err := uuid.Parse(session.ClientReferenceID)
+	if err != nil || session.Subscription == nil {
+		return errors.New("checkout session missing Chronicle user or subscription")
+	}
+	sub, err := s.retrieveAuthoritativeSubscription(ctx, session.Subscription.ID)
+	if err != nil {
+		return fmt.Errorf("retrieve subscription: %w", err)
+	}
+	if err := s.upsertSubscription(ctx, userID, sub); err != nil {
+		return err
+	}
+	return s.syncStripeEntitlementsIfConfigured(ctx, sub.Customer.ID)
+}
+
+func (s *Service) processSubscriptionEvent(ctx context.Context, subscriptionID string, eventType stripe.EventType, deleted bool, snapshot stripe.Subscription) error {
+	if subscriptionID == "" {
+		return errors.New("subscription event missing subscription ID")
+	}
+	sub, err := s.retrieveAuthoritativeSubscription(ctx, subscriptionID)
+	if err != nil {
+		if deleted && stripeResourceMissing(err) {
+			row, cancelErr := s.markSubscriptionCanceled(ctx, subscriptionID)
+			if cancelErr != nil {
+				return cancelErr
+			}
+			if err := s.syncStripeEntitlementsIfConfigured(ctx, row.ProviderCustomerID); err != nil {
+				return err
+			}
+			s.notifySubscriptionChange(ctx, deletedSubscriptionChange(eventType, snapshot, row))
+			return nil
+		}
+		return fmt.Errorf("retrieve subscription %q: %w", subscriptionID, err)
+	}
+	userID, err := s.subscriptionOwner(ctx, sub)
+	if err != nil {
+		return err
+	}
+	if err := s.upsertSubscription(ctx, userID, sub); err != nil {
+		return err
+	}
+	if err := s.syncStripeEntitlementsIfConfigured(ctx, sub.Customer.ID); err != nil {
+		return err
+	}
+	s.notifySubscriptionChange(ctx, s.stripeSubscriptionChange(eventType, userID, sub))
+	return nil
 }
 
 func stripeResourceMissing(err error) bool {

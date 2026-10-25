@@ -30,6 +30,7 @@ func tierForProduct(product ProductCode) string {
 type accountRetriever func(context.Context, *stripe.AccountRetrieveParams) (*stripe.Account, error)
 type priceRetriever func(context.Context, string, *stripe.PriceRetrieveParams) (*stripe.Price, error)
 type subscriptionRetriever func(context.Context, string, *stripe.SubscriptionRetrieveParams) (*stripe.Subscription, error)
+type checkoutSessionRetriever func(context.Context, string, *stripe.CheckoutSessionRetrieveParams) (*stripe.CheckoutSession, error)
 type checkoutSessionCreator func(context.Context, *stripe.CheckoutSessionCreateParams) (*stripe.CheckoutSession, error)
 type billingPortalSessionCreator func(context.Context, *stripe.BillingPortalSessionCreateParams) (*stripe.BillingPortalSession, error)
 type subscriptionLister func(context.Context) ([]*stripe.Subscription, error)
@@ -61,6 +62,7 @@ type Service struct {
 	retrieveAccount            accountRetriever
 	retrievePrice              priceRetriever
 	retrieveSubscription       subscriptionRetriever
+	retrieveCheckoutSession    checkoutSessionRetriever
 	createCheckoutSession      checkoutSessionCreator
 	createBillingPortalSession billingPortalSessionCreator
 	listSubscriptions          subscriptionLister
@@ -86,6 +88,7 @@ func New(opts Options) *Service {
 	var retrieveAccount accountRetriever
 	var retrievePrice priceRetriever
 	var retrieveSubscription subscriptionRetriever
+	var retrieveCheckoutSession checkoutSessionRetriever
 	var createCheckoutSession checkoutSessionCreator
 	var createBillingPortalSession billingPortalSessionCreator
 	var listSubscriptions subscriptionLister
@@ -95,6 +98,7 @@ func New(opts Options) *Service {
 		retrieveAccount = client.V1Accounts.Retrieve
 		retrievePrice = client.V1Prices.Retrieve
 		retrieveSubscription = client.V1Subscriptions.Retrieve
+		retrieveCheckoutSession = client.V1CheckoutSessions.Retrieve
 		createCheckoutSession = client.V1CheckoutSessions.Create
 		createBillingPortalSession = client.V1BillingPortalSessions.Create
 		listSubscriptions = func(ctx context.Context) ([]*stripe.Subscription, error) {
@@ -157,6 +161,7 @@ func New(opts Options) *Service {
 		retrieveAccount:            retrieveAccount,
 		retrievePrice:              retrievePrice,
 		retrieveSubscription:       retrieveSubscription,
+		retrieveCheckoutSession:    retrieveCheckoutSession,
 		createCheckoutSession:      createCheckoutSession,
 		createBillingPortalSession: createBillingPortalSession,
 		listSubscriptions:          listSubscriptions,
