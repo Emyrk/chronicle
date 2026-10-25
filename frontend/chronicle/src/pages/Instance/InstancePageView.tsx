@@ -84,6 +84,7 @@ import { LivePanelViewboxes, useAutoJoinLiveSession, useLiveSession } from "./Li
 import { showDebugDesktopControls } from "./debugFeatureGate";
 import { InstanceTimingTooltip } from "./InstanceTimingTooltip";
 import { ClearParseBadge, KillParseTooltip } from "./EncounterKillParse";
+import { OwnerAdFreeBadge } from "@/components/Ads/OwnerAdFreeBadge";
 import { useInstanceTimeParses } from "./Overview/overviewQueries";
 import { bossKillParsesByEncounter, killParseEdgeStyle, scopedClearParses, scopedKillParsesByEncounter } from "./Overview/encounterKillTimePopulation";
 import { HeroicBadge } from "@/components/HeroicBadge";
@@ -4097,6 +4098,7 @@ function InstancePageViewContent({
             {duplicateGroupId && (
               <DuplicatesBadge instanceId={instance.id} duplicateGroupId={duplicateGroupId} />
             )}
+            <OwnerAdFreeBadge subject="log" />
           </h1>
           {!isMobile && (
             <div className="flex shrink-0 items-center gap-3">

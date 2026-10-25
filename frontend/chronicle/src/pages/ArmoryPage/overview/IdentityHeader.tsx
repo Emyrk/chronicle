@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import type { ArmoryPlayer } from "@/api/typesGenerated";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
+import { OwnerAdFreeBadge } from "@/components/Ads/OwnerAdFreeBadge";
 import { formatClassLabel, formatRaceLabel, getClassIconUrl, getRaceIconUrl } from "../characterDisplay";
 import { getClassColorVar } from "../types";
 import { treeName } from "./util";
@@ -61,6 +62,7 @@ export function IdentityHeader({ player, titleAction, actions, children }: Ident
               {player.name}
             </div>
             {titleAction}
+            <OwnerAdFreeBadge subject="character" />
           </div>
           <div className="mt-2 text-sm text-muted-foreground">
             {player.guild_name && (
