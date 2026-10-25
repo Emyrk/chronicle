@@ -423,7 +423,7 @@ export function GuideHost({
   }, []);
 
   const handleNodeClick = useCallback((node: SceneNode, event: ReactMouseEvent) => {
-    if (!node.listeners.includes("click") && node.kind !== "button") return;
+    if (!node.listeners.includes("click")) return;
     const bounds = hostRef.current?.getBoundingClientRect();
     runtimeRef.current?.event({
       nodeId: node.id,

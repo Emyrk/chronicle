@@ -6,15 +6,15 @@ import { GuideHost } from "./host";
 import { loadGuidePackage } from "./package";
 import { assertGuideCompatibility } from "./guideCompatibility";
 import { browserGuideRuntimeFactory } from "./runtimeFactory";
+import catalog from "../../../public/guides/catalog.json";
 
-const BUILTIN_GUIDES: Readonly<Record<string, string>> = {
-  onyxia: "/guides/chronicle.onyxia.zip",
-  "chronicle.onyxia": "/guides/chronicle.onyxia.zip",
-};
+export const BUILTIN_GUIDES: Readonly<Record<string, string>> = Object.fromEntries(
+  catalog.guides.flatMap((guide) => [guide.id, ...guide.aliases].map((id) => [id, guide.package_url])),
+);
 
 async function fetchBuiltInGuide(id: string) {
   const url = BUILTIN_GUIDES[id];
-  if (!url) throw new Error(`Unknown guide package: ${id}`);
+  if (!Object.hasOwn(BUILTIN_GUIDES, id) || !url) throw new Error(`Unknown guide package: ${id}`);
   const response = await fetch(url, { credentials: "same-origin" });
   if (!response.ok) throw new Error(`Guide package request failed with ${response.status}`);
   const guide = await loadGuidePackage(await response.arrayBuffer());

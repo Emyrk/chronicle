@@ -4,6 +4,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { zipSync, type Zippable } from "fflate";
 import { EventMetaSchema, UnitPositionSchema } from "../src/api/proto/chronicle_pb";
+import { collectGuidePackageFiles } from "./guide-package-files";
+import { normalizePackagePath } from "../src/pages/Guides/package/paths";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const guidesDirectory = resolve(root, "public/guides");
@@ -31,6 +33,8 @@ interface GuideManifestSource {
   game_version?: string;
   encounters?: string[];
   event_streams?: { type: string; path: string }[];
+  entrypoint: string;
+  assets: string[];
 }
 
 function requireMetadataString(manifest: Record<string, unknown>, field: string): string {
@@ -102,13 +106,16 @@ for (const definition of guideDefinitions) {
   const game = requireMetadataString(manifest as unknown as Record<string, unknown>, "game");
   if (!/^[a-z0-9]+(?:[.-][a-z0-9]+)*$/.test(id)) throw new Error(`Guide manifest has unsafe id metadata: ${id}`);
 
-  const files: Zippable = {
-    "guide.json": [new Uint8Array(manifestBytes), zipOptions],
-    "main.lua": [new Uint8Array(await readFile(resolve(definition.source, "main.lua"))), zipOptions],
-  };
+  const files: Zippable = { "guide.json": [new Uint8Array(manifestBytes), zipOptions] };
+  for (const [path, data] of Object.entries(await collectGuidePackageFiles(definition.source, manifest.entrypoint, manifest.assets))) {
+    if (Object.hasOwn(files, path)) throw new Error(`Guide source conflicts with the manifest: ${path}`);
+    files[path] = [data, zipOptions];
+  }
   for (const stream of manifest.event_streams ?? []) {
     if (stream.type !== "unit_position") throw new Error(`Guide builder does not support stream ${stream.type}`);
-    files[stream.path] = [await buildUnitPositionStream(definition.source), zipOptions];
+    const path = normalizePackagePath(stream.path);
+    if (Object.hasOwn(files, path)) throw new Error(`Guide stream conflicts with a source file: ${path}`);
+    files[path] = [await buildUnitPositionStream(definition.source), zipOptions];
   }
   const archive = zipSync(files, zipOptions);
   const output = resolve(guidesDirectory, `${id}.zip`);
