@@ -618,10 +618,9 @@ export function CharacterSettings() {
           <p className="text-sm text-muted-foreground">Loading characters...</p>
         ) : sortedCharacters.length === 0 ? (
           <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-            No characters are linked to your account yet.
             {hasLinkMethod
-              ? " Use one of the methods below to link them."
-              : " Contact a site administrator to link them."}
+              ? "No characters are linked to your account yet. Use one of the methods below to link them."
+              : "Account linking is not supported for this server."}
           </div>
         ) : (
           <div className="divide-y rounded-lg border">
