@@ -2083,6 +2083,7 @@ type ProofRequest struct {
 	CreatedAt             pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	ReviewedAt            pgtype.Timestamptz `db:"reviewed_at" json:"reviewed_at"`
 	EvidenceDeletePending bool               `db:"evidence_delete_pending" json:"evidence_delete_pending"`
+	TenantID              uuid.UUID          `db:"tenant_id" json:"tenant_id"`
 }
 
 type ProofRequestSubject struct {

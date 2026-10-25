@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useAuth } from "@/hooks/useAuth";
-import { useAdminTelemetryNotices, useAuthorizationCheck } from "@/api/queries";
+import { useAdminTelemetryNotices, useAuthorizationCheck, useSiteConfig } from "@/api/queries";
 import { NoticeBanner } from "@/components/NoticeBanner/NoticeBanner";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
@@ -55,13 +55,15 @@ export function AdminLayout() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { data: siteConfig, isLoading: siteLoading } = useSiteConfig();
+  const tenantID = siteConfig?.tenant?.id;
 
   const authzChecks = useMemo(
     () => ({
       admin: "chronicle:chronicle#admin_users",
-      proofReviewer: "chronicle:chronicle#review_photo_proof",
+      proofReviewer: tenantID ? `wow_tenant:${tenantID}#review_photo_proof` : "chronicle:chronicle#admin_users",
     }),
-    [],
+    [tenantID],
   );
   const { data: authz, isLoading: authzLoading } = useAuthorizationCheck(authzChecks, {
     enabled: isAuthenticated,
@@ -70,7 +72,7 @@ export function AdminLayout() {
   const canReviewProofs = authz?.proofReviewer ?? false;
   const { data: noticeResponse } = useAdminTelemetryNotices({ enabled: isAdmin });
 
-  const sessionLoading = authLoading || authzLoading;
+  const sessionLoading = authLoading || siteLoading || authzLoading;
 
   if (sessionLoading) {
     return (
@@ -85,7 +87,7 @@ export function AdminLayout() {
     );
   }
 
-  if (!isAdmin && (!canReviewProofs || location.pathname !== "/admin/photo-proofs")) {
+  if ((location.pathname === "/admin/photo-proofs" && !canReviewProofs) || (!isAdmin && (!canReviewProofs || location.pathname !== "/admin/photo-proofs"))) {
     return (
       <div className="max-w-4xl mx-auto p-8">
         <Card className="p-6">
@@ -105,7 +107,7 @@ export function AdminLayout() {
 
   const renderNavLinks = (closeOnNavigate: boolean) => (
     <ul className="space-y-1">
-      {tabs.filter((tab) => isAdmin || tab.path === "/admin/photo-proofs").map((tab) => (
+      {tabs.filter((tab) => tab.path === "/admin/photo-proofs" ? canReviewProofs : isAdmin).map((tab) => (
         <li key={tab.path}>
           <Link
             to={tab.path}

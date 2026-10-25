@@ -22,6 +22,7 @@ type ProofSubject struct {
 type ProofRequest struct {
 	ID          uuid.UUID      `json:"id"`
 	ApplicantID uuid.UUID      `json:"applicant_id"`
+	TenantID    uuid.UUID      `json:"tenant_id"`
 	Purpose     string         `json:"purpose"`
 	Status      string         `json:"status"`
 	Message     string         `json:"message"`
@@ -29,6 +30,13 @@ type ProofRequest struct {
 	CreatedAt   time.Time      `json:"created_at"`
 	ReviewedAt  *time.Time     `json:"reviewed_at,omitempty"`
 	Subjects    []ProofSubject `json:"subjects"`
+}
+
+// TenantProofGrant assigns photo-proof permissions to one user on one tenant.
+type TenantProofGrant struct {
+	UserID uuid.UUID `json:"user_id"`
+	Submit bool      `json:"submit"`
+	Review bool      `json:"review"`
 }
 
 type ProofDecision struct {

@@ -38,7 +38,7 @@ func TestValidateSubjects(t *testing.T) {
 func TestRejectMissingApprovalHandler(t *testing.T) {
 	t.Parallel()
 	service := New(nil, nil)
-	if err := service.Decide(context.Background(), uuid.New(), uuid.New(), "character-link", "", nil, nil); err == nil {
+	if err := service.Decide(context.Background(), Scope{TenantID: uuid.New()}, uuid.New(), uuid.New(), "character-link", "", nil, nil); err == nil {
 		t.Fatal("expected missing approval handler error")
 	}
 }

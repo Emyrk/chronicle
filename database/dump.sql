@@ -1669,6 +1669,7 @@ CREATE TABLE proof_requests (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     reviewed_at timestamp with time zone,
     evidence_delete_pending boolean DEFAULT false NOT NULL,
+    tenant_id uuid NOT NULL,
     CONSTRAINT proof_requests_check CHECK (((status = 'pending'::text) OR (reviewed_at IS NOT NULL))),
     CONSTRAINT proof_requests_purpose_check CHECK ((purpose <> ''::text)),
     CONSTRAINT proof_requests_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'partial'::text])))
@@ -3285,6 +3286,10 @@ CREATE INDEX proof_requests_applicant_created ON proof_requests USING btree (app
 CREATE INDEX proof_requests_evidence_cleanup ON proof_requests USING btree (id) WHERE evidence_delete_pending;
 
 CREATE INDEX proof_requests_status_created ON proof_requests USING btree (status, created_at DESC);
+
+CREATE INDEX proof_requests_tenant_applicant_created ON proof_requests USING btree (tenant_id, applicant_id, created_at DESC);
+
+CREATE INDEX proof_requests_tenant_status_created ON proof_requests USING btree (tenant_id, status, created_at DESC);
 
 CREATE INDEX raid_compositions_user_tenant_idx ON raid_compositions USING btree (user_id, tenant_id);
 

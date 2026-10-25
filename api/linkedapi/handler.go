@@ -58,7 +58,7 @@ func (h *Handler) Routes() http.Handler {
 
 		r.Route("/me", func(r chi.Router) {
 			r.Get("/", h.ListMyCharacters)
-			r.With(httpmw.Can(h.zed, policy.New().GlobalChronicle().CanSubmit_photo_proof_User)).Post("/proofs", h.SubmitProof)
+			r.With(h.proofPermission(false)).Post("/proofs", h.SubmitProof)
 			r.Get("/proofs", h.ListMyProofs)
 			r.Put("/primary", h.SetMyPrimaryCharacter)
 			// Sync links from the deployment's external verification
@@ -72,10 +72,17 @@ func (h *Handler) Routes() http.Handler {
 
 		// Proof review can be granted to moderators without granting user admin.
 		r.Group(func(r chi.Router) {
-			r.Use(httpmw.Can(h.zed, policy.New().GlobalChronicle().CanReview_photo_proof_User))
+			r.Use(h.proofPermission(true))
 			r.Get("/admin/proofs", h.ListAdminProofs)
 			r.Get("/admin/proofs/{id}/image", h.ProofImage)
 			r.Post("/admin/proofs/{id}/decision", h.DecideProof)
+		})
+
+		// Root-site administrators assign tenant-specific proof roles.
+		r.Group(func(r chi.Router) {
+			r.Use(httpmw.Can(h.zed, policy.New().GlobalChronicle().CanAdmin_tenants_User))
+			r.Get("/admin/tenants/{tenantID}/proof-grants", h.ListTenantProofGrants)
+			r.Put("/admin/tenants/{tenantID}/proof-grants/{userID}", h.SetTenantProofGrant)
 		})
 
 		// Admin surface.

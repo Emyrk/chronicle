@@ -555,8 +555,8 @@ export function CharacterSettings() {
   const { data: siteConfig } = useSiteConfig();
   const photoProof = siteConfig?.tenant?.external_linking?.methods?.["photo-proof"];
   const { data: proofAccess, isLoading: proofAccessLoading } = useAuthorizationCheck(
-    { submit: "chronicle:chronicle#submit_photo_proof" },
-    { enabled: !!photoProof?.enabled },
+    { submit: `wow_tenant:${siteConfig?.tenant?.id ?? ""}#submit_photo_proof` },
+    { enabled: !!photoProof?.enabled && !!siteConfig?.tenant?.id },
   );
   const { data: characters, isLoading } = useMyCharacters();
   const favorites = useMyFavorites();

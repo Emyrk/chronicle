@@ -24,6 +24,7 @@ import { LOG_FORMAT_OPTIONS } from "@/config/serverCapabilities";
 import { Loader2, Trash2, Plus, ChevronDown, ChevronRight, ExternalLink, Building2, Pencil } from "lucide-react";
 import type { PricingAuctionHouse, WoWServer, WoWServerRealm, Tenant } from "@/api/typesGenerated";
 import { ThemeEditor } from "@/components/ThemeEditor/ThemeEditor";
+import { TenantProofGrants } from "./TenantProofGrants";
 
 function RealmPricingEditor({ realm }: { realm: WoWServerRealm }) {
   const updateRealm = useUpdateAzerothcoreRealm();
@@ -509,6 +510,7 @@ function TenantSection() {
   const deleteTenant = useDeleteTenant();
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [grantsTenantID, setGrantsTenantID] = useState<string | null>(null);
 
   return (
     <div className="space-y-3">
@@ -581,6 +583,11 @@ function TenantSection() {
               </div>
             </div>
           )}
+          <button type="button" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => setGrantsTenantID(grantsTenantID === tenant.id ? null : tenant.id)}>
+            {grantsTenantID === tenant.id ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            Photo proof access
+          </button>
+          {grantsTenantID === tenant.id && <TenantProofGrants tenantID={tenant.id} />}
         </Card>
       ))}
     </div>

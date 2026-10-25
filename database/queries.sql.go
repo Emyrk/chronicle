@@ -15067,11 +15067,16 @@ func (q *sqlQuerier) ListRankingsForInstance(ctx context.Context, instanceID uui
 
 const completeProofEvidenceCleanup = `-- name: CompleteProofEvidenceCleanup :exec
 UPDATE proof_requests SET evidence_delete_pending = false, evidence_key = ''
-WHERE id = $1 AND evidence_delete_pending
+WHERE id = $1 AND tenant_id = $2 AND evidence_delete_pending
 `
 
-func (q *sqlQuerier) CompleteProofEvidenceCleanup(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, completeProofEvidenceCleanup, id)
+type CompleteProofEvidenceCleanupParams struct {
+	ID       uuid.UUID `db:"id" json:"id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) CompleteProofEvidenceCleanup(ctx context.Context, arg CompleteProofEvidenceCleanupParams) error {
+	_, err := q.db.Exec(ctx, completeProofEvidenceCleanup, arg.ID, arg.TenantID)
 	return err
 }
 
@@ -15120,7 +15125,7 @@ func (q *sqlQuerier) DecideProofSubject(ctx context.Context, arg DecideProofSubj
 }
 
 const getProofRequest = `-- name: GetProofRequest :one
-SELECT id, applicant_id, purpose, evidence_key, status, message, response, reviewer_id, created_at, reviewed_at, evidence_delete_pending FROM proof_requests WHERE id = $1
+SELECT id, applicant_id, purpose, evidence_key, status, message, response, reviewer_id, created_at, reviewed_at, evidence_delete_pending, tenant_id FROM proof_requests WHERE id = $1
 `
 
 func (q *sqlQuerier) GetProofRequest(ctx context.Context, id uuid.UUID) (ProofRequest, error) {
@@ -15138,13 +15143,43 @@ func (q *sqlQuerier) GetProofRequest(ctx context.Context, id uuid.UUID) (ProofRe
 		&i.CreatedAt,
 		&i.ReviewedAt,
 		&i.EvidenceDeletePending,
+		&i.TenantID,
+	)
+	return i, err
+}
+
+const getTenantProofRequest = `-- name: GetTenantProofRequest :one
+SELECT id, applicant_id, purpose, evidence_key, status, message, response, reviewer_id, created_at, reviewed_at, evidence_delete_pending, tenant_id FROM proof_requests WHERE id = $1 AND tenant_id = $2
+`
+
+type GetTenantProofRequestParams struct {
+	ID       uuid.UUID `db:"id" json:"id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) GetTenantProofRequest(ctx context.Context, arg GetTenantProofRequestParams) (ProofRequest, error) {
+	row := q.db.QueryRow(ctx, getTenantProofRequest, arg.ID, arg.TenantID)
+	var i ProofRequest
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicantID,
+		&i.Purpose,
+		&i.EvidenceKey,
+		&i.Status,
+		&i.Message,
+		&i.Response,
+		&i.ReviewerID,
+		&i.CreatedAt,
+		&i.ReviewedAt,
+		&i.EvidenceDeletePending,
+		&i.TenantID,
 	)
 	return i, err
 }
 
 const insertProofRequest = `-- name: InsertProofRequest :one
-INSERT INTO proof_requests (id, applicant_id, purpose, evidence_key, message)
-VALUES ($1, $2, $3, $4, $5) RETURNING id, applicant_id, purpose, evidence_key, status, message, response, reviewer_id, created_at, reviewed_at, evidence_delete_pending
+INSERT INTO proof_requests (id, applicant_id, purpose, evidence_key, message, tenant_id)
+VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, applicant_id, purpose, evidence_key, status, message, response, reviewer_id, created_at, reviewed_at, evidence_delete_pending, tenant_id
 `
 
 type InsertProofRequestParams struct {
@@ -15153,6 +15188,7 @@ type InsertProofRequestParams struct {
 	Purpose     string    `db:"purpose" json:"purpose"`
 	EvidenceKey string    `db:"evidence_key" json:"evidence_key"`
 	Message     string    `db:"message" json:"message"`
+	TenantID    uuid.UUID `db:"tenant_id" json:"tenant_id"`
 }
 
 func (q *sqlQuerier) InsertProofRequest(ctx context.Context, arg InsertProofRequestParams) (ProofRequest, error) {
@@ -15162,6 +15198,7 @@ func (q *sqlQuerier) InsertProofRequest(ctx context.Context, arg InsertProofRequ
 		arg.Purpose,
 		arg.EvidenceKey,
 		arg.Message,
+		arg.TenantID,
 	)
 	var i ProofRequest
 	err := row.Scan(
@@ -15176,6 +15213,7 @@ func (q *sqlQuerier) InsertProofRequest(ctx context.Context, arg InsertProofRequ
 		&i.CreatedAt,
 		&i.ReviewedAt,
 		&i.EvidenceDeletePending,
+		&i.TenantID,
 	)
 	return i, err
 }
@@ -15207,11 +15245,11 @@ func (q *sqlQuerier) InsertProofSubject(ctx context.Context, arg InsertProofSubj
 }
 
 const listAdminProofRequests = `-- name: ListAdminProofRequests :many
-SELECT id, applicant_id, purpose, evidence_key, status, message, response, reviewer_id, created_at, reviewed_at, evidence_delete_pending FROM proof_requests ORDER BY (status = 'pending') DESC, created_at DESC LIMIT 200
+SELECT id, applicant_id, purpose, evidence_key, status, message, response, reviewer_id, created_at, reviewed_at, evidence_delete_pending, tenant_id FROM proof_requests WHERE tenant_id = $1 ORDER BY (status = 'pending') DESC, created_at DESC LIMIT 200
 `
 
-func (q *sqlQuerier) ListAdminProofRequests(ctx context.Context) ([]ProofRequest, error) {
-	rows, err := q.db.Query(ctx, listAdminProofRequests)
+func (q *sqlQuerier) ListAdminProofRequests(ctx context.Context, tenantID uuid.UUID) ([]ProofRequest, error) {
+	rows, err := q.db.Query(ctx, listAdminProofRequests, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -15231,6 +15269,83 @@ func (q *sqlQuerier) ListAdminProofRequests(ctx context.Context) ([]ProofRequest
 			&i.CreatedAt,
 			&i.ReviewedAt,
 			&i.EvidenceDeletePending,
+			&i.TenantID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllProofEvidenceCleanup = `-- name: ListAllProofEvidenceCleanup :many
+SELECT id, applicant_id, purpose, evidence_key, status, message, response, reviewer_id, created_at, reviewed_at, evidence_delete_pending, tenant_id FROM proof_requests WHERE evidence_delete_pending ORDER BY reviewed_at LIMIT 20
+`
+
+func (q *sqlQuerier) ListAllProofEvidenceCleanup(ctx context.Context) ([]ProofRequest, error) {
+	rows, err := q.db.Query(ctx, listAllProofEvidenceCleanup)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ProofRequest
+	for rows.Next() {
+		var i ProofRequest
+		if err := rows.Scan(
+			&i.ID,
+			&i.ApplicantID,
+			&i.Purpose,
+			&i.EvidenceKey,
+			&i.Status,
+			&i.Message,
+			&i.Response,
+			&i.ReviewerID,
+			&i.CreatedAt,
+			&i.ReviewedAt,
+			&i.EvidenceDeletePending,
+			&i.TenantID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllProofRequests = `-- name: ListAllProofRequests :many
+SELECT id, applicant_id, purpose, evidence_key, status, message, response, reviewer_id, created_at, reviewed_at, evidence_delete_pending, tenant_id FROM proof_requests ORDER BY (status = 'pending') DESC, created_at DESC LIMIT 200
+`
+
+// Root-domain site admins only: caller must use AdminBypass to include tenants
+// excluded by root-domain RLS.
+func (q *sqlQuerier) ListAllProofRequests(ctx context.Context) ([]ProofRequest, error) {
+	rows, err := q.db.Query(ctx, listAllProofRequests)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ProofRequest
+	for rows.Next() {
+		var i ProofRequest
+		if err := rows.Scan(
+			&i.ID,
+			&i.ApplicantID,
+			&i.Purpose,
+			&i.EvidenceKey,
+			&i.Status,
+			&i.Message,
+			&i.Response,
+			&i.ReviewerID,
+			&i.CreatedAt,
+			&i.ReviewedAt,
+			&i.EvidenceDeletePending,
+			&i.TenantID,
 		); err != nil {
 			return nil, err
 		}
@@ -15243,11 +15358,16 @@ func (q *sqlQuerier) ListAdminProofRequests(ctx context.Context) ([]ProofRequest
 }
 
 const listMyProofRequests = `-- name: ListMyProofRequests :many
-SELECT id, applicant_id, purpose, evidence_key, status, message, response, reviewer_id, created_at, reviewed_at, evidence_delete_pending FROM proof_requests WHERE applicant_id = $1 ORDER BY created_at DESC LIMIT 100
+SELECT id, applicant_id, purpose, evidence_key, status, message, response, reviewer_id, created_at, reviewed_at, evidence_delete_pending, tenant_id FROM proof_requests WHERE applicant_id = $1 AND tenant_id = $2 ORDER BY created_at DESC LIMIT 100
 `
 
-func (q *sqlQuerier) ListMyProofRequests(ctx context.Context, applicantID uuid.UUID) ([]ProofRequest, error) {
-	rows, err := q.db.Query(ctx, listMyProofRequests, applicantID)
+type ListMyProofRequestsParams struct {
+	ApplicantID uuid.UUID `db:"applicant_id" json:"applicant_id"`
+	TenantID    uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) ListMyProofRequests(ctx context.Context, arg ListMyProofRequestsParams) ([]ProofRequest, error) {
+	rows, err := q.db.Query(ctx, listMyProofRequests, arg.ApplicantID, arg.TenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -15267,6 +15387,7 @@ func (q *sqlQuerier) ListMyProofRequests(ctx context.Context, applicantID uuid.U
 			&i.CreatedAt,
 			&i.ReviewedAt,
 			&i.EvidenceDeletePending,
+			&i.TenantID,
 		); err != nil {
 			return nil, err
 		}
@@ -15279,11 +15400,11 @@ func (q *sqlQuerier) ListMyProofRequests(ctx context.Context, applicantID uuid.U
 }
 
 const listProofEvidenceCleanup = `-- name: ListProofEvidenceCleanup :many
-SELECT id, applicant_id, purpose, evidence_key, status, message, response, reviewer_id, created_at, reviewed_at, evidence_delete_pending FROM proof_requests WHERE evidence_delete_pending ORDER BY reviewed_at LIMIT 20
+SELECT id, applicant_id, purpose, evidence_key, status, message, response, reviewer_id, created_at, reviewed_at, evidence_delete_pending, tenant_id FROM proof_requests WHERE evidence_delete_pending AND tenant_id = $1 ORDER BY reviewed_at LIMIT 20
 `
 
-func (q *sqlQuerier) ListProofEvidenceCleanup(ctx context.Context) ([]ProofRequest, error) {
-	rows, err := q.db.Query(ctx, listProofEvidenceCleanup)
+func (q *sqlQuerier) ListProofEvidenceCleanup(ctx context.Context, tenantID uuid.UUID) ([]ProofRequest, error) {
+	rows, err := q.db.Query(ctx, listProofEvidenceCleanup, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -15303,6 +15424,7 @@ func (q *sqlQuerier) ListProofEvidenceCleanup(ctx context.Context) ([]ProofReque
 			&i.CreatedAt,
 			&i.ReviewedAt,
 			&i.EvidenceDeletePending,
+			&i.TenantID,
 		); err != nil {
 			return nil, err
 		}
@@ -15349,11 +15471,16 @@ func (q *sqlQuerier) ListProofSubjects(ctx context.Context, requestID uuid.UUID)
 }
 
 const lockPendingProofRequest = `-- name: LockPendingProofRequest :one
-SELECT id, applicant_id, purpose, evidence_key, status, message, response, reviewer_id, created_at, reviewed_at, evidence_delete_pending FROM proof_requests WHERE id = $1 AND status = 'pending' FOR UPDATE
+SELECT id, applicant_id, purpose, evidence_key, status, message, response, reviewer_id, created_at, reviewed_at, evidence_delete_pending, tenant_id FROM proof_requests WHERE id = $1 AND tenant_id = $2 AND status = 'pending' FOR UPDATE
 `
 
-func (q *sqlQuerier) LockPendingProofRequest(ctx context.Context, id uuid.UUID) (ProofRequest, error) {
-	row := q.db.QueryRow(ctx, lockPendingProofRequest, id)
+type LockPendingProofRequestParams struct {
+	ID       uuid.UUID `db:"id" json:"id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) LockPendingProofRequest(ctx context.Context, arg LockPendingProofRequestParams) (ProofRequest, error) {
+	row := q.db.QueryRow(ctx, lockPendingProofRequest, arg.ID, arg.TenantID)
 	var i ProofRequest
 	err := row.Scan(
 		&i.ID,
@@ -15367,6 +15494,32 @@ func (q *sqlQuerier) LockPendingProofRequest(ctx context.Context, id uuid.UUID) 
 		&i.CreatedAt,
 		&i.ReviewedAt,
 		&i.EvidenceDeletePending,
+		&i.TenantID,
+	)
+	return i, err
+}
+
+const lockPendingProofRequestByID = `-- name: LockPendingProofRequestByID :one
+SELECT id, applicant_id, purpose, evidence_key, status, message, response, reviewer_id, created_at, reviewed_at, evidence_delete_pending, tenant_id FROM proof_requests WHERE id = $1 AND status = 'pending' FOR UPDATE
+`
+
+// Root-domain site admins only (AdminBypass context).
+func (q *sqlQuerier) LockPendingProofRequestByID(ctx context.Context, id uuid.UUID) (ProofRequest, error) {
+	row := q.db.QueryRow(ctx, lockPendingProofRequestByID, id)
+	var i ProofRequest
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicantID,
+		&i.Purpose,
+		&i.EvidenceKey,
+		&i.Status,
+		&i.Message,
+		&i.Response,
+		&i.ReviewerID,
+		&i.CreatedAt,
+		&i.ReviewedAt,
+		&i.EvidenceDeletePending,
+		&i.TenantID,
 	)
 	return i, err
 }

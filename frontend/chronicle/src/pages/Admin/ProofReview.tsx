@@ -50,7 +50,7 @@ function Review({ request }: { request: ProofRequest }) {
   });
   return <article className="rounded-lg border p-4 space-y-4">
     <div className="flex flex-wrap justify-between gap-2"><h3 className="font-medium">Request {request.id.slice(0, 8)}</h3><span className="text-sm text-muted-foreground">{new Date(request.created_at).toLocaleString()}</span></div>
-    {request.applicant_id && <p className="text-sm">Applicant ID: {request.applicant_id}</p>}
+    <p className="text-sm text-muted-foreground">Tenant: {request.tenant_id} · Applicant ID: {request.applicant_id}</p>
     {request.message && <p className="rounded bg-muted/50 p-3 text-sm whitespace-pre-wrap">Applicant: {request.message}</p>}
     <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(16rem,2fr)]">
       <Evidence id={request.id} onAvailable={() => setEvidenceAvailable(true)} />
@@ -89,7 +89,7 @@ export function ProofReview() {
     {!!data?.some((request) => request.status !== "pending") && <div className="border-t pt-4 space-y-2">
       <h3 className="text-sm font-medium">Recent decisions</h3>
       {data.filter((request) => request.status !== "pending").slice(0, 10).map((request) => <div key={request.id} className="rounded border p-3 text-sm">
-        <span className="font-medium capitalize">{request.status}</span> · {request.applicant_id} · {new Date(request.reviewed_at ?? request.created_at).toLocaleString()}
+        <span className="font-medium capitalize">{request.status}</span> · Tenant {request.tenant_id} · {request.applicant_id} · {new Date(request.reviewed_at ?? request.created_at).toLocaleString()}
         <p className="text-muted-foreground">{request.subjects.map((subject) => `${subject.name}: ${subject.status}`).join(", ")}</p>
         {request.response && <p>Response: {request.response}</p>}
       </div>)}

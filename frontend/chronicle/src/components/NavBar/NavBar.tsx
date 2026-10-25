@@ -33,17 +33,19 @@ export function NavBar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
 
+  const { data: siteConfig } = useSiteConfig();
+  const tenantID = siteConfig?.tenant?.id;
   // Check admin permissions via SpiceDB
   const authzChecks = useMemo(() => ({
     admin: "chronicle:chronicle#admin_users",
-    proofReviewer: "chronicle:chronicle#review_photo_proof",
+    proofReviewer: tenantID ? `wow_tenant:${tenantID}#review_photo_proof` : "chronicle:chronicle#admin_users",
     adminAuthz: "chronicle:chronicle#administer_authz",
     adminWorldData: "chronicle:chronicle#admin_world_data",
     manageConsumables: "chronicle:chronicle#admin_consumables",
     canAdminSomeServer: "lookup:wow_server#administer",
     adminServers: "chronicle:chronicle#admin_servers",
     adminLogs: "chronicle:chronicle#admin_logs",
-  }), []);
+  }), [tenantID]);
   const { data: authz } = useAuthorizationCheck(authzChecks, {
     enabled: isAuthenticated,
   });
@@ -55,7 +57,6 @@ export function NavBar() {
   const canManageServers = (authz?.canAdminSomeServer ?? false) || (authz?.adminServers ?? false);
   const hasAdminLogs = authz?.adminLogs ?? false;
 
-  const { data: siteConfig } = useSiteConfig();
   const userID = session?.user_id ?? "";
   const whatsNewStatus = useWhatsNewStatus(userID, isAuthenticated);
   const { mutate: markWhatsNewRead, isPending: markingWhatsNewRead } = useMarkWhatsNewRead(userID);

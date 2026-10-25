@@ -13,12 +13,53 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/services/serviceproof"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 )
+
+// proofPermission checks the resolved tenant, never a tenant ID supplied by
+// the client. On the root domain only site-wide user admins may review every
+// tenant's requests. Tenant admins have no implicit proof-review permission.
+func (h *Handler) proofPermission(review bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+			actor, ok := authz.ActorFromContext(ctx)
+			if !ok {
+				httpapi.Forbidden(w, nil)
+				return
+			}
+			b := policy.New()
+			tenant := servicetenant.TenantFromContext(ctx)
+			if tenant == nil && !review {
+				httpapi.Forbidden(w, nil)
+				return
+			}
+			var can bool
+			var err error
+			if tenant == nil {
+				can, err = h.zed.CheckOne(ctx, nil, b.GlobalChronicle().CanAdmin_users_User(actor))
+			} else if review {
+				can, err = h.zed.CheckOne(ctx, nil, b.Wow_tenant(tenant.ID).CanReview_photo_proof_User(actor))
+			} else {
+				can, err = h.zed.CheckOne(ctx, nil, b.Wow_tenant(tenant.ID).CanSubmit_photo_proof_User(actor))
+			}
+			if err != nil {
+				httpapi.InternalServerError(w, err)
+				return
+			}
+			if !can {
+				httpapi.Forbidden(w, nil)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
 
 func proofError(w http.ResponseWriter, r *http.Request, status int, message string) {
 	httpapi.Write(r.Context(), w, status, chroniclesdk.Response{Message: message})
@@ -89,7 +130,7 @@ func (h *Handler) SubmitProof(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	user := chronauth.AuthenticationState(r).Claims.Subject
-	id, err := h.proofs.Create(ctx, user, "character-link", r.FormValue("message"), image, subjects)
+	id, err := h.proofs.Create(ctx, tenant.ID, user, "character-link", r.FormValue("message"), image, subjects)
 	if isProofPendingConflict(err) {
 		proofError(w, r, http.StatusConflict, "A selected character already has a pending proof request")
 		return
@@ -98,7 +139,7 @@ func (h *Handler) SubmitProof(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	result, err := h.proofResponse(ctx, id)
+	result, err := h.proofResponse(ctx, serviceproof.Scope{TenantID: tenant.ID}, id)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -127,12 +168,15 @@ func isProofPendingConflict(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "proof_request_subjects_pending_character"
 }
 
-func (h *Handler) proofResponse(ctx context.Context, id uuid.UUID) (chroniclesdk.ProofRequest, error) {
-	row, subjects, err := h.proofs.Get(ctx, id)
+func (h *Handler) proofResponse(ctx context.Context, scope serviceproof.Scope, id uuid.UUID) (chroniclesdk.ProofRequest, error) {
+	if scope.AllTenants {
+		ctx = servicetenant.AdminBypass(ctx)
+	}
+	row, subjects, err := h.proofs.Get(ctx, scope, id)
 	if err != nil {
 		return chroniclesdk.ProofRequest{}, err
 	}
-	out := chroniclesdk.ProofRequest{ID: row.ID, ApplicantID: row.ApplicantID, Purpose: row.Purpose, Status: row.Status, Message: row.Message, Response: row.Response, CreatedAt: row.CreatedAt.Time, Subjects: make([]chroniclesdk.ProofSubject, 0, len(subjects))}
+	out := chroniclesdk.ProofRequest{ID: row.ID, ApplicantID: row.ApplicantID, TenantID: row.TenantID, Purpose: row.Purpose, Status: row.Status, Message: row.Message, Response: row.Response, CreatedAt: row.CreatedAt.Time, Subjects: make([]chroniclesdk.ProofSubject, 0, len(subjects))}
 	if row.ReviewedAt.Valid {
 		t := row.ReviewedAt.Time
 		out.ReviewedAt = &t
@@ -155,27 +199,36 @@ func (h *Handler) proofResponse(ctx context.Context, id uuid.UUID) (chroniclesdk
 }
 
 func (h *Handler) ListMyProofs(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.proofs.ListMine(r.Context(), chronauth.AuthenticationState(r).Claims.Subject)
+	scope := serviceproof.Scope{TenantID: servicetenant.TenantIDFromContext(r.Context())}
+	rows, err := h.proofs.ListMine(r.Context(), scope.TenantID, chronauth.AuthenticationState(r).Claims.Subject)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	h.writeProofs(w, r, rows)
+	h.writeProofs(w, r, scope, rows)
+}
+
+func reviewProofScope(ctx context.Context) serviceproof.Scope {
+	if tenant := servicetenant.TenantFromContext(ctx); tenant != nil {
+		return serviceproof.Scope{TenantID: tenant.ID}
+	}
+	return serviceproof.Scope{AllTenants: true}
 }
 
 func (h *Handler) ListAdminProofs(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.proofs.ListForReview(r.Context())
+	scope := reviewProofScope(r.Context())
+	rows, err := h.proofs.ListForReview(r.Context(), scope)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	h.writeProofs(w, r, rows)
+	h.writeProofs(w, r, scope, rows)
 }
 
-func (h *Handler) writeProofs(w http.ResponseWriter, r *http.Request, rows []database.ProofRequest) {
+func (h *Handler) writeProofs(w http.ResponseWriter, r *http.Request, scope serviceproof.Scope, rows []database.ProofRequest) {
 	result := make([]chroniclesdk.ProofRequest, 0, len(rows))
 	for _, row := range rows {
-		proof, err := h.proofResponse(r.Context(), row.ID)
+		proof, err := h.proofResponse(r.Context(), scope, row.ID)
 		if err != nil {
 			httpapi.InternalServerError(w, err)
 			return
@@ -193,7 +246,7 @@ func (h *Handler) ProofImage(w http.ResponseWriter, r *http.Request) {
 		proofError(w, r, 400, "Invalid proof ID")
 		return
 	}
-	data, err := h.proofs.Evidence(r.Context(), id)
+	data, err := h.proofs.Evidence(r.Context(), reviewProofScope(r.Context()), id)
 	if errors.Is(err, sql.ErrNoRows) {
 		proofError(w, r, 404, "Proof not found")
 		return
@@ -233,7 +286,8 @@ func (h *Handler) DecideProof(w http.ResponseWriter, r *http.Request) {
 	}
 	// Resolve the API's realm/GUID identities into subject IDs. The service
 	// rechecks this exact set after locking the pending request.
-	_, subjects, err := h.proofs.Get(r.Context(), id)
+	scope := reviewProofScope(r.Context())
+	_, subjects, err := h.proofs.Get(r.Context(), scope, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		proofError(w, r, http.StatusConflict, "Proof already decided or character already linked")
 		return
@@ -265,7 +319,7 @@ func (h *Handler) DecideProof(w http.ResponseWriter, r *http.Request) {
 		decisions[subjectID] = decision.Approved
 	}
 	reviewer := chronauth.AuthenticationState(r).Claims.Subject
-	err = h.proofs.Decide(r.Context(), id, reviewer, "character-link", input.Message, decisions, func(ctx context.Context, tx *authz.AuthzTX, row database.ProofRequest, subject database.ProofRequestSubject) error {
+	err = h.proofs.Decide(r.Context(), scope, id, reviewer, "character-link", input.Message, decisions, func(ctx context.Context, tx *authz.AuthzTX, row database.ProofRequest, subject database.ProofRequestSubject) error {
 		if !subject.RealmID.Valid || subject.CharacterGuid == nil || subject.SubjectType != "character" {
 			return serviceproof.ErrConflict
 		}
@@ -293,7 +347,7 @@ func (h *Handler) DecideProof(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	result, err := h.proofResponse(r.Context(), id)
+	result, err := h.proofResponse(r.Context(), scope, id)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return

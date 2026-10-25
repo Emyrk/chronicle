@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/storage"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
 )
 
@@ -27,6 +28,21 @@ var ErrInvalidImage = errors.New("invalid JPEG photo (maximum 8 MB and 20 megapi
 var ErrConflict = errors.New("proof already decided or subject changed")
 var ErrEvidenceNotFound = errors.New("proof evidence unavailable")
 var ErrEvidenceDeleted = errors.New("proof evidence deleted")
+
+// Scope identifies a tenant's requests. AllTenants is reserved for a
+// root-domain site admin, after the HTTP layer checks global authorization.
+// It explicitly bypasses root-domain RLS to include non-discoverable tenants.
+type Scope struct {
+	TenantID   uuid.UUID
+	AllTenants bool
+}
+
+func (scope Scope) context(ctx context.Context) context.Context {
+	if scope.AllTenants {
+		return servicetenant.AdminBypass(ctx)
+	}
+	return ctx
+}
 
 // Service stores and reviews evidence independent of the kind of ownership
 // being proved. The subject-specific callback runs in the same transaction as
@@ -90,7 +106,7 @@ func validateSubjects(subjects []Subject) error {
 
 // Create writes the evidence first, then records the request and subjects in
 // one transaction. The caller resolves and validates subject identities first.
-func (s *Service) Create(ctx context.Context, applicant uuid.UUID, purpose, message string, image []byte, subjects []Subject) (uuid.UUID, error) {
+func (s *Service) Create(ctx context.Context, tenantID, applicant uuid.UUID, purpose, message string, image []byte, subjects []Subject) (uuid.UUID, error) {
 	if s.storage == nil {
 		return uuid.Nil, errors.New("proof storage unavailable")
 	}
@@ -110,7 +126,7 @@ func (s *Service) Create(ctx context.Context, applicant uuid.UUID, purpose, mess
 		return uuid.Nil, err
 	}
 	err := s.db.InTx(ctx, func(tx *authz.AuthzTX) error {
-		if _, err := tx.InsertProofRequest(ctx, database.InsertProofRequestParams{ID: id, ApplicantID: applicant, Purpose: purpose, EvidenceKey: key, Message: message}); err != nil {
+		if _, err := tx.InsertProofRequest(ctx, database.InsertProofRequestParams{ID: id, TenantID: tenantID, ApplicantID: applicant, Purpose: purpose, EvidenceKey: key, Message: message}); err != nil {
 			return err
 		}
 		for _, subject := range subjects {
@@ -136,8 +152,15 @@ func (s *Service) Create(ctx context.Context, applicant uuid.UUID, purpose, mess
 	return id, nil
 }
 
-func (s *Service) Get(ctx context.Context, id uuid.UUID) (database.ProofRequest, []database.ProofRequestSubject, error) {
-	row, err := s.db.GetProofRequest(ctx, id)
+func (s *Service) Get(ctx context.Context, scope Scope, id uuid.UUID) (database.ProofRequest, []database.ProofRequestSubject, error) {
+	ctx = scope.context(ctx)
+	var row database.ProofRequest
+	var err error
+	if scope.AllTenants {
+		row, err = s.db.GetProofRequest(ctx, id)
+	} else {
+		row, err = s.db.GetTenantProofRequest(ctx, database.GetTenantProofRequestParams{ID: id, TenantID: scope.TenantID})
+	}
 	if err != nil {
 		return database.ProofRequest{}, nil, err
 	}
@@ -145,22 +168,26 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (database.ProofRequest,
 	return row, subjects, err
 }
 
-func (s *Service) ListMine(ctx context.Context, applicant uuid.UUID) ([]database.ProofRequest, error) {
-	return s.db.ListMyProofRequests(ctx, applicant)
+func (s *Service) ListMine(ctx context.Context, tenantID, applicant uuid.UUID) ([]database.ProofRequest, error) {
+	return s.db.ListMyProofRequests(ctx, database.ListMyProofRequestsParams{ApplicantID: applicant, TenantID: tenantID})
 }
 
-func (s *Service) ListForReview(ctx context.Context) ([]database.ProofRequest, error) {
-	s.RetryCleanup(ctx)
-	return s.db.ListAdminProofRequests(ctx)
+func (s *Service) ListForReview(ctx context.Context, scope Scope) ([]database.ProofRequest, error) {
+	s.RetryCleanup(ctx, scope)
+	ctx = scope.context(ctx)
+	if scope.AllTenants {
+		return s.db.ListAllProofRequests(ctx)
+	}
+	return s.db.ListAdminProofRequests(ctx, scope.TenantID)
 }
 
 // Evidence is called only after the HTTP layer has authorized an administrator.
 // A completed request never serves its evidence, even if deletion is pending.
-func (s *Service) Evidence(ctx context.Context, id uuid.UUID) ([]byte, error) {
+func (s *Service) Evidence(ctx context.Context, scope Scope, id uuid.UUID) ([]byte, error) {
 	if s.storage == nil {
 		return nil, errors.New("proof storage unavailable")
 	}
-	row, err := s.db.GetProofRequest(ctx, id)
+	row, _, err := s.Get(ctx, scope, id)
 	if err != nil {
 		return nil, err
 	}
@@ -179,12 +206,19 @@ func (s *Service) Evidence(ctx context.Context, id uuid.UUID) ([]byte, error) {
 // every pending subject exactly once, keyed by subject row ID.
 type Approve func(context.Context, *authz.AuthzTX, database.ProofRequest, database.ProofRequestSubject) error
 
-func (s *Service) Decide(ctx context.Context, id, reviewer uuid.UUID, purpose, message string, decisions map[uuid.UUID]bool, approve Approve) error {
+func (s *Service) Decide(ctx context.Context, scope Scope, id, reviewer uuid.UUID, purpose, message string, decisions map[uuid.UUID]bool, approve Approve) error {
 	if approve == nil {
 		return errors.New("proof approval handler is required")
 	}
+	ctx = scope.context(ctx)
 	err := s.db.InTx(ctx, func(tx *authz.AuthzTX) error {
-		row, err := tx.LockPendingProofRequest(ctx, id)
+		var row database.ProofRequest
+		var err error
+		if scope.AllTenants {
+			row, err = tx.LockPendingProofRequestByID(ctx, id)
+		} else {
+			row, err = tx.LockPendingProofRequest(ctx, database.LockPendingProofRequestParams{ID: id, TenantID: scope.TenantID})
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrConflict
 		}
@@ -245,15 +279,22 @@ func (s *Service) Decide(ctx context.Context, id, reviewer uuid.UUID, purpose, m
 	// for the next admin request; never expose completed evidence meanwhile.
 	cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	s.RetryCleanup(cleanup)
+	s.RetryCleanup(cleanup, scope)
 	return nil
 }
 
-func (s *Service) RetryCleanup(ctx context.Context) {
+func (s *Service) RetryCleanup(ctx context.Context, scope Scope) {
 	if s.storage == nil {
 		return
 	}
-	rows, err := s.db.ListProofEvidenceCleanup(ctx)
+	ctx = scope.context(ctx)
+	var rows []database.ProofRequest
+	var err error
+	if scope.AllTenants {
+		rows, err = s.db.ListAllProofEvidenceCleanup(ctx)
+	} else {
+		rows, err = s.db.ListProofEvidenceCleanup(ctx, scope.TenantID)
+	}
 	if err != nil {
 		return
 	}
@@ -263,6 +304,6 @@ func (s *Service) RetryCleanup(ctx context.Context) {
 				continue
 			}
 		}
-		_ = s.db.CompleteProofEvidenceCleanup(ctx, row.ID)
+		_ = s.db.CompleteProofEvidenceCleanup(ctx, database.CompleteProofEvidenceCleanupParams{ID: row.ID, TenantID: row.TenantID})
 	}
 }

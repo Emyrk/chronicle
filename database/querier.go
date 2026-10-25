@@ -47,7 +47,7 @@ type sqlcQuerier interface {
 	CompleteDiscordMembershipGrantCheckMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckMemberParams) (DiscordMembershipGrantCheck, error)
 	CompleteDiscordMembershipGrantCheckNonMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckNonMemberParams) (DiscordMembershipGrantCheck, error)
 	CompleteInferenceClientToolRequest(ctx context.Context, arg CompleteInferenceClientToolRequestParams) (InferenceClientToolRequest, error)
-	CompleteProofEvidenceCleanup(ctx context.Context, id uuid.UUID) error
+	CompleteProofEvidenceCleanup(ctx context.Context, arg CompleteProofEvidenceCleanupParams) error
 	ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error)
 	ConsumeInferenceOAuthTransaction(ctx context.Context, arg ConsumeInferenceOAuthTransactionParams) (InferenceOauthTransaction, error)
 	CopyLegacySpellEffects(ctx context.Context, arg []CopyLegacySpellEffectsParams) *CopyLegacySpellEffectsBatchResults
@@ -375,6 +375,7 @@ type sqlcQuerier interface {
 	// Tenant queries. These run with AdminBypass context since the tenants table
 	// itself is not behind RLS (only wow_servers/wow_server_realms are).
 	GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Tenant, error)
+	GetTenantProofRequest(ctx context.Context, arg GetTenantProofRequestParams) (ProofRequest, error)
 	GetTimeParseBossKillCohortEntries(ctx context.Context, arg GetTimeParseBossKillCohortEntriesParams) ([]GetTimeParseBossKillCohortEntriesRow, error)
 	GetTimeParseBossKillMembershipCohort(ctx context.Context, arg GetTimeParseBossKillMembershipCohortParams) ([]int64, error)
 	GetTimeParseClearTimeCohortEntries(ctx context.Context, arg GetTimeParseClearTimeCohortEntriesParams) ([]GetTimeParseClearTimeCohortEntriesRow, error)
@@ -558,9 +559,13 @@ type sqlcQuerier interface {
 	ListActiveAdminTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListActivePublicTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListAdminActiveCustomPanelInstallations(ctx context.Context) ([]ListAdminActiveCustomPanelInstallationsRow, error)
-	ListAdminProofRequests(ctx context.Context) ([]ProofRequest, error)
+	ListAdminProofRequests(ctx context.Context, tenantID uuid.UUID) ([]ProofRequest, error)
 	ListAffectedAuraDurationCandidates(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationCandidatesRow, error)
 	ListAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationsByDatasetRow, error)
+	ListAllProofEvidenceCleanup(ctx context.Context) ([]ProofRequest, error)
+	// Root-domain site admins only: caller must use AdminBypass to include tenants
+	// excluded by root-domain RLS.
+	ListAllProofRequests(ctx context.Context) ([]ProofRequest, error)
 	ListAllRetentionPolicies(ctx context.Context) ([]RetentionPolicy, error)
 	ListAllUsers(ctx context.Context) ([]ListAllUsersRow, error)
 	ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAllWoWLogGroupsWithOwnerRow, error)
@@ -619,7 +624,7 @@ type sqlcQuerier interface {
 	ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error)
 	ListLogFilePartsForDeletion(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)
-	ListMyProofRequests(ctx context.Context, applicantID uuid.UUID) ([]ProofRequest, error)
+	ListMyProofRequests(ctx context.Context, arg ListMyProofRequestsParams) ([]ProofRequest, error)
 	ListObservedItemIDsForDate(ctx context.Context, arg ListObservedItemIDsForDateParams) ([]int32, error)
 	ListParseScoreCohortBuckets(ctx context.Context, arg ListParseScoreCohortBucketsParams) ([]ListParseScoreCohortBucketsRow, error)
 	ListParseScoreMemberships(ctx context.Context, arg ListParseScoreMembershipsParams) ([]ParseScoreMembership, error)
@@ -637,7 +642,7 @@ type sqlcQuerier interface {
 	// Receipt-less results are authoritative historical data. Read them without
 	// joining snapshot tables or score memberships so they can never be recomputed.
 	ListPersistedParseScoreResultsForInstance(ctx context.Context, arg ListPersistedParseScoreResultsForInstanceParams) ([]ParseScoreResult, error)
-	ListProofEvidenceCleanup(ctx context.Context) ([]ProofRequest, error)
+	ListProofEvidenceCleanup(ctx context.Context, tenantID uuid.UUID) ([]ProofRequest, error)
 	ListProofSubjects(ctx context.Context, requestID uuid.UUID) ([]ProofRequestSubject, error)
 	ListRaidCompositionsByUser(ctx context.Context, arg ListRaidCompositionsByUserParams) ([]RaidComposition, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
@@ -714,7 +719,9 @@ type sqlcQuerier interface {
 	ListWoWServersByTenantID(ctx context.Context, tenantID uuid.NullUUID) ([]WowServer, error)
 	ListWorlds(ctx context.Context) ([]World, error)
 	LockLogFilePartSequence(ctx context.Context, logFileID uuid.UUID) (uuid.UUID, error)
-	LockPendingProofRequest(ctx context.Context, id uuid.UUID) (ProofRequest, error)
+	LockPendingProofRequest(ctx context.Context, arg LockPendingProofRequestParams) (ProofRequest, error)
+	// Root-domain site admins only (AdminBypass context).
+	LockPendingProofRequestByID(ctx context.Context, id uuid.UUID) (ProofRequest, error)
 	LockWoWLogGroupParseGeneration(ctx context.Context, id uuid.UUID) (int64, error)
 	MarkBillingWebhookEventProcessed(ctx context.Context, stripeEventID string) error
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error

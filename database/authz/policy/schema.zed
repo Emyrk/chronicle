@@ -18,10 +18,6 @@ definition chronicle {
   relation inference_disabled: user
   relation technical_user: user
   relation supporter: user
-  // Character photo-proof submissions are an opt-in rollout. Reviewers can
-  // later be granted independently of general user administration.
-  relation photo_proof_submitter: user
-  relation photo_proof_reviewer: user
 
   // Stripe-owned feature roles granted by Chronicle billing entitlements.
   relation stripe_ad_free: user
@@ -72,9 +68,6 @@ definition chronicle {
 
   permission admin_servers = technical_admin
 
-  permission submit_photo_proof = photo_proof_submitter + administer
-  permission review_photo_proof = photo_proof_reviewer + admin_users
-
   permission create_tenant_application = technical_admin + chronicle_guild_member
 }
 
@@ -84,8 +77,13 @@ definition wow_server_upload_key {}
 definition wow_tenant {
   relation chronicle: chronicle
   relation admin: user
+  relation photo_proof_submitter: user
+  relation photo_proof_reviewer: user
 
   permission administer = admin + chronicle->admin_tenants + chronicle->admin_tenants
+  // Tenant admins do not implicitly receive proof review access.
+  permission submit_photo_proof = photo_proof_submitter
+  permission review_photo_proof = photo_proof_reviewer
 }
 
 definition wow_tenant_application {

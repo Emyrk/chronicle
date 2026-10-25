@@ -18,6 +18,7 @@ export type ProofSubject = {
 
 export type ProofRequest = {
   id: string;
+  tenant_id: string;
   purpose: string;
   status: string;
   message: string;

@@ -1,6 +1,7 @@
 package database_test
 
 import (
+	"database/sql"
 	"testing"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -19,23 +20,44 @@ func TestProofRequestLifecycle(t *testing.T) {
 	_, err := db.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "proof-" + userID.String()[:8]})
 	require.NoError(t, err)
 	id := uuid.New()
-	created, err := db.InsertProofRequest(ctx, database.InsertProofRequestParams{ID: id, ApplicantID: userID, Purpose: "character-link", EvidenceKey: id.String() + ".jpg", Message: "Please review"})
+	tenantID := uuid.New()
+	created, err := db.InsertProofRequest(ctx, database.InsertProofRequestParams{ID: id, TenantID: tenantID, ApplicantID: userID, Purpose: "character-link", EvidenceKey: id.String() + ".jpg", Message: "Please review"})
 	require.NoError(t, err)
 	require.Equal(t, "pending", created.Status)
-	own, err := db.ListMyProofRequests(ctx, userID)
+	own, err := db.ListMyProofRequests(ctx, database.ListMyProofRequestsParams{ApplicantID: userID, TenantID: tenantID})
 	require.NoError(t, err)
 	require.Len(t, own, 1)
+	other, err := db.ListMyProofRequests(ctx, database.ListMyProofRequestsParams{ApplicantID: userID, TenantID: uuid.New()})
+	require.NoError(t, err)
+	require.Empty(t, other)
+	_, err = db.GetTenantProofRequest(ctx, database.GetTenantProofRequestParams{ID: id, TenantID: uuid.New()})
+	require.ErrorIs(t, err, sql.ErrNoRows)
+	otherID := uuid.New()
+	otherTenant := uuid.New()
+	_, err = db.InsertProofRequest(ctx, database.InsertProofRequestParams{ID: otherID, TenantID: otherTenant, ApplicantID: userID, Purpose: "character-link", EvidenceKey: otherID.String() + ".jpg"})
+	require.NoError(t, err)
+	mine, err := db.ListMyProofRequests(ctx, database.ListMyProofRequestsParams{ApplicantID: userID, TenantID: tenantID})
+	require.NoError(t, err)
+	require.Len(t, mine, 1)
+	review, err := db.ListAdminProofRequests(ctx, tenantID)
+	require.NoError(t, err)
+	require.Len(t, review, 1)
+	_, err = db.LockPendingProofRequest(ctx, database.LockPendingProofRequestParams{ID: otherID, TenantID: tenantID})
+	require.ErrorIs(t, err, sql.ErrNoRows)
+	all, err := db.ListAllProofRequests(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 2)
 	n, err := db.DecideProofRequest(ctx, database.DecideProofRequestParams{ID: id, Status: "rejected", Response: "Not enough evidence", ReviewerID: uuid.NullUUID{UUID: userID, Valid: true}})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
 	n, err = db.DecideProofRequest(ctx, database.DecideProofRequestParams{ID: id, Status: "approved", ReviewerID: uuid.NullUUID{UUID: userID, Valid: true}})
 	require.NoError(t, err)
 	require.Zero(t, n)
-	cleanup, err := db.ListProofEvidenceCleanup(ctx)
+	cleanup, err := db.ListProofEvidenceCleanup(ctx, tenantID)
 	require.NoError(t, err)
 	require.Len(t, cleanup, 1)
 	require.Equal(t, id, cleanup[0].ID)
-	require.NoError(t, db.CompleteProofEvidenceCleanup(ctx, id))
+	require.NoError(t, db.CompleteProofEvidenceCleanup(ctx, database.CompleteProofEvidenceCleanupParams{ID: id, TenantID: tenantID}))
 	final, err := db.GetProofRequest(ctx, id)
 	require.NoError(t, err)
 	require.Equal(t, "rejected", final.Status)
@@ -53,7 +75,7 @@ func TestProofPendingCharacterIsExclusive(t *testing.T) {
 	character := guid.GUID(12345)
 	ids := []uuid.UUID{uuid.New(), uuid.New()}
 	for _, id := range ids {
-		_, err := db.InsertProofRequest(ctx, database.InsertProofRequestParams{ID: id, ApplicantID: userID, Purpose: "character-link", EvidenceKey: id.String() + ".jpg"})
+		_, err := db.InsertProofRequest(ctx, database.InsertProofRequestParams{ID: id, TenantID: uuid.New(), ApplicantID: userID, Purpose: "character-link", EvidenceKey: id.String() + ".jpg"})
 		require.NoError(t, err)
 	}
 	insert := func(id uuid.UUID) error {

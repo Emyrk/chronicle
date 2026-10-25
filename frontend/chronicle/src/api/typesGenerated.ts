@@ -3042,6 +3042,7 @@ export interface ProofDecision extends ProofCharacter {
 export interface ProofRequest {
     readonly id: string;
     readonly applicant_id: string;
+    readonly tenant_id: string;
     readonly purpose: string;
     readonly status: string;
     readonly message: string;
@@ -4299,6 +4300,16 @@ export interface Tenant {
     readonly external_linking?: ExternalLinking;
     readonly created_at: string;
     readonly updated_at: string;
+}
+
+// From chroniclesdk/proofs.go
+/**
+ * TenantProofGrant assigns photo-proof permissions to one user on one tenant.
+ */
+export interface TenantProofGrant {
+    readonly user_id: string;
+    readonly submit: boolean;
+    readonly review: boolean;
 }
 
 // From chroniclesdk/server_application.go
