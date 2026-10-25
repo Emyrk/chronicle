@@ -292,7 +292,7 @@ func (api *API) Routes() chi.Router {
 				if api.Opts.Inference != nil {
 					r.Mount("/me/inference", api.Opts.Inference.AccountRoutes())
 				}
-				r.Post("/me/lua-projects", api.CreateLuaProject)
+				r.With(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanCreate_lua_project_User)).Post("/me/lua-projects", api.CreateLuaProject)
 				r.Get("/me/lua-projects", api.ListMyLuaProjects)
 				r.Get("/me/lua-projects/{projectID}", api.GetMyLuaProject)
 				r.Get("/me/lua-projects/{projectID}/draft/package", api.DownloadMyLuaProjectDraft)

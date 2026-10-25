@@ -16,6 +16,7 @@ definition chronicle {
   relation inference_capable: user
   relation inference_debug_capable: user
   relation inference_disabled: user
+  relation lua_project_author: user
   relation technical_user: user
   relation supporter: user
 
@@ -77,6 +78,8 @@ definition chronicle {
   permission inference_available = inference_capable + administer
   permission debug_inference_chat = inference_debug_capable + administer
   permission use_inference_chat = inference_available - inference_disabled
+  // Authoring is opt-in even for administrators; published projects stay public.
+  permission create_lua_project = lua_project_author
   permission create_layout = chronicle_guild_member + chronicle_member
   permission admin_world_data = technical_admin + is_admin_game_data
   permission admin_consumables = administer + manage_consumables
@@ -156,6 +159,16 @@ definition layout {
 
   permission delete = owner + chronicle->admin_layouts
   permission edit = owner + chronicle->admin_layouts
+}
+
+// Lua projects are created by explicitly opted-in users. Their published
+// channels are public by default; draft bytes remain owner-only in the API.
+definition lua_project {
+  relation owner: user
+  relation public_viewer: user:*
+
+  permission update = owner
+  permission view = owner + public_viewer
 }
 
 // Talent builds are always publicly viewable — no view permission needed.

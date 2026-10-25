@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -47,6 +48,36 @@ func luaProjectID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	return id, true
 }
 
+// canLuaProject checks the project object in SpiceDB. Public reads use a
+// wildcard-matching user subject even when the request has no session.
+func (a *API) canLuaProject(w http.ResponseWriter, r *http.Request, id uuid.UUID, update bool) bool {
+	actor, authenticated := authz.ActorFromContext(r.Context())
+	if !authenticated {
+		if update {
+			httpapi.Forbidden(w, nil)
+			return false
+		}
+		actor = policy.New().User(uuid.Nil)
+	}
+	project := policy.New().Lua_project(id)
+	var allowed bool
+	var err error
+	if update {
+		allowed, err = a.Opts.Zed.CheckOne(r.Context(), nil, project.CanUpdate_User(actor))
+	} else {
+		allowed, err = a.Opts.Zed.CheckOne(r.Context(), nil, project.CanView_User(actor))
+	}
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return false
+	}
+	if !allowed {
+		httpapi.Forbidden(w, nil)
+		return false
+	}
+	return true
+}
+
 func (a *API) CreateLuaProject(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	var req chroniclesdk.CreateLuaProjectRequest
@@ -57,7 +88,12 @@ func (a *API) CreateLuaProject(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid project name, kind or slug."})
 		return
 	}
-	p, err := a.Opts.Zed.CreateLuaProject(r.Context(), database.CreateLuaProjectParams{OwnerID: chronauth.MustAuthenticatedClaims(r.Context()).Subject, Kind: req.Kind, Name: req.Name, Slug: req.Slug})
+	var p database.LuaProject
+	err := a.Opts.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
+		var err error
+		p, err = tx.CreateLuaProject(r.Context(), database.CreateLuaProjectParams{OwnerID: chronauth.MustAuthenticatedClaims(r.Context()).Subject, Kind: req.Kind, Name: req.Name, Slug: req.Slug})
+		return err
+	}, nil)
 	if err != nil {
 		var pg *pgconn.PgError
 		if errors.As(err, &pg) && pg.Code == "23505" {
@@ -85,7 +121,7 @@ func (a *API) ListMyLuaProjects(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) GetMyLuaProject(w http.ResponseWriter, r *http.Request) {
 	id, ok := luaProjectID(w, r)
-	if !ok {
+	if !ok || !a.canLuaProject(w, r, id, false) {
 		return
 	}
 	p, err := a.Opts.Zed.GetOwnerLuaProject(r.Context(), database.GetOwnerLuaProjectParams{ID: id, OwnerID: chronauth.MustAuthenticatedClaims(r.Context()).Subject})
@@ -102,7 +138,7 @@ func (a *API) GetMyLuaProject(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 	id, ok := luaProjectID(w, r)
-	if !ok {
+	if !ok || !a.canLuaProject(w, r, id, true) {
 		return
 	}
 	revision, err := strconv.ParseInt(r.URL.Query().Get("expected_revision"), 10, 64)
@@ -144,7 +180,7 @@ func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) PublishLuaProject(w http.ResponseWriter, r *http.Request) {
 	id, ok := luaProjectID(w, r)
-	if !ok {
+	if !ok || !a.canLuaProject(w, r, id, true) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
@@ -198,7 +234,19 @@ func (a *API) ListPublicLuaProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := make([]chroniclesdk.LuaProject, 0, len(projects))
+	actor, ok := authz.ActorFromContext(r.Context())
+	if !ok {
+		actor = policy.New().User(uuid.Nil)
+	}
 	for _, p := range projects {
+		allowed, err := a.Opts.Zed.CheckOne(r.Context(), nil, policy.New().Lua_project(p.ID).CanView_User(actor))
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		if !allowed {
+			continue
+		}
 		item := luaProjectResponse(p, false)
 		item.Unstable = nil // Unstable releases are discoverable only through their project link.
 		out = append(out, item)
@@ -232,6 +280,9 @@ func (a *API) publicLuaProject(w http.ResponseWriter, r *http.Request) (database
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Channel not published."})
 		return database.LuaProject{}, "", false
 	}
+	if !a.canLuaProject(w, r, id, false) {
+		return database.LuaProject{}, "", false
+	}
 	return p, channel, true
 }
 
@@ -249,7 +300,7 @@ func (a *API) GetPublicLuaProject(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) DownloadMyLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 	id, ok := luaProjectID(w, r)
-	if !ok {
+	if !ok || !a.canLuaProject(w, r, id, true) {
 		return
 	}
 	owner := chronauth.MustAuthenticatedClaims(r.Context()).Subject
@@ -289,6 +340,9 @@ func (a *API) DownloadLuaProject(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		httpapi.InternalServerError(w, err)
+		return
+	}
+	if !a.canLuaProject(w, r, id, false) {
 		return
 	}
 	hash := result.LuaProject.StableHash.String

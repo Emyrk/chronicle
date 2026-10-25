@@ -4,6 +4,8 @@ Lua projects are account-owned source packages. A project has one editable draft
 
 ## Authoring and sharing
 
+Authoring is opt-in via the site-wide SpiceDB relation `chronicle:chronicle#lua_project_author@user:<id>` (assignable as **Lua Project Author** in Admin Users). This grants `create_lua_project`; even site administrators need the explicit grant. Creation records a `lua_project:<id>#owner@user:<id>` and `lua_project:<id>#public_viewer@user:*`. The owner can `update` drafts and publish channels. Published metadata and packages require `view` and remain public by default, including for anonymous visitors. Private draft downloads additionally require ownership; the public view grant does not expose drafts. Removing the site-wide role prevents new projects but does not revoke update access to projects already owned; remove the project owner relation separately to revoke that access.
+
 Create a panel at `/lua-projects`. Upload an uncompressed `.tar` with `project.json` and `main.lua`, or use the separate ephemeral inference author to propose `main.lua`, review its text, and explicitly upload it as a private draft. The model cannot publish a project. Preview loads the owner-only draft ZIP in the same sandbox as installed panels, but has no instance event data. Test data-driven behavior by adding the Unstable panel reference to an instance layout before promoting it.
 
 A minimal manifest is:
