@@ -3,6 +3,7 @@ package database_test
 import (
 	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
@@ -81,7 +82,23 @@ func TestProofPendingCharacterIsExclusive(t *testing.T) {
 	insert := func(id uuid.UUID) error {
 		return db.InsertProofSubject(ctx, database.InsertProofSubjectParams{RequestID: id, SubjectType: "character", RealmID: uuid.NullUUID{UUID: realmID, Valid: true}, CharacterGuid: &character, Name: "Tester", RealmName: "test-realm"})
 	}
+	// The class query joins armory data for both old and new requests,
+	// without another lookup for every subject in a review.
+	players := db.UpsertPlayers(ctx, []database.UpsertPlayersParams{{
+		ID: character, RealmID: realmID, Name: "Tester",
+		Class: database.WowPlayableClassWARRIOR, Gender: database.WowPlayableGenderMale,
+		Race: database.WowPlayableRaceHuman, Level: 60,
+		UpdatedAt: database.Timestamptz(time.Now()),
+	}})
+	require.NoError(t, players.Close())
 	require.NoError(t, insert(ids[0]))
+	classes, err := db.ListProofSubjectClasses(ctx, ids[0])
+	require.NoError(t, err)
+	require.Len(t, classes, 1)
+	require.Equal(t, database.WowPlayableClassWARRIOR, classes[0].Class)
+	otherClasses, err := db.ListProofSubjectClasses(ctx, ids[1])
+	require.NoError(t, err)
+	require.Empty(t, otherClasses)
 	require.True(t, database.IsUniqueViolation(insert(ids[1])))
 	subjects, err := db.ListProofSubjects(ctx, ids[0])
 	require.NoError(t, err)

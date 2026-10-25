@@ -15436,6 +15436,40 @@ func (q *sqlQuerier) ListProofEvidenceCleanup(ctx context.Context, tenantID uuid
 	return items, nil
 }
 
+const listProofSubjectClasses = `-- name: ListProofSubjectClasses :many
+SELECT s.id AS subject_id, gp.class
+FROM proof_request_subjects s
+JOIN game_players gp ON gp.realm_id = s.realm_id AND gp.id = s.character_guid
+WHERE s.request_id = $1
+`
+
+type ListProofSubjectClassesRow struct {
+	SubjectID uuid.UUID        `db:"subject_id" json:"subject_id"`
+	Class     WowPlayableClass `db:"class" json:"class"`
+}
+
+// Resolve current armory classes in one query per request; old requests and
+// characters removed from the armory still render without a class color.
+func (q *sqlQuerier) ListProofSubjectClasses(ctx context.Context, requestID uuid.UUID) ([]ListProofSubjectClassesRow, error) {
+	rows, err := q.db.Query(ctx, listProofSubjectClasses, requestID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListProofSubjectClassesRow
+	for rows.Next() {
+		var i ListProofSubjectClassesRow
+		if err := rows.Scan(&i.SubjectID, &i.Class); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProofSubjects = `-- name: ListProofSubjects :many
 SELECT id, request_id, subject_type, realm_id, character_guid, name, realm_name, status, warning FROM proof_request_subjects WHERE request_id = $1 ORDER BY id
 `

@@ -643,6 +643,9 @@ type sqlcQuerier interface {
 	// joining snapshot tables or score memberships so they can never be recomputed.
 	ListPersistedParseScoreResultsForInstance(ctx context.Context, arg ListPersistedParseScoreResultsForInstanceParams) ([]ParseScoreResult, error)
 	ListProofEvidenceCleanup(ctx context.Context, tenantID uuid.UUID) ([]ProofRequest, error)
+	// Resolve current armory classes in one query per request; old requests and
+	// characters removed from the armory still render without a class color.
+	ListProofSubjectClasses(ctx context.Context, requestID uuid.UUID) ([]ListProofSubjectClassesRow, error)
 	ListProofSubjects(ctx context.Context, requestID uuid.UUID) ([]ProofRequestSubject, error)
 	ListRaidCompositionsByUser(ctx context.Context, arg ListRaidCompositionsByUserParams) ([]RaidComposition, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { ProofRequest } from "@/pages/Settings/PhotoProof";
+import { getClassColorVar } from "@/pages/ArmoryPage/types";
 
 function Evidence({ id, onAvailable }: { id: string; onAvailable: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -57,7 +58,9 @@ function Review({ request }: { request: ProofRequest }) {
       <div className="space-y-3">
         <p className="text-xs text-muted-foreground">Check the realm and each name against the screenshot. Existing links cannot be reassigned by this review.</p>
         {request.subjects.map((subject) => <div key={key(subject)} className="rounded border p-3 space-y-2 text-sm">
-          <Link className="font-medium hover:underline" to={`/armory/${encodeURIComponent(subject.realm_name)}/${subject.character_guid}`} target="_blank">{subject.name} · {subject.realm_name}</Link>
+          <Link className="font-medium hover:underline" to={`/armory/${encodeURIComponent(subject.realm_name)}/${subject.character_guid}`} target="_blank">
+            <span style={subject.class ? { color: getClassColorVar(subject.class) } : undefined}>{subject.name}</span> · {subject.realm_name}
+          </Link>
           {subject.warning && <p className="text-amber-500">{subject.warning}</p>}
           <div className="flex gap-4">
             <label className="flex gap-1 items-center"><input type="radio" name={`${request.id}/${key(subject)}`} checked={choices[key(subject)] === true} onChange={() => setChoices({ ...choices, [key(subject)]: true })} /> Approve</label>
@@ -90,7 +93,9 @@ export function ProofReview() {
       <h3 className="text-sm font-medium">Recent decisions</h3>
       {data.filter((request) => request.status !== "pending").slice(0, 10).map((request) => <div key={request.id} className="rounded border p-3 text-sm">
         <span className="font-medium capitalize">{request.status}</span> · Tenant {request.tenant_id} · {request.applicant_id} · {new Date(request.reviewed_at ?? request.created_at).toLocaleString()}
-        <p className="text-muted-foreground">{request.subjects.map((subject) => `${subject.name}: ${subject.status}`).join(", ")}</p>
+        <p className="text-muted-foreground">{request.subjects.map((subject, index) => <span key={`${subject.realm_id}/${subject.character_guid}`}>
+          {index > 0 && ", "}<span style={subject.class ? { color: getClassColorVar(subject.class) } : undefined}>{subject.name}</span>: {subject.status}
+        </span>)}</p>
         {request.response && <p>Response: {request.response}</p>}
       </div>)}
     </div>}

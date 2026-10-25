@@ -14,6 +14,7 @@ export type ProofSubject = {
   character_guid: string;
   name: string;
   realm_name: string;
+  class?: string;
   status: string;
   warning?: string;
 };
