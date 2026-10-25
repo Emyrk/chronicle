@@ -70,7 +70,8 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 	success := s.accessURL.ResolveReference(&url.URL{Path: "/account/billing", RawQuery: "billing=success"}).String()
 	cancel := s.accessURL.ResolveReference(&url.URL{Path: "/account/billing", RawQuery: "billing=cancel"}).String()
 	params := &stripe.CheckoutSessionCreateParams{
-		ClientReferenceID: stripe.String(claims.Subject.String()),
+		AllowPromotionCodes: stripe.Bool(true),
+		ClientReferenceID:   stripe.String(claims.Subject.String()),
 		LineItems: []*stripe.CheckoutSessionCreateLineItemParams{{
 			Price:    stripe.String(req.PriceID),
 			Quantity: stripe.Int64(1),

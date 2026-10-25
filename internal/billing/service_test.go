@@ -298,6 +298,7 @@ func TestCreateCheckoutReusesExistingStripeCustomer(t *testing.T) {
 	require.Equal(t, fmt.Sprintf("chronicle-checkout:%s:%s", userID, operationID), stripe.StringValue(checkoutParams.IdempotencyKey))
 	require.NotNil(t, checkoutParams.ManagedPayments)
 	require.True(t, stripe.BoolValue(checkoutParams.ManagedPayments.Enabled))
+	require.True(t, stripe.BoolValue(checkoutParams.AllowPromotionCodes))
 	require.Equal(t, "cus_existing", stripe.StringValue(checkoutParams.Customer))
 	require.Nil(t, checkoutParams.CustomerEmail)
 }
