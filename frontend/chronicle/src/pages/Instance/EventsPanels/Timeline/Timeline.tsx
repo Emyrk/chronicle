@@ -8,7 +8,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TrendingUp } from "lucide-react";
-import { ResponsiveLine, type LineSeries, type LineCustomSvgLayerProps, type SliceTooltipProps } from "@nivo/line";
+import { ResponsiveLine, type LineSeries, type LineCustomSvgLayerProps } from "@nivo/line";
+import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
 /** Custom series type with color for per-line coloring. */
@@ -24,7 +25,7 @@ import {
   type StatusResult,
 } from "../Status/status.processor";
 import { createStatusRaidHealthModel } from "../Status/statusRaidHealth";
-import { timelineProcessor, type TimelineResult, type TimelineSeriesMeta } from "./timeline.processor";
+import { timelineProcessor, type TimelineResult } from "./timeline.processor";
 import { applyAggregation } from "./aggregations";
 import { TimelineFilterEditor } from "./TimelineFilterEditor";
 import { useActualRaidDurabilityModel } from "../Status/useRaidDurabilityModel";
@@ -35,6 +36,7 @@ import {
   groupTimelineDeathAnnotations,
   timelineAnnotationsEnabled,
 } from "./timelineAnnotations";
+import { getTimelineHoverSnapshot, type TimelineHoverSnapshot } from "./timelineHover";
 import { getSeriesConfigs, getTimelineSettings, hydrateFromPanelOption, serializeTimelineConfig } from "./timelineTypes";
 
 import { useTimeRangeContextOptional } from "../../TimeRangeContext";
@@ -60,41 +62,12 @@ export function createTimelinePanel(): PanelDefinition<TimelineResult> {
   };
 }
 
-// ── Slice tooltip ────────────────────────────────────────────────────────────
+// ── Hover tooltip ────────────────────────────────────────────────────────────
 
 function formatValue(v: number): string {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000) return `${(v / 1_000).toFixed(1)}k`;
   return v.toFixed(0);
-}
-
-function TimelineSliceTooltip({ slice, seriesMeta }: SliceTooltipProps<ColoredSeries> & { seriesMeta: Map<string, TimelineSeriesMeta> }) {
-  const xVal = slice.points[0]?.data.x;
-  // Sort points by value descending
-  const sorted = [...slice.points].sort(
-    (a, b) => (Number(b.data.yFormatted) || 0) - (Number(a.data.yFormatted) || 0),
-  );
-
-  return (
-    <div className="bg-zinc-900/95 border border-zinc-700 rounded-md px-2.5 py-1.5 shadow-lg text-xs min-w-[120px]">
-      <div className="text-zinc-400 mb-1 font-medium">{String(xVal)}s</div>
-      {sorted.map((point) => {
-        const displayName = seriesMeta.get(String(point.seriesId))?.name ?? point.seriesId;
-        return (
-          <div key={point.id} className="flex items-center gap-1.5 py-px">
-            <span
-              className="inline-block h-2 w-2 rounded-full shrink-0"
-              style={{ backgroundColor: point.seriesColor }}
-            />
-            <span className="text-zinc-300 truncate max-w-[100px]">{String(displayName)}</span>
-            <span className="ml-auto text-zinc-100 font-medium tabular-nums">
-              {formatValue(point.data.y as number)}{seriesMeta.get(String(point.seriesId))?.aggregation === "per_second" ? "/s" : ""}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 // ── Drag selection (uses Nivo's xScale for pixel-perfect alignment) ──────────
@@ -113,6 +86,58 @@ type D3ScaleLinear = ((v: number) => number) & { invert: (px: number) => number 
 const CHART_MARGIN_DESKTOP = { top: 10, right: 20, bottom: 36, left: 50 } as const;
 const CHART_MARGIN_MOBILE = { top: 10, right: 8, bottom: 30, left: 36 } as const;
 
+interface TimelineHoverOverlayProps {
+  hover: TimelineHoverState | null;
+  margin: typeof CHART_MARGIN_DESKTOP | typeof CHART_MARGIN_MOBILE;
+}
+
+interface TimelineHoverState {
+  x: number;
+  plotWidth: number;
+  snapshot: TimelineHoverSnapshot;
+}
+
+/** One HTML tooltip and crosshair replace Nivo's per-point SVG slices. */
+function TimelineHoverOverlay({ hover, margin }: TimelineHoverOverlayProps) {
+  if (!hover) return null;
+
+  const placeLeft = hover.x > hover.plotWidth / 2;
+  const timeLabel = Number.isInteger(hover.snapshot.sec)
+    ? hover.snapshot.sec.toFixed(0)
+    : hover.snapshot.sec.toFixed(1);
+
+  return (
+    <div
+      className="absolute pointer-events-none z-20"
+      style={{ top: margin.top, right: margin.right, bottom: margin.bottom, left: margin.left }}
+      aria-hidden="true"
+    >
+      <div
+        className="absolute inset-y-0 w-px bg-zinc-400/70"
+        style={{ left: hover.x }}
+      />
+      <div
+        className={cn(
+          "absolute top-2 min-w-[140px] max-w-[220px] rounded-md border border-zinc-700 bg-zinc-900/95 px-2.5 py-1.5 text-xs shadow-lg backdrop-blur-sm",
+          placeLeft ? "-translate-x-full -ml-2" : "ml-2",
+        )}
+        style={{ left: hover.x }}
+      >
+        <div className="mb-1 font-medium text-zinc-400">{timeLabel}s</div>
+        {hover.snapshot.rows.map((row) => (
+          <div key={row.seriesId} className="flex items-center gap-1.5 py-px">
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: row.color }} />
+            <span className="min-w-0 flex-1 truncate text-zinc-300">{row.name}</span>
+            <span className="ml-2 font-medium tabular-nums text-zinc-100">
+              {formatValue(row.value)}{row.perSecond ? "/s" : ""}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const TIMELINE_DURABILITY_PANEL: PanelDefinition<StatusResult, StatusProcessorEvent> = {
   ...statusProcessor,
   label: "Raid Durability Background",
@@ -130,6 +155,7 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
   const containerRef = useRef<HTMLDivElement>(null);
   // Capture Nivo's xScale so mouse handlers can convert pixels ↔ data values.
   const xScaleRef = useRef<D3ScaleLinear | null>(null);
+  const [timelineHover, setTimelineHover] = useState<TimelineHoverState | null>(null);
   const [hoveredDeathOffsetSec, setHoveredDeathOffsetSec] = useState<number | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   /** Series IDs currently hidden by clicking the legend (hydrated from settings). */
@@ -313,6 +339,7 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
+    setTimelineHover(null);
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const sec = clientXToSec(e.clientX, rect);
     setDrag({ startSec: sec, currentSec: sec, active: true });
@@ -320,14 +347,57 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      if (!drag?.active) return;
-      const container = containerRef.current;
-      if (!container) return;
+      const container = e.currentTarget as HTMLElement;
       const rect = container.getBoundingClientRect();
-      const sec = clientXToSec(e.clientX, rect);
-      setDrag((prev) => (prev ? { ...prev, currentSec: sec } : null));
+
+      if (drag?.active) {
+        setTimelineHover(null);
+        const sec = clientXToSec(e.clientX, rect);
+        setDrag((prev) => (prev ? { ...prev, currentSec: sec } : null));
+        return;
+      }
+
+      if (e.target instanceof Element && e.target.closest("[data-timeline-death-marker]")) {
+        setTimelineHover(null);
+        return;
+      }
+
+      const scale = xScaleRef.current;
+      const plotWidth = rect.width - CHART_MARGIN.left - CHART_MARGIN.right;
+      const plotHeight = rect.height - CHART_MARGIN.top - CHART_MARGIN.bottom;
+      const plotX = e.clientX - rect.left - CHART_MARGIN.left;
+      const plotY = e.clientY - rect.top - CHART_MARGIN.top;
+      if (!scale?.invert || plotWidth <= 0 || plotHeight <= 0 || plotX < 0 || plotX > plotWidth || plotY < 0 || plotY > plotHeight) {
+        setTimelineHover(null);
+        return;
+      }
+
+      const snapshot = getTimelineHoverSnapshot(visibleData, scale.invert(plotX), result.binMs, result.seriesMeta);
+      if (!snapshot) {
+        setTimelineHover(null);
+        return;
+      }
+
+      const x = Math.max(0, Math.min(plotWidth, scale(snapshot.sec)));
+      setTimelineHover((previous) => {
+        const rowsUnchanged = previous?.snapshot.rows.length === snapshot.rows.length
+          && previous.snapshot.rows.every((row, index) => {
+            const next = snapshot.rows[index];
+            return row.seriesId === next?.seriesId
+              && row.value === next.value
+              && row.name === next.name
+              && row.color === next.color
+              && row.perSecond === next.perSecond;
+          });
+        return previous?.snapshot.sec === snapshot.sec
+          && previous.x === x
+          && previous.plotWidth === plotWidth
+          && rowsUnchanged
+          ? previous
+          : { x, plotWidth, snapshot };
+      });
     },
-    [drag?.active, clientXToSec],
+    [CHART_MARGIN, drag?.active, clientXToSec, result.binMs, result.seriesMeta, visibleData],
   );
 
   const handleMouseUp = useCallback(
@@ -351,6 +421,11 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
     },
     [drag, timeRange, clientXToSec],
   );
+
+  const handleMouseLeave = useCallback((e: React.MouseEvent) => {
+    setTimelineHover(null);
+    handleMouseUp(e);
+  }, [handleMouseUp]);
 
   const handleDoubleClick = useCallback(() => {
     timeRange?.reset();
@@ -503,6 +578,7 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
                   width={14}
                   height={innerHeight}
                   fill="transparent"
+                  data-timeline-death-marker
                   role="img"
                   aria-label={label}
                   style={{ cursor: "help" }}
@@ -631,7 +707,7 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      onMouseLeave={handleMouseLeave}
       onDoubleClick={handleDoubleClick}
     >
       <ResponsiveLine
@@ -665,9 +741,8 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
           },
           crosshair: { line: { stroke: "#71717a" } },
         }}
-        enableCrosshair={!drag?.active}
-        enableSlices={drag?.active ? false : "x"}
-        sliceTooltip={(props) => <TimelineSliceTooltip {...props} seriesMeta={result.seriesMeta} />}
+        enableCrosshair={false}
+        enableSlices={false}
         layers={[
           durabilityLayer,
           "grid",
@@ -675,14 +750,19 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
           "axes",
           overlayLayer,
           "lines",
-          "crosshair",
-          "slices",
           deathAnnotationLayer,
         ]}
       />
 
+      <TimelineHoverOverlay hover={dragActive ? null : timelineHover} margin={CHART_MARGIN} />
+
       {/* Clickable legend — click to toggle series visibility */}
-      <div className="absolute top-2 right-2 flex flex-col gap-0.5 select-none" data-lesson-target="legend">
+      <div
+        className="absolute top-2 right-2 flex flex-col gap-0.5 select-none"
+        data-lesson-target="legend"
+        onMouseEnter={() => setTimelineHover(null)}
+        onMouseMove={(event) => event.stopPropagation()}
+      >
         {legendData.map((item) => (
           <button
             key={String(item.id)}
