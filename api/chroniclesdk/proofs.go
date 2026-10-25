@@ -24,6 +24,8 @@ type ProofRequest struct {
 	ID          uuid.UUID      `json:"id"`
 	ApplicantID uuid.UUID      `json:"applicant_id"`
 	TenantID    uuid.UUID      `json:"tenant_id"`
+	TenantName  string         `json:"tenant_name"`
+	TenantSlug  string         `json:"tenant_slug,omitempty"`
 	Purpose     string         `json:"purpose"`
 	Status      string         `json:"status"`
 	Message     string         `json:"message"`

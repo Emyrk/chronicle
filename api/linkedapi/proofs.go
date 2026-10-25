@@ -213,6 +213,12 @@ func (h *Handler) proofResponse(ctx context.Context, scope serviceproof.Scope, i
 		t := row.ReviewedAt.Time
 		out.ReviewedAt = &t
 	}
+	tenant, err := h.zed.GetTenantByID(servicetenant.AdminBypass(ctx), row.TenantID)
+	if err != nil {
+		return chroniclesdk.ProofRequest{}, err
+	}
+	out.TenantName = tenant.Name
+	out.TenantSlug = tenant.Slug.String
 	classes, err := h.zed.ListProofSubjectClasses(ctx, id)
 	if err != nil {
 		return chroniclesdk.ProofRequest{}, err

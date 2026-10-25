@@ -3053,6 +3053,8 @@ export interface ProofRequest {
     readonly id: string;
     readonly applicant_id: string;
     readonly tenant_id: string;
+    readonly tenant_name: string;
+    readonly tenant_slug?: string;
     readonly purpose: string;
     readonly status: string;
     readonly message: string;

@@ -25,6 +25,8 @@ type SelectedProofCharacter = ProofSubject & Pick<ArmorySearchResult, "class" | 
 export type ProofRequest = {
   id: string;
   tenant_id: string;
+  tenant_name?: string;
+  tenant_slug?: string;
   purpose: string;
   status: string;
   message: string;
