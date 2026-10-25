@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { Link, Navigate } from "react-router-dom"
+import { useEffect, useState } from "react"
+import { Link, Navigate, useSearchParams } from "react-router-dom"
 import type { BillingPrice, BillingSummary } from "@/api/typesGenerated"
 import { useCreateBillingCancel, useCreateBillingChange, useCreateBillingCheckout, useCreateBillingPortal, useBillingSummary, useSiteConfig } from "@/api/queries"
 import { iconUrl } from "@/config/iconUrl"
@@ -97,10 +97,42 @@ const REWARDS: {
   },
 ]
 
+// Stripe redirects back before its webhook updates the tier, so poll briefly.
+const BILLING_RETURN_POLL_MS = 2_000
+const BILLING_RETURN_POLL_DURATION_MS = 30_000
+
+function isBillingReturn(value: string | null): boolean {
+  return value === "success" || value === "updated"
+}
+
+function useBillingReturnPolling(): boolean {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [polling, setPolling] = useState(() => isBillingReturn(searchParams.get("billing")))
+  const billingReturn = isBillingReturn(searchParams.get("billing"))
+
+  useEffect(() => {
+    if (!billingReturn) return
+    toast.success("Your reputation will be updated shortly, thank you for your support!")
+    setSearchParams((params) => {
+      params.delete("billing")
+      return params
+    }, { replace: true })
+  }, [billingReturn, setSearchParams])
+
+  useEffect(() => {
+    if (!polling) return
+    const timeout = setTimeout(() => setPolling(false), BILLING_RETURN_POLL_DURATION_MS)
+    return () => clearTimeout(timeout)
+  }, [polling])
+
+  return polling
+}
+
 export function BillingSettings() {
   const { data: siteConfig, isLoading: isSiteConfigLoading } = useSiteConfig()
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth()
-  const { data: billing, isLoading } = useBillingSummary()
+  const polling = useBillingReturnPolling()
+  const { data: billing, isLoading } = useBillingSummary(polling ? BILLING_RETURN_POLL_MS : false)
 
   if (isSiteConfigLoading || isAuthLoading) return null
   if (!siteConfig?.billing_enabled) return <Navigate to="/account/settings" replace />
@@ -560,13 +592,20 @@ function FormerSubscriptionHistory({ billing }: { billing: BillingSummary }) {
   )
 }
 
-function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
+/**
+ * Tier and billing period picker. With `change`, nothing is selectable:
+ * hovering a tier previews its prices, and the Stripe portal makes the change.
+ */
+function PlanPicker({ prices, change }: { prices: readonly BillingPrice[]; change?: { currentTier: string; onBack: () => void } }) {
   const checkout = useCreateBillingCheckout()
+  const changePortal = useCreateBillingChange()
   const openBilling = useOpenBilling()
   const availableTiers = PAID_BILLING_TIERS.filter((tier) => prices.some((price) => price.tier === tier))
-  const defaultTier = availableTiers.includes("revered") ? "revered" : availableTiers[0]
+  const currentTier = availableTiers.find((option) => option === change?.currentTier)
+  const defaultTier = currentTier ?? (availableTiers.includes("revered") ? "revered" : availableTiers[0])
   const [selectedTier, setSelectedTier] = useState<PaidBillingTier | undefined>(defaultTier)
-  const tier = selectedTier && availableTiers.includes(selectedTier) ? selectedTier : defaultTier
+  const [hoveredTier, setHoveredTier] = useState<PaidBillingTier | null>(null)
+  const tier = change ? (hoveredTier ?? defaultTier) : selectedTier && availableTiers.includes(selectedTier) ? selectedTier : defaultTier
   const tierPrices = prices.filter((price) => price.tier === tier)
   const monthlyPrice = tierPrices.find((price) => price.interval_months === 1)
   const [selectedPriceID, setSelectedPriceID] = useState<string | null>(null)
@@ -582,20 +621,25 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
   }
 
   return (
-    <FramePanel title="Choose Your Standing">
+    <FramePanel title={change ? "Change Your Standing" : "Choose Your Standing"}>
       <p className="text-center text-xs text-muted-foreground">Every tier includes ad-free browsing, raw log downloads, and unlisted logs. Higher standings include more log storage.</p>
 
       {availableTiers.length > 0 ? (
-        <div role="radiogroup" aria-label="Supporter tier" className="grid grid-cols-3 gap-2">
+        <div
+          role={change ? undefined : "radiogroup"}
+          aria-label="Supporter tier"
+          className="grid grid-cols-3 gap-2"
+          onMouseLeave={change ? () => setHoveredTier(null) : undefined}
+        >
           {availableTiers.map((option) => {
-            const selected = option === tier
+            const selected = change ? option === hoveredTier : option === tier
+            const Tag = change ? "div" : "button"
             return (
-              <button
+              <Tag
                 key={option}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                onClick={() => chooseTier(option)}
+                {...(change
+                  ? { onMouseEnter: () => setHoveredTier(option) }
+                  : { type: "button" as const, role: "radio", "aria-checked": selected, onClick: () => chooseTier(option) })}
                 className={cn(
                   "flex flex-col items-center gap-1 rounded-md border-2 p-2 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300",
                   selected ? "bg-white/10" : "border-white/10 bg-white/[0.025] hover:bg-white/5",
@@ -608,26 +652,26 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
                 <span className="font-wow text-xs font-bold" style={{ color: TIER_COLOR[option] }}>
                   {billingTierLabel(option)}
                 </span>
-                <span className="text-[10px] text-muted-foreground">+{billingTierStorageLabel(option)} storage</span>
-              </button>
+                <span className="text-[10px] text-muted-foreground">
+                  {option === currentTier ? "Current" : `+${billingTierStorageLabel(option)} storage`}
+                </span>
+              </Tag>
             )
           })}
         </div>
       ) : null}
 
       {sorted.length > 0 ? (
-        <div role="radiogroup" aria-label="Billing period" className="space-y-2">
+        <div role={change ? undefined : "radiogroup"} aria-label="Billing period" className="space-y-2">
           {sorted.map((price) => {
-            const selected = selectedPrice?.id === price.id
+            const selected = !change && selectedPrice?.id === price.id
             const discount = billingDiscountPercent(price, monthlyPrice)
             const quality = qualities.get(price.id) ?? "rare"
+            const Tag = change ? "div" : "button"
             return (
-              <button
+              <Tag
                 key={price.id}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                onClick={() => setSelectedPriceID(price.id)}
+                {...(change ? {} : { type: "button" as const, role: "radio", "aria-checked": selected, onClick: () => setSelectedPriceID(price.id) })}
                 className={cn(
                   "flex w-full items-center gap-3 rounded-md border-2 p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300",
                   selected ? "border-[#c9a227] bg-[#f0c060]/10" : "border-white/10 bg-white/[0.025] hover:border-[#c9a227]/50",
@@ -662,7 +706,7 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
                   </p>
                   {discount > 0 ? <p className="text-[11px] font-medium text-[#1eff00]">Save {discount}%</p> : null}
                 </div>
-              </button>
+              </Tag>
             )
           })}
         </div>
@@ -670,6 +714,22 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
         <p className="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">Supporter pricing is temporarily unavailable.</p>
       )}
 
+      {change ? (
+        <>
+          <button type="button" className={GOLD_BUTTON} disabled={changePortal.isPending} onClick={() => void openBilling(() => changePortal.mutateAsync())}>
+            {changePortal.isPending ? "Opening Stripe…" : "Go to Stripe to change your subscription"}
+          </button>
+          <button
+            type="button"
+            className="w-full rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+            onClick={change.onBack}
+          >
+            Back to your subscription
+          </button>
+          <p className="text-center text-xs text-muted-foreground">Stripe shows when a tier change takes effect before you confirm it.</p>
+        </>
+      ) : (
+      <>
       <button
         type="button"
         className={GOLD_BUTTON}
@@ -686,6 +746,8 @@ function PlanPicker({ prices }: { prices: readonly BillingPrice[] }) {
         </span>
       </button>
       <p className="text-center text-xs text-muted-foreground">Secure checkout with Stripe. Cancel or change tiers anytime.</p>
+      </>
+      )}
     </FramePanel>
   )
 }
@@ -772,8 +834,8 @@ function CancellationTimeline({
 
 function TierSubscriptionSettings({ billing }: { billing: BillingSummary }) {
   const portal = useCreateBillingPortal()
-  const change = useCreateBillingChange()
   const cancel = useCreateBillingCancel()
+  const [changingTier, setChangingTier] = useState(false)
   const openBilling = useOpenBilling()
   const { hasTierAccess, tierLabel, displayState, subscriptionEnded, cancellationScheduled, statusLabel, heading, periodLabel, effectiveDate } = billingSubscriptionState(billing)
   const displayDate = effectiveDate ? new Date(effectiveDate).toLocaleDateString() : null
@@ -802,6 +864,9 @@ function TierSubscriptionSettings({ billing }: { billing: BillingSummary }) {
       <Achievement billing={billing} />
 
       <div className="grid items-start gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
+        {changingTier && !subscriptionEnded && !cancellationScheduled ? (
+          <PlanPicker prices={billing.prices ?? []} change={{ currentTier: billing.tier, onBack: () => setChangingTier(false) }} />
+        ) : (
         <FramePanel title="Your Subscription">
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between gap-3">
@@ -876,8 +941,8 @@ function TierSubscriptionSettings({ billing }: { billing: BillingSummary }) {
             </button>
           ) : (
             <>
-              <button type="button" className={GOLD_BUTTON} disabled={change.isPending} onClick={() => void openBilling(() => change.mutateAsync())}>
-                {change.isPending ? "Opening Stripe…" : "Change Tier"}
+              <button type="button" className={GOLD_BUTTON} onClick={() => setChangingTier(true)}>
+                Change Tier
               </button>
               <div className="grid grid-cols-2 gap-2">
                 <button
@@ -902,12 +967,14 @@ function TierSubscriptionSettings({ billing }: { billing: BillingSummary }) {
             </>
           )}
         </FramePanel>
+        )}
 
         {subscriptionEnded || cancellationScheduled ? (
           <CancellationTimeline tierLabel={tierLabel} hasTierAccess={hasTierAccess} subscriptionEnded={subscriptionEnded} displayDate={displayDate} />
         ) : (
           <div>
-            <h3 className="font-wow text-xl font-semibold">{tierLabel} Rewards</h3>
+            <h3 className="font-wow text-xl font-semibold">Rewards</h3>
+            <p className="mt-1 text-sm text-muted-foreground">See table for full set of rewards.</p>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               {REWARDS.map((reward) => (
                 <RewardTooltip

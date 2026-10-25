@@ -158,8 +158,9 @@ export type AdminBulkDeleteResponse = AdminBulkDeleteResponseGenerated;
 export type AdminBulkSelectedReparseResponse = AdminBulkSelectedReparseResponseGenerated;
 export type AdminBulkReparseResponse = AdminBulkReparseResponseGenerated;
 
-export function useBillingSummary() {
+export function useBillingSummary(refetchInterval?: number | false) {
   return useQuery({
+    refetchInterval,
     queryKey: ["billing"],
     queryFn: async () => {
       const response = await fetch("/api/v1/me/billing")

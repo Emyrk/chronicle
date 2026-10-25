@@ -134,6 +134,12 @@ func (s *Service) createPortal(w http.ResponseWriter, r *http.Request, flowType 
 		ReturnURL: stripe.String(s.accessURL.ResolveReference(&url.URL{Path: "/account/billing"}).String()),
 	}
 	if flowType != "" {
+		// A plan change lands before the Stripe webhook updates the tier, so
+		// tell the billing page to show a pending notice and poll.
+		afterCompletionQuery := ""
+		if flowType == stripe.BillingPortalSessionFlowTypeSubscriptionUpdate {
+			afterCompletionQuery = "billing=updated"
+		}
 		if !sub.ProviderSubscriptionID.Valid {
 			httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "No active subscription was found."})
 			return
@@ -143,7 +149,7 @@ func (s *Service) createPortal(w http.ResponseWriter, r *http.Request, flowType 
 			AfterCompletion: &stripe.BillingPortalSessionCreateFlowDataAfterCompletionParams{
 				Type: stripe.String(string(stripe.BillingPortalSessionFlowAfterCompletionTypeRedirect)),
 				Redirect: &stripe.BillingPortalSessionCreateFlowDataAfterCompletionRedirectParams{
-					ReturnURL: stripe.String(s.accessURL.ResolveReference(&url.URL{Path: "/account/billing"}).String()),
+					ReturnURL: stripe.String(s.accessURL.ResolveReference(&url.URL{Path: "/account/billing", RawQuery: afterCompletionQuery}).String()),
 				},
 			},
 		}
@@ -207,7 +213,8 @@ func (s *Service) Summary(w http.ResponseWriter, r *http.Request) {
 	if !result.HasBillingAccount {
 		result.CanCheckout = true
 	}
-	if result.Enabled && result.CanCheckout {
+	// Subscribers also get prices so the tier picker can preview a plan change.
+	if result.Enabled && (result.CanCheckout || result.HasSubscription) {
 		result.Prices, err = s.billingPrices(r.Context())
 		if err != nil {
 			httpapi.InternalServerError(w, err)

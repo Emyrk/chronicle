@@ -115,13 +115,17 @@ func TestBillingSummarySeparatesCancellationRenewalAccessAndCheckoutState(t *tes
 			CancelAt:               pgtype.Timestamptz{Time: cancelAt, Valid: true},
 		},
 	}
+	price := testStripePrice("price_monthly", 200, stripe.PriceRecurringIntervalMonth, 1)
 	service := &Service{
 		store:            store,
 		stripe:           &stripe.Client{},
 		webhookSecret:    "whsec_test",
-		priceIDs:         map[ProductCode][]string{ProductRevered: {"price_monthly"}},
-		configuredPrices: map[string]ProductCode{"price_monthly": ProductRevered},
+		priceIDs:         map[ProductCode][]string{ProductRevered: {price.ID}},
+		configuredPrices: map[string]ProductCode{price.ID: ProductRevered},
 		accessURL:        &url.URL{Scheme: "https", Host: "example.com"},
+		retrievePrice: func(context.Context, string, *stripe.PriceRetrieveParams) (*stripe.Price, error) {
+			return price, nil
+		},
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/me/billing", nil)
@@ -140,7 +144,7 @@ func TestBillingSummarySeparatesCancellationRenewalAccessAndCheckoutState(t *tes
 	require.False(t, summary.CancelAtPeriodEnd)
 	require.Equal(t, &periodEnd, summary.CurrentPeriodEnd)
 	require.Equal(t, &cancelAt, summary.CancelAt)
-	require.Empty(t, summary.Prices)
+	require.Len(t, summary.Prices, 1)
 }
 
 func TestBillingSummaryKeepsFormerBillingAccountVisibleWhileAllowingResubscription(t *testing.T) {
