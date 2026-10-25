@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth/claims"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -258,6 +259,15 @@ func TestBillingSummaryTierPrecedenceAndPendingSubscriptionTier(t *testing.T) {
 	}
 }
 
+func TestReturnURLUsesPrimaryDomainWithoutResolvedTenant(t *testing.T) {
+	t.Parallel()
+
+	service := &Service{accessURL: &url.URL{Scheme: "https", Host: "legacy.chronicleclassic.com"}}
+	req := httptest.NewRequest(http.MethodPost, "https://untrusted.example/api/v1/me/billing/checkout", nil)
+
+	require.Equal(t, "https://legacy.chronicleclassic.com/account/billing?billing=success", service.returnURL(req, "billing=success"))
+}
+
 func TestCreateCheckoutReusesExistingStripeCustomer(t *testing.T) {
 	t.Parallel()
 
@@ -343,6 +353,43 @@ func TestCreateCheckoutUsesEmailWithoutExistingStripeCustomer(t *testing.T) {
 	require.Equal(t, "price_monthly", checkoutParams.SubscriptionData.Metadata["chronicle_price_id"])
 }
 
+func TestCreateCheckoutReturnsToResolvedTenant(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	operationID := uuid.New()
+	store := &entitlementStore{
+		subscriptionErr: pgx.ErrNoRows,
+		user:            database.ChronicleUser{ID: userID, Email: "supporter@example.com"},
+	}
+	var checkoutParams *stripe.CheckoutSessionCreateParams
+	service := &Service{
+		store:            store,
+		stripe:           &stripe.Client{},
+		webhookSecret:    "whsec_test",
+		priceIDs:         map[ProductCode][]string{ProductRevered: {"price_monthly"}},
+		configuredPrices: map[string]ProductCode{"price_monthly": ProductRevered},
+		accessURL:        &url.URL{Scheme: "https", Host: "legacy.chronicleclassic.com"},
+		createCheckoutSession: func(_ context.Context, params *stripe.CheckoutSessionCreateParams) (*stripe.CheckoutSession, error) {
+			checkoutParams = params
+			return &stripe.CheckoutSession{URL: "https://checkout.stripe.test/session"}, nil
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "https://epoch.chronicleclassic.com/api/v1/me/billing/checkout", strings.NewReader(fmt.Sprintf(`{"price_id":"price_monthly","operation_id":%q}`, operationID)))
+	req.Header.Set("Content-Type", "application/json")
+	ctx := chronauth.WithClaims(req.Context(), &claims.Claims{Subject: userID})
+	ctx = servicetenant.WithTenant(ctx, database.Tenant{ID: uuid.New()})
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+	service.CreateCheckout(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, checkoutParams)
+	require.Equal(t, "https://epoch.chronicleclassic.com/account/billing?billing=success", stripe.StringValue(checkoutParams.SuccessURL))
+	require.Equal(t, "https://epoch.chronicleclassic.com/account/billing?billing=cancel", stripe.StringValue(checkoutParams.CancelURL))
+}
+
 func TestCreateCheckoutRejectsInvalidOperationID(t *testing.T) {
 	t.Parallel()
 
@@ -404,6 +451,45 @@ func TestCreateChangePortalOpensSubscriptionUpdateFlow(t *testing.T) {
 	require.Equal(t, string(stripe.BillingPortalSessionFlowTypeSubscriptionUpdate), stripe.StringValue(portalParams.FlowData.Type))
 	require.NotNil(t, portalParams.FlowData.SubscriptionUpdate)
 	require.Equal(t, "sub_existing", stripe.StringValue(portalParams.FlowData.SubscriptionUpdate.Subscription))
+}
+
+func TestCreateChangePortalReturnsToResolvedTenant(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	store := &entitlementStore{subscription: database.BillingSubscription{
+		UserID:                 userID,
+		Provider:               ProviderStripe,
+		ProviderCustomerID:     "cus_existing",
+		ProviderSubscriptionID: pgtype.Text{String: "sub_existing", Valid: true},
+	}}
+	var portalParams *stripe.BillingPortalSessionCreateParams
+	service := &Service{
+		store:            store,
+		stripe:           &stripe.Client{},
+		webhookSecret:    "whsec_test",
+		configuredPrices: map[string]ProductCode{"price_honored": ProductHonored},
+		accessURL:        &url.URL{Scheme: "https", Host: "legacy.chronicleclassic.com"},
+		createBillingPortalSession: func(_ context.Context, params *stripe.BillingPortalSessionCreateParams) (*stripe.BillingPortalSession, error) {
+			portalParams = params
+			return &stripe.BillingPortalSession{URL: "https://billing.stripe.test/session"}, nil
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "https://epoch.chronicleclassic.com/api/v1/me/billing/change", nil)
+	ctx := chronauth.WithClaims(req.Context(), &claims.Claims{Subject: userID})
+	ctx = servicetenant.WithTenant(ctx, database.Tenant{ID: uuid.New()})
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+	service.CreateChangePortal(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, portalParams)
+	require.Equal(t, "https://epoch.chronicleclassic.com/account/billing", stripe.StringValue(portalParams.ReturnURL))
+	require.NotNil(t, portalParams.FlowData)
+	require.NotNil(t, portalParams.FlowData.AfterCompletion)
+	require.NotNil(t, portalParams.FlowData.AfterCompletion.Redirect)
+	require.Equal(t, "https://epoch.chronicleclassic.com/account/billing?billing=updated", stripe.StringValue(portalParams.FlowData.AfterCompletion.Redirect.ReturnURL))
 }
 
 func TestValidateAccount(t *testing.T) {
