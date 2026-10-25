@@ -16,14 +16,16 @@ import (
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/services/serviceproof"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/authzed/gochugaru/rel"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // proofPermission checks the resolved tenant, never a tenant ID supplied by
-// the client. On the root domain only site-wide user admins may review every
-// tenant's requests. Tenant admins have no implicit proof-review permission.
+// the client. A site-wide proof grant applies across tenants; tenant grants
+// apply only to their tenant. On root, site-wide reviewers and user admins
+// can review all requests. Tenant admins have no implicit review permission.
 func (h *Handler) proofPermission(review bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -39,20 +41,26 @@ func (h *Handler) proofPermission(review bool) func(http.Handler) http.Handler {
 				httpapi.Forbidden(w, nil)
 				return
 			}
-			var can bool
-			var err error
-			if tenant == nil {
-				can, err = h.zed.CheckOne(ctx, nil, b.GlobalChronicle().CanAdmin_users_User(actor))
-			} else if review {
-				can, err = h.zed.CheckOne(ctx, nil, b.Wow_tenant(tenant.ID).CanReview_photo_proof_User(actor))
+			var checks []rel.Interface
+			if review {
+				checks = append(checks, b.GlobalChronicle().CanReview_photo_proof_User(actor))
+				if tenant == nil {
+					checks = append(checks, b.GlobalChronicle().CanAdmin_users_User(actor))
+				} else {
+					checks = append(checks, b.Wow_tenant(tenant.ID).CanReview_photo_proof_User(actor))
+				}
 			} else {
-				can, err = h.zed.CheckOne(ctx, nil, b.Wow_tenant(tenant.ID).CanSubmit_photo_proof_User(actor))
+				checks = append(checks,
+					b.GlobalChronicle().CanSubmit_photo_proof_User(actor),
+					b.Wow_tenant(tenant.ID).CanSubmit_photo_proof_User(actor),
+				)
 			}
+			allowed, err := h.zed.Check(ctx, nil, checks...)
 			if err != nil {
 				httpapi.InternalServerError(w, err)
 				return
 			}
-			if !can {
+			if !allowed[0] && !allowed[1] {
 				httpapi.Forbidden(w, nil)
 				return
 			}

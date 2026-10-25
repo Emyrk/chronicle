@@ -572,7 +572,10 @@ export function CharacterSettings() {
   const { data: siteConfig } = useSiteConfig();
   const photoProof = siteConfig?.tenant?.external_linking?.methods?.["photo-proof"];
   const { data: proofAccess, isLoading: proofAccessLoading } = useAuthorizationCheck(
-    { submit: `wow_tenant:${siteConfig?.tenant?.id ?? ""}#submit_photo_proof` },
+    {
+      tenantSubmit: `wow_tenant:${siteConfig?.tenant?.id ?? ""}#submit_photo_proof`,
+      siteSubmit: "chronicle:chronicle#submit_photo_proof",
+    },
     { enabled: !!photoProof?.enabled && !!siteConfig?.tenant?.id },
   );
   const { data: characters, isLoading } = useMyCharacters();
@@ -653,7 +656,7 @@ export function CharacterSettings() {
             <ExternalVerificationCard />
             {photoProof?.enabled && (proofAccessLoading ? (
               <p className="text-sm text-muted-foreground">Checking photo proof access...</p>
-            ) : proofAccess?.submit ? (
+            ) : proofAccess?.tenantSubmit || proofAccess?.siteSubmit ? (
               <PhotoProofCard callout={photoProof.callout} />
             ) : (
               <div className="rounded-lg border p-4 space-y-2">

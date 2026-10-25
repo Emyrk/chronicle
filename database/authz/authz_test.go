@@ -361,21 +361,28 @@ func TestPhotoProofPermissions(t *testing.T) {
 		})
 	}
 
-	// A cached client can still ask for the removed global permission names.
-	// Existing global relationships must not grant access or turn that check
-	// into a SpiceDB schema error during a rolling deployment.
-	legacy := policy.New()
-	legacy.GlobalChronicle().Photo_proof_submitter(legacy.User(applicant))
-	legacy.GlobalChronicle().Photo_proof_reviewer(legacy.User(reviewer))
-	_, err = zed.Write(ctx, *legacy.Txn())
-	require.NoError(t, err)
-	legacyAllowed, err := zed.Check(ctx, nil,
-		legacy.GlobalChronicle().CanSubmit_photo_proof_User(legacy.User(applicant)),
-		legacy.GlobalChronicle().CanReview_photo_proof_User(legacy.User(reviewer)),
-		legacy.GlobalChronicle().CanReview_photo_proof_User(legacy.User(siteAdmin)),
+	// Global grants are independent of either tenant's direct relationships;
+	// the HTTP layer accepts either permission on tenant hosts and only global
+	// review (or admin_users) on root.
+	siteSubmitter, siteReviewer := uuid.New(), uuid.New()
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, siteSubmitter, []string{"photo_proof_submitter"}))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, siteReviewer, []string{"photo_proof_reviewer"}))
+	global := policy.New()
+	globalAllowed, err := zed.Check(ctx, nil,
+		global.GlobalChronicle().CanSubmit_photo_proof_User(global.User(siteSubmitter)),
+		global.GlobalChronicle().CanReview_photo_proof_User(global.User(siteSubmitter)),
+		global.GlobalChronicle().CanSubmit_photo_proof_User(global.User(siteReviewer)),
+		global.GlobalChronicle().CanReview_photo_proof_User(global.User(siteReviewer)),
+		global.GlobalChronicle().CanReview_photo_proof_User(global.User(siteAdmin)),
+		global.Wow_tenant(tenantA).CanReview_photo_proof_User(global.User(siteReviewer)),
+		global.Wow_tenant(tenantB).CanReview_photo_proof_User(global.User(siteReviewer)),
 	)
 	require.NoError(t, err)
-	require.Equal(t, []bool{false, false, false}, legacyAllowed)
+	require.Equal(t, []bool{true, false, false, true, false, false, false}, globalAllowed)
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, siteReviewer, nil))
+	globalReview, err := zed.CheckOne(ctx, nil, global.GlobalChronicle().CanReview_photo_proof_User(global.User(siteReviewer)))
+	require.NoError(t, err)
+	require.False(t, globalReview)
 
 	grants, err := zed.TenantProofGrants(ctx, tenantA)
 	require.NoError(t, err)

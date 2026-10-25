@@ -302,6 +302,8 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 		"moderate_logs",
 		"moderate_guilds",
 		"is_admin_users",
+		"photo_proof_submitter",
+		"photo_proof_reviewer",
 		"is_admin_queues",
 		"is_admin_game_data",
 		"manage_consumables",
@@ -344,6 +346,10 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 			gChron.Moderate_guilds(usr)
 		case "admin_users", "is_admin_users":
 			gChron.Is_admin_users(usr)
+		case "photo_proof_submitter":
+			gChron.Photo_proof_submitter(usr)
+		case "photo_proof_reviewer":
+			gChron.Photo_proof_reviewer(usr)
 		case "admin_queues", "is_admin_queues":
 			gChron.Is_admin_queues(usr)
 		case "admin_game_data", "is_admin_game_data":

@@ -39,6 +39,7 @@ export function NavBar() {
   const authzChecks = useMemo(() => ({
     admin: "chronicle:chronicle#admin_users",
     proofReviewer: tenantID ? `wow_tenant:${tenantID}#review_photo_proof` : "chronicle:chronicle#admin_users",
+    siteProofReviewer: "chronicle:chronicle#review_photo_proof",
     adminAuthz: "chronicle:chronicle#administer_authz",
     adminWorldData: "chronicle:chronicle#admin_world_data",
     manageConsumables: "chronicle:chronicle#admin_consumables",
@@ -50,7 +51,7 @@ export function NavBar() {
     enabled: isAuthenticated,
   });
   const isAdmin = authz?.admin ?? false;
-  const canReviewProofs = authz?.proofReviewer ?? false;
+  const canReviewProofs = !!(authz?.proofReviewer || authz?.siteProofReviewer);
   const canAdminAuthz = authz?.adminAuthz ?? false;
   const canAdminWorldData = authz?.adminWorldData ?? false;
   const canManageConsumables = authz?.manageConsumables ?? false;

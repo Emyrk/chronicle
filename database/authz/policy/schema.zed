@@ -19,9 +19,8 @@ definition chronicle {
   relation technical_user: user
   relation supporter: user
 
-  // Deprecated compatibility names for clients cached before tenant-scoped
-  // proof roles shipped. Never confer access: the current API checks tenant
-  // permissions (or admin_users on the root domain) instead.
+  // Site-wide proof grants supplement tenant-specific grants. Neither role
+  // implicitly belongs to a tenant administrator.
   relation photo_proof_submitter: user
   relation photo_proof_reviewer: user
 
@@ -74,10 +73,8 @@ definition chronicle {
 
   permission admin_servers = technical_admin
 
-  // Old browser bundles may still ask for these global permissions. Return
-  // denied instead of a schema error; never resurrect cross-tenant access.
-  permission submit_photo_proof = photo_proof_submitter - photo_proof_submitter
-  permission review_photo_proof = photo_proof_reviewer - photo_proof_reviewer
+  permission submit_photo_proof = photo_proof_submitter
+  permission review_photo_proof = photo_proof_reviewer
 
   permission create_tenant_application = technical_admin + chronicle_guild_member
 }

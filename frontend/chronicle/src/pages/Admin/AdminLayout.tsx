@@ -62,6 +62,7 @@ export function AdminLayout() {
     () => ({
       admin: "chronicle:chronicle#admin_users",
       proofReviewer: tenantID ? `wow_tenant:${tenantID}#review_photo_proof` : "chronicle:chronicle#admin_users",
+      siteProofReviewer: "chronicle:chronicle#review_photo_proof",
     }),
     [tenantID],
   );
@@ -69,7 +70,7 @@ export function AdminLayout() {
     enabled: isAuthenticated,
   });
   const isAdmin = authz?.admin ?? false;
-  const canReviewProofs = authz?.proofReviewer ?? false;
+  const canReviewProofs = !!(authz?.proofReviewer || authz?.siteProofReviewer);
   const { data: noticeResponse } = useAdminTelemetryNotices({ enabled: isAdmin });
 
   const sessionLoading = authLoading || siteLoading || authzLoading;
