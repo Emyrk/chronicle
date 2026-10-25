@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/Emyrk/chronicle/internal/cosmetics"
 	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicebilling"
 	"github.com/Emyrk/chronicle/internal/services/servicebot"
@@ -62,6 +63,7 @@ func (s *Service) Name() string {
 func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
+		serviceaccessurl.OnAccessURL(),
 		servicepgxpool.OnPGXPool(),
 		serviceprometheus.OnPrometheus(),
 		servicebilling.OnBilling(),
@@ -137,6 +139,10 @@ func (s *Service) Start(ctx context.Context) error {
 			&river.PeriodicJobOpts{ID: "billing-subscription-reconciliation", RunOnStart: true},
 		),
 	)
+
+	billingService.Billing.SetSubscriptionChangeNotifier(func(ctx context.Context, change billing.SubscriptionChangeNotification) error {
+		return chroniclebot.EnqueueAdminNotification(ctx, q, bot, billingSubscriptionNotificationArgs(serviceaccessurl.AccessURL(s.broker), change))
+	})
 
 	// Register character cosmetic audits. The daily dispatcher repairs missed
 	// event-driven audits without producing a deployment-time burst.

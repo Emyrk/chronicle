@@ -66,7 +66,8 @@ type Service struct {
 	listSubscriptions          subscriptionLister
 	listActiveEntitlements     activeEntitlementLister
 
-	cosmeticAuditEnqueuer func(context.Context, uuid.UUID) error
+	subscriptionChangeNotifier func(context.Context, SubscriptionChangeNotification) error
+	cosmeticAuditEnqueuer      func(context.Context, uuid.UUID) error
 
 	pricesMu sync.Mutex
 	prices   []chroniclesdk.BillingPrice
