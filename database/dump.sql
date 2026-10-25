@@ -297,6 +297,23 @@ COMMENT ON COLUMN log_file.compressed_size_bytes IS 'Compressed file size in byt
 
 COMMENT ON COLUMN log_file.content_encoding IS 'Content encoding used for storage (e.g., gzip), NULL if stored raw';
 
+CREATE TABLE log_group_artifacts (
+    id uuid NOT NULL,
+    log_group_id uuid NOT NULL,
+    kind text NOT NULL,
+    schema_version integer NOT NULL,
+    hash text NOT NULL,
+    size_bytes bigint NOT NULL,
+    mime_type text NOT NULL,
+    content_encoding text,
+    object_key text NOT NULL,
+    original_filename text,
+    storage_deleted_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    CONSTRAINT log_group_artifacts_size_bytes_check CHECK ((size_bytes >= 0))
+);
+
 CREATE VIEW user_storage_limits AS
  SELECT data_grants.user_id,
     sum(data_grants.storage_bytes) AS max_storage_bytes,
@@ -318,6 +335,20 @@ CREATE TABLE users (
     CONSTRAINT users_character_cosmetics_check CHECK ((character_cosmetics = ANY (ARRAY['enabled'::text, 'limited'::text, 'disabled'::text])))
 );
 
+CREATE TABLE wow_log_groups (
+    id uuid NOT NULL,
+    owner uuid NOT NULL,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    log_type log_type DEFAULT 'v1'::log_type NOT NULL,
+    format log_format,
+    flavor text[],
+    invalidated_at timestamp with time zone,
+    invalid_reason text DEFAULT ''::text NOT NULL,
+    parse_generation bigint DEFAULT 1 NOT NULL,
+    unlisted boolean DEFAULT false NOT NULL
+);
+
 CREATE VIEW chronicle_users AS
  SELECT u.id,
     u.username,
@@ -330,14 +361,22 @@ CREATE VIEW chronicle_users AS
     u.character_cosmetics,
     COALESCE(sl.max_storage_bytes, (0)::numeric) AS max_storage_bytes,
     sl.updated_at AS data_limit_updated_at,
-    COALESCE(lf.total_size_bytes, (0)::numeric) AS consumed_storage_bytes
+    COALESCE(storage.total_size_bytes, (0)::numeric) AS consumed_storage_bytes
    FROM ((public.users u
      LEFT JOIN user_storage_limits sl ON ((sl.user_id = u.id)))
-     LEFT JOIN ( SELECT log_file.owner,
-            sum(COALESCE(log_file.compressed_size_bytes, log_file.size_bytes)) AS total_size_bytes
-           FROM log_file
-          WHERE (log_file.storage_deleted_at IS NULL)
-          GROUP BY log_file.owner) lf ON ((lf.owner = u.id)));
+     LEFT JOIN ( SELECT stored.owner,
+            sum(stored.size_bytes) AS total_size_bytes
+           FROM ( SELECT log_file.owner,
+                    COALESCE(log_file.compressed_size_bytes, log_file.size_bytes) AS size_bytes
+                   FROM log_file
+                  WHERE (log_file.storage_deleted_at IS NULL)
+                UNION ALL
+                 SELECT groups.owner,
+                    artifacts.size_bytes
+                   FROM (public.log_group_artifacts artifacts
+                     JOIN wow_log_groups groups ON ((groups.id = artifacts.log_group_id)))
+                  WHERE (artifacts.storage_deleted_at IS NULL)) stored
+          GROUP BY stored.owner) storage ON ((storage.owner = u.id)));
 
 CREATE TABLE class_buff_ignores (
     dataset_id uuid NOT NULL,
@@ -1309,23 +1348,6 @@ CREATE TABLE log_file_parts (
     CONSTRAINT log_file_parts_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'ready'::text, 'failed'::text])))
 );
 
-CREATE TABLE log_group_artifacts (
-    id uuid NOT NULL,
-    log_group_id uuid NOT NULL,
-    kind text NOT NULL,
-    schema_version integer NOT NULL,
-    hash text NOT NULL,
-    size_bytes bigint NOT NULL,
-    mime_type text NOT NULL,
-    content_encoding text,
-    object_key text NOT NULL,
-    original_filename text,
-    storage_deleted_at timestamp with time zone,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL,
-    CONSTRAINT log_group_artifacts_size_bytes_check CHECK ((size_bytes >= 0))
-);
-
 CREATE TABLE log_instance_encounter_damage_unit_summary (
     encounter_id uuid NOT NULL,
     unit_guid wow_guid NOT NULL,
@@ -1475,20 +1497,6 @@ CREATE TABLE tenants (
     disabled_ads text[] DEFAULT '{}'::text[] NOT NULL,
     CONSTRAINT tenants_slug_format CHECK (((slug IS NULL) OR (slug ~ '^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$'::text))),
     CONSTRAINT tenants_slug_reserved CHECK ((slug <> ALL (ARRAY['www'::text, 'api'::text, 'auth'::text, 'admin'::text, 'legacy'::text, 'app'::text, 'mail'::text, 'staging'::text])))
-);
-
-CREATE TABLE wow_log_groups (
-    id uuid NOT NULL,
-    owner uuid NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
-    log_type log_type DEFAULT 'v1'::log_type NOT NULL,
-    format log_format,
-    flavor text[],
-    invalidated_at timestamp with time zone,
-    invalid_reason text DEFAULT ''::text NOT NULL,
-    parse_generation bigint DEFAULT 1 NOT NULL,
-    unlisted boolean DEFAULT false NOT NULL
 );
 
 CREATE TABLE wow_server_realms (
