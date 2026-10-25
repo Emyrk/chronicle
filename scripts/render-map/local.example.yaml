@@ -1,0 +1,29 @@
+# Machine settings for the render-map tools. Copy to scripts/render-map/local.yaml or, to survive
+# worktrees and fresh checkouts, ~/.config/chronicle-render-map/local.yaml (gitignored / outside the repo).
+# The first file found is used whole; every key is optional and falls back to the default shown.
+# Check what is in effect: .venv/bin/python -I tools/rmconfig.py
+
+# All state: maps/<slug>/{map.yaml,fetch.json,raw,renders,published}, cache/, data/wdt-index.csv.
+# Refused when inside any git repo that has a remote (Blizzard-derived files must never be committable).
+workdir: ~/.cache/chronicle-render-map
+
+# Blender 4.3.x; render_set.py refuses another major.minor unless --allow-blender-drift.
+blender: /Applications/Blender.app/Contents/MacOS/Blender
+
+# Interpreter for render_set.py's sub-steps (and the one the skill runs tools with).
+# Default: the interpreter running the tool, i.e. scripts/render-map/.venv/bin/python.
+# python: ~/somewhere/.venv/bin/python
+
+# 1.12 (MPQ) clients, by name: map.yaml `client: <name>` and every --client accept the name.
+# The directory holds Data/. Opened read-only; never write into a client someone plays from.
+mpq_clients: {}
+#   my-fork: ~/clients/my-fork
+
+# Map Foundry (publishing to chronicle; see the skill). namespace: forever, turtle, kronos, ...
+foundry:
+  host: telemetry.chronicleclassic.com
+  namespace:                       # no default: say which one, every publish
+
+# Chronicle hosts whose public logs check_log_positions.py fetches; --host defaults to the first.
+log_hosts:
+  - octo.chronicleclassic.com
