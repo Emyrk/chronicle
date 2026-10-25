@@ -297,6 +297,23 @@ COMMENT ON COLUMN log_file.compressed_size_bytes IS 'Compressed file size in byt
 
 COMMENT ON COLUMN log_file.content_encoding IS 'Content encoding used for storage (e.g., gzip), NULL if stored raw';
 
+CREATE TABLE log_group_artifacts (
+    id uuid NOT NULL,
+    log_group_id uuid NOT NULL,
+    kind text NOT NULL,
+    schema_version integer NOT NULL,
+    hash text NOT NULL,
+    size_bytes bigint NOT NULL,
+    mime_type text NOT NULL,
+    content_encoding text,
+    object_key text NOT NULL,
+    original_filename text,
+    storage_deleted_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    CONSTRAINT log_group_artifacts_size_bytes_check CHECK ((size_bytes >= 0))
+);
+
 CREATE VIEW user_storage_limits AS
  SELECT data_grants.user_id,
     sum(data_grants.storage_bytes) AS max_storage_bytes,
@@ -316,6 +333,20 @@ CREATE TABLE users (
     raw_log_retention_hours integer
 );
 
+CREATE TABLE wow_log_groups (
+    id uuid NOT NULL,
+    owner uuid NOT NULL,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    log_type log_type DEFAULT 'v1'::log_type NOT NULL,
+    format log_format,
+    flavor text[],
+    invalidated_at timestamp with time zone,
+    invalid_reason text DEFAULT ''::text NOT NULL,
+    parse_generation bigint DEFAULT 1 NOT NULL,
+    unlisted boolean DEFAULT false NOT NULL
+);
+
 CREATE VIEW chronicle_users AS
  SELECT u.id,
     u.username,
@@ -327,14 +358,22 @@ CREATE VIEW chronicle_users AS
     u.raw_log_retention_hours,
     COALESCE(sl.max_storage_bytes, (0)::numeric) AS max_storage_bytes,
     sl.updated_at AS data_limit_updated_at,
-    COALESCE(lf.total_size_bytes, (0)::numeric) AS consumed_storage_bytes
+    COALESCE(storage.total_size_bytes, (0)::numeric) AS consumed_storage_bytes
    FROM ((public.users u
      LEFT JOIN user_storage_limits sl ON ((sl.user_id = u.id)))
-     LEFT JOIN ( SELECT log_file.owner,
-            sum(COALESCE(log_file.compressed_size_bytes, log_file.size_bytes)) AS total_size_bytes
-           FROM log_file
-          WHERE (log_file.storage_deleted_at IS NULL)
-          GROUP BY log_file.owner) lf ON ((lf.owner = u.id)));
+     LEFT JOIN ( SELECT stored.owner,
+            sum(stored.size_bytes) AS total_size_bytes
+           FROM ( SELECT log_file.owner,
+                    COALESCE(log_file.compressed_size_bytes, log_file.size_bytes) AS size_bytes
+                   FROM log_file
+                  WHERE (log_file.storage_deleted_at IS NULL)
+                UNION ALL
+                 SELECT groups.owner,
+                    artifacts.size_bytes
+                   FROM (public.log_group_artifacts artifacts
+                     JOIN wow_log_groups groups ON ((groups.id = artifacts.log_group_id)))
+                  WHERE (artifacts.storage_deleted_at IS NULL)) stored
+          GROUP BY stored.owner) storage ON ((storage.owner = u.id)));
 
 CREATE TABLE class_buff_ignores (
     dataset_id uuid NOT NULL,
@@ -1455,20 +1494,6 @@ CREATE TABLE tenants (
     disabled_ads text[] DEFAULT '{}'::text[] NOT NULL,
     CONSTRAINT tenants_slug_format CHECK (((slug IS NULL) OR (slug ~ '^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$'::text))),
     CONSTRAINT tenants_slug_reserved CHECK ((slug <> ALL (ARRAY['www'::text, 'api'::text, 'auth'::text, 'admin'::text, 'legacy'::text, 'app'::text, 'mail'::text, 'staging'::text])))
-);
-
-CREATE TABLE wow_log_groups (
-    id uuid NOT NULL,
-    owner uuid NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
-    log_type log_type DEFAULT 'v1'::log_type NOT NULL,
-    format log_format,
-    flavor text[],
-    invalidated_at timestamp with time zone,
-    invalid_reason text DEFAULT ''::text NOT NULL,
-    parse_generation bigint DEFAULT 1 NOT NULL,
-    unlisted boolean DEFAULT false NOT NULL
 );
 
 CREATE TABLE wow_server_realms (
@@ -2762,6 +2787,12 @@ ALTER TABLE ONLY log_file_parts
 ALTER TABLE ONLY log_file
     ADD CONSTRAINT log_file_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY log_group_artifacts
+    ADD CONSTRAINT log_group_artifacts_object_key_key UNIQUE (object_key);
+
+ALTER TABLE ONLY log_group_artifacts
+    ADD CONSTRAINT log_group_artifacts_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY log_instance_encounter_damage_unit_summary
     ADD CONSTRAINT log_instance_encounter_damage_unit_summary_pkey PRIMARY KEY (encounter_id, unit_guid);
 
@@ -3273,6 +3304,10 @@ CREATE INDEX log_file_parts_pending_idx ON log_file_parts USING btree (log_file_
 
 CREATE UNIQUE INDEX log_file_parts_source_sequence_idx ON log_file_parts USING btree (log_file_id, source_sequence) WHERE (source_sequence IS NOT NULL);
 
+CREATE INDEX log_group_artifacts_kind_idx ON log_group_artifacts USING btree (kind);
+
+CREATE INDEX log_group_artifacts_log_group_id_idx ON log_group_artifacts USING btree (log_group_id);
+
 CREATE UNIQUE INDEX log_instance_raid_group_clean_kill_idx ON log_instance_raid_group_snapshots USING btree (encounter_id) WHERE (snapshot_type = 'clean_kill'::raid_group_snapshot_type);
 
 CREATE UNIQUE INDEX log_instance_raid_group_final_idx ON log_instance_raid_group_snapshots USING btree (instance_id) WHERE (snapshot_type = 'final'::raid_group_snapshot_type);
@@ -3625,6 +3660,9 @@ ALTER TABLE ONLY log_file_parts
 
 ALTER TABLE ONLY log_file
     ADD CONSTRAINT log_file_wow_log_id_fkey FOREIGN KEY (wow_log_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY log_group_artifacts
+    ADD CONSTRAINT log_group_artifacts_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY log_instance_encounter_damage_unit_summary
     ADD CONSTRAINT log_instance_encounter_damage_unit_summary_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES log_instance_encounters(id) ON DELETE CASCADE;

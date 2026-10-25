@@ -10,8 +10,10 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 )
 
-// Inserter merges an ordered artifact source into an ordered original source.
-// Original messages win timestamp ties. Order within each source is unchanged.
+// Inserter adds an artifact source to an original source by timestamp when the
+// next messages are comparable. Original messages win timestamp ties. Order
+// within each source is unchanged, including timestamp regressions caused by
+// clock-anchor changes between sessions.
 type Inserter struct {
 	original MessageSource
 	inserted MessageSource
@@ -24,10 +26,8 @@ type Inserter struct {
 }
 
 type sourceState struct {
-	buffer  []messages.Message
-	eof     bool
-	hasLast bool
-	last    time.Time
+	buffer []messages.Message
+	eof    bool
 }
 
 func NewInserter(original, inserted MessageSource) *Inserter {
@@ -35,10 +35,10 @@ func NewInserter(original, inserted MessageSource) *Inserter {
 }
 
 func (i *Inserter) Advance(ctx context.Context) ([]messages.Message, error) {
-	if err := fill(ctx, i.original, &i.originalState, "original", false); err != nil {
+	if err := fill(ctx, i.original, &i.originalState, "original"); err != nil {
 		return nil, err
 	}
-	if err := fill(ctx, i.inserted, &i.insertedState, "inserted", true); err != nil {
+	if err := fill(ctx, i.inserted, &i.insertedState, "inserted"); err != nil {
 		return nil, err
 	}
 
@@ -103,7 +103,7 @@ func (i *Inserter) takeOriginal(end int) []messages.Message {
 	return out
 }
 
-func fill(ctx context.Context, source MessageSource, state *sourceState, name string, validateOrder bool) error {
+func fill(ctx context.Context, source MessageSource, state *sourceState, name string) error {
 	for len(state.buffer) == 0 && !state.eof {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -116,11 +116,6 @@ func fill(ctx context.Context, source MessageSource, state *sourceState, name st
 			if message == nil {
 				return fmt.Errorf("%s source returned nil message at batch index %d", name, index)
 			}
-			if validateOrder && state.hasLast && message.Date().Before(state.last) {
-				return fmt.Errorf("%s source timestamp regression: %s before %s", name, message.Date(), state.last)
-			}
-			state.last = message.Date()
-			state.hasLast = true
 		}
 		state.buffer = batch
 		if errors.Is(err, io.EOF) {

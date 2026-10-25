@@ -17,10 +17,12 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/creatures"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
+	"github.com/Emyrk/chronicle/combatlog/parser/messagesource"
 	"github.com/Emyrk/chronicle/combatlog/parser/reorder"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/parserv2"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
+	"github.com/Emyrk/chronicle/combatlog/parser/wotlk/sidekickstorage"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
@@ -56,6 +58,7 @@ func (w *WorkerLogParse) parseCombatLog(
 	ctx context.Context,
 	logFormat database.LogFormat,
 	files []database.LogFile,
+	artifacts []database.LogGroupArtifact,
 	gameDB gamedb.GameDB,
 	reg *registry.Registry,
 	identityMode bool,
@@ -183,7 +186,37 @@ func (w *WorkerLogParse) parseCombatLog(
 		}
 		p.SetRealmClockInfo(scanCompanionHeaderClock(data))
 		c.Advancer = p
-		consumeErr = c.ConsumeAll(ctx, p)
+		var parseSource messagesource.MessageSource = p
+		var sawSidekickResources, sawSidekickPosition bool
+		if logFormat == database.LogFormat335aCcAddon {
+			for _, artifact := range artifacts {
+				if artifact.Kind != ArtifactKindSidekickStorage {
+					continue
+				}
+				if artifact.SchemaVersion != 1 && artifact.SchemaVersion != 2 {
+					return nil, fmt.Errorf("unsupported Sidekick storage artifact schema version %d", artifact.SchemaVersion)
+				}
+				contents, err := w.parent.Storage.DownloadFile(ctx, BucketRaidLogs, artifact.ObjectKey)
+				if err != nil {
+					return nil, fmt.Errorf("download Sidekick storage artifact: %w", err)
+				}
+				decoded, err := (sidekickstorage.Decoder{}).Decode(ctx, bytes.NewReader(contents))
+				if err != nil {
+					return nil, fmt.Errorf("decode Sidekick storage artifact: %w", err)
+				}
+				sidekickSource, ok := decoded.(*sidekickstorage.Source)
+				if !ok {
+					return nil, fmt.Errorf("unexpected Sidekick storage source type %T", decoded)
+				}
+				if sidekickSource.SchemaVersion() != artifact.SchemaVersion {
+					return nil, fmt.Errorf("sidekick storage artifact schema version %d does not match payload schema version %d", artifact.SchemaVersion, sidekickSource.SchemaVersion())
+				}
+				sawSidekickResources = sawSidekickResources || sidekickSource.SawUnitResources()
+				sawSidekickPosition = sawSidekickPosition || sidekickSource.SawUnitPosition()
+				parseSource = messagesource.NewInserter(parseSource, sidekickSource)
+			}
+		}
+		consumeErr = c.ConsumeAll(ctx, parseSource)
 		if consumeErr != nil && !errors.Is(consumeErr, io.EOF) {
 			return nil, fmt.Errorf("consume CLEU log: %w", consumeErr)
 		}
@@ -191,6 +224,10 @@ func (w *WorkerLogParse) parseCombatLog(
 		if p.SawRaidGroup() {
 			logCapabilities = append(logCapabilities, "raidgroup")
 		}
+		logCapabilities = append(logCapabilities, observedUnitTelemetryCapabilities(
+			sawSidekickResources,
+			sawSidekickPosition,
+		)...)
 
 	case database.LogFormatV9Cleu, database.LogFormatV22Cleu, database.LogFormatHermesproxy1142Cc:
 		logCapabilities = append(logCapabilities, "interrupt")

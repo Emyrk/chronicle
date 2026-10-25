@@ -34,12 +34,16 @@ type luaParser struct {
 
 func parseSavedVariables(input string) (luaValue, error) {
 	p := &luaParser{input: input}
+	var legacy luaValue
 	for {
 		if err := p.space(); err != nil {
 			return luaValue{}, err
 		}
 		if p.pos == len(p.input) {
-			return luaValue{}, fmt.Errorf("ChronicleCompanionWoTLKDB assignment not found")
+			if legacy.kind == luaTable {
+				return legacy, nil
+			}
+			return luaValue{}, fmt.Errorf("ChronicleSidekickBridgeWoTLKDB assignment not found")
 		}
 		name, err := p.identifier()
 		if err != nil {
@@ -55,11 +59,17 @@ func parseSavedVariables(input string) (luaValue, error) {
 		if err != nil {
 			return luaValue{}, fmt.Errorf("saved variables assignment %q: %w", name, err)
 		}
-		if name == "ChronicleCompanionWoTLKDB" {
+		switch name {
+		case "ChronicleSidekickBridgeWoTLKDB":
+			if value.kind != luaTable {
+				return luaValue{}, fmt.Errorf("ChronicleSidekickBridgeWoTLKDB must be a table")
+			}
+			return value, nil
+		case "ChronicleCompanionWoTLKDB":
 			if value.kind != luaTable {
 				return luaValue{}, fmt.Errorf("ChronicleCompanionWoTLKDB must be a table")
 			}
-			return value, nil
+			legacy = value
 		}
 		if err := p.space(); err != nil {
 			return luaValue{}, err
