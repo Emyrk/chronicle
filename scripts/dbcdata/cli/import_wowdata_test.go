@@ -101,9 +101,8 @@ func TestResolveWowdataBinaryUsesCachedPinnedBinary(t *testing.T) {
 	require.Equal(t, binary, got)
 }
 
+// Not parallel: concurrent execution of freshly written test scripts can return ETXTBSY on worktree filesystems.
 func TestExtractWowdataUsesTemporarySnapshot(t *testing.T) {
-	t.Parallel()
-
 	dir := t.TempDir()
 	extractor := filepath.Join(dir, "extract.sh")
 	require.NoError(t, os.WriteFile(extractor, []byte(`#!/usr/bin/env bash

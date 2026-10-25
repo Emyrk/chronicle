@@ -191,9 +191,8 @@ func TestBuildWowMapManifestRejectsMissingArt(t *testing.T) {
 	require.ErrorContains(t, err, "missing UiMapArt 2169")
 }
 
+// Not parallel: concurrent execution of freshly written test scripts can return ETXTBSY on worktree filesystems.
 func TestResolveWowdataBuild(t *testing.T) {
-	t.Parallel()
-
 	dir := t.TempDir()
 	binary := filepath.Join(dir, "wowdata")
 	require.NoError(t, os.WriteFile(binary, []byte(`#!/usr/bin/env bash
@@ -427,9 +426,8 @@ printf 'webp' > "$output"
 	require.FileExists(t, filepath.Join(dir, "original", "102.webp"))
 }
 
+// Not parallel: concurrent execution of freshly written test scripts can return ETXTBSY on worktree filesystems.
 func TestExportWowdataTexturesSkipsUnavailableFloorSiblings(t *testing.T) {
-	t.Parallel()
-
 	dir := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(dir, "original"), 0o755))
 	calls := filepath.Join(dir, "calls")
@@ -454,9 +452,8 @@ exit 1
 	require.Equal(t, "769212\n", string(data))
 }
 
+// Not parallel: concurrent execution of freshly written test scripts can return ETXTBSY on worktree filesystems.
 func TestExportWowdataTextureReportsUnavailableFile(t *testing.T) {
-	t.Parallel()
-
 	dir := t.TempDir()
 	binary := filepath.Join(dir, "wowdata")
 	require.NoError(t, os.WriteFile(binary, []byte(`#!/usr/bin/env bash
@@ -480,9 +477,8 @@ exit 1
 	require.NoFileExists(t, output)
 }
 
+// Not parallel: concurrent execution of freshly written test scripts can return ETXTBSY on worktree filesystems.
 func TestExportWowdataTextureRetriesCacheLockFailure(t *testing.T) {
-	t.Parallel()
-
 	dir := t.TempDir()
 	calls := filepath.Join(dir, "calls")
 	binary := filepath.Join(dir, "wowdata")
