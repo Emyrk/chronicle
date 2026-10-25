@@ -16,8 +16,19 @@ export function getClassIconUrl(cls: string): string {
 }
 
 export function getRaceIconUrl(race: string, gender: string, iconBaseUrl?: string): string {
+  if (race === "BloodElf") {
+    const icon = gender === "Female"
+      ? "achievement_character_bloodelf_female"
+      : "achievement_character_bloodelf_male";
+    return iconUrl(icon, iconBaseUrl);
+  }
+  if (race === "NightElf") {
+    const icon = gender === "Female" ? "inv_misc_head_elf_02" : "race_night_elf";
+    return iconUrl(icon, iconBaseUrl);
+  }
+
   const name = race === "Scourge" ? "forsaken" : race.toLowerCase().replace(" ", "");
-  if (gender == "Female") {
+  if (gender === "Female") {
     return iconUrl(`inv_misc_head_${name}_02`, iconBaseUrl);
   }
 
