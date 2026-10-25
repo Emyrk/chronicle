@@ -41,6 +41,9 @@ import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/P
 import type { PlayerRowCosmetic } from "@/components/ui/PlayerMetricChart/PlayerMetricChartModel";
 import { cn } from "@/lib/utils";
 
+const EMPTY_CATALOG: readonly CosmeticDefinition[] = [];
+const EMPTY_ALLOWED_IDS: readonly string[] = [];
+
 type Slot = keyof CosmeticStyleSelection;
 type PaidTier = Exclude<Tier, "Free">;
 
@@ -209,8 +212,8 @@ function OptionTile({
 export interface CharacterCosmeticsEditorProps {
   character: LinkedCharacter;
   cosmetics?: CharacterCosmetics;
-  catalog: readonly CosmeticDefinition[];
-  allowedIDs: readonly string[];
+  catalog?: readonly CosmeticDefinition[] | null;
+  allowedIDs?: readonly string[] | null;
   open: boolean;
   saving: boolean;
   onOpenChange: (open: boolean) => void;
@@ -227,15 +230,17 @@ export function CharacterCosmeticsEditor({
   onOpenChange,
   onSave,
 }: CharacterCosmeticsEditorProps) {
+  const safeCatalog = catalog ?? EMPTY_CATALOG;
+  const safeAllowedIDs = allowedIDs ?? EMPTY_ALLOWED_IDS;
   const saved = selectionFromAPI(cosmetics?.requested);
   const active = selectionFromAPI(cosmetics?.active);
   const [draft, setDraft] = useState(saved);
   const [applyToAll, setApplyToAll] = useState(false);
   const [barLength, setBarLength] = useState<"long" | "short">("long");
-  const allowed = useMemo(() => new Set(allowedIDs), [allowedIDs]);
+  const allowed = useMemo(() => new Set(safeAllowedIDs), [safeAllowedIDs]);
   const optionsBySlot = useMemo(
-    () => Object.fromEntries(SLOT_CONFIG.map((slot) => [slot.key, slotOptions(slot, catalog)])) as Record<Slot, EditorOption[]>,
-    [catalog],
+    () => Object.fromEntries(SLOT_CONFIG.map((slot) => [slot.key, slotOptions(slot, safeCatalog)])) as Record<Slot, EditorOption[]>,
+    [safeCatalog],
   );
   const selectedOptions = SLOT_CONFIG.map((slot) => ({
     slot,
@@ -349,14 +354,14 @@ export function CharacterCosmeticsEditor({
               Reset to default
             </Button>
             <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
-              {!requiredTier && allowedIDs.length > 0 && (
+              {!requiredTier && safeAllowedIDs.length > 0 && (
                 <label className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Switch checked={applyToAll} onCheckedChange={setApplyToAll} />
                   Apply to all linked characters
                 </label>
               )}
               <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
-              {requiredTier || allowedIDs.length === 0 ? (
+              {requiredTier || safeAllowedIDs.length === 0 ? (
                 <Button size="sm" asChild>
                   <Link to="/account/billing" onClick={() => onOpenChange(false)}>
                     <Sparkles className="size-3.5" />

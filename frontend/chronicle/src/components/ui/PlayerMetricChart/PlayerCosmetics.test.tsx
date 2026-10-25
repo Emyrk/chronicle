@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
+import { CharacterCosmeticsEditor } from "@/features/characterCosmetics/CharacterCosmeticsEditor";
+import type { LinkedCharacter } from "@/api/typesGenerated";
 import {
   BACKGROUND_STYLES,
   BORDER_STYLES,
@@ -9,7 +12,37 @@ import {
   selectionToAPI,
 } from "./PlayerCosmetics";
 
+const character: LinkedCharacter = {
+  link_id: "link-1",
+  user_id: "user-1",
+  character_guid: "character-1",
+  realm_id: "realm-1",
+  realm_name: "Nordanaar",
+  name: "Crashproof",
+  class: "Mage",
+  race: "Gnome",
+  gender: "Female",
+  level: 60,
+  is_primary: false,
+  link_source: "manual",
+  linked_at: "2026-10-25T00:00:00Z",
+};
+
 describe("player cosmetics", () => {
+  it("does not crash when an older backend returns null cosmetic arrays", () => {
+    expect(() => renderToStaticMarkup(
+      <CharacterCosmeticsEditor
+        character={character}
+        catalog={null}
+        allowedIDs={null}
+        open={false}
+        saving={false}
+        onOpenChange={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    )).not.toThrow();
+  });
+
   it("round-trips API IDs, including camel-cased style keys", () => {
     const selection = {
       name: "thunderfury" as const,

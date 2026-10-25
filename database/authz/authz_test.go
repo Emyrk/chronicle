@@ -609,6 +609,12 @@ func TestCosmeticTierAuthorization(t *testing.T) {
 	ctx := testutil.Context(t, testutil.WaitLong)
 	zed := serviceauthz.Authz(broker)
 
+	ordinaryUser := uuid.New()
+	allowed, err := zed.ListAllowedCosmetics(ctx, ordinaryUser)
+	require.NoError(t, err)
+	require.NotNil(t, allowed)
+	require.Empty(t, allowed)
+
 	honoredUser, reveredUser, exaltedUser, stripeUser := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	require.NoError(t, zed.SetUserChronicleRoles(ctx, honoredUser, []string{"honored"}))
 	require.NoError(t, zed.SetUserChronicleRoles(ctx, reveredUser, []string{"revered"}))
@@ -621,7 +627,7 @@ func TestCosmeticTierAuthorization(t *testing.T) {
 	require.NoError(t, zed.SetCosmeticTier(ctx, reveredCosmetic, "revered"))
 	require.NoError(t, zed.SetCosmeticTier(ctx, exaltedCosmetic, "exalted"))
 
-	allowed, err := zed.ListAllowedCosmetics(ctx, reveredUser)
+	allowed, err = zed.ListAllowedCosmetics(ctx, reveredUser)
 	require.NoError(t, err)
 	assert.Contains(t, allowed, honoredCosmetic)
 	assert.Contains(t, allowed, reveredCosmetic)

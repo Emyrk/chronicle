@@ -403,7 +403,7 @@ type CosmeticTierAssignment struct {
 
 // ListAllowedCosmetics returns cosmetic resource IDs the user may use.
 func (z *Authz) ListAllowedCosmetics(ctx context.Context, userID uuid.UUID) ([]string, error) {
-	var ids []string
+	ids := make([]string, 0)
 	for id, err := range z.LookupResources(ctx, nil, "cosmetic#use", "user:"+userID.String()) {
 		if err != nil {
 			return nil, err
