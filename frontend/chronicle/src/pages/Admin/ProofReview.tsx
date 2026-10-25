@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Check, ChevronLeft, ChevronRight, Server, X } from "lucide-react";
+import { BadgeCheck, Check, ChevronLeft, ChevronRight, Server, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ProofRequest } from "@/pages/Settings/PhotoProof";
@@ -13,12 +13,40 @@ const EMPTY_DRAFT: Draft = { choices: {}, message: "" };
 
 const subjectKey = (subject: { realm_id: string; character_guid: string }) => `${subject.realm_id}/${subject.character_guid}`;
 
-function TenantBadge({ request }: { request: ProofRequest }) {
-  return <span className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-sm font-medium text-primary" title={`Tenant ${request.tenant_id}`}>
-    <Server className="size-3.5" />
+function TenantBadge({ request, large = false }: { request: ProofRequest; large?: boolean }) {
+  return <span className={cn("inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 font-medium text-primary", large ? "px-3 py-1 text-base" : "px-2 py-0.5 text-sm")} title={`Tenant ${request.tenant_id}`}>
+    <Server className={large ? "size-4" : "size-3.5"} />
     {request.tenant_name || request.tenant_id}
     {request.tenant_slug && <span className="font-normal text-primary/70">({request.tenant_slug})</span>}
   </span>;
+}
+
+function ApplicantPanel({ request }: { request: ProofRequest }) {
+  const applicant = request.applicant;
+  return <div className="rounded border p-3 space-y-3 text-sm">
+    <div className="flex flex-wrap items-center gap-2">
+      <User className="size-4 text-muted-foreground" />
+      <span className="font-semibold">{applicant?.username ?? "Unknown user"}</span>
+      {applicant && (applicant.discord_linked
+        ? <span className="rounded-full bg-indigo-500/15 px-2 py-0.5 text-xs font-medium text-indigo-400" title={applicant.discord_id ? `Discord ID ${applicant.discord_id}` : undefined}>Discord user</span>
+        : <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">No Discord account</span>)}
+    </div>
+    <p className="text-xs text-muted-foreground">
+      User ID <code>{request.applicant_id}</code>
+      {applicant?.discord_id && <> · Discord ID <code>{applicant.discord_id}</code></>}
+    </p>
+    {applicant && <div className="space-y-1">
+      <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><BadgeCheck className="size-3.5" />Already linked ({applicant.linked_characters.length})</p>
+      {applicant.linked_characters.length === 0
+        ? <p className="text-xs text-muted-foreground">No linked characters yet.</p>
+        : <ul className="max-h-32 space-y-0.5 overflow-y-auto styled-scrollbar">
+          {applicant.linked_characters.map((character) => <li key={character.link_id} className="text-xs">
+            <Link to={`/armory/${encodeURIComponent(character.realm_name)}/${character.character_guid}`} target="_blank" className="font-medium hover:underline" style={{ color: getClassColorVar(character.class) }}>{character.name}</Link>
+            <span className="text-muted-foreground"> · {character.level} {character.class} · {character.realm_name}{character.is_primary ? " · Primary" : ""}</span>
+          </li>)}
+        </ul>}
+    </div>}
+  </div>;
 }
 
 function Evidence({ id, onAvailable }: { id: string; onAvailable: () => void }) {
@@ -68,14 +96,15 @@ function Review({ request, draft, onDraftChange }: { request: ProofRequest; draf
 
   return <article className="rounded-lg border">
     <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b bg-muted/30 px-4 py-3 text-sm">
-      <TenantBadge request={request} />
-      <span className="text-muted-foreground">Submitted {new Date(request.created_at).toLocaleString()}</span>
-      <span className="text-muted-foreground">Applicant <code className="text-xs">{request.applicant_id}</code></span>
+      <span className="text-muted-foreground">Submitted to</span>
+      <TenantBadge request={request} large />
+      <span className="text-muted-foreground">{new Date(request.created_at).toLocaleString()}</span>
       <span className="ml-auto text-xs text-muted-foreground">Request {request.id.slice(0, 8)}</span>
     </header>
     <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,3fr)_minmax(18rem,2fr)]">
       <Evidence id={request.id} onAvailable={() => setEvidenceAvailable(true)} />
       <div className="space-y-4">
+        <ApplicantPanel request={request} />
         {request.message && <div className="rounded bg-muted/50 p-3 text-sm whitespace-pre-wrap"><span className="block text-xs text-muted-foreground">Applicant message</span>{request.message}</div>}
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
@@ -165,7 +194,7 @@ export function ProofReview() {
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium capitalize">{r.status}</span>
           <TenantBadge request={r} />
-          <span className="text-muted-foreground">{new Date(r.reviewed_at ?? r.created_at).toLocaleString()} · {r.applicant_id}</span>
+          <span className="text-muted-foreground">{new Date(r.reviewed_at ?? r.created_at).toLocaleString()} · {r.applicant?.username ?? r.applicant_id}</span>
         </div>
         <p className="text-muted-foreground">{r.subjects.map((subject, i) => <span key={subjectKey(subject)}>
           {i > 0 && ", "}<span style={subject.class ? { color: getClassColorVar(subject.class) } : undefined}>{subject.name}</span>: {subject.status}

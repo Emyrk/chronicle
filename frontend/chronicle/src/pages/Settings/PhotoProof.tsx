@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Camera, Check, Clock, ImageUp, Maximize2, Search, Users } from "lucide-react";
 import { useArmorySearch } from "@/api/queries";
-import type { ArmorySearchResult, ProofCooldownResponse } from "@/api/typesGenerated";
+import type { ArmorySearchResult, ProofApplicant, ProofCooldownResponse } from "@/api/typesGenerated";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,7 @@ export type ProofRequest = {
   reviewed_at?: string;
   subjects: ProofSubject[];
   applicant_id?: string;
+  applicant?: ProofApplicant;
 };
 
 async function proofResponse(response: Response): Promise<ProofRequest> {

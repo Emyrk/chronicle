@@ -3026,6 +3026,17 @@ export const PricingAuctionHouses: PricingAuctionHouse[] = ["merged", "split"];
 
 // From chroniclesdk/proofs.go
 /**
+ * ProofApplicant gives reviewers context about who submitted a proof.
+ */
+export interface ProofApplicant {
+    readonly username: string;
+    readonly discord_linked: boolean;
+    readonly discord_id?: string;
+    readonly linked_characters: readonly LinkedCharacter[];
+}
+
+// From chroniclesdk/proofs.go
+/**
  * ProofCharacter identifies one same-realm character in a photo proof request.
  */
 export interface ProofCharacter {
@@ -3062,6 +3073,10 @@ export interface ProofRequest {
     readonly created_at: string;
     readonly reviewed_at?: string;
     readonly subjects: readonly ProofSubject[];
+    /**
+     * Applicant is only populated for reviewers.
+     */
+    readonly applicant?: ProofApplicant;
 }
 
 // From chroniclesdk/proofs.go

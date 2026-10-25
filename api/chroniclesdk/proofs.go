@@ -33,6 +33,16 @@ type ProofRequest struct {
 	CreatedAt   time.Time      `json:"created_at"`
 	ReviewedAt  *time.Time     `json:"reviewed_at,omitempty"`
 	Subjects    []ProofSubject `json:"subjects"`
+	// Applicant is only populated for reviewers.
+	Applicant *ProofApplicant `json:"applicant,omitempty"`
+}
+
+// ProofApplicant gives reviewers context about who submitted a proof.
+type ProofApplicant struct {
+	Username         string            `json:"username"`
+	DiscordLinked    bool              `json:"discord_linked"`
+	DiscordID        string            `json:"discord_id,omitempty"`
+	LinkedCharacters []LinkedCharacter `json:"linked_characters"`
 }
 
 // ProofCooldownResponse is the account's next eligible submission time for

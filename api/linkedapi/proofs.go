@@ -12,6 +12,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
@@ -260,7 +261,7 @@ func (h *Handler) ListMyProofs(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	h.writeProofs(w, r, scope, rows)
+	h.writeProofs(w, r, scope, rows, false)
 }
 
 func reviewProofScope(ctx context.Context) serviceproof.Scope {
@@ -277,10 +278,15 @@ func (h *Handler) ListAdminProofs(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	h.writeProofs(w, r, scope, rows)
+	h.writeProofs(w, r, scope, rows, true)
 }
 
-func (h *Handler) writeProofs(w http.ResponseWriter, r *http.Request, scope serviceproof.Scope, rows []database.ProofRequest) {
+func (h *Handler) writeProofs(w http.ResponseWriter, r *http.Request, scope serviceproof.Scope, rows []database.ProofRequest, reviewer bool) {
+	ctx := r.Context()
+	if scope.AllTenants {
+		ctx = servicetenant.AdminBypass(ctx)
+	}
+	applicants := make(map[uuid.UUID]*chroniclesdk.ProofApplicant)
 	result := make([]chroniclesdk.ProofRequest, 0, len(rows))
 	for _, row := range rows {
 		proof, err := h.proofResponse(r.Context(), scope, row.ID)
@@ -288,9 +294,43 @@ func (h *Handler) writeProofs(w http.ResponseWriter, r *http.Request, scope serv
 			httpapi.InternalServerError(w, err)
 			return
 		}
+		if reviewer {
+			applicant, ok := applicants[row.ApplicantID]
+			if !ok {
+				applicant, err = h.proofApplicant(ctx, row.ApplicantID)
+				if err != nil {
+					httpapi.InternalServerError(w, err)
+					return
+				}
+				applicants[row.ApplicantID] = applicant
+			}
+			proof.Applicant = applicant
+		}
 		result = append(result, proof)
 	}
-	httpapi.Write(r.Context(), w, http.StatusOK, result)
+	httpapi.Write(ctx, w, http.StatusOK, result)
+}
+
+func (h *Handler) proofApplicant(ctx context.Context, userID uuid.UUID) (*chroniclesdk.ProofApplicant, error) {
+	user, err := h.zed.GetUserByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := &chroniclesdk.ProofApplicant{Username: user.Username}
+	discord, err := h.zed.GetUserAuthLinkByUserIDAndProvider(ctx, database.GetUserAuthLinkByUserIDAndProviderParams{UserID: userID, Provider: "discord"})
+	switch {
+	case err == nil:
+		out.DiscordLinked = true
+		out.DiscordID = discord.LinkedID
+	case !errors.Is(err, sql.ErrNoRows):
+		return nil, err
+	}
+	links, err := h.zed.GetUserCharacterLinks(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out.LinkedCharacters = db2sdk.LinkedCharacters(links)
+	return out, nil
 }
 
 func proofID(r *http.Request) (uuid.UUID, error) { return uuid.Parse(chi.URLParam(r, "id")) }
