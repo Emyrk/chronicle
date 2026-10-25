@@ -83,7 +83,7 @@ export function TierBadge({ tier }: { tier: Tier }) {
   );
 }
 
-export function MiniRow({ character, cosmetic }: { character: LinkedCharacter; cosmetic: PlayerRowCosmetic }) {
+export function MiniRow({ character, cosmetic }: { character: Pick<LinkedCharacter, "name" | "class">; cosmetic: PlayerRowCosmetic }) {
   return (
     <div
       className="relative flex h-7 items-center overflow-hidden rounded-md px-2"

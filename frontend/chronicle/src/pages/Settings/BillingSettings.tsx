@@ -4,7 +4,20 @@ import type { BillingPrice, BillingSummary } from "@/api/typesGenerated"
 import { useCreateBillingCancel, useCreateBillingChange, useCreateBillingCheckout, useCreateBillingPortal, useBillingSummary, useSiteConfig } from "@/api/queries"
 import { iconUrl } from "@/config/iconUrl"
 import { Button } from "@/components/ui/button"
-import { BACKGROUND_STYLES, BORDER_STYLES, NAME_STYLES, TIER_RANK, type Preset, type Tier } from "@/components/ui/PlayerMetricChart/PlayerCosmetics"
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip"
+import {
+  BACKGROUND_STYLES,
+  BORDER_STYLES,
+  COSMETIC_CSS,
+  NAME_STYLES,
+  TIER_RANK,
+  combineCosmetics,
+  selectionSummary,
+  tierFromAPI,
+  type CosmeticStyleSelection,
+  type Preset,
+} from "@/components/ui/PlayerMetricChart/PlayerCosmetics"
+import { MiniRow } from "@/features/characterCosmetics/CharacterCosmeticsEditor"
 import { useAuth } from "@/hooks/useAuth"
 import { cn } from "@/lib/utils"
 import { Check, CircleCheck, CreditCard, LogIn, Sparkles, XCircle } from "lucide-react"
@@ -22,6 +35,7 @@ import {
   billingTierRank,
   billingTierStorageLabel,
   formatBillingAmount,
+  isPaidBillingTier,
   formatMonthlyAmount,
 } from "./billingPricing"
 import { billingSubscriptionState } from "./billingSubscriptionState"
@@ -230,13 +244,49 @@ export function SupporterOverview({ billing, panel }: { billing?: BillingSummary
 
 const INCLUDED = "included"
 
-/** Counts unlocked presets from the cosmetics catalog so the table tracks new styles. */
-function cosmeticStyles(styles: Record<string, Preset>, tier: Tier): string {
-  const count = Object.values(styles).filter((style) => style.tier !== "Free" && TIER_RANK[style.tier] <= TIER_RANK[tier]).length
-  return count === 0 ? "—" : `${count} style${count === 1 ? "" : "s"}`
+/** A representative look per tier for the comparison table's cosmetics preview. */
+const COSMETIC_SHOWCASE: Record<PaidBillingTier, { character: { name: string; class: string }; selection: CosmeticStyleSelection }> = {
+  honored: { character: { name: "Varian", class: "Warrior" }, selection: { name: "epic", background: "none", border: "none" } },
+  revered: { character: { name: "Uther", class: "Paladin" }, selection: { name: "legendary", background: "glossy", border: "none" } },
+  exalted: { character: { name: "Jaina", class: "Mage" }, selection: { name: "thunderfury", background: "arcane", border: "elite" } },
 }
 
-const COMPARISON: { feature: string; description: string; friendly: string; honored: string; revered?: string; exalted?: string; highlight?: boolean }[] = [
+/** Counts presets unlocked at a tier, so the tooltip tracks the cosmetics catalog. */
+function unlockedStyles(styles: Record<string, Preset>, tier: PaidBillingTier): number {
+  const rank = TIER_RANK[tierFromAPI(tier)]
+  return Object.values(styles).filter((style) => style.tier !== "Free" && TIER_RANK[style.tier] <= rank).length
+}
+
+function CosmeticsPreview({ tier, label }: { tier: PaidBillingTier; label: string }) {
+  const { character, selection } = COSMETIC_SHOWCASE[tier]
+  const counts = [
+    { label: "name styles", count: unlockedStyles(NAME_STYLES, tier) },
+    { label: "backgrounds", count: unlockedStyles(BACKGROUND_STYLES, tier) },
+    { label: "borders", count: unlockedStyles(BORDER_STYLES, tier) },
+  ].filter(({ count }) => count > 0)
+  return (
+    <HintTooltip delayDuration={150}>
+      <TooltipTrigger asChild>
+        <div tabIndex={0} className="flex w-full max-w-40 cursor-help flex-col gap-1 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <MiniRow character={character} cosmetic={combineCosmetics(selection)} />
+          <span>{label}</span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="top">
+        <ul className="space-y-0.5">
+          {counts.map(({ label, count }) => (
+            <li key={label}>
+              <span className="font-semibold text-white">{count}</span> {label}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-1 text-muted-foreground">Preview: {selectionSummary(selection)}</p>
+      </TooltipContent>
+    </HintTooltip>
+  )
+}
+
+const COMPARISON: { feature: string; description: string; friendly: string; honored: string; revered?: string; exalted?: string; highlight?: boolean; cosmetics?: boolean }[] = [
   {
     feature: "Log parsing, panels, rankings, and replays",
     description: "Full access for everyone. Core analysis is never paywalled.",
@@ -272,28 +322,13 @@ const COMPARISON: { feature: string; description: string; friendly: string; hono
     revered: INCLUDED,
   },
   {
-    feature: "Character name styles",
-    description: "Animated and colored name treatments shown on your characters' player rows across raid analysis.",
+    feature: "Character cosmetics",
+    description: "Animated name, background, and border styles on your characters' player rows across raid analysis.",
     friendly: "—",
-    honored: cosmeticStyles(NAME_STYLES, "Honored"),
-    revered: cosmeticStyles(NAME_STYLES, "Revered"),
-    exalted: cosmeticStyles(NAME_STYLES, "Exalted"),
-  },
-  {
-    feature: "Player row backgrounds",
-    description: "Background effects behind your characters' player rows.",
-    friendly: "—",
-    honored: cosmeticStyles(BACKGROUND_STYLES, "Honored"),
-    revered: cosmeticStyles(BACKGROUND_STYLES, "Revered"),
-    exalted: cosmeticStyles(BACKGROUND_STYLES, "Exalted"),
-  },
-  {
-    feature: "Player row borders",
-    description: "Border effects framing your characters' player rows.",
-    friendly: "—",
-    honored: cosmeticStyles(BORDER_STYLES, "Honored"),
-    revered: cosmeticStyles(BORDER_STYLES, "Revered"),
-    exalted: cosmeticStyles(BORDER_STYLES, "Exalted"),
+    honored: "Names",
+    revered: "+ Backgrounds",
+    exalted: "+ Borders",
+    cosmetics: true,
   },
   {
     feature: "Supporting Chronicle",
@@ -333,6 +368,7 @@ const COMPARISON_GRID = "md:grid-cols-[minmax(0,2.4fr)_repeat(4,minmax(0,1fr))]"
 function ComparisonTable({ currentTier }: { currentTier: string }) {
   return (
     <div className={FRAME}>
+      <style>{COSMETIC_CSS}</style>
       <h3 className="rounded-t-lg border-b border-border bg-[oklch(0.36_0_0)] px-4 py-2 text-center font-wow text-base font-bold tracking-[0.08em]" style={{ color: GOLD }}>
         Compare Tiers
       </h3>
@@ -378,7 +414,9 @@ function ComparisonTable({ currentTier }: { currentTier: string }) {
                       {label}:
                     </span>
                     {emphasized ? <Sparkles className="size-3.5 shrink-0 animate-pulse" aria-hidden="true" /> : null}
-                    {value === INCLUDED ? (
+                    {row.cosmetics && isPaidBillingTier(tier) ? (
+                      <CosmeticsPreview tier={tier} label={value} />
+                    ) : value === INCLUDED ? (
                       <>
                         <Check className="inline size-4 text-emerald-400" aria-hidden="true" />
                         <span className="sr-only">Included</span>
