@@ -1574,10 +1574,16 @@ CREATE VIEW log_instances_guild AS
      LEFT JOIN tenants t ON ((ws.tenant_id = t.id)))
      LEFT JOIN guilds g ON ((li.guild_id = g.id)));
 
+CREATE TABLE lua_project_artifact_gc (
+    object_key text NOT NULL,
+    attempted_at timestamp with time zone
+);
+
 CREATE TABLE lua_project_artifacts (
     project_id uuid NOT NULL,
     hash text NOT NULL,
-    bytes bytea NOT NULL,
+    bytes bytea,
+    object_key text,
     CONSTRAINT lua_project_artifacts_hash_check CHECK ((hash ~ '^[0-9a-f]{64}$'::text))
 );
 
@@ -2869,6 +2875,12 @@ ALTER TABLE ONLY log_instance_youtube_timestamped
 
 ALTER TABLE ONLY log_instances
     ADD CONSTRAINT log_instances_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY lua_project_artifact_gc
+    ADD CONSTRAINT lua_project_artifact_gc_pkey PRIMARY KEY (object_key);
+
+ALTER TABLE lua_project_artifacts
+    ADD CONSTRAINT lua_project_artifact_payload CHECK (((bytes IS NULL) <> (object_key IS NULL))) NOT VALID;
 
 ALTER TABLE ONLY lua_project_artifacts
     ADD CONSTRAINT lua_project_artifacts_pkey PRIMARY KEY (project_id, hash);

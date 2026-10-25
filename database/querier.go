@@ -123,6 +123,7 @@ type sqlcQuerier interface {
 	DeleteInferenceConnectionByOwner(ctx context.Context, arg DeleteInferenceConnectionByOwnerParams) error
 	DeleteLogInstanceByIDAndGroup(ctx context.Context, arg DeleteLogInstanceByIDAndGroupParams) (uuid.UUID, error)
 	DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
+	DeleteLuaProjectArtifactGarbage(ctx context.Context, objectKey string) error
 	DeleteModificationRequest(ctx context.Context, id uuid.UUID) error
 	DeleteOAuthTokenSession(ctx context.Context, arg DeleteOAuthTokenSessionParams) (int64, error)
 	DeleteOAuthTokenSessionsByRequestID(ctx context.Context, requestID string) (int64, error)
@@ -335,7 +336,7 @@ type sqlcQuerier interface {
 	// Return the start_time for a log instance. Used by the parses handler
 	// to resolve which snapshot cutoff applies to the instance.
 	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
-	GetLuaProjectArtifact(ctx context.Context, arg GetLuaProjectArtifactParams) ([]byte, error)
+	GetLuaProjectArtifact(ctx context.Context, arg GetLuaProjectArtifactParams) (pgtype.Text, error)
 	GetModificationRequestByID(ctx context.Context, id uuid.UUID) (ApplicationModificationRequest, error)
 	GetOAuthDeviceSession(ctx context.Context, signature string) (GetOAuthDeviceSessionRow, error)
 	GetOAuthTokenSession(ctx context.Context, arg GetOAuthTokenSessionParams) ([]byte, error)
@@ -643,6 +644,7 @@ type sqlcQuerier interface {
 	ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error)
 	ListLogFilePartsForDeletion(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListLogGroupArtifacts(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)
+	ListLuaProjectArtifactGarbage(ctx context.Context) ([]string, error)
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)
 	ListMyProofRequests(ctx context.Context, arg ListMyProofRequestsParams) ([]ProofRequest, error)
 	ListObservedItemIDsForDate(ctx context.Context, arg ListObservedItemIDsForDateParams) ([]int32, error)
@@ -757,6 +759,7 @@ type sqlcQuerier interface {
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
 	MarkLogFilePartFailed(ctx context.Context, arg MarkLogFilePartFailedParams) error
 	MarkLogGroupArtifactsStorageDeleted(ctx context.Context, arg MarkLogGroupArtifactsStorageDeletedParams) ([]LogGroupArtifact, error)
+	MarkLuaProjectArtifactGarbageAttempt(ctx context.Context, objectKey string) error
 	MarkWhatsNewRead(ctx context.Context, arg MarkWhatsNewReadParams) (UserWhatsNewState, error)
 	MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) (WoWLogGroup, error)
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
@@ -771,7 +774,7 @@ type sqlcQuerier interface {
 	PublicInstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (LogInstancesGuild, error)
 	PublishCacheGeneration(ctx context.Context, arg PublishCacheGenerationParams) (PublishCacheGenerationRow, error)
 	PublishLuaProjectUnstable(ctx context.Context, arg PublishLuaProjectUnstableParams) (LuaProject, error)
-	PutLuaProjectArtifact(ctx context.Context, arg PutLuaProjectArtifactParams) error
+	PutLuaProjectArtifact(ctx context.Context, arg PutLuaProjectArtifactParams) (pgtype.Text, error)
 	RankingRunByID(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	RankingRunIdentitiesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]RankingRunIdentitiesByInstanceIDsRow, error)
 	RankingRunIdentitiesByLogGroupID(ctx context.Context, logGroupID uuid.UUID) ([]RankingRunIdentitiesByLogGroupIDRow, error)

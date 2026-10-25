@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -41,6 +43,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewhatsnew"
 	"github.com/authzed/gochugaru/rel"
+	"github.com/aws/smithy-go"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
@@ -153,6 +156,14 @@ func New(ctx context.Context, opts Options) (*API, error) {
 	if err := serviceproof.EnsureBucket(ctx, opts.Storage); err != nil {
 		return nil, err
 	}
+	if opts.Storage != nil {
+		if _, err := opts.Storage.CreateBucket(ctx, luaProjectBucket, storage.BucketOptions{Public: false, AllowedMimeTypes: []string{"application/zip"}}); err != nil {
+			var apiErr smithy.APIError
+			if err.Error() != "The resource already exists" && (!errors.As(err, &apiErr) || apiErr.ErrorCode() != "BucketAlreadyOwnedByYou") {
+				return nil, fmt.Errorf("create Lua project bucket: %w", err)
+			}
+		}
+	}
 	if opts.Registry == nil {
 		opts.Registry = prometheus.NewRegistry()
 	}
@@ -192,7 +203,7 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		return nil, err
 	}
 
-	return &API{
+	api := &API{
 		Opts:         &opts,
 		AppContext:   ctx,
 		Auth:         service,
@@ -210,7 +221,11 @@ func New(ctx context.Context, opts Options) (*API, error) {
 				return user.Username, nil
 			},
 		}),
-	}, nil
+	}
+	gcCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	api.drainLuaArtifactGarbage(gcCtx)
+	cancel()
+	return api, nil
 }
 
 func (api *API) Routes() chi.Router {

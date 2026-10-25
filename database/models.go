@@ -2001,9 +2001,15 @@ type LuaProject struct {
 }
 
 type LuaProjectArtifact struct {
-	ProjectID uuid.UUID `db:"project_id" json:"project_id"`
-	Hash      string    `db:"hash" json:"hash"`
-	Bytes     []byte    `db:"bytes" json:"bytes"`
+	ProjectID uuid.UUID   `db:"project_id" json:"project_id"`
+	Hash      string      `db:"hash" json:"hash"`
+	Bytes     []byte      `db:"bytes" json:"bytes"`
+	ObjectKey pgtype.Text `db:"object_key" json:"object_key"`
+}
+
+type LuaProjectArtifactGc struct {
+	ObjectKey   string             `db:"object_key" json:"object_key"`
+	AttemptedAt pgtype.Timestamptz `db:"attempted_at" json:"attempted_at"`
 }
 
 type OauthDeviceSession struct {

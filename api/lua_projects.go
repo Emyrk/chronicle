@@ -1,6 +1,8 @@
 package api
 
 import (
+	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -9,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -16,12 +19,85 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const luaProjectBucket = "lua-projects"
+
+// Object keys are unique per upload attempt. A concurrent re-upload of the
+// same digest cannot be deleted by cleanup of an older artifact row.
+func luaProjectObjectKey(id uuid.UUID) string {
+	return id.String() + "/" + uuid.NewString() + ".zip"
+}
+
+func (a *API) discardLuaObject(key string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := a.Opts.Storage.RemoveFile(ctx, luaProjectBucket, []string{key}); err != nil {
+		a.Opts.Logger.Error("failed to discard unreferenced Lua ZIP", "key", key, "error", err)
+	}
+}
+
+// A garbage row is committed with each pruned artifact. Deletion happens only
+// after commit and can be retried on a later write or service restart.
+func (a *API) drainLuaArtifactGarbage(ctx context.Context) {
+	if a.Opts.Storage == nil || a.Opts.Zed == nil {
+		return
+	}
+	keys, err := a.Opts.Zed.ListLuaProjectArtifactGarbage(ctx)
+	if err != nil {
+		a.Opts.Logger.Error("list Lua ZIP garbage", "error", err)
+		return
+	}
+	for _, key := range keys {
+		if ctx.Err() != nil {
+			return
+		}
+		if err := a.Opts.Zed.MarkLuaProjectArtifactGarbageAttempt(ctx, key); err != nil {
+			a.Opts.Logger.Error("mark Lua ZIP garbage attempt", "key", key, "error", err)
+			continue
+		}
+		if _, err := a.Opts.Storage.RemoveFile(ctx, luaProjectBucket, []string{key}); err != nil {
+			a.Opts.Logger.Error("remove Lua ZIP garbage", "key", key, "error", err)
+			continue
+		}
+		if err := a.Opts.Zed.DeleteLuaProjectArtifactGarbage(ctx, key); err != nil {
+			a.Opts.Logger.Error("acknowledge Lua ZIP garbage", "key", key, "error", err)
+		}
+	}
+}
+
+func (a *API) drainLuaArtifactGarbageAfterWrite() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	a.drainLuaArtifactGarbage(ctx)
+}
+
+func (a *API) luaZIP(w http.ResponseWriter, r *http.Request, legacy []byte, key pgtype.Text, digest string) ([]byte, bool) {
+	if !key.Valid {
+		return legacy, true
+	}
+	if a.Opts.Storage == nil {
+		httpapi.InternalServerError(w, errors.New("lua project object storage is unavailable"))
+		return nil, false
+	}
+	archive, err := a.Opts.Storage.DownloadFile(r.Context(), luaProjectBucket, key.String)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return nil, false
+	}
+	hash := sha256.Sum256(archive)
+	if hex.EncodeToString(hash[:]) != digest {
+		httpapi.InternalServerError(w, fmt.Errorf("lua ZIP digest mismatch: %s", key.String))
+		return nil, false
+	}
+	return archive, true
+}
 
 var luaProjectSlug = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
@@ -163,18 +239,39 @@ func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	hash := sha256.Sum256(archive)
 	digest := hex.EncodeToString(hash[:])
+	if a.Opts.Storage == nil {
+		httpapi.InternalServerError(w, errors.New("lua project object storage is unavailable"))
+		return
+	}
+	// Write the immutable ZIP before opening the SQL transaction. Each upload
+	// gets a unique key; a competing upload of the same digest keeps its own key.
+	key := luaProjectObjectKey(id)
+	contentType := "application/zip"
+	if _, err := a.Opts.Storage.UploadFile(r.Context(), luaProjectBucket, key, bytes.NewReader(archive), storage.FileOptions{ContentType: &contentType}); err != nil {
+		a.discardLuaObject(key) // A failed upload may still have created the object.
+		httpapi.InternalServerError(w, err)
+		return
+	}
 	var project database.LuaProject
+	var storedKey pgtype.Text
 	err = a.Opts.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
 		var err error
 		project, err = tx.SetLuaProjectDraft(r.Context(), database.SetLuaProjectDraftParams{ID: id, OwnerID: owner, Hash: pgtype.Text{String: digest, Valid: true}, ExpectedRevision: revision})
 		if err != nil {
 			return err
 		}
-		if err = tx.PutLuaProjectArtifact(r.Context(), database.PutLuaProjectArtifactParams{ProjectID: id, Hash: digest, Bytes: archive}); err != nil {
+		storedKey, err = tx.PutLuaProjectArtifact(r.Context(), database.PutLuaProjectArtifactParams{ProjectID: id, Hash: digest, ObjectKey: pgtype.Text{String: key, Valid: true}})
+		if err != nil {
 			return err
 		}
 		return tx.PruneLuaProjectArtifacts(r.Context(), database.PruneLuaProjectArtifactsParams{ID: id, OwnerID: owner})
 	}, nil)
+	if err != nil || !storedKey.Valid || storedKey.String != key {
+		a.discardLuaObject(key)
+	}
+	if err == nil {
+		a.drainLuaArtifactGarbageAfterWrite()
+	}
 	luaProjectMutationResult(w, r, project, err)
 }
 
@@ -207,6 +304,9 @@ func (a *API) PublishLuaProject(w http.ResponseWriter, r *http.Request) {
 		}
 		return tx.PruneLuaProjectArtifacts(r.Context(), database.PruneLuaProjectArtifactsParams{ID: id, OwnerID: owner})
 	}, nil)
+	if err == nil {
+		a.drainLuaArtifactGarbageAfterWrite()
+	}
 	luaProjectMutationResult(w, r, project, err)
 }
 
@@ -313,11 +413,15 @@ func (a *API) DownloadMyLuaProjectDraft(w http.ResponseWriter, r *http.Request) 
 		httpapi.InternalServerError(w, err)
 		return
 	}
+	archive, ok := a.luaZIP(w, r, result.Bytes, result.ObjectKey, result.LuaProject.DraftHash.String)
+	if !ok {
+		return
+	}
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("ETag", `"`+result.LuaProject.DraftHash.String+`"`)
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(result.Bytes)
+	_, _ = w.Write(archive)
 }
 
 func (a *API) DownloadLuaProject(w http.ResponseWriter, r *http.Request) {
@@ -349,10 +453,14 @@ func (a *API) DownloadLuaProject(w http.ResponseWriter, r *http.Request) {
 	if channel == "unstable" {
 		hash = result.LuaProject.UnstableHash.String
 	}
+	archive, ok := a.luaZIP(w, r, result.Bytes, result.ObjectKey, hash)
+	if !ok {
+		return
+	}
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.zip"`, result.LuaProject.Slug))
 	w.Header().Set("ETag", `"`+hash+`"`)
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(result.Bytes)
+	_, _ = w.Write(archive)
 }
