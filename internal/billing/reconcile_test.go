@@ -94,6 +94,13 @@ func TestSubscriptionWebhookUsesAuthoritativeStateAndPriceTier(t *testing.T) {
 	periodEnd := time.Now().Add(24 * time.Hour)
 	store := &reconciliationStore{providerErr: pgx.ErrNoRows}
 	svc := New(Options{Store: store, ExaltedPriceIDs: []string{"price_exalted"}})
+	var notified SubscriptionChangeNotification
+	svc.SetSubscriptionChangeNotifier(func(ctx context.Context, change SubscriptionChangeNotification) error {
+		_, hasDeadline := ctx.Deadline()
+		require.True(t, hasDeadline)
+		notified = change
+		return nil
+	})
 	authoritative := testStripeSubscription("prod_exalted", "price_exalted", periodEnd)
 	authoritative.ID = "sub_authoritative"
 	authoritative.Customer = &stripe.Customer{ID: "cus_authoritative"}
@@ -117,6 +124,15 @@ func TestSubscriptionWebhookUsesAuthoritativeStateAndPriceTier(t *testing.T) {
 	require.Equal(t, userID, store.upserts[0].UserID)
 	require.Equal(t, string(ProductExalted), store.upserts[0].ProductCode, "configured price must override stale product metadata")
 	require.Equal(t, string(stripe.SubscriptionStatusActive), store.upserts[0].Status)
+	require.Equal(t, SubscriptionChangeNotification{
+		EventType:              string(stripe.EventTypeCustomerSubscriptionUpdated),
+		UserID:                 userID,
+		ProviderCustomerID:     authoritative.Customer.ID,
+		ProviderSubscriptionID: authoritative.ID,
+		ProductCode:            string(ProductExalted),
+		Status:                 string(stripe.SubscriptionStatusActive),
+		CurrentPeriodEnd:       periodEnd.Truncate(time.Second).UTC(),
+	}, notified)
 }
 
 func TestSubscriptionWebhookFallsBackToLocalOwner(t *testing.T) {
@@ -124,6 +140,11 @@ func TestSubscriptionWebhookFallsBackToLocalOwner(t *testing.T) {
 	userID := uuid.New()
 	store := &reconciliationStore{providerRow: database.BillingSubscription{UserID: userID, ProductCode: string(ProductRevered)}}
 	svc := New(Options{Store: store, ReveredPriceIDs: []string{"price_monthly"}})
+	var notified SubscriptionChangeNotification
+	svc.SetSubscriptionChangeNotifier(func(_ context.Context, change SubscriptionChangeNotification) error {
+		notified = change
+		return errors.New("river unavailable")
+	})
 	authoritative := testStripeSubscription("prod_supporter", "price_monthly", time.Now().Add(time.Hour))
 	authoritative.ID = "sub_existing"
 	authoritative.Customer = &stripe.Customer{ID: "cus_existing"}
@@ -138,6 +159,56 @@ func TestSubscriptionWebhookFallsBackToLocalOwner(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, userID, store.upserts[0].UserID)
 	require.Equal(t, string(stripe.SubscriptionStatusPastDue), store.upserts[0].Status)
+	require.Equal(t, string(stripe.EventTypeCustomerSubscriptionCreated), notified.EventType)
+	require.Equal(t, userID, notified.UserID)
+	require.Equal(t, authoritative.ID, notified.ProviderSubscriptionID)
+}
+
+func TestDeletedSubscriptionWebhookNotifiesFromPersistedRow(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	periodEnd := time.Date(2026, time.November, 18, 23, 25, 45, 0, time.UTC)
+	row := database.BillingSubscription{
+		UserID:                 userID,
+		Provider:               ProviderStripe,
+		ProviderCustomerID:     "cus_deleted",
+		ProviderSubscriptionID: text("sub_deleted"),
+		ProviderProductID:      text("prod_supporter"),
+		ProviderPriceID:        text("price_monthly"),
+		ProductCode:            string(ProductRevered),
+		Status:                 string(stripe.SubscriptionStatusActive),
+		CurrentPeriodEnd:       pgtype.Timestamptz{Time: periodEnd, Valid: true},
+	}
+	store := &reconciliationStore{providerRow: row}
+	svc := New(Options{Store: store, ReveredPriceIDs: []string{"price_monthly"}})
+	var notified SubscriptionChangeNotification
+	svc.SetSubscriptionChangeNotifier(func(_ context.Context, change SubscriptionChangeNotification) error {
+		notified = change
+		return nil
+	})
+	svc.retrieveSubscription = func(context.Context, string, *stripe.SubscriptionRetrieveParams) (*stripe.Subscription, error) {
+		return nil, &stripe.Error{Code: stripe.ErrorCodeResourceMissing}
+	}
+	raw, err := json.Marshal(stripe.Subscription{ID: row.ProviderSubscriptionID.String})
+	require.NoError(t, err)
+
+	err = svc.processEvent(context.Background(), stripe.Event{
+		Type: stripe.EventTypeCustomerSubscriptionDeleted,
+		Data: &stripe.EventData{Raw: raw},
+	})
+	require.NoError(t, err)
+	require.Len(t, store.upserts, 1)
+	require.Equal(t, string(stripe.SubscriptionStatusCanceled), store.upserts[0].Status)
+	require.Equal(t, SubscriptionChangeNotification{
+		EventType:              string(stripe.EventTypeCustomerSubscriptionDeleted),
+		UserID:                 userID,
+		ProviderCustomerID:     row.ProviderCustomerID,
+		ProviderSubscriptionID: row.ProviderSubscriptionID.String,
+		ProductCode:            row.ProductCode,
+		Status:                 string(stripe.SubscriptionStatusCanceled),
+		CurrentPeriodEnd:       periodEnd,
+	}, notified)
 }
 
 func TestReconciliationCountsChangedNoopAndInvalidMetadata(t *testing.T) {

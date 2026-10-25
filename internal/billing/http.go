@@ -396,11 +396,15 @@ func (s *Service) processEvent(ctx context.Context, event stripe.Event) error {
 		sub, err := s.retrieveAuthoritativeSubscription(ctx, snapshot.ID)
 		if err != nil {
 			if event.Type == stripe.EventTypeCustomerSubscriptionDeleted && stripeResourceMissing(err) {
-				customerID, cancelErr := s.markSubscriptionCanceled(ctx, snapshot.ID)
+				row, cancelErr := s.markSubscriptionCanceled(ctx, snapshot.ID)
 				if cancelErr != nil {
 					return cancelErr
 				}
-				return s.syncStripeEntitlementsIfConfigured(ctx, customerID)
+				if err := s.syncStripeEntitlementsIfConfigured(ctx, row.ProviderCustomerID); err != nil {
+					return err
+				}
+				s.notifySubscriptionChange(ctx, deletedSubscriptionChange(event.Type, snapshot, row))
+				return nil
 			}
 			return fmt.Errorf("retrieve subscription %q: %w", snapshot.ID, err)
 		}
@@ -411,7 +415,11 @@ func (s *Service) processEvent(ctx context.Context, event stripe.Event) error {
 		if err := s.upsertSubscription(ctx, userID, sub); err != nil {
 			return err
 		}
-		return s.syncStripeEntitlementsIfConfigured(ctx, sub.Customer.ID)
+		if err := s.syncStripeEntitlementsIfConfigured(ctx, sub.Customer.ID); err != nil {
+			return err
+		}
+		s.notifySubscriptionChange(ctx, s.stripeSubscriptionChange(event.Type, userID, sub))
+		return nil
 	default:
 		return nil
 	}
@@ -443,16 +451,16 @@ func (s *Service) subscriptionOwner(ctx context.Context, sub *stripe.Subscriptio
 	return row.UserID, nil
 }
 
-func (s *Service) markSubscriptionCanceled(ctx context.Context, subscriptionID string) (string, error) {
+func (s *Service) markSubscriptionCanceled(ctx context.Context, subscriptionID string) (database.BillingSubscription, error) {
 	row, err := s.store.GetBillingSubscriptionByProviderID(ctx, database.GetBillingSubscriptionByProviderIDParams{
 		Provider:               ProviderStripe,
 		ProviderSubscriptionID: pgtype.Text{String: subscriptionID, Valid: true},
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", nil
+		return database.BillingSubscription{}, nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("find deleted subscription: %w", err)
+		return database.BillingSubscription{}, fmt.Errorf("find deleted subscription: %w", err)
 	}
 	_, err = s.store.UpsertBillingSubscription(ctx, database.UpsertBillingSubscriptionParams{
 		UserID:                 row.UserID,
@@ -468,9 +476,10 @@ func (s *Service) markSubscriptionCanceled(ctx context.Context, subscriptionID s
 		CancelAt:               row.CancelAt,
 	})
 	if err != nil {
-		return "", fmt.Errorf("mark deleted subscription canceled: %w", err)
+		return database.BillingSubscription{}, fmt.Errorf("mark deleted subscription canceled: %w", err)
 	}
-	return row.ProviderCustomerID, nil
+	row.Status = string(stripe.SubscriptionStatusCanceled)
+	return row, nil
 }
 
 type stripePurchase struct {
