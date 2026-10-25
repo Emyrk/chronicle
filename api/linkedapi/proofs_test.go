@@ -96,4 +96,17 @@ func TestProofPermissionScopes(t *testing.T) {
 			require.Equal(t, tc.want, rec.Code)
 		})
 	}
+
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, siteSubmitter, []string{"photo_proof_submitter", "photo_proof_banned"}))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, tenantSubmitter, []string{"photo_proof_banned"}))
+	for _, user := range []uuid.UUID{siteSubmitter, tenantSubmitter} {
+		req := httptest.NewRequest(http.MethodPost, "/proofs", nil).WithContext(
+			servicetenant.WithTenantID(authz.AsUser(ctx, user), tenantA),
+		)
+		rec := httptest.NewRecorder()
+		h.proofPermission(false)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		})).ServeHTTP(rec, req)
+		require.Equal(t, http.StatusForbidden, rec.Code)
+	}
 }

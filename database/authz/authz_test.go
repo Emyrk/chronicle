@@ -387,6 +387,25 @@ func TestPhotoProofPermissions(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, globalReview)
 
+	// The negative role wins even when a user has both site-wide and
+	// tenant-specific submit grants. It does not remove their reviewer grant.
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, siteSubmitter, []string{"photo_proof_submitter", "photo_proof_banned"}))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, applicant, []string{"photo_proof_banned", "photo_proof_reviewer"}))
+	banChecks := policy.New()
+	banned, err := zed.Check(ctx, nil,
+		banChecks.GlobalChronicle().CanSubmit_photo_proof_User(banChecks.User(siteSubmitter)),
+		banChecks.Wow_tenant(tenantA).CanSubmit_photo_proof_User(banChecks.User(siteSubmitter)),
+		banChecks.Wow_tenant(tenantB).CanSubmit_photo_proof_User(banChecks.User(siteSubmitter)),
+		banChecks.Wow_tenant(tenantA).CanSubmit_photo_proof_User(banChecks.User(applicant)),
+		banChecks.Wow_tenant(tenantA).CanReview_photo_proof_User(banChecks.User(applicant)),
+	)
+	require.NoError(t, err)
+	require.Equal(t, []bool{false, false, false, false, true}, banned)
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, applicant, nil))
+	restored, err := zed.CheckOne(ctx, nil, banChecks.Wow_tenant(tenantA).CanSubmit_photo_proof_User(banChecks.User(applicant)))
+	require.NoError(t, err)
+	require.True(t, restored)
+
 	grants, err := zed.TenantProofGrants(ctx, tenantA)
 	require.NoError(t, err)
 	require.Len(t, grants, 2)
