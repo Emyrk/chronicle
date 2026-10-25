@@ -10,6 +10,7 @@ import { useSmoothReplayTime } from "../RotationTimeline/useSmoothReplayTime";
 import { useSpellMeta } from "../RotationTimeline/useSpellMeta";
 import { miniatureUrl } from "./bossMinis";
 import type { MapPositionSample } from "./map.processor";
+import { cameraPoseAt, type MapCameraMark, type MapCameraPose } from "./cameraPath";
 import { DISPEL_KINDS, DISPEL_ORDER, type DispelKind } from "./unitTokenArt";
 import type { PlanInput, PlanItem } from "./plan/mapPlan";
 import { prefersReducedMotion, replayPositionAt, VIEW_TRANSITION_MS, type MapPoint, type MapViewport } from "./mapModel";
@@ -94,6 +95,17 @@ export interface MapView3DProps {
   followGuid?: string | null;
   /** Called when the followed unit changes, including when the user takes the camera (null). */
   onFollowChange?: (guid: string | null) => void;
+  /** An authored orbit-camera pose. Takes precedence over cameraPath. */
+  cameraPose?: MapCameraPose | null;
+  /** Timestamped authored poses, sampled against the frame-smoothed replay clock. */
+  cameraPath?: readonly MapCameraMark[] | null;
+  /** Absolute replay timestamp corresponding to cameraPath timestamp zero. */
+  cameraPathStartMs?: number;
+  /** Bump to capture the current orbit-camera pose through onCameraCapture. */
+  cameraCaptureKey?: number;
+  onCameraCapture?: (pose: MapCameraPose) => void;
+  /** Deterministic first-person input for frame-by-frame walking capture. */
+  walkCaptureFrame?: { elapsedMs: number; input: MobileMapInput; startGuid?: string; lookAtGuid?: string; preRollMs?: number; preRollInput?: MobileMapInput } | null;
   /** Every debuff spell on a player in the encounter: their dispel types tint the tokens. */
   debuffSpellIds?: readonly number[];
   /**
@@ -219,6 +231,12 @@ export default function MapView3D({
   debuffSpellIds = NO_DEBUFFS,
   followGuid = null,
   onFollowChange,
+  cameraPose = null,
+  cameraPath = null,
+  cameraPathStartMs = 0,
+  cameraCaptureKey = 0,
+  onCameraCapture,
+  walkCaptureFrame = null,
   planItems = NO_PLAN_ITEMS,
   planSelectedId = null,
   planInput = null,
@@ -228,8 +246,14 @@ export default function MapView3D({
   const onUnavailableRef = useRef(onUnavailable);
   const onUserViewportRef = useRef(onUserViewport);
   const onDungeonMeshStateRef = useRef(onDungeonMeshState);
+  const onCameraCaptureRef = useRef(onCameraCapture);
   const colorCacheRef = useRef(new Map<string, string>());
   const smoothMs = useSmoothReplayTime(cursorMs, playing, playbackSpeed);
+  const authoredCameraPose = useMemo(() => {
+    if (cameraPose) return cameraPose;
+    if (!cameraPath || smoothMs === null) return null;
+    return cameraPoseAt(cameraPath, smoothMs - cameraPathStartMs);
+  }, [cameraPath, cameraPathStartMs, cameraPose, smoothMs]);
   const effectSettings = effectSettingsProp ?? DEFAULT_EFFECT_SETTINGS;
   const showBars = effectSettings.bars;
   const [effectHover, setEffectHover] = useState<MapScene3DEffectHover | null>(null);
@@ -247,7 +271,8 @@ export default function MapView3D({
     onUnavailableRef.current = onUnavailable;
     onUserViewportRef.current = onUserViewport;
     onDungeonMeshStateRef.current = onDungeonMeshState;
-  }, [onDungeonMeshState, onUnavailable, onUserViewport]);
+    onCameraCaptureRef.current = onCameraCapture;
+  }, [onCameraCapture, onDungeonMeshState, onUnavailable, onUserViewport]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -487,6 +512,29 @@ export default function MapView3D({
   useEffect(() => {
     sceneRef.current?.followUnit(followGuid);
   }, [followGuid]);
+
+  // Authored camera paths take precedence over Director, viewport, follow, and
+  // walking updates from the same React commit.
+  useEffect(() => {
+    if (authoredCameraPose) sceneRef.current?.applyCameraPose(authoredCameraPose);
+  }, [authoredCameraPose]);
+
+  useEffect(() => {
+    if (walkCaptureFrame) sceneRef.current?.setWalkCaptureFrame(
+      walkCaptureFrame.elapsedMs,
+      walkCaptureFrame.input,
+      walkCaptureFrame.startGuid,
+      walkCaptureFrame.lookAtGuid,
+      walkCaptureFrame.preRollMs,
+      walkCaptureFrame.preRollInput,
+    );
+  }, [walkCaptureFrame]);
+
+  useEffect(() => {
+    if (cameraCaptureKey <= 0) return;
+    const scene = sceneRef.current;
+    if (scene) onCameraCaptureRef.current?.(scene.captureCameraPose());
+  }, [cameraCaptureKey]);
 
   useEffect(() => {
     const scene = sceneRef.current;

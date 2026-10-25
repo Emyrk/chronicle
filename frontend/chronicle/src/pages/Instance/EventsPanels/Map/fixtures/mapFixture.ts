@@ -59,8 +59,20 @@ function toEvent(row: MapFixture["events"][number], index: number, guids: string
   const guid = (value: number) => guids[value];
   const base = { type: STREAM_TYPES[code], index, offsetMilli };
   switch (code) {
-    case "p":
-      return { ...base, unit: guid(f[0]), x: f[1], y: f[2], mapId: f[3], facing: f[4] } as unknown as MapProcessorEvent;
+    case "p": {
+      // Current fixtures include z; older captures stored mapId immediately
+      // after y. Keep loading both formats so existing fixtures remain valid.
+      const hasZ = f.length >= 6;
+      return {
+        ...base,
+        unit: guid(f[0]),
+        x: f[1],
+        y: f[2],
+        ...(hasZ && f[3] != null ? { z: f[3] } : {}),
+        mapId: f[hasZ ? 4 : 3],
+        facing: f[hasZ ? 5 : 4],
+      } as unknown as MapProcessorEvent;
+    }
     case "r":
       // Older fixtures stop at absorb and have no power.
       return {

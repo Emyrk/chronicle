@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SyncModeProvider, useSyncModeContext } from "../../SyncModeContext";
+import { mandokirOcto } from "./fixtures/mandokirOcto";
+import { gahzrankaOcto } from "./fixtures/gahzrankaOcto";
+import { GAHZRANKA_ANNOUNCEMENT_SLAM, HAKKAR_ANNOUNCEMENT_WALK_START, MANDOKIR_ANNOUNCEMENT_OVERVIEW } from "./fixtures/mandokirCameraPaths";
 import { hakkarOcto } from "./fixtures/hakkarOcto";
 import { DEFAULT_EFFECT_SETTINGS, type EffectSettings } from "./mapViewSettings";
 import { kreshReal } from "./fixtures/kreshReal";
@@ -15,6 +18,7 @@ import { dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
 import type { MapHealthSample, MapPositionSample, MapResult } from "./map.processor";
 import { clampViewport, fitViewportToBounds, FULL_MAP_VIEWPORT, latestPositionAt, renderedDungeonMapPoint, selectHealthBars, unitFocusBounds, type MapPoint } from "./mapModel";
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "./MapScene3D";
+import type { MapCameraMark, MapCameraPose } from "./cameraPath";
 import MapView3D from "./MapView3D";
 import type { MapViewRequest } from "./MapView2D";
 import { addEffectEvent, createEncounterEffects, isDeadAt, type EncounterEffects, type ReplayEffectEvent } from "./replayEffects";
@@ -832,6 +836,41 @@ function WithSpellIcons({ children }: { children: React.ReactNode }) {
   return children;
 }
 
+function mandokirSpellIcon(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.includes("heal") || lower.includes("regrowth")) return "spell_nature_healingwavegreater";
+  if (lower.includes("shot") || lower.includes("sting")) return "ability_hunter_quickshot";
+  if (lower.includes("fire") || lower.includes("flame")) return "spell_fire_flamebolt";
+  if (lower.includes("shadow") || lower.includes("siphon")) return "spell_shadow_shadowbolt";
+  if (lower.includes("holy") || lower.includes("light")) return "spell_holy_holybolt";
+  if (lower.includes("arcane") || lower.includes("lightning")) return "spell_nature_lightning";
+  return "spell_holy_holysmite";
+}
+
+function WithMandokirSpellIcons({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
+  useState(() => {
+    for (const row of mandokirOcto.events) {
+      if ((row[0] !== "s" && row[0] !== "g") || typeof row[5] !== "number" || typeof row[6] !== "string") continue;
+      queryClient.setQueryData(["wowdb", "spell", String(row[5]), "default"], seededSpell(row[5], mandokirSpellIcon(row[6]), row[6]));
+    }
+    queryClient.setQueryData(["wowdb", "cooldown-spells", "default"], { byClass: {}, datasetId: null });
+  });
+  return children;
+}
+
+function WithGahzrankaSpellIcons({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
+  useState(() => {
+    for (const row of gahzrankaOcto.events) {
+      if ((row[0] !== "s" && row[0] !== "g") || typeof row[5] !== "number" || typeof row[6] !== "string") continue;
+      queryClient.setQueryData(["wowdb", "spell", String(row[5]), "default"], seededSpell(row[5], mandokirSpellIcon(row[6]), row[6]));
+    }
+    queryClient.setQueryData(["wowdb", "cooldown-spells", "default"], { byClass: {}, datasetId: null });
+  });
+  return children;
+}
+
 // The real Kresh fight replayed from a captured fixture: the production map
 // processor builds the result, useMapScene derives the scene, and the real
 // SyncModeProvider drives the cursor from the pull to the kill on a loop.
@@ -839,17 +878,68 @@ const KRESH_LOOP_PAUSE_MS = 1_000;
 
 // Replays a loaded fixture (the real Kresh kill, or a synthetic encounter
 // built in its shape) through the production useMapScene, looping.
-function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSettings, walkAvatar }: {
+function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSettings, walkAvatar, capture = false, initialCameraMarks = [], captureRender = false, captureWalking = false, captureWalkStartGuid, captureWalkLookAtGuid }: {
   fixture: LoadedMapFixture;
   mesh?: boolean;
   followGuid?: string | null;
   effectSettings?: EffectSettings;
   walkAvatar?: string;
+  capture?: boolean;
+  initialCameraMarks?: readonly MapCameraMark[];
+  captureRender?: boolean;
+  captureWalking?: boolean;
+  captureWalkStartGuid?: string;
+  captureWalkLookAtGuid?: string;
 }) {
   const miniatureUrls = useStoryMiniatureUrls();
   const { instance } = fixture.props.context;
   const sync = useSyncModeContext();
-  const { enabled, isPlaying, currentTimestamp, enable, setEncounterBounds, setTimestamp, play } = sync;
+  const { enabled, isPlaying, currentTimestamp, enable, setEncounterBounds, setTimestamp, play, pause } = sync;
+  const [captureHud, setCaptureHud] = useState(!captureRender);
+  const [cameraMarks, setCameraMarks] = useState<MapCameraMark[]>(() => [...initialCameraMarks]);
+  const [cameraPathPreview, setCameraPathPreview] = useState(captureRender && !captureWalking);
+  const [cameraCaptureKey, setCameraCaptureKey] = useState(0);
+  const [manualCameraPose, setManualCameraPose] = useState<MapCameraPose | null>(() => captureWalking ? initialCameraMarks[0] ?? null : null);
+  const [captureWalkMs, setCaptureWalkMs] = useState(0);
+  const [cameraMarksCopied, setCameraMarksCopied] = useState(false);
+  const replayMs = Math.max(0, Math.min(fixture.endMs - fixture.startMs, (currentTimestamp?.getTime() ?? fixture.startMs) - fixture.startMs));
+  const elapsed = replayMs / 1000;
+  const durationSeconds = Math.max(0.001, (fixture.endMs - fixture.startMs) / 1000);
+  const sortedCameraMarks = useMemo(() => [...cameraMarks].sort((a, b) => a.timestampMs - b.timestampMs), [cameraMarks]);
+  const cameraMarksJson = useMemo(() => JSON.stringify(sortedCameraMarks, null, 2), [sortedCameraMarks]);
+  const walkCaptureFrame = useMemo(() => captureWalking ? {
+    elapsedMs: captureWalkMs,
+    input: {
+      forward: captureWalkMs >= 400 && captureWalkMs < 1_800 ? 0.14 : 0,
+      strafe: 0,
+      turn: 0,
+      pitch: 0,
+      jump: false,
+    },
+    preRollMs: 700,
+    preRollInput: { forward: -0.14, strafe: 0, turn: 0, pitch: 0, jump: false },
+    startGuid: captureWalkStartGuid,
+    lookAtGuid: captureWalkLookAtGuid,
+  } : null, [captureWalkLookAtGuid, captureWalkMs, captureWalkStartGuid, captureWalking]);
+  const captureCameraMark = useCallback((pose: MapCameraPose) => {
+    const timestampMs = replayMs;
+    setCameraMarks((current) => {
+      const existing = current.find((mark) => mark.timestampMs === timestampMs);
+      const next: MapCameraMark = { ...pose, timestampMs, label: existing?.label ?? `Shot ${current.length + 1}` };
+      return [...current.filter((mark) => mark.timestampMs !== timestampMs), next].sort((a, b) => a.timestampMs - b.timestampMs);
+    });
+    setManualCameraPose(null);
+  }, [replayMs]);
+
+  const copyCameraMarks = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(cameraMarksJson);
+      setCameraMarksCopied(true);
+    } catch {
+      setCameraMarksCopied(false);
+    }
+  }, [cameraMarksJson]);
+
   // As Map.tsx does with "3D map" on: units project with the pure world
   // transform once the mesh has loaded; the tiles (calibrated) stay otherwise.
   const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
@@ -871,16 +961,56 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
     setTimestamp(new Date(fixture.startMs));
   }, [enable, fixture, setEncounterBounds, setTimestamp]);
 
+  useEffect(() => {
+    if (!captureRender) return;
+    const captureWindow = window as Window & { __chronicleMapCapture?: { setTime: (timestampMs: number, walkElapsedMs?: number) => void } };
+    captureWindow.__chronicleMapCapture = {
+      setTime: (timestampMs, walkElapsedMs) => {
+        pause();
+        setTimestamp(new Date(fixture.startMs + Math.max(0, Math.min(fixture.endMs - fixture.startMs, timestampMs))));
+        if (walkElapsedMs !== undefined) setCaptureWalkMs(walkElapsedMs);
+      },
+    };
+    return () => {
+      delete captureWindow.__chronicleMapCapture;
+    };
+  }, [captureRender, fixture, pause, setTimestamp]);
+
   // Playback stops at the encounter end; rewind to the pull and play again.
   useEffect(() => {
-    if (!enabled || isPlaying) return;
+    if (capture || !enabled || isPlaying) return;
     const atEnd = (currentTimestamp?.getTime() ?? 0) >= fixture.endMs;
     const id = setTimeout(() => {
       if (atEnd) setTimestamp(new Date(fixture.startMs));
       play();
     }, atEnd ? KRESH_LOOP_PAUSE_MS : 0);
     return () => clearTimeout(id);
-  }, [currentTimestamp, enabled, fixture, isPlaying, play, setTimestamp]);
+  }, [capture, currentTimestamp, enabled, fixture, isPlaying, play, setTimestamp]);
+
+  useEffect(() => {
+    if (!capture) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLElement && ["INPUT", "SELECT", "TEXTAREA", "BUTTON"].includes(event.target.tagName)) return;
+      if (event.code === "KeyX") {
+        event.preventDefault();
+        if (isPlaying) pause(); else play();
+      } else if (event.code === "ArrowLeft" || event.code === "ArrowRight") {
+        event.preventDefault();
+        const direction = event.code === "ArrowLeft" ? -1 : 1;
+        const current = currentTimestamp?.getTime() ?? fixture.startMs;
+        setTimestamp(new Date(Math.max(fixture.startMs, Math.min(fixture.endMs, current + direction * 1_000))));
+      } else if (event.code === "Home") {
+        event.preventDefault();
+        pause();
+        setTimestamp(new Date(fixture.startMs));
+      } else if (event.code === "KeyH") {
+        event.preventDefault();
+        setCaptureHud((visible) => !visible);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [capture, currentTimestamp, fixture, isPlaying, pause, play, setTimestamp]);
 
   // The panel's auto fit on selecting the boss.
   const autoFit = scene.status === "ready" ? scene.autoFit : null;
@@ -892,9 +1022,13 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
   // The scene only follows a unit it has: wait for the mesh and the unit (a
   // totem appears seconds into the fight).
   const followable = meshState === "ready" && scene.status === "ready" && scene.markers.some((marker) => marker.guid === followGuid);
-  const elapsed = Math.max(0, (currentTimestamp?.getTime() ?? fixture.startMs) - fixture.startMs) / 1000;
   return (
-    <div style={{ width: 800, height: 520 }} className="relative overflow-hidden rounded-md border border-white/10 bg-black/70">
+    <div
+      data-map-capture-ready={captureRender && meshState === "ready" && scene.status === "ready"}
+      data-map-capture-ms={captureRender ? Math.round(replayMs) : undefined}
+      style={{ width: capture ? "100vw" : 800, height: capture ? "100vh" : 520 }}
+      className={capture ? "relative overflow-hidden bg-black" : "relative overflow-hidden rounded-md border border-white/10 bg-black/70"}
+    >
       {scene.status === "ready" ? (
         <MapView3D
           ground={scene.ground}
@@ -916,15 +1050,137 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
           cinematic={mesh}
           followGuid={followable ? followGuid : null}
           effectSettings={effectSettings}
+          cameraPose={capture ? manualCameraPose : null}
+          cameraPath={capture && cameraPathPreview ? sortedCameraMarks : null}
+          cameraPathStartMs={fixture.startMs}
+          walkCaptureFrame={capture ? walkCaptureFrame : null}
+          cameraCaptureKey={capture ? cameraCaptureKey : 0}
+          onCameraCapture={capture ? captureCameraMark : undefined}
           walkAvatar={walkAvatar}
         />
       ) : (
         <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{scene.title}: {scene.detail}</div>
       )}
-      <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-white/80">
-        {instance.encounters[0]?.name} {elapsed.toFixed(1)}s
-        {dungeonMesh && meshState !== "ready" && <span className="ml-1.5 text-amber-200/80">cave {meshState}</span>}
-      </div>
+      {capture && captureHud ? (
+        <>
+          <div className="absolute bottom-4 left-1/2 z-50 w-[min(760px,calc(100vw-32px))] -translate-x-1/2 rounded-xl border border-white/15 bg-black/80 px-4 py-3 text-white shadow-2xl backdrop-blur">
+            <div className="mb-2 flex items-center justify-between text-xs">
+              <span className="font-semibold">{instance.encounters[0]?.name} · {elapsed.toFixed(1)}s / {durationSeconds.toFixed(1)}s</span>
+              <span className="text-white/55">H hide · X play/pause · ←/→ step · Home rewind · G walk · Space jump</span>
+            </div>
+            <input
+              aria-label="Replay time"
+              type="range"
+              min={0}
+              max={durationSeconds}
+              step={0.05}
+              value={Math.min(durationSeconds, elapsed)}
+              onChange={(event) => {
+                pause();
+                setTimestamp(new Date(fixture.startMs + Number(event.target.value) * 1_000));
+              }}
+              className="w-full accent-cyan-400"
+            />
+          </div>
+          <div className="styled-scrollbar absolute right-4 top-4 z-50 max-h-[calc(100vh-150px)] w-[360px] overflow-y-auto rounded-xl border border-white/15 bg-black/85 p-3 text-xs text-white shadow-2xl backdrop-blur">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="font-semibold">Camera marks</div>
+                <div className="text-[10px] text-white/50">Encounter-relative, reusable JSON poses</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCameraCaptureKey((key) => key + 1)}
+                className="rounded-md bg-cyan-400 px-2.5 py-1.5 font-semibold text-black hover:bg-cyan-300"
+              >
+                Add / replace at {elapsed.toFixed(2)}s
+              </button>
+            </div>
+            <label className="mt-3 flex items-center gap-2 rounded-md border border-white/10 bg-white/5 px-2 py-1.5">
+              <input
+                type="checkbox"
+                checked={cameraPathPreview}
+                onChange={(event) => {
+                  setManualCameraPose(null);
+                  setCameraPathPreview(event.target.checked);
+                }}
+                className="accent-cyan-400"
+              />
+              Preview interpolated path while scrubbing or playing
+            </label>
+            <div className="mt-2 space-y-2">
+              {sortedCameraMarks.length === 0 ? (
+                <div className="rounded-md border border-dashed border-white/15 px-3 py-4 text-center text-white/45">
+                  Orbit to a shot, scrub to its time, then add a mark.
+                </div>
+              ) : sortedCameraMarks.map((mark, index) => (
+                <div key={`${mark.timestampMs}-${index}`} className="rounded-md border border-white/10 bg-white/5 p-2">
+                  <div className="flex gap-2">
+                    <input
+                      aria-label={`Camera mark ${index + 1} label`}
+                      value={mark.label ?? ""}
+                      onChange={(event) => setCameraMarks((current) => current.map((candidate) => candidate === mark ? { ...candidate, label: event.target.value } : candidate))}
+                      className="min-w-0 flex-1 rounded border border-white/10 bg-black/50 px-2 py-1 text-white"
+                    />
+                    <label className="flex items-center gap-1 text-white/55">
+                      <input
+                        aria-label={`Camera mark ${index + 1} time`}
+                        type="number"
+                        min={0}
+                        max={durationSeconds}
+                        step={0.05}
+                        value={(mark.timestampMs / 1000).toFixed(2)}
+                        onChange={(event) => {
+                          const timestampMs = Math.round(Math.max(0, Math.min(durationSeconds, Number(event.target.value))) * 1000);
+                          setCameraMarks((current) => current.map((candidate) => candidate === mark ? { ...candidate, timestampMs } : candidate));
+                        }}
+                        className="w-20 rounded border border-white/10 bg-black/50 px-2 py-1 text-right text-white"
+                      />s
+                    </label>
+                  </div>
+                  <div className="mt-2 flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        pause();
+                        setTimestamp(new Date(fixture.startMs + mark.timestampMs));
+                      }}
+                      className="rounded bg-white/10 px-2 py-1 hover:bg-white/20"
+                    >Jump</button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCameraPathPreview(false);
+                        setManualCameraPose({ ...mark });
+                      }}
+                      className="rounded bg-white/10 px-2 py-1 hover:bg-white/20"
+                    >View</button>
+                    <button
+                      type="button"
+                      onClick={() => setCameraMarks((current) => current.filter((candidate) => candidate !== mark))}
+                      className="ml-auto rounded bg-rose-500/20 px-2 py-1 text-rose-100 hover:bg-rose-500/35"
+                    >Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <details className="mt-3 rounded-md border border-white/10 bg-white/5">
+              <summary className="cursor-pointer px-2 py-1.5 text-white/70">Export JSON ({sortedCameraMarks.length} marks)</summary>
+              <div className="border-t border-white/10 p-2">
+                <textarea readOnly value={cameraMarksJson} aria-label="Camera marks JSON" className="styled-scrollbar h-32 w-full resize-y rounded bg-black/60 p-2 font-mono text-[10px] text-cyan-100" />
+                <button type="button" onClick={() => { void copyCameraMarks(); }} className="mt-1.5 w-full rounded bg-white/10 px-2 py-1.5 hover:bg-white/20">
+                  {cameraMarksCopied ? "Copied" : "Copy JSON"}
+                </button>
+              </div>
+            </details>
+          </div>
+        </>
+      ) : !capture ? (
+        <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-white/80">
+          {instance.encounters[0]?.name} {elapsed.toFixed(1)}s
+          {dungeonMesh && meshState !== "ready" && <span className="ml-1.5 text-amber-200/80">cave {meshState}</span>}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -988,6 +1244,7 @@ const HAKKAR_UNITS = {
   pet: "0xF14002542E000018",
   add: "0xF130002C5F11E679",
   shaman: "0x000000003B9CE6BE",
+  ranged: "0x000000003B9CD38E",
 } as const;
 
 // The health and power columns on: over the players, and none over anyone else.
@@ -1007,6 +1264,99 @@ function HakkarOctoReplay({ follow = null }: { follow?: keyof typeof HAKKAR_UNIT
           <FixturePlayer fixture={fixture} mesh followGuid={follow ? HAKKAR_UNITS[follow] : null} effectSettings={HAKKAR_EFFECT_SETTINGS} />
         </SyncModeProvider>
       </WithSpellIcons>
+    </QueryClientProvider>
+  );
+}
+
+function HakkarCaptureReplay() {
+  const [captureMode] = useState(() => new URLSearchParams(window.location.search).get("capture"));
+  const captureRender = captureMode === "render" || captureMode === "walk";
+  const captureWalking = captureMode === "walk";
+  const [fixture] = useState(() => loadMapFixture(hakkarOcto));
+  const [queryClient] = useState(() => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });
+    client.setQueryData(["wow-map-manifest", hakkarOcto.instance.iconBaseUrl], fixture.manifest);
+    return client;
+  });
+  return (
+    <QueryClientProvider client={queryClient}>
+      <WithSpellIcons>
+        <SyncModeProvider>
+          <FixturePlayer
+            fixture={fixture}
+            mesh
+            capture
+            initialCameraMarks={captureRender ? HAKKAR_ANNOUNCEMENT_WALK_START : []}
+            captureRender={captureRender}
+            captureWalkStartGuid={HAKKAR_UNITS.ranged}
+            captureWalkLookAtGuid={HAKKAR_UNITS.boss}
+            captureWalking={captureWalking}
+            effectSettings={HAKKAR_EFFECT_SETTINGS}
+            walkAvatar={DEFAULT_WALK_AVATAR}
+          />
+        </SyncModeProvider>
+      </WithSpellIcons>
+    </QueryClientProvider>
+  );
+}
+
+const MANDOKIR_EFFECT_SETTINGS: EffectSettings = {
+  ...DEFAULT_EFFECT_SETTINGS,
+  castMode: "all",
+  aboveDisc: "health",
+  trailSeconds: 1,
+};
+
+function MandokirCaptureReplay() {
+  const [captureRender] = useState(() => new URLSearchParams(window.location.search).get("capture") === "render");
+  const [fixture] = useState(() => loadMapFixture(mandokirOcto));
+  const [queryClient] = useState(() => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });
+    client.setQueryData(["wow-map-manifest", mandokirOcto.instance.iconBaseUrl], fixture.manifest);
+    return client;
+  });
+  return (
+    <QueryClientProvider client={queryClient}>
+      <WithMandokirSpellIcons>
+        <SyncModeProvider>
+          <FixturePlayer
+            fixture={fixture}
+            mesh
+            capture
+            initialCameraMarks={captureRender ? MANDOKIR_ANNOUNCEMENT_OVERVIEW : []}
+            captureRender={captureRender}
+            effectSettings={MANDOKIR_EFFECT_SETTINGS}
+            walkAvatar={DEFAULT_WALK_AVATAR}
+          />
+        </SyncModeProvider>
+      </WithMandokirSpellIcons>
+    </QueryClientProvider>
+  );
+}
+
+function GahzrankaCaptureReplay() {
+  const [captureRender] = useState(() => new URLSearchParams(window.location.search).get("capture") === "render");
+  const [fixture] = useState(() => loadMapFixture(gahzrankaOcto));
+  const [queryClient] = useState(() => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } } });
+    client.setQueryData(["wow-map-manifest", gahzrankaOcto.instance.iconBaseUrl], fixture.manifest);
+    return client;
+  });
+  return (
+    <QueryClientProvider client={queryClient}>
+      <WithGahzrankaSpellIcons>
+        <SyncModeProvider>
+          <FixturePlayer
+            fixture={fixture}
+            mesh
+            capture
+            initialCameraMarks={captureRender ? GAHZRANKA_ANNOUNCEMENT_SLAM : []}
+            captureRender={captureRender}
+            effectSettings={MANDOKIR_EFFECT_SETTINGS}
+            walkAvatar={DEFAULT_WALK_AVATAR}
+          />
+        </SyncModeProvider>
+      </WithGahzrankaSpellIcons>
     </QueryClientProvider>
   );
 }
@@ -1460,6 +1810,28 @@ function WalkAvatarReplay() {
  */
 export const HakkarReal: Story = {
   render: () => <HakkarOctoReplay />,
+};
+
+/** Full-screen camera and walking harness for the public Hakkar kill. */
+export const HakkarCapture: Story = {
+  parameters: { layout: "fullscreen" },
+  render: () => <HakkarCaptureReplay />,
+};
+
+/**
+ * Full-screen announcement capture harness for the public Bloodlord Mandokir
+ * kill from OJbOLvyr1pXA3AX9. Use the mouse to compose the shot, the HUD to
+ * scrub, H to hide controls, and G to enter walking mode.
+ */
+export const MandokirCapture: Story = {
+  parameters: { layout: "fullscreen" },
+  render: () => <MandokirCaptureReplay />,
+};
+
+/** Full-screen camera-mark harness for Gahz'ranka's Slam and Massive Geyser. */
+export const GahzrankaCapture: Story = {
+  parameters: { layout: "fullscreen" },
+  render: () => <GahzrankaCaptureReplay />,
 };
 
 /** HakkarReal following Hakkar: the boss model and its sigil (columns stand over players only). */
