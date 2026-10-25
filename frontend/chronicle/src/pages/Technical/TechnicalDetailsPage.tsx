@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft, BookOpen, Box, Braces, ChevronDown, Clock, FileCode, FileType2, FlaskConical, Globe2, Images, Lightbulb, Map, PawPrint, ShieldAlert, ShieldCheck, Sparkles, Swords, TimerReset } from "lucide-react";
+import { ArrowLeft, BookOpen, Box, Braces, ChevronDown, Clock, FileCode, FileType2, FlaskConical, Globe2, Images, Lightbulb, Map, PawPrint, ShieldAlert, ShieldCheck, Sparkles, Swords, TimerReset, WandSparkles } from "lucide-react";
 import { useDatasets, useSiteConfig } from "@/api/queries";
 import { Card } from "@/components/ui/Card/Card";
 import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
@@ -17,6 +17,12 @@ const TECHNICAL_LINKS: TechnicalLink[] = [
     description: "Preview Recent ad placeholders and browse every cached hint payload",
     href: "/technical/hints",
     icon: <Lightbulb className="h-4 w-4" />,
+  },
+  {
+    title: "Cosmetic Sandbox",
+    description: "Mix and match every character name, background, and border cosmetic",
+    href: "/technical/cosmetic",
+    icon: <WandSparkles className="h-4 w-4" />,
   },
   {
     title: "Extra Attack Spells",

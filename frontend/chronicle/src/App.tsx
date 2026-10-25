@@ -62,6 +62,7 @@ const ItemSetDetailPage = lazy(() => import("./pages/WoWDB/ItemSetDetailPage").t
 const WoWDBLayout = lazy(() => import("./pages/WoWDB/WoWDBLayout").then(({ WoWDBLayout }) => ({ default: WoWDBLayout })))
 const TechnicalDetailsPage = lazy(() => import("./pages/Technical").then(({ TechnicalDetailsPage }) => ({ default: TechnicalDetailsPage })))
 const TechnicalHintsPage = lazy(() => import("./pages/Technical").then(({ TechnicalHintsPage }) => ({ default: TechnicalHintsPage })))
+const CosmeticSandboxPage = lazy(() => import("./pages/Technical").then(({ CosmeticSandboxPage }) => ({ default: CosmeticSandboxPage })))
 const PeriodicSpellsPage = lazy(() => import("./pages/Technical").then(({ PeriodicSpellsPage }) => ({ default: PeriodicSpellsPage })))
 const ExtraAttackSpellsPage = lazy(() => import("./pages/Technical").then(({ ExtraAttackSpellsPage }) => ({ default: ExtraAttackSpellsPage })))
 const VulnerabilitySpellsPage = lazy(() => import("./pages/Technical").then(({ VulnerabilitySpellsPage }) => ({ default: VulnerabilitySpellsPage })))
@@ -231,6 +232,7 @@ function App() {
         <Route path="/technical" element={<TenantDatasetLayout />}>
           <Route index element={<TechnicalDetailsPage />} />
           <Route path="hints" element={<TechnicalHintsPage />} />
+          <Route path="cosmetic" element={<CosmeticSandboxPage />} />
           <Route path="extra-attack-spells" element={<ExtraAttackSpellsPage />} />
           <Route path="vulnerability-spells" element={<VulnerabilitySpellsPage />} />
           <Route path="periodic-spells" element={<PeriodicSpellsPage />} />
