@@ -613,6 +613,7 @@ func (api *API) Routes() chi.Router {
 						r.Route("/instances", func(r chi.Router) {
 							r.Route("/{instance_id}", func(r chi.Router) {
 								r.Use(httpmw.InstanceIDMiddleware(api.Opts.Zed))
+								r.Get("/cosmetics", api.InstanceCosmetics)
 								r.Get("/events/{type}", api.InstanceEvents)
 								r.With(api.trackGuildInstanceView).Get("/", api.Instance)
 								r.Get("/youtube", api.GetInstanceYoutube)

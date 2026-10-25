@@ -544,6 +544,11 @@ export interface CharacterCosmetics {
     readonly active: CosmeticSelection;
 }
 
+// From chroniclesdk/user.go
+export type CharacterCosmeticsDisplayMode = "disabled" | "enabled" | "limited";
+
+export const CharacterCosmeticsDisplayModes: CharacterCosmeticsDisplayMode[] = ["disabled", "enabled", "limited"];
+
 // From chroniclesdk/characters.go
 export interface CharacterCosmeticsResponse {
     readonly can_customize: boolean;
@@ -2047,6 +2052,11 @@ export interface InferenceThreadsResponse {
     readonly threads: readonly InferenceThread[];
 }
 
+// From chroniclesdk/characters.go
+export interface InstanceCosmeticsResponse {
+    readonly players: Record<string, CosmeticSelection>;
+}
+
 // From chroniclesdk/panel_layout.go
 /**
  * InstanceDefaultsResponse provides everything needed by the instance page in one request.
@@ -3053,6 +3063,7 @@ export const PositionCoordinateSpaces: PositionCoordinateSpace[] = ["ui-map-norm
 // From chroniclesdk/user.go
 export interface Preferences {
     readonly helpful_hints: boolean;
+    readonly character_cosmetics: CharacterCosmeticsDisplayMode;
     /**
      * RawLogRetentionHours is how long to keep raw log files in object storage
      * after upload. nil means keep forever.
@@ -4670,6 +4681,10 @@ export interface UpdatePreferencesRequest {
      * RawLogRetentionHours controls raw log file retention. nil = no change, 0 = keep forever.
      */
     readonly raw_log_retention_hours: number | null;
+    /**
+     * CharacterCosmetics controls how character cosmetics are displayed. nil means no change.
+     */
+    readonly character_cosmetics: CharacterCosmeticsDisplayMode | null;
 }
 
 // From chroniclesdk/raid_compositions.go

@@ -147,6 +147,13 @@ func (a *API) UpdateMyPreferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.CharacterCosmetics != nil && !req.CharacterCosmetics.IsValid() {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Invalid character cosmetics display mode",
+		})
+		return
+	}
+
 	if req.RawLogRetentionHours != nil {
 		val := *req.RawLogRetentionHours
 		var retentionHours pgtype.Int4
@@ -158,6 +165,17 @@ func (a *API) UpdateMyPreferences(w http.ResponseWriter, r *http.Request) {
 		_, err := a.Opts.Zed.UpdateUserRawLogRetentionHours(ctx, database.UpdateUserRawLogRetentionHoursParams{
 			ID:                   state.Claims.Subject,
 			RawLogRetentionHours: retentionHours,
+		})
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+	}
+
+	if req.CharacterCosmetics != nil {
+		_, err := a.Opts.Zed.UpdateUserCharacterCosmeticsDisplayMode(ctx, database.UpdateUserCharacterCosmeticsDisplayModeParams{
+			ID:                 state.Claims.Subject,
+			CharacterCosmetics: string(*req.CharacterCosmetics),
 		})
 		if err != nil {
 			httpapi.InternalServerError(w, err)
@@ -179,7 +197,8 @@ func (a *API) UpdateMyPreferences(w http.ResponseWriter, r *http.Request) {
 func userPreferences(user database.ChronicleUser) chroniclesdk.Preferences {
 	prefs := chroniclesdk.Preferences{
 		// Should allow people to disable hints if they want, but for now we'll just enable them by default
-		HelpfulHints: true,
+		HelpfulHints:       true,
+		CharacterCosmetics: chroniclesdk.CharacterCosmeticsDisplayMode(user.CharacterCosmetics),
 	}
 	if user.RawLogRetentionHours.Valid {
 		v := user.RawLogRetentionHours.Int32

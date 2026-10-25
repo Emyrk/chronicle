@@ -24769,6 +24769,61 @@ func (q *sqlQuerier) GetExternalCharacterLinkSync(ctx context.Context, arg GetEx
 	return i, err
 }
 
+const getInstancePlayerCosmetics = `-- name: GetInstancePlayerCosmetics :many
+SELECT
+  log_instance_players.unit_guid,
+  user_character_cosmetics.active_name_id,
+  user_character_cosmetics.active_background_id,
+  user_character_cosmetics.active_border_id
+FROM log_instance_players
+JOIN log_instances
+  ON log_instances.id = log_instance_players.instance_id
+JOIN user_character_links
+  ON user_character_links.character_guid = log_instance_players.unit_guid
+  AND user_character_links.realm_id = log_instances.realm_id
+JOIN user_character_cosmetics
+  ON user_character_cosmetics.user_character_link_id = user_character_links.id
+WHERE log_instance_players.instance_id = $1
+  AND (
+    user_character_cosmetics.active_name_id <> ''
+    OR user_character_cosmetics.active_background_id <> ''
+    OR user_character_cosmetics.active_border_id <> ''
+  )
+ORDER BY log_instance_players.unit_guid
+`
+
+type GetInstancePlayerCosmeticsRow struct {
+	UnitGuid           guid.GUID `db:"unit_guid" json:"unit_guid"`
+	ActiveNameID       string    `db:"active_name_id" json:"active_name_id"`
+	ActiveBackgroundID string    `db:"active_background_id" json:"active_background_id"`
+	ActiveBorderID     string    `db:"active_border_id" json:"active_border_id"`
+}
+
+func (q *sqlQuerier) GetInstancePlayerCosmetics(ctx context.Context, instanceID uuid.UUID) ([]GetInstancePlayerCosmeticsRow, error) {
+	rows, err := q.db.Query(ctx, getInstancePlayerCosmetics, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetInstancePlayerCosmeticsRow
+	for rows.Next() {
+		var i GetInstancePlayerCosmeticsRow
+		if err := rows.Scan(
+			&i.UnitGuid,
+			&i.ActiveNameID,
+			&i.ActiveBackgroundID,
+			&i.ActiveBorderID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserCharacterCosmetics = `-- name: GetUserCharacterCosmetics :many
 SELECT user_character_cosmetics.user_character_link_id, user_character_cosmetics.requested_name_id, user_character_cosmetics.requested_background_id, user_character_cosmetics.requested_border_id, user_character_cosmetics.active_name_id, user_character_cosmetics.active_background_id, user_character_cosmetics.active_border_id
 FROM user_character_cosmetics
@@ -26234,7 +26289,7 @@ func (q *sqlQuerier) GetUserAuthSessionByID(ctx context.Context, id uuid.UUID) (
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours FROM users WHERE LOWER(email) = LOWER($1)
+SELECT id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics FROM users WHERE LOWER(email) = LOWER($1)
 `
 
 func (q *sqlQuerier) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -26249,13 +26304,14 @@ func (q *sqlQuerier) GetUserByEmail(ctx context.Context, email string) (User, er
 		&i.DefaultDesktopLayoutID,
 		&i.DefaultMobileLayoutID,
 		&i.RawLogRetentionHours,
+		&i.CharacterCosmetics,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
 SELECT
-  id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, max_storage_bytes, data_limit_updated_at, consumed_storage_bytes
+  id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics, max_storage_bytes, data_limit_updated_at, consumed_storage_bytes
 FROM
   chronicle_users
 WHERE
@@ -26274,6 +26330,7 @@ func (q *sqlQuerier) GetUserByID(ctx context.Context, id uuid.UUID) (ChronicleUs
 		&i.DefaultDesktopLayoutID,
 		&i.DefaultMobileLayoutID,
 		&i.RawLogRetentionHours,
+		&i.CharacterCosmetics,
 		&i.MaxStorageBytes,
 		&i.DataLimitUpdatedAt,
 		&i.ConsumedStorageBytes,
@@ -26283,7 +26340,7 @@ func (q *sqlQuerier) GetUserByID(ctx context.Context, id uuid.UUID) (ChronicleUs
 
 const getUsersByIDs = `-- name: GetUsersByIDs :many
 SELECT
-  id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, max_storage_bytes, data_limit_updated_at, consumed_storage_bytes
+  id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics, max_storage_bytes, data_limit_updated_at, consumed_storage_bytes
 FROM
   chronicle_users
 WHERE
@@ -26308,6 +26365,7 @@ func (q *sqlQuerier) GetUsersByIDs(ctx context.Context, ids []uuid.UUID) ([]Chro
 			&i.DefaultDesktopLayoutID,
 			&i.DefaultMobileLayoutID,
 			&i.RawLogRetentionHours,
+			&i.CharacterCosmetics,
 			&i.MaxStorageBytes,
 			&i.DataLimitUpdatedAt,
 			&i.ConsumedStorageBytes,
@@ -26327,7 +26385,7 @@ INSERT INTO
   users(id, username, email, created_at, updated_at)
 VALUES
   ($1, $2, $3, $4, $5)
-RETURNING id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours
+RETURNING id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics
 `
 
 type InsertUserParams struct {
@@ -26356,6 +26414,7 @@ func (q *sqlQuerier) InsertUser(ctx context.Context, arg InsertUserParams) (User
 		&i.DefaultDesktopLayoutID,
 		&i.DefaultMobileLayoutID,
 		&i.RawLogRetentionHours,
+		&i.CharacterCosmetics,
 	)
 	return i, err
 }
@@ -26450,7 +26509,7 @@ func (q *sqlQuerier) InsertUserAuthSession(ctx context.Context, arg InsertUserAu
 
 const listAllUsers = `-- name: ListAllUsers :many
 SELECT
-  chronicle_users.id, chronicle_users.username, chronicle_users.email, chronicle_users.created_at, chronicle_users.updated_at, chronicle_users.default_desktop_layout_id, chronicle_users.default_mobile_layout_id, chronicle_users.raw_log_retention_hours, chronicle_users.max_storage_bytes, chronicle_users.data_limit_updated_at, chronicle_users.consumed_storage_bytes,
+  chronicle_users.id, chronicle_users.username, chronicle_users.email, chronicle_users.created_at, chronicle_users.updated_at, chronicle_users.default_desktop_layout_id, chronicle_users.default_mobile_layout_id, chronicle_users.raw_log_retention_hours, chronicle_users.character_cosmetics, chronicle_users.max_storage_bytes, chronicle_users.data_limit_updated_at, chronicle_users.consumed_storage_bytes,
   COALESCE(discord_auth.linked_id, '')::text AS discord_id
 FROM
   chronicle_users
@@ -26488,6 +26547,7 @@ func (q *sqlQuerier) ListAllUsers(ctx context.Context) ([]ListAllUsersRow, error
 			&i.ChronicleUser.DefaultDesktopLayoutID,
 			&i.ChronicleUser.DefaultMobileLayoutID,
 			&i.ChronicleUser.RawLogRetentionHours,
+			&i.ChronicleUser.CharacterCosmetics,
 			&i.ChronicleUser.MaxStorageBytes,
 			&i.ChronicleUser.DataLimitUpdatedAt,
 			&i.ChronicleUser.ConsumedStorageBytes,
@@ -26554,11 +26614,40 @@ func (q *sqlQuerier) UpdateUserAuthSessionTokens(ctx context.Context, arg Update
 	return i, err
 }
 
+const updateUserCharacterCosmeticsDisplayMode = `-- name: UpdateUserCharacterCosmeticsDisplayMode :one
+UPDATE users
+SET character_cosmetics = $1
+WHERE id = $2
+RETURNING id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics
+`
+
+type UpdateUserCharacterCosmeticsDisplayModeParams struct {
+	CharacterCosmetics string    `db:"character_cosmetics" json:"character_cosmetics"`
+	ID                 uuid.UUID `db:"id" json:"id"`
+}
+
+func (q *sqlQuerier) UpdateUserCharacterCosmeticsDisplayMode(ctx context.Context, arg UpdateUserCharacterCosmeticsDisplayModeParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserCharacterCosmeticsDisplayMode, arg.CharacterCosmetics, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DefaultDesktopLayoutID,
+		&i.DefaultMobileLayoutID,
+		&i.RawLogRetentionHours,
+		&i.CharacterCosmetics,
+	)
+	return i, err
+}
+
 const updateUserRawLogRetentionHours = `-- name: UpdateUserRawLogRetentionHours :one
 UPDATE users
 SET raw_log_retention_hours = $1
 WHERE id = $2
-RETURNING id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours
+RETURNING id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, character_cosmetics
 `
 
 type UpdateUserRawLogRetentionHoursParams struct {
@@ -26578,6 +26667,7 @@ func (q *sqlQuerier) UpdateUserRawLogRetentionHours(ctx context.Context, arg Upd
 		&i.DefaultDesktopLayoutID,
 		&i.DefaultMobileLayoutID,
 		&i.RawLogRetentionHours,
+		&i.CharacterCosmetics,
 	)
 	return i, err
 }

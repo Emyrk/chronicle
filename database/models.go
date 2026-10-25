@@ -869,6 +869,7 @@ type ChronicleUser struct {
 	DefaultDesktopLayoutID uuid.NullUUID      `db:"default_desktop_layout_id" json:"default_desktop_layout_id"`
 	DefaultMobileLayoutID  uuid.NullUUID      `db:"default_mobile_layout_id" json:"default_mobile_layout_id"`
 	RawLogRetentionHours   pgtype.Int4        `db:"raw_log_retention_hours" json:"raw_log_retention_hours"`
+	CharacterCosmetics     string             `db:"character_cosmetics" json:"character_cosmetics"`
 	MaxStorageBytes        int64              `db:"max_storage_bytes" json:"max_storage_bytes"`
 	DataLimitUpdatedAt     interface{}        `db:"data_limit_updated_at" json:"data_limit_updated_at"`
 	ConsumedStorageBytes   int64              `db:"consumed_storage_bytes" json:"consumed_storage_bytes"`
@@ -2483,6 +2484,7 @@ type User struct {
 	DefaultDesktopLayoutID uuid.NullUUID      `db:"default_desktop_layout_id" json:"default_desktop_layout_id"`
 	DefaultMobileLayoutID  uuid.NullUUID      `db:"default_mobile_layout_id" json:"default_mobile_layout_id"`
 	RawLogRetentionHours   pgtype.Int4        `db:"raw_log_retention_hours" json:"raw_log_retention_hours"`
+	CharacterCosmetics     string             `db:"character_cosmetics" json:"character_cosmetics"`
 }
 
 type UserActionBarSlot struct {

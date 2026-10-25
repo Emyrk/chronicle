@@ -120,6 +120,12 @@ SET raw_log_retention_hours = @raw_log_retention_hours
 WHERE id = @id
 RETURNING *;
 
+-- name: UpdateUserCharacterCosmeticsDisplayMode :one
+UPDATE users
+SET character_cosmetics = @character_cosmetics
+WHERE id = @id
+RETURNING *;
+
 -- name: CountUserAuthLinks :one
 SELECT COUNT(*) FROM user_auth_links;
 
