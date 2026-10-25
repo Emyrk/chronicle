@@ -9,6 +9,7 @@ import {
 import type { WoWServer, WoWServerRealm, UploadKey, CreateWoWServerRequest, CreateWoWServerRealmRequest, CreateUploadKeyRequest, RetentionPolicy, RetentionPreviewResponse, RetentionPreviewRequest, SupportedInstance, RankingEncounterSet, CensusEntry, Tenant, UpsertTenantRequest, ServerApplication, CreateServerApplicationRequest, CreateModificationRequestPayload, ApplicationAdminEntry, GuildCharacterRosterResponse, ListRaidCompositionsResponse, RaidComposition, CreateRaidCompositionRequest, UpdateRaidCompositionRequest, UpdateRaidCompositionSharingRequest, InstanceItemPricesResponse } from "./typesGenerated";
 import type { 
   WoWLogGroup as WoWLogGroupGenerated, 
+  WoWLogArtifact as WoWLogArtifactGenerated,
   WoWLogFile as WoWLogFileGenerated,
   WoWLogGroupState as WoWLogGroupStateGenerated,
   JobStatus as JobStatusGenerated,
@@ -92,6 +93,7 @@ import type {
 
 // Re-export types for convenience
 export type WoWLogGroup = WoWLogGroupGenerated;
+export type WoWLogArtifact = WoWLogArtifactGenerated;
 export type WoWLogFile = WoWLogFileGenerated;
 export type WoWLogGroupState = WoWLogGroupStateGenerated;
 export type JobStatus = JobStatusGenerated;

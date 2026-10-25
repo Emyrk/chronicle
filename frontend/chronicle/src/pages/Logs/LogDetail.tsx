@@ -59,6 +59,7 @@ import {
   useUploadInstanceYoutube,
   getLogGroupRefetchInterval,
   type WoWLogGroupState, 
+  type WoWLogArtifact,
   type WoWLogFile, 
   type RiverJobState,
   type WoWParsedLogJobOutput,
@@ -87,6 +88,53 @@ function formatBytes(bytes: number): string {
   const sizes = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+}
+
+interface UploadedArtifactRowProps {
+  logId: string;
+  artifact: WoWLogArtifact;
+  canDownloadFiles: boolean;
+}
+
+export function UploadedArtifactRow({ logId, artifact, canDownloadFiles }: UploadedArtifactRowProps) {
+  return (
+    <div
+      className={`flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border ${artifact.storage_deleted_at ? "opacity-60" : ""}`}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
+        <div className="min-w-0">
+          <p className="font-medium text-sm truncate">
+            {artifact.original_filename || "Sidekick SavedVariables"}
+          </p>
+          <p className="text-xs text-muted-foreground truncate">
+            Artifact · {artifact.kind} · schema v{artifact.schema_version}
+          </p>
+        </div>
+      </div>
+      <div className="ml-auto flex items-center gap-3">
+        <div className="text-right text-sm text-muted-foreground whitespace-nowrap">
+          <p>{formatBytes(artifact.size_bytes)}</p>
+          <p className="hidden text-xs sm:block">{formatDate(artifact.created_at)}</p>
+          {artifact.storage_deleted_at && (
+            <p className="text-xs text-destructive">
+              Deleted: {formatDate(artifact.storage_deleted_at)}
+            </p>
+          )}
+        </div>
+        {canDownloadFiles && !artifact.storage_deleted_at && (
+          <a
+            href={`/api/v1/raidlogs/logs/${logId}/artifacts/${artifact.id}/download`}
+            download
+          >
+            <Button variant="outline" size="sm" title="Download artifact">
+              <Download className="h-4 w-4" />
+            </Button>
+          </a>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // River job states - these match rivertype.JobState values
@@ -1224,6 +1272,11 @@ export function LogDetailView({
   const processingDone = log ? isProcessingDone(log) : false;
   const nextCheck = useNextCheckIn(log, lastCheckedAt);
   const nextCheckSeconds = nextCheck ? Math.ceil(nextCheck.remainingMs / 1000) : 0;
+  const uploadedFiles = log?.files ?? [];
+  const uploadedArtifacts = log?.artifacts ?? [];
+  const hasUploadedData = uploadedFiles.length > 0 || uploadedArtifacts.length > 0;
+  const hasStoredUploadedData = uploadedFiles.some((file) => !file.storage_deleted_at)
+    || uploadedArtifacts.some((artifact) => !artifact.storage_deleted_at);
   // Rare, irreversible action — kept small rather than given its own card.
   const unlistedAction = log && !log.unlisted && canMarkUnlisted && (
     <UnlistedConfirmationDialog
@@ -1506,7 +1559,7 @@ export function LogDetailView({
                 <HardDrive className="h-5 w-5 text-muted-foreground" />
                 Uploaded Files
               </h2>
-              {canDeleteFiles && log.files && log.files.length > 0 && !log.files.some(f => f.storage_deleted_at) && (
+              {canDeleteFiles && hasStoredUploadedData && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -1530,10 +1583,10 @@ export function LogDetailView({
             </div>
             
             {/* Warning about deleting files */}
-            {canDeleteFiles && log.files && log.files.length > 0 && !log.files.every(f => f.storage_deleted_at) && (
+            {canDeleteFiles && hasStoredUploadedData && (
               <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                 <p className="text-sm text-amber-200">
-                  <strong>Before deleting:</strong> These are your raw combat log files. Chronicle stores a compressed version of the parsed data, but if there are any parsing errors or missing data, the raw files are needed to investigate and re-parse.
+                  <strong>Before deleting:</strong> These are your raw combat log files and upload artifacts. Chronicle stores a compressed version of the parsed data, but if there are any parsing errors or missing data, the uploaded files are needed to investigate and re-parse.
                 </p>
                 <p className="text-sm text-amber-200/80 mt-2">
                   Only delete if:
@@ -1546,55 +1599,65 @@ export function LogDetailView({
             )}
             
             <div className="space-y-2">
-              {log.files && log.files.length > 0 ? (
-                log.files.map((file: WoWLogFile) => (
-                  <div 
-                    key={file.id} 
-                    className={`flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border ${file.storage_deleted_at ? "opacity-60" : ""}`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
-                      <div className="min-w-0">
-                        <p className="font-medium text-sm">Combat log</p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {file.mime_type || "unknown type"} · {file.id.slice(0, 8)}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="ml-auto flex items-center gap-3">
-                      <div className="text-right text-sm text-muted-foreground whitespace-nowrap">
-                        {file.compressed_size_bytes != null ? (
-                          <>
-                            <p className="text-xs">
-                              <span className="text-muted-foreground/70">Original:</span> {formatBytes(file.size_bytes)}
-                            </p>
-                            <p>
-                              <span className="text-muted-foreground/70">Stored:</span> {formatBytes(file.compressed_size_bytes)}
-                            </p>
-                          </>
-                        ) : (
-                          <p>{formatBytes(file.size_bytes)}</p>
-                        )}
-                        <p className="hidden text-xs sm:block">{formatDate(file.created_at)}</p>
-                        {file.storage_deleted_at && (
-                          <p className="text-xs text-destructive">
-                            Deleted: {formatDate(file.storage_deleted_at)}
+              {hasUploadedData ? (
+                <>
+                  {uploadedFiles.map((file: WoWLogFile) => (
+                    <div
+                      key={file.id}
+                      className={`flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border ${file.storage_deleted_at ? "opacity-60" : ""}`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm">Combat log</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {file.mime_type || "unknown type"} · {file.id.slice(0, 8)}
                           </p>
+                        </div>
+                      </div>
+                      <div className="ml-auto flex items-center gap-3">
+                        <div className="text-right text-sm text-muted-foreground whitespace-nowrap">
+                          {file.compressed_size_bytes != null ? (
+                            <>
+                              <p className="text-xs">
+                                <span className="text-muted-foreground/70">Original:</span> {formatBytes(file.size_bytes)}
+                              </p>
+                              <p>
+                                <span className="text-muted-foreground/70">Stored:</span> {formatBytes(file.compressed_size_bytes)}
+                              </p>
+                            </>
+                          ) : (
+                            <p>{formatBytes(file.size_bytes)}</p>
+                          )}
+                          <p className="hidden text-xs sm:block">{formatDate(file.created_at)}</p>
+                          {file.storage_deleted_at && (
+                            <p className="text-xs text-destructive">
+                              Deleted: {formatDate(file.storage_deleted_at)}
+                            </p>
+                          )}
+                        </div>
+                        {canDownloadFiles && !file.storage_deleted_at && (
+                          <a
+                            href={`/api/v1/raidlogs/logs/${log.id}/files/${file.id}/download`}
+                            download
+                          >
+                            <Button variant="outline" size="sm" title="Download combat log">
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </a>
                         )}
                       </div>
-                      {canDownloadFiles && !file.storage_deleted_at && (
-                        <a
-                          href={`/api/v1/raidlogs/logs/${log.id}/files/${file.id}/download`}
-                          download
-                        >
-                          <Button variant="outline" size="sm" title="Download file">
-                            <Download className="h-4 w-4" />
-                          </Button>
-                        </a>
-                      )}
                     </div>
-                  </div>
-                ))
+                  ))}
+                  {uploadedArtifacts.map((artifact: WoWLogArtifact) => (
+                    <UploadedArtifactRow
+                      key={artifact.id}
+                      logId={log.id}
+                      artifact={artifact}
+                      canDownloadFiles={canDownloadFiles}
+                    />
+                  ))}
+                </>
               ) : (
                 <p className="text-muted-foreground text-sm">No files found</p>
               )}

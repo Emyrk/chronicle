@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { MemoryRouter } from "react-router-dom"
-import { UploadView } from "./Upload"
+import { UploadView, type UploadViewProps } from "./Upload"
 
 const mockFile = new File(["content"], "WoWCombatLog.txt", { type: "text/plain" });
 Object.defineProperty(mockFile, "size", { value: 1024 * 1024 * 5 }); // 5MB
@@ -8,21 +8,35 @@ Object.defineProperty(mockFile, "size", { value: 1024 * 1024 * 5 }); // 5MB
 const mockRawFile = new File(["content"], "WoWRawCombatLog.txt", { type: "text/plain" });
 Object.defineProperty(mockRawFile, "size", { value: 1024 * 500 }); // 500KB
 
-const defaultProps = {
+const defaultProps: UploadViewProps = {
   isAuthenticated: true,
   authLoading: false,
+  hasUploadPermission: true,
+  hasAdminLogs: false,
+  canMarkUnlisted: true,
   combatLog: null,
   rawCombatLog: null,
+  sidekickStorage: null,
   uploading: false,
   uploadProgress: 0,
   error: null,
   success: null,
-  onFileSelect: () => {},
+  onFileDrop: () => {},
   onUpload: () => {},
   useV2Upload: true,
   onToggleV2Upload: () => {},
   showLegacy: false,
-  hasUploadPermission: true,
+  flavorOverride: "",
+  onFlavorOverrideChange: () => {},
+  effectiveFormat: "1.12a-cc-addon",
+  configLoaded: true,
+  flavorTags: [],
+  datasetFlavor: [],
+  availableFormats: [],
+  selectedFormat: "",
+  onFormatSelect: () => {},
+  unlistedLog: false,
+  onUnlistedLogChange: () => {},
 };
 
 const meta: Meta<typeof UploadView> = {
@@ -94,5 +108,19 @@ export const UploadSucceeded: Story = {
       message: "Raid log uploaded successfully. Processing will begin shortly.", 
       logId: "550e8400-e29b-41d4-a716-446655440000" 
     },
+  },
+}
+
+export const WotlkSidekickCollapsed: Story = {
+  args: {
+    effectiveFormat: "3.3.5a-cc-addon",
+  },
+}
+
+export const WotlkSidekickAttached: Story = {
+  args: {
+    effectiveFormat: "3.3.5a-cc-addon",
+    combatLog: mockFile,
+    sidekickStorage: new File(["content"], "ChronicleSidekickBridgeWoTLK.lua", { type: "text/plain" }),
   },
 }

@@ -1820,6 +1820,22 @@ type LogFilePart struct {
 	FinalizedAt         pgtype.Timestamptz `db:"finalized_at" json:"finalized_at"`
 }
 
+type LogGroupArtifact struct {
+	ID               uuid.UUID          `db:"id" json:"id"`
+	LogGroupID       uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	Kind             string             `db:"kind" json:"kind"`
+	SchemaVersion    int32              `db:"schema_version" json:"schema_version"`
+	Hash             string             `db:"hash" json:"hash"`
+	SizeBytes        int64              `db:"size_bytes" json:"size_bytes"`
+	MimeType         string             `db:"mime_type" json:"mime_type"`
+	ContentEncoding  pgtype.Text        `db:"content_encoding" json:"content_encoding"`
+	ObjectKey        string             `db:"object_key" json:"object_key"`
+	OriginalFilename pgtype.Text        `db:"original_filename" json:"original_filename"`
+	StorageDeletedAt pgtype.Timestamptz `db:"storage_deleted_at" json:"storage_deleted_at"`
+	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type LogInstance struct {
 	ID         uuid.UUID   `db:"id" json:"id"`
 	RealmID    uuid.UUID   `db:"realm_id" json:"realm_id"`

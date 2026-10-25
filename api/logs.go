@@ -2,7 +2,9 @@ package api
 
 import (
 	"fmt"
+	"mime"
 	"net/http"
+	"path"
 	"strconv"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
+	"github.com/Emyrk/chronicle/chronicle"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
@@ -183,6 +186,71 @@ func (api *API) WoWLogDeleteInstance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpapi.Write(ctx, w, http.StatusNoContent, nil)
+}
+
+func (api *API) WoWLogArtifactDownload(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	logID := httpmw.LogID(ctx)
+	artifactID, err := uuid.Parse(chi.URLParam(r, "artifactID"))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid artifact ID"})
+		return
+	}
+
+	artifact, err := api.Opts.Zed.GetLogGroupArtifact(ctx, database.GetLogGroupArtifactParams{
+		LogGroupID: logID,
+		ID:         artifactID,
+	})
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{Message: "Artifact not found"})
+		return
+	}
+
+	actor, _ := authz.ActorFromContext(ctx)
+	ok, err := api.Zed.CheckOne(ctx, nil, policy.New().Raid_log(logID).CanView_User(actor))
+	if !ok || err != nil {
+		httpapi.Forbidden(w, err)
+		return
+	}
+	canDownloadRawLogs, permissionErr := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanDownload_raw_logs_User(actor))
+	if permissionErr != nil {
+		httpapi.InternalServerError(w, permissionErr)
+		return
+	}
+	if !canDownloadRawLogs {
+		httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{Message: "Raw log downloads require Chronicle Revered."})
+		return
+	}
+	if artifact.StorageDeletedAt.Valid {
+		httpapi.Write(ctx, w, http.StatusGone, chroniclesdk.Response{Message: "Artifact has been deleted from storage"})
+		return
+	}
+
+	contents, err := api.Opts.Storage.DownloadFile(ctx, chronicle.BucketRaidLogs, artifact.ObjectKey)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{Message: "Failed to download artifact from storage", Detail: err.Error()},
+			Status:   http.StatusInternalServerError,
+			Wrapped:  err,
+		})
+		return
+	}
+
+	filename := fmt.Sprintf("%s-%s", artifact.Kind, artifact.ID.String())
+	if artifact.OriginalFilename.Valid {
+		if base := path.Base(artifact.OriginalFilename.String); base != "." && base != "/" && base != "" {
+			filename = base
+		}
+	}
+	contentType := artifact.MimeType
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
+	w.Header().Set("Content-Length", strconv.Itoa(len(contents)))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(contents)
 }
 
 func (api *API) WoWLogFileDownload(w http.ResponseWriter, r *http.Request) {

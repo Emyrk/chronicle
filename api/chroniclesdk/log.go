@@ -49,8 +49,9 @@ type WoWLogGroup struct {
 	InvalidatedAt *time.Time `json:"invalidated_at,omitempty"`
 	InvalidReason string     `json:"invalid_reason,omitempty"`
 
-	Files            []WoWLogFile    `json:"files"`
-	ProcessingOutput json.RawMessage `json:"processing_output,omitempty"`
+	Files            []WoWLogFile     `json:"files"`
+	Artifacts        []WoWLogArtifact `json:"artifacts,omitempty"`
+	ProcessingOutput json.RawMessage  `json:"processing_output,omitempty"`
 	// ParsedBytes is the total size, in bytes, of the parsed combat-log event
 	// streams (log_instance_events.events) for this log group. It does not
 	// count against the owner's raw storage allowance.
@@ -69,6 +70,21 @@ type WoWLogFile struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 	StorageDeletedAt    pgtype.Timestamptz `json:"storage_deleted_at,omitempty"`
+}
+
+type WoWLogArtifact struct {
+	ID               uuid.UUID          `json:"id"`
+	LogGroupID       uuid.UUID          `json:"log_group_id"`
+	Kind             string             `json:"kind"`
+	SchemaVersion    int32              `json:"schema_version"`
+	Hash             string             `json:"hash"`
+	SizeBytes        int64              `json:"size_bytes"`
+	MimeType         string             `json:"mime_type"`
+	ContentEncoding  *string            `json:"content_encoding,omitempty"`
+	OriginalFilename *string            `json:"original_filename,omitempty"`
+	StorageDeletedAt pgtype.Timestamptz `json:"storage_deleted_at,omitempty"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Guild struct {

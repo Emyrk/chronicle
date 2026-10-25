@@ -95,7 +95,17 @@ func (w *RawLogWorker) Work(ctx context.Context, _ *river.Job[ArgsRawLogRetentio
 			continue
 		}
 
-		if _, err := w.Storage.RemoveFile(ctx, "raidlogs", []string{groupID.String()}); err != nil {
+		paths := []string{groupID.String()}
+		artifacts, err := w.Store.ListLogGroupArtifacts(ctx, groupID)
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to list raw log artifacts",
+				slog.String("log_group_id", groupID.String()), slog.String("error", err.Error()))
+			continue
+		}
+		for _, artifact := range artifacts {
+			paths = append(paths, artifact.ObjectKey)
+		}
+		if _, err := w.Storage.RemoveFile(ctx, "raidlogs", paths); err != nil {
 			wrapped := fmt.Errorf("remove raw log group %s from storage: %w", groupID, err)
 			logger.ErrorContext(ctx, "failed to remove raw log group from storage",
 				slog.String("log_group_id", groupID.String()), slog.String("error", err.Error()))
@@ -110,6 +120,16 @@ func (w *RawLogWorker) Work(ctx context.Context, _ *river.Job[ArgsRawLogRetentio
 		})
 		if err != nil {
 			logger.ErrorContext(ctx, "failed to soft-delete log group files",
+				slog.String("log_group_id", groupID.String()),
+				slog.String("error", err.Error()),
+			)
+			continue
+		}
+		if _, err := w.Store.MarkLogGroupArtifactsStorageDeleted(ctx, database.MarkLogGroupArtifactsStorageDeletedParams{
+			StorageDeletedAt: pgtype.Timestamptz{Time: now, Valid: true},
+			LogGroupID:       groupID,
+		}); err != nil {
+			logger.ErrorContext(ctx, "failed to soft-delete log group artifacts",
 				slog.String("log_group_id", groupID.String()),
 				slog.String("error", err.Error()),
 			)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
 	"github.com/Emyrk/chronicle/chronicle"
+	"github.com/Emyrk/chronicle/combatlog/parser/wotlk/sidekickstorage"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
@@ -22,7 +24,10 @@ import (
 	"github.com/google/uuid"
 )
 
-const MaxLogFileSize = 250 * 1024 * 1024 // 250 MB
+const (
+	MaxLogFileSize     = 250 * 1024 * 1024 // 250 MB
+	MaxLogArtifactSize = 8 * 1024 * 1024   // 8 MB
+)
 
 // parseFlavorParam parses a comma-separated flavor query param into a WoWFlavor,
 // trimming whitespace and dropping empties.
@@ -259,7 +264,7 @@ func (api *API) DeleteWoWLogFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{
-		Message: "Log files deleted successfully",
+		Message: "Log files and artifacts deleted successfully",
 	})
 }
 
@@ -377,7 +382,7 @@ func (api *API) WoWLogUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{firstInput, secondInput}, database.LogTypeV1, uuid.Nil, chronicle.UploadMeta{Unlisted: unlisted})
+	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{firstInput, secondInput}, nil, database.LogTypeV1, uuid.Nil, chronicle.UploadMeta{Unlisted: unlisted})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
@@ -507,6 +512,62 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var artifactInputs []chronicle.ArtifactInput
+	artifactFile, artifactHeader, artifactErr := r.FormFile("sidekick_storage")
+	switch {
+	case artifactErr == nil:
+		defer func() { _ = artifactFile.Close() }()
+		if artifactHeader.Size > MaxLogArtifactSize {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+				Message: "Sidekick SavedVariables file is too large, exceeds maximum allowed size of 8 MB",
+				Detail:  fmt.Sprintf("file size: %d bytes", artifactHeader.Size),
+			})
+			return
+		}
+		effectiveFormat := meta.Format
+		if effectiveFormat == "" {
+			effectiveFormat = logType.Format()
+		}
+		if effectiveFormat != database.LogFormat335aCcAddon {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+				Message: "Sidekick SavedVariables artifacts are only supported for 3.3.5a logs",
+			})
+			return
+		}
+		decoded, err := (sidekickstorage.Decoder{}).Decode(ctx, artifactFile)
+		if err != nil {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+				Message: "Invalid Sidekick SavedVariables file",
+				Detail:  err.Error(),
+			})
+			return
+		}
+		sidekickSource, ok := decoded.(*sidekickstorage.Source)
+		if !ok {
+			httpapi.InternalServerError(w, fmt.Errorf("unexpected Sidekick storage source type %T", decoded))
+			return
+		}
+		if _, err := artifactFile.Seek(0, io.SeekStart); err != nil {
+			httpapi.InternalServerError(w, fmt.Errorf("rewind Sidekick SavedVariables file: %w", err))
+			return
+		}
+		artifactInputs = append(artifactInputs, chronicle.ArtifactInput{
+			Kind:             chronicle.ArtifactKindSidekickStorage,
+			SchemaVersion:    sidekickSource.SchemaVersion(),
+			Reader:           artifactFile,
+			MimeType:         "text/plain;charset=UTF-8",
+			OriginalFilename: artifactHeader.Filename,
+		})
+	case errors.Is(artifactErr, http.ErrMissingFile):
+		// Sidekick storage is optional.
+	default:
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Failed to get Sidekick SavedVariables file from form",
+			Detail:  artifactErr.Error(),
+		})
+		return
+	}
+
 	unlisted, err := uploadUnlisted(r)
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "unlisted must be a boolean"})
@@ -517,7 +578,7 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 	}
 	meta.Unlisted = unlisted
 
-	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{input}, logType, uuid.Nil, meta)
+	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{input}, artifactInputs, logType, uuid.Nil, meta)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{

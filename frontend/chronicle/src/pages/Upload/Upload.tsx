@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Upload as UploadIcon, FileText, Info, LogIn, AlertCircle, CheckCircle, FolderOpen, AlertTriangle, ArrowRight } from "lucide-react";
+import { Upload as UploadIcon, FileText, Info, LogIn, AlertCircle, CheckCircle, FolderOpen, AlertTriangle, ArrowRight, Plus, X } from "lucide-react";
 import { compressFile } from "@/api/compress";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
@@ -124,11 +124,12 @@ export interface UploadViewProps {
   canMarkUnlisted: boolean;
   combatLog: File | null;
   rawCombatLog: File | null;
+  sidekickStorage: File | null;
   uploading: boolean;
   uploadProgress: number;
   error: { message: string; call_to_action?: string; detail?: string; link?: string; link_text?: string } | null;
   success: { message: string; logId: string } | null;
-  onFileDrop: (file: File, type: "combat" | "raw") => void;
+  onFileDrop: (file: File, type: "combat" | "raw" | "sidekick") => void;
   onUpload: () => void;
   useV2Upload: boolean;
   onToggleV2Upload: (checked: boolean) => void;
@@ -161,6 +162,7 @@ export function UploadView({
   canMarkUnlisted,
   combatLog,
   rawCombatLog,
+  sidekickStorage,
   uploading,
   uploadProgress,
   error,
@@ -184,6 +186,9 @@ export function UploadView({
 }: UploadViewProps) {
   // Label for the "Default" format option, so users can see what default means.
   const defaultLabel = selectedFormat ? undefined : LOG_FORMAT_OPTIONS.find((o) => o.value === effectiveFormat)?.label;
+  // Sidekick SavedVariables is a rare, optional attachment; keep it tucked away unless opened or already attached.
+  const [sidekickExpanded, setSidekickExpanded] = useState(false);
+  const showSidekick = sidekickExpanded || sidekickStorage !== null;
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 sm:p-8 space-y-8">
@@ -299,6 +304,45 @@ export function UploadView({
                   onFile={(f) => onFileDrop(f, "combat")}
                   label="Click or drag file here"
                 />
+                {effectiveFormat === "3.3.5a-cc-addon" && (showSidekick ? (
+                  <div className="space-y-3 border-t pt-5 mt-5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h2 className="font-semibold">Sidekick SavedVariables <span className="font-normal text-muted-foreground">(optional)</span></h2>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Attach <code className="break-all">WTF/Account/&lt;ACCOUNT&gt;/SavedVariables/ChronicleSidekickBridgeWoTLK.lua</code> to enrich the log with unit telemetry.
+                        </p>
+                      </div>
+                      {sidekickStorage === null && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0 text-muted-foreground"
+                          aria-label="Hide Sidekick SavedVariables"
+                          onClick={() => setSidekickExpanded(false)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <FileDropZone
+                      file={sidekickStorage}
+                      accept=".lua"
+                      onFile={(f) => onFileDrop(f, "sidekick")}
+                      label="Click or drag SavedVariables file here"
+                    />
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => setSidekickExpanded(true)}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Attach Sidekick SavedVariables
+                  </button>
+                ))}
               </div>
             ) : (
               // V1: Original 2-file upload
@@ -555,6 +599,7 @@ export function Upload() {
 
   const [combatLog, setCombatLog] = useState<File | null>(null);
   const [rawCombatLog, setRawCombatLog] = useState<File | null>(null);
+  const [sidekickStorage, setSidekickStorage] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<{ message: string; call_to_action?: string; detail?: string; link?: string; link_text?: string } | null>(null);
@@ -570,15 +615,18 @@ export function Upload() {
     // Clear files when switching modes
     setCombatLog(null);
     setRawCombatLog(null);
+    setSidekickStorage(null);
     setError(null);
     setSuccess(null);
   }, []);
 
-  const handleFileDrop = (file: File, type: "combat" | "raw") => {
+  const handleFileDrop = (file: File, type: "combat" | "raw" | "sidekick") => {
     if (type === "combat") {
       setCombatLog(file);
-    } else {
+    } else if (type === "raw") {
       setRawCombatLog(file);
+    } else {
+      setSidekickStorage(file);
     }
   };
 
@@ -588,6 +636,11 @@ export function Upload() {
       if (!combatLog) return;
     } else {
       if (!combatLog || !rawCombatLog) return;
+    }
+
+    if (effectiveFormat === "3.3.5a-cc-addon" && sidekickStorage && sidekickStorage.size > 8 * 1024 * 1024) {
+      setError({ message: "Sidekick SavedVariables file is too large", detail: "Maximum allowed size is 8 MB." });
+      return;
     }
 
     setUploading(true);
@@ -607,6 +660,9 @@ export function Upload() {
         } else {
           const compressedLog = await compressFile(combatLog);
           formData.append("combat_log", compressedLog, combatLog.name + ".gz");
+        }
+        if (effectiveFormat === "3.3.5a-cc-addon" && sidekickStorage) {
+          formData.append("sidekick_storage", sidekickStorage, sidekickStorage.name);
         }
       } else {
         // V1 upload: two files
@@ -711,7 +767,7 @@ export function Upload() {
         detail: err instanceof Error ? err.message : String(err),
       });
     }
-  }, [combatLog, rawCombatLog, useV2Upload, effectiveFormat, flavorOverride, unlistedLog]);
+  }, [combatLog, rawCombatLog, sidekickStorage, useV2Upload, effectiveFormat, flavorOverride, unlistedLog]);
 
   if (isMultiple) {
     return <MultiUpload format={effectiveFormat} unlistedLog={unlistedLog} canMarkUnlisted={canMarkUnlisted} onUnlistedLogChange={setUnlistedLog} />;
@@ -740,6 +796,7 @@ export function Upload() {
       canMarkUnlisted={canMarkUnlisted}
       combatLog={combatLog}
       rawCombatLog={rawCombatLog}
+      sidekickStorage={sidekickStorage}
       uploading={uploading}
       uploadProgress={uploadProgress}
       error={error}

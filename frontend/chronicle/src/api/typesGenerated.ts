@@ -3887,8 +3887,8 @@ export interface SiteConfig {
      */
     readonly client_uploads_disabled: boolean;
     /**
-     * BillingEnabled is true when the deployment has configured its expected
-     * Stripe account ID, allowing billing links to be shown in the UI.
+     * BillingEnabled is true when the deployment has fully configured Stripe
+     * billing, allowing billing links to be shown in the UI.
      */
     readonly billing_enabled: boolean;
     /**
@@ -5116,6 +5116,22 @@ export interface WoWInstance {
 }
 
 // From chroniclesdk/log.go
+export interface WoWLogArtifact {
+    readonly id: string;
+    readonly log_group_id: string;
+    readonly kind: string;
+    readonly schema_version: number;
+    readonly hash: string;
+    readonly size_bytes: number;
+    readonly mime_type: string;
+    readonly content_encoding?: string;
+    readonly original_filename?: string;
+    readonly storage_deleted_at?: string;
+    readonly created_at: string;
+    readonly updated_at: string;
+}
+
+// From chroniclesdk/log.go
 export interface WoWLogFile {
     readonly id: string;
     readonly owner: string;
@@ -5144,6 +5160,7 @@ export interface WoWLogGroup {
     readonly invalidated_at?: string;
     readonly invalid_reason?: string;
     readonly files: readonly WoWLogFile[];
+    readonly artifacts?: readonly WoWLogArtifact[];
     readonly processing_output?: Record<string, string>;
     /**
      * ParsedBytes is the total size, in bytes, of the parsed combat-log event

@@ -292,6 +292,12 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		return fmt.Errorf("fetch log files: %w", err)
 	}
 
+	artifacts, err := db.ListLogGroupArtifacts(ctx, job.Args.LogID)
+	if err != nil {
+		jobResult = "failure"
+		return fmt.Errorf("fetch log group artifacts: %w", err)
+	}
+
 	if logFormat == database.LogFormat112aSuperwowAddon {
 		jobResult = "cancelled"
 		return river.JobCancel(errors.New("SuperWoW log parsing is no longer supported"))
@@ -403,7 +409,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	// ── Parse ────────────────────────────────────────────────────────────
 	reg := w.parent.RegistryForFlavor(flavor)
 	parsed, profileCaptured, err := w.parseCombatLogWithOptionalCPUProfile(ctx, job.Args.LogID, job.Args.Profile, func() (*parseResult, error) {
-		return w.parseCombatLog(ctx, logFormat, files, gameDB, reg, job.Args.IdentityMode, preloadedFirst, preRealmName)
+		return w.parseCombatLog(ctx, logFormat, files, artifacts, gameDB, reg, job.Args.IdentityMode, preloadedFirst, preRealmName)
 	})
 	if err != nil {
 		jobResult = "failure"
