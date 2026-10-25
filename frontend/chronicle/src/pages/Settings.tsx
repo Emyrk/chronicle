@@ -2,15 +2,17 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop, BadgeCheck, Crown, Camera, RefreshCw, Lock } from "lucide-react";
+import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop, BadgeCheck, Crown, Camera, RefreshCw, Lock, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
   useMyCharacters,
+  useMyCharacterCosmetics,
   useMyFavorites,
   useSession,
   useSetPrimaryCharacter,
   useUnlinkMyCharacter,
+  useUpdateMyCharacterCosmetics,
   useExternalCharacterSync,
   useExternalSyncStatus,
   type LinkedCharacter,
@@ -30,6 +32,8 @@ import {
   type UserPanelLayout,
 } from "@/api/queries";
 import type { CreateUserPanelLayoutRequest, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles } from "@/api/typesGenerated";
+import { selectionFromAPI, selectionSummary, selectionToAPI, type CosmeticStyleSelection } from "@/components/ui/PlayerMetricChart/PlayerCosmetics";
+import { CharacterCosmeticsEditor } from "@/features/characterCosmetics/CharacterCosmeticsEditor";
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
 import { LayoutEditorCanvas } from "@/features/layoutEditor/LayoutEditorCanvas";
 import { MAX_LAYOUT_PANELS, layoutDraftFromExport, layoutDraftToExport } from "@/features/layoutEditor/layoutDraft";
@@ -511,11 +515,14 @@ function LinkedVsFavoritesExplainer() {
   );
 }
 
-function LinkedCharacterRow({ character, onSetPrimary, onUnlink, busy }: {
+function LinkedCharacterRow({ character, cosmeticSummary, onCustomize, onSetPrimary, onUnlink, busy, customizeDisabled }: {
   character: LinkedCharacter;
+  cosmeticSummary: string;
+  onCustomize: () => void;
   onSetPrimary: () => void;
   onUnlink: () => void;
   busy: boolean;
+  customizeDisabled: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
@@ -545,10 +552,17 @@ function LinkedCharacterRow({ character, onSetPrimary, onUnlink, busy }: {
           Level {character.level} {character.race} {character.class} · {character.realm_name}
         </p>
         <p className="truncate text-xs text-muted-foreground/70">
+          Appearance · {cosmeticSummary}
+        </p>
+        <p className="truncate text-xs text-muted-foreground/70">
           {linkSourceLabel(character.link_source)} · {new Date(character.linked_at).toLocaleDateString()}
         </p>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1">
+        <Button variant="outline" size="sm" disabled={customizeDisabled} onClick={onCustomize}>
+          <Sparkles className="size-3.5" />
+          Customize
+        </Button>
         {!character.is_primary && (
           <Button variant="outline" size="sm" disabled={busy} onClick={onSetPrimary}>
             Make primary
@@ -576,13 +590,21 @@ export function CharacterSettings() {
     { enabled: !!photoProof?.enabled && !!siteConfig?.tenant?.id },
   );
   const { data: characters, isLoading } = useMyCharacters();
+  const { data: cosmetics, isLoading: cosmeticsLoading } = useMyCharacterCosmetics();
   const favorites = useMyFavorites();
   const setPrimary = useSetPrimaryCharacter();
   const unlink = useUnlinkMyCharacter();
+  const updateCosmetics = useUpdateMyCharacterCosmetics();
+  const [editingLinkID, setEditingLinkID] = useState<string | null>(null);
   const sortedCharacters = useMemo(
     () => [...(characters ?? [])].sort((a, b) => Number(b.is_primary) - Number(a.is_primary)),
     [characters],
   );
+  const cosmeticsByLinkID = useMemo(
+    () => new Map((cosmetics?.characters ?? []).map((entry) => [entry.link_id, entry])),
+    [cosmetics?.characters],
+  );
+  const editingCharacter = sortedCharacters.find((character) => character.link_id === editingLinkID);
   const hasLinkMethod = !!siteConfig?.external_verification || !!photoProof?.enabled;
   const favoriteCount = (favorites.data?.guilds.length ?? 0) + (favorites.data?.players.length ?? 0);
 
@@ -603,6 +625,24 @@ export function CharacterSettings() {
       {
         onSuccess: () => toast.success(`${character.name} has been unlinked.`),
         onError: (error) => showRequestErrorToast("Failed to unlink character", error),
+      },
+    );
+  };
+
+  const handleSaveCosmetics = (selection: CosmeticStyleSelection, applyToAll: boolean) => {
+    if (!editingCharacter) return;
+    updateCosmetics.mutate(
+      {
+        link_id: editingCharacter.link_id,
+        selection: selectionToAPI(selection),
+        apply_to_all: applyToAll,
+      },
+      {
+        onSuccess: () => {
+          toast.success(applyToAll ? "Appearance applied to all linked characters." : `${editingCharacter.name}'s appearance was updated.`);
+          setEditingLinkID(null);
+        },
+        onError: (error) => showRequestErrorToast("Failed to update character appearance", error),
       },
     );
   };
@@ -635,15 +675,21 @@ export function CharacterSettings() {
           </div>
         ) : (
           <div className="divide-y rounded-lg border">
-            {sortedCharacters.map((character) => (
-              <LinkedCharacterRow
-                key={`${character.realm_id}-${character.character_guid}`}
-                character={character}
-                busy={setPrimary.isPending || unlink.isPending}
-                onSetPrimary={() => handleSetPrimary(character)}
-                onUnlink={() => handleUnlink(character)}
-              />
-            ))}
+            {sortedCharacters.map((character) => {
+              const characterCosmetics = cosmeticsByLinkID.get(character.link_id);
+              return (
+                <LinkedCharacterRow
+                  key={character.link_id}
+                  character={character}
+                  cosmeticSummary={selectionSummary(selectionFromAPI(characterCosmetics?.requested))}
+                  busy={setPrimary.isPending || unlink.isPending}
+                  customizeDisabled={cosmeticsLoading || !cosmetics}
+                  onCustomize={() => setEditingLinkID(character.link_id)}
+                  onSetPrimary={() => handleSetPrimary(character)}
+                  onUnlink={() => handleUnlink(character)}
+                />
+              );
+            })}
           </div>
         )}
 
@@ -671,6 +717,20 @@ export function CharacterSettings() {
         )}
         <PhotoProofHistory />
       </CharacterSection>
+
+      {editingCharacter && cosmetics && (
+        <CharacterCosmeticsEditor
+          key={editingCharacter.link_id}
+          character={editingCharacter}
+          cosmetics={cosmeticsByLinkID.get(editingCharacter.link_id)}
+          catalog={cosmetics.catalog}
+          allowedIDs={cosmetics.allowed_ids}
+          open
+          saving={updateCosmetics.isPending}
+          onOpenChange={(open) => !open && setEditingLinkID(null)}
+          onSave={handleSaveCosmetics}
+        />
+      )}
 
       <CharacterSection
         accent="favorites"
