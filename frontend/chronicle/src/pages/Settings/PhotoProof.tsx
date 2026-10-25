@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Camera, Check, Clock, ImageUp, Maximize2, Search, Users } from "lucide-react";
+import { Camera, Check, ChevronRight, Clock, ImageUp, Maximize2, Search, Users } from "lucide-react";
 import { useArmorySearch } from "@/api/queries";
 import type { ArmorySearchResult, ProofApplicant, ProofCooldownResponse } from "@/api/typesGenerated";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
@@ -336,12 +336,18 @@ function ProofStatus({ status }: { status: string }) {
 
 export function PhotoProofHistory() {
   const { data: history, isLoading, error } = useMyProofs();
+  const [expanded, setExpanded] = useState(false);
   if (!isLoading && !error && !history?.length) return null;
+  const pendingCount = history?.filter((request) => request.status === "pending").length ?? 0;
   return <div className="space-y-2">
-    <h4 className="text-sm font-medium">Your photo proof requests</h4>
-    {isLoading && <p className="text-sm text-muted-foreground">Loading requests...</p>}
-    {error && <p className="text-sm text-destructive">Could not load request history.</p>}
-    {!!history?.length && <div className="divide-y rounded-lg border">
+    <button type="button" onClick={() => setExpanded(!expanded)} aria-expanded={expanded} className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
+      <ChevronRight className={`size-4 transition-transform ${expanded ? "rotate-90" : ""}`} />
+      Your photo proof requests{history ? ` (${history.length})` : ""}
+      {pendingCount > 0 && <ProofStatus status="pending" />}
+    </button>
+    {expanded && isLoading && <p className="text-sm text-muted-foreground">Loading requests...</p>}
+    {expanded && error && <p className="text-sm text-destructive">Could not load request history.</p>}
+    {expanded && !!history?.length && <div className="divide-y rounded-lg border">
       {history.map((request) => <div key={request.id} className="px-4 py-3 text-sm space-y-1.5">
         <div className="flex items-center justify-between gap-3">
           <span className="text-muted-foreground">Submitted {new Date(request.created_at).toLocaleDateString()}</span>
