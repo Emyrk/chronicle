@@ -100,34 +100,53 @@ func (api *API) GuildPageOptions(w http.ResponseWriter, r *http.Request) {
 }
 
 // defaultGuildPageConfig returns a starter page config when no page exists in the DB yet.
+// The Raids tab is appended by the frontend, so the default only needs an Overview.
 func defaultGuildPageConfig(guild chroniclesdk.GuildInfo) chroniclesdk.GuildPageConfig {
+	// Panel IDs only need to be unique for rendering; saving assigns real IDs.
+	panel := func(n byte, panelType, name string, config map[string]any, pos chroniclesdk.GuildPanelPosition) chroniclesdk.GuildPagePanel {
+		config["_style"] = map[string]any{"panelName": name}
+		return chroniclesdk.GuildPagePanel{
+			ID:         uuid.UUID{15: n},
+			PanelType:  panelType,
+			Config:     config,
+			Position:   pos,
+			Visibility: "all",
+		}
+	}
+
 	return chroniclesdk.GuildPageConfig{
 		GuildID: guild.ID,
 		Guild:   guild,
 		Theme:   chroniclesdk.GuildPageTheme{},
 		Tabs: []chroniclesdk.GuildPageTab{
 			{
-				ID:        uuid.Nil,
-				Label:     "Overview",
-				Slug:      "overview",
-				SortOrder: 0,
+				ID:         uuid.Nil,
+				Label:      "Overview",
+				Slug:       "overview",
+				SortOrder:  0,
+				Visibility: "all",
 				Panels: []chroniclesdk.GuildPagePanel{
-					{
-						ID:        uuid.Nil,
-						PanelType: "calendar",
-						Config: map[string]any{
-							"_style": map[string]any{
-								"background":      "transparent",
-								"backgroundColor": "rgba(0, 0, 0, 0.5)",
-								"panelName":       "",
-								"showHeader":      false,
-							},
-							"category": "raid",
-							"hasVideo": "all",
-						},
-						Position:   chroniclesdk.GuildPanelPosition{X: 0, Y: 0, W: 12, H: 6},
-						Visibility: "",
-					},
+					panel(1, "recent_raids", "Recent Raids",
+						map[string]any{"displayMode": "cards", "limit": 4, "category": "raid", "hasVideo": "all", "showParses": true},
+						chroniclesdk.GuildPanelPosition{X: 0, Y: 0, W: 8, H: 5}),
+					panel(2, "compact_calendar", "Raid Activity",
+						map[string]any{"weeks": "13", "category": "raid", "showStats": true},
+						chroniclesdk.GuildPanelPosition{X: 8, Y: 0, W: 4, H: 2}),
+					panel(3, "progress", "Progression",
+						map[string]any{"mode": "detail", "category": "raid", "contentLevel": "all"},
+						chroniclesdk.GuildPanelPosition{X: 8, Y: 2, W: 4, H: 3}),
+					panel(4, "top_parses", "Top DPS",
+						map[string]any{"metric": "dps", "timeWindow": "90", "limit": 8, "bestPerPlayer": true},
+						chroniclesdk.GuildPanelPosition{X: 0, Y: 5, W: 4, H: 5}),
+					panel(5, "top_parses", "Top Healing",
+						map[string]any{"metric": "hps", "timeWindow": "90", "limit": 8, "bestPerPlayer": true},
+						chroniclesdk.GuildPanelPosition{X: 4, Y: 5, W: 4, H: 5}),
+					panel(6, "best_performance", "Best Clears",
+						map[string]any{"rankBy": "parse", "timeWindow": "60"},
+						chroniclesdk.GuildPanelPosition{X: 8, Y: 5, W: 4, H: 5}),
+					panel(7, "raid_clears", "Raid Clears",
+						map[string]any{"displayMode": "cards", "timeWindow": "all", "showBestTime": true, "showAvgTime": true, "showLastCleared": true},
+						chroniclesdk.GuildPanelPosition{X: 0, Y: 10, W: 12, H: 3}),
 				},
 			},
 		},
