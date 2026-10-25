@@ -114,16 +114,30 @@ const (
 	stripeRoleAdFree          = "stripe_ad_free"
 	stripeRoleDownloadRawLogs = "stripe_download_raw_logs"
 	stripeRoleUnlistedLogs    = "stripe_unlisted_logs"
+	stripeRoleHonored         = "stripe_honored"
+	stripeRoleRevered         = "stripe_revered"
+	stripeRoleExalted         = "stripe_exalted"
 )
 
 var (
 	chronicleHonoredStripeRoles = []string{
 		stripeRoleAdFree,
+		stripeRoleHonored,
 	}
 	chronicleReveredStripeRoles = []string{
 		stripeRoleAdFree,
 		stripeRoleDownloadRawLogs,
 		stripeRoleUnlistedLogs,
+		stripeRoleHonored,
+		stripeRoleRevered,
+	}
+	chronicleExaltedStripeRoles = []string{
+		stripeRoleAdFree,
+		stripeRoleDownloadRawLogs,
+		stripeRoleUnlistedLogs,
+		stripeRoleHonored,
+		stripeRoleRevered,
+		stripeRoleExalted,
 	}
 )
 
@@ -183,10 +197,10 @@ var stripeEntitlements = []stripeEntitlementDefinition{
 	},
 	{
 		key:         EntitlementChronicleExalted,
-		behaviorKey: "chronicle-revered",
+		behaviorKey: "chronicle-exalted",
 		behavior: chroniclePaidEntitlement{
 			storageBytes: stripeExaltedStorageGrantBytes,
-			roles:        chronicleReveredStripeRoles,
+			roles:        chronicleExaltedStripeRoles,
 		},
 	},
 }

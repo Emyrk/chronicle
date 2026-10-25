@@ -30,6 +30,14 @@ definition chronicle {
   relation stripe_download_raw_logs: user
   relation stripe_unlisted_logs: user
 
+  // Administrator-managed and Stripe-owned supporter tiers stay distinct.
+  relation honored: user
+  relation revered: user
+  relation exalted: user
+  relation stripe_honored: user
+  relation stripe_revered: user
+  relation stripe_exalted: user
+
   relation chronicle_guild_member: user
   relation chronicle_member: user // Not in discord
 
@@ -79,6 +87,18 @@ definition chronicle {
   permission review_photo_proof = photo_proof_reviewer + technical_admin
 
   permission create_tenant_application = technical_admin + chronicle_guild_member
+
+  permission honored_cosmetics = honored + revered + exalted + stripe_honored + stripe_revered + stripe_exalted
+  permission revered_cosmetics = revered + exalted + stripe_revered + stripe_exalted
+  permission exalted_cosmetics = exalted + stripe_exalted
+}
+
+definition cosmetic {
+  relation honored: chronicle
+  relation revered: chronicle
+  relation exalted: chronicle
+
+  permission use = honored->honored_cosmetics + revered->revered_cosmetics + exalted->exalted_cosmetics
 }
 
 // An upload key is on a azeroth core world server.

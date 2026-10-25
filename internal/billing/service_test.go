@@ -716,7 +716,7 @@ func TestPaidTierEntitlementsGrantTierPerks(t *testing.T) {
 	}{
 		{entitlement: EntitlementChronicleHonored, storageBytes: stripeHonoredStorageGrantBytes, roles: chronicleHonoredStripeRoles},
 		{entitlement: EntitlementChronicleRevered, storageBytes: stripeReveredStorageGrantBytes, roles: chronicleReveredStripeRoles},
-		{entitlement: EntitlementChronicleExalted, storageBytes: stripeExaltedStorageGrantBytes, roles: chronicleReveredStripeRoles},
+		{entitlement: EntitlementChronicleExalted, storageBytes: stripeExaltedStorageGrantBytes, roles: chronicleExaltedStripeRoles},
 	} {
 		t.Run(string(tc.entitlement), func(t *testing.T) {
 			t.Parallel()

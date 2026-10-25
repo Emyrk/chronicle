@@ -13,6 +13,10 @@ import (
 	"github.com/google/uuid"
 )
 
+type stringID string
+
+func (id stringID) String() string { return string(id) }
+
 type Authorizer interface {
 	Write(ctx context.Context, txn rel.Txn) (writtenAtRevision string, err error)
 	Delete(ctx context.Context, filter *rel.PreconditionedFilter) error
@@ -309,6 +313,9 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 		"is_admin_game_data",
 		"manage_consumables",
 		"is_admin_raid_requirements",
+		"honored",
+		"revered",
+		"exalted",
 	}
 	for _, relation := range managedRelations {
 		f := rel.NewFilter(gChron.Object().Typ, gChron.Object().ID, relation)
@@ -368,6 +375,67 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 
 	_, err := z.Write(ctx, *b.Txn())
 	return err
+}
+
+// CosmeticTierAssignment is a cosmetic resource's direct tier relation.
+type CosmeticTierAssignment struct {
+	CosmeticID string
+	Tier       string
+}
+
+// ListAllowedCosmetics returns cosmetic resource IDs the user may use.
+func (z *Authz) ListAllowedCosmetics(ctx context.Context, userID uuid.UUID) ([]string, error) {
+	var ids []string
+	for id, err := range z.LookupResources(ctx, nil, "cosmetic#use", "user:"+userID.String()) {
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids, nil
+}
+
+// SetCosmeticTier replaces a cosmetic's tier assignment. Valid tiers are honored, revered, and exalted.
+func (z *Authz) SetCosmeticTier(ctx context.Context, cosmeticID, tier string) error {
+	if tier != "honored" && tier != "revered" && tier != "exalted" {
+		return fmt.Errorf("invalid cosmetic tier %q", tier)
+	}
+	obj := policy.New().Cosmetic(stringID(cosmeticID)).Object()
+	if err := z.Delete(ctx, rel.NewPreconditionedFilter(rel.NewFilter(obj.Typ, obj.ID, ""))); err != nil {
+		return err
+	}
+	b := policy.New()
+	cosmetic := b.Cosmetic(stringID(cosmeticID))
+	chronicle := b.GlobalChronicle()
+	switch tier {
+	case "honored":
+		cosmetic.Honored(chronicle)
+	case "revered":
+		cosmetic.Revered(chronicle)
+	case "exalted":
+		cosmetic.Exalted(chronicle)
+	}
+	_, err := z.Write(ctx, *b.Txn())
+	return err
+}
+
+// ListCosmeticTierAssignments returns all direct cosmetic tier assignments.
+func (z *Authz) ListCosmeticTierAssignments(ctx context.Context) ([]CosmeticTierAssignment, error) {
+	f := rel.NewFilter("cosmetic", "", "")
+	f.WithSubjectFilter("chronicle", "chronicle", "")
+	var assignments []CosmeticTierAssignment
+	for r, err := range z.spice.ReadRelationships(ctx, z.DefaultConsistencyStrategy(), f) {
+		if err != nil {
+			return nil, err
+		}
+		if r.ResourceRelation != "honored" && r.ResourceRelation != "revered" && r.ResourceRelation != "exalted" {
+			continue
+		}
+		assignments = append(assignments, CosmeticTierAssignment{CosmeticID: r.ResourceID, Tier: r.ResourceRelation})
+	}
+	sort.Slice(assignments, func(i, j int) bool { return assignments[i].CosmeticID < assignments[j].CosmeticID })
+	return assignments, nil
 }
 
 // TenantProofGrant lists direct tenant-scoped photo proof permissions. These

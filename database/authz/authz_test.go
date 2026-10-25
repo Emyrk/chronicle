@@ -579,3 +579,50 @@ func TestInTx_NilWrapped(t *testing.T) {
 	}, nil)
 	assert.Error(t, err, "InTx should return an error, not panic")
 }
+
+func TestCosmeticTierAuthorization(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(broker)
+
+	honoredUser, reveredUser, exaltedUser, stripeUser := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, honoredUser, []string{"honored"}))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, reveredUser, []string{"revered"}))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, exaltedUser, []string{"exalted"}))
+	require.NoError(t, zed.SetStripeEntitlementRole(ctx, stripeUser, "stripe_revered", true))
+
+	prefix := uuid.NewString()
+	honoredCosmetic, reveredCosmetic, exaltedCosmetic := prefix+"-honored", prefix+"-revered", prefix+"-exalted"
+	require.NoError(t, zed.SetCosmeticTier(ctx, honoredCosmetic, "honored"))
+	require.NoError(t, zed.SetCosmeticTier(ctx, reveredCosmetic, "revered"))
+	require.NoError(t, zed.SetCosmeticTier(ctx, exaltedCosmetic, "exalted"))
+
+	allowed, err := zed.ListAllowedCosmetics(ctx, reveredUser)
+	require.NoError(t, err)
+	assert.Contains(t, allowed, honoredCosmetic)
+	assert.Contains(t, allowed, reveredCosmetic)
+	assert.NotContains(t, allowed, exaltedCosmetic)
+
+	allowed, err = zed.ListAllowedCosmetics(ctx, exaltedUser)
+	require.NoError(t, err)
+	assert.Contains(t, allowed, honoredCosmetic)
+	assert.Contains(t, allowed, reveredCosmetic)
+	assert.Contains(t, allowed, exaltedCosmetic)
+
+	allowed, err = zed.ListAllowedCosmetics(ctx, stripeUser)
+	require.NoError(t, err)
+	assert.Contains(t, allowed, honoredCosmetic)
+	assert.Contains(t, allowed, reveredCosmetic)
+	assert.NotContains(t, allowed, exaltedCosmetic)
+
+	require.NoError(t, zed.SetCosmeticTier(ctx, honoredCosmetic, "exalted"))
+	allowed, err = zed.ListAllowedCosmetics(ctx, honoredUser)
+	require.NoError(t, err)
+	assert.NotContains(t, allowed, honoredCosmetic)
+
+	assignments, err := zed.ListCosmeticTierAssignments(ctx)
+	require.NoError(t, err)
+	assert.Contains(t, assignments, authz.CosmeticTierAssignment{CosmeticID: honoredCosmetic, Tier: "exalted"})
+}

@@ -23,6 +23,7 @@ var migrations = []AuthzMigration{
 	{Version: 3, Run: migration003},
 	{Version: 4, Run: migration004},
 	{Version: 5, Run: noop},
+	{Version: 6, Run: migration006},
 }
 
 // RunSchemaMigrations runs any authz migrations not yet recorded in the
@@ -178,4 +179,20 @@ func migration004(ctx context.Context, az *Authz) error {
 	// TOUCH is idempotent — safe to run on every startup.
 	_, err = az.Write(ctx, *b.Txn())
 	return err
+}
+
+func migration006(ctx context.Context, az *Authz) error {
+	tiers := map[string][]string{
+		"honored": {"name-bold", "name-glow", "bar-glossy", "bar-fade"},
+		"revered": {"name-gilded", "name-frost", "bar-edge", "bar-gilded"},
+		"exalted": {"name-fel", "name-shimmer", "name-prismatic", "bar-shimmer", "bar-arcane", "bar-embers"},
+	}
+	for tier, ids := range tiers {
+		for _, id := range ids {
+			if err := az.SetCosmeticTier(ctx, id, tier); err != nil {
+				return fmt.Errorf("set cosmetic %q tier: %w", id, err)
+			}
+		}
+	}
+	return nil
 }
