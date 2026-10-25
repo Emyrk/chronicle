@@ -106,9 +106,11 @@ func TestProofCooldownSerializesConcurrentTenants(t *testing.T) {
 	results := make(chan outcome, 2)
 	start := make(chan struct{})
 	for range 2 {
+		tenantID := uuid.New()
 		go func() {
 			<-start
-			id, err := svc.Create(ctx, uuid.New(), applicant, "character-link", "", photo.Bytes(), subjects)
+			requestCtx := servicetenant.WithTenantID(ctx, tenantID)
+			id, err := svc.Create(requestCtx, tenantID, applicant, "character-link", "", photo.Bytes(), subjects)
 			results <- outcome{id, err}
 		}()
 	}
