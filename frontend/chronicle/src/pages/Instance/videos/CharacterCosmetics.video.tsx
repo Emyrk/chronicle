@@ -403,8 +403,6 @@ function PlayerRow({
   const nameProgress = showName ? cosmeticReveal : 0;
   const backgroundProgress = showBackground ? cosmeticReveal : 0;
   const borderProgress = showBorder ? cosmeticReveal : 0;
-  const pulse = 0.5 + Math.sin((frame + index * 9) * 0.16) * 0.5;
-  const shimmer = ((frame * 2.2 + index * 41) % 260) - 80;
   const rowHeight = compact ? 39 : 43;
 
   return (
@@ -425,7 +423,7 @@ function PlayerRow({
         className="absolute inset-y-0 left-0 overflow-hidden rounded-r-sm"
         style={{
           width: `${player.width}%`,
-          opacity: backgroundProgress,
+          opacity: backgroundProgress * cosmeticBackgroundOpacity(player),
           background: cosmeticBackground(player, frame, index),
         }}
       >
@@ -441,20 +439,12 @@ function PlayerRow({
                   opacity: interpolate(
                     0.5 + Math.sin((frame + starIndex * 15) * 0.22) * 0.5,
                     [0, 1],
-                    [0.12, 0.9],
+                    [0.15, 0.9],
                   ),
-                  boxShadow: "0 0 5px white",
                 }}
               />
             ))}
           </>
-        ) : null}
-        {(player.background === "sunlit" || player.background === "glossy") &&
-        showBackground ? (
-          <span
-            className="absolute inset-y-0 w-24 -skew-x-12 bg-gradient-to-r from-transparent via-white/18 to-transparent"
-            style={{ left: shimmer }}
-          />
         ) : null}
       </div>
 
@@ -473,19 +463,11 @@ function PlayerRow({
         </span>
       </div>
 
-      <div
-        className="absolute inset-0 rounded-md"
-        style={{
-          opacity: borderProgress * interpolate(pulse, [0, 1], [0.52, 1]),
-          border:
-            player.border === "storm"
-              ? "1px solid #95c8ff"
-              : "1px solid #f3cf70",
-          boxShadow:
-            player.border === "storm"
-              ? `inset 0 0 ${4 + pulse * 7}px rgba(118,190,255,.75), 0 0 ${pulse * 8}px rgba(118,190,255,.26)`
-              : `inset 0 0 ${4 + pulse * 6}px rgba(244,203,93,.62), 0 0 ${pulse * 8}px rgba(244,203,93,.18)`,
-        }}
+      <CosmeticBorder
+        player={player}
+        frame={frame}
+        index={index}
+        progress={borderProgress}
       />
 
       {progressiveSpark(cosmeticReveal) ? (
@@ -510,25 +492,109 @@ function progressiveSpark(progress: number) {
   return progress > 0 && progress < 1;
 }
 
+function CosmeticBorder({
+  player,
+  frame,
+  index,
+  progress,
+}: {
+  player: Player;
+  frame: number;
+  index: number;
+  progress: number;
+}) {
+  if (player.border === "none" || progress <= 0) return null;
+
+  if (player.border === "elite") {
+    const phase = positiveModulo(frame + index * 19, 180) / 180;
+    const opacity = interpolate(
+      phase,
+      [0, 0.7, 0.76, 0.88, 1],
+      [0, 0, 1, 1, 0],
+      clamp,
+    );
+    const glow = interpolate(phase, [0.7, 0.76, 0.88, 1], [0, 1, 0, 0], clamp);
+    return (
+      <div
+        className="absolute inset-0 rounded-md"
+        style={{
+          opacity: progress * opacity,
+          background:
+            "linear-gradient(#f5d27a,#f5d27a) top left/12px 2px no-repeat,linear-gradient(#f5d27a,#f5d27a) top left/2px 10px no-repeat,linear-gradient(#f5d27a,#f5d27a) top right/12px 2px no-repeat,linear-gradient(#f5d27a,#f5d27a) top right/2px 10px no-repeat,linear-gradient(#f5d27a,#f5d27a) bottom left/12px 2px no-repeat,linear-gradient(#f5d27a,#f5d27a) bottom left/2px 10px no-repeat,linear-gradient(#f5d27a,#f5d27a) bottom right/12px 2px no-repeat,linear-gradient(#f5d27a,#f5d27a) bottom right/2px 10px no-repeat",
+          filter: `drop-shadow(0 0 1px #000) drop-shadow(0 0 ${glow * 4}px rgba(255,217,94,.9))`,
+        }}
+      />
+    );
+  }
+
+  if (player.border === "chasing") {
+    const phase = positiveModulo(frame + index * 23, 180) / 180;
+    const active = interpolate(
+      phase,
+      [0, 0.03, 0.39, 0.4, 1],
+      [0, 1, 1, 0, 0],
+      clamp,
+    );
+    const topPosition = interpolate(phase, [0, 0.4], [110, -10], clamp);
+    const bottomPosition = interpolate(phase, [0, 0.4], [-10, 110], clamp);
+    const chase = `color-mix(in oklch, ${player.color} 55%, white)`;
+    return (
+      <div
+        className="absolute inset-0 rounded-md"
+        style={{
+          opacity: progress * active,
+          background: `linear-gradient(90deg,transparent 40%,${chase} 48.5%,#fff 50%,transparent 50.2%) ${topPosition}% 0/250% 2px no-repeat,linear-gradient(270deg,transparent 40%,${chase} 48.5%,#fff 50%,transparent 50.2%) ${bottomPosition}% 100%/250% 2px no-repeat`,
+          filter: `drop-shadow(0 0 3px ${chase})`,
+        }}
+      />
+    );
+  }
+
+  const phase = positiveModulo(frame + index * 13, 120) / 120;
+  const opacity = interpolate(
+    phase,
+    [0, 0.84, 0.85, 0.87, 0.89, 0.91, 0.93, 1],
+    [0, 0, 1, 0.25, 1, 0.4, 0, 0],
+    clamp,
+  );
+  return (
+    <div
+      className="absolute inset-0 rounded-md"
+      style={{
+        opacity: progress * opacity,
+        boxShadow: "inset 0 0 0 1px #9bd8ff, inset 0 0 6px #4fb3ff88",
+        filter: `brightness(${interpolate(opacity, [0, 1], [1, 1.45])})`,
+      }}
+    />
+  );
+}
+
+function positiveModulo(value: number, divisor: number) {
+  return ((value % divisor) + divisor) % divisor;
+}
+
+function cosmeticBackgroundOpacity(player: Player): number {
+  return player.background === "arcane" ? 0.32 : 1;
+}
+
 function cosmeticBackground(
   player: Player,
   frame: number,
   index: number,
 ): string {
-  const base = player.color;
   switch (player.background) {
     case "sunlit":
-      return `linear-gradient(90deg, rgba(0,0,0,.28), transparent 45%, rgba(255,211,94,.40)), ${base}`;
+      return "linear-gradient(to right,transparent 50%,rgba(255,215,106,.38))";
     case "starfall":
-      return `radial-gradient(circle at ${30 + Math.sin(frame * 0.03) * 8}% 45%, rgba(255,255,255,.15), transparent 28%), linear-gradient(90deg, #27175c, ${base})`;
+      return "transparent";
     case "satin":
-      return `linear-gradient(180deg, transparent 8%, rgba(255,255,255,.2) 45%, transparent 82%), ${base}`;
+      return "linear-gradient(to bottom,transparent 15%,rgba(255,255,255,.16) 45%,transparent 80%)";
     case "arcane":
-      return `linear-gradient(${90 + Math.sin((frame + index) * 0.03) * 12}deg, #221338, ${base}, #4f216d, ${base})`;
+      return `linear-gradient(${90 + Math.sin((frame + index) * 0.03) * 8}deg,transparent 10%,color-mix(in oklch,${player.color} 65%,#a855f7) 50%,transparent 90%)`;
     case "frosted":
-      return `linear-gradient(180deg, rgba(230,250,255,.42), transparent 35%, transparent 65%, rgba(220,247,255,.28)), ${base}`;
+      return "linear-gradient(to bottom,rgba(230,247,255,.26),transparent 32%,transparent 68%,rgba(230,247,255,.18))";
     case "glossy":
-      return `linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,.05) 49%, rgba(0,0,0,.2) 51%, transparent), ${base}`;
+      return "linear-gradient(to bottom,rgba(255,255,255,.22),rgba(255,255,255,.04) 50%,rgba(0,0,0,.2) 51%,rgba(0,0,0,.05))";
   }
 }
 
@@ -541,10 +607,12 @@ function cosmeticNameStyle(
     return { color: player.color };
   }
 
+  const outline =
+    "drop-shadow(1px 0 0 #000) drop-shadow(-1px 0 0 #000) drop-shadow(0 1px 0 #000) drop-shadow(0 -1px 0 #000)";
   const common: CSSProperties = {
-    fontWeight: 800,
-    filter: `drop-shadow(1px 0 #000) drop-shadow(-1px 0 #000) drop-shadow(0 1px #000) drop-shadow(0 -1px #000)`,
-    opacity: interpolate(progress, [0, 1], [0.72, 1]),
+    fontWeight: 700,
+    filter: outline,
+    opacity: interpolate(progress, [0, 1], [0.78, 1]),
   };
 
   if (player.nameStyle === "epic") return { ...common, color: "#d2a6ff" };
@@ -552,7 +620,7 @@ function cosmeticNameStyle(
     return {
       ...common,
       color: "#d9f3ff",
-      textShadow: "0 0 8px rgba(95,180,232,.65)",
+      filter: `${outline} drop-shadow(0 0 3px rgba(95,180,232,.4))`,
     };
 
   const backgrounds: Record<Player["nameStyle"], string> = {
@@ -574,8 +642,10 @@ function cosmeticNameStyle(
     backgroundPosition: `${(frame * (player.nameStyle === "fel" ? 1.2 : 2.3)) % 220}% 50%`,
     backgroundClip: "text",
     WebkitBackgroundClip: "text",
-    textShadow:
-      player.nameStyle === "fel" ? "0 0 8px rgba(126,232,74,.38)" : undefined,
+    filter:
+      player.nameStyle === "fel"
+        ? `${outline} drop-shadow(0 0 ${2 + (0.5 + Math.sin(frame * 0.08) * 0.5) * 2}px rgba(90,255,42,.48))`
+        : outline,
   };
 }
 
@@ -697,7 +767,7 @@ function EditorScene() {
                 icon={<Wand2 className="h-4 w-4" />}
                 selected={backgroundSelected}
                 progress={interpolate(frame, [75, 84, 92], [0, 1, 0], clamp)}
-                swatch="radial-gradient(circle,#fff 0 1px,transparent 2px) 0 0 / 11px 11px,linear-gradient(90deg,#27175c,#7061a8)"
+                swatch="radial-gradient(circle at 30% 30%,#fff 0 1px,transparent 1.6px) 0 0/31px 100%,radial-gradient(circle at 75% 70%,#fff7d6 0 .8px,transparent 1.3px) 0 0/53px 100%,linear-gradient(to right,rgba(0,0,0,.3),rgba(0,0,0,.15)),#f3f4f6"
               />
               <CosmeticSlot
                 label="Border"
@@ -705,7 +775,7 @@ function EditorScene() {
                 icon={<Crown className="h-4 w-4" />}
                 selected={borderSelected}
                 progress={interpolate(frame, [116, 125, 133], [0, 1, 0], clamp)}
-                swatch="linear-gradient(90deg,#7b5b13,#ffe59a,#7b5b13)"
+                swatch="linear-gradient(#f5d27a,#f5d27a) top left/12px 2px no-repeat,linear-gradient(#f5d27a,#f5d27a) top left/2px 10px no-repeat,linear-gradient(#f5d27a,#f5d27a) top right/12px 2px no-repeat,linear-gradient(#f5d27a,#f5d27a) top right/2px 10px no-repeat,linear-gradient(#f5d27a,#f5d27a) bottom left/12px 2px no-repeat,linear-gradient(#f5d27a,#f5d27a) bottom left/2px 10px no-repeat,linear-gradient(#f5d27a,#f5d27a) bottom right/12px 2px no-repeat,linear-gradient(#f5d27a,#f5d27a) bottom right/2px 10px no-repeat,#17130b"
               />
             </div>
 
