@@ -2,6 +2,7 @@ package rankings
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -536,6 +537,216 @@ func TestDPSTracker_TalentSnapshotNilWhenInvalidated(t *testing.T) {
 
 	r := tracker.Result()
 	assert.Nil(t, r[encID].Units[player].Talents)
+}
+
+func TestDPSTracker_ObservedDruidForm(t *testing.T) {
+	t.Parallel()
+
+	type formEvent struct {
+		at    time.Duration
+		name  string
+		state types.AuraState
+	}
+	for _, tt := range []struct {
+		name   string
+		events []formEvent
+		want   string
+	}{
+		{
+			name: "cat only",
+			events: []formEvent{
+				{at: 0, name: "Cat Form", state: types.AuraStateAdded},
+			},
+			want: "Cat",
+		},
+		{
+			name: "dire bear only",
+			events: []formEvent{
+				{at: 0, name: "Dire Bear Form", state: types.AuraStateAdded},
+			},
+			want: "Bear",
+		},
+		{
+			name: "longer cat duration wins",
+			events: []formEvent{
+				{at: 0, name: "Cat Form", state: types.AuraStateAdded},
+				{at: 40 * time.Second, name: "Cat Form", state: types.AuraStateRemoved},
+				{at: 40 * time.Second, name: "Bear Form", state: types.AuraStateAdded},
+			},
+			want: "Cat",
+		},
+		{
+			name: "longer bear duration wins",
+			events: []formEvent{
+				{at: 0, name: "Cat Form", state: types.AuraStateAdded},
+				{at: 10 * time.Second, name: "Cat Form", state: types.AuraStateRemoved},
+				{at: 10 * time.Second, name: "Bear Form", state: types.AuraStateAdded},
+			},
+			want: "Bear",
+		},
+		{
+			name: "equal durations are ambiguous",
+			events: []formEvent{
+				{at: 0, name: "Cat Form", state: types.AuraStateAdded},
+				{at: 30 * time.Second, name: "Cat Form", state: types.AuraStateRemoved},
+				{at: 30 * time.Second, name: "Bear Form", state: types.AuraStateAdded},
+			},
+		},
+		{
+			name: "passive aura is ignored",
+			events: []formEvent{
+				{at: 0, name: "Bear Form (Passive)", state: types.AuraStateAdded},
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			tracker, units := setupDPSTracker()
+			player := makePlayerGUID(1)
+			boss := makeCreatureGUID(100, 1)
+			encID := uuid.New()
+			start := time.Date(2026, time.October, 25, 12, 0, 0, 0, time.UTC)
+			end := start.Add(time.Minute)
+
+			units.Info[player] = unitinfo.Info{Guid: player, Name: "Druid", IsPlayer: true, CanCooperate: true}
+			units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+			tracker.FightStarted(encID, &messages.Damage{MessageBase: messages.Base(start)})
+			for _, event := range tt.events {
+				require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Aura{
+					MessageBase: messages.Base(start.Add(event.at)),
+					Target:      player,
+					SpellName:   event.name,
+					State:       event.state,
+				}))
+			}
+			caster := player
+			require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Damage{
+				MessageBase: messages.Base(end),
+				Caster:      &caster,
+				Target:      boss,
+				Amount:      1,
+			}))
+			tracker.FightEnded(encID, &messages.Damage{MessageBase: messages.Base(end)})
+
+			require.Equal(t, tt.want, tracker.Result()[encID].Units[player].ObservedForm)
+		})
+	}
+}
+
+func TestDPSTracker_ObservedDruidFormFromVanillaAuraApplications(t *testing.T) {
+	t.Parallel()
+
+	tracker, units := setupDPSTracker()
+	player := makePlayerGUID(1)
+	boss := makeCreatureGUID(100, 1)
+	encID := uuid.New()
+	start := time.Date(2026, time.October, 25, 12, 0, 0, 0, time.UTC)
+	end := start.Add(time.Minute)
+	units.Info[player] = unitinfo.Info{Guid: player, Name: "Druid", IsPlayer: true, CanCooperate: true}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+
+	tracker.FightStarted(encID, &messages.Damage{MessageBase: messages.Base(start)})
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Aura{
+		MessageBase: messages.Base(start),
+		Target:      player,
+		SpellName:   "Cat Form",
+		Application: types.AuraApplicationGains,
+	}))
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Aura{
+		MessageBase: messages.Base(start.Add(10 * time.Second)),
+		Target:      player,
+		SpellName:   "Cat Form",
+		Application: types.AuraApplicationFades,
+	}))
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Aura{
+		MessageBase: messages.Base(start.Add(10 * time.Second)),
+		Target:      player,
+		SpellName:   "Dire Bear Form",
+		Application: types.AuraApplicationGains,
+	}))
+	caster := player
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Damage{
+		MessageBase: messages.Base(end),
+		Caster:      &caster,
+		Target:      boss,
+		Amount:      1,
+	}))
+	tracker.FightEnded(encID, &messages.Damage{MessageBase: messages.Base(end)})
+
+	require.Equal(t, "Bear", tracker.Result()[encID].Units[player].ObservedForm)
+}
+
+func TestDPSTracker_ObservedDruidFormAtPull(t *testing.T) {
+	t.Parallel()
+
+	tracker, units := setupDPSTracker()
+
+	player := makePlayerGUID(1)
+	boss := makeCreatureGUID(100, 1)
+	encID := uuid.New()
+	start := time.Date(2026, time.October, 25, 12, 0, 0, 0, time.UTC)
+	end := start.Add(time.Minute)
+	units.Info[player] = unitinfo.Info{Guid: player, Name: "Druid", IsPlayer: true, CanCooperate: true}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+
+	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, &messages.Aura{
+		MessageBase: messages.Base(start.Add(-time.Minute)),
+		Target:      player,
+		SpellName:   "Dire Bear Form",
+		Application: types.AuraApplicationGains,
+	}))
+	tracker.FightStarted(encID, &messages.Damage{MessageBase: messages.Base(start)})
+	caster := player
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Damage{
+		MessageBase: messages.Base(end),
+		Caster:      &caster,
+		Target:      boss,
+		Amount:      1,
+	}))
+	tracker.FightEnded(encID, &messages.Damage{MessageBase: messages.Base(end)})
+
+	require.Equal(t, "Bear", tracker.Result()[encID].Units[player].ObservedForm)
+}
+
+func TestDPSTracker_ObservedDruidFormUsesFinalizedFightStart(t *testing.T) {
+	t.Parallel()
+
+	tracker, units := setupDPSTracker()
+	player := makePlayerGUID(1)
+	boss := makeCreatureGUID(100, 1)
+	encID := uuid.New()
+	actualStart := time.Date(2026, time.October, 25, 12, 0, 0, 0, time.UTC)
+	hookStart := actualStart.Add(10 * time.Second)
+	end := actualStart.Add(30 * time.Second)
+	units.Info[player] = unitinfo.Info{Guid: player, Name: "Druid", IsPlayer: true, CanCooperate: true}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+
+	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, &messages.Aura{
+		MessageBase: messages.Base(actualStart.Add(-time.Minute)),
+		Target:      player,
+		SpellName:   "Cat Form",
+		Application: types.AuraApplicationGains,
+	}))
+	tracker.FightStarted(encID, &messages.Damage{MessageBase: messages.Base(hookStart)})
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Aura{
+		MessageBase: messages.Base(actualStart.Add(20 * time.Second)),
+		Target:      player,
+		SpellName:   "Bear Form",
+		Application: types.AuraApplicationGains,
+	}))
+	caster := player
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Damage{
+		MessageBase: messages.Base(end),
+		Caster:      &caster,
+		Target:      boss,
+		Amount:      1,
+	}))
+	tracker.FightEnded(encID, &messages.Damage{MessageBase: messages.Base(end)})
+	require.Empty(t, tracker.Result()[encID].Units[player].ObservedForm)
+
+	tracker.FightFinalized(encID, actualStart, end)
+	require.Equal(t, "Cat", tracker.Result()[encID].Units[player].ObservedForm)
 }
 
 func TestDPSTracker_InactiveMessagesIgnored(t *testing.T) {

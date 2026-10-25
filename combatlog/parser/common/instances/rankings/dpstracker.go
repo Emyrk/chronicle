@@ -2,6 +2,8 @@ package rankings
 
 import (
 	"context"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -10,10 +12,15 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
-var _ instancehook.Hook = (*DPSTracker)(nil)
+var (
+	_ instancehook.Hook               = (*DPSTracker)(nil)
+	_ instancehook.FightFinalizedHook = (*DPSTracker)(nil)
+)
 
 // UnitCombatStats holds accumulated combat metrics for a single unit in an encounter.
 type UnitCombatStats struct {
@@ -29,6 +36,19 @@ type UnitCombatStats struct {
 	// Talents snapshot at fight end. Nil if the player had no talent data
 	// (e.g., talents were invalidated by a respec, or addon didn't report).
 	Talents *combatant.Talents
+	// ObservedForm is the dominant Cat/Bear form during the encounter. It is
+	// empty when neither form was observed or their observed durations tie.
+	ObservedForm string
+}
+
+type druidFormState struct {
+	active        string
+	activeSince   time.Time
+	catDuration   time.Duration
+	bearDuration  time.Duration
+	catSeen       bool
+	bearSeen      bool
+	startedInForm string
 }
 
 // DPSResult holds per-unit combat stats for a single encounter.
@@ -46,10 +66,13 @@ type DPSTracker struct {
 	assemblyOfIron *DPSTrackerAssemblyOfIron
 
 	// Per-encounter state, reset on FightStarted.
-	damageDone  map[guid.GUID]int64
-	damageTaken map[guid.GUID]int64
-	healingDone map[guid.GUID]int64
-	absorbDone  map[guid.GUID]int64
+	damageDone        map[guid.GUID]int64
+	damageTaken       map[guid.GUID]int64
+	healingDone       map[guid.GUID]int64
+	absorbDone        map[guid.GUID]int64
+	druidForms        map[guid.GUID]*druidFormState
+	currentDruidForms map[guid.GUID]string
+	fightStartedAt    time.Time
 
 	// Results across all encounters.
 	results map[uuid.UUID]*DPSResult
@@ -59,12 +82,14 @@ type DPSTracker struct {
 // classifying GUIDs at fight end.
 func NewDPSTracker(units *unitdb.Units, rule DamageRule) *DPSTracker {
 	tracker := &DPSTracker{
-		units:       units,
-		damageDone:  make(map[guid.GUID]int64),
-		damageTaken: make(map[guid.GUID]int64),
-		healingDone: make(map[guid.GUID]int64),
-		absorbDone:  make(map[guid.GUID]int64),
-		results:     make(map[uuid.UUID]*DPSResult),
+		units:             units,
+		damageDone:        make(map[guid.GUID]int64),
+		damageTaken:       make(map[guid.GUID]int64),
+		healingDone:       make(map[guid.GUID]int64),
+		absorbDone:        make(map[guid.GUID]int64),
+		druidForms:        make(map[guid.GUID]*druidFormState),
+		currentDruidForms: make(map[guid.GUID]string),
+		results:           make(map[uuid.UUID]*DPSResult),
 	}
 	if rule == DamageRuleAssemblyOfIron {
 		tracker.assemblyOfIron = newDPSTrackerAssemblyOfIron()
@@ -72,17 +97,42 @@ func NewDPSTracker(units *unitdb.Units, rule DamageRule) *DPSTracker {
 	return tracker
 }
 
-func (t *DPSTracker) FightStarted(_ uuid.UUID, _ messages.Message) {
+func (t *DPSTracker) FightStarted(_ uuid.UUID, m messages.Message) {
 	t.damageDone = make(map[guid.GUID]int64)
 	t.damageTaken = make(map[guid.GUID]int64)
 	t.healingDone = make(map[guid.GUID]int64)
 	t.absorbDone = make(map[guid.GUID]int64)
+	t.druidForms = make(map[guid.GUID]*druidFormState)
+	t.fightStartedAt = time.Time{}
+	if m != nil {
+		t.fightStartedAt = m.Date()
+		for unit, form := range t.currentDruidForms {
+			state := &druidFormState{active: form, activeSince: m.Date(), startedInForm: form}
+			if form == "Cat" {
+				state.catSeen = true
+			} else {
+				state.bearSeen = true
+			}
+			t.druidForms[unit] = state
+		}
+	}
 	if t.assemblyOfIron != nil {
 		t.assemblyOfIron.reset()
 	}
 }
 
 func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message) error {
+	if msg, ok := m.(*messages.Aura); ok {
+		t.updateCurrentDruidForm(msg)
+		if active {
+			t.trackDruidForm(msg)
+		}
+		return nil
+	}
+	if msg, ok := m.(*messages.Slain); ok && !active {
+		delete(t.currentDruidForms, msg.Victim)
+		return nil
+	}
 	if !active {
 		return nil
 	}
@@ -142,6 +192,12 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 		}
 
 	case *messages.Slain:
+		delete(t.currentDruidForms, msg.Victim)
+		if state := t.druidForms[msg.Victim]; state != nil {
+			state.addActiveDuration(msg.Date())
+			state.active = ""
+			state.activeSince = time.Time{}
+		}
 		if t.assemblyOfIron != nil {
 			t.assemblyOfIron.commitSlainTarget(msg.Victim, t.damageDone)
 		}
@@ -171,7 +227,7 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 	return nil
 }
 
-func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
+func (t *DPSTracker) FightEnded(encounterID uuid.UUID, m messages.Message) {
 	if t.assemblyOfIron != nil {
 		t.assemblyOfIron.commitUnresolved(t.damageDone)
 	}
@@ -207,6 +263,14 @@ func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
 				talents = &cp
 			}
 		}
+		var observedForm string
+		if isPlayer {
+			var fightEnd time.Time
+			if m != nil {
+				fightEnd = m.Date()
+			}
+			observedForm = t.dominantDruidForm(g, fightEnd)
+		}
 		stats := &UnitCombatStats{
 			DamageDone:      t.damageDone[g],
 			DamageTaken:     t.damageTaken[g],
@@ -214,6 +278,7 @@ func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
 			HealingAbsorbed: t.absorbDone[g],
 			IsPlayer:        isPlayer,
 			Talents:         talents,
+			ObservedForm:    observedForm,
 		}
 		if cls.Relation.HasOwner() {
 			owner := *cls.Relation.Owner
@@ -223,6 +288,160 @@ func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
 	}
 
 	t.results[encounterID] = result
+}
+
+// FightFinalized corrects form durations to the materialized fight boundaries.
+// FightStarted receives the message that triggered detection, which can be later
+// than an authoritative encounter boundary or character activity start.
+func (t *DPSTracker) FightFinalized(encounterID uuid.UUID, start, end time.Time) {
+	if !t.fightStartedAt.IsZero() && start.Before(t.fightStartedAt) {
+		missing := t.fightStartedAt.Sub(start)
+		for _, state := range t.druidForms {
+			switch state.startedInForm {
+			case "Cat":
+				state.catDuration += missing
+			case "Bear":
+				state.bearDuration += missing
+			}
+		}
+	}
+
+	result := t.results[encounterID]
+	if result == nil {
+		return
+	}
+	for unit, stats := range result.Units {
+		if stats.IsPlayer {
+			stats.ObservedForm = t.dominantDruidForm(unit, end)
+		}
+	}
+}
+
+func (t *DPSTracker) updateCurrentDruidForm(msg *messages.Aura) {
+	form := druidFormFromAura(msg)
+	if form == "" {
+		return
+	}
+	if auraRemoved(msg) {
+		if t.currentDruidForms[msg.Target] == form {
+			delete(t.currentDruidForms, msg.Target)
+		}
+		return
+	}
+	if auraApplied(msg) {
+		t.currentDruidForms[msg.Target] = form
+	}
+}
+
+func (t *DPSTracker) trackDruidForm(msg *messages.Aura) {
+	form := druidFormFromAura(msg)
+	if form == "" {
+		return
+	}
+
+	state := t.druidForms[msg.Target]
+	if state == nil {
+		state = &druidFormState{}
+		t.druidForms[msg.Target] = state
+	}
+
+	at := msg.Date()
+	if auraRemoved(msg) {
+		if state.active == form {
+			state.addActiveDuration(at)
+			state.active = ""
+			state.activeSince = time.Time{}
+		}
+		return
+	}
+	if !auraApplied(msg) {
+		return
+	}
+
+	if form == "Cat" {
+		state.catSeen = true
+	} else {
+		state.bearSeen = true
+	}
+	if state.active == form {
+		return
+	}
+	state.addActiveDuration(at)
+	state.active = form
+	state.activeSince = at
+}
+
+func auraApplied(msg *messages.Aura) bool {
+	return msg.State == types.AuraStateAdded || msg.State == types.AuraStateModified ||
+		msg.Transition == messages.AuraTransitionApplied || msg.Transition == messages.AuraTransitionRefreshed ||
+		msg.Application == types.AuraApplicationGains
+}
+
+func auraRemoved(msg *messages.Aura) bool {
+	return msg.State == types.AuraStateRemoved || msg.Transition == messages.AuraTransitionRemoved ||
+		msg.Application == types.AuraApplicationFades || msg.Application == types.AuraApplicationRemoved
+}
+
+func (s *druidFormState) addActiveDuration(until time.Time) {
+	if s.active == "" || s.activeSince.IsZero() || until.Before(s.activeSince) {
+		return
+	}
+	duration := until.Sub(s.activeSince)
+	switch s.active {
+	case "Cat":
+		s.catDuration += duration
+	case "Bear":
+		s.bearDuration += duration
+	}
+}
+
+func (t *DPSTracker) dominantDruidForm(unit guid.GUID, fightEnd time.Time) string {
+	state := t.druidForms[unit]
+	if state == nil {
+		return ""
+	}
+
+	catDuration := state.catDuration
+	bearDuration := state.bearDuration
+	if state.active != "" && !fightEnd.IsZero() && !state.activeSince.IsZero() && !fightEnd.Before(state.activeSince) {
+		if state.active == "Cat" {
+			catDuration += fightEnd.Sub(state.activeSince)
+		} else {
+			bearDuration += fightEnd.Sub(state.activeSince)
+		}
+	}
+
+	if state.catSeen && !state.bearSeen {
+		return "Cat"
+	}
+	if state.bearSeen && !state.catSeen {
+		return "Bear"
+	}
+	if catDuration > bearDuration {
+		return "Cat"
+	}
+	if bearDuration > catDuration {
+		return "Bear"
+	}
+	return ""
+}
+
+func druidFormFromAura(msg *messages.Aura) string {
+	return druidForm(msg.SpellName, msg.SpellData)
+}
+
+func druidForm(name string, spell *chrondbc.Spell) string {
+	if name == "" && spell != nil {
+		name = spell.Name_lang.String()
+	}
+	switch {
+	case strings.EqualFold(name, "Cat Form"):
+		return "Cat"
+	case strings.EqualFold(name, "Bear Form"), strings.EqualFold(name, "Dire Bear Form"):
+		return "Bear"
+	default:
+		return ""
+	}
 }
 
 func (t *DPSTracker) Finalize(_ context.Context) error {

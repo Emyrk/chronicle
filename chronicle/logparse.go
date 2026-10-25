@@ -1530,7 +1530,7 @@ func insertDPSRankings(
 			// Use the per-encounter talent snapshot from the DPS tracker,
 			// not the armory tracker's final state, so mid-raid respecs
 			// and respec invalidation are correctly captured.
-			spec, subSpec, talentLayout, talentSummary := extractTalentInfoFromSnapshot(className, stats.Talents, flavor, talentTreeData)
+			spec, subSpec, talentLayout, talentSummary := extractTalentInfoFromSnapshot(className, stats.Talents, stats.ObservedForm, flavor, talentTreeData)
 
 			var talentBuildID uuid.NullUUID
 			if talentLayout != "" {
@@ -1690,7 +1690,7 @@ func insertTrashRankings(
 				continue
 			}
 			className := string(db2sdk.HeroClassToDB(finalized.Guilds.Players[unitGUID].HeroClass))
-			spec, subSpec, talentLayout, talentSummary := extractTalentInfoFromSnapshot(className, stats.Talents, flavor, talentTreeData)
+			spec, subSpec, talentLayout, talentSummary := extractTalentInfoFromSnapshot(className, stats.Talents, stats.ObservedForm, flavor, talentTreeData)
 
 			key := trashPlayerKey{GUID: unitGUID, Spec: spec, SubSpec: subSpec}
 			a, ok := accum[key]
@@ -1825,12 +1825,15 @@ func insertTrashRankings(
 
 // extractTalentInfoFromSnapshot returns the inferred spec, sub-spec, talent layout,
 // and talent summary from a per-encounter talent snapshot.
-func extractTalentInfoFromSnapshot(className string, playerTalents *combatant.Talents, flavor database.WoWFlavor, treeData *talents.TalentTreeData) (spec string, subSpec string, layout string, summary []int16) {
+func extractTalentInfoFromSnapshot(className string, playerTalents *combatant.Talents, observedForm string, flavor database.WoWFlavor, treeData *talents.TalentTreeData) (spec string, subSpec string, layout string, summary []int16) {
 	if playerTalents == nil {
 		return "Unknown", "", "", nil
 	}
 	spec = wowspec.InferSpec(className, playerTalents.Summary)
 	subSpec = inferTalentSubSpec(className, spec, playerTalents, flavor, treeData)
+	if flavor.Has(database.FlavorNightmareOfUrsol) && className == "DRUID" && spec == "Feral" && (observedForm == "Cat" || observedForm == "Bear") {
+		subSpec = observedForm
+	}
 	summary = make([]int16, 3)
 	for i, v := range playerTalents.Summary {
 		summary[i] = int16(v)
