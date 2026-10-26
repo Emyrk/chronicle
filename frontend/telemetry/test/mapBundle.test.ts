@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createMapBundleTools } from "../src/dashboard/mapBundle.ts";
+import { createMapBundleTools, serializeMapBundleTools } from "../src/dashboard/mapBundle.ts";
 
 const encoder = new TextEncoder();
 const tools = createMapBundleTools();
@@ -205,6 +205,15 @@ test("bundle merge replaces calibration and preference while preserving unrelate
   });
 });
 
-test("serialized browser bundle helpers remain valid JavaScript", () => {
-  assert.doesNotThrow(() => new Function(`return (${createMapBundleTools.toString()})`));
+test("serialized browser bundle helpers remain valid after bundler name instrumentation", () => {
+  const factorySource = `function createTools() {
+    function helper() { return true; }
+    __name(helper, "helper");
+    return { helper };
+  }`;
+  const instrumented = new Function(`return ${serializeMapBundleTools(factorySource)}`)() as { helper(): boolean };
+  assert.equal(instrumented.helper(), true);
+
+  const tools = new Function(`return ${serializeMapBundleTools()}`)() as { parseStoredZip: unknown };
+  assert.equal(typeof tools.parseStoredZip, "function");
 });

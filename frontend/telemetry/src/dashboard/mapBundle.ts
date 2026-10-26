@@ -41,6 +41,16 @@ export interface MapBundleTools {
 }
 
 /**
+ * Wrangler/esbuild adds calls to its private `__name` helper inside compiled
+ * function bodies. Function#toString preserves those calls but not the
+ * module-scoped helper, so provide the harmless helper inside the expression
+ * that is embedded in the dashboard page.
+ */
+export function serializeMapBundleTools(factorySource = createMapBundleTools.toString()): string {
+  return `(() => { const __name = (target) => target; return (${factorySource})(); })()`;
+}
+
+/**
  * Kept as one self-contained function so the exact helpers tested here can be
  * serialized into the Map Foundry's embedded browser script.
  */
