@@ -269,7 +269,7 @@ maps.get("/internal/api/v1/maps/:namespace", async (c) => {
         directory: instance.directory,
         original: originalInstanceIDs.has(instance.mapID),
         floor_count: instance.floors.length,
-        floors: instance.floors.map((floor) => ({ floor: floor.floor, renders: floor.renders, mesh: floor.mesh })),
+        floors: instance.floors.map((floor) => ({ floor: floor.floor, preferred2D: floor.preferred2D, renders: floor.renders, mesh: floor.mesh })),
         styled: instance.styled,
         renders: instance.renders,
         mesh: instance.mesh,

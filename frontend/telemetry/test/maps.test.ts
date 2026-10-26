@@ -161,7 +161,7 @@ test("Map Foundry uploads, drafts, previews, and publishes floor assets without 
     name: "Wailing Caverns",
     floors: [
       { floor: 0, renders: { path: floorZeroPath, width: 1024, height: 768 } },
-      { floor: 1, renders: { path: uploaded.path, width: uploaded.width, height: uploaded.height } },
+      { floor: 1, preferred2D: "art", renders: { path: uploaded.path, width: uploaded.width, height: uploaded.height } },
     ],
   }];
   const meshes = [{
@@ -182,14 +182,15 @@ test("Map Foundry uploads, drafts, previews, and publishes floor assets without 
   });
   assert.equal(saved.status, 200);
   const savedBody = await saved.json() as { draft_version: string; draft: { renders: { instances: typeof renders } } };
+  assert.equal(savedBody.draft.renders.instances[0]?.floors[1]?.preferred2D, "art");
   assert.deepEqual(savedBody.draft.renders.instances[0]?.floors.map((floor) => floor.floor), [0, 1]);
 
   const state = await request(bucket, "/internal/api/v1/maps/forever");
   assert.equal(state.status, 200);
-  const stateBody = await state.json() as { instances: { floors: { floor: number; renders?: { path: string }; mesh?: { path: string } }[] }[] };
-  assert.deepEqual(stateBody.instances[0]?.floors.map((floor) => [floor.floor, floor.renders?.path, floor.mesh?.path]), [
-    [0, floorZeroPath, undefined],
-    [1, uploaded.path, uploadedMesh.path],
+  const stateBody = await state.json() as { instances: { floors: { floor: number; preferred2D?: string; renders?: { path: string }; mesh?: { path: string } }[] }[] };
+  assert.deepEqual(stateBody.instances[0]?.floors.map((floor) => [floor.floor, floor.preferred2D, floor.renders?.path, floor.mesh?.path]), [
+    [0, undefined, floorZeroPath, undefined],
+    [1, "art", uploaded.path, uploadedMesh.path],
   ]);
 
   const preview = await request(bucket, "/internal/api/v1/maps/forever/instances/43/preview");
@@ -205,6 +206,7 @@ test("Map Foundry uploads, drafts, previews, and publishes floor assets without 
   });
   assert.equal(published.status, 200);
   const source = await bucket.json("forever/maps/manifest.renders.json") as { instances: typeof renders };
+  assert.equal(source.instances[0]?.floors[1]?.preferred2D, "art");
   assert.deepEqual(source.instances[0]?.floors.map((floor) => floor.floor), [0, 1]);
   const meshSource = await bucket.json("forever/maps/manifest.meshes.json") as { instances: typeof meshes };
   assert.deepEqual(meshSource.instances[0]?.floors.map((floor) => floor.floor), [1]);

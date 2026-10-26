@@ -138,6 +138,38 @@ test("merges render and mesh artwork into matching native floors", () => {
   assert.equal(merged.instances[0]?.floors[0]?.mesh, undefined);
 });
 
+test("merges and recovers per-floor preferred 2D source through the renders layer", () => {
+  const source = original();
+  source.instances[0]!.floors = [nativeFloor(0), nativeFloor(1)];
+  const merged = mergeMapManifests(source, {
+    renders: layer({ mapID: 43, floors: [
+      { floor: 0, preferred2D: "art" },
+      { floor: 1, preferred2D: "renders", renders: { path: "renders/floor-1.png", width: 10, height: 20 } },
+    ] }),
+  });
+  assert.equal(merged.instances[0]?.floors[0]?.preferred2D, "art");
+  assert.equal(merged.instances[0]?.floors[0]?.renders, undefined);
+  assert.equal(merged.instances[0]?.floors[1]?.preferred2D, "renders");
+
+  const layers = recoverMapManifestLayers(merged);
+  assert.deepEqual((layers.renders as { instances: { floors: unknown[] }[] }).instances[0]?.floors, [
+    { floor: 0, preferred2D: "art" },
+    { floor: 1, preferred2D: "renders", renders: { path: "renders/floor-1.png", width: 10, height: 20 } },
+  ]);
+  assert.equal(recoverMapManifestBase(merged, "forever").instances[0]?.floors[0]?.preferred2D, undefined);
+});
+
+test("rejects invalid or non-render-layer preferred 2D sources", () => {
+  const source = original();
+  source.instances[0]!.floors = [nativeFloor(0)];
+  assert.throws(() => mergeMapManifests(source, {
+    renders: layer({ mapID: 43, floors: [{ floor: 0, preferred2D: "styled" }] }),
+  }), /preferred2D/);
+  assert.throws(() => mergeMapManifests(source, {
+    meshes: layer({ mapID: 43, floors: [{ floor: 0, preferred2D: "art", mesh: mesh("3d/floor.glb") }] }),
+  }), /must contain only its own artwork/);
+});
+
 test("recovers floor artwork into source layers and removes it from the native base", () => {
   const reader = original();
   reader.instances[0]!.floors = [{
