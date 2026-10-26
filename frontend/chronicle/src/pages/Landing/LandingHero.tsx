@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { Play } from "lucide-react";
+import { Pause, Play } from "lucide-react";
+import type { HeroReplay } from "./heroReplay";
 
-// Positions on the scrubber bar, in percent of the run. Static until the
-// replay data car wires real encounters and deaths in.
+// The poster's scrubber, in percent of the run, until the live 3D replay
+// reports the featured run's own bosses, deaths and time.
 const BOSS_TICKS = [2, 31, 48, 66, 84, 96];
 const DEATH_DOTS = [36, 72];
 const PROGRESS = 34;
@@ -11,6 +12,8 @@ const BOSS_CHIPS = [
   { label: "The Butcher", active: true },
   { label: "Viktor the Vile", active: false },
 ];
+/** Boss chips on the desktop bar; the rest fold into "+N". */
+const DESKTOP_CHIPS = 3;
 
 interface LandingHeroProps {
   /** Poster image; it stays in the DOM under the 3D layer so a slow or failed 3D load is invisible. */
@@ -24,62 +27,86 @@ interface LandingHeroProps {
   getSidekickHref: string;
   /**
    * Slot for the live 3D replay, layered above the poster and below the
-   * gradients and copy. Empty in the shell; a later car mounts a lazy
-   * LandingHero3D here after first paint.
+   * gradients and copy (HeroReplayLayer mounts the lazy LandingHero3D here).
    */
   layer3D?: ReactNode;
+  /** The live replay's state once it plays; the scrubber drives it. Null: the poster's static scrubber. */
+  replay?: HeroReplay | null;
 }
 
-function BossChip({ label, active }: { label: string; active?: boolean }) {
+function formatClock(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function BossChip({ label, active, onClick }: { label: string; active?: boolean; onClick?: () => void }) {
+  const className = `whitespace-nowrap rounded-md border px-2.5 py-1.5 text-xs text-[#e8eef8] lg:py-1 ${
+    active ? "border-[#4fd1c5] bg-[#4fd1c5]/20" : "border-[#5f6d88] bg-[#0c1322]/70"
+  }`;
+  if (!onClick) return <span className={className}>{label}</span>;
   return (
-    <span
-      className={`whitespace-nowrap rounded-md border px-2.5 py-1.5 text-xs text-[#e8eef8] lg:py-1 ${
-        active ? "border-[#4fd1c5] bg-[#4fd1c5]/20" : "border-[#5f6d88] bg-[#0c1322]/70"
-      }`}
-    >
+    <button type="button" onClick={onClick} title={`Jump to ${label}`} className={`${className} hover:border-[#8a97ad]`}>
       {label}
-    </span>
+    </button>
   );
 }
 
-/** Presentational scrubber chrome pinned to the hero bottom. */
-function HeroScrubber() {
+/** Scrubber chrome pinned to the hero bottom: static over the poster, live once the 3D replay plays. */
+function HeroScrubber({ replay }: { replay?: HeroReplay | null }) {
+  const progress = replay ? (replay.elapsedMs / replay.durationMs) * 100 : PROGRESS;
+  const ticks = replay ? replay.bosses.map((boss) => boss.fraction * 100) : BOSS_TICKS;
+  const dots = replay ? replay.deaths.map((fraction) => fraction * 100) : DEATH_DOTS;
+  const chips = replay
+    ? replay.bosses.map((boss) => ({ label: boss.name, active: boss.id === replay.activeBossId, onClick: () => replay.jumpToBoss(boss.id) }))
+    : BOSS_CHIPS;
+  // Desktop: a window of chips from the one playing (or the first), the rest counted.
+  const activeIndex = Math.max(0, chips.findIndex((chip) => chip.active));
+  const firstChip = Math.max(0, Math.min(activeIndex - 1, chips.length - DESKTOP_CHIPS));
+  const desktopChips = chips.slice(firstChip, firstChip + DESKTOP_CHIPS);
+  const moreChips = replay ? chips.length - desktopChips.length : 5;
+  const playing = replay?.playing ?? false;
   return (
     <div className="flex flex-col gap-2.5 lg:gap-2">
       <div className="flex items-center gap-2.5 lg:gap-3.5">
         <button
           type="button"
-          aria-label="Play replay"
+          aria-label={playing ? "Pause replay" : "Play replay"}
+          onClick={replay?.togglePlay}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#5f6d88] bg-[#0c1322]/70 text-[#e8eef8] lg:h-10 lg:w-10"
         >
-          <Play className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
+          {playing
+            ? <Pause className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
+            : <Play className="h-3.5 w-3.5 fill-current" aria-hidden="true" />}
         </button>
         <div className="order-last font-mono text-xs text-[#e8eef8] lg:order-none lg:text-[13px]">
-          9:41<span className="hidden text-[#8a97ad] lg:inline"> / 28:42</span>
+          {replay ? formatClock(replay.elapsedMs) : "9:41"}
+          <span className="hidden text-[#8a97ad] lg:inline"> / {replay ? formatClock(replay.durationMs) : "28:42"}</span>
         </div>
         <div className="relative h-1.5 min-w-0 flex-1 rounded-full bg-white/20">
-          <div className="absolute inset-y-0 left-0 rounded-full bg-[#4fd1c5]" style={{ width: `${PROGRESS}%` }} />
-          {BOSS_TICKS.map((left) => (
-            <div key={left} className="absolute -top-[3px] h-3 w-0.5 bg-[#e0b45c]" style={{ left: `${left}%` }} />
+          <div className="absolute inset-y-0 left-0 rounded-full bg-[#4fd1c5]" style={{ width: `${progress}%` }} />
+          {ticks.map((left, i) => (
+            <div key={i} className="absolute -top-[3px] h-3 w-0.5 bg-[#e0b45c]" style={{ left: `${left}%` }} />
           ))}
-          {DEATH_DOTS.map((left) => (
+          {dots.map((left, i) => (
             <div
-              key={left}
+              key={i}
               className="absolute -top-[5px] h-2.5 w-2.5 -translate-x-1/2 rounded-full border-2 border-[#0c1322] bg-[#f0a8a8]"
               style={{ left: `${left}%` }}
             />
           ))}
         </div>
         <div className="hidden gap-1.5 lg:flex">
-          {BOSS_CHIPS.map((chip) => (
-            <BossChip key={chip.label} {...chip} />
+          {desktopChips.map((chip, i) => (
+            <BossChip key={i} {...chip} />
           ))}
-          <span className="rounded-md border border-[#5f6d88] bg-[#0c1322]/70 px-2.5 py-1 text-xs text-[#8a97ad]">+5</span>
+          {moreChips > 0 && (
+            <span className="rounded-md border border-[#5f6d88] bg-[#0c1322]/70 px-2.5 py-1 text-xs text-[#8a97ad]">+{moreChips}</span>
+          )}
         </div>
       </div>
       <div className="styled-scrollbar flex gap-1.5 overflow-x-auto lg:hidden">
-        {BOSS_CHIPS.map((chip) => (
-          <BossChip key={chip.label} {...chip} />
+        {chips.map((chip, i) => (
+          <BossChip key={i} {...chip} />
         ))}
       </div>
       <div className="hidden gap-4 pl-[54px] text-xs text-[#b7c2d6] lg:flex">
@@ -96,7 +123,8 @@ function HeroScrubber() {
   );
 }
 
-export function LandingHero({ poster, posterPortrait, posterAlt, instanceName, bossName, getSidekickHref, layer3D }: LandingHeroProps) {
+export function LandingHero({ poster, posterPortrait, posterAlt, instanceName, bossName, getSidekickHref, layer3D, replay }: LandingHeroProps) {
+  const playingBoss = replay?.bosses.find((boss) => boss.id === replay.activeBossId)?.name;
   return (
     <section id="top" className="relative h-[520px] overflow-hidden border-b border-[#27324a] bg-[#101829] lg:h-[580px]">
       <picture>
@@ -117,7 +145,8 @@ export function LandingHero({ poster, posterPortrait, posterAlt, instanceName, b
         <div className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#4fd1c5] lg:text-xs">
           <span className="inline-block h-2 w-2 rounded-full bg-[#4fd1c5]" />
           Playing now · {instanceName}
-          <span className="hidden lg:inline"> · {bossName}</span>
+          {/* Live: the boss pull playing, none before the first. */}
+          {(replay ? playingBoss : bossName) && <span className="hidden lg:inline"> · {replay ? playingBoss : bossName}</span>}
         </div>
         <h1 className="m-0 max-w-[640px] font-['Libre_Baskerville',Georgia,serif] text-[34px] font-bold leading-[1.06] text-[#e8eef8] lg:text-[54px] lg:leading-[1.04]">
           Your dungeon run, replayed in 3D.
@@ -146,7 +175,7 @@ export function LandingHero({ poster, posterPortrait, posterAlt, instanceName, b
           Recorded by Sidekick. Online 3 minutes after the group left.
         </div>
         <div className="mt-1 lg:mt-auto lg:pb-[22px]">
-          <HeroScrubber />
+          <HeroScrubber replay={replay} />
         </div>
       </div>
     </section>

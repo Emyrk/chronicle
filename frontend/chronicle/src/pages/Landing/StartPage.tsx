@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useRecentUploads } from "@/pages/Home";
 import { RaidCard } from "@/pages/Recent/RaidCard";
+import { HeroReplayLayer } from "./HeroReplayLayer";
+import type { HeroReplay } from "./heroReplay";
 import { LandingHero } from "./LandingHero";
 
 const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
@@ -313,6 +315,8 @@ function ClosingBand() {
 export function StartPage() {
   const isMobile = useIsMobile();
   const getSidekickHref = isMobile ? "#send-link" : "#get";
+  // The live 3D replay's state, for the hero's scrubber; null while the poster shows.
+  const [replay, setReplay] = useState<HeroReplay | null>(null);
 
   // Our hero now covers the static poster index.html painted before the bundle loaded.
   useLayoutEffect(() => {
@@ -329,6 +333,8 @@ export function StartPage() {
         instanceName="Ruins of Lordaeron"
         bossName="The Butcher"
         getSidekickHref={getSidekickHref}
+        layer3D={<HeroReplayLayer onReplay={setReplay} />}
+        replay={replay}
       />
       <SendLinkSection />
       <HowItWorks />
