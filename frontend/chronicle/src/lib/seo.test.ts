@@ -6,6 +6,7 @@ describe("seoProductName", () => {
     [["vanilla", "wow-forever"], "WoW Forever"],
     [["vanilla", "kronos"], "Kronos"],
     [["wrath", "azerothcore", "chromiecraft"], "ChromieCraft"],
+    [["wrath", "warmane"], "Warmane"],
     [["vanilla", "vanillaplus"], "VanillaPlus"],
     [["vanilla", "octowow"], "OctoWoW"],
     [["vanilla", "capybara"], "CapybaraCraft"],
