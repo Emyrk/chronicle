@@ -112,3 +112,60 @@ func TestListRecentInstanceGroupsPagesRunsAndRanksRepresentative(t *testing.T) {
 	require.Len(t, rows, 1, "offset should skip one logical run, not one upload")
 	require.Equal(t, secondRunID, rows[0].ID)
 }
+
+func TestListRecentInstanceGroupsFiltersToRunsWithPositions(t *testing.T) {
+	t.Parallel()
+
+	_, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+
+	userID := uuid.New()
+	_, err := store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "recent-positions-user"})
+	require.NoError(t, err)
+
+	baseTime := time.Date(2026, 9, 1, 18, 0, 0, 0, time.UTC)
+	insertInstance := func(name string, uploadedAt time.Time, capabilities []string) uuid.UUID {
+		t.Helper()
+		logGroupID := uuid.New()
+		_, err := store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+			ID:        logGroupID,
+			Owner:     userID,
+			LogType:   database.LogTypeV1,
+			CreatedAt: database.Timestamptz(uploadedAt),
+			UpdatedAt: database.Timestamptz(uploadedAt),
+		})
+		require.NoError(t, err)
+		require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
+		instanceID := uuid.New()
+		_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
+			ID:           instanceID,
+			RealmID:      realmID,
+			LogGroupID:   logGroupID,
+			Name:         name,
+			HashedSlug:   pgtype.Text{String: instanceID.String(), Valid: true},
+			Capabilities: capabilities,
+		})
+		require.NoError(t, err)
+		return instanceID
+	}
+
+	withPositionsID := insertInstance("Wailing Caverns", baseTime, []string{"unit-resources", "unit-position"})
+	_ = insertInstance("Molten Core", baseTime.Add(time.Hour), []string{"interrupt"})
+
+	params := database.ListRecentInstanceGroupsParams{
+		StartTime: database.Timestamptz(baseTime.Add(-time.Hour)),
+		EndTime:   database.Timestamptz(baseTime.Add(4 * time.Hour)),
+	}
+	rows, err := store.ListRecentInstanceGroups(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.False(t, rows[0].HasPositions, "newest run first, recorded without positions")
+	require.True(t, rows[1].HasPositions)
+
+	params.HasPositions = true
+	rows, err = store.ListRecentInstanceGroups(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, withPositionsID, rows[0].ID)
+	require.True(t, rows[0].HasPositions)
+}
