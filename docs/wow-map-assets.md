@@ -73,6 +73,56 @@ The Replay Map's "3D map" toggle stands the units on the dungeon's real geometry
 
 `bounds` is the mesh's extent in world coordinates (`minX..maxX` world X, `minY..maxY` world Y) and `zMin`/`zMax` its height range. The frontend places the mesh and projects unit positions from these bounds alone, so an instance needs neither tile artwork nor a render for the toggle. `frame` names the glTF axis convention and must be `wow-yup-mirrored-x`: Y-up with X mirrored, glTF `(x, y, z) = (-wow_x, wow_z, wow_y)`, the only frame the frontend places. An instance without a `mesh` entry shows no toggle and requests nothing.
 
+### Floor-aware manual renders and meshes
+
+Manual render and mesh layers retain the legacy map-level fields for single-floor and floorless
+instances. Multi-floor publication nests those same payloads under the native floor identifier:
+
+```json
+{
+  "mapID": 555,
+  "floors": [
+    {
+      "floor": 1,
+      "renders": {
+        "path": "renders/555-a1b2-floor-1.png",
+        "width": 2400,
+        "height": 1800,
+        "bounds": { "minX": -100, "maxX": 200, "minY": -300, "maxY": 100 }
+      },
+      "mesh": {
+        "path": "3d/555-c3d4-floor-1.glb",
+        "bounds": { "minX": -100, "maxX": 200, "minY": -300, "maxY": 100 },
+        "zMin": -20,
+        "zMax": 15,
+        "frame": "wow-yup-mirrored-x"
+      }
+    }
+  ]
+}
+```
+
+The renders layer uses `floors[].renders`; the meshes layer uses `floors[].mesh`. A layer may also
+retain `instances[].renders` or `instances[].mesh` for a legacy map-level asset. Do not copy one
+floor's bounds, height range, or calibration to another floor. A floor render and mesh should use the
+same horizontal bounds, but each floor is generated and verified from its own selected geometry.
+The renderer does not infer floor membership from the WMO. Configure object-prefix selection and/or
+world-Z slicing explicitly, or use an OBJ that already contains only that floor.
+
+#### Map Foundry workflow
+
+Upload and draft one floor at a time. For each floor, upload that floor's PNG or WebP and GLB as
+separate assets, use the content-addressed paths returned by the Foundry, and replace only the
+matching `{mapID, floor}` payload in the full renders and meshes draft arrays. Preserve every other
+instance, every other floor, and any legacy map-level `renders` or `mesh` field unchanged. Preview the
+floor against a real log before moving to the next floor.
+
+A draft may accumulate several floor changes, but **publishing remains atomic**. The Foundry validates
+all referenced assets, writes both layer manifests and then the merged reader manifest as one publish,
+and clears the draft only after the full manifest succeeds. There is no partially published state
+where one floor is live and another floor from the same draft is not. If an unrelated draft already
+exists, stop rather than adding a floor to someone else's unpublished work.
+
 ### Mesh-only instances
 
 Some dungeons have no native floor artwork (Ragefire Chasm, map 389, and Ruins of Lordaeron, map 2999), so the original manifest has no `instances[]` entry for them. A `meshes` layer entry whose `mapID` is unknown to the original then creates a floorless instance, `{ "mapID", "name", "floors": [], "mesh" }`, taking its `name` from the layer entry (required in that case; for an existing instance the original's name wins and the entry's `name` is ignored). The entry may still carry nothing but `mesh` (and `name`); floors, `renders` or `styled` are rejected; the `renders` layer may also create named floorless instances.

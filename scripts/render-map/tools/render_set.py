@@ -1,7 +1,7 @@
 """Render one VERSIONED set of top-down passes for a map.
 
   .venv/bin/python -I tools/render_set.py <slug> <label> [--width 2400] [--note "..."]
-      [--skip-shaded] [--no-selfcheck] [--blender-args "..."]
+      [--floor N] [--skip-shaded] [--no-selfcheck] [--blender-args "..."]
 
 Reads maps/<slug>/map.yaml (rot, optional reference image) and maps/<slug>/fetch.json
 (must exist: run tools/fetch_map.py <slug> first). A `terrain` fetch (ADT map) is stitched
@@ -46,12 +46,13 @@ import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import floor_config  # noqa: E402
 import rmconfig  # noqa: E402
 ROOT = rmconfig.workdir()  # maps/, cache/, data/ (local.yaml `workdir`)
 BLENDER = rmconfig.expand(rmconfig.CFG["blender"])
 BLENDER_PINNED = "Blender 4.3"  # major.minor the tools were validated on
 TOOLS = ["blender_topdown.py", "composite_water.py", "align_to_real.py", "wmo2obj.py", "adt2obj.py", "fetch_map.py", "mpq_chain.py",
-         "render_set.py", "preview.py", "export_glb.py", "m2obj.py", "m2fetch.py", "rmconfig.py"]
+         "render_set.py", "preview.py", "export_glb.py", "m2obj.py", "m2fetch.py", "floor_config.py", "rmconfig.py"]
 
 
 def sha(path):
@@ -75,13 +76,12 @@ def coverage(path):
     return round(100 * sum(hist[1:]) / (im.width * im.height), 3)
 
 
-def next_dir(mdir, label):
+def next_dir(mdir, label, floor=None):
     rd = os.path.join(mdir, "renders")
     os.makedirs(rd, exist_ok=True)
-    nums = [int(m.group(1)) for d in os.listdir(rd) if (m := re.match(r"v(\d{3})-", d))]
+    nums = [int(m.group(1)) for d in os.listdir(rd) if (m := re.match(r"v(\d{3})(?:-|$)", d))]
     n = max(nums, default=-1) + 1
-    slug = re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
-    d = os.path.join(rd, "v%03d-%s" % (n, slug))
+    d = os.path.join(rd, floor_config.version_name(n, label, floor))
     os.makedirs(d)
     return d
 
@@ -111,7 +111,10 @@ def render_terrain(a, cfg, mdir, fetch):
     x0, x1 = fetch["tile_range"]["x"]
     y0, y1 = fetch["tile_range"]["y"]
     W, H = (x1 - x0 + 1) * tp, (y1 - y0 + 1) * tp
-    out = next_dir(mdir, a.label)
+    if a.floor_meta and (a.floor_meta["object_include_prefixes"] or a.floor_meta["object_exclude_prefixes"]
+                         or a.floor_meta["z_min"] is not None or a.floor_meta["z_max"] is not None):
+        raise SystemExit("floor geometry selection needs an OBJ; this terrain map has only minimap tiles")
+    out = next_dir(mdir, a.label, a.floor_meta)
     rel = lambda p: os.path.relpath(p, ROOT)
     print("stitching %d minimap tiles into %dx%d -> %s" % (len(tiles), W, H, rel(out)), file=sys.stderr)
     canvas = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -138,7 +141,7 @@ def render_terrain(a, cfg, mdir, fetch):
                    "alpha_coverage_pct": coverage(os.path.join(out, n))}
                for n in sorted(os.listdir(out)) if n.endswith(".png")}
     manifest = {
-        "version": os.path.basename(out), "map": a.slug, "label": a.label, "note": a.note,
+        "version": os.path.basename(out), "map": a.slug, "floor": a.floor_meta, "label": a.label, "note": a.note,
         "created": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
         "engine": "minimap-stitch (Blizzard minimap tiles; doodads, WMOs, water, shading baked in)",
         "python": py, "map_yaml": cfg,
@@ -167,6 +170,7 @@ def main():
     ap.add_argument("label")
     ap.add_argument("--width", type=int, default=2400)
     ap.add_argument("--note", default="")
+    ap.add_argument("--floor", type=int, help="floor identifier; overrides map.yaml floor.id (selection still comes from map.yaml)")
     ap.add_argument("--skip-shaded", action="store_true")
     ap.add_argument("--no-selfcheck", action="store_true")
     ap.add_argument("--blender-args", default="", help="extra flags for every blender_topdown.py call")
@@ -185,6 +189,10 @@ def main():
 
     mdir = os.path.join(ROOT, "maps", a.slug)
     cfg = yaml.safe_load(open(os.path.join(mdir, "map.yaml")))
+    try:
+        a.floor_meta = floor_config.resolve_floor(cfg, a.floor)
+    except ValueError as e:
+        raise SystemExit("invalid floor configuration: " + str(e)) from e
     fetch_json = os.path.join(mdir, "fetch.json")
     if not os.path.exists(fetch_json):
         raise SystemExit("no %s — run: tools/fetch_map.py %s" % (os.path.relpath(fetch_json, ROOT), a.slug))
@@ -222,7 +230,7 @@ def main():
         raise SystemExit("Blender is '%s', tools were validated on '%s'. Pass --allow-blender-drift after "
                          "checking a self-check + a known map still match." % (bl_ver, BLENDER_PINNED))
 
-    out = next_dir(mdir, a.label)
+    out = next_dir(mdir, a.label, a.floor_meta)
     if fetch.get("kind") == "terrain" and fetch.get("minimap", True):
         # Blizzard's minimap of the same tiles is the reference: the alignment IoU verifies the terrain transform.
         reference = os.path.join(out, "minimap.png")
@@ -234,20 +242,32 @@ def main():
     log = os.path.join(out, "log.txt")
     rel = lambda p: os.path.relpath(p, ROOT)
     py = rmconfig.CFG["python"] and rmconfig.expand(rmconfig.CFG["python"]) or sys.executable
+    selection = []  # applied before framing in both top-down and GLB exporters
+    includes = list(a.floor_meta["object_include_prefixes"]) if a.floor_meta else []
+    excludes = list(a.floor_meta["object_exclude_prefixes"]) if a.floor_meta else []
+    if cfg.get("object_exclude_prefix"):
+        excludes.insert(0, str(cfg["object_exclude_prefix"]))  # legacy terrain selector
+    if includes:
+        selection += ["--object-include-prefix", ",".join(includes)]
+    if excludes:
+        selection += ["--object-exclude-prefix", ",".join(dict.fromkeys(excludes))]
+    if a.floor_meta and a.floor_meta["z_min"] is not None:
+        selection += ["--z-min", str(a.floor_meta["z_min"])]
+    if a.floor_meta and a.floor_meta["z_max"] is not None:
+        selection += ["--z-max", str(a.floor_meta["z_max"])]
+
     frame = []  # given to blender_topdown.py AND export_glb.py, so height.png shares the passes' frame
     if a.m2:
         frame += ["--frame-exclude-prefix", "m2_"]  # doodads must not move the camera frame
     if fetch.get("kind") == "terrain":
         frame += ["--smooth-prefix", "terrain_"]  # heightmap: weld + smooth normals, no per-triangle facets
-        if cfg.get("object_exclude_prefix"):
-            frame += ["--object-exclude-prefix", str(cfg["object_exclude_prefix"])]
         if cfg.get("frame_include_prefix"):
             frame += ["--frame-include-prefix", str(cfg["frame_include_prefix"])]
         elif cfg.get("frame_exclude_prefix"):
             frame += ["--frame-exclude-prefix", str(cfg["frame_exclude_prefix"])]
         elif cfg.get("crop") and not cfg.get("frame_include_all"):
             frame += ["--frame-include-prefix", "terrain_"]  # a WMO reaching out of the crop must not widen the frame
-    extra = a.blender_args.split() + frame
+    extra = a.blender_args.split() + selection + frame
     cmds = []
 
     def run(cmd, must_write=None):
@@ -315,14 +335,18 @@ def main():
     # 4. 3D export: open-top GLB + height map + perspective proofs (same OBJ, same rot, same frame)
     glb = None
     if a.glb:
+        glb_slug = floor_config.asset_slug(a.slug, a.floor_meta)
         gl = [BLENDER, "-b", "-P", os.path.join(HERE, "export_glb.py"), "--", "--obj", obj, "--outdir", out,
-              "--slug", a.slug, "--rot", rot, "--image-format", a.glb_format, "--height-width", str(a.width)]
+              "--slug", glb_slug, "--rot", rot, "--image-format", a.glb_format, "--height-width", str(a.width),
+              *selection]
+        if a.floor_meta:
+            gl += ["--floor", str(a.floor_meta["floor"])]
         if fetch.get("kind") == "terrain":
             gl += ["--kind", "terrain", *frame]  # same frame as the passes; open-sky cull (export_glb.py docstring)
         gl += a.glb_args.split()
         if not a.glb_full:
             gl.append("--skip-full")
-        run(gl, must_write=os.path.join(out, "%s-open-top.glb" % a.slug))
+        run(gl, must_write=os.path.join(out, "%s-open-top.glb" % glb_slug))
         glb = json.load(open(os.path.join(out, "height.json")))
         glb["files"] = {n: {"bytes": os.path.getsize(os.path.join(out, n)), "sha256_file": sha(os.path.join(out, n))}
                         for n in sorted(os.listdir(out)) if n.endswith(".glb")}
@@ -339,7 +363,7 @@ def main():
                    "alpha_coverage_pct": coverage(os.path.join(out, n))}
                for n in sorted(os.listdir(out)) if n.endswith(".png")}
     manifest = {
-        "version": os.path.basename(out), "map": a.slug, "label": a.label, "note": a.note,
+        "version": os.path.basename(out), "map": a.slug, "floor": a.floor_meta, "label": a.label, "note": a.note,
         "created": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
         "blender": bl_ver, "python": py,
         "map_yaml": cfg,

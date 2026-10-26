@@ -51,6 +51,13 @@ holes where floor should be?) and reporting it.
    `$W/maps/<slug>/renders/vNNN-<label>/` including `preview-*.webp` (1600 px, each <= 1 MB)
    for sharing. If the workdir is a (remote-less) git repo, commit manifests/previews.json after a run, not images.
    Never write into an existing version folder; never pass an output path by hand.
+   For a native instance floor, configure `floor: <integer>` or a `floor:` mapping in `map.yaml`,
+   or pass `--floor N`. A floor run is named `vNNN-floor-N-<label>` and its GLB is
+   `<slug>-floor-N-open-top.glb`; leaving floor unset preserves every legacy name. The renderer does
+   not infer membership. When one OBJ contains several floors, set explicit
+   `floor.object_include_prefixes`, `floor.object_exclude_prefixes`, and/or `floor.z_min` / `floor.z_max`.
+   Prefix selection and Z bisect apply before both top-down framing and GLB culling. Empty selectors,
+   bad Z ranges, a selection that removes everything, or a frame prefix that no longer matches aborts.
 4. **3D model (optional).** Add `--glb` to the same `render_set.py` call (or run it as its own
    version: `render_set.py <slug> glb --glb --note "..."`). It writes `<slug>-open-top.glb`
    (the cutaway: ceilings, vault fragments, upper walls, hanging decals and overhanging water
@@ -118,8 +125,10 @@ holes where floor should be?) and reporting it.
      a 2D render beside the mesh with the SAME bounds, made by `tools/chronicle_render.py <version>
      [--source <4x version>] --stream <saved unit_position>`: it crops the passes' 1 % camera margin (a
      plain downscale is 2 % too small: ZG's first publish) and turns a WMO pass 180° (pipeline frame;
-     chronicle draws north up, west left). It writes `$W/maps/<slug>/published/<map_id>-<slug>-<vNNN>-<pass>-<width>.png`
-     and prints the `renders` entry. Its `--stream` check must read ~100 %.
+     chronicle draws north up, west left). It writes `$W/maps/<slug>/published/<map_id>-<slug>[-floor-N]-<vNNN>-<pass>-<width>.png`.
+     Without a floor it prints the legacy `{mapID, renders}` instance entry. With a floor it prints
+     `{mapID, floors: [{floor, renders}]}`. A `--source` version must record the same floor. Its
+     `--stream` check must read ~100 %.
    - **Preview before publishing:** Playwright on the real community page with
      `page.route("https://icons.chronicleclassic.com/<namespace>/maps/**")` serving a local
      manifest.json (live one + the new entry) and the local GLB/PNG — prod code, real log, nothing
@@ -156,19 +165,23 @@ numbers and the preview. No go → stop at the preview and report.
 2. **Read the state:** `GET $API` → `draft_version` (null when no draft), `published` and `draft`
    (`renders` / `meshes`, each `{format, target, instances: [...]}`), and the per-instance view.
    A draft you did not make (`has_draft: true`) → stop and ask: it is someone else's unpublished work.
-3. **Upload assets:** `POST $API/assets/meshes` and `POST $API/assets/renders`, multipart
-   `-F file=@<path> -F mapID=<id>`. Meshes: strict GLB 2.0; renders: PNG/WebP ≤ 32768 px; ≤ 100 MB
-   each. The Foundry names the file itself, content-addressed
+3. **Upload assets:** upload one floor at a time with `POST $API/assets/meshes` and
+   `POST $API/assets/renders`, multipart `-F file=@<path> -F mapID=<id>`. The upload is an asset step;
+   assign the returned path to a floor in the draft. Meshes: strict GLB 2.0; renders: PNG/WebP ≤ 32768 px; ≤ 100 MB each.
+   The Foundry names the file itself, content-addressed
    (`3d/<mapID>-<sha256[:16 hex]>-<slugified filename>.glb`, `renders/<mapID>-...png`): use the
    returned `path` (and, for renders, `width`/`height`). Never write a literal `<slug>-open-top.glb`
    path into a draft or a ticket. Upload the GLB from the version folder and the PNG from `$PUB`.
 4. **Save the draft:** `PUT $API/draft` with JSON `{"version": <draft_version>, "renders": [...],
    "meshes": [...]}`. Each array is the layer's FULL instance list — every existing entry from step 2
-   unchanged, plus/replacing this `mapID` — a missing entry is unpublished. Entries:
-   - render: `{"mapID": N, "renders": {"path", "width", "height", "bounds": {minX,maxX,minY,maxY}}}`
-   - mesh: `{"mapID": N, "mesh": {"path", "bounds": {...}, "zMin", "zMax", "frame": "wow-yup-mirrored-x",
-     "liquid"?: {"color": "#rrggbb", "opacity": (0,1]}}}` — `liquid` tints `liquid_*` meshes (lava:
-     the map.yaml `water_color` as hex, opacity 0.85).
+   unchanged, plus/replacing this `mapID` and floor; a missing entry or floor is unpublished. Preserve
+   every other floor and any legacy map-level field. Entries:
+   - legacy render: `{"mapID": N, "renders": {"path", "width", "height", "bounds": {minX,maxX,minY,maxY}}}`
+   - floor render: `{"mapID": N, "floors": [{"floor": F, "renders": {...}}]}`
+   - legacy mesh: `{"mapID": N, "mesh": {"path", "bounds": {...}, "zMin", "zMax", "frame": "wow-yup-mirrored-x"}}`
+   - floor mesh: `{"mapID": N, "floors": [{"floor": F, "mesh": {...}}]}`
+   A mesh payload may include `"liquid": {"color": "#rrggbb", "opacity": (0,1]}`. `liquid` tints
+   `liquid_*` meshes (lava: the map.yaml `water_color` as hex, opacity 0.85).
    - a mapID not in the namespace's original manifest also needs `"name"` (creates a floorless instance).
    Unknown fields are rejected; 409 = version mismatch or lock (reload state, redo). The response
    carries the new `draft_version`.
@@ -176,7 +189,8 @@ numbers and the preview. No go → stop at the preview and report.
    `published_renders`/`published_mesh`. Bounds identical on both layers; paths are the uploaded ones.
 6. **Publish:** `POST $API/publish` with `{"version": <draft_version from step 4>}`. It verifies every
    referenced asset exists, writes `manifest.renders.json`, `manifest.meshes.json` and finally
-   `manifest.json`, then deletes the draft.
+   `manifest.json`, then deletes the draft. Publishing is atomic even when the draft contains several
+   floor uploads; never describe an uploaded or drafted floor as live before this succeeds.
 7. **Post-check** (fetch with a cache-busting query; plain CDN JSON is cached up to an hour):
    - the new `manifest.json` keeps `len(instances)` and `len(maps)` from step 1 (plus one instance if
      the map was new), and only this `mapID`'s entry changed (diff against the backup);

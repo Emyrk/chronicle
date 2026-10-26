@@ -25,8 +25,10 @@ import argparse, gzip, json, struct, sys, urllib.request, zlib
 from collections import Counter
 from pathlib import Path
 import numpy as np
+import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import floor_config  # noqa: E402
 import rmconfig  # noqa: E402
 
 UA = "Mozilla/5.0 (Macintosh) Chrome/130"
@@ -136,9 +138,17 @@ def main():
     else:  # WMO: chronicle bounds = bounds_wow with both horizontals negated (README "3D export")
         lo, hi = hj["bounds_wow"]["min"], hj["bounds_wow"]["max"]; x0, x1, y0, y1 = -hi[0], -lo[0], -hi[1], -lo[1]
     z0, z1 = hj["height"]["z_min"], hj["height"]["z_max"]
+    cfg = yaml.safe_load((vdir.parent.parent / "map.yaml").read_text())
+    map_id = cfg.get("map_id", a.map)
+    floor = floor_config.resolve_floor({"floor": hj["floor"]}) if hj.get("floor") is not None else None
+    if floor and (isinstance(map_id, bool) or not isinstance(map_id, int)):
+        sys.exit("floor publication metadata needs integer map_id in map.yaml or --map")
+    mesh = {"bounds": {"minX": round(x0, 4), "maxX": round(x1, 4), "minY": round(y0, 4), "maxY": round(y1, 4)},
+            "zMin": round(z0, 4), "zMax": round(z1, 4), "frame": "wow-yup-mirrored-x"}
     print("manifest mesh entry (path is set by the Map Foundry):")
-    print(json.dumps({"bounds": {"minX": round(x0, 4), "maxX": round(x1, 4), "minY": round(y0, 4), "maxY": round(y1, 4)},
-                      "zMin": round(z0, 4), "zMax": round(z1, 4), "frame": "wow-yup-mirrored-x"}))
+    entry = (floor_config.publication_mesh_entry(map_id, mesh, floor)
+             if isinstance(map_id, int) and not isinstance(map_id, bool) else mesh)
+    print(json.dumps(entry))
 
     rows = decode_positions(Path(a.stream).read_bytes() if a.stream else fetch_stream(a.host, a.instance))
     maps = Counter(r[3] for r in rows); mid = a.map if a.map is not None else maps.most_common(1)[0][0]

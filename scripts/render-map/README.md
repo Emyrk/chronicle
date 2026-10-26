@@ -69,7 +69,7 @@ is used whole.
                      │  composite_water.py: dry + depth-tested water → textured.png
                      │  align_to_real.py (optional): register onto a reference frame
                      ▼
-  <workdir>/maps/<slug>/renders/vNNN-<label>/{dry,water,shaded,textured,shaded-water}.png
+  <workdir>/maps/<slug>/renders/vNNN[-floor-N]-<label>/{dry,water,shaded,textured,shaded-water}.png
                                                 + *-aligned.png, preview-*.webp (<= 1 MB each),
                                                   align.json, previews.json, log.txt, manifest.json
                      │
@@ -172,6 +172,53 @@ reference_bg: 12,17,20          # that image's flat background colour
    deliberately.
 3. `tools/render_set.py <slug> first`. Open `textured.png`; if the map is rotated against
    what you want, change `rot` and render again (new version).
+
+## Rendering one floor at a time
+
+Leave `floor` out for the legacy single-floor workflow. Its version folders and GLBs keep their old
+names. For an instance floor, set a non-negative integer ID in `map.yaml` or pass `--floor N`.
+A configured floor produces `vNNN-floor-N-<label>`, `<slug>-floor-N-open-top.glb`, floor metadata in
+`manifest.json` and `height.json`, and a floor-qualified `chronicle_render.py` PNG name. `--floor`
+overrides only the identifier; geometry selectors still come from `map.yaml`.
+
+The renderer cannot infer which geometry belongs to a floor. If the fetched OBJ contains several
+floors, describe membership explicitly. Prefixes match Blender object names before framing and
+before the top-down and GLB culls. Z limits bisect geometry at world-Z planes. Include prefixes are
+an allowlist, exclude prefixes apply after it, and both may be combined with either or both Z limits:
+
+```yaml
+floor:
+  id: 2
+  object_include_prefixes: [group_20, liquid_]  # include liquid_ explicitly when this floor needs water
+  object_exclude_prefixes: [group_20_ceiling]
+  z_min: -30
+  z_max: 15.5
+```
+
+A scalar is valid when the OBJ already contains only that floor:
+
+```yaml
+floor: 2
+```
+
+Invalid IDs, empty prefix lists, unknown floor keys, `z_min >= z_max`, selectors that remove every
+object, and frame selectors that no longer match selected geometry abort the run. A minimap-only
+terrain fetch can carry floor metadata only when its source image is already floor-specific; it
+rejects geometry selectors because there is no OBJ to select. Inspect object names in the OBJ or
+Blender import log and choose selectors from evidence. Do not use Z alone where ramps, stairs, or
+rooms from adjacent floors overlap that range.
+
+Render and calibrate each floor in its own run:
+
+```bash
+.venv/bin/python -I tools/render_set.py shadow-labyrinth glb --floor 1 --glb --note "floor 1 only"
+.venv/bin/python -I tools/chronicle_render.py "$W/maps/shadow-labyrinth/renders/v012-floor-1-glb"
+```
+
+`chronicle_render.py` prints a complete layer instance entry. Without a floor it retains the legacy
+`{"mapID": N, "renders": {...}}` shape. With a floor it prints
+`{"mapID": N, "floors": [{"floor": F, "renders": {...}}]}`. A `--source` pass must record the same
+floor as the GLB version, in addition to having the same camera frame.
 
 ## 1.12 clients (`source: mpq`) — private-server forks (OctoWoW, Cappy)
 

@@ -82,6 +82,7 @@ def parse():
     p.add_argument("--obj", required=True)
     p.add_argument("--outdir", required=True)
     p.add_argument("--slug", default="map")
+    p.add_argument("--floor", type=int, default=None, help="floor identifier recorded in height.json")
     p.add_argument("--rot", type=float, default=90.0)
     p.add_argument("--ceiling-thresh", type=float, default=-0.15)
     p.add_argument("--height-width", type=int, default=2400)
@@ -104,8 +105,12 @@ def parse():
                    help="drop a water tile with no floor within this far below it (0 = keep all water)")
     p.add_argument("--kind", default="wmo", choices=["wmo", "terrain"], help="fetch kind (render_set passes it)")
     # terrain only (same meaning as in blender_topdown.py; render_set passes the same values to both)
+    p.add_argument("--object-include-prefix", default=None,
+                   help="comma-separated object-name prefixes to keep before framing/export")
     p.add_argument("--object-exclude-prefix", default=None,
-                   help="terrain: drop objects with this name prefix before framing/export")
+                   help="comma-separated object-name prefixes to drop before framing/export")
+    p.add_argument("--z-min", type=float, default=None, help="bisect geometry below this world Z before framing/export")
+    p.add_argument("--z-max", type=float, default=None, help="bisect geometry above this world Z before framing/export")
     p.add_argument("--frame-include-prefix", default=None, help="terrain: only these objects set the x/y frame")
     p.add_argument("--frame-exclude-prefix", default=None, help="terrain: these objects never set the frame")
     p.add_argument("--smooth-prefix", default=None, help="terrain: weld + smooth-shade objects with this prefix")
@@ -136,6 +141,50 @@ def import_obj(path):
     return objs
 
 
+def prefixes(value):
+    return tuple(v.strip() for v in (value or "").split(",") if v.strip())
+
+
+def select_geometry(objs, include_value=None, exclude_value=None, z_min=None, z_max=None):
+    """Apply explicit object-prefix and world-Z selectors before framing or support culling."""
+    includes, excludes = prefixes(include_value), prefixes(exclude_value)
+    excluded = [o for o in objs if (includes and not o.name.startswith(includes)) or o.name.startswith(excludes)]
+    kept = [o for o in objs if o not in excluded]
+    for ob in excluded:
+        bpy.data.objects.remove(ob, do_unlink=True)
+    objs = kept
+    clipped = faces_removed = 0
+    if z_min is not None or z_max is not None:
+        planes = []
+        if z_max is not None:
+            planes.append(((0, 0, z_max), (0, 0, 1)))
+        if z_min is not None:
+            planes.append(((0, 0, z_min), (0, 0, -1)))
+        for ob in objs:
+            if ob.matrix_world != Matrix.Identity(4):
+                raise SystemExit(f"{ob.name}: OBJ import gave a non-identity transform; Z slice assumes world == local")
+
+            def cut(bm):
+                before = len(bm.faces)
+                for co, no in planes:
+                    bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], dist=1e-4,
+                                           plane_co=co, plane_no=no, clear_outer=True)
+                return before - len(bm.faces)
+
+            faces_removed += edit(ob, cut)
+            clipped += 1
+        for ob in [o for o in objs if not o.data.polygons]:
+            bpy.data.objects.remove(ob, do_unlink=True)
+        objs = [o for o in objs if o.data.polygons]
+    if not objs:
+        raise SystemExit("floor selection removed all mesh objects")
+    stats = {"object_include_prefixes": list(includes), "object_exclude_prefixes": list(excludes),
+             "objects_excluded": len(excluded), "z_min": z_min, "z_max": z_max,
+             "objects_z_clipped": clipped, "faces_z_removed": faces_removed}
+    log(f"selection: {stats}")
+    return objs, stats
+
+
 def is_liquid(ob):
     return ob.name.startswith("liquid")
 
@@ -143,6 +192,8 @@ def is_liquid(ob):
 def join_solid(objs):
     """Join every non-liquid object into ONE mesh so welding/connectivity cross WMO group seams."""
     solid = [o for o in objs if not is_liquid(o)]
+    if not solid:
+        raise SystemExit("floor selection kept no solid geometry")
     with bpy.context.temp_override(active_object=solid[0], selected_editable_objects=solid, selected_objects=solid):
         bpy.ops.object.join()
     solid[0].name = "cave"
@@ -294,15 +345,19 @@ def support_cull(objs, weld, seed_min_area, wall_cap, water_support, island_dept
 def world_bounds(objs, exclude_prefix=None, include_prefix=None):
     lo = Vector((math.inf,) * 3)
     hi = Vector((-math.inf,) * 3)
+    found = False
     for ob in objs:
         if exclude_prefix and ob.name.startswith(exclude_prefix):
             continue
         if include_prefix and not ob.name.startswith(include_prefix):
             continue
         for v in ob.data.vertices:
+            found = True
             w = ob.matrix_world @ v.co
             lo = Vector(map(min, lo, w))
             hi = Vector(map(max, hi, w))
+    if not found:
+        raise SystemExit("frame selectors matched no geometry")
     return lo, hi
 
 
@@ -777,14 +832,8 @@ def shrink_atlases(objs, px_per_yard):
 def prepare_terrain(a, cull=True):
     """Import, clip to the frame, cull. Returns objects (true world frame), frame lo/hi, stats."""
     objs = import_obj(a.obj)
-    excluded = []
-    if a.object_exclude_prefix:
-        excluded = [o for o in objs if o.name.startswith(a.object_exclude_prefix)]
-        for ob in excluded:
-            bpy.data.objects.remove(ob, do_unlink=True)
-        objs = meshes()
-    st = {"kind": "terrain", "faces_in": sum(len(o.data.polygons) for o in objs),
-          "object_exclude_prefix": a.object_exclude_prefix, "objects_excluded": len(excluded)}
+    objs, selection = select_geometry(objs, a.object_include_prefix, a.object_exclude_prefix, a.z_min, a.z_max)
+    st = {"kind": "terrain", "faces_in": sum(len(o.data.polygons) for o in objs), "selection": selection}
     lo, hi = world_bounds(objs, a.frame_exclude_prefix, a.frame_include_prefix)
     framed = {o.name for o in objs if not (a.frame_exclude_prefix and o.name.startswith(a.frame_exclude_prefix))
               and not (a.frame_include_prefix and not o.name.startswith(a.frame_include_prefix))}
@@ -830,7 +879,7 @@ def export_terrain_glb(a, path, cull, report):
 
 
 def main_terrain(a):
-    report = {"kind": "terrain"}
+    report = {"kind": "terrain", "floor": a.floor}
     open_top = os.path.join(a.outdir, f"{a.slug}-open-top.glb")
     full = os.path.join(a.outdir, f"{a.slug}-full.glb")
     if not a.skip_full:
@@ -849,7 +898,9 @@ def main_terrain(a):
                                    "roof_min_drop": a.roof_min_drop, "roof_max_drop": a.roof_max_drop,
                                    "frame_include_prefix": a.frame_include_prefix,
                                    "frame_exclude_prefix": a.frame_exclude_prefix,
-                                   "object_exclude_prefix": a.object_exclude_prefix, "smooth_prefix": a.smooth_prefix,
+                                   "object_include_prefix": a.object_include_prefix,
+                                   "object_exclude_prefix": a.object_exclude_prefix,
+                                   "z_min": a.z_min, "z_max": a.z_max, "smooth_prefix": a.smooth_prefix,
                                    "terrain_px_per_yard": a.terrain_px_per_yard}
     report["terrain_atlases"] = atlases
     report["frame_world"] = {"min": [flo.x, flo.y], "max": [fhi.x, fhi.y],
@@ -881,11 +932,13 @@ def main():
     os.makedirs(a.outdir, exist_ok=True)
     if a.kind == "terrain":
         return main_terrain(a)
-    report = {}
+    report = {"floor": a.floor}
 
     # ---- full model
     objs = import_obj(a.obj)
+    objs, selection = select_geometry(objs, a.object_include_prefix, a.object_exclude_prefix, a.z_min, a.z_max)
     lo, hi = world_bounds(objs)
+    report["selection"] = selection
     report["bounds_wow"] = {"min": list(lo), "max": list(hi)}
     for mat in bpy.data.materials:
         build_pbr(mat)
@@ -899,6 +952,7 @@ def main():
 
     # ---- open-top model (same ceiling rule as blender_topdown.py)
     objs = import_obj(a.obj)
+    objs, _ = select_geometry(objs, a.object_include_prefix, a.object_exclude_prefix, a.z_min, a.z_max)
     objs = join_solid(objs)
     report["support_cull"] = support_cull(objs, a.weld, a.seed_min_area, a.wall_cap, a.water_support, a.island_depth,
                                           a.ceiling_thresh, a.undercut_cap, a.rest_tol, a.prop_max_height, seed_exclude)
@@ -915,6 +969,7 @@ def main():
 
     # ---- height map: open-top, no liquid, raw WoW frame (same camera as the top-down passes)
     objs = import_obj(a.obj)
+    objs, _ = select_geometry(objs, a.object_include_prefix, a.object_exclude_prefix, a.z_min, a.z_max)
     objs = join_solid(objs)
     support_cull(objs, a.weld, a.seed_min_area, a.wall_cap, a.water_support, a.island_depth,
                  a.ceiling_thresh, a.undercut_cap, a.rest_tol, a.prop_max_height, seed_exclude)
