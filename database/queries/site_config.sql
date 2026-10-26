@@ -13,3 +13,11 @@ UPDATE site_config SET
     updated_at = now()
 WHERE id = TRUE
 RETURNING *;
+
+-- name: UpdateSiteConfigLandingFeaturedInstance :one
+-- NULL clears the setting, so this cannot share UpdateSiteConfig's COALESCE pattern.
+UPDATE site_config SET
+    landing_featured_instance_id = sqlc.narg('landing_featured_instance_id')::uuid,
+    updated_at = now()
+WHERE id = TRUE
+RETURNING *;

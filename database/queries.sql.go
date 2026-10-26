@@ -20723,7 +20723,7 @@ func (q *sqlQuerier) UpsertSidekickWoWDirectory(ctx context.Context, arg UpsertS
 }
 
 const getSiteConfig = `-- name: GetSiteConfig :one
-SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled FROM site_config WHERE id = TRUE
+SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, landing_featured_instance_id FROM site_config WHERE id = TRUE
 `
 
 func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
@@ -20740,6 +20740,7 @@ func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
 		&i.ClientUploadsDisabled,
 		&i.ParseConfig,
 		&i.AdsEnabled,
+		&i.LandingFeaturedInstanceID,
 	)
 	return i, err
 }
@@ -20755,7 +20756,7 @@ UPDATE site_config SET
     ads_enabled = COALESCE($7, ads_enabled),
     updated_at = now()
 WHERE id = TRUE
-RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled
+RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, landing_featured_instance_id
 `
 
 type UpdateSiteConfigParams struct {
@@ -20790,6 +20791,35 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 		&i.ClientUploadsDisabled,
 		&i.ParseConfig,
 		&i.AdsEnabled,
+		&i.LandingFeaturedInstanceID,
+	)
+	return i, err
+}
+
+const updateSiteConfigLandingFeaturedInstance = `-- name: UpdateSiteConfigLandingFeaturedInstance :one
+UPDATE site_config SET
+    landing_featured_instance_id = $1::uuid,
+    updated_at = now()
+WHERE id = TRUE
+RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, landing_featured_instance_id
+`
+
+// NULL clears the setting, so this cannot share UpdateSiteConfig's COALESCE pattern.
+func (q *sqlQuerier) UpdateSiteConfigLandingFeaturedInstance(ctx context.Context, landingFeaturedInstanceID uuid.NullUUID) (SiteConfig, error) {
+	row := q.db.QueryRow(ctx, updateSiteConfigLandingFeaturedInstance, landingFeaturedInstanceID)
+	var i SiteConfig
+	err := row.Scan(
+		&i.ID,
+		&i.SignupsEnabled,
+		&i.UpdatedAt,
+		&i.Branding,
+		&i.Discoverable,
+		&i.DefaultFormat,
+		&i.AvailableFormats,
+		&i.ClientUploadsDisabled,
+		&i.ParseConfig,
+		&i.AdsEnabled,
+		&i.LandingFeaturedInstanceID,
 	)
 	return i, err
 }

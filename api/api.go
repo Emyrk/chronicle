@@ -108,6 +108,9 @@ type Options struct {
 	// ShortLinkDomain is the domain used for short share links (e.g. "chrn.link").
 	// If empty, short links use same-origin paths instead.
 	ShortLinkDomain string
+	// LandingFeaturedID is the deployment default for the /start hero's
+	// featured instance, used when the site setting is empty.
+	LandingFeaturedID uuid.UUID
 	// ClientUploadsDisabled disables client-side log uploads (for servers using server-side logging).
 	ClientUploadsDisabled bool
 	// BillingEnabled exposes billing navigation when Stripe billing is fully configured.
@@ -148,6 +151,7 @@ type API struct {
 	CustomPanels   *custompanelapi.Handler
 	liveSessions   *servicelivesession.Service
 	discoveryStats discoveryStatsCache
+	landing        landingFeaturedCache
 
 	sidekickRelease *sidekickReleaseCache
 }
@@ -351,6 +355,7 @@ func (api *API) Routes() chi.Router {
 			}
 			r.Get("/share/{code}", api.GetShare)
 			r.Get("/site-config", api.AdminGetSiteConfig)
+			r.Get("/landing/featured", api.LandingFeatured)
 			r.Get("/discovery", api.Discovery)
 			// Public read-only dataset list for the talent-tree dataset selector.
 			r.Get("/datasets", api.Opts.Dataset.List)

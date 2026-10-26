@@ -1,5 +1,6 @@
 import { useLayoutEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { useLandingFeatured } from "@/api/queries";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useRecentUploads } from "@/pages/Home";
 import { RaidCard } from "@/pages/Recent/RaidCard";
@@ -313,6 +314,7 @@ function ClosingBand() {
 export function StartPage() {
   const isMobile = useIsMobile();
   const getSidekickHref = isMobile ? "#send-link" : "#get";
+  const { data: landing } = useLandingFeatured();
 
   // Our hero now covers the static poster index.html painted before the bundle loaded.
   useLayoutEffect(() => {
@@ -326,8 +328,7 @@ export function StartPage() {
         poster={`${IMAGES}/ruins-courtyard-poster.jpg`}
         posterPortrait={`${IMAGES}/ruins-courtyard-poster-portrait.jpg`}
         posterAlt="3D replay: a five-player group fighting on the stone platform in the Ruins of Lordaeron courtyard"
-        instanceName="Ruins of Lordaeron"
-        bossName="The Butcher"
+        featured={landing?.featured}
         getSidekickHref={getSidekickHref}
       />
       <SendLinkSection />

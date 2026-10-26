@@ -46,6 +46,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/zugzuglink"
 
 	"github.com/coder/serpent"
+	"github.com/google/uuid"
 )
 
 var _ services.Servicer = (*Service)(nil)
@@ -80,6 +81,7 @@ type Service struct {
 	nitroPaySiteID        string
 	ga4MeasurementID      string
 	shortLinkDomain       string
+	landingFeaturedID     string
 	clientUploadsDisabled bool
 	zugzugURL             string
 	zugzugSecret          string
@@ -141,6 +143,14 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	if s.ga4MeasurementID != "" && !ga4MeasurementIDPattern.MatchString(s.ga4MeasurementID) {
 		return fmt.Errorf("invalid Google Analytics measurement ID %q: expected G- followed by uppercase letters or digits", s.ga4MeasurementID)
+	}
+	var landingFeaturedID uuid.UUID
+	if s.landingFeaturedID != "" {
+		id, err := uuid.Parse(s.landingFeaturedID)
+		if err != nil {
+			return fmt.Errorf("invalid landing featured instance %q: %w", s.landingFeaturedID, err)
+		}
+		landingFeaturedID = id
 	}
 
 	logger := servicelogger.Logger(s.broker)
@@ -253,6 +263,7 @@ func (s *Service) Start(ctx context.Context) error {
 		NitroPaySiteID:        s.nitroPaySiteID,
 		GA4ID:                 s.ga4MeasurementID,
 		ShortLinkDomain:       s.shortLinkDomain,
+		LandingFeaturedID:     landingFeaturedID,
 		ClientUploadsDisabled: s.clientUploadsDisabled,
 		BillingEnabled:        servicebilling.BillingEnabled(s.broker),
 		ExternalVerification:  s.externalVerification(),
@@ -396,6 +407,15 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_SHORT_LINK_DOMAIN",
 			Default:     "",
 			Value:       serpent.StringOf(&s.shortLinkDomain),
+		},
+		{
+			Name:        "Landing Featured Instance",
+			Description: "Default instance ID replayed on the /start landing hero. The admin site setting overrides it. Shares the env var the frontend build reads.",
+			Required:    false,
+			Flag:        "landing-featured-instance",
+			Env:         "VITE_LANDING_FEATURED_INSTANCE",
+			Default:     "",
+			Value:       serpent.StringOf(&s.landingFeaturedID),
 		},
 		{
 			Name:        "Client Uploads Disabled",
