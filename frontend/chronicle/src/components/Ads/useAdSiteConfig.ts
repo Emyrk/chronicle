@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useSiteConfig } from "@/api/queries"
+import { useSiteConfig } from "@/api/siteConfigQuery"
 import {
   readCachedAdSiteConfig,
   selectAdSiteConfig,

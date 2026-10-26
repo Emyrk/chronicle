@@ -1750,16 +1750,7 @@ export function useAdminOutdatedInstances(instanceName?: string, parserVersion?:
     },
   });
 }
-export function useSiteConfig() {
-  return useQuery({
-    queryKey: ["site-config"],
-    queryFn: async () => {
-      const response = await fetch("/api/v1/site-config");
-      if (!response.ok) throw new Error("Failed to fetch site config");
-      return response.json() as Promise<SiteConfig>;
-    },
-  });
-}
+export { useSiteConfig } from "./siteConfigQuery";
 
 // useLandingFeatured loads the /start hero's featured run (null when none is set).
 export function useLandingFeatured() {

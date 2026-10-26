@@ -2,7 +2,7 @@ import { useLayoutEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useLandingFeatured } from "@/api/queries";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { useRecentUploads } from "@/pages/Home";
+import { useRecentUploads } from "@/pages/Recent/recentUploads";
 import { RaidCard } from "@/pages/Recent/RaidCard";
 import { LandingHero } from "./LandingHero";
 

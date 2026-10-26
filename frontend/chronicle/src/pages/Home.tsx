@@ -20,7 +20,6 @@ import {
 } from "@/api/rankingsQueries";
 import type {
   RankingsEntry,
-  RecentInstancesResponse,
   SiteStats,
   SpeedrunGuildClearsEntry,
   SpeedrunLeaderboardEntry,
@@ -36,6 +35,7 @@ import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory";
 import { seoProductName } from "@/lib/seo";
 import { Podium } from "@/pages/Leaderboard/Podium";
 import { RaidCard } from "@/pages/Recent/RaidCard";
+import { useRecentUploads } from "@/pages/Recent/recentUploads";
 
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
 const ROTATE_SECS = 5 * 60; // rotate the spotlight every 5 minutes
@@ -104,15 +104,6 @@ function useGuildClears(instanceName: string, difficulty?: string) {
     },
     staleTime: STALE_TIME,
     enabled: !!instanceName,
-  });
-}
-
-export function useRecentUploads() {
-  return useQuery({
-    queryKey: ["home", "recent-uploads"],
-    queryFn: () =>
-      fetchJSON<RecentInstancesResponse>("/api/v1/raidlogs/recent?days=60&limit=12"),
-    staleTime: 60 * 1000,
   });
 }
 
