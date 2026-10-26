@@ -758,8 +758,11 @@ export function floorBoundsYardStep(bounds: WowMapFloorBounds | undefined): { x:
   };
 }
 
-/** Flat artwork has no yard scale; keep token geometry native at full-map zoom. */
-export const FLAT_ARTWORK_UNIT_SCALE = 1;
+/**
+ * Flat artwork without published world bounds cannot be yard-calibrated. Keep
+ * its chips smaller than native geometry so dense raid stacks stay readable.
+ */
+export const FLAT_ARTWORK_UNIT_SCALE = 0.7;
 
 export interface ScenePoint {
   x: number;

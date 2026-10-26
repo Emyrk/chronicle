@@ -554,8 +554,8 @@ describe("floorBoundsYardStep", () => {
 });
 
 describe("flatArtworkUnitScale", () => {
-  it("keeps token geometry fixed while the camera zooms", () => {
-    expect(flatArtworkUnitScale()).toBe(1);
+  it("keeps compact token geometry fixed while the camera zooms", () => {
+    expect(flatArtworkUnitScale()).toBe(0.7);
   });
 });
 
