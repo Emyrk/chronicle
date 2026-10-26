@@ -6,6 +6,9 @@ import {
   isPanelPresetLayout,
   mapPresetRowsForViewport,
   resizeMapPresetForViewport,
+  resizePresetForViewport,
+  resizeWatchPresetForViewport,
+  watchPresetSideRows,
   PRESET_LAYOUTS,
   PRESET_LAYOUTS_BY_ID,
   presetLayoutById,
@@ -14,6 +17,9 @@ import {
   deserializeTimelineConfig,
   extractTimelineToken,
 } from "./EventsPanels/Timeline/timelineTypes";
+import { parseMapPanelOptions } from "./EventsPanels/Map/mapPanelOptions";
+import { isCompactDeathsOption } from "./EventsPanels/Deaths/compactDeaths";
+import { isMeterBarsOption } from "./EventsPanels/metricPanelLiveState";
 
 function timelineSettings(panelOption: string | undefined) {
   return deserializeTimelineConfig(extractTimelineToken(panelOption))?.settings;
@@ -180,5 +186,97 @@ describe("Summary mini map", () => {
 
     const without = defaultInstanceLayout([]);
     expect(without.items.some((item) => without.panelTypes[item.id] === "mini_map")).toBe(false);
+  });
+});
+
+describe("Watch preset", () => {
+  function watchPreset(mobile = false) {
+    const preset = presetLayoutById("watch", ["unit-position"], mobile);
+    if (!preset || !isPanelPresetLayout(preset)) throw new Error("Watch should be a panels preset");
+    return preset;
+  }
+
+  it("is listed first and needs unit positions", () => {
+    expect(PRESET_LAYOUTS[0].id).toBe("watch");
+    expect(PRESET_LAYOUTS[0].label).toBe("Watch");
+    expect(getAvailablePresetLayouts([]).map((preset) => preset.id)).not.toContain("watch");
+    expect(getAvailablePresetLayouts(["unit-position"])[0].id).toBe("watch");
+    // The default tab is still Summary; the default rule is its own change.
+    expect(DEFAULT_PRESET_ID).toBe("summary");
+  });
+
+  it("puts the map beside party, deaths and one meter under a full-width replay strip", () => {
+    const preset = watchPreset();
+    expect(preset.seamless).toBe(true);
+    expect(preset.fit).toBe(true);
+    const byId = Object.fromEntries(preset.layoutItems.map((item) => [item.id, item]));
+    expect(byId["strip-1"]).toMatchObject({ kind: "strip", stripType: "replay", x: 0, y: 0, w: 12, h: 1 });
+    expect(byId["panel-1"]).toMatchObject({ x: 0, y: 1, w: 8, h: 9 });
+    expect(byId["panel-2"]).toMatchObject({ x: 8, y: 1, w: 4, h: 3 });
+    expect(byId["panel-3"]).toMatchObject({ x: 8, y: 4, w: 4, h: 4 });
+    expect(byId["panel-4"]).toMatchObject({ x: 8, y: 8, w: 4, h: 2 });
+    expect(preset.panelTypes).toEqual({
+      "panel-1": "map",
+      "panel-2": "raid_frames",
+      "panel-3": "deaths",
+      "panel-4": "damage_done",
+    });
+  });
+
+  it("opens the map on the whole run, playing, with the toolbar collapsed; compact deaths; a bars-only meter", () => {
+    const preset = watchPreset();
+    expect(parseMapPanelOptions(preset.panelOptions["panel-1"])).toEqual({ wholeRun: true, autoplay: true, toolbarCollapsed: true });
+    expect(isCompactDeathsOption(preset.panelOptions["panel-3"])).toBe(true);
+    expect(preset.panelOptions["panel-4"]).toContain("g:merged,p:owner");
+    expect(isMeterBarsOption(preset.panelOptions["panel-4"])).toBe(true);
+    expect(preset.panelOptions["panel-2"]).toBeUndefined();
+  });
+
+  it("stacks map, replay strip, party and deaths on mobile without fitting", () => {
+    const mobile = watchPreset(true);
+    expect(mobile.fit).toBe(false);
+    expect(mobile.layoutItems.map((item) => [item.id, item.y, item.w, item.h])).toEqual([
+      ["panel-1", 0, 12, 4],
+      ["strip-1", 4, 12, 1],
+      ["panel-2", 5, 12, 2],
+      ["panel-3", 7, 12, 3],
+    ]);
+  });
+
+  it.each([4, 5, 6, 7, 8, 9])("splits %i map rows into a side column of the same height", (mapRows) => {
+    const side = watchPresetSideRows(mapRows);
+    expect(side.party + side.deaths + side.damage).toBe(mapRows);
+    expect(Math.min(side.party, side.deaths, side.damage)).toBeGreaterThanOrEqual(1);
+    expect(side.deaths).toBeGreaterThanOrEqual(side.party);
+  });
+
+  it.each([720, 900, 1080, 1600])("fits every panel beside the map on a %ipx-tall viewport", (viewportHeight) => {
+    const resized = resizeWatchPresetForViewport(watchPreset().layoutItems, viewportHeight);
+    const byId = Object.fromEntries(resized.map((item) => [item.id, item]));
+    const mapBottom = byId["panel-1"].y + byId["panel-1"].h;
+    expect(byId["panel-1"].h).toBe(mapPresetRowsForViewport(viewportHeight));
+    expect(byId["strip-1"]).toMatchObject({ y: 0, h: 1 });
+    expect(byId["panel-2"].y).toBe(1);
+    expect(byId["panel-3"].y).toBe(byId["panel-2"].y + byId["panel-2"].h);
+    expect(byId["panel-4"].y).toBe(byId["panel-3"].y + byId["panel-3"].h);
+    expect(byId["panel-4"].y + byId["panel-4"].h).toBe(mapBottom);
+  });
+
+  it("resizes only the Map and Watch presets", () => {
+    const watch = watchPreset().layoutItems;
+    expect(resizePresetForViewport("watch", watch, 720)).toEqual(resizeWatchPresetForViewport(watch, 720));
+    const map = PRESET_LAYOUTS_BY_ID.map;
+    if (!isPanelPresetLayout(map)) throw new Error("Map should be a panels preset");
+    expect(resizePresetForViewport("map", map.layoutItems, 720)).toEqual(resizeMapPresetForViewport(map.layoutItems, 720));
+    const summary = PRESET_LAYOUTS_BY_ID.summary;
+    if (!isPanelPresetLayout(summary)) throw new Error("Summary should be a panels preset");
+    expect(resizePresetForViewport("summary", summary.layoutItems, 720)).toBe(summary.layoutItems);
+    expect(resizePresetForViewport(null, watch, 720)).toBe(watch);
+  });
+
+  it("leaves the other presets where they were", () => {
+    expect(PRESET_LAYOUTS.slice(1).map((preset) => preset.id)).toEqual([
+      "summary", "damage", "healing", "dispels", "interrupts", "deaths", "player_timeline", "map", "loot", "meta",
+    ]);
   });
 });

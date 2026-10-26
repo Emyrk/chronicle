@@ -130,6 +130,18 @@ export function encounterJumps(
     .sort((left, right) => left.timestampMs - right.timestampMs);
 }
 
+/** The first boss pull with position telemetry, at its first sample (a pull without any would show an empty scene). */
+export function firstBossPullMs(jumps: readonly EncounterJump[], processed: Map<string, MapEncounterPositions>): number | null {
+  for (const jump of jumps) {
+    let firstMs = Infinity;
+    for (const samples of processed.get(jump.id)?.positionsByUnit.values() ?? []) {
+      if (samples.length > 0) firstMs = Math.min(firstMs, samples[0].timestampMs);
+    }
+    if (Number.isFinite(firstMs)) return firstMs;
+  }
+  return null;
+}
+
 function medianOf(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);

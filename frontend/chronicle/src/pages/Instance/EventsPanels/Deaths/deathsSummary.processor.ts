@@ -1,10 +1,13 @@
 import type { SlainProcessorEvent, PanelProcessor, ProcessorContext } from "../processorTypes";
 import { isPlayerGuidFast } from "../processors/guidCache";
 import type { KillerData, PlayerDeathsData, UnitDeaths } from "./deaths.processor";
+import type { CompactDeathRow } from "./compactDeaths";
 
 export interface DeathsSummaryResult {
   EncounterDeaths: Map<string, UnitDeaths>;
   EncounterEnemyDeaths: Map<string, UnitDeaths>;
+  /** Every player death in order, for the compact list. */
+  PlayerDeathRows: CompactDeathRow[];
 }
 
 function resolveUnitName(guid: string, context: ProcessorContext): string {
@@ -20,9 +23,10 @@ export const deathsSummaryProcessor: PanelProcessor<DeathsSummaryResult, SlainPr
   createState: () => ({
     EncounterDeaths: new Map<string, UnitDeaths>(),
     EncounterEnemyDeaths: new Map<string, UnitDeaths>(),
+    PlayerDeathRows: [],
   }),
 
-  processEvent: (state, event, encounterID, _firstTimestamp, _streamType, context) => {
+  processEvent: (state, event, encounterID, firstTimestamp, _streamType, context) => {
     if (context.selectedEncounterIds.size > 0 && !context.selectedEncounterIds.has(encounterID)) return;
     if (!event.target) return;
 
@@ -58,5 +62,16 @@ export const deathsSummaryProcessor: PanelProcessor<DeathsSummaryResult, SlainPr
     killerData.count++;
     victimData.killers.set(killerKey, killerData);
     encounterData.set(victimID, victimData);
+
+    if (isPlayerDeath) {
+      state.PlayerDeathRows.push({
+        dateMilli: firstTimestamp.getTime() + event.offsetMilli,
+        encounterID,
+        playerID: victimID,
+        playerName: victimName,
+        className: victimClass,
+        killerName: killerID ? killerName : "Unknown",
+      });
+    }
   },
 };

@@ -105,7 +105,7 @@ import {
   getAvailablePresetLayouts,
   isPanelPresetLayout,
   presetLayoutById,
-  resizeMapPresetForViewport,
+  resizePresetForViewport,
   PRESET_LAYOUTS,
   PRESET_LAYOUTS_BY_ID,
   DEFAULT_PRESET_ID,
@@ -1319,7 +1319,7 @@ function PoppedOutLayoutContent({
   const [appearance, setAppearance] = useState(session.snapshot.appearance);
   const viewportHeight = useViewportHeight(session.window);
   const visibleLayoutItems = useMemo(
-    () => activePresetId === "map" ? resizeMapPresetForViewport(layoutItems, viewportHeight) : layoutItems,
+    () => resizePresetForViewport(activePresetId, layoutItems, viewportHeight),
     [activePresetId, layoutItems, viewportHeight],
   );
 
@@ -1593,9 +1593,7 @@ function EncounterDetail({
   const availablePresetLayouts = getAvailablePresetLayouts(instance.capabilities ?? [], isMobile);
   const viewportHeight = useViewportHeight(typeof window === "undefined" ? null : window);
   const visibleLayoutItems = useMemo(
-    () => activePresetId === "map" && !isMobile
-      ? resizeMapPresetForViewport(layoutItems, viewportHeight)
-      : layoutItems,
+    () => isMobile ? layoutItems : resizePresetForViewport(activePresetId, layoutItems, viewportHeight),
     [activePresetId, isMobile, layoutItems, viewportHeight],
   );
   // Active tab and collapsible state
