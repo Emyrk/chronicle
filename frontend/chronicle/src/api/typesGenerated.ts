@@ -822,6 +822,13 @@ export interface CreateLiveSessionResponse {
     readonly url: string;
 }
 
+// From chroniclesdk/lua_project.go
+export interface CreateLuaProjectRequest {
+    readonly kind: string;
+    readonly name: string;
+    readonly slug: string;
+}
+
 // From chroniclesdk/server_application.go
 /**
  * CreateModificationRequestPayload is sent to create/upsert a mod request.
@@ -2767,6 +2774,34 @@ export interface LogosPayload {
     readonly logo_wide: string;
     readonly favicon: string;
     readonly background_banner: string;
+}
+
+// From chroniclesdk/lua_project.go
+export interface LuaProject {
+    readonly id: string;
+    readonly owner_id: string;
+    readonly kind: string;
+    readonly name: string;
+    readonly slug: string;
+    readonly revision: number;
+    readonly draft_sha256?: string;
+    readonly unstable?: LuaProjectChannel;
+    readonly stable?: LuaProjectChannel;
+    readonly created_at: string;
+    readonly updated_at: string;
+}
+
+// From chroniclesdk/lua_project.go
+export interface LuaProjectChannel {
+    readonly sha256: string;
+    readonly published_at: string;
+    readonly published_by: string;
+}
+
+// From chroniclesdk/lua_project.go
+export interface LuaProjectPublishRequest {
+    readonly expected_revision: number;
+    readonly tested_sha256?: string;
 }
 
 // From chroniclesdk/unlisted_logs.go

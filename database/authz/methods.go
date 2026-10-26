@@ -379,6 +379,19 @@ func (z *interceptor) InsertUserAuthSession(ctx context.Context, arg database.In
 	return session, nil
 }
 
+func (z *interceptor) CreateLuaProject(ctx context.Context, arg database.CreateLuaProjectParams) (database.LuaProject, error) {
+	project, err := z.Store.CreateLuaProject(ctx, arg)
+	if err != nil {
+		return project, err
+	}
+	b := policy.New()
+	b.Lua_project(project.ID).Owner(b.User(arg.OwnerID)).Chronicle(b.GlobalChronicle()).Public_viewerWildcard()
+	if _, err := z.Write(ctx, *b.Txn()); err != nil {
+		return database.LuaProject{}, fmt.Errorf("write lua project relations: %w", err)
+	}
+	return project, nil
+}
+
 func (z *interceptor) CreateRaidComposition(ctx context.Context, arg database.CreateRaidCompositionParams) (database.RaidComposition, error) {
 	if arg.ID == uuid.Nil {
 		arg.ID = uuid.New()

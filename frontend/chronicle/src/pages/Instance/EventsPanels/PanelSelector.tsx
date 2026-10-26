@@ -13,6 +13,7 @@ import { PANELS, type EventsPanelType } from "./EventsPanel";
 
 import { listSelectableCustomPanels, resolveCustomPanel, useCustomPanelRegistry } from "./custom/pluginRegistry";
 import { isCustomPanelRef } from "./custom/pluginTypes";
+import { isLuaPanelRef, parseLuaPanelRef, useLuaPanelCatalog, type LuaPanelRef } from "./LuaPanel/luaPanelRegistry";
 
 interface PanelOption {
   value: EventsPanelType;
@@ -292,9 +293,16 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
   const [isOpen, setIsOpen] = useState(false);
   const customRegistry = useCustomPanelRegistry(isOpen || isCustomPanelRef(value));
   const customPanels = useMemo(() => listSelectableCustomPanels(customRegistry), [customRegistry]);
+  const luaCatalog = useLuaPanelCatalog(isOpen || isLuaPanelRef(value));
+  const luaPanels = useMemo(() => (luaCatalog.data ?? []).flatMap((project) =>
+    (["stable", "unstable"] as const).filter((channel) => project[channel]).map((channel) => ({
+      ref: `lua:${project.id}:${channel}` as LuaPanelRef, label: `${project.name} (${channel})`,
+    }))), [luaCatalog.data]);
+  const selectedLua = parseLuaPanelRef(value);
   const selectedCustom = isCustomPanelRef(value) ? resolveCustomPanel(value, customRegistry) : null;
   const selectedOption = selectedCustom
     ? { value, label: selectedCustom.panel?.name ?? selectedCustom.panelId ?? "Unavailable custom panel", icon: <Blocks className="h-4 w-4" /> }
+    : selectedLua ? { value, label: luaPanels.find((item) => item.ref === value)?.label ?? `Lua panel (${selectedLua.channel})`, icon: <Blocks className="h-4 w-4" /> }
     : getPanelOption(value);
   const [searchParams] = useSearchParams();
   const portalContainer = usePortalContainer();
@@ -434,9 +442,13 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
       });
     }
 
+    for (const item of luaPanels) {
+      const { match, score } = fuzzyMatch(searchQuery, item.label);
+      if (match) results.push({ option: { value: item.ref, label: item.label, icon: <Blocks className="h-4 w-4" /> }, category: "Lua", score });
+    }
     // Sort by score descending
     return results.sort((a, b) => b.score - a.score);
-  }, [searchQuery, isPanelVisible, customPanels]);
+  }, [searchQuery, isPanelVisible, customPanels, luaPanels]);
 
   const handleSelect = (panelValue: EventsPanelType) => {
     onChange(panelValue);
@@ -551,6 +563,10 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
                       isPanelVisible={isPanelVisible}
                     />
                   ))}
+                  {luaPanels.length > 0 && <div>
+                    <button type="button" onClick={() => toggleExpanded("Lua")} className="w-full px-2 py-1.5 text-left text-sm font-medium rounded-sm hover:bg-accent/50">Lua panels ({luaPanels.length})</button>
+                    {expandedPaths.has("Lua") && luaPanels.map((item) => <button key={item.ref} type="button" onClick={() => handleSelect(item.ref)} className="block w-full truncate px-6 py-1.5 text-left text-sm hover:bg-accent">{item.label}</button>)}
+                  </div>}
                   {customPanels.length > 0 && (
                     <div>
                       <button type="button" onClick={() => toggleExpanded("Custom")} className="w-full px-2 py-1.5 text-left text-sm font-medium rounded-sm flex items-center gap-1.5 hover:bg-accent/50">

@@ -1574,6 +1574,44 @@ CREATE VIEW log_instances_guild AS
      LEFT JOIN tenants t ON ((ws.tenant_id = t.id)))
      LEFT JOIN guilds g ON ((li.guild_id = g.id)));
 
+CREATE TABLE lua_project_artifact_gc (
+    object_key text NOT NULL,
+    attempted_at timestamp with time zone,
+    ready_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE lua_project_artifacts (
+    project_id uuid NOT NULL,
+    hash text NOT NULL,
+    object_key text NOT NULL,
+    mime_type text DEFAULT 'application/zip'::text NOT NULL,
+    content_encoding text,
+    uncompressed_size_bytes bigint NOT NULL,
+    stored_size_bytes bigint NOT NULL,
+    CONSTRAINT lua_project_artifacts_hash_check CHECK ((hash ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT lua_project_artifacts_stored_size_bytes_check CHECK ((stored_size_bytes >= 0)),
+    CONSTRAINT lua_project_artifacts_uncompressed_size_bytes_check CHECK ((uncompressed_size_bytes >= 0))
+);
+
+CREATE TABLE lua_projects (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    owner_id uuid NOT NULL,
+    kind text NOT NULL,
+    name text NOT NULL,
+    slug text NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    draft_hash text,
+    unstable_hash text,
+    stable_hash text,
+    unstable_published_at timestamp with time zone,
+    unstable_published_by uuid,
+    stable_published_at timestamp with time zone,
+    stable_published_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT lua_projects_kind_check CHECK ((kind = ANY (ARRAY['panel'::text, 'guide'::text])))
+);
+
 CREATE TABLE oauth_device_sessions (
     device_signature text NOT NULL,
     user_signature text NOT NULL,
@@ -2844,6 +2882,18 @@ ALTER TABLE ONLY log_instance_youtube_timestamped
 ALTER TABLE ONLY log_instances
     ADD CONSTRAINT log_instances_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY lua_project_artifact_gc
+    ADD CONSTRAINT lua_project_artifact_gc_pkey PRIMARY KEY (object_key);
+
+ALTER TABLE ONLY lua_project_artifacts
+    ADD CONSTRAINT lua_project_artifacts_pkey PRIMARY KEY (project_id, hash);
+
+ALTER TABLE ONLY lua_projects
+    ADD CONSTRAINT lua_projects_owner_id_slug_key UNIQUE (owner_id, slug);
+
+ALTER TABLE ONLY lua_projects
+    ADD CONSTRAINT lua_projects_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY oauth_device_sessions
     ADD CONSTRAINT oauth_device_sessions_pkey PRIMARY KEY (device_signature);
 
@@ -3342,6 +3392,10 @@ CREATE UNIQUE INDEX log_instance_youtube_timestamped_slug_idx ON log_instance_yo
 
 CREATE UNIQUE INDEX log_instances_hashed_slug_idx ON log_instances USING btree (hashed_slug) WHERE (hashed_slug IS NOT NULL);
 
+CREATE INDEX lua_projects_owner_idx ON lua_projects USING btree (owner_id, updated_at DESC);
+
+CREATE INDEX lua_projects_public_idx ON lua_projects USING btree (stable_published_at DESC) WHERE (stable_hash IS NOT NULL);
+
 CREATE INDEX oauth_device_sessions_expires_at_idx ON oauth_device_sessions USING btree (expires_at);
 
 CREATE INDEX oauth_relay_codes_expires_at_idx ON oauth_relay_codes USING btree (expires_at);
@@ -3729,6 +3783,18 @@ ALTER TABLE ONLY log_instances
 
 ALTER TABLE ONLY log_instances
     ADD CONSTRAINT log_instances_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY lua_project_artifacts
+    ADD CONSTRAINT lua_project_artifacts_project_id_fkey FOREIGN KEY (project_id) REFERENCES lua_projects(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY lua_projects
+    ADD CONSTRAINT lua_projects_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES users(id);
+
+ALTER TABLE ONLY lua_projects
+    ADD CONSTRAINT lua_projects_stable_published_by_fkey FOREIGN KEY (stable_published_by) REFERENCES users(id);
+
+ALTER TABLE ONLY lua_projects
+    ADD CONSTRAINT lua_projects_unstable_published_by_fkey FOREIGN KEY (unstable_published_by) REFERENCES users(id);
 
 ALTER TABLE ONLY oauth_relay_codes
     ADD CONSTRAINT oauth_relay_codes_user_auth_session_id_fkey FOREIGN KEY (user_auth_session_id) REFERENCES user_auth_session(id) ON DELETE CASCADE;

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -41,6 +43,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewhatsnew"
 	"github.com/authzed/gochugaru/rel"
+	"github.com/aws/smithy-go"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
@@ -138,20 +141,29 @@ type Options struct {
 }
 
 type API struct {
-	AppContext     context.Context
-	Opts           *Options
-	Auth           *chronauth.Service
-	Chronicle      *chronicle.Chronicle
-	Queues         *riverqueue.Queues
-	Zed            *authz.Authz
-	CustomPanels   *custompanelapi.Handler
-	liveSessions   *servicelivesession.Service
-	discoveryStats discoveryStatsCache
+	AppContext         context.Context
+	Opts               *Options
+	Auth               *chronauth.Service
+	Chronicle          *chronicle.Chronicle
+	Queues             *riverqueue.Queues
+	Zed                *authz.Authz
+	CustomPanels       *custompanelapi.Handler
+	liveSessions       *servicelivesession.Service
+	luaArtifactBacklog prometheus.Gauge
+	discoveryStats     discoveryStatsCache
 }
 
 func New(ctx context.Context, opts Options) (*API, error) {
 	if err := serviceproof.EnsureBucket(ctx, opts.Storage); err != nil {
 		return nil, err
+	}
+	if opts.Storage != nil {
+		if _, err := opts.Storage.CreateBucket(ctx, luaProjectBucket, storage.BucketOptions{Public: false, AllowedMimeTypes: []string{"application/zip"}}); err != nil {
+			var apiErr smithy.APIError
+			if err.Error() != "The resource already exists" && (!errors.As(err, &apiErr) || apiErr.ErrorCode() != "BucketAlreadyOwnedByYou") {
+				return nil, fmt.Errorf("create Lua project bucket: %w", err)
+			}
+		}
 	}
 	if opts.Registry == nil {
 		opts.Registry = prometheus.NewRegistry()
@@ -192,14 +204,24 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		return nil, err
 	}
 
-	return &API{
-		Opts:         &opts,
-		AppContext:   ctx,
-		Auth:         service,
-		Chronicle:    opts.Chronicle,
-		Queues:       opts.RiverQueue,
-		Zed:          opts.Zed,
-		CustomPanels: custompanelapi.New(custompanelapi.Options{HTTPClient: opts.CustomPanelHTTPClient}),
+	luaArtifactBacklog := prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "chronicle",
+		Subsystem: "lua_projects",
+		Name:      "artifact_gc_backlog",
+		Help:      "Number of eligible, unreferenced Lua ZIPs awaiting object-storage deletion.",
+	})
+	if err := opts.Registry.Register(luaArtifactBacklog); err != nil {
+		return nil, fmt.Errorf("register Lua artifact GC metric: %w", err)
+	}
+	api := &API{
+		luaArtifactBacklog: luaArtifactBacklog,
+		Opts:               &opts,
+		AppContext:         ctx,
+		Auth:               service,
+		Chronicle:          opts.Chronicle,
+		Queues:             opts.RiverQueue,
+		Zed:                opts.Zed,
+		CustomPanels:       custompanelapi.New(custompanelapi.Options{HTTPClient: opts.CustomPanelHTTPClient}),
 		liveSessions: servicelivesession.New(servicelivesession.Options{
 			AccessURL: opts.AccessURL,
 			ResolveUsername: func(ctx context.Context, userID uuid.UUID) (string, error) {
@@ -210,7 +232,27 @@ func New(ctx context.Context, opts Options) (*API, error) {
 				return user.Username, nil
 			},
 		}),
-	}, nil
+	}
+	gcCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	api.drainLuaArtifactGarbage(gcCtx)
+	cancel()
+	// Upload intents become eligible after their I/O grace period; a one-off
+	// startup sweep would miss intents that age while the service stays up.
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				gcCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				api.drainLuaArtifactGarbage(gcCtx)
+				cancel()
+			}
+		}
+	}()
+	return api, nil
 }
 
 func (api *API) Routes() chi.Router {
@@ -292,6 +334,12 @@ func (api *API) Routes() chi.Router {
 				if api.Opts.Inference != nil {
 					r.Mount("/me/inference", api.Opts.Inference.AccountRoutes())
 				}
+				r.With(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanCreate_lua_project_User)).Post("/me/lua-projects", api.CreateLuaProject)
+				r.Get("/me/lua-projects", api.ListMyLuaProjects)
+				r.Get("/me/lua-projects/{projectID}", api.GetMyLuaProject)
+				r.Get("/me/lua-projects/{projectID}/draft/{hash}/package", api.DownloadMyLuaProjectDraft)
+				r.Put("/me/lua-projects/{projectID}/draft", api.PutLuaProjectDraft)
+				r.Post("/me/lua-projects/{projectID}/{channel:stable|unstable}", api.PublishLuaProject)
 				r.Get("/me/custom-panels", api.GetMyCustomPanelSettings)
 				r.Put("/me/custom-panels", api.UpdateMyCustomPanelSettings)
 				r.Patch("/me/preferences", api.UpdateMyPreferences)
@@ -325,6 +373,9 @@ func (api *API) Routes() chi.Router {
 					r.Mount("/inference", api.Opts.Inference.Routes())
 				})
 			}
+			r.Get("/lua-projects", api.ListPublicLuaProjects)
+			r.Get("/lua-projects/{projectID}", api.GetPublicLuaProject)
+			r.Get("/lua-projects/{projectID}/artifacts/{hash}/package", api.DownloadLuaProject)
 			r.Mount("/custom-panels", api.CustomPanels.Routes())
 			r.Mount("/panel-layout", panellayoutapi.New(api.Opts.Zed, api.Auth).Routes())
 			r.Mount("/gear-builder", gearbuilderapi.New(api.Opts.Zed, api.Auth, api.Opts.CacheSvc).Routes())
