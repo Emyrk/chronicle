@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -147,6 +148,8 @@ type API struct {
 	CustomPanels   *custompanelapi.Handler
 	liveSessions   *servicelivesession.Service
 	discoveryStats discoveryStatsCache
+
+	sidekickRelease *sidekickReleaseCache
 }
 
 func New(ctx context.Context, opts Options) (*API, error) {
@@ -210,6 +213,11 @@ func New(ctx context.Context, opts Options) (*API, error) {
 				return user.Username, nil
 			},
 		}),
+		sidekickRelease: &sidekickReleaseCache{
+			apiURL: sidekickLatestAPIURL,
+			client: &http.Client{Timeout: 15 * time.Second},
+			logger: opts.Logger,
+		},
 	}, nil
 }
 
@@ -248,6 +256,8 @@ func (api *API) Routes() chi.Router {
 			r.Get("/discovery", api.Discovery)
 			r.Get("/parser-version", api.ParserVersion)
 			r.Get("/notices/public", api.ListPublicTelemetryNotices)
+			r.Get("/sidekick-release", api.SidekickRelease)
+			r.Get("/sidekick-release/download/{os}", api.SidekickDownload)
 		})
 
 		if api.Opts.Billing != nil {

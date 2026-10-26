@@ -1,10 +1,12 @@
-import { lazy, Suspense } from "react"
+import { lazy, Suspense, useEffect } from "react"
 import { Routes, Route, Navigate, useLocation } from "react-router-dom"
 import { Home } from "./pages/Home"
 import { NitroPayRuntime } from "./components/Ads/NitroPayRuntime"
 import { Layout } from "./components/Layout/Layout"
 import { RouteLoadingFallback } from "./components/Layout/RouteLoadingFallback"
+import { captureUtm } from "./utils/utm"
 
+const DownloadPage = lazy(() => import("./pages/Download").then(({ DownloadPage }) => ({ default: DownloadPage })))
 const Login = lazy(() => import("./pages/Login/Login").then(({ Login }) => ({ default: Login })))
 const Contact = lazy(() => import("./pages/Contact").then(({ Contact }) => ({ default: Contact })))
 const BecomeSupporter = lazy(() => import("./pages/BecomeSupporter").then(({ BecomeSupporter }) => ({ default: BecomeSupporter })))
@@ -144,6 +146,10 @@ function CatchAllRoute() {
 }
 
 function App() {
+  const location = useLocation()
+  // Keep an ad landing's utm_* params (e.g. /start) for /download and pairing.
+  useEffect(() => captureUtm(location.search), [location.search])
+
   return (
     <>
       <NitroPayRuntime />
@@ -151,6 +157,8 @@ function App() {
         <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/start" element={<StartPage />} />
+      <Route path="/download" element={<DownloadPage />} />
+      <Route path="/get-sidekick" element={<DownloadPage />} />
       <Route path="/youtube-sync" element={<LegacyYouTubeSyncRedirect />} />
       <Route path="/youtube-sync-v2" element={<LegacyYouTubeSyncRedirect />} />
       <Route path="/youtube-sync-v3" element={<YouTubeSyncV3Page />} />

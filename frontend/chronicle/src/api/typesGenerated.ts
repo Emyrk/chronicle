@@ -3867,6 +3867,35 @@ export interface SidekickIssueReport {
 }
 
 // From chroniclesdk/sidekick.go
+/**
+ * SidekickRelease is the latest published Chronicle Sidekick release, served
+ * from a server-side cache of the chronicle-sidekick GitHub releases API.
+ */
+export interface SidekickRelease {
+    /**
+     * Available is false when no published release was found; links then fall
+     * back to ReleasesURL.
+     */
+    readonly available: boolean;
+    readonly version: string;
+    readonly published_at?: string;
+    readonly releases_url: string;
+    readonly assets: readonly SidekickReleaseAsset[];
+}
+
+// From chroniclesdk/sidekick.go
+export interface SidekickReleaseAsset {
+    /**
+     * OS is "macos", "windows" or "linux".
+     */
+    readonly os: string;
+    readonly name: string;
+    readonly size: number;
+    readonly sha256?: string;
+    readonly url: string;
+}
+
+// From chroniclesdk/sidekick.go
 export interface SidekickStatusRequest {
     readonly platform?: string;
     readonly version?: string;
