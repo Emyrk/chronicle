@@ -11,7 +11,7 @@ import {
 } from "react";
 import { fetchMiniatureUrls } from "../../Instance/EventsPanels/Map/bossMinis";
 import MapView3D from "../../Instance/EventsPanels/Map/MapView3D";
-import { clampViewport } from "../../Instance/EventsPanels/Map/mapModel";
+import { clampViewport, type MapPoint } from "../../Instance/EventsPanels/Map/mapModel";
 import { applySceneBatch, createInitialScene, type RetainedScene, type SceneNode, type Viewport } from "../protocol";
 import { GuideUiScene } from "../protocol/GuideUiScene";
 export { GuideUiScene } from "../protocol/GuideUiScene";
@@ -28,6 +28,7 @@ import type {
 } from "./types";
 
 const EMPTY_ASSET_URLS: ReadonlyMap<string, string> = new Map();
+const EMPTY_ROUTE_POINTS: MapPoint[] = []; // Guides do not supply encounter movement routes.
 
 export interface GuideHostProps {
   guide: GuidePackageLike;
@@ -45,6 +46,7 @@ function DefaultGuideMapRenderer(props: GuideMapRenderProps) {
     <MapView3D
       ground={props.ground}
       markers={props.markers}
+      routePoints={EMPTY_ROUTE_POINTS}
       projectSample={props.projectSample}
       cursorMs={props.cursorMs}
       playing={props.playing}
