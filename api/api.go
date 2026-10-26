@@ -266,10 +266,14 @@ func (api *API) Routes() chi.Router {
 			r.Get("/live-sessions/{code}/ws", api.liveSessions.WebSocket)
 
 			r.Group(func(r chi.Router) {
+				r.Use(api.Auth.Authenticated(true))
+				r.Get("/whoami", api.WhoAmI)
+			})
+
+			r.Group(func(r chi.Router) {
 				r.Use(
 					api.Auth.Authenticated(false),
 				)
-				r.Get("/whoami", api.WhoAmI)
 				r.Get("/whoami/dump", api.DumpToken)
 				r.Post("/authcheck", api.checkAuthorization)
 				r.Post("/live-sessions", api.liveSessions.Create)
