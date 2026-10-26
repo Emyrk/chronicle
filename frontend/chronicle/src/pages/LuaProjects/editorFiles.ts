@@ -101,12 +101,10 @@ export function panelPackageFromWorkingCopy(project: Pick<LuaProject, "kind" | "
   }
 }
 
-export function applySourceProposal(project: Pick<LuaProject, "kind" | "name" | "slug">, files: EditorFiles,
-  revision: number, proposal: { source: string; expectedRevision: number }): EditorFiles | null {
+/** Replaces working-copy files only if nothing changed since the proposal was made. Validation is reported, not enforced. */
+export function applySourceProposal(files: EditorFiles, revision: number, proposal: { files: EditorFiles; expectedRevision: number }): EditorFiles | null {
   if (proposal.expectedRevision !== revision) return null
-  const next = { ...files, lua: proposal.source }
-  try { validateEditorFiles(project, next) } catch { return null }
-  return next
+  return { ...files, ...proposal.files }
 }
 
 /** Stable USTAR metadata and entry order; the archive is never executed in the browser. */

@@ -1,0 +1,122 @@
+import { useCallback, useEffect, useState } from "react"
+import { LoaderCircle, Sparkles } from "lucide-react"
+import { useAuth } from "@/hooks/useAuth"
+import { ChatPanel } from "@/features/chat/ChatPanel"
+import { AssistantConfiguration, ConnectRequiredAction } from "@/features/chat/InferenceChats"
+import {
+  isInferenceAuthorizationError,
+  isInferenceServiceUnavailable,
+  useClearInferenceThread,
+  useCreateLuaProjectInferenceThread,
+  useInferenceDebugPermission,
+  useInferenceDebugPreview,
+  useInferencePermission,
+  useInferenceThread,
+} from "@/features/chat/api"
+import { buildLuaWorkshopRunRequest, toChatMessages } from "@/features/chat/inference"
+import { useAssistantChat, type DebugCommandInput, type UseAssistantChatOptions } from "@/features/chat/useAssistantChat"
+import { useInferenceSelection } from "@/features/chat/useInferenceSelection"
+
+type PanelProps = Omit<React.ComponentProps<typeof ChatPanel>, "controller">
+
+function WorkshopChatPanel({ chat, panel, ideas }: { chat: UseAssistantChatOptions; panel: PanelProps; ideas: boolean }) {
+  const controller = useAssistantChat(chat)
+  const emptyState = ideas && !panel.disabled ? <EmptyState onPick={text => void controller.submit(text)} /> : panel.emptyState
+  return <ChatPanel {...panel} emptyState={emptyState} controller={controller} />
+}
+
+function EmptyState({ onPick }: { onPick: (text: string) => void }) {
+  const ideas = ["Show total damage as a big number", "Rank players by damage with bars", "Track the top 5 damage targets"]
+  return <div className="mx-auto max-w-sm text-center text-sm text-muted-foreground">
+    <Sparkles className="mx-auto mb-3 size-8 text-primary" />
+    <p className="font-medium text-foreground">What should this panel do?</p>
+    <p className="mt-2">The assistant reads and edits your unsaved main.lua and project.json, and can run a startup check. Nothing is saved until you click Save draft.</p>
+    <div className="mt-4 flex flex-col gap-2">
+      {ideas.map(idea => <button key={idea} type="button" onClick={() => onPick(idea)}
+        className="rounded-md border border-border px-3 py-2 text-left text-xs text-foreground hover:bg-accent">{idea}</button>)}
+    </div>
+  </div>
+}
+
+/** Durable per-project chat. Tools come from the page's lua-editor capability. */
+export function LuaWorkshopChat({ projectId, projectName, windowControls }: { projectId: string; projectName: string; windowControls?: React.ReactNode }) {
+  const { session, isAuthenticated } = useAuth()
+  const permission = useInferencePermission(isAuthenticated)
+  const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed)
+  const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed)
+  const debugPreview = useInferenceDebugPreview()
+  const clearThread = useClearInferenceThread()
+  const createThread = useCreateLuaProjectInferenceThread()
+  const [debugEnabled, setDebugEnabled] = useState(false)
+  const threadId = createThread.data?.thread.id
+  const threadQuery = useInferenceThread(threadId, { enabled: false })
+
+  useEffect(() => {
+    if (permission.allowed && selection.ready && !createThread.data && !createThread.isPending && !createThread.error) {
+      createThread.mutate(projectId)
+    }
+  }, [permission.allowed, selection.ready, createThread, projectId])
+
+  const refreshThread = useCallback(async () => { await threadQuery.refetch() }, [threadQuery])
+  const startNewChat = useCallback(async () => {
+    if (!threadId) return []
+    const cleared = await clearThread.mutateAsync(threadId)
+    return toChatMessages(cleared.messages)
+  }, [clearThread, threadId])
+  const previewDebug = useCallback(async (input: DebugCommandInput) => {
+    if (!threadId || !selection.modelId) throw new Error("Open the conversation and select a model first.")
+    const snapshot = await debugPreview.mutateAsync({
+      assistant_id: "lua-workshop", thread_id: threadId, model: selection.modelId,
+      ...(input.client ? { client: input.client } : {}),
+    })
+    setDebugEnabled(true)
+    return { snapshot }
+  }, [debugPreview, selection.modelId, threadId])
+  const createRequest = useCallback((input: Parameters<typeof buildLuaWorkshopRunRequest>[0]) => {
+    if (!selection.connectionId || !selection.modelId) throw new Error("Select an AI connection and model first.")
+    return buildLuaWorkshopRunRequest(input, { connectionId: selection.connectionId, modelId: selection.modelId }, debugEnabled)
+  }, [debugEnabled, selection.connectionId, selection.modelId])
+
+  if (!isAuthenticated || !permission.allowed || isInferenceServiceUnavailable(selection.error)) {
+    return <div className="flex h-full flex-col">
+      <div className="flex justify-end border-b border-border p-1.5">{windowControls}</div>
+      <p className="m-auto max-w-xs p-6 text-center text-sm text-muted-foreground">AI chat isn't available for this account. You can still edit and test the code directly.</p>
+    </div>
+  }
+  if (selection.isLoading) {
+    return <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" /> Loading AI configuration…</div>
+  }
+  const response = threadQuery.data ?? createThread.data
+  const disconnected = selection.connections.length === 0
+  const threadError = createThread.error ?? threadQuery.error
+  const threadLoading = selection.ready && !response && !threadError
+  const initialMessages = response ? toChatMessages(response.messages) : []
+
+  return <WorkshopChatPanel
+    // Keep the controller mounted across thread refreshes; remounting aborts client-tool continuations.
+    key={response?.thread.id ?? "pending"}
+    ideas={!threadLoading}
+    chat={{
+      endpoint: "/api/v1/inference/runs", threadId: response?.thread.id, initialMessages, createRequest,
+      onDebugCommand: debugPermission.allowed ? previewDebug : undefined, onStartNewChat: startNewChat, onRunSettled: refreshThread,
+    }}
+    panel={{
+      title: `${projectName} workshop`,
+      description: "Builds your panel in the unsaved working copy. Responses can be inaccurate; review before saving.",
+      placeholder: "Describe what the panel should show…",
+      configuration: selection.connections.length > 0 ? <AssistantConfiguration selection={selection} /> : undefined,
+      emptyState: threadLoading
+        ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" /> Loading conversation…</div>
+        : undefined,
+      debugAvailable: debugPermission.allowed, debugEnabled, onDebugEnabledChange: setDebugEnabled,
+      disabled: disconnected || Boolean(selection.error || threadError) || threadLoading,
+      disabledTitle: disconnected ? "Connect OpenRouter to use the workshop chat"
+        : threadLoading ? "Opening workshop chat"
+        : isInferenceAuthorizationError(threadError) ? "Assistant authorization expired" : "Workshop chat unavailable",
+      disabledDescription: selection.error?.message ?? threadError?.message ?? (threadLoading ? "Loading conversation history…" : "Connect a provider in account settings, then choose a model."),
+      disabledAction: disconnected ? <ConnectRequiredAction /> : undefined,
+      windowControls,
+      className: "h-full",
+    }}
+  />
+}

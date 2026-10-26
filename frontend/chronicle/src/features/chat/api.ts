@@ -18,6 +18,7 @@ const inferenceKeys = {
   models: (connectionId: string) => ["inference", "connections", connectionId, "models"] as const,
   thread: (threadId: string) => ["inference", "threads", threadId] as const,
   instanceThread: (instanceId: string) => ["inference", "threads", "instance", instanceId] as const,
+  luaProjectThread: (projectId: string) => ["inference", "threads", "lua-project", projectId] as const,
 };
 
 export class InferenceAPIError extends Error {
@@ -190,6 +191,25 @@ export function useCreateInstanceInferenceThread() {
     onSuccess: (data, instanceId) => {
       queryClient.setQueryData(inferenceKeys.thread(data.thread.id), data);
       queryClient.setQueryData(inferenceKeys.instanceThread(instanceId), data);
+    },
+  });
+}
+
+export function useCreateLuaProjectInferenceThread() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (projectId: string) => {
+      const response = await fetch(`/api/v1/inference/threads/lua-project/${encodeURIComponent(projectId)}`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!response.ok) throw await readError(response, "Failed to open the Lua workshop assistant");
+      return response.json() as Promise<InferenceThreadResponse>;
+    },
+    retry: false,
+    onSuccess: (data, projectId) => {
+      queryClient.setQueryData(inferenceKeys.thread(data.thread.id), data);
+      queryClient.setQueryData(inferenceKeys.luaProjectThread(projectId), data);
     },
   });
 }

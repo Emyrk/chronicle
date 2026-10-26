@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Compartment, EditorState } from "@codemirror/state"
 import { EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection } from "@codemirror/view"
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands"
@@ -75,18 +75,21 @@ function LuaCodeMirror({ value, onChange, disabled }: { value: string; onChange:
   return <div ref={container} className="h-full overflow-hidden" role="group" aria-label="main.lua source editor" />
 }
 
-export type LuaWorkingCopy = { source: string; manifest: string; revision: number; dirty: boolean; valid: boolean }
-export type LuaSourceProposal = { id: string; source: string; expectedRevision: number }
+export type LuaWorkingCopy = { source: string; manifest: string; revision: number; dirty: boolean; valid: boolean; validation: string }
+/** Replaces working-copy files if the revision still matches; used by AI tools and undo. */
+export type LuaSourceProposal = { id: string; files: EditorFiles; expectedRevision: number }
 export type LuaSourceEditorProps = {
   project: LuaProject
   onUploaded: (success: boolean) => Promise<void>
   onWorkingCopy?: (copy: LuaWorkingCopy | null) => void
   proposedSource?: LuaSourceProposal | null
-  onProposalResult?: (id: string, applied: boolean) => void
+  onProposalResult?: (id: string, applied: boolean, revision: number) => void
+  /** Rendered in the status bar, e.g. the startup check. */
+  footer?: ReactNode
 }
 
 /** Lazy-load this component from the route: importing it loads the CodeMirror bundle. */
-export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSource, onProposalResult }: LuaSourceEditorProps) {
+export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSource, onProposalResult, footer }: LuaSourceEditorProps) {
   const [files, setFiles] = useState<EditorFiles | null>(null)
   const [baseline, setBaseline] = useState<EditorFiles | null>(null)
   const [loading, setLoading] = useState(true)
@@ -140,20 +143,21 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
   useEffect(() => {
     onWorkingCopyRef.current?.(files && !loading ? {
       source: files.lua, manifest: files.manifest, revision: localRevision.current,
-      dirty, valid: !validation && !error,
+      dirty, valid: !validation && !error, validation: validation || error,
     } : null)
   }, [files, loading, dirty, validation, error])
 
   useEffect(() => {
     if (!proposedSource || !files || loading || handledProposal.current === proposedSource.id) return
     handledProposal.current = proposedSource.id
-    const next = !saving && !error ? applySourceProposal(project, files, localRevision.current, proposedSource) : null
-    if (next) {
-      if (next.lua !== files.lua) { localRevision.current += 1; setFiles(next) }
-      setActive("lua")
+    const next = !saving && !error ? applySourceProposal(files, localRevision.current, proposedSource) : null
+    if (next && (next.lua !== files.lua || next.manifest !== files.manifest)) {
+      localRevision.current += 1
+      setFiles(next)
+      setActive(next.lua === files.lua ? "manifest" : "lua")
     }
-    onProposalResultRef.current?.(proposedSource.id, !!next)
-  }, [proposedSource, files, loading, saving, error, project])
+    onProposalResultRef.current?.(proposedSource.id, !!next, localRevision.current)
+  }, [proposedSource, files, loading, saving, error])
 
   function edit(field: keyof EditorFiles, value: string) {
     if (!files || files[field] === value) return
@@ -215,7 +219,7 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
       {message ? <p role="alert" className="text-destructive">{message}</p>
         : notice ? <p role="status" className="text-emerald-400">{notice}</p>
         : <p className="text-muted-foreground">{active === "manifest" ? "Identity, entrypoint and assets are fixed; capabilities and streams are editable." : "Lua 5.1 · private working copy"}</p>}
-      <span className="ml-auto shrink-0 font-mono text-muted-foreground">rev {project.revision}</span>
+      <div className="ml-auto flex min-w-0 shrink-0 items-center gap-3">{footer}<span className="font-mono text-muted-foreground">rev {project.revision}</span></div>
     </div>
   </section>
 }

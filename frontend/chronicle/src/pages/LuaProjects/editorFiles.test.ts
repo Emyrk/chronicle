@@ -59,12 +59,11 @@ describe("Lua browser source model", () => {
     expect(() => panelPackageFromWorkingCopy(project, { ...files, manifest: files.manifest.replace('"assets": []', '"assets": ["icon.png"]') })).toThrow()
   })
 
-  it("accepts an AI source proposal only at the captured local revision", () => {
-    const proposal = { source: "return { title = 'New' }", expectedRevision: 4 }
-    expect(applySourceProposal(project, files, 4, proposal)).toEqual({ ...files, lua: proposal.source })
-    expect(applySourceProposal(project, files, 5, proposal)).toBeNull()
-    expect(applySourceProposal(project, files, 4, { ...proposal, source: "x".repeat(65537) })).toBeNull()
-    expect(files.lua).not.toBe(proposal.source)
+  it("accepts an AI working-copy proposal only at the captured local revision", () => {
+    const proposal = { files: { ...files, lua: "return { title = 'New' }" }, expectedRevision: 4 }
+    expect(applySourceProposal(files, 4, proposal)).toEqual(proposal.files)
+    expect(applySourceProposal(files, 5, proposal)).toBeNull()
+    expect(files.lua).not.toBe(proposal.files.lua)
   })
 
   it("validates manifest identity, schema, streams and bounded source before upload", () => {
