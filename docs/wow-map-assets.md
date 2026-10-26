@@ -111,17 +111,28 @@ world-Z slicing explicitly, or use an OBJ that already contains only that floor.
 
 #### Map Foundry workflow
 
-Upload and draft one floor at a time. For each floor, upload that floor's PNG or WebP and GLB as
-separate assets, use the content-addressed paths returned by the Foundry, and replace only the
-matching `{mapID, floor}` payload in the full renders and meshes draft arrays. Preserve every other
-instance, every other floor, and any legacy map-level `renders` or `mesh` field unchanged. Preview the
-floor against a real log before moving to the next floor.
+For multi-floor maps, prefer a deterministic `chronicle-map-foundry-bundle-v1` ZIP built by
+`scripts/render-map/tools/foundry_bundle.py`. It contains root `foundry.json` plus canonical assets
+such as `maps/533/floor-1/render.png` and `maps/533/floor-1/mesh.glb`. The generator verifies exact
+local byte counts and SHA-256 hashes, the 100 MB per-asset limit, unique map and floor IDs, identical
+render and mesh bounds, and complete dimensions, Z range, frame, and optional liquid calibration.
+It writes `ZIP_STORED` entries with normalized order, timestamps, and permissions for byte-identical
+runs. Absolute source paths are not included.
 
-A draft may accumulate several floor changes, but **publishing remains atomic**. The Foundry validates
-all referenced assets, writes both layer manifests and then the merged reader manifest as one publish,
-and clears the draft only after the full manifest succeeds. There is no partially published state
-where one floor is live and another floor from the same draft is not. If an unrelated draft already
-exists, stop rather than adding a floor to someone else's unpublished work.
+Each bundled floor has `preferred2D`. `renders` selects the calibrated render and is emitted by
+default when staging omits the field. `art` requests native floor art where usable. The bundle still
+contains the calibrated render and mesh either way.
+
+The Foundry UI extracts the ZIP in the browser, uploads each contained asset individually, then saves
+one draft containing all floor changes. The draft save is atomic. Asset storage is not transactional,
+so a failed import may leave unreferenced content-addressed objects. Importing a bundle never
+publishes it. Inspect the completed draft and preview every floor against a real log before publishing.
+If an unrelated draft already exists, stop rather than replacing someone else's unpublished work.
+
+Publishing remains atomic. The Foundry validates all referenced assets, writes both layer manifests
+and then the merged reader manifest as one publish, and clears the draft only after the full manifest
+succeeds. There is no partially published state where one floor is live and another floor from the
+same draft is not.
 
 ### Mesh-only instances
 

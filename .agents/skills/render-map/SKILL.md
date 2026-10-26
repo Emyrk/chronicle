@@ -152,6 +152,35 @@ serve several servers (LOCAL.md says which, and what to tell the operator about 
 the backup without the operator's explicit go for this map + namespace, after they saw the check
 numbers and the preview. No go → stop at the preview and report.
 
+**Preferred multi-floor workflow: deterministic bundle.** Build one local import archive after every
+floor passes its render, mesh, and real-log checks:
+
+```bash
+.venv/bin/python -I tools/foundry_bundle.py $W/maps/<slug>/<slug>-foundry-stage.json
+.venv/bin/python -I tools/foundry_bundle.py --check $W/maps/<slug>/<slug>-foundry-stage.json
+```
+
+The staging JSON has `namespace`, `mapID`, `name`, and `floors[]`. Each floor supplies `floor`, optional
+`name`, optional `preferred2D`, and complete `render` and `mesh` objects. Both assets need absolute local
+`path`, `bytes`, `sha256`, and identical `bounds`; the render also needs `width`/`height`; the mesh needs
+`zMin`/`zMax`, `frame: "wow-yup-mirrored-x"`, and optional `liquid`. `preferred2D` accepts `renders` or
+`art`: omitted means `renders`; `art` requests native floor art where usable. Never invent `art` for a
+stage that did not request it.
+
+The tool validates all local files and calibration, enforces the 100 MB individual asset limit, and
+writes a deterministic `ZIP_STORED` archive. Its root `foundry.json` has format
+`chronicle-map-foundry-bundle-v1`; assets have canonical names such as
+`maps/533/floor-1/render.png` and `maps/533/floor-1/mesh.glb`. It contains no absolute local paths.
+Run it twice when proving determinism and compare SHA-256 hashes.
+
+Import the ZIP in the Foundry UI. The browser extracts it, uploads the files individually, and saves
+all map and floor changes as one draft. Draft replacement is atomic, but asset storage is not. A failed
+import can leave unreferenced content-addressed objects. Import never publishes. Inspect the draft and
+preview every floor, then stop until the operator explicitly approves publishing that map and namespace.
+
+The direct API sequence below is the fallback for a single asset or when the bundle importer is not
+available. Do not use it as the default multi-floor workflow.
+
 **Auth.** `/internal/*` sits behind Cloudflare Access; the worker itself checks nothing else.
 `cloudflared access login https://$HOST` once, then every call is
 `cloudflared access curl https://$HOST/internal/api/v1/maps/$NS... <curl args>`. Do NOT send an
