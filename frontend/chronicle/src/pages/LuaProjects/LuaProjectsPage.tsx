@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { Link, useParams } from "react-router-dom"
 import { ArrowLeft, ArrowUpRight, FileArchive, FlaskConical, Package, Plus, ShieldCheck } from "lucide-react"
+import { useAuthorizationCheck, useSession } from "@/api/queries"
 import { createProject, getProject, listProjects, promoteStable, publicPackageURL, publishUnstable, uploadDraft, type LuaProject, type LuaProjectKind } from "./api"
 
 import { LuaDraftPreview } from "./LuaDraftPreview"
@@ -21,15 +22,21 @@ export function LuaProjectsPage() {
   const [name, setName] = useState("")
   const [slug, setSlug] = useState("")
   const [kind, setKind] = useState<LuaProjectKind>("panel")
+  const { data: session, isLoading: sessionLoading } = useSession()
+  const createPermission = useAuthorizationCheck({ createLuaProject: "chronicle:chronicle#create_lua_project" }, { enabled: !!session })
+  const canCreate = createPermission.data?.createLuaProject === true
 
   useEffect(() => {
+    if (sessionLoading) return
+    if (!session) { setProjects([]); setLoading(false); return }
     let active = true
     listProjects().then(items => { if (active) setProjects(items) }).catch(e => { if (active) setError(errorMessage(e)) }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [])
+  }, [session, sessionLoading])
 
   async function create(event: FormEvent) {
     event.preventDefault()
+    if (!canCreate) return
     setBusy(true)
     setError("")
     try {
@@ -56,13 +63,18 @@ export function LuaProjectsPage() {
             <ArrowUpRight className="size-5 shrink-0 text-muted-foreground group-hover:text-primary" aria-hidden="true" />
           </Link>) }
       </section>
-      <form onSubmit={create} className={`${card} h-fit space-y-4`}>
+      {canCreate ? <form onSubmit={create} className={`${card} h-fit space-y-4`}>
         <div className="flex items-center gap-2"><Plus className="size-4" /><h2 className="font-semibold">New project</h2></div>
         <label className="block text-sm font-medium">Name<input className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={name} onChange={event => setName(event.target.value)} maxLength={120} required /></label>
         <label className="block text-sm font-medium">Slug<input className="mt-1 w-full rounded-md border bg-background px-3 py-2 font-mono" value={slug} onChange={event => setSlug(event.target.value)} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" maxLength={80} required /><span className="mt-1 block text-xs text-muted-foreground">Lowercase letters, numbers and hyphens.</span></label>
         <label className="block text-sm font-medium">Kind<select className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={kind} onChange={event => setKind(event.target.value as LuaProjectKind)}><option value="panel">Panel</option><option value="guide">Guide</option></select></label>
         <button className={button} disabled={busy} type="submit">{busy ? "Creating…" : "Create project"}</button>
-      </form>
+      </form> : <div className={`${card} h-fit text-sm`}>
+        {sessionLoading || (session && createPermission.isPending) ? <p>Checking project creation permission…</p> :
+          <p role="alert" className="text-destructive">{!session ? "Sign in to create Lua projects." :
+            createPermission.isError ? "Could not check project creation permission. Please try again." :
+              "You do not have permission to create Lua projects. Ask a technical administrator for the Lua Project Author role."}</p>}
+      </div>}
     </div>
   </main>
 }
@@ -128,7 +140,7 @@ export function LuaProjectPage() {
         </div>
       </section>
       <section className={`${card} space-y-4`}><div className="flex items-center gap-2"><Package className="size-5" /><h2 className="font-semibold">03 / Unstable</h2></div>
-        <p className="text-sm text-muted-foreground">Publish a test build. Anyone can paste its reference into an instance panel selector; Unstable stays out of the public catalog.</p>
+        <p className="text-sm text-muted-foreground">Publish a test build. Only you will find it in the instance panel selector; the release URL remains accessible to anyone with the link.</p>
         <button type="button" className={button} disabled={busy || !project.draft_sha256} onClick={() => { if (window.confirm("Publish this draft to the public unstable channel?")) void mutate(() => publishUnstable(project.id, project.revision), "Unstable release published.") }}>Publish unstable</button>
         {project.unstable?.sha256 && <div className="space-y-1 text-xs"><p className="break-all font-mono text-muted-foreground">SHA-256: {project.unstable?.sha256}</p><a href={unstableLink} className="inline-flex items-center gap-1 text-primary underline" target="_blank" rel="noopener noreferrer">Public unstable package <ArrowUpRight className="size-3" /></a><p className="break-all font-mono text-muted-foreground">Panel reference: lua:{project.id}:unstable</p></div>}
       </section>

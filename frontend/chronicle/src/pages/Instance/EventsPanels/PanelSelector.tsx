@@ -446,15 +446,6 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
       const { match, score } = fuzzyMatch(searchQuery, item.label);
       if (match) results.push({ option: { value: item.ref, label: item.label, icon: <Blocks className="h-4 w-4" /> }, category: "Lua", score });
     }
-    // Unstable is link-only, so a recipient can paste its channel-following ref.
-    const pastedLuaRef = searchQuery.trim();
-    if (isLuaPanelRef(pastedLuaRef) && !luaPanels.some((item) => item.ref === pastedLuaRef)) {
-      results.push({
-        option: { value: pastedLuaRef, label: `Lua panel (${parseLuaPanelRef(pastedLuaRef)?.channel})`, icon: <Blocks className="h-4 w-4" /> },
-        category: "Lua › Shared reference",
-        score: 1_000,
-      });
-    }
     // Sort by score descending
     return results.sort((a, b) => b.score - a.score);
   }, [searchQuery, isPanelVisible, customPanels, luaPanels]);

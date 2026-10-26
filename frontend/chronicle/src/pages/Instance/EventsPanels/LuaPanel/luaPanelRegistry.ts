@@ -1,4 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
+import { useSession } from "@/api/queries"
+import { listProjects } from "../../../LuaProjects/api"
 
 export type LuaPanelRef = `lua:${string}:${"stable" | "unstable"}`
 const REF = /^lua:([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}):(stable|unstable)$/i
@@ -18,15 +20,22 @@ export interface LuaProjectCatalogEntry {
   unstable?: { sha256: string }
 }
 
+export async function fetchOwnedLuaPanels(ownerId: string): Promise<LuaProjectCatalogEntry[]> {
+  const projects = await listProjects()
+  return projects.filter(project => project.owner_id === ownerId && project.kind === "panel" &&
+    !!parseLuaPanelRef(`lua:${project.id}:stable`) && (project.stable || project.unstable))
+    .map(project => ({ id: project.id, kind: project.kind, name: project.name,
+      stable: project.stable ?? undefined, unstable: project.unstable ?? undefined }))
+}
+
 export function useLuaPanelCatalog(enabled = true) {
-  return useQuery({ queryKey: ["lua-panel-catalog"], enabled, staleTime: 60_000,
-    queryFn: async ({ signal }): Promise<LuaProjectCatalogEntry[]> => {
-      const response = await fetch("/api/v1/lua-projects", { signal })
-      if (!response.ok) throw new Error("Lua panel catalog unavailable")
-      const value: unknown = await response.json()
-      if (!Array.isArray(value)) throw new Error("Invalid Lua panel catalog")
-      return value.filter((item): item is LuaProjectCatalogEntry => !!item && typeof item === "object" &&
-        item.kind === "panel" && typeof item.id === "string" && !!parseLuaPanelRef(`lua:${item.id}:stable`) && typeof item.name === "string")
+  const { data: session } = useSession()
+  const ownerId = session?.user_id
+  return useQuery({
+    queryKey: ["lua-panel-catalog", ownerId], enabled: enabled && !!ownerId, staleTime: 60_000,
+    queryFn: () => {
+      if (!ownerId) throw new Error("Sign in to view your Lua panels")
+      return fetchOwnedLuaPanels(ownerId)
     },
   })
 }

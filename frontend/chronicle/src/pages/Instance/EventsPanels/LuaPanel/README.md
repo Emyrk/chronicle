@@ -14,8 +14,8 @@ worker and selects only current encounter IDs. The worker caps event count and
 operation output. `chronicle.v1.ui` provides `metric`, `table`, `bars`, each
 creating retained UI operations validated by the Guide scene protocol.
 
-Public catalog: `GET /api/v1/lua-projects` (array of entries with `id`, `kind`,
-`name`, `stable` and optional `unstable`). The panel resolves
+Selector catalog: `GET /api/v1/me/lua-projects` for the signed-in owner's
+published panels only. The panel resolves
 `GET /api/v1/lua-projects/{id}?channel=stable|unstable` once per page load for
 its SHA-256, then fetches its ZIP from
 `/api/v1/lua-projects/{id}/artifacts/{sha256}/package`. A browser refresh
