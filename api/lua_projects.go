@@ -35,30 +35,37 @@ func luaProjectObjectKey(id uuid.UUID) string {
 	return id.String() + "/" + uuid.NewString() + ".zip"
 }
 
-func (a *API) discardLuaObject(key string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if _, err := a.Opts.Storage.RemoveFile(ctx, luaProjectBucket, []string{key}); err != nil {
-		a.Opts.Logger.Error("failed to discard unreferenced Lua ZIP", "key", key, "error", err)
-		return // Keep the durable intent for a later retry.
+// Count only keys that are eligible now and have no committed artifact.
+// Claim leases do not remove work from the backlog until deletion succeeds.
+func (a *API) refreshLuaArtifactBacklog(ctx context.Context) {
+	if a.luaArtifactBacklog == nil {
+		return
 	}
-	if err := a.Opts.Zed.DeleteLuaProjectArtifactGarbage(ctx, key); err != nil {
-		a.Opts.Logger.Error("failed to acknowledge discarded Lua ZIP", "key", key, "error", err)
+	count, err := a.Opts.Zed.CountReadyLuaProjectArtifactGarbage(ctx)
+	if err != nil {
+		a.Opts.Logger.Error("count Lua ZIP garbage backlog", "error", err)
+		return
 	}
+	a.luaArtifactBacklog.Set(float64(count))
 }
 
 // A garbage row is committed with each pruned artifact. Upload intents are
 // recorded before object I/O. Only unreferenced, eligible keys are claimed
 // for deletion, retried on writes and by the periodic service collector.
 func (a *API) drainLuaArtifactGarbage(ctx context.Context) {
-	a.drainLuaArtifactGarbageAt(ctx, time.Now())
+	a.drainLuaArtifactGarbageAt(ctx, time.Time{}) // PostgreSQL supplies now().
 }
 
+// A nonzero cutoff is only for deterministic tests of expiry and retries.
 func (a *API) drainLuaArtifactGarbageAt(ctx context.Context, asOf time.Time) {
-	if a.Opts.Storage == nil || a.Opts.Zed == nil {
+	if a.Opts.Zed == nil {
 		return
 	}
-	keys, err := a.Opts.Zed.ClaimLuaProjectArtifactGarbage(ctx, pgtype.Timestamptz{Time: asOf, Valid: true})
+	a.refreshLuaArtifactBacklog(ctx)
+	if a.Opts.Storage == nil {
+		return
+	}
+	keys, err := a.Opts.Zed.ClaimLuaProjectArtifactGarbage(ctx, pgtype.Timestamptz{Time: asOf, Valid: !asOf.IsZero()})
 	if err != nil {
 		a.Opts.Logger.Error("list Lua ZIP garbage", "error", err)
 		return
@@ -284,7 +291,8 @@ func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 	uploadCtx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
 	if _, err := a.Opts.Storage.UploadFile(uploadCtx, luaProjectBucket, key, bytes.NewReader(archive), storage.FileOptions{ContentType: &contentType}); err != nil {
-		a.discardLuaObject(key) // A failed upload may still have created the object.
+		// A timeout does not prove the object write failed. Keep the intent for
+		// GC after its grace period instead of racing an in-flight PutObject.
 		httpapi.InternalServerError(w, err)
 		return
 	}
@@ -309,9 +317,9 @@ func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 		}
 		return nil // Existing identical bytes keep their prior object key.
 	}, nil)
-	if err != nil || !storedKey.Valid || storedKey.String != key {
-		a.discardLuaObject(key)
-	}
+	// An error from COMMIT can mean the transaction actually committed. Never
+	// delete this key on an uncertain result: committed artifacts consumed the
+	// intent, while failed or duplicate uploads remain eligible for GC.
 	if err == nil {
 		a.drainLuaArtifactGarbageAfterWrite()
 	}

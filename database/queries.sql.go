@@ -11337,11 +11337,14 @@ func (q *sqlQuerier) GetInstanceLoot(ctx context.Context, arg GetInstanceLootPar
 const claimLuaProjectArtifactGarbage = `-- name: ClaimLuaProjectArtifactGarbage :many
 WITH candidates AS (
   SELECT gc.object_key FROM lua_project_artifact_gc gc
-  WHERE gc.ready_at <= $1::timestamptz AND (gc.attempted_at IS NULL OR gc.attempted_at + interval '2 minutes' < $1::timestamptz)
+  -- A null override uses PostgreSQL time. Tests supply an explicit cutoff to
+  -- exercise grace periods and retries without sleeps.
+  WHERE gc.ready_at <= COALESCE($1::timestamptz, now())
+    AND (gc.attempted_at IS NULL OR gc.attempted_at + interval '2 minutes' < COALESCE($1::timestamptz, now()))
     AND NOT EXISTS (SELECT 1 FROM lua_project_artifacts a WHERE a.object_key = gc.object_key)
   ORDER BY gc.attempted_at NULLS FIRST, gc.object_key LIMIT 50 FOR UPDATE SKIP LOCKED
 )
-UPDATE lua_project_artifact_gc gc SET attempted_at = $1::timestamptz
+UPDATE lua_project_artifact_gc gc SET attempted_at = COALESCE($1::timestamptz, now())
 FROM candidates c WHERE gc.object_key = c.object_key
 RETURNING gc.object_key
 `
@@ -11377,6 +11380,19 @@ func (q *sqlQuerier) ConsumeLuaProjectUpload(ctx context.Context, objectKey stri
 	var object_key string
 	err := row.Scan(&object_key)
 	return object_key, err
+}
+
+const countReadyLuaProjectArtifactGarbage = `-- name: CountReadyLuaProjectArtifactGarbage :one
+SELECT count(*) FROM lua_project_artifact_gc gc
+WHERE gc.ready_at <= now()
+  AND NOT EXISTS (SELECT 1 FROM lua_project_artifacts a WHERE a.object_key = gc.object_key)
+`
+
+func (q *sqlQuerier) CountReadyLuaProjectArtifactGarbage(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countReadyLuaProjectArtifactGarbage)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const createLuaProject = `-- name: CreateLuaProject :one

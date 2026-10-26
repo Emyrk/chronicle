@@ -141,15 +141,16 @@ type Options struct {
 }
 
 type API struct {
-	AppContext     context.Context
-	Opts           *Options
-	Auth           *chronauth.Service
-	Chronicle      *chronicle.Chronicle
-	Queues         *riverqueue.Queues
-	Zed            *authz.Authz
-	CustomPanels   *custompanelapi.Handler
-	liveSessions   *servicelivesession.Service
-	discoveryStats discoveryStatsCache
+	AppContext         context.Context
+	Opts               *Options
+	Auth               *chronauth.Service
+	Chronicle          *chronicle.Chronicle
+	Queues             *riverqueue.Queues
+	Zed                *authz.Authz
+	CustomPanels       *custompanelapi.Handler
+	liveSessions       *servicelivesession.Service
+	luaArtifactBacklog prometheus.Gauge
+	discoveryStats     discoveryStatsCache
 }
 
 func New(ctx context.Context, opts Options) (*API, error) {
@@ -203,14 +204,24 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		return nil, err
 	}
 
+	luaArtifactBacklog := prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "chronicle",
+		Subsystem: "lua_projects",
+		Name:      "artifact_gc_backlog",
+		Help:      "Number of eligible, unreferenced Lua ZIPs awaiting object-storage deletion.",
+	})
+	if err := opts.Registry.Register(luaArtifactBacklog); err != nil {
+		return nil, fmt.Errorf("register Lua artifact GC metric: %w", err)
+	}
 	api := &API{
-		Opts:         &opts,
-		AppContext:   ctx,
-		Auth:         service,
-		Chronicle:    opts.Chronicle,
-		Queues:       opts.RiverQueue,
-		Zed:          opts.Zed,
-		CustomPanels: custompanelapi.New(custompanelapi.Options{HTTPClient: opts.CustomPanelHTTPClient}),
+		luaArtifactBacklog: luaArtifactBacklog,
+		Opts:               &opts,
+		AppContext:         ctx,
+		Auth:               service,
+		Chronicle:          opts.Chronicle,
+		Queues:             opts.RiverQueue,
+		Zed:                opts.Zed,
+		CustomPanels:       custompanelapi.New(custompanelapi.Options{HTTPClient: opts.CustomPanelHTTPClient}),
 		liveSessions: servicelivesession.New(servicelivesession.Options{
 			AccessURL: opts.AccessURL,
 			ResolveUsername: func(ctx context.Context, userID uuid.UUID) (string, error) {

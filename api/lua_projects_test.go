@@ -22,6 +22,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -145,8 +147,16 @@ func TestLuaArtifactGarbageRemoval(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, zed.PruneLuaProjectArtifacts(ctx, database.PruneLuaProjectArtifactsParams{ID: project.ID, OwnerID: owner}))
 
-	api := &API{Opts: &Options{Zed: zed, Storage: objects, Logger: slog.Default()}}
+	backlog := prometheus.NewGauge(prometheus.GaugeOpts{Name: "lua_test_gc_backlog"})
+	api := &API{Opts: &Options{Zed: zed, Storage: objects, Logger: slog.Default()}, luaArtifactBacklog: backlog}
+	api.refreshLuaArtifactBacklog(ctx)
+	var metric dto.Metric
+	require.NoError(t, backlog.Write(&metric))
+	require.Equal(t, float64(1), metric.GetGauge().GetValue())
 	api.drainLuaArtifactGarbage(ctx)
+	api.refreshLuaArtifactBacklog(ctx)
+	require.NoError(t, backlog.Write(&metric))
+	require.Equal(t, float64(0), metric.GetGauge().GetValue())
 	_, err = objects.DownloadFile(ctx, luaProjectBucket, key)
 	require.ErrorIs(t, err, storage.ErrFileNotFound)
 	pending, err := zed.ListLuaProjectArtifactGarbage(ctx)
@@ -181,9 +191,8 @@ func TestLuaUploadIntentRecovery(t *testing.T) {
 	_, err = objects.UploadFile(ctx, luaProjectBucket, key, bytes.NewReader([]byte("uncommitted")))
 	require.NoError(t, err)
 
-	// A failed best-effort delete must retain the intent, even if the request
-	// (or process) never makes it as far as writing an artifact.
-	api.discardLuaObject(key)
+	// An uncertain upload/transaction result leaves its intent and object
+	// alone; a delayed storage write cannot race an immediate delete.
 	pending, err := zed.ListLuaProjectArtifactGarbage(ctx)
 	require.NoError(t, err)
 	require.Contains(t, pending, key)
