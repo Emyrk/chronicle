@@ -445,6 +445,7 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           let uploaded = 0;
           setBusy(true); setStatus('Reading and validating ' + file.name + '…');
           try {
+            if (file.size > 512 * 1024 * 1024) throw new Error('ZIP archive must not exceed 512 MB');
             const files = bundleTools.parseStoredZip(new Uint8Array(await file.arrayBuffer()));
             const manifestBytes = files.get('foundry.json');
             if (!manifestBytes) throw new Error('ZIP archive is missing root foundry.json');

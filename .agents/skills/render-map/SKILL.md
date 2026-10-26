@@ -173,10 +173,12 @@ writes a deterministic `ZIP_STORED` archive. Its root `foundry.json` has format
 `maps/533/floor-1/render.png` and `maps/533/floor-1/mesh.glb`. It contains no absolute local paths.
 Run it twice when proving determinism and compare SHA-256 hashes.
 
-Import the ZIP in the Foundry UI. The browser extracts it, uploads the files individually, and saves
-all map and floor changes as one draft. Draft replacement is atomic, but asset storage is not. A failed
-import can leave unreferenced content-addressed objects. Import never publishes. Inspect the draft and
-preview every floor, then stop until the operator explicitly approves publishing that map and namespace.
+Import the ZIP in the Foundry UI. The browser rejects archives over 512 MB, archives with more than
+512 entries, and unreferenced entries before uploading the files individually and saving
+all map and floor changes with one conditional draft write. Asset storage is not transactional: a
+failed import can leave unreferenced content-addressed objects. Import never publishes. Inspect the
+draft and preview every floor, then stop until the operator explicitly approves publishing that map
+and namespace.
 
 The direct API sequence below is the fallback for a single asset or when the bundle importer is not
 available. Do not use it as the default multi-floor workflow.

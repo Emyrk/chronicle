@@ -151,9 +151,10 @@ entry names, and entry order are normalized, so identical staging metadata and a
 an identical bundle. Absolute local paths never enter `foundry.json`.
 
 Import the ZIP through the Map Foundry UI. The browser extracts it locally, validates
-`chronicle-map-foundry-bundle-v1`, uploads the contained files individually, and saves one draft.
-The draft update is atomic, but asset storage is not transactional. A failed import can leave
-unreferenced content-addressed objects. Importing never publishes; inspect the draft and preview,
+`chronicle-map-foundry-bundle-v1`, rejects archives over 512 MB, archives with more than 512 entries,
+and unreferenced entries, uploads the contained files individually, and saves one draft.
+The draft update is one conditional write, but asset storage is not transactional. A failed import can
+leave unreferenced content-addressed objects. Importing never publishes; inspect the draft and preview,
 then wait for the operator's explicit publish approval.
 
 ## Two kinds of map

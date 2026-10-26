@@ -99,8 +99,9 @@ function bundle(overrides: Record<string, unknown> = {}) {
       mapID: 43,
       floors: [{
         floor: 0,
+        name: "The Wailing Caverns",
         preferred2D: "art",
-        render: { file: "assets/floor.png", bounds: { minX: 1, maxX: 2, minY: 3, maxY: 4 } },
+        render: { file: "assets/floor.png", width: 1600, height: 1000, bounds: { minX: 1, maxX: 2, minY: 3, maxY: 4 } },
         mesh: { file: "assets/floor.glb", bounds: { minX: 10, maxX: 20, minY: 30, maxY: 40 }, zMin: -5, zMax: 15, frame: "wow-yup-mirrored-x" },
       }],
     }],
@@ -128,6 +129,10 @@ test("STORED ZIP parser rejects unsafe, duplicate, encrypted, compressed, ZIP64,
   assert.throws(() => tools.parseStoredZip(storedZip([{ name: "map.png", bytes: new Uint8Array([1]), flags: 0x0801 }])), /encrypted ZIP entries/);
   assert.throws(() => tools.parseStoredZip(storedZip([{ name: "map.png", bytes: new Uint8Array([1]), method: 8 }])), /STORED compression method/);
   assert.throws(() => tools.parseStoredZip(storedZip([{ name: "map.png", bytes: new Uint8Array([1]), centralExtra: new Uint8Array([1, 0, 0, 0]) }])), /ZIP64 archives/);
+  assert.throws(() => tools.parseStoredZip(storedZip(Array.from({ length: 513 }, (_, index) => ({
+    name: `entry-${index}`,
+    bytes: new Uint8Array(),
+  })))), /must not contain more than 512 entries/);
   const malformed = storedZip([{ name: "map.png", bytes: new Uint8Array([1]) }]);
   new DataView(malformed.buffer).setUint32(malformed.length - 6, 1, true);
   assert.throws(() => tools.parseStoredZip(malformed), /central directory is malformed/);
@@ -143,12 +148,17 @@ test("bundle validation checks namespace, existing floors, metadata, files, and 
 
   const defaultPlan = await tools.validateMapFoundryBundle(bundle({
     maps: [{ mapID: 43, floors: [{ floor: 0, render: { file: "assets/floor.png" } }] }],
-  }), files, "azerothcore", instances());
+  }), new Map([["assets/floor.png", png]]), "azerothcore", instances());
   assert.equal(defaultPlan.maps[0]?.floors[0]?.preferred2D, "renders");
+
+  assert.equal(plan.assets[0]?.metadata.width, 1600);
+  assert.equal(plan.assets[0]?.metadata.height, 1000);
 
   await assert.rejects(() => tools.validateMapFoundryBundle(bundle(), files, "forever", instances()), /does not match selected namespace/);
   await assert.rejects(() => tools.validateMapFoundryBundle(bundle({ maps: [{ mapID: 43, floors: [{ floor: 9, render: { file: "assets/floor.png" } }] }] }), files, "azerothcore", instances()), /unknown mapID 43 floor 9/);
   await assert.rejects(() => tools.validateMapFoundryBundle(bundle(), new Map([["assets/floor.png", png]]), "azerothcore", instances()), /missing ZIP file/);
+  await assert.rejects(() => tools.validateMapFoundryBundle(bundle(), new Map([...files, ["assets/unreferenced.bin", new Uint8Array([7])]]), "azerothcore", instances()), /unreferenced entry/);
+  await assert.rejects(() => tools.validateMapFoundryBundle(bundle(), new Map([...files, ["junk/", new Uint8Array()]]), "azerothcore", instances()), /unreferenced entry/);
   await assert.rejects(() => tools.validateMapFoundryBundle(bundle({ maps: [{ mapID: 43, floors: [{ floor: 0, preferred2D: "styled", render: { file: "assets/floor.png" } }] }] }), files, "azerothcore", instances()), /preferred2D/);
 });
 
@@ -165,6 +175,11 @@ test("bundle merge replaces calibration and preference while preserving unrelate
     ] },
     meshes: { instances: [{ mapID: 43, name: "Wailing Caverns", floors: [{ floor: 1, mesh: { path: "3d/sibling.glb" } }] }] },
   };
+  assert.throws(() => tools.mergeMapFoundryBundle(draft, plan, [
+    { path: "renders/wrong.png", width: 1599, height: 1000 },
+    { path: "3d/new.glb" },
+  ]), /width does not match bundle metadata/);
+
   const merged = tools.mergeMapFoundryBundle(draft, plan, [
     { path: "renders/new.png", width: 1600, height: 1000 },
     { path: "3d/new.glb" },

@@ -123,16 +123,19 @@ Each bundled floor has `preferred2D`. `renders` selects the calibrated render an
 default when staging omits the field. `art` requests native floor art where usable. The bundle still
 contains the calibrated render and mesh either way.
 
-The Foundry UI extracts the ZIP in the browser, uploads each contained asset individually, then saves
-one draft containing all floor changes. The draft save is atomic. Asset storage is not transactional,
-so a failed import may leave unreferenced content-addressed objects. Importing a bundle never
-publishes it. Inspect the completed draft and preview every floor against a real log before publishing.
-If an unrelated draft already exists, stop rather than replacing someone else's unpublished work.
+The Foundry UI extracts the ZIP in the browser, rejects archives over 512 MB, archives with more than
+512 entries, and entries not referenced by `foundry.json`, then uploads each asset
+individually and saves one draft containing all floor changes. The draft save is a single conditional
+write. Asset storage is not transactional, so a failed import may leave unreferenced content-addressed
+objects. Importing a bundle never publishes it. Inspect the completed draft and preview every floor
+against a real log before publishing. If an unrelated draft already exists, stop rather than replacing
+someone else's unpublished work.
 
-Publishing remains atomic. The Foundry validates all referenced assets, writes both layer manifests
-and then the merged reader manifest as one publish, and clears the draft only after the full manifest
-succeeds. There is no partially published state where one floor is live and another floor from the
-same draft is not.
+Publication is ordered, not transactional. The Foundry validates all referenced assets before writing,
+then writes the source-layer manifests, writes the merged reader `manifest.json` last, and clears the
+draft afterward. A failed publish can leave source manifests ahead of the reader manifest or retain an
+already-published draft; retry publication to reconcile them. Consumers of the merged reader manifest
+see either its previous object or the complete replacement object.
 
 ### Mesh-only instances
 

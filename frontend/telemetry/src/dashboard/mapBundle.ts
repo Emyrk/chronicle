@@ -47,6 +47,8 @@ export interface MapBundleTools {
 export function createMapBundleTools(): MapBundleTools {
   const textDecoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false });
   const bundleFormat = "chronicle-map-foundry-bundle-v1";
+  const maxArchiveBytes = 512 * 1024 * 1024;
+  const maxArchiveEntries = 512;
 
   function fail(message: string): never {
     throw new TypeError(message);
@@ -102,6 +104,7 @@ export function createMapBundleTools(): MapBundleTools {
 
   function parseStoredZip(input: Uint8Array | ArrayBuffer): Map<string, Uint8Array> {
     const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+    if (bytes.length > maxArchiveBytes) fail("ZIP archive must not exceed 512 MB");
     if (bytes.length < 22) fail("ZIP archive is truncated");
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const searchStart = Math.max(0, bytes.length - 22 - 0xffff);
@@ -122,6 +125,7 @@ export function createMapBundleTools(): MapBundleTools {
     const centralOffset = uint32(view, eocd + 16);
     if (disk !== 0 || centralDisk !== 0 || diskEntries !== totalEntries) fail("multi-disk ZIP archives are not supported");
     if (totalEntries === 0xffff || centralSize === 0xffffffff || centralOffset === 0xffffffff) fail("ZIP64 archives are not supported");
+    if (totalEntries > maxArchiveEntries) fail(`ZIP archive must not contain more than ${maxArchiveEntries} entries`);
     if (centralOffset + centralSize !== eocd || centralOffset > bytes.length) fail("ZIP central directory is malformed");
 
     const entries = new Map<string, Uint8Array>();
@@ -225,7 +229,7 @@ export function createMapBundleTools(): MapBundleTools {
 
   function assetMetadata(value: unknown, context: string, kind: "renders" | "meshes"): Record<string, unknown> {
     const fields = kind === "renders"
-      ? ["file", "bounds", "sha256", "bytes"]
+      ? ["file", "width", "height", "bounds", "sha256", "bytes"]
       : ["file", "bounds", "zMin", "zMax", "frame", "liquid", "sha256", "bytes"];
     const input = object(value, context, fields);
     const file = string(input.file, `${context}.file`);
@@ -234,6 +238,14 @@ export function createMapBundleTools(): MapBundleTools {
     if (kind === "meshes" && !/\.glb$/i.test(file)) fail(`${context}.file must be a GLB`);
     const result: Record<string, unknown> = { file };
     if (input.bounds !== undefined) result.bounds = bounds(input.bounds, `${context}.bounds`);
+    if (kind === "renders") {
+      for (const field of ["width", "height"] as const) {
+        if (input[field] === undefined) continue;
+        const dimension = integer(input[field], `${context}.${field}`);
+        if (dimension <= 0 || dimension > 32768) fail(`${context}.${field} must be between 1 and 32768`);
+        result[field] = dimension;
+      }
+    }
     if (kind === "meshes") {
       if (input.bounds === undefined) fail(`${context}.bounds is required`);
       result.zMin = finite(input.zMin, `${context}.zMin`);
@@ -285,6 +297,7 @@ export function createMapBundleTools(): MapBundleTools {
       });
     }
     const assets: FoundryBundleAssetPlan[] = [];
+    const referencedFiles = new Set(["foundry.json"]);
     const maps: { mapID: number; firstFloor: number | null; floors: { floor: number; preferred2D: "renders" | "art" }[] }[] = [];
     const seenMaps = new Set<number>();
     for (const [mapIndex, rawMap] of array(root.maps, "foundry.json.maps").entries()) {
@@ -306,14 +319,16 @@ export function createMapBundleTools(): MapBundleTools {
         const file = metadata.file as string;
         const bytes = files.get(file);
         if (!bytes) fail(`${assetContext} references missing ZIP file ${JSON.stringify(file)}`);
+        referencedFiles.add(file);
         assets.push({ kind, mapID, floor, name, file, bytes, metadata });
       };
       if (map.render !== undefined) addAsset(map.render, "renders", null, `${context}.render`);
       if (map.mesh !== undefined) addAsset(map.mesh, "meshes", null, `${context}.mesh`);
       for (const [floorIndex, rawFloor] of floors.entries()) {
         const floorContext = `${context}.floors[${floorIndex}]`;
-        const floorEntry = object(rawFloor, floorContext, ["floor", "preferred2D", "render", "mesh"]);
+        const floorEntry = object(rawFloor, floorContext, ["floor", "name", "preferred2D", "render", "mesh"]);
         const floor = integer(floorEntry.floor, `${floorContext}.floor`);
+        if (floorEntry.name !== undefined) string(floorEntry.name, `${floorContext}.name`);
         if (seenFloors.has(floor)) fail(`duplicate bundle mapID ${mapID} floor ${floor}`);
         seenFloors.add(floor);
         if (!base.floors.has(floor)) fail(`bundle references unknown mapID ${mapID} floor ${floor}`);
@@ -329,6 +344,9 @@ export function createMapBundleTools(): MapBundleTools {
       maps.push({ mapID, firstFloor, floors: plannedFloors });
     }
     if (maps.length === 0) fail("foundry.json.maps must contain at least one map");
+    for (const file of files.keys()) {
+      if (!referencedFiles.has(file)) fail(`ZIP archive contains unreferenced entry ${JSON.stringify(file)}`);
+    }
     for (const asset of assets) {
       if (asset.bytes.byteLength === 0 || asset.bytes.byteLength > 100 * 1024 * 1024) fail(`${asset.file} must be between 1 byte and 100 MB`);
       if (asset.metadata.bytes !== undefined && asset.metadata.bytes !== asset.bytes.byteLength) {
@@ -380,6 +398,8 @@ export function createMapBundleTools(): MapBundleTools {
       if (asset.floor !== null) target = ensureLayerFloor(entry, asset.floor);
       if (asset.kind === "renders") {
         if (!Number.isSafeInteger(upload.width) || !Number.isSafeInteger(upload.height) || upload.width! <= 0 || upload.height! <= 0) fail(`render upload result ${index + 1} has invalid dimensions`);
+        if (asset.metadata.width !== undefined && upload.width !== asset.metadata.width) fail(`render upload result ${index + 1} width does not match bundle metadata`);
+        if (asset.metadata.height !== undefined && upload.height !== asset.metadata.height) fail(`render upload result ${index + 1} height does not match bundle metadata`);
         target[field] = {
           path: upload.path,
           width: upload.width,
