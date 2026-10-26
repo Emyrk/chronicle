@@ -4,6 +4,7 @@ import { Download as DownloadIcon, Eye, Check, Info, Upload as UploadIcon, Panel
 import { Stone } from "./Stone";
 import s from "./Download.module.css";
 import type { SidekickRelease } from "@/api/typesGenerated";
+import { trackFunnel } from "@/utils/funnel";
 import { campaignParams, withCampaign } from "@/utils/utm";
 
 type OS = "macos" | "windows" | "linux";
@@ -99,6 +100,7 @@ export function DownloadPage({ os }: { os?: OS }) {
   const primary = found?.assets.find((x) => x.os === current.os);
   // The server redirects to the latest asset, or to the releases page if there is none.
   const href = (a: Asset) => withCampaign(`/api/v1/sidekick-release/download/${a.os}`, campaign);
+  const onDownload = (a: Asset) => () => trackFunnel("download_start", { os: a.os });
 
   const metaParts: string[] = [];
   if (found && primary) {
@@ -151,7 +153,7 @@ export function DownloadPage({ os }: { os?: OS }) {
             moment you log out. No dragging files around. Nothing to remember.
           </p>
           <div className={`${s.rise} ${s.d4} ${s.ctaBlock}`}>
-            <a href={href(current)} className={s.cta}>
+            <a href={href(current)} onClick={onDownload(current)} className={s.cta}>
               <DownloadIcon className={s.arrow} size={22} strokeWidth={2.6} aria-hidden="true" />
               Download for {current.label}
             </a>
@@ -165,7 +167,8 @@ export function DownloadPage({ os }: { os?: OS }) {
                 </span>
               )}
               <span>
-                Also for <a href={href(others[0])}>{others[0].label}</a> and <a href={href(others[1])}>{others[1].label}</a>
+                Also for <a href={href(others[0])} onClick={onDownload(others[0])}>{others[0].label}</a> and{" "}
+                <a href={href(others[1])} onClick={onDownload(others[1])}>{others[1].label}</a>
               </span>
             </div>
           </div>

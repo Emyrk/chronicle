@@ -333,4 +333,14 @@ func (s *Service) RecordUpload(ctx context.Context) {
 	}); err != nil {
 		s.logger.ErrorContext(ctx, "record sidekick upload", "sidekick_id", installationID, "error", err)
 	}
+	// The landing funnel's first_upload (docs/landing-funnel-events.md): the
+	// account's first log group from any Sidekick. No user identifiers.
+	count, err := s.zed.CountSidekickLogGroupsByUser(ctx, claims.Subject)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "count sidekick log groups", "sidekick_id", installationID, "error", err)
+		return
+	}
+	if count == 1 {
+		s.logger.InfoContext(ctx, "funnel event", "event", "first_upload")
+	}
 }

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useLandingFeatured } from "@/api/landingFeaturedQuery";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useRecentUploads } from "@/pages/Recent/recentUploads";
+import { trackFunnel } from "@/utils/funnel";
 import { HeroReplayLayer } from "./HeroReplayLayer";
 import type { HeroReplay } from "./heroReplay";
 import { LandingHero } from "./LandingHero";
@@ -120,6 +121,7 @@ function LandingNav({ getSidekickHref }: { getSidekickHref: string }) {
       <div className="flex items-center gap-2">
         <a
           href={getSidekickHref}
+          onClick={() => trackFunnel("cta_sidekick", { placement: "nav" })}
           className="rounded-lg bg-[#e0b45c] px-3 py-2 text-[13px] font-semibold text-[#0c1322] no-underline hover:bg-[#e8c477] lg:px-4 lg:py-2.5 lg:text-sm"
         >
           Get Sidekick
@@ -254,6 +256,7 @@ function RecentRuns({ getSidekickHref }: { getSidekickHref: string }) {
         </Suspense>
         <a
           href={getSidekickHref}
+          onClick={() => trackFunnel("cta_sidekick", { placement: "ghost_card" })}
           className="flex min-h-[160px] flex-col justify-center gap-1.5 rounded-xl border border-dashed border-[#5f6d88] bg-[#101829] p-4 text-center text-[#e8eef8] no-underline hover:border-[#e0b45c]"
         >
           <div className={`text-lg font-bold ${HEADING_FONT}`}>Your run goes here</div>
@@ -284,6 +287,7 @@ function ClosingBand() {
             <a
               key={href}
               href={href}
+              onClick={() => trackFunnel("cta_sidekick", { placement: "band" })}
               className="rounded-[10px] bg-[#e0b45c] px-5 py-[13px] text-[15px] font-semibold text-[#0c1322] no-underline hover:bg-[#e8c477]"
             >
               {label}
@@ -306,6 +310,9 @@ export function StartPage() {
   const [replay, setReplay] = useState<HeroReplay | null>(null);
   const showShelf = useIdleAfterMount();
 
+  // The funnel's denominator: one per visit to /start, with its campaign.
+  useEffect(() => trackFunnel("land"), []);
+
   // Our hero now covers the static poster index.html painted before the bundle loaded.
   useLayoutEffect(() => {
     document.getElementById("start-poster-shell")?.remove();
@@ -322,7 +329,7 @@ export function StartPage() {
         currentMs={replay?.currentMs}
         playback={replay}
         getSidekickHref={getSidekickHref}
-        layer3D={heroInstanceId ? <HeroReplayLayer instanceId={heroInstanceId} onReplay={setReplay} /> : null}
+        layer3D={landing || landingFailed ? <HeroReplayLayer instanceId={heroInstanceId} onReplay={setReplay} /> : null}
       />
       <SendLinkSection />
       <HowItWorks />
