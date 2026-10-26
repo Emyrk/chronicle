@@ -470,6 +470,10 @@ WITH matching_runs AS (
                 AND lip_filter.unit_guid = @player_guid
           )
       )
+      AND (
+          NOT @has_positions::boolean
+          OR 'unit-position' = ANY(li.capabilities)
+      )
 ),
 instance_rows AS (
     SELECT
@@ -496,7 +500,8 @@ instance_rows AS (
         li.recorder_name,
         li.difficulty_name,
         li.max_players,
-        li.dynamic_difficulty
+        li.dynamic_difficulty,
+        ('unit-position' = ANY(li.capabilities))::boolean AS has_positions
     FROM log_instances li
     JOIN matching_runs ON matching_runs.run_id = COALESCE(li.duplicate_group_id, li.id)
     JOIN parsed_log_group plg ON plg.id = li.log_group_id
@@ -580,7 +585,8 @@ SELECT
     ranked_instances.recorder_name,
     ranked_instances.difficulty_name,
     ranked_instances.max_players,
-    ranked_instances.dynamic_difficulty
+    ranked_instances.dynamic_difficulty,
+    ranked_instances.has_positions
 FROM ranked_instances
 JOIN selected_runs USING (run_id)
 ORDER BY
