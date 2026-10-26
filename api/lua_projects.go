@@ -90,22 +90,23 @@ func (a *API) drainLuaArtifactGarbageAfterWrite() {
 	a.drainLuaArtifactGarbage(ctx)
 }
 
-func (a *API) luaZIP(w http.ResponseWriter, r *http.Request, legacy []byte, key pgtype.Text, digest string) ([]byte, bool) {
-	if !key.Valid {
-		return legacy, true
+func (a *API) luaZIP(w http.ResponseWriter, r *http.Request, key, digest, mimeType string, encoding pgtype.Text) ([]byte, bool) {
+	if mimeType != "application/zip" || encoding.Valid {
+		httpapi.InternalServerError(w, fmt.Errorf("unsupported Lua artifact format: %q, encoding %q", mimeType, encoding.String))
+		return nil, false
 	}
 	if a.Opts.Storage == nil {
 		httpapi.InternalServerError(w, errors.New("lua project object storage is unavailable"))
 		return nil, false
 	}
-	archive, err := a.Opts.Storage.DownloadFile(r.Context(), luaProjectBucket, key.String)
+	archive, err := a.Opts.Storage.DownloadFile(r.Context(), luaProjectBucket, key)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return nil, false
 	}
 	hash := sha256.Sum256(archive)
 	if hex.EncodeToString(hash[:]) != digest {
-		httpapi.InternalServerError(w, fmt.Errorf("lua ZIP digest mismatch: %s", key.String))
+		httpapi.InternalServerError(w, fmt.Errorf("lua ZIP digest mismatch: %s", key))
 		return nil, false
 	}
 	return archive, true
@@ -273,6 +274,11 @@ func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid tar package.", Detail: err.Error()})
 		return
 	}
+	uncompressedSize, err := luaZIPFileBytes(archive)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
 	hash := sha256.Sum256(archive)
 	digest := hex.EncodeToString(hash[:])
 	if a.Opts.Storage == nil {
@@ -297,21 +303,25 @@ func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var project database.LuaProject
-	var storedKey pgtype.Text
+	var storedKey string
 	err = a.Opts.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
 		var err error
 		project, err = tx.SetLuaProjectDraft(r.Context(), database.SetLuaProjectDraftParams{ID: id, OwnerID: owner, TechnicalAdmin: technicalAdmin, Hash: pgtype.Text{String: digest, Valid: true}, ExpectedRevision: revision})
 		if err != nil {
 			return err
 		}
-		storedKey, err = tx.PutLuaProjectArtifact(r.Context(), database.PutLuaProjectArtifactParams{ProjectID: id, Hash: digest, ObjectKey: pgtype.Text{String: key, Valid: true}})
+		storedKey, err = tx.PutLuaProjectArtifact(r.Context(), database.PutLuaProjectArtifactParams{
+			ProjectID: id, Hash: digest, ObjectKey: key, MimeType: "application/zip",
+			UncompressedSizeBytes: pgtype.Int8{Int64: uncompressedSize, Valid: true},
+			StoredSizeBytes:       pgtype.Int8{Int64: int64(len(archive)), Valid: true},
+		})
 		if err != nil {
 			return err
 		}
 		if err := tx.PruneLuaProjectArtifacts(r.Context(), database.PruneLuaProjectArtifactsParams{ID: id, OwnerID: owner, TechnicalAdmin: technicalAdmin}); err != nil {
 			return err
 		}
-		if storedKey.Valid && storedKey.String == key {
+		if storedKey == key {
 			_, err = tx.ConsumeLuaProjectUpload(r.Context(), key)
 			return err // Roll back the artifact if GC has already claimed the key.
 		}
@@ -472,11 +482,11 @@ func (a *API) DownloadMyLuaProjectDraft(w http.ResponseWriter, r *http.Request) 
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	archive, ok := a.luaZIP(w, r, result.Bytes, result.ObjectKey, result.LuaProject.DraftHash.String)
+	archive, ok := a.luaZIP(w, r, result.ObjectKey, result.LuaProject.DraftHash.String, result.MimeType, result.ContentEncoding)
 	if !ok {
 		return
 	}
-	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Type", result.MimeType)
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("ETag", `"`+result.LuaProject.DraftHash.String+`"`)
 	w.WriteHeader(http.StatusOK)
@@ -512,11 +522,11 @@ func (a *API) DownloadLuaProject(w http.ResponseWriter, r *http.Request) {
 	if channel == "unstable" {
 		hash = result.LuaProject.UnstableHash.String
 	}
-	archive, ok := a.luaZIP(w, r, result.Bytes, result.ObjectKey, hash)
+	archive, ok := a.luaZIP(w, r, result.ObjectKey, hash, result.MimeType, result.ContentEncoding)
 	if !ok {
 		return
 	}
-	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Type", result.MimeType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.zip"`, result.LuaProject.Slug))
 	w.Header().Set("ETag", `"`+hash+`"`)
 	w.Header().Set("Cache-Control", "no-store")

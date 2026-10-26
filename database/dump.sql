@@ -1583,9 +1583,14 @@ CREATE TABLE lua_project_artifact_gc (
 CREATE TABLE lua_project_artifacts (
     project_id uuid NOT NULL,
     hash text NOT NULL,
-    bytes bytea,
-    object_key text,
-    CONSTRAINT lua_project_artifacts_hash_check CHECK ((hash ~ '^[0-9a-f]{64}$'::text))
+    object_key text NOT NULL,
+    mime_type text DEFAULT 'application/zip'::text NOT NULL,
+    content_encoding text,
+    uncompressed_size_bytes bigint,
+    stored_size_bytes bigint,
+    CONSTRAINT lua_project_artifacts_hash_check CHECK ((hash ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT lua_project_artifacts_stored_size_bytes_check CHECK ((stored_size_bytes >= 0)),
+    CONSTRAINT lua_project_artifacts_uncompressed_size_bytes_check CHECK ((uncompressed_size_bytes >= 0))
 );
 
 CREATE TABLE lua_projects (
@@ -2879,9 +2884,6 @@ ALTER TABLE ONLY log_instances
 
 ALTER TABLE ONLY lua_project_artifact_gc
     ADD CONSTRAINT lua_project_artifact_gc_pkey PRIMARY KEY (object_key);
-
-ALTER TABLE lua_project_artifacts
-    ADD CONSTRAINT lua_project_artifact_payload CHECK (((bytes IS NULL) <> (object_key IS NULL))) NOT VALID;
 
 ALTER TABLE ONLY lua_project_artifacts
     ADD CONSTRAINT lua_project_artifacts_pkey PRIMARY KEY (project_id, hash);

@@ -18,7 +18,8 @@ UPDATE lua_projects SET draft_hash = @hash, revision = revision + 1, updated_at 
 WHERE id = @id AND (owner_id = @owner_id OR @technical_admin::boolean) AND revision = @expected_revision RETURNING *;
 
 -- name: PutLuaProjectArtifact :one
-INSERT INTO lua_project_artifacts (project_id, hash, object_key) VALUES (@project_id, @hash, @object_key)
+INSERT INTO lua_project_artifacts (project_id, hash, object_key, mime_type, content_encoding, uncompressed_size_bytes, stored_size_bytes)
+VALUES (@project_id, @hash, @object_key, @mime_type, @content_encoding, @uncompressed_size_bytes, @stored_size_bytes)
 ON CONFLICT (project_id, hash) DO UPDATE SET hash = EXCLUDED.hash
 RETURNING object_key;
 
@@ -82,17 +83,18 @@ SELECT object_key FROM lua_project_artifact_gc ORDER BY object_key LIMIT 100;
 DELETE FROM lua_project_artifact_gc WHERE object_key = @object_key;
 
 -- name: GetOwnerLuaProjectDraftPackage :one
-SELECT sqlc.embed(p), a.bytes, a.object_key
+SELECT sqlc.embed(p), a.object_key, a.mime_type, a.content_encoding
 FROM lua_projects p
 JOIN lua_project_artifacts a ON a.project_id = p.id AND a.hash = p.draft_hash
 WHERE p.id = @id AND (p.owner_id = @owner_id OR @technical_admin::boolean);
 
 -- name: GetPublishedLuaProjectPackage :one
-SELECT sqlc.embed(p), a.bytes, a.object_key
+SELECT sqlc.embed(p), a.object_key, a.mime_type, a.content_encoding
 FROM lua_projects p
 JOIN lua_project_artifacts a ON a.project_id = p.id
  AND a.hash = CASE WHEN @channel::text = 'stable' THEN p.stable_hash ELSE p.unstable_hash END
 WHERE p.id = @id AND @channel::text IN ('stable', 'unstable');
 
 -- name: GetLuaProjectArtifact :one
-SELECT object_key FROM lua_project_artifacts WHERE project_id = @project_id AND hash = @hash;
+SELECT object_key, mime_type, content_encoding, uncompressed_size_bytes, stored_size_bytes
+FROM lua_project_artifacts WHERE project_id = @project_id AND hash = @hash;

@@ -339,7 +339,7 @@ type sqlcQuerier interface {
 	// Return the start_time for a log instance. Used by the parses handler
 	// to resolve which snapshot cutoff applies to the instance.
 	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
-	GetLuaProjectArtifact(ctx context.Context, arg GetLuaProjectArtifactParams) (pgtype.Text, error)
+	GetLuaProjectArtifact(ctx context.Context, arg GetLuaProjectArtifactParams) (GetLuaProjectArtifactRow, error)
 	GetModificationRequestByID(ctx context.Context, id uuid.UUID) (ApplicationModificationRequest, error)
 	GetOAuthDeviceSession(ctx context.Context, signature string) (GetOAuthDeviceSessionRow, error)
 	GetOAuthTokenSession(ctx context.Context, arg GetOAuthTokenSessionParams) ([]byte, error)
@@ -776,7 +776,7 @@ type sqlcQuerier interface {
 	PublicInstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (LogInstancesGuild, error)
 	PublishCacheGeneration(ctx context.Context, arg PublishCacheGenerationParams) (PublishCacheGenerationRow, error)
 	PublishLuaProjectUnstable(ctx context.Context, arg PublishLuaProjectUnstableParams) (LuaProject, error)
-	PutLuaProjectArtifact(ctx context.Context, arg PutLuaProjectArtifactParams) (pgtype.Text, error)
+	PutLuaProjectArtifact(ctx context.Context, arg PutLuaProjectArtifactParams) (string, error)
 	RankingRunByID(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	RankingRunIdentitiesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]RankingRunIdentitiesByInstanceIDsRow, error)
 	RankingRunIdentitiesByLogGroupID(ctx context.Context, logGroupID uuid.UUID) ([]RankingRunIdentitiesByLogGroupIDRow, error)

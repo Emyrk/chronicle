@@ -11444,7 +11444,8 @@ func (q *sqlQuerier) DeleteLuaProjectArtifactGarbage(ctx context.Context, object
 }
 
 const getLuaProjectArtifact = `-- name: GetLuaProjectArtifact :one
-SELECT object_key FROM lua_project_artifacts WHERE project_id = $1 AND hash = $2
+SELECT object_key, mime_type, content_encoding, uncompressed_size_bytes, stored_size_bytes
+FROM lua_project_artifacts WHERE project_id = $1 AND hash = $2
 `
 
 type GetLuaProjectArtifactParams struct {
@@ -11452,11 +11453,25 @@ type GetLuaProjectArtifactParams struct {
 	Hash      string    `db:"hash" json:"hash"`
 }
 
-func (q *sqlQuerier) GetLuaProjectArtifact(ctx context.Context, arg GetLuaProjectArtifactParams) (pgtype.Text, error) {
+type GetLuaProjectArtifactRow struct {
+	ObjectKey             string      `db:"object_key" json:"object_key"`
+	MimeType              string      `db:"mime_type" json:"mime_type"`
+	ContentEncoding       pgtype.Text `db:"content_encoding" json:"content_encoding"`
+	UncompressedSizeBytes pgtype.Int8 `db:"uncompressed_size_bytes" json:"uncompressed_size_bytes"`
+	StoredSizeBytes       pgtype.Int8 `db:"stored_size_bytes" json:"stored_size_bytes"`
+}
+
+func (q *sqlQuerier) GetLuaProjectArtifact(ctx context.Context, arg GetLuaProjectArtifactParams) (GetLuaProjectArtifactRow, error) {
 	row := q.db.QueryRow(ctx, getLuaProjectArtifact, arg.ProjectID, arg.Hash)
-	var object_key pgtype.Text
-	err := row.Scan(&object_key)
-	return object_key, err
+	var i GetLuaProjectArtifactRow
+	err := row.Scan(
+		&i.ObjectKey,
+		&i.MimeType,
+		&i.ContentEncoding,
+		&i.UncompressedSizeBytes,
+		&i.StoredSizeBytes,
+	)
+	return i, err
 }
 
 const getOwnerLuaProject = `-- name: GetOwnerLuaProject :one
@@ -11493,7 +11508,7 @@ func (q *sqlQuerier) GetOwnerLuaProject(ctx context.Context, arg GetOwnerLuaProj
 }
 
 const getOwnerLuaProjectDraftPackage = `-- name: GetOwnerLuaProjectDraftPackage :one
-SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.unstable_hash, p.stable_hash, p.unstable_published_at, p.unstable_published_by, p.stable_published_at, p.stable_published_by, p.created_at, p.updated_at, a.bytes, a.object_key
+SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.unstable_hash, p.stable_hash, p.unstable_published_at, p.unstable_published_by, p.stable_published_at, p.stable_published_by, p.created_at, p.updated_at, a.object_key, a.mime_type, a.content_encoding
 FROM lua_projects p
 JOIN lua_project_artifacts a ON a.project_id = p.id AND a.hash = p.draft_hash
 WHERE p.id = $1 AND (p.owner_id = $2 OR $3::boolean)
@@ -11506,9 +11521,10 @@ type GetOwnerLuaProjectDraftPackageParams struct {
 }
 
 type GetOwnerLuaProjectDraftPackageRow struct {
-	LuaProject LuaProject  `db:"lua_project" json:"lua_project"`
-	Bytes      []byte      `db:"bytes" json:"bytes"`
-	ObjectKey  pgtype.Text `db:"object_key" json:"object_key"`
+	LuaProject      LuaProject  `db:"lua_project" json:"lua_project"`
+	ObjectKey       string      `db:"object_key" json:"object_key"`
+	MimeType        string      `db:"mime_type" json:"mime_type"`
+	ContentEncoding pgtype.Text `db:"content_encoding" json:"content_encoding"`
 }
 
 func (q *sqlQuerier) GetOwnerLuaProjectDraftPackage(ctx context.Context, arg GetOwnerLuaProjectDraftPackageParams) (GetOwnerLuaProjectDraftPackageRow, error) {
@@ -11530,8 +11546,9 @@ func (q *sqlQuerier) GetOwnerLuaProjectDraftPackage(ctx context.Context, arg Get
 		&i.LuaProject.StablePublishedBy,
 		&i.LuaProject.CreatedAt,
 		&i.LuaProject.UpdatedAt,
-		&i.Bytes,
 		&i.ObjectKey,
+		&i.MimeType,
+		&i.ContentEncoding,
 	)
 	return i, err
 }
@@ -11564,7 +11581,7 @@ func (q *sqlQuerier) GetPublicLuaProject(ctx context.Context, id uuid.UUID) (Lua
 }
 
 const getPublishedLuaProjectPackage = `-- name: GetPublishedLuaProjectPackage :one
-SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.unstable_hash, p.stable_hash, p.unstable_published_at, p.unstable_published_by, p.stable_published_at, p.stable_published_by, p.created_at, p.updated_at, a.bytes, a.object_key
+SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.unstable_hash, p.stable_hash, p.unstable_published_at, p.unstable_published_by, p.stable_published_at, p.stable_published_by, p.created_at, p.updated_at, a.object_key, a.mime_type, a.content_encoding
 FROM lua_projects p
 JOIN lua_project_artifacts a ON a.project_id = p.id
  AND a.hash = CASE WHEN $1::text = 'stable' THEN p.stable_hash ELSE p.unstable_hash END
@@ -11577,9 +11594,10 @@ type GetPublishedLuaProjectPackageParams struct {
 }
 
 type GetPublishedLuaProjectPackageRow struct {
-	LuaProject LuaProject  `db:"lua_project" json:"lua_project"`
-	Bytes      []byte      `db:"bytes" json:"bytes"`
-	ObjectKey  pgtype.Text `db:"object_key" json:"object_key"`
+	LuaProject      LuaProject  `db:"lua_project" json:"lua_project"`
+	ObjectKey       string      `db:"object_key" json:"object_key"`
+	MimeType        string      `db:"mime_type" json:"mime_type"`
+	ContentEncoding pgtype.Text `db:"content_encoding" json:"content_encoding"`
 }
 
 func (q *sqlQuerier) GetPublishedLuaProjectPackage(ctx context.Context, arg GetPublishedLuaProjectPackageParams) (GetPublishedLuaProjectPackageRow, error) {
@@ -11601,8 +11619,9 @@ func (q *sqlQuerier) GetPublishedLuaProjectPackage(ctx context.Context, arg GetP
 		&i.LuaProject.StablePublishedBy,
 		&i.LuaProject.CreatedAt,
 		&i.LuaProject.UpdatedAt,
-		&i.Bytes,
 		&i.ObjectKey,
+		&i.MimeType,
+		&i.ContentEncoding,
 	)
 	return i, err
 }
@@ -11823,20 +11842,33 @@ func (q *sqlQuerier) PublishLuaProjectUnstable(ctx context.Context, arg PublishL
 }
 
 const putLuaProjectArtifact = `-- name: PutLuaProjectArtifact :one
-INSERT INTO lua_project_artifacts (project_id, hash, object_key) VALUES ($1, $2, $3)
+INSERT INTO lua_project_artifacts (project_id, hash, object_key, mime_type, content_encoding, uncompressed_size_bytes, stored_size_bytes)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (project_id, hash) DO UPDATE SET hash = EXCLUDED.hash
 RETURNING object_key
 `
 
 type PutLuaProjectArtifactParams struct {
-	ProjectID uuid.UUID   `db:"project_id" json:"project_id"`
-	Hash      string      `db:"hash" json:"hash"`
-	ObjectKey pgtype.Text `db:"object_key" json:"object_key"`
+	ProjectID             uuid.UUID   `db:"project_id" json:"project_id"`
+	Hash                  string      `db:"hash" json:"hash"`
+	ObjectKey             string      `db:"object_key" json:"object_key"`
+	MimeType              string      `db:"mime_type" json:"mime_type"`
+	ContentEncoding       pgtype.Text `db:"content_encoding" json:"content_encoding"`
+	UncompressedSizeBytes pgtype.Int8 `db:"uncompressed_size_bytes" json:"uncompressed_size_bytes"`
+	StoredSizeBytes       pgtype.Int8 `db:"stored_size_bytes" json:"stored_size_bytes"`
 }
 
-func (q *sqlQuerier) PutLuaProjectArtifact(ctx context.Context, arg PutLuaProjectArtifactParams) (pgtype.Text, error) {
-	row := q.db.QueryRow(ctx, putLuaProjectArtifact, arg.ProjectID, arg.Hash, arg.ObjectKey)
-	var object_key pgtype.Text
+func (q *sqlQuerier) PutLuaProjectArtifact(ctx context.Context, arg PutLuaProjectArtifactParams) (string, error) {
+	row := q.db.QueryRow(ctx, putLuaProjectArtifact,
+		arg.ProjectID,
+		arg.Hash,
+		arg.ObjectKey,
+		arg.MimeType,
+		arg.ContentEncoding,
+		arg.UncompressedSizeBytes,
+		arg.StoredSizeBytes,
+	)
+	var object_key string
 	err := row.Scan(&object_key)
 	return object_key, err
 }

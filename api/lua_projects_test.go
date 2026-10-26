@@ -83,28 +83,38 @@ func TestLuaProjectOwnerAndPublication(t *testing.T) {
 	_, err = db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: draft.ID, OwnerID: owner, Hash: pgtype.Text{String: packageHash, Valid: true}, ExpectedRevision: 1})
 	require.NoError(t, err)
 	objectKey := draft.ID.String() + "/test.zip"
-	storedKey, err := db.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: draft.ID, Hash: packageHash, ObjectKey: pgtype.Text{String: objectKey, Valid: true}})
+	storedKey, err := db.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: draft.ID, Hash: packageHash, ObjectKey: objectKey, MimeType: "application/zip", UncompressedSizeBytes: pgtype.Int8{Int64: 42, Valid: true}, StoredSizeBytes: pgtype.Int8{Int64: 64, Valid: true}})
 	require.NoError(t, err)
-	require.Equal(t, objectKey, storedKey.String)
-	duplicateKey, err := db.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: draft.ID, Hash: packageHash, ObjectKey: pgtype.Text{String: draft.ID.String() + "/duplicate.zip", Valid: true}})
+	require.Equal(t, objectKey, storedKey)
+	duplicateKey, err := db.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: draft.ID, Hash: packageHash, ObjectKey: draft.ID.String() + "/duplicate.zip", MimeType: "application/zip"})
 	require.NoError(t, err)
-	require.Equal(t, objectKey, duplicateKey.String, "duplicate content keeps its first object key")
+	require.Equal(t, objectKey, duplicateKey, "duplicate content keeps its first object key")
+	artifact, err := db.GetLuaProjectArtifact(ctx, database.GetLuaProjectArtifactParams{ProjectID: draft.ID, Hash: packageHash})
+	require.NoError(t, err)
+	require.Equal(t, objectKey, artifact.ObjectKey)
+	require.Equal(t, "application/zip", artifact.MimeType)
+	require.False(t, artifact.ContentEncoding.Valid)
+	require.Equal(t, int64(42), artifact.UncompressedSizeBytes.Int64)
+	require.Equal(t, int64(64), artifact.StoredSizeBytes.Int64)
 	_, err = db.GetOwnerLuaProjectDraftPackage(ctx, database.GetOwnerLuaProjectDraftPackageParams{ID: draft.ID, OwnerID: other})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	adminPreview, err := db.GetOwnerLuaProjectDraftPackage(ctx, database.GetOwnerLuaProjectDraftPackageParams{ID: draft.ID, OwnerID: technicalAdmin, TechnicalAdmin: true})
 	require.NoError(t, err)
-	require.Equal(t, objectKey, adminPreview.ObjectKey.String)
+	require.Equal(t, objectKey, adminPreview.ObjectKey)
+	require.Equal(t, "application/zip", adminPreview.MimeType)
+	require.False(t, adminPreview.ContentEncoding.Valid)
 	preview, err := db.GetOwnerLuaProjectDraftPackage(ctx, database.GetOwnerLuaProjectDraftPackageParams{ID: draft.ID, OwnerID: owner})
 	require.NoError(t, err)
-	require.Equal(t, objectKey, preview.ObjectKey.String)
-	require.Empty(t, preview.Bytes)
+	require.Equal(t, objectKey, preview.ObjectKey)
+	require.Equal(t, "application/zip", preview.MimeType)
+	require.False(t, preview.ContentEncoding.Valid)
 	_, err = db.GetPublishedLuaProjectPackage(ctx, database.GetPublishedLuaProjectPackageParams{ID: draft.ID, Channel: "stable"})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	// A replaced draft queues its former object key for post-commit removal.
 	newHash := strings.Repeat("b", 64)
 	_, err = db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: draft.ID, OwnerID: owner, Hash: pgtype.Text{String: newHash, Valid: true}, ExpectedRevision: 2})
 	require.NoError(t, err)
-	_, err = db.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: draft.ID, Hash: newHash, ObjectKey: pgtype.Text{String: draft.ID.String() + "/new.zip", Valid: true}})
+	_, err = db.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: draft.ID, Hash: newHash, ObjectKey: draft.ID.String() + "/new.zip", MimeType: "application/zip"})
 	require.NoError(t, err)
 	require.NoError(t, db.PruneLuaProjectArtifacts(ctx, database.PruneLuaProjectArtifactsParams{ID: draft.ID, OwnerID: owner}))
 	garbage, err := db.ListLuaProjectArtifactGarbage(ctx)
@@ -141,7 +151,7 @@ func TestLuaArtifactGarbageRemoval(t *testing.T) {
 	require.NoError(t, err)
 	_, err = zed.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, OwnerID: owner, Hash: pgtype.Text{String: oldHash, Valid: true}, ExpectedRevision: 1})
 	require.NoError(t, err)
-	_, err = zed.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: project.ID, Hash: oldHash, ObjectKey: pgtype.Text{String: key, Valid: true}})
+	_, err = zed.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: project.ID, Hash: oldHash, ObjectKey: key, MimeType: "application/zip"})
 	require.NoError(t, err)
 	_, err = zed.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, OwnerID: owner, Hash: pgtype.Text{String: newHash, Valid: true}, ExpectedRevision: 2})
 	require.NoError(t, err)
@@ -232,7 +242,7 @@ func TestLuaUploadIntentFinalization(t *testing.T) {
 		if _, err := tx.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, OwnerID: owner, Hash: pgtype.Text{String: hash, Valid: true}, ExpectedRevision: 1}); err != nil {
 			return err
 		}
-		if _, err := tx.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: project.ID, Hash: hash, ObjectKey: pgtype.Text{String: key, Valid: true}}); err != nil {
+		if _, err := tx.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: project.ID, Hash: hash, ObjectKey: key, MimeType: "application/zip"}); err != nil {
 			return err
 		}
 		_, err := tx.ConsumeLuaProjectUpload(ctx, key)
@@ -264,7 +274,7 @@ func TestLuaUploadIntentFinalization(t *testing.T) {
 		if _, err := tx.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, OwnerID: owner, Hash: pgtype.Text{String: strings.Repeat("b", 64), Valid: true}, ExpectedRevision: 2}); err != nil {
 			return err
 		}
-		if _, err := tx.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: project.ID, Hash: strings.Repeat("b", 64), ObjectKey: pgtype.Text{String: staleKey, Valid: true}}); err != nil {
+		if _, err := tx.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: project.ID, Hash: strings.Repeat("b", 64), ObjectKey: staleKey, MimeType: "application/zip"}); err != nil {
 			return err
 		}
 		_, err := tx.ConsumeLuaProjectUpload(ctx, staleKey)
@@ -294,16 +304,25 @@ func TestLuaZIPObjectStorage(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	archive, ok := api.luaZIP(rec, req, nil, pgtype.Text{String: first, Valid: true}, hex.EncodeToString(digest[:]))
+	archive, ok := api.luaZIP(rec, req, first, hex.EncodeToString(digest[:]), "application/zip", pgtype.Text{})
 	require.True(t, ok)
 	require.Equal(t, data, archive)
 
 	rec = httptest.NewRecorder()
-	_, ok = api.luaZIP(rec, req, nil, pgtype.Text{String: first, Valid: true}, strings.Repeat("0", 64))
+	_, ok = api.luaZIP(rec, req, first, strings.Repeat("0", 64), "application/zip", pgtype.Text{})
 	require.False(t, ok)
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
 
-	archive, ok = api.luaZIP(httptest.NewRecorder(), req, []byte("legacy"), pgtype.Text{}, "")
-	require.True(t, ok)
-	require.Equal(t, []byte("legacy"), archive)
+	for _, unsupported := range []struct {
+		mimeType string
+		encoding pgtype.Text
+	}{
+		{mimeType: "text/html"},
+		{mimeType: "application/zip", encoding: pgtype.Text{String: "gzip", Valid: true}},
+	} {
+		rec = httptest.NewRecorder()
+		_, ok = api.luaZIP(rec, req, first, hex.EncodeToString(digest[:]), unsupported.mimeType, unsupported.encoding)
+		require.False(t, ok)
+		require.Equal(t, http.StatusInternalServerError, rec.Code)
+	}
 }

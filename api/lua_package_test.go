@@ -61,6 +61,12 @@ func TestCanonicalLuaZIP(t *testing.T) {
 	}{luaTestEntry("main.lua", "return {}"), luaTestEntry("project.json", luaTestManifest)}
 	archive, err := canonicalLuaZIP(bytes.NewReader(luaTestTar(t, entries...)), "panel", "Example", "example")
 	require.NoError(t, err)
+	uncompressed, err := luaZIPFileBytes(archive)
+	require.NoError(t, err)
+	require.Equal(t, int64(len("return {}")+len(luaTestManifest)), uncompressed)
+	_, err = luaZIPFileBytes([]byte("not a ZIP"))
+	require.Error(t, err)
+	require.Greater(t, len(archive), int(uncompressed)) // ZIP headers are not file bytes.
 	z, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
 	require.NoError(t, err)
 	require.Len(t, z.File, 2)

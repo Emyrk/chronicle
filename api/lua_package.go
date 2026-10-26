@@ -60,6 +60,23 @@ func validRasterSignature(name string, data []byte) bool {
 	}
 }
 
+// luaZIPFileBytes counts the logical file bytes inside the validated ZIP,
+// excluding ZIP headers. ZIP entries currently use Store (no compression).
+func luaZIPFileBytes(archive []byte) (int64, error) {
+	reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	if err != nil {
+		return 0, err
+	}
+	var size int64
+	for _, file := range reader.File {
+		if file.UncompressedSize64 > uint64(maxLuaExpandedBytes)-uint64(size) {
+			return 0, errors.New("ZIP exceeds expanded package limit")
+		}
+		size += int64(file.UncompressedSize64)
+	}
+	return size, nil
+}
+
 // canonicalLuaZIP rejects tar features which could escape a package root or
 // produce different packages depending on the extraction environment.
 func canonicalLuaZIP(input io.Reader, kind, projectName, slug string) ([]byte, error) {
