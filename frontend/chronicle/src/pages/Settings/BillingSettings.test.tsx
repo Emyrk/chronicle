@@ -67,6 +67,7 @@ describe("PlanPicker", () => {
     expect(markup).toContain("$10.00")
     expect(markup).toContain("Change Tier in Stripe")
     expect(markup).toContain("Reactivate Subscription")
+    expect(markup).toContain("Your current tier")
   })
 
   it("keeps tiers visible after the Stripe subscription has ended", () => {

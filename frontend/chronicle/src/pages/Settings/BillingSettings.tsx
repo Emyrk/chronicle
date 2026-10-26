@@ -710,6 +710,7 @@ export function PlanPicker({ prices, change }: { prices: readonly BillingPrice[]
         >
           {availableTiers.map((option) => {
             const selected = option === tier
+            const isCurrent = option === currentTier
             const lowestMonthlyPrice = prices
               .filter((price) => price.tier === option)
               .sort((a, b) => a.unit_amount / a.interval_months - b.unit_amount / b.interval_months)[0]
@@ -718,11 +719,18 @@ export function PlanPicker({ prices, change }: { prices: readonly BillingPrice[]
                 key={option}
                 type="button"
                 {...(change
-                  ? { "aria-pressed": selected, onMouseEnter: () => setHoveredTier(option), onFocus: () => setHoveredTier(option), onClick: () => chooseTier(option) }
+                  ? {
+                      "aria-pressed": selected,
+                      onMouseEnter: () => setHoveredTier(option),
+                      onFocus: () => setHoveredTier(option),
+                      onBlur: () => setHoveredTier(null),
+                      onClick: () => setHoveredTier(option),
+                    }
                   : { role: "radio", "aria-checked": selected, onClick: () => chooseTier(option) })}
                 className={cn(
                   "flex flex-col items-center gap-1 rounded-md border-2 p-2 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300",
                   selected ? "bg-white/10" : "border-white/10 bg-white/[0.025] hover:bg-white/5",
+                  isCurrent && "ring-1 ring-inset ring-[#f0c060]/70",
                 )}
                 style={{
                   borderColor: selected ? TIER_COLOR[option] : undefined,
@@ -735,8 +743,8 @@ export function PlanPicker({ prices, change }: { prices: readonly BillingPrice[]
                 {lowestMonthlyPrice ? (
                   <span className="text-[10px] font-semibold text-white">From {formatMonthlyAmount(lowestMonthlyPrice)}/mo</span>
                 ) : null}
-                <span className="text-[10px] text-muted-foreground">
-                  {option === currentTier ? "Current" : `+${billingTierStorageLabel(option)} storage`}
+                <span className={cn("text-[10px]", isCurrent ? "font-bold text-[#f0c060]" : "text-muted-foreground")}>
+                  {isCurrent ? "Your current tier" : `+${billingTierStorageLabel(option)} storage`}
                 </span>
               </button>
             )
