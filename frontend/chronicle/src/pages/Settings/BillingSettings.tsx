@@ -661,20 +661,28 @@ function FormerSubscriptionHistory({ billing }: { billing: BillingSummary }) {
   )
 }
 
+type PlanPickerChange = {
+  currentTier: string
+  onBack?: () => void
+  returningState?: "canceling" | "ended"
+}
+
 /**
- * Tier and billing period picker. With `change`, nothing is selectable:
- * hovering a tier previews its prices, and the Stripe portal makes the change.
+ * Tier and billing period picker. With `change`, choosing a tier previews its
+ * prices, and the Stripe portal makes the actual subscription change.
  */
-function PlanPicker({ prices, change }: { prices: readonly BillingPrice[]; change?: { currentTier: string; onBack: () => void } }) {
+export function PlanPicker({ prices, change }: { prices: readonly BillingPrice[]; change?: PlanPickerChange }) {
   const checkout = useCreateBillingCheckout()
   const changePortal = useCreateBillingChange()
+  const portal = useCreateBillingPortal()
   const openBilling = useOpenBilling()
   const availableTiers = PAID_BILLING_TIERS.filter((tier) => prices.some((price) => price.tier === tier))
   const currentTier = availableTiers.find((option) => option === change?.currentTier)
   const defaultTier = currentTier ?? (availableTiers.includes("revered") ? "revered" : availableTiers[0])
   const [selectedTier, setSelectedTier] = useState<PaidBillingTier | undefined>(defaultTier)
   const [hoveredTier, setHoveredTier] = useState<PaidBillingTier | null>(null)
-  const tier = change ? (hoveredTier ?? defaultTier) : selectedTier && availableTiers.includes(selectedTier) ? selectedTier : defaultTier
+  const selectedOrDefaultTier = selectedTier && availableTiers.includes(selectedTier) ? selectedTier : defaultTier
+  const tier = change ? (hoveredTier ?? selectedOrDefaultTier) : selectedOrDefaultTier
   const tierPrices = prices.filter((price) => price.tier === tier)
   const monthlyPrice = tierPrices.find((price) => price.interval_months === 1)
   const [selectedPriceID, setSelectedPriceID] = useState<string | null>(null)
@@ -690,7 +698,7 @@ function PlanPicker({ prices, change }: { prices: readonly BillingPrice[]; chang
   }
 
   return (
-    <FramePanel title={change ? "Change Your Standing" : "Choose Your Standing"}>
+    <FramePanel title={change?.returningState ? "Choose Your Next Standing" : change ? "Change Your Standing" : "Choose Your Standing"}>
       <p className="text-center text-xs text-muted-foreground">Every tier includes ad-free browsing, raw log downloads, and unlisted logs. Higher standings include more log storage.</p>
 
       {availableTiers.length > 0 ? (
@@ -701,17 +709,28 @@ function PlanPicker({ prices, change }: { prices: readonly BillingPrice[]; chang
           onMouseLeave={change ? () => setHoveredTier(null) : undefined}
         >
           {availableTiers.map((option) => {
-            const selected = change ? option === hoveredTier : option === tier
-            const Tag = change ? "div" : "button"
+            const selected = option === tier
+            const isCurrent = option === currentTier
+            const lowestMonthlyPrice = prices
+              .filter((price) => price.tier === option)
+              .sort((a, b) => a.unit_amount / a.interval_months - b.unit_amount / b.interval_months)[0]
             return (
-              <Tag
+              <button
                 key={option}
+                type="button"
                 {...(change
-                  ? { onMouseEnter: () => setHoveredTier(option) }
-                  : { type: "button" as const, role: "radio", "aria-checked": selected, onClick: () => chooseTier(option) })}
+                  ? {
+                      "aria-pressed": selected,
+                      onMouseEnter: () => setHoveredTier(option),
+                      onFocus: () => setHoveredTier(option),
+                      onBlur: () => setHoveredTier(null),
+                      onClick: () => setHoveredTier(option),
+                    }
+                  : { role: "radio", "aria-checked": selected, onClick: () => chooseTier(option) })}
                 className={cn(
                   "flex flex-col items-center gap-1 rounded-md border-2 p-2 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300",
                   selected ? "bg-white/10" : "border-white/10 bg-white/[0.025] hover:bg-white/5",
+                  isCurrent && "ring-1 ring-inset ring-[#f0c060]/70",
                 )}
                 style={{
                   borderColor: selected ? TIER_COLOR[option] : undefined,
@@ -721,10 +740,13 @@ function PlanPicker({ prices, change }: { prices: readonly BillingPrice[]; chang
                 <span className="font-wow text-xs font-bold" style={{ color: TIER_COLOR[option] }}>
                   {billingTierLabel(option)}
                 </span>
-                <span className="text-[10px] text-muted-foreground">
-                  {option === currentTier ? "Current" : `+${billingTierStorageLabel(option)} storage`}
+                {lowestMonthlyPrice ? (
+                  <span className="text-[10px] font-semibold text-white">From {formatMonthlyAmount(lowestMonthlyPrice)}/mo</span>
+                ) : null}
+                <span className={cn("text-[10px]", isCurrent ? "font-bold text-[#f0c060]" : "text-muted-foreground")}>
+                  {isCurrent ? "Your current tier" : `+${billingTierStorageLabel(option)} storage`}
                 </span>
-              </Tag>
+              </button>
             )
           })}
         </div>
@@ -783,18 +805,42 @@ function PlanPicker({ prices, change }: { prices: readonly BillingPrice[]; chang
         <p className="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">Supporter pricing is temporarily unavailable.</p>
       )}
 
-      {change ? (
+      {change?.returningState === "canceling" ? (
+        <>
+          <button type="button" className={GOLD_BUTTON} disabled={changePortal.isPending} onClick={() => void openBilling(() => changePortal.mutateAsync())}>
+            {changePortal.isPending ? "Opening Stripe…" : "Change Tier in Stripe"}
+          </button>
+          <button
+            type="button"
+            className="w-full rounded-md bg-[#f0c060] px-3 py-2 font-wow text-sm font-bold text-[#1a1200] transition-colors hover:bg-[#ffd580] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 disabled:opacity-50"
+            disabled={portal.isPending}
+            onClick={() => void openBilling(() => portal.mutateAsync(), true)}
+          >
+            {portal.isPending ? "Opening Stripe…" : "Reactivate Subscription"}
+          </button>
+          <p className="text-center text-xs text-muted-foreground">Stripe lets you resume renewal or confirm when a tier change takes effect.</p>
+        </>
+      ) : change?.returningState === "ended" ? (
+        <>
+          <button type="button" className={GOLD_BUTTON} disabled={portal.isPending} onClick={() => void openBilling(() => portal.mutateAsync(), true)}>
+            {portal.isPending ? "Opening Stripe…" : "View Stripe Billing History"}
+          </button>
+          <p className="text-center text-xs text-muted-foreground">Your options and current prices stay visible here. You can subscribe again when the remaining paid access ends.</p>
+        </>
+      ) : change ? (
         <>
           <button type="button" className={GOLD_BUTTON} disabled={changePortal.isPending} onClick={() => void openBilling(() => changePortal.mutateAsync())}>
             {changePortal.isPending ? "Opening Stripe…" : "Go to Stripe to change your subscription"}
           </button>
-          <button
-            type="button"
-            className="w-full rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-            onClick={change.onBack}
-          >
-            Back to your subscription
-          </button>
+          {change.onBack ? (
+            <button
+              type="button"
+              className="w-full rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+              onClick={change.onBack}
+            >
+              Back to your subscription
+            </button>
+          ) : null}
           <p className="text-center text-xs text-muted-foreground">Stripe shows when a tier change takes effect before you confirm it.</p>
         </>
       ) : (
@@ -884,7 +930,9 @@ export function CancellationTimeline({
           Supporter rewards switch off and ads return. Log parsing, panels, rankings, and replays stay free for everyone.
         </TimelineStep>
         <TimelineStep state="upcoming" title="Want to come back?" last>
-          Once this subscription fully expires, return here to choose Honored, Revered, or Exalted again.
+          {subscriptionEnded
+            ? "Your tier options and current prices remain visible here. Once the remaining paid access expires, you can subscribe again."
+            : "Use the tier chooser here to compare current prices, change your standing, or reactivate renewal in Stripe."}
         </TimelineStep>
       </ol>
     </FramePanel>
@@ -923,7 +971,12 @@ function TierSubscriptionSettings({ billing }: { billing: BillingSummary }) {
       <Achievement billing={billing} />
 
       <div className="grid items-start gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
-        {changingTier && !subscriptionEnded && !cancellationScheduled ? (
+        {subscriptionEnded || cancellationScheduled ? (
+          <PlanPicker
+            prices={billing.prices ?? []}
+            change={{ currentTier: billing.tier, returningState: subscriptionEnded ? "ended" : "canceling" }}
+          />
+        ) : changingTier ? (
           <PlanPicker prices={billing.prices ?? []} change={{ currentTier: billing.tier, onBack: () => setChangingTier(false) }} />
         ) : (
         <FramePanel title="Your Subscription">
