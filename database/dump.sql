@@ -1586,8 +1586,8 @@ CREATE TABLE lua_project_artifacts (
     object_key text NOT NULL,
     mime_type text DEFAULT 'application/zip'::text NOT NULL,
     content_encoding text,
-    uncompressed_size_bytes bigint,
-    stored_size_bytes bigint,
+    uncompressed_size_bytes bigint NOT NULL,
+    stored_size_bytes bigint NOT NULL,
     CONSTRAINT lua_project_artifacts_hash_check CHECK ((hash ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT lua_project_artifacts_stored_size_bytes_check CHECK ((stored_size_bytes >= 0)),
     CONSTRAINT lua_project_artifacts_uncompressed_size_bytes_check CHECK ((uncompressed_size_bytes >= 0))

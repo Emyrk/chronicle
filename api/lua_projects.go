@@ -312,8 +312,8 @@ func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 		}
 		storedKey, err = tx.PutLuaProjectArtifact(r.Context(), database.PutLuaProjectArtifactParams{
 			ProjectID: id, Hash: digest, ObjectKey: key, MimeType: "application/zip",
-			UncompressedSizeBytes: pgtype.Int8{Int64: uncompressedSize, Valid: true},
-			StoredSizeBytes:       pgtype.Int8{Int64: int64(len(archive)), Valid: true},
+			UncompressedSizeBytes: uncompressedSize,
+			StoredSizeBytes:       int64(len(archive)),
 		})
 		if err != nil {
 			return err

@@ -2006,8 +2006,8 @@ type LuaProjectArtifact struct {
 	ObjectKey             string      `db:"object_key" json:"object_key"`
 	MimeType              string      `db:"mime_type" json:"mime_type"`
 	ContentEncoding       pgtype.Text `db:"content_encoding" json:"content_encoding"`
-	UncompressedSizeBytes pgtype.Int8 `db:"uncompressed_size_bytes" json:"uncompressed_size_bytes"`
-	StoredSizeBytes       pgtype.Int8 `db:"stored_size_bytes" json:"stored_size_bytes"`
+	UncompressedSizeBytes int64       `db:"uncompressed_size_bytes" json:"uncompressed_size_bytes"`
+	StoredSizeBytes       int64       `db:"stored_size_bytes" json:"stored_size_bytes"`
 }
 
 type LuaProjectArtifactGc struct {
