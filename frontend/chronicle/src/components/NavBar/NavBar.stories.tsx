@@ -38,7 +38,7 @@ export const LoggedOut: Story = {
   parameters: {
     msw: {
       handlers: [
-        http.get("/api/v1/whoami", () => new HttpResponse(null, { status: 401 })),
+        http.get("/api/v1/whoami", () => new HttpResponse(null, { status: 204 })),
       ],
     },
   },
@@ -49,7 +49,7 @@ export const GuildPage: Story = {
     route: "/g/example-guild",
     msw: {
       handlers: [
-        http.get("/api/v1/whoami", () => new HttpResponse(null, { status: 401 })),
+        http.get("/api/v1/whoami", () => new HttpResponse(null, { status: 204 })),
       ],
     },
   },

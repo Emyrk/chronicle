@@ -224,7 +224,7 @@ export function useSession(options?: Omit<UseQueryOptions<Session | null>, "quer
     queryKey: ["session"],
     queryFn: async () => {
       const response = await fetch("/api/v1/whoami");
-      if (!response.ok) return null;
+      if (response.status === 204 || !response.ok) return null;
       return response.json() as Promise<Session>;
     },
     retry: false,
