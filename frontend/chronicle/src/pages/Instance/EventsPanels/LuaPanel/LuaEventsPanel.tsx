@@ -27,6 +27,7 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
   const packageQuery = useQuery({
     queryKey: ["lua-panel-package", ref?.id, hash], enabled: !!ref && !!hash,
     staleTime: Infinity, // Hash-addressed bytes never change while published.
+    gcTime: Infinity, // Keep bytes available if the channel rotates before a panel remount.
     queryFn: async ({ signal }) => {
       if (!ref || !hash) throw new Error("Lua channel has no published package")
       const response = await fetch(publicPackageURL(ref.id, hash), { signal })
