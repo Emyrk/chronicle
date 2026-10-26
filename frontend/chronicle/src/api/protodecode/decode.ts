@@ -5767,6 +5767,7 @@ export interface ReusableUnitPosition {
   y: number;
   z?: number;
   mapId: number;
+  floor?: number;
   facing?: number;
   activity: ReusableActivityEntry[];
   activityCount: number;
@@ -5837,6 +5838,7 @@ export class FastUnitPositionCursor extends MappedStreamCursor<typeof UnitPositi
         y: message.y,
         z: message.z,
         mapId: message.mapId,
+        floor: message.floor,
         facing: message.facing,
         activity,
         activityCount: activity.length,

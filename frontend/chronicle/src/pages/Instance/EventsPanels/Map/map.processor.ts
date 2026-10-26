@@ -43,6 +43,8 @@ export interface MapPositionSample {
   y: number;
   z?: number;
   mapId: number;
+  /** Dungeon map level from position schema v3; absent in older logs or when unknown. */
+  floor?: number;
   /** Radians, when the log records it (an optional proto field); no facing is drawn without it. */
   facing?: number;
 }
@@ -268,6 +270,7 @@ export const mapProcessor: PanelProcessor<MapResult, MapProcessorEvent> = {
       mapId: event.mapId,
     };
     if (event.z !== undefined) sample.z = event.z;
+    if (event.floor !== undefined) sample.floor = event.floor;
     if (event.facing !== undefined) sample.facing = event.facing;
     positions.push(sample);
   },

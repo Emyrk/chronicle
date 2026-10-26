@@ -44,6 +44,8 @@ go run ./scripts/dbcdata extract-legacy-maps \
 
 Legacy base-zone maps use the twelve standard 256-pixel tiles plus explored overlays from `WorldMapOverlay.dbc`. Instance floors are included when a client contains a complete twelve-tile floor matching an instance in `Map.dbc`. The stock 2.4.3 client does not include dungeon floor artwork, so its manifest contains outdoor maps but no instance floors.
 
+For Wrath-era clients, the legacy extractor also reads `DungeonMap.dbc` and writes each matching `instances[].floors[].bounds` as the floor's world-coordinate extent. The frontend uses those bounds to recover yards-per-artwork-unit for normalized UI-map telemetry, including unit-token scale. Artwork dimensions such as `1002 × 668` describe pixels only and must not be treated as physical size. If a client has no usable `DungeonMap` row, bounds remain absent and replay falls back to uncalibrated flat-map sizing.
+
 ## Modern CASC clients
 
 WoW Forever and current Blizzard Classic products use `extract-wowdata-maps`. See [WoW Forever game-data import](wow-forever-game-data.md#extract-and-publish-ui-maps) for build pinning, published-tile reuse, and concurrency controls.

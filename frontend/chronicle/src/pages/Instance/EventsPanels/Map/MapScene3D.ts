@@ -46,7 +46,7 @@ import {
   medianHeight,
 } from "./dungeonMeshes";
 import { MAP_CURSOR, MAP_HOSTILE_CURSOR, MAP_UNIT_CURSOR } from "./mapCursors";
-import { FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, type MapPoint, type MapViewport } from "./mapModel";
+import { flatArtworkUnitScale, FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, type MapPoint, type MapViewport } from "./mapModel";
 import { deepBreathLaneForSpell, extendedDeepBreathLane } from "./deepBreathLanes";
 import { projectMapDebugPath, type MapDebugOverlay } from "./mapDebugOverlays";
 import {
@@ -160,9 +160,8 @@ const ANGLED_OFFSET = new THREE.Vector3(0, 0.85, 0.75);
 // artwork-up at the top of the screen, as in the 2D view.
 const TOP_DOWN_OFFSET = new THREE.Vector3(0, 1, 0.0001);
 const TILES_MAX_DISTANCE = 400;
-// On flat artwork without a world mapping (no yards), units are this many
-// times their full-map size on screen at every zoom.
-const TILES_UNIT_SCALE = 2;
+// Flat artwork has no yard scale. Keep token geometry fixed in map space so
+// zooming in makes units larger with the artwork instead of shrinking them.
 // How far the orbit camera may tilt from straight down. On the flat artwork it
 // stays 30 degrees above the horizon, where the token faces still show; on
 // the mesh it may go down to the floor.
@@ -174,6 +173,10 @@ const MESH_MAX_POLAR = Math.PI / 2 - 0.05;
 const MESH_PLAYER_HEIGHT_YARDS = 2;
 // The player capsule's geometry height (CapsuleGeometry radius 0.9, length 1.2).
 const PLAYER_GEOMETRY_HEIGHT = 3;
+// On calibrated flat artwork the disc represents a character's footprint, not
+// their standing height. Keeping that distinction makes close fight framing
+// readable even on physically small dungeon floors.
+const FLAT_PLAYER_TOKEN_DIAMETER_YARDS = 1.25;
 // Zoomed out, units never shrink below this fraction of their tiles-mode
 // (constant on-screen) size, so the raid stays visible without being giants
 // at Fit.
@@ -1551,17 +1554,17 @@ export class MapScene3D {
     return Math.max(GROUND_WIDTH, GROUND_WIDTH * this.aspect) * ANGLED_OFFSET.length();
   }
 
-  // Where the ground has yards, units hold their true size, so they keep
-  // their size against the map as it zooms: on flat artwork with a world
-  // mapping always, and on the dungeon mesh down to a floor on screen (half
-  // the full-map on-screen size) so the raid stays visible zoomed out.
-  // Without yards they hold a constant on-screen size instead (scale 1 at
-  // the default full-map distance).
+  // Where the ground has yards, units hold their physical size against the map
+  // as it zooms. Mesh capsules use standing player height, while flat discs use
+  // a smaller character-footprint diameter. Without yards, flat artwork keeps
+  // native token geometry instead.
   private updateUnitScale(force = false) {
     const screenScale = this.camera.position.distanceTo(this.controls.target) / this.baseDistance();
     const yards = this.yardScale();
-    const trueScale = yards ? (MESH_PLAYER_HEIGHT_YARDS * yards) / PLAYER_GEOMETRY_HEIGHT : null;
-    const scale = trueScale === null ? TILES_UNIT_SCALE * screenScale
+    const trueScale = yards === null ? null : this.dungeonMesh
+      ? (MESH_PLAYER_HEIGHT_YARDS * yards) / PLAYER_GEOMETRY_HEIGHT
+      : (FLAT_PLAYER_TOKEN_DIAMETER_YARDS * yards) / (2 * TOKEN_RADIUS.player);
+    const scale = trueScale === null ? flatArtworkUnitScale()
       : this.dungeonMesh ? Math.max(trueScale, MESH_MIN_SCREEN_SCALE * screenScale)
       : trueScale;
     if (scale === this.unitScale && !force) return;

@@ -311,7 +311,11 @@ export function replayPositionAt(
   }
   const latest = positions[index];
   const next = positions[index + 1];
-  if (!next || next.mapId !== latest.mapId || next.timestampMs <= latest.timestampMs || next.timestampMs - latest.timestampMs > maxInterpolationGapMs) return latest;
+  if (!next
+    || next.mapId !== latest.mapId
+    || next.floor !== latest.floor
+    || next.timestampMs <= latest.timestampMs
+    || next.timestampMs - latest.timestampMs > maxInterpolationGapMs) return latest;
   const t = (timestampMs - latest.timestampMs) / (next.timestampMs - latest.timestampMs);
   const sample: MapPositionSample = {
     timestampMs,
@@ -319,6 +323,7 @@ export function replayPositionAt(
     y: latest.y + (next.y - latest.y) * t,
     mapId: latest.mapId,
   };
+  if (latest.floor !== undefined) sample.floor = latest.floor;
   // Facing blends when both samples have it, else holds the earlier one's (if any).
   if (latest.facing !== undefined && next.facing !== undefined) sample.facing = lerpAngle(latest.facing, next.facing, t);
   else if (latest.facing !== undefined) sample.facing = latest.facing;
@@ -441,6 +446,33 @@ export function dominantMapId(samples: MapPositionSample[]): number | null {
     }
   }
   return selected;
+}
+
+export function resolveMapFloorNumber(
+  instance: WowMapInstance,
+  requestedFloor: number | null,
+  samples: readonly MapPositionSample[],
+): number | null {
+  const available = new Set(instance.floors.map((floor) => floor.floor));
+  if (requestedFloor !== null && available.has(requestedFloor)) return requestedFloor;
+
+  const counts = new Map<number, number>();
+  for (const sample of samples) {
+    if (sample.floor !== undefined && available.has(sample.floor)) {
+      counts.set(sample.floor, (counts.get(sample.floor) ?? 0) + 1);
+    }
+  }
+  let detected: number | null = null;
+  let detectedCount = 0;
+  for (const [floor, count] of counts) {
+    if (count > detectedCount) {
+      detected = floor;
+      detectedCount = count;
+    }
+  }
+  if (detected !== null) return detected;
+
+  return instance.floors[0]?.floor ?? null;
 }
 
 function assignmentContains(assignment: WowMapAssignment, sample: MapPositionSample): boolean {
@@ -691,9 +723,51 @@ export function dungeonMapPoint(sample: MapPositionSample, bounds: WowMapFloorBo
   };
 }
 
+// How far one world yard moves on flat artwork around `sample`. Normalized UI
+// coordinates are percentages rather than yards, so they must never be probed
+// this way: the ±5-yard samples clamp to the canvas edges and invent a huge scale.
+export function flatYardStep(
+  project: (sample: MapPositionSample) => MapPoint | null,
+  sample: MapPositionSample,
+  worldCoordinates: boolean,
+): { x: MapPoint; y: MapPoint } | null {
+  if (!worldCoordinates) return null;
+  const half = 5;
+  const step = (dx: number, dy: number): MapPoint | null => {
+    const from = project({ ...sample, x: sample.x - dx, y: sample.y - dy });
+    const to = project({ ...sample, x: sample.x + dx, y: sample.y + dy });
+    return from && to ? {
+      leftPercent: (to.leftPercent - from.leftPercent) / (2 * half),
+      topPercent: (to.topPercent - from.topPercent) / (2 * half),
+    } : null;
+  };
+  const x = step(half, 0);
+  const y = step(0, half);
+  return x && y ? { x, y } : null;
+}
+
+export function floorBoundsYardStep(bounds: WowMapFloorBounds | undefined): { x: MapPoint; y: MapPoint } | null {
+  if (!bounds) return null;
+  const spanX = Math.abs(bounds.maxX - bounds.minX);
+  const spanY = Math.abs(bounds.maxY - bounds.minY);
+  if (!Number.isFinite(spanX) || !Number.isFinite(spanY) || spanX <= 0 || spanY <= 0) return null;
+  // Dungeon floor artwork runs horizontally along world Y and vertically along world X.
+  return {
+    x: { leftPercent: 0, topPercent: 100 / spanX },
+    y: { leftPercent: 100 / spanY, topPercent: 0 },
+  };
+}
+
+/** Flat artwork has no yard scale; keep token geometry native at full-map zoom. */
+export const FLAT_ARTWORK_UNIT_SCALE = 1;
+
 export interface ScenePoint {
   x: number;
   z: number;
+}
+
+export function flatArtworkUnitScale(): number {
+  return FLAT_ARTWORK_UNIT_SCALE;
 }
 
 // Places a 2D artwork point on a ground plane centred on the origin that is

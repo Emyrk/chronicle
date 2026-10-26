@@ -614,6 +614,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               ground={ready.ground}
               markers={ready.markers}
               projectSample={ready.projectSample}
+              worldCoordinates={props.context.instance.positionCoordinateSpace !== "ui-map-normalized"}
               cursorMs={ready.cursorMs}
               playing={ready.playing}
               playbackSpeed={ready.playbackSpeed}

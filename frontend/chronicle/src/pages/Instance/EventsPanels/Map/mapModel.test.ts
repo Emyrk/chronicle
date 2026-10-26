@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { WowMapManifest } from "@/pages/Technical/mapGallery";
+import type { WowMapInstance, WowMapManifest } from "@/pages/Technical/mapGallery";
 import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
 import { createEncounterEffects } from "./replayEffects";
 import {
@@ -11,6 +11,9 @@ import {
   containScaleForCover,
   coverMapCanvasRect,
   fitFreeMapCameraToPoints,
+  flatArtworkUnitScale,
+  flatYardStep,
+  floorBoundsYardStep,
   zoomFreeMapCamera,
   focusCentre,
   INITIAL_MAP_FRAMING,
@@ -34,6 +37,7 @@ import {
   mapPointToScene,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
+  resolveMapFloorNumber,
   selectHealthBars,
   selectMapEncounter,
   uiMapPoint,
@@ -393,6 +397,43 @@ describe("map replay model", () => {
   });
 });
 
+describe("resolveMapFloorNumber", () => {
+  const instance: WowMapInstance = {
+    mapID: 595,
+    name: "The Culling of Stratholme",
+    instanceType: 1,
+    directory: "StratholmeCOT",
+    floors: [1, 2].map((floor) => ({
+      floor,
+      width: 1002,
+      height: 668,
+      tileWidth: 256,
+      tileHeight: 256,
+      tiles: [],
+    })),
+  };
+
+  it("uses the floor reported by position schema v3", () => {
+    expect(resolveMapFloorNumber(instance, null, [
+      { timestampMs: 0, x: 0.4, y: 0.5, mapId: 595, floor: 1 },
+      { timestampMs: 0, x: 0.4, y: 0.5, mapId: 595, floor: 2 },
+      { timestampMs: 0, x: 0.4, y: 0.5, mapId: 595, floor: 2 },
+    ])).toBe(2);
+  });
+
+  it("honours a manual floor selection", () => {
+    expect(resolveMapFloorNumber(instance, 1, [
+      { timestampMs: 0, x: 0.4, y: 0.5, mapId: 595, floor: 2 },
+    ])).toBe(1);
+  });
+
+  it("does not guess a floor for older position schemas", () => {
+    expect(resolveMapFloorNumber(instance, null, [
+      { timestampMs: 0, x: 0.4, y: 0.5, mapId: 595 },
+    ])).toBe(1);
+  });
+});
+
 describe("replayPositionAt", () => {
   it("allows small first-sample timestamp skew for every unit", () => {
     expect(replayPositionAt(samples, 89)).toBeNull();
@@ -455,6 +496,14 @@ describe("replayPositionAt", () => {
     expect(replayPositionAt(halfFaced, 50)!.facing).toBe(1.2);
   });
 
+  it("never interpolates across floor changes", () => {
+    const changingFloor: MapPositionSample[] = [
+      { timestampMs: 0, x: 0, y: 0, mapId: 595, floor: 1 },
+      { timestampMs: 100, x: 10, y: 0, mapId: 595, floor: 2 },
+    ];
+    expect(replayPositionAt(changingFloor, 50)).toBe(changingFloor[0]);
+  });
+
   it("can hold the last real sample instead of gliding across a long run gap", () => {
     const gapped: MapPositionSample[] = [
       { timestampMs: 0, x: 0, y: 0, mapId: 1 },
@@ -471,6 +520,42 @@ describe("replayPositionAt", () => {
     ];
     expect(replayPositionAt(gapped, 2_500)).toEqual({ timestampMs: 2_500, x: 5, y: 0, mapId: 1, facing: 0 });
     expect(replayPositionAt(gapped, 5_050)).toBe(gapped[1]);
+  });
+});
+
+describe("flatYardStep", () => {
+  const sample: MapPositionSample = { timestampMs: 0, x: 0.5, y: 0.5, mapId: 595 };
+
+  it("does not invent a yard scale from normalized UI-map coordinates", () => {
+    expect(flatYardStep(uiMapPoint, sample, false)).toBeNull();
+  });
+
+  it("measures world-coordinate projections", () => {
+    const project = (value: MapPositionSample) => ({ leftPercent: value.x * 2, topPercent: value.y * 3 });
+    expect(flatYardStep(project, sample, true)).toEqual({
+      x: { leftPercent: 2, topPercent: 0 },
+      y: { leftPercent: 0, topPercent: 3 },
+    });
+  });
+});
+
+describe("floorBoundsYardStep", () => {
+  it("derives normalized floor scale from manifest world bounds", () => {
+    expect(floorBoundsYardStep({ minX: -100, maxX: 300, minY: -50, maxY: 150 })).toEqual({
+      x: { leftPercent: 0, topPercent: 0.25 },
+      y: { leftPercent: 0.5, topPercent: 0 },
+    });
+  });
+
+  it("requires usable bounds", () => {
+    expect(floorBoundsYardStep(undefined)).toBeNull();
+    expect(floorBoundsYardStep({ minX: 1, maxX: 1, minY: 0, maxY: 2 })).toBeNull();
+  });
+});
+
+describe("flatArtworkUnitScale", () => {
+  it("keeps token geometry fixed while the camera zooms", () => {
+    expect(flatArtworkUnitScale()).toBe(1);
   });
 });
 
