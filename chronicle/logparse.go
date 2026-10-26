@@ -1066,6 +1066,16 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 					slog.Int("instance_ordinal", ordinal), slog.Any("error", err))
 			}
 		}
+		// Replay stills for the landing's recent-runs rail, rendered while the run is fresh.
+		for _, inst := range persistedInstances {
+			if !HasRunStillPositions(inst.Capabilities) {
+				continue
+			}
+			if err := w.parent.EnqueueRunStill(ctx, inst.ID); err != nil {
+				w.parent.logger.WarnContext(ctx, "failed to enqueue run still",
+					slog.String("instance_id", inst.ID.String()), slog.Any("error", err))
+			}
+		}
 	}
 
 	return nil

@@ -26,6 +26,7 @@ const recentInstancesCacheControl = "public, max-age=60, stale-while-revalidate=
 // @Param has_video query string false "Filter by video presence (true, false)"
 // @Param realm_id query string false "Filter by realm UUID"
 // @Param guild_id query string false "Filter by guild UUID"
+// @Param has_positions query bool false "Only runs whose log recorded unit positions (a replay)"
 // @Success 200 {object} chroniclesdk.RecentInstancesResponse
 // @Router /api/v1/raidlogs/recent [get]
 func (api *API) RecentInstances(w http.ResponseWriter, r *http.Request) {
@@ -156,6 +157,7 @@ func (api *API) instancesByTimeRange(w http.ResponseWriter, r *http.Request, gro
 			RealmID:       realmID,
 			GuildID:       guildID,
 			PlayerGuid:    playerGUID,
+			HasPositions:  q.Get("has_positions") == "true",
 			LimitCount:    queryLimit,
 			OffsetCount:   offsetCount,
 		})
@@ -314,6 +316,7 @@ func (api *API) writeRecentInstanceGroups(ctx context.Context, w http.ResponseWr
 			DifficultyName:     row.DifficultyName,
 			MaxPlayers:         int(row.MaxPlayers),
 			DynamicDifficulty:  int(row.DynamicDifficulty),
+			HasPositions:       row.HasPositions,
 		}
 		if row.DuplicateGroupID.Valid {
 			inst.DuplicateGroupID = &row.DuplicateGroupID.UUID

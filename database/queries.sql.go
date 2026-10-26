@@ -13173,6 +13173,10 @@ WITH matching_runs AS (
                 AND lip_filter.unit_guid = $7
           )
       )
+      AND (
+          NOT $8::boolean
+          OR 'unit-position' = ANY(li.capabilities)
+      )
 ),
 instance_rows AS (
     SELECT
@@ -13199,7 +13203,8 @@ instance_rows AS (
         li.recorder_name,
         li.difficulty_name,
         li.max_players,
-        li.dynamic_difficulty
+        li.dynamic_difficulty,
+        ('unit-position' = ANY(li.capabilities))::boolean AS has_positions
     FROM log_instances li
     JOIN matching_runs ON matching_runs.run_id = COALESCE(li.duplicate_group_id, li.id)
     JOIN parsed_log_group plg ON plg.id = li.log_group_id
@@ -13240,7 +13245,7 @@ instance_rows AS (
 ),
 ranked_instances AS (
     SELECT
-        instance_rows.id, instance_rows.slug, instance_rows.name, instance_rows.realm_id, instance_rows.realm_name, instance_rows.uploader_id, instance_rows.uploader_name, instance_rows.uploaded_at, instance_rows.first_encounter_time, instance_rows.player_count, instance_rows.boss_count, instance_rows.encounter_count, instance_rows.boss_kills, instance_rows.duration_ms, instance_rows.combat_duration_ms, instance_rows.guild_id, instance_rows.guild_name, instance_rows.has_youtube_video, instance_rows.duplicate_group_id, instance_rows.run_id, instance_rows.recorder_name, instance_rows.difficulty_name, instance_rows.max_players, instance_rows.dynamic_difficulty,
+        instance_rows.id, instance_rows.slug, instance_rows.name, instance_rows.realm_id, instance_rows.realm_name, instance_rows.uploader_id, instance_rows.uploader_name, instance_rows.uploaded_at, instance_rows.first_encounter_time, instance_rows.player_count, instance_rows.boss_count, instance_rows.encounter_count, instance_rows.boss_kills, instance_rows.duration_ms, instance_rows.combat_duration_ms, instance_rows.guild_id, instance_rows.guild_name, instance_rows.has_youtube_video, instance_rows.duplicate_group_id, instance_rows.run_id, instance_rows.recorder_name, instance_rows.difficulty_name, instance_rows.max_players, instance_rows.dynamic_difficulty, instance_rows.has_positions,
         ROW_NUMBER() OVER (
             PARTITION BY instance_rows.run_id
             ORDER BY
@@ -13258,8 +13263,8 @@ selected_runs AS (
     FROM ranked_instances
     WHERE representative_rank = 1
     ORDER BY first_encounter_time DESC, id DESC
-    LIMIT CASE WHEN $9::int > 0 THEN $9 ELSE NULL END
-    OFFSET $8
+    LIMIT CASE WHEN $10::int > 0 THEN $10 ELSE NULL END
+    OFFSET $9
 )
 SELECT
     ranked_instances.id,
@@ -13283,7 +13288,8 @@ SELECT
     ranked_instances.recorder_name,
     ranked_instances.difficulty_name,
     ranked_instances.max_players,
-    ranked_instances.dynamic_difficulty
+    ranked_instances.dynamic_difficulty,
+    ranked_instances.has_positions
 FROM ranked_instances
 JOIN selected_runs USING (run_id)
 ORDER BY
@@ -13300,6 +13306,7 @@ type ListRecentInstanceGroupsParams struct {
 	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
 	GuildID       uuid.UUID          `db:"guild_id" json:"guild_id"`
 	PlayerGuid    guid.GUID          `db:"player_guid" json:"player_guid"`
+	HasPositions  bool               `db:"has_positions" json:"has_positions"`
 	OffsetCount   int32              `db:"offset_count" json:"offset_count"`
 	LimitCount    int32              `db:"limit_count" json:"limit_count"`
 }
@@ -13327,6 +13334,7 @@ type ListRecentInstanceGroupsRow struct {
 	DifficultyName     string             `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers         int32              `db:"max_players" json:"max_players"`
 	DynamicDifficulty  int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
+	HasPositions       bool               `db:"has_positions" json:"has_positions"`
 }
 
 // Pages logical runs, then returns every upload in each selected duplicate group.
@@ -13341,6 +13349,7 @@ func (q *sqlQuerier) ListRecentInstanceGroups(ctx context.Context, arg ListRecen
 		arg.RealmID,
 		arg.GuildID,
 		arg.PlayerGuid,
+		arg.HasPositions,
 		arg.OffsetCount,
 		arg.LimitCount,
 	)
@@ -13374,6 +13383,7 @@ func (q *sqlQuerier) ListRecentInstanceGroups(ctx context.Context, arg ListRecen
 			&i.DifficultyName,
 			&i.MaxPlayers,
 			&i.DynamicDifficulty,
+			&i.HasPositions,
 		); err != nil {
 			return nil, err
 		}

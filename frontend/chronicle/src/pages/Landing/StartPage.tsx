@@ -2,16 +2,17 @@ import { useEffect, useLayoutEffect, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useLandingFeatured, useSupportedInstances } from "@/api/queries";
+import type { RecentInstance, RecentInstancesResponse } from "@/api/typesGenerated";
 import { useTenantDatasetScope } from "@/hooks/useDatasetId";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { useRecentUploads } from "@/pages/Home";
-import { RaidCard } from "@/pages/Recent/RaidCard";
+import { getInstanceArtCrop } from "@/pages/Logs/utils/instanceImages";
 import { fetchMapManifest } from "@/pages/Technical/mapManifest";
 import { trackFunnel } from "@/utils/funnel";
-import { dungeonShelfCards } from "./dungeonShelf";
+import { dungeonMapKind, dungeonNames, dungeonShelfCards } from "./dungeonShelf";
 import { HeroReplayLayer } from "./HeroReplayLayer";
 import type { HeroReplay } from "./heroReplay";
 import { LandingHero } from "./LandingHero";
+import { formatRunDuration, runBadge, runStillUrl, type RunBadge } from "./recentRuns";
 
 const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
 // Public Sidekick downloads; the utm cookie set on landing carries attribution.
@@ -218,9 +219,101 @@ function FirstMinute() {
   );
 }
 
-function RecentRuns({ getSidekickHref }: { getSidekickHref: string }) {
-  const { data } = useRecentUploads();
-  const runs = (data?.instances ?? []).slice(0, 3);
+/** The maps manifest: the same query as the Map panel's, so they share one cached fetch. */
+function useMapManifest() {
+  const { iconBaseUrl } = useTenantDatasetScope();
+  return useQuery({
+    queryKey: ["wow-map-manifest", iconBaseUrl],
+    enabled: Boolean(iconBaseUrl),
+    staleTime: 60 * 60 * 1000,
+    queryFn: () => fetchMapManifest(iconBaseUrl!),
+  });
+}
+
+// Only runs with a replay: their cards show a still, never a wall of placeholders.
+const RECENT_RUNS_URL = "/api/v1/raidlogs/recent?days=60&limit=3&has_positions=true";
+
+function useRecentRuns() {
+  return useQuery({
+    queryKey: ["landing", "recent-runs"],
+    staleTime: 60 * 1000,
+    queryFn: async () => {
+      const response = await fetch(RECENT_RUNS_URL);
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
+      return (await response.json()) as RecentInstancesResponse;
+    },
+  });
+}
+
+function RunCard({ run, badge }: { run: RecentInstance; badge: RunBadge | null }) {
+  const [still, setStill] = useState<"loading" | "loaded" | "missing">("loading");
+  const [artFailed, setArtFailed] = useState(false);
+  const duration = formatRunDuration(run.duration_ms);
+  const href = `/instances/${run.slug || run.id}`;
+
+  return (
+    <Link
+      to={href}
+      className="flex flex-col overflow-hidden rounded-xl border border-[#27324a] bg-[#141d30] text-[#e8eef8] no-underline hover:border-[#5f6d88]"
+    >
+      <div className="relative h-[130px] overflow-hidden bg-[#1b2740]">
+        {/* Until this run's still loads (or when it has none yet): a muted crop of the dungeon's art. */}
+        {still !== "loaded" && !artFailed && (
+          <img
+            src={getInstanceArtCrop(run.name)}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            onError={() => setArtFailed(true)}
+            className="absolute inset-0 h-full w-full object-cover opacity-40 grayscale-[60%]"
+          />
+        )}
+        {still !== "missing" && (
+          <img
+            src={runStillUrl(run.id)}
+            alt={`Replay still of ${run.name}`}
+            loading="lazy"
+            decoding="async"
+            width={640}
+            height={360}
+            onLoad={() => setStill("loaded")}
+            onError={() => setStill("missing")}
+            className={`absolute inset-0 h-full w-full object-cover ${still === "loaded" ? "" : "invisible"}`}
+          />
+        )}
+        {badge && (
+          <span
+            className={`absolute left-2.5 top-2.5 rounded-md bg-[#0c1322]/85 px-2 py-[3px] text-[11px] font-semibold tracking-[0.08em] ${
+              badge === "3d" ? "text-[#4fd1c5]" : "text-[#b7c2d6]"
+            }`}
+          >
+            {badge === "3d" ? "3D REPLAY" : "2D MAP"}
+          </span>
+        )}
+        {duration && (
+          <span className="absolute bottom-2.5 right-2.5 rounded-md bg-[#0c1322]/85 px-2 py-[3px] font-mono text-[11px] text-[#e8eef8]">
+            {duration}
+          </span>
+        )}
+      </div>
+      <div className="flex flex-col gap-1 px-3.5 py-3">
+        <div className="text-[15px] font-semibold">{run.name}</div>
+        <div className="text-xs text-[#b7c2d6]">
+          {run.player_count} players · {run.boss_kills} {run.boss_kills === 1 ? "boss" : "bosses"}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function RecentRuns() {
+  const { data } = useRecentRuns();
+  const { data: instances } = useSupportedInstances();
+  const { data: manifest } = useMapManifest();
+  const runs = (data?.instances ?? [])
+    // The endpoint lists every upload of a duplicate run, its representative first; one card per run.
+    .filter((run, i, all) => !run.duplicate_group_id || all.findIndex((other) => other.duplicate_group_id === run.duplicate_group_id) === i)
+    .slice(0, 3);
 
   return (
     <section id="runs" className="mx-auto box-border flex w-full max-w-[1180px] flex-col gap-3.5 px-4 pb-3 pt-7 lg:px-8">
@@ -232,17 +325,22 @@ function RecentRuns({ getSidekickHref }: { getSidekickHref: string }) {
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {runs.map((run) => (
-          <RaidCard key={run.id} instance={run} />
+          <RunCard key={run.id} run={run} badge={runBadge(run, dungeonMapKind(dungeonNames(run.name, instances ?? []), manifest))} />
         ))}
-        <a
-          href={getSidekickHref}
+        <Link
+          to="/download"
           onClick={() => trackFunnel("cta_sidekick", { placement: "ghost_card" })}
-          className="flex min-h-[160px] flex-col justify-center gap-1.5 rounded-xl border border-dashed border-[#5f6d88] bg-[#101829] p-4 text-center text-[#e8eef8] no-underline hover:border-[#e0b45c]"
+          className="flex flex-col overflow-hidden rounded-xl border border-dashed border-[#5f6d88] bg-[#141d30] text-[#e8eef8] no-underline hover:border-[#e0b45c]"
         >
-          <div className={`text-lg font-bold ${HEADING_FONT}`}>Your run goes here</div>
-          <div className="text-xs text-[#b7c2d6]">Tonight, if Sidekick is running.</div>
-          <div className="mt-2 text-[15px] font-semibold text-[#e0b45c]">Get Sidekick →</div>
-        </a>
+          <div className="flex h-[130px] flex-col items-center justify-center gap-1.5 bg-[#101829] p-4 text-center">
+            <div className={`text-lg font-bold ${HEADING_FONT}`}>Your run goes here</div>
+            <div className="text-xs text-[#b7c2d6]">Tonight, if Sidekick is running.</div>
+          </div>
+          <div className="flex flex-col gap-1 px-3.5 py-3">
+            <div className="text-[15px] font-semibold text-[#e0b45c]">Get Sidekick</div>
+            <div className="text-xs text-[#b7c2d6]">2 minutes to set up</div>
+          </div>
+        </Link>
       </div>
     </section>
   );
@@ -250,14 +348,7 @@ function RecentRuns({ getSidekickHref }: { getSidekickHref: string }) {
 
 function DungeonShelf() {
   const { data: instances } = useSupportedInstances();
-  const { iconBaseUrl } = useTenantDatasetScope();
-  // Same query as the Map panel's manifest, so the two share one cached fetch.
-  const { data: manifest } = useQuery({
-    queryKey: ["wow-map-manifest", iconBaseUrl],
-    enabled: Boolean(iconBaseUrl),
-    staleTime: 60 * 60 * 1000,
-    queryFn: () => fetchMapManifest(iconBaseUrl!),
-  });
+  const { data: manifest } = useMapManifest();
   const cards = dungeonShelfCards(instances ?? [], manifest);
 
   return (
@@ -358,7 +449,7 @@ export function StartPage() {
       <SendLinkSection />
       <HowItWorks />
       <FirstMinute />
-      <RecentRuns getSidekickHref={getSidekickHref} />
+      <RecentRuns />
       <DungeonShelf />
       <ClosingBand />
       <footer className="mt-auto flex flex-wrap gap-3 border-t border-[#27324a] px-4 py-3.5 text-[11px] text-[#8a97ad] lg:gap-[18px] lg:px-8 lg:py-[18px] lg:text-xs">
