@@ -44,6 +44,8 @@ def parse():
     p.add_argument("--keep-ceiling", action="store_true")
     p.add_argument("--shaded", action="store_true")
     p.add_argument("--no-liquid", action="store_true")
+    p.add_argument("--object-exclude-prefix", default=None,
+                   help="drop objects with this name prefix before framing/rendering (for example terrain_ on a WMO-only map)")
     p.add_argument("--frame-exclude-prefix", default=None,
                    help="object-name prefix left out of the camera-frame bounds (e.g. m2_: doodads must not move the frame)")
     p.add_argument("--frame-include-prefix", default=None,
@@ -268,7 +270,14 @@ def main():
     a = parse()
     mode = "water_mask" if a.water_mask else ("shaded" if a.shaded else "albedo")
     objs = import_obj(a.obj)
-    # frame from the FULL model (before any drop/cull), so every pass shares one camera
+    if a.object_exclude_prefix:
+        drop = [o for o in objs if o.name.startswith(a.object_exclude_prefix)]
+        keep = [o for o in objs if not o.name.startswith(a.object_exclude_prefix)]
+        for ob in drop:
+            bpy.data.objects.remove(ob, do_unlink=True)
+        objs = keep
+        print(f"excluded {len(drop)} objects with prefix {a.object_exclude_prefix}", file=sys.stderr)
+    # frame from the FULL selected model (before any pass-specific drop/cull), so every pass shares one camera
     lo, hi = world_bounds(objs, a.frame_exclude_prefix, a.frame_include_prefix)
     if a.frame_exclude_prefix or a.frame_include_prefix:
         # x/y from the framed objects, z from everything: the camera sits above hi.z, and a palace

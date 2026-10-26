@@ -223,11 +223,14 @@ def main():
                          "checking a self-check + a known map still match." % (bl_ver, BLENDER_PINNED))
 
     out = next_dir(mdir, a.label)
-    if fetch.get("kind") == "terrain":
-        # Blizzard's minimap of the same tiles is the reference: the alignment IoU verifies the terrain transform
+    if fetch.get("kind") == "terrain" and fetch.get("minimap", True):
+        # Blizzard's minimap of the same tiles is the reference: the alignment IoU verifies the terrain transform.
         reference = os.path.join(out, "minimap.png")
         stitch_minimap(fetch, mdir, reference, bg=str(cfg.get("reference_bg", "12,17,20")))
         cfg = dict(cfg, reference="minimap.png (stitched into this version folder)")
+    elif fetch.get("kind") == "terrain":
+        reference = None
+        cfg = dict(cfg, reference=None)
     log = os.path.join(out, "log.txt")
     rel = lambda p: os.path.relpath(p, ROOT)
     py = rmconfig.CFG["python"] and rmconfig.expand(rmconfig.CFG["python"]) or sys.executable
@@ -236,7 +239,13 @@ def main():
         frame += ["--frame-exclude-prefix", "m2_"]  # doodads must not move the camera frame
     if fetch.get("kind") == "terrain":
         frame += ["--smooth-prefix", "terrain_"]  # heightmap: weld + smooth normals, no per-triangle facets
-        if cfg.get("crop"):
+        if cfg.get("object_exclude_prefix"):
+            frame += ["--object-exclude-prefix", str(cfg["object_exclude_prefix"])]
+        if cfg.get("frame_include_prefix"):
+            frame += ["--frame-include-prefix", str(cfg["frame_include_prefix"])]
+        elif cfg.get("frame_exclude_prefix"):
+            frame += ["--frame-exclude-prefix", str(cfg["frame_exclude_prefix"])]
+        elif cfg.get("crop") and not cfg.get("frame_include_all"):
             frame += ["--frame-include-prefix", "terrain_"]  # a WMO reaching out of the crop must not widen the frame
     extra = a.blender_args.split() + frame
     cmds = []

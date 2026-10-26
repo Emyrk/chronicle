@@ -108,7 +108,7 @@ Terrain, in detail (`tools/adt2obj.py`, run by `fetch_map.py`):
 - **Heightmap.** `MCNK.position` is `(world x, world y, z)` of the chunk's +x/+y corner;
   `IndexX` runs along −y, `IndexY` along −x; 145 heights per chunk (9×9 outer + 8×8 inner),
   holes from the high-res 64-bit mask when flag 0x10000 is set, else the 4×4 low-res mask.
-- **Ground textures.** `MDID` (tex0) lists texture file ids; per chunk `MCLY` layers (texture,
+- **Ground textures.** `MDID` (tex0) lists texture file ids; BLP2 raw BGRA (encoding 3) is decoded directly when Pillow cannot read it. Per chunk `MCLY` layers (texture,
   flags, alpha offset) and `MCAL` alpha maps: 8-bit when MPHD has 0x4 or 0x80 (big alpha /
   height texturing), RLE when the layer flag 0x200 is set, else 4-bit with the last row and
   column duplicated. Textures repeat 8× per chunk. One atlas per tile, `atlas_chunk_px` per
@@ -161,6 +161,9 @@ rot: 90                         # camera roll: 90 = WoW -Y -> screen right, -X -
 reference: ../some-frame.png    # optional, relative to the map folder: register renders onto this frame
 reference_bg: 12,17,20          # that image's flat background colour
 # terrain only: crop: {x: [min, max], y: [min, max]}  (world yards)   atlas_chunk_px: 512   (4x sets)
+# frame_include_all: true  # include placed WMOs outside the cropped terrain in the camera/GLB frame
+# frame_include_prefix: wmo_248358  # select what sets bounds; object_exclude_prefix: terrain_ drops blank terrain entirely
+# minimap: false  # only when this CDN product omits MAID textures; disables reference alignment / IoU
 # water_tint: 0.7  water_color: "214,96,32"          (lava; defaults 0.42 / 78,150,196)
 # source: mpq  client: <mpq_clients name>             (1.12 client, see below)  placed_wmo: <fid or name>
 ```

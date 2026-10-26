@@ -104,6 +104,8 @@ def parse():
                    help="drop a water tile with no floor within this far below it (0 = keep all water)")
     p.add_argument("--kind", default="wmo", choices=["wmo", "terrain"], help="fetch kind (render_set passes it)")
     # terrain only (same meaning as in blender_topdown.py; render_set passes the same values to both)
+    p.add_argument("--object-exclude-prefix", default=None,
+                   help="terrain: drop objects with this name prefix before framing/export")
     p.add_argument("--frame-include-prefix", default=None, help="terrain: only these objects set the x/y frame")
     p.add_argument("--frame-exclude-prefix", default=None, help="terrain: these objects never set the frame")
     p.add_argument("--smooth-prefix", default=None, help="terrain: weld + smooth-shade objects with this prefix")
@@ -602,6 +604,11 @@ def bury_cull(objs, depth, hole_depth, straddle_depth, lo, hi):
             base = len(fv)
             fv.extend(tuple(v.co) for v in ob.data.vertices)
             fp.extend(tuple(base + i for i in p.vertices) for p in ob.data.polygons)
+    if not fv:
+        return {"faces_removed": 0, "faces_kept": sum(len(ob.data.polygons) for ob in objs),
+                "ground_grid_points": 0, "vertices_under_holes": 0,
+                "vertices_buried_in_holes": 0, "straddling_faces_removed": 0,
+                "skipped": "no terrain vertices"}
     bvh = BVHTree.FromPolygons(fv, fp, all_triangles=False, epsilon=0.0)
     ground, n_grid = filled_ground(fv, lo, hi)
     sv, sp = [], []  # every solid face (terrain + WMO + doodads), for 'is anything over this point?'
@@ -770,7 +777,14 @@ def shrink_atlases(objs, px_per_yard):
 def prepare_terrain(a, cull=True):
     """Import, clip to the frame, cull. Returns objects (true world frame), frame lo/hi, stats."""
     objs = import_obj(a.obj)
-    st = {"kind": "terrain", "faces_in": sum(len(o.data.polygons) for o in objs)}
+    excluded = []
+    if a.object_exclude_prefix:
+        excluded = [o for o in objs if o.name.startswith(a.object_exclude_prefix)]
+        for ob in excluded:
+            bpy.data.objects.remove(ob, do_unlink=True)
+        objs = meshes()
+    st = {"kind": "terrain", "faces_in": sum(len(o.data.polygons) for o in objs),
+          "object_exclude_prefix": a.object_exclude_prefix, "objects_excluded": len(excluded)}
     lo, hi = world_bounds(objs, a.frame_exclude_prefix, a.frame_include_prefix)
     framed = {o.name for o in objs if not (a.frame_exclude_prefix and o.name.startswith(a.frame_exclude_prefix))
               and not (a.frame_include_prefix and not o.name.startswith(a.frame_include_prefix))}
@@ -834,7 +848,8 @@ def main_terrain(a):
                                    "roof_cull": a.roof_cull,
                                    "roof_min_drop": a.roof_min_drop, "roof_max_drop": a.roof_max_drop,
                                    "frame_include_prefix": a.frame_include_prefix,
-                                   "frame_exclude_prefix": a.frame_exclude_prefix, "smooth_prefix": a.smooth_prefix,
+                                   "frame_exclude_prefix": a.frame_exclude_prefix,
+                                   "object_exclude_prefix": a.object_exclude_prefix, "smooth_prefix": a.smooth_prefix,
                                    "terrain_px_per_yard": a.terrain_px_per_yard}
     report["terrain_atlases"] = atlases
     report["frame_world"] = {"min": [flo.x, flo.y], "max": [fhi.x, fhi.y],
