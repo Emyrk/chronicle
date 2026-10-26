@@ -10,6 +10,7 @@ import {
   overviewDungeonCanvas,
   pointInMapViewport,
   projectDungeonMapPoint,
+  replayDungeonCanvas,
   selectMapJourneyEncounters,
   zoomMapCameraAtPoint,
 } from "./mapModel";
@@ -126,14 +127,60 @@ describe("map route overview model", () => {
     const styled = { path: "styled/map.jpeg", width: 200, height: 160, source: "hand-styled", bounds: floor.bounds };
     const renders: WowMapManualRender = { path: "renders/map.png", width: 300, height: 240 };
     const instance = { mapID: 230, name: "Blackrock Depths", instanceType: 1, directory: "", floors: [floor], styled, renders };
+    expect(overviewDungeonCanvas(instance, floor, "auto")).toEqual({ canvas: styled, source: "styled" });
     const defaultCanvas = overviewDungeonCanvas(instance, floor, "renders");
     expect(defaultCanvas).toEqual({ canvas: renders, source: "renders" });
     expect(defaultCanvas.canvas?.bounds).toBeUndefined();
     expect(overviewDungeonCanvas(instance, floor, "styled")).toEqual({ canvas: styled, source: "styled" });
     expect(overviewDungeonCanvas(instance, floor, "art")).toEqual({ canvas: floor, source: "art" });
+    expect(overviewDungeonCanvas({ ...instance, renders: { ...renders, bounds: floor.bounds } }, floor, "auto")).toMatchObject({ canvas: renders, source: "renders" });
     expect(overviewDungeonCanvas({ ...instance, renders: { ...renders, bounds: floor.bounds } }, floor, "renders").canvas?.bounds).toEqual(floor.bounds);
     expect(overviewDungeonCanvas({ ...instance, renders: undefined }, floor, "renders")).toEqual({ canvas: styled, source: "styled" });
     expect(overviewDungeonCanvas({ ...instance, styled: undefined, renders: undefined }, floor, "renders")).toEqual({ canvas: floor, source: "art" });
+  });
+
+  it("prefers a calibrated render over native floor artwork in flat 2D mode", () => {
+    const bounds = { minX: -200, maxX: 300, minY: -400, maxY: 600 };
+    const floor = { floor: 1, width: 100, height: 80, tileWidth: 50, tileHeight: 40, tiles: [], bounds };
+    const render: WowMapManualRender = { path: "renders/map.png", width: 300, height: 240, bounds };
+    const instance = { mapID: 230, name: "Blackrock Depths", instanceType: 1, directory: "", floors: [floor], renders: render };
+
+    expect(replayDungeonCanvas(instance, floor, true)).toMatchObject({
+      rendered: true,
+      canvas: { path: "renders/map.png", source: "renders" },
+    });
+    expect(replayDungeonCanvas(instance, floor, false)).toEqual({ canvas: floor, rendered: false });
+  });
+
+  it("recovers the published Wailing Caverns render calibration", () => {
+    const floor = { floor: 1, width: 1002, height: 668, tileWidth: 256, tileHeight: 256, tiles: [] };
+    const render: WowMapManualRender = { path: "renders/WC-shaded-water.png", width: 2400, height: 1533 };
+    const instance = { mapID: 43, name: "Wailing Caverns", instanceType: 1, directory: "", floors: [floor], renders: render };
+    const bounds = { minX: -389.07001, maxX: 191.6667, minY: -370.83331, maxY: 538.3512 };
+
+    expect(overviewDungeonCanvas(instance, floor, "auto")).toMatchObject({
+      source: "renders",
+      canvas: { path: render.path, bounds },
+    });
+    expect(replayDungeonCanvas(instance, floor, true)).toMatchObject({
+      rendered: true,
+      canvas: { path: render.path, bounds },
+    });
+  });
+
+  it("recovers the published Ruins of Lordaeron render calibration", () => {
+    const render: WowMapManualRender = { path: "renders/RoL-shaded-aligned.png", width: 1024, height: 1024 };
+    const instance = { mapID: 2999, name: "Ruins of Lordaeron", instanceType: 0, directory: "", floors: [], renders: render };
+    const bounds = { minX: 1333.3337, maxX: 1900, minY: -33.3333, maxY: 500 };
+
+    expect(overviewDungeonCanvas(instance, undefined, "auto")).toMatchObject({
+      source: "renders",
+      canvas: { path: render.path, bounds },
+    });
+    expect(replayDungeonCanvas(instance, undefined, true)).toMatchObject({
+      rendered: true,
+      canvas: { path: render.path, bounds },
+    });
   });
 
   it("projects rendered geometry from ordinary world X/Y bounds", () => {

@@ -10,12 +10,15 @@ import {
   clampViewport,
   healthBarColor,
   interpolateViewport,
+  movementTrailPoints,
   prefersReducedMotion,
   VIEW_TRANSITION_MS,
   viewportPoint,
   zoomViewportAt,
+  type MapPoint,
   type MapViewport,
 } from "./mapModel";
+import type { MapPositionSample } from "./map.processor";
 import type { MapSceneGround, MapSceneMarker, MapUnitHealth } from "./useMapScene";
 
 /**
@@ -90,6 +93,65 @@ function HealthBar({ health }: { health: MapUnitHealth }) {
   );
 }
 
+function EncounterRoute({ points, viewport }: { points: MapPoint[]; viewport: MapViewport }) {
+  if (points.length < 2) return null;
+  const path = points
+    .map((point) => viewportPoint(point, viewport))
+    .map((point) => `${point.leftPercent},${point.topPercent}`)
+    .join(" ");
+  return (
+    <svg className="pointer-events-none absolute inset-0 z-10 size-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points={path} fill="none" stroke="rgba(0,0,0,.88)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+      <polyline points={path} fill="none" stroke="rgba(251,191,36,.92)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
+function MovementTrails({
+  markers,
+  viewport,
+  trailSeconds,
+  projectSample,
+}: {
+  markers: MapSceneMarker[];
+  viewport: MapViewport;
+  trailSeconds: number;
+  projectSample: (sample: MapPositionSample) => MapPoint | null;
+}) {
+  if (trailSeconds <= 0) return null;
+  return (
+    <svg className="pointer-events-none absolute inset-0 z-10 size-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      {markers.flatMap((marker) => {
+        const trail = movementTrailPoints(
+          marker.positions,
+          marker.sample,
+          trailSeconds * 1000,
+          marker.kind === "player",
+          projectSample,
+        ).map(({ point }) => viewportPoint(point, viewport));
+        return trail.slice(0, -1).map((from, index) => {
+          const to = trail[index + 1];
+          const fade = 1 - index / Math.max(1, trail.length - 1);
+          return (
+            <line
+              key={`${marker.guid}-${index}`}
+              x1={from.leftPercent}
+              y1={from.topPercent}
+              x2={to.leftPercent}
+              y2={to.topPercent}
+              stroke={marker.color}
+              strokeWidth="2"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+              opacity={(marker.muted ? 0.2 : 0.75) * fade}
+            />
+          );
+        });
+      })}
+    </svg>
+  );
+}
+
 // Markers live in an un-scaled overlay positioned from the zoomed
 // coordinates, so they keep their pixel size and spread apart as the
 // artwork zooms in.
@@ -124,9 +186,12 @@ function MapMarker({ marker, viewport }: { marker: MapSceneMarker; viewport: Map
   );
 }
 
-export function MapView2D({ ground, markers, view, onUserViewport }: {
+export function MapView2D({ ground, markers, routePoints, projectSample, trailSeconds, view, onUserViewport }: {
   ground: MapSceneGround;
   markers: MapSceneMarker[];
+  routePoints: MapPoint[];
+  projectSample: (sample: MapPositionSample) => MapPoint | null;
+  trailSeconds: number;
   view: MapViewRequest;
   /** Called with the viewport after the user zooms or pans. */
   onUserViewport?: (viewport: MapViewport) => void;
@@ -241,6 +306,8 @@ export function MapView2D({ ground, markers, view, onUserViewport }: {
         <MapTiles ground={ground} />
       </div>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_45%,rgba(0,0,0,.28))]" />
+      <EncounterRoute points={routePoints} viewport={viewport} />
+      <MovementTrails markers={markers} viewport={viewport} trailSeconds={trailSeconds} projectSample={projectSample} />
       {markers.map((marker) => <MapMarker key={marker.guid} marker={marker} viewport={viewport} />)}
     </div>
   );
