@@ -25,6 +25,7 @@ const (
 	maxStatesPerChunk      = 60
 
 	unknownPermille  = 1295
+	unknownFloor     = 1295
 	unknownMaximum   = 60466175
 	unknownPowerType = 35
 )
@@ -116,7 +117,10 @@ func decodePayload(ctx context.Context, payload luaValue) ([]messages.Message, i
 	case schema == 2 && encoding == "b36-v2":
 		decoded, err := decodePayloadV2(ctx, payload)
 		return decoded, 2, err
-	case schema != 1 && schema != 2:
+	case schema == 3 && encoding == "b36-v3":
+		decoded, err := decodePayloadV3(ctx, payload)
+		return decoded, 3, err
+	case schema != 1 && schema != 2 && schema != 3:
 		return nil, 0, fmt.Errorf("unsupported schema_version %d", schema)
 	default:
 		return nil, 0, fmt.Errorf("unsupported encoding %q for schema_version %d", encoding, schema)
@@ -210,6 +214,14 @@ type stateRecord struct {
 }
 
 func decodePayloadV2(ctx context.Context, payload luaValue) ([]messages.Message, error) {
+	return decodePayloadWithVitals(ctx, payload, false)
+}
+
+func decodePayloadV3(ctx context.Context, payload luaValue) ([]messages.Message, error) {
+	return decodePayloadWithVitals(ctx, payload, true)
+}
+
+func decodePayloadWithVitals(ctx context.Context, payload luaValue, hasFloor bool) ([]messages.Message, error) {
 	guids, guidBytes, err := decodeGUIDs(ctx, payload)
 	if err != nil {
 		return nil, err
@@ -264,7 +276,7 @@ func decodePayloadV2(ctx context.Context, payload luaValue) ([]messages.Message,
 		if encodedBytes > maxEncodedBytes {
 			return nil, fmt.Errorf("encoded content exceeds %d bytes", maxEncodedBytes)
 		}
-		ticks, err := decodeChunkV2(ctx, value.text, guids, stateBatchesByEpoch, stateByGUID, &result, &positionCount)
+		ticks, err := decodeChunkV2(ctx, value.text, guids, stateBatchesByEpoch, stateByGUID, &result, &positionCount, hasFloor)
 		if err != nil {
 			return nil, fmt.Errorf("chunks[%d]: %w", chunkIndex+1, err)
 		}
@@ -340,7 +352,7 @@ func decodeChunkV1(ctx context.Context, chunk string, guids []guid.GUID, result 
 		if err := ctx.Err(); err != nil {
 			return 0, err
 		}
-		epoch, mapID, records, err := decodeTickHeader(tickIndex, tick, 8)
+		epoch, mapID, _, records, err := decodeTickHeader(tickIndex, tick, 8, false)
 		if err != nil {
 			return 0, err
 		}
@@ -353,14 +365,14 @@ func decodeChunkV1(ctx context.Context, chunk string, guids []guid.GUID, result 
 			if err := validateSample(tickIndex, offset/8, index, indexErr, x, xErr, y, yErr, guids, seenIndexes); err != nil {
 				return 0, err
 			}
-			*result = append(*result, unitPosition(epoch, mapID, guids[index], x, y))
+			*result = append(*result, unitPosition(epoch, mapID, nil, guids[index], x, y))
 			*positionCount++
 		}
 	}
 	return len(parts), nil
 }
 
-func decodeChunkV2(ctx context.Context, chunk string, guids []guid.GUID, stateBatchesByEpoch map[uint64][][]stateRecord, stateByGUID map[uint64]vitalState, result *[]messages.Message, positionCount *uint64) (int, error) {
+func decodeChunkV2(ctx context.Context, chunk string, guids []guid.GUID, stateBatchesByEpoch map[uint64][][]stateRecord, stateByGUID map[uint64]vitalState, result *[]messages.Message, positionCount *uint64, hasFloor bool) (int, error) {
 	parts, err := splitRecords(chunk, maxTicksPerChunk, "ticks", "unterminated trailing tick")
 	if err != nil {
 		return 0, err
@@ -369,7 +381,7 @@ func decodeChunkV2(ctx context.Context, chunk string, guids []guid.GUID, stateBa
 		if err := ctx.Err(); err != nil {
 			return 0, err
 		}
-		epoch, mapID, records, err := decodeTickHeader(tickIndex, tick, 12)
+		epoch, mapID, floor, records, err := decodeTickHeader(tickIndex, tick, 12, hasFloor)
 		if err != nil {
 			return 0, err
 		}
@@ -403,7 +415,7 @@ func decodeChunkV2(ctx context.Context, chunk string, guids []guid.GUID, stateBa
 			}
 
 			unit := guids[index]
-			*result = append(*result, unitPosition(epoch, mapID, unit, x, y))
+			*result = append(*result, unitPosition(epoch, mapID, floor, unit, x, y))
 			if resource, ok := unitResources(epoch, unit, healthPermille, resourcePermille, stateByGUID[index]); ok {
 				*result = append(*result, resource)
 			}
@@ -413,33 +425,56 @@ func decodeChunkV2(ctx context.Context, chunk string, guids []guid.GUID, stateBa
 	return len(parts), nil
 }
 
-func decodeTickHeader(tickIndex int, tick string, recordWidth int) (uint64, uint64, string, error) {
+func decodeTickHeader(tickIndex int, tick string, recordWidth int, hasFloor bool) (uint64, uint64, *int32, string, error) {
 	first := strings.IndexByte(tick, ':')
 	if first <= 0 {
-		return 0, 0, "", fmt.Errorf("tick %d: missing epoch separator", tickIndex+1)
+		return 0, 0, nil, "", fmt.Errorf("tick %d: missing epoch separator", tickIndex+1)
 	}
 	secondRelative := strings.IndexByte(tick[first+1:], ':')
 	if secondRelative < 0 {
-		return 0, 0, "", fmt.Errorf("tick %d: missing map separator", tickIndex+1)
+		return 0, 0, nil, "", fmt.Errorf("tick %d: missing map separator", tickIndex+1)
 	}
 	second := first + 1 + secondRelative
 	epoch, err := decodeBase36(tick[:first])
 	if err != nil || epoch == 0 || epoch > 1<<53-1 {
-		return 0, 0, "", fmt.Errorf("tick %d: invalid epoch %q", tickIndex+1, tick[:first])
+		return 0, 0, nil, "", fmt.Errorf("tick %d: invalid epoch %q", tickIndex+1, tick[:first])
 	}
 	mapText := tick[first+1 : second]
 	if len(mapText) != 3 {
-		return 0, 0, "", fmt.Errorf("tick %d: map ID width is %d, want 3", tickIndex+1, len(mapText))
+		return 0, 0, nil, "", fmt.Errorf("tick %d: map ID width is %d, want 3", tickIndex+1, len(mapText))
 	}
 	mapID, err := decodeBase36(mapText)
 	if err != nil || mapID > 46655 {
-		return 0, 0, "", fmt.Errorf("tick %d: invalid map ID %q", tickIndex+1, mapText)
+		return 0, 0, nil, "", fmt.Errorf("tick %d: invalid map ID %q", tickIndex+1, mapText)
 	}
-	records := tick[second+1:]
+
+	recordStart := second + 1
+	var floor *int32
+	if hasFloor {
+		thirdRelative := strings.IndexByte(tick[recordStart:], ':')
+		if thirdRelative < 0 {
+			return 0, 0, nil, "", fmt.Errorf("tick %d: missing floor separator", tickIndex+1)
+		}
+		third := recordStart + thirdRelative
+		floorText := tick[recordStart:third]
+		if len(floorText) != 2 {
+			return 0, 0, nil, "", fmt.Errorf("tick %d: floor width is %d, want 2", tickIndex+1, len(floorText))
+		}
+		floorValue, floorErr := decodeBase36(floorText)
+		if floorErr != nil || floorValue > unknownFloor {
+			return 0, 0, nil, "", fmt.Errorf("tick %d: invalid floor %q", tickIndex+1, floorText)
+		}
+		if floorValue != unknownFloor {
+			value := int32(floorValue)
+			floor = &value
+		}
+		recordStart = third + 1
+	}
+	records := tick[recordStart:]
 	if len(records) == 0 || len(records)%recordWidth != 0 || len(records)/recordWidth > maxPositionsPerTick {
-		return 0, 0, "", fmt.Errorf("tick %d: invalid position record length %d", tickIndex+1, len(records))
+		return 0, 0, nil, "", fmt.Errorf("tick %d: invalid position record length %d", tickIndex+1, len(records))
 	}
-	return epoch, mapID, records, nil
+	return epoch, mapID, floor, records, nil
 }
 
 func validateSample(tickIndex, positionIndex int, index uint64, indexErr error, x uint64, xErr error, y uint64, yErr error, guids []guid.GUID, seenIndexes map[uint64]struct{}) error {
@@ -545,10 +580,10 @@ func validPermille(value uint64) bool {
 	return value <= 1000 || value == unknownPermille
 }
 
-func unitPosition(epoch, mapID uint64, unit guid.GUID, x, y uint64) *messages.UnitPosition {
+func unitPosition(epoch, mapID uint64, floor *int32, unit guid.GUID, x, y uint64) *messages.UnitPosition {
 	return &messages.UnitPosition{
 		MessageBase: messages.Base(time.UnixMilli(int64(epoch)), messages.WithSynthetic()),
-		Unit:        unit, X: float64(x) / 10000, Y: float64(y) / 10000, MapID: int32(mapID),
+		Unit:        unit, X: float64(x) / 10000, Y: float64(y) / 10000, MapID: int32(mapID), Floor: floor,
 	}
 }
 

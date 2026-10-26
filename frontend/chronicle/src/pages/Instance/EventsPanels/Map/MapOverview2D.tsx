@@ -29,6 +29,7 @@ import {
   projectDungeonMapPoint,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
+  resolveMapFloorNumber,
   selectMapJourneyEncounters,
   uiMapPoint,
   zoneMapPoint,
@@ -397,9 +398,12 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
       .find(({ layer }) => layer.width > 0 && layer.height > 0 && layer.tiles.length > 0)
     : undefined;
   const selectedFloorNumber = artwork?.kind === "instance"
-    && artwork.instance.floors.some((floor) => floor.floor === floorNumber)
-    ? floorNumber
-    : artwork?.kind === "instance" ? artwork.instance.floors[0]?.floor ?? null : null;
+    ? resolveMapFloorNumber(
+      artwork.instance,
+      floorNumber,
+      representativeSamples.filter((sample) => sample.mapId === mapId),
+    )
+    : null;
   const selectedFloor = artwork?.kind === "instance"
     ? artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0]
     : undefined;
@@ -420,11 +424,12 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
 
   const projectSample = useCallback((sample: MapPositionSample, calibration: ReturnType<typeof resolveDungeonMapCalibration>): MapPoint | null => {
     if (!artwork || sample.mapId !== mapId) return null;
+    if (sample.floor !== undefined && selectedFloorNumber !== null && sample.floor !== selectedFloorNumber) return null;
     if (normalizedUIMap) return uiMapPoint(sample);
     if (artwork.kind === "zone") return zoneMapPoint(sample, artwork.assignment);
     if (!dungeonBounds) return null;
     return projectDungeonMapPoint(sample, dungeonBounds, artwork.instance.mapID, calibration, imageProjection);
-  }, [artwork, dungeonBounds, imageProjection, mapId, normalizedUIMap]);
+  }, [artwork, dungeonBounds, imageProjection, mapId, normalizedUIMap, selectedFloorNumber]);
 
   const journeyRoutes = useMemo<EncounterRoute[]>(() => {
     if (!artwork || selectedEncounters.length === 0) return [];

@@ -62,6 +62,42 @@ func TestDecoderCanonicalV2SavedVariables(t *testing.T) {
 	require.ErrorIs(t, err, io.EOF)
 }
 
+func TestDecoderCanonicalV3Floor(t *testing.T) {
+	t.Parallel()
+	sourceValue, err := (sidekickstorage.Decoder{}).Decode(context.Background(), strings.NewReader(payloadV3()))
+	require.NoError(t, err)
+	source := sourceValue.(*sidekickstorage.Source)
+	require.Equal(t, int32(3), source.SchemaVersion())
+
+	batch, err := source.Advance(context.Background())
+	require.NoError(t, err)
+	require.Len(t, batch, 4)
+	floor := int32(2)
+	require.Equal(t, &floor, batch[0].(*messages.UnitPosition).Floor)
+	require.Equal(t, &floor, batch[2].(*messages.UnitPosition).Floor)
+}
+
+func TestDecoderV3PreservesFloorZero(t *testing.T) {
+	t.Parallel()
+	input := payloadV3(`chunks = { "msl7so3f:0hj:00:000ya4dqdw6y017ps000rszz;" }`)
+	sourceValue, err := (sidekickstorage.Decoder{}).Decode(context.Background(), strings.NewReader(input))
+	require.NoError(t, err)
+	batch, err := sourceValue.(*sidekickstorage.Source).Advance(context.Background())
+	require.NoError(t, err)
+	floor := int32(0)
+	require.Equal(t, &floor, batch[0].(*messages.UnitPosition).Floor)
+}
+
+func TestDecoderV3PreservesUnknownFloor(t *testing.T) {
+	t.Parallel()
+	input := payloadV3(`chunks = { "msl7so3f:0hj:zz:000ya4dqdw6y017ps000rszz;" }`)
+	sourceValue, err := (sidekickstorage.Decoder{}).Decode(context.Background(), strings.NewReader(input))
+	require.NoError(t, err)
+	batch, err := sourceValue.(*sidekickstorage.Source).Advance(context.Background())
+	require.NoError(t, err)
+	require.Nil(t, batch[0].(*messages.UnitPosition).Floor)
+}
+
 func TestDecoderRetainsV1Compatibility(t *testing.T) {
 	t.Parallel()
 	sourceValue, err := (sidekickstorage.Decoder{}).Decode(context.Background(), strings.NewReader(payloadV1()))
@@ -178,6 +214,21 @@ func TestDecoderCancellation(t *testing.T) {
 	cancel()
 	_, err := (sidekickstorage.Decoder{}).Decode(ctx, strings.NewReader(payloadV2()))
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+func payloadV3(overrides ...string) string {
+	fields := map[string]string{
+		"schema_version": `schema_version = 3`, "encoding": `encoding = "b36-v3"`,
+		"guids":               `guids = { "0x0000000000000001", "0x0000000000000002" }`,
+		"chunks":              `chunks = { "msl7so3f:0hj:02:000ya4dqdw6y017ps000rszz;" }`,
+		"state_chunks":        `state_chunks = { "msl7so3f:0000n5c00ffk0;msl7so3f:01012kw000001;" }`,
+		"current_chunk_ticks": `current_chunk_ticks = 1`, "current_state_chunk_records": `current_state_chunk_records = 2`,
+		"tick_count": `tick_count = 1`, "position_count": `position_count = 2`, "state_count": `state_count = 2`,
+		"encoded_bytes": `encoded_bytes = 125`,
+	}
+	return payload("ChronicleSidekickBridgeWoTLKDB", fields, []string{
+		"schema_version", "encoding", "guids", "chunks", "state_chunks", "current_chunk_ticks", "current_state_chunk_records", "tick_count", "position_count", "state_count", "encoded_bytes",
+	}, overrides...)
 }
 
 func payloadV2(overrides ...string) string {

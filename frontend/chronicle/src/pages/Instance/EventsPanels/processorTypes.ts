@@ -93,6 +93,7 @@ export interface UnitPositionProcessorEvent extends EventMeta {
   y: number;
   z?: number;
   mapId: number;
+  floor?: number;
   facing?: number;
 }
 

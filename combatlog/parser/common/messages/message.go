@@ -308,6 +308,7 @@ type UnitPosition struct {
 	Y         float64
 	Z         *float64
 	MapID     int32
+	Floor     *int32
 	Facing    float64
 	HasFacing bool
 }

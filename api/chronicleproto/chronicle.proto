@@ -109,6 +109,7 @@ message UnitPosition {
   int32 map_id = 5;
   optional double facing = 6;
   optional double z = 7;
+  optional int32 floor = 8;
 }
 
 message UnitResources {

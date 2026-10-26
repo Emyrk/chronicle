@@ -87,6 +87,7 @@ func UnitPosition(from time.Time, idx int32, position *messages.UnitPosition) *c
 		MapId:  position.MapID,
 		Facing: facing,
 		Z:      position.Z,
+		Floor:  position.Floor,
 	}
 }
 

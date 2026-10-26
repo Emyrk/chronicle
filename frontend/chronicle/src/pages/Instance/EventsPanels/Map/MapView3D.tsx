@@ -13,7 +13,7 @@ import type { MapPositionSample } from "./map.processor";
 import { cameraPoseAt, type MapCameraMark, type MapCameraPose } from "./cameraPath";
 import { DISPEL_KINDS, DISPEL_ORDER, type DispelKind } from "./unitTokenArt";
 import type { PlanInput, PlanItem } from "./plan/mapPlan";
-import { prefersReducedMotion, replayPositionAt, VIEW_TRANSITION_MS, type MapPoint, type MapViewport } from "./mapModel";
+import { flatYardStep, floorBoundsYardStep, prefersReducedMotion, replayPositionAt, VIEW_TRANSITION_MS, type MapPoint, type MapViewport } from "./mapModel";
 import {
   MapScene3D,
   type DungeonMeshRequest,
@@ -37,6 +37,8 @@ export interface MapView3DProps {
   ground: MapSceneGround;
   markers: MapSceneMarker[];
   projectSample: (sample: MapPositionSample) => MapPoint | null;
+  /** Whether x/y are world-yard coordinates; normalized UI-map coordinates cannot calibrate physical scale. */
+  worldCoordinates?: boolean;
   cursorMs: number;
   playing: boolean;
   playbackSpeed: number;
@@ -118,20 +120,6 @@ export interface MapView3DProps {
 const NO_DEBUFFS: readonly number[] = [];
 const NO_PLAN_ITEMS: readonly PlanItem[] = [];
 
-// How far one yard of world x and of world y moves a point on the artwork,
-// measured with the units' own projection around `sample` (walking the flat map).
-function flatYardStep(project: (sample: MapPositionSample) => MapPoint | null, sample: MapPositionSample): { x: MapPoint; y: MapPoint } | null {
-  const half = 5;
-  const step = (dx: number, dy: number): MapPoint | null => {
-    const from = project({ ...sample, x: sample.x - dx, y: sample.y - dy });
-    const to = project({ ...sample, x: sample.x + dx, y: sample.y + dy });
-    return from && to ? { leftPercent: (to.leftPercent - from.leftPercent) / (2 * half), topPercent: (to.topPercent - from.topPercent) / (2 * half) } : null;
-  };
-  const x = step(half, 0);
-  const y = step(0, half);
-  return x && y ? { x, y } : null;
-}
-
 const NO_ROLES: MapUnitRoles = { selected: null, target: null, targetsTarget: null, pinned: new Set() };
 
 export interface MapLivePresence {
@@ -202,6 +190,7 @@ export default function MapView3D({
   ground,
   markers,
   projectSample,
+  worldCoordinates = true,
   cursorMs,
   playing,
   playbackSpeed,
@@ -302,9 +291,14 @@ export default function MapView3D({
   }, [frozen, ground]);
 
   const yardSample = markers[0]?.sample;
+  const floorBounds = "bounds" in ground.canvas ? ground.canvas.bounds : undefined;
   useEffect(() => {
-    if (!frozen) sceneRef.current?.setFlatYards(yardSample ? flatYardStep(projectSample, yardSample) : null);
-  }, [frozen, projectSample, yardSample]);
+    if (frozen) return;
+    const scale = worldCoordinates
+      ? yardSample ? flatYardStep(projectSample, yardSample, true) : null
+      : floorBoundsYardStep(floorBounds);
+    sceneRef.current?.setFlatYards(scale);
+  }, [floorBounds, frozen, projectSample, worldCoordinates, yardSample]);
 
   useEffect(() => {
     if (!frozen) sceneRef.current?.setDungeonMesh(dungeonMesh);

@@ -31,6 +31,7 @@ import {
   renderedDungeonMapPoint,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
+  resolveMapFloorNumber,
   selectHealthBars,
   selectMapEncounter,
   unitFocusBounds,
@@ -374,9 +375,12 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       .find(({ layer }) => layer.width > 0 && layer.height > 0 && layer.tiles.length > 0)
     : undefined;
   const selectedFloorNumber = artwork.kind === "instance"
-    && artwork.instance.floors.some((floor) => floor.floor === floorNumber)
-    ? floorNumber
-    : artwork.kind === "instance" ? artwork.instance.floors[0]?.floor ?? null : null;
+    ? resolveMapFloorNumber(
+      artwork.instance,
+      floorNumber,
+      visibleUnits.filter((unit) => unit.sample.mapId === mapId).map((unit) => unit.sample),
+    )
+    : null;
   const selectedFloor = artwork.kind === "instance"
     ? artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0]
     : undefined;
@@ -422,6 +426,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     .flatMap((candidate) => candidate.enemies?.filter((enemy) => enemy.boss).map((enemy) => enemy.id) ?? []));
   const markers = visibleUnits.flatMap(({ guid, sample, positions }): MapSceneMarker[] => {
     if (sample.mapId !== mapId) return [];
+    if (sample.floor !== undefined && selectedFloorNumber !== null && sample.floor !== selectedFloorNumber) return [];
     const point = projectSample(sample);
     if (!point) return [];
     const player = props.context.instance.players?.[guid];
