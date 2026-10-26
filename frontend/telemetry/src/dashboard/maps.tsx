@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { html, raw } from "hono/html";
 import type { Env } from "../types";
-import { createMapBundleTools } from "./mapBundle";
+import { serializeMapBundleTools } from "./mapBundle";
 
 const mapsDashboard = new Hono<{ Bindings: Env }>();
 
@@ -147,7 +147,7 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
       </main>
 
       {html`<script>
-        const bundleTools = (${raw(createMapBundleTools.toString())})();
+        const bundleTools = ${raw(serializeMapBundleTools())};
         const els = Object.fromEntries(['namespace','search','add-map','import-bundle','bundle-file','discard','save','publish','status','count','map-list','editor'].map(id => [id, document.getElementById(id)]));
         let state = null;
         let selectedID = null;
