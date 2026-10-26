@@ -61,6 +61,30 @@ func TestDruidFormTrackerDominantForm(t *testing.T) {
 			},
 		},
 		{
+			name: "more time than the other form is not enough without 51 percent of the encounter",
+			events: []formEvent{
+				{name: "Cat Form", state: types.AuraStateAdded},
+				{at: 24 * time.Second, name: "Cat Form", state: types.AuraStateRemoved},
+				{at: 24 * time.Second, name: "Bear Form", state: types.AuraStateAdded},
+				{at: 42 * time.Second, name: "Bear Form", state: types.AuraStateRemoved},
+			},
+		},
+		{
+			name: "exactly 51 percent is not dominant",
+			events: []formEvent{
+				{name: "Cat Form", state: types.AuraStateAdded},
+				{at: 30*time.Second + 600*time.Millisecond, name: "Cat Form", state: types.AuraStateRemoved},
+			},
+		},
+		{
+			name: "more than 51 percent is dominant",
+			events: []formEvent{
+				{name: "Cat Form", state: types.AuraStateAdded},
+				{at: 30*time.Second + 601*time.Millisecond, name: "Cat Form", state: types.AuraStateRemoved},
+			},
+			want: druidFormCat,
+		},
+		{
 			name:   "passive aura is ignored",
 			events: []formEvent{{name: "Bear Form (Passive)", state: types.AuraStateAdded}},
 		},

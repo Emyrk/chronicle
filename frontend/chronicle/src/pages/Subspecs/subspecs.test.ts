@@ -12,6 +12,10 @@ describe("subspecRulesForFlavor", () => {
       detectedSubspec: "Bear",
       fallback: "Cat",
     })
+    expect(rules[0].subspecs).toEqual([
+      expect.objectContaining({ name: "Bear", description: expect.stringContaining("more than 51%") }),
+      expect.objectContaining({ name: "Cat", description: expect.stringContaining("more than 51%") }),
+    ])
     expect(rules[0].detection).toEqual(["Thick Hide", "Feral Charge", "Feral Instinct"])
     expect(rules[1]).toMatchObject({
       className: "Shaman",

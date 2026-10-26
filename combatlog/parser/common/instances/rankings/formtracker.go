@@ -13,6 +13,8 @@ import (
 // druidForm is a ranking-relevant player form observed in combat logs.
 type druidForm uint8
 
+const minimumDominantFormPercent = 51
+
 const (
 	druidFormUnknown druidForm = iota
 	druidFormCat
@@ -35,8 +37,6 @@ type formState struct {
 	activeSince   time.Time
 	catDuration   time.Duration
 	bearDuration  time.Duration
-	catSeen       bool
-	bearSeen      bool
 	startedInForm druidForm
 }
 
@@ -70,7 +70,6 @@ func (t *druidFormTracker) FightStarted(m messages.Message) {
 			activeSince:   m.Date(),
 			startedInForm: form,
 		}
-		state.markSeen(form)
 		t.encounter[unit] = state
 	}
 }
@@ -88,14 +87,13 @@ func (t *druidFormTracker) ProcessMessage(active bool, m messages.Message) {
 // FightStarted receives the message that triggered detection, which can be later
 // than an authoritative encounter boundary or character activity start.
 func (t *druidFormTracker) FightFinalized(start time.Time) {
-	if t.fightStartedAt.IsZero() || !start.Before(t.fightStartedAt) {
-		return
+	if !t.fightStartedAt.IsZero() && start.Before(t.fightStartedAt) {
+		missing := t.fightStartedAt.Sub(start)
+		for _, state := range t.encounter {
+			state.addDuration(state.startedInForm, missing)
+		}
 	}
-
-	missing := t.fightStartedAt.Sub(start)
-	for _, state := range t.encounter {
-		state.addDuration(state.startedInForm, missing)
-	}
+	t.fightStartedAt = start
 }
 
 func (t *druidFormTracker) Dominant(unit guid.GUID, fightEnd time.Time) druidForm {
@@ -116,16 +114,14 @@ func (t *druidFormTracker) Dominant(unit guid.GUID, fightEnd time.Time) druidFor
 		}
 	}
 
-	if state.catSeen && !state.bearSeen {
+	encounterDuration := fightEnd.Sub(t.fightStartedAt)
+	if encounterDuration <= 0 {
+		return druidFormUnknown
+	}
+	if catDuration*100 > encounterDuration*minimumDominantFormPercent {
 		return druidFormCat
 	}
-	if state.bearSeen && !state.catSeen {
-		return druidFormBear
-	}
-	if catDuration > bearDuration {
-		return druidFormCat
-	}
-	if bearDuration > catDuration {
+	if bearDuration*100 > encounterDuration*minimumDominantFormPercent {
 		return druidFormBear
 	}
 	return druidFormUnknown
@@ -166,7 +162,6 @@ func (t *druidFormTracker) processAura(active bool, msg *messages.Aura) {
 		return
 	}
 
-	state.markSeen(form)
 	if state.active == form {
 		return
 	}
@@ -184,15 +179,6 @@ func (t *druidFormTracker) processSlain(active bool, msg *messages.Slain) {
 		state.addActiveDuration(msg.Date())
 		state.active = druidFormUnknown
 		state.activeSince = time.Time{}
-	}
-}
-
-func (s *formState) markSeen(form druidForm) {
-	switch form {
-	case druidFormCat:
-		s.catSeen = true
-	case druidFormBear:
-		s.bearSeen = true
 	}
 }
 
