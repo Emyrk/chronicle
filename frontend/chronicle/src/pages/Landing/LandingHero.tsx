@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { Pause, Play } from "lucide-react";
 import type { LandingFeaturedRun } from "@/api/typesGenerated";
+import { trackFunnel } from "@/utils/funnel";
 
 // Boss chips shown inline on desktop; the rest collapse into a "+N" chip.
 const DESKTOP_CHIPS = 3;
@@ -81,6 +82,20 @@ function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; c
     return playback && boss ? () => playback.seek(boss.start_offset_ms) : undefined;
   };
   const playing = playback?.playing ?? false;
+  // The first touch of the scrubber's controls, once per page view.
+  const interacted = useRef(false);
+  const trackInteraction = (control: "play_pause" | "boss_jump") => {
+    if (interacted.current) return;
+    interacted.current = true;
+    trackFunnel("scrub_or_bossjump", { control });
+  };
+  const chipClick = (name: string) => {
+    const jump = jumpTo(name);
+    return jump && (() => {
+      trackInteraction("boss_jump");
+      jump();
+    });
+  };
 
   return (
     <div className="flex flex-col gap-2.5 lg:gap-2">
@@ -88,7 +103,10 @@ function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; c
         <button
           type="button"
           aria-label={playing ? "Pause replay" : "Play replay"}
-          onClick={playback?.togglePlay}
+          onClick={() => {
+            trackInteraction("play_pause");
+            playback?.togglePlay();
+          }}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#5f6d88] bg-[#0c1322]/70 text-[#e8eef8] lg:h-10 lg:w-10"
         >
           {playing
@@ -124,7 +142,7 @@ function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; c
         {chips.length > 0 && (
           <div className="hidden gap-1.5 lg:flex">
             {desktopChips.map((name) => (
-              <BossChip key={name} label={name} active={name === current} onClick={jumpTo(name)} />
+              <BossChip key={name} label={name} active={name === current} onClick={chipClick(name)} />
             ))}
             {hiddenChips > 0 && (
               <span className="rounded-md border border-[#5f6d88] bg-[#0c1322]/70 px-2.5 py-1 text-xs text-[#8a97ad]">
@@ -137,7 +155,7 @@ function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; c
       {chips.length > 0 && (
         <div className="styled-scrollbar flex gap-1.5 overflow-x-auto lg:hidden">
           {chips.map((name) => (
-            <BossChip key={name} label={name} active={name === current} onClick={jumpTo(name)} />
+            <BossChip key={name} label={name} active={name === current} onClick={chipClick(name)} />
           ))}
         </div>
       )}
@@ -203,6 +221,7 @@ export function LandingHero({
         <div className="mt-1 hidden flex-wrap items-center gap-3 lg:flex">
           <a
             href={getSidekickHref}
+            onClick={() => trackFunnel("cta_sidekick", { placement: "hero" })}
             className="rounded-[10px] bg-[#e0b45c] px-[22px] py-3.5 text-base font-semibold text-[#0c1322] no-underline hover:bg-[#e8c477]"
           >
             Get Sidekick, free

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useLandingFeatured, useSupportedInstances } from "@/api/queries";
@@ -7,6 +7,7 @@ import { useTenantDatasetScope } from "@/hooks/useDatasetId";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { getInstanceArtCrop } from "@/pages/Logs/utils/instanceImages";
 import { fetchMapManifest } from "@/pages/Technical/mapManifest";
+import { trackFunnel } from "@/utils/funnel";
 import { dungeonMapKind, dungeonNames, dungeonShelfCards } from "./dungeonShelf";
 import { HeroReplayLayer } from "./HeroReplayLayer";
 import type { HeroReplay } from "./heroReplay";
@@ -103,6 +104,7 @@ function LandingNav({ getSidekickHref }: { getSidekickHref: string }) {
       <div className="flex items-center gap-2">
         <a
           href={getSidekickHref}
+          onClick={() => trackFunnel("cta_sidekick", { placement: "nav" })}
           className="rounded-lg bg-[#e0b45c] px-3 py-2 text-[13px] font-semibold text-[#0c1322] no-underline hover:bg-[#e8c477] lg:px-4 lg:py-2.5 lg:text-sm"
         >
           Get Sidekick
@@ -327,6 +329,7 @@ function RecentRuns() {
         ))}
         <Link
           to="/download"
+          onClick={() => trackFunnel("cta_sidekick", { placement: "ghost_card" })}
           className="flex flex-col overflow-hidden rounded-xl border border-dashed border-[#5f6d88] bg-[#141d30] text-[#e8eef8] no-underline hover:border-[#e0b45c]"
         >
           <div className="flex h-[130px] flex-col items-center justify-center gap-1.5 bg-[#101829] p-4 text-center">
@@ -400,6 +403,7 @@ function ClosingBand() {
             <a
               key={href}
               href={href}
+              onClick={() => trackFunnel("cta_sidekick", { placement: "band" })}
               className="rounded-[10px] bg-[#e0b45c] px-5 py-[13px] text-[15px] font-semibold text-[#0c1322] no-underline hover:bg-[#e8c477]"
             >
               {label}
@@ -421,6 +425,9 @@ export function StartPage() {
   // The live 3D replay's position and controls, for the hero's scrubber; null while the poster shows.
   const [replay, setReplay] = useState<HeroReplay | null>(null);
 
+  // The funnel's denominator: one per visit to /start, with its campaign.
+  useEffect(() => trackFunnel("land"), []);
+
   // Our hero now covers the static poster index.html painted before the bundle loaded.
   useLayoutEffect(() => {
     document.getElementById("start-poster-shell")?.remove();
@@ -437,7 +444,7 @@ export function StartPage() {
         currentMs={replay?.currentMs}
         playback={replay}
         getSidekickHref={getSidekickHref}
-        layer3D={heroInstanceId ? <HeroReplayLayer instanceId={heroInstanceId} onReplay={setReplay} /> : null}
+        layer3D={landing || landingFailed ? <HeroReplayLayer instanceId={heroInstanceId} onReplay={setReplay} /> : null}
       />
       <SendLinkSection />
       <HowItWorks />

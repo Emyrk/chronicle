@@ -20148,6 +20148,22 @@ func (q *sqlQuerier) GetSharedViewByInstanceAndHash(ctx context.Context, arg Get
 	return i, err
 }
 
+const countSidekickLogGroupsByUser = `-- name: CountSidekickLogGroupsByUser :one
+SELECT COUNT(*)
+FROM wow_log_groups g
+JOIN sidekick_installations si ON si.id = g.sidekick_installation_id
+WHERE si.user_id = $1
+`
+
+// Log groups uploaded by any of the user's Sidekick installations; 1 right
+// after an upload means it was the account's first (the first_upload event).
+func (q *sqlQuerier) CountSidekickLogGroupsByUser(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countSidekickLogGroupsByUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteSidekickConfigOverride = `-- name: DeleteSidekickConfigOverride :one
 DELETE FROM sidekick_config_overrides sco
 USING sidekick_installations si
