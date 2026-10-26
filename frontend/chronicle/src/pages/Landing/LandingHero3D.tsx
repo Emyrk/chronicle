@@ -4,6 +4,7 @@ import { useInstance } from "@/api/queries";
 import { InstanceEventsProvider, useInstanceEventsContext, type CachedStream, type StreamType } from "@/hooks/instanceEvents";
 import { transformToInstance } from "@/pages/Instance/transformInstance";
 import type { Instance } from "@/pages/Instance/InstancePage";
+import { deathsProcessor, type DeathEvent, type DeathsResult } from "@/pages/Instance/EventsPanels/Deaths/deaths.processor";
 import { processIncrementally } from "@/pages/Instance/EventsPanels/mainThreadProcessor";
 import type { SerializableProcessorContext } from "@/pages/Instance/EventsPanels/processorTypes";
 import type { PanelRenderProps } from "@/pages/Instance/EventsPanels/types";
@@ -14,7 +15,7 @@ import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "@/page
 import { MapView2D } from "@/pages/Instance/EventsPanels/Map/MapView2D";
 import MapView3D from "@/pages/Instance/EventsPanels/Map/MapView3D";
 import { previewSpeed, useMapScene } from "@/pages/Instance/EventsPanels/Map/useMapScene";
-import type { HeroReplay } from "./heroReplay";
+import type { HeroDeathBeat, HeroDeathRecap, HeroReplay } from "./heroReplay";
 
 // The Map panel's streams without auras: those only tint debuffed players,
 // and they are by far the biggest download (1.3 MB of 1.6 MB on the Ruins run).
@@ -24,6 +25,10 @@ const TICK_MS = 250;
 /** Fastest the whole run plays: quick enough to show the run, slow enough to read the fights. */
 const HERO_MAX_SPEED = 4;
 const NO_PLAN_ITEMS: [] = [];
+// The deaths processor's streams the replay already fetched, so the death cards' recaps download nothing more.
+const HERO_DEATH_STREAMS = deathsProcessor.streams.filter((stream) => HERO_STREAMS.includes(stream));
+/** A death card's strip covers this long before the death. */
+const DEATH_STRIP_MS = 10_000;
 
 interface LandingHero3DProps {
   instanceId: string;
@@ -67,8 +72,9 @@ function serializableContext(instance: Instance, selectedEncounterIds: string[])
 // Positions first: the featured run's streams, through the Map panel's processor (on the main thread, yielding).
 function useHeroRun(instance: Instance | null) {
   const events = useInstanceEventsContext();
+  // Wipes stay in: the death dots and a boss's first pull often land in one.
   const selectedEncounterIds = useMemo(
-    () => instance?.encounters.filter((encounter) => encounter.kill_type !== "wipe" && encounter.kill_type !== "reset").map((encounter) => encounter.id) ?? [],
+    () => instance?.encounters.filter((encounter) => encounter.kill_type !== "reset").map((encounter) => encounter.id) ?? [],
     [instance],
   );
   return useQuery({
@@ -91,8 +97,58 @@ function useHeroRun(instance: Instance | null) {
   });
 }
 
+/** The death card's view of a recap: hits and heals on the victim in the last ten seconds, the last hit the killing blow. */
+function heroDeathRecap(death: DeathEvent, instanceStartMs: number): HeroDeathRecap {
+  const beats: HeroDeathBeat[] = [];
+  let lastHit: { beat: HeroDeathBeat; ability: string } | null = null;
+  for (const entry of death.recap) {
+    const beforeMs = death.offsetMilli - entry.offsetMilli;
+    if (beforeMs > DEATH_STRIP_MS || entry.amount <= 0) continue;
+    if (entry.type === "damage") {
+      const beat: HeroDeathBeat = { beforeMs, kind: "hit", amount: entry.amount };
+      beats.push(beat);
+      lastHit = { beat, ability: entry.sourceName };
+    } else if (entry.type === "heal" || entry.type === "resource_change") {
+      beats.push({ beforeMs, kind: "heal", amount: entry.amount });
+    }
+  }
+  if (lastHit) lastHit.beat.kind = "killing_blow";
+  return {
+    offsetMs: death.dateMilli - instanceStartMs,
+    victimName: death.playerName,
+    killingBlow: death.attribution?.sourceName || lastHit?.ability || null,
+    beats,
+  };
+}
+
+// After the positions: the Instance page's death recaps, through its deaths processor.
+function useHeroDeaths(instance: Instance, enabled: boolean) {
+  const events = useInstanceEventsContext();
+  return useQuery({
+    queryKey: ["landing-hero-deaths", instance.id],
+    enabled,
+    staleTime: Infinity,
+    retry: false,
+    queryFn: async () => {
+      const fetched = await Promise.all(HERO_DEATH_STREAMS.map(async (type) => [type, await events.fetchStream(type)] as [StreamType, CachedStream]));
+      const processed = await processIncrementally<DeathsResult>({
+        panelId: "death_log",
+        streams: new Map(fetched),
+        // Every encounter: the processor skips unselected ones, and any of them can hold a death.
+        context: serializableContext(instance, instance.encounters.map((encounter) => encounter.id)),
+        stopAtTimestamp: null,
+        previousState: null,
+      });
+      if (processed.error) throw new Error(processed.error);
+      const instanceStartMs = Date.parse(instance.startTime);
+      return processed.result.DeathEvents.map((death) => heroDeathRecap(death, instanceStartMs));
+    },
+  });
+}
+
 function HeroScene({ instance, startOffsetMs, active, onReplay, still = false }: Omit<LandingHero3DProps, "instanceId"> & { instance: Instance }) {
   const run = useHeroRun(instance);
+  const deathRecaps = useHeroDeaths(instance, run.isSuccess).data ?? null;
   const result = run.data?.result ?? null;
   const span = useMemo(() => {
     if (!result || result.encounters.size === 0) return null;
@@ -112,6 +168,8 @@ function HeroScene({ instance, startOffsetMs, active, onReplay, still = false }:
   const [userPlaying, setUserPlaying] = useState(true);
   const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
   const [unavailable, setUnavailable] = useState(false);
+  // Bumped on a jump (a boss chip, a death): the camera cuts to the new shot rather than gliding there.
+  const [cutKey, setCutKey] = useState(0);
   const playing = userPlaying && active && meshState === "ready";
   useEffect(() => {
     if (!playing || !span) return;
@@ -174,10 +232,11 @@ function HeroScene({ instance, startOffsetMs, active, onReplay, still = false }:
   const togglePlay = useCallback(() => setUserPlaying((current) => !current), []);
   // The scrubber's times are offsets from the instance's start (the featured run's), not the replay's first sample.
   const instanceStartMs = Date.parse(instance.startTime);
-  const seek = useCallback((offsetMs: number) => {
+  const seek = useCallback((offsetMs: number, options?: { cut?: boolean }) => {
     if (!span) return;
     setRunMs(instanceStartMs + offsetMs - span.startMs);
     setUserPlaying(true);
+    if (options?.cut) setCutKey((key) => key + 1);
   }, [instanceStartMs, span]);
   const cursorMs = ready?.cursorMs ?? null;
   useEffect(() => {
@@ -185,8 +244,8 @@ function HeroScene({ instance, startOffsetMs, active, onReplay, still = false }:
       onReplay(null);
       return;
     }
-    onReplay({ currentMs: cursorMs - instanceStartMs, playing: userPlaying, togglePlay, seek });
-  }, [cursorMs, instanceStartMs, onReplay, seek, shown, span, togglePlay, userPlaying]);
+    onReplay({ currentMs: cursorMs - instanceStartMs, playing: userPlaying, togglePlay, seek, deathRecaps });
+  }, [cursorMs, deathRecaps, instanceStartMs, onReplay, seek, shown, span, togglePlay, userPlaying]);
   useEffect(() => () => onReplay(null), [onReplay]);
 
   if (!ready || unavailable) return null;
@@ -221,6 +280,7 @@ function HeroScene({ instance, startOffsetMs, active, onReplay, still = false }:
         onDungeonMeshState={setMeshState}
         focus={focus}
         cinematic
+        cutKey={cutKey}
         debuffSpellIds={ready.debuffSpellIds}
         planItems={NO_PLAN_ITEMS}
         frozen={!live}
