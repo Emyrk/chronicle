@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useInstanceEventsContext } from "@/hooks/instanceEvents"
 import { loadPanelPackage } from "../../../Guides/package/panelLoader"
+import { getPublicProject, publicPackageURL } from "../../../LuaProjects/api"
 import type { EventsPanelProps } from "../EventsPanel"
 import { PanelSelector } from "../PanelSelector"
 import { LuaPanelHost } from "./LuaPanelHost"
@@ -10,14 +11,24 @@ import { parseLuaPanelRef } from "./luaPanelRegistry"
 export default function LuaEventsPanel(props: EventsPanelProps) {
   const ref = parseLuaPanelRef(props.panelType)
   const { fetchStream } = useInstanceEventsContext()
-  const packageQuery = useQuery({ queryKey: ["lua-panel-package", ref?.id, ref?.channel], enabled: !!ref,
-    refetchInterval: 60_000, // A channel follows its latest published artifact without retaining old releases.
-    queryFn: async ({ signal }) => {
+  const channelQuery = useQuery({
+    queryKey: ["lua-panel-channel", ref?.id, ref?.channel],
+    enabled: !!ref,
+    refetchInterval: 60_000, // Follow the channel without re-downloading unchanged bytes.
+    queryFn: ({ signal }) => {
       if (!ref) throw new Error("Invalid Lua panel reference")
-      const response = await fetch(`/api/v1/lua-projects/${ref.id}/package?channel=${ref.channel}`, { signal })
+      return getPublicProject(ref.id, ref.channel, signal)
+    },
+  })
+  const hash = ref?.channel === "unstable" ? channelQuery.data?.unstable?.sha256 : channelQuery.data?.stable?.sha256
+  const packageQuery = useQuery({
+    queryKey: ["lua-panel-package", ref?.id, hash], enabled: !!ref && !!hash,
+    staleTime: Infinity, // Hash-addressed bytes never change while published.
+    queryFn: async ({ signal }) => {
+      if (!ref || !hash) throw new Error("Lua channel has no published package")
+      const response = await fetch(publicPackageURL(ref.id, hash), { signal })
       if (!response.ok) throw new Error(`Lua panel package unavailable (${response.status})`)
-      const bytes = new Uint8Array(await response.arrayBuffer())
-      return loadPanelPackage(bytes)
+      return loadPanelPackage(new Uint8Array(await response.arrayBuffer()))
     },
   })
   const panel = packageQuery.data
@@ -44,10 +55,10 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
       <span className="truncate font-semibold">{panel?.name ?? "Lua panel"} <span className="text-xs text-muted-foreground">({ref?.channel})</span></span>
       <PanelSelector value={props.panelType} onChange={props.onPanelTypeChange} />
     </div>
-    {packageQuery.isPending ? <div className="p-4 text-sm">Loading Lua panel...</div> :
-      packageQuery.error || streamError ? <div role="alert" className="p-4 text-sm text-destructive">{String(packageQuery.error ?? streamError)}</div> :
+    {channelQuery.isPending || (hash && packageQuery.isPending) ? <div className="p-4 text-sm">Loading Lua panel...</div> :
+      channelQuery.error || packageQuery.error || streamError || !hash ? <div role="alert" className="p-4 text-sm text-destructive">{String(channelQuery.error ?? packageQuery.error ?? streamError ?? "Channel not published")}</div> :
       panel && (panel.streams.includes("damage") && !damage ? <div className="p-4 text-sm">Loading damage...</div> :
-        <LuaPanelHost key={`${ref?.id}:${ref?.channel}`} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} capabilities={panel.capabilities}
+        <LuaPanelHost key={`${ref?.id}:${hash}`} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} capabilities={panel.capabilities}
           damageStream={damage} encounterIds={selectedIds} assets={assetUrls} />)}
   </div>
 }

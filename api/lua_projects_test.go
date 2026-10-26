@@ -13,12 +13,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/api/chronauth"
+	"github.com/Emyrk/chronicle/api/chronauth/claims"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/testservices"
 	"github.com/Emyrk/chronicle/internal/testutil"
+	"github.com/authzed/gochugaru/rel"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -108,7 +114,7 @@ func TestLuaProjectOwnerAndPublication(t *testing.T) {
 	require.Equal(t, objectKey, preview.ObjectKey)
 	require.Equal(t, "application/zip", preview.MimeType)
 	require.False(t, preview.ContentEncoding.Valid)
-	_, err = db.GetPublishedLuaProjectPackage(ctx, database.GetPublishedLuaProjectPackageParams{ID: draft.ID, Channel: "stable"})
+	_, err = db.GetPublishedLuaProjectArtifact(ctx, database.GetPublishedLuaProjectArtifactParams{ID: draft.ID, Hash: packageHash})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	// A replaced draft queues its former object key for post-commit removal.
 	newHash := strings.Repeat("b", 64)
@@ -284,6 +290,118 @@ func TestLuaUploadIntentFinalization(t *testing.T) {
 	unchanged, err := zed.GetOwnerLuaProject(ctx, database.GetOwnerLuaProjectParams{ID: project.ID, OwnerID: owner})
 	require.NoError(t, err)
 	require.EqualValues(t, 2, unchanged.Revision)
+}
+
+type blockedLuaDownload struct {
+	storage.ObjectStorage
+	blocked bool
+}
+
+func (s *blockedLuaDownload) DownloadFile(ctx context.Context, bucket, path string, opts ...storage.UrlOptions) ([]byte, error) {
+	if s.blocked {
+		return nil, errors.New("download should not run for a matching ETag")
+	}
+	return s.ObjectStorage.DownloadFile(ctx, bucket, path, opts...)
+}
+
+func TestLuaPublishedHashCaching(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(testservices.Authz(t))
+	objects, err := storage.NewLocalStorageAt(t.TempDir())
+	require.NoError(t, err)
+	_, err = objects.CreateBucket(ctx, luaProjectBucket, storage.BucketOptions{Public: false})
+	require.NoError(t, err)
+	owner := uuid.New()
+	_, err = zed.InsertUser(ctx, database.InsertUserParams{ID: owner, Username: "hash-" + owner.String()})
+	require.NoError(t, err)
+	project, err := zed.CreateLuaProject(ctx, database.CreateLuaProjectParams{OwnerID: owner, Kind: "panel", Name: "Hash", Slug: "hash"})
+	require.NoError(t, err)
+	data := []byte("published archive")
+	digest := sha256.Sum256(data)
+	hash := hex.EncodeToString(digest[:])
+	key := luaProjectObjectKey(project.ID)
+	_, err = objects.UploadFile(ctx, luaProjectBucket, key, bytes.NewReader(data))
+	require.NoError(t, err)
+	_, err = zed.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, OwnerID: owner, Hash: pgtype.Text{String: hash, Valid: true}, ExpectedRevision: 1})
+	require.NoError(t, err)
+	_, err = zed.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: project.ID, Hash: hash, ObjectKey: key, MimeType: "application/zip", UncompressedSizeBytes: int64(len(data)), StoredSizeBytes: int64(len(data))})
+	require.NoError(t, err)
+
+	trackedStorage := &blockedLuaDownload{ObjectStorage: objects}
+	api := &API{Opts: &Options{Zed: zed, Storage: trackedStorage, Logger: slog.Default()}}
+	router := chi.NewRouter()
+	router.Get("/me/lua-projects/{projectID}/draft/{hash}/package", api.DownloadMyLuaProjectDraft)
+	router.Get("/lua-projects/{projectID}/artifacts/{hash}/package", api.DownloadLuaProject)
+	url := "/lua-projects/" + project.ID.String() + "/artifacts/" + hash + "/package"
+	get := func(path string, requestCtx context.Context, headers map[string]string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, path, nil).WithContext(requestCtx)
+		for name, value := range headers {
+			req.Header.Set(name, value)
+		}
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec
+	}
+
+	require.Equal(t, http.StatusNotFound, get(url, ctx, nil).Code, "draft hashes are not public")
+	draftURL := "/me/lua-projects/" + project.ID.String() + "/draft/" + hash + "/package"
+	ownerCtx := authz.AsUser(chronauth.WithClaims(ctx, &claims.Claims{Subject: owner}), owner)
+	rec := get(draftURL, ownerCtx, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, data, rec.Body.Bytes())
+	require.Equal(t, "private, no-store", rec.Header().Get("Cache-Control"))
+	require.Equal(t, http.StatusNotFound, get("/me/lua-projects/"+project.ID.String()+"/draft/"+strings.Repeat("a", 64)+"/package", ownerCtx, nil).Code)
+	require.Equal(t, http.StatusForbidden, get(draftURL, ctx, nil).Code)
+	_, err = zed.PublishLuaProjectUnstable(ctx, database.PublishLuaProjectUnstableParams{ID: project.ID, OwnerID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 2})
+	require.NoError(t, err)
+	rec = get(url, ctx, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, data, rec.Body.Bytes())
+	require.Equal(t, `"`+hash+`"`, rec.Header().Get("ETag"))
+	require.Equal(t, "public, max-age=3600", rec.Header().Get("Cache-Control"))
+	require.Equal(t, "application/zip", rec.Header().Get("Content-Type"))
+	trackedStorage.blocked = true
+	rec = get(url, ctx, map[string]string{"If-None-Match": `"` + hash + `"`})
+	require.Equal(t, http.StatusNotModified, rec.Code)
+	require.Empty(t, rec.Body.Bytes())
+	trackedStorage.blocked = false
+	rec = get(url, authz.AsUser(ctx, owner), map[string]string{"Cookie": "session=example"})
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "private, max-age=3600", rec.Header().Get("Cache-Control"))
+	refreshRouter := chi.NewRouter()
+	refreshRouter.Get("/lua-projects/{projectID}/artifacts/{hash}/package", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Set-Cookie", "session=refreshed; HttpOnly")
+		api.DownloadLuaProject(w, r)
+	})
+	rec = httptest.NewRecorder()
+	refreshRouter.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, url, nil).WithContext(ctx))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "private, no-store", rec.Header().Get("Cache-Control"))
+	require.Equal(t, http.StatusBadRequest, get("/lua-projects/"+project.ID.String()+"/artifacts/invalid/package", ctx, nil).Code)
+
+	nextData := []byte("updated archive")
+	nextDigest := sha256.Sum256(nextData)
+	nextHash := hex.EncodeToString(nextDigest[:])
+	nextKey := luaProjectObjectKey(project.ID)
+	_, err = objects.UploadFile(ctx, luaProjectBucket, nextKey, bytes.NewReader(nextData))
+	require.NoError(t, err)
+	_, err = zed.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, OwnerID: owner, Hash: pgtype.Text{String: nextHash, Valid: true}, ExpectedRevision: 3})
+	require.NoError(t, err)
+	_, err = zed.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: project.ID, Hash: nextHash, ObjectKey: nextKey, MimeType: "application/zip", UncompressedSizeBytes: int64(len(nextData)), StoredSizeBytes: int64(len(nextData))})
+	require.NoError(t, err)
+	_, err = zed.PublishLuaProjectUnstable(ctx, database.PublishLuaProjectUnstableParams{ID: project.ID, OwnerID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 4})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNotFound, get(url, ctx, map[string]string{"If-None-Match": `"` + hash + `"`}).Code, "rotated hashes cannot be revalidated")
+	url = "/lua-projects/" + project.ID.String() + "/artifacts/" + nextHash + "/package"
+	require.Equal(t, http.StatusOK, get(url, ctx, nil).Code)
+
+	publicRelation := policy.New().Lua_project(project.ID).Object()
+	require.NoError(t, zed.Delete(ctx, rel.NewPreconditionedFilter(rel.NewFilter(publicRelation.Typ, publicRelation.ID, "public_viewer"))))
+	require.Equal(t, http.StatusForbidden, get(url, ctx, map[string]string{"If-None-Match": `"` + nextHash + `"`}).Code)
+	rec = get(url, authz.AsUser(ctx, owner), nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "private, no-store", rec.Header().Get("Cache-Control"))
 }
 
 func TestLuaZIPObjectStorage(t *testing.T) {

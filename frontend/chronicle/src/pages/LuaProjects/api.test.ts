@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { createProject, listProjects, promoteStable, publicPackageURL, publishUnstable, uploadDraft } from "./api"
+import { createProject, getPublicProject, listProjects, promoteStable, publicPackageURL, publishUnstable, uploadDraft } from "./api"
 
 const response = (body: unknown = {}) => ({ ok: true, status: 200, json: async () => body })
 
@@ -27,6 +27,17 @@ describe("Lua project authoring API", () => {
     })
   })
 
+  it("resolves mutable channels without caching before fetching hash-addressed bytes", async () => {
+    const fetch = vi.fn().mockResolvedValue(response({ unstable: { sha256: "a".repeat(64) } }))
+    vi.stubGlobal("fetch", fetch)
+    const controller = new AbortController()
+    const project = await getPublicProject("a/b", "unstable", controller.signal)
+    expect(fetch).toHaveBeenCalledWith("/api/v1/lua-projects/a%2Fb?channel=unstable", {
+      credentials: "include", signal: controller.signal, cache: "no-store",
+    })
+    expect(publicPackageURL("a/b", project.unstable!.sha256)).toBe(`/api/v1/lua-projects/a%2Fb/artifacts/${"a".repeat(64)}/package`)
+  })
+
   it("publishes with explicit revision and tested digest", async () => {
     const fetch = vi.fn().mockResolvedValue(response())
     vi.stubGlobal("fetch", fetch)
@@ -34,6 +45,6 @@ describe("Lua project authoring API", () => {
     await promoteStable("abc", 8, "a".repeat(64))
     expect(JSON.parse(fetch.mock.calls[0][1].body as string)).toEqual({ expected_revision: 7 })
     expect(JSON.parse(fetch.mock.calls[1][1].body as string)).toEqual({ expected_revision: 8, tested_sha256: "a".repeat(64) })
-    expect(publicPackageURL("abc", "unstable")).toBe("/api/v1/lua-projects/abc/package?channel=unstable")
+    expect(publicPackageURL("abc", "a".repeat(64))).toBe(`/api/v1/lua-projects/abc/artifacts/${"a".repeat(64)}/package`)
   })
 })

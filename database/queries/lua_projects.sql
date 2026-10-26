@@ -88,12 +88,11 @@ FROM lua_projects p
 JOIN lua_project_artifacts a ON a.project_id = p.id AND a.hash = p.draft_hash
 WHERE p.id = @id AND (p.owner_id = @owner_id OR @technical_admin::boolean);
 
--- name: GetPublishedLuaProjectPackage :one
+-- name: GetPublishedLuaProjectArtifact :one
 SELECT sqlc.embed(p), a.object_key, a.mime_type, a.content_encoding
 FROM lua_projects p
-JOIN lua_project_artifacts a ON a.project_id = p.id
- AND a.hash = CASE WHEN @channel::text = 'stable' THEN p.stable_hash ELSE p.unstable_hash END
-WHERE p.id = @id AND @channel::text IN ('stable', 'unstable');
+JOIN lua_project_artifacts a ON a.project_id = p.id AND a.hash = @hash
+WHERE p.id = @id AND (p.stable_hash = @hash OR p.unstable_hash = @hash);
 
 -- name: GetLuaProjectArtifact :one
 SELECT object_key, mime_type, content_encoding, uncompressed_size_bytes, stored_size_bytes

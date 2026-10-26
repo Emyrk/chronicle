@@ -366,7 +366,7 @@ type sqlcQuerier interface {
 	GetProofCooldown(ctx context.Context, arg GetProofCooldownParams) (pgtype.Timestamptz, error)
 	GetProofRequest(ctx context.Context, id uuid.UUID) (ProofRequest, error)
 	GetPublicLuaProject(ctx context.Context, id uuid.UUID) (LuaProject, error)
-	GetPublishedLuaProjectPackage(ctx context.Context, arg GetPublishedLuaProjectPackageParams) (GetPublishedLuaProjectPackageRow, error)
+	GetPublishedLuaProjectArtifact(ctx context.Context, arg GetPublishedLuaProjectArtifactParams) (GetPublishedLuaProjectArtifactRow, error)
 	GetRaidCompositionByID(ctx context.Context, id uuid.UUID) (RaidComposition, error)
 	// Returns all realm IDs that have an applicable retention policy
 	// (either directly or through their server).

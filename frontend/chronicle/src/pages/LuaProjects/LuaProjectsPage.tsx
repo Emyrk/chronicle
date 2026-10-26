@@ -106,7 +106,7 @@ export function LuaProjectPage() {
   if (loading) return <main className="container mx-auto px-4 py-10">Loading project…</main>
   if (!project) return <main className="container mx-auto px-4 py-10"><Link to="/lua-projects">← Projects</Link><p role="alert">{error || "Project not found."}</p></main>
 
-  const unstableLink = publicPackageURL(project.id, "unstable")
+  const unstableLink = project.unstable ? publicPackageURL(project.id, project.unstable.sha256) : ""
   return <main className="container mx-auto max-w-5xl space-y-7 px-4 py-10">
     <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" to="/lua-projects"><ArrowLeft className="size-4" /> All projects</Link>
     <header className="border-b pb-6"><p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">{project.kind} / {project.slug} / revision {project.revision}</p><h1 className="mt-2 text-3xl font-semibold">{project.name}</h1></header>
@@ -136,7 +136,7 @@ export function LuaProjectPage() {
         <p className="text-sm text-muted-foreground">Promote only the unstable SHA-256 you tested in the real runtime. Test event-driven behavior from an installed Unstable panel before promotion.</p>
         <label className="block text-sm font-medium">Tested unstable SHA-256<input className="mt-2 w-full rounded-md border bg-background px-3 py-2 font-mono text-xs" value={testedSha} onChange={event => setTestedSha(event.target.value.trim().toLowerCase())} placeholder={project.unstable?.sha256 ?? "64 hexadecimal characters"} pattern="[a-f0-9]{64}" /></label>
         <button type="button" className={button} disabled={busy || !project.unstable?.sha256 || testedSha !== project.unstable?.sha256} onClick={() => { if (window.confirm(`Promote tested release ${testedSha} to stable?`)) void mutate(() => promoteStable(project.id, project.revision, testedSha), "Stable release promoted.") }}>Promote tested release</button>
-        {project.stable?.sha256 && <a href={publicPackageURL(project.id, "stable")} className="block break-all font-mono text-xs text-primary underline">Stable package · {project.stable?.sha256}</a>}
+        {project.stable?.sha256 && <a href={publicPackageURL(project.id, project.stable.sha256)} className="block break-all font-mono text-xs text-primary underline">Stable package · {project.stable?.sha256}</a>}
       </section>
     </div>
   </main>

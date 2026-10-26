@@ -75,6 +75,10 @@ export function promoteStable(id: string, revision: number, testedSha256: string
   })
 }
 
-export function publicPackageURL(id: string, channel: "stable" | "unstable"): string {
-  return `/api/v1/lua-projects/${encodeURIComponent(id)}/package?channel=${channel}`
+export async function getPublicProject(id: string, channel: "stable" | "unstable", signal?: AbortSignal): Promise<LuaProject> {
+  return request<LuaProject>(`/api/v1/lua-projects/${encodeURIComponent(id)}?channel=${channel}`, { signal, cache: "no-store" })
+}
+
+export function publicPackageURL(id: string, hash: string): string {
+  return `/api/v1/lua-projects/${encodeURIComponent(id)}/artifacts/${encodeURIComponent(hash)}/package`
 }

@@ -337,7 +337,7 @@ func (api *API) Routes() chi.Router {
 				r.With(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanCreate_lua_project_User)).Post("/me/lua-projects", api.CreateLuaProject)
 				r.Get("/me/lua-projects", api.ListMyLuaProjects)
 				r.Get("/me/lua-projects/{projectID}", api.GetMyLuaProject)
-				r.Get("/me/lua-projects/{projectID}/draft/package", api.DownloadMyLuaProjectDraft)
+				r.Get("/me/lua-projects/{projectID}/draft/{hash}/package", api.DownloadMyLuaProjectDraft)
 				r.Put("/me/lua-projects/{projectID}/draft", api.PutLuaProjectDraft)
 				r.Post("/me/lua-projects/{projectID}/{channel:stable|unstable}", api.PublishLuaProject)
 				r.Get("/me/custom-panels", api.GetMyCustomPanelSettings)
@@ -375,7 +375,7 @@ func (api *API) Routes() chi.Router {
 			}
 			r.Get("/lua-projects", api.ListPublicLuaProjects)
 			r.Get("/lua-projects/{projectID}", api.GetPublicLuaProject)
-			r.Get("/lua-projects/{projectID}/package", api.DownloadLuaProject)
+			r.Get("/lua-projects/{projectID}/artifacts/{hash}/package", api.DownloadLuaProject)
 			r.Mount("/custom-panels", api.CustomPanels.Routes())
 			r.Mount("/panel-layout", panellayoutapi.New(api.Opts.Zed, api.Auth).Routes())
 			r.Mount("/gear-builder", gearbuilderapi.New(api.Opts.Zed, api.Auth, api.Opts.CacheSvc).Routes())

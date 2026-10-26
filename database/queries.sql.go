@@ -11580,29 +11580,28 @@ func (q *sqlQuerier) GetPublicLuaProject(ctx context.Context, id uuid.UUID) (Lua
 	return i, err
 }
 
-const getPublishedLuaProjectPackage = `-- name: GetPublishedLuaProjectPackage :one
+const getPublishedLuaProjectArtifact = `-- name: GetPublishedLuaProjectArtifact :one
 SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.unstable_hash, p.stable_hash, p.unstable_published_at, p.unstable_published_by, p.stable_published_at, p.stable_published_by, p.created_at, p.updated_at, a.object_key, a.mime_type, a.content_encoding
 FROM lua_projects p
-JOIN lua_project_artifacts a ON a.project_id = p.id
- AND a.hash = CASE WHEN $1::text = 'stable' THEN p.stable_hash ELSE p.unstable_hash END
-WHERE p.id = $2 AND $1::text IN ('stable', 'unstable')
+JOIN lua_project_artifacts a ON a.project_id = p.id AND a.hash = $1
+WHERE p.id = $2 AND (p.stable_hash = $1 OR p.unstable_hash = $1)
 `
 
-type GetPublishedLuaProjectPackageParams struct {
-	Channel string    `db:"channel" json:"channel"`
-	ID      uuid.UUID `db:"id" json:"id"`
+type GetPublishedLuaProjectArtifactParams struct {
+	Hash string    `db:"hash" json:"hash"`
+	ID   uuid.UUID `db:"id" json:"id"`
 }
 
-type GetPublishedLuaProjectPackageRow struct {
+type GetPublishedLuaProjectArtifactRow struct {
 	LuaProject      LuaProject  `db:"lua_project" json:"lua_project"`
 	ObjectKey       string      `db:"object_key" json:"object_key"`
 	MimeType        string      `db:"mime_type" json:"mime_type"`
 	ContentEncoding pgtype.Text `db:"content_encoding" json:"content_encoding"`
 }
 
-func (q *sqlQuerier) GetPublishedLuaProjectPackage(ctx context.Context, arg GetPublishedLuaProjectPackageParams) (GetPublishedLuaProjectPackageRow, error) {
-	row := q.db.QueryRow(ctx, getPublishedLuaProjectPackage, arg.Channel, arg.ID)
-	var i GetPublishedLuaProjectPackageRow
+func (q *sqlQuerier) GetPublishedLuaProjectArtifact(ctx context.Context, arg GetPublishedLuaProjectArtifactParams) (GetPublishedLuaProjectArtifactRow, error) {
+	row := q.db.QueryRow(ctx, getPublishedLuaProjectArtifact, arg.Hash, arg.ID)
+	var i GetPublishedLuaProjectArtifactRow
 	err := row.Scan(
 		&i.LuaProject.ID,
 		&i.LuaProject.OwnerID,

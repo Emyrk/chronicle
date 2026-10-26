@@ -14,7 +14,7 @@ export function LuaDraftPreview({ projectId, draftHash }: LuaDraftPreviewProps) 
     queryKey: ["lua-draft-preview", projectId, draftHash],
     retry: false,
     queryFn: async ({ signal }) => {
-      const response = await fetch(`/api/v1/me/lua-projects/${encodeURIComponent(projectId)}/draft/package`, {
+      const response = await fetch(`/api/v1/me/lua-projects/${encodeURIComponent(projectId)}/draft/${encodeURIComponent(draftHash)}/package`, {
         signal,
         credentials: "same-origin",
         cache: "no-store",

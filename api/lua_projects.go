@@ -137,6 +137,17 @@ func luaProjectID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	return id, true
 }
 
+var luaArtifactHash = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+func luaProjectHash(w http.ResponseWriter, r *http.Request) (string, bool) {
+	hash := chi.URLParam(r, "hash")
+	if !luaArtifactHash.MatchString(hash) {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid artifact hash."})
+		return "", false
+	}
+	return hash, true
+}
+
 // canLuaProject checks the project object in SpiceDB. Public reads use a
 // wildcard-matching user subject even when the request has no session.
 func (a *API) canLuaProject(w http.ResponseWriter, r *http.Request, id uuid.UUID, update bool) bool {
@@ -460,11 +471,17 @@ func (a *API) GetPublicLuaProject(w http.ResponseWriter, r *http.Request) {
 	if channel == "stable" {
 		result.Unstable = nil
 	}
+	// Channel pointers are mutable; resolve the current hash on every poll.
+	w.Header().Set("Cache-Control", "no-store")
 	httpapi.Write(r.Context(), w, http.StatusOK, result)
 }
 
 func (a *API) DownloadMyLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 	id, ok := luaProjectID(w, r)
+	if !ok {
+		return
+	}
+	hash, ok := luaProjectHash(w, r)
 	if !ok || !a.canLuaProject(w, r, id, true) {
 		return
 	}
@@ -480,6 +497,10 @@ func (a *API) DownloadMyLuaProjectDraft(w http.ResponseWriter, r *http.Request) 
 	}
 	if err != nil {
 		httpapi.InternalServerError(w, err)
+		return
+	}
+	if result.LuaProject.DraftHash.String != hash {
+		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Draft artifact not found."})
 		return
 	}
 	archive, ok := a.luaZIP(w, r, result.ObjectKey, result.LuaProject.DraftHash.String, result.MimeType, result.ContentEncoding)
@@ -498,38 +519,53 @@ func (a *API) DownloadLuaProject(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	channel := r.URL.Query().Get("channel")
-	if channel == "" {
-		channel = "stable"
-	}
-	if channel != "stable" && channel != "unstable" {
-		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid channel."})
+	hash, ok := luaProjectHash(w, r)
+	if !ok || !a.canLuaProject(w, r, id, false) {
 		return
 	}
-	result, err := a.Opts.Zed.GetPublishedLuaProjectPackage(r.Context(), database.GetPublishedLuaProjectPackageParams{ID: id, Channel: channel})
+	// Only currently published hashes are retrievable. An older package may
+	// remain in an HTTP cache for at most the bounded public TTL after rotation.
+	result, err := a.Opts.Zed.GetPublishedLuaProjectArtifact(r.Context(), database.GetPublishedLuaProjectArtifactParams{ID: id, Hash: hash})
 	if errors.Is(err, pgx.ErrNoRows) {
-		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Channel not published."})
+		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Published artifact not found."})
 		return
 	}
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	if !a.canLuaProject(w, r, id, false) {
+	// Shared caches must never hold an admin-only response when the public
+	// viewer grant is removed. Authorized non-public reads remain uncached.
+	anonymous := policy.New().User(uuid.Nil)
+	public, err := a.Opts.Zed.CheckOne(r.Context(), nil, policy.New().Lua_project(id).CanView_User(anonymous))
+	if err != nil {
+		httpapi.InternalServerError(w, err)
 		return
 	}
-	hash := result.LuaProject.StableHash.String
-	if channel == "unstable" {
-		hash = result.LuaProject.UnstableHash.String
+	cacheControl := "private, no-store"
+	// Auth middleware can refresh the session and set a cookie. Such a
+	// response must never enter a shared cache with that Set-Cookie header.
+	if public && len(w.Header().Values("Set-Cookie")) == 0 {
+		cacheControl = "private, max-age=3600"
+		if r.Header.Get("Cookie") == "" && r.Header.Get("Authorization") == "" {
+			cacheControl = "public, max-age=3600"
+		}
+	}
+	etag := `"` + hash + `"`
+	if r.Header.Get("If-None-Match") == etag {
+		w.Header().Set("Cache-Control", cacheControl)
+		w.Header().Set("ETag", etag)
+		w.WriteHeader(http.StatusNotModified)
+		return
 	}
 	archive, ok := a.luaZIP(w, r, result.ObjectKey, hash, result.MimeType, result.ContentEncoding)
 	if !ok {
 		return
 	}
+	w.Header().Set("Cache-Control", cacheControl)
+	w.Header().Set("ETag", etag)
 	w.Header().Set("Content-Type", result.MimeType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.zip"`, result.LuaProject.Slug))
-	w.Header().Set("ETag", `"`+hash+`"`)
-	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(archive)
 }
