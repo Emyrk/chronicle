@@ -4,9 +4,6 @@ import type { HeroReplay } from "./heroReplay";
 // The 3D chunk (three.js, the Map scene, the featured run's data): requested only once the trigger below fires.
 const LandingHero3D = lazy(() => import("./LandingHero3D"));
 
-// The featured run until the config car moves it to a site setting: a public
-// instance with unit positions and a published dungeon mesh.
-const FEATURED_INSTANCE: string | undefined = import.meta.env.VITE_LANDING_FEATURED_INSTANCE || undefined;
 /** Where in the featured run the replay starts, in seconds from its start. */
 const FEATURED_START_OFFSET_MS = (Number(import.meta.env.VITE_LANDING_FEATURED_START_S) || 0) * 1000;
 /** requestIdleCallback's deadline: the 3D layer starts loading by then even on a busy page. */
@@ -66,9 +63,13 @@ function usePageVisible(): boolean {
  * once the hero is on screen and the browser is idle (or 1.5 s passed), and
  * pauses it while the hero is scrolled away or the tab is hidden.
  */
-export function HeroReplayLayer({ onReplay }: { onReplay: (replay: HeroReplay | null) => void }) {
+export function HeroReplayLayer({ instanceId, onReplay }: {
+  /** The featured run: a public instance with unit positions and a published dungeon mesh. */
+  instanceId: string;
+  onReplay: (replay: HeroReplay | null) => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
-  const [allowed] = useState(() => Boolean(FEATURED_INSTANCE) && canShow3D());
+  const [allowed] = useState(canShow3D);
   const [inView, setInView] = useState(false);
   const [load, setLoad] = useState(false);
   const pageVisible = usePageVisible();
@@ -98,11 +99,11 @@ export function HeroReplayLayer({ onReplay }: { onReplay: (replay: HeroReplay | 
 
   return (
     <div ref={ref} className="absolute inset-0">
-      {load && FEATURED_INSTANCE && (
+      {load && (
         <SilentBoundary>
           <Suspense fallback={null}>
             <LandingHero3D
-              instanceId={FEATURED_INSTANCE}
+              instanceId={instanceId}
               startOffsetMs={FEATURED_START_OFFSET_MS}
               active={inView && pageVisible}
               onReplay={onReplay}

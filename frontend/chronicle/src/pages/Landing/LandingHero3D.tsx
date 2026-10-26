@@ -13,7 +13,6 @@ import { FULL_MAP_VIEWPORT } from "@/pages/Instance/EventsPanels/Map/mapModel";
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "@/pages/Instance/EventsPanels/Map/MapScene3D";
 import MapView3D from "@/pages/Instance/EventsPanels/Map/MapView3D";
 import { previewSpeed, useMapScene } from "@/pages/Instance/EventsPanels/Map/useMapScene";
-import { encounterJumps } from "@/pages/Instance/EventsPanels/Map/wholeRun";
 import type { HeroReplay } from "./heroReplay";
 
 // The Map panel's streams without auras: those only tint debuffed players,
@@ -167,45 +166,23 @@ function HeroScene({ instance, startOffsetMs, active, onReplay }: Omit<LandingHe
     mesh && iconBaseUrl ? { url: dungeonMeshUrl(mesh, iconBaseUrl), bounds: mesh.bounds, liquid: dungeonMeshLiquid(mesh) } : null,
   [iconBaseUrl, mesh]);
 
-  const jumps = useMemo(
-    () => span ? encounterJumps(instance.encounters, result!.encounters, span.startMs, span.endMs) : [],
-    [instance.encounters, result, span],
-  );
-  const effects = ready?.effects ?? null;
-  const deaths = useMemo(() => {
-    if (!effects || !span) return [];
-    return [...effects.deathsByUnit.entries()]
-      .filter(([guid]) => instance.players?.[guid])
-      .flatMap(([, times]) => times.map((time) => (time - span.startMs) / span.durationMs))
-      .filter((fraction) => fraction >= 0 && fraction <= 1);
-  }, [effects, instance.players, span]);
-
   const shown = ready !== null && meshState === "ready" && !unavailable;
   const togglePlay = useCallback(() => setUserPlaying((current) => !current), []);
-  const jumpToBoss = useCallback((id: string) => {
-    const jump = jumps.find((candidate) => candidate.id === id);
-    if (!jump || !span) return;
-    setRunMs(jump.timestampMs - span.startMs);
+  // The scrubber's times are offsets from the instance's start (the featured run's), not the replay's first sample.
+  const instanceStartMs = Date.parse(instance.startTime);
+  const seek = useCallback((offsetMs: number) => {
+    if (!span) return;
+    setRunMs(instanceStartMs + offsetMs - span.startMs);
     setUserPlaying(true);
-  }, [jumps, span]);
+  }, [instanceStartMs, span]);
   const cursorMs = ready?.cursorMs ?? null;
   useEffect(() => {
     if (!shown || !span || cursorMs === null) {
       onReplay(null);
       return;
     }
-    const activeBoss = jumps.filter((jump) => jump.timestampMs <= cursorMs).at(-1) ?? null;
-    onReplay({
-      playing: userPlaying,
-      elapsedMs: cursorMs - span.startMs,
-      durationMs: span.durationMs,
-      bosses: jumps.map((jump) => ({ id: jump.id, name: jump.name, fraction: jump.fraction })),
-      activeBossId: activeBoss?.id ?? null,
-      deaths,
-      togglePlay,
-      jumpToBoss,
-    });
-  }, [cursorMs, deaths, jumpToBoss, jumps, onReplay, shown, span, togglePlay, userPlaying]);
+    onReplay({ currentMs: cursorMs - instanceStartMs, playing: userPlaying, togglePlay, seek });
+  }, [cursorMs, instanceStartMs, onReplay, seek, shown, span, togglePlay, userPlaying]);
   useEffect(() => () => onReplay(null), [onReplay]);
 
   if (!ready || unavailable) return null;

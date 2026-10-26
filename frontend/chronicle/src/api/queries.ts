@@ -85,6 +85,7 @@ import type {
   AdminActiveCustomPanelsResponse,
   SiteConfig,
   UpdateSiteConfigRequest,
+  LandingFeaturedResponse,
   Dataset,
   UpsertDatasetRequest,
   UserFavoritesResponse,
@@ -1760,6 +1761,19 @@ export function useSiteConfig() {
   });
 }
 
+// useLandingFeatured loads the /start hero's featured run (null when none is set).
+export function useLandingFeatured() {
+  return useQuery({
+    queryKey: ["landing-featured"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/landing/featured");
+      if (!response.ok) throw new Error("Failed to fetch featured run");
+      return response.json() as Promise<LandingFeaturedResponse>;
+    },
+    staleTime: 60 * 1000,
+  });
+}
+
 // useDatasets lists the available game-data datasets (id, name, slug, version).
 // Used by the talent-tree dataset selector.
 export function useDatasets() {
@@ -1892,11 +1906,15 @@ export function useUpdateSiteConfig() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
       });
-      if (!response.ok) throw new Error("Failed to update site config");
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(body?.message || "Failed to update site config");
+      }
       return response.json() as Promise<SiteConfig>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["site-config"] });
+      queryClient.invalidateQueries({ queryKey: ["landing-featured"] });
     },
   });
 }

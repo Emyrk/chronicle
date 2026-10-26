@@ -960,6 +960,8 @@ type sqlcQuerier interface {
 	UpdateRetentionPolicyStats(ctx context.Context, arg UpdateRetentionPolicyStatsParams) error
 	UpdateSidekickHeartbeat(ctx context.Context, arg UpdateSidekickHeartbeatParams) (SidekickInstallation, error)
 	UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigParams) (SiteConfig, error)
+	// NULL clears the setting, so this cannot share UpdateSiteConfig's COALESCE pattern.
+	UpdateSiteConfigLandingFeaturedInstance(ctx context.Context, landingFeaturedInstanceID uuid.NullUUID) (SiteConfig, error)
 	UpdateTelemetryHeartbeat(ctx context.Context) error
 	// Only non-null params are applied; NULL means "keep existing value".
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Tenant, error)
