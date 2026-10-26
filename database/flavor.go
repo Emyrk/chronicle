@@ -33,6 +33,8 @@ const (
 	FlavorWoWForever FlavorTag = "wow-forever"
 	// FlavorWrath is 3.3.5a (WotLK)-era behavior (Warmane, Epoch, AzerothCore).
 	FlavorWrath FlavorTag = "wrath"
+	// FlavorWarmane is Warmane-specific behavior.
+	FlavorWarmane FlavorTag = "warmane"
 	// FlavorTurtle is Turtle WoW-specific behavior.
 	FlavorTurtle FlavorTag = "turtle"
 	// FlavorKronos is Kronos-specific behavior.
@@ -73,6 +75,7 @@ func AllFlavorTagValues() []FlavorTag {
 		FlavorTBCAnniversary,
 		FlavorWoWForever,
 		FlavorWrath,
+		FlavorWarmane,
 		FlavorTurtle,
 		FlavorKronos,
 		FlavorEpoch,
@@ -212,7 +215,7 @@ func (e LogType) Flavor() WoWFlavor {
 	case LogTypeKronos:
 		return WoWFlavor{FlavorVanilla, FlavorKronos}
 	case LogTypeWarmane:
-		return WoWFlavor{FlavorWrath}
+		return WoWFlavor{FlavorWrath, FlavorWarmane}
 	case LogTypeEpoch:
 		return WoWFlavor{FlavorWrath, FlavorEpoch}
 	case LogTypeAzerothcoreClientside, LogTypeAzerothcore:
