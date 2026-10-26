@@ -1,13 +1,8 @@
 import { lazy, Suspense, useLayoutEffect, useState, type FormEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useLandingFeatured } from "@/api/landingFeaturedQuery";
-import { useSupportedInstances } from "@/api/queries";
-import { useTenantDatasetScope } from "@/hooks/useDatasetId";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useRecentUploads } from "@/pages/Recent/recentUploads";
-import { fetchMapManifest } from "@/pages/Technical/mapManifest";
-import { dungeonShelfCards } from "./dungeonShelf";
 import { HeroReplayLayer } from "./HeroReplayLayer";
 import type { HeroReplay } from "./heroReplay";
 import { LandingHero } from "./LandingHero";
@@ -15,6 +10,9 @@ import { LandingHero } from "./LandingHero";
 // Recent runs render below the fold once their fetch returns; keeping RaidCard (and its
 // icon and helper chunks) out of the static graph keeps them off /start's first paint.
 const RaidCard = lazy(() => import("@/pages/Recent/RaidCard").then(({ RaidCard }) => ({ default: RaidCard })));
+// The dungeon shelf is below the fold too, and its queries/manifest imports would pull
+// the shared query hooks into /start's first paint.
+const DungeonShelf = lazy(() => import("./DungeonShelfSection").then(({ DungeonShelf }) => ({ default: DungeonShelf })));
 
 const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
 // Public Sidekick downloads; the utm cookie set on landing carries attribution.
@@ -251,51 +249,6 @@ function RecentRuns({ getSidekickHref }: { getSidekickHref: string }) {
   );
 }
 
-function DungeonShelf() {
-  const { data: instances } = useSupportedInstances();
-  const { iconBaseUrl } = useTenantDatasetScope();
-  // Same query as the Map panel's manifest, so the two share one cached fetch.
-  const { data: manifest } = useQuery({
-    queryKey: ["wow-map-manifest", iconBaseUrl],
-    enabled: Boolean(iconBaseUrl),
-    staleTime: 60 * 60 * 1000,
-    queryFn: () => fetchMapManifest(iconBaseUrl!),
-  });
-  const cards = dungeonShelfCards(instances ?? [], manifest);
-
-  return (
-    <section id="dungeons" className="mx-auto box-border flex w-full max-w-[1180px] flex-col gap-3.5 px-4 pb-9 pt-7 lg:px-8">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <h2 className={`m-0 text-xl font-bold lg:text-2xl ${HEADING_FONT}`}>Real floors, not dots on a map</h2>
-        <Link to="/supported" className="text-sm text-[#4fd1c5] hover:text-[#8ee6dd]">
-          All supported instances
-        </Link>
-      </div>
-      <ul className="styled-scrollbar m-0 flex list-none gap-3 overflow-x-auto p-0 pb-1.5">
-        {cards.map((d) => (
-          <li key={d.name} className="flex shrink-0 basis-[190px]">
-            <Link
-              to={`/recent?inst=${encodeURIComponent(d.name)}`}
-              className={`flex w-full flex-col gap-1 rounded-[10px] border bg-[#141d30] p-3.5 text-[#e8eef8] no-underline hover:bg-[#1a2540] ${
-                d.kind === "3d" ? "border-[#4fd1c5]" : "border-[#27324a]"
-              }`}
-            >
-              <div className="font-semibold">{d.name}</div>
-              <div
-                className={`text-xs ${
-                  d.kind === "3d" ? "text-[#8ee6dd]" : d.kind === "2d" ? "text-[#b7c2d6]" : "text-[#8a97ad]"
-                }`}
-              >
-                {d.kind === "3d" ? "3D floor" : d.kind === "2d" ? "2D map" : "Coming"}
-              </div>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
 function ClosingBand() {
   return (
     <section id="get" className="hidden border-t border-[#27324a] bg-[#101829] lg:block">
@@ -358,7 +311,9 @@ export function StartPage() {
       <HowItWorks />
       <FirstMinute />
       <RecentRuns getSidekickHref={getSidekickHref} />
-      <DungeonShelf />
+      <Suspense fallback={null}>
+        <DungeonShelf />
+      </Suspense>
       <ClosingBand />
       <footer className="mt-auto flex flex-wrap gap-3 border-t border-[#27324a] px-4 py-3.5 text-[11px] text-[#8a97ad] lg:gap-[18px] lg:px-8 lg:py-[18px] lg:text-xs">
         <span>Chronicle for WoW Forever</span>
