@@ -1,12 +1,14 @@
-import type {
-  WowMap,
-  WowMapAssignment,
-  WowMapFloorBounds,
-  WowMapInstance,
-  WowMapInstanceFloor,
-  WowMapManifest,
-  WowMapManualRender,
-  WowMapRenderedInstance,
+import {
+  hasNativeMapFloorArtwork,
+  mapFloorRender,
+  type WowMap,
+  type WowMapAssignment,
+  type WowMapFloorBounds,
+  type WowMapInstance,
+  type WowMapInstanceFloor,
+  type WowMapManifest,
+  type WowMapManualRender,
+  type WowMapRenderedInstance,
 } from "@/pages/Technical/mapGallery";
 import type { MapEncounterPositions, MapHealthSample, MapPositionSample } from "./map.processor";
 
@@ -527,8 +529,7 @@ function normalizedMapName(value: string): string {
 
 const calibratedRenderCache = new WeakMap<WowMapManualRender, WowMapRenderedInstance>();
 
-function calibratedManualRender(instance: WowMapInstance): WowMapRenderedInstance | WowMapInstance["renders"] {
-  const render = instance.renders;
+function calibratedManualRender(render: WowMapManualRender | undefined): WowMapRenderedInstance | WowMapManualRender | undefined {
   if (!render || render.width <= 0 || render.height <= 0) return undefined;
   const bounds = render.bounds;
   if (!bounds) return render;
@@ -547,9 +548,9 @@ export function overviewDungeonCanvas(
   floor: WowMapInstance["floors"][number] | undefined,
   source: OverviewMapSource,
 ) {
-  const render = calibratedManualRender(instance);
+  const render = calibratedManualRender(mapFloorRender(instance, floor));
   const styled = instance.styled && instance.styled.width > 0 && instance.styled.height > 0 ? instance.styled : undefined;
-  if (source === "art" && floor) return { canvas: floor, source: "art" as const };
+  if (source === "art" && hasNativeMapFloorArtwork(floor)) return { canvas: floor, source: "art" as const };
   if (source === "renders" && render) return { canvas: render, source: "renders" as const };
   if (source === "styled" && styled) return { canvas: styled, source: "styled" as const };
   // The overview needs the chosen image's own bounds to project a route. In
@@ -559,7 +560,7 @@ export function overviewDungeonCanvas(
   if (styled?.bounds) return { canvas: styled, source: "styled" as const };
   if (render) return { canvas: render, source: "renders" as const };
   if (styled) return { canvas: styled, source: "styled" as const };
-  return { canvas: floor, source: "art" as const };
+  return { canvas: hasNativeMapFloorArtwork(floor) ? floor : undefined, source: "art" as const };
 }
 
 export type ReplayDungeonCanvas =
@@ -572,14 +573,14 @@ export function replayDungeonCanvas(
   floor: WowMapInstanceFloor | undefined,
   preferRendered: boolean,
 ): ReplayDungeonCanvas | null {
-  const render = calibratedManualRender(instance);
+  const render = calibratedManualRender(mapFloorRender(instance, floor));
   const boundedRender = render && "source" in render ? render : null;
   const styled = instance.styled && instance.styled.width > 0 && instance.styled.height > 0
     ? instance.styled
     : null;
   const rendered = boundedRender ?? styled;
   if (preferRendered && rendered) return { canvas: rendered, rendered: true };
-  if (floor) return { canvas: floor, rendered: false };
+  if (floor && hasNativeMapFloorArtwork(floor)) return { canvas: floor, rendered: false };
   return rendered ? { canvas: rendered, rendered: true } : null;
 }
 
@@ -616,8 +617,9 @@ export function resolveMapArtwork(
   const instanceHasProjection = instance && (
     instance.mapID === 43
       || Boolean(instance.renders?.bounds)
+      || Boolean(instance.mesh?.bounds)
       || Boolean(instance.styled?.bounds)
-      || instance.floors.some((floor) => Boolean(floor.bounds))
+      || instance.floors.some((floor) => Boolean(floor.bounds || floor.renders?.bounds || floor.mesh?.bounds))
   );
   if (instance && (!sample || instanceHasProjection || !zone)) return { kind: "instance", instance };
   if (zone) return zone;

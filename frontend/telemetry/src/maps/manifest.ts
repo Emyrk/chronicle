@@ -109,6 +109,8 @@ export interface MapInstanceFloor {
   tileHeight: number;
   bounds?: MapFloorBounds;
   tiles: MapTile[];
+  renders?: MapManualRender;
+  mesh?: MapPlaceableMesh;
 }
 
 export interface MapRenderedArtwork {
@@ -189,7 +191,10 @@ export function recoverMapManifestBase(value: unknown, namespace: MapManifestNam
   }
   return {
     ...manifest,
-    instances: manifest.instances.map(({ styled: _styled, renders: _renders, mesh: _mesh, ...instance }) => instance),
+    instances: manifest.instances.map(({ styled: _styled, renders: _renders, mesh: _mesh, ...instance }) => ({
+      ...instance,
+      floors: instance.floors.map(({ renders: _floorRenders, mesh: _floorMesh, ...floor }) => floor),
+    })),
   };
 }
 
@@ -200,17 +205,29 @@ export function recoverMapManifestLayers(value: unknown): MapManifestLayers {
   const styled = manifest.instances.flatMap((instance) => instance.styled
     ? [{ mapID: instance.mapID, name: instance.name, styled: instance.styled }]
     : []);
-  const renders = manifest.instances.flatMap((instance) => instance.renders
-    ? [{ mapID: instance.mapID, name: instance.name, renders: instance.renders }]
-    : []);
-  const meshes = manifest.instances.flatMap((instance) => instance.mesh
-    ? [{ mapID: instance.mapID, name: instance.name, mesh: instance.mesh }]
-    : []);
+  const renders = manifest.instances.flatMap((instance) => {
+    const floors = instance.floors.flatMap((floor) => floor.renders ? [{ floor: floor.floor, renders: floor.renders }] : []);
+    return instance.renders || floors.length > 0
+      ? [{ mapID: instance.mapID, name: instance.name, ...(instance.renders ? { renders: instance.renders } : {}), ...(floors.length > 0 ? { floors } : {}) }]
+      : [];
+  });
+  const meshes = manifest.instances.flatMap((instance) => {
+    const floors = instance.floors.flatMap((floor) => floor.mesh ? [{ floor: floor.floor, mesh: floor.mesh }] : []);
+    return instance.mesh || floors.length > 0
+      ? [{ mapID: instance.mapID, name: instance.name, ...(instance.mesh ? { mesh: instance.mesh } : {}), ...(floors.length > 0 ? { floors } : {}) }]
+      : [];
+  });
   return {
     styled: styled.length > 0 ? { format: MAP_MANIFEST_FORMAT, target, instances: styled } : undefined,
     renders: renders.length > 0 ? { format: MAP_MANIFEST_FORMAT, target, instances: renders } : undefined,
     meshes: meshes.length > 0 ? { format: MAP_MANIFEST_FORMAT, target, instances: meshes } : undefined,
   };
+}
+
+export interface MapLayerFloor {
+  floor: number;
+  renders?: MapManualRender;
+  mesh?: MapPlaceableMesh;
 }
 
 export interface MapLayerInstance {
@@ -219,6 +236,7 @@ export interface MapLayerInstance {
   styled?: MapRenderedArtwork;
   renders?: MapManualRender;
   mesh?: MapPlaceableMesh;
+  floors?: MapLayerFloor[];
 }
 
 export interface MapLayerManifest {
@@ -405,7 +423,7 @@ function parseRecord(value: unknown, context: string): MapRecord {
 }
 
 function parseFloor(value: unknown, context: string): MapInstanceFloor {
-  const input = object(value, context, ["floor", "width", "height", "tileWidth", "tileHeight", "bounds", "tiles"]);
+  const input = object(value, context, ["floor", "width", "height", "tileWidth", "tileHeight", "bounds", "tiles", "renders", "mesh"]);
   const result: MapInstanceFloor = {
     floor: integer(input.floor, `${context}.floor`, 0),
     width: integer(input.width, `${context}.width`, 0),
@@ -415,7 +433,11 @@ function parseFloor(value: unknown, context: string): MapInstanceFloor {
     tiles: parseTiles(input.tiles, `${context}.tiles`),
   };
   const bounds = optional(input.bounds, (entry) => parseBounds(entry, `${context}.bounds`));
+  const renders = optional(input.renders, (entry) => parseManualRender(entry, `${context}.renders`));
+  const mesh = optional(input.mesh, (entry) => parseMesh(entry, `${context}.mesh`));
   if (bounds) result.bounds = bounds;
+  if (renders) result.renders = renders;
+  if (mesh) result.mesh = mesh;
   return result;
 }
 
@@ -514,15 +536,26 @@ export function parseMapLayer(value: unknown): MapLayerManifest {
     target: parseTarget(input.target, "map layer.target"),
     instances: array(input.instances ?? [], "map layer.instances").map((entry, index) => {
       const context = `map layer.instances[${index}]`;
-      const item = object(entry, context, ["mapID", "name", "styled", "renders", "mesh"]);
+      const item = object(entry, context, ["mapID", "name", "styled", "renders", "mesh", "floors"]);
       const result: MapLayerInstance = { mapID: integer(item.mapID, `${context}.mapID`, 0) };
       if (hasOwn(item, "name")) result.name = string(item.name, `${context}.name`);
       const styled = optional(item.styled, (art) => parseRendered(art, `${context}.styled`));
       const renders = optional(item.renders, (art) => parseManualRender(art, `${context}.renders`));
       const meshes = optional(item.mesh, (art) => parseMesh(art, `${context}.mesh`));
+      const floors = optional(item.floors, (entries) => array(entries, `${context}.floors`).map((floor, floorIndex) => {
+        const floorContext = `${context}.floors[${floorIndex}]`;
+        const floorItem = object(floor, floorContext, ["floor", "renders", "mesh"]);
+        const parsed: MapLayerFloor = { floor: integer(floorItem.floor, `${floorContext}.floor`) };
+        const floorRenders = optional(floorItem.renders, (art) => parseManualRender(art, `${floorContext}.renders`));
+        const floorMesh = optional(floorItem.mesh, (art) => parseMesh(art, `${floorContext}.mesh`));
+        if (floorRenders) parsed.renders = floorRenders;
+        if (floorMesh) parsed.mesh = floorMesh;
+        return parsed;
+      }));
       if (styled) result.styled = styled;
       if (renders) result.renders = renders;
       if (meshes) result.mesh = meshes;
+      if (floors) result.floors = floors;
       return result;
     }),
   };
@@ -540,6 +573,31 @@ function validAssetPath(assetPath: string, prefix: string): boolean {
 
 function isRenderImagePath(assetPath: string): boolean {
   return assetPath.endsWith(".png") || assetPath.endsWith(".webp");
+}
+
+function validateLayerArtwork(
+  kind: LayerKind,
+  artwork: MapRenderedArtwork | MapManualRender | MapPlaceableMesh | undefined,
+  mapID: number,
+  floor?: number,
+): void {
+  const location = floor === undefined ? `mapID ${mapID}` : `mapID ${mapID} floor ${floor}`;
+  if (kind === "styled") {
+    const styled = artwork as MapRenderedArtwork | undefined;
+    if (!styled || !validAssetPath(styled.path, "render-styled/") || styled.width <= 0 || styled.height <= 0) {
+      throw new TypeError(`invalid ${kind} map layer artwork for ${location}`);
+    }
+  } else if (kind === "renders") {
+    const render = artwork as MapManualRender | undefined;
+    if (!render || !validAssetPath(render.path, "renders/") || !isRenderImagePath(render.path) || render.width <= 0 || render.height <= 0) {
+      throw new TypeError(`invalid renders map layer artwork for ${location}`);
+    }
+  } else {
+    const mesh = artwork as MapPlaceableMesh | undefined;
+    if (!mesh || !validAssetPath(mesh.path, "3d/") || !mesh.path.endsWith(".glb")) {
+      throw new TypeError(`invalid meshes map layer artwork for ${location}`);
+    }
+  }
 }
 
 function mergeLayer(
@@ -566,6 +624,9 @@ function mergeLayer(
       if (entry.mapID <= 0 || (entry.name ?? "").trim() === "") {
         throw new TypeError(`${kind} map layer mapID ${entry.mapID} needs a positive mapID and name to create an instance`);
       }
+      if ((entry.floors?.length ?? 0) > 0) {
+        throw new TypeError(`${kind} map layer mapID ${entry.mapID} cannot attach floor artwork without native floors`);
+      }
       instance = { mapID: entry.mapID, name: entry.name!, instanceType: 1, directory: "", floors: [] };
       instances.set(entry.mapID, instance);
       created.set(entry.mapID, instance);
@@ -573,28 +634,40 @@ function mergeLayer(
       throw new TypeError(`conflicting names for manually created instance mapID ${entry.mapID}`);
     }
 
-    const fields = [entry.styled, entry.renders, entry.mesh].filter((field) => field !== undefined).length;
-    if (fields !== 1) throw new TypeError(`${kind} map layer mapID ${entry.mapID} must contain only its own artwork`);
+    const directFields = [entry.styled, entry.renders, entry.mesh].filter((field) => field !== undefined).length;
+    const expectedDirect = kind === "styled" ? entry.styled : kind === "renders" ? entry.renders : entry.mesh;
+    const floors = entry.floors ?? [];
+    if (directFields > (expectedDirect ? 1 : 0) || (!expectedDirect && floors.length === 0)) {
+      throw new TypeError(`${kind} map layer mapID ${entry.mapID} must contain only its own artwork`);
+    }
+    if (kind === "styled" && floors.length > 0) {
+      throw new TypeError(`styled map layer mapID ${entry.mapID} cannot contain floor artwork`);
+    }
 
-    if (kind === "styled") {
-      const artwork = entry.styled;
-      const prefix = "render-styled/";
-      if (!artwork || !validAssetPath(artwork.path, prefix) || artwork.width <= 0 || artwork.height <= 0) {
-        throw new TypeError(`invalid ${kind} map layer artwork for mapID ${entry.mapID}`);
+    if (expectedDirect) {
+      validateLayerArtwork(kind, expectedDirect, entry.mapID);
+      if (kind === "styled") instance.styled = expectedDirect as MapRenderedArtwork;
+      else if (kind === "renders") instance.renders = expectedDirect as MapManualRender;
+      else instance.mesh = expectedDirect as MapPlaceableMesh;
+    }
+
+    const nativeFloors = new Map(instance.floors.map((floor) => [floor.floor, floor]));
+    const seenFloors = new Set<number>();
+    for (const floorEntry of floors) {
+      if (seenFloors.has(floorEntry.floor)) {
+        throw new TypeError(`duplicate ${kind} map layer mapID ${entry.mapID} floor ${floorEntry.floor}`);
       }
-      instance.styled = artwork;
-    } else if (kind === "renders") {
-      const artwork = entry.renders;
-      if (!artwork || !validAssetPath(artwork.path, "renders/") || !isRenderImagePath(artwork.path) || artwork.width <= 0 || artwork.height <= 0) {
-        throw new TypeError(`invalid renders map layer artwork for mapID ${entry.mapID}`);
+      seenFloors.add(floorEntry.floor);
+      const floor = nativeFloors.get(floorEntry.floor);
+      if (!floor) throw new TypeError(`unknown ${kind} map layer mapID ${entry.mapID} floor ${floorEntry.floor}`);
+      const floorFields = [floorEntry.renders, floorEntry.mesh].filter((field) => field !== undefined).length;
+      const artwork = kind === "renders" ? floorEntry.renders : kind === "meshes" ? floorEntry.mesh : undefined;
+      if (floorFields !== 1 || !artwork) {
+        throw new TypeError(`${kind} map layer mapID ${entry.mapID} floor ${floorEntry.floor} must contain only its own artwork`);
       }
-      instance.renders = artwork;
-    } else {
-      const artwork = entry.mesh;
-      if (!artwork || !validAssetPath(artwork.path, "3d/") || !artwork.path.endsWith(".glb")) {
-        throw new TypeError(`invalid meshes map layer artwork for mapID ${entry.mapID}`);
-      }
-      instance.mesh = artwork;
+      validateLayerArtwork(kind, artwork, entry.mapID, floorEntry.floor);
+      if (kind === "renders") floor.renders = artwork as MapManualRender;
+      else floor.mesh = artwork as MapPlaceableMesh;
     }
   }
 }
@@ -611,7 +684,13 @@ export function mergeMapManifests(original: unknown, layers: MapManifestLayers =
   for (const source of manifest.instances) {
     if (instances.has(source.mapID)) throw new TypeError(`duplicate original instance mapID ${source.mapID}`);
     const { styled: _styled, renders: _renders, mesh: _mesh, ...metadata } = source;
-    const instance: MapInstance = metadata;
+    const floorNumbers = new Set<number>();
+    const floors = metadata.floors.map(({ renders: _floorRenders, mesh: _floorMesh, ...floor }) => {
+      if (floorNumbers.has(floor.floor)) throw new TypeError(`duplicate original instance mapID ${source.mapID} floor ${floor.floor}`);
+      floorNumbers.add(floor.floor);
+      return floor;
+    });
+    const instance: MapInstance = { ...metadata, floors };
     instances.set(instance.mapID, instance);
   }
   manifest.instances = [...instances.values()];

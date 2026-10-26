@@ -36,6 +36,8 @@ import {
   MAX_HEALTH_BARS,
   mapPointToScene,
   movementTrailPoints,
+  overviewDungeonCanvas,
+  replayDungeonCanvas,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
   resolveMapFloorNumber,
@@ -444,6 +446,62 @@ describe("resolveMapFloorNumber", () => {
     expect(resolveMapFloorNumber(instance, null, [
       { timestampMs: 0, x: 0.4, y: 0.5, mapId: 595 },
     ])).toBe(1);
+  });
+});
+
+describe("floor-specific dungeon canvases", () => {
+  const legacyRender = {
+    path: "renders/595.png",
+    width: 1200,
+    height: 800,
+    bounds: { minX: 0, maxX: 100, minY: 0, maxY: 100 },
+  };
+  const floorRender = {
+    path: "renders/595-floor-2.png",
+    width: 900,
+    height: 600,
+    bounds: { minX: 100, maxX: 200, minY: 100, maxY: 200 },
+  };
+  const nativeTile = { row: 0, column: 0, fileDataID: 1, path: "original/1.webp" };
+  const instance: WowMapInstance = {
+    mapID: 595,
+    name: "The Culling of Stratholme",
+    instanceType: 1,
+    directory: "StratholmeCOT",
+    renders: legacyRender,
+    floors: [{
+      floor: 1,
+      width: 1002,
+      height: 668,
+      tileWidth: 256,
+      tileHeight: 256,
+      tiles: [nativeTile],
+    }, {
+      floor: 2,
+      width: 1002,
+      height: 668,
+      tileWidth: 256,
+      tileHeight: 256,
+      tiles: [nativeTile],
+      renders: floorRender,
+    }],
+  };
+
+  it("uses the selected floor render before the legacy instance render", () => {
+    expect(overviewDungeonCanvas(instance, instance.floors[1], "renders").canvas).toMatchObject({ path: floorRender.path });
+    expect(replayDungeonCanvas(instance, instance.floors[1], true)?.canvas).toMatchObject({ path: floorRender.path });
+  });
+
+  it("falls back to the legacy instance render when the selected floor has none", () => {
+    expect(overviewDungeonCanvas(instance, instance.floors[0], "renders").canvas).toMatchObject({ path: legacyRender.path });
+    expect(replayDungeonCanvas(instance, instance.floors[0], true)?.canvas).toMatchObject({ path: legacyRender.path });
+  });
+
+  it("keeps native floor artwork when rendered canvases are not preferred", () => {
+    expect(replayDungeonCanvas(instance, instance.floors[1], false)).toEqual({
+      canvas: instance.floors[1],
+      rendered: false,
+    });
   });
 });
 

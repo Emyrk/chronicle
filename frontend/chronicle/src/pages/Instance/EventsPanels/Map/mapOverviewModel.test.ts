@@ -123,7 +123,7 @@ describe("map route overview model", () => {
   });
 
   it("prefers manual renders but never borrows calibration from styled or native artwork", () => {
-    const floor = { floor: 1, width: 100, height: 80, tileWidth: 50, tileHeight: 40, tiles: [], bounds: { minX: 0, maxX: 10, minY: 0, maxY: 20 } };
+    const floor = { floor: 1, width: 100, height: 80, tileWidth: 50, tileHeight: 40, tiles: [{ row: 0, column: 0, fileDataID: 1, path: "original/1.webp" }], bounds: { minX: 0, maxX: 10, minY: 0, maxY: 20 } };
     const styled = { path: "styled/map.jpeg", width: 200, height: 160, source: "hand-styled", bounds: floor.bounds };
     const renders: WowMapManualRender = { path: "renders/map.png", width: 300, height: 240 };
     const instance = { mapID: 230, name: "Blackrock Depths", instanceType: 1, directory: "", floors: [floor], styled, renders };
@@ -141,7 +141,7 @@ describe("map route overview model", () => {
 
   it("prefers a calibrated render over native floor artwork in flat 2D mode", () => {
     const bounds = { minX: -200, maxX: 300, minY: -400, maxY: 600 };
-    const floor = { floor: 1, width: 100, height: 80, tileWidth: 50, tileHeight: 40, tiles: [], bounds };
+    const floor = { floor: 1, width: 100, height: 80, tileWidth: 50, tileHeight: 40, tiles: [{ row: 0, column: 0, fileDataID: 1, path: "original/1.webp" }], bounds };
     const render: WowMapManualRender = { path: "renders/map.png", width: 300, height: 240, bounds };
     const instance = { mapID: 230, name: "Blackrock Depths", instanceType: 1, directory: "", floors: [floor], renders: render };
 
