@@ -32,6 +32,10 @@ function original() {
   };
 }
 
+function nativeFloor(floor: number) {
+  return { floor, width: 1024, height: 768, tileWidth: 256, tileHeight: 256, tiles: [] };
+}
+
 function mesh(path: string) {
   return { path, bounds: { minX: -10, maxX: 20, minY: 30, maxY: 40 }, zMin: -5, zMax: 15, frame: "wow-yup-mirrored-x" };
 }
@@ -107,6 +111,68 @@ test("merges layers in deterministic order and strips original artwork", () => {
   ]);
   assert.equal(merged.instances[0]?.mesh?.frame, "wow-yup-mirrored-x");
   assert.doesNotThrow(() => JSON.stringify(merged));
+});
+
+test("merges render and mesh artwork into matching native floors", () => {
+  const source = original();
+  source.instances[0]!.floors = [nativeFloor(0), nativeFloor(2)];
+  const merged = mergeMapManifests(source, {
+    renders: layer({
+      mapID: 43,
+      renders: { path: "renders/map-level.png", width: 640, height: 480 },
+      floors: [
+        { floor: 0, renders: { path: "renders/floor-0.png", width: 1024, height: 768 } },
+        { floor: 2, renders: { path: "renders/floor-2.webp", width: 1024, height: 768 } },
+      ],
+    }),
+    meshes: layer({
+      mapID: 43,
+      floors: [{ floor: 2, mesh: mesh("3d/floor-2.glb") }],
+    }),
+  });
+
+  assert.equal(merged.instances[0]?.renders?.path, "renders/map-level.png");
+  assert.equal(merged.instances[0]?.floors[0]?.renders?.path, "renders/floor-0.png");
+  assert.equal(merged.instances[0]?.floors[1]?.renders?.path, "renders/floor-2.webp");
+  assert.equal(merged.instances[0]?.floors[1]?.mesh?.path, "3d/floor-2.glb");
+  assert.equal(merged.instances[0]?.floors[0]?.mesh, undefined);
+});
+
+test("recovers floor artwork into source layers and removes it from the native base", () => {
+  const reader = original();
+  reader.instances[0]!.floors = [{
+    ...nativeFloor(1),
+    renders: { path: "renders/floor-1.png", width: 1024, height: 768 },
+    mesh: mesh("3d/floor-1.glb"),
+  }];
+  const layers = recoverMapManifestLayers(reader);
+  assert.deepEqual((layers.renders as { instances: { floors: unknown[] }[] }).instances[0]?.floors, [
+    { floor: 1, renders: { path: "renders/floor-1.png", width: 1024, height: 768 } },
+  ]);
+  assert.deepEqual((layers.meshes as { instances: { floors: unknown[] }[] }).instances[0]?.floors, [
+    { floor: 1, mesh: mesh("3d/floor-1.glb") },
+  ]);
+  assert.deepEqual(recoverMapManifestBase(reader, "forever").instances[0]?.floors, [nativeFloor(1)]);
+});
+
+test("rejects unknown, duplicate, cross-kind, and synthetic floor artwork", () => {
+  const source = original();
+  source.instances[0]!.floors = [nativeFloor(0)];
+  assert.throws(() => mergeMapManifests(source, {
+    renders: layer({ mapID: 43, floors: [{ floor: 7, renders: { path: "renders/a.png", width: 1, height: 1 } }] }),
+  }), /unknown renders map layer mapID 43 floor 7/);
+  assert.throws(() => mergeMapManifests(source, {
+    renders: layer({ mapID: 43, floors: [
+      { floor: 0, renders: { path: "renders/a.png", width: 1, height: 1 } },
+      { floor: 0, renders: { path: "renders/b.png", width: 1, height: 1 } },
+    ] }),
+  }), /duplicate renders map layer mapID 43 floor 0/);
+  assert.throws(() => mergeMapManifests(source, {
+    renders: layer({ mapID: 43, floors: [{ floor: 0, mesh: mesh("3d/a.glb") }] }),
+  }), /must contain only its own artwork/);
+  assert.throws(() => mergeMapManifests(source, {
+    renders: layer({ mapID: 389, name: "Ragefire Chasm", floors: [{ floor: 0, renders: { path: "renders/rfc.png", width: 1, height: 1 } }] }),
+  }), /cannot attach floor artwork without native floors/);
 });
 
 test("rejects an incompatible target", () => {
@@ -227,5 +293,6 @@ test("requires explicit calibrated mesh metadata and rejects legacy layers", () 
 
 test("rejects unknown fields recursively", () => {
   assert.throws(() => parseMapLayer({ ...layer({ mapID: 43, renders: { path: "renders/a.png", width: 1, height: 1, extra: true } }) }), /unknown field/);
+  assert.throws(() => parseMapLayer({ ...layer({ mapID: 43, floors: [{ floor: 0, renders: { path: "renders/a.png", width: 1, height: 1 }, extra: true }] }) }), /unknown field/);
   assert.throws(() => parseMapManifest({ ...original(), maps: [{ ...original().maps[0], extra: true }] }), /unknown field/);
 });

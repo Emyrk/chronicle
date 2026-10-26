@@ -147,6 +147,7 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
         const els = Object.fromEntries(['namespace','search','add-map','discard','save','publish','status','count','map-list','editor'].map(id => [id, document.getElementById(id)]));
         let state = null;
         let selectedID = null;
+        let selectedFloor = null;
         let dirty = false;
         let busy = false;
         let previewData = null;
@@ -169,7 +170,18 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           els['add-map'].disabled = busy || !state;
         }
         function layerEntry(kind, mapID) { return state?.draft?.[kind]?.instances?.find(item => item.mapID === mapID); }
+        function layerFloor(kind, mapID, floor) { return layerEntry(kind, mapID)?.floors?.find(item => item.floor === floor); }
         function baseInstance(mapID) { return state?.instances?.find(item => item.mapID === mapID && item.original); }
+        function selectMap(mapID) {
+          selectedID = mapID;
+          selectedFloor = baseInstance(mapID)?.floors?.[0]?.floor ?? null;
+        }
+        function selectedArtwork(kind) {
+          const entry = layerEntry(kind, selectedID);
+          if (selectedFloor === null) return kind === 'renders' ? entry?.renders : entry?.mesh;
+          const floor = layerFloor(kind, selectedID, selectedFloor);
+          return kind === 'renders' ? floor?.renders : floor?.mesh;
+        }
         function allInstances() {
           if (!state) return [];
           const byID = new Map(state.instances.filter(item => item.original).map(item => [item.mapID, item]));
@@ -185,13 +197,15 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           const rows = allInstances().filter(item => (item.name + ' ' + item.mapID + ' ' + (item.directory || '')).toLowerCase().includes(query));
           els.count.textContent = rows.length + ' maps';
           els['map-list'].innerHTML = rows.map(item => {
-            const render = layerEntry('renders', item.mapID)?.renders || item.renders || item.styled;
-            const model = layerEntry('meshes', item.mapID)?.mesh || item.mesh;
+            const renderEntry = layerEntry('renders', item.mapID);
+            const modelEntry = layerEntry('meshes', item.mapID);
+            const render = renderEntry?.renders || renderEntry?.floors?.some(floor => floor.renders) || item.renders || item.floors?.some(floor => floor.renders) || item.styled;
+            const model = modelEntry?.mesh || modelEntry?.floors?.some(floor => floor.mesh) || item.mesh || item.floors?.some(floor => floor.mesh);
             return '<button class="map-row ' + (item.mapID === selectedID ? 'active' : '') + '" data-map-id="' + item.mapID + '">' +
               '<span class="map-id">#' + item.mapID + '</span><span class="map-name">' + escapeHTML(item.name) + '</span>' +
               '<span class="badges"><span class="badge original ' + (item.floor_count ? 'on' : '') + '">ORG</span><span class="badge render ' + (render ? 'on' : '') + '">PNG</span><span class="badge model ' + (model ? 'on' : '') + '">GLB</span></span></button>';
           }).join('') || '<div class="empty-editor">No matching maps.</div>';
-          document.querySelectorAll('.map-row').forEach(row => row.addEventListener('click', () => { if (busy) return; selectedID = Number(row.dataset.mapId); renderList(); renderEditor(); }));
+          document.querySelectorAll('.map-row').forEach(row => row.addEventListener('click', () => { if (busy) return; selectMap(Number(row.dataset.mapId)); renderList(); renderEditor(); }));
         }
         function ensureEntry(kind, mapID) {
           let entry = layerEntry(kind, mapID);
@@ -202,6 +216,13 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           }
           return entry;
         }
+        function ensureFloorEntry(kind, mapID, floor) {
+          const entry = ensureEntry(kind, mapID);
+          entry.floors ||= [];
+          let floorEntry = entry.floors.find(item => item.floor === floor);
+          if (!floorEntry) { floorEntry = { floor }; entry.floors.push(floorEntry); entry.floors.sort((a,b) => a.floor - b.floor); }
+          return floorEntry;
+        }
         function selectedName() { return baseInstance(selectedID)?.name || addedMaps.get(selectedID)?.name || layerEntry('renders', selectedID)?.name || layerEntry('meshes', selectedID)?.name || ''; }
         function fieldNumber(id) { const raw = document.getElementById(id)?.value; return raw === '' ? null : Number(raw); }
         function syncEditor() {
@@ -209,40 +230,43 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           const name = document.getElementById('map-name').value.trim();
           const renderEntry = layerEntry('renders', selectedID);
           const modelEntry = layerEntry('meshes', selectedID);
-          if (renderEntry) {
-            renderEntry.name = name;
-            if (renderEntry.renders) {
-              renderEntry.renders.width = fieldNumber('render-width');
-              renderEntry.renders.height = fieldNumber('render-height');
-              if (document.getElementById('has-bounds').checked) renderEntry.renders.bounds = { minX:fieldNumber('min-x'), maxX:fieldNumber('max-x'), minY:fieldNumber('min-y'), maxY:fieldNumber('max-y') };
-              else delete renderEntry.renders.bounds;
-            }
+          const render = selectedArtwork('renders');
+          const model = selectedArtwork('meshes');
+          if (renderEntry) renderEntry.name = name;
+          if (render) {
+            render.width = fieldNumber('render-width');
+            render.height = fieldNumber('render-height');
+            if (document.getElementById('has-bounds').checked) render.bounds = { minX:fieldNumber('min-x'), maxX:fieldNumber('max-x'), minY:fieldNumber('min-y'), maxY:fieldNumber('max-y') };
+            else delete render.bounds;
           }
-          if (modelEntry) {
-            modelEntry.name = name;
-            if (modelEntry.mesh) {
-              modelEntry.mesh.bounds = { minX:fieldNumber('mesh-min-x'), maxX:fieldNumber('mesh-max-x'), minY:fieldNumber('mesh-min-y'), maxY:fieldNumber('mesh-max-y') };
-              modelEntry.mesh.zMin = fieldNumber('mesh-z-min');
-              modelEntry.mesh.zMax = fieldNumber('mesh-z-max');
-              modelEntry.mesh.frame = document.getElementById('mesh-frame').value.trim();
-              if (document.getElementById('mesh-liquid').checked) modelEntry.mesh.liquid = { color:document.getElementById('liquid-color').value, opacity:fieldNumber('liquid-opacity') };
-              else delete modelEntry.mesh.liquid;
-            }
+          if (modelEntry) modelEntry.name = name;
+          if (model) {
+            model.bounds = { minX:fieldNumber('mesh-min-x'), maxX:fieldNumber('mesh-max-x'), minY:fieldNumber('mesh-min-y'), maxY:fieldNumber('mesh-max-y') };
+            model.zMin = fieldNumber('mesh-z-min');
+            model.zMax = fieldNumber('mesh-z-max');
+            model.frame = document.getElementById('mesh-frame').value.trim();
+            if (document.getElementById('mesh-liquid').checked) model.liquid = { color:document.getElementById('liquid-color').value, opacity:fieldNumber('liquid-opacity') };
+            else delete model.liquid;
           }
         }
         function assetURL(path) { return '/internal/api/v1/maps/' + encodeURIComponent(state.namespace) + '/preview-assets/' + path.split('/').map(encodeURIComponent).join('/'); }
         function previewSources() {
           if (!previewData) return { floors:[], images:[], models:[] };
-          const draftRender = state.has_draft ? layerEntry('renders', selectedID)?.renders : null;
-          const draftModel = state.has_draft ? layerEntry('meshes', selectedID)?.mesh : null;
-          const publishedRender = previewData.published_renders || (!state.has_draft ? previewData.renders : null);
-          const publishedModel = previewData.published_mesh || (!state.has_draft ? previewData.mesh : null);
+          const previewFloor = selectedFloor === null ? null : previewData.floors?.find(item => item.floor === selectedFloor);
+          const draftRender = state.has_draft || dirty ? selectedArtwork('renders') : null;
+          const draftModel = state.has_draft || dirty ? selectedArtwork('meshes') : null;
+          const publishedRender = selectedFloor === null
+            ? previewData.published_renders || (!state.has_draft ? previewData.renders : null)
+            : previewData.published_render_floors?.find(item => item.floor === selectedFloor)?.renders || (!state.has_draft ? previewFloor?.renders : null);
+          const publishedModel = selectedFloor === null
+            ? previewData.published_mesh || (!state.has_draft ? previewData.mesh : null)
+            : previewData.published_mesh_floors?.find(item => item.floor === selectedFloor)?.mesh || (!state.has_draft ? previewFloor?.mesh : null);
           return {
-            floors:previewData.floors || [],
+            floors:selectedFloor === null ? (previewData.floors || []) : (previewFloor ? [previewFloor] : []),
             images:[
               draftRender ? { label:'Draft manual', artwork:draftRender } : null,
               publishedRender && publishedRender.path !== draftRender?.path ? { label:'Published manual', artwork:publishedRender } : null,
-              previewData.styled ? { label:'Styled', artwork:previewData.styled } : null,
+              selectedFloor === null && previewData.styled ? { label:'Styled', artwork:previewData.styled } : null,
             ].filter(Boolean),
             models:[
               draftModel ? { label:'Draft model', asset:draftModel } : null,
@@ -314,14 +338,15 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
         function renderEditor() {
           if (!state || !selectedID) { els.editor.innerHTML = '<div class="empty-editor"><div><strong>No map selected</strong>Select a map from the inventory.</div></div>'; return; }
           const base = baseInstance(selectedID);
-          const renderEntry = layerEntry('renders', selectedID);
-          const modelEntry = layerEntry('meshes', selectedID);
-          const render = renderEntry?.renders;
-          const model = modelEntry?.mesh;
+          const render = selectedArtwork('renders');
+          const model = selectedArtwork('meshes');
           const bounds = render?.bounds;
+          const floorOptions = base?.floors?.length
+            ? '<label>Artwork scope<select id="floor-select"><option value="map" ' + (selectedFloor === null ? 'selected' : '') + '>Map-level (legacy)</option>' + base.floors.map(item => '<option value="' + item.floor + '" ' + (item.floor === selectedFloor ? 'selected' : '') + '>Native floor ' + item.floor + '</option>').join('') + '</select></label>'
+            : '<p class="count">Map-level artwork. Floor assets require a native floor.</p>';
           els.editor.innerHTML = '<div class="panel-head"><h2>Map asset editor</h2><span class="count">' + escapeHTML(state.namespace) + '/maps</span></div><div class="editor-body">' +
             '<div class="map-title"><div><h2>' + escapeHTML(selectedName() || 'Manual map') + '</h2><p>mapID ' + selectedID + (base?.directory ? ' · ' + escapeHTML(base.directory) : ' · manual-only instance') + '</p>' +
-            (!base ? '<input class="manual-name" id="map-name" type="text" value="' + escapeHTML(selectedName()) + '" placeholder="Required map name" />' : '<input id="map-name" type="hidden" value="' + escapeHTML(selectedName()) + '" />') + '</div></div>' +
+            (!base ? '<input class="manual-name" id="map-name" type="text" value="' + escapeHTML(selectedName()) + '" placeholder="Required map name" />' : '<input id="map-name" type="hidden" value="' + escapeHTML(selectedName()) + '" />') + '</div><div>' + floorOptions + '</div></div>' +
             '<div class="layer-grid">' +
               '<article class="layer-card"><h3>Rendered map <span class="layer-tag">PNG / WebP</span></h3><p>Manual 2D artwork. Image dimensions and format are read from the uploaded file.</p>' +
                 '<div class="path ' + (!render ? 'empty-path' : '') + '">' + escapeHTML(render?.path || 'No render registered') + '</div>' +
@@ -343,6 +368,12 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
             '<section class="preview-workbench"><div class="preview-head"><h3>Artwork preview</h3><div class="preview-tabs"><button class="preview-tab active" data-mode="original">Original</button><button class="preview-tab" data-mode="rendered">Rendered</button><button class="preview-tab" data-mode="3d">3D model</button></div></div>' +
             '<div class="preview-head"><div class="preview-options" id="preview-options"></div><span class="count">draft-aware</span></div><div class="preview-stage" id="preview-stage"><div class="preview-loading">Loading preview…</div></div><div class="preview-meta" id="preview-meta"></div></section>' +
             '<div class="json-panel"><details><summary>Draft source manifests</summary><pre id="json-preview"></pre></details></div></div>';
+          document.getElementById('floor-select')?.addEventListener('change', event => {
+            syncEditor();
+            selectedFloor = event.target.value === 'map' ? null : Number(event.target.value);
+            previewChoice = 0;
+            renderEditor();
+          });
           document.getElementById('mesh-liquid').addEventListener('change', event => { document.getElementById('liquid-fields').hidden = !event.target.checked; syncEditor(); markDirty(); });
           document.getElementById('has-bounds').addEventListener('change', event => { document.getElementById('bounds').hidden = !event.target.checked; syncEditor(); markDirty(); });
           document.querySelectorAll('#editor input').forEach(input => { if (input.type !== 'file' && input.id !== 'has-bounds' && input.id !== 'mesh-liquid') input.addEventListener('input', () => { syncEditor(); markDirty(); renderList(); }); });
@@ -356,10 +387,20 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
         }
         function renderJSON() { const pre = document.getElementById('json-preview'); if (pre && state) pre.textContent = JSON.stringify({ renders:state.draft.renders, meshes:state.draft.meshes }, null, 2); }
         function removeLayer(kind) {
-          state.draft[kind].instances = state.draft[kind].instances.filter(item => item.mapID !== selectedID);
+          const entry = layerEntry(kind, selectedID);
+          if (!entry) return;
+          if (selectedFloor === null) delete entry[kind === 'renders' ? 'renders' : 'mesh'];
+          else {
+            const floor = layerFloor(kind, selectedID, selectedFloor);
+            if (floor) delete floor[kind === 'renders' ? 'renders' : 'mesh'];
+            entry.floors = (entry.floors || []).filter(item => item.renders || item.mesh);
+            if (!entry.floors.length) delete entry.floors;
+          }
+          if (!entry.renders && !entry.mesh && !entry.floors?.length) state.draft[kind].instances = state.draft[kind].instances.filter(item => item !== entry);
           if (!baseInstance(selectedID) && !layerEntry('renders', selectedID) && !layerEntry('meshes', selectedID)) {
             addedMaps.delete(selectedID);
-            selectedID = allInstances()[0]?.mapID || null;
+            const next = allInstances()[0]?.mapID || null;
+            if (next) selectMap(next); else { selectedID = null; selectedFloor = null; }
           }
           markDirty(); renderList(); renderEditor();
         }
@@ -368,16 +409,18 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           syncEditor();
           const namespace = state.namespace;
           const mapID = selectedID;
+          const floor = selectedFloor;
           const name = document.getElementById('map-name').value.trim();
           setBusy(true); setStatus('Uploading ' + file.name + '…');
           try {
-            const data = new FormData(); data.append('mapID', String(mapID)); data.append('file', file);
+            const data = new FormData(); data.append('mapID', String(mapID)); if (floor !== null) data.append('floor', String(floor)); data.append('file', file);
             const response = await fetch('/internal/api/v1/maps/' + namespace + '/assets/' + kind, { method:'POST', body:data });
             const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Upload failed');
-            if (!state || state.namespace !== namespace || selectedID !== mapID) return;
+            if (!state || state.namespace !== namespace || selectedID !== mapID || selectedFloor !== floor) return;
             const entry = ensureEntry(kind, mapID); entry.name = name;
-            if (kind === 'renders') entry.renders = { ...(entry.renders || {}), path:result.path, width:result.width, height:result.height };
-            else entry.mesh = { ...(entry.mesh || {}), path:result.path };
+            const target = floor === null ? entry : ensureFloorEntry(kind, mapID, floor);
+            if (kind === 'renders') target.renders = { ...(target.renders || {}), path:result.path, width:result.width, height:result.height };
+            else target.mesh = { ...(target.mesh || {}), path:result.path };
             dirty = true; setStatus('Asset uploaded. Save the draft to register it.'); renderList(); renderEditor();
           } catch (error) {
             if (state?.namespace === namespace && selectedID === mapID) setStatus(error.message, true);
@@ -387,12 +430,12 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           const namespace = els.namespace.value;
           const request = ++loadRequest;
           previewRequest++;
-          state = null; selectedID = null; dirty = false; addedMaps = new Map(); setBusy(true); setStatus('Loading ' + namespace + '/maps manifests…'); els['map-list'].innerHTML = ''; renderEditor();
+          state = null; selectedID = null; selectedFloor = null; dirty = false; addedMaps = new Map(); setBusy(true); setStatus('Loading ' + namespace + '/maps manifests…'); els['map-list'].innerHTML = ''; renderEditor();
           try {
             const response = await fetch('/internal/api/v1/maps/' + namespace);
             const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Load failed');
             if (request !== loadRequest || els.namespace.value !== namespace) return;
-            state = result; selectedID = state.instances[0]?.mapID || null;
+            state = result; if (state.instances[0]) selectMap(state.instances[0].mapID);
             const bootstrap = state.base_source === 'reader'
               ? ' Recovered native metadata from the existing reader manifest; first publish will create manifest.original.json.'
               : state.base_source === 'empty'
@@ -436,7 +479,7 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
           if (!Number.isSafeInteger(mapID) || mapID <= 0) return setStatus('Map ID must be a positive integer.', true);
           const name = prompt('Map name (required for IDs missing from the original manifest)', baseInstance(mapID)?.name || ''); if (name === null || !name.trim()) return setStatus('A map name is required.', true);
           if (!baseInstance(mapID)) addedMaps.set(mapID, {mapID,name:name.trim(),directory:'',floor_count:0,original:false});
-          selectedID = mapID; renderList(); renderEditor();
+          selectMap(mapID); renderList(); renderEditor();
         });
         load();
       </script>`}
