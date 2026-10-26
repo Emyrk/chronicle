@@ -804,7 +804,7 @@ export function PlanPicker({ prices, change }: { prices: readonly BillingPrice[]
           </button>
           <button
             type="button"
-            className="w-full rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 disabled:opacity-50"
+            className="w-full rounded-md bg-[#f0c060] px-3 py-2 font-wow text-sm font-bold text-[#1a1200] transition-colors hover:bg-[#ffd580] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 disabled:opacity-50"
             disabled={portal.isPending}
             onClick={() => void openBilling(() => portal.mutateAsync(), true)}
           >
