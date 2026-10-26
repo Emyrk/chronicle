@@ -3,7 +3,10 @@ import type {
   WowMapAssignment,
   WowMapFloorBounds,
   WowMapInstance,
+  WowMapInstanceFloor,
   WowMapManifest,
+  WowMapManualRender,
+  WowMapRenderedInstance,
 } from "@/pages/Technical/mapGallery";
 import type { MapEncounterPositions, MapHealthSample, MapPositionSample } from "./map.processor";
 
@@ -334,6 +337,36 @@ export function replayPositionAt(
   return sample;
 }
 
+export interface MapTrailPoint {
+  point: MapPoint;
+  z?: number;
+}
+
+/** Gap between projected movement-trail points. */
+export const TRAIL_STEP_MS = 100;
+
+/** Project a unit's recent movement, newest first, stopping at its first sample or a map change. */
+export function movementTrailPoints(
+  positions: MapPositionSample[],
+  sample: MapPositionSample,
+  spanMs: number,
+  showInitialPosition: boolean,
+  projectSample: (sample: MapPositionSample) => MapPoint | null,
+): MapTrailPoint[] {
+  const trail: MapTrailPoint[] = [];
+  const first = positions[0];
+  for (let ago = 0; ago <= spanMs; ago += TRAIL_STEP_MS) {
+    const at = sample.timestampMs - ago;
+    if (!first || at < first.timestampMs) break;
+    const past = ago === 0 ? sample : replayPositionAt(positions, at, showInitialPosition);
+    if (!past || past.mapId !== sample.mapId) break;
+    const point = projectSample(past);
+    if (!point) break;
+    trail.push({ point, z: past.z });
+  }
+  return trail;
+}
+
 // The height `t` (0-1) of the way from sample `index` to the next: a cubic
 // Hermite curve (Catmull-Rom tangents over each sample's neighbours, scaled
 // for uneven gaps), which passes through every sample. Both samples have z.
@@ -492,7 +525,21 @@ function normalizedMapName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
-export type OverviewMapSource = "renders" | "styled" | "art";
+const calibratedRenderCache = new WeakMap<WowMapManualRender, WowMapRenderedInstance>();
+
+function calibratedManualRender(instance: WowMapInstance): WowMapRenderedInstance | WowMapInstance["renders"] {
+  const render = instance.renders;
+  if (!render || render.width <= 0 || render.height <= 0) return undefined;
+  const bounds = render.bounds;
+  if (!bounds) return render;
+  const cached = calibratedRenderCache.get(render);
+  if (cached) return cached;
+  const calibrated = { ...render, bounds, source: "renders" };
+  calibratedRenderCache.set(render, calibrated);
+  return calibrated;
+}
+
+export type OverviewMapSource = "auto" | "renders" | "styled" | "art";
 
 /** Choose 2D artwork without borrowing calibration from a different image. */
 export function overviewDungeonCanvas(
@@ -500,13 +547,40 @@ export function overviewDungeonCanvas(
   floor: WowMapInstance["floors"][number] | undefined,
   source: OverviewMapSource,
 ) {
-  const render = instance.renders && instance.renders.width > 0 && instance.renders.height > 0 ? instance.renders : undefined;
+  const render = calibratedManualRender(instance);
   const styled = instance.styled && instance.styled.width > 0 && instance.styled.height > 0 ? instance.styled : undefined;
   if (source === "art" && floor) return { canvas: floor, source: "art" as const };
+  if (source === "renders" && render) return { canvas: render, source: "renders" as const };
   if (source === "styled" && styled) return { canvas: styled, source: "styled" as const };
+  // The overview needs the chosen image's own bounds to project a route. In
+  // automatic mode, prefer a calibrated render rather than displaying an
+  // uncalibrated image that cannot carry the overlay.
+  if (render?.bounds) return { canvas: render, source: "renders" as const };
+  if (styled?.bounds) return { canvas: styled, source: "styled" as const };
   if (render) return { canvas: render, source: "renders" as const };
   if (styled) return { canvas: styled, source: "styled" as const };
   return { canvas: floor, source: "art" as const };
+}
+
+export type ReplayDungeonCanvas =
+  | { canvas: WowMapRenderedInstance; rendered: true }
+  | { canvas: WowMapInstanceFloor; rendered: false };
+
+/** Prefer a calibrated top-down render in flat 2D mode, while retaining native artwork as fallback. */
+export function replayDungeonCanvas(
+  instance: WowMapInstance,
+  floor: WowMapInstanceFloor | undefined,
+  preferRendered: boolean,
+): ReplayDungeonCanvas | null {
+  const render = calibratedManualRender(instance);
+  const boundedRender = render && "source" in render ? render : null;
+  const styled = instance.styled && instance.styled.width > 0 && instance.styled.height > 0
+    ? instance.styled
+    : null;
+  const rendered = boundedRender ?? styled;
+  if (preferRendered && rendered) return { canvas: rendered, rendered: true };
+  if (floor) return { canvas: floor, rendered: false };
+  return rendered ? { canvas: rendered, rendered: true } : null;
 }
 
 export function resolveMapArtwork(

@@ -391,7 +391,7 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
     )
     : null;
   const [floorNumber, setFloorNumber] = useState<number | null>(null);
-  const [mapSource, setMapSource] = useState<"styled" | "renders" | "art">("renders");
+  const [mapSource, setMapSource] = useState<"auto" | "styled" | "renders" | "art">("auto");
 
   const zoneSelection = artwork?.kind === "zone"
     ? artwork.map.art?.flatMap((art) => art.layers.map((layer) => ({ art, layer })))

@@ -915,6 +915,11 @@ export class MapScene3D {
   private readonly ownerLinePositions = new Float32Array(MAX_OWNER_LINES * 6);
   private readonly ownerLineColors = new Float32Array(MAX_OWNER_LINES * 6);
   private readonly ownerLines: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+  // The encounter's projected route, drawn over flat artwork and hidden on the dungeon mesh.
+  private readonly routeGroup = new THREE.Group();
+  private readonly routeGeometry = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  private readonly routeOutlineMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.88, depthTest: false, depthWrite: false });
+  private readonly routeMaterial = new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.92, depthTest: false, depthWrite: false });
   // Movement trails, every unit's segments in one buffer; colours carry alpha for the fade.
   private readonly trailPositions = new Float32Array(MAX_TRAIL_SEGMENTS * 6);
   private readonly trailColors = new Float32Array(MAX_TRAIL_SEGMENTS * 8);
@@ -997,7 +1002,7 @@ export class MapScene3D {
     // Lifts the cave's albedo textures (roughness 1, no vertex colour) while the mesh is on.
     this.meshLight.visible = false;
     this.scene.add(this.meshLight);
-    this.scene.add(this.groundGroup, this.debugOverlayGroup, this.unitsGroup, this.planLayer.group);
+    this.scene.add(this.groundGroup, this.routeGroup, this.debugOverlayGroup, this.unitsGroup, this.planLayer.group);
 
     const beamGeometry = new THREE.BufferGeometry();
     beamGeometry.setAttribute("position", new THREE.BufferAttribute(this.beamPositions, 3).setUsage(THREE.DynamicDrawUsage));
@@ -1201,6 +1206,31 @@ export class MapScene3D {
       this.setViewport(this.viewport);
       // The plan's world <-> scene transform uses the aspect.
       this.updatePlanSurface();
+    }
+    this.requestRender();
+  }
+
+  setRoute(points: readonly MapPoint[]) {
+    this.routeGroup.clear();
+    const scenePoints = points.map((point) => mapPointToScene(point, this.aspect, GROUND_WIDTH));
+    for (let index = 1; index < scenePoints.length; index++) {
+      const from = scenePoints[index - 1];
+      const to = scenePoints[index];
+      const dx = to.x - from.x;
+      const dz = to.z - from.z;
+      const length = Math.hypot(dx, dz);
+      if (length <= 0) continue;
+      const yaw = Math.atan2(-dx, -dz);
+      const addSegment = (width: number, y: number, material: THREE.MeshBasicMaterial, order: number) => {
+        const segment = new THREE.Mesh(this.routeGeometry, material);
+        segment.position.set((from.x + to.x) / 2, y, (from.z + to.z) / 2);
+        segment.rotation.y = yaw;
+        segment.scale.set(width, 1, length * 1.04);
+        segment.renderOrder = order;
+        this.routeGroup.add(segment);
+      };
+      addSegment(0.8, 0.025, this.routeOutlineMaterial, 0);
+      addSegment(0.42, 0.03, this.routeMaterial, 1);
     }
     this.requestRender();
   }
@@ -1687,6 +1717,7 @@ export class MapScene3D {
     this.updatePlanSurface();
     const mesh = this.dungeonMesh !== null;
     this.groundGroup.visible = !mesh;
+    this.routeGroup.visible = !mesh;
     this.meshLight.visible = mesh;
     this.floorHeights.clear();
     for (const [guid, object] of this.units) this.placeUnit(guid, object, object.base.x, object.base.z);
@@ -2060,6 +2091,9 @@ export class MapScene3D {
     this.beams.material.dispose();
     this.ownerLines.geometry.dispose();
     this.ownerLines.material.dispose();
+    this.routeGeometry.dispose();
+    this.routeOutlineMaterial.dispose();
+    this.routeMaterial.dispose();
     this.trailLines.geometry.dispose();
     this.trailLines.material.dispose();
     this.deepBreathLane.geometry.dispose();

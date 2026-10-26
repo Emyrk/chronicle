@@ -13,13 +13,12 @@ import type { MapPositionSample } from "./map.processor";
 import { cameraPoseAt, type MapCameraMark, type MapCameraPose } from "./cameraPath";
 import { DISPEL_KINDS, DISPEL_ORDER, type DispelKind } from "./unitTokenArt";
 import type { PlanInput, PlanItem } from "./plan/mapPlan";
-import { flatYardStep, floorBoundsYardStep, prefersReducedMotion, replayPositionAt, VIEW_TRANSITION_MS, type MapPoint, type MapViewport } from "./mapModel";
+import { flatYardStep, floorBoundsYardStep, movementTrailPoints, prefersReducedMotion, replayPositionAt, VIEW_TRANSITION_MS, type MapPoint, type MapViewport } from "./mapModel";
 import {
   MapScene3D,
   type DungeonMeshRequest,
   type DungeonMeshState,
   type MapScene3DEffectHover,
-  type MapScene3DTrailPoint,
   type MapScene3DUnit,
   type MapSceneDirector,
   type MapSceneFocus,
@@ -36,6 +35,7 @@ import type { MobileMapInput } from "./mapControls";
 export interface MapView3DProps {
   ground: MapSceneGround;
   markers: MapSceneMarker[];
+  routePoints: MapPoint[];
   projectSample: (sample: MapPositionSample) => MapPoint | null;
   /** Whether x/y are world-yard coordinates; normalized UI-map coordinates cannot calibrate physical scale. */
   worldCoordinates?: boolean;
@@ -161,34 +161,10 @@ function EffectTooltip({ hover }: { hover: MapScene3DEffectHover }) {
   );
 }
 
-// Gap between a movement trail's points.
-const TRAIL_STEP_MS = 100;
-
-// Where the unit was every TRAIL_STEP_MS over the last `spanMs`, newest first
-// (from `sample`, the unit now), stopping at a map change or before its first sample.
-function sampleTrail(
-  marker: MapSceneMarker,
-  sample: MapPositionSample,
-  spanMs: number,
-  projectSample: (sample: MapPositionSample) => MapPoint | null,
-): MapScene3DTrailPoint[] {
-  const trail: MapScene3DTrailPoint[] = [];
-  const first = marker.positions[0];
-  for (let ago = 0; ago <= spanMs; ago += TRAIL_STEP_MS) {
-    const at = sample.timestampMs - ago;
-    if (!first || at < first.timestampMs) break;
-    const past = ago === 0 ? sample : replayPositionAt(marker.positions, at, marker.kind === "player");
-    if (!past || past.mapId !== sample.mapId) break;
-    const point = projectSample(past);
-    if (!point) break;
-    trail.push({ point, z: past.z });
-  }
-  return trail;
-}
-
 export default function MapView3D({
   ground,
   markers,
+  routePoints,
   projectSample,
   worldCoordinates = true,
   cursorMs,
@@ -290,6 +266,10 @@ export default function MapView3D({
     if (!frozen) sceneRef.current?.setGround(ground);
   }, [frozen, ground]);
 
+  useEffect(() => {
+    if (!frozen) sceneRef.current?.setRoute(routePoints);
+  }, [frozen, routePoints]);
+
   const yardSample = markers[0]?.sample;
   const floorBounds = "bounds" in ground.canvas ? ground.canvas.bounds : undefined;
   useEffect(() => {
@@ -341,7 +321,9 @@ export default function MapView3D({
         : marker.sample;
       const point = sample === marker.sample ? marker.point : projectSample(sample) ?? marker.point;
       const modelUrl = miniatureUrl(marker.entry, miniatureUrls);
-      const trail = effectSettings.trailSeconds > 0 ? sampleTrail(marker, sample, effectSettings.trailSeconds * 1000, projectSample) : undefined;
+      const trail = effectSettings.trailSeconds > 0
+        ? movementTrailPoints(marker.positions, sample, effectSettings.trailSeconds * 1000, marker.kind === "player", projectSample)
+        : undefined;
       return [{
         guid: marker.guid,
         point,

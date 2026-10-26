@@ -35,6 +35,7 @@ import {
   latestPositionAt,
   MAX_HEALTH_BARS,
   mapPointToScene,
+  movementTrailPoints,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
   resolveMapFloorNumber,
@@ -142,6 +143,18 @@ describe("map replay model", () => {
     expect(latestPositionAt(samples, 200)).toBe(samples[1]);
     expect(latestPositionAt(samples, 250)).toBe(samples[1]);
     expect(latestPositionAt(samples, 999)).toBe(samples[2]);
+  });
+
+  it("projects recent movement trails with the active map transform", () => {
+    const trail = movementTrailPoints(samples, samples[2], 200, true, (sample) => ({
+      leftPercent: sample.x * 10,
+      topPercent: sample.y * 10,
+    }));
+    expect(trail).toEqual([
+      { point: { leftPercent: 50, topPercent: 60 }, z: undefined },
+      { point: { leftPercent: 30, topPercent: 40 }, z: undefined },
+      { point: { leftPercent: 10, topPercent: 20 }, z: undefined },
+    ]);
   });
 
   it("finds the latest health sample at or before the replay cursor", () => {

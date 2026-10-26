@@ -305,7 +305,12 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     } : null,
     [mobile, previewElapsedMs, previewOn, previewPlaying, wholeRun],
   );
-  const scene = useMapScene(props, { rawDungeonProjection: show3D && meshOn && meshState === "ready", wholeRun, preview });
+  const scene = useMapScene(props, {
+    rawDungeonProjection: show3D && meshOn && meshState === "ready",
+    preferRenderedCanvas: !show3D || !meshOn || (mobile && !mobileWorldOpen),
+    wholeRun,
+    preview,
+  });
   // A new encounter starts its preview from the beginning.
   const [previewEncounterId, setPreviewEncounterId] = useState<string | null>(null);
   if (scene.status === "ready" && scene.encounterId !== previewEncounterId) {
@@ -500,7 +505,17 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     setStoredMesh(next);
     storeMesh(next);
   };
-  const view2D = <MapView2D ground={ready.ground} markers={ready.markers} view={view} onUserViewport={handleUserViewport} />;
+  const view2D = (
+    <MapView2D
+      ground={ready.ground}
+      markers={ready.markers}
+      routePoints={ready.routePoints}
+      projectSample={ready.projectSample}
+      trailSeconds={effectSettings.trailSeconds}
+      view={view}
+      onUserViewport={handleUserViewport}
+    />
+  );
 
   // In the card's title row when the host offers one, so the map gets the height.
   const headerControls = (
@@ -613,6 +628,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
             <MapView3D
               ground={ready.ground}
               markers={ready.markers}
+              routePoints={ready.routePoints}
               projectSample={ready.projectSample}
               worldCoordinates={props.context.instance.positionCoordinateSpace !== "ui-map-normalized"}
               cursorMs={ready.cursorMs}
