@@ -4,6 +4,7 @@ import { createEncounterEffects } from "./replayEffects";
 import {
   ENCOUNTER_JUMP_LEAD_MS,
   encounterJumps,
+  firstBossPullMs,
   groupCentre,
   isStaleRunSample,
   mergeRunEncounters,
@@ -75,6 +76,25 @@ describe("encounterJumps", () => {
     const processed = new Map([["boss1", encounter("boss1", runStart + 2_000, runStart + 9_000, {})]]);
     const jumps = encounterJumps(instanceEncounters, processed, runStart, runEnd);
     expect(jumps[0].timestampMs).toBe(runStart);
+  });
+});
+
+describe("firstBossPullMs", () => {
+  const jumps = [
+    { id: "boss1", name: "Boss One", timestampMs: 5_000, fraction: 0.1 },
+    { id: "boss2", name: "Boss Two", timestampMs: 50_000, fraction: 0.5 },
+  ];
+
+  it("skips pulls without positions and returns the first sample of the next", () => {
+    const processed = new Map([
+      ["boss1", encounter("boss1", 10_000, 20_000, { p1: [] })],
+      ["boss2", encounter("boss2", 55_000, 70_000, { p1: [57_000, 58_000], p2: [56_000] })],
+    ]);
+    expect(firstBossPullMs(jumps, processed)).toBe(56_000);
+  });
+
+  it("is null with no positions at any pull", () => {
+    expect(firstBossPullMs(jumps, new Map())).toBeNull();
   });
 });
 

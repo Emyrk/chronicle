@@ -59,6 +59,18 @@ describe("deathsSummaryProcessor", () => {
     });
   });
 
+  it("records one compact row per player death with its time and killer", () => {
+    const state = deathsSummaryProcessor.createState();
+
+    deathsSummaryProcessor.processEvent(state, slain(PLAYER, ENEMY), "selected", FIRST_TIMESTAMP, "slain", context());
+    deathsSummaryProcessor.processEvent(state, slain(PLAYER, ""), "selected", FIRST_TIMESTAMP, "slain", context());
+
+    expect(state.PlayerDeathRows).toEqual([
+      { dateMilli: 11_000, encounterID: "selected", playerID: PLAYER, playerName: "Player", className: "PRIEST", killerName: "Enemy" },
+      { dateMilli: 11_000, encounterID: "selected", playerID: PLAYER, playerName: "Player", className: "PRIEST", killerName: "Unknown" },
+    ]);
+  });
+
   it("keeps enemy deaths separate from player deaths", () => {
     const state = deathsSummaryProcessor.createState();
 
@@ -72,6 +84,7 @@ describe("deathsSummaryProcessor", () => {
     );
 
     expect(state.EncounterDeaths.size).toBe(0);
+    expect(state.PlayerDeathRows).toEqual([]);
     expect(state.EncounterEnemyDeaths.get("selected")?.get(ENEMY)).toMatchObject({
       playerID: ENEMY,
       playerName: "Enemy",

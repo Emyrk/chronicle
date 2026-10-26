@@ -9,6 +9,9 @@ import {
   POSITION_SUMMARY_LAYOUT_ITEMS,
   POSITION_SUMMARY_PANEL_TYPES,
 } from "./viewDefaults";
+import { WATCH_MAP_PANEL_OPTION } from "./EventsPanels/Map/mapPanelOptions";
+import { COMPACT_DEATHS_PANEL_OPTION } from "./EventsPanels/Deaths/compactDeaths";
+import { METER_BARS_PANEL_OPTION } from "./EventsPanels/metricPanelLiveState";
 
 // ── Preset Layout Definition ────────────────────────────────────────────────
 
@@ -87,6 +90,38 @@ export function resizeMapPresetForViewport(layoutItems: readonly GridEditorItem[
   });
 }
 
+/** The Watch preset's side column (Party, Deaths, Damage), sharing the map's rows in its 3:4:2 proportion. */
+export function watchPresetSideRows(mapRows: number): { party: number; deaths: number; damage: number } {
+  const party = Math.max(1, Math.round((mapRows * 3) / 9));
+  const damage = Math.max(1, Math.round((mapRows * 2) / 9));
+  return { party, deaths: Math.max(1, mapRows - party - damage), damage };
+}
+
+/** Resize only the stable Watch preset items: the map as in the Map preset, the side column beside it. */
+export function resizeWatchPresetForViewport(layoutItems: readonly GridEditorItem[], viewportHeight: number): GridEditorItem[] {
+  const mapRows = mapPresetRowsForViewport(viewportHeight);
+  const side = watchPresetSideRows(mapRows);
+  const sized: Record<string, { y: number; h: number }> = {
+    "panel-1": { y: 1, h: mapRows },
+    "panel-2": { y: 1, h: side.party },
+    "panel-3": { y: 1 + side.party, h: side.deaths },
+    "panel-4": { y: 1 + side.party + side.deaths, h: side.damage },
+  };
+  return layoutItems.map((item) => {
+    if (item.id === "strip-1") return item.y === 0 ? item : { ...item, y: 0 };
+    const size = sized[item.id];
+    if (!size) return item;
+    return item.y === size.y && item.h === size.h ? item : { ...item, ...size };
+  });
+}
+
+/** The visible grid for a preset on this viewport: the Map and Watch presets fit it, others are untouched. */
+export function resizePresetForViewport(presetId: string | null, layoutItems: GridEditorItem[], viewportHeight: number): GridEditorItem[] {
+  if (presetId === "map") return resizeMapPresetForViewport(layoutItems, viewportHeight);
+  if (presetId === "watch") return resizeWatchPresetForViewport(layoutItems, viewportHeight);
+  return layoutItems;
+}
+
 // ── Shared timeline series config ───────────────────────────────────────────
 // All presets share the same 5-series timeline (Damage Done, Healing, Damage
 // Taken, Effective Healing, Friendly Fire) with different hidden series per
@@ -151,6 +186,46 @@ const HEAL_TARGET_PLAYERS_FILTER: PanelFilter = { type: "target_type", value: "s
 // ── Preset Definitions ──────────────────────────────────────────────────────
 
 export const PRESET_LAYOUTS: PresetLayout[] = [
+  {
+    // Picture first, people second, numbers last and small.
+    id: "watch",
+    label: "Watch",
+    kind: "panels",
+    seamless: true,
+    fit: true,
+    layoutItems: [
+      // Full width until the Sidekick strip takes the right three columns.
+      { id: "strip-1", title: "Replay", kind: "strip", stripType: "replay", orientation: "horizontal", x: 0, y: 0, w: 12, h: 1, minW: 6, minH: 1, maxH: 2 },
+      { id: "panel-1", title: "Map", x: 0, y: 1, w: 8, h: 9, minW: 6 },
+      { id: "panel-2", title: "Party", x: 8, y: 1, w: 4, h: 3, minW: 3 },
+      { id: "panel-3", title: "Deaths", x: 8, y: 4, w: 4, h: 4, minW: 3 },
+      { id: "panel-4", title: "Damage", x: 8, y: 8, w: 4, h: 2, minW: 3 },
+    ],
+    mobileVariant: {
+      fit: false,
+      layoutItems: [
+        { id: "panel-1", title: "Map", x: 0, y: 0, w: 12, h: 4, minW: 4 },
+        { id: "strip-1", title: "Replay", kind: "strip", stripType: "replay", orientation: "horizontal", x: 0, y: 4, w: 12, h: 1, minW: 6, minH: 1, maxH: 2 },
+        { id: "panel-2", title: "Party", x: 0, y: 5, w: 12, h: 2, minW: 4 },
+        { id: "panel-3", title: "Deaths", x: 0, y: 7, w: 12, h: 3, minW: 4 },
+      ],
+    },
+    panelTypes: {
+      "panel-1": "map",
+      "panel-2": "raid_frames",
+      "panel-3": "deaths",
+      "panel-4": "damage_done",
+    },
+    panelOptions: {
+      "panel-1": WATCH_MAP_PANEL_OPTION,
+      "panel-3": COMPACT_DEATHS_PANEL_OPTION,
+      "panel-4": `g:merged,p:owner,${METER_BARS_PANEL_OPTION}`,
+    },
+    panelFilters: {
+      "panel-4": [DAMAGE_TIME_RANGE_FILTER, DAMAGE_TARGET_ENEMIES_FILTER],
+    },
+    requiredCapabilities: ["unit-position"],
+  },
   {
     id: "summary",
     label: "Summary",
