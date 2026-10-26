@@ -1,6 +1,6 @@
 import { lazy, Suspense, useLayoutEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { useLandingFeatured } from "@/api/queries";
+import { useLandingFeatured } from "@/api/landingFeaturedQuery";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useRecentUploads } from "@/pages/Recent/recentUploads";
 import { HeroReplayLayer } from "./HeroReplayLayer";
