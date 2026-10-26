@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -470,6 +471,10 @@ func (api *API) GetInstanceYoutube(w http.ResponseWriter, r *http.Request) {
 		LogInstanceID: uuid.NullUUID{UUID: inst.ID, Valid: true},
 		InstanceSlug:  inst.HashedSlug,
 	})
+	if errors.Is(err, sql.ErrNoRows) {
+		httpapi.Write(ctx, w, http.StatusNoContent, nil)
+		return
+	}
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
