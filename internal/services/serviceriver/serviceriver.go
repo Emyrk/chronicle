@@ -104,8 +104,12 @@ func (s *Service) Start(ctx context.Context) error {
 	q.AddQueue(riverqueue.QueueDiscordAnnouncements, river.QueueConfig{
 		MaxWorkers: 1,
 	})
+	q.AddQueue(riverqueue.QueueExternalUploads, river.QueueConfig{
+		MaxWorkers: 1,
+	})
 
 	riverqueue.AddWorker(q, chron.NewWorkerLogParse())
+	riverqueue.AddWorker(q, chron.NewWorkerForwardWoWLogs())
 	riverqueue.AddWorker(q, chron.NewWorkerReLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerRegressionSnapshot())
 	if !bot.Disabled() {

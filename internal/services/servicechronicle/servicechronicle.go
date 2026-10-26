@@ -34,8 +34,10 @@ func OnChronicle() string {
 type Service struct {
 	broker *services.Services
 
-	chronicle     *chronicle.Chronicle
-	emitParseLogs bool
+	chronicle       *chronicle.Chronicle
+	emitParseLogs   bool
+	wowLogsBaseURL  string
+	wowLogsAPIToken string
 }
 
 func New(broker *services.Services) *Service {
@@ -93,6 +95,8 @@ func (s *Service) Start(ctx context.Context) error {
 		// Stamp the build-tag flavor on new log groups.
 		DefaultFlavor:    BuildTagFlavor(),
 		DefaultDatasetID: servicedataset.DefaultDatasetID,
+		WoWLogsBaseURL:   s.wowLogsBaseURL,
+		WoWLogsAPIToken:  s.wowLogsAPIToken,
 		ResolveDataset: func(ctx context.Context, realmID uuid.UUID) chronicle.ResolvedDataset {
 			dsID, flavor, additionalFlavor := datasetSvc.ResolveDatasetWithFlavorForRealm(ctx, realmID)
 			return chronicle.ResolvedDataset{
@@ -124,6 +128,24 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_EMIT_PARSE_LOGS",
 			Default:     "false",
 			Value:       serpent.BoolOf(&s.emitParseLogs),
+		},
+		{
+			Name:        "WoW-Logs uploader base URL",
+			Description: "Base URL for the wow-logs.co.in native uploader API.",
+			Required:    false,
+			Flag:        "wow-logs-base-url",
+			Env:         "CHRONICLE_WOW_LOGS_BASE_URL",
+			Default:     "https://wow-logs.co.in",
+			Value:       serpent.StringOf(&s.wowLogsBaseURL),
+		},
+		{
+			Name:        "WoW-Logs uploader API token",
+			Description: "Optional X-API-Token used when forwarding tenant uploads to wow-logs.co.in.",
+			Required:    false,
+			Flag:        "wow-logs-api-token",
+			Env:         "CHRONICLE_WOW_LOGS_API_TOKEN",
+			Default:     "",
+			Value:       serpent.StringOf(&s.wowLogsAPIToken),
 		},
 	}
 }

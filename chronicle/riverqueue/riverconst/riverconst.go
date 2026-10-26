@@ -9,6 +9,7 @@ const (
 	QueueRetention            = "retention"
 	QueueRankings             = "rankings"
 	QueueResync               = "resync"
+	QueueExternalUploads      = "external-uploads"
 )
 
 const (

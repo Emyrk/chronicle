@@ -40,12 +40,13 @@ const LINKING_METHODS = [
 
 const PARSE_MODES = ["spec", "class", "disabled"] as const;
 
-type BoolField = "discoverable" | "include_in_all" | "disable_client_upload" | "ads_enabled";
+type BoolField = "discoverable" | "include_in_all" | "disable_client_upload" | "ads_enabled" | "wow_logs_forwarding_enabled";
 
 const BOOL_FIELDS: { key: BoolField; label: string }[] = [
   { key: "discoverable", label: "Discoverable" },
   { key: "include_in_all", label: "In root listing" },
   { key: "disable_client_upload", label: "Uploads disabled" },
+  { key: "wow_logs_forwarding_enabled", label: "WoW-Logs forwarding" },
   { key: "ads_enabled", label: "Ads enabled" },
 ];
 

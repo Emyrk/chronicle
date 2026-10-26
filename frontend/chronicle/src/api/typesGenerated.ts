@@ -4410,6 +4410,7 @@ export interface Tenant {
     readonly discoverable: boolean;
     readonly ads_enabled: boolean;
     readonly disabled_ads: readonly string[];
+    readonly wow_logs_forwarding_enabled: boolean;
     readonly branding: Branding | null;
     readonly parse_config: ParseConfig | null;
     readonly default_dataset_id: string | null;
@@ -4872,6 +4873,7 @@ export interface UpsertTenantRequest {
     readonly discoverable: boolean | null;
     readonly ads_enabled?: boolean;
     readonly disabled_ads?: readonly string[];
+    readonly wow_logs_forwarding_enabled?: boolean;
     readonly branding: Branding | null;
     readonly parse_config: ParseConfig | null;
     readonly default_format: string | null;

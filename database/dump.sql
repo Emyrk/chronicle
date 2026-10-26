@@ -1503,6 +1503,7 @@ CREATE TABLE tenants (
     additional_flavor text[] DEFAULT '{}'::text[] NOT NULL,
     ads_enabled boolean DEFAULT false NOT NULL,
     disabled_ads text[] DEFAULT '{}'::text[] NOT NULL,
+    wow_logs_forwarding_enabled boolean DEFAULT false NOT NULL,
     CONSTRAINT tenants_slug_format CHECK (((slug IS NULL) OR (slug ~ '^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$'::text))),
     CONSTRAINT tenants_slug_reserved CHECK ((slug <> ALL (ARRAY['www'::text, 'api'::text, 'auth'::text, 'admin'::text, 'legacy'::text, 'app'::text, 'mail'::text, 'staging'::text])))
 );

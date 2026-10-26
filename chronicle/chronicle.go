@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -89,6 +90,7 @@ type Chronicle struct {
 	defaultDatasetID   uuid.UUID
 	recordParseAbort   func(context.Context, parseGenerationAbortOutput) error
 	resolveDataset     func(ctx context.Context, realmID uuid.UUID) ResolvedDataset
+	wowLogsClient      wowLogsClient
 
 	mu                     sync.Mutex
 	insertParsedInstanceMu sync.Mutex
@@ -115,9 +117,23 @@ type Options struct {
 	// The resolver follows the server > tenant > default chain.
 	// If nil, the default dataset is always used.
 	ResolveDataset func(ctx context.Context, realmID uuid.UUID) ResolvedDataset
+	// WoWLogsBaseURL and WoWLogsAPIToken configure optional forwarding to the
+	// wow-logs.co.in native uploader API. Tenant opt-in remains authoritative.
+	WoWLogsBaseURL    string
+	WoWLogsAPIToken   string
+	WoWLogsHTTPClient *http.Client
 }
 
 func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, error) {
+	wowLogsBaseURL := strings.TrimSpace(opts.WoWLogsBaseURL)
+	if wowLogsBaseURL == "" {
+		wowLogsBaseURL = defaultWoWLogsBaseURL
+	}
+	wowLogsHTTPClient := opts.WoWLogsHTTPClient
+	if wowLogsHTTPClient == nil {
+		wowLogsHTTPClient = defaultWoWLogsHTTPClient()
+	}
+
 	c := &Chronicle{
 		AppContext:         ctx,
 		primaryDomain:      opts.PrimaryDomain,
@@ -134,6 +150,11 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, er
 		emitParsingLogs:    opts.EmitParsingLogs,
 		registryByFlavor:   make(map[string]*registry.Registry),
 		resolveDataset:     opts.ResolveDataset,
+		wowLogsClient: wowLogsClient{
+			baseURL:    wowLogsBaseURL,
+			apiToken:   opts.WoWLogsAPIToken,
+			httpClient: wowLogsHTTPClient,
+		},
 	}
 
 	err := c.initStorage(ctx)

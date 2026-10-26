@@ -23174,7 +23174,7 @@ func (q *sqlQuerier) DeleteTenant(ctx context.Context, id uuid.UUID) error {
 }
 
 const getTenantByID = `-- name: GetTenantByID :one
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor, ads_enabled, disabled_ads FROM tenants WHERE id = $1
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor, ads_enabled, disabled_ads, wow_logs_forwarding_enabled FROM tenants WHERE id = $1
 `
 
 func (q *sqlQuerier) GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, error) {
@@ -23198,13 +23198,14 @@ func (q *sqlQuerier) GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, e
 		&i.AdditionalFlavor,
 		&i.AdsEnabled,
 		&i.DisabledAds,
+		&i.WowLogsForwardingEnabled,
 	)
 	return i, err
 }
 
 const getTenantBySlug = `-- name: GetTenantBySlug :one
 
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor, ads_enabled, disabled_ads FROM tenants WHERE slug = $1
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor, ads_enabled, disabled_ads, wow_logs_forwarding_enabled FROM tenants WHERE slug = $1
 `
 
 // Tenant queries. These run with AdminBypass context since the tenants table
@@ -23230,31 +23231,33 @@ func (q *sqlQuerier) GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Ten
 		&i.AdditionalFlavor,
 		&i.AdsEnabled,
 		&i.DisabledAds,
+		&i.WowLogsForwardingEnabled,
 	)
 	return i, err
 }
 
 const insertTenant = `-- name: InsertTenant :one
-INSERT INTO tenants (id, slug, name, disable_client_upload, include_in_all, branding, discoverable, ads_enabled, disabled_ads, default_format, available_formats, additional_flavor, parse_config, external_linking)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9::text[], '{}'::text[]), $10, $11, COALESCE($12::text[], '{}'::text[]), $13, $14)
-RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor, ads_enabled, disabled_ads
+INSERT INTO tenants (id, slug, name, disable_client_upload, include_in_all, branding, discoverable, ads_enabled, disabled_ads, wow_logs_forwarding_enabled, default_format, available_formats, additional_flavor, parse_config, external_linking)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9::text[], '{}'::text[]), $10, $11, $12, COALESCE($13::text[], '{}'::text[]), $14, $15)
+RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor, ads_enabled, disabled_ads, wow_logs_forwarding_enabled
 `
 
 type InsertTenantParams struct {
-	ID                  uuid.UUID     `db:"id" json:"id"`
-	Slug                pgtype.Text   `db:"slug" json:"slug"`
-	Name                string        `db:"name" json:"name"`
-	DisableClientUpload bool          `db:"disable_client_upload" json:"disable_client_upload"`
-	IncludeInAll        bool          `db:"include_in_all" json:"include_in_all"`
-	Branding            []byte        `db:"branding" json:"branding"`
-	Discoverable        bool          `db:"discoverable" json:"discoverable"`
-	AdsEnabled          bool          `db:"ads_enabled" json:"ads_enabled"`
-	DisabledAds         []string      `db:"disabled_ads" json:"disabled_ads"`
-	DefaultFormat       NullLogFormat `db:"default_format" json:"default_format"`
-	AvailableFormats    []string      `db:"available_formats" json:"available_formats"`
-	AdditionalFlavor    []string      `db:"additional_flavor" json:"additional_flavor"`
-	ParseConfig         []byte        `db:"parse_config" json:"parse_config"`
-	ExternalLinking     []byte        `db:"external_linking" json:"external_linking"`
+	ID                       uuid.UUID     `db:"id" json:"id"`
+	Slug                     pgtype.Text   `db:"slug" json:"slug"`
+	Name                     string        `db:"name" json:"name"`
+	DisableClientUpload      bool          `db:"disable_client_upload" json:"disable_client_upload"`
+	IncludeInAll             bool          `db:"include_in_all" json:"include_in_all"`
+	Branding                 []byte        `db:"branding" json:"branding"`
+	Discoverable             bool          `db:"discoverable" json:"discoverable"`
+	AdsEnabled               bool          `db:"ads_enabled" json:"ads_enabled"`
+	DisabledAds              []string      `db:"disabled_ads" json:"disabled_ads"`
+	WowLogsForwardingEnabled bool          `db:"wow_logs_forwarding_enabled" json:"wow_logs_forwarding_enabled"`
+	DefaultFormat            NullLogFormat `db:"default_format" json:"default_format"`
+	AvailableFormats         []string      `db:"available_formats" json:"available_formats"`
+	AdditionalFlavor         []string      `db:"additional_flavor" json:"additional_flavor"`
+	ParseConfig              []byte        `db:"parse_config" json:"parse_config"`
+	ExternalLinking          []byte        `db:"external_linking" json:"external_linking"`
 }
 
 func (q *sqlQuerier) InsertTenant(ctx context.Context, arg InsertTenantParams) (Tenant, error) {
@@ -23268,6 +23271,7 @@ func (q *sqlQuerier) InsertTenant(ctx context.Context, arg InsertTenantParams) (
 		arg.Discoverable,
 		arg.AdsEnabled,
 		arg.DisabledAds,
+		arg.WowLogsForwardingEnabled,
 		arg.DefaultFormat,
 		arg.AvailableFormats,
 		arg.AdditionalFlavor,
@@ -23293,12 +23297,13 @@ func (q *sqlQuerier) InsertTenant(ctx context.Context, arg InsertTenantParams) (
 		&i.AdditionalFlavor,
 		&i.AdsEnabled,
 		&i.DisabledAds,
+		&i.WowLogsForwardingEnabled,
 	)
 	return i, err
 }
 
 const listTenants = `-- name: ListTenants :many
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor, ads_enabled, disabled_ads FROM tenants ORDER BY name
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor, ads_enabled, disabled_ads, wow_logs_forwarding_enabled FROM tenants ORDER BY name
 `
 
 func (q *sqlQuerier) ListTenants(ctx context.Context) ([]Tenant, error) {
@@ -23328,6 +23333,7 @@ func (q *sqlQuerier) ListTenants(ctx context.Context) ([]Tenant, error) {
 			&i.AdditionalFlavor,
 			&i.AdsEnabled,
 			&i.DisabledAds,
+			&i.WowLogsForwardingEnabled,
 		); err != nil {
 			return nil, err
 		}
@@ -23425,31 +23431,33 @@ UPDATE tenants SET
     discoverable = COALESCE($6, discoverable),
     ads_enabled = COALESCE($7, ads_enabled),
     disabled_ads = COALESCE($8, disabled_ads),
-    default_format = COALESCE($9, default_format),
-    available_formats = COALESCE($10, available_formats),
-    additional_flavor = COALESCE($11, additional_flavor),
-    parse_config = COALESCE($12, parse_config),
-    external_linking = COALESCE($13, external_linking),
+    wow_logs_forwarding_enabled = COALESCE($9, wow_logs_forwarding_enabled),
+    default_format = COALESCE($10, default_format),
+    available_formats = COALESCE($11, available_formats),
+    additional_flavor = COALESCE($12, additional_flavor),
+    parse_config = COALESCE($13, parse_config),
+    external_linking = COALESCE($14, external_linking),
     updated_at = now()
-WHERE id = $14
-RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor, ads_enabled, disabled_ads
+WHERE id = $15
+RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor, ads_enabled, disabled_ads, wow_logs_forwarding_enabled
 `
 
 type UpdateTenantParams struct {
-	Slug                pgtype.Text   `db:"slug" json:"slug"`
-	Name                pgtype.Text   `db:"name" json:"name"`
-	DisableClientUpload pgtype.Bool   `db:"disable_client_upload" json:"disable_client_upload"`
-	IncludeInAll        pgtype.Bool   `db:"include_in_all" json:"include_in_all"`
-	Branding            []byte        `db:"branding" json:"branding"`
-	Discoverable        pgtype.Bool   `db:"discoverable" json:"discoverable"`
-	AdsEnabled          pgtype.Bool   `db:"ads_enabled" json:"ads_enabled"`
-	DisabledAds         []string      `db:"disabled_ads" json:"disabled_ads"`
-	DefaultFormat       NullLogFormat `db:"default_format" json:"default_format"`
-	AvailableFormats    []string      `db:"available_formats" json:"available_formats"`
-	AdditionalFlavor    []string      `db:"additional_flavor" json:"additional_flavor"`
-	ParseConfig         []byte        `db:"parse_config" json:"parse_config"`
-	ExternalLinking     []byte        `db:"external_linking" json:"external_linking"`
-	ID                  uuid.UUID     `db:"id" json:"id"`
+	Slug                     pgtype.Text   `db:"slug" json:"slug"`
+	Name                     pgtype.Text   `db:"name" json:"name"`
+	DisableClientUpload      pgtype.Bool   `db:"disable_client_upload" json:"disable_client_upload"`
+	IncludeInAll             pgtype.Bool   `db:"include_in_all" json:"include_in_all"`
+	Branding                 []byte        `db:"branding" json:"branding"`
+	Discoverable             pgtype.Bool   `db:"discoverable" json:"discoverable"`
+	AdsEnabled               pgtype.Bool   `db:"ads_enabled" json:"ads_enabled"`
+	DisabledAds              []string      `db:"disabled_ads" json:"disabled_ads"`
+	WowLogsForwardingEnabled pgtype.Bool   `db:"wow_logs_forwarding_enabled" json:"wow_logs_forwarding_enabled"`
+	DefaultFormat            NullLogFormat `db:"default_format" json:"default_format"`
+	AvailableFormats         []string      `db:"available_formats" json:"available_formats"`
+	AdditionalFlavor         []string      `db:"additional_flavor" json:"additional_flavor"`
+	ParseConfig              []byte        `db:"parse_config" json:"parse_config"`
+	ExternalLinking          []byte        `db:"external_linking" json:"external_linking"`
+	ID                       uuid.UUID     `db:"id" json:"id"`
 }
 
 // Only non-null params are applied; NULL means "keep existing value".
@@ -23463,6 +23471,7 @@ func (q *sqlQuerier) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (
 		arg.Discoverable,
 		arg.AdsEnabled,
 		arg.DisabledAds,
+		arg.WowLogsForwardingEnabled,
 		arg.DefaultFormat,
 		arg.AvailableFormats,
 		arg.AdditionalFlavor,
@@ -23489,6 +23498,7 @@ func (q *sqlQuerier) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (
 		&i.AdditionalFlavor,
 		&i.AdsEnabled,
 		&i.DisabledAds,
+		&i.WowLogsForwardingEnabled,
 	)
 	return i, err
 }
