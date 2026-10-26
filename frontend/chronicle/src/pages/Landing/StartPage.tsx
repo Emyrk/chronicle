@@ -1,35 +1,19 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useState, type FormEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useLandingFeatured } from "@/api/landingFeaturedQuery";
+import { useSupportedInstances } from "@/api/queries";
+import type { RecentInstance, RecentInstancesResponse } from "@/api/typesGenerated";
+import { useTenantDatasetScope } from "@/hooks/useDatasetId";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { useRecentUploads } from "@/pages/Recent/recentUploads";
+import { getInstanceArtCrop } from "@/pages/Logs/utils/instanceImages";
+import { fetchMapManifest } from "@/pages/Technical/mapManifest";
 import { trackFunnel } from "@/utils/funnel";
+import { dungeonMapKind, dungeonNames, dungeonShelfCards } from "./dungeonShelf";
 import { HeroReplayLayer } from "./HeroReplayLayer";
 import type { HeroReplay } from "./heroReplay";
 import { LandingHero } from "./LandingHero";
-
-// Recent runs render below the fold once their fetch returns; keeping RaidCard (and its
-// icon and helper chunks) out of the static graph keeps them off /start's first paint.
-const RaidCard = lazy(() => import("@/pages/Recent/RaidCard").then(({ RaidCard }) => ({ default: RaidCard })));
-// The dungeon shelf is below the fold too; it mounts once the browser is idle after first
-// paint, so its query hooks and map manifest imports never load ahead of the poster.
-const DungeonShelf = lazy(() => import("./DungeonShelfSection").then(({ DungeonShelf }) => ({ default: DungeonShelf })));
-
-/** requestIdleCallback's deadline for the dungeon shelf, as for the 3D hero layer. */
-const SHELF_IDLE_TIMEOUT_MS = 1500;
-
-function useIdleAfterMount(): boolean {
-  const [idle, setIdle] = useState(false);
-  useEffect(() => {
-    if (typeof window.requestIdleCallback !== "function") {
-      const timer = window.setTimeout(() => setIdle(true), SHELF_IDLE_TIMEOUT_MS);
-      return () => window.clearTimeout(timer);
-    }
-    const handle = window.requestIdleCallback(() => setIdle(true), { timeout: SHELF_IDLE_TIMEOUT_MS });
-    return () => window.cancelIdleCallback(handle);
-  }, []);
-  return idle;
-}
+import { formatRunDuration, runBadge, runStillUrl, type RunBadge } from "./recentRuns";
 
 const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
 // Public Sidekick downloads; the utm cookie set on landing carries attribution.
@@ -236,9 +220,101 @@ function FirstMinute() {
   );
 }
 
-function RecentRuns({ getSidekickHref }: { getSidekickHref: string }) {
-  const { data } = useRecentUploads();
-  const runs = (data?.instances ?? []).slice(0, 3);
+/** The maps manifest: the same query as the Map panel's, so they share one cached fetch. */
+function useMapManifest() {
+  const { iconBaseUrl } = useTenantDatasetScope();
+  return useQuery({
+    queryKey: ["wow-map-manifest", iconBaseUrl],
+    enabled: Boolean(iconBaseUrl),
+    staleTime: 60 * 60 * 1000,
+    queryFn: () => fetchMapManifest(iconBaseUrl!),
+  });
+}
+
+// Only runs with a replay: their cards show a still, never a wall of placeholders.
+const RECENT_RUNS_URL = "/api/v1/raidlogs/recent?days=60&limit=3&has_positions=true";
+
+function useRecentRuns() {
+  return useQuery({
+    queryKey: ["landing", "recent-runs"],
+    staleTime: 60 * 1000,
+    queryFn: async () => {
+      const response = await fetch(RECENT_RUNS_URL);
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
+      return (await response.json()) as RecentInstancesResponse;
+    },
+  });
+}
+
+function RunCard({ run, badge }: { run: RecentInstance; badge: RunBadge | null }) {
+  const [still, setStill] = useState<"loading" | "loaded" | "missing">("loading");
+  const [artFailed, setArtFailed] = useState(false);
+  const duration = formatRunDuration(run.duration_ms);
+  const href = `/instances/${run.slug || run.id}`;
+
+  return (
+    <Link
+      to={href}
+      className="flex flex-col overflow-hidden rounded-xl border border-[#27324a] bg-[#141d30] text-[#e8eef8] no-underline hover:border-[#5f6d88]"
+    >
+      <div className="relative h-[130px] overflow-hidden bg-[#1b2740]">
+        {/* Until this run's still loads (or when it has none yet): a muted crop of the dungeon's art. */}
+        {still !== "loaded" && !artFailed && (
+          <img
+            src={getInstanceArtCrop(run.name)}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            onError={() => setArtFailed(true)}
+            className="absolute inset-0 h-full w-full object-cover opacity-40 grayscale-[60%]"
+          />
+        )}
+        {still !== "missing" && (
+          <img
+            src={runStillUrl(run.id)}
+            alt={`Replay still of ${run.name}`}
+            loading="lazy"
+            decoding="async"
+            width={640}
+            height={360}
+            onLoad={() => setStill("loaded")}
+            onError={() => setStill("missing")}
+            className={`absolute inset-0 h-full w-full object-cover ${still === "loaded" ? "" : "invisible"}`}
+          />
+        )}
+        {badge && (
+          <span
+            className={`absolute left-2.5 top-2.5 rounded-md bg-[#0c1322]/85 px-2 py-[3px] text-[11px] font-semibold tracking-[0.08em] ${
+              badge === "3d" ? "text-[#4fd1c5]" : "text-[#b7c2d6]"
+            }`}
+          >
+            {badge === "3d" ? "3D REPLAY" : "2D MAP"}
+          </span>
+        )}
+        {duration && (
+          <span className="absolute bottom-2.5 right-2.5 rounded-md bg-[#0c1322]/85 px-2 py-[3px] font-mono text-[11px] text-[#e8eef8]">
+            {duration}
+          </span>
+        )}
+      </div>
+      <div className="flex flex-col gap-1 px-3.5 py-3">
+        <div className="text-[15px] font-semibold">{run.name}</div>
+        <div className="text-xs text-[#b7c2d6]">
+          {run.player_count} players · {run.boss_kills} {run.boss_kills === 1 ? "boss" : "bosses"}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function RecentRuns() {
+  const { data } = useRecentRuns();
+  const { data: instances } = useSupportedInstances();
+  const { data: manifest } = useMapManifest();
+  const runs = (data?.instances ?? [])
+    // The endpoint lists every upload of a duplicate run, its representative first; one card per run.
+    .filter((run, i, all) => !run.duplicate_group_id || all.findIndex((other) => other.duplicate_group_id === run.duplicate_group_id) === i)
+    .slice(0, 3);
 
   return (
     <section id="runs" className="mx-auto box-border flex w-full max-w-[1180px] flex-col gap-3.5 px-4 pb-3 pt-7 lg:px-8">
@@ -249,21 +325,62 @@ function RecentRuns({ getSidekickHref }: { getSidekickHref: string }) {
         </Link>
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Suspense fallback={null}>
-          {runs.map((run) => (
-            <RaidCard key={run.id} instance={run} />
-          ))}
-        </Suspense>
-        <a
-          href={getSidekickHref}
+        {runs.map((run) => (
+          <RunCard key={run.id} run={run} badge={runBadge(run, dungeonMapKind(dungeonNames(run.name, instances ?? []), manifest))} />
+        ))}
+        <Link
+          to="/download"
           onClick={() => trackFunnel("cta_sidekick", { placement: "ghost_card" })}
-          className="flex min-h-[160px] flex-col justify-center gap-1.5 rounded-xl border border-dashed border-[#5f6d88] bg-[#101829] p-4 text-center text-[#e8eef8] no-underline hover:border-[#e0b45c]"
+          className="flex flex-col overflow-hidden rounded-xl border border-dashed border-[#5f6d88] bg-[#141d30] text-[#e8eef8] no-underline hover:border-[#e0b45c]"
         >
-          <div className={`text-lg font-bold ${HEADING_FONT}`}>Your run goes here</div>
-          <div className="text-xs text-[#b7c2d6]">Tonight, if Sidekick is running.</div>
-          <div className="mt-2 text-[15px] font-semibold text-[#e0b45c]">Get Sidekick →</div>
-        </a>
+          <div className="flex h-[130px] flex-col items-center justify-center gap-1.5 bg-[#101829] p-4 text-center">
+            <div className={`text-lg font-bold ${HEADING_FONT}`}>Your run goes here</div>
+            <div className="text-xs text-[#b7c2d6]">Tonight, if Sidekick is running.</div>
+          </div>
+          <div className="flex flex-col gap-1 px-3.5 py-3">
+            <div className="text-[15px] font-semibold text-[#e0b45c]">Get Sidekick</div>
+            <div className="text-xs text-[#b7c2d6]">2 minutes to set up</div>
+          </div>
+        </Link>
       </div>
+    </section>
+  );
+}
+
+function DungeonShelf() {
+  const { data: instances } = useSupportedInstances();
+  const { data: manifest } = useMapManifest();
+  const cards = dungeonShelfCards(instances ?? [], manifest);
+
+  return (
+    <section id="dungeons" className="mx-auto box-border flex w-full max-w-[1180px] flex-col gap-3.5 px-4 pb-9 pt-7 lg:px-8">
+      <div className="flex flex-wrap items-baseline justify-between gap-4">
+        <h2 className={`m-0 text-xl font-bold lg:text-2xl ${HEADING_FONT}`}>Real floors, not dots on a map</h2>
+        <Link to="/supported" className="text-sm text-[#4fd1c5] hover:text-[#8ee6dd]">
+          All supported instances
+        </Link>
+      </div>
+      <ul className="styled-scrollbar m-0 flex list-none gap-3 overflow-x-auto p-0 pb-1.5">
+        {cards.map((d) => (
+          <li key={d.name} className="flex shrink-0 basis-[190px]">
+            <Link
+              to={`/recent?inst=${encodeURIComponent(d.name)}`}
+              className={`flex w-full flex-col gap-1 rounded-[10px] border bg-[#141d30] p-3.5 text-[#e8eef8] no-underline hover:bg-[#1a2540] ${
+                d.kind === "3d" ? "border-[#4fd1c5]" : "border-[#27324a]"
+              }`}
+            >
+              <div className="font-semibold">{d.name}</div>
+              <div
+                className={`text-xs ${
+                  d.kind === "3d" ? "text-[#8ee6dd]" : d.kind === "2d" ? "text-[#b7c2d6]" : "text-[#8a97ad]"
+                }`}
+              >
+                {d.kind === "3d" ? "3D floor" : d.kind === "2d" ? "2D map" : "Coming"}
+              </div>
+            </Link>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -308,7 +425,6 @@ export function StartPage() {
   const heroInstanceId = landing || landingFailed ? landing?.featured?.instance_id ?? FALLBACK_FEATURED_INSTANCE : undefined;
   // The live 3D replay's position and controls, for the hero's scrubber; null while the poster shows.
   const [replay, setReplay] = useState<HeroReplay | null>(null);
-  const showShelf = useIdleAfterMount();
 
   // The funnel's denominator: one per visit to /start, with its campaign.
   useEffect(() => trackFunnel("land"), []);
@@ -334,12 +450,8 @@ export function StartPage() {
       <SendLinkSection />
       <HowItWorks />
       <FirstMinute />
-      <RecentRuns getSidekickHref={getSidekickHref} />
-      {showShelf && (
-        <Suspense fallback={null}>
-          <DungeonShelf />
-        </Suspense>
-      )}
+      <RecentRuns />
+      <DungeonShelf />
       <ClosingBand />
       <footer className="mt-auto flex flex-wrap gap-3 border-t border-[#27324a] px-4 py-3.5 text-[11px] text-[#8a97ad] lg:gap-[18px] lg:px-8 lg:py-[18px] lg:text-xs">
         <span>Chronicle for WoW Forever</span>

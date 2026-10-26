@@ -48,7 +48,10 @@ RUN touch frontend/chronicle/dist && \
 # Stage 3: Final minimal image
 FROM alpine:3.22
 
-RUN apk --no-cache add ca-certificates
+# Chromium renders the replay stills on the landing's recent-runs rail
+# (chronicle/run_still.go); unset CHRONICLE_RUN_STILL_CHROME_PATH to turn them off.
+RUN apk --no-cache add ca-certificates chromium ttf-freefont
+ENV CHRONICLE_RUN_STILL_CHROME_PATH=/usr/bin/chromium
 WORKDIR /app
 
 COPY --from=frontend /chronicle/frontend/chronicle/dist ./frontend/chronicle/dist

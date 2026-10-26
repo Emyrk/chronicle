@@ -18,6 +18,7 @@ const Terms = lazy(() => import("./pages/Terms").then(({ Terms }) => ({ default:
 const ParsingPage = lazy(() => import("./pages/Parsing/ParsingPage").then(({ ParsingPage }) => ({ default: ParsingPage })))
 const CohortViewerPage = lazy(() => import("./pages/Parsing/CohortViewerPage").then(({ CohortViewerPage }) => ({ default: CohortViewerPage })))
 const StartPage = lazy(() => import("./pages/Landing/StartPage").then(({ StartPage }) => ({ default: StartPage })))
+const RunStillPage = lazy(() => import("./pages/Landing/RunStillPage").then(({ RunStillPage }) => ({ default: RunStillPage })))
 const Empty = lazy(() => import("./pages/Empty").then(({ Empty }) => ({ default: Empty })))
 const Upload = lazy(() => import("./pages/Upload/Upload").then(({ Upload }) => ({ default: Upload })))
 const LogsList = lazy(() => import("./pages/Logs/LogsList").then(({ LogsList }) => ({ default: LogsList })))
@@ -152,11 +153,13 @@ function App() {
 
   return (
     <>
-      <NitroPayRuntime />
+      {/* The still renderer's page is screenshotted: no consent banner over it. */}
+      {!location.pathname.startsWith("/render/") && <NitroPayRuntime />}
       <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/start" element={<StartPage />} />
+      <Route path="/render/run-still/:instanceId" element={<RunStillPage />} />
       <Route path="/download" element={<DownloadPage />} />
       <Route path="/get-sidekick" element={<DownloadPage />} />
       <Route path="/youtube-sync" element={<LegacyYouTubeSyncRedirect />} />

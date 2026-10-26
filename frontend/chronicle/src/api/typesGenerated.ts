@@ -3507,6 +3507,11 @@ export interface RecentInstance {
     readonly difficulty_name: string;
     readonly max_players: number;
     readonly dynamic_difficulty: number;
+    /**
+     * HasPositions is true when the log recorded unit positions, so the run
+     * has a replay. Set by /raidlogs/recent only.
+     */
+    readonly has_positions?: boolean;
 }
 
 // From chroniclesdk/log.go

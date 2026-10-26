@@ -14,6 +14,19 @@ function normalizedName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
+/** Whether an instance, by its names, has a 3D floor (a mesh), a 2D map, or nothing yet in the maps manifest. */
+export function dungeonMapKind(names: readonly string[], manifest: WowMapManifest | undefined): DungeonShelfKind {
+  const entries = new Map((manifest?.instances ?? []).map((entry) => [normalizedName(entry.name), entry]));
+  const entry = names.map((name) => entries.get(normalizedName(name))).find(Boolean);
+  return entry?.mesh ? "3d" : entry ? "2d" : "coming";
+}
+
+/** The supported instance's own name and zone names, matched to a run's instance name. */
+export function dungeonNames(name: string, instances: readonly SupportedInstance[]): string[] {
+  const instance = instances.find((candidate) => normalizedName(candidate.name) === normalizedName(name));
+  return [name, ...(instance?.zone_names ?? [])];
+}
+
 /**
  * The tenant's supported instances, each marked by its maps manifest entry:
  * a mesh is a 3D floor, any other entry a 2D map, no entry still coming.
@@ -23,14 +36,8 @@ export function dungeonShelfCards(
   instances: readonly SupportedInstance[],
   manifest: WowMapManifest | undefined,
 ): DungeonShelfCard[] {
-  const entries = new Map((manifest?.instances ?? []).map((entry) => [normalizedName(entry.name), entry]));
   return instances
-    .map((instance): DungeonShelfCard => {
-      // Manifest names can carry the zone ("Excavation Site: Wetlands"), so try the zone names too.
-      const entry = [instance.name, ...(instance.zone_names ?? [])]
-        .map((name) => entries.get(normalizedName(name)))
-        .find(Boolean);
-      return { name: instance.name, kind: entry?.mesh ? "3d" : entry ? "2d" : "coming" };
-    })
+    // Manifest names can carry the zone ("Excavation Site: Wetlands"), so try the zone names too.
+    .map((instance): DungeonShelfCard => ({ name: instance.name, kind: dungeonMapKind([instance.name, ...(instance.zone_names ?? [])], manifest) }))
     .sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.name.localeCompare(b.name));
 }

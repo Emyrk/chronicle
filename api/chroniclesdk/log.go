@@ -627,6 +627,9 @@ type RecentInstance struct {
 	DifficultyName    string            `json:"difficulty_name"`
 	MaxPlayers        int               `json:"max_players"`
 	DynamicDifficulty int               `json:"dynamic_difficulty"`
+	// HasPositions is true when the log recorded unit positions, so the run
+	// has a replay. Set by /raidlogs/recent only.
+	HasPositions bool `json:"has_positions,omitempty"`
 }
 
 // RecentEncounter is a simplified encounter summary for the recent raids list.

@@ -12,6 +12,7 @@ import { dungeonMeshLiquid, dungeonMeshUrl } from "@/pages/Instance/EventsPanels
 import { mapProcessor, type MapResult } from "@/pages/Instance/EventsPanels/Map/map.processor";
 import { FULL_MAP_VIEWPORT } from "@/pages/Instance/EventsPanels/Map/mapModel";
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "@/pages/Instance/EventsPanels/Map/MapScene3D";
+import { MapView2D } from "@/pages/Instance/EventsPanels/Map/MapView2D";
 import MapView3D from "@/pages/Instance/EventsPanels/Map/MapView3D";
 import { previewSpeed, useMapScene } from "@/pages/Instance/EventsPanels/Map/useMapScene";
 import type { HeroDeathBeat, HeroDeathRecap, HeroReplay } from "./heroReplay";
@@ -37,6 +38,8 @@ interface LandingHero3DProps {
   active: boolean;
   /** The replay's state for the scrubber once the mesh is up and the scene shows, or null (not yet, or it failed). */
   onReplay: (replay: HeroReplay | null) => void;
+  /** A replay still (the run-still page): a map without a mesh, or whose mesh failed, shows its 2D tiles. */
+  still?: boolean;
 }
 
 /**
@@ -143,7 +146,7 @@ function useHeroDeaths(instance: Instance, enabled: boolean) {
   });
 }
 
-function HeroScene({ instance, startOffsetMs, active, onReplay }: Omit<LandingHero3DProps, "instanceId"> & { instance: Instance }) {
+function HeroScene({ instance, startOffsetMs, active, onReplay, still = false }: Omit<LandingHero3DProps, "instanceId"> & { instance: Instance }) {
   const run = useHeroRun(instance);
   const deathRecaps = useHeroDeaths(instance, run.isSuccess).data ?? null;
   const result = run.data?.result ?? null;
@@ -224,7 +227,8 @@ function HeroScene({ instance, startOffsetMs, active, onReplay }: Omit<LandingHe
     mesh && iconBaseUrl ? { url: dungeonMeshUrl(mesh, iconBaseUrl), bounds: mesh.bounds, liquid: dungeonMeshLiquid(mesh) } : null,
   [iconBaseUrl, mesh]);
 
-  const shown = ready !== null && meshState === "ready" && !unavailable;
+  const stillTiles = still && ready !== null && (ready.mesh === null || meshState === "failed");
+  const shown = ready !== null && (meshState === "ready" || stillTiles) && !unavailable;
   const togglePlay = useCallback(() => setUserPlaying((current) => !current), []);
   // The scrubber's times are offsets from the instance's start (the featured run's), not the replay's first sample.
   const instanceStartMs = Date.parse(instance.startTime);
@@ -245,6 +249,14 @@ function HeroScene({ instance, startOffsetMs, active, onReplay }: Omit<LandingHe
   useEffect(() => () => onReplay(null), [onReplay]);
 
   if (!ready || unavailable) return null;
+  // A still of a map without a mesh: the Map panel's flat 2D view, framed on the party.
+  if (stillTiles) {
+    return (
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <MapView2D ground={ready.ground} markers={ready.markers} view={{ viewport: autoFit ?? FULL_MAP_VIEWPORT, key: "still" }} />
+      </div>
+    );
+  }
   return (
     // Fades in over the poster (which stays underneath) once the mesh is up; until then nothing new shows.
     <div
