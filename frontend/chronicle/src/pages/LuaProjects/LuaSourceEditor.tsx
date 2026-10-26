@@ -28,7 +28,7 @@ async function fetchPrivateDraft(project: LuaProject, signal: AbortSignal): Prom
       if (size > maxZipBytes) throw new Error("Private draft ZIP exceeds 8 MiB.")
       chunks.push(value)
     }
-  } finally { reader.releaseLock() }
+  } finally { await reader.cancel().catch(() => {}); reader.releaseLock() }
   const bytes = new Uint8Array(size)
   let offset = 0
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length }
@@ -49,11 +49,14 @@ function LuaCodeMirror({ value, onChange, disabled }: { value: string; onChange:
       StreamLanguage.define(lua), syntaxHighlighting(defaultHighlightStyle),
       editable.current.of(EditorView.editable.of(!disabled)), EditorView.lineWrapping,
       EditorView.theme({
-        "&": { fontSize: "13px", color: "var(--foreground)", backgroundColor: "var(--background)" },
-        ".cm-content": { minHeight: "320px", fontFamily: "var(--font-mono, monospace)", padding: "12px 0" },
+        "&": { fontSize: "13px", lineHeight: "1.65", color: "var(--foreground)", backgroundColor: "var(--background)" },
+        ".cm-content": { minHeight: "320px", fontFamily: "var(--font-mono, ui-monospace, monospace)", padding: "12px 0", caretColor: "var(--primary)" },
         ".cm-scroller": { maxHeight: "520px", overflow: "auto" },
-        ".cm-gutters": { backgroundColor: "var(--muted)", color: "var(--muted-foreground)", border: "none" },
-        ".cm-focused": { outline: "2px solid var(--ring)", outlineOffset: "-2px" },
+        ".cm-gutters": { backgroundColor: "var(--muted)", color: "var(--muted-foreground)", border: "none", paddingRight: "6px" },
+        ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "color-mix(in srgb, var(--primary) 7%, transparent)" },
+        ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: "color-mix(in srgb, var(--primary) 25%, transparent)" },
+        ".cm-cursor": { borderLeftColor: "var(--primary)", borderLeftWidth: "2px" },
+        "&.cm-focused": { outline: "2px solid var(--ring)", outlineOffset: "-2px" },
       }),
       EditorView.updateListener.of(update => { if (update.docChanged) onChangeRef.current(update.state.doc.toString()) }),
     ] }) })
@@ -99,6 +102,13 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
   onProposalResultRef.current = onProposalResult
   const dirty = !!files && (!baseline || files.lua !== baseline.lua || files.manifest !== baseline.manifest)
   dirtyRef.current = dirty
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = "" }
+    window.addEventListener("beforeunload", warn)
+    return () => window.removeEventListener("beforeunload", warn)
+  }, [dirty])
+
   useEffect(() => {
     if (loadedIdentity.current && loadedIdentity.current !== identity && dirtyRef.current) {
       setError("The draft changed while you had unsaved edits. Your local edits remain visible; reload the page to discard them and review the latest draft.")

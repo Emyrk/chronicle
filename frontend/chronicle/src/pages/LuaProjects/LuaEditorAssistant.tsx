@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from "react"
+import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { useAuth } from "@/hooks/useAuth"
 import { useInferencePermission } from "@/features/chat/api"
 import { runAgUi } from "@/features/chat/client"
 import { useInferenceSelection } from "@/features/chat/useInferenceSelection"
 import type { LuaProject } from "./api"
 import { buildLuaEditMessage, createLuaEditResponse, isLuaEditCurrent, type LuaEditSnapshot } from "./aiEditorEdits"
+
+const LuaDiffReview = lazy(() => import("./LuaDiffReview").then(module => ({ default: module.LuaDiffReview })))
 
 export type LuaEditorAssistantProps = {
   project: LuaProject
@@ -25,6 +27,7 @@ export function LuaEditorAssistant({ project, source, revisionToken, onApply }: 
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
   const [lastEdit, setLastEdit] = useState<{ before: string; after: string } | null>(null)
+  const [reviewOpen, setReviewOpen] = useState(false)
   const controller = useRef<AbortController | null>(null)
   const current = useRef<LuaEditSnapshot>({ source, revisionToken, projectId: project.id, projectRevision: project.revision })
   const apply = useRef(onApply)
@@ -47,6 +50,7 @@ export function LuaEditorAssistant({ project, source, revisionToken, onApply }: 
     setError("")
     setNotice("")
     setLastEdit(null)
+    setReviewOpen(false)
     const response = createLuaEditResponse()
     let finished = false
     try {
@@ -94,11 +98,11 @@ export function LuaEditorAssistant({ project, source, revisionToken, onApply }: 
     </> : <p className="text-sm text-muted-foreground">Connect an AI provider in account settings to edit the working copy.</p>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {notice && <p role="status" className="text-sm">{notice}</p>}
-    {lastEdit && <details className="text-sm"><summary className="cursor-pointer">Review last AI edit (before and after)</summary>
-      <div className="grid gap-3 lg:grid-cols-2">
-        <label className="block">Before<textarea readOnly value={lastEdit.before} className="styled-scrollbar mt-1 h-48 w-full rounded-md border bg-background p-2 font-mono text-xs" /></label>
-        <label className="block">After<textarea readOnly value={lastEdit.after} className="styled-scrollbar mt-1 h-48 w-full rounded-md border bg-background p-2 font-mono text-xs" /></label>
-      </div>
+    {lastEdit && <details className="text-sm" onToggle={event => setReviewOpen(event.currentTarget.open)}>
+      <summary className="cursor-pointer">Review applied AI diff</summary>
+      {reviewOpen && <Suspense fallback={<p className="py-3">Loading diff…</p>}>
+        <LuaDiffReview before={lastEdit.before} after={lastEdit.after} />
+      </Suspense>}
     </details>}
   </section>
 }

@@ -121,7 +121,9 @@ export function LuaProjectPage() {
   const unstableLink = project.unstable ? publicPackageURL(project.id, project.unstable.sha256) : ""
   return <main className="container mx-auto max-w-5xl space-y-7 px-4 py-10">
     <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" to="/lua-projects"><ArrowLeft className="size-4" /> All projects</Link>
-    <header className="border-b pb-6"><p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">{project.kind} / {project.slug} / revision {project.revision}</p><h1 className="mt-2 text-3xl font-semibold">{project.name}</h1></header>
+    <header className="border-b pb-6"><p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">{project.kind} / {project.slug} / revision {project.revision}</p><h1 className="mt-2 text-3xl font-semibold">{project.name}</h1>
+      {project.kind === "panel" && <Link className="mt-4 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90" to={`/lua-projects/${encodeURIComponent(project.id)}/edit`}>Open browser editor</Link>}
+    </header>
     {error && <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}{error.includes("revision") && " Reload the project before retrying."}</p>}
     {notice && <p role="status" className="rounded-md border border-emerald-600/30 bg-emerald-600/10 p-3 text-sm">{notice}</p>}
     {project.kind === "panel" && <LuaDraftAuthor key={`${project.id}:${project.revision}`} project={project} onUploaded={async success => { setProject(await getProject(project.id)); if (success) setNotice("Private draft uploaded. It has not been tested or published."); else setError("Revision changed. Generate and review a new proposal before retrying.") }} />}

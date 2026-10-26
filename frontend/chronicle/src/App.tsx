@@ -115,6 +115,7 @@ const CensusPage = lazy(() => import("./pages/Census/CensusPage").then(({ Census
 const APIExplorer = lazy(() => import("./pages/APIExplorer/APIExplorer").then(({ APIExplorer }) => ({ default: APIExplorer })))
 const LuaProjectsPage = lazy(() => import("./pages/LuaProjects/LuaProjectsPage").then(({ LuaProjectsPage }) => ({ default: LuaProjectsPage })))
 const LuaProjectPage = lazy(() => import("./pages/LuaProjects/LuaProjectsPage").then(({ LuaProjectPage }) => ({ default: LuaProjectPage })))
+const LuaProjectWorkspacePage = lazy(() => import("./pages/LuaProjects/LuaProjectWorkspacePage"))
 const CustomPanelsPage = lazy(() => import("./pages/Tools/CustomPanelsPage").then(({ CustomPanelsPage }) => ({ default: CustomPanelsPage })))
 const ToolsPage = lazy(() => import("./pages/Tools/ToolsPage").then(({ ToolsPage }) => ({ default: ToolsPage })))
 const SpeedrunningPage = lazy(() => import("./pages/Speedrunning/SpeedrunningPage").then(({ SpeedrunningPage }) => ({ default: SpeedrunningPage })))
@@ -184,6 +185,7 @@ function App() {
         <Route path="/tools" element={<ToolsPage />} />
         <Route path="/lua-projects" element={<LuaProjectsPage />} />
         <Route path="/lua-projects/:projectId" element={<LuaProjectPage />} />
+        <Route path="/lua-projects/:projectId/edit" element={<LuaProjectWorkspacePage />} />
         <Route path="/tools/custom-panels" element={<CustomPanelsPage />} />
         <Route path="/developers/api" element={<APIExplorer />} />
         <Route path="/debug/proto" element={<ProtoDecode />} />
