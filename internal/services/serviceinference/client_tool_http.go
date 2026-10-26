@@ -58,13 +58,12 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	thread, err := s.db.GetInferenceThreadByOwner(r.Context(), database.GetInferenceThreadByOwnerParams{ID: run.ThreadID.UUID, UserID: uid})
-	if err != nil || thread.AssistantID != run.AssistantID || thread.Persistence != "durable" || thread.ContextType.String != "instance" {
+	if err != nil || thread.AssistantID != run.AssistantID || thread.Persistence != "durable" || thread.ContextType.String != assistants[run.AssistantID].ContextType {
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Thread not found."})
 		return
 	}
-	instance, err := s.instanceForUser(r, thread.ContextID.String)
-	if err != nil {
-		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "You cannot view this instance."})
+	if err := s.authorizeThreadContext(r, thread); err != nil {
+		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: threadContextForbidden(thread)})
 		return
 	}
 	connection, err := s.db.GetInferenceConnectionByOwner(r.Context(), database.GetInferenceConnectionByOwnerParams{ID: run.ConnectionID, UserID: uid})
@@ -79,7 +78,7 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		if err := validateClientToolContinuation(pending, request, instance.ID.String()); err != nil {
+		if err := validateClientToolContinuation(pending, request, thread.ContextID.String); err != nil {
 			return err
 		}
 		if _, err = tx.CompleteInferenceClientToolRequest(r.Context(), database.CompleteInferenceClientToolRequestParams{RunID: run.ID, ToolCallID: toolCallID}); err != nil {
@@ -175,7 +174,7 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 	pause := func(assistantMessage Message, toolMessages []Message, next clientToolPause, nextState agentLoopState) error {
 		return s.pauseForClientTool(r.Context(), run, thread.ID, assistantMessage, toolMessages, next, nextState)
 	}
-	result, err := s.agentLoop(r.Context(), writer, provider, credential, run.Model, assistantDefinition, history, toolContext{service: s, instanceID: instance.ID}, debug, capability, state, persist, pause)
+	result, err := s.agentLoop(r.Context(), writer, provider, credential, run.Model, assistantDefinition, history, threadToolContext(s, thread), debug, capability, state, persist, pause)
 	if err != nil {
 		if s.logger != nil {
 			s.logger.Warn("continued inference run failed", "run_id", run.IdempotencyKey, "error", err)
