@@ -1,8 +1,7 @@
 import { useEffect, useLayoutEffect, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { useLandingFeatured } from "@/api/landingFeaturedQuery";
-import { useSupportedInstances } from "@/api/queries";
+import { useLandingFeatured, useSupportedInstances } from "@/api/queries";
 import type { RecentInstance, RecentInstancesResponse } from "@/api/typesGenerated";
 import { useTenantDatasetScope } from "@/hooks/useDatasetId";
 import { useIsMobile } from "@/hooks/useIsMobile";
