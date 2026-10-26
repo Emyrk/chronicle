@@ -1,11 +1,11 @@
 import { lazy, Suspense, useEffect } from "react"
 import { Routes, Route, Navigate, useLocation } from "react-router-dom"
-import { Home } from "./pages/Home"
 import { NitroPayRuntime } from "./components/Ads/NitroPayRuntime"
-import { Layout } from "./components/Layout/Layout"
 import { RouteLoadingFallback } from "./components/Layout/RouteLoadingFallback"
 import { captureUtm } from "./utils/utm"
 
+const Home = lazy(() => import("./pages/Home").then(({ Home }) => ({ default: Home })))
+const Layout = lazy(() => import("./components/Layout/Layout").then(({ Layout }) => ({ default: Layout })))
 const DownloadPage = lazy(() => import("./pages/Download").then(({ DownloadPage }) => ({ default: DownloadPage })))
 const Login = lazy(() => import("./pages/Login/Login").then(({ Login }) => ({ default: Login })))
 const Contact = lazy(() => import("./pages/Contact").then(({ Contact }) => ({ default: Contact })))
