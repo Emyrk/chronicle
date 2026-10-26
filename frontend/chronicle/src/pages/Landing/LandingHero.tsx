@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, typ
 import { Pause, Play } from "lucide-react";
 import type { LandingFeaturedDeath, LandingFeaturedRun } from "@/api/typesGenerated";
 import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
+import { trackFunnel } from "@/utils/funnel";
 import type { HeroDeathRecap, HeroReplay } from "./heroReplay";
 
 // Boss chips shown inline on desktop; the rest collapse into a "+N" chip.
@@ -172,6 +173,20 @@ function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; c
   const desktopChips = chips.slice(firstChip, firstChip + DESKTOP_CHIPS);
   const hiddenChips = chips.length - desktopChips.length;
   const playing = playback?.playing ?? false;
+  // The first touch of the scrubber's controls, once per page view.
+  const interacted = useRef(false);
+  const trackInteraction = (control: "play_pause" | "boss_jump" | "drag" | "death_jump") => {
+    if (interacted.current) return;
+    interacted.current = true;
+    trackFunnel("scrub_or_bossjump", { control });
+  };
+  const chipClick = (name: string) => {
+    const jump = jumpTo(name);
+    return jump && (() => {
+      trackInteraction("boss_jump");
+      jump();
+    });
+  };
 
   const clampMs = (ms: number) => Math.min(run.duration_ms, Math.max(0, ms));
   const goTo = (ms: number, cut = false) => {
@@ -201,6 +216,7 @@ function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; c
   };
   const onTrackPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
+    trackInteraction("drag");
     e.currentTarget.setPointerCapture(e.pointerId);
     const ms = msAtPointer(e.clientX);
     setDragMs(ms);
@@ -222,6 +238,7 @@ function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; c
   };
 
   const onDeathClick = (index: number) => {
+    trackInteraction("death_jump");
     // 10 s before the death, playing, so the visitor sees it happen.
     goTo(run.deaths[index].offset_ms - DEATH_LEAD_MS, true);
     if (lastPointerType.current !== "mouse") {
@@ -236,6 +253,7 @@ function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; c
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === " " && !(e.target instanceof HTMLButtonElement)) {
       e.preventDefault();
+      trackInteraction("play_pause");
       playback?.togglePlay();
     } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault();
@@ -252,7 +270,10 @@ function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; c
         <button
           type="button"
           aria-label={playing ? "Pause replay" : "Play replay"}
-          onClick={playback?.togglePlay}
+          onClick={() => {
+            trackInteraction("play_pause");
+            playback?.togglePlay();
+          }}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#5f6d88] bg-[#0c1322]/70 text-[#e8eef8] lg:h-10 lg:w-10"
         >
           {playing
@@ -329,7 +350,7 @@ function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; c
         {chips.length > 0 && (
           <div className="hidden gap-1.5 lg:flex">
             {desktopChips.map((name) => (
-              <BossChip key={name} label={name} active={name === current} fixedWidth onClick={jumpTo(name)} />
+              <BossChip key={name} label={name} active={name === current} fixedWidth onClick={chipClick(name)} />
             ))}
             {hiddenChips > 0 && (
               <span className="w-10 rounded-md border border-[#5f6d88] bg-[#0c1322]/70 py-1 text-center text-xs text-[#8a97ad]">
@@ -342,7 +363,7 @@ function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; c
       {chips.length > 0 && (
         <div className="styled-scrollbar flex gap-1.5 overflow-x-auto lg:hidden">
           {chips.map((name) => (
-            <BossChip key={name} label={name} active={name === current} onClick={jumpTo(name)} />
+            <BossChip key={name} label={name} active={name === current} onClick={chipClick(name)} />
           ))}
         </div>
       )}
@@ -409,6 +430,7 @@ export function LandingHero({
         <div className="mt-1 hidden flex-wrap items-center gap-3 lg:flex">
           <a
             href={getSidekickHref}
+            onClick={() => trackFunnel("cta_sidekick", { placement: "hero" })}
             className="rounded-[10px] bg-[#e0b45c] px-[22px] py-3.5 text-base font-semibold text-[#0c1322] no-underline hover:bg-[#e8c477]"
           >
             Get Sidekick, free

@@ -1,4 +1,5 @@
-import { Component, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+import { Component, lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { trackFunnel } from "@/utils/funnel";
 import type { HeroReplay } from "./heroReplay";
 
 // The 3D chunk (three.js, the Map scene, the featured run's data): requested only once the trigger below fires.
@@ -8,6 +9,8 @@ const LandingHero3D = lazy(() => import("./LandingHero3D"));
 const FEATURED_START_OFFSET_MS = (Number(import.meta.env.VITE_LANDING_FEATURED_START_S) || 0) * 1000;
 /** requestIdleCallback's deadline: the 3D layer starts loading by then even on a busy page. */
 const IDLE_TIMEOUT_MS = 1500;
+/** How long the hero must play (or the poster stay in view) before hero_play_3s. */
+const HERO_PLAY_EVENT_MS = 3000;
 
 interface NavigatorConnection {
   saveData?: boolean;
@@ -62,25 +65,45 @@ function usePageVisible(): boolean {
  * The hero's 3D slot: mounts LandingHero3D after the shell's first paint,
  * once the hero is on screen and the browser is idle (or 1.5 s passed), and
  * pauses it while the hero is scrolled away or the tab is hidden.
+ * Sends hero_play_3s once the 3D replay has played for 3 s on screen, or,
+ * with 3D suppressed (or no featured run), once the poster has been on screen for 3 s.
  */
 export function HeroReplayLayer({ instanceId, onReplay }: {
-  /** The featured run: a public instance with unit positions and a published dungeon mesh. */
-  instanceId: string;
+  /** The featured run: a public instance with unit positions and a published dungeon mesh; without one, the poster stays. */
+  instanceId?: string;
   onReplay: (replay: HeroReplay | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [allowed] = useState(canShow3D);
+  const [allowed] = useState(() => Boolean(instanceId) && canShow3D());
   const [inView, setInView] = useState(false);
   const [load, setLoad] = useState(false);
   const pageVisible = usePageVisible();
+  const [playing3D, setPlaying3D] = useState(false);
+  const heroPlaySent = useRef(false);
+
+  const handleReplay = useCallback((replay: HeroReplay | null) => {
+    onReplay(replay);
+    setPlaying3D(replay?.playing ?? false);
+  }, [onReplay]);
 
   useEffect(() => {
     const element = ref.current;
-    if (!allowed || !element) return;
+    if (!element) return;
     const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting));
     observer.observe(element);
     return () => observer.disconnect();
-  }, [allowed]);
+  }, []);
+
+  // A 3 s stretch of uninterrupted play on screen; a pause, scroll-away or hidden tab restarts it.
+  const heroMode = !inView || !pageVisible ? null : allowed ? (playing3D ? "3d" : null) : "poster";
+  useEffect(() => {
+    if (!heroMode || heroPlaySent.current) return;
+    const timer = window.setTimeout(() => {
+      heroPlaySent.current = true;
+      trackFunnel("hero_play_3s", { mode: heroMode });
+    }, HERO_PLAY_EVENT_MS);
+    return () => window.clearTimeout(timer);
+  }, [heroMode]);
 
   useEffect(() => {
     if (!allowed || load || !inView) return;
@@ -99,14 +122,14 @@ export function HeroReplayLayer({ instanceId, onReplay }: {
 
   return (
     <div ref={ref} className="absolute inset-0">
-      {load && (
+      {load && instanceId && (
         <SilentBoundary>
           <Suspense fallback={null}>
             <LandingHero3D
               instanceId={instanceId}
               startOffsetMs={FEATURED_START_OFFSET_MS}
               active={inView && pageVisible}
-              onReplay={onReplay}
+              onReplay={handleReplay}
             />
           </Suspense>
         </SilentBoundary>

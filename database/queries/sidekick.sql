@@ -115,6 +115,14 @@ WHERE id = @id
   AND user_id = @user_id
   AND disconnected_at IS NULL;
 
+-- name: CountSidekickLogGroupsByUser :one
+-- Log groups uploaded by any of the user's Sidekick installations; 1 right
+-- after an upload means it was the account's first (the first_upload event).
+SELECT COUNT(*)
+FROM wow_log_groups g
+JOIN sidekick_installations si ON si.id = g.sidekick_installation_id
+WHERE si.user_id = @user_id;
+
 -- name: DisconnectSidekickInstallation :one
 UPDATE sidekick_installations
 SET disconnected_at = NOW(),

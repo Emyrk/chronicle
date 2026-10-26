@@ -1,9 +1,11 @@
 package serviceoauth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -108,6 +110,48 @@ func TestDevicePageCarriesCampaignThroughLogin(t *testing.T) {
 	service.serveBrowserApproval(recorder, req)
 	require.Equal(t, http.StatusSeeOther, recorder.Code)
 	require.Equal(t, "/login?from="+url.QueryEscape("/oauth/device?user_code=ABCD-EFGH&utm_content=A&utm_source=x"), recorder.Header().Get("Location"))
+}
+
+func TestDeviceApprovalLogsPairCompleteWithCampaign(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	db, _ := dbtestutil.NewDB(t)
+	service := &Service{}
+	require.NoError(t, service.configure(ctx, db, "https://chronicle.example"))
+	var logs bytes.Buffer
+	service.logger = slog.New(slog.NewJSONHandler(&logs, nil))
+
+	userID := uuid.New()
+	_, err := db.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "pair-user"})
+	require.NoError(t, err)
+	service.SetBrowserAuth(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r.WithContext(chronauth.WithClaims(r.Context(), &claims.Claims{Subject: userID})))
+		})
+	})
+	device := postForm[deviceAuthorizationResponse](t, service, "/device/authorize", url.Values{
+		"client_id": {ClientID},
+		"scope":     {ScopeAll},
+	}, http.StatusOK)
+
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/device", strings.NewReader(url.Values{
+		"user_code": {device.UserCode},
+		"decision":  {"approve"},
+	}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: utmCookie, Value: url.QueryEscape("utm_source=reddit&utm_content=hero-a&other=1")})
+	rec := httptest.NewRecorder()
+	service.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var event map[string]any
+	require.NoError(t, json.Unmarshal(logs.Bytes(), &event), logs.String())
+	require.Equal(t, "funnel event", event["msg"])
+	require.Equal(t, "pair_complete", event["event"])
+	require.Equal(t, "reddit", event["utm_source"])
+	require.Equal(t, "hero-a", event["utm_content"])
+	require.NotContains(t, event, "other")
+	require.NotContains(t, logs.String(), userID.String())
 }
 
 func TestDeviceAuthorizationRefreshAndRevocation(t *testing.T) {
