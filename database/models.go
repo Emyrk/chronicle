@@ -544,6 +544,67 @@ func AllRiverJobStateValues() []RiverJobState {
 	}
 }
 
+type UploadSource string
+
+const (
+	UploadSourceWeb      UploadSource = "web"
+	UploadSourceSidekick UploadSource = "sidekick"
+	UploadSourceApi      UploadSource = "api"
+)
+
+func (e *UploadSource) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = UploadSource(s)
+	case string:
+		*e = UploadSource(s)
+	default:
+		return fmt.Errorf("unsupported scan type for UploadSource: %T", src)
+	}
+	return nil
+}
+
+type NullUploadSource struct {
+	UploadSource UploadSource `json:"upload_source"`
+	Valid        bool         `json:"valid"` // Valid is true if UploadSource is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullUploadSource) Scan(value interface{}) error {
+	if value == nil {
+		ns.UploadSource, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.UploadSource.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullUploadSource) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.UploadSource), nil
+}
+
+func (e UploadSource) Valid() bool {
+	switch e {
+	case UploadSourceWeb,
+		UploadSourceSidekick,
+		UploadSourceApi:
+		return true
+	}
+	return false
+}
+
+func AllUploadSourceValues() []UploadSource {
+	return []UploadSource{
+		UploadSourceWeb,
+		UploadSourceSidekick,
+		UploadSourceApi,
+	}
+}
+
 type WowPlayableClass string
 
 const (
@@ -2645,17 +2706,19 @@ type UserWhatsNewState struct {
 }
 
 type WoWLogGroup struct {
-	ID              uuid.UUID          `db:"id" json:"id"`
-	Owner           uuid.UUID          `db:"owner" json:"owner"`
-	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	LogType         LogType            `db:"log_type" json:"log_type"`
-	Format          NullLogFormat      `db:"format" json:"format"`
-	Flavor          []string           `db:"flavor" json:"flavor"`
-	InvalidatedAt   pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
-	InvalidReason   string             `db:"invalid_reason" json:"invalid_reason"`
-	ParseGeneration int64              `db:"parse_generation" json:"parse_generation"`
-	Unlisted        bool               `db:"unlisted" json:"unlisted"`
+	ID                     uuid.UUID          `db:"id" json:"id"`
+	Owner                  uuid.UUID          `db:"owner" json:"owner"`
+	CreatedAt              pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	LogType                LogType            `db:"log_type" json:"log_type"`
+	Format                 NullLogFormat      `db:"format" json:"format"`
+	Flavor                 []string           `db:"flavor" json:"flavor"`
+	InvalidatedAt          pgtype.Timestamptz `db:"invalidated_at" json:"invalidated_at"`
+	InvalidReason          string             `db:"invalid_reason" json:"invalid_reason"`
+	ParseGeneration        int64              `db:"parse_generation" json:"parse_generation"`
+	Unlisted               bool               `db:"unlisted" json:"unlisted"`
+	UploadSource           NullUploadSource   `db:"upload_source" json:"upload_source"`
+	SidekickInstallationID uuid.NullUUID      `db:"sidekick_installation_id" json:"sidekick_installation_id"`
 }
 
 type World struct {

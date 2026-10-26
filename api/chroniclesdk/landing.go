@@ -42,6 +42,7 @@ type LandingUploadSource string
 const (
 	LandingUploadSourceSidekick LandingUploadSource = "sidekick"
 	LandingUploadSourceManual   LandingUploadSource = "manual"
+	LandingUploadSourceAPI      LandingUploadSource = "api"
 	// LandingUploadSourceUnknown means the upload path was not recorded.
 	LandingUploadSourceUnknown LandingUploadSource = "unknown"
 )
