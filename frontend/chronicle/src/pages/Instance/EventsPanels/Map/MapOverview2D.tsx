@@ -385,14 +385,20 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
   const encounterMapId = selectedEncounters.find(({ encounter }) => encounter.mapId !== 0)?.encounter.mapId ?? 0;
   const artworkMapId = encounterMapId || mapId;
   const normalizedUIMap = props.context.instance.positionCoordinateSpace === "ui-map-normalized";
-  const artwork = manifestQuery.data && artworkMapId !== null
+  const artwork = useMemo(() => manifestQuery.data && artworkMapId !== null
     ? resolveMapArtwork(
       manifestQuery.data,
       artworkMapId,
       normalizedUIMap ? undefined : representativeSample,
       props.context.instance.name,
     )
-    : null;
+    : null, [
+    artworkMapId,
+    manifestQuery.data,
+    normalizedUIMap,
+    props.context.instance.name,
+    representativeSample,
+  ]);
   const [floorNumber, setFloorNumber] = useState<number | null>(null);
   const [mapSource, setMapSource] = useState<"auto" | "styled" | "renders" | "art">("auto");
 
