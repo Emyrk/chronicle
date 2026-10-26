@@ -1401,6 +1401,15 @@ export class MapScene3D {
     this.requestRender();
   }
 
+  /** Cuts the Director straight to its next shot (the replay jumped), instead of springing there from the old one. */
+  cutDirector() {
+    if (!this.director) return;
+    this.directorGoal.seeded = false;
+    this.directorInFrame.clear();
+    this.engageDirector(true);
+    this.requestRender();
+  }
+
   // Hands the camera back to the Director, springing from wherever it is now.
   // The first shot after an asynchronous mesh load can opt to snap into place.
   // Already following: nothing to seed, or the springs would stutter.
