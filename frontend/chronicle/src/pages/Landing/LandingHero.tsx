@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Play } from "lucide-react";
+import { Pause, Play } from "lucide-react";
 import type { LandingFeaturedRun } from "@/api/typesGenerated";
 
 // Boss chips shown inline on desktop; the rest collapse into a "+N" chip.
@@ -15,14 +15,22 @@ interface LandingHeroProps {
   featured?: LandingFeaturedRun | null;
   /** Playback position in ms from the run start; the 3D replay drives it. */
   currentMs?: number;
+  /** The 3D replay's controls once it plays: the scrubber's play button and boss chips drive it. */
+  playback?: HeroPlayback | null;
   /** Where the hero's install CTA points (the download band on desktop, the send-link form on phones). */
   getSidekickHref: string;
   /**
    * Slot for the live 3D replay, layered above the poster and below the
-   * gradients and copy. Empty in the shell; a later car mounts a lazy
-   * LandingHero3D here after first paint.
+   * gradients and copy (HeroReplayLayer mounts the lazy LandingHero3D here).
    */
   layer3D?: ReactNode;
+}
+
+export interface HeroPlayback {
+  playing: boolean;
+  togglePlay: () => void;
+  /** Moves the replay to `offsetMs` from the run start (the boss chips' jumps). */
+  seek: (offsetMs: number) => void;
 }
 
 function formatClock(ms: number) {
@@ -46,20 +54,20 @@ function currentBossName(run: LandingFeaturedRun, currentMs: number) {
   return name;
 }
 
-function BossChip({ label, active }: { label: string; active?: boolean }) {
+function BossChip({ label, active, onClick }: { label: string; active?: boolean; onClick?: () => void }) {
+  const className = `whitespace-nowrap rounded-md border px-2.5 py-1.5 text-xs text-[#e8eef8] lg:py-1 ${
+    active ? "border-[#4fd1c5] bg-[#4fd1c5]/20" : "border-[#5f6d88] bg-[#0c1322]/70"
+  }`;
+  if (!onClick) return <span className={className}>{label}</span>;
   return (
-    <span
-      className={`whitespace-nowrap rounded-md border px-2.5 py-1.5 text-xs text-[#e8eef8] lg:py-1 ${
-        active ? "border-[#4fd1c5] bg-[#4fd1c5]/20" : "border-[#5f6d88] bg-[#0c1322]/70"
-      }`}
-    >
+    <button type="button" onClick={onClick} title={`Jump to ${label}`} className={`${className} hover:border-[#8a97ad]`}>
       {label}
-    </span>
+    </button>
   );
 }
 
-/** Presentational scrubber chrome pinned to the hero bottom. */
-function HeroScrubber({ run, currentMs }: { run: LandingFeaturedRun; currentMs: number }) {
+/** Scrubber chrome pinned to the hero bottom; with `playback` (the 3D replay is up) it drives the replay. */
+function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; currentMs: number; playback?: HeroPlayback | null }) {
   const current = currentBossName(run, currentMs);
   // Wipes repeat a boss on the bar; chips list each boss once.
   const chips = [...new Set(run.bosses.map((b) => b.name))];
@@ -67,16 +75,25 @@ function HeroScrubber({ run, currentMs }: { run: LandingFeaturedRun; currentMs: 
   const firstChip = Math.max(0, Math.min(currentChip - 1, chips.length - DESKTOP_CHIPS));
   const desktopChips = chips.slice(firstChip, firstChip + DESKTOP_CHIPS);
   const hiddenChips = chips.length - desktopChips.length;
+  // A chip jumps to that boss's first pull.
+  const jumpTo = (name: string) => {
+    const boss = run.bosses.find((b) => b.name === name);
+    return playback && boss ? () => playback.seek(boss.start_offset_ms) : undefined;
+  };
+  const playing = playback?.playing ?? false;
 
   return (
     <div className="flex flex-col gap-2.5 lg:gap-2">
       <div className="flex items-center gap-2.5 lg:gap-3.5">
         <button
           type="button"
-          aria-label="Play replay"
+          aria-label={playing ? "Pause replay" : "Play replay"}
+          onClick={playback?.togglePlay}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#5f6d88] bg-[#0c1322]/70 text-[#e8eef8] lg:h-10 lg:w-10"
         >
-          <Play className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
+          {playing
+            ? <Pause className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
+            : <Play className="h-3.5 w-3.5 fill-current" aria-hidden="true" />}
         </button>
         <div className="order-last font-mono text-xs text-[#e8eef8] lg:order-none lg:text-[13px]">
           {formatClock(currentMs)}
@@ -107,7 +124,7 @@ function HeroScrubber({ run, currentMs }: { run: LandingFeaturedRun; currentMs: 
         {chips.length > 0 && (
           <div className="hidden gap-1.5 lg:flex">
             {desktopChips.map((name) => (
-              <BossChip key={name} label={name} active={name === current} />
+              <BossChip key={name} label={name} active={name === current} onClick={jumpTo(name)} />
             ))}
             {hiddenChips > 0 && (
               <span className="rounded-md border border-[#5f6d88] bg-[#0c1322]/70 px-2.5 py-1 text-xs text-[#8a97ad]">
@@ -120,7 +137,7 @@ function HeroScrubber({ run, currentMs }: { run: LandingFeaturedRun; currentMs: 
       {chips.length > 0 && (
         <div className="styled-scrollbar flex gap-1.5 overflow-x-auto lg:hidden">
           {chips.map((name) => (
-            <BossChip key={name} label={name} active={name === current} />
+            <BossChip key={name} label={name} active={name === current} onClick={jumpTo(name)} />
           ))}
         </div>
       )}
@@ -144,6 +161,7 @@ export function LandingHero({
   posterAlt,
   featured,
   currentMs = 0,
+  playback,
   getSidekickHref,
   layer3D,
 }: LandingHeroProps) {
@@ -205,7 +223,7 @@ export function LandingHero({
         )}
         {featured && (
           <div className="mt-1 lg:mt-auto lg:pb-[22px]">
-            <HeroScrubber run={featured} currentMs={currentMs} />
+            <HeroScrubber run={featured} currentMs={currentMs} playback={playback} />
           </div>
         )}
       </div>
