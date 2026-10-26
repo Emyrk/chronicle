@@ -16,7 +16,7 @@ export type LuaEditorAssistantProps = {
   onApply: (nextSource: string, previousSource: string) => void
 }
 
-const button = "rounded-md border border-border bg-background px-3 py-2 text-sm hover:bg-accent disabled:opacity-50"
+const button = "rounded-md border border-border bg-background px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
 
 export function LuaEditorAssistant({ project, source, revisionToken, onApply }: LuaEditorAssistantProps) {
   const { session, isAuthenticated } = useAuth()
@@ -86,19 +86,22 @@ export function LuaEditorAssistant({ project, source, revisionToken, onApply }: 
     }
   }
 
-  return <section className="space-y-3 rounded-xl border border-border/80 bg-card p-4" aria-label="AI Lua editor assistant">
-    <h3 className="font-semibold">Edit working copy with AI</h3>
-    <p className="text-sm text-muted-foreground">Uses your connected AI provider. AI output is untrusted Lua, never run, uploaded or published here. An edit replaces only the unsaved editor source; review it and use editor undo if needed.</p>
+  return <section className="space-y-3 p-4" aria-label="AI Lua editor assistant">
+    <div>
+      <h2 className="text-sm font-semibold">Edit with AI</h2>
+      <p className="mt-0.5 text-xs text-muted-foreground">Rewrites the unsaved main.lua using your connected provider. Nothing is run or saved; use editor undo to revert.</p>
+    </div>
     {selection.ready ? <>
-      <label className="block text-sm font-medium">Describe the edit
-        <textarea className="styled-scrollbar mt-1 block min-h-20 w-full rounded-md border bg-background p-3" maxLength={4000} value={instruction} onChange={e => setInstruction(e.target.value)} disabled={working} />
-      </label>
-      <button className={button} type="button" disabled={working || !instruction.trim()} onClick={() => void edit()}>{working ? "Editing…" : "Edit unsaved source"}</button>
-      {working && <button className={button} type="button" onClick={() => controller.current?.abort()}>Cancel edit</button>}
-    </> : <p className="text-sm text-muted-foreground">Connect an AI provider in account settings to edit the working copy.</p>}
-    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-    {notice && <p role="status" className="text-sm">{notice}</p>}
-    {lastEdit && <details className="text-sm" onToggle={event => setReviewOpen(event.currentTarget.open)}>
+      <textarea aria-label="Describe the edit" placeholder="e.g. Track interrupts per player and show a sorted table"
+        className="styled-scrollbar block min-h-20 w-full rounded-md border border-border bg-background p-2.5 text-sm" maxLength={4000} value={instruction} onChange={e => setInstruction(e.target.value)} disabled={working} />
+      <div className="flex gap-2">
+        <button className={button} type="button" disabled={working || !instruction.trim()} onClick={() => void edit()}>{working ? "Editing…" : "Apply AI edit"}</button>
+        {working && <button className={button} type="button" onClick={() => controller.current?.abort()}>Cancel</button>}
+      </div>
+    </> : <p className="text-xs text-muted-foreground">Connect an AI provider in account settings to edit with AI.</p>}
+    {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
+    {notice && <p role="status" className="text-xs">{notice}</p>}
+    {lastEdit && <details className="text-xs" onToggle={event => setReviewOpen(event.currentTarget.open)}>
       <summary className="cursor-pointer">Review applied AI diff</summary>
       {reviewOpen && <Suspense fallback={<p className="py-3">Loading diff…</p>}>
         <LuaDiffReview before={lastEdit.before} after={lastEdit.after} />

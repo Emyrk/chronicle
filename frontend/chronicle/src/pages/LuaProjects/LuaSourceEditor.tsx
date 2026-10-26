@@ -2,12 +2,15 @@ import { useEffect, useRef, useState } from "react"
 import { Compartment, EditorState } from "@codemirror/state"
 import { EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection } from "@codemirror/view"
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands"
-import { StreamLanguage, syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language"
+import { StreamLanguage, syntaxHighlighting } from "@codemirror/language"
 import { lua } from "@codemirror/legacy-modes/mode/lua"
 import { applySourceProposal, buildEditorTar, initialEditorFiles, readLuaDraftZip, validateEditorFiles, type EditorFiles } from "./editorFiles"
 import { uploadDraft, type LuaProject } from "./api"
+import { luaHighlightStyle } from "./luaHighlight"
 
-const button = "rounded-md border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50"
+const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
+
 const maxZipBytes = 8 * 1024 * 1024
 
 /** Fetch with a cap before parsing; never interpret package source as JavaScript. */
@@ -46,17 +49,17 @@ function LuaCodeMirror({ value, onChange, disabled }: { value: string; onChange:
     const editor = new EditorView({ parent: container.current, state: EditorState.create({ doc: value, extensions: [
       lineNumbers(), history(), drawSelection(), highlightActiveLine(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
-      StreamLanguage.define(lua), syntaxHighlighting(defaultHighlightStyle),
-      editable.current.of(EditorView.editable.of(!disabled)), EditorView.lineWrapping,
+      StreamLanguage.define(lua), syntaxHighlighting(luaHighlightStyle),
+      editable.current.of(EditorView.editable.of(!disabled)),
       EditorView.theme({
-        "&": { fontSize: "13px", lineHeight: "1.65", color: "var(--foreground)", backgroundColor: "var(--background)" },
-        ".cm-content": { minHeight: "320px", fontFamily: "var(--font-mono, ui-monospace, monospace)", padding: "12px 0", caretColor: "var(--primary)" },
-        ".cm-scroller": { maxHeight: "520px", overflow: "auto" },
-        ".cm-gutters": { backgroundColor: "var(--muted)", color: "var(--muted-foreground)", border: "none", paddingRight: "6px" },
+        "&": { height: "100%", fontSize: "13px", lineHeight: "1.65", color: "var(--foreground)", backgroundColor: "var(--background)" },
+        ".cm-content": { fontFamily: "var(--font-mono, ui-monospace, monospace)", padding: "12px 0", caretColor: "var(--primary)" },
+        ".cm-scroller": { overflow: "auto" },
+        ".cm-gutters": { backgroundColor: "var(--background)", color: "var(--muted-foreground)", border: "none", borderRight: "1px solid var(--border)", paddingRight: "6px" },
         ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "color-mix(in srgb, var(--primary) 7%, transparent)" },
         ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: "color-mix(in srgb, var(--primary) 25%, transparent)" },
         ".cm-cursor": { borderLeftColor: "var(--primary)", borderLeftWidth: "2px" },
-        "&.cm-focused": { outline: "2px solid var(--ring)", outlineOffset: "-2px" },
+        "&.cm-focused": { outline: "none" },
       }),
       EditorView.updateListener.of(update => { if (update.docChanged) onChangeRef.current(update.state.doc.toString()) }),
     ] }) })
@@ -69,7 +72,7 @@ function LuaCodeMirror({ value, onChange, disabled }: { value: string; onChange:
     view.current.dispatch({ changes: { from: 0, to: view.current.state.doc.length, insert: value } })
   } }, [value])
   useEffect(() => { view.current?.dispatch({ effects: editable.current.reconfigure(EditorView.editable.of(!disabled)) }) }, [disabled])
-  return <div ref={container} className="overflow-hidden rounded-md border border-border" role="group" aria-label="main.lua source editor" />
+  return <div ref={container} className="h-full overflow-hidden" role="group" aria-label="main.lua source editor" />
 }
 
 export type LuaWorkingCopy = { source: string; manifest: string; revision: number; dirty: boolean; valid: boolean }
@@ -176,28 +179,43 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
     } finally { setSaving(false) }
   }
 
-  return <section aria-label="Lua source editor" className="space-y-4 rounded-xl border border-border/80 bg-card p-5 shadow-sm">
-    <div className="flex flex-wrap items-start justify-between gap-3"><div>
-      <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Private draft / source</p>
-      <h2 className="mt-1 text-lg font-semibold">Project files</h2>
-      <p className="text-sm text-muted-foreground">Edit locally in your browser. Save uploads a private draft at revision {project.revision}; it does not run or publish code.</p>
-    </div><span role="status" className="rounded-full border border-border px-3 py-1 font-mono text-xs">{loading ? "Loading" : dirty ? "Unsaved changes" : "Saved"}</span></div>
-    {loading ? <p role="status" className="text-sm">Loading source…</p> : files && project.kind === "panel" ? <>
-      <div className="flex gap-2 border-b border-border pb-2" role="tablist" aria-label="Project files">
-        {(["lua", "manifest"] as const).map(tab => <button key={tab} id={`lua-editor-tab-${tab}`} type="button" role="tab" aria-selected={active === tab} aria-controls={`lua-editor-panel-${tab}`} className={`${button} ${active === tab ? "border-primary text-foreground" : "text-muted-foreground"}`} onClick={() => setActive(tab)}>{tab === "lua" ? "main.lua" : "project.json"}</button>)}
+  const status = loading ? "Loading" : !baseline ? "Never saved" : dirty ? "Unsaved changes" : "Saved"
+  const message = error || validation
+  return <section aria-label="Lua source editor" className="flex h-full min-h-0 flex-col bg-background"
+    onKeyDown={event => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); void save() }
+    }}>
+    <div className="flex items-center gap-2 border-b border-border bg-card/60 pr-2">
+      {files && project.kind === "panel" && <div className="flex self-stretch" role="tablist" aria-label="Project files">
+        {(["lua", "manifest"] as const).map(tab => <button key={tab} id={`lua-editor-tab-${tab}`} type="button" role="tab" aria-selected={active === tab} aria-controls={`lua-editor-panel-${tab}`}
+          className={`-mb-px border-b-2 border-r border-r-border px-4 py-2 font-mono text-xs ${focusRing} ${active === tab ? "border-b-primary bg-background text-foreground" : "border-b-transparent text-muted-foreground hover:text-foreground"}`}
+          onClick={() => setActive(tab)}>{tab === "lua" ? "main.lua" : "project.json"}</button>)}
+      </div>}
+      <div className="ml-auto flex items-center gap-3 py-1.5">
+        <span role="status" className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
+          <span aria-hidden className={`size-2 rounded-full ${loading ? "bg-muted-foreground" : dirty ? "bg-amber-400" : "bg-emerald-500"}`} />{status}
+        </span>
+        <button type="button" disabled={!dirty || !!validation || saving || loading}
+          title={`Upload a private draft at revision ${project.revision}. Does not run or publish code. (${isMac ? "⌘" : "Ctrl+"}S)`}
+          className={`whitespace-nowrap rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`}
+          onClick={() => void save()}>{saving ? "Saving…" : "Save draft"}</button>
       </div>
-      <div id="lua-editor-panel-lua" role="tabpanel" aria-labelledby="lua-editor-tab-lua" hidden={active !== "lua"}>
-        <LuaCodeMirror key={identity} value={files.lua} onChange={lua => edit("lua", lua)} disabled={saving} />
-      </div>
-      <div id="lua-editor-panel-manifest" role="tabpanel" aria-labelledby="lua-editor-tab-manifest" hidden={active !== "manifest"}>
-        <label htmlFor="lua-editor-manifest" className="mb-2 block text-sm font-medium">project.json</label>
-        <textarea id="lua-editor-manifest" className="styled-scrollbar min-h-64 w-full rounded-md border border-border bg-background p-3 font-mono text-xs focus-visible:outline-2 focus-visible:outline-primary" spellCheck={false} value={files.manifest} disabled={saving} onChange={event => edit("manifest", event.target.value)} />
-        <p className="text-xs text-muted-foreground">Project identity, entrypoint and assets are fixed. You can change capabilities and streams.</p>
-      </div>
-      {validation && <p role="alert" className="text-sm text-destructive">{validation}</p>}
-      <button type="button" className={button} disabled={!dirty || !!validation || saving} onClick={() => void save()}>{saving ? "Saving…" : "Save private draft"}</button>
-    </> : !error && <p className="text-sm text-muted-foreground">This editor currently supports panel projects only.</p>}
-    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-    {notice && <p role="status" className="text-sm">{notice}</p>}
+    </div>
+    <div className="relative min-h-0 flex-1">
+      {loading ? <p role="status" className="p-4 text-sm text-muted-foreground">Loading source…</p> : files && project.kind === "panel" ? <>
+        <div id="lua-editor-panel-lua" role="tabpanel" aria-labelledby="lua-editor-tab-lua" hidden={active !== "lua"} className="h-full">
+          <LuaCodeMirror key={identity} value={files.lua} onChange={lua => edit("lua", lua)} disabled={saving} />
+        </div>
+        <div id="lua-editor-panel-manifest" role="tabpanel" aria-labelledby="lua-editor-tab-manifest" hidden={active !== "manifest"} className="h-full">
+          <textarea id="lua-editor-manifest" aria-label="project.json" className="styled-scrollbar block h-full w-full resize-none bg-background p-4 font-mono text-[13px] leading-relaxed focus-visible:outline-none" spellCheck={false} value={files.manifest} disabled={saving} onChange={event => edit("manifest", event.target.value)} />
+        </div>
+      </> : !error && <p className="p-4 text-sm text-muted-foreground">This editor currently supports panel projects only.</p>}
+    </div>
+    <div className="flex min-h-8 items-center gap-3 border-t border-border bg-card/60 px-3 py-1 text-xs">
+      {message ? <p role="alert" className="text-destructive">{message}</p>
+        : notice ? <p role="status" className="text-emerald-400">{notice}</p>
+        : <p className="text-muted-foreground">{active === "manifest" ? "Identity, entrypoint and assets are fixed; capabilities and streams are editable." : "Lua 5.1 · private working copy"}</p>}
+      <span className="ml-auto shrink-0 font-mono text-muted-foreground">rev {project.revision}</span>
+    </div>
   </section>
 }

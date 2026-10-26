@@ -1,9 +1,10 @@
 import { useEffect, useRef } from "react"
 import { EditorState } from "@codemirror/state"
 import { EditorView, lineNumbers } from "@codemirror/view"
-import { StreamLanguage, syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language"
+import { StreamLanguage, syntaxHighlighting } from "@codemirror/language"
 import { lua } from "@codemirror/legacy-modes/mode/lua"
 import { MergeView } from "@codemirror/merge"
+import { luaHighlightStyle } from "./luaHighlight"
 
 /** Read-only highlighted diff, loaded only after the user expands an AI edit review. */
 export function LuaDiffReview({ before, after }: { before: string; after: string }) {
@@ -11,7 +12,7 @@ export function LuaDiffReview({ before, after }: { before: string; after: string
   useEffect(() => {
     if (!container.current) return
     const common = [EditorState.readOnly.of(true), EditorView.editable.of(false),
-      lineNumbers(), StreamLanguage.define(lua), syntaxHighlighting(defaultHighlightStyle),
+      lineNumbers(), StreamLanguage.define(lua), syntaxHighlighting(luaHighlightStyle),
       EditorView.theme({
         "&": { backgroundColor: "var(--background)", color: "var(--foreground)", fontSize: "12px" },
         ".cm-content": { fontFamily: "var(--font-mono, ui-monospace, monospace)", minHeight: "120px" },

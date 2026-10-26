@@ -17,7 +17,7 @@ export interface LuaInstancePreviewProps {
 }
 
 interface Run { id: number; instanceId: string; panel: PanelPackage; selection: string; data?: Uint8Array }
-const button = "rounded-md border border-border bg-background px-3 py-2 text-sm disabled:opacity-50"
+const button = "rounded-md border border-border bg-background px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
 
 /** Explicit, ephemeral browser-only preview. No package lookup, upload or server execution. */
 export function LuaInstancePreview({ panel, instanceId, encounterIds, events }: LuaInstancePreviewProps) {
@@ -93,15 +93,15 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events }: 
 
   const active = run && !safeMode && run.panel === panel && run.instanceId === instanceId && run.selection === selection
   return <section className="space-y-3" aria-label="Unsaved Lua instance preview">
-    <p className="text-xs text-muted-foreground">Runs current unsaved source locally against selected encounter damage only. Up to {MAX_PREVIEW_ENCOUNTERS} encounters, 50,000 events and 8 MB of selected data. Nothing is uploaded or published.</p>
-    {safeMode ? <p>Lua preview is disabled by ?safe=1.</p> : <>
-      <div className="flex gap-2">
-        <button className={button} type="button" disabled={busy || !instanceId || !panel.sources[panel.entrypoint]} onClick={() => void start()}>{busy ? "Loading events…" : "Run preview"}</button>
-        <button className={button} type="button" disabled={!busy && !run} onClick={cancel}>Cancel preview</button>
+    {safeMode ? <p className="text-xs">Lua preview is disabled by ?safe=1.</p> : <>
+      <div className="flex items-center gap-2">
+        <button className={`${button} border-primary bg-primary text-primary-foreground hover:bg-primary/90`} type="button" disabled={busy || !instanceId || !panel.sources[panel.entrypoint]} onClick={() => void start()}>{busy ? "Loading events…" : run ? "Re-run preview" : "Run preview"}</button>
+        {(busy || run) && <button className={button} type="button" onClick={cancel}>{busy ? "Cancel" : "Clear"}</button>}
+        <span className="ml-auto text-[11px] text-muted-foreground" title="Damage events only. Nothing is uploaded or published.">≤ 50k events · 8 MB</span>
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {active && <LuaPanelHost key={run.id} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams}
-        capabilities={panel.capabilities} damageStream={run.data} encounterIds={encounterIds} assets={assetUrls} />}
+      {active && <div className="overflow-hidden rounded-md border border-border bg-background"><LuaPanelHost key={run.id} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams}
+        capabilities={panel.capabilities} damageStream={run.data} encounterIds={encounterIds} assets={assetUrls} /></div>}
     </>}
   </section>
 }

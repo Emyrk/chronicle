@@ -49,68 +49,74 @@ export default function LuaProjectWorkspacePage() {
     catch (error) { return { value: null, error: error instanceof Error ? error.message : "Invalid working copy" } }
   }, [project, copy])
 
-  if (projectQuery.isPending) return <main className="container mx-auto p-8">Loading project editor…</main>
-  if (projectQuery.isError || !project) return <main className="container mx-auto p-8" role="alert">Project unavailable or access denied.</main>
-  if (project.kind !== "panel") return <main className="container mx-auto p-8" role="alert">Browser source editing currently supports panel projects only.</main>
+  if (projectQuery.isPending) return <div className="container mx-auto p-8 text-sm text-muted-foreground">Loading project editor…</div>
+  if (projectQuery.isError || !project) return <div className="container mx-auto p-8" role="alert">Project unavailable or access denied.</div>
+  if (project.kind !== "panel") return <div className="container mx-auto p-8" role="alert">Browser source editing currently supports panel projects only.</div>
 
-  return <main className="container mx-auto max-w-7xl space-y-6 px-4 py-8">
-    <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-5">
-      <div><Link className="text-xs text-muted-foreground hover:text-foreground" to={`/lua-projects/${encodeURIComponent(project.id)}`}
-        onClick={event => { if (copy?.dirty && !window.confirm("Leave the editor and discard unsaved source changes?")) event.preventDefault() }}>← Project releases</Link>
-        <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Lua workshop / private working copy</p>
-        <h1 className="mt-1 text-2xl font-semibold">{project.name}</h1></div>
-      <p className="text-sm text-muted-foreground">Edit, test, then save. Publishing remains a separate action.</p>
+  const toggleEncounter = (id: string) => setEncounterIds(ids => ids.includes(id) ? ids.filter(item => item !== id) : ids.length >= 3 ? ids : [...ids, id])
+  const selectInstance = (id: string) => { setInstanceId(id); setEncounterIds([]) }
+
+  return <div className="flex flex-col border-b border-border lg:h-[calc(100dvh-70px)] lg:min-h-[560px]">
+    <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-4 py-2.5">
+      <Link className="text-xs text-muted-foreground hover:text-foreground" to={`/lua-projects/${encodeURIComponent(project.id)}`}
+        onClick={event => { if (copy?.dirty && !window.confirm("Leave the editor and discard unsaved source changes?")) event.preventDefault() }}>← Releases</Link>
+      <span aria-hidden className="h-4 w-px bg-border" />
+      <h1 className="text-base font-semibold">{project.name}</h1>
+      <span className="font-mono text-xs text-muted-foreground">{project.slug}</span>
+      <span className="ml-auto text-xs text-muted-foreground">Edit and test locally. Saving uploads a private draft; publishing is separate.</span>
     </header>
-    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.82fr)]">
-      <Suspense fallback={<p role="status">Loading code editor…</p>}>
-        <LuaSourceEditor project={project} onUploaded={onUploaded} onWorkingCopy={onWorkingCopy}
-          proposedSource={proposal} onProposalResult={onProposalResult} />
-      </Suspense>
-      <div className="space-y-5">
-        {copy?.valid && <Suspense fallback={<p role="status">Loading AI assistant…</p>}>
+    <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(380px,40%)]">
+      <div className="h-[65vh] min-h-0 lg:h-auto">
+        <Suspense fallback={<p role="status" className="p-4 text-sm text-muted-foreground">Loading code editor…</p>}>
+          <LuaSourceEditor project={project} onUploaded={onUploaded} onWorkingCopy={onWorkingCopy}
+            proposedSource={proposal} onProposalResult={onProposalResult} />
+        </Suspense>
+      </div>
+      <aside className="styled-scrollbar min-h-0 divide-y divide-border overflow-y-auto border-t border-border bg-card/40 lg:border-l lg:border-t-0" aria-label="Test and preview">
+        <section className="space-y-3 p-4" aria-label="Instance preview setup">
+          <div>
+            <h2 className="text-sm font-semibold">Preview on an instance</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">Runs your unsaved source in the browser against up to three encounters.</p>
+          </div>
+          {recent.data && <select aria-label="Recent instance" className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs" value={recent.data.instances.some(item => item.id === instanceId) ? instanceId : ""} onChange={event => selectInstance(event.target.value)}>
+            <option value="">Choose a recent instance…</option>
+            {recent.data.instances.map(item => <option key={item.id} value={item.id}>{item.name} · {item.realm_name} · {new Date(item.uploaded_at).toLocaleDateString()}</option>)}
+          </select>}
+          <form className="flex gap-2" onSubmit={event => { event.preventDefault(); selectInstance(instanceInput.trim()) }}>
+            <input aria-label="Instance ID" className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs" value={instanceInput} onChange={event => setInstanceInput(event.target.value)} placeholder={recent.data ? "…or paste an instance ID" : "Paste an instance ID"} />
+            <button className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50" type="submit" disabled={!instanceInput.trim()}>Load</button>
+          </form>
+          {instanceId && !validInstanceID && <p role="alert" className="text-xs text-destructive">Enter a valid instance UUID.</p>}
+          {instance.isFetching && <p role="status" className="text-xs text-muted-foreground">Loading encounters…</p>}
+          {instance.isError && <p role="alert" className="text-xs text-destructive">Instance unavailable.</p>}
+          {instance.data && <fieldset>
+            <legend className="mb-1.5 flex w-full text-xs text-muted-foreground">Encounters<span className="ml-auto font-mono">{encounterIds.length}/3</span></legend>
+            <div className="flex flex-wrap gap-1.5">
+              {instance.data.encounters.map(encounter => {
+                const selected = encounterIds.includes(encounter.id)
+                return <button key={encounter.id} type="button" aria-pressed={selected} disabled={!selected && encounterIds.length >= 3} onClick={() => toggleEncounter(encounter.id)}
+                  className={`rounded-full border px-2.5 py-1 text-xs disabled:opacity-40 ${selected ? "border-primary bg-primary/20 text-foreground" : "border-border text-muted-foreground hover:text-foreground"}`}>{encounter.name}</button>
+              })}
+            </div>
+          </fieldset>}
+          {localPanel?.error && <p role="alert" className="text-xs text-destructive">{localPanel.error}</p>}
+          {!copy?.valid && copy && <p className="text-xs text-muted-foreground">Fix the source errors to enable previews.</p>}
+          {instance.data && localPanel?.value && encounterIds.length > 0 && <Suspense fallback={<p role="status" className="text-xs">Loading local preview…</p>}>
+            <LuaInstancePreview panel={localPanel.value} instanceId={instanceId} encounterIds={encounterIds} events={events} />
+          </Suspense>}
+        </section>
+        {localPanel?.value && <Suspense fallback={<p role="status" className="p-4 text-xs">Loading browser test…</p>}>
+          <LuaBrowserTest key={`${project.revision}:${copy?.revision}`} panel={localPanel.value} />
+        </Suspense>}
+        {copy?.valid && <Suspense fallback={<p role="status" className="p-4 text-xs">Loading AI assistant…</p>}>
           <LuaEditorAssistant project={project} source={copy.source} revisionToken={copy.revision}
             onApply={(source) => {
               setProposalError("")
               setProposal({ id: crypto.randomUUID(), source, expectedRevision: copy.revision })
             }} />
         </Suspense>}
-        {proposalError && <p role="alert" className="text-sm text-destructive">{proposalError}</p>}
-        {localPanel?.value && <Suspense fallback={<p role="status">Loading browser test…</p>}>
-          <LuaBrowserTest key={`${project.revision}:${copy?.revision}`} panel={localPanel.value} />
-        </Suspense>}
-        <section className="space-y-3 rounded-xl border border-border bg-card p-4" aria-label="Instance preview setup">
-          <h2 className="font-semibold">Preview on an instance</h2>
-          <p className="text-xs text-muted-foreground">Choose a recent instance or enter an instance ID. The browser downloads a bounded damage stream and processes only the selected encounters when you run the preview.</p>
-          {recent.data && <label className="block text-sm">Recent instance
-            <select className="mt-1 w-full rounded-md border bg-background p-2" value={instanceId} onChange={event => { setInstanceId(event.target.value); setEncounterIds([]) }}>
-              <option value="">Choose an instance</option>
-              {recent.data.instances.map(item => <option key={item.id} value={item.id}>{item.name} · {item.realm_name} · {new Date(item.uploaded_at).toLocaleDateString()}</option>)}
-            </select>
-          </label>}
-          <form onSubmit={event => { event.preventDefault(); setInstanceId(instanceInput.trim()); setEncounterIds([]) }}>
-            <label className="block text-sm">Or enter an instance ID
-              <input className="mt-1 w-full rounded-md border bg-background p-2 font-mono text-xs" value={instanceInput} onChange={event => setInstanceInput(event.target.value)} placeholder="Paste an instance ID" />
-            </label>
-            <button className="mt-2 rounded-md border px-3 py-1 text-xs hover:bg-accent" type="submit">Select instance</button>
-          </form>
-          {instanceId && !validInstanceID && <p role="alert" className="text-xs text-destructive">Enter a valid instance UUID.</p>}
-          {instance.isFetching && <p role="status" className="text-xs text-muted-foreground">Loading instance encounters…</p>}
-          {instance.isError && <p role="alert" className="text-sm text-destructive">Instance unavailable.</p>}
-          {instance.data && <fieldset className="space-y-2"><legend className="text-sm font-medium">Encounters (up to three)</legend>
-            <div className="styled-scrollbar max-h-52 space-y-1 overflow-auto rounded-md border p-2">
-              {instance.data.encounters.map(encounter => <label key={encounter.id} className="flex items-center gap-2 text-xs">
-                <input type="checkbox" checked={encounterIds.includes(encounter.id)} disabled={!encounterIds.includes(encounter.id) && encounterIds.length >= 3}
-                  onChange={event => setEncounterIds(ids => event.target.checked ? [...ids, encounter.id] : ids.filter(id => id !== encounter.id))} />
-                <span>{encounter.name}</span>
-              </label>)}
-            </div>
-          </fieldset>}
-          {localPanel?.error && <p role="alert" className="text-sm text-destructive">{localPanel.error}</p>}
-          {instance.data && localPanel?.value && encounterIds.length > 0 && <Suspense fallback={<p role="status">Loading local preview…</p>}>
-            <LuaInstancePreview panel={localPanel.value} instanceId={instanceId} encounterIds={encounterIds} events={events} />
-          </Suspense>}
-        </section>
-      </div>
+        {proposalError && <p role="alert" className="p-4 text-sm text-destructive">{proposalError}</p>}
+      </aside>
     </div>
-  </main>
+  </div>
 }

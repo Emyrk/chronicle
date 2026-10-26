@@ -40,12 +40,15 @@ export function LuaBrowserTest({ panel }: { panel: PanelPackage }) {
     catch { finish("Lua worker could not receive the source package.") }
   }
 
-  return <section className="space-y-2 rounded-xl border border-border bg-card p-4" aria-label="Browser Lua test">
-    <h2 className="font-semibold">Browser startup test</h2>
-    <p className="text-xs text-muted-foreground">Starts a fresh sandboxed worker with the current unsaved source. It does not call a test service or test event behavior.</p>
-    <div className="flex gap-2"><button type="button" disabled={running} onClick={run} className="rounded-md border px-3 py-2 text-sm hover:bg-accent disabled:opacity-50">{running ? "Running…" : "Run local test"}</button>
-      {running && <button type="button" onClick={stop} className="rounded-md border px-3 py-2 text-sm">Cancel</button>}
+  return <section className="space-y-2 p-4" aria-label="Browser Lua test">
+    <div className="flex items-start gap-3">
+      <div className="flex-1">
+        <h2 className="text-sm font-semibold">Startup check</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">Loads the unsaved source in a sandboxed worker. No events are processed.</p>
+      </div>
+      <button type="button" disabled={running} onClick={run} className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50">{running ? "Running…" : "Run check"}</button>
+      {running && <button type="button" onClick={stop} className="rounded-md border border-border px-3 py-1.5 text-xs">Cancel</button>}
     </div>
-    {result && <p role="status" className="text-sm">{result}</p>}
+    {result && <p role="status" className={`rounded-md border px-3 py-2 text-xs ${result.startsWith("Lua startup passed") ? "border-emerald-500/40 text-emerald-300" : "border-destructive/50 text-destructive"}`}>{result}</p>}
   </section>
 }
