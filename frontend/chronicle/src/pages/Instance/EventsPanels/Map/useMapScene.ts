@@ -226,6 +226,10 @@ export type MapScene =
     detail: string;
     /** While loading: the selected encounter's dungeon mesh, when the manifest has one, so it can be fetched early. */
     meshHint?: WowMapMeshInstance | null;
+    /** Available when another floor may resolve the missing artwork. */
+    floors?: number[];
+    selectedFloorNumber?: number | null;
+    setFloorNumber?: (floor: number) => void;
   }
   | {
     status: "ready";
@@ -416,7 +420,16 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const flatCanvas = !meshCanvas ? availableFlatCanvas : null;
   const renderCanvas = flatCanvas?.rendered ? flatCanvas.canvas : null;
   const canvas = artwork.kind === "zone" ? zoneSelection?.layer : meshCanvas ?? flatCanvas?.canvas;
-  if (!canvas) return { status: "message", title: "Map artwork unavailable", detail: "No renderable map layer was published." };
+  if (!canvas) return {
+    status: "message",
+    title: "Map artwork unavailable",
+    detail: "No renderable map layer was published for this floor. Choose another floor to try its artwork.",
+    ...(artwork.kind === "instance" ? {
+      floors: artwork.instance.floors.map((floor) => floor.floor),
+      selectedFloorNumber,
+      setFloorNumber,
+    } : {}),
+  };
 
   const dungeonBounds = artwork.kind === "instance" ? meshCanvas?.bounds ?? flatCanvas?.canvas.bounds ?? null : null;
   const dungeonCalibration = artwork.kind === "instance" && encounter && !rawProjection && !renderCanvas
