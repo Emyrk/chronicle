@@ -103,6 +103,7 @@ export interface MapRecord {
 
 export interface MapInstanceFloor {
   floor: number;
+  preferred2D?: "renders" | "art";
   width: number;
   height: number;
   tileWidth: number;
@@ -193,7 +194,7 @@ export function recoverMapManifestBase(value: unknown, namespace: MapManifestNam
     ...manifest,
     instances: manifest.instances.map(({ styled: _styled, renders: _renders, mesh: _mesh, ...instance }) => ({
       ...instance,
-      floors: instance.floors.map(({ renders: _floorRenders, mesh: _floorMesh, ...floor }) => floor),
+      floors: instance.floors.map(({ preferred2D: _preferred2D, renders: _floorRenders, mesh: _floorMesh, ...floor }) => floor),
     })),
   };
 }
@@ -206,7 +207,9 @@ export function recoverMapManifestLayers(value: unknown): MapManifestLayers {
     ? [{ mapID: instance.mapID, name: instance.name, styled: instance.styled }]
     : []);
   const renders = manifest.instances.flatMap((instance) => {
-    const floors = instance.floors.flatMap((floor) => floor.renders ? [{ floor: floor.floor, renders: floor.renders }] : []);
+    const floors = instance.floors.flatMap((floor) => floor.renders || floor.preferred2D !== undefined
+      ? [{ floor: floor.floor, ...(floor.preferred2D === undefined ? {} : { preferred2D: floor.preferred2D }), ...(floor.renders ? { renders: floor.renders } : {}) }]
+      : []);
     return instance.renders || floors.length > 0
       ? [{ mapID: instance.mapID, name: instance.name, ...(instance.renders ? { renders: instance.renders } : {}), ...(floors.length > 0 ? { floors } : {}) }]
       : [];
@@ -226,6 +229,7 @@ export function recoverMapManifestLayers(value: unknown): MapManifestLayers {
 
 export interface MapLayerFloor {
   floor: number;
+  preferred2D?: "renders" | "art";
   renders?: MapManualRender;
   mesh?: MapPlaceableMesh;
 }
@@ -311,6 +315,13 @@ function tuple(value: unknown, context: string, length: number): number[] {
 
 function optional<T>(value: unknown, parse: (value: unknown) => T): T | undefined {
   return value === undefined || value === null ? undefined : parse(value);
+}
+
+function preferred2D(value: unknown, context: string): "renders" | "art" {
+  if (value !== "renders" && value !== "art") {
+    throw new TypeError(`${context} must be "renders" or "art"`);
+  }
+  return value;
 }
 
 function parseTarget(value: unknown, context: string): MapTarget {
@@ -423,7 +434,7 @@ function parseRecord(value: unknown, context: string): MapRecord {
 }
 
 function parseFloor(value: unknown, context: string): MapInstanceFloor {
-  const input = object(value, context, ["floor", "width", "height", "tileWidth", "tileHeight", "bounds", "tiles", "renders", "mesh"]);
+  const input = object(value, context, ["floor", "preferred2D", "width", "height", "tileWidth", "tileHeight", "bounds", "tiles", "renders", "mesh"]);
   const result: MapInstanceFloor = {
     floor: integer(input.floor, `${context}.floor`, 0),
     width: integer(input.width, `${context}.width`, 0),
@@ -432,9 +443,11 @@ function parseFloor(value: unknown, context: string): MapInstanceFloor {
     tileHeight: integer(input.tileHeight, `${context}.tileHeight`, 0),
     tiles: parseTiles(input.tiles, `${context}.tiles`),
   };
+  const preferred = optional(input.preferred2D, (entry) => preferred2D(entry, `${context}.preferred2D`));
   const bounds = optional(input.bounds, (entry) => parseBounds(entry, `${context}.bounds`));
   const renders = optional(input.renders, (entry) => parseManualRender(entry, `${context}.renders`));
   const mesh = optional(input.mesh, (entry) => parseMesh(entry, `${context}.mesh`));
+  if (preferred) result.preferred2D = preferred;
   if (bounds) result.bounds = bounds;
   if (renders) result.renders = renders;
   if (mesh) result.mesh = mesh;
@@ -544,10 +557,12 @@ export function parseMapLayer(value: unknown): MapLayerManifest {
       const meshes = optional(item.mesh, (art) => parseMesh(art, `${context}.mesh`));
       const floors = optional(item.floors, (entries) => array(entries, `${context}.floors`).map((floor, floorIndex) => {
         const floorContext = `${context}.floors[${floorIndex}]`;
-        const floorItem = object(floor, floorContext, ["floor", "renders", "mesh"]);
+        const floorItem = object(floor, floorContext, ["floor", "preferred2D", "renders", "mesh"]);
         const parsed: MapLayerFloor = { floor: integer(floorItem.floor, `${floorContext}.floor`) };
+        const floorPreferred = optional(floorItem.preferred2D, (value) => preferred2D(value, `${floorContext}.preferred2D`));
         const floorRenders = optional(floorItem.renders, (art) => parseManualRender(art, `${floorContext}.renders`));
         const floorMesh = optional(floorItem.mesh, (art) => parseMesh(art, `${floorContext}.mesh`));
+        if (floorPreferred) parsed.preferred2D = floorPreferred;
         if (floorRenders) parsed.renders = floorRenders;
         if (floorMesh) parsed.mesh = floorMesh;
         return parsed;
@@ -662,12 +677,15 @@ function mergeLayer(
       if (!floor) throw new TypeError(`unknown ${kind} map layer mapID ${entry.mapID} floor ${floorEntry.floor}`);
       const floorFields = [floorEntry.renders, floorEntry.mesh].filter((field) => field !== undefined).length;
       const artwork = kind === "renders" ? floorEntry.renders : kind === "meshes" ? floorEntry.mesh : undefined;
-      if (floorFields !== 1 || !artwork) {
+      const hasPreference = floorEntry.preferred2D !== undefined;
+      if (floorFields > (artwork ? 1 : 0) || (!artwork && !(kind === "renders" && hasPreference)) || (kind !== "renders" && hasPreference)) {
         throw new TypeError(`${kind} map layer mapID ${entry.mapID} floor ${floorEntry.floor} must contain only its own artwork`);
       }
-      validateLayerArtwork(kind, artwork, entry.mapID, floorEntry.floor);
-      if (kind === "renders") floor.renders = artwork as MapManualRender;
-      else floor.mesh = artwork as MapPlaceableMesh;
+      if (artwork) validateLayerArtwork(kind, artwork, entry.mapID, floorEntry.floor);
+      if (kind === "renders") {
+        if (artwork) floor.renders = artwork as MapManualRender;
+        if (floorEntry.preferred2D !== undefined) floor.preferred2D = floorEntry.preferred2D;
+      } else if (artwork) floor.mesh = artwork as MapPlaceableMesh;
     }
   }
 }
@@ -685,7 +703,7 @@ export function mergeMapManifests(original: unknown, layers: MapManifestLayers =
     if (instances.has(source.mapID)) throw new TypeError(`duplicate original instance mapID ${source.mapID}`);
     const { styled: _styled, renders: _renders, mesh: _mesh, ...metadata } = source;
     const floorNumbers = new Set<number>();
-    const floors = metadata.floors.map(({ renders: _floorRenders, mesh: _floorMesh, ...floor }) => {
+    const floors = metadata.floors.map(({ preferred2D: _preferred2D, renders: _floorRenders, mesh: _floorMesh, ...floor }) => {
       if (floorNumbers.has(floor.floor)) throw new TypeError(`duplicate original instance mapID ${source.mapID} floor ${floor.floor}`);
       floorNumbers.add(floor.floor);
       return floor;

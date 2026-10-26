@@ -286,7 +286,7 @@ export interface MapSceneOptions {
    * placeable mesh the option does nothing.
    */
   rawDungeonProjection?: boolean;
-  /** Prefer a calibrated top-down render over native map tiles for the flat 2D view. */
+  /** Use the floor's automatic 2D source instead of forcing native artwork while the mesh is inactive. */
   preferRenderedCanvas?: boolean;
   /**
    * Replay every processed encounter as one run: the camera follows the

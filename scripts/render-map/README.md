@@ -91,6 +91,72 @@ Always `.venv/bin/python -I` (numpy, Pillow, PyYAML), or local.yaml `python:`. B
 (local.yaml `blender:`). Run the tools from `scripts/render-map/`; slugs resolve under the workdir.
 First `fetch_map.py` builds CascLib + `cache/casc/cascget` (needs `cmake`, `clang++`; ~1 min).
 
+## Map Foundry bundles (preferred for multi-floor maps)
+
+After every floor has a calibrated render and mesh, collect their local paths and metadata in one
+staging JSON, then build a deterministic import bundle:
+
+```bash
+.venv/bin/python -I tools/foundry_bundle.py \
+  ~/.cache/chronicle-render-map/maps/naxxramas/naxxramas-foundry-stage.json
+# validate only, without writing a ZIP
+.venv/bin/python -I tools/foundry_bundle.py --check <staging.json>
+# optional explicit destination
+.venv/bin/python -I tools/foundry_bundle.py <staging.json> <bundle.zip>
+```
+
+The current single-map staging shape is:
+
+```json
+{
+  "namespace": "azerothcore",
+  "mapID": 533,
+  "name": "Naxxramas",
+  "floors": [
+    {
+      "floor": 1,
+      "name": "The Arachnid Quarter",
+      "preferred2D": "renders",
+      "render": {
+        "path": "/absolute/local/render.png",
+        "width": 2400,
+        "height": 1638,
+        "bounds": {"minX": 2925.3887, "maxX": 3564.1309, "minY": -3811.5806, "maxY": -2875.6465},
+        "bytes": 4079884,
+        "sha256": "..."
+      },
+      "mesh": {
+        "path": "/absolute/local/mesh.glb",
+        "bounds": {"minX": 2925.3887, "maxX": 3564.1309, "minY": -3811.5806, "maxY": -2875.6465},
+        "zMin": 245.5746,
+        "zMax": 436.5089,
+        "frame": "wow-yup-mirrored-x",
+        "bytes": 17733256,
+        "sha256": "..."
+      }
+    }
+  ]
+}
+```
+
+`preferred2D` is optional in staging and defaults to `renders` in `foundry.json`. Use `renders` for
+the calibrated render, or `art` to request native floor art where usable. The tool also accepts a
+shared `namespace` plus a `maps` array, rejects duplicate map or floor IDs, verifies every local
+file's exact byte count and SHA-256, requires identical render and mesh bounds, validates complete
+render and mesh calibration, and enforces the Foundry's 100 MB per-asset limit.
+
+The output is a `ZIP_STORED` archive with `foundry.json` at its root and canonical entries such as
+`maps/533/floor-1/render.png` and `maps/533/floor-1/mesh.glb`. ZIP timestamps, permissions, JSON,
+entry names, and entry order are normalized, so identical staging metadata and asset bytes produce
+an identical bundle. Absolute local paths never enter `foundry.json`.
+
+Import the ZIP through the Map Foundry UI. The browser extracts it locally, validates
+`chronicle-map-foundry-bundle-v1`, rejects archives over 512 MB, archives with more than 512 entries,
+and unreferenced entries, uploads the contained files individually, and saves one draft.
+The draft update is one conditional write, but asset storage is not transactional. A failed import can
+leave unreferenced content-addressed objects. Importing never publishes; inspect the draft and preview,
+then wait for the operator's explicit publish approval.
+
 ## Two kinds of map
 
 | kind | detected by | what you get |
