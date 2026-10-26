@@ -107,7 +107,7 @@ function useGuildClears(instanceName: string, difficulty?: string) {
   });
 }
 
-function useRecentUploads() {
+export function useRecentUploads() {
   return useQuery({
     queryKey: ["home", "recent-uploads"],
     queryFn: () =>
