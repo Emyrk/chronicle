@@ -1,10 +1,13 @@
-import { useLayoutEffect, useState, type FormEvent } from "react";
+import { lazy, Suspense, useLayoutEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useLandingFeatured } from "@/api/queries";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useRecentUploads } from "@/pages/Recent/recentUploads";
-import { RaidCard } from "@/pages/Recent/RaidCard";
 import { LandingHero } from "./LandingHero";
+
+// Recent runs render below the fold once their fetch returns; keeping RaidCard (and its
+// icon and helper chunks) out of the static graph keeps them off /start's first paint.
+const RaidCard = lazy(() => import("@/pages/Recent/RaidCard").then(({ RaidCard }) => ({ default: RaidCard })));
 
 const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
 // Public Sidekick downloads; the utm cookie set on landing carries attribution.
@@ -232,9 +235,11 @@ function RecentRuns({ getSidekickHref }: { getSidekickHref: string }) {
         </Link>
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {runs.map((run) => (
-          <RaidCard key={run.id} instance={run} />
-        ))}
+        <Suspense fallback={null}>
+          {runs.map((run) => (
+            <RaidCard key={run.id} instance={run} />
+          ))}
+        </Suspense>
         <a
           href={getSidekickHref}
           className="flex min-h-[160px] flex-col justify-center gap-1.5 rounded-xl border border-dashed border-[#5f6d88] bg-[#101829] p-4 text-center text-[#e8eef8] no-underline hover:border-[#e0b45c]"
