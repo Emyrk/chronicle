@@ -4,6 +4,8 @@ import { useLandingFeatured } from "@/api/queries";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useRecentUploads } from "@/pages/Home";
 import { RaidCard } from "@/pages/Recent/RaidCard";
+import { HeroReplayLayer } from "./HeroReplayLayer";
+import type { HeroReplay } from "./heroReplay";
 import { LandingHero } from "./LandingHero";
 
 const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
@@ -12,6 +14,8 @@ const DOWNLOAD_MAC_URL = "/download?os=macos";
 const DOWNLOAD_WINDOWS_URL = "/download?os=windows";
 
 const IMAGES = "/c/images/landing";
+// The 3D hero's run when the site setting names none.
+const FALLBACK_FEATURED_INSTANCE: string | undefined = import.meta.env.VITE_LANDING_FEATURED_INSTANCE || undefined;
 const HEADING_FONT = "font-['Libre_Baskerville',Georgia,serif]";
 
 const STEPS = [
@@ -314,7 +318,11 @@ function ClosingBand() {
 export function StartPage() {
   const isMobile = useIsMobile();
   const getSidekickHref = isMobile ? "#send-link" : "#get";
-  const { data: landing } = useLandingFeatured();
+  const { data: landing, isError: landingFailed } = useLandingFeatured();
+  // The 3D hero replays the featured run (the build-time instance when none is set); undefined until that is known.
+  const heroInstanceId = landing || landingFailed ? landing?.featured?.instance_id ?? FALLBACK_FEATURED_INSTANCE : undefined;
+  // The live 3D replay's position and controls, for the hero's scrubber; null while the poster shows.
+  const [replay, setReplay] = useState<HeroReplay | null>(null);
 
   // Our hero now covers the static poster index.html painted before the bundle loaded.
   useLayoutEffect(() => {
@@ -329,7 +337,10 @@ export function StartPage() {
         posterPortrait={`${IMAGES}/ruins-courtyard-poster-portrait.jpg`}
         posterAlt="3D replay: a five-player group fighting on the stone platform in the Ruins of Lordaeron courtyard"
         featured={landing?.featured}
+        currentMs={replay?.currentMs}
+        playback={replay}
         getSidekickHref={getSidekickHref}
+        layer3D={heroInstanceId ? <HeroReplayLayer instanceId={heroInstanceId} onReplay={setReplay} /> : null}
       />
       <SendLinkSection />
       <HowItWorks />
