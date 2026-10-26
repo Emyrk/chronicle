@@ -2,23 +2,27 @@ import { describe, it, expect } from "vitest";
 import { expandInstanceOptions, expandInstanceQuery, getRecentRaidAdInsertions } from "./recentRaids.utils";
 
 describe("getRecentRaidAdInsertions", () => {
-  it("uses the full five to ten raid range in a single-column grid", () => {
+  it("inserts the first single-column ad after three raids, then uses the full five to ten raid range", () => {
     const instanceIDs = Array.from({ length: 500 }, (_, index) => `instance-${index}`);
     const insertions = getRecentRaidAdInsertions(instanceIDs, 1);
-    const gaps = insertions.map((raidCount, index) => raidCount - (insertions[index - 1] ?? 0));
+    const laterGaps = insertions.slice(1).map(
+      (raidCount, index) => raidCount - insertions[index],
+    );
 
-    expect(new Set(gaps)).toEqual(new Set([5, 6, 7, 8, 9, 10]));
+    expect(insertions[0]).toBe(3);
+    expect(new Set(laterGaps)).toEqual(new Set([5, 6, 7, 8, 9, 10]));
   });
 
-  it("keeps every ad five to ten raids after the previous ad", () => {
+  it("keeps ads after the first insertion five to ten raids apart", () => {
     const instanceIDs = Array.from({ length: 100 }, (_, index) => `instance-${index}`);
 
     for (const columnCount of [1, 2, 3, 4]) {
       const insertions = getRecentRaidAdInsertions(instanceIDs, columnCount);
       const gaps = insertions.map((raidCount, index) => raidCount - (insertions[index - 1] ?? 0));
+      const regularCadenceGaps = columnCount === 1 ? gaps.slice(1) : gaps;
 
       expect(insertions.length).toBeGreaterThan(0);
-      expect(gaps.every((gap) => gap >= 5 && gap <= 10)).toBe(true);
+      expect(regularCadenceGaps.every((gap) => gap >= 5 && gap <= 10)).toBe(true);
     }
   });
 
