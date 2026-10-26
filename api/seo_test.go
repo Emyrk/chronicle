@@ -68,6 +68,9 @@ func TestBrandingResolverNoIndex(t *testing.T) {
 	require.Equal(t, "noindex, nofollow", api.brandingResolver(tenantSEORequest(t, "/admin/users", true)).Robots)
 	require.Equal(t, "noindex, nofollow", api.brandingResolver(tenantSEORequest(t, "/g/guild-id/edit", true)).Robots)
 	require.Equal(t, "noindex, nofollow", api.brandingResolver(tenantSEORequest(t, "/made-up-route", true)).Robots)
+	require.Empty(t, api.brandingResolver(tenantSEORequest(t, "/guides/chronicle.onyxia", true)).Robots)
+	require.Empty(t, api.brandingResolver(tenantSEORequest(t, "/guides/onyxia", true)).Robots)
+	require.Equal(t, "noindex, nofollow", api.brandingResolver(tenantSEORequest(t, "/guides/unknown", true)).Robots)
 	require.Equal(t, "noindex, nofollow", api.brandingResolver(tenantSEORequest(t, "/recent", false)).Robots)
 }
 
@@ -132,6 +135,7 @@ func TestTenantRobotsAndSitemap(t *testing.T) {
 	require.Contains(t, sitemap.Body.String(), "https://everlook.chronicleclassic.com/leaderboards/statistics")
 	require.Contains(t, sitemap.Body.String(), "https://everlook.chronicleclassic.com/wowdb")
 	require.Contains(t, sitemap.Body.String(), "https://everlook.chronicleclassic.com/talents/warrior")
+	require.Contains(t, sitemap.Body.String(), "https://everlook.chronicleclassic.com/guides/chronicle.onyxia")
 	require.NotContains(t, sitemap.Body.String(), "/wowdb/item")
 	require.NotContains(t, sitemap.Body.String(), "/wowdb/spell")
 

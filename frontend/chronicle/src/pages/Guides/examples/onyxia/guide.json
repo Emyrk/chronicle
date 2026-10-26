@@ -1,0 +1,19 @@
+{
+  "manifest_version": 1,
+  "id": "chronicle.onyxia",
+  "name": "Onyxia's Lair",
+  "version": "1.0.0",
+  "author": "Chronicle",
+  "api_version": 1,
+  "entrypoint": "main.lua",
+  "map_id": 249,
+  "game": "turtle-wow",
+  "game_version": "1.18.1",
+  "capabilities": ["map", "ui", "input", "timers"],
+  "assets": [],
+  "event_streams": [
+    { "type": "unit_position", "path": "events/unit_position.pb" }
+  ],
+  "description": "An interactive strategy prototype for Turtle WoW's reworked Onyxia encounter.",
+  "encounters": ["Onyxia"]
+}

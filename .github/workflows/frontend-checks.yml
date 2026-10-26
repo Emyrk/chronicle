@@ -50,6 +50,12 @@ jobs:
         working-directory: frontend/chronicle
         run: pnpm vitest run --project unit
 
+      - name: Verify generated guide packages match sources
+        working-directory: frontend/chronicle
+        run: |
+          pnpm build:guides
+          git diff --exit-code -- public/guides
+
   panel-sdk-package:
     name: chronicle-panel-sdk (snapshots + typecheck + test + build)
     runs-on: ubuntu-latest

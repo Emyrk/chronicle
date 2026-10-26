@@ -21,6 +21,7 @@ var indexablePrefixes = []string{
 	"/", "/recent", "/guilds", "/g", "/armory", "/instances", "/s", "/leaderboards",
 	"/talents", "/wowdb", "/technical", "/census", "/speedrunning", "/tools", "/contact",
 	"/privacy", "/terms", "/disclaimer", "/supported-instances",
+	"/guides/chronicle.onyxia", "/guides/onyxia",
 }
 
 var noIndexPrefixes = []string{
@@ -189,6 +190,7 @@ var sitemapPaths = []string{
 	"/census",
 	"/speedrunning",
 	"/tools",
+	"/guides/chronicle.onyxia",
 }
 
 func (api *API) robotsTXT(w http.ResponseWriter, r *http.Request) {

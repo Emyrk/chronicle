@@ -18,6 +18,12 @@ window.addEventListener('vite:preloadError', (event) => {
 const queryClient = new QueryClient()
 const root = document.getElementById('root')!
 const isBlogRoute = window.location.pathname === '/blog' || window.location.pathname.startsWith('/blog/')
+const isPrerenderedGuide = root.dataset.prerender === 'guide'
+
+// Guide pages contain a server-rendered summary for crawlers and no-JavaScript
+// visitors. The interactive client owns a different tree, so replace the
+// summary instead of attempting to hydrate it.
+if (isPrerenderedGuide) root.replaceChildren()
 
 const application: ReactNode = isBlogRoute ? (
   <BlogApp />

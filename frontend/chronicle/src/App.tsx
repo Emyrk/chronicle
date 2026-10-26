@@ -5,6 +5,7 @@ import { NitroPayRuntime } from "./components/Ads/NitroPayRuntime"
 import { Layout } from "./components/Layout/Layout"
 import { RouteLoadingFallback } from "./components/Layout/RouteLoadingFallback"
 
+const GuidePage = lazy(() => import("./pages/Guides/GuidePage").then(({ GuidePage }) => ({ default: GuidePage })))
 const Login = lazy(() => import("./pages/Login/Login").then(({ Login }) => ({ default: Login })))
 const Contact = lazy(() => import("./pages/Contact").then(({ Contact }) => ({ default: Contact })))
 const BecomeSupporter = lazy(() => import("./pages/BecomeSupporter").then(({ BecomeSupporter }) => ({ default: BecomeSupporter })))
@@ -150,6 +151,7 @@ function App() {
       <NitroPayRuntime />
       <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
+      <Route path="/guides/:guideId" element={<GuidePage />} />
       <Route path="/login" element={<Login />} />
       <Route path="/youtube-sync" element={<LegacyYouTubeSyncRedirect />} />
       <Route path="/youtube-sync-v2" element={<LegacyYouTubeSyncRedirect />} />
