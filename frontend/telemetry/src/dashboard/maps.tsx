@@ -419,9 +419,9 @@ mapsDashboard.get("/internal/maps", (c) => c.html(
             if (!state || state.namespace !== namespace || selectedID !== mapID || selectedFloor !== floor) return;
             const entry = ensureEntry(kind, mapID); entry.name = name;
             const target = floor === null ? entry : ensureFloorEntry(kind, mapID, floor);
-            if (kind === 'renders') target.renders = { ...(target.renders || {}), path:result.path, width:result.width, height:result.height };
-            else target.mesh = { ...(target.mesh || {}), path:result.path };
-            dirty = true; setStatus('Asset uploaded. Save the draft to register it.'); renderList(); renderEditor();
+            if (kind === 'renders') target.renders = { path:result.path, width:result.width, height:result.height };
+            else target.mesh = { path:result.path };
+            dirty = true; setStatus('Asset uploaded. Confirm its calibration, then save the draft to register it.'); renderList(); renderEditor();
           } catch (error) {
             if (state?.namespace === namespace && selectedID === mapID) setStatus(error.message, true);
           } finally { setBusy(false); }
