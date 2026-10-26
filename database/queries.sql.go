@@ -5872,7 +5872,7 @@ func (q *sqlQuerier) GetWoWLogFilesByGroupID(ctx context.Context, wowLogID uuid.
 
 const getWoWLogGroupByID = `-- name: GetWoWLogGroupByID :one
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted, wow_log_groups.upload_source, wow_log_groups.sidekick_installation_id,
   u.username AS owner_name,
   COALESCE(
       jsonb_agg(
@@ -5927,6 +5927,8 @@ func (q *sqlQuerier) GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetW
 		&i.WoWLogGroup.InvalidReason,
 		&i.WoWLogGroup.ParseGeneration,
 		&i.WoWLogGroup.Unlisted,
+		&i.WoWLogGroup.UploadSource,
+		&i.WoWLogGroup.SidekickInstallationID,
 		&i.OwnerName,
 		&i.Files,
 	)
@@ -5935,7 +5937,7 @@ func (q *sqlQuerier) GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetW
 
 const getWoWLogGroupsByOwner = `-- name: GetWoWLogGroupsByOwner :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted, wow_log_groups.upload_source, wow_log_groups.sidekick_installation_id,
   files_agg.files,
   instances_output.output AS processing_output,
   parsed_bytes_agg.parsed_bytes
@@ -6067,6 +6069,8 @@ func (q *sqlQuerier) GetWoWLogGroupsByOwner(ctx context.Context, arg GetWoWLogGr
 			&i.WoWLogGroup.InvalidReason,
 			&i.WoWLogGroup.ParseGeneration,
 			&i.WoWLogGroup.Unlisted,
+			&i.WoWLogGroup.UploadSource,
+			&i.WoWLogGroup.SidekickInstallationID,
 			&i.Files,
 			&i.ProcessingOutput,
 			&i.ParsedBytes,
@@ -6163,6 +6167,8 @@ INSERT INTO
     format,
     flavor,
     unlisted,
+    upload_source,
+    sidekick_installation_id,
     created_at,
     updated_at
   )
@@ -6175,20 +6181,24 @@ VALUES
     $5,
     $6,
     $7,
-    $8
+    $8,
+    $9,
+    $10
   )
-RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason, parse_generation, unlisted
+RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason, parse_generation, unlisted, upload_source, sidekick_installation_id
 `
 
 type InsertWoWLogGroupParams struct {
-	ID        uuid.UUID          `db:"id" json:"id"`
-	Owner     uuid.UUID          `db:"owner" json:"owner"`
-	LogType   LogType            `db:"log_type" json:"log_type"`
-	Format    NullLogFormat      `db:"format" json:"format"`
-	Flavor    []string           `db:"flavor" json:"flavor"`
-	Unlisted  bool               `db:"unlisted" json:"unlisted"`
-	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	ID                     uuid.UUID          `db:"id" json:"id"`
+	Owner                  uuid.UUID          `db:"owner" json:"owner"`
+	LogType                LogType            `db:"log_type" json:"log_type"`
+	Format                 NullLogFormat      `db:"format" json:"format"`
+	Flavor                 []string           `db:"flavor" json:"flavor"`
+	Unlisted               bool               `db:"unlisted" json:"unlisted"`
+	UploadSource           NullUploadSource   `db:"upload_source" json:"upload_source"`
+	SidekickInstallationID uuid.NullUUID      `db:"sidekick_installation_id" json:"sidekick_installation_id"`
+	CreatedAt              pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 func (q *sqlQuerier) InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGroupParams) (WoWLogGroup, error) {
@@ -6199,6 +6209,8 @@ func (q *sqlQuerier) InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGrou
 		arg.Format,
 		arg.Flavor,
 		arg.Unlisted,
+		arg.UploadSource,
+		arg.SidekickInstallationID,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -6215,6 +6227,8 @@ func (q *sqlQuerier) InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGrou
 		&i.InvalidReason,
 		&i.ParseGeneration,
 		&i.Unlisted,
+		&i.UploadSource,
+		&i.SidekickInstallationID,
 	)
 	return i, err
 }
@@ -6266,7 +6280,7 @@ func (q *sqlQuerier) InvalidateWoWLogGroup(ctx context.Context, arg InvalidateWo
 
 const listAllWoWLogGroupsWithOwner = `-- name: ListAllWoWLogGroupsWithOwner :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted, wow_log_groups.upload_source, wow_log_groups.sidekick_installation_id,
   u.username AS owner_name,
   files_agg.files,
   instances_output.output AS processing_output
@@ -6390,6 +6404,8 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAl
 			&i.WoWLogGroup.InvalidReason,
 			&i.WoWLogGroup.ParseGeneration,
 			&i.WoWLogGroup.Unlisted,
+			&i.WoWLogGroup.UploadSource,
+			&i.WoWLogGroup.SidekickInstallationID,
 			&i.OwnerName,
 			&i.Files,
 			&i.ProcessingOutput,
@@ -6406,7 +6422,7 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAl
 
 const listAllWoWLogGroupsWithOwnerPaginated = `-- name: ListAllWoWLogGroupsWithOwnerPaginated :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted, wow_log_groups.upload_source, wow_log_groups.sidekick_installation_id,
   u.username AS owner_name,
   files_agg.files,
   files_agg.total_size_bytes,
@@ -6581,6 +6597,8 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, 
 			&i.WoWLogGroup.InvalidReason,
 			&i.WoWLogGroup.ParseGeneration,
 			&i.WoWLogGroup.Unlisted,
+			&i.WoWLogGroup.UploadSource,
+			&i.WoWLogGroup.SidekickInstallationID,
 			&i.OwnerName,
 			&i.Files,
 			&i.TotalSizeBytes,
@@ -19929,7 +19947,7 @@ func (q *sqlQuerier) UpsertPendingModificationRequest(ctx context.Context, arg U
 }
 
 const findMatchingServerUpload = `-- name: FindMatchingServerUpload :one
-SELECT wlg.id, wlg.owner, wlg.created_at, wlg.updated_at, wlg.log_type, wlg.format, wlg.flavor, wlg.invalidated_at, wlg.invalid_reason, wlg.parse_generation, wlg.unlisted
+SELECT wlg.id, wlg.owner, wlg.created_at, wlg.updated_at, wlg.log_type, wlg.format, wlg.flavor, wlg.invalidated_at, wlg.invalid_reason, wlg.parse_generation, wlg.unlisted, wlg.upload_source, wlg.sidekick_installation_id
 FROM wow_log_groups wlg
 JOIN server_upload_meta sm ON sm.log_group_id = wlg.id
 WHERE wlg.owner = $1
@@ -19975,6 +19993,8 @@ func (q *sqlQuerier) FindMatchingServerUpload(ctx context.Context, arg FindMatch
 		&i.InvalidReason,
 		&i.ParseGeneration,
 		&i.Unlisted,
+		&i.UploadSource,
+		&i.SidekickInstallationID,
 	)
 	return i, err
 }
@@ -24544,7 +24564,7 @@ UPDATE wow_log_groups
 SET unlisted = true,
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason, parse_generation, unlisted
+RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason, parse_generation, unlisted, upload_source, sidekick_installation_id
 `
 
 func (q *sqlQuerier) MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) (WoWLogGroup, error) {
@@ -24562,6 +24582,8 @@ func (q *sqlQuerier) MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) 
 		&i.InvalidReason,
 		&i.ParseGeneration,
 		&i.Unlisted,
+		&i.UploadSource,
+		&i.SidekickInstallationID,
 	)
 	return i, err
 }

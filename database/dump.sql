@@ -79,6 +79,12 @@ CREATE TYPE river_job_state AS ENUM (
     'scheduled'
 );
 
+CREATE TYPE upload_source AS ENUM (
+    'web',
+    'sidekick',
+    'api'
+);
+
 CREATE DOMAIN wow_guid AS text
 	CONSTRAINT wow_guid_check CHECK ((VALUE ~ '^0x[0-9A-Fa-f]{16}$'::text));
 
@@ -365,7 +371,9 @@ CREATE TABLE wow_log_groups (
     invalidated_at timestamp with time zone,
     invalid_reason text DEFAULT ''::text NOT NULL,
     parse_generation bigint DEFAULT 1 NOT NULL,
-    unlisted boolean DEFAULT false NOT NULL
+    unlisted boolean DEFAULT false NOT NULL,
+    upload_source upload_source,
+    sidekick_installation_id uuid
 );
 
 CREATE VIEW chronicle_users AS
@@ -3291,6 +3299,8 @@ CREATE INDEX idx_world_item_template_dataset_set_inventory_type ON world_item_te
 
 CREATE INDEX idx_world_item_template_name ON world_item_template USING btree (dataset_id, name);
 
+CREATE INDEX idx_wow_log_groups_sidekick_installation_id ON wow_log_groups USING btree (sidekick_installation_id) WHERE (sidekick_installation_id IS NOT NULL);
+
 CREATE UNIQUE INDEX idx_wow_server_realms_name_unique ON wow_server_realms USING btree (lower(name));
 
 CREATE UNIQUE INDEX idx_wow_servers_name_unique ON wow_servers USING btree (lower(name));
@@ -3977,6 +3987,9 @@ ALTER TABLE ONLY world_spell_threat
 ALTER TABLE ONLY wow_log_groups
     ADD CONSTRAINT wow_log_groups_owner_fkey FOREIGN KEY (owner) REFERENCES users(id);
 
+ALTER TABLE ONLY wow_log_groups
+    ADD CONSTRAINT wow_log_groups_sidekick_installation_id_fkey FOREIGN KEY (sidekick_installation_id) REFERENCES sidekick_installations(id) ON DELETE SET NULL;
+
 ALTER TABLE ONLY wow_server_realms
     ADD CONSTRAINT wow_server_realms_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(id);
 
@@ -4030,5 +4043,4 @@ CREATE POLICY tenant_realm_isolation ON wow_server_realms USING ((server_id IN (
 ALTER TABLE wow_server_realms ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE wow_servers ENABLE ROW LEVEL SECURITY;
-
 
