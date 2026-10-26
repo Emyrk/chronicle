@@ -1394,6 +1394,21 @@ func (q *sqlQuerier) DeleteBillingEntitlementsByProviderCustomerID(ctx context.C
 	return err
 }
 
+const deleteOldSuccessfulBillingReconciliationRuns = `-- name: DeleteOldSuccessfulBillingReconciliationRuns :execrows
+DELETE FROM billing_reconciliation_runs
+WHERE status = 'completed'
+  AND error_text = ''
+  AND started_at < NOW() - INTERVAL '7 days'
+`
+
+func (q *sqlQuerier) DeleteOldSuccessfulBillingReconciliationRuns(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOldSuccessfulBillingReconciliationRuns)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getBillingEntitlementOwnerByProviderCustomerID = `-- name: GetBillingEntitlementOwnerByProviderCustomerID :one
 SELECT user_id FROM billing_entitlements
 WHERE provider = $1

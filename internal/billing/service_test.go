@@ -987,8 +987,11 @@ func TestStripeSubscriptionPurchase(t *testing.T) {
 	firstEnd := time.Date(2026, time.November, 15, 12, 0, 0, 0, time.UTC)
 	latestEnd := firstEnd.AddDate(0, 1, 0)
 	sub := testStripeSubscription("prod_supporter", "price_monthly", firstEnd)
+	sub.Items.Data[0].Price = testStripePrice("price_monthly", 500, stripe.PriceRecurringIntervalMonth, 3)
+	sub.Items.Data[0].Quantity = 2
 	sub.Items.Data = append(sub.Items.Data, &stripe.SubscriptionItem{
-		Price:            &stripe.Price{ID: "price_monthly", Product: &stripe.Product{ID: "prod_supporter"}},
+		Price:            testStripePrice("price_monthly", 500, stripe.PriceRecurringIntervalMonth, 3),
+		Quantity:         3,
 		CurrentPeriodEnd: latestEnd.Unix(),
 	})
 
@@ -996,6 +999,10 @@ func TestStripeSubscriptionPurchase(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "prod_supporter", got.productID)
 	require.Equal(t, "price_monthly", got.priceID)
+	require.Equal(t, int64(500), got.unitAmount)
+	require.Equal(t, "usd", got.currency)
+	require.Equal(t, int64(3), got.intervalMonths)
+	require.Equal(t, int64(5), got.quantity)
 	require.Equal(t, pgtype.Timestamptz{Time: latestEnd, Valid: true}, got.periodEnd)
 }
 

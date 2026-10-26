@@ -573,9 +573,13 @@ func (s *Service) markSubscriptionCanceled(ctx context.Context, subscriptionID s
 }
 
 type stripePurchase struct {
-	productID string
-	priceID   string
-	periodEnd pgtype.Timestamptz
+	productID      string
+	priceID        string
+	unitAmount     int64
+	currency       string
+	intervalMonths int64
+	quantity       int64
+	periodEnd      pgtype.Timestamptz
 }
 
 func stripeSubscriptionPurchase(sub *stripe.Subscription) (stripePurchase, error) {
@@ -597,6 +601,21 @@ func stripeSubscriptionPurchase(sub *stripe.Subscription) (stripePurchase, error
 		}
 		purchase.productID = productID
 		purchase.priceID = priceID
+		purchase.unitAmount = item.Price.UnitAmount
+		purchase.currency = string(item.Price.Currency)
+		if item.Price.Recurring != nil && item.Price.Recurring.IntervalCount > 0 {
+			purchase.intervalMonths = item.Price.Recurring.IntervalCount
+			if item.Price.Recurring.Interval == stripe.PriceRecurringIntervalYear {
+				purchase.intervalMonths *= 12
+			} else if item.Price.Recurring.Interval != stripe.PriceRecurringIntervalMonth {
+				purchase.intervalMonths = 0
+			}
+		}
+		quantity := item.Quantity
+		if quantity <= 0 {
+			quantity = 1
+		}
+		purchase.quantity += quantity
 		if item.CurrentPeriodEnd > purchase.periodEnd.Time.Unix() {
 			purchase.periodEnd = pgtype.Timestamptz{Time: time.Unix(item.CurrentPeriodEnd, 0).UTC(), Valid: true}
 		}

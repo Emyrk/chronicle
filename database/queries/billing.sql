@@ -180,6 +180,12 @@ SET status = @status,
     error_text = @error_text
 WHERE id = @id;
 
+-- name: DeleteOldSuccessfulBillingReconciliationRuns :execrows
+DELETE FROM billing_reconciliation_runs
+WHERE status = 'completed'
+  AND error_text = ''
+  AND started_at < NOW() - INTERVAL '7 days';
+
 -- name: ListRecentBillingReconciliationRuns :many
 SELECT * FROM billing_reconciliation_runs
 ORDER BY started_at DESC

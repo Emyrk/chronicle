@@ -28,6 +28,8 @@ type reconciliationStore struct {
 	providerCustomers  []database.ListBillingProviderCustomersForReconciliationRow
 	runID              uuid.UUID
 	completion         database.CompleteBillingReconciliationRunParams
+	cleanupCalls       int
+	cleanupErr         error
 }
 
 func (s *reconciliationStore) GetBillingSubscriptionByProviderID(context.Context, database.GetBillingSubscriptionByProviderIDParams) (database.BillingSubscription, error) {
@@ -80,6 +82,11 @@ func (s *reconciliationStore) CompleteBillingReconciliationRun(_ context.Context
 	return nil
 }
 
+func (s *reconciliationStore) DeleteOldSuccessfulBillingReconciliationRuns(context.Context) (int64, error) {
+	s.cleanupCalls++
+	return 1, s.cleanupErr
+}
+
 func TestReconciliationJobRetriesAtMostOnce(t *testing.T) {
 	t.Parallel()
 
@@ -109,6 +116,8 @@ func TestSubscriptionWebhookUsesAuthoritativeStateAndPriceTier(t *testing.T) {
 		return nil
 	})
 	authoritative := testStripeSubscription("prod_exalted", "price_exalted", periodEnd)
+	authoritative.Items.Data[0].Price = testStripePrice("price_exalted", 1800, stripe.PriceRecurringIntervalYear, 1)
+	authoritative.Items.Data[0].Quantity = 1
 	authoritative.ID = "sub_authoritative"
 	authoritative.Customer = &stripe.Customer{ID: "cus_authoritative"}
 	authoritative.Status = stripe.SubscriptionStatusActive
@@ -139,6 +148,11 @@ func TestSubscriptionWebhookUsesAuthoritativeStateAndPriceTier(t *testing.T) {
 		ProviderCustomerID:     authoritative.Customer.ID,
 		ProviderSubscriptionID: authoritative.ID,
 		ProductCode:            string(ProductExalted),
+		ProviderPriceID:        "price_exalted",
+		UnitAmount:             1800,
+		Currency:               "usd",
+		IntervalMonths:         12,
+		Quantity:               1,
 		Status:                 string(stripe.SubscriptionStatusActive),
 		CurrentPeriodEnd:       periodEnd.Truncate(time.Second).UTC(),
 	}, notified)
@@ -215,6 +229,7 @@ func TestDeletedSubscriptionWebhookNotifiesFromPersistedRow(t *testing.T) {
 		ProviderCustomerID:     row.ProviderCustomerID,
 		ProviderSubscriptionID: row.ProviderSubscriptionID.String,
 		ProductCode:            row.ProductCode,
+		ProviderPriceID:        row.ProviderPriceID.String,
 		Status:                 string(stripe.SubscriptionStatusCanceled),
 		CurrentPeriodEnd:       periodEnd,
 	}, notified)
@@ -317,6 +332,11 @@ func TestReconciliationCountsChangedNoopAndInvalidMetadata(t *testing.T) {
 		},
 	}
 	svc := New(Options{Store: store, ReveredPriceIDs: []string{"price_monthly"}})
+	var notifications []SubscriptionChangeNotification
+	svc.SetSubscriptionChangeNotifier(func(_ context.Context, change SubscriptionChangeNotification) error {
+		notifications = append(notifications, change)
+		return nil
+	})
 	customerMetadata := make(map[string]string)
 	svc.updateCustomer = func(_ context.Context, customerID string, params *stripe.CustomerUpdateParams) (*stripe.Customer, error) {
 		customerMetadata[customerID] = params.Metadata[stripeMetadataChronicleUserID]
@@ -341,6 +361,9 @@ func TestReconciliationCountsChangedNoopAndInvalidMetadata(t *testing.T) {
 	require.Equal(t, pgtype.Timestamptz{Time: cancelAt, Valid: true}, store.conditionalUpserts[0].CancelAt)
 	require.Equal(t, userID.String(), customerMetadata[validChanged.Customer.ID])
 	require.Equal(t, validNoopUserID.String(), customerMetadata[validNoop.Customer.ID])
+	require.Len(t, notifications, 1)
+	require.Equal(t, SubscriptionChangeEventReconciled, notifications[0].EventType)
+	require.Equal(t, validChanged.ID, notifications[0].ProviderSubscriptionID)
 	require.Equal(t, int32(3), store.completion.EntitlementCustomersFound)
 	require.Equal(t, int32(3), store.completion.EntitlementCustomersSynced)
 }
@@ -457,12 +480,19 @@ func TestReconciliationCancelsLocalSubscriptionMissingFromStripe(t *testing.T) {
 		require.Equal(t, local.ProviderSubscriptionID.String, id)
 		return nil, &stripe.Error{Code: stripe.ErrorCodeResourceMissing}
 	}
+	var notified SubscriptionChangeNotification
+	svc.SetSubscriptionChangeNotifier(func(_ context.Context, change SubscriptionChangeNotification) error {
+		notified = change
+		return nil
+	})
 
 	err := (&ReconciliationWorker{Billing: svc, Store: store}).Work(context.Background(), &river.Job[ArgsReconcileSubscriptions]{})
 	require.NoError(t, err)
 	require.Equal(t, int32(1), store.completion.SubscriptionsChanged)
 	require.Len(t, store.conditionalUpserts, 1)
 	require.Equal(t, string(stripe.SubscriptionStatusCanceled), store.conditionalUpserts[0].Status)
+	require.Equal(t, SubscriptionChangeEventReconciledCanceled, notified.EventType)
+	require.Equal(t, local.ProviderSubscriptionID.String, notified.ProviderSubscriptionID)
 	require.Equal(t, local.CurrentPeriodEnd, store.conditionalUpserts[0].CurrentPeriodEnd)
 }
 
@@ -593,6 +623,19 @@ func TestAuthoritativeSubscriptionRejectsUnconfiguredPriceAndEmptyCustomer(t *te
 	require.Empty(t, store.upserts)
 }
 
+func TestReconciliationDeletesOldSuccessfulRunsAfterCompletion(t *testing.T) {
+	t.Parallel()
+
+	store := &reconciliationStore{cleanupErr: errors.New("cleanup unavailable")}
+	svc := New(Options{Store: store, ReveredPriceIDs: []string{"price_monthly"}})
+	svc.listSubscriptions = func(context.Context) ([]*stripe.Subscription, error) { return nil, nil }
+
+	err := (&ReconciliationWorker{Billing: svc, Store: store}).Work(context.Background(), &river.Job[ArgsReconcileSubscriptions]{})
+	require.NoError(t, err, "cleanup is best effort")
+	require.Equal(t, "completed", store.completion.Status)
+	require.Equal(t, 1, store.cleanupCalls)
+}
+
 func TestReconciliationRecordsFailureAndRetries(t *testing.T) {
 	t.Parallel()
 	store := &reconciliationStore{}
@@ -602,5 +645,6 @@ func TestReconciliationRecordsFailureAndRetries(t *testing.T) {
 	err := worker.Work(context.Background(), &river.Job[ArgsReconcileSubscriptions]{})
 	require.ErrorContains(t, err, "stripe unavailable")
 	require.Equal(t, "failed", store.completion.Status)
+	require.Zero(t, store.cleanupCalls)
 	require.Contains(t, store.completion.ErrorText, "stripe unavailable")
 }

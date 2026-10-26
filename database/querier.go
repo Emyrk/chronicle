@@ -126,6 +126,7 @@ type sqlcQuerier interface {
 	DeleteOAuthTokenSession(ctx context.Context, arg DeleteOAuthTokenSessionParams) (int64, error)
 	DeleteOAuthTokenSessionsByRequestID(ctx context.Context, requestID string) (int64, error)
 	DeleteObsoleteRankingRuns(ctx context.Context, arg DeleteObsoleteRankingRunsParams) ([]uuid.UUID, error)
+	DeleteOldSuccessfulBillingReconciliationRuns(ctx context.Context) (int64, error)
 	DeleteOrphanCustomPanelReleases(ctx context.Context) (int64, error)
 	DeleteParseScoreMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error
 	// Compact current-known membership for DPS/HPS parse cohorts.
