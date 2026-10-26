@@ -20,6 +20,7 @@ import (
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/internal/services/serviceoauth"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
 )
@@ -382,7 +383,7 @@ func (api *API) WoWLogUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{firstInput, secondInput}, nil, database.LogTypeV1, uuid.Nil, chronicle.UploadMeta{Unlisted: unlisted})
+	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{firstInput, secondInput}, nil, database.LogTypeV1, uuid.Nil, uploadSourceMeta(ctx, chronicle.UploadMeta{Unlisted: unlisted}))
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
@@ -407,6 +408,20 @@ func (api *API) WoWLogUpload(w http.ResponseWriter, r *http.Request) {
 		LogID: group.ID,
 		Files: fileIDs,
 	})
+}
+
+// uploadSourceMeta records which authenticated path an upload came through:
+// a Sidekick token, another OAuth token, or a browser session.
+func uploadSourceMeta(ctx context.Context, meta chronicle.UploadMeta) chronicle.UploadMeta {
+	source := database.UploadSourceWeb
+	if id, ok := serviceoauth.SidekickInstallationID(ctx); ok {
+		source = database.UploadSourceSidekick
+		meta.SidekickInstallationID = uuid.NullUUID{UUID: id, Valid: true}
+	} else if serviceoauth.OAuthBearer(ctx) {
+		source = database.UploadSourceApi
+	}
+	meta.Source = database.NullUploadSource{UploadSource: source, Valid: true}
+	return meta
 }
 
 // isGzipped checks if a file header indicates gzip compression
@@ -577,6 +592,7 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	meta.Unlisted = unlisted
+	meta = uploadSourceMeta(ctx, meta)
 
 	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{input}, artifactInputs, logType, uuid.Nil, meta)
 	if err != nil {
