@@ -46,6 +46,8 @@ const (
 	FlavorChromieCraft FlavorTag = "chromiecraft"
 	// FlavorCapybara is Capybara-specific behavior.
 	FlavorCapybara FlavorTag = "capybara"
+	// FlavorRavencraft is Ravencraft-specific behavior.
+	FlavorRavencraft FlavorTag = "ravencraft"
 	// FlavorAzerothcoreProgression enables progression-server behavior where
 	// multiple expansion versions of the same instance can coexist.
 	FlavorAzerothcoreProgression FlavorTag = "azerothcore-progression"
@@ -77,6 +79,7 @@ func AllFlavorTagValues() []FlavorTag {
 		FlavorAzerothcore,
 		FlavorChromieCraft,
 		FlavorCapybara,
+		FlavorRavencraft,
 		FlavorAzerothcoreProgression,
 		FlavorVanillaPlus,
 		FlavorOctoWoW,
