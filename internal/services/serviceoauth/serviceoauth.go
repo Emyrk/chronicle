@@ -409,7 +409,7 @@ func (s *Service) authenticateBearer(r *http.Request) (context.Context, bool) {
 	if err != nil {
 		return r.Context(), false
 	}
-	ctx := chronauth.WithClaims(r.Context(), &claims.Claims{Subject: userID})
+	ctx := withOAuthBearer(chronauth.WithClaims(r.Context(), &claims.Claims{Subject: userID}))
 	if installationID, ok := sidekickInstallationIDFromSession(request.GetSession()); ok {
 		ctx = withSidekickInstallationID(ctx, installationID)
 	}

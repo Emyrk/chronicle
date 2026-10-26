@@ -208,7 +208,9 @@ func (h *Handler) ServerLogUpload(w http.ResponseWriter, r *http.Request) {
 		IsGzipped: isGzipped(header),
 	}
 
-	group, files, err := h.chronicle.UploadLogs(ctx, []chronicle.UploadInput{input}, nil, database.LogTypeAzerothcore, key.RealmID, chronicle.UploadMeta{})
+	group, files, err := h.chronicle.UploadLogs(ctx, []chronicle.UploadInput{input}, nil, database.LogTypeAzerothcore, key.RealmID, chronicle.UploadMeta{
+		Source: database.NullUploadSource{UploadSource: database.UploadSourceApi, Valid: true},
+	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{

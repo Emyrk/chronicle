@@ -77,7 +77,7 @@ func TestLandingFeatured(t *testing.T) {
 			{OffsetMs: (5 * time.Minute).Milliseconds(), VictimName: "Tanky", VictimClass: "WARRIOR"},
 			{OffsetMs: (11 * time.Minute).Milliseconds(), VictimName: "Healy", VictimClass: "PRIEST", KillerName: "The Butcher"},
 		},
-		Upload: chroniclesdk.LandingFeaturedUpload{Source: chroniclesdk.LandingUploadSourceUnknown, DelayMs: &delay},
+		Upload: chroniclesdk.LandingFeaturedUpload{Source: chroniclesdk.LandingUploadSourceSidekick, DelayMs: &delay},
 	}, getFeatured())
 
 	require.Equal(t, http.StatusBadRequest, setFeatured("not-a-uuid"))
@@ -106,7 +106,8 @@ func seedLandingInstance(t *testing.T, store database.Store, start, end time.Tim
 	uploaded := end.Add(3 * time.Minute)
 	_, err = store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
 		ID: logGroupID, Owner: ownerID, LogType: database.LogTypeV1,
-		CreatedAt: database.Timestamptz(uploaded), UpdatedAt: database.Timestamptz(uploaded),
+		UploadSource: database.NullUploadSource{UploadSource: database.UploadSourceSidekick, Valid: true},
+		CreatedAt:    database.Timestamptz(uploaded), UpdatedAt: database.Timestamptz(uploaded),
 	})
 	require.NoError(t, err)
 	require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))

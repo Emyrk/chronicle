@@ -2685,9 +2685,9 @@ export interface LandingFeaturedUpload {
 }
 
 // From chroniclesdk/landing.go
-export type LandingUploadSource = "manual" | "sidekick" | "unknown";
+export type LandingUploadSource = "api" | "manual" | "sidekick" | "unknown";
 
-export const LandingUploadSources: LandingUploadSource[] = ["manual", "sidekick", "unknown"];
+export const LandingUploadSources: LandingUploadSource[] = ["api", "manual", "sidekick", "unknown"];
 
 // From chroniclesdk/panel_layout.go
 export interface LayoutDefaultsResponse {

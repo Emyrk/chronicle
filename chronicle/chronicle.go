@@ -240,6 +240,10 @@ type UploadMeta struct {
 	Format   database.LogFormat
 	Flavor   database.WoWFlavor
 	Unlisted bool
+	// Source is the authenticated path the upload came through; the
+	// installation is set for Sidekick uploads.
+	Source                 database.NullUploadSource
+	SidekickInstallationID uuid.NullUUID
 }
 
 func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifacts []ArtifactInput, logType database.LogType, realmID uuid.UUID, meta UploadMeta) (*database.WoWLogGroup, []database.LogFile, error) {
@@ -476,10 +480,12 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, artifa
 			Format:  database.NullLogFormat{LogFormat: format, Valid: format.Valid()},
 			// flavor is the server's identity, independent of log_type. nil leaves
 			// the column NULL.
-			Flavor:    flavor.Strings(),
-			Unlisted:  meta.Unlisted,
-			CreatedAt: database.Timestamptz(now),
-			UpdatedAt: database.Timestamptz(now),
+			Flavor:                 flavor.Strings(),
+			Unlisted:               meta.Unlisted,
+			UploadSource:           meta.Source,
+			SidekickInstallationID: meta.SidekickInstallationID,
+			CreatedAt:              database.Timestamptz(now),
+			UpdatedAt:              database.Timestamptz(now),
 		})
 		if err != nil {
 			return err

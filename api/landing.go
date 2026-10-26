@@ -183,11 +183,21 @@ func (a *API) loadLandingFeatured(ctx context.Context) (*chroniclesdk.LandingFea
 	return run, nil
 }
 
-// landingUpload derives upload provenance. The upload path (Sidekick or the
-// web form) is not recorded per log group, so the source is always unknown.
-// The upload completed when its newest file was stored.
+// landingUpload derives upload provenance. Groups uploaded before the source
+// was recorded report unknown. The upload completed when its newest file was
+// stored.
 func landingUpload(group database.GetWoWLogGroupByIDRow, lastEvent time.Time) chroniclesdk.LandingFeaturedUpload {
 	out := chroniclesdk.LandingFeaturedUpload{Source: chroniclesdk.LandingUploadSourceUnknown}
+	if src := group.WoWLogGroup.UploadSource; src.Valid {
+		switch src.UploadSource {
+		case database.UploadSourceSidekick:
+			out.Source = chroniclesdk.LandingUploadSourceSidekick
+		case database.UploadSourceWeb:
+			out.Source = chroniclesdk.LandingUploadSourceManual
+		case database.UploadSourceApi:
+			out.Source = chroniclesdk.LandingUploadSourceAPI
+		}
+	}
 	completed := group.WoWLogGroup.CreatedAt.Time
 	for _, f := range group.Files {
 		if f.CreatedAt.Valid && f.CreatedAt.Time.After(completed) {
