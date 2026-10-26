@@ -2625,6 +2625,70 @@ export type KillType = "clean" | "partial" | "reset" | "wipe";
 
 export const KillTypes: KillType[] = ["clean", "partial", "reset", "wipe"];
 
+// From chroniclesdk/landing.go
+/**
+ * LandingFeaturedBoss is one boss encounter (kill or wipe), ordered by pull.
+ * Offsets are milliseconds from the instance start.
+ */
+export interface LandingFeaturedBoss {
+    readonly name: string;
+    readonly start_offset_ms: number;
+    readonly end_offset_ms: number;
+}
+
+// From chroniclesdk/landing.go
+/**
+ * LandingFeaturedDeath is a player death, ordered by time.
+ */
+export interface LandingFeaturedDeath {
+    readonly offset_ms: number;
+    readonly victim_name: string;
+    readonly victim_class: string;
+    /**
+     * KillerName is empty when the log does not attribute the death.
+     */
+    readonly killer_name?: string;
+}
+
+// From chroniclesdk/landing.go
+/**
+ * LandingFeaturedResponse is the public payload behind the /start hero.
+ * Featured is nil when no featured instance is configured or it cannot be
+ * shown (missing, unlisted, invalidated); the landing then shows its poster only.
+ */
+export interface LandingFeaturedResponse {
+    readonly featured: LandingFeaturedRun | null;
+}
+
+// From chroniclesdk/landing.go
+export interface LandingFeaturedRun {
+    readonly instance_id: string;
+    readonly instance_name: string;
+    /**
+     * DurationMs spans the instance's first to last event.
+     */
+    readonly duration_ms: number;
+    readonly player_count: number;
+    readonly bosses: readonly LandingFeaturedBoss[];
+    readonly deaths: readonly LandingFeaturedDeath[];
+    readonly upload: LandingFeaturedUpload;
+}
+
+// From chroniclesdk/landing.go
+export interface LandingFeaturedUpload {
+    readonly source: LandingUploadSource;
+    /**
+     * DelayMs is the time from the instance's last event to the upload
+     * completing. Nil when it cannot be derived.
+     */
+    readonly delay_ms: number | null;
+}
+
+// From chroniclesdk/landing.go
+export type LandingUploadSource = "manual" | "sidekick" | "unknown";
+
+export const LandingUploadSources: LandingUploadSource[] = ["manual", "sidekick", "unknown"];
+
 // From chroniclesdk/panel_layout.go
 export interface LayoutDefaultsResponse {
     readonly default_desktop_layout_id: string | null;
@@ -4045,6 +4109,12 @@ export interface SiteConfig {
      * verification provider (never includes the URL or secret).
      */
     readonly external_verification?: ExternalVerificationPublic;
+    /**
+     * LandingFeaturedInstanceID is the admin-chosen instance replayed on the
+     * /start landing hero. Empty when unset (the server may still fall back to
+     * its deployment default).
+     */
+    readonly landing_featured_instance_id?: string;
 }
 
 // From chroniclesdk/stats.go
@@ -4761,6 +4831,11 @@ export interface UpdateSiteConfigRequest {
     readonly discoverable?: boolean;
     readonly default_format?: string;
     readonly available_formats?: readonly string[];
+    /**
+     * LandingFeaturedInstanceID sets the landing hero's featured instance.
+     * An empty string clears it.
+     */
+    readonly landing_featured_instance_id?: string;
 }
 
 // From chroniclesdk/guild_page.go
