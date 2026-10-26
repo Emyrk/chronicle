@@ -2,6 +2,7 @@ package rankings
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -13,7 +14,10 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 )
 
-var _ instancehook.Hook = (*DPSTracker)(nil)
+var (
+	_ instancehook.Hook               = (*DPSTracker)(nil)
+	_ instancehook.FightFinalizedHook = (*DPSTracker)(nil)
+)
 
 // UnitCombatStats holds accumulated combat metrics for a single unit in an encounter.
 type UnitCombatStats struct {
@@ -29,6 +33,9 @@ type UnitCombatStats struct {
 	// Talents snapshot at fight end. Nil if the player had no talent data
 	// (e.g., talents were invalidated by a respec, or addon didn't report).
 	Talents *combatant.Talents
+	// ObservedForm is the dominant Cat/Bear form during the encounter. It is
+	// empty when neither form was observed or their observed durations tie.
+	ObservedForm string
 }
 
 // DPSResult holds per-unit combat stats for a single encounter.
@@ -50,6 +57,7 @@ type DPSTracker struct {
 	damageTaken map[guid.GUID]int64
 	healingDone map[guid.GUID]int64
 	absorbDone  map[guid.GUID]int64
+	forms       *druidFormTracker
 
 	// Results across all encounters.
 	results map[uuid.UUID]*DPSResult
@@ -64,6 +72,7 @@ func NewDPSTracker(units *unitdb.Units, rule DamageRule) *DPSTracker {
 		damageTaken: make(map[guid.GUID]int64),
 		healingDone: make(map[guid.GUID]int64),
 		absorbDone:  make(map[guid.GUID]int64),
+		forms:       newDruidFormTracker(),
 		results:     make(map[uuid.UUID]*DPSResult),
 	}
 	if rule == DamageRuleAssemblyOfIron {
@@ -72,17 +81,19 @@ func NewDPSTracker(units *unitdb.Units, rule DamageRule) *DPSTracker {
 	return tracker
 }
 
-func (t *DPSTracker) FightStarted(_ uuid.UUID, _ messages.Message) {
+func (t *DPSTracker) FightStarted(_ uuid.UUID, m messages.Message) {
 	t.damageDone = make(map[guid.GUID]int64)
 	t.damageTaken = make(map[guid.GUID]int64)
 	t.healingDone = make(map[guid.GUID]int64)
 	t.absorbDone = make(map[guid.GUID]int64)
+	t.forms.FightStarted(m)
 	if t.assemblyOfIron != nil {
 		t.assemblyOfIron.reset()
 	}
 }
 
 func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message) error {
+	t.forms.ProcessMessage(active, m)
 	if !active {
 		return nil
 	}
@@ -171,7 +182,7 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 	return nil
 }
 
-func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
+func (t *DPSTracker) FightEnded(encounterID uuid.UUID, m messages.Message) {
 	if t.assemblyOfIron != nil {
 		t.assemblyOfIron.commitUnresolved(t.damageDone)
 	}
@@ -207,6 +218,14 @@ func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
 				talents = &cp
 			}
 		}
+		var observedForm string
+		if isPlayer {
+			var fightEnd time.Time
+			if m != nil {
+				fightEnd = m.Date()
+			}
+			observedForm = t.forms.Dominant(g, fightEnd).String()
+		}
 		stats := &UnitCombatStats{
 			DamageDone:      t.damageDone[g],
 			DamageTaken:     t.damageTaken[g],
@@ -214,6 +233,7 @@ func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
 			HealingAbsorbed: t.absorbDone[g],
 			IsPlayer:        isPlayer,
 			Talents:         talents,
+			ObservedForm:    observedForm,
 		}
 		if cls.Relation.HasOwner() {
 			owner := *cls.Relation.Owner
@@ -223,6 +243,23 @@ func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
 	}
 
 	t.results[encounterID] = result
+}
+
+// FightFinalized corrects form durations to the materialized fight boundaries.
+// FightStarted receives the message that triggered detection, which can be later
+// than an authoritative encounter boundary or character activity start.
+func (t *DPSTracker) FightFinalized(encounterID uuid.UUID, start, end time.Time) {
+	t.forms.FightFinalized(start)
+
+	result := t.results[encounterID]
+	if result == nil {
+		return
+	}
+	for unit, stats := range result.Units {
+		if stats.IsPlayer {
+			stats.ObservedForm = t.forms.Dominant(unit, end).String()
+		}
+	}
 }
 
 func (t *DPSTracker) Finalize(_ context.Context) error {

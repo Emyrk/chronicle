@@ -2,6 +2,7 @@ package rankings
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -536,6 +537,46 @@ func TestDPSTracker_TalentSnapshotNilWhenInvalidated(t *testing.T) {
 
 	r := tracker.Result()
 	assert.Nil(t, r[encID].Units[player].Talents)
+}
+
+func TestDPSTrackerForwardsFormLifecycle(t *testing.T) {
+	t.Parallel()
+
+	tracker, units := setupDPSTracker()
+	player := makePlayerGUID(1)
+	boss := makeCreatureGUID(100, 1)
+	encID := uuid.New()
+	actualStart := time.Date(2026, time.October, 25, 12, 0, 0, 0, time.UTC)
+	hookStart := actualStart.Add(10 * time.Second)
+	end := actualStart.Add(30 * time.Second)
+	units.Info[player] = unitinfo.Info{Guid: player, Name: "Druid", IsPlayer: true, CanCooperate: true}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+
+	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, &messages.Aura{
+		MessageBase: messages.Base(actualStart.Add(-time.Minute)),
+		Target:      player,
+		SpellName:   "Cat Form",
+		Application: types.AuraApplicationGains,
+	}))
+	tracker.FightStarted(encID, &messages.Damage{MessageBase: messages.Base(hookStart)})
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Aura{
+		MessageBase: messages.Base(actualStart.Add(20 * time.Second)),
+		Target:      player,
+		SpellName:   "Bear Form",
+		Application: types.AuraApplicationGains,
+	}))
+	caster := player
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Damage{
+		MessageBase: messages.Base(end),
+		Caster:      &caster,
+		Target:      boss,
+		Amount:      1,
+	}))
+	tracker.FightEnded(encID, &messages.Damage{MessageBase: messages.Base(end)})
+	require.Empty(t, tracker.Result()[encID].Units[player].ObservedForm)
+
+	tracker.FightFinalized(encID, actualStart, end)
+	require.Equal(t, "Cat", tracker.Result()[encID].Units[player].ObservedForm)
 }
 
 func TestDPSTracker_InactiveMessagesIgnored(t *testing.T) {
