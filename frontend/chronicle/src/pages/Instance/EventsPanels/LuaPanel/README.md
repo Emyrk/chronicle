@@ -15,9 +15,11 @@ operation output. `chronicle.v1.ui` provides `metric`, `table`, `bars`, each
 creating retained UI operations validated by the Guide scene protocol.
 
 Public catalog: `GET /api/v1/lua-projects` (array of entries with `id`, `kind`,
-`name`, `stable` and optional `unstable`). The panel polls
-`GET /api/v1/lua-projects/{id}?channel=stable|unstable` for the current SHA-256,
-then fetches its ZIP from `/api/v1/lua-projects/{id}/artifacts/{sha256}/package`.
+`name`, `stable` and optional `unstable`). The panel resolves
+`GET /api/v1/lua-projects/{id}?channel=stable|unstable` once per page load for
+its SHA-256, then fetches its ZIP from
+`/api/v1/lua-projects/{id}/artifacts/{sha256}/package`. A browser refresh
+resolves the channel again; an open panel keeps running its original release.
 Panel refs are `lua:{uuid}:{channel}`. A missing channel/package remains a
 non-executing error placeholder. Backend must validate package manifests and
 capabilities on publication; this client validates independently. Future work:

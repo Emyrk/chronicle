@@ -14,7 +14,10 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
   const channelQuery = useQuery({
     queryKey: ["lua-panel-channel", ref?.id, ref?.channel],
     enabled: !!ref,
-    refetchInterval: 60_000, // Follow the channel without re-downloading unchanged bytes.
+    // Resolve the channel once per page load. Do not swap a running Lua worker
+    // when a release changes; a browser refresh creates a fresh query client.
+    staleTime: "static",
+    gcTime: Infinity, // Keep the resolved hash across panel remounts until page refresh.
     queryFn: ({ signal }) => {
       if (!ref) throw new Error("Invalid Lua panel reference")
       return getPublicProject(ref.id, ref.channel, signal)
