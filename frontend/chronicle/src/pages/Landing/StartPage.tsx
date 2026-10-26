@@ -1,4 +1,4 @@
-import { lazy, Suspense, useLayoutEffect, useState, type FormEvent } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useLandingFeatured } from "@/api/landingFeaturedQuery";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -10,9 +10,25 @@ import { LandingHero } from "./LandingHero";
 // Recent runs render below the fold once their fetch returns; keeping RaidCard (and its
 // icon and helper chunks) out of the static graph keeps them off /start's first paint.
 const RaidCard = lazy(() => import("@/pages/Recent/RaidCard").then(({ RaidCard }) => ({ default: RaidCard })));
-// The dungeon shelf is below the fold too, and its queries/manifest imports would pull
-// the shared query hooks into /start's first paint.
+// The dungeon shelf is below the fold too; it mounts once the browser is idle after first
+// paint, so its query hooks and map manifest imports never load ahead of the poster.
 const DungeonShelf = lazy(() => import("./DungeonShelfSection").then(({ DungeonShelf }) => ({ default: DungeonShelf })));
+
+/** requestIdleCallback's deadline for the dungeon shelf, as for the 3D hero layer. */
+const SHELF_IDLE_TIMEOUT_MS = 1500;
+
+function useIdleAfterMount(): boolean {
+  const [idle, setIdle] = useState(false);
+  useEffect(() => {
+    if (typeof window.requestIdleCallback !== "function") {
+      const timer = window.setTimeout(() => setIdle(true), SHELF_IDLE_TIMEOUT_MS);
+      return () => window.clearTimeout(timer);
+    }
+    const handle = window.requestIdleCallback(() => setIdle(true), { timeout: SHELF_IDLE_TIMEOUT_MS });
+    return () => window.cancelIdleCallback(handle);
+  }, []);
+  return idle;
+}
 
 const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
 // Public Sidekick downloads; the utm cookie set on landing carries attribution.
@@ -288,6 +304,7 @@ export function StartPage() {
   const heroInstanceId = landing || landingFailed ? landing?.featured?.instance_id ?? FALLBACK_FEATURED_INSTANCE : undefined;
   // The live 3D replay's position and controls, for the hero's scrubber; null while the poster shows.
   const [replay, setReplay] = useState<HeroReplay | null>(null);
+  const showShelf = useIdleAfterMount();
 
   // Our hero now covers the static poster index.html painted before the bundle loaded.
   useLayoutEffect(() => {
@@ -311,9 +328,11 @@ export function StartPage() {
       <HowItWorks />
       <FirstMinute />
       <RecentRuns getSidekickHref={getSidekickHref} />
-      <Suspense fallback={null}>
-        <DungeonShelf />
-      </Suspense>
+      {showShelf && (
+        <Suspense fallback={null}>
+          <DungeonShelf />
+        </Suspense>
+      )}
       <ClosingBand />
       <footer className="mt-auto flex flex-wrap gap-3 border-t border-[#27324a] px-4 py-3.5 text-[11px] text-[#8a97ad] lg:gap-[18px] lg:px-8 lg:py-[18px] lg:text-xs">
         <span>Chronicle for WoW Forever</span>
