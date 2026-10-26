@@ -525,30 +525,12 @@ function normalizedMapName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
-const LEGACY_RENDER_BOUNDS = new Map<string, WowMapFloorBounds>([
-  // These published images were produced from coordinate-faithful render
-  // frames, but their original source manifest predates render bounds. Keep
-  // their known calibration while the CDN manifest catches up.
-  ["2999:renders/RoL-shaded-aligned.png", {
-    minX: 1333.3337,
-    maxX: 1900,
-    minY: -33.3333,
-    maxY: 500,
-  }],
-  ["43:renders/WC-shaded-water.png", {
-    minX: -389.07001,
-    maxX: 191.6667,
-    minY: -370.83331,
-    maxY: 538.3512,
-  }],
-]);
-
 const calibratedRenderCache = new WeakMap<WowMapManualRender, WowMapRenderedInstance>();
 
 function calibratedManualRender(instance: WowMapInstance): WowMapRenderedInstance | WowMapInstance["renders"] {
   const render = instance.renders;
   if (!render || render.width <= 0 || render.height <= 0) return undefined;
-  const bounds = render.bounds ?? LEGACY_RENDER_BOUNDS.get(`${instance.mapID}:${render.path}`);
+  const bounds = render.bounds;
   if (!bounds) return render;
   const cached = calibratedRenderCache.get(render);
   if (cached) return cached;

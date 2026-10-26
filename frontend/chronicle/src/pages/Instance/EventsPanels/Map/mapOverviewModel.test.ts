@@ -152,37 +152,6 @@ describe("map route overview model", () => {
     expect(replayDungeonCanvas(instance, floor, false)).toEqual({ canvas: floor, rendered: false });
   });
 
-  it("recovers the published Wailing Caverns render calibration", () => {
-    const floor = { floor: 1, width: 1002, height: 668, tileWidth: 256, tileHeight: 256, tiles: [] };
-    const render: WowMapManualRender = { path: "renders/WC-shaded-water.png", width: 2400, height: 1533 };
-    const instance = { mapID: 43, name: "Wailing Caverns", instanceType: 1, directory: "", floors: [floor], renders: render };
-    const bounds = { minX: -389.07001, maxX: 191.6667, minY: -370.83331, maxY: 538.3512 };
-
-    expect(overviewDungeonCanvas(instance, floor, "auto")).toMatchObject({
-      source: "renders",
-      canvas: { path: render.path, bounds },
-    });
-    expect(replayDungeonCanvas(instance, floor, true)).toMatchObject({
-      rendered: true,
-      canvas: { path: render.path, bounds },
-    });
-  });
-
-  it("recovers the published Ruins of Lordaeron render calibration", () => {
-    const render: WowMapManualRender = { path: "renders/RoL-shaded-aligned.png", width: 1024, height: 1024 };
-    const instance = { mapID: 2999, name: "Ruins of Lordaeron", instanceType: 0, directory: "", floors: [], renders: render };
-    const bounds = { minX: 1333.3337, maxX: 1900, minY: -33.3333, maxY: 500 };
-
-    expect(overviewDungeonCanvas(instance, undefined, "auto")).toMatchObject({
-      source: "renders",
-      canvas: { path: render.path, bounds },
-    });
-    expect(replayDungeonCanvas(instance, undefined, true)).toMatchObject({
-      rendered: true,
-      canvas: { path: render.path, bounds },
-    });
-  });
-
   it("projects rendered geometry from ordinary world X/Y bounds", () => {
     const bounds = { minX: -200, maxX: 300, minY: -400, maxY: 600 };
     expect(projectDungeonMapPoint(
