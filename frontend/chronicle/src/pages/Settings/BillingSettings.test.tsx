@@ -1,8 +1,9 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { renderToStaticMarkup } from "react-dom/server"
 import { MemoryRouter } from "react-router-dom"
-import type { BillingSummary } from "@/api/typesGenerated"
+import type { BillingPrice, BillingSummary } from "@/api/typesGenerated"
 import { describe, expect, it } from "vitest"
-import { BillingSignInPrompt, CancellationTimeline, SupporterOverview } from "./BillingSettings"
+import { BillingSignInPrompt, CancellationTimeline, PlanPicker, SupporterOverview } from "./BillingSettings"
 
 describe("BillingSignInPrompt", () => {
   it("returns signed-out users to billing after sign in", () => {
@@ -35,6 +36,50 @@ function renderSupporterOverview(tier: "honored" | "revered") {
     </MemoryRouter>,
   )
 }
+
+const RETURNING_PRICES: BillingPrice[] = [
+  { id: "price_honored", tier: "honored", currency: "usd", unit_amount: 300, interval_months: 1 },
+  { id: "price_revered", tier: "revered", currency: "usd", unit_amount: 500, interval_months: 1 },
+  { id: "price_exalted", tier: "exalted", currency: "usd", unit_amount: 1000, interval_months: 1 },
+]
+
+function renderPlanPicker(returningState: "canceling" | "ended") {
+  const queryClient = new QueryClient()
+  return renderToStaticMarkup(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <PlanPicker prices={RETURNING_PRICES} change={{ currentTier: "revered", returningState }} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
+describe("PlanPicker", () => {
+  it("keeps tiers and prices visible while a cancellation is scheduled", () => {
+    const markup = renderPlanPicker("canceling")
+
+    expect(markup).toContain("Choose Your Next Standing")
+    expect(markup).toContain("Honored")
+    expect(markup).toContain("Revered")
+    expect(markup).toContain("Exalted")
+    expect(markup).toContain("$3.00")
+    expect(markup).toContain("$5.00")
+    expect(markup).toContain("$10.00")
+    expect(markup).toContain("Change Tier in Stripe")
+    expect(markup).toContain("Reactivate Subscription")
+  })
+
+  it("keeps tiers visible after the Stripe subscription has ended", () => {
+    const markup = renderPlanPicker("ended")
+
+    expect(markup).toContain("Choose Your Next Standing")
+    expect(markup).toContain("Honored")
+    expect(markup).toContain("Revered")
+    expect(markup).toContain("Exalted")
+    expect(markup).toContain("View Stripe Billing History")
+    expect(markup).not.toContain("Reactivate Subscription")
+  })
+})
 
 describe("CancellationTimeline", () => {
   it("describes retained access without listing individual benefits", () => {
