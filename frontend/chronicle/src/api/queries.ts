@@ -1447,7 +1447,7 @@ export function useInstanceYoutube(instanceId: string, options?: Omit<UseQueryOp
     retry: false,
     queryFn: async () => {
       const response = await fetch(`/api/v1/raidlogs/instances/${instanceId}/youtube`);
-      if (response.status === 404) return null;
+      if (response.status === 204 || response.status === 404) return null;
       if (!response.ok) throw new Error("Failed to fetch YouTube data");
       return response.json() as Promise<Video>;
     },
