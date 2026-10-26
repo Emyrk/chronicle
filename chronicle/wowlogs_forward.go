@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -14,8 +15,10 @@ import (
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/secrets"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 )
@@ -81,11 +84,10 @@ type wowLogsPreprocessResponse struct {
 
 type wowLogsClient struct {
 	baseURL    string
-	apiToken   string
 	httpClient *http.Client
 }
 
-func (c wowLogsClient) preprocess(ctx context.Context, logData []byte, serverName string, unlisted bool) (wowLogsPreprocessResponse, error) {
+func (c wowLogsClient) preprocess(ctx context.Context, apiToken string, logData []byte, serverName string, unlisted bool) (wowLogsPreprocessResponse, error) {
 	zipBuffer := new(bytes.Buffer)
 	zipWriter := zip.NewWriter(zipBuffer)
 	entry, err := zipWriter.Create("WoWCombatLog.txt")
@@ -126,13 +128,13 @@ func (c wowLogsClient) preprocess(ctx context.Context, logData []byte, serverNam
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("X-Socket-ID", "chronicle-server")
-	c.setHeaders(req)
+	setWoWLogsHeaders(req, apiToken)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return wowLogsPreprocessResponse{}, fmt.Errorf("send preprocess request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
 		return wowLogsPreprocessResponse{}, wowLogsResponseError(resp)
@@ -148,7 +150,7 @@ func (c wowLogsClient) preprocess(ctx context.Context, logData []byte, serverNam
 	return result, nil
 }
 
-func (c wowLogsClient) enqueue(ctx context.Context, preprocess wowLogsPreprocessResponse, unlisted bool) error {
+func (c wowLogsClient) enqueue(ctx context.Context, apiToken string, preprocess wowLogsPreprocessResponse, unlisted bool) error {
 	for i := range preprocess.Instances {
 		preprocess.Instances[i].Unlisted = unlisted
 	}
@@ -172,24 +174,22 @@ func (c wowLogsClient) enqueue(ctx context.Context, preprocess wowLogsPreprocess
 		return fmt.Errorf("create enqueue request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	c.setHeaders(req)
+	setWoWLogsHeaders(req, apiToken)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("send enqueue request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusAccepted {
 		return wowLogsResponseError(resp)
 	}
 	return nil
 }
 
-func (c wowLogsClient) setHeaders(req *http.Request) {
+func setWoWLogsHeaders(req *http.Request, apiToken string) {
 	req.Header.Set(wowLogsNativeUploaderHeader, "1")
-	if token := strings.TrimSpace(c.apiToken); token != "" {
-		req.Header.Set("X-API-Token", token)
-	}
+	req.Header.Set("X-API-Token", apiToken)
 }
 
 func wowLogsResponseError(resp *http.Response) error {
@@ -203,8 +203,73 @@ func wowLogsResponseError(resp *http.Response) error {
 	return fmt.Errorf("wow-logs returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
 }
 
-func (c *Chronicle) enqueueWoWLogsForward(ctx context.Context, logID, tenantID uuid.UUID) error {
-	if c.queue == nil || tenantID == uuid.Nil {
+// ErrCredentialsDisabled is returned when no credential encryption key is
+// configured, so user tokens cannot be stored.
+var ErrCredentialsDisabled = errors.New("credential storage is not configured")
+
+const wowLogsTokenPurpose = "wow-logs-token"
+
+// CredentialsAvailable reports whether user tokens can be stored.
+func (c *Chronicle) CredentialsAvailable() bool { return c.credentialCipher != nil }
+
+// SetUserWoWLogsToken encrypts and stores the user's own wow-logs API token.
+// Only that user's uploads are forwarded with it.
+func (c *Chronicle) SetUserWoWLogsToken(ctx context.Context, userID uuid.UUID, token string) error {
+	if c.credentialCipher == nil {
+		return ErrCredentialsDisabled
+	}
+	encrypted, err := c.credentialCipher.Encrypt([]byte(token), secrets.UserCredentialAAD(userID.String(), wowLogsTokenPurpose))
+	if err != nil {
+		return fmt.Errorf("encrypt wow-logs token: %w", err)
+	}
+	_, err = c.Zed.UpsertUserWoWLogsCredential(ctx, database.UpsertUserWoWLogsCredentialParams{
+		UserID:               userID,
+		EncryptedToken:       encrypted,
+		CredentialKeyVersion: c.credentialCipher.KeyID(),
+	})
+	return err
+}
+
+// DeleteUserWoWLogsToken removes the user's token, opting them out of forwarding.
+func (c *Chronicle) DeleteUserWoWLogsToken(ctx context.Context, userID uuid.UUID) error {
+	return c.Zed.DeleteUserWoWLogsCredential(ctx, userID)
+}
+
+// UserWoWLogsTokenUpdatedAt reports when the user last saved a token, or
+// nil when they have none. The token itself is never returned.
+func (c *Chronicle) UserWoWLogsTokenUpdatedAt(ctx context.Context, userID uuid.UUID) (*time.Time, error) {
+	row, err := c.Zed.GetUserWoWLogsCredential(ctx, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row.UpdatedAt.Time, nil
+}
+
+// userWoWLogsToken returns the decrypted token, or "" when the user has not
+// opted in.
+func (c *Chronicle) userWoWLogsToken(ctx context.Context, userID uuid.UUID) (string, error) {
+	if c.credentialCipher == nil {
+		return "", nil
+	}
+	row, err := c.Zed.GetUserWoWLogsCredential(ctx, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("fetch wow-logs token: %w", err)
+	}
+	token, err := c.credentialCipher.Decrypt(row.EncryptedToken, secrets.UserCredentialAAD(userID.String(), wowLogsTokenPurpose))
+	if err != nil {
+		return "", fmt.Errorf("decrypt wow-logs token: %w", err)
+	}
+	return string(token), nil
+}
+
+func (c *Chronicle) enqueueWoWLogsForward(ctx context.Context, logID, tenantID, ownerID uuid.UUID) error {
+	if c.queue == nil || tenantID == uuid.Nil || c.credentialCipher == nil {
 		return nil
 	}
 	tenant, err := c.Zed.GetTenantByID(ctx, tenantID)
@@ -212,6 +277,13 @@ func (c *Chronicle) enqueueWoWLogsForward(ctx context.Context, logID, tenantID u
 		return fmt.Errorf("fetch tenant forwarding config: %w", err)
 	}
 	if !tenant.WowLogsForwardingEnabled {
+		return nil
+	}
+	updatedAt, err := c.UserWoWLogsTokenUpdatedAt(ctx, ownerID)
+	if err != nil {
+		return fmt.Errorf("fetch uploader wow-logs token: %w", err)
+	}
+	if updatedAt == nil {
 		return nil
 	}
 	_, err = c.queue.Insert(ctx, ArgsForwardWoWLogs{LogID: logID, TenantID: tenantID}, nil)
@@ -264,12 +336,21 @@ func (w *WorkerForwardWoWLogs) Work(ctx context.Context, job *river.Job[ArgsForw
 	if err != nil {
 		return river.JobCancel(err)
 	}
+	// Forward with the uploader's own token; if they removed it since the job
+	// was queued, they have opted out.
+	apiToken, err := w.parent.userWoWLogsToken(ctx, groupRow.WoWLogGroup.Owner)
+	if err != nil {
+		return err
+	}
+	if apiToken == "" {
+		return nil
+	}
 
 	logData, err := w.parent.loadFileBytes(ctx, files[0])
 	if err != nil {
 		return fmt.Errorf("load raw log: %w", err)
 	}
-	preprocess, err := w.parent.wowLogsClient.preprocess(ctx, logData, serverName, groupRow.WoWLogGroup.Unlisted)
+	preprocess, err := w.parent.wowLogsClient.preprocess(ctx, apiToken, logData, serverName, groupRow.WoWLogGroup.Unlisted)
 	if err != nil {
 		return err
 	}
@@ -277,7 +358,7 @@ func (w *WorkerForwardWoWLogs) Work(ctx context.Context, job *river.Job[ArgsForw
 		if len(preprocess.Instances) == 0 {
 			return river.JobCancel(fmt.Errorf("wow-logs preprocess found no instances"))
 		}
-		if err := w.parent.wowLogsClient.enqueue(ctx, preprocess, groupRow.WoWLogGroup.Unlisted); err != nil {
+		if err := w.parent.wowLogsClient.enqueue(ctx, apiToken, preprocess, groupRow.WoWLogGroup.Unlisted); err != nil {
 			return err
 		}
 	}

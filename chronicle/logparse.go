@@ -992,10 +992,10 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		}
 	}
 
-	// Forward initial uploads for tenants that explicitly opted in. The external
+	// Forward initial uploads when both the tenant and the uploader opted in. The external
 	// handoff is supplementary and must never fail Chronicle's own parse.
 	if !job.Args.Replacement {
-		if err := w.parent.enqueueWoWLogsForward(ctx, job.Args.LogID, job.Args.TenantID); err != nil {
+		if err := w.parent.enqueueWoWLogsForward(ctx, job.Args.LogID, job.Args.TenantID, lg.Owner); err != nil {
 			w.parent.logger.WarnContext(ctx, "failed to enqueue wow-logs forwarding",
 				slog.String("log_group_id", job.Args.LogID.String()),
 				slog.Any("error", err),

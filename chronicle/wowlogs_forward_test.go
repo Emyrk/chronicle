@@ -6,12 +6,18 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/Emyrk/chronicle/internal/secrets"
+	"github.com/Emyrk/chronicle/internal/testutil"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -86,7 +92,7 @@ func TestWoWLogsClientPreprocess(t *testing.T) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 		zipBytes, err := io.ReadAll(file)
 		if !assert.NoError(t, err) {
 			w.WriteHeader(http.StatusBadRequest)
@@ -103,7 +109,7 @@ func TestWoWLogsClientPreprocess(t *testing.T) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		defer entry.Close()
+		defer func() { _ = entry.Close() }()
 		contents, err := io.ReadAll(entry)
 		if !assert.NoError(t, err) {
 			w.WriteHeader(http.StatusBadRequest)
@@ -116,8 +122,8 @@ func TestWoWLogsClientPreprocess(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := wowLogsClient{baseURL: server.URL, apiToken: "secret", httpClient: server.Client()}
-	result, err := client.preprocess(context.Background(), []byte(logContents), "Warmane_Icecrown", true)
+	client := wowLogsClient{baseURL: server.URL, httpClient: server.Client()}
+	result, err := client.preprocess(context.Background(), "secret", []byte(logContents), "Warmane_Icecrown", true)
 	require.NoError(t, err)
 	require.Equal(t, 42, result.PreprocessID)
 	require.Len(t, result.Instances, 1)
@@ -152,10 +158,57 @@ func TestWoWLogsClientEnqueue(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := wowLogsClient{baseURL: server.URL, apiToken: "secret", httpClient: server.Client()}
-	err := client.enqueue(context.Background(), wowLogsPreprocessResponse{
+	client := wowLogsClient{baseURL: server.URL, httpClient: server.Client()}
+	err := client.enqueue(context.Background(), "secret", wowLogsPreprocessResponse{
 		PreprocessID: 42,
 		Instances:    []wowLogsInstance{{Name: "Icecrown Citadel"}},
 	}, true)
 	require.NoError(t, err)
+}
+
+func TestUserWoWLogsToken(t *testing.T) {
+	t.Parallel()
+
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	store, _ := dbtestutil.NewDB(t)
+	cipher, err := secrets.NewCredentialCipher("v1", bytes.Repeat([]byte{7}, 32))
+	require.NoError(t, err)
+	chron := &Chronicle{Zed: authz.NewDatabaseOnly(slog.Default(), store), credentialCipher: cipher}
+
+	userID := uuid.New()
+	_, err = store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "wow-logs-" + userID.String()})
+	require.NoError(t, err)
+
+	// No token saved means the user has not opted in.
+	token, err := chron.userWoWLogsToken(ctx, userID)
+	require.NoError(t, err)
+	require.Empty(t, token)
+	updatedAt, err := chron.UserWoWLogsTokenUpdatedAt(ctx, userID)
+	require.NoError(t, err)
+	require.Nil(t, updatedAt)
+
+	require.NoError(t, chron.SetUserWoWLogsToken(ctx, userID, "user-token"))
+	row, err := store.GetUserWoWLogsCredential(ctx, userID)
+	require.NoError(t, err)
+	require.NotContains(t, string(row.EncryptedToken), "user-token")
+
+	token, err = chron.userWoWLogsToken(ctx, userID)
+	require.NoError(t, err)
+	require.Equal(t, "user-token", token)
+
+	// Another user's AAD must not decrypt this row.
+	_, err = cipher.Decrypt(row.EncryptedToken, secrets.UserCredentialAAD(uuid.NewString(), wowLogsTokenPurpose))
+	require.Error(t, err)
+
+	require.NoError(t, chron.DeleteUserWoWLogsToken(ctx, userID))
+	token, err = chron.userWoWLogsToken(ctx, userID)
+	require.NoError(t, err)
+	require.Empty(t, token)
+}
+
+func TestSetUserWoWLogsTokenRequiresCipher(t *testing.T) {
+	t.Parallel()
+
+	err := (&Chronicle{}).SetUserWoWLogsToken(context.Background(), uuid.New(), "token")
+	require.ErrorIs(t, err, ErrCredentialsDisabled)
 }

@@ -2678,6 +2678,14 @@ type UserWhatsNewState struct {
 	SeenAt pgtype.Timestamptz `db:"seen_at" json:"seen_at"`
 }
 
+type UserWowLogsCredential struct {
+	UserID               uuid.UUID          `db:"user_id" json:"user_id"`
+	EncryptedToken       []byte             `db:"encrypted_token" json:"encrypted_token"`
+	CredentialKeyVersion string             `db:"credential_key_version" json:"credential_key_version"`
+	CreatedAt            pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type WoWLogGroup struct {
 	ID              uuid.UUID          `db:"id" json:"id"`
 	Owner           uuid.UUID          `db:"owner" json:"owner"`

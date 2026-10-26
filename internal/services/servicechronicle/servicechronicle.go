@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
+	"github.com/Emyrk/chronicle/internal/services/servicesecrets"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewowdb"
@@ -34,10 +35,9 @@ func OnChronicle() string {
 type Service struct {
 	broker *services.Services
 
-	chronicle       *chronicle.Chronicle
-	emitParseLogs   bool
-	wowLogsBaseURL  string
-	wowLogsAPIToken string
+	chronicle      *chronicle.Chronicle
+	emitParseLogs  bool
+	wowLogsBaseURL string
 }
 
 func New(broker *services.Services) *Service {
@@ -59,6 +59,7 @@ func (s *Service) DependsOn() []string {
 		serviceprometheus.OnPrometheus(),
 		servicetenant.OnTenant(),
 		servicedataset.OnDataset(),
+		servicesecrets.OnSecrets(),
 	}
 }
 
@@ -96,7 +97,7 @@ func (s *Service) Start(ctx context.Context) error {
 		DefaultFlavor:    BuildTagFlavor(),
 		DefaultDatasetID: servicedataset.DefaultDatasetID,
 		WoWLogsBaseURL:   s.wowLogsBaseURL,
-		WoWLogsAPIToken:  s.wowLogsAPIToken,
+		CredentialCipher: servicesecrets.CredentialCipher(s.broker),
 		ResolveDataset: func(ctx context.Context, realmID uuid.UUID) chronicle.ResolvedDataset {
 			dsID, flavor, additionalFlavor := datasetSvc.ResolveDatasetWithFlavorForRealm(ctx, realmID)
 			return chronicle.ResolvedDataset{
@@ -137,15 +138,6 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_WOW_LOGS_BASE_URL",
 			Default:     "https://wow-logs.co.in",
 			Value:       serpent.StringOf(&s.wowLogsBaseURL),
-		},
-		{
-			Name:        "WoW-Logs uploader API token",
-			Description: "Optional X-API-Token used when forwarding tenant uploads to wow-logs.co.in.",
-			Required:    false,
-			Flag:        "wow-logs-api-token",
-			Env:         "CHRONICLE_WOW_LOGS_API_TOKEN",
-			Default:     "",
-			Value:       serpent.StringOf(&s.wowLogsAPIToken),
 		},
 	}
 }

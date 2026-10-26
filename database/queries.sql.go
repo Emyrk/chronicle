@@ -27501,6 +27501,61 @@ func (q *sqlQuerier) UpdateUserTalentBuildByID(ctx context.Context, arg UpdateUs
 	return i, err
 }
 
+const deleteUserWoWLogsCredential = `-- name: DeleteUserWoWLogsCredential :exec
+DELETE FROM user_wow_logs_credentials WHERE user_id = $1
+`
+
+func (q *sqlQuerier) DeleteUserWoWLogsCredential(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserWoWLogsCredential, userID)
+	return err
+}
+
+const getUserWoWLogsCredential = `-- name: GetUserWoWLogsCredential :one
+SELECT user_id, encrypted_token, credential_key_version, created_at, updated_at FROM user_wow_logs_credentials WHERE user_id = $1
+`
+
+func (q *sqlQuerier) GetUserWoWLogsCredential(ctx context.Context, userID uuid.UUID) (UserWowLogsCredential, error) {
+	row := q.db.QueryRow(ctx, getUserWoWLogsCredential, userID)
+	var i UserWowLogsCredential
+	err := row.Scan(
+		&i.UserID,
+		&i.EncryptedToken,
+		&i.CredentialKeyVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertUserWoWLogsCredential = `-- name: UpsertUserWoWLogsCredential :one
+INSERT INTO user_wow_logs_credentials (user_id, encrypted_token, credential_key_version)
+VALUES ($1, $2, $3)
+ON CONFLICT (user_id) DO UPDATE SET
+    encrypted_token = EXCLUDED.encrypted_token,
+    credential_key_version = EXCLUDED.credential_key_version,
+    updated_at = now()
+RETURNING user_id, encrypted_token, credential_key_version, created_at, updated_at
+`
+
+type UpsertUserWoWLogsCredentialParams struct {
+	UserID               uuid.UUID `db:"user_id" json:"user_id"`
+	EncryptedToken       []byte    `db:"encrypted_token" json:"encrypted_token"`
+	CredentialKeyVersion string    `db:"credential_key_version" json:"credential_key_version"`
+}
+
+func (q *sqlQuerier) UpsertUserWoWLogsCredential(ctx context.Context, arg UpsertUserWoWLogsCredentialParams) (UserWowLogsCredential, error) {
+	row := q.db.QueryRow(ctx, upsertUserWoWLogsCredential, arg.UserID, arg.EncryptedToken, arg.CredentialKeyVersion)
+	var i UserWowLogsCredential
+	err := row.Scan(
+		&i.UserID,
+		&i.EncryptedToken,
+		&i.CredentialKeyVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const deleteYoutubeVideoByInstanceOrSlug = `-- name: DeleteYoutubeVideoByInstanceOrSlug :exec
 DELETE FROM log_instance_youtube_timestamped
 WHERE log_instance_id = $1

@@ -102,6 +102,7 @@ func TestNewCredentialCipherFromBase64(t *testing.T) {
 	cipher, err := NewCredentialCipherFromBase64("v1", base64.StdEncoding.EncodeToString(make([]byte, 32)))
 	require.NoError(t, err)
 	require.NotNil(t, cipher)
+	require.Equal(t, "v1", cipher.KeyID())
 }
 
 func TestUserCredentialAAD(t *testing.T) {

@@ -117,8 +117,8 @@ export function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => 
           checked={wowLogsForwardingEnabled}
           onChange={(e) => setWowLogsForwardingEnabled(e.target.checked)}
         />
-        Forward successful uploads to wow-logs.co.in
-        <span className="text-xs text-muted-foreground">(ChromieCraft and Warmane only)</span>
+        Allow uploaders to forward to wow-logs.co.in
+        <span className="text-xs text-muted-foreground">(each uploader opts in with their own token; ChromieCraft and Warmane only)</span>
       </label>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={adsEnabled} onChange={(e) => setAdsEnabled(e.target.checked)} />

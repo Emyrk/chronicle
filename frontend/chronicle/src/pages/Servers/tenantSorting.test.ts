@@ -10,6 +10,7 @@ function tenant(overrides: Partial<Tenant> & Pick<Tenant, "id" | "name">): Tenan
     discoverable: false,
     ads_enabled: false,
     disabled_ads: [],
+    wow_logs_forwarding_enabled: false,
     branding: null,
     parse_config: null,
     default_dataset_id: null,

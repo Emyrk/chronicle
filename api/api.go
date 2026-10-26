@@ -343,6 +343,9 @@ func (api *API) Routes() chi.Router {
 				r.Get("/me/custom-panels", api.GetMyCustomPanelSettings)
 				r.Put("/me/custom-panels", api.UpdateMyCustomPanelSettings)
 				r.Patch("/me/preferences", api.UpdateMyPreferences)
+				r.Get("/me/wow-logs", api.GetMyWoWLogsSettings)
+				r.Put("/me/wow-logs/token", api.SetMyWoWLogsToken)
+				r.Delete("/me/wow-logs/token", api.DeleteMyWoWLogsToken)
 				r.Get("/me/whats-new", api.GetMyWhatsNewStatus)
 				r.Put("/me/whats-new/read", api.MarkMyWhatsNewRead)
 

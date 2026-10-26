@@ -19,7 +19,7 @@ OpenRouter authorization uses PKCE. Chronicle stores the short-lived verifier an
 
 Configure the service with:
 
-- `CHRONICLE_CREDENTIAL_ENCRYPTION_KEY`: base64-encoded 32-byte encryption key shared by stored user-provided third-party credentials.
+- `CHRONICLE_CREDENTIAL_ENCRYPTION_KEY`: base64-encoded 32-byte encryption key shared by all user-provided credentials. The old `CHRONICLE_INFERENCE_CREDENTIAL_ENCRYPTION_KEY` name is still read as a fallback.
 - `CHRONICLE_INFERENCE_OPENROUTER_BASE_URL`: optional OpenRouter API override.
 - `CHRONICLE_INFERENCE_OPENROUTER_AUTH_URL`: optional OpenRouter authorization override.
 - `CHRONICLE_INFERENCE_ATTRIBUTION_TITLE`: optional provider attribution title.

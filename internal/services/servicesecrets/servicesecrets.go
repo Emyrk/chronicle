@@ -1,5 +1,5 @@
 // Package servicesecrets owns the shared cipher used to encrypt per-user
-// third-party credentials.
+// third-party credentials, including inference providers and wow-logs tokens.
 package servicesecrets
 
 import (
@@ -11,7 +11,8 @@ import (
 	"github.com/coder/serpent"
 )
 
-// CredentialKeyID is embedded in every ciphertext.
+// CredentialKeyID is embedded in every ciphertext. It must stay "v1" so
+// credentials written before the key was shared keep decrypting.
 const CredentialKeyID = "v1"
 
 var _ services.Servicer = (*Service)(nil)
@@ -29,7 +30,11 @@ type Service struct {
 	broker *services.Services
 
 	credentialKey string
-	cipher        *secrets.CredentialCipher
+	// legacyInferenceKey is the pre-rename env var, kept so existing
+	// deployments keep working until they switch.
+	legacyInferenceKey string
+
+	cipher *secrets.CredentialCipher
 }
 
 func New(broker *services.Services) *Service {
@@ -43,6 +48,9 @@ func (s *Service) Close(_ context.Context) error { return nil }
 
 func (s *Service) Start(_ context.Context) error {
 	key := strings.TrimSpace(s.credentialKey)
+	if key == "" {
+		key = strings.TrimSpace(s.legacyInferenceKey)
+	}
 	if key == "" {
 		return nil
 	}
@@ -63,6 +71,15 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_CREDENTIAL_ENCRYPTION_KEY",
 			Default:     "",
 			Value:       serpent.StringOf(&s.credentialKey),
+		},
+		{
+			Name:        "Inference credential encryption key (deprecated)",
+			Description: "Deprecated: use CHRONICLE_CREDENTIAL_ENCRYPTION_KEY.",
+			Flag:        "inference-credential-encryption-key",
+			Env:         "CHRONICLE_INFERENCE_CREDENTIAL_ENCRYPTION_KEY",
+			Default:     "",
+			Value:       serpent.StringOf(&s.legacyInferenceKey),
+			Hidden:      true,
 		},
 	}
 }

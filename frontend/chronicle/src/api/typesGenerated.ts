@@ -3825,6 +3825,14 @@ export interface SetUserRolesRequest {
     readonly roles: readonly string[];
 }
 
+// From chroniclesdk/wowlogs.go
+/**
+ * SetWoWLogsTokenRequest saves the caller's own wow-logs API token.
+ */
+export interface SetWoWLogsTokenRequest {
+    readonly token: string;
+}
+
 // From chroniclesdk/server_application.go
 /**
  * SettingsPayload contains tenant boolean settings.
@@ -5290,6 +5298,23 @@ export interface WoWLogGroup {
 // From chroniclesdk/log.go
 export interface WoWLogGroupState extends WoWLogGroup {
     readonly status: JobStatus;
+}
+
+// From chroniclesdk/wowlogs.go
+/**
+ * WoWLogsSettings describes the caller's wow-logs forwarding opt-in. The
+ * stored token is write-only and never returned.
+ */
+export interface WoWLogsSettings {
+    /**
+     * Available is false when the deployment cannot store tokens.
+     */
+    readonly available: boolean;
+    /**
+     * TokenSet is true when the user saved a token and is opted in.
+     */
+    readonly token_set: boolean;
+    readonly token_updated_at?: string;
 }
 
 // From chroniclesdk/log.go

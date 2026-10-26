@@ -33,6 +33,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/cleanup"
 	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/ptr"
+	"github.com/Emyrk/chronicle/internal/secrets"
 	"github.com/Emyrk/chronicle/internal/slice"
 	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 	"github.com/dustin/go-humanize"
@@ -91,6 +92,7 @@ type Chronicle struct {
 	recordParseAbort   func(context.Context, parseGenerationAbortOutput) error
 	resolveDataset     func(ctx context.Context, realmID uuid.UUID) ResolvedDataset
 	wowLogsClient      wowLogsClient
+	credentialCipher   *secrets.CredentialCipher
 
 	mu                     sync.Mutex
 	insertParsedInstanceMu sync.Mutex
@@ -117,11 +119,14 @@ type Options struct {
 	// The resolver follows the server > tenant > default chain.
 	// If nil, the default dataset is always used.
 	ResolveDataset func(ctx context.Context, realmID uuid.UUID) ResolvedDataset
-	// WoWLogsBaseURL and WoWLogsAPIToken configure optional forwarding to the
-	// wow-logs.co.in native uploader API. Tenant opt-in remains authoritative.
+	// WoWLogsBaseURL configures forwarding to the wow-logs.co.in native
+	// uploader API. Forwarding requires the tenant opt-in and the uploader's
+	// own token.
 	WoWLogsBaseURL    string
-	WoWLogsAPIToken   string
 	WoWLogsHTTPClient *http.Client
+	// CredentialCipher encrypts user-provided third-party tokens. Nil
+	// disables features that store them.
+	CredentialCipher *secrets.CredentialCipher
 }
 
 func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, error) {
@@ -152,9 +157,9 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, er
 		resolveDataset:     opts.ResolveDataset,
 		wowLogsClient: wowLogsClient{
 			baseURL:    wowLogsBaseURL,
-			apiToken:   opts.WoWLogsAPIToken,
 			httpClient: wowLogsHTTPClient,
 		},
+		credentialCipher: opts.CredentialCipher,
 	}
 
 	err := c.initStorage(ctx)
