@@ -97,6 +97,19 @@ func TestDevicePageRedirectsSignedOutUsersToLogin(t *testing.T) {
 	require.Equal(t, "/login?from=%2Foauth%2Fdevice%3Fuser_code%3DABCD-EFGH", recorder.Header().Get("Location"))
 }
 
+func TestDevicePageCarriesCampaignThroughLogin(t *testing.T) {
+	t.Parallel()
+	service := &Service{}
+	service.SetBrowserAuth()
+
+	req := httptest.NewRequest(http.MethodGet, "/oauth/device?user_code=ABCD-EFGH", nil)
+	req.AddCookie(&http.Cookie{Name: utmCookie, Value: url.QueryEscape("utm_source=x&utm_content=A&other=1")})
+	recorder := httptest.NewRecorder()
+	service.serveBrowserApproval(recorder, req)
+	require.Equal(t, http.StatusSeeOther, recorder.Code)
+	require.Equal(t, "/login?from="+url.QueryEscape("/oauth/device?user_code=ABCD-EFGH&utm_content=A&utm_source=x"), recorder.Header().Get("Location"))
+}
+
 func TestDeviceAuthorizationRefreshAndRevocation(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitLong)

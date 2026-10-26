@@ -38,6 +38,10 @@ const (
 	installationPlatformParam = "installation_platform"
 	installationVersionParam  = "installation_version"
 	sidekickSessionExtraKey   = "sidekick_installation_id"
+
+	// utmCookie is set by the public /download page from the landing's utm_*
+	// params (frontend/chronicle/src/utils/utm.ts).
+	utmCookie = "chronicle_utm"
 )
 
 type sidekickMetadata struct {
@@ -255,10 +259,37 @@ func (s *Service) revoke(w http.ResponseWriter, r *http.Request) {
 	s.provider.WriteRevocationResponse(r.Context(), w, err)
 }
 
+// withCampaign returns the pairing URL with the visitor's campaign utm_* params
+// added, so they survive the sign-in round trip and a new account can be
+// attributed to the ad that brought it.
+func withCampaign(r *http.Request) string {
+	target := *r.URL
+	cookie, err := r.Cookie(utmCookie)
+	if err != nil {
+		return target.RequestURI()
+	}
+	raw, err := url.QueryUnescape(cookie.Value)
+	if err != nil {
+		return target.RequestURI()
+	}
+	campaign, err := url.ParseQuery(raw)
+	if err != nil {
+		return target.RequestURI()
+	}
+	query := target.Query()
+	for key, values := range campaign {
+		if strings.HasPrefix(key, "utm_") && len(values) > 0 && !query.Has(key) {
+			query.Set(key, values[0])
+		}
+	}
+	target.RawQuery = query.Encode()
+	return target.RequestURI()
+}
+
 func (s *Service) browserApprovalHandler(w http.ResponseWriter, r *http.Request) {
 	authClaims, ok := chronauth.AuthenticatedClaims(r.Context())
 	if !ok {
-		http.Redirect(w, r, "/login?from="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
+		http.Redirect(w, r, "/login?from="+url.QueryEscape(withCampaign(r)), http.StatusSeeOther)
 		return
 	}
 	switch r.Method {

@@ -127,3 +127,24 @@ type SidekickIssueReport struct {
 	Message string `json:"message"`
 	Details string `json:"details,omitempty"`
 }
+
+// SidekickRelease is the latest published Chronicle Sidekick release, served
+// from a server-side cache of the chronicle-sidekick GitHub releases API.
+type SidekickRelease struct {
+	// Available is false when no published release was found; links then fall
+	// back to ReleasesURL.
+	Available   bool                   `json:"available"`
+	Version     string                 `json:"version"`
+	PublishedAt *time.Time             `json:"published_at,omitempty"`
+	ReleasesURL string                 `json:"releases_url"`
+	Assets      []SidekickReleaseAsset `json:"assets"`
+}
+
+type SidekickReleaseAsset struct {
+	// OS is "macos", "windows" or "linux".
+	OS     string `json:"os"`
+	Name   string `json:"name"`
+	Size   int64  `json:"size"`
+	SHA256 string `json:"sha256,omitempty"`
+	URL    string `json:"url"`
+}
