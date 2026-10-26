@@ -20,8 +20,9 @@ function hashString(value: string): number {
 }
 
 /**
- * Return raid counts after which a grid ad should be inserted. The hashed IDs
- * produce stable pseudo-random gaps, so loading another page never moves ads
+ * Return raid counts after which a grid ad should be inserted. Single-column
+ * grids show the first ad after three raids, then use the regular hashed gaps.
+ * The stable pseudo-random gaps ensure loading another page never moves ads
  * that are already visible.
  */
 export function getRecentRaidAdInsertions(instanceIDs: string[], columnCount: number): number[] {
@@ -30,8 +31,13 @@ export function getRecentRaidAdInsertions(instanceIDs: string[], columnCount: nu
   const eligibleGaps = columnCount <= 1
     ? gaps
     : gaps.filter((gap) => (gap + 1) % columnCount !== 0);
-  let raidCount = 0;
+  let raidCount = columnCount <= 1 ? 3 : 0;
   let adIndex = 0;
+
+  if (columnCount <= 1 && raidCount <= instanceIDs.length) {
+    insertions.push(raidCount);
+    adIndex += 1;
+  }
 
   while (raidCount < instanceIDs.length) {
     const anchorID = instanceIDs[raidCount] ?? instanceIDs[0];
