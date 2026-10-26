@@ -17,6 +17,7 @@ import {
 } from "@/pages/Technical/mapGallery";
 import { fetchMapManifest } from "@/pages/Technical/mapManifest";
 import type { PanelRenderProps } from "../types";
+import { MapFloorPicker } from "./MapFloorPicker";
 import { isMeshOnlyInstance, placeableDungeonMesh } from "./dungeonMeshes";
 import type { MapEncounterPositions, MapPositionSample, MapResult } from "./map.processor";
 import {
@@ -553,9 +554,27 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
   }
   if (!artwork) return <MapMessage title={`Map ${artworkMapId} is unavailable`} detail="The active dataset does not publish artwork or rendered geometry for this world map." />;
   if (artwork.kind === "instance" && (isMeshOnlyInstance(artwork.instance) || (!canvas && selectedMesh))) {
-    return <MapMessage title="No map artwork for this floor" detail={`${artwork.instance.name} has no 2D map for this floor; it is 3D only. Select a single encounter to open its 3D Replay Map.`} />;
+    return (
+      <MapMessage title="No map artwork for this floor" detail={`${artwork.instance.name} has no 2D map for this floor; it is 3D only. Select a single encounter to open its 3D Replay Map.`}>
+        <MapFloorPicker
+          floors={artwork.instance.floors.map((floor) => floor.floor)}
+          value={selectedFloorNumber}
+          onChange={setFloorNumber}
+        />
+      </MapMessage>
+    );
   }
-  if (!canvas) return <MapMessage title="Map assets unavailable" detail="No renderable map layer was published." />;
+  if (!canvas) return (
+    <MapMessage title="Map assets unavailable" detail="No renderable map layer was published for this floor. Choose another floor to try its artwork.">
+      {artwork.kind === "instance" && (
+        <MapFloorPicker
+          floors={artwork.instance.floors.map((floor) => floor.floor)}
+          value={selectedFloorNumber}
+          onChange={setFloorNumber}
+        />
+      )}
+    </MapMessage>
+  );
 
   const mapName = artwork.kind === "zone" ? artwork.map.name : artwork.instance.name;
   const displayedMapId = artwork.kind === "instance" ? artwork.instance.mapID : mapId;
@@ -729,12 +748,13 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
   );
 }
 
-function MapMessage({ title, detail }: { title: string; detail: string }) {
+function MapMessage({ title, detail, children }: { title: string; detail: string; children?: ReactNode }) {
   return (
     <div className="flex h-full min-h-48 flex-col items-center justify-center gap-2 p-6 text-center">
       <MapIcon className="h-8 w-8 text-muted-foreground/50" />
       <div className="text-sm font-medium text-foreground">{title}</div>
       <p className="max-w-sm text-xs text-muted-foreground">{detail}</p>
+      {children}
     </div>
   );
 }

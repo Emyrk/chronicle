@@ -18,6 +18,7 @@ import { fetchMiniatureUrls } from "./bossMinis";
 import { dungeonMeshBytes, dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
 import { mapProcessor, type MapProcessorEvent, type MapResult } from "./map.processor";
 import type { MapLivePresence } from "./MapView3D";
+import { MapFloorPicker } from "./MapFloorPicker";
 import { MapOverview2D } from "./MapOverview2D";
 import {
   FULL_MAP_VIEWPORT,
@@ -472,7 +473,13 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     setFraming((current) => manualMapFraming(current, viewport));
   }, []);
 
-  if (!ready) return scene.status === "message" ? <MapMessage title={scene.title} detail={scene.detail} /> : null;
+  if (!ready) return scene.status === "message" ? (
+    <MapMessage title={scene.title} detail={scene.detail}>
+      {scene.floors && scene.setFloorNumber && (
+        <MapFloorPicker floors={scene.floors} value={scene.selectedFloorNumber ?? null} onChange={scene.setFloorNumber} />
+      )}
+    </MapMessage>
+  ) : null;
 
   const applyFraming = (viewport: MapViewport) => setFraming(pinMapFraming(framing, viewport));
   // Back to the default framing: the cinematic camera on the mesh, the
@@ -1030,12 +1037,13 @@ function MapContent({ forceMini = false, ...props }: PanelRenderProps<MapResult>
   );
 }
 
-function MapMessage({ title, detail }: { title: string; detail: string }) {
+function MapMessage({ title, detail, children }: { title: string; detail: string; children?: ReactNode }) {
   return (
     <div className="flex h-full min-h-48 flex-col items-center justify-center gap-2 p-6 text-center">
       <MapIcon className="h-8 w-8 text-muted-foreground/50" />
       <div className="text-sm font-medium text-foreground">{title}</div>
       <p className="max-w-sm text-xs text-muted-foreground">{detail}</p>
+      {children}
     </div>
   );
 }
