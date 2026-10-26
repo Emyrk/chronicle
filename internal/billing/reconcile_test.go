@@ -94,6 +94,13 @@ func TestSubscriptionWebhookUsesAuthoritativeStateAndPriceTier(t *testing.T) {
 	periodEnd := time.Now().Add(24 * time.Hour)
 	store := &reconciliationStore{providerErr: pgx.ErrNoRows}
 	svc := New(Options{Store: store, ExaltedPriceIDs: []string{"price_exalted"}})
+	var updatedCustomerID string
+	var updatedCustomerMetadata map[string]string
+	svc.updateCustomer = func(_ context.Context, customerID string, params *stripe.CustomerUpdateParams) (*stripe.Customer, error) {
+		updatedCustomerID = customerID
+		updatedCustomerMetadata = params.Metadata
+		return &stripe.Customer{ID: customerID}, nil
+	}
 	var notified SubscriptionChangeNotification
 	svc.SetSubscriptionChangeNotifier(func(ctx context.Context, change SubscriptionChangeNotification) error {
 		_, hasDeadline := ctx.Deadline()
@@ -124,6 +131,8 @@ func TestSubscriptionWebhookUsesAuthoritativeStateAndPriceTier(t *testing.T) {
 	require.Equal(t, userID, store.upserts[0].UserID)
 	require.Equal(t, string(ProductExalted), store.upserts[0].ProductCode, "configured price must override stale product metadata")
 	require.Equal(t, string(stripe.SubscriptionStatusActive), store.upserts[0].Status)
+	require.Equal(t, authoritative.Customer.ID, updatedCustomerID)
+	require.Equal(t, userID.String(), updatedCustomerMetadata[stripeMetadataChronicleUserID])
 	require.Equal(t, SubscriptionChangeNotification{
 		EventType:              string(stripe.EventTypeCustomerSubscriptionUpdated),
 		UserID:                 userID,
@@ -286,10 +295,11 @@ func TestReconciliationCountsChangedNoopAndInvalidMetadata(t *testing.T) {
 	cancelAt := time.Date(2026, time.November, 18, 23, 25, 45, 0, time.UTC)
 	validChanged.CancelAt = cancelAt.Unix()
 	validChanged.Metadata = map[string]string{"chronicle_user_id": userID.String(), "chronicle_product_code": string(ProductRevered)}
+	validNoopUserID := uuid.New()
 	validNoop := testStripeSubscription("prod_supporter", "price_monthly", time.Now().Add(time.Hour))
 	validNoop.ID = "sub_noop"
 	validNoop.Customer = &stripe.Customer{ID: "cus_noop"}
-	validNoop.Metadata = map[string]string{"chronicle_user_id": uuid.NewString(), "chronicle_product_code": string(ProductRevered)}
+	validNoop.Metadata = map[string]string{"chronicle_user_id": validNoopUserID.String(), "chronicle_product_code": string(ProductRevered)}
 	invalid := testStripeSubscription("prod_supporter", "price_monthly", time.Now().Add(time.Hour))
 	invalid.ID = "sub_invalid"
 	invalid.Customer = &stripe.Customer{ID: "cus_invalid"}
@@ -307,6 +317,11 @@ func TestReconciliationCountsChangedNoopAndInvalidMetadata(t *testing.T) {
 		},
 	}
 	svc := New(Options{Store: store, ReveredPriceIDs: []string{"price_monthly"}})
+	customerMetadata := make(map[string]string)
+	svc.updateCustomer = func(_ context.Context, customerID string, params *stripe.CustomerUpdateParams) (*stripe.Customer, error) {
+		customerMetadata[customerID] = params.Metadata[stripeMetadataChronicleUserID]
+		return &stripe.Customer{ID: customerID}, nil
+	}
 	svc.listSubscriptions = func(context.Context) ([]*stripe.Subscription, error) {
 		return []*stripe.Subscription{validChanged, validNoop, invalid}, nil
 	}
@@ -324,6 +339,8 @@ func TestReconciliationCountsChangedNoopAndInvalidMetadata(t *testing.T) {
 	require.Equal(t, int32(1), store.completion.SubscriptionsChanged)
 	require.Equal(t, int32(1), store.completion.SubscriptionsSkippedInvalid)
 	require.Equal(t, pgtype.Timestamptz{Time: cancelAt, Valid: true}, store.conditionalUpserts[0].CancelAt)
+	require.Equal(t, userID.String(), customerMetadata[validChanged.Customer.ID])
+	require.Equal(t, validNoopUserID.String(), customerMetadata[validNoop.Customer.ID])
 	require.Equal(t, int32(3), store.completion.EntitlementCustomersFound)
 	require.Equal(t, int32(3), store.completion.EntitlementCustomersSynced)
 }

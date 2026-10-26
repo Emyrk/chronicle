@@ -90,9 +90,9 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 		SuccessURL:      stripe.String(success),
 		CancelURL:       stripe.String(cancel),
 		SubscriptionData: &stripe.CheckoutSessionCreateSubscriptionDataParams{Metadata: map[string]string{
-			"chronicle_user_id":      claims.Subject.String(),
-			"chronicle_product_code": string(selectedProduct),
-			"chronicle_price_id":     req.PriceID,
+			stripeMetadataChronicleUserID: claims.Subject.String(),
+			"chronicle_product_code":      string(selectedProduct),
+			"chronicle_price_id":          req.PriceID,
 		}},
 	}
 	params.SetIdempotencyKey(fmt.Sprintf("chronicle-checkout:%s:%s", claims.Subject, operationID))
@@ -523,7 +523,7 @@ func (s *Service) subscriptionOwner(ctx context.Context, sub *stripe.Subscriptio
 	if sub == nil || sub.ID == "" {
 		return uuid.Nil, fmt.Errorf("subscription is missing")
 	}
-	userID, userErr := uuid.Parse(sub.Metadata["chronicle_user_id"])
+	userID, userErr := uuid.Parse(sub.Metadata[stripeMetadataChronicleUserID])
 	if userErr == nil {
 		return userID, nil
 	}
@@ -641,5 +641,5 @@ func (s *Service) upsertSubscription(ctx context.Context, userID uuid.UUID, sub 
 	if err != nil {
 		return fmt.Errorf("upsert billing subscription: %w", err)
 	}
-	return nil
+	return s.syncStripeCustomerMetadata(ctx, sub.Customer.ID, userID)
 }

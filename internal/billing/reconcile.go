@@ -294,6 +294,9 @@ func (s *Service) upsertSubscriptionIfChanged(ctx context.Context, userID uuid.U
 	if err != nil {
 		return false, fmt.Errorf("upsert billing subscription: %w", err)
 	}
+	if err := s.syncStripeCustomerMetadata(ctx, sub.Customer.ID, userID); err != nil {
+		return false, err
+	}
 	return rows > 0, nil
 }
 
