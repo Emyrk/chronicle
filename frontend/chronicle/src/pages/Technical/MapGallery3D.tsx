@@ -7,16 +7,16 @@ import {
 import { MapScene3D } from "@/pages/Instance/EventsPanels/Map/MapScene3D";
 import type { MapDebugOverlay } from "@/pages/Instance/EventsPanels/Map/mapDebugOverlays";
 import type { MapSceneGround } from "@/pages/Instance/EventsPanels/Map/useMapScene";
-import type { WowMapInstance } from "./mapGallery";
+import type { WowMapMeshInstance } from "./mapGallery";
 
 interface MapGallery3DProps {
-  instance: WowMapInstance;
+  mesh: WowMapMeshInstance;
   iconBaseUrl: string;
   overlays: readonly MapDebugOverlay[];
 }
 
-function meshGround(instance: WowMapInstance, iconBaseUrl: string): MapSceneGround | null {
-  const mesh = placeableDungeonMesh(instance.mesh);
+function meshGround(meshEntry: WowMapMeshInstance, iconBaseUrl: string): MapSceneGround | null {
+  const mesh = placeableDungeonMesh(meshEntry);
   if (!mesh) return null;
   return {
     iconBaseUrl,
@@ -32,10 +32,10 @@ function meshGround(instance: WowMapInstance, iconBaseUrl: string): MapSceneGrou
   };
 }
 
-export default function MapGallery3D({ instance, iconBaseUrl, overlays }: MapGallery3DProps) {
+export default function MapGallery3D({ mesh: meshEntry, iconBaseUrl, overlays }: MapGallery3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mesh = useMemo(() => placeableDungeonMesh(instance.mesh), [instance.mesh]);
-  const ground = useMemo(() => meshGround(instance, iconBaseUrl), [iconBaseUrl, instance]);
+  const mesh = useMemo(() => placeableDungeonMesh(meshEntry), [meshEntry]);
+  const ground = useMemo(() => meshGround(meshEntry, iconBaseUrl), [iconBaseUrl, meshEntry]);
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
 
   useEffect(() => {

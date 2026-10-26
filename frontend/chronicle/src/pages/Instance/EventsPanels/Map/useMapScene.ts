@@ -1,17 +1,18 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
-import type {
-  WowMapInstanceFloor,
-  WowMapLayer,
-  WowMapMeshInstance,
-  WowMapOverlay,
-  WowMapRenderedInstance,
+import {
+  mapFloorMesh,
+  type WowMapInstanceFloor,
+  type WowMapLayer,
+  type WowMapMeshInstance,
+  type WowMapOverlay,
+  type WowMapRenderedInstance,
 } from "@/pages/Technical/mapGallery";
 import { fetchMapManifest } from "@/pages/Technical/mapManifest";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelRenderProps } from "../types";
-import { isMeshOnlyInstance, placeableDungeonMesh } from "./dungeonMeshes";
+import { placeableDungeonMesh } from "./dungeonMeshes";
 import { groupCentre, isStaleRunSample, mergeRunEncounters, RUN_UNIT_STALE_MS, runSignature } from "./wholeRun";
 import { POWER_COLORS } from "../RaidFrames/raidFrameShared";
 import { activeDebuffsAt, type MapDebuff, type MapEncounterPositions, type MapPositionSample, type MapResult } from "./map.processor";
@@ -399,19 +400,22 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     ? artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0]
     : undefined;
   // GetPlayerMapPosition coordinates only place units on 2D UI map artwork.
-  const mesh = !normalizedUIMap && artwork.kind === "instance" ? placeableDungeonMesh(artwork.instance.mesh) : null;
-  // A mesh-only instance has no floor to fall back on, so its mesh is the
-  // canvas from the start (while the mesh loads too), not only once asked.
-  // Replay uses native floors, calibrated renders, or the mesh, never an uncalibrated manual image.
-  // Without a floor, keep the mesh available even when a 2D render exists.
-  const meshOnly = artwork.kind === "instance" && (isMeshOnlyInstance(artwork.instance) || (!selectedFloor && mesh !== null));
-  const rawProjection = (Boolean(options.rawDungeonProjection) || meshOnly) && mesh !== null;
-  const meshCanvas = rawProjection && mesh ? dungeonMeshCanvas(mesh) : null;
-  const flatCanvas = !normalizedUIMap && artwork.kind === "instance" && !meshCanvas
+  // The active floor owns its mesh and render when published; legacy
+  // instance-level assets remain the fallback.
+  const mesh = !normalizedUIMap && artwork.kind === "instance"
+    ? placeableDungeonMesh(mapFloorMesh(artwork.instance, selectedFloor))
+    : null;
+  const availableFlatCanvas = !normalizedUIMap && artwork.kind === "instance"
     ? replayDungeonCanvas(artwork.instance, selectedFloor, Boolean(options.preferRenderedCanvas) || !selectedFloor?.bounds)
     : null;
+  // A mesh-only floor has no native or calibrated 2D canvas to fall back on,
+  // so its mesh is the canvas from the start, not only once asked.
+  const meshOnly = artwork.kind === "instance" && mesh !== null && availableFlatCanvas === null;
+  const rawProjection = (Boolean(options.rawDungeonProjection) || meshOnly) && mesh !== null;
+  const meshCanvas = rawProjection && mesh ? dungeonMeshCanvas(mesh) : null;
+  const flatCanvas = !meshCanvas ? availableFlatCanvas : null;
   const renderCanvas = flatCanvas?.rendered ? flatCanvas.canvas : null;
-  const canvas = artwork.kind === "zone" ? zoneSelection?.layer : meshCanvas ?? flatCanvas?.canvas ?? selectedFloor;
+  const canvas = artwork.kind === "zone" ? zoneSelection?.layer : meshCanvas ?? flatCanvas?.canvas;
   if (!canvas) return { status: "message", title: "Map artwork unavailable", detail: "No renderable map layer was published." };
 
   const dungeonBounds = artwork.kind === "instance" ? meshCanvas?.bounds ?? flatCanvas?.canvas.bounds ?? null : null;
