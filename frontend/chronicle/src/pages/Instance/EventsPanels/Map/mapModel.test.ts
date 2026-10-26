@@ -487,14 +487,53 @@ describe("floor-specific dungeon canvases", () => {
     }],
   };
 
-  it("uses the selected floor render before the legacy instance render", () => {
-    expect(overviewDungeonCanvas(instance, instance.floors[1], "renders").canvas).toMatchObject({ path: floorRender.path });
+  it("keeps legacy floors render-first when preferred2D is absent", () => {
+    expect(overviewDungeonCanvas(instance, instance.floors[1], "auto").canvas).toMatchObject({ path: floorRender.path });
     expect(replayDungeonCanvas(instance, instance.floors[1], true)?.canvas).toMatchObject({ path: floorRender.path });
   });
 
   it("falls back to the legacy instance render when the selected floor has none", () => {
     expect(overviewDungeonCanvas(instance, instance.floors[0], "renders").canvas).toMatchObject({ path: legacyRender.path });
     expect(replayDungeonCanvas(instance, instance.floors[0], true)?.canvas).toMatchObject({ path: legacyRender.path });
+  });
+
+  it("honours an art-preferring floor only for automatic 2D selection", () => {
+    const preferredFloor = { ...instance.floors[1], preferred2D: "art" as const };
+    const preferredInstance = { ...instance, floors: [instance.floors[0], preferredFloor] };
+
+    expect(overviewDungeonCanvas(preferredInstance, preferredFloor, "auto")).toEqual({
+      canvas: preferredFloor,
+      source: "art",
+    });
+    expect(replayDungeonCanvas(preferredInstance, preferredFloor, true)).toEqual({
+      canvas: preferredFloor,
+      rendered: false,
+    });
+    expect(overviewDungeonCanvas(preferredInstance, preferredFloor, "renders").canvas).toMatchObject({
+      path: floorRender.path,
+    });
+  });
+
+  it("re-evaluates automatic preference for each selected floor", () => {
+    const preferredFloor = { ...instance.floors[1], preferred2D: "art" as const };
+    const preferredInstance = { ...instance, floors: [instance.floors[0], preferredFloor] };
+
+    expect(overviewDungeonCanvas(preferredInstance, preferredFloor, "auto")).toMatchObject({ source: "art" });
+    expect(overviewDungeonCanvas(preferredInstance, instance.floors[0], "auto")).toMatchObject({
+      source: "renders",
+      canvas: { path: legacyRender.path },
+    });
+  });
+
+  it("falls back to renders when an art-preferring floor has no native artwork", () => {
+    const floor = { ...instance.floors[1], preferred2D: "art" as const, tiles: [] };
+    const preferredInstance = { ...instance, floors: [instance.floors[0], floor] };
+
+    expect(overviewDungeonCanvas(preferredInstance, floor, "auto")).toMatchObject({
+      source: "renders",
+      canvas: { path: floorRender.path },
+    });
+    expect(replayDungeonCanvas(preferredInstance, floor, true)?.canvas).toMatchObject({ path: floorRender.path });
   });
 
   it("keeps native floor artwork when rendered canvases are not preferred", () => {

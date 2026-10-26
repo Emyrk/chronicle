@@ -119,6 +119,8 @@ export interface WowMapInstanceFloor {
   tileHeight: number;
   bounds?: WowMapFloorBounds;
   tiles: WowMapTile[];
+  /** Preferred automatic 2D source for this floor; absent preserves render-first behavior. */
+  preferred2D?: "renders" | "art";
   renders?: WowMapManualRender;
   mesh?: WowMapMeshInstance;
 }

@@ -553,6 +553,9 @@ export function overviewDungeonCanvas(
   if (source === "art" && hasNativeMapFloorArtwork(floor)) return { canvas: floor, source: "art" as const };
   if (source === "renders" && render) return { canvas: render, source: "renders" as const };
   if (source === "styled" && styled) return { canvas: styled, source: "styled" as const };
+  // The manifest preference applies only to automatic selection. An explicit
+  // UI choice above remains in effect for the session, including across floors.
+  if (floor?.preferred2D === "art" && hasNativeMapFloorArtwork(floor)) return { canvas: floor, source: "art" as const };
   // The overview needs the chosen image's own bounds to project a route. In
   // automatic mode, prefer a calibrated render rather than displaying an
   // uncalibrated image that cannot carry the overlay.
@@ -567,7 +570,7 @@ export type ReplayDungeonCanvas =
   | { canvas: WowMapRenderedInstance; rendered: true }
   | { canvas: WowMapInstanceFloor; rendered: false };
 
-/** Prefer a calibrated top-down render in flat 2D mode, while retaining native artwork as fallback. */
+/** Prefer the floor's automatic 2D source in flat mode, while retaining every source as fallback. */
 export function replayDungeonCanvas(
   instance: WowMapInstance,
   floor: WowMapInstanceFloor | undefined,
@@ -579,8 +582,12 @@ export function replayDungeonCanvas(
     ? instance.styled
     : null;
   const rendered = boundedRender ?? styled;
+  const nativeArtwork = floor && hasNativeMapFloorArtwork(floor) ? floor : null;
+  if (preferRendered && floor?.preferred2D === "art" && nativeArtwork) {
+    return { canvas: nativeArtwork, rendered: false };
+  }
   if (preferRendered && rendered) return { canvas: rendered, rendered: true };
-  if (floor && hasNativeMapFloorArtwork(floor)) return { canvas: floor, rendered: false };
+  if (nativeArtwork) return { canvas: nativeArtwork, rendered: false };
   return rendered ? { canvas: rendered, rendered: true } : null;
 }
 
