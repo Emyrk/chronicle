@@ -224,6 +224,56 @@ func (h *Handler) notifyPhotoProof(ctx context.Context, id, applicantID uuid.UUI
 	}
 }
 
+// notifyCharacterLinkDecision is best effort and only runs after the proof
+// decision commits. Lookup or queue failures never change the review response.
+func (h *Handler) notifyCharacterLinkDecision(ctx context.Context, proof chroniclesdk.ProofRequest) {
+	if h.bot == nil || h.bot.Disabled() {
+		return
+	}
+	if h.accessURL == nil {
+		slog.ErrorContext(ctx, "character-link decision notification URL unavailable", "request_id", proof.ID)
+		return
+	}
+
+	notifyCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	discord, err := h.zed.GetUserAuthLinkByUserIDAndProvider(notifyCtx, database.GetUserAuthLinkByUserIDAndProviderParams{
+		UserID:   proof.ApplicantID,
+		Provider: "discord",
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return
+	}
+	if err != nil {
+		slog.WarnContext(notifyCtx, "character-link decision Discord lookup failed", "request_id", proof.ID, "error", err)
+		return
+	}
+
+	approved := make([]string, 0, len(proof.Subjects))
+	rejected := make([]string, 0, len(proof.Subjects))
+	for _, subject := range proof.Subjects {
+		character := fmt.Sprintf("%s (%s)", subject.Name, subject.RealmName)
+		switch subject.Status {
+		case "approved":
+			approved = append(approved, character)
+		case "rejected":
+			rejected = append(rejected, character)
+		}
+	}
+	err = chroniclebot.EnqueueCharacterLinkDecision(notifyCtx, h.queue, h.bot, chroniclebot.ArgsNotifyCharacterLinkDecision{
+		ProofID:            proof.ID.String(),
+		DiscordID:          discord.LinkedID,
+		Status:             proof.Status,
+		URL:                strings.TrimRight(h.accessURL.String(), "/") + "/account/characters",
+		ApprovedCharacters: approved,
+		RejectedCharacters: rejected,
+		Response:           proof.Response,
+	})
+	if err != nil {
+		slog.ErrorContext(notifyCtx, "failed to enqueue character-link decision notification", "request_id", proof.ID, "error", err)
+	}
+}
+
 func validProofCharacters(choices []chroniclesdk.ProofCharacter) bool {
 	if len(choices) == 0 || len(choices) > 10 {
 		return false
@@ -435,7 +485,7 @@ func (h *Handler) DecideProof(w http.ResponseWriter, r *http.Request) {
 	// Resolve the API's realm/GUID identities into subject IDs. The service
 	// rechecks this exact set after locking the pending request.
 	scope := reviewProofScope(r.Context())
-	_, subjects, err := h.proofs.Get(r.Context(), scope, id)
+	proofRow, subjects, err := h.proofs.Get(r.Context(), scope, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		proofError(w, r, http.StatusConflict, "Proof already decided or character already linked")
 		return
@@ -495,6 +545,30 @@ func (h *Handler) DecideProof(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
+
+	approvedCount := 0
+	decisionSubjects := make([]chroniclesdk.ProofSubject, 0, len(subjects))
+	for _, subject := range subjects {
+		status := "rejected"
+		if decisions[subject.ID] {
+			status = "approved"
+			approvedCount++
+		}
+		decisionSubjects = append(decisionSubjects, chroniclesdk.ProofSubject{
+			Name: subject.Name, RealmName: subject.RealmName, Status: status,
+		})
+	}
+	decisionStatus := "partial"
+	if approvedCount == 0 {
+		decisionStatus = "rejected"
+	} else if approvedCount == len(subjects) {
+		decisionStatus = "approved"
+	}
+	h.notifyCharacterLinkDecision(r.Context(), chroniclesdk.ProofRequest{
+		ID: id, ApplicantID: proofRow.ApplicantID, Status: decisionStatus,
+		Response: strings.TrimSpace(input.Message), Subjects: decisionSubjects,
+	})
+
 	result, err := h.proofResponse(r.Context(), scope, id)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
