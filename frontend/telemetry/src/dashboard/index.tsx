@@ -96,7 +96,7 @@ dashboard.get("/internal", async (c) => {
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Chronicle Telemetry</title>
-        <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAQlBMVEUrKytVTT1rXkdkWUQdHyQ1Mi9wY0knKCkjJCcuLSxGQTdcUkE9OTNNRjp3aE3GqHCAb1CpkGO6nmqKd1WUgFrYt3iDjUckAAAACXBIWXMAAA7EAAAOxAGVKw4bAAABgklEQVR42pVT23LdMAiUAHHRXbbP//9qcDudyidNM+FJI1bLsogQfhqi/09LziZfpi0kxtKr2H1+C3VuIchEicUR+s5ToEjqnWomnEnDWXQnESwhXmtNaoX4dfTygh0giSnrbIQtx9r7GMd4MhhrY5RgOCf0EI8x4g4wLWc7p1tAEal2wjHyrtLovFpqLEFyFHXQGlV29+KoFDSyaPPawoIj/QVIZQDOYo6gHMkLNiu7gl5V022gRuBZRSrqNhKN/sg0o9/pzJWTJNisdsJbsCTv0jNEmNVg98B1OQM19MZ1YmR/BM9ZcVOtPbmGUrD7hZd4fIIEs8OtsYB34W26yOe8aV2kdw/6y4dbdlmbEaZ41CqR/Uv8NqrStTvlkHWWs/uw1I3ShpTH8QSw1QliPvdZUze5ngCpQDGgSWYEPFO4xhuDcKZ2JWXzEtDXa603QAIA/3L9HlZ8HdP4KdIXwlRzP0UCASdvd9rnrRBqXFNBkq82zFUCxD/4f4bqN8v58/gAYXERW1mDvqEAAAAASUVORK5CYII=" type="image/png" />
+        <link rel="icon" href="/favicon.png" type="image/png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -501,7 +501,7 @@ dashboard.get("/internal/deployment/:id", async (c) => {
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Deployment {deploymentId.substring(0, 8)} — Chronicle Telemetry</title>
-        <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAQlBMVEUrKytVTT1rXkdkWUQdHyQ1Mi9wY0knKCkjJCcuLSxGQTdcUkE9OTNNRjp3aE3GqHCAb1CpkGO6nmqKd1WUgFrYt3iDjUckAAAACXBIWXMAAA7EAAAOxAGVKw4bAAABgklEQVR42pVT23LdMAiUAHHRXbbP//9qcDudyidNM+FJI1bLsogQfhqi/09LziZfpi0kxtKr2H1+C3VuIchEicUR+s5ToEjqnWomnEnDWXQnESwhXmtNaoX4dfTygh0giSnrbIQtx9r7GMd4MhhrY5RgOCf0EI8x4g4wLWc7p1tAEal2wjHyrtLovFpqLEFyFHXQGlV29+KoFDSyaPPawoIj/QVIZQDOYo6gHMkLNiu7gl5V022gRuBZRSrqNhKN/sg0o9/pzJWTJNisdsJbsCTv0jNEmNVg98B1OQM19MZ1YmR/BM9ZcVOtPbmGUrD7hZd4fIIEs8OtsYB34W26yOe8aV2kdw/6y4dbdlmbEaZ41CqR/Uv8NqrStTvlkHWWs/uw1I3ShpTH8QSw1QliPvdZUze5ngCpQDGgSWYEPFO4xhuDcKZ2JWXzEtDXa603QAIA/3L9HlZ8HdP4KdIXwlRzP0UCASdvd9rnrRBqXFNBkq82zFUCxD/4f4bqN8v58/gAYXERW1mDvqEAAAAASUVORK5CYII=" type="image/png" />
+        <link rel="icon" href="/favicon.png" type="image/png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet" />
