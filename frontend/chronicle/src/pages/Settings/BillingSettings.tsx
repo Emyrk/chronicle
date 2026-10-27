@@ -283,6 +283,13 @@ const COMPARISON: { feature: string; description: string; friendly: string; hono
     honored: "No ads",
   },
   {
+    feature: "Ad-free for your viewers",
+    description: "Instance pages from your logs, and armory pages of your linked characters, are ad-free for everyone who views them.",
+    friendly: "—",
+    honored: INCLUDED,
+    highlight: true,
+  },
+  {
     feature: "Log storage",
     description: "Extra storage on top of the standard allowance for your uploads.",
     friendly: "Standard",

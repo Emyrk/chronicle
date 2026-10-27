@@ -100,38 +100,42 @@ function VisualRow({ label, color, note, children }: { label: string; color: str
 }
 
 /** Wireframe page with or without an ad slot. */
-function MockPage({ withAd, label }: { withAd: boolean; label: ReactNode }) {
+/** Wireframe of one of your pages, badged ad-free. */
+function MockPage({ title, bars }: { title: string; bars: string[] }) {
   return (
-    <div className="flex-1 space-y-2">
-      <div className="text-center text-xs">{label}</div>
-      <div className="space-y-1.5 rounded-md border border-border bg-background/60 p-2">
-        <div className="h-2 w-2/3 rounded bg-muted-foreground/30" />
-        {withAd ? (
-          <div className="flex h-12 items-center justify-center rounded border border-dashed border-rose-400/40 bg-[repeating-linear-gradient(45deg,transparent,transparent_6px,rgba(244,63,94,0.08)_6px,rgba(244,63,94,0.08)_12px)] text-[9px] uppercase tracking-[0.2em] text-rose-300/70">
-            Advertisement
-          </div>
-        ) : null}
-        {[90, 72, 84, 60].map((w) => (
-          <div key={w} className="h-3 rounded bg-[var(--color-class-mage)]/50" style={{ width: `${w}%` }} />
-        ))}
-        {withAd ? null : <div className="h-3 w-1/2 rounded bg-[var(--color-class-paladin)]/50" />}
+    <div className="flex-1 space-y-1.5 rounded-md border border-border bg-background/60 p-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-[11px] font-medium text-zinc-200">{title}</span>
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-lime-500/30 bg-lime-500/10 px-1.5 py-px text-[10px] font-medium text-lime-300">
+          <Sparkles className="h-2.5 w-2.5" aria-hidden="true" /> Ad-free
+        </span>
       </div>
+      {bars.map((cls, i) => (
+        <div key={i} className="h-2.5 rounded" style={{ width: `${92 - i * 14}%`, backgroundColor: `color-mix(in srgb, var(--color-class-${cls}) 55%, transparent)` }} />
+      ))}
     </div>
   )
 }
 
+const VIEWER_CLASSES = ["warrior", "priest", "mage", "rogue", "druid", "hunter", "paladin"]
+
 function AdFreeVisual() {
   return (
-    <div className="flex gap-4">
-      <MockPage withAd label={<span className="font-wow font-bold text-zinc-400">Friendly</span>} />
-      <MockPage
-        withAd={false}
-        label={
-          <span className="inline-flex items-center gap-1 rounded-full border border-lime-500/30 bg-lime-500/10 px-2 py-0.5 font-medium text-lime-300">
-            <Sparkles className="h-3 w-3" /> Ad-free
-          </span>
-        }
-      />
+    <div className="space-y-3">
+      <div className="flex gap-3">
+        <MockPage title="Your raid logs" bars={["mage", "warrior", "priest", "rogue"]} />
+        <MockPage title="Your characters" bars={["paladin", "paladin", "hunter", "druid"]} />
+      </div>
+      <div className="flex items-center gap-3 rounded-md border border-lime-500/30 bg-lime-500/10 px-3 py-2">
+        <div className="flex shrink-0 -space-x-1.5">
+          {VIEWER_CLASSES.map((cls) => (
+            <span key={cls} className="size-5 rounded-full ring-2 ring-[#1b1f17]" style={{ backgroundColor: `var(--color-class-${cls})` }} />
+          ))}
+        </div>
+        <p className="text-xs leading-snug text-lime-100">
+          <span className="font-semibold text-lime-300">Shared with your viewers.</span> Every raider who opens them sees no ads.
+        </p>
+      </div>
     </div>
   )
 }
@@ -289,11 +293,11 @@ const SLIDES: PerkSlide[] = [
     id: "ad-free",
     tab: "Ad-Free",
     tier: "honored",
-    headline: "Clear line of sight to every pull.",
-    body: "Remove every advertisement from Chronicle. Your own logs and characters go ad-free for everyone who views them, so your raid sees a clean report too.",
+    headline: "Ad-free for you, and everyone viewing your raids.",
+    body: "Supporters never see ads. Every instance page from a log you upload, and the armory page of every character you've linked, is ad-free for everyone who opens it. Your whole raid gets a clean report.",
     levels: [
       { tier: "free", text: "Limited ads on some pages" },
-      { tier: "honored", text: "No ads for you, and none on your logs for your raid" },
+      { tier: "honored", text: "No ads for you, and none for anyone viewing your logs or characters" },
     ],
     visual: <AdFreeVisual />,
   },
