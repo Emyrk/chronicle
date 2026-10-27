@@ -36,10 +36,32 @@ describe("safe panel profile", () => {
       damage.bySource(function(source, total) label:SetText(source .. ":" .. total) end)
     `)
     runtime.start()
-    expect(() => runtime.panelEvent({ stream: "heal", source: "A", target: "B", amount: 1, offsetMs: 0 })).toThrow(/disallowed/)
-    expect(() => runtime.panelEvent({ stream: "damage", source: "A", target: "B", amount: 1, offsetMs: 0, secret: "x" })).toThrow(/disallowed/)
-    runtime.panelEvent({ stream: "damage", source: "A", target: "B", amount: 42, offsetMs: 0 })
+    const event = { stream: "damage", source: "A", target: "B", amount: 42, offsetMs: 0, encounterId: "e1", selected: true }
+    expect(() => runtime.panelEvent({ ...event, stream: "heal" })).toThrow(/disallowed/)
+    expect(() => runtime.panelEvent({ ...event, secret: "x" })).toThrow(/disallowed/)
+    expect(() => runtime.panelEvent({ ...event, selected: "yes" })).toThrow(/disallowed/)
+    runtime.panelEvent(event)
     expect(runtime.flush()).toContainEqual({ op: "set", id: "amount", props: { text: "A:42.0" } })
+    runtime.stop()
+  })
+
+  it("passes encounter tags to Lua and calls onComplete once the host finishes", () => {
+    const runtime = panel(`
+      local label = CreateFrame("FontString", "amount", UIParent)
+      local damage = require("chronicle.v1.events.damage")
+      local total, seen = 0, {}
+      damage.onEvent(function(event)
+        if event.selected then total = total + event.amount end
+        seen[#seen + 1] = event.encounterId
+      end)
+      damage.onComplete(function() label:SetText(total .. " " .. table.concat(seen, ",")) end)
+    `)
+    runtime.start()
+    runtime.panelEvent({ stream: "damage", source: "A", target: "B", amount: 5, offsetMs: 0, encounterId: "e1", selected: true })
+    runtime.panelEvent({ stream: "damage", source: "A", target: "B", amount: 7, offsetMs: 0, encounterId: "e2", selected: false })
+    expect(runtime.flush()).not.toContainEqual(expect.objectContaining({ op: "set", id: "amount" }))
+    runtime.panelComplete()
+    expect(runtime.flush()).toContainEqual({ op: "set", id: "amount", props: { text: "5.0 e1,e2" } })
     runtime.stop()
   })
 })

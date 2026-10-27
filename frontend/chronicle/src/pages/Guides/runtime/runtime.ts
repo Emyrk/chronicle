@@ -95,6 +95,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
   const timers = new Map<number, number>()
   const modules = new Map<string, number>()
   const panelCallbacks = new Map<PanelStream, number>()
+  let completeCallback: number | undefined // Panel:OnComplete, called once after the host's last event.
   const allowedPanelStreams = new Set(options.panelStreams ?? [])
   if ([...allowedPanelStreams].some((stream) => !PANEL_STREAMS.includes(stream))) throw new GuideLuaError("unsupported panel stream")
   if (Object.keys(options.sources).some((path) => isReservedLuaPath(path.toLowerCase()))) throw new GuideLuaError("reserved Chronicle module path")
@@ -346,6 +347,14 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
         panelCallbacks.set(stream, lauxlib.luaL_ref(state, lua.LUA_REGISTRYINDEX))
         return 0
       })
+      registerFunction(L, "OnComplete", (state) => {
+        const index = lua.lua_istable(state, 1) ? 2 : 1
+        lauxlib.luaL_checktype(state, index, lua.LUA_TFUNCTION)
+        if (completeCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, completeCallback)
+        lua.lua_pushvalue(state, index)
+        completeCallback = lauxlib.luaL_ref(state, lua.LUA_REGISTRYINDEX)
+        return 0
+      })
       lua.lua_setglobal(L, to_luastring("Panel"))
     }
     let chapter = ""
@@ -380,12 +389,17 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
       const ref = panelCallbacks.get(event.stream)
       if (ref === undefined) return
       lua.lua_rawgeti(L, lua.LUA_REGISTRYINDEX, ref)
-      lua.lua_createtable(L, 0, 5)
+      lua.lua_createtable(L, 0, 7)
       for (const [key, value] of Object.entries(event)) { pushArgument(L, value); setField(L, -2, key) }
       protectedCall(L, 1, 0, limits.callbackInstructions)
     },
+    panelComplete() {
+      ensureActive()
+      if (!options.panelStreams) throw new GuideLuaError("panel profile is not enabled")
+      if (completeCallback !== undefined) callRef(completeCallback, null, [])
+    },
     flush,
-    stop() { if (stopped) return; for (const ref of callbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of timers.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of modules.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of panelCallbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); callbacks.clear(); timers.clear(); modules.clear(); panelCallbacks.clear(); objects.clear(); operations.length = 0; lua.lua_close(L); stopped = true },
+    stop() { if (stopped) return; for (const ref of callbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of timers.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of modules.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of panelCallbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); if (completeCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, completeCallback); completeCallback = undefined; callbacks.clear(); timers.clear(); modules.clear(); panelCallbacks.clear(); objects.clear(); operations.length = 0; lua.lua_close(L); stopped = true },
     stats() { return { callbacks: callbacks.size, objects: Math.max(0, objects.size - 1), operations: operations.length, timers: timers.size, stopped } },
   }
 }

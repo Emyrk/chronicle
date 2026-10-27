@@ -140,6 +140,7 @@ func canonicalLuaZIP(input io.Reader, kind, projectName, slug string) ([]byte, e
 		Entrypoint      string   `json:"entrypoint"`
 		Capabilities    []string `json:"capabilities"`
 		Streams         []string `json:"streams"`
+		StreamScope     string   `json:"stream_scope"`
 		Assets          []string `json:"assets"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(manifestBytes))
@@ -155,6 +156,9 @@ func canonicalLuaZIP(input io.Reader, kind, projectName, slug string) ([]byte, e
 	}
 	if len(manifest.Streams) > 1 || (len(manifest.Streams) == 1 && manifest.Streams[0] != "damage") {
 		return nil, errors.New("unsupported or duplicate streams")
+	}
+	if manifest.StreamScope != "" && manifest.StreamScope != "selection" && manifest.StreamScope != "instance" {
+		return nil, fmt.Errorf("unsupported stream_scope %q", manifest.StreamScope)
 	}
 	seenCapabilities := map[string]bool{}
 	for _, capability := range manifest.Capabilities {

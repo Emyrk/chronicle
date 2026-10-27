@@ -26,6 +26,13 @@ describe("unsaved Lua preview encounter bounds", () => {
     source.fill(0)
     expect(selected).toEqual(b)
   })
+  it("keeps every encounter for stream_scope instance, still requiring the selection", () => {
+    const a = frame("a", 1, new Uint8Array([3]))
+    const b = frame("b", 2, new Uint8Array([4]))
+    expect(boundPreviewDamage(concat(a, b), ["b"], "instance")).toEqual(concat(a, b))
+    expect(() => boundPreviewDamage(a, ["b"], "instance")).toThrow(/unavailable/)
+    expect(() => boundPreviewDamage(concat(frame("a", 30_000), frame("b", 30_000)), ["b"], "instance")).toThrow(/stream_scope "instance"/)
+  })
   it("rejects missing, duplicate, excessive and malformed encounter data", () => {
     expect(() => boundPreviewDamage(frame("a", 1), [])).toThrow(/Select/)
     expect(() => boundPreviewDamage(frame("a", 1), ["a", "a"])).toThrow(/distinct/)

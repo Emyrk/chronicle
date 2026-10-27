@@ -7,10 +7,13 @@ assets, capabilities `ui`/`input`, and at most the `damage` stream. Packages may
 modules are never copied into or resolved from the uploaded ZIP. Reserved
 `chronicle/` and `chronicle.` paths are rejected. No Lua network API exists.
 
-`chronicle.v1.events.damage` offers `onEvent(callback)` and
-`bySource(onUpdate)`. Events contain only `stream`, `source`, `target`, `amount`,
-`offsetMs`. Chronicle fetches its cached damage stream, decodes it in the Lua
-worker and selects only current encounter IDs. The worker caps event count and
+`chronicle.v1.events.damage` offers `onEvent(callback)`, `onComplete(callback)`
+and `bySource(onUpdate)`. Events contain only `stream`, `source`, `target`,
+`amount`, `offsetMs`, `encounterId`, `selected`. Chronicle fetches its cached
+damage stream, decodes it in the Lua worker and replays it once, then calls
+`Panel:OnComplete`. By default it selects only current encounter IDs; a manifest
+with `"stream_scope": "instance"` receives every encounter, tagged `selected`.
+Panel filters are not applied to Lua panels yet. The worker caps event count and
 operation output. `chronicle.v1.ui` provides `metric`, `table`, `bars`, each
 creating retained UI operations validated by the Guide scene protocol.
 

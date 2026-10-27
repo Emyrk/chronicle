@@ -3,12 +3,13 @@ import { GuideUiScene } from "../../../Guides/protocol/GuideUiScene"
 import { applySceneBatch, createInitialScene } from "../../../Guides/protocol/scene"
 import { parseWorkerMessage } from "../../../Guides/protocol/protocol"
 import type { GuideCapability, RetainedScene } from "../../../Guides/protocol/types"
-import type { PanelEvent, PanelStream } from "../../../Guides/runtime/panelEvents"
+import type { PanelEvent, PanelStream, PanelStreamScope } from "../../../Guides/runtime/panelEvents"
 
 export interface LuaPanelHostProps {
   entrypoint: string
   sources: Record<string, string>
   streams: PanelStream[]
+  streamScope?: PanelStreamScope
   capabilities: readonly GuideCapability[]
   events?: readonly PanelEvent[]
   damageStream?: Uint8Array
@@ -21,7 +22,7 @@ const EMPTY_IDS: readonly string[] = []
 const EMPTY_ASSETS: ReadonlyMap<string, string> = new Map()
 
 // Shared by the author preview and embedded EventsPanels. No Lua executes on the main thread.
-export function LuaPanelHost({ entrypoint, sources, streams, capabilities, events = EMPTY_EVENTS, damageStream, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS }: LuaPanelHostProps) {
+export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", capabilities, events = EMPTY_EVENTS, damageStream, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS }: LuaPanelHostProps) {
   const [scene, setScene] = useState<RetainedScene>(createInitialScene)
   const [error, setError] = useState<string | null>(null)
   const workerRef = useRef<Worker | null>(null)
@@ -59,10 +60,10 @@ export function LuaPanelHost({ entrypoint, sources, streams, capabilities, event
     }
     runtime.onerror = () => stop("Panel worker failed")
     armWatchdog()
-    runtime.postMessage({ type: "start", entrypoint, sources, streams, capabilities })
+    runtime.postMessage({ type: "start", entrypoint, sources, streams, capabilities, streamScope })
     if (damageStream && streams.includes("damage")) runtime.postMessage({ type: "damage-stream", data: damageStream, encounterIds: [...encounterIds] })
     return () => { clearTimeout(watchdog); runtime.terminate(); if (workerRef.current === runtime) workerRef.current = null }
-  }, [entrypoint, sources, streams, capabilities, damageStream, encounterIds])
+  }, [entrypoint, sources, streams, streamScope, capabilities, damageStream, encounterIds])
 
   useEffect(() => {
     for (const event of events) workerRef.current?.postMessage({ type: "event", event })
