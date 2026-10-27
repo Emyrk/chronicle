@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react"
 import type { ReactNode } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import { Activity, Check, Download, ExternalLink, FileText, LockKeyhole, Map as MapIcon, Plus, Shield, Sparkles, Swords, Timer, Trophy, Users } from "lucide-react"
+import { Activity, ArrowRight, BadgeCheck, Camera, Check, Download, ExternalLink, FileText, LockKeyhole, Map as MapIcon, Plus, Shield, Sparkles, Swords, Timer, Trophy, Users } from "lucide-react"
 import { BACKGROUND_STYLES, BORDER_STYLES, COSMETIC_CSS, NAME_STYLES, TIER_RANK, combineCosmetics, tierFromAPI, type Preset } from "@/components/ui/PlayerMetricChart/PlayerCosmetics"
 import { MiniRow } from "@/features/characterCosmetics/CharacterCosmeticsEditor"
 import { TierPill } from "@/components/Supporter/Supporter"
@@ -177,6 +177,27 @@ function ViewersAdFreeVisual() {
   )
 }
 
+/** Screenshot proof on the left, a verified character on the right. */
+function LinkingVisual() {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex aspect-[4/3] w-2/5 flex-col items-center justify-center gap-1.5 rounded-md border border-border bg-background/60 text-muted-foreground">
+        <Camera className="size-6" aria-hidden="true" />
+        <span className="text-[11px]">In-game screenshot</span>
+      </div>
+      <ArrowRight className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <div className="min-w-0 flex-1 space-y-2">
+        <style>{COSMETIC_CSS}</style>
+        <MiniRow character={COSMETIC_SHOWCASE.honored.character} cosmetic={combineCosmetics(COSMETIC_SHOWCASE.honored.selection)} />
+        <p className="flex items-center gap-1.5 text-xs text-sky-300">
+          <BadgeCheck className="size-4 shrink-0" aria-hidden="true" />
+          Verified yours
+        </p>
+      </div>
+    </div>
+  )
+}
+
 const STORAGE_BAR_WIDTH: Record<PaidBillingTier, number> = { honored: 18, revered: 55, exalted: 100 }
 
 function StorageVisual() {
@@ -310,6 +331,18 @@ const SLIDES: PerkSlide[] = [
       { tier: "exalted", text: "+ Animated borders" },
     ],
     visual: <CosmeticsVisual />,
+  },
+  {
+    id: "linking",
+    tab: "Character Linking",
+    tier: "honored",
+    headline: "Claim your characters.",
+    body: "Link a character to your account with an in-game screenshot on servers that support photo proof. Linked characters wear your cosmetics everywhere they appear.",
+    levels: [
+      { tier: "free", text: "Link only where a server offers its own verification" },
+      { tier: "honored", text: "Link with photo proof on supported servers" },
+    ],
+    visual: <LinkingVisual />,
   },
   {
     id: "ad-free",
