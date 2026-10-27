@@ -446,7 +446,7 @@ export function PerkShowcase() {
               aria-selected={i === index}
               onClick={() => navigate({ hash: s.id }, { replace: true, preventScrollReset: true })}
               className={cn(
-                "flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-sm transition-colors",
+                "flex shrink-0 cursor-pointer items-center gap-2 border-b-2 px-3 py-3 text-sm transition-colors",
                 i === index ? "text-white" : "text-muted-foreground hover:text-foreground",
               )}
               // Unselected tabs keep a faint tier-colored underline so the tier reads at a glance.
