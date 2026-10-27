@@ -134,3 +134,16 @@ export function runPreview(input: PreviewRunInput, signal?: AbortSignal, createW
     }
   })
 }
+
+/** Mirrors the server's run_preview schema; the browser never trusts model arguments. */
+export function parseRunPreviewArgs(value: unknown): { encounterIds?: string[] } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid run_preview arguments.")
+  const input = value as Record<string, unknown>
+  if (Object.keys(input).some(key => key !== "encounter_ids")) throw new Error("run_preview only accepts encounter_ids.")
+  if (input.encounter_ids === undefined) return {}
+  const ids = input.encounter_ids
+  if (!Array.isArray(ids) || !ids.length || ids.length > 100 || ids.some(id => typeof id !== "string" || !id || id.length > 200) || new Set(ids).size !== ids.length) {
+    throw new Error("encounter_ids must be 1 to 100 distinct encounter ids.")
+  }
+  return { encounterIds: ids as string[] }
+}

@@ -11,7 +11,7 @@ import { LuaBrowserTest } from "./LuaBrowserTest"
 import { panelPackageFromWorkingCopy, validateEditorFiles, type EditorFiles } from "./editorFiles"
 import { applyLuaFileEdit, LUA_EDITOR_CAPABILITY, parseLuaFileEdit, type LuaToolFile } from "./luaEditorTools"
 import { createCachedDamageProvider } from "./previewStream"
-import { runPreview } from "./previewRun"
+import { parseRunPreviewArgs, runPreview } from "./previewRun"
 import { selectPreviewDamage } from "./luaPreviewBounds"
 import { runStartupCheck } from "./startupCheck"
 import { buildPanelUnits } from "../Guides/runtime/panelUnits"
@@ -137,8 +137,8 @@ export default function LuaProjectWorkspacePage() {
   const copyRef = useRef(copy)
   copyRef.current = copy
   // run_preview replays against whatever the user has selected in the Preview pane.
-  const previewRef = useRef({ instanceId, encounterIds, units: previewUnits })
-  previewRef.current = { instanceId: instance.data ? instanceId : "", encounterIds, units: previewUnits }
+  const previewRef = useRef({ instanceId, encounterIds, units: previewUnits, encounters: instance.data?.encounters ?? [] })
+  previewRef.current = { instanceId: instance.data ? instanceId : "", encounterIds, units: previewUnits, encounters: instance.data?.encounters ?? [] }
   const pendingProposals = useRef(new Map<string, (result: { applied: boolean; revision: number }) => void>())
   const propose = useCallback((files: EditorFiles, expectedRevision: number) => {
     const id = crypto.randomUUID()
@@ -189,19 +189,28 @@ export default function LuaProjectWorkspacePage() {
         try { validateEditorFiles(project, after) } catch (error) { validation = errorMessage(error, "Invalid working copy.") }
         return { applied: true, revision: result.revision, validation_error: validation }
       },
-      run_preview: async (_args, { signal }) => {
+      run_preview: async (args, { signal }) => {
         const current = requireCopy()
-        const { instanceId: previewInstance, encounterIds: selected, units } = previewRef.current
-        if (!previewInstance || !selected.length) {
-          return { ok: false, error: "No preview data selected. Ask the user to choose an instance and at least one encounter in the Preview pane." }
-        }
+        let requested: string[] | undefined
+        try { requested = parseRunPreviewArgs(args).encounterIds }
+        catch (error) { return { ok: false, error: errorMessage(error, "Invalid run_preview arguments.") } }
+        const { instanceId: previewInstance, units, encounters: available } = previewRef.current
+        if (!previewInstance) return { ok: false, error: "An instance must be selected first. Ask the user to pick an instance in the Preview pane." }
+        const known = new Set(available.map(encounter => encounter.id))
+        const unknown = requested?.filter(id => !known.has(id)) ?? []
+        const selected = requested && !unknown.length ? requested : previewRef.current.encounterIds
+        const encounters = available.map(encounter => ({ id: encounter.id, name: encounter.name, boss: encounter.boss, kill_type: encounter.kill_type, selected: selected.includes(encounter.id) }))
+        if (unknown.length) return { ok: false, error: `Unknown encounter ids: ${unknown.join(", ")}. Choose from encounters.`, encounters }
+        if (!selected.length) return { ok: false, error: "No encounters selected. Pass encounter_ids from encounters.", encounters }
+        // Show the user what the assistant is previewing; Auto preview follows the same selection.
+        if (requested) setEncounterIds(requested)
         let panel
         try { panel = panelPackageFromWorkingCopy(projectQuery.data!, { manifest: current.manifest, lua: current.source }) }
         catch (error) { return { ok: false, error: `The working copy is invalid: ${errorMessage(error, "unknown error")}` } }
         const damage = panel.streams.includes("damage")
           ? selectPreviewDamage(await events.getDamage(previewInstance, { signal }), selected, panel.streamScope) : undefined
         const result = await runPreview({ panel, damage, encounterIds: selected, units }, signal)
-        return { ...result, instance_id: previewInstance, encounter_ids: selected, revision: current.revision }
+        return { ...result, instance_id: previewInstance, encounter_ids: selected, revision: current.revision, encounters }
       },
       run_startup_check: async (_args, { signal }) => {
         const current = requireCopy()

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 import { DamageSchema } from "@/api/proto/chronicle_pb"
 import type { PanelPackage } from "../Guides/package/panelLoader"
 import { createPanelWorkerHandler } from "../Guides/runtime/panelWorker"
-import { runPreview, type PreviewWorker } from "./previewRun"
+import { parseRunPreviewArgs, runPreview, type PreviewWorker } from "./previewRun"
 
 function varint(value: number): number[] {
   const bytes: number[] = []
@@ -69,5 +69,13 @@ describe("runPreview", () => {
     const pending = runPreview({ panel: panel(totals), damage, encounterIds: ["e1"] }, controller.signal, fakeWorker)
     controller.abort()
     await expect(pending).rejects.toBeDefined()
+  })
+
+  it("validates run_preview arguments like the server", () => {
+    expect(parseRunPreviewArgs({})).toEqual({})
+    expect(parseRunPreviewArgs({ encounter_ids: ["e1", "e2"] })).toEqual({ encounterIds: ["e1", "e2"] })
+    for (const bad of [null, [], { encounter_ids: [] }, { encounter_ids: ["e1", "e1"] }, { encounter_ids: [""] }, { instance_id: "x" }]) {
+      expect(() => parseRunPreviewArgs(bad)).toThrow()
+    }
   })
 })
