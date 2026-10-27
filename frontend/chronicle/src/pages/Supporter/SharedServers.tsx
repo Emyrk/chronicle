@@ -2,19 +2,12 @@ import { ExternalLink } from "lucide-react"
 import { useDiscoverableServers } from "@/api/queries"
 import type { DiscoveryEntry } from "@/api/typesGenerated"
 import { SUPPORTER_GOLD } from "@/components/Supporter/supporterUpsell"
-
-function isCurrentSite(url: string): boolean {
-  try {
-    return new URL(url).host === window.location.host
-  } catch {
-    return false
-  }
-}
+import { cn } from "@/lib/utils"
 
 function ServerCard({ server }: { server: DiscoveryEntry }) {
   const branding = server.branding
   const name = branding?.display_name || (server.url ? new URL(server.url).host : "Chronicle")
-  const current = server.url ? isCurrentSite(server.url) : false
+  const current = server.current ?? false
   const players = server.unique_players_14d
 
   return (
@@ -22,7 +15,12 @@ function ServerCard({ server }: { server: DiscoveryEntry }) {
       href={server.url || undefined}
       target={current ? undefined : "_blank"}
       rel="noopener noreferrer"
-      className="group flex items-center gap-3 rounded-lg border border-border bg-card/60 p-3 transition-colors hover:border-[#c9a227]/60 hover:bg-card"
+      className={cn(
+        "group flex items-center gap-3 rounded-lg border p-3 transition-colors",
+        current
+          ? "border-emerald-500/60 bg-emerald-500/10 ring-1 ring-emerald-500/30"
+          : "border-border bg-card/60 hover:border-[#c9a227]/60 hover:bg-card",
+      )}
     >
       {branding?.square_logo ? (
         <img src={branding.square_logo} alt="" className="size-10 shrink-0 rounded object-contain" />
@@ -31,9 +29,9 @@ function ServerCard({ server }: { server: DiscoveryEntry }) {
       )}
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
-          <span className="truncate font-medium text-white group-hover:text-[#f0c060]">{name}</span>
+          <span className={cn("truncate font-medium text-white", !current && "group-hover:text-[#f0c060]")}>{name}</span>
           {current ? (
-            <span className="shrink-0 rounded-full border border-[#c9a227]/50 px-1.5 text-[10px] uppercase tracking-wider text-[#f0c060]">You are here</span>
+            <span className="shrink-0 rounded-full border border-emerald-500/50 bg-emerald-500/10 px-1.5 text-[10px] uppercase tracking-wider text-emerald-300">You are here</span>
           ) : (
             <ExternalLink className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
           )}
@@ -51,8 +49,10 @@ export function SharedServers() {
   const { data: servers } = useDiscoverableServers()
   if (!servers || servers.length === 0) return null
 
-  // Busiest servers first.
-  const sorted = [...servers].sort((a, b) => (b.unique_players_14d ?? 0) - (a.unique_players_14d ?? 0))
+  // The server you're on first, then the busiest.
+  const sorted = [...servers].sort(
+    (a, b) => Number(b.current ?? false) - Number(a.current ?? false) || (b.unique_players_14d ?? 0) - (a.unique_players_14d ?? 0),
+  )
 
   return (
     <section aria-labelledby="shared-servers-heading" className="space-y-3">

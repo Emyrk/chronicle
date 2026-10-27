@@ -1190,6 +1190,10 @@ export interface DiscoveryEntry {
      * UniquePlayers14d is the number of distinct players across instances in the last 14 days.
      */
     readonly unique_players_14d?: number;
+    /**
+     * Current is true for the server/tenant that served this request.
+     */
+    readonly current?: boolean;
 }
 
 // From chroniclesdk/log.go
