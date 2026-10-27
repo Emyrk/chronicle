@@ -14,16 +14,18 @@ import {
   combineCosmetics,
   selectionSummary,
   tierFromAPI,
-  type CosmeticStyleSelection,
   type Preset,
 } from "@/components/ui/PlayerMetricChart/PlayerCosmetics"
 import { MiniRow } from "@/features/characterCosmetics/CharacterCosmeticsEditor"
 import { useAuth } from "@/hooks/useAuth"
 import { cn } from "@/lib/utils"
-import { Check, CircleCheck, CreditCard, LogIn, Sparkles, XCircle } from "lucide-react"
+import { BadgeDollarSign, Check, CircleCheck, CreditCard, LogIn, Sparkles, XCircle } from "lucide-react"
 import { toast } from "sonner"
 import {
   PAID_BILLING_TIERS,
+  COSMETIC_SHOWCASE,
+  TIER_COLOR,
+  TIER_ICON,
   type BillingQuality,
   type PaidBillingTier,
   bestValuePriceID,
@@ -48,18 +50,6 @@ const TOOLTIP = "rounded-lg border-2 border-[#4a4a6a] bg-[#1a1a2e] shadow-lg"
 
 // Free users sit at the start of the bar; each paid tier fills an equal third.
 const FRIENDLY_FILL = 5
-
-const TIER_COLOR: Record<PaidBillingTier, string> = {
-  honored: "#1eff00",
-  revered: "#0070dd",
-  exalted: "#a335ee",
-}
-
-const TIER_ICON: Record<PaidBillingTier, string> = {
-  honored: "inv_misc_token_argentdawn",
-  revered: "inv_jewelry_talisman_07",
-  exalted: "inv_crown_02",
-}
 
 const QUALITY_COLOR: Record<BillingQuality, string> = {
   uncommon: "#1eff00",
@@ -244,13 +234,6 @@ export function SupporterOverview({ billing, panel }: { billing?: BillingSummary
 
 const INCLUDED = "included"
 
-/** A representative look per tier for the comparison table's cosmetics preview. */
-const COSMETIC_SHOWCASE: Record<PaidBillingTier, { character: { name: string; class: string }; selection: CosmeticStyleSelection }> = {
-  honored: { character: { name: "Varian", class: "Warrior" }, selection: { name: "epic", background: "none", border: "none" } },
-  revered: { character: { name: "Uther", class: "Paladin" }, selection: { name: "legendary", background: "glossy", border: "none" } },
-  exalted: { character: { name: "Jaina", class: "Mage" }, selection: { name: "thunderfury", background: "arcane", border: "elite" } },
-}
-
 /** Counts presets unlocked at a tier, so the tooltip tracks the cosmetics catalog. */
 function unlockedStyles(styles: Record<string, Preset>, tier: PaidBillingTier): number {
   const rank = TIER_RANK[tierFromAPI(tier)]
@@ -298,6 +281,13 @@ const COMPARISON: { feature: string; description: string; friendly: string; hono
     description: "Limited ads appear on some pages to help cover hosting costs.",
     friendly: "Limited ads",
     honored: "No ads",
+  },
+  {
+    feature: "Ad-free for your viewers",
+    description: "Instance pages from your logs, and armory pages of your linked characters, are ad-free for everyone who views them.",
+    friendly: "—",
+    honored: "—",
+    revered: INCLUDED,
   },
   {
     feature: "Log storage",
@@ -365,9 +355,9 @@ const CURRENT_TIER_COLUMN = "-mx-2 bg-white/[0.06] px-2"
 const COMPARISON_GRID = "md:grid-cols-[minmax(0,2.4fr)_repeat(4,minmax(0,1fr))]"
 
 /** Plain-language breakdown of what each supporter tier changes compared to free access. */
-function ComparisonTable({ currentTier }: { currentTier: string }) {
+export function ComparisonTable({ currentTier }: { currentTier: string }) {
   return (
-    <div className={FRAME}>
+    <div id="compare" className={cn(FRAME, "scroll-mt-4")}>
       <style>{COSMETIC_CSS}</style>
       <h3 className="rounded-t-lg border-b border-border bg-[oklch(0.36_0_0)] px-4 py-2 text-center font-wow text-base font-bold tracking-[0.08em]" style={{ color: GOLD }}>
         Compare Tiers
@@ -577,6 +567,23 @@ function RewardTooltip({ reward, unlocked }: { reward: (typeof REWARDS)[number];
   )
 }
 
+/** Reassures subscribers that switching tiers never wastes what they've already paid. */
+function TierChangeCredit() {
+  return (
+    <div className="flex items-start gap-3 rounded-md border border-emerald-500/50 bg-emerald-500/10 p-3">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
+        <BadgeDollarSign className="size-5 text-emerald-300" aria-hidden="true" />
+      </span>
+      <div className="text-sm leading-5">
+        <p className="font-semibold text-emerald-300">Your payment carries over</p>
+        <p className="text-emerald-50/90">
+          Change tiers anytime. Whatever is left on your current plan is credited toward the new one, so you never pay twice.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export function FramePanel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className={cn(FRAME, "lg:sticky lg:top-4")}>
@@ -699,7 +706,11 @@ export function PlanPicker({ prices, change }: { prices: readonly BillingPrice[]
 
   return (
     <FramePanel title={change?.returningState ? "Choose Your Next Standing" : change ? "Change Your Standing" : "Choose Your Standing"}>
-      <p className="text-center text-xs text-muted-foreground">Every tier includes ad-free browsing, raw log downloads, and unlisted logs. Higher standings include more log storage.</p>
+      {change && !change.returningState ? (
+        <TierChangeCredit />
+      ) : (
+        <p className="text-center text-xs text-muted-foreground">Every tier includes ad-free browsing, raw log downloads, and unlisted logs. Higher standings include more log storage.</p>
+      )}
 
       {availableTiers.length > 0 ? (
         <div
@@ -1039,8 +1050,7 @@ function TierSubscriptionSettings({ billing }: { billing: BillingSummary }) {
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">Stripe reports this subscription as paused. Open the billing portal to review its billing state.</p>
             ) : (
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                Change tiers, update your payment method, or view invoices in the Stripe billing portal. Stripe shows when a tier change takes effect before you confirm it. If you
-                cancel, your {tierLabel} rewards stay active until
+                Update your payment method or view invoices in Stripe. If you cancel, your {tierLabel} rewards stay active until
                 {displayDate ? ` ${displayDate}` : " the end of your billing period"}.
               </p>
             )}
@@ -1053,8 +1063,12 @@ function TierSubscriptionSettings({ billing }: { billing: BillingSummary }) {
             </button>
           ) : (
             <>
+              <TierChangeCredit />
               <button type="button" className={GOLD_BUTTON} onClick={() => setChangingTier(true)}>
-                Change Tier
+                <span className="flex flex-col items-center leading-tight">
+                  <span>Change Tier</span>
+                  <span className="mt-0.5 font-sans text-xs font-medium text-[#f0c060]/80">Unused time carries over</span>
+                </span>
               </button>
               <div className="grid grid-cols-2 gap-2">
                 <button

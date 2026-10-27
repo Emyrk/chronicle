@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { useQueries, useQuery, useMutation, useQueryClient, keepPreviousData, type QueryClient, type UseQueryOptions } from "@tanstack/react-query";
-import type { CharacterCosmeticsResponse, ListSidekicksResponse, RenameSidekickRequest, SidekickAccountConfigResponse, SidekickConfig, SidekickConfigState, SidekickInstallation, UpdateCharacterCosmeticsRequest, WhatsNewStatus } from "./typesGenerated";
+import type { CharacterCosmeticsResponse, DiscoveryEntry, ListSidekicksResponse, RenameSidekickRequest, SidekickAccountConfigResponse, SidekickConfig, SidekickConfigState, SidekickInstallation, UpdateCharacterCosmeticsRequest, WhatsNewStatus } from "./typesGenerated";
 import type { WoWSpell } from "./wowdb";
 import {
   recordPublicNoticeResult,
@@ -1756,6 +1756,19 @@ export function useSiteConfig() {
       const response = await fetch("/api/v1/site-config");
       if (!response.ok) throw new Error("Failed to fetch site config");
       return response.json() as Promise<SiteConfig>;
+    },
+  });
+}
+
+// useDiscoverableServers lists every discoverable Chronicle server, even from a tenant subdomain.
+export function useDiscoverableServers() {
+  return useQuery({
+    queryKey: ["discovery", "all"],
+    staleTime: 60 * 60 * 1000,
+    queryFn: async () => {
+      const response = await fetch("/api/v1/discovery?scope=all");
+      if (!response.ok) throw new Error("Failed to fetch servers");
+      return response.json() as Promise<DiscoveryEntry[]>;
     },
   });
 }

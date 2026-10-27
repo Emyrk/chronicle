@@ -786,15 +786,34 @@ export function CharacterSettings() {
             ) : proofAccess?.submit ? (
               <PhotoProofCard callout={photoProof.callout} />
             ) : (
-              <div className={cn("rounded-lg border p-4 space-y-2", !proofAccessError && "border-destructive/40 bg-destructive/5")}>
+              <div
+                className={cn(
+                  "rounded-lg border p-4 space-y-2",
+                  !proofAccessError && (siteConfig?.billing_enabled ? "border-[#1eff00]/30 bg-[#1eff00]/5" : "border-destructive/40 bg-destructive/5"),
+                )}
+              >
                 <h3 className="flex items-center gap-2 text-sm font-medium">
-                  {proofAccessError ? <Camera className="size-4 text-muted-foreground" /> : <Lock className="size-4 text-destructive" />}
+                  {proofAccessError ? (
+                    <Camera className="size-4 text-muted-foreground" />
+                  ) : (
+                    <Lock className={cn("size-4", siteConfig?.billing_enabled ? "text-[#1eff00]" : "text-destructive")} />
+                  )}
                   Link with photo proof
                 </h3>
                 {photoProof.callout && <p className="text-sm text-muted-foreground">{photoProof.callout}</p>}
-                {proofAccessError
-                  ? <p className="text-sm text-muted-foreground">Could not verify photo proof access. Please refresh the page or try again shortly.</p>
-                  : <p className="text-sm text-destructive/90">You do not have permission to submit photo proof on this server, so this method is unavailable for your account.</p>}
+                {proofAccessError ? (
+                  <p className="text-sm text-muted-foreground">Could not verify photo proof access. Please refresh the page or try again shortly.</p>
+                ) : siteConfig?.billing_enabled ? (
+                  <p className="text-sm">
+                    <span className="text-muted-foreground">You can&apos;t link characters with photo proof yet.</span>{" "}
+                    <span className="font-medium text-[#1eff00]">Become an Honored supporter to unlock it.</span>{" "}
+                    <Link to="/supporter#linking" className="font-medium text-[#f0c060] underline-offset-4 hover:underline">
+                      See supporter perks
+                    </Link>
+                  </p>
+                ) : (
+                  <p className="text-sm text-destructive/90">You do not have permission to submit photo proof on this server, so this method is unavailable for your account.</p>
+                )}
               </div>
             ))}
           </div>
