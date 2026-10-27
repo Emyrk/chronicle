@@ -69,6 +69,24 @@ function assertMessageSize(value: unknown) {
   if (messageSize(value) > MAX_MESSAGE_BYTES) throw new ProtocolValidationError("message exceeds the 64 KiB limit")
 }
 
+/**
+ * Splits UI operations into chunks whose batch messages each fit MAX_MESSAGE_BYTES, so large
+ * redraws are delivered in several messages instead of failing. Order is preserved.
+ */
+export function splitBatchOperations<T>(operations: readonly T[]): T[][] {
+  const budget = MAX_MESSAGE_BYTES - 256 // Room for the batch envelope.
+  const chunks: T[][] = []
+  let chunk: T[] = []
+  let bytes = 0
+  for (const operation of operations) {
+    const size = messageSize(operation) + 1
+    if (chunk.length && bytes + size > budget) { chunks.push(chunk); chunk = []; bytes = 0 }
+    chunk.push(operation); bytes += size
+  }
+  if (chunk.length) chunks.push(chunk)
+  return chunks
+}
+
 function luaSourcePath(value: unknown): string {
   const path = string(value, "file path")
   if (path.startsWith("/") || path.includes("\\") || path.includes("\0")
