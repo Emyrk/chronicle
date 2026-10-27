@@ -1,5 +1,5 @@
 import { ExternalLink } from "lucide-react"
-import { useDiscoverableServers } from "@/api/queries"
+import { useDiscoverableServers, useSiteConfig } from "@/api/queries"
 import type { DiscoveryEntry } from "@/api/typesGenerated"
 import { SUPPORTER_GOLD } from "@/components/Supporter/supporterUpsell"
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip"
@@ -17,6 +17,38 @@ function serverName(server: DiscoveryEntry): string {
 function serverDetail(server: DiscoveryEntry): string | undefined {
   const players = server.unique_players_14d
   return server.branding?.tagline || (players ? `${players.toLocaleString()} players in the last 14 days` : undefined)
+}
+
+function isHere(url: string): boolean {
+  try {
+    return new URL(url).host === window.location.host
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The server serving this page. Prefers the API's flag, then a URL match, and
+ * otherwise builds an entry from site config, since the site you're on may not
+ * be discoverable itself.
+ */
+function useCurrentServer(servers: readonly DiscoveryEntry[] | undefined): DiscoveryEntry | undefined {
+  const { data: siteConfig } = useSiteConfig()
+  if (!servers) return undefined
+  const listed = servers.find((s) => s.current) ?? servers.find((s) => s.url && isHere(s.url))
+  if (listed) return { ...listed, current: true }
+  if (!siteConfig) return undefined
+  const branding = siteConfig.tenant?.branding ?? siteConfig.branding
+  return {
+    branding: {
+      ...branding,
+      display_name: branding?.display_name || siteConfig.tenant?.name || "Chronicle",
+      square_logo: branding?.square_logo || "/c/chronicle/ChronicleIconSquare.webp",
+      tagline: branding?.tagline || "The server you are browsing",
+    },
+    url: window.location.origin,
+    current: true,
+  }
 }
 
 function ServerLogo({ server, className }: { server: DiscoveryEntry; className?: string }) {
@@ -60,12 +92,34 @@ function ServerCard({ server }: { server: DiscoveryEntry }) {
   )
 }
 
+const UNLISTED_NOTE = "Your tier also applies on Chronicle servers that aren't publicly listed."
+
+/** Marks that the list is only the discoverable subset of servers. */
+function MoreServers({ className }: { className?: string }) {
+  return (
+    <HintTooltip delayDuration={100}>
+      <TooltipTrigger asChild>
+        <span
+          tabIndex={0}
+          className={cn(
+            "flex shrink-0 cursor-help items-center justify-center rounded-full border border-dashed border-muted-foreground/50 text-xs font-medium text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            className,
+          )}
+        >
+          + more
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top">{UNLISTED_NOTE}</TooltipContent>
+    </HintTooltip>
+  )
+}
+
 /** Overlapping round logos, each linking to its server with the name on hover. */
 function ServerStack({ servers }: { servers: DiscoveryEntry[] }) {
   const shown = servers.slice(0, MAX_STACKED)
   const hidden = servers.length - shown.length
   const names = servers.map(serverName)
-  const label = names.length <= 2 ? names.join(" and ") : `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`
+  const label = names.length <= 2 ? names.join(", ") : `${names.slice(0, 2).join(", ")} and ${names.length - 2} others`
 
   return (
     <div className="flex min-w-0 items-center gap-3">
@@ -96,6 +150,7 @@ function ServerStack({ servers }: { servers: DiscoveryEntry[] }) {
         ) : null}
       </div>
       <span className="truncate text-sm text-muted-foreground">{label}</span>
+      <MoreServers className="h-7 px-2.5" />
     </div>
   )
 }
@@ -103,14 +158,14 @@ function ServerStack({ servers }: { servers: DiscoveryEntry[] }) {
 /** Every discoverable server; one supporter tier applies on all of them. */
 export function SharedServers() {
   const { data: servers } = useDiscoverableServers()
-  if (!servers || servers.length === 0) return null
+  const current = useCurrentServer(servers)
+  if (!servers || (servers.length === 0 && !current)) return null
 
-  // The server you're on first, then the busiest.
-  const sorted = [...servers].sort(
-    (a, b) => Number(b.current ?? false) - Number(a.current ?? false) || (b.unique_players_14d ?? 0) - (a.unique_players_14d ?? 0),
-  )
-  const current = sorted[0].current ? sorted[0] : undefined
-  const others = current ? sorted.slice(1) : sorted
+  // The server you're on first, then the busiest, then alphabetical.
+  const others = servers
+    .filter((s) => !current || s.url !== current.url)
+    .sort((a, b) => (b.unique_players_14d ?? 0) - (a.unique_players_14d ?? 0) || serverName(a).localeCompare(serverName(b)))
+  const sorted = current ? [current, ...others] : others
 
   return (
     <section aria-labelledby="shared-servers-heading" className="space-y-3">
@@ -119,7 +174,7 @@ export function SharedServers() {
           One reputation, every server
         </h2>
         <p className="text-sm text-muted-foreground">
-          Your tier follows your account. Perks apply on all {sorted.length} Chronicle {sorted.length === 1 ? "server" : "servers"}.
+          Your tier follows your account. Perks apply on every Chronicle server, including these.
         </p>
       </div>
       {sorted.length <= MAX_CARDS ? (
@@ -127,6 +182,7 @@ export function SharedServers() {
           {sorted.map((server) => (
             <ServerCard key={server.url || serverName(server)} server={server} />
           ))}
+          <MoreServers className="h-16 rounded-lg" />
         </div>
       ) : (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
