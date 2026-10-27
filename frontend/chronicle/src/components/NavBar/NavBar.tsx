@@ -8,6 +8,7 @@ import { useAuthorizationCheck, useMarkWhatsNewRead, useMyFavorites, useSiteConf
 import type { Branding } from "@/api/typesGenerated";
 import { Button } from "../ui/button";
 import { FavoritesMenu } from "../Favorites";
+import { SupporterNavLink } from "../Supporter/Supporter";
 import { WhatsNewDialog } from "../WhatsNew/WhatsNewDialog";
 import {
   Sheet,
@@ -209,6 +210,7 @@ export function NavBar() {
                 <Users className="h-4 w-4" />
                 Census
               </Link>
+              <SupporterNavLink className="mt-2 justify-center" onClick={() => setMobileMenuOpen(false)} />
               {isAuthenticated && (
                 <>
                   <div className="border-t my-2" />
@@ -275,6 +277,7 @@ export function NavBar() {
 
       {/* Right: Desktop navigation (hidden on mobile) */}
       <div className="hidden md:flex items-center gap-6">
+        <SupporterNavLink />
         <Link
           to="/recent"
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"

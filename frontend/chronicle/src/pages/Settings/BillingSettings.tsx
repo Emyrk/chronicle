@@ -14,7 +14,6 @@ import {
   combineCosmetics,
   selectionSummary,
   tierFromAPI,
-  type CosmeticStyleSelection,
   type Preset,
 } from "@/components/ui/PlayerMetricChart/PlayerCosmetics"
 import { MiniRow } from "@/features/characterCosmetics/CharacterCosmeticsEditor"
@@ -24,6 +23,9 @@ import { Check, CircleCheck, CreditCard, LogIn, Sparkles, XCircle } from "lucide
 import { toast } from "sonner"
 import {
   PAID_BILLING_TIERS,
+  COSMETIC_SHOWCASE,
+  TIER_COLOR,
+  TIER_ICON,
   type BillingQuality,
   type PaidBillingTier,
   bestValuePriceID,
@@ -48,18 +50,6 @@ const TOOLTIP = "rounded-lg border-2 border-[#4a4a6a] bg-[#1a1a2e] shadow-lg"
 
 // Free users sit at the start of the bar; each paid tier fills an equal third.
 const FRIENDLY_FILL = 5
-
-const TIER_COLOR: Record<PaidBillingTier, string> = {
-  honored: "#1eff00",
-  revered: "#0070dd",
-  exalted: "#a335ee",
-}
-
-const TIER_ICON: Record<PaidBillingTier, string> = {
-  honored: "inv_misc_token_argentdawn",
-  revered: "inv_jewelry_talisman_07",
-  exalted: "inv_crown_02",
-}
 
 const QUALITY_COLOR: Record<BillingQuality, string> = {
   uncommon: "#1eff00",
@@ -198,7 +188,7 @@ export function BillingSignInPrompt() {
 }
 
 /** Shared supporter-tier overview used by account billing and the public /supporter route. */
-export function SupporterOverview({ billing, panel }: { billing?: BillingSummary; panel: React.ReactNode }) {
+export function SupporterOverview({ billing, panel, hideHeading = false }: { billing?: BillingSummary; panel: React.ReactNode; hideHeading?: boolean }) {
   const hasTierAccess = billing?.ads_free ?? false
   const currentTier = hasTierAccess ? (billing?.tier ?? "honored") : "free"
   const tierLabel = billingTierLabel(currentTier)
@@ -206,9 +196,11 @@ export function SupporterOverview({ billing, panel }: { billing?: BillingSummary
 
   return (
     <section className="max-w-5xl space-y-8">
-      <h2 className="font-wow text-3xl leading-tight sm:text-4xl">
-        <span style={{ color: GOLD }}>{hasTierAccess ? `You are ${tierLabel}` : "Support Chronicle"}</span> <span className="text-white">and earn reputation</span>
-      </h2>
+      {hideHeading ? null : (
+        <h2 className="font-wow text-3xl leading-tight sm:text-4xl">
+          <span style={{ color: GOLD }}>{hasTierAccess ? `You are ${tierLabel}` : "Support Chronicle"}</span> <span className="text-white">and earn reputation</span>
+        </h2>
+      )}
 
       <Achievement billing={billing} />
 
@@ -243,13 +235,6 @@ export function SupporterOverview({ billing, panel }: { billing?: BillingSummary
 }
 
 const INCLUDED = "included"
-
-/** A representative look per tier for the comparison table's cosmetics preview. */
-const COSMETIC_SHOWCASE: Record<PaidBillingTier, { character: { name: string; class: string }; selection: CosmeticStyleSelection }> = {
-  honored: { character: { name: "Varian", class: "Warrior" }, selection: { name: "epic", background: "none", border: "none" } },
-  revered: { character: { name: "Uther", class: "Paladin" }, selection: { name: "legendary", background: "glossy", border: "none" } },
-  exalted: { character: { name: "Jaina", class: "Mage" }, selection: { name: "thunderfury", background: "arcane", border: "elite" } },
-}
 
 /** Counts presets unlocked at a tier, so the tooltip tracks the cosmetics catalog. */
 function unlockedStyles(styles: Record<string, Preset>, tier: PaidBillingTier): number {
@@ -367,7 +352,7 @@ const COMPARISON_GRID = "md:grid-cols-[minmax(0,2.4fr)_repeat(4,minmax(0,1fr))]"
 /** Plain-language breakdown of what each supporter tier changes compared to free access. */
 function ComparisonTable({ currentTier }: { currentTier: string }) {
   return (
-    <div className={FRAME}>
+    <div id="compare" className={cn(FRAME, "scroll-mt-4")}>
       <style>{COSMETIC_CSS}</style>
       <h3 className="rounded-t-lg border-b border-border bg-[oklch(0.36_0_0)] px-4 py-2 text-center font-wow text-base font-bold tracking-[0.08em]" style={{ color: GOLD }}>
         Compare Tiers

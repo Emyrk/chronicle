@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pause, Play } from "lucide-react";
+import { ArrowRight, Crown, Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -36,6 +36,9 @@ import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory";
 import { seoProductName } from "@/lib/seo";
 import { Podium } from "@/pages/Leaderboard/Podium";
 import { RaidCard } from "@/pages/Recent/RaidCard";
+import { TierPill } from "@/components/Supporter/Supporter";
+import { SUPPORTER_PATH, supporterPerkPath, useShowSupporterUpsell, type SupporterPerk } from "@/components/Supporter/supporterUpsell";
+import type { PaidBillingTier } from "@/pages/Settings/billingPricing";
 
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
 const ROTATE_SECS = 5 * 60; // rotate the spotlight every 5 minutes
@@ -184,6 +187,7 @@ function HeroSection() {
   const { data: siteConfig } = useSiteConfig();
   const showUpload = !siteConfig?.client_uploads_disabled;
   const productName = seoProductName(siteConfig?.dataset_flavor);
+  const showSupporter = useShowSupporterUpsell();
 
   return (
     <section
@@ -218,6 +222,15 @@ function HeroSection() {
             </Link>
           </Button>
           <p className="text-center text-sm text-muted-foreground">No account required.</p>
+          {showSupporter && (
+            <Link
+              to={SUPPORTER_PATH}
+              className="inline-flex items-center justify-center gap-1.5 text-sm font-medium text-[#f0c060] hover:underline underline-offset-4"
+            >
+              <Crown className="h-4 w-4" />
+              Explore supporter perks
+            </Link>
+          )}
         </div>
       </div>
     </section>
@@ -256,6 +269,49 @@ function StatsStrip() {
             <div className="mt-1 text-xs text-muted-foreground tracking-wide">{c.k}</div>
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+const HOME_PERKS: { perk: SupporterPerk; tier: PaidBillingTier; title: string; detail: string }[] = [
+  { perk: "cosmetics", tier: "honored", title: "Character cosmetics", detail: "Animated names, backgrounds, and borders on your player rows" },
+  { perk: "ad-free", tier: "honored", title: "Ad-free", detail: "For you, and for everyone viewing your logs" },
+  { perk: "unlisted", tier: "revered", title: "Unlisted logs", detail: "Keep progression uploads out of public view" },
+  { perk: "downloads", tier: "revered", title: "Raw log downloads", detail: "Archive the original combat log files" },
+];
+
+/** Compact supporter-perk teaser; hidden for supporters and on deployments without billing. */
+function SupporterStrip() {
+  const show = useShowSupporterUpsell();
+  if (!show) return null;
+  return (
+    <section className="border-b px-6 py-8 bg-gradient-to-r from-[#f0c060]/[0.06] via-transparent to-[#a335ee]/[0.08]">
+      <div className="max-w-7xl mx-auto flex flex-col gap-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="font-wow text-2xl text-[#f0c060]">Earn reputation with Chronicle</h2>
+            <p className="text-sm text-muted-foreground">
+              Honored, Revered, and Exalted supporters keep Chronicle free for everyone, and unlock perks of their own.
+            </p>
+          </div>
+          <Link to={SUPPORTER_PATH} className="inline-flex items-center gap-1 text-sm font-medium text-[#f0c060] hover:underline underline-offset-4">
+            See all perks <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {HOME_PERKS.map((p) => (
+            <Link
+              key={p.perk}
+              to={supporterPerkPath(p.perk)}
+              className="group rounded-lg border bg-card/60 p-4 transition-colors hover:border-[#c9a227]/60 hover:bg-card"
+            >
+              <TierPill tier={p.tier} />
+              <div className="mt-2 font-semibold group-hover:text-[#f0c060]">{p.title}</div>
+              <div className="mt-0.5 text-sm text-muted-foreground">{p.detail}</div>
+            </Link>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -1049,6 +1105,7 @@ export function Home() {
     <div className="flex flex-col">
       <HeroSection />
       <StatsStrip />
+      <SupporterStrip />
       <RaidSpotlight />
       <LatestUploads />
     </div>

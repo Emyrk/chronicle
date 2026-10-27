@@ -1,4 +1,5 @@
 import type { BillingPrice } from "@/api/typesGenerated"
+import type { CosmeticStyleSelection } from "@/components/ui/PlayerMetricChart/PlayerCosmetics"
 
 export function formatBillingAmount(unitAmount: number, currency: string): string {
   return new Intl.NumberFormat(undefined, {
@@ -48,6 +49,25 @@ export function bestValuePriceID(prices: readonly BillingPrice[], monthlyPrice?:
 export const PAID_BILLING_TIERS = ["honored", "revered", "exalted"] as const
 
 export type PaidBillingTier = (typeof PAID_BILLING_TIERS)[number]
+
+export const TIER_COLOR: Record<PaidBillingTier, string> = {
+  honored: "#1eff00",
+  revered: "#0070dd",
+  exalted: "#a335ee",
+}
+
+export const TIER_ICON: Record<PaidBillingTier, string> = {
+  honored: "inv_misc_token_argentdawn",
+  revered: "inv_jewelry_talisman_07",
+  exalted: "inv_crown_02",
+}
+
+/** A representative look per tier for the comparison table's cosmetics preview. */
+export const COSMETIC_SHOWCASE: Record<PaidBillingTier, { character: { name: string; class: string }; selection: CosmeticStyleSelection }> = {
+  honored: { character: { name: "Varian", class: "Warrior" }, selection: { name: "epic", background: "none", border: "none" } },
+  revered: { character: { name: "Uther", class: "Paladin" }, selection: { name: "legendary", background: "glossy", border: "none" } },
+  exalted: { character: { name: "Jaina", class: "Mage" }, selection: { name: "thunderfury", background: "arcane", border: "elite" } },
+}
 
 export function isPaidBillingTier(tier: string): tier is PaidBillingTier {
   return PAID_BILLING_TIERS.includes(tier as PaidBillingTier)

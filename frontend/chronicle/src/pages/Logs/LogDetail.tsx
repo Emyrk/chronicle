@@ -27,6 +27,7 @@ import {
   AlertTriangle,
   Fingerprint,
   Flame,
+  LockKeyhole,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,8 @@ import { useMarkLogUnlisted } from "@/api/unlistedLogs";
 import { UploadSyncDialog } from "./components/UploadSyncDialog";
 import { UnlistedConfirmationDialog } from "./components/UnlistedConfirmationDialog";
 import { UnlistedBadge } from "./components/UnlistedBadge";
+import { SupporterLockedAction } from "@/components/Supporter/Supporter";
+import { useShowSupporterUpsell } from "@/components/Supporter/supporterUpsell";
 import { 
   useLogGroup,
   useLogGroupByFileHash,
@@ -87,9 +90,16 @@ interface UploadedArtifactRowProps {
   logId: string;
   artifact: WoWLogArtifact;
   canDownloadFiles: boolean;
+  /** Show a locked download that links to supporter perks when the viewer can't download. */
+  showSupporterHints?: boolean;
 }
 
-export function UploadedArtifactRow({ logId, artifact, canDownloadFiles }: UploadedArtifactRowProps) {
+/** Locked stand-in for the raw download button. */
+function LockedDownload() {
+  return <SupporterLockedAction tier="revered" perk="downloads" label="Download raw file" icon={Download} iconOnly className="h-8" />;
+}
+
+export function UploadedArtifactRow({ logId, artifact, canDownloadFiles, showSupporterHints = false }: UploadedArtifactRowProps) {
   return (
     <div
       className={`flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border ${artifact.storage_deleted_at ? "opacity-60" : ""}`}
@@ -125,6 +135,7 @@ export function UploadedArtifactRow({ logId, artifact, canDownloadFiles }: Uploa
             </Button>
           </a>
         )}
+        {!canDownloadFiles && showSupporterHints && !artifact.storage_deleted_at && <LockedDownload />}
       </div>
     </div>
   );
@@ -1220,6 +1231,8 @@ export interface LogDetailViewProps {
   canMarkUnlisted: boolean;
   onMarkUnlisted: () => void;
   isMarkingUnlisted: boolean;
+  /** Owner without the needed supporter tier: show locked supporter actions instead of hiding them. */
+  showSupporterHints?: boolean;
 }
 
 export function LogDetailView({
@@ -1248,6 +1261,7 @@ export function LogDetailView({
   canMarkUnlisted,
   onMarkUnlisted,
   isMarkingUnlisted,
+  showSupporterHints = false,
 }: LogDetailViewProps) {
   const { data: allFlavorTags = [] } = useFlavors();
   const [showReparseAxis, setShowReparseAxis] = useState(false);
@@ -1271,14 +1285,16 @@ export function LogDetailView({
   const hasStoredUploadedData = uploadedFiles.some((file) => !file.storage_deleted_at)
     || uploadedArtifacts.some((artifact) => !artifact.storage_deleted_at);
   // Rare, irreversible action — kept small rather than given its own card.
-  const unlistedAction = log && !log.unlisted && canMarkUnlisted && (
+  const unlistedAction = log && !log.unlisted && (canMarkUnlisted ? (
     <UnlistedConfirmationDialog
       compact
       disabled={isMarkingUnlisted}
       isPending={isMarkingUnlisted}
       onConfirm={onMarkUnlisted}
     />
-  );
+  ) : showSupporterHints && (
+    <SupporterLockedAction tier="revered" perk="unlisted" label="Make unlisted" icon={LockKeyhole} />
+  ));
   return (
     <div className="max-w-4xl mx-auto p-8 space-y-8">
       {/* Back link */}
@@ -1639,6 +1655,7 @@ export function LogDetailView({
                             </Button>
                           </a>
                         )}
+                        {!canDownloadFiles && showSupporterHints && !file.storage_deleted_at && <LockedDownload />}
                       </div>
                     </div>
                   ))}
@@ -1648,6 +1665,7 @@ export function LogDetailView({
                       logId={log.id}
                       artifact={artifact}
                       canDownloadFiles={canDownloadFiles}
+                      showSupporterHints={showSupporterHints}
                     />
                   ))}
                 </>
@@ -1769,6 +1787,7 @@ export function LogDetail() {
   const canDownloadFiles = (authz?.adminLogs ?? false) || (session?.can_download_raw_logs ?? false);
   const canUploadYoutube = authz?.uploadYoutube ?? false;
   const canMarkUnlisted = authz?.markUnlisted ?? false;
+  const showSupporterHints = useShowSupporterUpsell() && canDeleteInstance;
 
   const handleMarkUnlisted = () => {
     markUnlisted.mutate(undefined, {
@@ -1883,6 +1902,7 @@ export function LogDetail() {
       canMarkUnlisted={canMarkUnlisted}
       onMarkUnlisted={handleMarkUnlisted}
       isMarkingUnlisted={markUnlisted.isPending}
+      showSupporterHints={showSupporterHints}
     />
   );
 }
@@ -1946,6 +1966,7 @@ export function LogDetailByHash() {
   const canDownloadFiles = (authz?.adminLogs ?? false) || (session?.can_download_raw_logs ?? false);
   const canUploadYoutube = authz?.uploadYoutube ?? false;
   const canMarkUnlisted = authz?.markUnlisted ?? false;
+  const showSupporterHints = useShowSupporterUpsell() && canDeleteInstance;
 
   const handleMarkUnlisted = () => {
     markUnlisted.mutate(undefined, {
@@ -2045,6 +2066,7 @@ export function LogDetailByHash() {
       canMarkUnlisted={canMarkUnlisted}
       onMarkUnlisted={handleMarkUnlisted}
       isMarkingUnlisted={markUnlisted.isPending}
+      showSupporterHints={showSupporterHints}
     />
   );
 }

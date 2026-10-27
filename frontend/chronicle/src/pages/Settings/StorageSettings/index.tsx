@@ -7,6 +7,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { DiscordGrantCallout } from "./DiscordGrantCallout";
+import { SupporterStorageCallout } from "./SupporterStorageCallout";
+import { useShowSupporterUpsell } from "@/components/Supporter/supporterUpsell";
 import { hasDiscordMemberGrant } from "./grantMath";
 import { LogsTable } from "./LogsTable";
 import { ParsedDataCard } from "./ParsedDataCard";
@@ -20,6 +22,8 @@ export interface StorageSettingsViewProps {
   logsLoading: boolean;
   /** Name of the tenant currently being browsed (subdomain), or null on the root domain. */
   currentTenantName: string | null;
+  /** Viewer has no supporter tier and billing is on. */
+  showSupporterCallout?: boolean;
 }
 
 export function StorageSettingsView({
@@ -28,6 +32,7 @@ export function StorageSettingsView({
   logs,
   logsLoading,
   currentTenantName,
+  showSupporterCallout = false,
 }: StorageSettingsViewProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [videoOpen, setVideoOpen] = useState(false);
@@ -52,6 +57,7 @@ export function StorageSettingsView({
       ) : (
         <>
           {!hasDiscordMemberGrant(storage.grants) && <DiscordGrantCallout />}
+          {showSupporterCallout && <SupporterStorageCallout />}
           <div className="grid gap-4 md:grid-cols-2">
             <RawStorageCard storage={storage} />
             <ParsedDataCard storage={storage} />
@@ -95,6 +101,7 @@ export function StorageSettings() {
     enabled: isAuthenticated,
   });
   const { data: siteConfig } = useSiteConfig();
+  const showSupporterCallout = useShowSupporterUpsell();
 
   if (authLoading) {
     return <p className="text-sm text-muted-foreground">Checking your session...</p>;
@@ -112,6 +119,7 @@ export function StorageSettings() {
       logs={logs}
       logsLoading={logsLoading}
       currentTenantName={siteConfig?.tenant?.name ?? null}
+      showSupporterCallout={showSupporterCallout}
     />
   );
 }
