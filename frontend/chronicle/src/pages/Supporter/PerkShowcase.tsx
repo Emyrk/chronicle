@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react"
 import type { ReactNode } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import { Check, Download, FileText, LockKeyhole, Sparkles } from "lucide-react"
+import { Activity, Check, Download, FileText, LockKeyhole, Map as MapIcon, Shield, Sparkles, Swords, Timer, Trophy, Users } from "lucide-react"
 import { COSMETIC_CSS, combineCosmetics } from "@/components/ui/PlayerMetricChart/PlayerCosmetics"
 import { MiniRow } from "@/features/characterCosmetics/CharacterCosmeticsEditor"
 import { TierPill } from "@/components/Supporter/Supporter"
@@ -12,14 +12,24 @@ import { COSMETIC_SHOWCASE, PAID_BILLING_TIERS, TIER_COLOR, billingTierLabel, bi
 
 const PANEL = "rounded-lg border border-border bg-card shadow-2xl shadow-black/40 ring-1 ring-white/10"
 
+/** "free" is the Friendly standing everyone has. */
+type SlideTier = PaidBillingTier | "free"
+
+const FRIENDLY_COLOR = "#e4e4e7"
+
+function slideColor(tier: SlideTier): string {
+  return tier === "free" ? FRIENDLY_COLOR : TIER_COLOR[tier]
+}
+
 interface PerkSlide {
   id: SupporterPerk
   tab: string
-  tier: PaidBillingTier
+  tier: SlideTier
   headline: string
   body: string
-  friendly: string
-  supporter: string
+  /** Friendly vs. tier comparison; omitted on the Friendly slide itself. */
+  friendly?: string
+  supporter?: string
   visual: ReactNode
 }
 
@@ -175,7 +185,39 @@ function FutureVisual() {
   )
 }
 
+const FREE_FEATURES = [
+  { icon: MapIcon, label: "3D map replays" },
+  { icon: Activity, label: "Player timelines" },
+  { icon: Swords, label: "Damage, healing & death panels" },
+  { icon: Trophy, label: "Rankings & leaderboards" },
+  { icon: Timer, label: "Speedrun boards" },
+  { icon: Shield, label: "Guild pages" },
+  { icon: Users, label: "Raid planner" },
+  { icon: Sparkles, label: "Talent & gear builders" },
+]
+
+function FreeVisual() {
+  return (
+    <ul className="grid grid-cols-2 gap-2">
+      {FREE_FEATURES.map(({ icon: Icon, label }) => (
+        <li key={label} className="flex items-center gap-2 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs text-zinc-200">
+          <Icon className="size-4 shrink-0 text-zinc-400" aria-hidden="true" />
+          {label}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 const SLIDES: PerkSlide[] = [
+  {
+    id: "free",
+    tab: "Free for everyone",
+    tier: "free",
+    headline: "Every raid tool, free.",
+    body: "Upload logs and get the full analysis: replays, timelines, panels, and rankings. Core analysis is never paywalled. Supporter perks are extras on top.",
+    visual: <FreeVisual />,
+  },
   {
     id: "cosmetics",
     tab: "Cosmetics",
@@ -238,9 +280,12 @@ const SLIDES: PerkSlide[] = [
   },
 ]
 
+/** Without a hash, open on the first paid perk; the Friendly tab is there for context. */
+const DEFAULT_SLIDE = SLIDES.findIndex((slide) => slide.tier === "honored")
+
 function slideIndexFromHash(hash: string): number {
   const index = SLIDES.findIndex((slide) => `#${slide.id}` === hash)
-  return Math.max(0, index)
+  return index >= 0 ? index : DEFAULT_SLIDE
 }
 
 /** Tabbed panel of supporter perks. The URL hash selects the tab so locked hints can deep-link. */
@@ -250,7 +295,7 @@ export function PerkShowcase() {
   const sectionRef = useRef<HTMLElement>(null)
   const index = slideIndexFromHash(location.hash)
   const slide = SLIDES[index]
-  const tierColor = TIER_COLOR[slide.tier]
+  const tierColor = slideColor(slide.tier)
 
   // Bring deep-linked perks into view on arrival.
   useEffect(() => {
@@ -277,9 +322,9 @@ export function PerkShowcase() {
                 i === index ? "text-white" : "text-muted-foreground hover:text-foreground",
               )}
               // Unselected tabs keep a faint tier-colored underline so the tier reads at a glance.
-              style={{ borderColor: i === index ? TIER_COLOR[s.tier] : `${TIER_COLOR[s.tier]}40` }}
+              style={{ borderColor: i === index ? slideColor(s.tier) : `${slideColor(s.tier)}40` }}
             >
-              <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: TIER_COLOR[s.tier] }} />
+              <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: slideColor(s.tier) }} />
               {s.tab}
             </button>
           ))}
@@ -294,19 +339,27 @@ export function PerkShowcase() {
           <div role="tabpanel" className="relative grid items-center gap-8 p-6 sm:p-8 lg:grid-cols-2">
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <TierPill tier={slide.tier} />
-                {slide.id === "future" ? null : <span>and above</span>}
+                {slide.tier === "free" ? (
+                  <span className="inline-flex items-center rounded-full border border-zinc-400/40 bg-zinc-400/10 px-1.5 py-px font-wow text-[10px] font-bold uppercase tracking-wider text-zinc-200">
+                    Friendly
+                  </span>
+                ) : (
+                  <TierPill tier={slide.tier} />
+                )}
+                {slide.tier === "free" ? <span>no account tier needed</span> : slide.id === "future" ? null : <span>and above</span>}
               </div>
               <h3 className="font-wow text-2xl leading-tight text-white sm:text-3xl">{slide.headline}</h3>
               <p className="text-sm leading-relaxed text-zinc-300 sm:text-base">{slide.body}</p>
-              <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
-                <dt className="font-wow text-zinc-500">Friendly</dt>
-                <dd className="text-muted-foreground">{slide.friendly}</dd>
-                <dt className="font-wow" style={{ color: tierColor }}>
-                  {billingTierLabel(slide.tier)}
-                </dt>
-                <dd className="text-zinc-200">{slide.supporter}</dd>
-              </dl>
+              {slide.tier === "free" ? null : (
+                <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
+                  <dt className="font-wow text-zinc-500">Friendly</dt>
+                  <dd className="text-muted-foreground">{slide.friendly}</dd>
+                  <dt className="font-wow" style={{ color: tierColor }}>
+                    {billingTierLabel(slide.tier)}
+                  </dt>
+                  <dd className="text-zinc-200">{slide.supporter}</dd>
+                </dl>
+              )}
             </div>
             <div className="rounded-lg border border-white/10 bg-black/30 p-4 sm:p-5">{slide.visual}</div>
           </div>
