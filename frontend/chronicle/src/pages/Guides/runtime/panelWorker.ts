@@ -6,8 +6,6 @@ import type { PanelUnits } from "./panelUnits"
 import { parseWorkerMessage } from "../protocol/protocol"
 import type { GuideCapability } from "../protocol/types"
 
-const MAX_BATCH_OPERATIONS = 10_000
-
 /** Per-replay timings sent with damage-complete; phases add up to roughly totalMs. */
 export type PanelReplayMetrics = {
   events: number
@@ -93,9 +91,8 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
           luaMs += performance.now() - luaStart
           if (count % 100 === 0) {
             const uiStart = performance.now()
-            // Bound each UI batch, not the whole replay, so long replays are never cut off for size alone.
+            // The runtime bounds pending UI operations per batch (maxOperations), never the whole replay.
             const batch = runtime.flush()
-            if (batch.length > MAX_BATCH_OPERATIONS) throw new Error(`panel output limit exceeded (over ${MAX_BATCH_OPERATIONS} UI operations per 100 events)`)
             uiOperations += batch.length
             flush(batch)
             uiMs += performance.now() - uiStart

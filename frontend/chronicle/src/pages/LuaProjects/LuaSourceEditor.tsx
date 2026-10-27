@@ -221,7 +221,7 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
     <div className="flex min-h-8 items-center gap-3 border-t border-border bg-card/60 px-3 py-1 text-xs">
       {message ? <p role="alert" className="text-destructive">{message}</p>
         : notice ? <p role="status" className="text-emerald-400">{notice}</p>
-        : <p className="text-muted-foreground">{active === "manifest" ? "Identity, entrypoint and assets are fixed; capabilities and streams are editable." : "Lua 5.1 · private working copy"}</p>}
+        : <p className="text-muted-foreground">{active === "manifest" ? "Identity, entrypoint and assets are fixed; capabilities and streams are editable." : "Lua 5.3 · private working copy"}</p>}
       <div className="ml-auto flex min-w-0 shrink-0 items-center gap-3">{footer}<span className="font-mono text-muted-foreground">rev {project.revision}</span></div>
     </div>
   </section>
