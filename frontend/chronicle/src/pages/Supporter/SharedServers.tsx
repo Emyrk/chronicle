@@ -181,7 +181,7 @@ export function SharedServers() {
           One reputation, every server
         </h2>
         <p className="text-sm text-muted-foreground">
-          Your tier follows your account. Perks apply on every Chronicle server, including these.
+          Your tier follows your account. Perks on every Chronicle hosted server.
         </p>
       </div>
       {sorted.length <= MAX_CARDS ? (
