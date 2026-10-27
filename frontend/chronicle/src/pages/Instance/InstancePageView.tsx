@@ -977,40 +977,6 @@ function EncounterSidebar({
   );
 }
 
-/** The instance page's encounter sidebar for embedding elsewhere (no ads, rankings, or time ranges). */
-export function EncounterPicker({ instance, selectedIds, onChange, onCollapse, className }: {
-  instance: Instance;
-  selectedIds: string[];
-  onChange: (ids: string[]) => void;
-  onCollapse: () => void;
-  className?: string;
-}) {
-  const [includeWipes, setIncludeWipes] = useState(false);
-  const trashGroups = useMemo(() => groupTrashEncounters(instance.encounters), [instance.encounters]);
-  return (
-    <EncounterSidebar
-      instanceId={instance.id}
-      encounters={instance.encounters}
-      trashGroups={trashGroups}
-      selectedIds={selectedIds}
-      activePhaseId={null}
-      onSelect={(id, mode) => onChange(mode === "single" ? [id]
-        : selectedIds.includes(id) ? selectedIds.filter(sid => sid !== id) : [...selectedIds, id])}
-      onSelectMany={onChange}
-      onSelectPhase={(_phase, encounterId) => onChange([encounterId])}
-      onCollapse={onCollapse}
-      isMobile={false}
-      showHints={false}
-      includeWipes={includeWipes}
-      onIncludeWipesChange={setIncludeWipes}
-      instanceStartTime={instance.startTime}
-      showRankings={false}
-      hideAd
-      className={className}
-    />
-  );
-}
-
 export interface SharedViewPayload {
   version: number;
   instanceId?: string;

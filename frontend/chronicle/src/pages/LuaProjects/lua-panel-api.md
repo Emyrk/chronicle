@@ -123,7 +123,7 @@ local button = CreateFrame("Button", "my-button", UIParent)
 
 ### Panel size and scrolling
 
-`UIParent` fills the panel by default. Anything drawn below or to the right of the panel scrolls rather than being cut off. To size the content yourself, set `UIParent`'s size; the panel scrolls when it is bigger than the space available, and the workshop preview grows to fit it:
+`UIParent` fills the panel by default. Anything drawn below or to the right of the panel scrolls rather than being cut off. To size the content yourself, set `UIParent`'s size; the panel scrolls when it is bigger than the space available:
 
 ```lua
 local ROW = 22
@@ -219,7 +219,7 @@ Read `unit.class` and map it to a colour; the example below includes the standar
 Make sure `project.json` lists `"damage"` in `streams`. Make sure you draw in `onComplete`, or update frames in `onEvent`. Then run **Startup check** in the editor to catch Lua errors.
 
 **My panel is cut off.**
-Content past the panel's edge scrolls. Set `UIParent:SetHeight(...)` to the height your rows need so the panel and the workshop preview size to fit. See [Panel size and scrolling](#panel-size-and-scrolling).
+Content past the panel's edge scrolls. Set `UIParent:SetHeight(...)` to the height your rows need so the panel scrolls to all of it. See [Panel size and scrolling](#panel-size-and-scrolling).
 
 When an addon stops, Chronicle shows what went wrong, where (file, line, and whether it was startup, `onEvent`, `onComplete` or a click), and how to fix it. In the workshop, **Ask the assistant to fix it** sends that explanation to the assistant.
 
