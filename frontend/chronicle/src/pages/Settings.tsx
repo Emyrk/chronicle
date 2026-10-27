@@ -514,7 +514,7 @@ function linkSourceLabel(source: string): string {
 }
 
 const SECTION_ACCENTS = {
-  linked: { border: "border-primary/30", header: "bg-primary/5" },
+  linked: { border: "border-sky-500/30", header: "bg-sky-500/5" },
   favorites: { border: "border-amber-500/30", header: "bg-amber-500/5" },
 };
 
@@ -548,9 +548,9 @@ function CharacterSection({ accent, icon: Icon, iconClassName, title, count, des
 function LinkedVsFavoritesExplainer() {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-2">
+      <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-4 space-y-2">
         <div className="flex items-center gap-2 font-medium">
-          <BadgeCheck className="size-4 text-primary" />
+          <BadgeCheck className="size-4 text-sky-400" />
           Linked characters
           <span className="text-xs font-normal text-muted-foreground">— characters you play</span>
         </div>
@@ -740,7 +740,7 @@ export function CharacterSettings() {
       <CharacterSection
         accent="linked"
         icon={BadgeCheck}
-        iconClassName="text-primary"
+        iconClassName="text-sky-400"
         title="Linked characters"
         count={characters?.length}
         description="Characters verified as yours."
