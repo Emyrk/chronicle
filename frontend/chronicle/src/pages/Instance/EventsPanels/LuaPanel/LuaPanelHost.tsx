@@ -8,6 +8,7 @@ import { parseWorkerMessage } from "../../../Guides/protocol/protocol"
 import type { GuideCapability, RetainedScene } from "../../../Guides/protocol/types"
 import type { PanelEvent, PanelStream, PanelStreamScope } from "../../../Guides/runtime/panelEvents"
 import type { PanelReplayMetrics } from "../../../Guides/runtime/panelWorker"
+import type { PanelUnits } from "../../../Guides/runtime/panelUnits"
 
 /** Worker phases plus host-side wall time (includes copying the stream to the worker) and page drawing time. */
 export type LuaPanelRunMetrics = PanelReplayMetrics & { wallMs: number; drawMs: number }
@@ -23,6 +24,8 @@ export interface LuaPanelHostProps {
   damageStream?: Uint8Array
   encounterIds?: readonly string[]
   assets?: ReadonlyMap<string, string>
+  /** Units Lua can look up with Chronicle.GetUnit; memoize it, since a new object restarts the panel. */
+  units?: PanelUnits
   /** Called once per completed damage replay. */
   onMetrics?: (metrics: LuaPanelRunMetrics) => void
 }
@@ -32,7 +35,7 @@ const EMPTY_IDS: readonly string[] = []
 const EMPTY_ASSETS: ReadonlyMap<string, string> = new Map()
 
 // Shared by the author preview and embedded EventsPanels. No Lua executes on the main thread.
-export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", maxEvents, capabilities, events = EMPTY_EVENTS, damageStream, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS, onMetrics }: LuaPanelHostProps) {
+export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", maxEvents, capabilities, events = EMPTY_EVENTS, damageStream, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS, units, onMetrics }: LuaPanelHostProps) {
   const [scene, setScene] = useState<RetainedScene>(createInitialScene)
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<number | null>(null)
@@ -97,10 +100,10 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
     }
     runtime.onerror = () => stop("Panel worker failed")
     armWatchdog()
-    runtime.postMessage({ type: "start", entrypoint, sources, streams, capabilities, streamScope, maxEvents })
+    runtime.postMessage({ type: "start", entrypoint, sources, streams, capabilities, streamScope, maxEvents, units })
     if (replaying) { postedAt = performance.now(); runtime.postMessage({ type: "damage-stream", data: damageStream, encounterIds: [...encounterIds] }) }
     return () => { clearTimeout(watchdog); runtime.terminate(); if (workerRef.current === runtime) workerRef.current = null }
-  }, [entrypoint, sources, streams, streamScope, maxEvents, capabilities, damageStream, encounterIds])
+  }, [entrypoint, sources, streams, streamScope, maxEvents, capabilities, damageStream, encounterIds, units])
 
   useEffect(() => {
     for (const event of events) workerRef.current?.postMessage({ type: "event", event })

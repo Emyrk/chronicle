@@ -61,12 +61,12 @@ describe("Lua panel worker damage replay", () => {
 
   it("sends only selected encounters by default and calls onComplete before damage-complete", () => {
     const messages = replay()
-    expect(finalText(messages)).toEqual(["e2=7.0*"])
+    expect(finalText(messages)).toEqual(["e2=7*"])
     expect(messages.at(-1)).toMatchObject({ type: "damage-complete" })
   })
 
   it("sends every encounter tagged with selected for stream_scope instance", () => {
-    expect(finalText(replay("instance"))).toEqual(["e1=5.0 e2=7.0*"])
+    expect(finalText(replay("instance"))).toEqual(["e1=5 e2=7*"])
   })
 
   it("reports replay metrics with damage-complete", () => {

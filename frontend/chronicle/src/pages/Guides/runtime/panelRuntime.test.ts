@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { applySceneBatch, createInitialScene } from "../protocol/scene"
 import { createGuideRuntime } from "./runtime"
+import type { PanelUnits } from "./panelUnits"
 
-function panel(source: string, sources: Record<string, string> = {}) {
+function panel(source: string, sources: Record<string, string> = {}, units?: PanelUnits) {
   return createGuideRuntime({ entrypoint: "main.lua", sources: { "main.lua": source, ...sources },
-    capabilities: ["ui", "input"], panelStreams: ["damage"] })
+    capabilities: ["ui", "input"], panelStreams: ["damage"], units })
 }
 
 describe("safe panel profile", () => {
@@ -41,7 +42,7 @@ describe("safe panel profile", () => {
     expect(() => runtime.panelEvent({ ...event, secret: "x" })).toThrow(/disallowed/)
     expect(() => runtime.panelEvent({ ...event, selected: "yes" })).toThrow(/disallowed/)
     runtime.panelEvent(event)
-    expect(runtime.flush()).toContainEqual({ op: "set", id: "amount", props: { text: "A:42.0" } })
+    expect(runtime.flush()).toContainEqual({ op: "set", id: "amount", props: { text: "A:42" } })
     runtime.stop()
   })
 
@@ -61,7 +62,25 @@ describe("safe panel profile", () => {
     runtime.panelEvent({ stream: "damage", source: "A", target: "B", amount: 7, offsetMs: 0, encounterId: "e2", selected: false })
     expect(runtime.flush()).not.toContainEqual(expect.objectContaining({ op: "set", id: "amount" }))
     runtime.panelComplete()
-    expect(runtime.flush()).toContainEqual({ op: "set", id: "amount", props: { text: "5.0 e1,e2" } })
+    expect(runtime.flush()).toContainEqual({ op: "set", id: "amount", props: { text: "5 e1,e2" } })
+    runtime.stop()
+  })
+
+  it("looks up units and lists players through Chronicle", () => {
+    const runtime = panel(`
+      local label = CreateFrame("FontString", "out", UIParent)
+      local thrall = Chronicle.GetUnit("0xP1")
+      local wolf = Chronicle.GetUnit("0xPET")
+      local owner = Chronicle.GetUnit(wolf.owner)
+      assert(Chronicle.GetUnit("0xMISSING") == nil)
+      label:SetText(thrall.name .. " " .. thrall.class .. " " .. thrall.race .. " " .. tostring(thrall.player) .. " | " ..
+        wolf.name .. " " .. wolf.entry .. " " .. owner.name .. " | " .. table.concat(Chronicle.GetPlayers(), ","))
+    `, {}, {
+      "0xP1": { guid: "0xP1", name: "Thrall", player: true, class: "SHAMAN", race: "ORC", level: 60 },
+      "0xP2": { guid: "0xP2", name: "Jaina", player: true, class: "MAGE" },
+      "0xPET": { guid: "0xPET", name: "Wolf", player: false, owner: "0xP1", entry: 1863 },
+    })
+    expect(runtime.start()).toContainEqual({ op: "set", id: "out", props: { text: "Thrall SHAMAN ORC true | Wolf 1863 Thrall | 0xP2,0xP1" } })
     runtime.stop()
   })
 })

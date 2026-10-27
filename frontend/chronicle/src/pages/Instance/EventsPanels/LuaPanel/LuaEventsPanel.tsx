@@ -6,6 +6,7 @@ import { getPublicProject, publicPackageURL } from "../../../LuaProjects/api"
 import type { EventsPanelProps } from "../EventsPanel"
 import { PanelSelector } from "../PanelSelector"
 import { usePanelTiming, usePanelTimingContext } from "../PanelTimingContext"
+import { buildPanelUnits } from "../../../Guides/runtime/panelUnits"
 import { LuaPanelHost, type LuaPanelRunMetrics } from "./LuaPanelHost"
 import { parseLuaPanelRef } from "./luaPanelRegistry"
 
@@ -37,6 +38,8 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
     },
   })
   const panel = packageQuery.data
+  const { players, units: instanceUnits } = props.context.instance
+  const units = useMemo(() => buildPanelUnits(players, instanceUnits), [players, instanceUnits])
   const selectedIds = useMemo(() => [...(props.context.selectedEncounterIds ?? [])], [props.context.selectedEncounterIds])
   const [damage, setDamage] = useState<Uint8Array>()
   const [streamError, setStreamError] = useState<string>()
@@ -79,6 +82,6 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
       channelQuery.error || packageQuery.error || streamError || !hash ? <div role="alert" className="p-4 text-sm text-destructive">{String(channelQuery.error ?? packageQuery.error ?? streamError ?? "Channel not published")}</div> :
       panel && (panel.streams.includes("damage") && !damage ? <div className="p-4 text-sm">Loading damage...</div> :
         <LuaPanelHost key={`${ref?.id}:${hash}`} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} streamScope={panel.streamScope} maxEvents={panel.maxEvents} capabilities={panel.capabilities}
-          damageStream={damage} encounterIds={selectedIds} assets={assetUrls} onMetrics={onMetrics} />)}
+          damageStream={damage} encounterIds={selectedIds} assets={assetUrls} units={units} onMetrics={onMetrics} />)}
   </div>
 }

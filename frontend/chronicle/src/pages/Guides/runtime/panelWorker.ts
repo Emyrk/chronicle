@@ -2,6 +2,7 @@
 import { createGuideRuntime } from "./runtime"
 import { PANEL_STREAM_SCOPES, PANEL_STREAMS, type PanelStream, type PanelStreamScope } from "./panelEvents"
 import { FastDamageCursor } from "@/api/protodecode/decode"
+import type { PanelUnits } from "./panelUnits"
 import { parseWorkerMessage } from "../protocol/protocol"
 import type { GuideCapability } from "../protocol/types"
 
@@ -29,7 +30,7 @@ export type PanelReplayMetrics = {
 
 // Dedicated worker entry. The caller owns termination and treats all returned scene batches as untrusted.
 type Input =
-  | { type: "start"; entrypoint: string; sources: Record<string, string>; streams: PanelStream[]; capabilities: GuideCapability[]; streamScope?: PanelStreamScope; maxEvents?: number }
+  | { type: "start"; entrypoint: string; sources: Record<string, string>; streams: PanelStream[]; capabilities: GuideCapability[]; streamScope?: PanelStreamScope; maxEvents?: number; units?: PanelUnits }
   | { type: "event"; event: unknown }
   | { type: "damage-stream"; data: Uint8Array; encounterIds: string[] }
   | { type: "click"; nodeId: string }
@@ -55,8 +56,9 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
         if (input.maxEvents !== undefined && (!Number.isSafeInteger(input.maxEvents) || input.maxEvents < 1)) throw new Error("invalid max_events")
         maxEvents = input.maxEvents
         const started = performance.now()
+        if (input.units !== undefined && (!input.units || typeof input.units !== "object" || Array.isArray(input.units))) throw new Error("invalid units")
         runtime = createGuideRuntime({ entrypoint: input.entrypoint, sources: input.sources,
-          capabilities: input.capabilities, panelStreams: input.streams })
+          capabilities: input.capabilities, panelStreams: input.streams, units: input.units })
         const initial = runtime.start(); startupMs = performance.now() - started
         send({ type: "ready", protocolVersion: 1 }); flush(initial)
       } else if (input.type === "event") {
