@@ -1,4 +1,4 @@
-import { ExternalLink } from "lucide-react"
+import { ExternalLink, Plus } from "lucide-react"
 import { useDiscoverableServers, useSiteConfig } from "@/api/queries"
 import type { DiscoveryEntry } from "@/api/typesGenerated"
 import { SUPPORTER_GOLD } from "@/components/Supporter/supporterUpsell"
@@ -11,7 +11,8 @@ const MAX_CARDS = 3
 const MAX_STACKED = 10
 
 function serverName(server: DiscoveryEntry): string {
-  return server.branding?.display_name || (server.url ? new URL(server.url).host : "Chronicle")
+  // Without a display name, the subdomain ("faebright") reads better than the full host.
+  return server.branding?.display_name || (server.url ? new URL(server.url).hostname.split(".")[0] : "Chronicle")
 }
 
 function serverDetail(server: DiscoveryEntry): string | undefined {
@@ -95,19 +96,21 @@ function ServerCard({ server }: { server: DiscoveryEntry }) {
 
 const UNLISTED_NOTE = "Your tier also applies on Chronicle servers that aren't publicly listed."
 
-/** Marks that the list is only the discoverable subset of servers. */
-function MoreServers({ className }: { className?: string }) {
+/** Marks that the list is only the discoverable subset of servers. Compact renders as a stack coin. */
+function MoreServers({ compact = false }: { compact?: boolean }) {
   return (
     <HintTooltip delayDuration={100}>
       <TooltipTrigger asChild>
         <span
           tabIndex={0}
+          aria-label="More servers"
           className={cn(
-            "flex shrink-0 cursor-help items-center justify-center rounded-full border border-dashed border-muted-foreground/50 text-xs font-medium text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            className,
+            "flex shrink-0 cursor-help items-center justify-center gap-1 border border-dashed border-muted-foreground/50 bg-background text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+            compact ? "relative size-9 rounded-full ring-2 ring-background" : "h-16 rounded-lg text-sm",
           )}
         >
-          + more
+          <Plus className="size-4" aria-hidden="true" />
+          {compact ? null : "more servers"}
         </span>
       </TooltipTrigger>
       <TooltipContent side="top">{UNLISTED_NOTE}</TooltipContent>
@@ -119,8 +122,6 @@ function MoreServers({ className }: { className?: string }) {
 function ServerStack({ servers }: { servers: DiscoveryEntry[] }) {
   const shown = servers.slice(0, MAX_STACKED)
   const hidden = servers.length - shown.length
-  const names = servers.map(serverName)
-  const label = names.length <= 2 ? names.join(", ") : `${names.slice(0, 2).join(", ")} and ${names.length - 2} others`
 
   return (
     <div className="flex min-w-0 items-center gap-3">
@@ -149,9 +150,14 @@ function ServerStack({ servers }: { servers: DiscoveryEntry[] }) {
             +{hidden}
           </span>
         ) : null}
+        <MoreServers compact />
       </div>
-      <span className="truncate text-sm text-muted-foreground">{label}</span>
-      <MoreServers className="h-7 px-2.5" />
+      <div className="min-w-0 leading-tight">
+        <p className="text-sm font-medium text-zinc-200">
+          {servers.length} more {servers.length === 1 ? "server" : "servers"}
+        </p>
+        <p className="text-xs text-muted-foreground">plus unlisted ones</p>
+      </div>
     </div>
   )
 }
@@ -183,7 +189,7 @@ export function SharedServers() {
           {sorted.map((server) => (
             <ServerCard key={server.url || serverName(server)} server={server} />
           ))}
-          <MoreServers className="h-16 rounded-lg" />
+          <MoreServers />
         </div>
       ) : (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
