@@ -100,8 +100,44 @@ function VisualRow({ label, color, note, children }: { label: string; color: str
 }
 
 /** Wireframe page with or without an ad slot. */
+const AD_SLOT =
+  "flex h-10 items-center justify-center rounded border border-dashed border-rose-400/40 bg-[repeating-linear-gradient(45deg,transparent,transparent_6px,rgba(244,63,94,0.08)_6px,rgba(244,63,94,0.08)_12px)] text-[9px] uppercase tracking-[0.2em] text-rose-300/70"
+
+/** Wireframe raid page, with or without an ad slot. */
+function AdMockPage({ withAd, label }: { withAd: boolean; label: ReactNode }) {
+  return (
+    <div className="flex-1 space-y-2">
+      <div className="text-center text-xs">{label}</div>
+      <div className="space-y-1.5 rounded-md border border-border bg-background/60 p-2">
+        <div className="h-2 w-2/3 rounded bg-muted-foreground/30" />
+        {withAd ? <div className={AD_SLOT}>Advertisement</div> : null}
+        {["mage", "warrior", "priest", "rogue"].map((cls, i) => (
+          <div key={cls} className="h-2.5 rounded" style={{ width: `${92 - i * 14}%`, backgroundColor: `color-mix(in srgb, var(--color-class-${cls}) 55%, transparent)` }} />
+        ))}
+        {withAd ? null : <div className="h-2.5 w-1/2 rounded" style={{ backgroundColor: "color-mix(in srgb, var(--color-class-paladin) 55%, transparent)" }} />}
+      </div>
+    </div>
+  )
+}
+
+function AdFreeVisual() {
+  return (
+    <div className="flex gap-4">
+      <AdMockPage withAd label={<span className="font-wow font-bold text-zinc-400">Friendly</span>} />
+      <AdMockPage
+        withAd={false}
+        label={
+          <span className="inline-flex items-center gap-1 rounded-full border border-lime-500/30 bg-lime-500/10 px-2 py-0.5 font-medium text-lime-300">
+            <Sparkles className="h-3 w-3" aria-hidden="true" /> You see no ads
+          </span>
+        }
+      />
+    </div>
+  )
+}
+
 /** Wireframe of one of your pages, badged ad-free. */
-function MockPage({ title, bars }: { title: string; bars: string[] }) {
+function OwnedPage({ title, bars }: { title: string; bars: string[] }) {
   return (
     <div className="flex-1 space-y-1.5 rounded-md border border-border bg-background/60 p-2">
       <div className="flex items-center justify-between gap-2">
@@ -119,12 +155,12 @@ function MockPage({ title, bars }: { title: string; bars: string[] }) {
 
 const VIEWER_CLASSES = ["warrior", "priest", "mage", "rogue", "druid", "hunter", "paladin"]
 
-function AdFreeVisual() {
+function ViewersAdFreeVisual() {
   return (
     <div className="space-y-3">
       <div className="flex gap-3">
-        <MockPage title="Your raid logs" bars={["mage", "warrior", "priest", "rogue"]} />
-        <MockPage title="Your characters" bars={["paladin", "paladin", "hunter", "druid"]} />
+        <OwnedPage title="Your raid logs" bars={["mage", "warrior", "priest", "rogue"]} />
+        <OwnedPage title="Your characters" bars={["paladin", "paladin", "hunter", "druid"]} />
       </div>
       <div className="flex items-center gap-3 rounded-md border border-lime-500/30 bg-lime-500/10 px-3 py-2">
         <div className="flex shrink-0 -space-x-1.5">
@@ -133,7 +169,6 @@ function AdFreeVisual() {
           ))}
         </div>
         <p className="text-xs leading-snug text-lime-100">
-          <TierPill tier="revered" className="mr-1 align-[1px]" />
           <span className="font-semibold text-lime-300">Shared with your viewers.</span> Every raider who opens them sees no ads.
         </p>
       </div>
@@ -211,21 +246,6 @@ function UnlistedVisual() {
   )
 }
 
-function FutureVisual() {
-  return (
-    <div className="grid grid-cols-3 gap-3">
-      {["#0070dd", "#a335ee", "#ff8000"].map((color) => (
-        <div
-          key={color}
-          className="flex aspect-square items-center justify-center rounded-md border-2 bg-black/40 font-wow text-3xl font-bold"
-          style={{ borderColor: `${color}99`, color }}
-        >
-          ?
-        </div>
-      ))}
-    </div>
-  )
-}
 
 // Rounded down from the panel picker (PANEL_CATEGORIES in EventsPanels/PanelSelector.tsx, 57 today)
 // so it stays true as panels are added without importing the panel registry here.
@@ -270,7 +290,7 @@ function FreeVisual() {
 const SLIDES: PerkSlide[] = [
   {
     id: "free",
-    tab: "Free for everyone",
+    tab: "Free",
     tier: "free",
     headline: "Every raid tool, free.",
     body: "Upload logs and get the full analysis: replays, timelines, panels, and rankings. Core analysis is never paywalled. Supporter perks are extras on top.",
@@ -294,12 +314,11 @@ const SLIDES: PerkSlide[] = [
     id: "ad-free",
     tab: "Ad-Free",
     tier: "honored",
-    headline: "Ad-free for you, and at Revered, for your whole raid.",
-    body: "Supporters never see ads. From Revered up, every instance page from a log you upload, and the armory page of every character you've linked, is ad-free for everyone who opens it.",
+    headline: "You see no ads. Anywhere.",
+    body: "Every page on Chronicle is ad-free for you: raid reports, rankings, armory, and everything else. Clear line of sight to every pull.",
     levels: [
       { tier: "free", text: "Limited ads on some pages" },
-      { tier: "honored", text: "No ads for you" },
-      { tier: "revered", text: "+ No ads for anyone viewing your logs or characters" },
+      { tier: "honored", text: "No ads anywhere on Chronicle" },
     ],
     visual: <AdFreeVisual />,
   },
@@ -316,6 +335,18 @@ const SLIDES: PerkSlide[] = [
       { tier: "exalted", text: "+2 GB" },
     ],
     visual: <StorageVisual />,
+  },
+  {
+    id: "viewers-ad-free",
+    tab: "Shared Ad-Free",
+    tier: "revered",
+    headline: "Your whole raid sees no ads.",
+    body: "Every instance page from a log you upload, and the armory page of every character you've linked, is ad-free for everyone who opens it. Share a report and your raid gets it clean.",
+    levels: [
+      { tier: "free", text: "Viewers of your logs may see ads" },
+      { tier: "revered", text: "No ads for anyone viewing your logs or characters" },
+    ],
+    visual: <ViewersAdFreeVisual />,
   },
   {
     id: "downloads",
@@ -340,18 +371,6 @@ const SLIDES: PerkSlide[] = [
       { tier: "revered", text: "Unlist any log you upload" },
     ],
     visual: <UnlistedVisual />,
-  },
-  {
-    id: "future",
-    tab: "Coming Soon",
-    tier: "revered",
-    headline: "Every future perk, included.",
-    body: "New supporter perks are on the way. Revered and Exalted supporters get them automatically as they ship.",
-    levels: [
-      { tier: "free", text: "Core analysis, always free" },
-      { tier: "revered", text: "New perks unlock as they release" },
-    ],
-    visual: <FutureVisual />,
   },
 ]
 
@@ -384,7 +403,7 @@ export function PerkShowcase() {
   return (
     <section ref={sectionRef} aria-label="Supporter perks" className="scroll-mt-4">
       <div className={cn(PANEL, "overflow-hidden")}>
-        <div role="tablist" aria-label="Perks" className="styled-scrollbar flex overflow-x-auto border-b border-border bg-black/20">
+        <div role="tablist" aria-label="Perks" className="flex flex-wrap border-b border-border bg-black/20">
           {SLIDES.map((s, i) => (
             <button
               key={s.id}
@@ -393,7 +412,7 @@ export function PerkShowcase() {
               aria-selected={i === index}
               onClick={() => navigate({ hash: s.id }, { replace: true, preventScrollReset: true })}
               className={cn(
-                "flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-sm transition-colors",
+                "flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-sm transition-colors",
                 i === index ? "text-white" : "text-muted-foreground hover:text-foreground",
               )}
               // Unselected tabs keep a faint tier-colored underline so the tier reads at a glance.
@@ -421,7 +440,7 @@ export function PerkShowcase() {
                 ) : (
                   <TierPill tier={slide.tier} />
                 )}
-                {slide.tier === "free" ? <span>no account tier needed</span> : slide.id === "future" ? null : <span>and above</span>}
+                {slide.tier === "free" ? <span>no account tier needed</span> : <span>and above</span>}
               </div>
               <h3 className="font-wow text-2xl leading-tight text-white sm:text-3xl">{slide.headline}</h3>
               <p className="text-sm leading-relaxed text-zinc-300 sm:text-base">{slide.body}</p>
