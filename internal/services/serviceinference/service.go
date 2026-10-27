@@ -3,7 +3,6 @@ package serviceinference
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -19,17 +18,17 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/serviceinference/openrouter"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
+	"github.com/Emyrk/chronicle/internal/services/servicesecrets"
 	"github.com/coder/serpent"
 )
 
-const credentialKeyID = "v1"
+const credentialKeyID = servicesecrets.CredentialKeyID
 
 var _ services.Servicer = (*Service)(nil)
 var _ http.Handler = (*Service)(nil)
 
 type Service struct {
 	broker                     *services.Services
-	credentialKey              string
 	openRouterBaseURL          string
 	openRouterAuthorizationURL string
 	attributionTitle           string
@@ -52,7 +51,7 @@ func OnInference() string                          { return (&Service{}).Name() 
 func (s *Service) Name() string                    { return services.ServiceInference }
 func (s *Service) Configures() []string            { return nil }
 func (s *Service) DependsOn() []string {
-	return []string{servicelogger.OnLogger(), servicedbstore.OnDatabaseStore(), serviceauthz.OnAuthz(), serviceaccessurl.OnAccessURL()}
+	return []string{servicelogger.OnLogger(), servicedbstore.OnDatabaseStore(), serviceauthz.OnAuthz(), serviceaccessurl.OnAccessURL(), servicesecrets.OnSecrets()}
 }
 func (s *Service) Enabled() bool                                    { return s.enabled }
 func (s *Service) Routes() http.Handler                             { return s }
@@ -69,13 +68,10 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	s.accessURL = accessURL
 	s.router = s.routes()
-	if strings.TrimSpace(s.credentialKey) == "" {
+	s.cipher = servicesecrets.CredentialCipher(s.broker)
+	if s.cipher == nil {
 		s.enabled = false
 		return nil
-	}
-	s.cipher, err = credentialCipher(s.credentialKey)
-	if err != nil {
-		return err
 	}
 	title := strings.TrimSpace(s.attributionTitle)
 	if title == "" {
@@ -104,21 +100,8 @@ func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-func credentialCipher(encoded string) (*secrets.CredentialCipher, error) {
-	key, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		return nil, fmt.Errorf("decode inference credential encryption key: %w", err)
-	}
-	cipher, err := secrets.NewCredentialCipher(credentialKeyID, key)
-	if err != nil {
-		return nil, fmt.Errorf("configure inference credential encryption: %w", err)
-	}
-	return cipher, nil
-}
-
 func (s *Service) Options() serpent.OptionSet {
 	return serpent.OptionSet{
-		{Name: "Inference credential encryption key", Description: "Base64 encoded 32-byte AES key for inference credentials.", Flag: "inference-credential-encryption-key", Env: "CHRONICLE_INFERENCE_CREDENTIAL_ENCRYPTION_KEY", Default: "", Value: serpent.StringOf(&s.credentialKey)},
 		{Name: "OpenRouter base URL", Description: "OpenRouter API base URL.", Flag: "inference-openrouter-base-url", Env: "CHRONICLE_INFERENCE_OPENROUTER_BASE_URL", Default: openrouter.DefaultBaseURL, Value: serpent.StringOf(&s.openRouterBaseURL)},
 		{Name: "OpenRouter authorization URL", Description: "OpenRouter OAuth authorization URL.", Flag: "inference-openrouter-auth-url", Env: "CHRONICLE_INFERENCE_OPENROUTER_AUTH_URL", Default: openrouter.DefaultAuthorizationBaseURL, Value: serpent.StringOf(&s.openRouterAuthorizationURL)},
 		{Name: "Inference attribution title", Description: "Provider attribution title.", Flag: "inference-attribution-title", Env: "CHRONICLE_INFERENCE_ATTRIBUTION_TITLE", Default: "Chronicle", Value: serpent.StringOf(&s.attributionTitle)},
@@ -126,5 +109,5 @@ func (s *Service) Options() serpent.OptionSet {
 	}
 }
 
-func credentialAAD(userID, purpose string) []byte { return []byte(userID + ":" + purpose) }
+func credentialAAD(userID, purpose string) []byte { return secrets.UserCredentialAAD(userID, purpose) }
 func hashSecret(value string) []byte              { sum := sha256.Sum256([]byte(value)); return sum[:] }

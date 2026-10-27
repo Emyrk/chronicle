@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"bytes"
+	"encoding/base64"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -89,4 +90,21 @@ func TestNewCredentialCipherValidation(t *testing.T) {
 	require.ErrorContains(t, err, "key ID")
 	_, err = NewCredentialCipher("v1", make([]byte, 31))
 	require.ErrorContains(t, err, "32 bytes")
+}
+
+func TestNewCredentialCipherFromBase64(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewCredentialCipherFromBase64("v1", "not-base64")
+	require.ErrorContains(t, err, "decode")
+	_, err = NewCredentialCipherFromBase64("v1", base64.StdEncoding.EncodeToString(make([]byte, 31)))
+	require.ErrorContains(t, err, "32 bytes")
+	cipher, err := NewCredentialCipherFromBase64("v1", base64.StdEncoding.EncodeToString(make([]byte, 32)))
+	require.NoError(t, err)
+	require.NotNil(t, cipher)
+}
+
+func TestUserCredentialAAD(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, []byte("user-id:provider-credential"), UserCredentialAAD("user-id", "provider-credential"))
 }
