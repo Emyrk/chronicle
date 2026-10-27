@@ -560,6 +560,23 @@ function RewardTooltip({ reward, unlocked }: { reward: (typeof REWARDS)[number];
   )
 }
 
+/** Reassures subscribers that switching tiers never wastes what they've already paid. */
+function TierChangeCredit() {
+  return (
+    <div className="flex items-start gap-3 rounded-md border border-emerald-500/50 bg-emerald-500/10 p-3">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
+        <BadgeDollarSign className="size-5 text-emerald-300" aria-hidden="true" />
+      </span>
+      <div className="text-sm leading-5">
+        <p className="font-semibold text-emerald-300">Your payment carries over</p>
+        <p className="text-emerald-50/90">
+          Change tiers anytime. Whatever is left on your current plan is credited toward the new one, so you never pay twice.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export function FramePanel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className={cn(FRAME, "lg:sticky lg:top-4")}>
@@ -682,6 +699,7 @@ export function PlanPicker({ prices, change }: { prices: readonly BillingPrice[]
 
   return (
     <FramePanel title={change?.returningState ? "Choose Your Next Standing" : change ? "Change Your Standing" : "Choose Your Standing"}>
+      {change && !change.returningState ? <TierChangeCredit /> : null}
       <p className="text-center text-xs text-muted-foreground">Every tier includes ad-free browsing, raw log downloads, and unlisted logs. Higher standings include more log storage.</p>
 
       {availableTiers.length > 0 ? (
@@ -812,13 +830,6 @@ export function PlanPicker({ prices, change }: { prices: readonly BillingPrice[]
         </>
       ) : change ? (
         <>
-          <p className="flex items-start gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 p-2.5 text-xs leading-5 text-emerald-100">
-            <BadgeDollarSign className="mt-0.5 size-4 shrink-0 text-emerald-300" aria-hidden="true" />
-            <span>
-              <span className="font-semibold text-emerald-300">You keep what you've paid.</span> Switching tiers credits the unused time on your current plan toward the
-              new one.
-            </span>
-          </p>
           <button type="button" className={GOLD_BUTTON} disabled={changePortal.isPending} onClick={() => void openBilling(() => changePortal.mutateAsync())}>
             {changePortal.isPending ? "Opening Stripe…" : "Go to Stripe to change your subscription"}
           </button>
@@ -1044,8 +1055,12 @@ function TierSubscriptionSettings({ billing }: { billing: BillingSummary }) {
             </button>
           ) : (
             <>
+              <TierChangeCredit />
               <button type="button" className={GOLD_BUTTON} onClick={() => setChangingTier(true)}>
-                Change Tier
+                <span className="flex flex-col items-center leading-tight">
+                  <span>Change Tier</span>
+                  <span className="mt-0.5 font-sans text-xs font-medium text-[#f0c060]/80">Unused time carries over</span>
+                </span>
               </button>
               <div className="grid grid-cols-2 gap-2">
                 <button
