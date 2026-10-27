@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from "react"
+import { HelpCircle } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip"
+import { formatNumber } from "@/lib/format"
 import { GuideUiScene } from "../../../Guides/protocol/GuideUiScene"
 import { applySceneBatch, createInitialScene } from "../../../Guides/protocol/scene"
 import { parseWorkerMessage } from "../../../Guides/protocol/protocol"
@@ -112,24 +115,65 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
   </div>
 }
 
-const ms = (value: number) => value >= 1000 ? `${(value / 1000).toFixed(2)} s` : `${value.toFixed(0)} ms`
+const ms = (value: number) => `${value.toFixed(value < 10 ? 1 : 0)}ms`
 
+/** Matches the built-in panel performance footer; the ? icon shows the full timing breakdown. */
 function LuaRunMetricsBar({ metrics, progress }: { metrics: LuaPanelRunMetrics | null; progress: number | null }) {
-  if (!metrics) return <div role="status" className="border-t border-border px-3 py-1 font-mono text-[11px] text-muted-foreground">
-    Replaying… {(progress ?? 0).toLocaleString()} events</div>
-  const transfer = Math.max(0, metrics.wallMs - metrics.totalMs)
-  const parts: Array<[string, number, string]> = [
-    ["Lua", metrics.luaMs, "Lua onEvent callbacks"],
-    ["decode", metrics.decodeMs, "Decoding the damage stream and skipping unselected encounters"],
-    ["UI", metrics.uiMs, "Collecting and posting UI updates from the worker"],
-    ["complete", metrics.completeMs, "Lua onComplete callback"],
-    ["draw", metrics.drawMs, "Applying UI updates on the page"],
-    ["startup", metrics.startupMs, "Loading the Lua state and running main.lua"],
-    ["transfer", transfer, "Copying the stream to the worker and message delivery"],
-  ]
-  return <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-border px-3 py-1 font-mono text-[11px] text-muted-foreground"
-    title={`${metrics.bytes.toLocaleString()} stream bytes, ${metrics.uiOperations.toLocaleString()} UI operations`}>
-    <span className="text-blue-500">{metrics.events.toLocaleString()} events · {metrics.encounters} enc · {ms(metrics.wallMs)}</span>
-    {parts.map(([label, value, title]) => <span key={label} title={title}>{label} {ms(value)}</span>)}
+  const footer = "flex shrink-0 items-center justify-between px-2 pb-1 font-mono text-2xs text-muted-foreground"
+  if (!metrics) return <div role="status" className={footer} data-panel-performance-footer>
+    <span>{formatNumber(progress ?? 0)} events<span className="ml-2 text-blue-500">updating…</span></span>
   </div>
+  const eventsPerSecond = metrics.totalMs > 0 ? metrics.events / (metrics.totalMs / 1000) : 0
+  const transfer = Math.max(0, metrics.wallMs - metrics.totalMs)
+  const rows: Array<[string, number, string]> = [
+    ["Lua onEvent", metrics.luaMs, "Your event callbacks"],
+    ["Decode", metrics.decodeMs, "Reading the damage stream"],
+    ["UI updates", metrics.uiMs, "Collecting and posting UI changes"],
+    ["Lua onComplete", metrics.completeMs, "Your completion callback"],
+  ]
+  const outside: Array<[string, number, string]> = [
+    ["Startup", metrics.startupMs, "Loading main.lua"],
+    ["Transfer", transfer, "Copying the stream to the worker"],
+    ["Draw", metrics.drawMs, "Applying UI changes on the page"],
+  ]
+  const row = ([label, value, hint]: [string, number, string]) => <div key={label} className="contents">
+    <span title={hint}>{label}</span>
+    <span className="text-right">{ms(value)}</span>
+    <span className="text-right text-muted-foreground">{metrics.totalMs > 0 ? `${Math.round(value / metrics.totalMs * 100)}%` : ""}</span>
+  </div>
+  return <div className={footer} data-panel-performance-footer>
+    <span>{formatNumber(metrics.events)} events{eventsPerSecond > 0 && <span className="ml-2">({formatNumber(eventsPerSecond)}/s)</span>}</span>
+    <span className="flex items-center gap-1">
+      <span className="text-blue-500">{metrics.totalMs.toFixed(0)}ms</span>
+      <TooltipProvider delayDuration={100}><Tooltip>
+        <TooltipTrigger asChild>
+          <button type="button" aria-label="Panel timing details" className="-m-1 p-1 text-muted-foreground/70 hover:text-foreground"><HelpCircle className="size-3" /></button>
+        </TooltipTrigger>
+        <TooltipContent side="top" align="end" sideOffset={6} className="w-64 p-3 font-mono text-[11px]">
+          <div className="mb-2 font-sans text-xs font-semibold">Lua panel timing</div>
+          <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-0.5">
+            {rows.map(row)}
+            <span className="border-t border-border pt-1 font-semibold">Worker total</span>
+            <span className="border-t border-border pt-1 text-right font-semibold">{ms(metrics.totalMs)}</span>
+            <span className="border-t border-border pt-1" />
+            {outside.map(([label, value, hint]) => <div key={label} className="contents">
+              <span title={hint}>{label}</span><span className="text-right">{ms(value)}</span><span />
+            </div>)}
+            <span className="border-t border-border pt-1 font-semibold">End to end</span>
+            <span className="border-t border-border pt-1 text-right font-semibold">{ms(metrics.wallMs + metrics.drawMs)}</span>
+            <span className="border-t border-border pt-1" />
+          </div>
+          <div className="mt-2 font-sans text-muted-foreground">
+            {formatNumber(metrics.events)} events from {metrics.encounters} encounter{metrics.encounters === 1 ? "" : "s"} ·{" "}
+            {formatBytes(metrics.bytes)} stream · {formatNumber(metrics.uiOperations)} UI operations ·{" "}
+            {metrics.events > 0 ? `${(metrics.luaMs * 1000 / metrics.events).toFixed(1)}µs Lua per event` : "no events"}
+          </div>
+        </TooltipContent>
+      </Tooltip></TooltipProvider>
+    </span>
+  </div>
+}
+
+function formatBytes(bytes: number) {
+  return bytes >= 1_048_576 ? `${(bytes / 1_048_576).toFixed(1)} MB` : `${(bytes / 1024).toFixed(0)} KB`
 }
