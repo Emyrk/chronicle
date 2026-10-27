@@ -591,6 +591,19 @@ export function replayDungeonCanvas(
   return rendered ? { canvas: rendered, rendered: true } : null;
 }
 
+/** Normalized UI-map coordinates must use native floor artwork, never world-calibrated renders. */
+export function replayDungeonCanvasForCoordinates(
+  instance: WowMapInstance,
+  floor: WowMapInstanceFloor | undefined,
+  normalizedUIMap: boolean,
+  preferRendered: boolean,
+): ReplayDungeonCanvas | null {
+  if (normalizedUIMap) {
+    return floor && hasNativeMapFloorArtwork(floor) ? { canvas: floor, rendered: false } : null;
+  }
+  return replayDungeonCanvas(instance, floor, preferRendered);
+}
+
 export function resolveMapArtwork(
   manifest: WowMapManifest,
   mapId: number,

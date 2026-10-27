@@ -30,7 +30,7 @@ import {
   replayPositionAt,
   projectionScale,
   renderedDungeonMapPoint,
-  replayDungeonCanvas,
+  replayDungeonCanvasForCoordinates,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
   resolveMapFloorNumber,
@@ -409,8 +409,13 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const mesh = !normalizedUIMap && artwork.kind === "instance"
     ? placeableDungeonMesh(mapFloorMesh(artwork.instance, selectedFloor))
     : null;
-  const availableFlatCanvas = !normalizedUIMap && artwork.kind === "instance"
-    ? replayDungeonCanvas(artwork.instance, selectedFloor, Boolean(options.preferRenderedCanvas) || !selectedFloor?.bounds)
+  const availableFlatCanvas = artwork.kind === "instance"
+    ? replayDungeonCanvasForCoordinates(
+      artwork.instance,
+      selectedFloor,
+      normalizedUIMap,
+      Boolean(options.preferRenderedCanvas) || !selectedFloor?.bounds,
+    )
     : null;
   // A mesh-only floor has no native or calibrated 2D canvas to fall back on,
   // so its mesh is the canvas from the start, not only once asked.

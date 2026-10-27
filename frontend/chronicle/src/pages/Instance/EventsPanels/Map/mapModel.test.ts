@@ -38,6 +38,7 @@ import {
   movementTrailPoints,
   overviewDungeonCanvas,
   replayDungeonCanvas,
+  replayDungeonCanvasForCoordinates,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
   resolveMapFloorNumber,
@@ -534,6 +535,18 @@ describe("floor-specific dungeon canvases", () => {
       canvas: { path: floorRender.path },
     });
     expect(replayDungeonCanvas(preferredInstance, floor, true)?.canvas).toMatchObject({ path: floorRender.path });
+  });
+
+  it("uses native floor artwork for normalized instance coordinates", () => {
+    expect(replayDungeonCanvasForCoordinates(instance, instance.floors[1], true, true)).toEqual({
+      canvas: instance.floors[1],
+      rendered: false,
+    });
+  });
+
+  it("does not project normalized instance coordinates onto a render without native artwork", () => {
+    const floor = { ...instance.floors[1], tiles: [] };
+    expect(replayDungeonCanvasForCoordinates(instance, floor, true, true)).toBeNull();
   });
 
   it("keeps native floor artwork when rendered canvases are not preferred", () => {
