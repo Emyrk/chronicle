@@ -752,6 +752,7 @@ type entitlementStore struct {
 	billingEntitled         bool
 	billingEntitlementByKey map[string]bool
 	billingEntitlements     []database.BillingEntitlement
+	entitlementsByUser      map[uuid.UUID][]database.BillingEntitlement
 	subscription            database.BillingSubscription
 	subscriptionErr         error
 	user                    database.ChronicleUser
@@ -779,7 +780,10 @@ func (s *entitlementStore) HasBillingEntitlement(_ context.Context, arg database
 	return s.billingEntitled, nil
 }
 
-func (s *entitlementStore) ListBillingEntitlementsByUserID(context.Context, uuid.UUID) ([]database.BillingEntitlement, error) {
+func (s *entitlementStore) ListBillingEntitlementsByUserID(_ context.Context, userID uuid.UUID) ([]database.BillingEntitlement, error) {
+	if s.entitlementsByUser != nil {
+		return s.entitlementsByUser[userID], nil
+	}
 	return s.billingEntitlements, nil
 }
 
@@ -814,11 +818,25 @@ func (s *entitlementStore) InTx(ctx context.Context, fn func(database.Store) err
 
 func (s *entitlementStore) DeleteBillingEntitlementsByProviderCustomerID(_ context.Context, arg database.DeleteBillingEntitlementsByProviderCustomerIDParams) error {
 	s.deletedCustomer = arg
+	for userID, rows := range s.entitlementsByUser {
+		kept := rows[:0:0]
+		for _, row := range rows {
+			if row.Provider != arg.Provider || row.ProviderCustomerID != arg.ProviderCustomerID {
+				kept = append(kept, row)
+			}
+		}
+		s.entitlementsByUser[userID] = kept
+	}
 	return nil
 }
 
 func (s *entitlementStore) UpsertBillingEntitlement(_ context.Context, arg database.UpsertBillingEntitlementParams) (database.BillingEntitlement, error) {
 	s.persisted = append(s.persisted, arg)
+	if s.entitlementsByUser != nil {
+		s.entitlementsByUser[arg.UserID] = append(s.entitlementsByUser[arg.UserID], database.BillingEntitlement{
+			UserID: arg.UserID, Provider: arg.Provider, ProviderCustomerID: arg.ProviderCustomerID, EntitlementKey: arg.EntitlementKey,
+		})
+	}
 	return database.BillingEntitlement{}, nil
 }
 
@@ -1019,6 +1037,62 @@ func TestSyncStripeEntitlementsTransfersOwnerAndAppliesRolePerEntitlement(t *tes
 		{userID: currentOwner, role: stripeRoleRevered, granted: true},
 		{userID: currentOwner, role: stripeRoleExalted, granted: false},
 	}, store.roleChanges)
+}
+
+func TestStripeEntitlementRoleSyncOnlyOnEffectiveTierChange(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	userID := uuid.New()
+	store := &entitlementStore{
+		providerCustomer:   database.BillingSubscription{UserID: userID},
+		entitlementsByUser: make(map[uuid.UUID][]database.BillingEntitlement),
+	}
+	svc := New(Options{Store: store})
+	var active []*stripe.EntitlementsActiveEntitlement
+	svc.listActiveEntitlements = func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error) {
+		return active, nil
+	}
+	var enqueued []uuid.UUID
+	svc.SetDiscordRoleSyncEnqueuer(func(_ context.Context, id uuid.UUID) error {
+		enqueued = append(enqueued, id)
+		return errors.New("Discord queue unavailable")
+	})
+	require.NoError(t, svc.syncStripeEntitlements(ctx, "cus_123"))
+	require.Empty(t, enqueued)
+	active = []*stripe.EntitlementsActiveEntitlement{{ID: "ent_honored", LookupKey: string(EntitlementChronicleHonored)}}
+	require.NoError(t, svc.syncStripeEntitlements(ctx, "cus_123"))
+	require.Equal(t, []uuid.UUID{userID}, enqueued)
+	require.NoError(t, svc.syncStripeEntitlements(ctx, "cus_123"))
+	require.Len(t, enqueued, 1, "unchanged 15-minute reconciliation should not enqueue")
+	active = []*stripe.EntitlementsActiveEntitlement{{ID: "ent_revered", LookupKey: string(EntitlementChronicleRevered)}}
+	require.NoError(t, svc.syncStripeEntitlements(ctx, "cus_123"))
+	require.Len(t, enqueued, 2)
+	active = nil
+	require.NoError(t, svc.syncStripeEntitlements(ctx, "cus_123"))
+	require.Len(t, enqueued, 3, "revoking the tier should enqueue removal")
+}
+
+func TestStripeEntitlementRoleSyncTransfersOwner(t *testing.T) {
+	t.Parallel()
+	oldOwner, newOwner := uuid.New(), uuid.New()
+	store := &entitlementStore{
+		providerCustomer: database.BillingSubscription{UserID: newOwner},
+		entitlementOwner: oldOwner,
+		entitlementsByUser: map[uuid.UUID][]database.BillingEntitlement{
+			oldOwner: {{UserID: oldOwner, Provider: ProviderStripe, ProviderCustomerID: "cus_123", EntitlementKey: string(EntitlementChronicleExalted)}},
+		},
+	}
+	svc := New(Options{Store: store})
+	svc.listActiveEntitlements = func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error) {
+		return []*stripe.EntitlementsActiveEntitlement{{ID: "ent_revered", LookupKey: string(EntitlementChronicleRevered)}}, nil
+	}
+	var enqueued []uuid.UUID
+	svc.SetDiscordRoleSyncEnqueuer(func(_ context.Context, id uuid.UUID) error {
+		enqueued = append(enqueued, id)
+		return nil
+	})
+	require.NoError(t, svc.syncStripeEntitlements(context.Background(), "cus_123"))
+	require.ElementsMatch(t, []uuid.UUID{oldOwner, newOwner}, enqueued)
 }
 
 func TestEntitlementTransactionDoesNotApplyRolesWhenDatabaseCommitFails(t *testing.T) {

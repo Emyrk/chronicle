@@ -74,6 +74,7 @@ type Service struct {
 
 	subscriptionChangeNotifier func(context.Context, SubscriptionChangeNotification) error
 	cosmeticAuditEnqueuer      func(context.Context, uuid.UUID) error
+	discordRoleSyncEnqueuer    func(context.Context, uuid.UUID) error
 
 	pricesMu sync.Mutex
 	prices   []chroniclesdk.BillingPrice
@@ -84,6 +85,14 @@ type Service struct {
 func (s *Service) SetCosmeticAuditEnqueuer(enqueue func(context.Context, uuid.UUID) error) {
 	if s != nil {
 		s.cosmeticAuditEnqueuer = enqueue
+	}
+}
+
+// SetDiscordRoleSyncEnqueuer schedules a role repair when a user's effective
+// paid tier changes. The job reads the current tier, never a stale snapshot.
+func (s *Service) SetDiscordRoleSyncEnqueuer(enqueue func(context.Context, uuid.UUID) error) {
+	if s != nil {
+		s.discordRoleSyncEnqueuer = enqueue
 	}
 }
 

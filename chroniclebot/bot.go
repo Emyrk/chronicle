@@ -23,6 +23,9 @@ type Config struct {
 	// GuildID is your Discord server ID. If empty, commands are registered globally.
 	GuildID                      string
 	AdminNotificationsChannelID  string
+	HonoredRoleID                string
+	ReveredRoleID                string
+	ExaltedRoleID                string
 	Disabled                     bool
 	MembershipGrantChecksPerHour int64
 	DB                           database.Store
@@ -66,6 +69,10 @@ func New(_ context.Context, logger *slog.Logger, config Config) (*Bot, error) {
 			config:   config,
 			disabled: true,
 		}, nil
+	}
+
+	if err := validateTierRoleConfig(config); err != nil {
+		return nil, err
 	}
 
 	session, err := discordgo.New("Bot " + config.Token)

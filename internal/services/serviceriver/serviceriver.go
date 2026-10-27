@@ -144,6 +144,8 @@ func (s *Service) Start(ctx context.Context) error {
 		return chroniclebot.EnqueueAdminNotification(ctx, q, bot, billingSubscriptionNotificationArgs(serviceaccessurl.AccessURL(s.broker), change))
 	})
 
+	billingService.Billing.SetDiscordRoleSyncEnqueuer(bot.EnqueueEntitlementRoleSync)
+
 	// Register character cosmetic audits. The daily dispatcher repairs missed
 	// event-driven audits without producing a deployment-time burst.
 	cosmeticStore := servicedbstore.DatabaseStore(s.broker)
