@@ -97,6 +97,7 @@ func (s *Service) routes() http.Handler {
 	r.Delete("/connections/{connectionID}", s.deleteConnection)
 	r.Get("/connections/{connectionID}/models", s.listModels)
 	r.Post("/threads/instance/{instance}", s.createInstanceThread)
+	r.Post("/threads/lua-project/{project}", s.createLuaProjectThread)
 	r.Get("/threads", s.listThreads)
 	r.Get("/threads/{threadID}", s.getThread)
 	r.Delete("/threads/{threadID}/messages", s.clearThread)
@@ -360,6 +361,73 @@ func (s *Service) createInstanceThread(w http.ResponseWriter, r *http.Request) {
 	}
 	s.writeThread(w, r, thread)
 }
+func (s *Service) createLuaProjectThread(w http.ResponseWriter, r *http.Request) {
+	project, err := s.luaProjectForUser(r, chi.URLParam(r, "project"))
+	if err != nil {
+		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "You cannot edit this Lua project."})
+		return
+	}
+	thread, err := s.db.GetOrCreateInferenceThread(r.Context(), database.GetOrCreateInferenceThreadParams{UserID: userID(r), AssistantID: "lua-workshop", ContextType: pgtype.Text{String: "lua_project", Valid: true}, ContextID: pgtype.Text{String: project.ID.String(), Valid: true}, Title: project.Name})
+	if err != nil {
+		s.internalError(w, "create inference thread", err)
+		return
+	}
+	s.writeThread(w, r, thread)
+}
+
+// luaProjectForUser returns a Lua project the caller may update. Lua threads
+// only expose the browser working copy, but still require edit access.
+func (s *Service) luaProjectForUser(r *http.Request, identifier string) (database.LuaProject, error) {
+	id, err := uuid.Parse(identifier)
+	if err != nil {
+		return database.LuaProject{}, pgx.ErrNoRows
+	}
+	actor := policy.New().User(userID(r))
+	allowed, err := s.zed.CheckOne(r.Context(), nil, policy.New().Lua_project(id).CanUpdate_User(actor))
+	if err != nil {
+		return database.LuaProject{}, err
+	}
+	if !allowed {
+		return database.LuaProject{}, pgx.ErrNoRows
+	}
+	technicalAdmin, err := s.zed.CheckOne(r.Context(), nil, policy.New().GlobalChronicle().CanAdminister_authz_User(actor))
+	if err != nil {
+		return database.LuaProject{}, err
+	}
+	return s.db.GetOwnerLuaProject(r.Context(), database.GetOwnerLuaProjectParams{ID: id, OwnerID: userID(r), TechnicalAdmin: technicalAdmin})
+}
+
+// authorizeThreadContext re-checks access to a durable thread's context on every use.
+func (s *Service) authorizeThreadContext(r *http.Request, thread database.InferenceThread) error {
+	switch thread.ContextType.String {
+	case "instance":
+		_, err := s.instanceForUser(r, thread.ContextID.String)
+		return err
+	case "lua_project":
+		_, err := s.luaProjectForUser(r, thread.ContextID.String)
+		return err
+	case "":
+		return nil
+	default:
+		return pgx.ErrNoRows
+	}
+}
+
+func threadContextForbidden(thread database.InferenceThread) string {
+	if thread.ContextType.String == "lua_project" {
+		return "You cannot edit this Lua project."
+	}
+	return "You cannot view this instance."
+}
+
+func threadToolContext(s *Service, thread database.InferenceThread) toolContext {
+	tc := toolContext{service: s}
+	if thread.ContextType.String == "instance" {
+		tc.instanceID, _ = uuid.Parse(thread.ContextID.String)
+	}
+	return tc
+}
+
 func (s *Service) listThreads(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.ListInferenceThreadsByOwner(r.Context(), userID(r))
 	if err != nil {
@@ -374,8 +442,8 @@ func (s *Service) listThreads(w http.ResponseWriter, r *http.Request) {
 		if c := r.URL.Query().Get("context"); c != "" && row.ContextType.String != c {
 			continue
 		}
-		if row.ContextType.String == "instance" {
-			if _, err := s.instanceForUser(r, row.ContextID.String); err != nil {
+		if row.ContextType.Valid {
+			if err := s.authorizeThreadContext(r, row); err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
 					continue
 				}
@@ -398,11 +466,9 @@ func (s *Service) getThread(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Thread not found."})
 		return
 	}
-	if thread.ContextType.String == "instance" {
-		if _, err := s.instanceForUser(r, thread.ContextID.String); err != nil {
-			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "You cannot view this instance."})
-			return
-		}
+	if err := s.authorizeThreadContext(r, thread); err != nil {
+		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: threadContextForbidden(thread)})
+		return
 	}
 	s.writeThread(w, r, thread)
 }
@@ -436,21 +502,20 @@ func (s *Service) previewDebug(w http.ResponseWriter, r *http.Request) {
 	debug := debugRunContext{Enabled: true, RunID: "preview-" + uuid.NewString(), Persistence: "ephemeral"}
 	messages := make([]Message, 0, maxHistoryMessages+1)
 	if assistantDefinition.Durable {
-		if request.ThreadID == nil || request.Instance == "" {
-			badRequest(w, r, "Durable debug previews require thread_id and instance.")
+		if request.ThreadID == nil || (assistantDefinition.ContextType == "instance") != (request.Instance != "") {
+			badRequest(w, r, "Durable debug previews require thread_id, and instance for instance threads.")
 			return
 		}
 		thread, err := s.db.GetInferenceThreadByOwner(r.Context(), database.GetInferenceThreadByOwnerParams{ID: *request.ThreadID, UserID: uid})
-		if err != nil || thread.AssistantID != assistantDefinition.ID || thread.Persistence != "durable" || thread.ContextType.String != "instance" || thread.ContextID.String != request.Instance {
+		if err != nil || thread.AssistantID != assistantDefinition.ID || thread.Persistence != "durable" || thread.ContextType.String != assistantDefinition.ContextType || (request.Instance != "" && thread.ContextID.String != request.Instance) {
 			httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Thread not found."})
 			return
 		}
-		instance, err := s.instanceForUser(r, thread.ContextID.String)
-		if err != nil {
-			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "You cannot view this instance."})
+		if err := s.authorizeThreadContext(r, thread); err != nil {
+			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: threadContextForbidden(thread)})
 			return
 		}
-		capability, err := advertisedInstancePageClient(request.Client, instance.ID.String())
+		capability, err := advertisedClient(request.Client, clientCapabilities[assistantDefinition.ClientCapability], thread.ContextID.String)
 		if err != nil {
 			badRequest(w, r, err.Error())
 			return
@@ -516,11 +581,9 @@ func (s *Service) clearThread(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Thread not found."})
 		return
 	}
-	if thread.ContextType.String == "instance" {
-		if _, err := s.instanceForUser(r, thread.ContextID.String); err != nil {
-			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "You cannot view this instance."})
-			return
-		}
+	if err := s.authorizeThreadContext(r, thread); err != nil {
+		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: threadContextForbidden(thread)})
+		return
 	}
 
 	thread, err = s.clearThreadMessages(r.Context(), id, uid)

@@ -21,7 +21,7 @@ import type { DebugCommandInput } from "./useAssistantChat";
 import { useChatWindow } from "./useChatWindow";
 import { useInferenceSelection } from "./useInferenceSelection";
 
-function AssistantConfiguration({
+export function AssistantConfiguration({
   selection,
 }: {
   selection: ReturnType<typeof useInferenceSelection>;
@@ -53,7 +53,7 @@ function AssistantConfiguration({
   );
 }
 
-function ConnectRequiredAction() {
+export function ConnectRequiredAction() {
   return <Button asChild size="sm"><Link to="/account/settings">Open AI settings</Link></Button>;
 }
 

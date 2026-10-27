@@ -1,11 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { Link, useParams } from "react-router-dom"
-import { ArrowLeft, ArrowUpRight, FileArchive, FlaskConical, Package, Plus, ShieldCheck } from "lucide-react"
+import { ArrowLeft, ArrowUpRight, Code2, FileArchive, FlaskConical, Package, Plus, ShieldCheck } from "lucide-react"
 import { useAuthorizationCheck, useSession } from "@/api/queries"
 import { createProject, getProject, listProjects, promoteStable, publicPackageURL, publishUnstable, uploadDraft, type LuaProject, type LuaProjectKind } from "./api"
 
 import { LuaDraftPreview } from "./LuaDraftPreview"
-import { LuaDraftAuthor } from "./LuaDraftAuthor"
 
 const card = "rounded-xl border border-border/80 bg-card p-5 shadow-sm"
 const button = "inline-flex items-center justify-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
@@ -121,10 +120,14 @@ export function LuaProjectPage() {
   const unstableLink = project.unstable ? publicPackageURL(project.id, project.unstable.sha256) : ""
   return <main className="container mx-auto max-w-5xl space-y-7 px-4 py-10">
     <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" to="/lua-projects"><ArrowLeft className="size-4" /> All projects</Link>
-    <header className="border-b pb-6"><p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">{project.kind} / {project.slug} / revision {project.revision}</p><h1 className="mt-2 text-3xl font-semibold">{project.name}</h1></header>
+    <header className="border-b pb-6"><p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">{project.kind} / {project.slug} / revision {project.revision}</p><h1 className="mt-2 text-3xl font-semibold">{project.name}</h1>
+      {project.kind === "panel" && <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Link className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90" to={`/lua-projects/${encodeURIComponent(project.id)}/edit`}><Code2 className="size-4" /> Open editor &amp; AI chat</Link>
+        <span className="text-sm text-muted-foreground">Build the panel with the AI assistant, edit the code and preview it on an instance.</span>
+      </div>}
+    </header>
     {error && <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}{error.includes("revision") && " Reload the project before retrying."}</p>}
     {notice && <p role="status" className="rounded-md border border-emerald-600/30 bg-emerald-600/10 p-3 text-sm">{notice}</p>}
-    {project.kind === "panel" && <LuaDraftAuthor key={`${project.id}:${project.revision}`} project={project} onUploaded={async success => { setProject(await getProject(project.id)); if (success) setNotice("Private draft uploaded. It has not been tested or published."); else setError("Revision changed. Generate and review a new proposal before retrying.") }} />}
     <div className="grid gap-5 lg:grid-cols-2">
       <section className={`${card} space-y-4`}><div className="flex items-center gap-2"><FileArchive className="size-5" /><h2 className="font-semibold">01 / Draft</h2></div>
         <p className="text-sm text-muted-foreground">Upload an uncompressed tar with project.json at its root and a Lua entrypoint. The server validates the archive. Uploading replaces the draft at this revision.</p>

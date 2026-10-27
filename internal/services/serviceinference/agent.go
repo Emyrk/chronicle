@@ -36,7 +36,11 @@ const (
 type assistant struct {
 	ID, System string
 	Durable    bool
-	Tools      []ToolDefinition
+	// ContextType scopes durable threads ("instance" or "lua_project").
+	ContextType string
+	// ClientCapability is the browser capability whose tools this assistant may call.
+	ClientCapability string
+	Tools            []ToolDefinition
 }
 
 var pageCatalog = []map[string]string{
@@ -52,8 +56,8 @@ var assistants = map[string]assistant{
 		{Name: "find_pages", Description: "Find Chronicle pages by name or description.", Parameters: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","maxLength":100}},"required":["query"],"additionalProperties":false}`)},
 		{Name: "query_rankings", Description: "Query a bounded Chronicle player leaderboard.", Parameters: json.RawMessage(`{"type":"object","properties":{"instance_name":{"type":"string","maxLength":100},"encounter":{"type":"string","maxLength":100},"class":{"type":"string","maxLength":30},"spec":{"type":"string","maxLength":50},"role":{"type":"string","maxLength":30},"metric":{"type":"string","enum":["dps","hps"]},"limit":{"type":"integer","minimum":1,"maximum":10}},"required":["instance_name"],"additionalProperties":false}`)},
 	}},
-	"lua-project-author": {ID: "lua-project-author", System: "You draft Lua panel source for Chronicle. Return ONLY a JSON object with exactly one key, main_lua, containing a Lua source string. No markdown, tar, manifest, extra keys, explanations, tool calls, publishing instructions, or claims that the code has been executed or tested. The user must review and explicitly upload the draft. Keep main_lua under 64 KiB. Chronicle's project.json is generated separately from owner project metadata; never ask for credentials or suggest bypassing the sandbox. You have no access to the user's projects, existing draft, instance data, or runtime APIs beyond what the user describes. If unsure about an API, write a minimal Lua draft and state uncertainty in Lua comments."},
-	"instance-analyst": {ID: "instance-analyst", Durable: true, System: "You are a Chronicle raid instance analyst. Use instance_summary for bounded metadata, encounter, and roster context. You may inspect, query, or update the current instance UI only through advertised client tools. Do not claim access to raw event streams. If a client tool returns user_rejected or capability_unavailable, do not retry the same mutation; explain why it could not be completed. After stale_state, inspect once for fresh state before retrying at most once.", Tools: []ToolDefinition{
+	"lua-workshop": {ID: "lua-workshop", Durable: true, ContextType: "lua_project", ClientCapability: luaEditorCapabilityID, System: luaWorkshopSystem},
+	"instance-analyst": {ID: "instance-analyst", Durable: true, ContextType: "instance", ClientCapability: instancePageCapabilityID, System: "You are a Chronicle raid instance analyst. Use instance_summary for bounded metadata, encounter, and roster context. You may inspect, query, or update the current instance UI only through advertised client tools. Do not claim access to raw event streams. If a client tool returns user_rejected or capability_unavailable, do not retry the same mutation; explain why it could not be completed. After stale_state, inspect once for fresh state before retrying at most once.", Tools: []ToolDefinition{
 		{Name: "instance_summary", Description: "Return bounded metadata, encounters, and players for this authorized raid instance.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
 	}},
 }
@@ -492,26 +496,25 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		thread, err = s.db.GetInferenceThreadByOwner(r.Context(), database.GetInferenceThreadByOwnerParams{ID: *req.ThreadID, UserID: uid})
-		if err != nil || thread.AssistantID != a.ID || thread.Persistence != "durable" || thread.ContextType.String != "instance" {
+		if err != nil || thread.AssistantID != a.ID || thread.Persistence != "durable" || thread.ContextType.String != a.ContextType {
 			httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Thread not found."})
 			return
 		}
-		if req.Instance == "" || req.Instance != thread.ContextID.String {
+		if (a.ContextType == "instance" && req.Instance != thread.ContextID.String) || (a.ContextType != "instance" && req.Instance != "") {
 			badRequest(w, r, "Thread does not belong to the requested instance.")
 			return
 		}
-		inst, err := s.instanceForUser(r, thread.ContextID.String)
-		if err != nil {
-			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "You cannot view this instance."})
+		if err := s.authorizeThreadContext(r, thread); err != nil {
+			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: threadContextForbidden(thread)})
 			return
 		}
-		client, err = advertisedInstancePageClient(req.Client, inst.ID.String())
+		client, err = advertisedClient(req.Client, clientCapabilities[a.ClientCapability], thread.ContextID.String)
 		if err != nil {
 			badRequest(w, r, err.Error())
 			return
 		}
 		a = withClientTools(a, client)
-		tc.instanceID = inst.ID
+		tc = threadToolContext(s, thread)
 		threadID = uuid.NullUUID{UUID: thread.ID, Valid: true}
 		rows, err := s.db.ListRecentInferenceMessagesByThread(r.Context(), database.ListRecentInferenceMessagesByThreadParams{ThreadID: thread.ID, Limit: maxHistoryMessages})
 		if err != nil {
@@ -843,7 +846,12 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 			if state.ToolCallCount > maxToolCalls {
 				return agentLoopResult{State: state}, errAgentToolLimit
 			}
-			if clientTool, ok := clientToolByName(call.Name); ok && capability != nil {
+			var clientTool clientToolDefinition
+			var isClientTool bool
+			if capability != nil {
+				clientTool, isClientTool = clientToolByName(capability.ID, call.Name)
+			}
+			if isClientTool {
 				if pending != nil {
 					return agentLoopResult{State: state}, errors.New("multiple client tool calls are not supported")
 				}

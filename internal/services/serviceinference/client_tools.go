@@ -16,6 +16,9 @@ import (
 const (
 	instancePageCapabilityID      = "instance-page"
 	instancePageCapabilityVersion = 2
+	luaEditorCapabilityID         = "lua-editor"
+	luaEditorCapabilityVersion    = 1
+	maxLuaEditorEdits             = 20
 	maxClientCapabilities         = 8
 	maxClientSessionID            = 128
 	maxClientResult               = 64 << 10
@@ -59,8 +62,38 @@ var instancePageClientTools = []clientToolDefinition{
 	},
 }
 
-func clientToolByName(name string) (clientToolDefinition, bool) {
-	for _, tool := range instancePageClientTools {
+// luaEditorClientTools operate on the unsaved browser working copy only. The
+// server never reads or writes Lua drafts on the assistant's behalf.
+var luaEditorClientTools = []clientToolDefinition{
+	{
+		ToolDefinition: ToolDefinition{Name: "read_lua_files", Description: "Read the current unsaved working copy: main.lua, project.json, the working-copy revision, and any validation error.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
+		CapabilityID:   luaEditorCapabilityID, CapabilityVersion: luaEditorCapabilityVersion, Effect: "read", Confirmation: "never",
+	},
+	{
+		ToolDefinition: ToolDefinition{Name: "edit_lua_file", Description: "Edit one file in the unsaved working copy. Provide either edits (each old_text must appear exactly once in the current file) or content to replace the whole file. Pass expected_revision from read_lua_files; after stale_state, read again before retrying once. Edits are never saved or published; the user saves explicitly.", Parameters: json.RawMessage(`{"type":"object","properties":{"file":{"type":"string","enum":["main.lua","project.json"]},"expected_revision":{"type":"integer","minimum":0},"edits":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","properties":{"old_text":{"type":"string","minLength":1},"new_text":{"type":"string"}},"required":["old_text","new_text"],"additionalProperties":false}},"content":{"type":"string","minLength":1}},"required":["file","expected_revision"],"additionalProperties":false}`)},
+		CapabilityID:   luaEditorCapabilityID, CapabilityVersion: luaEditorCapabilityVersion, Effect: "view_mutation", Confirmation: "never",
+	},
+	{
+		ToolDefinition: ToolDefinition{Name: "run_startup_check", Description: "Start the current unsaved working copy in a fresh sandboxed browser worker and report whether Lua startup succeeded or the Lua error. No events are processed.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
+		CapabilityID:   luaEditorCapabilityID, CapabilityVersion: luaEditorCapabilityVersion, Effect: "read", Confirmation: "never",
+	},
+}
+
+type clientCapabilityDefinition struct {
+	ID        string
+	Version   int
+	ScopeType string
+	Tools     []clientToolDefinition
+}
+
+var (
+	instancePageCapability = clientCapabilityDefinition{ID: instancePageCapabilityID, Version: instancePageCapabilityVersion, ScopeType: "instance", Tools: instancePageClientTools}
+	luaEditorCapability    = clientCapabilityDefinition{ID: luaEditorCapabilityID, Version: luaEditorCapabilityVersion, ScopeType: "lua_project", Tools: luaEditorClientTools}
+	clientCapabilities     = map[string]clientCapabilityDefinition{instancePageCapabilityID: instancePageCapability, luaEditorCapabilityID: luaEditorCapability}
+)
+
+func clientToolByName(capabilityID, name string) (clientToolDefinition, bool) {
+	for _, tool := range clientCapabilities[capabilityID].Tools {
 		if tool.Name == name {
 			return tool, true
 		}
@@ -69,6 +102,12 @@ func clientToolByName(name string) (clientToolDefinition, bool) {
 }
 
 func advertisedInstancePageClient(client *chroniclesdk.InferenceClient, instanceID string) (*clientCapability, error) {
+	return advertisedClient(client, instancePageCapability, instanceID)
+}
+
+// advertisedClient returns the browser capability matching definition and the
+// thread scope. Unknown or older capability versions are ignored.
+func advertisedClient(client *chroniclesdk.InferenceClient, definition clientCapabilityDefinition, scopeID string) (*clientCapability, error) {
 	if client == nil {
 		return nil, nil
 	}
@@ -83,11 +122,11 @@ func advertisedInstancePageClient(client *chroniclesdk.InferenceClient, instance
 		if (capability.ScopeType == "") != (capability.ScopeID == "") || (capability.StateRevision != nil && *capability.StateRevision < 0) {
 			return nil, errors.New("invalid client capability scope")
 		}
-		if capability.ID != instancePageCapabilityID || capability.Version != instancePageCapabilityVersion {
+		if capability.ID != definition.ID || capability.Version != definition.Version {
 			continue
 		}
-		if capability.ScopeType != "instance" || capability.ScopeID != instanceID || matched != nil {
-			return nil, errors.New("instance-page capability must match the thread instance")
+		if capability.ScopeType != definition.ScopeType || capability.ScopeID != scopeID || matched != nil {
+			return nil, fmt.Errorf("%s capability must match the thread %s", definition.ID, definition.ScopeType)
 		}
 		matched = &clientCapability{ID: capability.ID, Version: capability.Version, ScopeType: capability.ScopeType, ScopeID: capability.ScopeID, SessionID: client.SessionID, StateRevision: capability.StateRevision}
 	}
@@ -99,7 +138,7 @@ func withClientTools(a assistant, capability *clientCapability) assistant {
 		return a
 	}
 	a.Tools = slices.Clone(a.Tools)
-	for _, tool := range instancePageClientTools {
+	for _, tool := range clientCapabilities[capability.ID].Tools {
 		a.Tools = append(a.Tools, tool.ToolDefinition)
 	}
 	return a
@@ -251,6 +290,33 @@ func validateClientToolArguments(name, raw string) (json.RawMessage, error) {
 				}
 			}
 		}
+	case "read_lua_files", "run_startup_check":
+		var input struct{}
+		if err := decodeStrict(raw, &input); err != nil {
+			return nil, fmt.Errorf("invalid %s arguments", name)
+		}
+	case "edit_lua_file":
+		var input struct {
+			File             string  `json:"file"`
+			ExpectedRevision *int64  `json:"expected_revision"`
+			Content          *string `json:"content"`
+			Edits            []struct {
+				OldText string `json:"old_text"`
+				NewText string `json:"new_text"`
+			} `json:"edits"`
+		}
+		if err := decodeStrict(raw, &input); err != nil || (input.File != "main.lua" && input.File != "project.json") || input.ExpectedRevision == nil || *input.ExpectedRevision < 0 {
+			return nil, errors.New("invalid edit_lua_file arguments")
+		}
+		// Total size is already bounded by maxToolArguments.
+		if (input.Content == nil) == (len(input.Edits) == 0) || len(input.Edits) > maxLuaEditorEdits || (input.Content != nil && *input.Content == "") {
+			return nil, errors.New("edit_lua_file requires either content or 1-20 edits")
+		}
+		for _, edit := range input.Edits {
+			if edit.OldText == "" {
+				return nil, errors.New("invalid edit_lua_file edit")
+			}
+		}
 	default:
 		return nil, fmt.Errorf("unknown client tool %q", name)
 	}
@@ -261,11 +327,12 @@ func validateClientToolArguments(name, raw string) (json.RawMessage, error) {
 	return compact.Bytes(), nil
 }
 
-func validateClientToolContinuation(pending database.InferenceClientToolRequest, request chroniclesdk.InferenceClientToolResultRequest, instanceID string) error {
+func validateClientToolContinuation(pending database.InferenceClientToolRequest, request chroniclesdk.InferenceClientToolResultRequest, scopeID string) error {
 	if pending.Status != "pending" || pending.ClientSessionID != request.ClientSessionID || pending.CapabilityID != request.CapabilityID || pending.CapabilityVersion != int32(request.CapabilityVersion) || pending.ScopeType.String != request.ScopeType || pending.ScopeID.String != request.ScopeID {
 		return errClientToolMismatch
 	}
-	if pending.ScopeType.String != "instance" || pending.ScopeID.String != instanceID {
+	definition, ok := clientCapabilities[pending.CapabilityID]
+	if !ok || pending.ScopeType.String != definition.ScopeType || pending.ScopeID.String != scopeID {
 		return errClientToolMismatch
 	}
 	if pending.StateRevision.Valid {

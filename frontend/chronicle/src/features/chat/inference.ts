@@ -50,6 +50,27 @@ export function buildInstanceAnalystRunRequest(
   };
 }
 
+export function buildLuaWorkshopRunRequest(
+  input: CreateChatRunRequestInput,
+  selection: InferenceSelection,
+  debug = false,
+): FrontendInferenceRunRequest {
+  const message = input.messages.at(-1);
+  if (!message || message.role !== "user") {
+    throw new Error("A Lua workshop run requires a new user message.");
+  }
+  return {
+    run_id: input.runId,
+    ...(input.client ? { client: input.client } : {}),
+    connection_id: selection.connectionId,
+    model: selection.modelId,
+    assistant_id: "lua-workshop",
+    ...(debug ? { debug: true } : {}),
+    thread_id: input.threadId,
+    message: toInferenceMessage(message),
+  };
+}
+
 export function toInferenceMessage(message: ChatMessage): InferenceMessage {
   return { id: message.id, role: message.role, content: message.content };
 }

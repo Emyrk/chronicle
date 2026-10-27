@@ -19,6 +19,8 @@ export function Layout() {
   const hideChrome = useHideSiteChrome();
   const location = useLocation();
   const isInstancePage = location.pathname.startsWith("/instances/");
+  // The Lua workshop embeds its own project chat.
+  const hasPageChat = isInstancePage || /^\/lua-projects\/[^/]+\/edit$/.test(location.pathname);
 
   return (
     <TooltipProvider>
@@ -35,7 +37,7 @@ export function Layout() {
         </Suspense>
       </main>
       {!hideChrome && <Footer />}
-      {!hideChrome && !isInstancePage && <GlobalSiteHelpChat />}
+      {!hideChrome && !hasPageChat && <GlobalSiteHelpChat />}
       <Toaster />
     </TooltipProvider>
   );
