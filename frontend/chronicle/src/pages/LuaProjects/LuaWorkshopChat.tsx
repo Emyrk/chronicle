@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
-import { LoaderCircle, Sparkles } from "lucide-react"
+import { Code2, LoaderCircle, Sparkles } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/useAuth"
 import { ChatPanel } from "@/features/chat/ChatPanel"
 import { AssistantConfiguration, ConnectRequiredAction } from "@/features/chat/InferenceChats"
@@ -39,7 +40,11 @@ function EmptyState({ onPick }: { onPick: (text: string) => void }) {
 }
 
 /** Durable per-project chat. Tools come from the page's lua-editor capability. */
-export function LuaWorkshopChat({ projectId, projectName, windowControls }: { projectId: string; projectName: string; windowControls?: React.ReactNode }) {
+export function LuaWorkshopChat({ projectId, projectName, windowControls, onShowCode }: {
+  projectId: string; projectName: string; windowControls?: React.ReactNode
+  /** Set while chat holds the main area; lets users without chat bring the code there instead. */
+  onShowCode?: () => void
+}) {
   const { session, isAuthenticated } = useAuth()
   const permission = useInferencePermission(isAuthenticated)
   const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed)
@@ -77,10 +82,15 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls }: { pr
     return buildLuaWorkshopRunRequest(input, { connectionId: selection.connectionId, modelId: selection.modelId }, debugEnabled)
   }, [debugEnabled, selection.connectionId, selection.modelId])
 
+  const showCodeButton = onShowCode && <Button size="sm" variant="outline" onClick={onShowCode}><Code2 className="size-4" /> Open code here</Button>
+
   if (!isAuthenticated || !permission.allowed || isInferenceServiceUnavailable(selection.error)) {
     return <div className="flex h-full flex-col">
       <div className="flex justify-end border-b border-border p-1.5">{windowControls}</div>
-      <p className="m-auto max-w-xs p-6 text-center text-sm text-muted-foreground">AI chat isn't available for this account. You can still edit and test the code directly.</p>
+      <div className="m-auto flex max-w-xs flex-col items-center gap-4 p-6 text-center">
+        <p className="text-sm text-muted-foreground">AI chat isn't available for this account. You can still edit and test the code directly.</p>
+        {showCodeButton}
+      </div>
     </div>
   }
   if (selection.isLoading) {
@@ -114,7 +124,10 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls }: { pr
         : threadLoading ? "Opening workshop chat"
         : isInferenceAuthorizationError(threadError) ? "Assistant authorization expired" : "Workshop chat unavailable",
       disabledDescription: selection.error?.message ?? threadError?.message ?? (threadLoading ? "Loading conversation history…" : "Connect a provider in account settings, then choose a model."),
-      disabledAction: disconnected ? <ConnectRequiredAction /> : undefined,
+      disabledAction: (disconnected || showCodeButton) && <div className="flex flex-wrap justify-center gap-2">
+        {disconnected && <ConnectRequiredAction />}
+        {!threadLoading && showCodeButton}
+      </div>,
       windowControls,
       className: "h-full",
     }}

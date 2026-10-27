@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, useParams } from "react-router-dom"
-import { ArrowLeftRight, Code2, GitCompare, MessageSquare, PanelRightClose, PanelRightOpen, Undo2 } from "lucide-react"
+import { Code2, GitCompare, Maximize2, MessageSquare, Minimize2, PanelRightClose, PanelRightOpen, Undo2 } from "lucide-react"
 import { useInstance } from "@/api/queries"
 import type { RecentInstancesResponse } from "@/api/typesGenerated"
 import { useInferenceCapability } from "@/features/chat/runtime"
@@ -37,6 +37,7 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 const iconButton = "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+const paneButton = "inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
 
 export default function LuaProjectWorkspacePage() {
   const { projectId = "" } = useParams<{ projectId: string }>()
@@ -157,13 +158,14 @@ export default function LuaProjectWorkspacePage() {
   // Both panes stay mounted; CSS order swaps them so the editor keeps its state and undo history.
   const paneClass = (pane: "chat" | "code") => pane === focus
     ? "order-1 flex min-w-0 flex-1 flex-col"
-    : `order-2 min-w-0 flex-col border-l border-border lg:w-[min(44%,680px)] lg:min-w-[360px] ${sideOpen ? "hidden lg:flex" : "hidden"}`
-  const paneControls = (pane: "chat" | "code") => <>
-    <button type="button" className={iconButton} onClick={swap}
-      title={pane === focus ? `Move ${pane} to the side` : `Move ${pane} to the center`} aria-label={pane === focus ? `Move ${pane} to the side` : `Move ${pane} to the center`}><ArrowLeftRight className="size-4" /></button>
-    {pane !== focus && <button type="button" className={`${iconButton} max-lg:hidden`} onClick={() => setLayout({ sideOpen: false })}
+    : `order-2 min-w-0 flex-col border-l-2 border-foreground/25 bg-black/20 lg:w-[min(44%,680px)] lg:min-w-[360px] ${sideOpen ? "hidden lg:flex" : "hidden"}`
+  const paneControls = (pane: "chat" | "code") => <div className="flex items-center gap-1 max-lg:hidden">
+    {pane === focus
+      ? <button type="button" className={paneButton} onClick={swap} title={`Move ${pane} to the side panel`}><Minimize2 className="size-3.5" /> Move to side</button>
+      : <button type="button" className={`${paneButton} border-primary/50 text-foreground`} onClick={swap} title={`Move ${pane} to the main area`}><Maximize2 className="size-3.5" /> Open in center</button>}
+    {pane !== focus && <button type="button" className={iconButton} onClick={() => setLayout({ sideOpen: false })}
       title={`Hide ${pane}`} aria-label={`Hide ${pane}`}><PanelRightClose className="size-4" /></button>}
-  </>
+  </div>
   const aiEditCurrent = !!aiEdit && copy?.revision === aiEdit.revision
 
   return <div className="flex flex-col border-b border-border lg:h-[calc(100dvh-70px)] lg:min-h-[560px]">
@@ -186,7 +188,8 @@ export default function LuaProjectWorkspacePage() {
     <div className="flex min-h-[70vh] flex-1 lg:min-h-0">
       <section className={paneClass("chat")} aria-label="Workshop chat">
         <Suspense fallback={<p role="status" className="p-4 text-sm text-muted-foreground">Loading chat…</p>}>
-          <LuaWorkshopChat projectId={project.id} projectName={project.name} windowControls={paneControls("chat")} />
+          <LuaWorkshopChat projectId={project.id} projectName={project.name} windowControls={paneControls("chat")}
+            onShowCode={focus === "chat" ? swap : undefined} />
         </Suspense>
       </section>
       <section className={paneClass("code")} aria-label="Code and preview">
