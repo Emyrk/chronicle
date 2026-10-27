@@ -110,6 +110,17 @@ func (s *Service) Start(ctx context.Context) error {
 	riverqueue.AddWorker(q, chron.NewWorkerRegressionSnapshot())
 	if !bot.Disabled() {
 		bot.SetQueue(q)
+		riverqueue.AddWorker(q, bot.NewWorkerDispatchEntitlementRoleAudits())
+		q.AddPeriodicJob(
+			river.NewPeriodicJob(
+				river.PeriodicInterval(24*time.Hour),
+				func() (river.JobArgs, *river.InsertOpts) {
+					return chroniclebot.ArgsDispatchEntitlementRoleAudits{}, nil
+				},
+				&river.PeriodicJobOpts{ID: "discord-entitlement-role-audit", RunOnStart: true},
+			),
+		)
+		riverqueue.AddWorker(q, bot.NewWorkerSyncEntitlementRoles())
 		riverqueue.AddWorker(q, bot.NewWorkerSyncDiscordUser())
 		riverqueue.AddWorker(q, bot.NewWorkerNotifyApplication())
 		riverqueue.AddWorker(q, bot.NewWorkerNotifyAdmin())
@@ -143,6 +154,8 @@ func (s *Service) Start(ctx context.Context) error {
 	billingService.Billing.SetSubscriptionChangeNotifier(func(ctx context.Context, change billing.SubscriptionChangeNotification) error {
 		return chroniclebot.EnqueueAdminNotification(ctx, q, bot, billingSubscriptionNotificationArgs(serviceaccessurl.AccessURL(s.broker), change))
 	})
+
+	billingService.Billing.SetDiscordRoleSyncEnqueuer(bot.EnqueueEntitlementRoleSync)
 
 	// Register character cosmetic audits. The daily dispatcher repairs missed
 	// event-driven audits without producing a deployment-time burst.

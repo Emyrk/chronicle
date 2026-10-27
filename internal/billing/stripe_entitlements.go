@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/paidtier"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stripe/stripe-go/v87"
@@ -63,6 +64,19 @@ func (s *Service) syncStripeEntitlements(ctx context.Context, customerID string)
 	if s.runEntitlementTransaction == nil {
 		return fmt.Errorf("billing entitlement transactions are not configured")
 	}
+	previousTiers := make(map[uuid.UUID]string, 2)
+	if s.discordRoleSyncEnqueuer != nil {
+		for _, owner := range []uuid.UUID{persistedOwner, userID} {
+			if owner == uuid.Nil {
+				continue
+			}
+			rows, err := s.store.ListBillingEntitlementsByUserID(ctx, owner)
+			if err != nil {
+				return fmt.Errorf("read previous billing tier for user %s: %w", owner, err)
+			}
+			previousTiers[owner] = paidtier.Effective(rows)
+		}
+	}
 	if err := s.runEntitlementTransaction(ctx, func(tx EntitlementTransaction) error {
 		if persistedOwner != uuid.Nil && persistedOwner != userID {
 			if err := revokeAllStripeEntitlements(ctx, tx, persistedOwner); err != nil {
@@ -107,6 +121,19 @@ func (s *Service) syncStripeEntitlements(ctx context.Context, customerID string)
 		return nil
 	}); err != nil {
 		return err
+	}
+	if s.discordRoleSyncEnqueuer != nil {
+		for owner, previousTier := range previousTiers {
+			rows, err := s.store.ListBillingEntitlementsByUserID(ctx, owner)
+			if err != nil {
+				return fmt.Errorf("read updated billing tier for user %s: %w", owner, err)
+			}
+			if paidtier.Effective(rows) != previousTier {
+				if err := s.discordRoleSyncEnqueuer(ctx, owner); err != nil {
+					return fmt.Errorf("enqueue Discord tier role sync for user %s: %w", owner, err)
+				}
+			}
+		}
 	}
 	if s.cosmeticAuditEnqueuer != nil {
 		_ = s.cosmeticAuditEnqueuer(ctx, userID)

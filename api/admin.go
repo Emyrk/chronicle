@@ -239,6 +239,10 @@ func (a *API) AdminResyncUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := a.Opts.Bot.EnqueueEntitlementRoleSync(r.Context(), userID); err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
 	_ = cosmetics.EnqueueUserAudit(r.Context(), a.Queues, userID)
 
 	// Fetch updated user
