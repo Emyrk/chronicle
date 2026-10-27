@@ -11,6 +11,7 @@ describe("seoProductName", () => {
     [["vanilla", "octowow"], "OctoWoW"],
     [["vanilla", "capybara"], "CapybaraCraft"],
     [["vanilla", "ravencraft"], "Ravencraft"],
+    [["vanilla", "sunreach"], "Sun Reach"],
   ])("maps %j to %s", (flavor, expected) => {
     expect(seoProductName(flavor)).toBe(expected);
   });
