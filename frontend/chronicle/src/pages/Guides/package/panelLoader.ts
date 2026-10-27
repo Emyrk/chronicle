@@ -2,7 +2,7 @@ import { unzip, type Unzipped } from "fflate"
 import { inspectArchive, normalizeExtractedFiles } from "./archive"
 import { normalizePackagePath } from "./paths"
 import { isReservedLuaPath } from "../runtime/trustedModules"
-import type { PanelStream } from "../runtime/panelEvents"
+import { PANEL_STREAM_SCOPES, type PanelStream, type PanelStreamScope } from "../runtime/panelEvents"
 import type { GuideCapability } from "../protocol/types"
 
 export interface PanelPackage {
@@ -10,6 +10,10 @@ export interface PanelPackage {
   entrypoint: string
   sources: Record<string, string>
   streams: PanelStream[]
+  /** project.json `stream_scope`; "selection" when omitted. */
+  streamScope: PanelStreamScope
+  /** project.json `max_events`: the panel's own replay bound. Omitted means every event in scope. */
+  maxEvents?: number
   capabilities: GuideCapability[]
   assets: ReadonlyMap<string, Uint8Array>
 }
@@ -55,6 +59,10 @@ export async function loadPanelPackage(bytes: Uint8Array): Promise<PanelPackage>
   if (capabilities.some((cap) => !VALID_CAPS.has(cap))) throw new Error("unsupported panel capability")
   const streams = names(data.streams, "streams")
   if (streams.some((stream) => !STREAM_SET.has(stream))) throw new Error("unsupported panel stream")
+  const streamScope = data.stream_scope ?? "selection"
+  if (!PANEL_STREAM_SCOPES.includes(streamScope as PanelStreamScope)) throw new Error("unsupported panel stream scope")
+  const maxEvents = data.max_events
+  if (maxEvents !== undefined && (typeof maxEvents !== "number" || !Number.isSafeInteger(maxEvents) || maxEvents < 1)) throw new Error("invalid panel max_events")
   const assets = names(data.assets, "assets").map((asset) => normalizePackagePath(asset))
   const assetSet = new Set(assets)
   if (assetSet.size !== assets.length) throw new Error("duplicate panel asset")
@@ -70,5 +78,5 @@ export async function loadPanelPackage(bytes: Uint8Array): Promise<PanelPackage>
     } else if (path !== "project.json") throw new Error(`undeclared panel file: ${path}`)
   }
   if (assetFiles.size !== assets.length) throw new Error("missing panel asset")
-  return { name: data.name, entrypoint, sources, streams: streams as PanelStream[], capabilities: capabilities as GuideCapability[], assets: assetFiles }
+  return { name: data.name, entrypoint, sources, streams: streams as PanelStream[], streamScope: streamScope as PanelStreamScope, ...(maxEvents !== undefined && { maxEvents }), capabilities: capabilities as GuideCapability[], assets: assetFiles }
 }

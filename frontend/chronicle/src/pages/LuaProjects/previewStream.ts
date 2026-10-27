@@ -1,6 +1,4 @@
-const DAMAGE_LIMIT = 32_000_000
-
-async function readBounded(stream: ReadableStream<Uint8Array>, maxBytes: number, signal: AbortSignal): Promise<Uint8Array> {
+async function readAll(stream: ReadableStream<Uint8Array>, signal: AbortSignal): Promise<Uint8Array> {
   const reader = stream.getReader()
   const cancel = () => { void reader.cancel().catch(() => {}) }
   signal.addEventListener("abort", cancel, { once: true })
@@ -13,7 +11,6 @@ async function readBounded(stream: ReadableStream<Uint8Array>, maxBytes: number,
       signal.throwIfAborted()
       if (done) break
       total += value.byteLength
-      if (total > maxBytes) throw new Error("Damage stream exceeds the browser preview limit")
       chunks.push(value)
     }
   } finally {
@@ -27,16 +24,13 @@ async function readBounded(stream: ReadableStream<Uint8Array>, maxBytes: number,
   return result
 }
 
-/** Fetches authorized event bytes, bounding both transport and expanded data before preview. */
-export async function fetchPreviewDamage(instanceId: string, { signal, maxBytes }: { signal: AbortSignal; maxBytes: number }): Promise<Uint8Array> {
-  const limit = Math.min(maxBytes, DAMAGE_LIMIT)
+/** Fetches the instance's authorized damage event bytes (gunzipping if needed) for the browser preview. */
+export async function fetchPreviewDamage(instanceId: string, { signal }: { signal: AbortSignal }): Promise<Uint8Array> {
   const response = await fetch(`/api/v1/raidlogs/instances/${encodeURIComponent(instanceId)}/events/damage`, { signal, credentials: "same-origin" })
   if (!response.ok) throw new Error(`Damage events unavailable (${response.status})`)
   if (!response.body) throw new Error("Streaming damage events are unavailable in this browser")
-  const size = Number(response.headers.get("content-length"))
-  if (Number.isFinite(size) && size > limit) throw new Error("Damage stream exceeds the browser preview limit")
-  const bytes = await readBounded(response.body, limit, signal)
+  const bytes = await readAll(response.body, signal)
   if (bytes[0] !== 0x1f || bytes[1] !== 0x8b) return bytes
   if (typeof DecompressionStream === "undefined") throw new Error("Gzip decompression is unavailable in this browser")
-  return readBounded(new Blob([new Uint8Array(bytes)]).stream().pipeThrough(new DecompressionStream("gzip")), limit, signal)
+  return readAll(new Blob([new Uint8Array(bytes)]).stream().pipeThrough(new DecompressionStream("gzip")), signal)
 }

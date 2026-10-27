@@ -71,3 +71,11 @@ func TestLuaEditorContinuationIsBoundToProjectScope(t *testing.T) {
 	require.NoError(t, validateClientToolContinuation(pending, request, "project-1"))
 	require.ErrorIs(t, validateClientToolContinuation(pending, request, "project-2"), errClientToolMismatch)
 }
+
+func TestLuaWorkshopPromptIncludesAPIReference(t *testing.T) {
+	t.Parallel()
+	system := assistants["lua-workshop"].System
+	for _, want := range []string{"# Addon API reference", "## Events", "Chronicle.GetUnit", "## Limits", "chronicle.v1.ui"} {
+		require.Contains(t, system, want)
+	}
+}

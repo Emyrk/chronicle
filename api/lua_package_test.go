@@ -81,6 +81,9 @@ func TestCanonicalLuaZIP(t *testing.T) {
 	withDamage := strings.Replace(luaTestManifest, `"streams":[]`, `"streams":["damage"]`, 1)
 	_, err = canonicalLuaZIP(bytes.NewReader(luaTestTar(t, luaTestEntry("main.lua", "return {}"), luaTestEntry("project.json", withDamage))), "panel", "Example", "example")
 	require.NoError(t, err)
+	wholeInstance := strings.Replace(withDamage, `"assets":[]`, `"stream_scope":"instance","max_events":2000000,"assets":[]`, 1)
+	_, err = canonicalLuaZIP(bytes.NewReader(luaTestTar(t, luaTestEntry("main.lua", "return {}"), luaTestEntry("project.json", wholeInstance))), "panel", "Example", "example")
+	require.NoError(t, err)
 	// Tar header ordering, timestamps and modes never affect package identity.
 	reversed := luaTestTar(t, entries[1], entries[0])
 	same, err := canonicalLuaZIP(bytes.NewReader(reversed), "panel", "Example", "example")
@@ -196,6 +199,9 @@ func TestCanonicalLuaZIPRejectsOversizeAndManifest(t *testing.T) {
 		{"wrong kind", strings.Replace(luaTestManifest, `"panel"`, `"guide"`, 1), nil},
 		{"unsupported capability", strings.Replace(luaTestManifest, `"ui"`, `"network"`, 1), nil},
 		{"stream", strings.Replace(luaTestManifest, `"streams":[]`, `"streams":["heal"]`, 1), nil},
+		{"stream scope", strings.Replace(luaTestManifest, `"assets":[]`, `"stream_scope":"everything","assets":[]`, 1), nil},
+		{"max events", strings.Replace(luaTestManifest, `"assets":[]`, `"max_events":0,"assets":[]`, 1), nil},
+		{"fractional max events", strings.Replace(luaTestManifest, `"assets":[]`, `"max_events":1.5,"assets":[]`, 1), nil},
 		{"missing asset", strings.Replace(luaTestManifest, `"assets":[]`, `"assets":["missing.png"]`, 1), nil},
 		{"oversized asset", strings.Replace(luaTestManifest, `"assets":[]`, `"assets":["large.png"]`, 1), []struct {
 			name    string

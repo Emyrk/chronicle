@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react"
 import { Compartment, EditorState } from "@codemirror/state"
 import { EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection } from "@codemirror/view"
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands"
@@ -9,7 +9,6 @@ import { uploadDraft, type LuaProject } from "./api"
 import { luaHighlightStyle } from "./luaHighlight"
 
 const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
 
 const maxZipBytes = 8 * 1024 * 1024
 
@@ -75,7 +74,14 @@ function LuaCodeMirror({ value, onChange, disabled }: { value: string; onChange:
   return <div ref={container} className="h-full overflow-hidden" role="group" aria-label="main.lua source editor" />
 }
 
-export type LuaWorkingCopy = { source: string; manifest: string; revision: number; dirty: boolean; valid: boolean; validation: string }
+export type LuaWorkingCopy = {
+  source: string; manifest: string; revision: number; dirty: boolean; valid: boolean; validation: string
+  /** A private draft exists on the server for this working copy. */
+  saved: boolean
+  saving: boolean
+}
+/** Lets the page save from anywhere (header, publish) while the editor keeps owning its draft baseline. */
+export type LuaSourceEditorHandle = { save(): Promise<{ ok: boolean; error?: string }> }
 /** Replaces working-copy files if the revision still matches; used by AI tools and undo. */
 export type LuaSourceProposal = { id: string; files: EditorFiles; expectedRevision: number }
 export type LuaSourceEditorProps = {
@@ -86,10 +92,11 @@ export type LuaSourceEditorProps = {
   onProposalResult?: (id: string, applied: boolean, revision: number) => void
   /** Rendered in the status bar, e.g. the startup check. */
   footer?: ReactNode
+  handleRef?: Ref<LuaSourceEditorHandle>
 }
 
 /** Lazy-load this component from the route: importing it loads the CodeMirror bundle. */
-export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSource, onProposalResult, footer }: LuaSourceEditorProps) {
+export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSource, onProposalResult, footer, handleRef }: LuaSourceEditorProps) {
   const [files, setFiles] = useState<EditorFiles | null>(null)
   const [baseline, setBaseline] = useState<EditorFiles | null>(null)
   const [loading, setLoading] = useState(true)
@@ -143,9 +150,9 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
   useEffect(() => {
     onWorkingCopyRef.current?.(files && !loading ? {
       source: files.lua, manifest: files.manifest, revision: localRevision.current,
-      dirty, valid: !validation && !error, validation: validation || error,
+      dirty, valid: !validation && !error, validation: validation || error, saved: !!baseline, saving,
     } : null)
-  }, [files, loading, dirty, validation, error])
+  }, [files, loading, dirty, validation, error, baseline, saving])
 
   useEffect(() => {
     if (!proposedSource || !files || loading || handledProposal.current === proposedSource.id) return
@@ -165,8 +172,11 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
     setFiles(current => current ? { ...current, [field]: value } : current)
   }
 
-  async function save() {
-    if (!files || !dirty || saving || validation) return
+  async function save(): Promise<{ ok: boolean; error?: string }> {
+    if (!files || loading) return { ok: false, error: "The editor is still loading." }
+    if (validation) return { ok: false, error: validation }
+    if (!dirty) return { ok: true }
+    if (saving) return { ok: false, error: "A save is already in progress." }
     setSaving(true); setError(""); setNotice("")
     try {
       const archive = buildEditorTar(project, files)
@@ -174,36 +184,29 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
       setBaseline(files)
       setNotice("Private draft saved. It has not been run or published.")
       await onUploaded(true)
+      return { ok: true }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Draft upload failed.")
+      let message = reason instanceof Error ? reason.message : "Draft upload failed."
       if (reason instanceof Error && "status" in reason && reason.status === 409) {
-        setError("Project revision changed. Your edits are preserved. Reload the project and compare before saving again.")
+        message = "Project revision changed. Your edits are preserved. Reload the project and compare before saving again."
         await onUploaded(false).catch(() => {})
       }
+      setError(message)
+      return { ok: false, error: message }
     } finally { setSaving(false) }
   }
+  const saveRef = useRef(save)
+  saveRef.current = save
+  useImperativeHandle(handleRef, () => ({ save: () => saveRef.current() }), [])
 
-  const status = loading ? "Loading" : !baseline ? "Never saved" : dirty ? "Unsaved changes" : "Saved"
   const message = error || validation
-  return <section aria-label="Lua source editor" className="flex h-full min-h-0 flex-col bg-background"
-    onKeyDown={event => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); void save() }
-    }}>
+  return <section aria-label="Lua source editor" className="flex h-full min-h-0 flex-col bg-background">
     <div className="flex items-center gap-2 border-b border-border bg-card/60 pr-2">
       {files && project.kind === "panel" && <div className="flex self-stretch" role="tablist" aria-label="Project files">
         {(["lua", "manifest"] as const).map(tab => <button key={tab} id={`lua-editor-tab-${tab}`} type="button" role="tab" aria-selected={active === tab} aria-controls={`lua-editor-panel-${tab}`}
           className={`-mb-px border-b-2 border-r border-r-border px-4 py-2 font-mono text-xs ${focusRing} ${active === tab ? "border-b-primary bg-background text-foreground" : "border-b-transparent text-muted-foreground hover:text-foreground"}`}
           onClick={() => setActive(tab)}>{tab === "lua" ? "main.lua" : "project.json"}</button>)}
       </div>}
-      <div className="ml-auto flex items-center gap-3 py-1.5">
-        <span role="status" className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
-          <span aria-hidden className={`size-2 rounded-full ${loading ? "bg-muted-foreground" : dirty ? "bg-amber-400" : "bg-emerald-500"}`} />{status}
-        </span>
-        <button type="button" disabled={!dirty || !!validation || saving || loading}
-          title={`Upload a private draft at revision ${project.revision}. Does not run or publish code. (${isMac ? "⌘" : "Ctrl+"}S)`}
-          className={`whitespace-nowrap rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`}
-          onClick={() => void save()}>{saving ? "Saving…" : "Save draft"}</button>
-      </div>
     </div>
     <div className="relative min-h-0 flex-1">
       {loading ? <p role="status" className="p-4 text-sm text-muted-foreground">Loading source…</p> : files && project.kind === "panel" ? <>
@@ -218,7 +221,7 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
     <div className="flex min-h-8 items-center gap-3 border-t border-border bg-card/60 px-3 py-1 text-xs">
       {message ? <p role="alert" className="text-destructive">{message}</p>
         : notice ? <p role="status" className="text-emerald-400">{notice}</p>
-        : <p className="text-muted-foreground">{active === "manifest" ? "Identity, entrypoint and assets are fixed; capabilities and streams are editable." : "Lua 5.1 · private working copy"}</p>}
+        : <p className="text-muted-foreground">{active === "manifest" ? "Identity, entrypoint and assets are fixed; capabilities and streams are editable." : "Lua 5.3 · private working copy"}</p>}
       <div className="ml-auto flex min-w-0 shrink-0 items-center gap-3">{footer}<span className="font-mono text-muted-foreground">rev {project.revision}</span></div>
     </div>
   </section>

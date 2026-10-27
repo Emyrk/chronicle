@@ -116,6 +116,7 @@ const APIExplorer = lazy(() => import("./pages/APIExplorer/APIExplorer").then(({
 const LuaProjectsPage = lazy(() => import("./pages/LuaProjects/LuaProjectsPage").then(({ LuaProjectsPage }) => ({ default: LuaProjectsPage })))
 const LuaProjectPage = lazy(() => import("./pages/LuaProjects/LuaProjectsPage").then(({ LuaProjectPage }) => ({ default: LuaProjectPage })))
 const LuaProjectWorkspacePage = lazy(() => import("./pages/LuaProjects/LuaProjectWorkspacePage"))
+const LuaPanelApiPage = lazy(() => import("./pages/LuaProjects/LuaPanelApiPage"))
 const CustomPanelsPage = lazy(() => import("./pages/Tools/CustomPanelsPage").then(({ CustomPanelsPage }) => ({ default: CustomPanelsPage })))
 const ToolsPage = lazy(() => import("./pages/Tools/ToolsPage").then(({ ToolsPage }) => ({ default: ToolsPage })))
 const SpeedrunningPage = lazy(() => import("./pages/Speedrunning/SpeedrunningPage").then(({ SpeedrunningPage }) => ({ default: SpeedrunningPage })))
@@ -130,6 +131,12 @@ const BACKEND_PATHS = ["/saffron", "/river", "/api", "/auth"]
 function LegacyYouTubeSyncRedirect() {
   const location = useLocation()
   return <Navigate to={`/youtube-sync-v3${location.search}${location.hash}`} replace />
+}
+
+/** Moves a renamed section (e.g. /lua-projects → /addons), keeping the rest of the path, query and hash. */
+function RenamedPathRedirect({ from, to }: { from: string; to: string }) {
+  const location = useLocation()
+  return <Navigate to={`${to}${location.pathname.slice(from.length)}${location.search}${location.hash}`} replace />
 }
 
 function CatchAllRoute() {
@@ -183,10 +190,13 @@ function App() {
         <Route path="/apply/:id" element={<ApplicationPage />} />
         <Route path="/census" element={<CensusPage />} />
         <Route path="/tools" element={<ToolsPage />} />
-        <Route path="/lua-projects" element={<LuaProjectsPage />} />
-        <Route path="/lua-projects/:projectId" element={<LuaProjectPage />} />
-        <Route path="/lua-projects/:projectId/edit" element={<LuaProjectWorkspacePage />} />
-        <Route path="/tools/custom-panels" element={<CustomPanelsPage />} />
+        <Route path="/addons" element={<LuaProjectsPage />} />
+        <Route path="/addons/api" element={<LuaPanelApiPage />} />
+        <Route path="/addons/:projectId" element={<LuaProjectPage />} />
+        <Route path="/addons/:projectId/edit" element={<LuaProjectWorkspacePage />} />
+        <Route path="/lua-projects/*" element={<RenamedPathRedirect from="/lua-projects" to="/addons" />} />
+        <Route path="/tools/developer-panels" element={<CustomPanelsPage />} />
+        <Route path="/tools/custom-panels" element={<RenamedPathRedirect from="/tools/custom-panels" to="/tools/developer-panels" />} />
         <Route path="/developers/api" element={<APIExplorer />} />
         <Route path="/debug/proto" element={<ProtoDecode />} />
         <Route path="/admin" element={<AdminLayout />}>
@@ -293,7 +303,8 @@ function App() {
           <Route path="notifications" element={<NotificationSettings />} />
           <Route path="privacy" element={<PrivacySettings />} />
           <Route path="appearance" element={<AppearanceSettings />} />
-          <Route path="custom-panels" element={<CustomPanelSettings />} />
+          <Route path="developer-panels" element={<CustomPanelSettings />} />
+          <Route path="custom-panels" element={<Navigate to="/account/developer-panels" replace />} />
           <Route path="layout-book" element={<LayoutBookSettings />} />
           <Route path="layout-lab" element={<LayoutLabSettings />} />
         </Route>

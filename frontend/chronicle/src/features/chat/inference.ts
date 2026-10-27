@@ -57,7 +57,7 @@ export function buildLuaWorkshopRunRequest(
 ): FrontendInferenceRunRequest {
   const message = input.messages.at(-1);
   if (!message || message.role !== "user") {
-    throw new Error("A Lua workshop run requires a new user message.");
+    throw new Error("An Addon Workshop run requires a new user message.");
   }
   return {
     run_id: input.runId,

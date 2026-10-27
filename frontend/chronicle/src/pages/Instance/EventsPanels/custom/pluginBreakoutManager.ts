@@ -85,9 +85,9 @@ export function createPluginBreakoutManager({
 
   return {
     open(options) {
-      if (disposed) throw new Error("Custom panel is no longer mounted.");
+      if (disposed) throw new Error("Developer panel is no longer mounted.");
       if (entries.size >= CUSTOM_PANEL_MAX_BREAKOUTS)
-        throw new Error(`Custom panels may open at most ${CUSTOM_PANEL_MAX_BREAKOUTS} breakouts at once.`);
+        throw new Error(`Developer panels may open at most ${CUSTOM_PANEL_MAX_BREAKOUTS} breakouts at once.`);
 
       const normalized = normalizePluginBreakoutOptions(
         options,

@@ -34,13 +34,13 @@ export function LuaDraftPreview({ projectId, draftHash }: LuaDraftPreviewProps) 
   useEffect(() => () => { for (const url of assets.values()) URL.revokeObjectURL(url); }, [assets]);
 
   if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("safe") === "1") {
-    return <p className="text-sm text-muted-foreground">Lua preview is disabled by ?safe=1.</p>;
+    return <p className="text-sm text-muted-foreground">Addon preview is disabled by ?safe=1.</p>;
   }
   if (draft.isPending) return <p className="text-sm text-muted-foreground">Loading private draft…</p>;
   if (draft.isError) return <p role="alert" className="text-sm text-destructive">{draft.error.message}</p>;
   return <div className="space-y-2">
     <p className="text-xs text-muted-foreground">Worker preview. Instance events are unavailable here; test data-driven behavior from an installed Unstable panel.</p>
     <LuaPanelHost key={draftHash} entrypoint={draft.data.entrypoint} sources={draft.data.sources} capabilities={draft.data.capabilities}
-      streams={draft.data.streams} assets={assets} />
+      streams={draft.data.streams} streamScope={draft.data.streamScope} maxEvents={draft.data.maxEvents} assets={assets} />
   </div>;
 }
