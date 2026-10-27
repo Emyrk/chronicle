@@ -7,6 +7,7 @@ import {
   dungeonMeshPlacement,
   dungeonMeshUrl,
   floorBelow,
+  floorWithoutLoggedHeight,
   FloorHeightCache,
   isMeshOnlyInstance,
   medianHeight,
@@ -214,6 +215,20 @@ describe("floorBelow", () => {
   it("misses when nothing lies below the top", () => {
     expect(floorBelow(() => null, TOP, 3)).toBeNull();
     expect(floorBelow(() => null, TOP, undefined)).toBeNull();
+  });
+});
+
+describe("floorWithoutLoggedHeight", () => {
+  it("uses the lowest surface for normalized no-Z positions", () => {
+    expect(floorWithoutLoggedHeight(20, 0, true)).toBe(0);
+  });
+
+  it("keeps the highest surface for world-coordinate positions", () => {
+    expect(floorWithoutLoggedHeight(20, 0, false)).toBe(20);
+  });
+
+  it("falls back to the highest hit when no lower surface is found", () => {
+    expect(floorWithoutLoggedHeight(20, null, true)).toBe(20);
   });
 });
 

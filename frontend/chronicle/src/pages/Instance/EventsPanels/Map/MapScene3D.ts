@@ -39,6 +39,7 @@ import {
   dungeonMeshBytes,
   dungeonMeshPlacement,
   floorBelow,
+  floorWithoutLoggedHeight,
   releaseDungeonMeshBytes,
   FloorHeightCache,
   AIRBORNE_YARDS,
@@ -197,8 +198,9 @@ const MESH_PAN_RADIUS_YARDS = FOCUS_RADIUS_YARDS;
 const MESH_FULL_MAP_DISTANCE_FACTOR = 3;
 // The camera stays at least this far (scene units) above the floor beneath it.
 const MESH_CAMERA_CLEARANCE = 0.3;
-// Floor probes drop from this height (scene units), above any cave surface.
+// Floor probes span these scene heights, outside any published dungeon mesh.
 const FLOOR_PROBE_HEIGHT = 100;
+const FLOOR_PROBE_BOTTOM = -100;
 // The camera direction the mesh starts from: steeper than ANGLED_OFFSET so
 // the rock between the camera and a sunken chamber hides less of the fight.
 const MESH_ANGLED_OFFSET = new THREE.Vector3(0, 1.6, 0.75);
@@ -764,6 +766,12 @@ export class MapScene3D {
   // Scene point of `focus` at its floor height while the mesh is on.
   private focusCentre: THREE.Vector3 | null = null;
   private readonly floorHeights = new FloorHeightCache((x, z, ceiling) => this.sampleFloor(x, z, ceiling));
+  private readonly unitFloorHeights = new FloorHeightCache((x, z, ceiling) => {
+    const highest = this.sampleFloor(x, z, ceiling);
+    if (ceiling !== undefined) return highest;
+    return floorWithoutLoggedHeight(highest, this.sampleLowestFloor(x, z), this.preferLowestUnitFloor);
+  });
+  private preferLowestUnitFloor = false;
   private readonly floorRay = new THREE.Ray();
   private constraining = false;
   // The hovered unit's nameplate (drawUnitPlate), redrawn when what it shows changes.
@@ -1363,6 +1371,17 @@ export class MapScene3D {
   }
 
   /**
+   * Normalized UI-map logs have no world Z. Prefer the lowest upward-facing
+   * mesh surface for their units so roofs and canopies do not capture them.
+   */
+  setPreferLowestUnitFloor(prefer: boolean) {
+    if (prefer === this.preferLowestUnitFloor) return;
+    this.preferLowestUnitFloor = prefer;
+    this.unitFloorHeights.clear();
+    for (const [guid, object] of this.units) this.placeUnit(guid, object, object.base.x, object.base.z);
+  }
+
+  /**
    * Swaps the tiles for the real dungeon mesh (`request`), loading it on first
    * use, or back to the tiles with `null`. Reports loading / ready / failed
    * through `onDungeonMesh`; a failed load leaves the tiles showing.
@@ -1619,7 +1638,7 @@ export class MapScene3D {
   private placeUnit(guid: string, object: UnitObject, x: number, z: number) {
     const mesh = this.dungeonMesh;
     const loggedZ = object.loggedZ;
-    const floor = mesh ? this.floorHeights.heightAt(guid, x, z, this.probeCeiling(loggedZ, mesh.scale)) : 0;
+    const floor = mesh ? this.unitFloorHeights.heightAt(guid, x, z, this.probeCeiling(loggedZ, mesh.scale)) : 0;
     const logged = mesh && loggedZ !== undefined ? loggedZ * mesh.scale : null;
     const y = mesh && logged !== null && logged - floor > AIRBORNE_YARDS * mesh.scale ? logged : floor;
     object.floorY = floor;
@@ -1676,6 +1695,27 @@ export class MapScene3D {
     return floorBelow((fromY) => this.castFloor(x, z, fromY), FLOOR_PROBE_HEIGHT, ceiling);
   }
 
+  // The lowest upward-facing cave or water surface at (x, z), or null for none.
+  // An upward probe finds the ground before roofs when the log has no height.
+  private sampleLowestFloor(x: number, z: number): number | null {
+    const mesh = this.dungeonMesh;
+    if (!mesh) return 0;
+    let best: number | null = null;
+    for (const cave of mesh.caves) best = this.lowestHit(cave, x, z, THREE.BackSide, best);
+    for (const liquid of mesh.liquids) best = this.lowestHit(liquid, x, z, THREE.DoubleSide, best);
+    return best;
+  }
+
+  private lowestHit(cave: DungeonMeshCave, x: number, z: number, side: THREE.Side, best: number | null): number | null {
+    this.floorRay.origin.set(x, FLOOR_PROBE_BOTTOM, z);
+    this.floorRay.direction.set(0, 1, 0);
+    this.floorRay.applyMatrix4(cave.inverse);
+    const hit = cave.bvh.raycastFirst(this.floorRay, side);
+    if (!hit) return best;
+    const y = this.vector.copy(hit.point).applyMatrix4(cave.mesh.matrixWorld).y;
+    return best === null || y < best ? y : best;
+  }
+
   // The highest cave or water surface below (x, fromY, z), or null for none:
   // a unit swimming near the surface stands on the water, not the lake bed.
   private castFloor(x: number, z: number, fromY: number): number | null {
@@ -1720,6 +1760,7 @@ export class MapScene3D {
     this.routeGroup.visible = !mesh;
     this.meshLight.visible = mesh;
     this.floorHeights.clear();
+    this.unitFloorHeights.clear();
     for (const [guid, object] of this.units) this.placeUnit(guid, object, object.base.x, object.base.z);
     this.updateCameraLimits();
     this.updateUnitScale(true);
@@ -2458,6 +2499,7 @@ export class MapScene3D {
     object.drop?.material.dispose();
     this.units.delete(guid);
     this.floorHeights.delete(guid);
+    this.unitFloorHeights.delete(guid);
     const wobbling = this.wobbling.indexOf(object);
     if (wobbling >= 0) this.wobbling.splice(wobbling, 1);
     const lunging = this.lunging.indexOf(object);

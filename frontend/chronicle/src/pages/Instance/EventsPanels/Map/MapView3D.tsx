@@ -281,6 +281,10 @@ export default function MapView3D({
   }, [floorBounds, frozen, projectSample, worldCoordinates, yardSample]);
 
   useEffect(() => {
+    if (!frozen) sceneRef.current?.setPreferLowestUnitFloor(!worldCoordinates);
+  }, [frozen, worldCoordinates]);
+
+  useEffect(() => {
     if (!frozen) sceneRef.current?.setDungeonMesh(dungeonMesh);
   }, [dungeonMesh, frozen]);
 
