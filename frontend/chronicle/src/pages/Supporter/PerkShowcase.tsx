@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react"
 import type { ReactNode } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import { Activity, Check, Download, FileText, LockKeyhole, Map as MapIcon, Shield, Sparkles, Swords, Timer, Trophy, Users } from "lucide-react"
+import { Activity, Check, Download, FileText, LockKeyhole, Map as MapIcon, Plus, Shield, Sparkles, Swords, Timer, Trophy, Users } from "lucide-react"
 import { COSMETIC_CSS, combineCosmetics } from "@/components/ui/PlayerMetricChart/PlayerCosmetics"
 import { MiniRow } from "@/features/characterCosmetics/CharacterCosmeticsEditor"
 import { TierPill } from "@/components/Supporter/Supporter"
@@ -185,10 +185,13 @@ function FutureVisual() {
   )
 }
 
+// Rounded down from the panel picker (PANEL_CATEGORIES in EventsPanels/PanelSelector.tsx, 57 today)
+// so it stays true as panels are added without importing the panel registry here.
+const PANEL_TYPE_COUNT = "50+"
+
 const FREE_FEATURES = [
   { icon: MapIcon, label: "3D map replays" },
   { icon: Activity, label: "Player timelines" },
-  { icon: Swords, label: "Damage, healing & death panels" },
   { icon: Trophy, label: "Rankings & leaderboards" },
   { icon: Timer, label: "Speedrun boards" },
   { icon: Shield, label: "Guild pages" },
@@ -196,15 +199,28 @@ const FREE_FEATURES = [
   { icon: Sparkles, label: "Talent & gear builders" },
 ]
 
+const FREE_TILE = "flex items-center gap-2 rounded-md border px-2.5 py-2 text-xs"
+
 function FreeVisual() {
   return (
     <ul className="grid grid-cols-2 gap-2">
+      <li className={cn(FREE_TILE, "col-span-2 border-zinc-400/40 bg-zinc-400/10 py-2.5")}>
+        <Swords className="size-5 shrink-0 text-zinc-200" aria-hidden="true" />
+        <span>
+          <span className="font-wow text-base font-bold text-white">{PANEL_TYPE_COUNT} panel types</span>
+          <span className="block text-muted-foreground">Damage, healing, deaths, buffs, dispels, cooldowns, and more</span>
+        </span>
+      </li>
       {FREE_FEATURES.map(({ icon: Icon, label }) => (
-        <li key={label} className="flex items-center gap-2 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs text-zinc-200">
+        <li key={label} className={cn(FREE_TILE, "border-border bg-background/60 text-zinc-200")}>
           <Icon className="size-4 shrink-0 text-zinc-400" aria-hidden="true" />
           {label}
         </li>
       ))}
+      <li className={cn(FREE_TILE, "justify-center border-dashed border-muted-foreground/40 text-muted-foreground")}>
+        <Plus className="size-4 shrink-0" aria-hidden="true" />
+        more
+      </li>
     </ul>
   )
 }
