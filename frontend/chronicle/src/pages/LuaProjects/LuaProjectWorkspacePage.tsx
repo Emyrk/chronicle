@@ -1,17 +1,18 @@
-import { lazy, Suspense, useCallback, useMemo, useRef, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, useParams } from "react-router-dom"
-import { ArrowLeftRight, GitCompare, PanelLeft, PanelRightClose, PanelRightOpen, Undo2 } from "lucide-react"
+import { ArrowLeftRight, GitCompare, PanelLeft, PanelRightClose, PanelRightOpen, Rocket, Save, Undo2 } from "lucide-react"
+import { toast } from "sonner"
 import { useInstance } from "@/api/queries"
 import type { RecentInstancesResponse } from "@/api/typesGenerated"
 import { useInferenceCapability } from "@/features/chat/runtime"
-import { getProject } from "./api"
+import { getProject, publishUnstable, type LuaProject } from "./api"
 import { LuaBrowserTest } from "./LuaBrowserTest"
 import { panelPackageFromWorkingCopy, validateEditorFiles, type EditorFiles } from "./editorFiles"
 import { applyLuaFileEdit, LUA_EDITOR_CAPABILITY, parseLuaFileEdit, type LuaToolFile } from "./luaEditorTools"
 import { fetchPreviewDamage } from "./previewStream"
 import { runStartupCheck } from "./startupCheck"
-import type { LuaSourceProposal, LuaWorkingCopy } from "./LuaSourceEditor"
+import type { LuaSourceEditorHandle, LuaSourceProposal, LuaWorkingCopy } from "./LuaSourceEditor"
 
 const LuaSourceEditor = lazy(() => import("./LuaSourceEditor").then(module => ({ default: module.LuaSourceEditor })))
 const LuaWorkshopChat = lazy(() => import("./LuaWorkshopChat").then(module => ({ default: module.LuaWorkshopChat })))
@@ -35,6 +36,18 @@ function readLayout(): Layout {
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
+}
+
+const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
+
+/** Where the working copy stands relative to the saved draft and the unstable release. */
+function releaseStatus(project: LuaProject, copy: LuaWorkingCopy | null): { label: string; tone: string } {
+  if (!copy) return { label: "Loading…", tone: "bg-muted-foreground" }
+  if (copy.saving) return { label: "Saving…", tone: "bg-sky-400" }
+  if (copy.dirty) return { label: "Unsaved changes", tone: "bg-amber-400" }
+  if (!copy.saved) return { label: "Not saved yet", tone: "bg-muted-foreground" }
+  if (project.unstable?.sha256 === project.draft_sha256) return { label: "Published to unstable", tone: "bg-emerald-500" }
+  return { label: "Draft saved · not published", tone: "bg-sky-400" }
 }
 
 const iconButton = "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -71,6 +84,39 @@ export default function LuaProjectWorkspacePage() {
     await projectQuery.refetch()
   }, [projectQuery])
   const onWorkingCopy = useCallback((next: LuaWorkingCopy | null) => setCopy(next), [])
+  // Save and publish live in the page header so they work from every tab, not just the code editor.
+  const editorHandle = useRef<LuaSourceEditorHandle>(null)
+  const [publishing, setPublishing] = useState(false)
+  const saveDraft = useCallback(async () => {
+    const result = await editorHandle.current?.save() ?? { ok: false, error: "The editor is still loading." }
+    if (!result.ok) toast.error(result.error ?? "Draft upload failed.")
+    return result.ok
+  }, [])
+  const saveDraftRef = useRef(saveDraft)
+  saveDraftRef.current = saveDraft
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); void saveDraftRef.current() }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
+  async function publish() {
+    if (publishing || !copy) return
+    if (!window.confirm(copy.dirty ? "Save your changes and publish them to the public unstable channel?" : "Publish this draft to the public unstable channel?")) return
+    setPublishing(true)
+    try {
+      if (copy.dirty && !await saveDraft()) return
+      const latest = (await projectQuery.refetch()).data
+      if (!latest?.draft_sha256) throw new Error("Save a draft before publishing.")
+      await publishUnstable(latest.id, latest.revision)
+      await projectQuery.refetch()
+      toast.success("Unstable release published. Test it in a real instance layout before promoting it to stable.")
+    } catch (error) {
+      toast.error(errorMessage(error, "Publish failed."))
+      await projectQuery.refetch().catch(() => {})
+    } finally { setPublishing(false) }
+  }
   const [layout, setLayoutState] = useState(readLayout)
   const [sideTab, setSideTab] = useState<"pane" | "preview">("pane")
   const [aiEdit, setAiEdit] = useState<AiEdit | null>(null)
@@ -175,6 +221,10 @@ export default function LuaProjectWorkspacePage() {
     <ArrowLeftRight className="size-3.5" /> Swap code &amp; chat</button>
   const mainControls = (pane: "chat" | "code") => pane === focus ? <span className="max-lg:hidden">{swapButton}</span> : undefined
   const aiEditCurrent = !!aiEdit && copy?.revision === aiEdit.revision
+  const status = releaseStatus(project, copy)
+  const published = !!copy && !copy.dirty && copy.saved && project.unstable?.sha256 === project.draft_sha256
+  const canSave = !!copy && copy.dirty && copy.valid && !copy.saving && !publishing
+  const canPublish = !!copy && copy.valid && !copy.saving && !publishing && !published && (copy.dirty || !!project.draft_sha256)
 
   return <div className="flex flex-col border-b border-border lg:h-[calc(100dvh-70px)] lg:min-h-[560px]">
     <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-4 py-2">
@@ -183,8 +233,21 @@ export default function LuaProjectWorkspacePage() {
       <span aria-hidden className="h-4 w-px bg-border" />
       <h1 className="text-base font-semibold">{project.name}</h1>
       <span className="font-mono text-xs text-muted-foreground">{project.slug}</span>
-      {copy?.dirty && focus === "chat" && (!sideOpen || sideTab === "preview") && <span className="rounded-full border border-amber-400/40 px-2 py-0.5 text-[11px] text-amber-300">Unsaved changes</span>}
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex flex-wrap items-center gap-2">
+        <span role="status" className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground" title={copy?.validation || undefined}>
+          <span aria-hidden className={`size-2 rounded-full ${status.tone}`} />{status.label}
+          {copy && !copy.valid && <span className="text-destructive">· invalid</span>}
+        </span>
+        <button type="button" disabled={!canSave} onClick={() => void saveDraft()}
+          title={`Upload a private draft. Does not run or publish code. (${isMac ? "⌘" : "Ctrl+"}S)`}
+          className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${copy?.dirty ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border border-border hover:bg-accent"}`}>
+          <Save className="size-3.5" /> {copy?.saving && !publishing ? "Saving…" : "Save draft"}</button>
+        <button type="button" disabled={!canPublish} onClick={() => void publish()}
+          title={published ? "This draft is already the unstable release." : "Publish the saved draft to the unstable channel. Promote to stable from Releases after testing."}
+          className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${!copy?.dirty && canPublish ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border border-border hover:bg-accent"}`}>
+          <Rocket className="size-3.5" /> {publishing ? "Publishing…" : copy?.dirty ? "Save & publish" : "Publish unstable"}</button>
+      </div>
+      <div className="flex items-center gap-1">
         <span className="lg:hidden">{swapButton}</span>
         {!sideOpen && <button type="button" onClick={() => setLayout({ sideOpen: true })} className="hidden items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs hover:bg-accent lg:inline-flex">
           <PanelRightOpen className="size-3.5" /> Show side panel
@@ -229,7 +292,7 @@ export default function LuaProjectWorkspacePage() {
             </Suspense>
           </div>}
           <Suspense fallback={<p role="status" className="p-4 text-sm text-muted-foreground">Loading code editor…</p>}>
-            <LuaSourceEditor project={project} onUploaded={onUploaded} onWorkingCopy={onWorkingCopy}
+            <LuaSourceEditor handleRef={editorHandle} project={project} onUploaded={onUploaded} onWorkingCopy={onWorkingCopy}
               proposedSource={proposal} onProposalResult={onProposalResult}
               footer={localPanel?.value && <LuaBrowserTest key={`${project.revision}:${copy?.revision}`} panel={localPanel.value} />} />
           </Suspense>
