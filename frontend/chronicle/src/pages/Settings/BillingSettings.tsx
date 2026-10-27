@@ -17,6 +17,7 @@ import {
   type Preset,
 } from "@/components/ui/PlayerMetricChart/PlayerCosmetics"
 import { MiniRow } from "@/features/characterCosmetics/CharacterCosmeticsEditor"
+import { ServerReach } from "@/pages/Supporter/SharedServers"
 import { useAuth } from "@/hooks/useAuth"
 import { cn } from "@/lib/utils"
 import { BadgeDollarSign, Check, CircleCheck, CreditCard, LogIn, Sparkles, XCircle } from "lucide-react"
@@ -477,6 +478,7 @@ function Achievement({ billing }: { billing?: BillingSummary }) {
             {hasTierAccess ? standing : "Chronicle Reputation"}
           </p>
           <p className="mt-0.5 text-sm text-zinc-300">Choose Honored, Revered, or Exalted to support Chronicle.</p>
+          <ServerReach className="mt-2" />
         </div>
         <div className="flex w-16 shrink-0 flex-col items-center gap-1">
           <PointsShield earned={hasTierAccess} />

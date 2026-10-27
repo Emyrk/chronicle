@@ -31,9 +31,11 @@ function renderSupporterOverview(tier: "honored" | "revered") {
   } as BillingSummary
 
   return renderToStaticMarkup(
-    <MemoryRouter>
-      <SupporterOverview billing={billing} panel={<div>Subscription panel</div>} />
-    </MemoryRouter>,
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <SupporterOverview billing={billing} panel={<div>Subscription panel</div>} />
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 
