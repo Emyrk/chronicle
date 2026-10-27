@@ -18,6 +18,8 @@ export interface LuaInstancePreviewProps {
   events: LuaPreviewEventProvider
   /** The previewed instance's units for Chronicle.GetUnit. */
   units?: PanelUnits
+  /** Sends a prompt to the workshop assistant, for the error card's "Ask the assistant" button. */
+  onAskAssistant?: (prompt: string) => void
 }
 
 interface Run { id: number; instanceId: string; panel: PanelPackage; selection: string; encounterIds: readonly string[]; data?: Uint8Array }
@@ -35,7 +37,7 @@ function readAutoPreview(): boolean {
  * Ephemeral browser-only preview. No package lookup, upload or server execution. Runs on click, or
  * with Auto on, after every edit (including AI diffs) and encounter selection change.
  */
-export function LuaInstancePreview({ panel, instanceId, encounterIds, events, units }: LuaInstancePreviewProps) {
+export function LuaInstancePreview({ panel, instanceId, encounterIds, events, units, onAskAssistant }: LuaInstancePreviewProps) {
   const [run, setRun] = useState<Run | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
@@ -142,7 +144,7 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events, un
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {visible && <div className={`overflow-hidden rounded-md border border-border bg-background transition-opacity ${current ? "" : "opacity-60"}`}>
         <LuaPanelHost key={visible.id} entrypoint={visible.panel.entrypoint} sources={visible.panel.sources} streams={visible.panel.streams} streamScope={visible.panel.streamScope}
-          maxEvents={visible.panel.maxEvents} units={units} capabilities={visible.panel.capabilities} damageStream={visible.data} encounterIds={visible.encounterIds} assets={assetUrls} /></div>}
+          maxEvents={visible.panel.maxEvents} units={units} capabilities={visible.panel.capabilities} damageStream={visible.data} encounterIds={visible.encounterIds} assets={assetUrls} onAskAssistant={onAskAssistant} fitContent /></div>}
     </>}
   </section>
 }

@@ -4,6 +4,7 @@ import { applySceneBatch, createInitialScene, UI_ROOT_ID } from "../Guides/proto
 import type { RetainedScene, SceneNode } from "../Guides/protocol/types"
 import type { PanelReplayMetrics } from "../Guides/runtime/panelWorker"
 import type { PanelUnits } from "../Guides/runtime/panelUnits"
+import { explainAddonError, formatAddonError, type AddonPhase } from "../Guides/runtime/addonErrors"
 
 /** The parts of a Worker the runner uses, so tests can drive the worker handler directly. */
 export interface PreviewWorker {
@@ -22,8 +23,10 @@ export interface PreviewRunInput {
 
 export interface PreviewRunResult {
   ok: boolean
-  /** The same message the preview pane shows, e.g. "panel exceeded its max_events (10)". */
+  /** The runtime's error, e.g. "main.lua:151: operation limit exceeded". */
   error?: string
+  /** What the error means and how to fix it, the same explanation the preview pane shows. */
+  explanation?: string
   metrics?: Pick<PanelReplayMetrics, "events" | "encounters" | "totalMs" | "luaMs" | "completeMs" | "uiOperations">
   /** Number of UI objects alive at the end. */
   nodes: number
@@ -104,8 +107,12 @@ export function runPreview(input: PreviewRunInput, signal?: AbortSignal, createW
     if (signal?.aborted) { finish(null); return }
     signal?.addEventListener("abort", abort, { once: true })
     worker.onmessage = ({ data }) => {
-      const message = data as { type?: string; message?: unknown; metrics?: PanelReplayMetrics }
-      if (message?.type === "error") { finish({ ok: false, error: String(message.message ?? "Panel failed") }); return }
+      const message = data as { type?: string; message?: unknown; metrics?: PanelReplayMetrics; phase?: AddonPhase; events?: number }
+      if (message?.type === "error") {
+        const error = String(message.message ?? "Panel failed")
+        finish({ ok: false, error, explanation: formatAddonError(explainAddonError(error, { phase: message.phase, events: message.events })) })
+        return
+      }
       if (message?.type === "progress") { armWatchdog(); return }
       if (message?.type === "damage-complete") {
         const m = message.metrics

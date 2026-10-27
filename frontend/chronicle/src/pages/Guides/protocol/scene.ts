@@ -7,6 +7,8 @@ export const MAX_NESTING = 64
 export const MAX_STRING_LENGTH = 4_096
 export const MAX_ID_LENGTH = 128
 export const MAX_POINTS = 256
+/** Largest content size UIParent:SetSize accepts, in pixels. */
+export const MAX_CANVAS_SIZE = 16_384
 
 const MAP_KINDS = new Set<NodeKind>(["unit", "icon", "map-text", "line", "arrow", "circle", "cone", "polygon"])
 const ANCHORS = new Set(["top-left", "top", "top-right", "left", "center", "right", "bottom-left", "bottom", "bottom-right"])
@@ -191,13 +193,18 @@ export function validateSceneOperation(input: unknown): SceneOperation {
     case "chapter":
       exact(operation, ["op", "chapter"], "chapter operation")
       return { op: "chapter", chapter: id(operation.chapter, "chapter") }
+    case "canvas": {
+      exact(operation, ["op", "width", "height"], "canvas operation")
+      const size = (value: unknown, label: string) => value === null ? null : bounded(value, 1, MAX_CANVAS_SIZE, label)
+      return { op: "canvas", width: size(operation.width, "canvas.width"), height: size(operation.height, "canvas.height") }
+    }
     default:
       throw new SceneValidationError(`unknown operation ${operation.op}`)
   }
 }
 
 export function createInitialScene(): RetainedScene {
-  return Object.freeze({ nodes: new ImmutableMap<string, SceneNode>(), camera: Object.freeze({ x: 0.5, y: 0.5, zoom: 1 }), chapter: null })
+  return Object.freeze({ nodes: new ImmutableMap<string, SceneNode>(), camera: Object.freeze({ x: 0.5, y: 0.5, zoom: 1 }), chapter: null, canvas: Object.freeze({ width: null, height: null }) })
 }
 
 function assertParent(nodes: Map<string, SceneNode>, nodeId: string, kind: NodeKind, parentId: string | null) {
@@ -248,6 +255,7 @@ export function applySceneBatch(scene: RetainedScene, rawOperations: readonly un
   for (const [key, value] of scene.nodes) nodes.set(key, cloneNode(value))
   let camera = { ...scene.camera }
   let chapter = scene.chapter
+  let canvas = scene.canvas
 
   for (const operation of operations) {
     if (operation.op === "camera") {
@@ -256,6 +264,10 @@ export function applySceneBatch(scene: RetainedScene, rawOperations: readonly un
     }
     if (operation.op === "chapter") {
       chapter = operation.chapter
+      continue
+    }
+    if (operation.op === "canvas") {
+      canvas = Object.freeze({ width: operation.width, height: operation.height })
       continue
     }
     if (operation.id === UI_ROOT_ID) throw new SceneValidationError(`${UI_ROOT_ID} is reserved`)
@@ -287,5 +299,5 @@ export function applySceneBatch(scene: RetainedScene, rawOperations: readonly un
     }
   }
 
-  return Object.freeze({ nodes: new ImmutableMap(nodes), camera: Object.freeze(camera), chapter })
+  return Object.freeze({ nodes: new ImmutableMap(nodes), camera: Object.freeze(camera), chapter, canvas })
 }

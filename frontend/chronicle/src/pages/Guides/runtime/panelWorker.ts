@@ -3,6 +3,7 @@ import { createGuideRuntime } from "./runtime"
 import { PANEL_STREAM_SCOPES, PANEL_STREAMS, type PanelStream, type PanelStreamScope } from "./panelEvents"
 import { FastDamageCursor } from "@/api/protodecode/decode"
 import type { PanelUnits } from "./panelUnits"
+import type { AddonPhase } from "./addonErrors"
 import { parseWorkerMessage, splitBatchOperations } from "../protocol/protocol"
 import type { GuideCapability } from "../protocol/types"
 
@@ -40,12 +41,15 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
   let streamScope: PanelStreamScope = "selection"
   let maxEvents: number | undefined
   let startupMs = 0
+  // Reported with errors so the host can explain where the addon stopped.
+  let phase: AddonPhase = "startup"
+  let delivered = 0
   const flush = (operations: ReturnType<NonNullable<typeof runtime>["flush"]>) => {
     for (const chunk of splitBatchOperations(operations)) send(parseWorkerMessage({ type: "batch", batchId: String(++batchId), operations: chunk }))
   }
   return (input: Input) => {
     try {
-      if (input.type === "stop" || input.type === "start") { runtime?.stop(); runtime = null }
+      if (input.type === "stop" || input.type === "start") { runtime?.stop(); runtime = null; phase = "startup"; delivered = 0 }
       if (input.type === "start") {
         if (!Array.isArray(input.streams) || input.streams.some((s) => !PANEL_STREAMS.includes(s))) throw new Error("unsupported streams")
         if (!Array.isArray(input.capabilities) || input.capabilities.some((cap) => cap !== "ui" && cap !== "input")) throw new Error("unsupported capabilities")
@@ -61,6 +65,7 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
         send({ type: "ready", protocolVersion: 1 }); flush(initial)
       } else if (input.type === "event") {
         if (!runtime) throw new Error("panel not started")
+        phase = "onEvent"; delivered++
         runtime.panelEvent(input.event); flush(runtime.flush())
       } else if (input.type === "damage-stream") {
         if (!runtime) throw new Error("panel not started")
@@ -85,6 +90,7 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
           encounters.add(encounter)
           if (maxEvents !== undefined && count >= maxEvents) throw new Error(`panel exceeded its max_events (${maxEvents})`)
           count++
+          phase = "onEvent"; delivered = count
           const luaStart = performance.now()
           runtime.panelEvent({ stream: "damage", source: event.caster ?? "", target: event.target ?? "",
             amount: event.amount, offsetMs: event.offsetMilli, encounterId: encounter, selected: isSelected })
@@ -101,6 +107,7 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
           if (count % 1_000 === 0) send({ type: "progress", events: count })
         }
         const completeStart = performance.now()
+        phase = "onComplete"
         runtime.panelComplete()
         const completeMs = performance.now() - completeStart
         const uiStart = performance.now()
@@ -112,11 +119,12 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
         send({ type: "damage-complete", metrics })
       } else if (input.type === "click") {
         if (!runtime) throw new Error("panel not started")
+        phase = "click"
         runtime.event({ id: input.nodeId, event: "click" }); flush(runtime.flush())
       }
     } catch (error) {
       runtime?.stop(); runtime = null
-      send({ type: "error", message: error instanceof Error ? error.message : String(error) })
+      send({ type: "error", message: error instanceof Error ? error.message : String(error), phase, ...(phase === "onEvent" ? { events: delivered } : {}) })
     }
   }
 }

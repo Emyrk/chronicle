@@ -11,6 +11,7 @@ import { LuaBrowserTest } from "./LuaBrowserTest"
 import { panelPackageFromWorkingCopy, validateEditorFiles, type EditorFiles } from "./editorFiles"
 import { applyLuaFileEdit, LUA_EDITOR_CAPABILITY, parseLuaFileEdit, type LuaToolFile } from "./luaEditorTools"
 import { createCachedDamageProvider } from "./previewStream"
+import type { WorkshopChatRequest } from "./LuaWorkshopChat"
 import { parseRunPreviewArgs, runPreview } from "./previewRun"
 import { selectPreviewDamage } from "./luaPreviewBounds"
 import { runStartupCheck } from "./startupCheck"
@@ -131,6 +132,7 @@ export default function LuaProjectWorkspacePage() {
   const gridRef = useRef<HTMLDivElement>(null)
   const [dragWidth, setDragWidth] = useState<number | null>(null)
   const [sideTab, setSideTab] = useState<"pane" | "preview">("pane")
+  const [chatRequest, setChatRequest] = useState<WorkshopChatRequest>()
   const [aiEdit, setAiEdit] = useState<AiEdit | null>(null)
   const [diffOpen, setDiffOpen] = useState(false)
   const setLayout = useCallback((next: Partial<Layout>) => setLayoutState(current => {
@@ -250,6 +252,8 @@ export default function LuaProjectWorkspacePage() {
   const sideName = focus === "chat" ? "code" : "chat"
   const swap = () => { setLayout({ focus: sideName, sideOpen: true }); setSideTab("pane") }
   const showSidePane = (pane: "chat" | "code") => { if (pane !== focus) setSideTab("pane") }
+  // From the preview's error card: send the explanation to the chat and make sure the chat is visible.
+  const askAssistant = (text: string) => { setChatRequest({ id: Date.now(), text }); showSidePane("chat") }
   // Chat and code stay mounted and move between grid cells, so the editor keeps its state and undo history.
   // Preview always lives in the side column; on narrow screens the side column stacks below the main pane.
   const sideHidden = sideOpen ? "" : "lg:hidden"
@@ -314,7 +318,7 @@ export default function LuaProjectWorkspacePage() {
         className={`hidden lg:col-start-2 lg:row-span-2 lg:row-start-1 ${sideOpen ? "lg:block" : ""}`} />
       <section className={paneClass("chat")} aria-label="Workshop chat">
         <Suspense fallback={<p role="status" className="p-4 text-sm text-muted-foreground">Loading chat…</p>}>
-          <LuaWorkshopChat projectId={project.id} projectName={project.name} windowControls={mainControls("chat")}
+          <LuaWorkshopChat projectId={project.id} projectName={project.name} request={chatRequest} windowControls={mainControls("chat")}
             onShowCode={focus === "chat" ? swap : undefined} />
         </Suspense>
       </section>
@@ -372,7 +376,7 @@ export default function LuaProjectWorkspacePage() {
             {!copy?.valid && copy && <p className="text-xs text-muted-foreground">Fix the source errors to enable previews.</p>}
             {instance.data && encounterIds.length === 0 && <p className="text-xs text-muted-foreground">Select an encounter to preview. Ctrl/⌘-click selects several.</p>}
             {instance.data && localPanel?.value && encounterIds.length > 0 && <Suspense fallback={<p role="status" className="text-xs">Loading local preview…</p>}>
-              <LuaInstancePreview panel={localPanel.value} instanceId={instanceId} encounterIds={encounterIds} events={events} units={previewUnits} />
+              <LuaInstancePreview panel={localPanel.value} instanceId={instanceId} encounterIds={encounterIds} events={events} units={previewUnits} onAskAssistant={askAssistant} />
             </Suspense>}
           </div>
         </div>
