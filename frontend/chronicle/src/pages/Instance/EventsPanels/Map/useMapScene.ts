@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import {
-  mapFloorMesh,
   type WowMapInstanceFloor,
   type WowMapLayer,
   type WowMapMeshInstance,
@@ -12,7 +11,7 @@ import {
 import { fetchMapManifest } from "@/pages/Technical/mapManifest";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import type { PanelRenderProps } from "../types";
-import { placeableDungeonMesh } from "./dungeonMeshes";
+import { placeableDungeonMesh, replayDungeonMesh } from "./dungeonMeshes";
 import { groupCentre, isStaleRunSample, mergeRunEncounters, RUN_UNIT_STALE_MS, runSignature } from "./wholeRun";
 import { POWER_COLORS } from "../RaidFrames/raidFrameShared";
 import { activeDebuffsAt, type MapDebuff, type MapEncounterPositions, type MapPositionSample, type MapResult } from "./map.processor";
@@ -380,7 +379,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     // name its mesh so the (large) download can start now.
     const selectedMapId = props.context.instance.encounters.find((candidate) => candidate.id === props.context.selectedEncounterIds[0])?.mapId;
     const hintArtwork = manifestQuery.data && selectedMapId ? resolveMapArtwork(manifestQuery.data, selectedMapId, undefined, props.context.instance.name) : null;
-    const meshHint = !normalizedUIMap && hintArtwork?.kind === "instance" ? placeableDungeonMesh(hintArtwork.instance.mesh) : null;
+    const meshHint = hintArtwork?.kind === "instance" ? placeableDungeonMesh(hintArtwork.instance.mesh) : null;
     return { status: "message", title: "Loading map", detail: "Fetching artwork and position telemetry…", meshHint };
   }
   if (manifestQuery.error) return { status: "message", title: "Map artwork unavailable", detail: manifestQuery.error.message };
@@ -403,11 +402,11 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const selectedFloor = artwork.kind === "instance"
     ? artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0]
     : undefined;
-  // GetPlayerMapPosition coordinates only place units on 2D UI map artwork.
   // The active floor owns its mesh and render when published; legacy
-  // instance-level assets remain the fallback.
-  const mesh = !normalizedUIMap && artwork.kind === "instance"
-    ? placeableDungeonMesh(mapFloorMesh(artwork.instance, selectedFloor))
+  // instance-level assets remain the fallback. Normalized UI-map positions
+  // still map onto the mesh by their floor percentages when 3D is selected.
+  const mesh = artwork.kind === "instance"
+    ? replayDungeonMesh(artwork.instance, selectedFloor)
     : null;
   const availableFlatCanvas = artwork.kind === "instance"
     ? replayDungeonCanvasForCoordinates(

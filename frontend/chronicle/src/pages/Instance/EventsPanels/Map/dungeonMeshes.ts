@@ -1,7 +1,9 @@
 import {
   mapAssetUrl,
+  mapFloorMesh,
   type WowMapFloorBounds,
   type WowMapInstance,
+  type WowMapInstanceFloor,
   type WowMapMeshInstance,
   type WowMapMeshLiquid,
 } from "@/pages/Technical/mapGallery";
@@ -31,6 +33,18 @@ export function placeableDungeonMesh(mesh: WowMapMeshInstance | undefined): WowM
   const { bounds } = mesh;
   if (!(bounds.maxX > bounds.minX) || !(bounds.maxY > bounds.minY)) return null;
   return mesh;
+}
+
+/**
+ * The selected floor's mesh (or the legacy instance mesh), when placeable.
+ * UI-map-normalized telemetry still uses this mesh: its normalized points are
+ * projected across the mesh canvas, while flat mode keeps native floor art.
+ */
+export function replayDungeonMesh(
+  instance: WowMapInstance,
+  floor: WowMapInstanceFloor | undefined,
+): WowMapMeshInstance | null {
+  return placeableDungeonMesh(mapFloorMesh(instance, floor));
 }
 
 /**
