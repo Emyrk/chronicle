@@ -109,7 +109,7 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
     for (const event of events) workerRef.current?.postMessage({ type: "event", event })
   }, [events])
 
-  if (error) return <div role="alert" className="p-4 text-sm text-destructive">Lua panel stopped: {error}</div>
+  if (error) return <div role="alert" className="p-4 text-sm text-destructive">Addon stopped: {error}</div>
   return <div className="flex min-h-0 flex-1 flex-col">
     <div className="relative min-h-[240px] flex-1 overflow-hidden" data-lua-panel-host>
       <GuideUiScene scene={scene} assets={assets} onNodeClick={(node) => workerRef.current?.postMessage({ type: "click", nodeId: node.id })} />
@@ -153,7 +153,7 @@ function LuaRunMetricsBar({ metrics, progress }: { metrics: LuaPanelRunMetrics |
           <button type="button" aria-label="Panel timing details" className="-m-1 p-1 text-muted-foreground/70 hover:text-foreground"><HelpCircle className="size-3" /></button>
         </TooltipTrigger>
         <TooltipContent side="top" align="end" sideOffset={6} className="w-64 p-3 font-mono text-[11px]">
-          <div className="mb-2 font-sans text-xs font-semibold">Lua panel timing</div>
+          <div className="mb-2 font-sans text-xs font-semibold">Addon timing</div>
           <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-0.5">
             {rows.map(row)}
             <span className="border-t border-border pt-1 font-semibold">Worker total</span>

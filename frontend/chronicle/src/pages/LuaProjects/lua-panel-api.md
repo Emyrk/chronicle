@@ -1,10 +1,12 @@
-# Lua panel API reference
+# Addon API reference
 
-Lua panels are small programs that turn a raid log into your own panel on the instance page. They run in a sandboxed browser worker (Lua 5.3 via Fengari) with no network, file or page access. Chronicle replays the log's events into your code, and your code draws the panel with a small WoW-style UI API.
+Chronicle addons are small Lua programs that extend Chronicle. This reference covers **instance panel** addons, which turn a raid log into your own panel on the instance page; guide, guild and armory addons will follow the same model. Addons run in a sandboxed browser worker (Lua 5.3 via Fengari) with no network, file or page access. Chronicle replays the log's events into your code, and your code draws the panel with a small WoW-style UI API.
+
+Chronicle addons run on Chronicle in your browser, not in the game client: they do not go in your `Interface/AddOns` folder.
 
 ## Quick start
 
-A panel is two files: `project.json` (what the panel needs) and `main.lua` (what it does). This panel shows total damage for the selected encounters:
+An instance panel addon is two files: `project.json` (what the panel needs) and `main.lua` (what it does). This panel shows total damage for the selected encounters:
 
 ```lua
 local damage = require("chronicle.v1.events.damage")
@@ -21,16 +23,16 @@ damage.onComplete(function()
 end)
 ```
 
-with `"streams": ["damage"]` in `project.json`. Use **Preview** in the workshop to run it on a real instance before you save and publish.
+with `"streams": ["damage"]` in `project.json`. Use **Preview** in the Addon Workshop to run it on a real instance before you save and publish.
 
-## How a panel runs
+## How an addon runs
 
 1. **Startup.** `main.lua` runs once. Create frames and register callbacks here.
 2. **Replay.** Chronicle sends every event in scope, in log order, encounter by encounter, to your `onEvent` callback.
-3. **Complete.** Your `onComplete` callback runs once after the last event. Draw your results here. Panels without a stream never get this callback.
-4. **Clicks.** If the panel declares `input`, `OnClick` handlers run whenever a viewer clicks.
+3. **Complete.** Your `onComplete` callback runs once after the last event. Draw your results here. Addons without a stream never get this callback.
+4. **Clicks.** If the addon declares `input`, `OnClick` handlers run whenever a viewer clicks.
 
-When the viewer changes the encounter selection, the panel starts again from step 1 with a fresh Lua state. Nothing persists between runs.
+When the viewer changes the encounter selection, the addon starts again from step 1 with a fresh Lua state. Nothing persists between runs.
 
 ## project.json
 
@@ -56,7 +58,7 @@ When the viewer changes the encounter selection, the panel starts again from ste
 | `capabilities` | yes | `"ui"` to draw; add `"input"` to handle clicks. |
 | `streams` | yes | `[]` or `["damage"]`. Declare `damage` to receive damage events. |
 | `stream_scope` | no | `"selection"` (default): only the encounters the viewer selected. `"instance"`: every encounter in the log, each tagged with `selected`. |
-| `max_events` | no | A positive integer. The panel stops with an error after this many events. Omit it to receive everything. |
+| `max_events` | no | A positive integer. The addon stops with an error after this many events. Omit it to receive everything. |
 | `assets` | no | Image files (PNG, JPEG, WebP, up to 2 MiB each) for `SetTexture`. Uploaded packages only; the browser editor is asset-free. |
 
 ## Events
@@ -117,7 +119,7 @@ local image = frame:CreateTexture("my-icon")
 local button = CreateFrame("Button", "my-button", UIParent)
 ```
 
-`CreateFrame(type, id, parent)` accepts `"Frame"`, `"FontString"`, `"Texture"` and `"Button"`. `id` must be unique within the panel; omit it to get a generated one. `parent` defaults to `UIParent`, the panel's root. Objects persist until you call `:Destroy()`, so create them once and update them, rather than creating new ones each time.
+`CreateFrame(type, id, parent)` accepts `"Frame"`, `"FontString"`, `"Texture"` and `"Button"`. `id` must be unique within the addon; omit it to get a generated one. `parent` defaults to `UIParent`, the panel's root. Objects persist until you call `:Destroy()`, so create them once and update them, rather than creating new ones each time.
 
 ### Methods
 
@@ -159,7 +161,7 @@ Whole numbers arrive as Lua integers, so `tostring(event.amount)` prints `42`, n
 
 ## Limits
 
-These protect viewers' browsers from runaway panels. There is no limit on how many events a panel receives unless you set `max_events`.
+These protect viewers' browsers from runaway addons. There is no limit on how many events an addon receives unless you set `max_events`.
 
 | Limit | Value | Error |
 | --- | --- | --- |
@@ -174,20 +176,20 @@ These protect viewers' browsers from runaway panels. There is no limit on how ma
 
 ## Performance
 
-The footer under every Lua panel shows events processed, events per second and the replay time, like the built-in panels. Hover the `?` for the full breakdown: your `onEvent` time, decoding, UI updates, `onComplete`, startup, transfer and drawing.
+The footer under every addon panel shows events processed, events per second and the replay time, like the built-in panels. Hover the `?` for the full breakdown: your `onEvent` time, decoding, UI updates, `onComplete`, startup, transfer and drawing.
 
 - **Aggregate in `onEvent`, draw in `onComplete`.** Calling UI methods for every event is slow and can hit the UI change limit.
-- **Keep `onEvent` small.** Each call has a fixed cost of a few microseconds; most panels spend their time there.
+- **Keep `onEvent` small.** Each call has a fixed cost of a few microseconds; most addons spend their time there.
 - **Cache unit lookups** in a Lua table keyed by GUID.
 - **Prefer `stream_scope: "selection"`.** Unselected encounters are then skipped without being read. Use `"instance"` only when you need the whole log.
 
 ## Publishing
 
 1. **Save draft** keeps a private copy. Nothing runs for anyone else.
-2. **Publish unstable** makes that draft available to test in instance layouts. It appears in the panel selector only for you, but anyone with the link can load it.
+2. **Publish unstable** makes that draft available to test in instance layouts. It appears under **Addons** in the panel selector only for you, but anyone with the link can load it.
 3. **Promote to stable** on the Releases page, after testing that exact unstable release.
 
-The workshop header shows whether your working copy is unsaved, saved, or published. Ctrl/⌘+S saves from anywhere on the page.
+The Addon Workshop header shows whether your working copy is unsaved, saved, or published. Ctrl/⌘+S saves from anywhere on the page.
 
 ## FAQ
 
@@ -200,13 +202,13 @@ If `GetUnit(guid)` is not a player but has `owner`, look up the owner instead. S
 **How do I colour by class?**
 Read `unit.class` and map it to a colour; the example below includes the standard class colours.
 
-**My panel shows nothing.**
+**My addon shows nothing.**
 Make sure `project.json` lists `"damage"` in `streams`. Make sure you draw in `onComplete`, or update frames in `onEvent`. Then run **Startup check** in the editor to catch Lua errors.
 
-**"Lua panel stopped: instruction budget exceeded".**
+**"Addon stopped: instruction budget exceeded".**
 One callback did too much work, for example sorting a large table inside `onEvent`. Move heavy work to `onComplete`, and keep each callback under 100,000 instructions.
 
-**"Lua panel stopped: operation limit exceeded".**
+**"Addon stopped: operation limit exceeded".**
 More than 2,000 UI changes happened in one startup, callback or 100-event batch. Draw in `onComplete` instead of on every event, and reuse frames.
 
 **"panel exceeded its max_events".**
@@ -218,10 +220,10 @@ Yes. Set `"stream_scope": "instance"` and use `event.selected` to tell the two a
 **Can I use talents, gear, healing, casts or auras?**
 Not yet. Only the damage stream and the unit facts above are available.
 
-**Can my panel load data from the internet or remember things between views?**
-No. Panels have no network or storage access, and every run starts fresh.
+**Can my addon load data from the internet or remember things between views?**
+No. Addons have no network or storage access, and every run starts fresh.
 
-**Does my panel run on Chronicle's servers?**
+**Does my addon run on Chronicle's servers, or in the game?**
 No. It runs only in the viewer's browser, in a sandboxed worker.
 
 ## Example: damage by player, with pets and class colours

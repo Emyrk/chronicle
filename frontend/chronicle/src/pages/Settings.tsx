@@ -133,7 +133,7 @@ const allTabs: Tab[] = [
   // { path: "/account/privacy", label: "Privacy", icon: Shield },
   // { path: "/account/appearance", label: "Appearance", icon: Palette },
   { path: "/account/sidekick", label: "Sidekick", icon: Laptop },
-  { path: "/account/custom-panels", label: "Custom panels", icon: Blocks },
+  { path: "/account/developer-panels", label: "Developer panels", icon: Blocks },
   { path: "/account/layout-book", label: "Layout Book", icon: BookOpenText },
   { path: "/account/layout-lab", label: "Layout Lab", icon: LayoutTemplate },
 ];

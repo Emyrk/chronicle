@@ -1202,13 +1202,13 @@ function BuiltinEventsPanel({
 export function EventsPanel(props: EventsPanelProps) {
   if (isLuaPanelRef(props.panelType)) {
     if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("safe") === "1") {
-      return <Card className="h-full p-4 text-sm text-muted-foreground">Lua panels are disabled by ?safe=1.</Card>;
+      return <Card className="h-full p-4 text-sm text-muted-foreground">Addons are disabled by ?safe=1.</Card>;
     }
-    return <Suspense fallback={<Card className="h-full p-4">Loading Lua panel...</Card>}><LazyLuaEventsPanel {...props} /></Suspense>;
+    return <Suspense fallback={<Card className="h-full p-4">Loading addon...</Card>}><LazyLuaEventsPanel {...props} /></Suspense>;
   }
   if (isCustomPanelRef(props.panelType)) {
     return (
-      <Suspense fallback={<Card className="h-full p-4 text-sm text-muted-foreground">Loading custom panel runtime...</Card>}>
+      <Suspense fallback={<Card className="h-full p-4 text-sm text-muted-foreground">Loading developer panel runtime...</Card>}>
         <LazyCustomEventsPanel {...props} />
       </Suspense>
     );

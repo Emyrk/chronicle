@@ -301,8 +301,8 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
   const selectedLua = parseLuaPanelRef(value);
   const selectedCustom = isCustomPanelRef(value) ? resolveCustomPanel(value, customRegistry) : null;
   const selectedOption = selectedCustom
-    ? { value, label: selectedCustom.panel?.name ?? selectedCustom.panelId ?? "Unavailable custom panel", icon: <Blocks className="h-4 w-4" /> }
-    : selectedLua ? { value, label: luaPanels.find((item) => item.ref === value)?.label ?? `Lua panel (${selectedLua.channel})`, icon: <Blocks className="h-4 w-4" /> }
+    ? { value, label: selectedCustom.panel?.name ?? selectedCustom.panelId ?? "Unavailable developer panel", icon: <Blocks className="h-4 w-4" /> }
+    : selectedLua ? { value, label: luaPanels.find((item) => item.ref === value)?.label ?? `Addon (${selectedLua.channel})`, icon: <Blocks className="h-4 w-4" /> }
     : getPanelOption(value);
   const [searchParams] = useSearchParams();
   const portalContainer = usePortalContainer();
@@ -437,14 +437,14 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
       const { match, score } = fuzzyMatch(searchQuery, haystack);
       if (match) results.push({
         option: { value: item.ref, label: item.panel.name, icon: <Blocks className="h-4 w-4" /> },
-        category: `Custom › ${item.installation.manifest.plugin.name}`,
+        category: `Developer › ${item.installation.manifest.plugin.name}`,
         score,
       });
     }
 
     for (const item of luaPanels) {
       const { match, score } = fuzzyMatch(searchQuery, item.label);
-      if (match) results.push({ option: { value: item.ref, label: item.label, icon: <Blocks className="h-4 w-4" /> }, category: "Lua", score });
+      if (match) results.push({ option: { value: item.ref, label: item.label, icon: <Blocks className="h-4 w-4" /> }, category: "Addons", score });
     }
     // Sort by score descending
     return results.sort((a, b) => b.score - a.score);
@@ -563,15 +563,23 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
                       isPanelVisible={isPanelVisible}
                     />
                   ))}
-                  {luaPanels.length > 0 && <div>
-                    <button type="button" onClick={() => toggleExpanded("Lua")} className="w-full px-2 py-1.5 text-left text-sm font-medium rounded-sm hover:bg-accent/50">Lua panels ({luaPanels.length})</button>
-                    {expandedPaths.has("Lua") && luaPanels.map((item) => <button key={item.ref} type="button" onClick={() => handleSelect(item.ref)} className="block w-full truncate px-6 py-1.5 text-left text-sm hover:bg-accent">{item.label}</button>)}
-                  </div>}
+                  {luaPanels.length > 0 && (
+                    <div>
+                      <button type="button" onClick={() => toggleExpanded("Lua")} className="w-full px-2 py-1.5 text-left text-sm font-medium rounded-sm flex items-center gap-1.5 hover:bg-accent/50">
+                        <ChevronRight className={cn("size-4 transition-transform", expandedPaths.has("Lua") && "rotate-90")} />
+                        <Blocks className="h-4 w-4 text-muted-foreground" /> Addons
+                        <span className="ml-auto text-xs text-muted-foreground">{luaPanels.length}</span>
+                      </button>
+                      {expandedPaths.has("Lua") && <div className="ml-2 border-l pl-1">{luaPanels.map((item) => (
+                        <button key={item.ref} type="button" onClick={() => handleSelect(item.ref)} className={cn("w-full truncate pl-6 pr-2 py-1.5 text-left text-sm rounded-sm hover:bg-accent", item.ref === value && "bg-accent/50")}>{item.label}</button>
+                      ))}</div>}
+                    </div>
+                  )}
                   {customPanels.length > 0 && (
                     <div>
                       <button type="button" onClick={() => toggleExpanded("Custom")} className="w-full px-2 py-1.5 text-left text-sm font-medium rounded-sm flex items-center gap-1.5 hover:bg-accent/50">
                         <ChevronRight className={cn("size-4 transition-transform", expandedPaths.has("Custom") && "rotate-90")} />
-                        <Blocks className="h-4 w-4 text-muted-foreground" /> Custom
+                        <Blocks className="h-4 w-4 text-muted-foreground" /> Developer
                         <span className="ml-auto text-xs text-muted-foreground">{customPanels.length}</span>
                       </button>
                       {expandedPaths.has("Custom") && <div className="ml-2 border-l pl-1">{customPanels.map((item) => (

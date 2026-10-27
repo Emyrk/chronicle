@@ -26,9 +26,9 @@ function finiteOr(value: number | undefined, fallback: number): number {
 
 export function normalizePluginBreakoutTitle(title: string): string {
   const normalized = title.trim();
-  if (!normalized) throw new Error("Custom panel breakout title is required.");
+  if (!normalized) throw new Error("Developer panel breakout title is required.");
   if (normalized.length > CUSTOM_PANEL_BREAKOUT_TITLE_MAX_LENGTH)
-    throw new Error(`Custom panel breakout title exceeds ${CUSTOM_PANEL_BREAKOUT_TITLE_MAX_LENGTH} characters.`);
+    throw new Error(`Developer panel breakout title exceeds ${CUSTOM_PANEL_BREAKOUT_TITLE_MAX_LENGTH} characters.`);
   return normalized;
 }
 

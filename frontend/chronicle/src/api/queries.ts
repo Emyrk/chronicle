@@ -1553,7 +1553,7 @@ export function useAdminActiveCustomPanels(
     queryKey: ["admin", "custom-panels"],
     queryFn: async () => {
       const response = await fetch("/api/v1/admin/custom-panels");
-      if (!response.ok) throw new Error("Failed to fetch active custom panels");
+      if (!response.ok) throw new Error("Failed to fetch active developer panels");
       return response.json() as Promise<AdminActiveCustomPanelsResponse>;
     },
     retry: false,

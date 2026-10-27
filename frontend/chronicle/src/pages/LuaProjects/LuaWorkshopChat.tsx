@@ -111,7 +111,7 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls, onShow
       onDebugCommand: debugPermission.allowed ? previewDebug : undefined, onStartNewChat: startNewChat, onRunSettled: refreshThread,
     }}
     panel={{
-      title: `${projectName} workshop`,
+      title: `${projectName} · Addon Workshop`,
       description: "Builds your panel in the unsaved working copy. Responses can be inaccurate; review before saving.",
       placeholder: "Describe what the panel should show…",
       configuration: selection.connections.length > 0 ? <AssistantConfiguration selection={selection} /> : undefined,
@@ -120,8 +120,8 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls, onShow
         : undefined,
       debugAvailable: debugPermission.allowed, debugEnabled, onDebugEnabledChange: setDebugEnabled,
       disabled: disconnected || Boolean(selection.error || threadError) || threadLoading,
-      disabledTitle: disconnected ? "Connect OpenRouter to use the workshop chat"
-        : threadLoading ? "Opening workshop chat"
+      disabledTitle: disconnected ? "Connect OpenRouter to use the Addon Workshop chat"
+        : threadLoading ? "Opening Addon Workshop chat"
         : isInferenceAuthorizationError(threadError) ? "Assistant authorization expired" : "Workshop chat unavailable",
       disabledDescription: selection.error?.message ?? threadError?.message ?? (threadLoading ? "Loading conversation history…" : "Connect a provider in account settings, then choose a model."),
       disabledAction: (disconnected || showCodeButton) && <div className="flex flex-wrap justify-center gap-2">

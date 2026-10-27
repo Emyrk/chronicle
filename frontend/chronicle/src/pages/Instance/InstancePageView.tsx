@@ -3949,7 +3949,7 @@ function InstancePageViewContent({
     () => listSelectableCustomPanels(customPanelRegistry).map(({ ref, panel, installation }) => ({
       id: canonicalizeCustomPanelRef(ref) ?? ref,
       label: panel.name,
-      description: panel.description ?? installation.manifest.plugin.description ?? `Custom panel from ${installation.repository}`,
+      description: panel.description ?? installation.manifest.plugin.description ?? `Developer panel from ${installation.repository}`,
       queryable: false,
       hidden: false,
     })),
@@ -3961,7 +3961,7 @@ function InstancePageViewContent({
     .map((project) => ({
       id: `lua:${project.id}:stable`,
       label: project.name,
-      description: "Sandboxed Lua panel (automatically follows its Stable release)",
+      description: "Sandboxed addon (automatically follows its Stable release)",
       queryable: false,
       hidden: false,
     })), [luaPanelCatalog.data]);

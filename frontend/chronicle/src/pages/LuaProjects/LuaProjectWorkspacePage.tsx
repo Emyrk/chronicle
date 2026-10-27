@@ -232,13 +232,13 @@ export default function LuaProjectWorkspacePage() {
 
   return <div className="flex flex-col border-b border-border lg:h-[calc(100dvh-70px)] lg:min-h-[560px]">
     <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-4 py-2">
-      <Link className="text-xs text-muted-foreground hover:text-foreground" to={`/lua-projects/${encodeURIComponent(project.id)}`}
+      <Link className="text-xs text-muted-foreground hover:text-foreground" to={`/addons/${encodeURIComponent(project.id)}`}
         onClick={event => { if (copy?.dirty && !window.confirm("Leave the editor and discard unsaved source changes?")) event.preventDefault() }}>← Releases</Link>
       <span aria-hidden className="h-4 w-px bg-border" />
       <h1 className="text-base font-semibold">{project.name}</h1>
       <span className="font-mono text-xs text-muted-foreground">{project.slug}</span>
-      <a className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" href="/lua-projects/api" target="_blank" rel="noreferrer"
-        title="Lua panel API reference and FAQ (opens in a new tab)"><BookOpen className="size-3.5" /> API reference</a>
+      <a className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" href="/addons/api" target="_blank" rel="noreferrer"
+        title="Addon API reference and FAQ (opens in a new tab)"><BookOpen className="size-3.5" /> API reference</a>
       <div className="ml-auto flex flex-wrap items-center gap-2">
         <span role="status" className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground" title={copy?.validation || undefined}>
           <span aria-hidden className={`size-2 rounded-full ${status.tone}`} />{status.label}

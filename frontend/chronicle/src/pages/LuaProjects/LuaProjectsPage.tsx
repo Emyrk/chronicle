@@ -6,6 +6,8 @@ import { createProject, getProject, listProjects, promoteStable, publicPackageUR
 
 import { LuaDraftPreview } from "./LuaDraftPreview"
 
+/** User-facing names for addon kinds; the API and manifests keep "panel" and "guide". */
+const kindLabel = (kind: LuaProjectKind) => kind === "panel" ? "Instance panel" : "Guide"
 const card = "rounded-xl border border-border/80 bg-card p-5 shadow-sm"
 const button = "inline-flex items-center justify-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
 
@@ -48,31 +50,31 @@ export function LuaProjectsPage() {
 
   return <main className="container mx-auto max-w-5xl space-y-8 px-4 py-10">
     <header className="border-b pb-7">
-      <p className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">Creator workspace / Lua</p>
-      <h1 className="text-3xl font-semibold tracking-tight">Lua projects</h1>
-      <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Keep a private draft, share an unstable release for testing, then promote exactly the version you tested.</p>
+      <p className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">Creator workspace / Addons</p>
+      <h1 className="text-3xl font-semibold tracking-tight">Addons</h1>
+      <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Build sandboxed Lua addons for Chronicle with the Addon Workshop. Keep a private draft, share an unstable release for testing, then promote exactly the version you tested.</p>
     </header>
     {error && <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
     <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_19rem]">
-      <section aria-label="Your projects" className="space-y-3">
-        <h2 className="text-lg font-semibold">Your projects</h2>
-        {loading ? <p className="text-sm text-muted-foreground">Loading projects…</p> : projects.length === 0 ? <p className={card}>No projects yet. Create one to begin.</p> : projects.map(project =>
-          <Link key={project.id} to={`/lua-projects/${encodeURIComponent(project.id)}`} className={`${card} group flex items-center justify-between gap-4 hover:border-primary/50`}>
-            <div><span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">{project.kind} · r{project.revision}</span><h3 className="mt-1 font-semibold">{project.name}</h3><p className="font-mono text-xs text-muted-foreground">/{project.slug}</p></div>
+      <section aria-label="Your addons" className="space-y-3">
+        <h2 className="text-lg font-semibold">Your addons</h2>
+        {loading ? <p className="text-sm text-muted-foreground">Loading addons…</p> : projects.length === 0 ? <p className={card}>No addons yet. Create one to begin.</p> : projects.map(project =>
+          <Link key={project.id} to={`/addons/${encodeURIComponent(project.id)}`} className={`${card} group flex items-center justify-between gap-4 hover:border-primary/50`}>
+            <div><span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">{kindLabel(project.kind)} · r{project.revision}</span><h3 className="mt-1 font-semibold">{project.name}</h3><p className="font-mono text-xs text-muted-foreground">/{project.slug}</p></div>
             <ArrowUpRight className="size-5 shrink-0 text-muted-foreground group-hover:text-primary" aria-hidden="true" />
           </Link>) }
       </section>
       {canCreate ? <form onSubmit={create} className={`${card} h-fit space-y-4`}>
-        <div className="flex items-center gap-2"><Plus className="size-4" /><h2 className="font-semibold">New project</h2></div>
+        <div className="flex items-center gap-2"><Plus className="size-4" /><h2 className="font-semibold">New addon</h2></div>
         <label className="block text-sm font-medium">Name<input className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={name} onChange={event => setName(event.target.value)} maxLength={120} required /></label>
         <label className="block text-sm font-medium">Slug<input className="mt-1 w-full rounded-md border bg-background px-3 py-2 font-mono" value={slug} onChange={event => setSlug(event.target.value)} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" maxLength={80} required /><span className="mt-1 block text-xs text-muted-foreground">Lowercase letters, numbers and hyphens.</span></label>
-        <label className="block text-sm font-medium">Kind<select className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={kind} onChange={event => setKind(event.target.value as LuaProjectKind)}><option value="panel">Panel</option><option value="guide">Guide</option></select></label>
-        <button className={button} disabled={busy} type="submit">{busy ? "Creating…" : "Create project"}</button>
+        <label className="block text-sm font-medium">Kind<select className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={kind} onChange={event => setKind(event.target.value as LuaProjectKind)}><option value="panel">{kindLabel("panel")}</option><option value="guide">{kindLabel("guide")}</option></select></label>
+        <button className={button} disabled={busy} type="submit">{busy ? "Creating…" : "Create addon"}</button>
       </form> : <div className={`${card} h-fit text-sm`}>
-        {sessionLoading || (session && createPermission.isPending) ? <p>Checking project creation permission…</p> :
-          <p role="alert" className="text-destructive">{!session ? "Sign in to create Lua projects." :
-            createPermission.isError ? "Could not check project creation permission. Please try again." :
-              "You do not have permission to create Lua projects. Ask a technical administrator for the Lua Project Author role."}</p>}
+        {sessionLoading || (session && createPermission.isPending) ? <p>Checking addon creation permission…</p> :
+          <p role="alert" className="text-destructive">{!session ? "Sign in to create addons." :
+            createPermission.isError ? "Could not check addon creation permission. Please try again." :
+              "You do not have permission to create addons. Ask a technical administrator for the Addon Author role."}</p>}
       </div>}
     </div>
   </main>
@@ -115,15 +117,15 @@ export function LuaProjectPage() {
 
   if (!projectId) return <p role="alert">Missing project ID.</p>
   if (loading) return <main className="container mx-auto px-4 py-10">Loading project…</main>
-  if (!project) return <main className="container mx-auto px-4 py-10"><Link to="/lua-projects">← Projects</Link><p role="alert">{error || "Project not found."}</p></main>
+  if (!project) return <main className="container mx-auto px-4 py-10"><Link to="/addons">← Addons</Link><p role="alert">{error || "Addon not found."}</p></main>
 
   const unstableLink = project.unstable ? publicPackageURL(project.id, project.unstable.sha256) : ""
   return <main className="container mx-auto max-w-5xl space-y-7 px-4 py-10">
-    <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" to="/lua-projects"><ArrowLeft className="size-4" /> All projects</Link>
-    <header className="border-b pb-6"><p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">{project.kind} / {project.slug} / revision {project.revision}</p><h1 className="mt-2 text-3xl font-semibold">{project.name}</h1>
+    <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" to="/addons"><ArrowLeft className="size-4" /> All addons</Link>
+    <header className="border-b pb-6"><p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">{kindLabel(project.kind)} / {project.slug} / revision {project.revision}</p><h1 className="mt-2 text-3xl font-semibold">{project.name}</h1>
       {project.kind === "panel" && <div className="mt-4 flex flex-wrap items-center gap-3">
-        <Link className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90" to={`/lua-projects/${encodeURIComponent(project.id)}/edit`}><Code2 className="size-4" /> Open editor &amp; AI chat</Link>
-        <span className="text-sm text-muted-foreground">Build the panel with the AI assistant, edit the code and preview it on an instance. See the <Link className="text-primary underline underline-offset-2" to="/lua-projects/api">Lua API reference</Link>.</span>
+        <Link className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90" to={`/addons/${encodeURIComponent(project.id)}/edit`}><Code2 className="size-4" /> Open in Addon Workshop</Link>
+        <span className="text-sm text-muted-foreground">Build it with the AI assistant, edit the code and preview it on an instance. See the <Link className="text-primary underline underline-offset-2" to="/addons/api">Addon API reference</Link>.</span>
       </div>}
     </header>
     {error && <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}{error.includes("revision") && " Reload the project before retrying."}</p>}

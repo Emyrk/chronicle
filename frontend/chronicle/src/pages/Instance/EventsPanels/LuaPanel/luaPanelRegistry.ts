@@ -34,7 +34,7 @@ export function useLuaPanelCatalog(enabled = true) {
   return useQuery({
     queryKey: ["lua-panel-catalog", ownerId], enabled: enabled && !!ownerId, staleTime: 60_000,
     queryFn: () => {
-      if (!ownerId) throw new Error("Sign in to view your Lua panels")
+      if (!ownerId) throw new Error("Sign in to view your addons")
       return fetchOwnedLuaPanels(ownerId)
     },
   })

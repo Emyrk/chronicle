@@ -34,7 +34,7 @@ export function LuaDraftPreview({ projectId, draftHash }: LuaDraftPreviewProps) 
   useEffect(() => () => { for (const url of assets.values()) URL.revokeObjectURL(url); }, [assets]);
 
   if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("safe") === "1") {
-    return <p className="text-sm text-muted-foreground">Lua preview is disabled by ?safe=1.</p>;
+    return <p className="text-sm text-muted-foreground">Addon preview is disabled by ?safe=1.</p>;
   }
   if (draft.isPending) return <p className="text-sm text-muted-foreground">Loading private draft…</p>;
   if (draft.isError) return <p role="alert" className="text-sm text-destructive">{draft.error.message}</p>;
