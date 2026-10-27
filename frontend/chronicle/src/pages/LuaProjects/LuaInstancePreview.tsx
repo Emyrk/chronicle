@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { LuaPanelHost } from "../Instance/EventsPanels/LuaPanel/LuaPanelHost"
 import type { PanelPackage } from "../Guides/package/panelLoader"
-import { boundPreviewDamage, MAX_PREVIEW_ENCOUNTERS, MAX_PREVIEW_STREAM_BYTES } from "./luaPreviewBounds"
+import { selectPreviewDamage } from "./luaPreviewBounds"
 
-/** The caller must authorize instance access and enforce maxBytes during download/decompression. */
+/** The caller must authorize instance access; the preview passes on every event in scope. */
 export interface LuaPreviewEventProvider {
-  getDamage(instanceId: string, options: { signal: AbortSignal; maxBytes: number }): Promise<Uint8Array>
+  getDamage(instanceId: string, options: { signal: AbortSignal }): Promise<Uint8Array>
 }
 
 export interface LuaInstancePreviewProps {
@@ -60,8 +60,8 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events }: 
       setError("Select an instance and provide a supported unsaved Lua panel package")
       return
     }
-    if (!encounterIds.length || encounterIds.length > MAX_PREVIEW_ENCOUNTERS || new Set(encounterIds).size !== encounterIds.length) {
-      setError(`Select 1 to ${MAX_PREVIEW_ENCOUNTERS} distinct encounters`)
+    if (!encounterIds.length || new Set(encounterIds).size !== encounterIds.length) {
+      setError("Select at least one encounter")
       return
     }
     const abort = new AbortController()
@@ -71,9 +71,9 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events }: 
     try {
       let data: Uint8Array | undefined
       if (panel.streams.includes("damage")) {
-        const input = await events.getDamage(instanceId, { signal: abort.signal, maxBytes: MAX_PREVIEW_STREAM_BYTES })
+        const input = await events.getDamage(instanceId, { signal: abort.signal })
         if (abort.signal.aborted || generation.current !== id) return
-        data = boundPreviewDamage(input, encounterIds, panel.streamScope)
+        data = selectPreviewDamage(input, encounterIds, panel.streamScope)
       }
       if (abort.signal.aborted || generation.current !== id) return
       setRun({ id, panel, instanceId, selection, data })
@@ -97,10 +97,10 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events }: 
       <div className="flex items-center gap-2">
         <button className={`${button} border-primary bg-primary text-primary-foreground hover:bg-primary/90`} type="button" disabled={busy || !instanceId || !panel.sources[panel.entrypoint]} onClick={() => void start()}>{busy ? "Loading events…" : run ? "Re-run preview" : "Run preview"}</button>
         {(busy || run) && <button className={button} type="button" onClick={cancel}>{busy ? "Cancel" : "Clear"}</button>}
-        <span className="ml-auto text-[11px] text-muted-foreground" title="Damage events only. Nothing is uploaded or published.">≤ 50k events · 8 MB</span>
+        <span className="ml-auto text-[11px] text-muted-foreground" title="Damage events only. Nothing is uploaded or published.">Damage events · runs locally</span>
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {active && <div className="overflow-hidden rounded-md border border-border bg-background"><LuaPanelHost key={run.id} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} streamScope={panel.streamScope}
+      {active && <div className="overflow-hidden rounded-md border border-border bg-background"><LuaPanelHost key={run.id} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} streamScope={panel.streamScope} maxEvents={panel.maxEvents}
         capabilities={panel.capabilities} damageStream={run.data} encounterIds={encounterIds} assets={assetUrls} /></div>}
     </>}
   </section>

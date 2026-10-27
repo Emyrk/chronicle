@@ -13,8 +13,9 @@ and `bySource(onUpdate)`. Events contain only `stream`, `source`, `target`,
 damage stream, decodes it in the Lua worker and replays it once, then calls
 `Panel:OnComplete`. By default it selects only current encounter IDs; a manifest
 with `"stream_scope": "instance"` receives every encounter, tagged `selected`.
-Panel filters are not applied to Lua panels yet. The worker caps event count and
-operation output. `chronicle.v1.ui` provides `metric`, `table`, `bars`, each
+Panel filters are not applied to Lua panels yet. There is no host cap on events or
+bytes: the manifest may set `max_events`, the worker bounds UI operations per
+100-event batch, and the host stops a worker after 10 s without progress. `chronicle.v1.ui` provides `metric`, `table`, `bars`, each
 creating retained UI operations validated by the Guide scene protocol.
 
 Selector catalog: `GET /api/v1/me/lua-projects` for the signed-in owner's

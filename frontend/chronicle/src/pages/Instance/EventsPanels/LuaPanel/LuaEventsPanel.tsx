@@ -43,7 +43,6 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
     if (!panel?.streams.includes("damage")) return
     let active = true
     fetchStream("damage").then((stream) => {
-      if (stream.data.byteLength > 32_000_000) throw new Error("Damage stream exceeds Lua panel limit")
       if (active) { setDamage(stream.data.slice()); setStreamError(undefined) }
     }).catch((error: unknown) => { if (active) setStreamError(String(error)) })
     return () => { active = false; setDamage(undefined) }
@@ -62,7 +61,7 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
     {channelQuery.isPending || (hash && packageQuery.isPending) ? <div className="p-4 text-sm">Loading Lua panel...</div> :
       channelQuery.error || packageQuery.error || streamError || !hash ? <div role="alert" className="p-4 text-sm text-destructive">{String(channelQuery.error ?? packageQuery.error ?? streamError ?? "Channel not published")}</div> :
       panel && (panel.streams.includes("damage") && !damage ? <div className="p-4 text-sm">Loading damage...</div> :
-        <LuaPanelHost key={`${ref?.id}:${hash}`} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} streamScope={panel.streamScope} capabilities={panel.capabilities}
+        <LuaPanelHost key={`${ref?.id}:${hash}`} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} streamScope={panel.streamScope} maxEvents={panel.maxEvents} capabilities={panel.capabilities}
           damageStream={damage} encounterIds={selectedIds} assets={assetUrls} />)}
   </div>
 }

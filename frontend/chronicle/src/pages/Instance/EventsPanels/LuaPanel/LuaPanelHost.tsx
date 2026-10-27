@@ -10,6 +10,7 @@ export interface LuaPanelHostProps {
   sources: Record<string, string>
   streams: PanelStream[]
   streamScope?: PanelStreamScope
+  maxEvents?: number
   capabilities: readonly GuideCapability[]
   events?: readonly PanelEvent[]
   damageStream?: Uint8Array
@@ -22,7 +23,7 @@ const EMPTY_IDS: readonly string[] = []
 const EMPTY_ASSETS: ReadonlyMap<string, string> = new Map()
 
 // Shared by the author preview and embedded EventsPanels. No Lua executes on the main thread.
-export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", capabilities, events = EMPTY_EVENTS, damageStream, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS }: LuaPanelHostProps) {
+export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", maxEvents, capabilities, events = EMPTY_EVENTS, damageStream, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS }: LuaPanelHostProps) {
   const [scene, setScene] = useState<RetainedScene>(createInitialScene)
   const [error, setError] = useState<string | null>(null)
   const workerRef = useRef<Worker | null>(null)
@@ -37,7 +38,7 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
     }
     const armWatchdog = () => {
       clearTimeout(watchdog)
-      watchdog = setTimeout(() => stop("Panel worker exceeded its time limit"), 10_000)
+      watchdog = setTimeout(() => stop("Panel worker made no progress for 10 seconds"), 10_000)
     }
     runtime.onmessage = ({ data }: MessageEvent<unknown>) => {
       try {
@@ -47,23 +48,25 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
         if (data && typeof data === "object" && "type" in data && data.type === "damage-complete") {
           clearTimeout(watchdog); return
         }
+        // The watchdog measures inactivity, not total time: large replays keep it alive with progress.
+        if (data && typeof data === "object" && "type" in data && data.type === "progress") { armWatchdog(); return }
         const message = parseWorkerMessage(data)
         if (message.type === "ready") {
           setScene(createInitialScene()); setError(null)
           if (damageStream && streams.includes("damage")) armWatchdog()
           else clearTimeout(watchdog)
         }
-        if (message.type === "batch") setScene((current) => applySceneBatch(current, message.operations))
+        if (message.type === "batch") { setScene((current) => applySceneBatch(current, message.operations)); if (damageStream && streams.includes("damage")) armWatchdog() }
       } catch (caught) {
         stop(caught instanceof Error ? caught.message : "Invalid panel output")
       }
     }
     runtime.onerror = () => stop("Panel worker failed")
     armWatchdog()
-    runtime.postMessage({ type: "start", entrypoint, sources, streams, capabilities, streamScope })
+    runtime.postMessage({ type: "start", entrypoint, sources, streams, capabilities, streamScope, maxEvents })
     if (damageStream && streams.includes("damage")) runtime.postMessage({ type: "damage-stream", data: damageStream, encounterIds: [...encounterIds] })
     return () => { clearTimeout(watchdog); runtime.terminate(); if (workerRef.current === runtime) workerRef.current = null }
-  }, [entrypoint, sources, streams, streamScope, capabilities, damageStream, encounterIds])
+  }, [entrypoint, sources, streams, streamScope, maxEvents, capabilities, damageStream, encounterIds])
 
   useEffect(() => {
     for (const event of events) workerRef.current?.postMessage({ type: "event", event })

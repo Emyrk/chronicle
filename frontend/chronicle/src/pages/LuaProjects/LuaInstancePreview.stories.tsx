@@ -7,10 +7,10 @@ import { LuaInstancePreview, type LuaPreviewEventProvider } from "./LuaInstanceP
 const panel: PanelPackage = { name: "Unsaved", entrypoint: "main.lua", sources: { "main.lua": "return {}", "extra.lua": "return 1" }, streams: ["damage"], streamScope: "selection", capabilities: ["ui"], assets: new Map() }
 const frame = new Uint8Array([1, 97, 1, 0, 0]) // encounter a, timestamp 1, zero events
 let resolveFirst: ((value: Uint8Array) => void) | undefined
-const calls: Array<{ instance: string; signal: AbortSignal; maxBytes: number }> = []
+const calls: Array<{ instance: string; signal: AbortSignal }> = []
 const provider: LuaPreviewEventProvider = {
-  getDamage(instance, { signal, maxBytes }) {
-    calls.push({ instance, signal, maxBytes })
+  getDamage(instance, { signal }) {
+    calls.push({ instance, signal })
     if (instance === "one") return new Promise(resolve => { resolveFirst = resolve })
     return Promise.resolve(frame)
   },
@@ -58,7 +58,7 @@ export const InstanceChangeAndWorkerCleanup: Story = {
       await expect(canvas.queryByText("Loading events…")).not.toBeInTheDocument()
       await userEvent.click(canvas.getByRole("button", { name: "Run preview" }))
       await waitFor(() => expect(workers).toHaveLength(1))
-      await expect(calls.at(-1)).toMatchObject({ instance: "two", maxBytes: 32_000_000 })
+      await expect(calls.at(-1)).toMatchObject({ instance: "two" })
       await expect(workers[0].messages[0]).toMatchObject({ type: "start", sources: panel.sources })
       await userEvent.click(canvas.getByRole("button", { name: "Edit unsaved source" }))
       await waitFor(() => expect(workers[0].terminated).toBe(true))

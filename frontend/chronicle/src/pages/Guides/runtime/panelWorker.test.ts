@@ -49,11 +49,11 @@ describe("Lua panel worker damage replay", () => {
     damage.onEvent(function(e) parts[#parts + 1] = e.encounterId .. "=" .. e.amount .. (e.selected and "*" or "") end)
     damage.onComplete(function() label:SetText(table.concat(parts, " ")) end)
   `
-  const replay = (streamScope?: "selection" | "instance") => {
+  const replay = (streamScope?: "selection" | "instance", { lua = source, data = [...encounter("e1", [5]), ...encounter("e2", [7])], maxEvents }: { lua?: string; data?: number[]; maxEvents?: number } = {}) => {
     const messages: unknown[] = []
     const handle = createPanelWorkerHandler((message) => messages.push(message))
-    handle({ type: "start", entrypoint: "main.lua", sources: { "main.lua": source }, streams: ["damage"], capabilities: ["ui"], streamScope })
-    handle({ type: "damage-stream", data: new Uint8Array([...encounter("e1", [5]), ...encounter("e2", [7])]), encounterIds: ["e2"] })
+    handle({ type: "start", entrypoint: "main.lua", sources: { "main.lua": lua }, streams: ["damage"], capabilities: ["ui"], streamScope, maxEvents })
+    handle({ type: "damage-stream", data: new Uint8Array(data), encounterIds: ["e2"] })
     return messages
   }
   const finalText = (messages: unknown[]) => messages.flatMap(message => (message as { operations?: Array<{ op: string; props?: { text?: string } }> }).operations ?? [])
@@ -71,5 +71,24 @@ describe("Lua panel worker damage replay", () => {
 
   it("rejects unknown stream scopes", () => {
     expect(replay("everything" as "instance")).toContainEqual(expect.objectContaining({ type: "error", message: "unsupported stream scope" }))
+  })
+
+  it("replays more events than the old fixed caps and reports progress", () => {
+    const counter = `
+      local label = CreateFrame("FontString", "out", UIParent)
+      local damage = require("chronicle.v1.events.damage")
+      local n = 0
+      damage.onEvent(function() n = n + 1; label:SetText(n) end)
+      damage.onComplete(function() label:SetText("done " .. n) end)
+    `
+    const messages = replay("selection", { lua: counter, data: encounter("e2", new Array(60_000).fill(1)) })
+    expect(messages).toContainEqual({ type: "progress", events: 60_000 })
+    expect(finalText(messages).at(-1)).toBe("done 60000")
+    expect(messages.at(-1)).toEqual({ type: "damage-complete" })
+  })
+
+  it("stops only at the manifest's own max_events", () => {
+    expect(replay("instance", { maxEvents: 1 })).toContainEqual(expect.objectContaining({ type: "error", message: "panel exceeded its max_events (1)" }))
+    expect(replay("instance", { maxEvents: 2 }).at(-1)).toEqual({ type: "damage-complete" })
   })
 })
