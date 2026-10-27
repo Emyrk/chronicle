@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { LuaPanelHost } from "../Instance/EventsPanels/LuaPanel/LuaPanelHost"
 import type { PanelPackage } from "../Guides/package/panelLoader"
+import type { PanelUnits } from "../Guides/runtime/panelUnits"
 import { selectPreviewDamage } from "./luaPreviewBounds"
 
 /** The caller must authorize instance access; the preview passes on every event in scope. */
@@ -14,13 +15,15 @@ export interface LuaInstancePreviewProps {
   instanceId: string
   encounterIds: readonly string[]
   events: LuaPreviewEventProvider
+  /** The previewed instance's units for Chronicle.GetUnit. */
+  units?: PanelUnits
 }
 
 interface Run { id: number; instanceId: string; panel: PanelPackage; selection: string; data?: Uint8Array }
 const button = "rounded-md border border-border bg-background px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
 
 /** Explicit, ephemeral browser-only preview. No package lookup, upload or server execution. */
-export function LuaInstancePreview({ panel, instanceId, encounterIds, events }: LuaInstancePreviewProps) {
+export function LuaInstancePreview({ panel, instanceId, encounterIds, events, units }: LuaInstancePreviewProps) {
   const [run, setRun] = useState<Run | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
@@ -100,7 +103,7 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events }: 
         <span className="ml-auto text-[11px] text-muted-foreground" title="Damage events only. Nothing is uploaded or published.">Damage events · runs locally</span>
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {active && <div className="overflow-hidden rounded-md border border-border bg-background"><LuaPanelHost key={run.id} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} streamScope={panel.streamScope} maxEvents={panel.maxEvents}
+      {active && <div className="overflow-hidden rounded-md border border-border bg-background"><LuaPanelHost key={run.id} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} streamScope={panel.streamScope} maxEvents={panel.maxEvents} units={units}
         capabilities={panel.capabilities} damageStream={run.data} encounterIds={encounterIds} assets={assetUrls} /></div>}
     </>}
   </section>

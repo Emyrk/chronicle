@@ -12,6 +12,8 @@ import { panelPackageFromWorkingCopy, validateEditorFiles, type EditorFiles } fr
 import { applyLuaFileEdit, LUA_EDITOR_CAPABILITY, parseLuaFileEdit, type LuaToolFile } from "./luaEditorTools"
 import { fetchPreviewDamage } from "./previewStream"
 import { runStartupCheck } from "./startupCheck"
+import { buildPanelUnits } from "../Guides/runtime/panelUnits"
+import { resolveInstanceUnits } from "../Instance/instanceUnits"
 import type { LuaSourceEditorHandle, LuaSourceProposal, LuaWorkingCopy } from "./LuaSourceEditor"
 
 const LuaSourceEditor = lazy(() => import("./LuaSourceEditor").then(module => ({ default: module.LuaSourceEditor })))
@@ -71,6 +73,8 @@ export default function LuaProjectWorkspacePage() {
     }, staleTime: 60_000, retry: false })
   const validInstanceID = instanceIDPattern.test(instanceId)
   const instance = useInstance(instanceId, { enabled: validInstanceID, retry: false })
+  const previewUnits = useMemo(() => instance.data && buildPanelUnits(instance.data.players,
+    resolveInstanceUnits(instance.data.units, instance.data.names_by_entry, instance.data.summons_by_owner)), [instance.data])
   // Start each newly loaded instance on its first boss kill so the preview runs without extra clicks.
   const [defaultedFor, setDefaultedFor] = useState("")
   if (instance.data && defaultedFor !== instance.data.id) {
@@ -325,7 +329,7 @@ export default function LuaProjectWorkspacePage() {
             {!copy?.valid && copy && <p className="text-xs text-muted-foreground">Fix the source errors to enable previews.</p>}
             {instance.data && encounterIds.length === 0 && <p className="text-xs text-muted-foreground">Select an encounter to preview. Ctrl/⌘-click selects several.</p>}
             {instance.data && localPanel?.value && encounterIds.length > 0 && <Suspense fallback={<p role="status" className="text-xs">Loading local preview…</p>}>
-              <LuaInstancePreview panel={localPanel.value} instanceId={instanceId} encounterIds={encounterIds} events={events} />
+              <LuaInstancePreview panel={localPanel.value} instanceId={instanceId} encounterIds={encounterIds} events={events} units={previewUnits} />
             </Suspense>}
           </div>
         </div>

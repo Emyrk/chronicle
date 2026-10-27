@@ -3,6 +3,7 @@ import { UI_ROOT_ID } from "../protocol/scene"
 import type { GuideCapability, NodeKind, SceneOperation } from "../protocol/types"
 import { trustedLuaModule, isReservedLuaPath } from "./trustedModules"
 import { PANEL_STREAMS, validatePanelEvent, type PanelEvent, type PanelStream } from "./panelEvents"
+import type { PanelUnit, PanelUnits } from "./panelUnits"
 
 const encoder = new TextEncoder()
 const UI_KINDS = new Map<string, NodeKind>([["Frame", "frame"], ["FontString", "text"], ["Texture", "texture"], ["Button", "button"]])
@@ -33,6 +34,8 @@ export interface GuideRuntimeOptions {
   capabilities?: readonly GuideCapability[]
   // Panel mode grants only explicitly listed streams; guide mode has no Panel API.
   panelStreams?: readonly PanelStream[]
+  /** Panel mode: units Lua can look up with Chronicle.GetUnit / Chronicle.GetPlayers. */
+  units?: PanelUnits
   limits?: Partial<GuideRuntimeLimits>
   emitBatch?: (operations: SceneOperation[]) => void
   scheduleTimer?: (id: number, delayMs: number) => void
@@ -356,6 +359,26 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
         return 0
       })
       lua.lua_setglobal(L, to_luastring("Panel"))
+      const units = options.units ?? {}
+      const playerGuids = Object.values(units).filter(unit => unit.player)
+        .sort((a, b) => a.name.localeCompare(b.name)).map(unit => unit.guid)
+      const pushUnit = (state: LuaState, unit: PanelUnit) => {
+        lua.lua_createtable(state, 0, 8)
+        for (const [key, value] of Object.entries(unit)) { pushArgument(state, value); setField(state, -2, key) }
+      }
+      lua.lua_createtable(L, 0, 2)
+      registerFunction(L, "GetUnit", (state) => {
+        const guid = stringAt(state, lua.lua_istable(state, 1) ? 2 : 1, "guid")
+        const unit = Object.hasOwn(units, guid) ? units[guid] : undefined
+        if (unit) pushUnit(state, unit); else lua.lua_pushnil(state)
+        return 1
+      })
+      registerFunction(L, "GetPlayers", (state) => {
+        lua.lua_createtable(state, playerGuids.length, 0)
+        playerGuids.forEach((guid, index) => { pushString(state, guid); lua.lua_rawseti(state, -2, index + 1) })
+        return 1
+      })
+      lua.lua_setglobal(L, to_luastring("Chronicle"))
     }
     let chapter = ""
     lua.lua_createtable(L, 0, 2); registerFunction(L, "SetChapter", (state) => { chapter = stringAt(state, lua.lua_istable(state, 1) ? 2 : 1, "chapter"); addOperation({ op: "chapter", chapter }); return 0 }); registerFunction(L, "GetChapter", (state) => { pushString(state, chapter || " "); return 1 }); lua.lua_setglobal(L, to_luastring("Guide"))
@@ -364,6 +387,8 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
   const pushArgument = (state: LuaState, value: unknown) => {
     if (value === null || value === undefined) lua.lua_pushnil(state)
     else if (typeof value === "string") { if (encoder.encode(value).byteLength > limits.maxStringBytes) fail("event string exceeds string limit"); pushString(state, value) }
+    // Whole numbers arrive as Lua integers so tostring/concatenation print "42", not "42.0".
+    else if (typeof value === "number" && Number.isSafeInteger(value)) lua.lua_pushinteger(state, value)
     else if (typeof value === "number" && Number.isFinite(value)) lua.lua_pushnumber(state, value)
     else if (typeof value === "boolean") pushBoolean(state, value)
     else fail("unsupported callback argument")
