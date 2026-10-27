@@ -65,8 +65,8 @@ export const TIER_ICON: Record<PaidBillingTier, string> = {
 /** A representative look per tier for the comparison table's cosmetics preview. */
 export const COSMETIC_SHOWCASE: Record<PaidBillingTier, { character: { name: string; class: string }; selection: CosmeticStyleSelection }> = {
   honored: { character: { name: "Varian", class: "Warrior" }, selection: { name: "epic", background: "none", border: "none" } },
-  revered: { character: { name: "Uther", class: "Paladin" }, selection: { name: "legendary", background: "glossy", border: "none" } },
-  exalted: { character: { name: "Jaina", class: "Mage" }, selection: { name: "thunderfury", background: "arcane", border: "elite" } },
+  revered: { character: { name: "Uther", class: "Paladin" }, selection: { name: "legendary", background: "pinpoint", border: "none" } },
+  exalted: { character: { name: "Jaina", class: "Mage" }, selection: { name: "thunderfury", background: "snowfall", border: "elite" } },
 }
 
 export function isPaidBillingTier(tier: string): tier is PaidBillingTier {
