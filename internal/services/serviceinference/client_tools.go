@@ -74,6 +74,10 @@ var luaEditorClientTools = []clientToolDefinition{
 		CapabilityID:   luaEditorCapabilityID, CapabilityVersion: luaEditorCapabilityVersion, Effect: "view_mutation", Confirmation: "never",
 	},
 	{
+		ToolDefinition: ToolDefinition{Name: "run_preview", Description: "Replay the current unsaved working copy in a fresh sandboxed browser worker against the instance and encounters the user selected in the Preview pane, exactly like the preview. Returns ok, the panel's error message if it stopped, event and timing metrics, and an indented text outline of every UI object it drew (kind, id, text, size, position, colors, hidden). Use it after edits to check behavior and output. If it reports no preview data selected, ask the user to pick an instance and encounters.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
+		CapabilityID:   luaEditorCapabilityID, CapabilityVersion: luaEditorCapabilityVersion, Effect: "read", Confirmation: "never",
+	},
+	{
 		ToolDefinition: ToolDefinition{Name: "run_startup_check", Description: "Start the current unsaved working copy in a fresh sandboxed browser worker and report whether Lua startup succeeded or the Lua error. No events are processed.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		CapabilityID:   luaEditorCapabilityID, CapabilityVersion: luaEditorCapabilityVersion, Effect: "read", Confirmation: "never",
 	},
@@ -290,7 +294,7 @@ func validateClientToolArguments(name, raw string) (json.RawMessage, error) {
 				}
 			}
 		}
-	case "read_lua_files", "run_startup_check":
+	case "read_lua_files", "run_startup_check", "run_preview":
 		var input struct{}
 		if err := decodeStrict(raw, &input); err != nil {
 			return nil, fmt.Errorf("invalid %s arguments", name)

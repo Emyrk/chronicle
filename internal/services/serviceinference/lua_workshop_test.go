@@ -30,7 +30,7 @@ func TestLuaWorkshopIsDurableAndUsesOnlyLuaEditorTools(t *testing.T) {
 		require.True(t, json.Valid(tool.Parameters), tool.Name)
 		names = append(names, tool.Name)
 	}
-	require.Equal(t, []string{"read_lua_files", "edit_lua_file", "run_startup_check"}, names)
+	require.Equal(t, []string{"read_lua_files", "edit_lua_file", "run_preview", "run_startup_check"}, names)
 	_, ok := clientToolByName("lua-editor", "update_instance_ui")
 	require.False(t, ok, "instance tools must not resolve under the Lua capability")
 

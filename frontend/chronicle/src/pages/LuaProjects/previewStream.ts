@@ -34,3 +34,33 @@ export async function fetchPreviewDamage(instanceId: string, { signal }: { signa
   if (typeof DecompressionStream === "undefined") throw new Error("Gzip decompression is unavailable in this browser")
   return readAll(new Blob([new Uint8Array(bytes)]).stream().pipeThrough(new DecompressionStream("gzip")), signal)
 }
+
+function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted()
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason)
+    signal.addEventListener("abort", onAbort, { once: true })
+    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort))
+  })
+}
+
+/**
+ * Keeps the most recent instance's damage bytes so re-running a preview (or auto-preview after every
+ * edit) does not download them again. One download per instance is shared: a caller giving up only
+ * stops waiting, and switching instances drops the old bytes.
+ */
+export function createCachedDamageProvider(fetchDamage: typeof fetchPreviewDamage = fetchPreviewDamage) {
+  let cached: { instanceId: string; abort: AbortController; promise: Promise<Uint8Array> } | null = null
+  return {
+    getDamage(instanceId: string, { signal }: { signal: AbortSignal }): Promise<Uint8Array> {
+      if (cached?.instanceId !== instanceId) {
+        cached?.abort.abort()
+        const abort = new AbortController()
+        const entry = { instanceId, abort, promise: fetchDamage(instanceId, { signal: abort.signal }) }
+        entry.promise.catch(() => { if (cached === entry) cached = null })
+        cached = entry
+      }
+      return abortable(cached.promise, signal)
+    },
+  }
+}

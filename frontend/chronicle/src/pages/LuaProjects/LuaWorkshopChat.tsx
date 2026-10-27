@@ -31,7 +31,7 @@ function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   return <div className="mx-auto max-w-sm text-center text-sm text-muted-foreground">
     <Sparkles className="mx-auto mb-3 size-8 text-primary" />
     <p className="font-medium text-foreground">What should this panel do?</p>
-    <p className="mt-2">The assistant reads and edits your unsaved main.lua and project.json, and can run a startup check. Nothing is saved until you click Save draft.</p>
+    <p className="mt-2">The assistant reads and edits your unsaved main.lua and project.json, and can run a startup check or a preview on your selected encounters. Nothing is saved until you click Save draft.</p>
     <div className="mt-4 flex flex-col gap-2">
       {ideas.map(idea => <button key={idea} type="button" onClick={() => onPick(idea)}
         className="rounded-md border border-border px-3 py-2 text-left text-xs text-foreground hover:bg-accent">{idea}</button>)}
