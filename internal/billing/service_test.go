@@ -1055,7 +1055,7 @@ func TestStripeEntitlementRoleSyncOnlyOnEffectiveTierChange(t *testing.T) {
 	var enqueued []uuid.UUID
 	svc.SetDiscordRoleSyncEnqueuer(func(_ context.Context, id uuid.UUID) error {
 		enqueued = append(enqueued, id)
-		return nil
+		return errors.New("Discord queue unavailable")
 	})
 	require.NoError(t, svc.syncStripeEntitlements(ctx, "cus_123"))
 	require.Empty(t, enqueued)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -12,13 +13,16 @@ import (
 	"github.com/Emyrk/chronicle/internal/paidtier"
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/require"
 )
 
 type tierRoleTestStore struct {
 	database.Store
-	userID uuid.UUID
-	roles  []database.BillingEntitlement
+	userID        uuid.UUID
+	roles         []database.BillingEntitlement
+	memberChecked bool
 }
 
 func (s *tierRoleTestStore) GetUserAuthLinkByUserIDAndProvider(_ context.Context, arg database.GetUserAuthLinkByUserIDAndProviderParams) (database.UserAuthLink, error) {
@@ -26,6 +30,44 @@ func (s *tierRoleTestStore) GetUserAuthLinkByUserIDAndProvider(_ context.Context
 		return database.UserAuthLink{}, fmt.Errorf("unexpected auth link lookup: %v", arg)
 	}
 	return database.UserAuthLink{UserID: s.userID, LinkedID: "discord-user", Provider: "discord"}, nil
+}
+
+type tierSyncQueue struct {
+	JobInserter
+	args river.JobArgs
+}
+
+func (q *tierSyncQueue) Insert(_ context.Context, args river.JobArgs, _ *river.InsertOpts) (*rivertype.JobInsertResult, error) {
+	q.args = args
+	return nil, nil
+}
+
+func TestEnqueueEntitlementRoleSyncReusesDiscordUserJob(t *testing.T) {
+	t.Parallel()
+	userID := uuid.New()
+	store := &tierRoleTestStore{userID: userID}
+	session, err := discordgo.New("Bot test")
+	require.NoError(t, err)
+	queue := &tierSyncQueue{}
+	bot := &Bot{session: session, queue: queue, config: Config{
+		GuildID: "guild", HonoredRoleID: "honored", ReveredRoleID: "revered", ExaltedRoleID: "exalted", DB: store,
+	}}
+	require.NoError(t, bot.EnqueueEntitlementRoleSync(context.Background(), userID))
+	require.Equal(t, ArgsSyncDiscordUser{DiscordID: "discord-user", UniqueString: "billing"}, queue.args)
+}
+
+func (s *tierRoleTestStore) UpsertDataGrant(_ context.Context, _ database.UpsertDataGrantParams) (database.DataGrant, error) {
+	return database.DataGrant{}, nil
+}
+
+func (s *tierRoleTestStore) UpsertDiscordMembershipGrantCheckMember(_ context.Context, _ database.UpsertDiscordMembershipGrantCheckMemberParams) (database.DiscordMembershipGrantCheck, error) {
+	s.memberChecked = true
+	return database.DiscordMembershipGrantCheck{}, nil
+}
+
+type tierRoleTestAuthorizer struct {
+	*recordingAuthorizer
+	database.StoreQueries
 }
 
 func (s *tierRoleTestStore) ListBillingEntitlementsByUserID(_ context.Context, userID uuid.UUID) ([]database.BillingEntitlement, error) {
@@ -39,7 +81,7 @@ type tierRoleTransport func(*http.Request) (*http.Response, error)
 
 func (f tierRoleTransport) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
-func TestSyncEntitlementRolesUpdatesOnlyConfiguredGuildRoles(t *testing.T) {
+func TestSyncEntitlementRolesUsesExistingMemberRoles(t *testing.T) {
 	t.Parallel()
 	userID := uuid.New()
 	store := &tierRoleTestStore{userID: userID, roles: []database.BillingEntitlement{{EntitlementKey: "chronicle-revered"}}}
@@ -50,9 +92,6 @@ func TestSyncEntitlementRolesUpdatesOnlyConfiguredGuildRoles(t *testing.T) {
 		path := req.URL.Path
 		status, body := http.StatusNoContent, ""
 		switch req.Method {
-		case http.MethodGet:
-			require.True(t, strings.HasSuffix(path, "/guilds/guild/members/discord-user"), path)
-			status, body = http.StatusOK, `{"user":{"id":"discord-user"},"roles":["honored","unrelated"]}`
 		case http.MethodPut, http.MethodDelete:
 			mutations = append(mutations, req.Method+" "+path)
 		default:
@@ -63,11 +102,39 @@ func TestSyncEntitlementRolesUpdatesOnlyConfiguredGuildRoles(t *testing.T) {
 	bot := &Bot{session: session, config: Config{
 		GuildID: "guild", HonoredRoleID: "honored", ReveredRoleID: "revered", ExaltedRoleID: "exalted", DB: store,
 	}}
-	require.NoError(t, bot.SyncEntitlementRoles(context.Background(), userID))
+	require.NoError(t, bot.syncEntitlementRoles(context.Background(), "discord-user", userID, []string{"honored", "unrelated"}))
 	require.Equal(t, []string{
 		"DELETE /api/v9/guilds/guild/members/discord-user/roles/honored",
 		"PUT /api/v9/guilds/guild/members/discord-user/roles/revered",
 	}, mutations)
+}
+
+func TestSyncDiscordUserKeepsMembershipWhenTierRoleWriteFails(t *testing.T) {
+	t.Parallel()
+	userID := uuid.New()
+	store := &tierRoleTestStore{userID: userID, roles: []database.BillingEntitlement{{EntitlementKey: "chronicle-revered"}}}
+	session, err := discordgo.New("Bot test")
+	require.NoError(t, err)
+	var memberFetches, roleWrites int
+	session.Client.Transport = tierRoleTransport(func(req *http.Request) (*http.Response, error) {
+		status, body := http.StatusForbidden, `{"message":"Missing Permissions"}`
+		if req.Method == http.MethodGet {
+			memberFetches++
+			require.True(t, strings.HasSuffix(req.URL.Path, "/guilds/guild/members/discord-user"))
+			status, body = http.StatusOK, `{"user":{"id":"discord-user"},"roles":["honored"]}`
+		} else {
+			roleWrites++
+		}
+		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{}, Request: req}, nil
+	})
+	bot := &Bot{session: session, logger: slog.New(slog.NewTextHandler(io.Discard, nil)), config: Config{
+		GuildID: "guild", HonoredRoleID: "honored", ReveredRoleID: "revered", ExaltedRoleID: "exalted", DB: store,
+	}}
+	zed := &tierRoleTestAuthorizer{recordingAuthorizer: &recordingAuthorizer{}, StoreQueries: store}
+	require.NoError(t, bot.SyncDiscordUser(context.Background(), zed, "discord-user", userID))
+	require.Equal(t, 1, memberFetches, "reuse the existing Discord member fetch")
+	require.Equal(t, 1, roleWrites)
+	require.True(t, store.memberChecked, "role mutation failures must not block membership grants")
 }
 
 func TestTierRoleDiff(t *testing.T) {

@@ -67,10 +67,6 @@ func (w *WorkerSyncDiscordUser) Work(ctx context.Context, job *river.Job[ArgsSyn
 		return fmt.Errorf("sync discord user %s: %w", job.Args.DiscordID, err)
 	}
 
-	if err := b.EnqueueEntitlementRoleSync(ctx, link.UserID); err != nil {
-		return fmt.Errorf("enqueue Discord entitlement role sync: %w", err)
-	}
-
 	b.logger.Info("synced discord user",
 		slog.String("discord_id", job.Args.DiscordID),
 		slog.String("user_id", link.UserID.String()),

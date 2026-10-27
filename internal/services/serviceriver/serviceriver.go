@@ -120,7 +120,6 @@ func (s *Service) Start(ctx context.Context) error {
 				&river.PeriodicJobOpts{ID: "discord-entitlement-role-audit", RunOnStart: true},
 			),
 		)
-		riverqueue.AddWorker(q, bot.NewWorkerSyncEntitlementRoles())
 		riverqueue.AddWorker(q, bot.NewWorkerSyncDiscordUser())
 		riverqueue.AddWorker(q, bot.NewWorkerNotifyApplication())
 		riverqueue.AddWorker(q, bot.NewWorkerNotifyAdmin())

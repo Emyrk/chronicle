@@ -71,10 +71,9 @@ func (s *Service) syncStripeEntitlements(ctx context.Context, customerID string)
 				continue
 			}
 			rows, err := s.store.ListBillingEntitlementsByUserID(ctx, owner)
-			if err != nil {
-				return fmt.Errorf("read previous billing tier for user %s: %w", owner, err)
+			if err == nil {
+				previousTiers[owner] = paidtier.Effective(rows)
 			}
-			previousTiers[owner] = paidtier.Effective(rows)
 		}
 	}
 	if err := s.runEntitlementTransaction(ctx, func(tx EntitlementTransaction) error {
@@ -125,13 +124,9 @@ func (s *Service) syncStripeEntitlements(ctx context.Context, customerID string)
 	if s.discordRoleSyncEnqueuer != nil {
 		for owner, previousTier := range previousTiers {
 			rows, err := s.store.ListBillingEntitlementsByUserID(ctx, owner)
-			if err != nil {
-				return fmt.Errorf("read updated billing tier for user %s: %w", owner, err)
-			}
-			if paidtier.Effective(rows) != previousTier {
-				if err := s.discordRoleSyncEnqueuer(ctx, owner); err != nil {
-					return fmt.Errorf("enqueue Discord tier role sync for user %s: %w", owner, err)
-				}
+			if err == nil && paidtier.Effective(rows) != previousTier {
+				// Discord roles are best-effort. The periodic audit repairs missed jobs.
+				_ = s.discordRoleSyncEnqueuer(ctx, owner)
 			}
 		}
 	}
