@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, useParams } from "react-router-dom"
 import { ArrowLeftRight, BookOpen, GitCompare, PanelLeft, PanelRightClose, PanelRightOpen, Rocket, Save, Undo2 } from "lucide-react"
@@ -17,6 +17,8 @@ import { runStartupCheck } from "./startupCheck"
 import { buildPanelUnits } from "../Guides/runtime/panelUnits"
 import { resolveInstanceUnits } from "../Instance/instanceUnits"
 import type { LuaSourceEditorHandle, LuaSourceProposal, LuaWorkingCopy } from "./LuaSourceEditor"
+import { PaneResizer } from "./PaneResizer"
+import { MIN_SIDE_WIDTH } from "./paneWidth"
 
 const LuaSourceEditor = lazy(() => import("./LuaSourceEditor").then(module => ({ default: module.LuaSourceEditor })))
 const LuaWorkshopChat = lazy(() => import("./LuaWorkshopChat").then(module => ({ default: module.LuaWorkshopChat })))
@@ -28,14 +30,16 @@ const instanceIDPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
 const proposalTimeoutMs = 5_000
 const layoutKey = "lua-workshop-layout"
 
-type Layout = { focus: "chat" | "code"; sideOpen: boolean }
+/** sideWidth is the right-hand column's dragged width in px; null keeps the default. */
+type Layout = { focus: "chat" | "code"; sideOpen: boolean; sideWidth: number | null }
 type AiEdit = { file: LuaToolFile; before: EditorFiles; after: EditorFiles; revision: number }
 
 function readLayout(): Layout {
   try {
     const value = JSON.parse(localStorage.getItem(layoutKey) ?? "null") as Partial<Layout> | null
-    return { focus: value?.focus === "code" ? "code" : "chat", sideOpen: value?.sideOpen !== false }
-  } catch { return { focus: "chat", sideOpen: true } }
+    const sideWidth = typeof value?.sideWidth === "number" && Number.isFinite(value.sideWidth) && value.sideWidth >= MIN_SIDE_WIDTH ? value.sideWidth : null
+    return { focus: value?.focus === "code" ? "code" : "chat", sideOpen: value?.sideOpen !== false, sideWidth }
+  } catch { return { focus: "chat", sideOpen: true, sideWidth: null } }
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -124,6 +128,8 @@ export default function LuaProjectWorkspacePage() {
     } finally { setPublishing(false) }
   }
   const [layout, setLayoutState] = useState(readLayout)
+  const gridRef = useRef<HTMLDivElement>(null)
+  const [dragWidth, setDragWidth] = useState<number | null>(null)
   const [sideTab, setSideTab] = useState<"pane" | "preview">("pane")
   const [aiEdit, setAiEdit] = useState<AiEdit | null>(null)
   const [diffOpen, setDiffOpen] = useState(false)
@@ -240,6 +246,7 @@ export default function LuaProjectWorkspacePage() {
 
   const selectInstance = (id: string) => { setInstanceId(id); setEncounterIds([]) }
   const { focus, sideOpen } = layout
+  const sideWidth = dragWidth ?? layout.sideWidth
   const sideName = focus === "chat" ? "code" : "chat"
   const swap = () => { setLayout({ focus: sideName, sideOpen: true }); setSideTab("pane") }
   const showSidePane = (pane: "chat" | "code") => { if (pane !== focus) setSideTab("pane") }
@@ -288,7 +295,11 @@ export default function LuaProjectWorkspacePage() {
         </button>}
       </div>
     </header>
-    <div className={`grid flex-1 grid-cols-1 lg:min-h-0 lg:grid-rows-[auto_minmax(0,1fr)] ${sideOpen ? "lg:grid-cols-[minmax(0,1fr)_minmax(360px,min(44%,680px))]" : "lg:grid-cols-1"}`}>
+    <div ref={gridRef} style={sideWidth !== null ? { "--workshop-side": `${sideWidth}px` } as CSSProperties : undefined}
+      className={`grid flex-1 grid-cols-1 lg:min-h-0 lg:grid-rows-[auto_minmax(0,1fr)] ${!sideOpen ? "lg:grid-cols-1"
+        // A dragged width still leaves the main area its minimum when the window shrinks.
+        : sideWidth !== null ? "lg:grid-cols-[minmax(0,1fr)_min(var(--workshop-side),calc(100%_-_360px))]"
+        : "lg:grid-cols-[minmax(0,1fr)_minmax(360px,min(44%,680px))]"}`}>
       <div className={`order-1 flex h-10 items-center gap-1 border-y-2 border-foreground/25 bg-black/20 px-2 lg:col-start-2 lg:row-start-1 lg:border-y-0 lg:border-b lg:border-b-border ${sideHidden}`}>
         {(["pane", "preview"] as const).map(tab => <button key={tab} type="button" aria-pressed={sideTab === tab} onClick={() => setSideTab(tab)}
           className={`rounded-md px-2.5 py-1 text-xs ${sideTab === tab ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{tab === "preview" ? "Preview" : sideName === "code" ? "Code" : "Chat"}</button>)}
@@ -297,8 +308,10 @@ export default function LuaProjectWorkspacePage() {
           <button type="button" className={iconButton} onClick={() => setLayout({ sideOpen: false })} title="Hide side panel" aria-label="Hide side panel"><PanelRightClose className="size-4" /></button>
         </div>
       </div>
-      {/* Visible divider between the main area and the side column. */}
-      <div aria-hidden className={`pointer-events-none z-10 hidden border-l-2 border-foreground/25 lg:col-start-2 lg:row-span-2 lg:row-start-1 ${sideOpen ? "lg:block" : ""}`} />
+      {/* Divider between the main area and the side column; drag it to resize. */}
+      <PaneResizer containerRef={gridRef} width={sideWidth} onDrag={setDragWidth}
+        onCommit={width => { setDragWidth(null); setLayout({ sideWidth: width }) }}
+        className={`hidden lg:col-start-2 lg:row-span-2 lg:row-start-1 ${sideOpen ? "lg:block" : ""}`} />
       <section className={paneClass("chat")} aria-label="Workshop chat">
         <Suspense fallback={<p role="status" className="p-4 text-sm text-muted-foreground">Loading chat…</p>}>
           <LuaWorkshopChat projectId={project.id} projectName={project.name} windowControls={mainControls("chat")}
