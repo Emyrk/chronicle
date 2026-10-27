@@ -1,5 +1,5 @@
 import { lauxlib, lua, lualib, to_luastring } from "fengari"
-import { UI_ROOT_ID } from "../protocol/scene"
+import { MAX_CANVAS_SIZE, UI_ROOT_ID } from "../protocol/scene"
 import type { GuideCapability, NodeKind, SceneOperation } from "../protocol/types"
 import { trustedLuaModule, isReservedLuaPath } from "./trustedModules"
 import { PANEL_STREAMS, validatePanelEvent, type PanelEvent, type PanelStream } from "./panelEvents"
@@ -94,6 +94,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
   const L = lauxlib.luaL_newstate()
   const operations: SceneOperation[] = []
   const objects = new Map<string, ObjectState>([[UI_ROOT_ID, { kind: "root", shown: true }]])
+  let canvas: { width: number | null; height: number | null } = { width: null, height: null }
   const callbacks = new Map<string, number>()
   const timers = new Map<number, number>()
   const modules = new Map<string, number>()
@@ -140,7 +141,14 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
     const id = objectIdAt(state)
     const props = read(state)
     const kind = objects.get(id)!.kind
-    if (kind === "root") luaError(state, "UIParent only supports SetScript")
+    if (kind === "root") {
+      // UIParent's size is the panel's content size: bigger than the panel scrolls.
+      if (Object.keys(props).some(property => property !== "width" && property !== "height")) luaError(state, "UIParent only supports SetSize, SetWidth, SetHeight and SetScript")
+      canvas = { ...canvas, ...props as { width?: number; height?: number } }
+      for (const value of [canvas.width, canvas.height]) if (value !== null && !(value >= 1 && value <= MAX_CANVAS_SIZE)) luaError(state, `UIParent size must be between 1 and ${MAX_CANVAS_SIZE}`)
+      addOperation({ op: "canvas", width: canvas.width, height: canvas.height })
+      return 0
+    }
     const supported = SUPPORTED_PROPS[kind as NodeKind]
     for (const property of Object.keys(props)) if (!supported.has(property)) luaError(state, `${property} is not supported for ${kind}`)
     setProps(id, props)
@@ -202,7 +210,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
       const kind = kindAt(objectIdAt(inner))
       const width = numberAt(inner, 2); const height = numberAt(inner, 3)
       if (kind === "unit" || kind === "icon") return { size: Math.max(width, height) }
-      if (kind === "frame" || kind === "text" || kind === "texture" || kind === "button") return { width, height }
+      if (kind === "frame" || kind === "text" || kind === "texture" || kind === "button" || kind === "root") return { width, height }
       return luaError(inner, `SetSize is not supported for ${kind}`)
     }))
     registerFunction(state, "SetWidth", propertyMethod((inner) => ({ width: numberAt(inner, 2) })))

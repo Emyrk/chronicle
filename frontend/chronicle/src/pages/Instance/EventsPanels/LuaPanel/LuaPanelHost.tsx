@@ -9,6 +9,8 @@ import type { GuideCapability, RetainedScene } from "../../../Guides/protocol/ty
 import type { PanelEvent, PanelStream, PanelStreamScope } from "../../../Guides/runtime/panelEvents"
 import type { PanelReplayMetrics } from "../../../Guides/runtime/panelWorker"
 import type { PanelUnits } from "../../../Guides/runtime/panelUnits"
+import { explainAddonError, type AddonErrorContext, type AddonErrorExplanation, type AddonPhase } from "../../../Guides/runtime/addonErrors"
+import { AddonErrorCard } from "./AddonErrorCard"
 
 /** Worker phases plus host-side wall time (includes copying the stream to the worker) and page drawing time. */
 export type LuaPanelRunMetrics = PanelReplayMetrics & { wallMs: number; drawMs: number }
@@ -28,6 +30,10 @@ export interface LuaPanelHostProps {
   units?: PanelUnits
   /** Called once per completed damage replay. */
   onMetrics?: (metrics: LuaPanelRunMetrics) => void
+  /** Shows an "Ask the assistant to fix it" button on errors (Addon Workshop only). */
+  onAskAssistant?: (prompt: string) => void
+  /** Grow to the height set with UIParent:SetHeight instead of filling the parent (author preview). */
+  fitContent?: boolean
 }
 
 const EMPTY_EVENTS: readonly PanelEvent[] = []
@@ -35,9 +41,9 @@ const EMPTY_IDS: readonly string[] = []
 const EMPTY_ASSETS: ReadonlyMap<string, string> = new Map()
 
 // Shared by the author preview and embedded EventsPanels. No Lua executes on the main thread.
-export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", maxEvents, capabilities, events = EMPTY_EVENTS, damageStream, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS, units, onMetrics }: LuaPanelHostProps) {
+export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", maxEvents, capabilities, events = EMPTY_EVENTS, damageStream, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS, units, onMetrics, onAskAssistant, fitContent }: LuaPanelHostProps) {
   const [scene, setScene] = useState<RetainedScene>(createInitialScene)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<AddonErrorExplanation | null>(null)
   const [progress, setProgress] = useState<number | null>(null)
   const [metrics, setMetrics] = useState<LuaPanelRunMetrics | null>(null)
   const workerRef = useRef<Worker | null>(null)
@@ -51,10 +57,10 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
     const runtime = new Worker(new URL("../../../Guides/runtime/panelWorker.ts", import.meta.url), { type: "module" })
     workerRef.current = runtime
     let watchdog: ReturnType<typeof setTimeout> | undefined
-    const stop = (reason: string) => {
+    const stop = (reason: string, context?: AddonErrorContext) => {
       clearTimeout(watchdog)
       runtime.terminate()
-      setError(reason)
+      setError(explainAddonError(reason, context))
     }
     const armWatchdog = () => {
       clearTimeout(watchdog)
@@ -63,7 +69,8 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
     runtime.onmessage = ({ data }: MessageEvent<unknown>) => {
       try {
         if (data && typeof data === "object" && "type" in data && data.type === "error") {
-          stop(String("message" in data ? data.message : "Panel failed")); return
+          const context = data as { phase?: AddonPhase; events?: number }
+          stop(String("message" in data ? data.message : "Panel failed"), { phase: context.phase, events: context.events }); return
         }
         if (data && typeof data === "object" && "type" in data && data.type === "damage-complete") {
           clearTimeout(watchdog)
@@ -109,10 +116,14 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
     for (const event of events) workerRef.current?.postMessage({ type: "event", event })
   }, [events])
 
-  if (error) return <div role="alert" className="p-4 text-sm text-destructive">Addon stopped: {error}</div>
+  if (error) return <AddonErrorCard error={error} onAskAssistant={onAskAssistant} />
   return <div className="flex min-h-0 flex-1 flex-col">
-    <div className="relative min-h-[240px] flex-1 overflow-hidden" data-lua-panel-host>
-      <GuideUiScene scene={scene} assets={assets} onNodeClick={(node) => workerRef.current?.postMessage({ type: "click", nodeId: node.id })} />
+    {/* Content larger than the panel (or than UIParent:SetSize asks for) scrolls instead of being cut off. */}
+    <div className="styled-scrollbar relative min-h-[240px] flex-1 overflow-auto" data-lua-panel-host
+      style={fitContent && scene.canvas.height !== null ? { flex: "none", height: scene.canvas.height } : undefined}>
+      <div className="relative" style={{ width: scene.canvas.width ?? "100%", height: scene.canvas.height ?? "100%", minWidth: "100%", minHeight: "100%" }}>
+        <GuideUiScene scene={scene} assets={assets} onNodeClick={(node) => workerRef.current?.postMessage({ type: "click", nodeId: node.id })} />
+      </div>
     </div>
     {(metrics || progress !== null) && <LuaRunMetricsBar metrics={metrics} progress={progress} />}
   </div>

@@ -121,12 +121,23 @@ local button = CreateFrame("Button", "my-button", UIParent)
 
 `CreateFrame(type, id, parent)` accepts `"Frame"`, `"FontString"`, `"Texture"` and `"Button"`. `id` must be unique within the addon; omit it to get a generated one. `parent` defaults to `UIParent`, the panel's root. Objects persist until you call `:Destroy()`, so create them once and update them, rather than creating new ones each time.
 
+### Panel size and scrolling
+
+`UIParent` fills the panel by default. Anything drawn below or to the right of the panel scrolls rather than being cut off. To size the content yourself, set `UIParent`'s size; the panel scrolls when it is bigger than the space available, and the workshop preview grows to fit it:
+
+```lua
+local ROW = 22
+UIParent:SetHeight(40 + #rows * ROW)   -- tall enough for a title and every row
+```
+
+`UIParent:SetSize(w, h)`, `SetWidth(w)` and `SetHeight(h)` accept 1–16,384 pixels. `BOTTOM` anchors are measured from the bottom of this content area.
+
 ### Methods
 
 | Method | Works on | Notes |
 | --- | --- | --- |
 | `SetPoint(point, relativeTo, relativePoint, x, y)` | all | Anchors the object inside its **parent** at `point` (`"TOPLEFT"`, `"TOP"`, `"TOPRIGHT"`, `"LEFT"`, `"CENTER"`, `"RIGHT"`, `"BOTTOMLEFT"`, `"BOTTOM"`, `"BOTTOMRIGHT"`), offset by `x`, `y` pixels. Negative `y` moves down. `relativeTo` and `relativePoint` are accepted for WoW compatibility but ignored. |
-| `SetSize(w, h)`, `SetWidth(w)`, `SetHeight(h)` | all | Pixels. |
+| `SetSize(w, h)`, `SetWidth(w)`, `SetHeight(h)` | all | Pixels. On `UIParent` this sets the scrollable content size. |
 | `SetText(s)` | FontString, Button | Up to 4 KiB. |
 | `SetFontSize(n)` | FontString | Pixels; default 14. |
 | `SetColor(r, g, b, a)` | Frame, FontString, Button | Text or foreground colour, components 0–1, `a` optional. |
@@ -138,6 +149,8 @@ local button = CreateFrame("Button", "my-button", UIParent)
 | `Show()`, `Hide()`, `IsShown()` | all | |
 | `SetParent(frame)` | all | |
 | `Destroy()` | all except UIParent | Removes the object and its click handler. |
+
+`UIParent` supports only `SetSize`, `SetWidth`, `SetHeight` and `SetScript`.
 | `SetScript("OnClick", fn)` | Button, Frame | Needs the `input` capability. `fn(self)` runs on click. |
 
 ## Built-in modules
@@ -204,6 +217,11 @@ Read `unit.class` and map it to a colour; the example below includes the standar
 
 **My addon shows nothing.**
 Make sure `project.json` lists `"damage"` in `streams`. Make sure you draw in `onComplete`, or update frames in `onEvent`. Then run **Startup check** in the editor to catch Lua errors.
+
+**My panel is cut off.**
+Content past the panel's edge scrolls. Set `UIParent:SetHeight(...)` to the height your rows need so the panel and the workshop preview size to fit. See [Panel size and scrolling](#panel-size-and-scrolling).
+
+When an addon stops, Chronicle shows what went wrong, where (file, line, and whether it was startup, `onEvent`, `onComplete` or a click), and how to fix it. In the workshop, **Ask the assistant to fix it** sends that explanation to the assistant.
 
 **"Addon stopped: instruction budget exceeded".**
 One callback did too much work, for example sorting a large table inside `onEvent`. Move heavy work to `onComplete`, and keep each callback under 100,000 instructions.

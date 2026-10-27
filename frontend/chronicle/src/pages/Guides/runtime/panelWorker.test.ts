@@ -2,6 +2,7 @@ import { create, toBinary } from "@bufbuild/protobuf"
 import { describe, expect, it } from "vitest"
 import { DamageSchema } from "@/api/proto/chronicle_pb"
 import { createPanelWorkerHandler } from "./panelWorker"
+import { applySceneBatch, createInitialScene } from "../protocol/scene"
 
 function varint(value: number): number[] {
   const bytes: number[] = []
@@ -43,6 +44,17 @@ describe("Lua panel worker capability boundary", () => {
     expect(batches.length).toBeGreaterThan(1)
     expect(batches.flatMap(b => b.operations)).toHaveLength(1000)
     for (const batch of batches) expect(new TextEncoder().encode(JSON.stringify(batch)).byteLength).toBeLessThanOrEqual(64 * 1024)
+  })
+
+  it("lets UIParent set the panel's content size, which the scene keeps", () => {
+    const messages = start(`UIParent:SetHeight(900); UIParent:SetSize(500, 1200); UIParent:SetWidth(640)`, ["ui"])
+    const operations = messages.flatMap(m => (m as { type: string; operations?: unknown[] }).type === "batch" ? (m as { operations: unknown[] }).operations : [])
+    expect(operations).toEqual([
+      { op: "canvas", width: null, height: 900 }, { op: "canvas", width: 500, height: 1200 }, { op: "canvas", width: 640, height: 1200 },
+    ])
+    expect(applySceneBatch(createInitialScene(), operations).canvas).toEqual({ width: 640, height: 1200 })
+    expect(start(`UIParent:SetHeight(0)`, ["ui"])).toContainEqual(expect.objectContaining({ type: "error", message: expect.stringMatching(/between 1 and 16384/) }))
+    expect(start(`UIParent:SetText("x")`, ["ui"])).toContainEqual(expect.objectContaining({ type: "error", message: expect.stringMatching(/UIParent only supports SetSize/) }))
   })
 
   it("allows UI without input callbacks", () => {

@@ -58,7 +58,14 @@ export interface ChapterOperation {
   chapter: string
 }
 
-export type SceneOperation = CreateOperation | SetOperation | ListenOperation | DestroyOperation | CameraOperation | ChapterOperation
+/** Content size set with UIParent:SetSize/SetWidth/SetHeight; null means "fit the panel". */
+export interface CanvasOperation {
+  op: "canvas"
+  width: number | null
+  height: number | null
+}
+
+export type SceneOperation = CreateOperation | SetOperation | ListenOperation | DestroyOperation | CameraOperation | ChapterOperation | CanvasOperation
 
 export interface SceneNode {
   readonly id: string
@@ -74,10 +81,17 @@ export interface CameraState {
   readonly zoom: number
 }
 
+export interface CanvasSize {
+  readonly width: number | null
+  readonly height: number | null
+}
+
 export interface RetainedScene {
   readonly nodes: ReadonlyMap<string, SceneNode>
   readonly camera: CameraState
   readonly chapter: string | null
+  /** Content size requested by the addon; larger than the panel scrolls. */
+  readonly canvas: CanvasSize
 }
 
 export interface Viewport {
