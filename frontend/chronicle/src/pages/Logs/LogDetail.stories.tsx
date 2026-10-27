@@ -497,19 +497,6 @@ export const OnlyTrashFights: Story = {
   },
 };
 
-// Uploader without the Revered tier: supporter-only actions render as locked links to /supporter.
-export const OwnerWithoutRevered: Story = {
-  args: {
-    canDownloadFiles: false,
-    canMarkUnlisted: false,
-    showSupporterHints: true,
-    log: {
-      ...mockLog,
-      status: { ...mockJobStatus, state: "completed", finalized_at: "2026-01-10T14:35:00Z" },
-    },
-  },
-};
-
 // Story with no instances parsed
 export const NoInstancesParsed: Story = {
   args: {

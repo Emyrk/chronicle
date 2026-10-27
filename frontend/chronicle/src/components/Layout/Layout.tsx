@@ -27,8 +27,7 @@ export function Layout() {
       {!hideChrome && (
         <>
           <NoticeBanner notices={noticeResponse?.notices ?? []} />
-          {/* The supporter page is already the ask. */}
-          {location.pathname !== "/supporter" && <SupportBanner />}
+          <SupportBanner />
           <NavBar />
         </>
       )}
