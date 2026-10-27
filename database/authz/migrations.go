@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/authzed/gochugaru/rel"
 	"github.com/google/uuid"
 )
 
@@ -26,6 +27,7 @@ var migrations = []AuthzMigration{
 	{Version: 6, Run: migration006},
 	{Version: 7, Run: migration007},
 	{Version: 8, Run: migration008},
+	{Version: 9, Run: migration009},
 }
 
 // RunSchemaMigrations runs any authz migrations not yet recorded in the
@@ -231,4 +233,19 @@ func migration008(ctx context.Context, az *Authz) error {
 	// TOUCH is idempotent, so existing tenant links are preserved.
 	_, err = az.Write(ctx, *b.Txn())
 	return err
+}
+
+// migration009 removes legacy Stripe feature grants now derived from paid tiers.
+// Retain their schema relations for compatibility during a mixed-version rollout.
+func migration009(ctx context.Context, az *Authz) error {
+	for _, role := range []string{
+		"stripe_ad_free", "stripe_download_raw_logs",
+		"stripe_unlisted_logs", "stripe_submit_photo_proof",
+	} {
+		filter := rel.NewFilter("chronicle", "chronicle", role)
+		if err := az.Delete(ctx, rel.NewPreconditionedFilter(filter)); err != nil {
+			return fmt.Errorf("delete legacy Stripe feature grants %q: %w", role, err)
+		}
+	}
+	return nil
 }
