@@ -26,7 +26,9 @@ definition chronicle {
   relation photo_proof_reviewer: user
   relation photo_proof_banned: user
 
-  // Stripe-owned feature roles granted by Chronicle billing entitlements.
+  // Deprecated Stripe feature roles. Billing no longer writes them; migration 9
+  // removes old relationships. Keep the relations during rollout so older
+  // deployments can still read and revoke their existing grants.
   relation stripe_ad_free: user
   relation stripe_download_raw_logs: user
   relation stripe_unlisted_logs: user
@@ -66,12 +68,17 @@ definition chronicle {
   permission admin_tenants = technical_admin
   permission admin_queues = technical_admin + is_admin_queues
   permission set_user_data_limit = technical_admin
+  // Effective tiers combine administrator and Stripe grants without merging ownership.
+  permission has_honored = honored + revered + exalted + stripe_honored + stripe_revered + stripe_exalted
+  permission has_revered = revered + exalted + stripe_revered + stripe_exalted
+  permission has_exalted = exalted + stripe_exalted
+
   permission shorter_urls = supporter + admin
-  permission ad_free = ad_free_capable + supporter + stripe_ad_free
-  permission linked_characters_ad_free = revered + exalted + stripe_revered + stripe_exalted
-  permission uploaded_logs_ad_free = revered + exalted + stripe_revered + stripe_exalted
-  permission download_raw_logs = administer + moderate_logs + stripe_download_raw_logs
-  permission unlisted_logs = stripe_unlisted_logs
+  permission ad_free = ad_free_capable + supporter + stripe_ad_free + has_honored
+  permission linked_characters_ad_free = has_revered
+  permission uploaded_logs_ad_free = has_revered
+  permission download_raw_logs = administer + moderate_logs + stripe_download_raw_logs + has_revered
+  permission unlisted_logs = stripe_unlisted_logs + has_revered
   permission admin_regressions = technical_admin + is_admin_raid_requirements
   permission admin_speedrun_requirements = technical_admin + is_admin_raid_requirements
 
@@ -89,14 +96,14 @@ definition chronicle {
   permission admin_servers = technical_admin
 
   // A site-wide ban overrides every site-wide submission grant.
-  permission submit_photo_proof = (photo_proof_submitter + stripe_submit_photo_proof + supporter) - photo_proof_banned
+  permission submit_photo_proof = (photo_proof_submitter + stripe_submit_photo_proof + supporter + has_honored) - photo_proof_banned
   permission review_photo_proof = photo_proof_reviewer + technical_admin
 
   permission create_tenant_application = technical_admin + chronicle_guild_member
 
-  permission honored_cosmetics = honored + revered + exalted + stripe_honored + stripe_revered + stripe_exalted
-  permission revered_cosmetics = revered + exalted + stripe_revered + stripe_exalted
-  permission exalted_cosmetics = exalted + stripe_exalted
+  permission honored_cosmetics = has_honored
+  permission revered_cosmetics = has_revered
+  permission exalted_cosmetics = has_exalted
 }
 
 definition cosmetic {
