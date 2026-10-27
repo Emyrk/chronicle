@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
+import { cn } from "@/lib/utils";
 import { DiscordGrantCallout } from "./DiscordGrantCallout";
+import { SupporterStorageCallout } from "./SupporterStorageCallout";
 import { hasDiscordMemberGrant } from "./grantMath";
 import { LogsTable } from "./LogsTable";
 import { ParsedDataCard } from "./ParsedDataCard";
@@ -20,6 +22,8 @@ export interface StorageSettingsViewProps {
   logsLoading: boolean;
   /** Name of the tenant currently being browsed (subdomain), or null on the root domain. */
   currentTenantName: string | null;
+  /** Billing is on and the account has no supporter tier yet. */
+  showSupporterCallout?: boolean;
 }
 
 export function StorageSettingsView({
@@ -28,6 +32,7 @@ export function StorageSettingsView({
   logs,
   logsLoading,
   currentTenantName,
+  showSupporterCallout = false,
 }: StorageSettingsViewProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [videoOpen, setVideoOpen] = useState(false);
@@ -51,7 +56,7 @@ export function StorageSettingsView({
         <p className="text-sm text-muted-foreground">Loading storage information...</p>
       ) : (
         <>
-          {!hasDiscordMemberGrant(storage.grants) && <DiscordGrantCallout />}
+          <StorageCallouts showDiscord={!hasDiscordMemberGrant(storage.grants)} showSupporter={showSupporterCallout} />
           <div className="grid gap-4 md:grid-cols-2">
             <RawStorageCard storage={storage} />
             <ParsedDataCard storage={storage} />
@@ -86,9 +91,21 @@ export function StorageSettingsView({
   );
 }
 
+/** Ways to get more storage; side by side when both apply, full width when only one does. */
+function StorageCallouts({ showDiscord, showSupporter }: { showDiscord: boolean; showSupporter: boolean }) {
+  if (!showDiscord && !showSupporter) return null;
+  const both = showDiscord && showSupporter;
+  return (
+    <div className={cn("grid gap-4", both && "md:grid-cols-2")}>
+      {showDiscord && <DiscordGrantCallout compact={both} />}
+      {showSupporter && <SupporterStorageCallout compact={both} />}
+    </div>
+  );
+}
+
 export function StorageSettings() {
   const location = useLocation();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, session } = useAuth();
   const { data: storage, isLoading: storageLoading } = useMyStorage({ enabled: isAuthenticated });
   const { data: logs, isLoading: logsLoading } = useLogGroups({
     allTenants: true,
@@ -112,6 +129,7 @@ export function StorageSettings() {
       logs={logs}
       logsLoading={logsLoading}
       currentTenantName={siteConfig?.tenant?.name ?? null}
+      showSupporterCallout={!!siteConfig?.billing_enabled && !session?.ads_free}
     />
   );
 }
