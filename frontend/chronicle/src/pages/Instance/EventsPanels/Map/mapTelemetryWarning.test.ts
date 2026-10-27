@@ -1,29 +1,42 @@
 import { describe, expect, it } from "vitest";
 import {
   dismissMapTelemetryWarning,
-  hasLimitedSuperWowPositionTelemetry,
+  hasLimitedHostilePositionTelemetry,
   isMapTelemetryWarningDismissed,
   MAP_TELEMETRY_WARNING_CACHE_SIZE,
 } from "./mapTelemetryWarning";
 
 describe("map telemetry warning", () => {
-  it("warns only for position logs recorded with SuperWoW but not ClassicAPI", () => {
-    expect(hasLimitedSuperWowPositionTelemetry({
+  it("warns for allied-only position telemetry", () => {
+    expect(hasLimitedHostilePositionTelemetry({
       capabilities: ["unit-position"],
       versions: { superwow: "2.2" },
     })).toBe(true);
 
-    expect(hasLimitedSuperWowPositionTelemetry({
+    expect(hasLimitedHostilePositionTelemetry({
       capabilities: ["unit-position"],
       versions: { superwow: "2.2", classicapi: "1.13.2" },
     })).toBe(false);
 
-    expect(hasLimitedSuperWowPositionTelemetry({
+    expect(hasLimitedHostilePositionTelemetry({
+      capabilities: ["unit-position"],
+      format: "3.3.5a-cc-addon",
+      versions: { wow: "3.3.5a" },
+    })).toBe(true);
+
+    expect(hasLimitedHostilePositionTelemetry({
       capabilities: [],
-      versions: { superwow: "2.2" },
+      format: "3.3.5a-cc-addon",
+      versions: { wow: "3.3.5a" },
     })).toBe(false);
 
-    expect(hasLimitedSuperWowPositionTelemetry({
+    expect(hasLimitedHostilePositionTelemetry({
+      capabilities: ["unit-position"],
+      format: "azerothcore-mod",
+      versions: { wow: "3.3.5a" },
+    })).toBe(false);
+
+    expect(hasLimitedHostilePositionTelemetry({
       capabilities: ["unit-position"],
       versions: { classicapi: "1.13.2" },
     })).toBe(false);
