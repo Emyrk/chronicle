@@ -9,6 +9,7 @@ import { SUPPORTER_GOLD } from "@/components/Supporter/supporterUpsell"
 import { ComparisonTable, GOLD_BUTTON } from "@/pages/Settings/BillingSettings"
 import { isPaidBillingTier } from "@/pages/Settings/billingPricing"
 import { PerkShowcase } from "./Supporter/PerkShowcase"
+import { SharedServers } from "./Supporter/SharedServers"
 
 const BILLING_PATH = "/account/billing"
 
@@ -78,6 +79,8 @@ export function BecomeSupporter() {
 
         <PerkShowcase />
       </div>
+
+      <SharedServers />
 
       <ComparisonTable currentTier={currentTier} />
 

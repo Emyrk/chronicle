@@ -55,9 +55,12 @@ func (c *discoveryStatsCache) get(ctx context.Context, q discoveryStatsQuerier) 
 // On a tenant subdomain: returns a single-element array for that tenant.
 // On the primary domain: returns site-level branding plus every tenant.
 // Used by the landing site (chronicleclassic.com) to aggregate server info.
+// With ?scope=all, a tenant subdomain returns the primary-domain list too,
+// e.g. to show every server a supporter tier applies to.
 //
 //	@Summary  Discovery info for landing page aggregation
 //	@Tags     Public
+//	@Param    scope query string false "Set to 'all' to list every discoverable server, even from a tenant subdomain"
 //	@Success  200 {array} chroniclesdk.DiscoveryEntry
 //	@Router   /api/v1/discovery [get]
 func (a *API) Discovery(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +70,7 @@ func (a *API) Discovery(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 
 	// On a tenant subdomain, return just that tenant (if discoverable).
-	if t := servicetenant.TenantFromContext(ctx); t != nil {
+	if t := servicetenant.TenantFromContext(ctx); t != nil && r.URL.Query().Get("scope") != "all" {
 		if !t.Discoverable {
 			httpapi.Write(ctx, w, http.StatusOK, []chroniclesdk.DiscoveryEntry{})
 			return
