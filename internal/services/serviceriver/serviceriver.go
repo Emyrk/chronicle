@@ -110,16 +110,6 @@ func (s *Service) Start(ctx context.Context) error {
 	riverqueue.AddWorker(q, chron.NewWorkerRegressionSnapshot())
 	if !bot.Disabled() {
 		bot.SetQueue(q)
-		riverqueue.AddWorker(q, bot.NewWorkerDispatchEntitlementRoleAudits())
-		q.AddPeriodicJob(
-			river.NewPeriodicJob(
-				river.PeriodicInterval(6*time.Hour),
-				func() (river.JobArgs, *river.InsertOpts) {
-					return chroniclebot.ArgsDispatchEntitlementRoleAudits{}, nil
-				},
-				&river.PeriodicJobOpts{ID: "discord-entitlement-role-audit", RunOnStart: true},
-			),
-		)
 		riverqueue.AddWorker(q, bot.NewWorkerSyncDiscordUser())
 		riverqueue.AddWorker(q, bot.NewWorkerNotifyApplication())
 		riverqueue.AddWorker(q, bot.NewWorkerNotifyAdmin())

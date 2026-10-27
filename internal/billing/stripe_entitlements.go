@@ -125,7 +125,7 @@ func (s *Service) syncStripeEntitlements(ctx context.Context, customerID string)
 		for owner, previousTier := range previousTiers {
 			rows, err := s.store.ListBillingEntitlementsByUserID(ctx, owner)
 			if err == nil && paidtier.Effective(rows) != previousTier {
-				// Discord roles are best-effort. The periodic audit repairs missed jobs.
+				// Discord role changes are best-effort and must not block billing.
 				_ = s.discordRoleSyncEnqueuer(ctx, owner)
 			}
 		}

@@ -9,52 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/paidtier"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/riverqueue/river"
-	"github.com/riverqueue/river/rivertype"
 )
-
-const KindDispatchEntitlementRoleAudits = "discord-dispatch-entitlement-role-audits"
-
-type ArgsDispatchEntitlementRoleAudits struct{}
-
-func (ArgsDispatchEntitlementRoleAudits) Kind() string { return KindDispatchEntitlementRoleAudits }
-func (ArgsDispatchEntitlementRoleAudits) InsertOpts() river.InsertOpts {
-	return river.InsertOpts{Queue: river.QueueDefault, MaxAttempts: 3, UniqueOpts: river.UniqueOpts{ByState: []rivertype.JobState{
-		rivertype.JobStateScheduled, rivertype.JobStatePending,
-		rivertype.JobStateAvailable, rivertype.JobStateRunning, rivertype.JobStateRetryable,
-	}}}
-}
-
-type WorkerDispatchEntitlementRoleAudits struct {
-	river.WorkerDefaults[ArgsDispatchEntitlementRoleAudits]
-	bot *Bot
-}
-
-func (b *Bot) NewWorkerDispatchEntitlementRoleAudits() river.Worker[ArgsDispatchEntitlementRoleAudits] {
-	return &WorkerDispatchEntitlementRoleAudits{bot: b}
-}
-
-// Include canceled subscriptions so a missed revocation can be repaired.
-func (w *WorkerDispatchEntitlementRoleAudits) Work(ctx context.Context, _ *river.Job[ArgsDispatchEntitlementRoleAudits]) error {
-	if !w.bot.tierRolesEnabled() {
-		return nil
-	}
-	rows, err := w.bot.config.DB.ListBillingSubscriptionsForReconciliation(ctx)
-	if err != nil {
-		return fmt.Errorf("list subscribers for Discord role audit: %w", err)
-	}
-	seen := make(map[uuid.UUID]bool, len(rows))
-	for _, row := range rows {
-		if row.UserID == uuid.Nil || seen[row.UserID] {
-			continue
-		}
-		seen[row.UserID] = true
-		if err := w.bot.EnqueueEntitlementRoleSync(ctx, row.UserID); err != nil {
-			return fmt.Errorf("enqueue Discord role audit for user %s: %w", row.UserID, err)
-		}
-	}
-	return nil
-}
 
 func validateTierRoleConfig(config Config) error {
 	ids := []string{config.HonoredRoleID, config.ReveredRoleID, config.ExaltedRoleID}
