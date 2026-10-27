@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react"
+import { Switch } from "@/components/ui/Switch/Switch"
 import { LuaPanelHost } from "../Instance/EventsPanels/LuaPanel/LuaPanelHost"
 import type { PanelPackage } from "../Guides/package/panelLoader"
 import type { PanelUnits } from "../Guides/runtime/panelUnits"
@@ -19,43 +20,73 @@ export interface LuaInstancePreviewProps {
   units?: PanelUnits
 }
 
-interface Run { id: number; instanceId: string; panel: PanelPackage; selection: string; data?: Uint8Array }
-const button = "rounded-md border border-border bg-background px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
+interface Run { id: number; instanceId: string; panel: PanelPackage; selection: string; encounterIds: readonly string[]; data?: Uint8Array }
+const button = "whitespace-nowrap rounded-md border border-border bg-background px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
 
-/** Explicit, ephemeral browser-only preview. No package lookup, upload or server execution. */
+const autoPreviewKey = "lua-workshop-auto-preview"
+/** Wait for a pause in typing before an automatic re-run. */
+const AUTO_PREVIEW_DELAY_MS = 600
+
+function readAutoPreview(): boolean {
+  try { return localStorage.getItem(autoPreviewKey) === "1" } catch { return false }
+}
+
+/**
+ * Ephemeral browser-only preview. No package lookup, upload or server execution. Runs on click, or
+ * with Auto on, after every edit (including AI diffs) and encounter selection change.
+ */
 export function LuaInstancePreview({ panel, instanceId, encounterIds, events, units }: LuaInstancePreviewProps) {
   const [run, setRun] = useState<Run | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
+  const [auto, setAuto] = useState(readAutoPreview)
   const controller = useRef<AbortController | null>(null)
   const generation = useRef(0)
   const selection = JSON.stringify(encounterIds)
   const safeMode = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("safe") === "1"
 
-  // Invalidate asynchronous data and unmount the worker on every input/provider change.
+  // With Auto off an input change clears the result; with Auto on the old result stays visible until
+  // the debounced re-run replaces it.
+  const inputsChanged = useEffectEvent(() => {
+    if (!auto) { setRun(null); return undefined }
+    const timer = setTimeout(() => void start(), AUTO_PREVIEW_DELAY_MS)
+    return () => clearTimeout(timer)
+  })
+
+  // Invalidate asynchronous data on every input/provider change.
   useEffect(() => {
     const generationRef = generation
     const controllerRef = controller
     generationRef.current++
     controllerRef.current?.abort()
     controllerRef.current = null
-    setRun(null)
     setBusy(false)
     setError("")
-    return () => { generationRef.current++; controllerRef.current?.abort(); controllerRef.current = null }
+    const cancelTimer = inputsChanged()
+    return () => { cancelTimer?.(); generationRef.current++; controllerRef.current?.abort(); controllerRef.current = null }
   }, [panel, instanceId, selection, events, safeMode])
 
-  function cancel() {
+  function abortPending() {
     generation.current++
     controller.current?.abort()
     controller.current = null
-    setRun(null)
     setBusy(false)
     setError("")
   }
 
+  function cancel() {
+    abortPending()
+    setRun(null)
+  }
+
+  function toggleAuto(next: boolean) {
+    setAuto(next)
+    try { localStorage.setItem(autoPreviewKey, next ? "1" : "0") } catch { /* per-viewer preference only */ }
+    if (next && !busy && !current) void start()
+  }
+
   async function start() {
-    cancel()
+    abortPending()
     if (safeMode) return
     if (!instanceId || !panel.sources[panel.entrypoint] ||
       Object.values(panel.sources).some(source => source.includes("\0") || new TextEncoder().encode(source).length > 64 * 1024) ||
@@ -79,7 +110,7 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events, un
         data = selectPreviewDamage(input, encounterIds, panel.streamScope)
       }
       if (abort.signal.aborted || generation.current !== id) return
-      setRun({ id, panel, instanceId, selection, data })
+      setRun({ id, panel, instanceId, selection, encounterIds: [...encounterIds], data })
     } catch (caught) {
       if (!abort.signal.aborted && generation.current === id) setError(caught instanceof Error ? caught.message : "Preview data unavailable")
     } finally {
@@ -94,17 +125,24 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events, un
   }, [run])
   useEffect(() => () => { for (const url of assetUrls.values()) URL.revokeObjectURL(url) }, [assetUrls])
 
-  const active = run && !safeMode && run.panel === panel && run.instanceId === instanceId && run.selection === selection
+  const current = run && run.panel === panel && run.instanceId === instanceId && run.selection === selection
+  // A stale result only stays on screen while Auto is about to replace it.
+  const visible = run && !safeMode && (current || auto) ? run : null
   return <section className="space-y-3" aria-label="Unsaved addon instance preview">
     {safeMode ? <p className="text-xs">Addon preview is disabled by ?safe=1.</p> : <>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <button className={`${button} border-primary bg-primary text-primary-foreground hover:bg-primary/90`} type="button" disabled={busy || !instanceId || !panel.sources[panel.entrypoint]} onClick={() => void start()}>{busy ? "Loading events…" : run ? "Re-run preview" : "Run preview"}</button>
         {(busy || run) && <button className={button} type="button" onClick={cancel}>{busy ? "Cancel" : "Clear"}</button>}
-        <span className="ml-auto text-[11px] text-muted-foreground" title="Damage events only. Nothing is uploaded or published.">Damage events · runs locally</span>
+        <label className="flex items-center gap-1.5 text-xs" title="Re-run the preview automatically after edits, AI changes and encounter selection changes">
+          <Switch size="sm" checked={auto} onCheckedChange={toggleAuto} aria-label="Auto preview" /> Auto
+        </label>
+        {visible && !current && <span role="status" className="text-[11px] text-muted-foreground">{busy ? "Updating…" : "Waiting for changes to settle…"}</span>}
+        <span className="ml-auto whitespace-nowrap text-[11px] text-muted-foreground" title="Damage events only. Nothing is uploaded or published.">Damage events · runs locally</span>
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {active && <div className="overflow-hidden rounded-md border border-border bg-background"><LuaPanelHost key={run.id} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} streamScope={panel.streamScope} maxEvents={panel.maxEvents} units={units}
-        capabilities={panel.capabilities} damageStream={run.data} encounterIds={encounterIds} assets={assetUrls} /></div>}
+      {visible && <div className={`overflow-hidden rounded-md border border-border bg-background transition-opacity ${current ? "" : "opacity-60"}`}>
+        <LuaPanelHost key={visible.id} entrypoint={visible.panel.entrypoint} sources={visible.panel.sources} streams={visible.panel.streams} streamScope={visible.panel.streamScope}
+          maxEvents={visible.panel.maxEvents} units={units} capabilities={visible.panel.capabilities} damageStream={visible.data} encounterIds={visible.encounterIds} assets={assetUrls} /></div>}
     </>}
   </section>
 }

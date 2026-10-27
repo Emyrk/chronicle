@@ -74,6 +74,10 @@ var luaEditorClientTools = []clientToolDefinition{
 		CapabilityID:   luaEditorCapabilityID, CapabilityVersion: luaEditorCapabilityVersion, Effect: "view_mutation", Confirmation: "never",
 	},
 	{
+		ToolDefinition: ToolDefinition{Name: "run_preview", Description: "Replay the current unsaved working copy in a fresh sandboxed browser worker against the instance the user picked in the Preview pane, exactly like the preview. Pass encounter_ids to choose encounters (this also selects them in the user's Preview pane); omit it to use the user's current selection. Every result lists the instance's encounters (id, name, boss, kill_type, selected) so you can choose. Returns ok, the panel's error message if it stopped, event and timing metrics, and an indented text outline of every UI object it drew (kind, id, text, size, position, colors, hidden). If it reports that an instance must be selected first, ask the user to pick one in the Preview pane.", Parameters: json.RawMessage(`{"type":"object","properties":{"encounter_ids":{"type":"array","minItems":1,"maxItems":100,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":200}}},"additionalProperties":false}`)},
+		CapabilityID:   luaEditorCapabilityID, CapabilityVersion: luaEditorCapabilityVersion, Effect: "read", Confirmation: "never",
+	},
+	{
 		ToolDefinition: ToolDefinition{Name: "run_startup_check", Description: "Start the current unsaved working copy in a fresh sandboxed browser worker and report whether Lua startup succeeded or the Lua error. No events are processed.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		CapabilityID:   luaEditorCapabilityID, CapabilityVersion: luaEditorCapabilityVersion, Effect: "read", Confirmation: "never",
 	},
@@ -288,6 +292,26 @@ func validateClientToolArguments(name, raw string) (json.RawMessage, error) {
 				if id == "" || len(id) > 200 {
 					return nil, errors.New("invalid update_instance_ui id")
 				}
+			}
+		}
+	case "run_preview":
+		var input struct {
+			EncounterIDs *[]string `json:"encounter_ids"`
+		}
+		if err := decodeStrict(raw, &input); err != nil {
+			return nil, errors.New("invalid run_preview arguments")
+		}
+		if input.EncounterIDs != nil {
+			ids := *input.EncounterIDs
+			if len(ids) == 0 || len(ids) > 100 {
+				return nil, errors.New("run_preview encounter_ids must have 1 to 100 entries")
+			}
+			seen := make(map[string]bool, len(ids))
+			for _, id := range ids {
+				if id == "" || len(id) > 200 || seen[id] {
+					return nil, errors.New("invalid run_preview encounter id")
+				}
+				seen[id] = true
 			}
 		}
 	case "read_lua_files", "run_startup_check":

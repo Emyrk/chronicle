@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { gzipSync } from "fflate"
-import { fetchPreviewDamage } from "./previewStream"
+import { createCachedDamageProvider, fetchPreviewDamage } from "./previewStream"
 
 function response(chunks: Uint8Array[], status = 200) {
   return { ok: status === 200, status, headers: new Headers(), body: new ReadableStream<Uint8Array>({
@@ -40,5 +40,25 @@ describe("browser preview download", () => {
     const raw = new Uint8Array(1024).map((_, index) => index % 251)
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response([gzipSync(raw)])))
     expect(await fetchPreviewDamage("id", { signal: new AbortController().signal })).toEqual(raw)
+  })
+
+  it("downloads each instance once and shares it across re-runs", async () => {
+    const fetchDamage = vi.fn(async (id: string) => new TextEncoder().encode(id))
+    const provider = createCachedDamageProvider(fetchDamage)
+    const first = new AbortController()
+    const abandoned = provider.getDamage("a", { signal: first.signal })
+    first.abort()
+    await expect(abandoned).rejects.toBeDefined()
+    // The caller gave up, but the shared download finished and is reused.
+    expect(await provider.getDamage("a", { signal: new AbortController().signal })).toEqual(new TextEncoder().encode("a"))
+    expect(await provider.getDamage("b", { signal: new AbortController().signal })).toEqual(new TextEncoder().encode("b"))
+    expect(fetchDamage).toHaveBeenCalledTimes(2)
+  })
+
+  it("retries an instance whose download failed", async () => {
+    const fetchDamage = vi.fn().mockRejectedValueOnce(new Error("503")).mockResolvedValue(new Uint8Array([1]))
+    const provider = createCachedDamageProvider(fetchDamage)
+    await expect(provider.getDamage("a", { signal: new AbortController().signal })).rejects.toThrow("503")
+    expect(await provider.getDamage("a", { signal: new AbortController().signal })).toEqual(new Uint8Array([1]))
   })
 })

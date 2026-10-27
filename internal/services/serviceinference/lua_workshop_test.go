@@ -30,7 +30,7 @@ func TestLuaWorkshopIsDurableAndUsesOnlyLuaEditorTools(t *testing.T) {
 		require.True(t, json.Valid(tool.Parameters), tool.Name)
 		names = append(names, tool.Name)
 	}
-	require.Equal(t, []string{"read_lua_files", "edit_lua_file", "run_startup_check"}, names)
+	require.Equal(t, []string{"read_lua_files", "edit_lua_file", "run_preview", "run_startup_check"}, names)
 	_, ok := clientToolByName("lua-editor", "update_instance_ui")
 	require.False(t, ok, "instance tools must not resolve under the Lua capability")
 
@@ -57,6 +57,14 @@ func TestLuaEditorToolArguments(t *testing.T) {
 		`{"file":"main.lua","expected_revision":1,"edits":[{"old_text":"","new_text":"b"}]}`,
 	} {
 		_, err := validateClientToolArguments("edit_lua_file", args)
+		require.Error(t, err, args)
+	}
+	for _, args := range []string{`{}`, `{"encounter_ids":["e1","e2"]}`} {
+		_, err := validateClientToolArguments("run_preview", args)
+		require.NoError(t, err, args)
+	}
+	for _, args := range []string{`{"encounter_ids":[]}`, `{"encounter_ids":["e1","e1"]}`, `{"encounter_ids":[""]}`, `{"encounter_ids":"e1"}`, `{"instance_id":"x"}`} {
+		_, err := validateClientToolArguments("run_preview", args)
 		require.Error(t, err, args)
 	}
 	_, err := validateClientToolArguments("read_lua_files", `{"file":"main.lua"}`)
