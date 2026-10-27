@@ -20,6 +20,7 @@ import { resolveInstanceUnits } from "../Instance/instanceUnits"
 import type { LuaSourceEditorHandle, LuaSourceProposal, LuaWorkingCopy } from "./LuaSourceEditor"
 import { PaneResizer } from "./PaneResizer"
 import { MIN_SIDE_WIDTH } from "./paneWidth"
+import { readPreviewSelection, restoredEncounters, writePreviewSelection } from "./previewSelection"
 
 const LuaSourceEditor = lazy(() => import("./LuaSourceEditor").then(module => ({ default: module.LuaSourceEditor })))
 const LuaWorkshopChat = lazy(() => import("./LuaWorkshopChat").then(module => ({ default: module.LuaWorkshopChat })))
@@ -68,7 +69,9 @@ export default function LuaProjectWorkspacePage() {
     queryFn: () => getProject(projectId), retry: false })
   const [copy, setCopy] = useState<LuaWorkingCopy | null>(null)
   const [proposal, setProposal] = useState<LuaSourceProposal | null>(null)
-  const [instanceId, setInstanceId] = useState("")
+  // Reopen the preview on the instance and encounters last used for this addon.
+  const [savedSelection] = useState(() => readPreviewSelection(projectId))
+  const [instanceId, setInstanceId] = useState(savedSelection?.instanceId ?? "")
   const [instanceInput, setInstanceInput] = useState("")
   const [encounterIds, setEncounterIds] = useState<string[]>([])
   const [pickerOpen, setPickerOpen] = useState(true)
@@ -78,6 +81,12 @@ export default function LuaProjectWorkspacePage() {
       if (!response.ok) throw new Error(`Recent instances unavailable (${response.status})`)
       return response.json() as Promise<RecentInstancesResponse>
     }, staleTime: 60_000, retry: false })
+  // A restored instance missing from the recent list shows in the ID box instead of the dropdown.
+  const [restoredInput, setRestoredInput] = useState(false)
+  if (!restoredInput && recent.data && savedSelection && instanceId === savedSelection.instanceId) {
+    setRestoredInput(true)
+    if (!recent.data.instances.some(item => item.id === instanceId)) setInstanceInput(instanceId)
+  }
   const validInstanceID = instanceIDPattern.test(instanceId)
   const instance = useInstance(instanceId, { enabled: validInstanceID, retry: false })
   const previewUnits = useMemo(() => instance.data && buildPanelUnits(instance.data.players,
@@ -85,11 +94,16 @@ export default function LuaProjectWorkspacePage() {
   // Start each newly loaded instance on its first boss kill so the preview runs without extra clicks.
   const [defaultedFor, setDefaultedFor] = useState("")
   if (instance.data && defaultedFor !== instance.data.id) {
-    setDefaultedFor(instance.data.id)
     const encounters = instance.data.encounters ?? []
+    // Only the first load restores the saved encounters; picking another instance starts fresh.
+    const restored = !defaultedFor && savedSelection?.instanceId === instance.data.id ? restoredEncounters(savedSelection.encounterIds, encounters) : []
+    setDefaultedFor(instance.data.id)
     const first = encounters.find(e => e.boss && e.kill_type !== "wipe" && e.kill_type !== "reset") ?? encounters[0]
-    setEncounterIds(first ? [first.id] : [])
+    setEncounterIds(restored.length ? restored : first ? [first.id] : [])
   }
+  useEffect(() => {
+    if (projectId && validInstanceID && defaultedFor === instanceId) writePreviewSelection(projectId, { instanceId, encounterIds })
+  }, [projectId, validInstanceID, defaultedFor, instanceId, encounterIds])
   const project = projectQuery.data
   const onUploaded = useCallback(async () => {
     await projectQuery.refetch()
