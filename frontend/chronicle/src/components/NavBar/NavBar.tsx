@@ -92,7 +92,8 @@ export function NavBar() {
     ...(canAdminAuthz ? [{ title: "Saffron", href: "/saffron", icon: Key, external: true } as NavItem] : []),
     { title: "Settings", href: "/account/settings", icon: Settings },
     { title: "What's New", onClick: openWhatsNew, icon: Sparkles, indicator: hasUnreadWhatsNew },
-    ...(siteConfig?.billing_enabled ? [{ title: "Support Chronicle", href: "/supporter", icon: Crown, highlight: true } as NavItem] : []),
+    // Only invite accounts without a supporter tier.
+    ...(siteConfig?.billing_enabled && !session?.ads_free ? [{ title: "Supporter Perks", href: "/supporter", icon: Crown, highlight: true } as NavItem] : []),
     { title: "Sign Out", onClick: logout, icon: LogOut },
   ];
 
