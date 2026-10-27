@@ -2,9 +2,13 @@
 const MODULES: Readonly<Record<string, string>> = Object.freeze({
   "chronicle/v1/events/damage.lua": `
     local M = {}
-    -- The host owns the stream and projects only source, target, amount, offsetMs.
+    -- The host owns the stream and projects only source, target, amount, offsetMs, encounterId, selected.
     function M.onEvent(callback)
       Panel:OnEvent("damage", callback)
+    end
+    -- Called once after the last event of the replay; draw final totals here.
+    function M.onComplete(callback)
+      Panel:OnComplete(callback)
     end
     function M.bySource(onUpdate)
       local totals = {}

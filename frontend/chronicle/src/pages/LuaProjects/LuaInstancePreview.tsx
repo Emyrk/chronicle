@@ -73,7 +73,7 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events }: 
       if (panel.streams.includes("damage")) {
         const input = await events.getDamage(instanceId, { signal: abort.signal, maxBytes: MAX_PREVIEW_STREAM_BYTES })
         if (abort.signal.aborted || generation.current !== id) return
-        data = boundPreviewDamage(input, encounterIds)
+        data = boundPreviewDamage(input, encounterIds, panel.streamScope)
       }
       if (abort.signal.aborted || generation.current !== id) return
       setRun({ id, panel, instanceId, selection, data })
@@ -100,7 +100,7 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events }: 
         <span className="ml-auto text-[11px] text-muted-foreground" title="Damage events only. Nothing is uploaded or published.">≤ 50k events · 8 MB</span>
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {active && <div className="overflow-hidden rounded-md border border-border bg-background"><LuaPanelHost key={run.id} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams}
+      {active && <div className="overflow-hidden rounded-md border border-border bg-background"><LuaPanelHost key={run.id} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} streamScope={panel.streamScope}
         capabilities={panel.capabilities} damageStream={run.data} encounterIds={encounterIds} assets={assetUrls} /></div>}
     </>}
   </section>

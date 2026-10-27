@@ -4,7 +4,7 @@ import { expect, userEvent, waitFor, within } from "storybook/test"
 import type { PanelPackage } from "../Guides/package/panelLoader"
 import { LuaInstancePreview, type LuaPreviewEventProvider } from "./LuaInstancePreview"
 
-const panel: PanelPackage = { name: "Unsaved", entrypoint: "main.lua", sources: { "main.lua": "return {}", "extra.lua": "return 1" }, streams: ["damage"], capabilities: ["ui"], assets: new Map() }
+const panel: PanelPackage = { name: "Unsaved", entrypoint: "main.lua", sources: { "main.lua": "return {}", "extra.lua": "return 1" }, streams: ["damage"], streamScope: "selection", capabilities: ["ui"], assets: new Map() }
 const frame = new Uint8Array([1, 97, 1, 0, 0]) // encounter a, timestamp 1, zero events
 let resolveFirst: ((value: Uint8Array) => void) | undefined
 const calls: Array<{ instance: string; signal: AbortSignal; maxBytes: number }> = []

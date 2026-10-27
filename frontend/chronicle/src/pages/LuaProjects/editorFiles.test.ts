@@ -54,8 +54,10 @@ describe("Lua browser source model", () => {
   it("builds an in-memory preview package without server execution or dropped assets", () => {
     expect(panelPackageFromWorkingCopy(project, files)).toEqual({
       name: "Example", entrypoint: "main.lua", sources: { "main.lua": files.lua },
-      capabilities: ["ui"], streams: [], assets: new Map(),
+      capabilities: ["ui"], streams: [], streamScope: "selection", assets: new Map(),
     })
+    const wholeInstance = JSON.stringify({ ...JSON.parse(files.manifest), stream_scope: "instance" })
+    expect(panelPackageFromWorkingCopy(project, { ...files, manifest: wholeInstance }).streamScope).toBe("instance")
     expect(() => panelPackageFromWorkingCopy(project, { ...files, manifest: files.manifest.replace('"assets": []', '"assets": ["icon.png"]') })).toThrow()
   })
 
@@ -71,6 +73,7 @@ describe("Lua browser source model", () => {
       JSON.stringify({ ...JSON.parse(files.manifest), assets: ["image.png"] }),
       JSON.stringify({ ...JSON.parse(files.manifest), streams: ["damage", "damage"] }),
       JSON.stringify({ ...JSON.parse(files.manifest), capabilities: ["network"] }),
+      JSON.stringify({ ...JSON.parse(files.manifest), stream_scope: "everything" }),
       JSON.stringify({ ...JSON.parse(files.manifest), unexpected: true })]) {
       expect(() => validateEditorFiles(project, { ...files, manifest })).toThrow()
     }

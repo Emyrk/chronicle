@@ -1,6 +1,7 @@
 import { unzip, type Unzipped } from "fflate"
 import { inspectArchive, normalizeExtractedFiles } from "../Guides/package/archive"
 import type { PanelPackage } from "../Guides/package/panelLoader"
+import { PANEL_STREAM_SCOPES, type PanelStreamScope } from "../Guides/runtime/panelEvents"
 import type { LuaProject } from "./api"
 
 const encoder = new TextEncoder()
@@ -54,7 +55,7 @@ export function validateEditorFiles(project: Pick<LuaProject, "kind" | "name" | 
   try { parsed = JSON.parse(files.manifest) } catch { throw new Error("project.json must contain valid JSON.") }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("project.json must be an object.")
   const manifest = parsed as Record<string, unknown>
-  const fields = ["manifest_version", "kind", "name", "slug", "entrypoint", "capabilities", "streams", "assets"]
+  const fields = ["manifest_version", "kind", "name", "slug", "entrypoint", "capabilities", "streams", "stream_scope", "assets"]
   if (Object.keys(manifest).some(key => !fields.includes(key)) || manifest.manifest_version !== 1 ||
     manifest.kind !== project.kind || manifest.name !== project.name || manifest.slug !== project.slug ||
     manifest.entrypoint !== "main.lua") {
@@ -62,6 +63,9 @@ export function validateEditorFiles(project: Pick<LuaProject, "kind" | "name" | 
   }
   assertStringList(manifest.capabilities, ["ui", "input"], "capabilities")
   assertStringList(manifest.streams, ["damage"], "streams")
+  if (manifest.stream_scope !== undefined && !PANEL_STREAM_SCOPES.includes(manifest.stream_scope as PanelStreamScope)) {
+    throw new Error(`stream_scope in project.json must be one of: ${PANEL_STREAM_SCOPES.join(", ")}.`)
+  }
   assertStringList(manifest.assets, [], "assets")
 }
 
@@ -92,11 +96,11 @@ function entry(name: string, data: Uint8Array): Uint8Array {
 
 export function panelPackageFromWorkingCopy(project: Pick<LuaProject, "kind" | "name" | "slug">, files: EditorFiles): PanelPackage {
   validateEditorFiles(project, files)
-  const manifest = JSON.parse(files.manifest) as { capabilities: ("ui" | "input")[]; streams: "damage"[] }
+  const manifest = JSON.parse(files.manifest) as { capabilities: ("ui" | "input")[]; streams: "damage"[]; stream_scope?: PanelStreamScope }
   // Validation above guarantees this is a two-file, asset-free panel package.
   return {
     name: project.name, entrypoint: "main.lua", sources: { "main.lua": files.lua },
-    capabilities: manifest.capabilities, streams: manifest.streams,
+    capabilities: manifest.capabilities, streams: manifest.streams, streamScope: manifest.stream_scope ?? "selection",
     assets: new Map<string, Uint8Array>(),
   }
 }

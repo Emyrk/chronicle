@@ -30,7 +30,7 @@ export function runStartupCheck(panel: PanelPackage, signal?: AbortSignal, timeo
       } catch { finish({ ok: false, message: "Lua worker returned an invalid message." }) }
     }
     runtime.onerror = () => finish({ ok: false, message: "Lua worker failed to start." })
-    try { runtime.postMessage({ type: "start", entrypoint: panel.entrypoint, sources: panel.sources, capabilities: panel.capabilities, streams: panel.streams }) }
+    try { runtime.postMessage({ type: "start", entrypoint: panel.entrypoint, sources: panel.sources, capabilities: panel.capabilities, streams: panel.streams, streamScope: panel.streamScope }) }
     catch { finish({ ok: false, message: "Lua worker could not receive the source package." }) }
   })
 }
