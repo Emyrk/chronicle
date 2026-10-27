@@ -185,7 +185,7 @@ export default function LuaProjectWorkspacePage() {
     <div className={`grid flex-1 grid-cols-1 lg:min-h-0 lg:grid-rows-[auto_minmax(0,1fr)] ${sideOpen ? "lg:grid-cols-[minmax(0,1fr)_minmax(360px,min(44%,680px))]" : "lg:grid-cols-1"}`}>
       <div className={`order-1 flex h-10 items-center gap-1 border-y-2 border-foreground/25 bg-black/20 px-2 lg:col-start-2 lg:row-start-1 lg:border-y-0 lg:border-b lg:border-b-border ${sideHidden}`}>
         {(["pane", "preview"] as const).map(tab => <button key={tab} type="button" aria-pressed={sideTab === tab} onClick={() => setSideTab(tab)}
-          className={`rounded-md px-2.5 py-1 text-xs ${sideTab === tab ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{tab === "preview" ? "Preview" : sideName === "code" ? "Code" : "Chat"}</button>)}
+          className={`rounded-md px-2.5 py-1 text-xs ${sideTab === tab ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{tab === "preview" ? "Preview" : sideName === "code" ? "Code" : "Chat"}</button>)}
         <div className="ml-auto flex items-center gap-1 max-lg:hidden">
           {swapButton}
           <button type="button" className={iconButton} onClick={() => setLayout({ sideOpen: false })} title="Hide side panel" aria-label="Hide side panel"><PanelRightClose className="size-4" /></button>
