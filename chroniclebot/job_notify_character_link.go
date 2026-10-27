@@ -20,7 +20,8 @@ type ArgsNotifyCharacterLinkDecision struct {
 	ProofID            string   `json:"proof_id"`
 	DiscordID          string   `json:"discord_id"`
 	Status             string   `json:"status"`
-	URL                string   `json:"url"`
+	URL                string   `json:"url,omitempty"`
+	TenantName         string   `json:"tenant_name"`
 	ApprovedCharacters []string `json:"approved_characters,omitempty"`
 	RejectedCharacters []string `json:"rejected_characters,omitempty"`
 	Response           string   `json:"response,omitempty"`
@@ -91,7 +92,12 @@ func characterLinkDecisionMessage(args ArgsNotifyCharacterLinkDecision) *discord
 		color = 0xED4245
 	}
 
-	fields := make([]*discordgo.MessageEmbedField, 0, 3)
+	tenantName := strings.TrimSpace(args.TenantName)
+	if tenantName == "" {
+		tenantName = "Unknown site"
+	}
+	fields := make([]*discordgo.MessageEmbedField, 0, 4)
+	fields = append(fields, &discordgo.MessageEmbedField{Name: "Site", Value: tenantName})
 	if len(args.ApprovedCharacters) > 0 {
 		fields = append(fields, &discordgo.MessageEmbedField{
 			Name:  "Approved characters",

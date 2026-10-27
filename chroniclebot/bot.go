@@ -121,6 +121,14 @@ func (b *Bot) AdminNotificationsChannelID() string {
 	return b.config.AdminNotificationsChannelID
 }
 
+// PrimaryDomain is the configured base domain for tenant subdomains.
+func (b *Bot) PrimaryDomain() string {
+	if b == nil {
+		return ""
+	}
+	return b.config.PrimaryDomain
+}
+
 // JobInserter is the interface for inserting River jobs.
 // Satisfied by *riverqueue.Queues (via river.Client).
 type JobInserter interface {

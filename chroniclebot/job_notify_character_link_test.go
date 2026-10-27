@@ -73,6 +73,7 @@ func TestCharacterLinkDecisionMessage(t *testing.T) {
 			message := characterLinkDecisionMessage(ArgsNotifyCharacterLinkDecision{
 				Status:             tc.status,
 				URL:                "https://chronicle.example/account/characters",
+				TenantName:         "Turtle WoW",
 				ApprovedCharacters: []string{"Approved (Realm)"},
 				RejectedCharacters: []string{"Rejected (Realm)"},
 				Response:           "  Reviewer note  ",
@@ -84,10 +85,12 @@ func TestCharacterLinkDecisionMessage(t *testing.T) {
 			require.Equal(t, tc.title, embed.Title)
 			require.Equal(t, tc.color, embed.Color)
 			require.Equal(t, "https://chronicle.example/account/characters", embed.URL)
-			require.Len(t, embed.Fields, 3)
-			require.Equal(t, "Approved (Realm)", embed.Fields[0].Value)
-			require.Equal(t, "Rejected (Realm)", embed.Fields[1].Value)
-			require.Equal(t, "Reviewer note", embed.Fields[2].Value)
+			require.Len(t, embed.Fields, 4)
+			require.Equal(t, "Site", embed.Fields[0].Name)
+			require.Equal(t, "Turtle WoW", embed.Fields[0].Value)
+			require.Equal(t, "Approved (Realm)", embed.Fields[1].Value)
+			require.Equal(t, "Rejected (Realm)", embed.Fields[2].Value)
+			require.Equal(t, "Reviewer note", embed.Fields[3].Value)
 		})
 	}
 }

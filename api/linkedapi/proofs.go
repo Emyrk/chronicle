@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -230,11 +231,6 @@ func (h *Handler) notifyCharacterLinkDecision(ctx context.Context, proof chronic
 	if h.bot == nil || h.bot.Disabled() {
 		return
 	}
-	if h.accessURL == nil {
-		slog.ErrorContext(ctx, "character-link decision notification URL unavailable", "request_id", proof.ID)
-		return
-	}
-
 	notifyCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	discord, err := h.zed.GetUserAuthLinkByUserIDAndProvider(notifyCtx, database.GetUserAuthLinkByUserIDAndProviderParams{
@@ -264,7 +260,8 @@ func (h *Handler) notifyCharacterLinkDecision(ctx context.Context, proof chronic
 		ProofID:            proof.ID.String(),
 		DiscordID:          discord.LinkedID,
 		Status:             proof.Status,
-		URL:                strings.TrimRight(h.accessURL.String(), "/") + "/account/characters",
+		URL:                h.characterLinkDecisionURL(proof),
+		TenantName:         proof.TenantName,
 		ApprovedCharacters: approved,
 		RejectedCharacters: rejected,
 		Response:           proof.Response,
@@ -272,6 +269,25 @@ func (h *Handler) notifyCharacterLinkDecision(ctx context.Context, proof chronic
 	if err != nil {
 		slog.ErrorContext(notifyCtx, "failed to enqueue character-link decision notification", "request_id", proof.ID, "error", err)
 	}
+}
+
+func (h *Handler) characterLinkDecisionURL(proof chroniclesdk.ProofRequest) string {
+	if h.accessURL == nil {
+		return ""
+	}
+	target := h.accessURL.ResolveReference(&url.URL{Path: "/account/characters"})
+	if target.Scheme == "" || target.Host == "" {
+		return ""
+	}
+	if proof.TenantID == uuid.Nil {
+		return target.String()
+	}
+	primaryDomain := h.bot.PrimaryDomain()
+	if proof.TenantSlug == "" || primaryDomain == "" {
+		return ""
+	}
+	target.Host = proof.TenantSlug + "." + primaryDomain
+	return target.String()
 }
 
 func validProofCharacters(choices []chroniclesdk.ProofCharacter) bool {
@@ -485,7 +501,7 @@ func (h *Handler) DecideProof(w http.ResponseWriter, r *http.Request) {
 	// Resolve the API's realm/GUID identities into subject IDs. The service
 	// rechecks this exact set after locking the pending request.
 	scope := reviewProofScope(r.Context())
-	proofRow, subjects, err := h.proofs.Get(r.Context(), scope, id)
+	_, subjects, err := h.proofs.Get(r.Context(), scope, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		proofError(w, r, http.StatusConflict, "Proof already decided or character already linked")
 		return
@@ -546,33 +562,11 @@ func (h *Handler) DecideProof(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	approvedCount := 0
-	decisionSubjects := make([]chroniclesdk.ProofSubject, 0, len(subjects))
-	for _, subject := range subjects {
-		status := "rejected"
-		if decisions[subject.ID] {
-			status = "approved"
-			approvedCount++
-		}
-		decisionSubjects = append(decisionSubjects, chroniclesdk.ProofSubject{
-			Name: subject.Name, RealmName: subject.RealmName, Status: status,
-		})
-	}
-	decisionStatus := "partial"
-	if approvedCount == 0 {
-		decisionStatus = "rejected"
-	} else if approvedCount == len(subjects) {
-		decisionStatus = "approved"
-	}
-	h.notifyCharacterLinkDecision(r.Context(), chroniclesdk.ProofRequest{
-		ID: id, ApplicantID: proofRow.ApplicantID, Status: decisionStatus,
-		Response: strings.TrimSpace(input.Message), Subjects: decisionSubjects,
-	})
-
 	result, err := h.proofResponse(r.Context(), scope, id)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
+	h.notifyCharacterLinkDecision(r.Context(), result)
 	httpapi.Write(r.Context(), w, http.StatusOK, result)
 }
