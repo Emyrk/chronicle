@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Settings, Upload, LogOut, FileText, Shield, Key, Castle, Menu, Swords, Trophy, ChartSpline, Database, Server, Users, Compass, Sparkles, Shirt } from "lucide-react";
+import { Settings, Upload, LogOut, FileText, Shield, Key, Castle, Menu, Swords, Trophy, ChartSpline, Database, Server, Users, Compass, Sparkles, Shirt, Crown } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { serverCapabilities } from "@/config/serverCapabilities";
 import { useAuth } from "@/hooks/useAuth";
@@ -25,7 +25,11 @@ type NavItem = {
   title: string;
   icon: LucideIcon;
   indicator?: boolean;
+  /** Gold supporter styling, so the item reads as an invitation rather than a setting. */
+  highlight?: boolean;
 } & ({ href: string; external?: boolean } | { onClick: () => void });
+
+const HIGHLIGHT_CLASS = "font-medium text-[#f0c060] hover:text-[#ffd580] focus:text-[#ffd580]";
 
 export function NavBar() {
   const location = useLocation();
@@ -88,6 +92,7 @@ export function NavBar() {
     ...(canAdminAuthz ? [{ title: "Saffron", href: "/saffron", icon: Key, external: true } as NavItem] : []),
     { title: "Settings", href: "/account/settings", icon: Settings },
     { title: "What's New", onClick: openWhatsNew, icon: Sparkles, indicator: hasUnreadWhatsNew },
+    ...(siteConfig?.billing_enabled ? [{ title: "Support Chronicle", href: "/supporter", icon: Crown, highlight: true } as NavItem] : []),
     { title: "Sign Out", onClick: logout, icon: LogOut },
   ];
 
@@ -108,7 +113,7 @@ export function NavBar() {
         );
       }
       return (
-        <Link key={item.title} to={item.href} className={className} onClick={closeMobile}>
+        <Link key={item.title} to={item.href} className={item.highlight ? `${className} ${HIGHLIGHT_CLASS}` : className} onClick={closeMobile}>
           <item.icon className="h-4 w-4" />
           {item.title}
         </Link>
@@ -357,7 +362,7 @@ export function NavBar() {
                         {item.title}
                       </a>
                     ) : (
-                      <Link to={item.href} className="flex items-center gap-2">
+                      <Link to={item.href} className={item.highlight ? `flex items-center gap-2 ${HIGHLIGHT_CLASS}` : "flex items-center gap-2"}>
                         <item.icon className="h-4 w-4" />
                         {item.title}
                       </Link>
