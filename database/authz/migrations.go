@@ -25,6 +25,7 @@ var migrations = []AuthzMigration{
 	{Version: 5, Run: noop},
 	{Version: 6, Run: migration006},
 	{Version: 7, Run: migration007},
+	{Version: 8, Run: migration008},
 }
 
 // RunSchemaMigrations runs any authz migrations not yet recorded in the
@@ -212,4 +213,22 @@ func migration006(ctx context.Context, az *Authz) error {
 // preview databases that recorded migration 6 before every editor option was added.
 func migration007(ctx context.Context, az *Authz) error {
 	return migration006(ctx, az)
+}
+
+// migration008 repairs tenants created without their link to the global Chronicle resource.
+func migration008(ctx context.Context, az *Authz) error {
+	tenants, err := az.ListTenants(ctx)
+	if err != nil {
+		return fmt.Errorf("list tenants: %w", err)
+	}
+
+	b := policy.New()
+	chronicle := b.GlobalChronicle()
+	for _, tenant := range tenants {
+		b.Wow_tenant(tenant.ID).Chronicle(chronicle)
+	}
+
+	// TOUCH is idempotent, so existing tenant links are preserved.
+	_, err = az.Write(ctx, *b.Txn())
+	return err
 }
