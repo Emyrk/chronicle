@@ -1742,33 +1742,56 @@ func (q *sqlQuerier) ListRecentBillingReconciliationRuns(ctx context.Context, li
 }
 
 const listRecentBillingSubscriptions = `-- name: ListRecentBillingSubscriptions :many
-SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id, cancel_at FROM billing_subscriptions
-ORDER BY updated_at DESC
+SELECT
+  billing_subscriptions.user_id, billing_subscriptions.provider_customer_id, billing_subscriptions.provider_subscription_id, billing_subscriptions.product_code, billing_subscriptions.status, billing_subscriptions.current_period_end, billing_subscriptions.cancel_at_period_end, billing_subscriptions.updated_at, billing_subscriptions.provider, billing_subscriptions.provider_product_id, billing_subscriptions.provider_price_id, billing_subscriptions.cancel_at,
+  chronicle_users.username,
+  chronicle_users.email,
+  COALESCE(discord_auth.linked_id, '')::text AS discord_id
+FROM billing_subscriptions
+JOIN chronicle_users ON chronicle_users.id = billing_subscriptions.user_id
+LEFT JOIN LATERAL (
+  SELECT linked_id
+  FROM user_auth_links
+  WHERE user_id = billing_subscriptions.user_id
+    AND provider = 'discord'
+  LIMIT 1
+) AS discord_auth ON true
+ORDER BY billing_subscriptions.updated_at DESC
 LIMIT $1
 `
 
-func (q *sqlQuerier) ListRecentBillingSubscriptions(ctx context.Context, limit int32) ([]BillingSubscription, error) {
+type ListRecentBillingSubscriptionsRow struct {
+	BillingSubscription BillingSubscription `db:"billing_subscription" json:"billing_subscription"`
+	Username            string              `db:"username" json:"username"`
+	Email               string              `db:"email" json:"email"`
+	DiscordID           string              `db:"discord_id" json:"discord_id"`
+}
+
+func (q *sqlQuerier) ListRecentBillingSubscriptions(ctx context.Context, limit int32) ([]ListRecentBillingSubscriptionsRow, error) {
 	rows, err := q.db.Query(ctx, listRecentBillingSubscriptions, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []BillingSubscription
+	var items []ListRecentBillingSubscriptionsRow
 	for rows.Next() {
-		var i BillingSubscription
+		var i ListRecentBillingSubscriptionsRow
 		if err := rows.Scan(
-			&i.UserID,
-			&i.ProviderCustomerID,
-			&i.ProviderSubscriptionID,
-			&i.ProductCode,
-			&i.Status,
-			&i.CurrentPeriodEnd,
-			&i.CancelAtPeriodEnd,
-			&i.UpdatedAt,
-			&i.Provider,
-			&i.ProviderProductID,
-			&i.ProviderPriceID,
-			&i.CancelAt,
+			&i.BillingSubscription.UserID,
+			&i.BillingSubscription.ProviderCustomerID,
+			&i.BillingSubscription.ProviderSubscriptionID,
+			&i.BillingSubscription.ProductCode,
+			&i.BillingSubscription.Status,
+			&i.BillingSubscription.CurrentPeriodEnd,
+			&i.BillingSubscription.CancelAtPeriodEnd,
+			&i.BillingSubscription.UpdatedAt,
+			&i.BillingSubscription.Provider,
+			&i.BillingSubscription.ProviderProductID,
+			&i.BillingSubscription.ProviderPriceID,
+			&i.BillingSubscription.CancelAt,
+			&i.Username,
+			&i.Email,
+			&i.DiscordID,
 		); err != nil {
 			return nil, err
 		}

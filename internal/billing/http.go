@@ -289,24 +289,28 @@ func (s *Service) AdminActivity(w http.ResponseWriter, r *http.Request) {
 		result.WebhookDeliveries = append(result.WebhookDeliveries, item)
 	}
 	for _, sub := range subscriptions {
+		billingSubscription := sub.BillingSubscription
 		item := chroniclesdk.AdminBillingSubscription{
-			UserID:                 sub.UserID.String(),
-			Provider:               sub.Provider,
-			ProviderCustomerID:     sub.ProviderCustomerID,
-			ProviderSubscriptionID: sub.ProviderSubscriptionID.String,
-			ProviderProductID:      sub.ProviderProductID.String,
-			ProviderPriceID:        sub.ProviderPriceID.String,
-			ProductCode:            sub.ProductCode,
-			Status:                 sub.Status,
-			CancelAtPeriodEnd:      sub.CancelAtPeriodEnd,
-			UpdatedAt:              sub.UpdatedAt.Time,
+			UserID:                 billingSubscription.UserID.String(),
+			Username:               sub.Username,
+			Email:                  sub.Email,
+			DiscordID:              sub.DiscordID,
+			Provider:               billingSubscription.Provider,
+			ProviderCustomerID:     billingSubscription.ProviderCustomerID,
+			ProviderSubscriptionID: billingSubscription.ProviderSubscriptionID.String,
+			ProviderProductID:      billingSubscription.ProviderProductID.String,
+			ProviderPriceID:        billingSubscription.ProviderPriceID.String,
+			ProductCode:            billingSubscription.ProductCode,
+			Status:                 billingSubscription.Status,
+			CancelAtPeriodEnd:      billingSubscription.CancelAtPeriodEnd,
+			UpdatedAt:              billingSubscription.UpdatedAt.Time,
 		}
-		if sub.CancelAt.Valid {
-			cancelAt := sub.CancelAt.Time
+		if billingSubscription.CancelAt.Valid {
+			cancelAt := billingSubscription.CancelAt.Time
 			item.CancelAt = &cancelAt
 		}
-		if sub.CurrentPeriodEnd.Valid {
-			periodEnd := sub.CurrentPeriodEnd.Time
+		if billingSubscription.CurrentPeriodEnd.Valid {
+			periodEnd := billingSubscription.CurrentPeriodEnd.Time
 			item.CurrentPeriodEnd = &periodEnd
 		}
 		result.Subscriptions = append(result.Subscriptions, item)

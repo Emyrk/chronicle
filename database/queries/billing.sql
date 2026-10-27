@@ -152,8 +152,21 @@ SELECT * FROM billing_subscriptions
 WHERE provider = 'stripe';
 
 -- name: ListRecentBillingSubscriptions :many
-SELECT * FROM billing_subscriptions
-ORDER BY updated_at DESC
+SELECT
+  sqlc.embed(billing_subscriptions),
+  chronicle_users.username,
+  chronicle_users.email,
+  COALESCE(discord_auth.linked_id, '')::text AS discord_id
+FROM billing_subscriptions
+JOIN chronicle_users ON chronicle_users.id = billing_subscriptions.user_id
+LEFT JOIN LATERAL (
+  SELECT linked_id
+  FROM user_auth_links
+  WHERE user_id = billing_subscriptions.user_id
+    AND provider = 'discord'
+  LIMIT 1
+) AS discord_auth ON true
+ORDER BY billing_subscriptions.updated_at DESC
 LIMIT $1;
 
 -- name: ListRecentBillingWebhookEvents :many

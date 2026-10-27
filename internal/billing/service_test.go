@@ -35,6 +35,58 @@ func TestPublicTierNames(t *testing.T) {
 	require.Equal(t, TierExalted, string(ProductExalted))
 }
 
+type adminActivityStore struct {
+	database.Store
+	subscriptions []database.ListRecentBillingSubscriptionsRow
+}
+
+func (s *adminActivityStore) ListRecentBillingReconciliationRuns(context.Context, int32) ([]database.BillingReconciliationRun, error) {
+	return nil, nil
+}
+
+func (s *adminActivityStore) ListRecentBillingWebhookEvents(context.Context, int32) ([]database.BillingWebhookEvent, error) {
+	return nil, nil
+}
+
+func (s *adminActivityStore) ListRecentBillingSubscriptions(context.Context, int32) ([]database.ListRecentBillingSubscriptionsRow, error) {
+	return s.subscriptions, nil
+}
+
+func TestAdminActivityIncludesSubscriptionUserIdentity(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	updatedAt := time.Date(2026, time.October, 27, 12, 0, 0, 0, time.UTC)
+	service := &Service{store: &adminActivityStore{
+		subscriptions: []database.ListRecentBillingSubscriptionsRow{{
+			BillingSubscription: database.BillingSubscription{
+				UserID:             userID,
+				Provider:           ProviderStripe,
+				ProviderCustomerID: "cus_example",
+				ProductCode:        string(ProductRevered),
+				Status:             string(stripe.SubscriptionStatusActive),
+				UpdatedAt:          pgtype.Timestamptz{Time: updatedAt, Valid: true},
+			},
+			Username:  "example-user",
+			Email:     "user@example.com",
+			DiscordID: "123456789",
+		}},
+	}}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/billing/activity", nil)
+	rec := httptest.NewRecorder()
+	service.AdminActivity(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var response chroniclesdk.AdminBillingActivityResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	require.Len(t, response.Subscriptions, 1)
+	require.Equal(t, userID.String(), response.Subscriptions[0].UserID)
+	require.Equal(t, "example-user", response.Subscriptions[0].Username)
+	require.Equal(t, "user@example.com", response.Subscriptions[0].Email)
+	require.Equal(t, "123456789", response.Subscriptions[0].DiscordID)
+}
+
 func TestSubscriptionHasCurrentBillingStateIsIndependentFromCheckoutAndAccess(t *testing.T) {
 	t.Parallel()
 

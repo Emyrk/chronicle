@@ -95,6 +95,9 @@ export interface AdminBillingReconciliationRun {
 // From chroniclesdk/billing.go
 export interface AdminBillingSubscription {
     readonly user_id: string;
+    readonly username: string;
+    readonly email: string;
+    readonly discord_id?: string;
     readonly provider: string;
     readonly provider_customer_id: string;
     readonly provider_subscription_id?: string;
