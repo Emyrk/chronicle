@@ -21,7 +21,8 @@ function serverDetail(server: DiscoveryEntry): string | undefined {
 
 function isHere(url: string): boolean {
   try {
-    return new URL(url).host === window.location.host
+    // Hostname only: in dev the API reports the backend port, not the page port.
+    return new URL(url).hostname === window.location.hostname
   } catch {
     return false
   }
