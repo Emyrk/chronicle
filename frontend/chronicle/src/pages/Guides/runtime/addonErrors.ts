@@ -116,6 +116,16 @@ export function explainAddonError(message: string, context: AddonErrorContext = 
       docs: "performance",
     }
   }
+  const stream = /panel stream '([^']+)' is not allowed/.exec(reason)
+  if (stream) {
+    return {
+      ...base,
+      title: "Stream not declared",
+      detail: `The addon subscribed to "${stream[1]}", but project.json does not list it in streams.`,
+      fixes: [`Add "${stream[1]}" to "streams" in project.json.`, "Check the stream name against the Addon API reference."],
+      docs: "streams-and-fields",
+    }
+  }
   if (/text is not supported for frame/.test(reason)) {
     return {
       ...base,

@@ -17,6 +17,15 @@ const maxLuaTarBytes = 8 << 20
 const maxLuaExpandedBytes = 16 << 20
 const maxLuaFiles = 128
 
+// luaPanelStreams are the instance event streams a panel may declare; they match /events/{type} and the
+// frontend's PANEL_STREAMS.
+var luaPanelStreams = map[string]bool{
+	"damage": true, "heal": true, "absorbed": true, "resource_change": true, "extra_attack": true, "slain": true,
+	"ressurection": true, "cast": true, "spell_start": true, "spell_go": true, "spell_fail": true, "aura": true,
+	"aura_cast": true, "dispel": true, "interrupt": true, "unit_classification": true, "unit_position": true,
+	"unit_resources": true, "combatant_info": true, "consume": true, "raid_group": true,
+}
+
 func safeLuaPackagePath(name string) bool {
 	if name == "" || strings.Contains(name, "\\") || strings.HasPrefix(name, "/") || strings.ContainsRune(name, 0) || strings.Contains(name, ":") || path.Clean(name) != name || name == ".." || strings.HasPrefix(name, "../") || strings.Contains(name, "/../") {
 		return false
@@ -155,8 +164,12 @@ func canonicalLuaZIP(input io.Reader, kind, projectName, slug string) ([]byte, e
 	if manifest.ManifestVersion != 1 || manifest.Kind != kind || manifest.Name != projectName || manifest.Slug != slug {
 		return nil, errors.New("project.json metadata mismatch")
 	}
-	if len(manifest.Streams) > 1 || (len(manifest.Streams) == 1 && manifest.Streams[0] != "damage") {
-		return nil, errors.New("unsupported or duplicate streams")
+	seenStreams := map[string]bool{}
+	for _, stream := range manifest.Streams {
+		if !luaPanelStreams[stream] || seenStreams[stream] {
+			return nil, fmt.Errorf("unsupported or duplicate stream %q", stream)
+		}
+		seenStreams[stream] = true
 	}
 	if manifest.StreamScope != "" && manifest.StreamScope != "selection" && manifest.StreamScope != "instance" {
 		return nil, fmt.Errorf("unsupported stream_scope %q", manifest.StreamScope)

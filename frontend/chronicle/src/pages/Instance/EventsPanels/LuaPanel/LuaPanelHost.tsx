@@ -6,7 +6,7 @@ import { GuideUiScene } from "../../../Guides/protocol/GuideUiScene"
 import { applySceneBatch, createInitialScene } from "../../../Guides/protocol/scene"
 import { parseWorkerMessage } from "../../../Guides/protocol/protocol"
 import type { GuideCapability, RetainedScene } from "../../../Guides/protocol/types"
-import type { PanelEvent, PanelStream, PanelStreamScope } from "../../../Guides/runtime/panelEvents"
+import type { EventStreams, PanelEvent, PanelStream, PanelStreamScope } from "../../../Guides/runtime/panelEvents"
 import type { PanelReplayMetrics } from "../../../Guides/runtime/panelWorker"
 import type { PanelUnits } from "../../../Guides/runtime/panelUnits"
 import { explainAddonError, type AddonErrorContext, type AddonErrorExplanation, type AddonPhase } from "../../../Guides/runtime/addonErrors"
@@ -23,12 +23,13 @@ export interface LuaPanelHostProps {
   maxEvents?: number
   capabilities: readonly GuideCapability[]
   events?: readonly PanelEvent[]
-  damageStream?: Uint8Array
+  /** Bytes for every declared stream; the replay starts once all of them are here. */
+  eventStreams?: EventStreams
   encounterIds?: readonly string[]
   assets?: ReadonlyMap<string, string>
   /** Units Lua can look up with Chronicle.GetUnit; memoize it, since a new object restarts the panel. */
   units?: PanelUnits
-  /** Called once per completed damage replay. */
+  /** Called once per completed replay. */
   onMetrics?: (metrics: LuaPanelRunMetrics) => void
   /** Shows an "Ask the assistant to fix it" button on errors (Addon Workshop only). */
   onAskAssistant?: (prompt: string) => void
@@ -39,7 +40,7 @@ const EMPTY_IDS: readonly string[] = []
 const EMPTY_ASSETS: ReadonlyMap<string, string> = new Map()
 
 // Shared by the author preview and embedded EventsPanels. No Lua executes on the main thread.
-export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", maxEvents, capabilities, events = EMPTY_EVENTS, damageStream, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS, units, onMetrics, onAskAssistant }: LuaPanelHostProps) {
+export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", maxEvents, capabilities, events = EMPTY_EVENTS, eventStreams, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS, units, onMetrics, onAskAssistant }: LuaPanelHostProps) {
   const [scene, setScene] = useState<RetainedScene>(createInitialScene)
   const [error, setError] = useState<AddonErrorExplanation | null>(null)
   const [progress, setProgress] = useState<number | null>(null)
@@ -49,7 +50,7 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
   const onMetricsRef = useRef(onMetrics)
   useEffect(() => { onMetricsRef.current = onMetrics }, [onMetrics])
   useEffect(() => {
-    const replaying = !!damageStream && streams.includes("damage")
+    const replaying = streams.length > 0 && !!eventStreams && streams.every(stream => eventStreams[stream])
     let postedAt = 0
     drawMs.current = 0
     const runtime = new Worker(new URL("../../../Guides/runtime/panelWorker.ts", import.meta.url), { type: "module" })
@@ -70,7 +71,7 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
           const context = data as { phase?: AddonPhase; events?: number }
           stop(String("message" in data ? data.message : "Panel failed"), { phase: context.phase, events: context.events }); return
         }
-        if (data && typeof data === "object" && "type" in data && data.type === "damage-complete") {
+        if (data && typeof data === "object" && "type" in data && data.type === "replay-complete") {
           clearTimeout(watchdog)
           if ("metrics" in data && data.metrics && typeof data.metrics === "object") {
             const run = { ...(data.metrics as PanelReplayMetrics), wallMs: performance.now() - postedAt, drawMs: drawMs.current }
@@ -106,9 +107,9 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
     runtime.onerror = () => stop("Panel worker failed")
     armWatchdog()
     runtime.postMessage({ type: "start", entrypoint, sources, streams, capabilities, streamScope, maxEvents, units })
-    if (replaying) { postedAt = performance.now(); runtime.postMessage({ type: "damage-stream", data: damageStream, encounterIds: [...encounterIds] }) }
+    if (replaying) { postedAt = performance.now(); runtime.postMessage({ type: "streams", streams: eventStreams, encounterIds: [...encounterIds] }) }
     return () => { clearTimeout(watchdog); runtime.terminate(); if (workerRef.current === runtime) workerRef.current = null }
-  }, [entrypoint, sources, streams, streamScope, maxEvents, capabilities, damageStream, encounterIds, units])
+  }, [entrypoint, sources, streams, streamScope, maxEvents, capabilities, eventStreams, encounterIds, units])
 
   useEffect(() => {
     for (const event of events) workerRef.current?.postMessage({ type: "event", event })

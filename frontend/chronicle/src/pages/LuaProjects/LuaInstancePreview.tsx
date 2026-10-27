@@ -3,12 +3,11 @@ import { Switch } from "@/components/ui/Switch/Switch"
 import { LuaPanelHost } from "../Instance/EventsPanels/LuaPanel/LuaPanelHost"
 import type { PanelPackage } from "../Guides/package/panelLoader"
 import type { PanelUnits } from "../Guides/runtime/panelUnits"
-import { selectPreviewDamage } from "./luaPreviewBounds"
+import { PANEL_STREAMS, type EventStreams } from "../Guides/runtime/panelEvents"
+import { loadPreviewStreams, type PreviewStreamProvider } from "./previewStream"
 
 /** The caller must authorize instance access; the preview passes on every event in scope. */
-export interface LuaPreviewEventProvider {
-  getDamage(instanceId: string, options: { signal: AbortSignal }): Promise<Uint8Array>
-}
+export type LuaPreviewEventProvider = Pick<PreviewStreamProvider, "getStream">
 
 export interface LuaInstancePreviewProps {
   /** Entire parsed package from current unsaved editor/archive bytes, never a saved draft or release. */
@@ -22,7 +21,7 @@ export interface LuaInstancePreviewProps {
   onAskAssistant?: (prompt: string) => void
 }
 
-interface Run { id: number; instanceId: string; panel: PanelPackage; selection: string; encounterIds: readonly string[]; data?: Uint8Array }
+interface Run { id: number; instanceId: string; panel: PanelPackage; selection: string; encounterIds: readonly string[]; streams: EventStreams }
 const button = "whitespace-nowrap rounded-md border border-border bg-background px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
 
 const autoPreviewKey = "lua-workshop-auto-preview"
@@ -92,7 +91,7 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events, un
     if (safeMode) return
     if (!instanceId || !panel.sources[panel.entrypoint] ||
       Object.values(panel.sources).some(source => source.includes("\0") || new TextEncoder().encode(source).length > 64 * 1024) ||
-      panel.streams.some(stream => stream !== "damage") || panel.capabilities.some(cap => cap !== "ui" && cap !== "input")) {
+      panel.streams.some(stream => !PANEL_STREAMS.includes(stream)) || panel.capabilities.some(cap => cap !== "ui" && cap !== "input")) {
       setError("Select an instance and provide a supported unsaved addon package")
       return
     }
@@ -105,14 +104,9 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events, un
     controller.current = abort
     setBusy(true)
     try {
-      let data: Uint8Array | undefined
-      if (panel.streams.includes("damage")) {
-        const input = await events.getDamage(instanceId, { signal: abort.signal })
-        if (abort.signal.aborted || generation.current !== id) return
-        data = selectPreviewDamage(input, encounterIds, panel.streamScope)
-      }
+      const streams = await loadPreviewStreams(events, instanceId, panel, encounterIds, abort.signal)
       if (abort.signal.aborted || generation.current !== id) return
-      setRun({ id, panel, instanceId, selection, encounterIds: [...encounterIds], data })
+      setRun({ id, panel, instanceId, selection, encounterIds: [...encounterIds], streams })
     } catch (caught) {
       if (!abort.signal.aborted && generation.current === id) setError(caught instanceof Error ? caught.message : "Preview data unavailable")
     } finally {
@@ -139,12 +133,12 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events, un
           <Switch size="sm" checked={auto} onCheckedChange={toggleAuto} aria-label="Auto preview" /> Auto
         </label>
         {visible && !current && <span role="status" className="text-[11px] text-muted-foreground">{busy ? "Updating…" : "Waiting for changes to settle…"}</span>}
-        <span className="ml-auto whitespace-nowrap text-[11px] text-muted-foreground" title="Damage events only. Nothing is uploaded or published.">Damage events · runs locally</span>
+        <span className="ml-auto whitespace-nowrap text-[11px] text-muted-foreground" title={`Streams: ${panel.streams.join(", ") || "none"}. Nothing is uploaded or published.`}>{panel.streams.length === 1 ? `${panel.streams[0]} events` : `${panel.streams.length} streams`} · runs locally</span>
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {visible && <div className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-background transition-opacity ${current ? "" : "opacity-60"}`}>
         <LuaPanelHost key={visible.id} entrypoint={visible.panel.entrypoint} sources={visible.panel.sources} streams={visible.panel.streams} streamScope={visible.panel.streamScope}
-          maxEvents={visible.panel.maxEvents} units={units} capabilities={visible.panel.capabilities} damageStream={visible.data} encounterIds={visible.encounterIds} assets={assetUrls} onAskAssistant={onAskAssistant} /></div>}
+          maxEvents={visible.panel.maxEvents} units={units} capabilities={visible.panel.capabilities} eventStreams={visible.streams} encounterIds={visible.encounterIds} assets={assetUrls} onAskAssistant={onAskAssistant} /></div>}
     </>}
   </section>
 }

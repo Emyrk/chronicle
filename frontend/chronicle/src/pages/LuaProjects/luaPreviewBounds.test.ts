@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { selectPreviewDamage } from "./luaPreviewBounds"
+import { selectPreviewEncounters } from "./luaPreviewBounds"
 
 function varint(value: number): number[] {
   const bytes: number[] = []
@@ -21,7 +21,7 @@ describe("unsaved Lua preview encounter selection", () => {
     const a = frame("a", 1, new Uint8Array([3]))
     const b = frame("b", 2, new Uint8Array([4]))
     const source = concat(a, b)
-    const selected = selectPreviewDamage(source, ["b"])
+    const selected = selectPreviewEncounters(source, ["b"])
     expect(selected).toEqual(b)
     source.fill(0)
     expect(selected).toEqual(b)
@@ -29,18 +29,19 @@ describe("unsaved Lua preview encounter selection", () => {
   it("keeps every encounter for stream_scope instance, still requiring the selection", () => {
     const a = frame("a", 1, new Uint8Array([3]))
     const b = frame("b", 2, new Uint8Array([4]))
-    expect(selectPreviewDamage(concat(a, b), ["b"], "instance")).toEqual(concat(a, b))
-    expect(() => selectPreviewDamage(a, ["b"], "instance")).toThrow(/unavailable/)
+    expect(selectPreviewEncounters(concat(a, b), ["b"], "instance")).toEqual(concat(a, b))
+    // Sparse streams (dispels, deaths) have no frame for encounters without events.
+    expect(selectPreviewEncounters(a, ["b"], "instance")).toEqual(a)
   })
   it("passes large selections and event counts through without a host cap", () => {
     const frames = ["a", "b", "c", "d", "e"].map(id => frame(id, 1_000_000, new Uint8Array(4)))
-    expect(selectPreviewDamage(concat(...frames), ["a", "b", "c", "d", "e"])).toEqual(concat(...frames))
+    expect(selectPreviewEncounters(concat(...frames), ["a", "b", "c", "d", "e"])).toEqual(concat(...frames))
   })
   it("rejects missing, duplicate and malformed encounter data", () => {
-    expect(() => selectPreviewDamage(frame("a", 1), [])).toThrow(/Select/)
-    expect(() => selectPreviewDamage(frame("a", 1), ["a", "a"])).toThrow(/Select/)
-    expect(() => selectPreviewDamage(frame("a", 1), ["b"])).toThrow(/unavailable/)
-    expect(() => selectPreviewDamage(concat(frame("a", 1), frame("a", 1)), ["a"])).toThrow(/Duplicate/)
-    expect(() => selectPreviewDamage(new Uint8Array([1, 97, 1, 0, 5]), ["a"])).toThrow(/Invalid/)
+    expect(() => selectPreviewEncounters(frame("a", 1), [])).toThrow(/Select/)
+    expect(() => selectPreviewEncounters(frame("a", 1), ["a", "a"])).toThrow(/Select/)
+    expect(selectPreviewEncounters(frame("a", 1), ["b"])).toEqual(new Uint8Array())
+    expect(() => selectPreviewEncounters(concat(frame("a", 1), frame("a", 1)), ["a"])).toThrow(/Duplicate/)
+    expect(() => selectPreviewEncounters(new Uint8Array([1, 97, 1, 0, 5]), ["a"])).toThrow(/Invalid/)
   })
 })

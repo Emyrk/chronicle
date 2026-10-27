@@ -11,10 +11,9 @@ import { getProject, publishUnstable, type LuaProject } from "./api"
 import { LuaBrowserTest } from "./LuaBrowserTest"
 import { panelPackageFromWorkingCopy, validateEditorFiles, type EditorFiles } from "./editorFiles"
 import { applyLuaFileEdit, LUA_EDITOR_CAPABILITY, parseLuaFileEdit, type LuaToolFile } from "./luaEditorTools"
-import { createCachedDamageProvider } from "./previewStream"
+import { createCachedStreamProvider, loadPreviewStreams } from "./previewStream"
 import type { WorkshopChatRequest } from "./LuaWorkshopChat"
 import { parseRunPreviewArgs, runPreview } from "./previewRun"
-import { selectPreviewDamage } from "./luaPreviewBounds"
 import { runStartupCheck } from "./startupCheck"
 import { buildPanelUnits } from "../Guides/runtime/panelUnits"
 import { resolveInstanceUnits } from "../Instance/instanceUnits"
@@ -28,7 +27,7 @@ const LuaSourceEditor = lazy(() => import("./LuaSourceEditor").then(module => ({
 const LuaWorkshopChat = lazy(() => import("./LuaWorkshopChat").then(module => ({ default: module.LuaWorkshopChat })))
 const LuaDiffReview = lazy(() => import("./LuaDiffReview").then(module => ({ default: module.LuaDiffReview })))
 const LuaInstancePreview = lazy(() => import("./LuaInstancePreview").then(module => ({ default: module.LuaInstancePreview })))
-const events = createCachedDamageProvider()
+const events = createCachedStreamProvider()
 const instanceIDPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
 const proposalTimeoutMs = 5_000
 const layoutKey = "lua-workshop-layout"
@@ -230,9 +229,8 @@ export default function LuaProjectWorkspacePage() {
         let panel
         try { panel = panelPackageFromWorkingCopy(projectQuery.data!, { manifest: current.manifest, lua: current.source }) }
         catch (error) { return { ok: false, error: `The working copy is invalid: ${errorMessage(error, "unknown error")}` } }
-        const damage = panel.streams.includes("damage")
-          ? selectPreviewDamage(await events.getDamage(previewInstance, { signal }), selected, panel.streamScope) : undefined
-        const result = await runPreview({ panel, damage, encounterIds: selected, units }, signal)
+        const streams = await loadPreviewStreams(events, previewInstance, panel, selected, signal)
+        const result = await runPreview({ panel, streams, encounterIds: selected, units }, signal)
         return { ...result, instance_id: previewInstance, encounter_ids: selected, revision: current.revision, encounters }
       },
       run_startup_check: async (_args, { signal }) => {

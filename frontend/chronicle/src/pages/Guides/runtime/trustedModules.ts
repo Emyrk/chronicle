@@ -1,8 +1,34 @@
+import { PANEL_STREAMS, type PanelStream } from "./panelEvents"
+
+/** chronicle.v1.events.<stream>: onEvent for one stream, plus the shared onComplete. */
+const streamModule = (stream: PanelStream) => `
+    local M = {}
+    function M.onEvent(callback)
+      Panel:OnEvent("${stream}", callback)
+    end
+    -- Called once after the last event of the replay; draw final totals here.
+    function M.onComplete(callback)
+      Panel:OnComplete(callback)
+    end
+    return M
+  `
+
 // These modules belong to the host, never to uploaded ZIPs. They are loaded only by require().
 const MODULES: Readonly<Record<string, string>> = Object.freeze({
+  ...Object.fromEntries(PANEL_STREAMS.map(stream => [`chronicle/v1/events/${stream}.lua`, streamModule(stream)])),
+  // Every declared stream through one callback; event.stream says which.
+  "chronicle/v1/events.lua": `
+    local M = {}
+    function M.onEvent(callback)
+      Panel:OnEvent(callback)
+    end
+    function M.onComplete(callback)
+      Panel:OnComplete(callback)
+    end
+    return M
+  `,
   "chronicle/v1/events/damage.lua": `
     local M = {}
-    -- The host owns the stream and projects only source, target, amount, offsetMs, encounterId, selected.
     function M.onEvent(callback)
       Panel:OnEvent("damage", callback)
     end

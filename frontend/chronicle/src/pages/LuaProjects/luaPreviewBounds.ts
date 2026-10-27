@@ -2,11 +2,11 @@ import { readVarint, readVarint64 } from "@/api/protodecode/decode"
 import type { PanelStreamScope } from "../Guides/runtime/panelEvents"
 
 /**
- * Keep only complete framed encounters before sending bytes to the Lua worker: the selected ones,
- * or every encounter for panels with stream_scope "instance". There is no size cap; the panel's
- * manifest may set max_events to bound its own replay.
+ * Keep only complete framed encounters of one stream before sending bytes to the Lua worker: the selected
+ * ones, or every encounter for panels with stream_scope "instance". Streams without events in an encounter
+ * have no frame for it. There is no size cap; the panel's manifest may set max_events to bound its own replay.
  */
-export function selectPreviewDamage(data: Uint8Array, encounterIds: readonly string[], scope: PanelStreamScope = "selection"): Uint8Array {
+export function selectPreviewEncounters(data: Uint8Array, encounterIds: readonly string[], scope: PanelStreamScope = "selection"): Uint8Array {
   if (!encounterIds.length || encounterIds.some(id => !id || id.length > 256) || new Set(encounterIds).size !== encounterIds.length) {
     throw new Error("Select at least one encounter")
   }
@@ -35,7 +35,6 @@ export function selectPreviewDamage(data: Uint8Array, encounterIds: readonly str
     bytes += offset - start
     chunks.push(data.subarray(start, offset))
   }
-  if (encounterIds.some(id => !found.has(id))) throw new Error("Selected encounter data is unavailable")
   const output = new Uint8Array(bytes)
   let position = 0
   for (const chunk of chunks) { output.set(chunk, position); position += chunk.length }

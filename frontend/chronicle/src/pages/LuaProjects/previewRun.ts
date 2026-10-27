@@ -2,6 +2,7 @@ import type { PanelPackage } from "../Guides/package/panelLoader"
 import { parseWorkerMessage } from "../Guides/protocol/protocol"
 import { applySceneBatch, createInitialScene, UI_ROOT_ID } from "../Guides/protocol/scene"
 import type { RetainedScene, SceneNode } from "../Guides/protocol/types"
+import type { EventStreams } from "../Guides/runtime/panelEvents"
 import type { PanelReplayMetrics } from "../Guides/runtime/panelWorker"
 import type { PanelUnits } from "../Guides/runtime/panelUnits"
 import { explainAddonError, formatAddonError, type AddonPhase } from "../Guides/runtime/addonErrors"
@@ -16,7 +17,8 @@ export interface PreviewWorker {
 
 export interface PreviewRunInput {
   panel: PanelPackage
-  damage?: Uint8Array
+  /** Bytes for every declared stream; see loadPreviewStreams. */
+  streams?: EventStreams
   encounterIds: readonly string[]
   units?: PanelUnits
 }
@@ -85,13 +87,13 @@ const defaultWorker = (): PreviewWorker => new Worker(new URL("../Guides/runtime
  * the result as text so the workshop assistant can read errors and output without the user pasting them.
  */
 export function runPreview(input: PreviewRunInput, signal?: AbortSignal, createWorker: () => PreviewWorker = defaultWorker): Promise<PreviewRunResult> {
-  const { panel, damage, encounterIds, units } = input
+  const { panel, streams, encounterIds, units } = input
   return new Promise((resolve, reject) => {
     let worker: PreviewWorker
     try { worker = createWorker() } catch { resolve({ ok: false, error: "This browser cannot start a Lua worker.", nodes: 0, output: "", truncated: false }); return }
     let scene = createInitialScene()
     let watchdog: ReturnType<typeof setTimeout> | undefined
-    const replaying = !!damage && panel.streams.includes("damage")
+    const replaying = panel.streams.length > 0 && !!streams && panel.streams.every(stream => streams[stream])
     const finish = (result: Omit<PreviewRunResult, "nodes" | "output" | "truncated"> | null) => {
       clearTimeout(watchdog)
       signal?.removeEventListener("abort", abort)
@@ -114,7 +116,7 @@ export function runPreview(input: PreviewRunInput, signal?: AbortSignal, createW
         return
       }
       if (message?.type === "progress") { armWatchdog(); return }
-      if (message?.type === "damage-complete") {
+      if (message?.type === "replay-complete") {
         const m = message.metrics
         finish({ ok: true, metrics: m && { events: m.events, encounters: m.encounters, totalMs: round(m.totalMs), luaMs: round(m.luaMs), completeMs: round(m.completeMs), uiOperations: m.uiOperations } })
         return
@@ -123,7 +125,7 @@ export function runPreview(input: PreviewRunInput, signal?: AbortSignal, createW
         const parsed = parseWorkerMessage(data)
         if (parsed.type === "batch") scene = applySceneBatch(scene, parsed.operations)
         if (parsed.type === "ready") {
-          if (replaying) { armWatchdog(); worker.postMessage({ type: "damage-stream", data: damage, encounterIds: [...encounterIds] }) }
+          if (replaying) { armWatchdog(); worker.postMessage({ type: "streams", streams, encounterIds: [...encounterIds] }) }
           // Without a stream there is nothing to replay; the startup drawing arrives right after ready.
           else queueMicrotask(() => setTimeout(() => finish({ ok: true }), 0))
         }

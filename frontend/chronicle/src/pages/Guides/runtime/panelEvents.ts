@@ -1,6 +1,11 @@
 // Host-owned projection. Never pass raw event objects or arbitrary processor identifiers to Lua.
-export const PANEL_STREAMS = ["damage", "heal", "cast", "aura", "slain", "resource_change", "extra_attack"] as const
+/** Every instance event stream an addon can declare in project.json. Names match /events/{type}. */
+export const PANEL_STREAMS = ["damage", "heal", "absorbed", "resource_change", "extra_attack", "slain", "ressurection", "cast", "spell_start",
+  "spell_go", "spell_fail", "aura", "aura_cast", "dispel", "interrupt", "unit_classification", "unit_position", "unit_resources",
+  "combatant_info", "consume", "raid_group"] as const
 export type PanelStream = (typeof PANEL_STREAMS)[number]
+/** Framed event bytes per declared stream, as /events/{type} returns them. */
+export type EventStreams = Partial<Record<PanelStream, Uint8Array>>
 export type PanelEvent = Readonly<{ stream: PanelStream; source: string; target: string; amount: number; offsetMs: number; encounterId: string; selected: boolean }>
 /** Which encounters a panel receives: the user's selection (default) or every encounter tagged with `selected`. */
 export const PANEL_STREAM_SCOPES = ["selection", "instance"] as const
