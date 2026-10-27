@@ -130,7 +130,7 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events, un
   const current = run && run.panel === panel && run.instanceId === instanceId && run.selection === selection
   // A stale result only stays on screen while Auto is about to replace it.
   const visible = run && !safeMode && (current || auto) ? run : null
-  return <section className="space-y-3" aria-label="Unsaved addon instance preview">
+  return <section className="flex min-h-0 flex-1 flex-col gap-3" aria-label="Unsaved addon instance preview">
     {safeMode ? <p className="text-xs">Addon preview is disabled by ?safe=1.</p> : <>
       <div className="flex flex-wrap items-center gap-2">
         <button className={`${button} border-primary bg-primary text-primary-foreground hover:bg-primary/90`} type="button" disabled={busy || !instanceId || !panel.sources[panel.entrypoint]} onClick={() => void start()}>{busy ? "Loading events…" : run ? "Re-run preview" : "Run preview"}</button>
@@ -142,9 +142,9 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events, un
         <span className="ml-auto whitespace-nowrap text-[11px] text-muted-foreground" title="Damage events only. Nothing is uploaded or published.">Damage events · runs locally</span>
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {visible && <div className={`overflow-hidden rounded-md border border-border bg-background transition-opacity ${current ? "" : "opacity-60"}`}>
+      {visible && <div className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-background transition-opacity ${current ? "" : "opacity-60"}`}>
         <LuaPanelHost key={visible.id} entrypoint={visible.panel.entrypoint} sources={visible.panel.sources} streams={visible.panel.streams} streamScope={visible.panel.streamScope}
-          maxEvents={visible.panel.maxEvents} units={units} capabilities={visible.panel.capabilities} damageStream={visible.data} encounterIds={visible.encounterIds} assets={assetUrls} onAskAssistant={onAskAssistant} fitContent /></div>}
+          maxEvents={visible.panel.maxEvents} units={units} capabilities={visible.panel.capabilities} damageStream={visible.data} encounterIds={visible.encounterIds} assets={assetUrls} onAskAssistant={onAskAssistant} /></div>}
     </>}
   </section>
 }
