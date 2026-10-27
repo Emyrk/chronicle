@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { Env } from "./types";
+import { FAVICON_PNG_BASE64 } from "./favicon";
 import { LOGO_SVG_BASE64 } from "./logo";
 import ingest from "./routes/ingest";
 import api from "./routes/api";
@@ -18,6 +19,14 @@ const app = new Hono<{ Bindings: Env }>();
 
 // Allow Chronicle instances to POST from any origin.
 app.use("/api/*", cors());
+
+app.get("/favicon.png", (c) => {
+  const bytes = Uint8Array.from(atob(FAVICON_PNG_BASE64), (ch) => ch.charCodeAt(0));
+  return c.body(bytes, 200, {
+    "Content-Type": "image/png",
+    "Cache-Control": "public, max-age=31536000, immutable",
+  });
+});
 
 // Serve the logo from the Worker itself (avoids cross-origin ORB blocking).
 app.get("/logo.svg", async (c) => {
@@ -51,7 +60,7 @@ app.get("/", (c) => {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Chronicle Telemetry</title>
-  <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAQlBMVEUrKytVTT1rXkdkWUQdHyQ1Mi9wY0knKCkjJCcuLSxGQTdcUkE9OTNNRjp3aE3GqHCAb1CpkGO6nmqKd1WUgFrYt3iDjUckAAAACXBIWXMAAA7EAAAOxAGVKw4bAAABgklEQVR42pVT23LdMAiUAHHRXbbP//9qcDudyidNM+FJI1bLsogQfhqi/09LziZfpi0kxtKr2H1+C3VuIchEicUR+s5ToEjqnWomnEnDWXQnESwhXmtNaoX4dfTygh0giSnrbIQtx9r7GMd4MhhrY5RgOCf0EI8x4g4wLWc7p1tAEal2wjHyrtLovFpqLEFyFHXQGlV29+KoFDSyaPPawoIj/QVIZQDOYo6gHMkLNiu7gl5V022gRuBZRSrqNhKN/sg0o9/pzJWTJNisdsJbsCTv0jNEmNVg98B1OQM19MZ1YmR/BM9ZcVOtPbmGUrD7hZd4fIIEs8OtsYB34W26yOe8aV2kdw/6y4dbdlmbEaZ41CqR/Uv8NqrStTvlkHWWs/uw1I3ShpTH8QSw1QliPvdZUze5ngCpQDGgSWYEPFO4xhuDcKZ2JWXzEtDXa603QAIA/3L9HlZ8HdP4KdIXwlRzP0UCASdvd9rnrRBqXFNBkq82zFUCxD/4f4bqN8v58/gAYXERW1mDvqEAAAAASUVORK5CYII=" type="image/png">
+  <link rel="icon" href="/favicon.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
