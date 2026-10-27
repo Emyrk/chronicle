@@ -211,7 +211,7 @@ func (api *API) instanceOwnerAdsFree(ctx context.Context, instanceID uuid.UUID) 
 	return api.Opts.Zed.CheckOne(
 		ctx,
 		nil,
-		policy.New().GlobalChronicle().CanAd_free_User(policy.New().User(ownerID)),
+		policy.New().GlobalChronicle().CanUploaded_logs_ad_free_User(policy.New().User(ownerID)),
 	)
 }
 

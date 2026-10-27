@@ -98,6 +98,11 @@ func TestInstanceOwnerAdsFree(t *testing.T) {
 	require.NoError(t, zed.SetUserChronicleRoles(ctx, ownerID, []string{"ad_free_capable"}))
 	adsFree, err = handlerAPI.instanceOwnerAdsFree(ctx, instanceID)
 	require.NoError(t, err)
+	require.False(t, adsFree, "personal ad-free access must not make uploaded log pages ad-free")
+
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, ownerID, []string{"revered"}))
+	adsFree, err = handlerAPI.instanceOwnerAdsFree(ctx, instanceID)
+	require.NoError(t, err)
 	require.True(t, adsFree)
 }
 
