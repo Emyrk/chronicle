@@ -100,5 +100,7 @@ func TestValidateTierRoleConfig(t *testing.T) {
 	require.NoError(t, validateTierRoleConfig(Config{}))
 	require.Error(t, validateTierRoleConfig(Config{GuildID: "guild", HonoredRoleID: "honored"}))
 	require.Error(t, validateTierRoleConfig(Config{GuildID: "guild", HonoredRoleID: "same", ReveredRoleID: "same", ExaltedRoleID: "exalted"}))
+	require.ErrorContains(t, validateTierRoleConfig(Config{GuildID: "guild", HonoredRoleID: boosterRoleID, ReveredRoleID: "revered", ExaltedRoleID: "exalted"}), "Booster or Supporter")
+	require.ErrorContains(t, validateTierRoleConfig(Config{GuildID: "guild", HonoredRoleID: "honored", ReveredRoleID: supporterRoleID, ExaltedRoleID: "exalted"}), "Booster or Supporter")
 	require.NoError(t, validateTierRoleConfig(Config{GuildID: "guild", HonoredRoleID: "honored", ReveredRoleID: "revered", ExaltedRoleID: "exalted"}))
 }

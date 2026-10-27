@@ -18,7 +18,12 @@ import (
 
 var ErrMustJoinDiscordServer = errors.New("must be in the discord server to use chronicle")
 
-const protectedTechnicalAdminDiscordID = "221411580535898113"
+const (
+	protectedTechnicalAdminDiscordID = "221411580535898113"
+	// Discord-owned supporter sources must not be managed as billing tier roles.
+	boosterRoleID   = "1476428881677389865"
+	supporterRoleID = "1476558127552790812"
+)
 
 func ensureProtectedTechnicalAdmin(ctx context.Context, zed authz.Authorizer, discordID string, userID uuid.UUID) error {
 	if discordID != protectedTechnicalAdminDiscordID {
@@ -91,8 +96,7 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 
 	if member != nil {
 		for _, roleID := range member.Roles {
-			if roleID == "1476428881677389865" || // Booster
-				roleID == "1476558127552790812" { // Supporter
+			if roleID == boosterRoleID || roleID == supporterRoleID {
 				b := policy.New()
 				b.GlobalChronicle().Supporter(b.User(userID))
 				if _, err := zed.Write(ctx, *b.Txn()); err != nil {

@@ -113,7 +113,7 @@ func (s *Service) Start(ctx context.Context) error {
 		riverqueue.AddWorker(q, bot.NewWorkerDispatchEntitlementRoleAudits())
 		q.AddPeriodicJob(
 			river.NewPeriodicJob(
-				river.PeriodicInterval(24*time.Hour),
+				river.PeriodicInterval(6*time.Hour),
 				func() (river.JobArgs, *river.InsertOpts) {
 					return chroniclebot.ArgsDispatchEntitlementRoleAudits{}, nil
 				},

@@ -84,7 +84,7 @@ func validateTierRoleConfig(config Config) error {
 	}
 	seen := make(map[string]bool, len(ids))
 	for _, id := range ids {
-		if id == "1476428881677389865" || id == "1476558127552790812" {
+		if id == boosterRoleID || id == supporterRoleID {
 			return fmt.Errorf("discord tier roles must not use the Booster or Supporter role")
 		}
 		if seen[id] {
