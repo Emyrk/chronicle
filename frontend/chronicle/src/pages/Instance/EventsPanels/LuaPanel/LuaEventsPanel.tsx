@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useInstanceEventsContext } from "@/hooks/instanceEvents"
 import { loadPanelPackage } from "../../../Guides/package/panelLoader"
 import { getPublicProject, publicPackageURL } from "../../../LuaProjects/api"
 import type { EventsPanelProps } from "../EventsPanel"
 import { PanelSelector } from "../PanelSelector"
-import { LuaPanelHost } from "./LuaPanelHost"
+import { usePanelTiming, usePanelTimingContext } from "../PanelTimingContext"
+import { LuaPanelHost, type LuaPanelRunMetrics } from "./LuaPanelHost"
 import { parseLuaPanelRef } from "./luaPanelRegistry"
 
 export default function LuaEventsPanel(props: EventsPanelProps) {
@@ -39,14 +40,30 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
   const selectedIds = useMemo(() => [...(props.context.selectedEncounterIds ?? [])], [props.context.selectedEncounterIds])
   const [damage, setDamage] = useState<Uint8Array>()
   const [streamError, setStreamError] = useState<string>()
+  const [fetchMs, setFetchMs] = useState(0)
   useEffect(() => {
     if (!panel?.streams.includes("damage")) return
     let active = true
+    const started = performance.now()
     fetchStream("damage").then((stream) => {
-      if (active) { setDamage(stream.data.slice()); setStreamError(undefined) }
+      if (active) { setFetchMs(performance.now() - started); setDamage(stream.data.slice()); setStreamError(undefined) }
     }).catch((error: unknown) => { if (active) setStreamError(String(error)) })
     return () => { active = false; setDamage(undefined) }
   }, [panel, fetchStream])
+  // Report like built-in panels so Lua panels show up in the Metrics panel and the page's load timer.
+  const reportPanelMetrics = usePanelTimingContext()?.reportPanelMetrics
+  const [done, setDone] = useState(false)
+  usePanelTiming(`panel-${props.panelIndex}`, done)
+  const onMetrics = useCallback((run: LuaPanelRunMetrics) => {
+    setDone(true)
+    reportPanelMetrics?.({
+      panelKey: `panel-${props.panelIndex}`, panelId: String(props.panelType), panelLabel: `${panel?.name ?? "Lua panel"} (Lua)`,
+      panelIndex: props.panelIndex, streams: ["damage"], streamBytes: { damage: run.bytes }, totalStreamBytes: run.bytes,
+      totalEvents: run.events, processingTimeMs: run.totalMs, streamProcessingTimeMs: run.luaMs + run.completeMs,
+      serializationTimeMs: run.uiMs, deserializationTimeMs: run.drawMs, wallTimeMs: fetchMs + run.wallMs,
+      queueWaitMs: run.startupMs, fetchTimeMs: fetchMs, updatedAtMs: performance.now(),
+    })
+  }, [reportPanelMetrics, props.panelIndex, props.panelType, panel?.name, fetchMs])
   const assetUrls = useMemo(() => {
     const urls = new Map<string, string>()
     for (const [path, bytes] of panel?.assets ?? []) urls.set(path, URL.createObjectURL(new Blob([new Uint8Array(bytes)])))
@@ -62,6 +79,6 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
       channelQuery.error || packageQuery.error || streamError || !hash ? <div role="alert" className="p-4 text-sm text-destructive">{String(channelQuery.error ?? packageQuery.error ?? streamError ?? "Channel not published")}</div> :
       panel && (panel.streams.includes("damage") && !damage ? <div className="p-4 text-sm">Loading damage...</div> :
         <LuaPanelHost key={`${ref?.id}:${hash}`} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} streamScope={panel.streamScope} maxEvents={panel.maxEvents} capabilities={panel.capabilities}
-          damageStream={damage} encounterIds={selectedIds} assets={assetUrls} />)}
+          damageStream={damage} encounterIds={selectedIds} assets={assetUrls} onMetrics={onMetrics} />)}
   </div>
 }

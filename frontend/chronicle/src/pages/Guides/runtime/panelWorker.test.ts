@@ -62,11 +62,18 @@ describe("Lua panel worker damage replay", () => {
   it("sends only selected encounters by default and calls onComplete before damage-complete", () => {
     const messages = replay()
     expect(finalText(messages)).toEqual(["e2=7.0*"])
-    expect(messages.at(-1)).toEqual({ type: "damage-complete" })
+    expect(messages.at(-1)).toMatchObject({ type: "damage-complete" })
   })
 
   it("sends every encounter tagged with selected for stream_scope instance", () => {
     expect(finalText(replay("instance"))).toEqual(["e1=5.0 e2=7.0*"])
+  })
+
+  it("reports replay metrics with damage-complete", () => {
+    expect(replay().at(-1)).toMatchObject({ type: "damage-complete", metrics: { events: 1, encounters: 1, uiOperations: 1 } })
+    const metrics = (replay("instance").at(-1) as { metrics: Record<string, number> }).metrics
+    expect(metrics).toMatchObject({ events: 2, encounters: 2 })
+    for (const key of ["startupMs", "totalMs", "decodeMs", "luaMs", "uiMs", "completeMs"]) expect(metrics[key]).toBeGreaterThanOrEqual(0)
   })
 
   it("rejects unknown stream scopes", () => {
@@ -84,11 +91,11 @@ describe("Lua panel worker damage replay", () => {
     const messages = replay("selection", { lua: counter, data: encounter("e2", new Array(60_000).fill(1)) })
     expect(messages).toContainEqual({ type: "progress", events: 60_000 })
     expect(finalText(messages).at(-1)).toBe("done 60000")
-    expect(messages.at(-1)).toEqual({ type: "damage-complete" })
+    expect(messages.at(-1)).toMatchObject({ type: "damage-complete" })
   })
 
   it("stops only at the manifest's own max_events", () => {
     expect(replay("instance", { maxEvents: 1 })).toContainEqual(expect.objectContaining({ type: "error", message: "panel exceeded its max_events (1)" }))
-    expect(replay("instance", { maxEvents: 2 }).at(-1)).toEqual({ type: "damage-complete" })
+    expect(replay("instance", { maxEvents: 2 }).at(-1)).toMatchObject({ type: "damage-complete" })
   })
 })
