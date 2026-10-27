@@ -99,6 +99,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
   const timers = new Map<number, number>()
   const modules = new Map<string, number>()
   const panelCallbacks = new Map<PanelStream, number>()
+  let anyEventCallback: number | undefined // Panel:OnEvent(fn), called for every declared stream.
   let completeCallback: number | undefined // Panel:OnComplete, called once after the host's last event.
   const allowedPanelStreams = new Set(options.panelStreams ?? [])
   if ([...allowedPanelStreams].some((stream) => !PANEL_STREAMS.includes(stream))) throw new GuideLuaError("unsupported panel stream")
@@ -123,6 +124,9 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
   const pushString = (state: LuaState, value: string) => lua.lua_pushstring(state, to_luastring(value))
   const setField = (state: LuaState, index: number, name: string) => lua.lua_setfield(state, index, to_luastring(name))
   const pushBoolean = (state: LuaState, value: boolean) => lua.lua_pushboolean(state, value ? 1 : 0)
+  // Whole numbers arrive as Lua integers so tostring/concatenation print "42", not "42.0". Fengari's
+  // integers are 32-bit, so larger whole numbers stay floats.
+  const pushNumber = (state: LuaState, value: number) => { if ((value | 0) === value) lua.lua_pushinteger(state, value); else lua.lua_pushnumber(state, value) }
   const addOperation = (operation: SceneOperation) => {
     if (operations.length >= limits.maxOperations) fail("operation limit exceeded")
     operations.push(operation)
@@ -348,8 +352,16 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
     if (options.panelStreams) {
       lua.lua_createtable(L, 0, 1)
       registerFunction(L, "OnEvent", (state) => {
-        const stream = stringAt(state, lua.lua_istable(state, 1) ? 2 : 1) as PanelStream
-        const index = lua.lua_istable(state, 1) ? 3 : 2
+        const first = lua.lua_istable(state, 1) ? 2 : 1
+        // Panel:OnEvent(fn) receives every declared stream; event.stream says which.
+        if (lua.lua_isfunction(state, first)) {
+          if (anyEventCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, anyEventCallback)
+          lua.lua_pushvalue(state, first)
+          anyEventCallback = lauxlib.luaL_ref(state, lua.LUA_REGISTRYINDEX)
+          return 0
+        }
+        const stream = stringAt(state, first) as PanelStream
+        const index = first + 1
         if (!allowedPanelStreams.has(stream)) return luaError(state, `panel stream '${stream}' is not allowed`)
         lauxlib.luaL_checktype(state, index, lua.LUA_TFUNCTION)
         const old = panelCallbacks.get(stream)
@@ -396,10 +408,51 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
     if (value === null || value === undefined) lua.lua_pushnil(state)
     else if (typeof value === "string") { if (encoder.encode(value).byteLength > limits.maxStringBytes) fail("event string exceeds string limit"); pushString(state, value) }
     // Whole numbers arrive as Lua integers so tostring/concatenation print "42", not "42.0".
-    else if (typeof value === "number" && Number.isSafeInteger(value)) lua.lua_pushinteger(state, value)
-    else if (typeof value === "number" && Number.isFinite(value)) lua.lua_pushnumber(state, value)
+    else if (typeof value === "number" && Number.isFinite(value)) pushNumber(state, value)
     else if (typeof value === "boolean") pushBoolean(state, value)
     else fail("unsupported callback argument")
+  }
+  const keys = new Map<string, Uint8Array>()
+  const key = (name: string) => { let bytes = keys.get(name); if (!bytes) { bytes = to_luastring(name); keys.set(name, bytes) } return bytes }
+  const pushEventValue = (state: LuaState, value: unknown, depth: number) => {
+    if (typeof value === "string") {
+      // UTF-16 length * 3 bounds the UTF-8 size, so only long strings pay for an encode.
+      if (value.length * 3 > limits.maxStringBytes && encoder.encode(value).byteLength > limits.maxStringBytes) fail("event string exceeds string limit")
+      pushString(state, value)
+    }
+    else if (typeof value === "number") { if (Number.isFinite(value)) pushNumber(state, value); else lua.lua_pushnil(state) }
+    else if (typeof value === "boolean") pushBoolean(state, value)
+    else if (value && typeof value === "object" && depth < 4) pushEventTable(state, value, depth + 1)
+    else lua.lua_pushnil(state)
+  }
+  // Decoder bookkeeping, not event data. Arrays with a matching "...Count" field are reused buffers.
+  const internalFields = new Set(["type", "index", "offsetMilli", "globalOffsetMilli", "activity", "isSynthetic"])
+  const pushEventTable = (state: LuaState, value: object, depth: number) => {
+    if (Array.isArray(value)) {
+      lua.lua_createtable(state, value.length, 0)
+      value.forEach((item, i) => { pushEventValue(state, item, depth); lua.lua_rawseti(state, -2, i + 1) })
+      return
+    }
+    const record = value as Record<string, unknown>
+    lua.lua_createtable(state, 0, 8)
+    for (const name in record) {
+      const field = record[name]
+      if (field === null || field === undefined || internalFields.has(name) || name.endsWith("Count")) continue
+      const count = Array.isArray(field) ? record[`${name}Count`] ?? record[`${name.replace(/s$/, "")}Count`] : undefined
+      if (typeof count === "number") {
+        lua.lua_createtable(state, count, 0)
+        for (let i = 0; i < count; i++) { pushEventValue(state, (field as unknown[])[i], depth + 1); lua.lua_rawseti(state, -2, i + 1) }
+      } else pushEventValue(state, field, depth)
+      // The decoders call the acting unit "caster"; addons see "source" on every stream.
+      lua.lua_setfield(state, -2, key(name === "caster" ? "source" : name))
+    }
+  }
+  const pushStreamEvent = (state: LuaState, stream: PanelStream, event: object, encounterId: string, selected: boolean) => {
+    pushEventTable(state, event, 0)
+    pushString(state, stream); lua.lua_setfield(state, -2, key("stream"))
+    pushNumber(state, (event as { offsetMilli: number }).offsetMilli); lua.lua_setfield(state, -2, key("offsetMs"))
+    pushString(state, encounterId); lua.lua_setfield(state, -2, key("encounterId"))
+    pushBoolean(state, selected); lua.lua_setfield(state, -2, key("selected"))
   }
   const callRef = (ref: number, selfId: string | null, args: unknown[]) => {
     lua.lua_rawgeti(L, lua.LUA_REGISTRYINDEX, ref); let count = 0
@@ -419,12 +472,33 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
       ensureActive()
       if (!options.panelStreams) throw new GuideLuaError("panel profile is not enabled")
       const event: PanelEvent = validatePanelEvent(raw, [...allowedPanelStreams])
-      const ref = panelCallbacks.get(event.stream)
-      if (ref === undefined) return
-      lua.lua_rawgeti(L, lua.LUA_REGISTRYINDEX, ref)
-      lua.lua_createtable(L, 0, 7)
-      for (const [key, value] of Object.entries(event)) { pushArgument(L, value); setField(L, -2, key) }
-      protectedCall(L, 1, 0, limits.callbackInstructions)
+      for (const ref of [panelCallbacks.get(event.stream), anyEventCallback]) {
+        if (ref === undefined) continue
+        lua.lua_rawgeti(L, lua.LUA_REGISTRYINDEX, ref)
+        lua.lua_createtable(L, 0, 7)
+        for (const [key, value] of Object.entries(event)) { pushArgument(L, value); setField(L, -2, key) }
+        protectedCall(L, 1, 0, limits.callbackInstructions)
+      }
+    },
+    /**
+     * Delivers one decoded stream event straight from the cursor's reusable object: every field becomes a
+     * Lua field, without an intermediate copy. Skipped when no callback wants the stream.
+     */
+    panelStreamEvent(stream: PanelStream, event: object, encounterId: string, selected: boolean) {
+      ensureActive()
+      if (!allowedPanelStreams.has(stream)) throw new GuideLuaError(`panel stream '${stream}' is not allowed`)
+      const ref = panelCallbacks.get(stream)
+      if (ref === undefined && anyEventCallback === undefined) return
+      pushStreamEvent(L, stream, event, encounterId, selected)
+      if (ref !== undefined) {
+        lua.lua_rawgeti(L, lua.LUA_REGISTRYINDEX, ref); lua.lua_pushvalue(L, -2)
+        protectedCall(L, 1, 0, limits.callbackInstructions)
+      }
+      if (anyEventCallback !== undefined) {
+        lua.lua_rawgeti(L, lua.LUA_REGISTRYINDEX, anyEventCallback); lua.lua_pushvalue(L, -2)
+        protectedCall(L, 1, 0, limits.callbackInstructions)
+      }
+      lua.lua_pop(L, 1)
     },
     panelComplete() {
       ensureActive()
@@ -432,7 +506,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
       if (completeCallback !== undefined) callRef(completeCallback, null, [])
     },
     flush,
-    stop() { if (stopped) return; for (const ref of callbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of timers.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of modules.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of panelCallbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); if (completeCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, completeCallback); completeCallback = undefined; callbacks.clear(); timers.clear(); modules.clear(); panelCallbacks.clear(); objects.clear(); operations.length = 0; lua.lua_close(L); stopped = true },
+    stop() { if (stopped) return; for (const ref of callbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of timers.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of modules.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of panelCallbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); if (completeCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, completeCallback); completeCallback = undefined; if (anyEventCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, anyEventCallback); anyEventCallback = undefined; callbacks.clear(); timers.clear(); modules.clear(); panelCallbacks.clear(); objects.clear(); operations.length = 0; lua.lua_close(L); stopped = true },
     stats() { return { callbacks: callbacks.size, objects: Math.max(0, objects.size - 1), operations: operations.length, timers: timers.size, stopped } },
   }
 }

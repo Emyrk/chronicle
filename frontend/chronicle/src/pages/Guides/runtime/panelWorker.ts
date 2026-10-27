@@ -1,13 +1,13 @@
 /// <reference lib="webworker" />
 import { createGuideRuntime } from "./runtime"
 import { PANEL_STREAM_SCOPES, PANEL_STREAMS, type PanelStream, type PanelStreamScope } from "./panelEvents"
-import { FastDamageCursor } from "@/api/protodecode/decode"
+import { replayStreams } from "./panelReplay"
 import type { PanelUnits } from "./panelUnits"
 import type { AddonPhase } from "./addonErrors"
 import { parseWorkerMessage, splitBatchOperations } from "../protocol/protocol"
 import type { GuideCapability } from "../protocol/types"
 
-/** Per-replay timings sent with damage-complete; phases add up to roughly totalMs. */
+/** Per-replay timings sent with replay-complete; phases add up to roughly totalMs. */
 export type PanelReplayMetrics = {
   events: number
   encounters: number
@@ -31,7 +31,8 @@ export type PanelReplayMetrics = {
 type Input =
   | { type: "start"; entrypoint: string; sources: Record<string, string>; streams: PanelStream[]; capabilities: GuideCapability[]; streamScope?: PanelStreamScope; maxEvents?: number; units?: PanelUnits }
   | { type: "event"; event: unknown }
-  | { type: "damage-stream"; data: Uint8Array; encounterIds: string[] }
+  /** Framed event bytes for every stream the panel declared, replayed together in log order. */
+  | { type: "streams"; streams: Partial<Record<PanelStream, Uint8Array>>; encounterIds: string[] }
   | { type: "click"; nodeId: string }
   | { type: "stop" }
 
@@ -40,6 +41,7 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
   let batchId = 0
   let streamScope: PanelStreamScope = "selection"
   let maxEvents: number | undefined
+  let declared: PanelStream[] = []
   let startupMs = 0
   // Reported with errors so the host can explain where the addon stopped.
   let phase: AddonPhase = "startup"
@@ -55,6 +57,7 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
         if (!Array.isArray(input.capabilities) || input.capabilities.some((cap) => cap !== "ui" && cap !== "input")) throw new Error("unsupported capabilities")
         if (input.streamScope !== undefined && !PANEL_STREAM_SCOPES.includes(input.streamScope)) throw new Error("unsupported stream scope")
         streamScope = input.streamScope ?? "selection"
+        declared = input.streams
         if (input.maxEvents !== undefined && (!Number.isSafeInteger(input.maxEvents) || input.maxEvents < 1)) throw new Error("invalid max_events")
         maxEvents = input.maxEvents
         const started = performance.now()
@@ -67,45 +70,40 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
         if (!runtime) throw new Error("panel not started")
         phase = "onEvent"; delivered++
         runtime.panelEvent(input.event); flush(runtime.flush())
-      } else if (input.type === "damage-stream") {
+      } else if (input.type === "streams") {
         if (!runtime) throw new Error("panel not started")
+        const active = runtime
         // No host-imposed data caps: panels see every event in scope. Only the manifest's optional max_events bounds a replay.
-        if (!(input.data instanceof Uint8Array) || !Array.isArray(input.encounterIds)) throw new Error("invalid damage stream")
+        if (!input.streams || typeof input.streams !== "object" || !Array.isArray(input.encounterIds)) throw new Error("invalid event streams")
+        const streams = Object.entries(input.streams).map(([stream, data]) => {
+          if (!declared.includes(stream as PanelStream) || !(data instanceof Uint8Array)) throw new Error(`invalid event stream '${stream}'`)
+          return { stream: stream as PanelStream, data }
+        })
         const replayStart = performance.now()
         const selected = new Set(input.encounterIds)
-        const cursor = new FastDamageCursor(input.data)
         let count = 0
         let luaMs = 0
         let uiMs = 0
         let uiOperations = 0
-        const encounters = new Set<string>()
-        while (cursor.currentHeader) {
-          if (!cursor.hasMoreInEncounter) { cursor.nextEncounter(); continue }
-          const encounter = cursor.currentHeader.encounterID
-          const isSelected = selected.has(encounter)
-          // Unselected encounters are skipped without decoding when the panel only wants the selection.
-          if (!isSelected && streamScope === "selection") { cursor.skipEncounter(); continue }
-          const event = cursor.next()
-          if (!event) continue
-          encounters.add(encounter)
+        // Unselected encounters are skipped without decoding when the panel only wants the selection.
+        const encounters = replayStreams(streams, { selected, selectedOnly: streamScope === "selection" }, (stream, event, encounter) => {
           if (maxEvents !== undefined && count >= maxEvents) throw new Error(`panel exceeded its max_events (${maxEvents})`)
           count++
           phase = "onEvent"; delivered = count
           const luaStart = performance.now()
-          runtime.panelEvent({ stream: "damage", source: event.caster ?? "", target: event.target ?? "",
-            amount: event.amount, offsetMs: event.offsetMilli, encounterId: encounter, selected: isSelected })
+          active.panelStreamEvent(stream, event, encounter, selected.has(encounter))
           luaMs += performance.now() - luaStart
           if (count % 100 === 0) {
             const uiStart = performance.now()
             // The runtime bounds pending UI operations per batch (maxOperations), never the whole replay.
-            const batch = runtime.flush()
+            const batch = active.flush()
             uiOperations += batch.length
             flush(batch)
             uiMs += performance.now() - uiStart
           }
           // Lets the host tell a long replay from a stalled one.
           if (count % 1_000 === 0) send({ type: "progress", events: count })
-        }
+        })
         const completeStart = performance.now()
         phase = "onComplete"
         runtime.panelComplete()
@@ -114,9 +112,10 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
         const last = runtime.flush(); uiOperations += last.length; flush(last)
         uiMs += performance.now() - uiStart
         const totalMs = performance.now() - replayStart
-        const metrics: PanelReplayMetrics = { events: count, encounters: encounters.size, bytes: input.data.byteLength, startupMs, totalMs,
+        const bytes = streams.reduce((total, { data }) => total + data.byteLength, 0)
+        const metrics: PanelReplayMetrics = { events: count, encounters: encounters.size, bytes, startupMs, totalMs,
           decodeMs: Math.max(0, totalMs - luaMs - uiMs - completeMs), luaMs, uiMs, completeMs, uiOperations }
-        send({ type: "damage-complete", metrics })
+        send({ type: "replay-complete", metrics })
       } else if (input.type === "click") {
         if (!runtime) throw new Error("panel not started")
         phase = "click"

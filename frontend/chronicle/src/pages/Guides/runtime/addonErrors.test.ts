@@ -17,6 +17,7 @@ describe("explainAddonError", () => {
   it("explains budgets, max_events, nil calls and unknown errors", () => {
     expect(explainAddonError("main.lua:3: instruction budget exceeded", { phase: "startup" }).detail).toMatch(/250,000/)
     expect(explainAddonError("panel exceeded its max_events (10)", { phase: "onEvent" })).toMatchObject({ title: "Reached the addon's max_events", docs: "project-json" })
+    expect(explainAddonError("main.lua:3: panel stream 'aura' is not allowed", { phase: "startup" })).toMatchObject({ title: "Stream not declared", docs: "streams-and-fields" })
     expect(explainAddonError("main.lua:9: attempt to call a nil value (method 'SetTxt')").detail).toBe("Tried to call method 'SetTxt', but it is nil.")
     expect(explainAddonError("main.lua:9: boom")).toMatchObject({ title: "Lua error", detail: "boom", fixes: ["Check main.lua around line 9."] })
   })

@@ -11,6 +11,7 @@ describe("Lua panel packages", () => {
   it("loads bounded panel sources without injecting trusted modules", async () => {
     const pkg = await loadPanelPackage(archive())
     expect(pkg.streams).toEqual(["damage"])
+    expect((await loadPanelPackage(archive({ streams: ["heal", "aura", "combatant_info"] }))).streams).toEqual(["heal", "aura", "combatant_info"])
     expect(pkg.sources["main.lua"]).toBe("return true")
     expect(pkg.sources["chronicle/v1/events/damage.lua"]).toBeUndefined()
   })
@@ -30,6 +31,7 @@ describe("Lua panel packages", () => {
   it("rejects undeclared files, unsupported capabilities and streams", async () => {
     await expect(loadPanelPackage(archive({}, { "extra.txt": strToU8("bad") }))).rejects.toThrow(/undeclared/)
     await expect(loadPanelPackage(archive({ capabilities: ["network"] }))).rejects.toThrow(/capability/)
-    await expect(loadPanelPackage(archive({ streams: ["heal"] }))).rejects.toThrow(/stream/)
+    await expect(loadPanelPackage(archive({ streams: ["chat"] }))).rejects.toThrow(/stream/)
+    await expect(loadPanelPackage(archive({ streams: ["damage", "damage"] }))).rejects.toThrow(/stream/)
   })
 })

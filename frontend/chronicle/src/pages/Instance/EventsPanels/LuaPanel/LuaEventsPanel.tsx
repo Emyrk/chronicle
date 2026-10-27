@@ -7,6 +7,7 @@ import type { EventsPanelProps } from "../EventsPanel"
 import { PanelSelector } from "../PanelSelector"
 import { usePanelTiming, usePanelTimingContext } from "../PanelTimingContext"
 import { buildPanelUnits } from "../../../Guides/runtime/panelUnits"
+import type { EventStreams } from "../../../Guides/runtime/panelEvents"
 import { LuaPanelHost, type LuaPanelRunMetrics } from "./LuaPanelHost"
 import { parseLuaPanelRef } from "./luaPanelRegistry"
 
@@ -41,17 +42,18 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
   const { players, units: instanceUnits } = props.context.instance
   const units = useMemo(() => buildPanelUnits(players, instanceUnits), [players, instanceUnits])
   const selectedIds = useMemo(() => [...(props.context.selectedEncounterIds ?? [])], [props.context.selectedEncounterIds])
-  const [damage, setDamage] = useState<Uint8Array>()
+  const [eventStreams, setEventStreams] = useState<EventStreams>()
   const [streamError, setStreamError] = useState<string>()
   const [fetchMs, setFetchMs] = useState(0)
   useEffect(() => {
-    if (!panel?.streams.includes("damage")) return
+    if (!panel?.streams.length) return
     let active = true
     const started = performance.now()
-    fetchStream("damage").then((stream) => {
-      if (active) { setFetchMs(performance.now() - started); setDamage(stream.data.slice()); setStreamError(undefined) }
+    // slice() so posting to the worker clones only this stream, not a larger buffer it may view.
+    Promise.all(panel.streams.map(async (type) => [type, (await fetchStream(type)).data.slice()] as const)).then((entries) => {
+      if (active) { setFetchMs(performance.now() - started); setEventStreams(Object.fromEntries(entries)); setStreamError(undefined) }
     }).catch((error: unknown) => { if (active) setStreamError(String(error)) })
-    return () => { active = false; setDamage(undefined) }
+    return () => { active = false; setEventStreams(undefined) }
   }, [panel, fetchStream])
   // Report like built-in panels so Lua panels show up in the Metrics panel and the page's load timer.
   const reportPanelMetrics = usePanelTimingContext()?.reportPanelMetrics
@@ -61,12 +63,13 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
     setDone(true)
     reportPanelMetrics?.({
       panelKey: `panel-${props.panelIndex}`, panelId: String(props.panelType), panelLabel: `${panel?.name ?? "Addon"} (addon)`,
-      panelIndex: props.panelIndex, streams: ["damage"], streamBytes: { damage: run.bytes }, totalStreamBytes: run.bytes,
+      panelIndex: props.panelIndex, streams: panel?.streams ?? [],
+      streamBytes: Object.fromEntries(Object.entries(eventStreams ?? {}).map(([type, data]) => [type, data.byteLength])), totalStreamBytes: run.bytes,
       totalEvents: run.events, processingTimeMs: run.totalMs, streamProcessingTimeMs: run.luaMs + run.completeMs,
       serializationTimeMs: run.uiMs, deserializationTimeMs: run.drawMs, wallTimeMs: fetchMs + run.wallMs,
       queueWaitMs: run.startupMs, fetchTimeMs: fetchMs, updatedAtMs: performance.now(),
     })
-  }, [reportPanelMetrics, props.panelIndex, props.panelType, panel?.name, fetchMs])
+  }, [reportPanelMetrics, props.panelIndex, props.panelType, panel?.name, panel?.streams, eventStreams, fetchMs])
   const assetUrls = useMemo(() => {
     const urls = new Map<string, string>()
     for (const [path, bytes] of panel?.assets ?? []) urls.set(path, URL.createObjectURL(new Blob([new Uint8Array(bytes)])))
@@ -80,8 +83,8 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
     </div>
     {channelQuery.isPending || (hash && packageQuery.isPending) ? <div className="p-4 text-sm">Loading addon...</div> :
       channelQuery.error || packageQuery.error || streamError || !hash ? <div role="alert" className="p-4 text-sm text-destructive">{String(channelQuery.error ?? packageQuery.error ?? streamError ?? "Channel not published")}</div> :
-      panel && (panel.streams.includes("damage") && !damage ? <div className="p-4 text-sm">Loading damage...</div> :
+      panel && (panel.streams.length > 0 && !eventStreams ? <div className="p-4 text-sm">Loading events...</div> :
         <LuaPanelHost key={`${ref?.id}:${hash}`} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} streamScope={panel.streamScope} maxEvents={panel.maxEvents} capabilities={panel.capabilities}
-          damageStream={damage} encounterIds={selectedIds} assets={assetUrls} units={units} onMetrics={onMetrics} />)}
+          eventStreams={eventStreams} encounterIds={selectedIds} assets={assetUrls} units={units} onMetrics={onMetrics} />)}
   </div>
 }

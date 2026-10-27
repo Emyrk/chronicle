@@ -2,7 +2,7 @@ import { unzip, type Unzipped } from "fflate"
 import { inspectArchive, normalizeExtractedFiles } from "./archive"
 import { normalizePackagePath } from "./paths"
 import { isReservedLuaPath } from "../runtime/trustedModules"
-import { PANEL_STREAM_SCOPES, type PanelStream, type PanelStreamScope } from "../runtime/panelEvents"
+import { PANEL_STREAM_SCOPES, PANEL_STREAMS, type PanelStream, type PanelStreamScope } from "../runtime/panelEvents"
 import type { GuideCapability } from "../protocol/types"
 
 export interface PanelPackage {
@@ -19,7 +19,7 @@ export interface PanelPackage {
 }
 
 const decoder = new TextDecoder("utf-8", { fatal: true })
-const STREAM_SET: ReadonlySet<string> = new Set(["damage"] satisfies PanelStream[])
+const STREAM_SET: ReadonlySet<string> = new Set(PANEL_STREAMS)
 const VALID_CAPS = new Set(["ui", "input"])
 
 function names(value: unknown, label: string): string[] {

@@ -28,7 +28,7 @@ with `"streams": ["damage"]` in `project.json`. Use **Preview** in the Addon Wor
 ## How an addon runs
 
 1. **Startup.** `main.lua` runs once. Create frames and register callbacks here.
-2. **Replay.** Chronicle sends every event in scope, in log order, encounter by encounter, to your `onEvent` callback.
+2. **Replay.** Chronicle sends every event in scope from every stream you declared, in log order, encounter by encounter, to your `onEvent` callbacks.
 3. **Complete.** Your `onComplete` callback runs once after the last event. Draw your results here. Addons without a stream never get this callback.
 4. **Clicks.** If the addon declares `input`, `OnClick` handlers run whenever a viewer clicks.
 
@@ -56,35 +56,76 @@ When the viewer changes the encounter selection, the addon starts again from ste
 | `manifest_version`, `kind`, `name`, `slug` | yes | Must match the project; set for you. |
 | `entrypoint` | yes | The Lua file that runs first (`main.lua` in the browser editor). |
 | `capabilities` | yes | `"ui"` to draw; add `"input"` to handle clicks. |
-| `streams` | yes | `[]` or `["damage"]`. Declare `damage` to receive damage events. |
+| `streams` | yes | The event streams to receive, e.g. `["damage", "heal", "aura"]`. Any of the streams in [Streams and fields](#streams-and-fields); `[]` for none. Each stream is a separate download, so declare only what you use. |
 | `stream_scope` | no | `"selection"` (default): only the encounters the viewer selected. `"instance"`: every encounter in the log, each tagged with `selected`. |
 | `max_events` | no | A positive integer. The addon stops with an error after this many events. Omit it to receive everything. |
 | `assets` | no | Image files (PNG, JPEG, WebP, up to 2 MiB each) for `SetTexture`. Uploaded packages only; the browser editor is asset-free. |
 
 ## Events
 
+Subscribe per stream, or to every declared stream at once:
+
 ```lua
-local damage = require("chronicle.v1.events.damage")
-damage.onEvent(function(event) ... end)
-damage.onComplete(function() ... end)
+-- One stream
+local heal = require("chronicle.v1.events.heal")
+heal.onEvent(function(event) ... end)
+Panel:OnEvent("aura", function(event) ... end)   -- the same hook without the module
+
+-- Every declared stream; event.stream says which
+local events = require("chronicle.v1.events")
+events.onEvent(function(event)
+  if event.stream == "slain" then ... end
+end)
+
+events.onComplete(function() ... end)   -- or Panel:OnComplete(fn); once, after the last event
 ```
 
-`Panel:OnEvent("damage", fn)` and `Panel:OnComplete(fn)` are the same hooks without the module. Registering again replaces the previous callback.
+Every stream has a `chronicle.v1.events.<stream>` module with `onEvent(fn)` and `onComplete(fn)`. `Panel:OnEvent(fn)` without a stream name is the catch-all. When both a stream callback and the catch-all are registered, each event goes to the stream callback first, then the catch-all, with the same table. Registering again replaces the previous callback. Subscribing to a stream that `project.json` does not declare is an error.
 
-Each damage event is a table:
+Events from all declared streams arrive interleaved in log order, so a `slain` event comes after the `damage` that caused it.
+
+### Common fields
+
+Every event table has:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `source` | string | GUID of the unit that dealt the damage (empty if unknown). |
-| `target` | string | GUID of the unit that took it. |
-| `amount` | integer | Damage amount. |
+| `stream` | string | The stream, e.g. `"damage"`. |
 | `offsetMs` | integer | Milliseconds since the start of its encounter. |
 | `encounterId` | string | The encounter this event belongs to. |
 | `selected` | boolean | Whether the viewer selected that encounter. Always `true` with `stream_scope: "selection"`. |
 
-`damage.bySource(onUpdate)` keeps running totals per source and calls `onUpdate(source, total)` on every event. It returns the totals table, which you can read in `onComplete`.
+### Streams and fields
 
-Only the `damage` stream exists today.
+Each stream adds its own fields, taken straight from Chronicle's decoded combat log. Unit fields (`source`, `target`, `unit`, `guid`, `owner`, …) are GUIDs; look them up with `Chronicle.GetUnit`. The acting unit is always `source`. Missing values are `nil`. Numeric codes (`hitType`, `schools`, `action`, `application`, `state`, `transition`, `dispelType`, …) are Chronicle's combat-log enum values. Nested values are tables, and lists are Lua arrays starting at 1.
+
+| Stream | Fields |
+| --- | --- |
+| `damage` | `source`, `sourceName`, `target`, `hitType`, `amount`, `schools`, `tailers[] {amount, hitType}`, `spellId`, `spellAttackOutcome`, `overkill` |
+| `heal` | `source`, `sourceName`, `target`, `hitType`, `amount`, `schools`, `spellId`, `spellAttackOutcome`, `overheal`, `absorbed` |
+| `absorbed` | `attacker`, `target`, `damageSpellId`, `damageSpellName`, `source` (the absorber's caster), `absorbSpellId`, `absorbSpellName`, `absorbSchools`, `amount`, `estimated` |
+| `resource_change` | `source`, `sourceName`, `target`, `amount`, `resourceType`, `direction`, `spellId`, `spellAttackOutcome`, `overResource` |
+| `extra_attack` | `target`, `amount`, `sourceName`, `spellId`, `spellAttackOutcome` |
+| `slain` | `target`, `source`, `attribution {source, sourceName, hitType, amount, schools, spellId, spellAttackOutcome}` (the killing blow) |
+| `ressurection` | `source`, `target`, `spell {id, name}` |
+| `cast` | `source`, `action`, `target`, `spell {name, id, rank}` |
+| `spell_start` | `source`, `target`, `spell {id, name, attackOutcome}`, `itemId`, `castFlags`, `castTimeMilli`, `channelTimeMilli`, `spellType` |
+| `spell_go` | `source`, `target`, `spell {id, name, attackOutcome}`, `numHits`, `numMisses`, `itemId`, `corpseOwner` |
+| `spell_fail` | `source`, `spell {id, name, attackOutcome}`, `failedByServer` |
+| `aura` | `target`, `source`, `spellName`, `spellId`, `spellAttackOutcome`, `amount`, `application`, `state`, `transition`, `isBuff` |
+| `aura_cast` | `source`, `target`, `spell {id, name, attackOutcome}`, `effect`, `amplitude`, `effectMiscValue`, `durationMS`, `capStatus`, `effectAuraName` |
+| `dispel` | `source`, `target`, `spellId`, `spellName`, `spellAttackOutcome`, `dispelType` |
+| `interrupt` | `source`, `target`, `spellName`, `extraSpellId`, `extraSchools` |
+| `unit_classification` | `target`, `unitType`, `affiliation`, `owner`, `controller`, `spellId` |
+| `unit_position` | `unit`, `x`, `y`, `z`, `mapId`, `floor`, `facing` |
+| `unit_resources` | `unit`, `currentHealth`, `maximumHealth`, `absorb`, `powerType`, `currentPower`, `maximumPower`, `attackPower`, `spellPower`, `armor`, `unitLevel`, `averageItemLevel` |
+| `combatant_info` | `guid`, `name`, `heroClass`, `race`, `gender`, `guildName`, `gear[] {itemId, enchantId, temporaryEnchantId, gemEnchantIds, itemLevel, bonusIds, gems[] {itemId, itemLevel}}`, `talents {summary, trees}`, and `v22` stats on servers that log them |
+| `consume` | `consumeId`, `evidenceId`, `player`, `itemId`, `itemName`, `candidateItemIds`, `spell {id, name}`, `kind`, `confidence`, `consumedAtUnixMilli`, `observedAtUnixMilli`, `amount`, `resourceType`, `isProjection` |
+| `raid_group` | `groupMemberGuids` (40 slots; empty slots are `""`) |
+
+Gear and talents come from `combatant_info`, not from `Chronicle.GetUnit`.
+
+`require("chronicle.v1.events.damage").bySource(onUpdate)` keeps running damage totals per source and calls `onUpdate(source, total)` on every event. It returns the totals table, which you can read in `onComplete`.
 
 ## Units
 
@@ -157,7 +198,8 @@ UIParent:SetHeight(40 + #rows * ROW)   -- tall enough for a title and every row
 
 Load with `require`. The `chronicle` module names are reserved; you cannot ship your own files under them.
 
-- **`chronicle.v1.events.damage`**: `onEvent(fn)`, `onComplete(fn)`, `bySource(onUpdate)`. See [Events](#events).
+- **`chronicle.v1.events`**: `onEvent(fn)` for every declared stream, `onComplete(fn)`. See [Events](#events).
+- **`chronicle.v1.events.<stream>`**: `onEvent(fn)`, `onComplete(fn)` for one stream, e.g. `chronicle.v1.events.aura`. The `damage` module also has `bySource(onUpdate)`.
 - **`chronicle.v1.ui`**: quick widgets.
   - `metric(parent, id, label, value, x, y)` draws a label and a large value. It returns `{ frame, set(v) }`.
   - `table(parent, id, rows, x, y)` draws up to 50 `{label, value}` rows as text.
@@ -194,6 +236,7 @@ The footer under every addon panel shows events processed, events per second and
 - **Aggregate in `onEvent`, draw in `onComplete`.** Calling UI methods for every event is slow and can hit the UI change limit.
 - **Keep `onEvent` small.** Each call has a fixed cost of a few microseconds; most addons spend their time there.
 - **Cache unit lookups** in a Lua table keyed by GUID.
+- **Declare only the streams you use.** Each one is downloaded and decoded; `unit_position` and `unit_resources` are large.
 - **Prefer `stream_scope: "selection"`.** Unselected encounters are then skipped without being read. Use `"instance"` only when you need the whole log.
 
 ## Publishing
@@ -216,7 +259,7 @@ If `GetUnit(guid)` is not a player but has `owner`, look up the owner instead. S
 Read `unit.class` and map it to a colour; the example below includes the standard class colours.
 
 **My addon shows nothing.**
-Make sure `project.json` lists `"damage"` in `streams`. Make sure you draw in `onComplete`, or update frames in `onEvent`. Then run **Startup check** in the editor to catch Lua errors.
+Make sure `project.json` lists every stream you subscribe to in `streams`. Make sure you draw in `onComplete`, or update frames in `onEvent`. Then run **Startup check** in the editor to catch Lua errors.
 
 **My panel is cut off.**
 Content past the panel's edge scrolls. Set `UIParent:SetHeight(...)` to the height your rows need so the panel scrolls to all of it. See [Panel size and scrolling](#panel-size-and-scrolling).

@@ -9,7 +9,7 @@ const frame = new Uint8Array([1, 97, 1, 0, 0]) // encounter a, timestamp 1, zero
 let resolveFirst: ((value: Uint8Array) => void) | undefined
 const calls: Array<{ instance: string; signal: AbortSignal }> = []
 const provider: LuaPreviewEventProvider = {
-  getDamage(instance, { signal }) {
+  getStream(instance, _stream, { signal }) {
     calls.push({ instance, signal })
     if (instance === "one") return new Promise(resolve => { resolveFirst = resolve })
     return Promise.resolve(frame)
