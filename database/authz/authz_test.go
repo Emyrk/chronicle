@@ -326,6 +326,50 @@ func TestStripeEntitlementRoles(t *testing.T) {
 	require.ErrorContains(t, zed.SetStripeEntitlementRole(ctx, userID, "supporter", true), "invalid Stripe entitlement role")
 }
 
+func TestOwnerAdFreeTierPermissions(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	ctx := testutil.Context(t, testutil.WaitLong)
+
+	for _, tc := range []struct {
+		name       string
+		role       string
+		stripeRole bool
+		allowed    bool
+	}{
+		{name: "ordinary user"},
+		{name: "personal ad-free", role: "ad_free_capable"},
+		{name: "honored", role: "honored"},
+		{name: "revered", role: "revered", allowed: true},
+		{name: "exalted", role: "exalted", allowed: true},
+		{name: "Stripe honored", role: "stripe_honored", stripeRole: true},
+		{name: "Stripe revered", role: "stripe_revered", stripeRole: true, allowed: true},
+		{name: "Stripe exalted", role: "stripe_exalted", stripeRole: true, allowed: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			userID := uuid.New()
+			if tc.role != "" {
+				if tc.stripeRole {
+					require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, tc.role, true))
+				} else {
+					require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{tc.role}))
+				}
+			}
+
+			chronicle := policy.New().GlobalChronicle()
+			user := policy.New().User(userID)
+			allowed, err := zed.Check(ctx, nil,
+				chronicle.CanLinked_characters_ad_free_User(user),
+				chronicle.CanUploaded_logs_ad_free_User(user),
+			)
+			require.NoError(t, err)
+			require.Equal(t, []bool{tc.allowed, tc.allowed}, allowed)
+		})
+	}
+}
+
 func TestGuildDiscordBotPermissions(t *testing.T) {
 	t.Parallel()
 

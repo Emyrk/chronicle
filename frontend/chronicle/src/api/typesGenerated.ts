@@ -395,7 +395,7 @@ export interface ArmoryPlayer {
      */
     readonly icon_base_url?: string;
     /**
-     * OwnerAdsFree is true when this character is linked to an account with ad-free access.
+     * OwnerAdsFree is true when this character is linked to an account whose tier makes linked characters ad-free.
      */
     readonly owner_ads_free: boolean;
 }

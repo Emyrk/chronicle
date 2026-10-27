@@ -68,6 +68,8 @@ definition chronicle {
   permission set_user_data_limit = technical_admin
   permission shorter_urls = supporter + admin
   permission ad_free = ad_free_capable + supporter + stripe_ad_free
+  permission linked_characters_ad_free = revered + exalted + stripe_revered + stripe_exalted
+  permission uploaded_logs_ad_free = revered + exalted + stripe_revered + stripe_exalted
   permission download_raw_logs = administer + moderate_logs + stripe_download_raw_logs
   permission unlisted_logs = stripe_unlisted_logs
   permission admin_regressions = technical_admin + is_admin_raid_requirements

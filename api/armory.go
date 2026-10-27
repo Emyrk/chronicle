@@ -114,7 +114,7 @@ func (api *API) characterOwnerAdsFree(ctx context.Context, characterGUID guid.GU
 	return api.Opts.Zed.CheckOne(
 		ctx,
 		nil,
-		policy.New().GlobalChronicle().CanAd_free_User(policy.New().User(link.UserID)),
+		policy.New().GlobalChronicle().CanLinked_characters_ad_free_User(policy.New().User(link.UserID)),
 	)
 }
 
