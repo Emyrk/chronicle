@@ -699,8 +699,11 @@ export function PlanPicker({ prices, change }: { prices: readonly BillingPrice[]
 
   return (
     <FramePanel title={change?.returningState ? "Choose Your Next Standing" : change ? "Change Your Standing" : "Choose Your Standing"}>
-      {change && !change.returningState ? <TierChangeCredit /> : null}
-      <p className="text-center text-xs text-muted-foreground">Every tier includes ad-free browsing, raw log downloads, and unlisted logs. Higher standings include more log storage.</p>
+      {change && !change.returningState ? (
+        <TierChangeCredit />
+      ) : (
+        <p className="text-center text-xs text-muted-foreground">Every tier includes ad-free browsing, raw log downloads, and unlisted logs. Higher standings include more log storage.</p>
+      )}
 
       {availableTiers.length > 0 ? (
         <div
@@ -1040,9 +1043,7 @@ function TierSubscriptionSettings({ billing }: { billing: BillingSummary }) {
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">Stripe reports this subscription as paused. Open the billing portal to review its billing state.</p>
             ) : (
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                Change tiers, update your payment method, or view invoices in the Stripe billing portal. Changing tiers credits the unused time on your current plan, and
-                Stripe shows the adjusted price before you confirm it. If you
-                cancel, your {tierLabel} rewards stay active until
+                Update your payment method or view invoices in Stripe. If you cancel, your {tierLabel} rewards stay active until
                 {displayDate ? ` ${displayDate}` : " the end of your billing period"}.
               </p>
             )}
