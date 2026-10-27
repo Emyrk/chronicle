@@ -286,8 +286,8 @@ const COMPARISON: { feature: string; description: string; friendly: string; hono
     feature: "Ad-free for your viewers",
     description: "Instance pages from your logs, and armory pages of your linked characters, are ad-free for everyone who views them.",
     friendly: "—",
-    honored: INCLUDED,
-    highlight: true,
+    honored: "—",
+    revered: INCLUDED,
   },
   {
     feature: "Log storage",

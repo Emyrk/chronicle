@@ -133,6 +133,7 @@ function AdFreeVisual() {
           ))}
         </div>
         <p className="text-xs leading-snug text-lime-100">
+          <TierPill tier="revered" className="mr-1 align-[1px]" />
           <span className="font-semibold text-lime-300">Shared with your viewers.</span> Every raider who opens them sees no ads.
         </p>
       </div>
@@ -293,11 +294,12 @@ const SLIDES: PerkSlide[] = [
     id: "ad-free",
     tab: "Ad-Free",
     tier: "honored",
-    headline: "Ad-free for you, and everyone viewing your raids.",
-    body: "Supporters never see ads. Every instance page from a log you upload, and the armory page of every character you've linked, is ad-free for everyone who opens it. Your whole raid gets a clean report.",
+    headline: "Ad-free for you, and at Revered, for your whole raid.",
+    body: "Supporters never see ads. From Revered up, every instance page from a log you upload, and the armory page of every character you've linked, is ad-free for everyone who opens it.",
     levels: [
       { tier: "free", text: "Limited ads on some pages" },
-      { tier: "honored", text: "No ads for you, and none for anyone viewing your logs or characters" },
+      { tier: "honored", text: "No ads for you" },
+      { tier: "revered", text: "+ No ads for anyone viewing your logs or characters" },
     ],
     visual: <AdFreeVisual />,
   },
