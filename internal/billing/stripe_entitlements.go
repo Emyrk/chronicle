@@ -121,6 +121,11 @@ func revokeAllStripeEntitlements(ctx context.Context, tx EntitlementTransaction,
 	if err := tx.DeleteDataGrant(ctx, database.DeleteDataGrantParams{UserID: userID, Source: stripePaidTierStorageGrantSource}); err != nil {
 		return fmt.Errorf("revoke storage grant: %w", err)
 	}
+	for _, role := range legacyPaidFeatureRoles {
+		if err := tx.SetStripeEntitlementRole(ctx, userID, role, false); err != nil {
+			return fmt.Errorf("revoke legacy Stripe feature role %q: %w", role, err)
+		}
+	}
 
 	revoked := make(map[string]struct{}, len(stripeEntitlements))
 	for _, entitlement := range stripeEntitlements {

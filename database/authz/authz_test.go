@@ -326,6 +326,70 @@ func TestStripeEntitlementRoles(t *testing.T) {
 	require.ErrorContains(t, zed.SetStripeEntitlementRole(ctx, userID, "supporter", true), "invalid Stripe entitlement role")
 }
 
+func TestEffectiveSupporterTiers(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	ctx := testutil.Context(t, testutil.WaitLong)
+
+	for _, tc := range []struct {
+		name       string
+		role       string
+		stripeRole bool
+		allowed    []bool
+	}{
+		{name: "ordinary", allowed: []bool{false, false, false, false, false, false}},
+		{name: "admin honored", role: "honored", allowed: []bool{true, false, true, false, false, true}},
+		{name: "Stripe honored", role: "stripe_honored", stripeRole: true, allowed: []bool{true, false, true, false, false, true}},
+		{name: "admin revered", role: "revered", allowed: []bool{true, true, true, true, true, true}},
+		{name: "Stripe revered", role: "stripe_revered", stripeRole: true, allowed: []bool{true, true, true, true, true, true}},
+		{name: "admin exalted", role: "exalted", allowed: []bool{true, true, true, true, true, true}},
+		{name: "Stripe exalted", role: "stripe_exalted", stripeRole: true, allowed: []bool{true, true, true, true, true, true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			userID := uuid.New()
+			if tc.role != "" {
+				if tc.stripeRole {
+					require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, tc.role, true))
+				} else {
+					require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{tc.role}))
+				}
+			}
+			chronicle := policy.New().GlobalChronicle()
+			user := policy.New().User(userID)
+			allowed, err := zed.Check(ctx, nil,
+				chronicle.CanHas_honored_User(user),
+				chronicle.CanHas_revered_User(user),
+				chronicle.CanAd_free_User(user),
+				chronicle.CanDownload_raw_logs_User(user),
+				chronicle.CanUnlisted_logs_User(user),
+				chronicle.CanSubmit_photo_proof_User(user),
+			)
+			require.NoError(t, err)
+			require.Equal(t, tc.allowed, allowed)
+			if tc.stripeRole {
+				require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, tc.role, false))
+				allowed, err = zed.Check(ctx, nil, chronicle.CanHas_honored_User(user), chronicle.CanAd_free_User(user))
+				require.NoError(t, err)
+				require.Equal(t, []bool{false, false}, allowed)
+			}
+		})
+	}
+
+	// An administrator grant survives a Stripe revocation, and the proof ban
+	// still overrides the tier's proof permission.
+	userID := uuid.New()
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"honored", "photo_proof_banned"}))
+	require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, "stripe_honored", true))
+	require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, "stripe_honored", false))
+	chronicle := policy.New().GlobalChronicle()
+	user := policy.New().User(userID)
+	allowed, err := zed.Check(ctx, nil, chronicle.CanHas_honored_User(user), chronicle.CanSubmit_photo_proof_User(user))
+	require.NoError(t, err)
+	require.Equal(t, []bool{true, false}, allowed)
+}
+
 func TestOwnerAdFreeTierPermissions(t *testing.T) {
 	t.Parallel()
 

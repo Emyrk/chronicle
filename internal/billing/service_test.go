@@ -935,11 +935,11 @@ func TestSyncStripeEntitlementsPersistsAuthoritativeSnapshotAndStorageGrant(t *t
 	require.Equal(t, stripePaidTierStorageGrantSource, store.dataGrant.Source)
 	require.Equal(t, stripePaidTierStorageGrantSource, store.deletedDataGrant.Source)
 	require.Equal(t, []entitlementRoleChange{
-		{userID: userID, role: stripeRoleAdFree, granted: true},
-		{userID: userID, role: stripeRoleSubmitPhotoProof, granted: true},
-		{userID: userID, role: stripeRoleHonored, granted: true},
-		{userID: userID, role: stripeRoleDownloadRawLogs, granted: true},
-		{userID: userID, role: stripeRoleUnlistedLogs, granted: true},
+		{userID: userID, role: "stripe_ad_free", granted: false},
+		{userID: userID, role: "stripe_submit_photo_proof", granted: false},
+		{userID: userID, role: "stripe_download_raw_logs", granted: false},
+		{userID: userID, role: "stripe_unlisted_logs", granted: false},
+		{userID: userID, role: stripeRoleHonored, granted: false},
 		{userID: userID, role: stripeRoleRevered, granted: true},
 		{userID: userID, role: stripeRoleExalted, granted: false},
 	}, store.roleChanges)
@@ -1004,18 +1004,18 @@ func TestSyncStripeEntitlementsTransfersOwnerAndAppliesRolePerEntitlement(t *tes
 		{UserID: currentOwner, Source: stripePaidTierStorageGrantSource},
 	}, store.deletedDataGrants)
 	require.Equal(t, []entitlementRoleChange{
-		{userID: previousOwner, role: stripeRoleAdFree, granted: false},
-		{userID: previousOwner, role: stripeRoleSubmitPhotoProof, granted: false},
+		{userID: previousOwner, role: "stripe_ad_free", granted: false},
+		{userID: previousOwner, role: "stripe_submit_photo_proof", granted: false},
+		{userID: previousOwner, role: "stripe_download_raw_logs", granted: false},
+		{userID: previousOwner, role: "stripe_unlisted_logs", granted: false},
 		{userID: previousOwner, role: stripeRoleHonored, granted: false},
-		{userID: previousOwner, role: stripeRoleDownloadRawLogs, granted: false},
-		{userID: previousOwner, role: stripeRoleUnlistedLogs, granted: false},
 		{userID: previousOwner, role: stripeRoleRevered, granted: false},
 		{userID: previousOwner, role: stripeRoleExalted, granted: false},
-		{userID: currentOwner, role: stripeRoleAdFree, granted: true},
-		{userID: currentOwner, role: stripeRoleSubmitPhotoProof, granted: true},
-		{userID: currentOwner, role: stripeRoleHonored, granted: true},
-		{userID: currentOwner, role: stripeRoleDownloadRawLogs, granted: true},
-		{userID: currentOwner, role: stripeRoleUnlistedLogs, granted: true},
+		{userID: currentOwner, role: "stripe_ad_free", granted: false},
+		{userID: currentOwner, role: "stripe_submit_photo_proof", granted: false},
+		{userID: currentOwner, role: "stripe_download_raw_logs", granted: false},
+		{userID: currentOwner, role: "stripe_unlisted_logs", granted: false},
+		{userID: currentOwner, role: stripeRoleHonored, granted: false},
 		{userID: currentOwner, role: stripeRoleRevered, granted: true},
 		{userID: currentOwner, role: stripeRoleExalted, granted: false},
 	}, store.roleChanges)
@@ -1027,7 +1027,7 @@ func TestEntitlementTransactionDoesNotApplyRolesWhenDatabaseCommitFails(t *testi
 	store := &entitlementStore{transactionErr: errors.New("commit failed")}
 	run := NewEntitlementTransactionRunner(store, store)
 	err := run(context.Background(), func(tx EntitlementTransaction) error {
-		return tx.SetStripeEntitlementRole(context.Background(), uuid.New(), stripeRoleAdFree, true)
+		return tx.SetStripeEntitlementRole(context.Background(), uuid.New(), stripeRoleHonored, true)
 	})
 	require.ErrorContains(t, err, "commit failed")
 	require.Empty(t, store.roleChanges)
