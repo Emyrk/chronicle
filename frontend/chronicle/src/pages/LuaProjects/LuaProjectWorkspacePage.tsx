@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { useInstance } from "@/api/queries"
 import type { RecentInstancesResponse } from "@/api/typesGenerated"
 import { useInferenceCapability } from "@/features/chat/runtime"
+import { useConfirmLinkNavigation } from "@/hooks/useConfirmLinkNavigation"
 import { getProject, publishUnstable, type LuaProject } from "./api"
 import { LuaBrowserTest } from "./LuaBrowserTest"
 import { panelPackageFromWorkingCopy, validateEditorFiles, type EditorFiles } from "./editorFiles"
@@ -68,6 +69,7 @@ export default function LuaProjectWorkspacePage() {
   const projectQuery = useQuery({ queryKey: ["lua-editor-project", projectId], enabled: !!projectId,
     queryFn: () => getProject(projectId), retry: false })
   const [copy, setCopy] = useState<LuaWorkingCopy | null>(null)
+  useConfirmLinkNavigation(!!copy?.dirty, "Leave the Addon Workshop and discard your unsaved source changes?")
   const [proposal, setProposal] = useState<LuaSourceProposal | null>(null)
   // Reopen the preview on the instance and encounters last used for this addon.
   const [savedSelection] = useState(() => readPreviewSelection(projectId))
@@ -284,8 +286,7 @@ export default function LuaProjectWorkspacePage() {
 
   return <div className="flex flex-col border-b border-border lg:h-[calc(100dvh-70px)] lg:min-h-[560px]">
     <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-4 py-2">
-      <Link className="text-xs text-muted-foreground hover:text-foreground" to={`/addons/${encodeURIComponent(project.id)}`}
-        onClick={event => { if (copy?.dirty && !window.confirm("Leave the editor and discard unsaved source changes?")) event.preventDefault() }}>← Releases</Link>
+      <Link className="text-xs text-muted-foreground hover:text-foreground" to={`/addons/${encodeURIComponent(project.id)}`}>← Releases</Link>
       <span aria-hidden className="h-4 w-px bg-border" />
       <h1 className="text-base font-semibold">{project.name}</h1>
       <span className="font-mono text-xs text-muted-foreground">{project.slug}</span>
