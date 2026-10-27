@@ -273,11 +273,13 @@ export function PerkShowcase() {
               aria-selected={i === index}
               onClick={() => navigate({ hash: s.id }, { replace: true, preventScrollReset: true })}
               className={cn(
-                "shrink-0 border-b-2 px-4 py-3 text-sm transition-colors",
-                i === index ? "text-white" : "border-transparent text-muted-foreground hover:text-foreground",
+                "flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-sm transition-colors",
+                i === index ? "text-white" : "text-muted-foreground hover:text-foreground",
               )}
-              style={i === index ? { borderColor: TIER_COLOR[s.tier] } : undefined}
+              // Unselected tabs keep a faint tier-colored underline so the tier reads at a glance.
+              style={{ borderColor: i === index ? TIER_COLOR[s.tier] : `${TIER_COLOR[s.tier]}40` }}
             >
+              <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: TIER_COLOR[s.tier] }} />
               {s.tab}
             </button>
           ))}
