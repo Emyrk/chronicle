@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, useParams } from "react-router-dom"
-import { ArrowLeftRight, GitCompare, PanelRightClose, PanelRightOpen, Undo2 } from "lucide-react"
+import { ArrowLeftRight, GitCompare, PanelLeft, PanelRightClose, PanelRightOpen, Undo2 } from "lucide-react"
 import { useInstance } from "@/api/queries"
 import type { RecentInstancesResponse } from "@/api/typesGenerated"
 import { useInferenceCapability } from "@/features/chat/runtime"
@@ -10,12 +10,14 @@ import { LuaBrowserTest } from "./LuaBrowserTest"
 import { panelPackageFromWorkingCopy, validateEditorFiles, type EditorFiles } from "./editorFiles"
 import { applyLuaFileEdit, LUA_EDITOR_CAPABILITY, parseLuaFileEdit, type LuaToolFile } from "./luaEditorTools"
 import { fetchPreviewDamage } from "./previewStream"
+import { MAX_PREVIEW_ENCOUNTERS } from "./luaPreviewBounds"
 import { runStartupCheck } from "./startupCheck"
 import type { LuaSourceProposal, LuaWorkingCopy } from "./LuaSourceEditor"
 
 const LuaSourceEditor = lazy(() => import("./LuaSourceEditor").then(module => ({ default: module.LuaSourceEditor })))
 const LuaWorkshopChat = lazy(() => import("./LuaWorkshopChat").then(module => ({ default: module.LuaWorkshopChat })))
 const LuaDiffReview = lazy(() => import("./LuaDiffReview").then(module => ({ default: module.LuaDiffReview })))
+const InstanceEncounterPicker = lazy(() => import("@/pages/Instance/InstancePage").then(module => ({ default: module.InstanceEncounterPicker })))
 const LuaInstancePreview = lazy(() => import("./LuaInstancePreview").then(module => ({ default: module.LuaInstancePreview })))
 const events = { getDamage: fetchPreviewDamage }
 const instanceIDPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
@@ -48,6 +50,7 @@ export default function LuaProjectWorkspacePage() {
   const [instanceId, setInstanceId] = useState("")
   const [instanceInput, setInstanceInput] = useState("")
   const [encounterIds, setEncounterIds] = useState<string[]>([])
+  const [pickerOpen, setPickerOpen] = useState(true)
   const recent = useQuery({ queryKey: ["lua-editor-recent-instances"],
     queryFn: async () => {
       const response = await fetch("/api/v1/raidlogs/recent?days=60&limit=20")
@@ -56,6 +59,14 @@ export default function LuaProjectWorkspacePage() {
     }, staleTime: 60_000, retry: false })
   const validInstanceID = instanceIDPattern.test(instanceId)
   const instance = useInstance(instanceId, { enabled: validInstanceID, retry: false })
+  // Start each newly loaded instance on its first boss kill so the preview runs without extra clicks.
+  const [defaultedFor, setDefaultedFor] = useState("")
+  if (instance.data && defaultedFor !== instance.data.id) {
+    setDefaultedFor(instance.data.id)
+    const encounters = instance.data.encounters ?? []
+    const first = encounters.find(e => e.boss && e.kill_type !== "wipe" && e.kill_type !== "reset") ?? encounters[0]
+    setEncounterIds(first ? [first.id] : [])
+  }
   const project = projectQuery.data
   const onUploaded = useCallback(async () => {
     await projectQuery.refetch()
@@ -150,7 +161,6 @@ export default function LuaProjectWorkspacePage() {
   if (projectQuery.isError || !project) return <div className="container mx-auto p-8" role="alert">Project unavailable or access denied.</div>
   if (project.kind !== "panel") return <div className="container mx-auto p-8" role="alert">Browser source editing currently supports panel projects only.</div>
 
-  const toggleEncounter = (id: string) => setEncounterIds(ids => ids.includes(id) ? ids.filter(item => item !== id) : ids.length >= 3 ? ids : [...ids, id])
   const selectInstance = (id: string) => { setInstanceId(id); setEncounterIds([]) }
   const { focus, sideOpen } = layout
   const sideName = focus === "chat" ? "code" : "chat"
@@ -226,38 +236,37 @@ export default function LuaProjectWorkspacePage() {
           </Suspense>
         </div>
       </section>
-      <section aria-label="Instance preview" className={`${sideTab === "preview" ? "block" : "hidden"} order-1 styled-scrollbar h-[70vh] min-w-0 overflow-y-auto bg-black/20 lg:col-start-2 lg:row-start-2 lg:h-auto ${sideHidden}`}>
-        <div className="space-y-3 p-4">
-          <div>
-            <h2 className="text-sm font-semibold">Preview on an instance</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">Runs your unsaved source in the browser against up to three encounters.</p>
-          </div>
-          {recent.data && <select aria-label="Recent instance" className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs" value={recent.data.instances.some(item => item.id === instanceId) ? instanceId : ""} onChange={event => selectInstance(event.target.value)}>
+      <section aria-label="Instance preview" className={`${sideTab === "preview" ? "flex" : "hidden"} order-1 h-[70vh] min-w-0 flex-col bg-black/20 lg:col-start-2 lg:row-start-2 lg:h-auto ${sideHidden}`}>
+        <div className="flex flex-wrap items-center gap-2 border-b border-border p-2">
+          {recent.data && <select aria-label="Recent instance" className="min-w-0 flex-1 basis-56 rounded-md border border-border bg-background px-2 py-1.5 text-xs" value={recent.data.instances.some(item => item.id === instanceId) ? instanceId : ""} onChange={event => selectInstance(event.target.value)}>
             <option value="">Choose a recent instance…</option>
             {recent.data.instances.map(item => <option key={item.id} value={item.id}>{item.name} · {item.realm_name} · {new Date(item.uploaded_at).toLocaleDateString()}</option>)}
           </select>}
-          <form className="flex gap-2" onSubmit={event => { event.preventDefault(); selectInstance(instanceInput.trim()) }}>
+          <form className="flex min-w-0 flex-1 basis-56 gap-2" onSubmit={event => { event.preventDefault(); selectInstance(instanceInput.trim()) }}>
             <input aria-label="Instance ID" className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs" value={instanceInput} onChange={event => setInstanceInput(event.target.value)} placeholder={recent.data ? "…or paste an instance ID" : "Paste an instance ID"} />
             <button className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50" type="submit" disabled={!instanceInput.trim()}>Load</button>
           </form>
-          {instanceId && !validInstanceID && <p role="alert" className="text-xs text-destructive">Enter a valid instance UUID.</p>}
-          {instance.isFetching && <p role="status" className="text-xs text-muted-foreground">Loading encounters…</p>}
-          {instance.isError && <p role="alert" className="text-xs text-destructive">Instance unavailable.</p>}
-          {instance.data && <fieldset>
-            <legend className="mb-1.5 flex w-full text-xs text-muted-foreground">Encounters<span className="ml-auto font-mono">{encounterIds.length}/3</span></legend>
-            <div className="flex flex-wrap gap-1.5">
-              {instance.data.encounters.map(encounter => {
-                const selected = encounterIds.includes(encounter.id)
-                return <button key={encounter.id} type="button" aria-pressed={selected} disabled={!selected && encounterIds.length >= 3} onClick={() => toggleEncounter(encounter.id)}
-                  className={`rounded-full border px-2.5 py-1 text-xs disabled:opacity-40 ${selected ? "border-primary bg-primary/20 text-foreground" : "border-border text-muted-foreground hover:text-foreground"}`}>{encounter.name}</button>
-              })}
-            </div>
-          </fieldset>}
-          {localPanel?.error && <p role="alert" className="text-xs text-destructive">{localPanel.error}</p>}
-          {!copy?.valid && copy && <p className="text-xs text-muted-foreground">Fix the source errors to enable previews.</p>}
-          {instance.data && localPanel?.value && encounterIds.length > 0 && <Suspense fallback={<p role="status" className="text-xs">Loading local preview…</p>}>
-            <LuaInstancePreview panel={localPanel.value} instanceId={instanceId} encounterIds={encounterIds} events={events} />
+        </div>
+        <div className="flex min-h-0 flex-1">
+          {instance.data && pickerOpen && <Suspense fallback={<p role="status" className="w-[267px] p-3 text-xs text-muted-foreground">Loading encounters…</p>}>
+            <InstanceEncounterPicker apiInstance={instance.data} selectedIds={encounterIds} onChange={setEncounterIds}
+              onCollapse={() => setPickerOpen(false)} className="static max-h-none h-full py-3 pl-3" />
           </Suspense>}
+          <div className="styled-scrollbar min-w-0 flex-1 space-y-3 overflow-y-auto p-3">
+            {instance.data && !pickerOpen && <button type="button" className={paneButton} onClick={() => setPickerOpen(true)}>
+              <PanelLeft className="size-3.5" /> Encounters · {encounterIds.length} selected</button>}
+            {!instanceId && <p className="text-xs text-muted-foreground">Choose an instance to run your unsaved source against its encounters in the browser.</p>}
+            {instanceId && !validInstanceID && <p role="alert" className="text-xs text-destructive">Enter a valid instance UUID.</p>}
+            {instance.isFetching && <p role="status" className="text-xs text-muted-foreground">Loading encounters…</p>}
+            {instance.isError && <p role="alert" className="text-xs text-destructive">Instance unavailable.</p>}
+            {localPanel?.error && <p role="alert" className="text-xs text-destructive">{localPanel.error}</p>}
+            {!copy?.valid && copy && <p className="text-xs text-muted-foreground">Fix the source errors to enable previews.</p>}
+            {instance.data && encounterIds.length === 0 && <p className="text-xs text-muted-foreground">Select an encounter to preview. Ctrl/⌘-click selects several.</p>}
+            {encounterIds.length > MAX_PREVIEW_ENCOUNTERS && <p role="alert" className="text-xs text-amber-300">The preview runs on up to {MAX_PREVIEW_ENCOUNTERS} encounters. Deselect {encounterIds.length - MAX_PREVIEW_ENCOUNTERS} to continue.</p>}
+            {instance.data && localPanel?.value && encounterIds.length > 0 && encounterIds.length <= MAX_PREVIEW_ENCOUNTERS && <Suspense fallback={<p role="status" className="text-xs">Loading local preview…</p>}>
+              <LuaInstancePreview panel={localPanel.value} instanceId={instanceId} encounterIds={encounterIds} events={events} />
+            </Suspense>}
+          </div>
         </div>
       </section>
     </div>

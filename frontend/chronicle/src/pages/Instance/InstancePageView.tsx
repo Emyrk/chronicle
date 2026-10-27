@@ -470,6 +470,8 @@ function EncounterSidebar({
   instanceStartTime,
   instanceId,
   showRankings,
+  hideAd = false,
+  className,
 }: {
   encounters: Encounter[];
   trashGroups: TrashGroup[];
@@ -486,6 +488,8 @@ function EncounterSidebar({
   instanceStartTime: string;
   instanceId: string;
   showRankings: boolean;
+  hideAd?: boolean;
+  className?: string;
 }) {
   const timeParsesQuery = useInstanceTimeParses(showRankings ? instanceId : undefined);
   const killParses = bossKillParsesByEncounter(timeParsesQuery.data);
@@ -521,7 +525,7 @@ function EncounterSidebar({
   const isDebug = searchParams.get("debug") === "true";
 
   const effectiveTrashOpen = trashOpen || hasSelectedTrash;
-  const showEncounterAd = shouldShowEncounterSidebarAd({
+  const showEncounterAd = !hideAd && shouldShowEncounterSidebarAd({
     isMobile,
     showChronological,
     trashOpen: effectiveTrashOpen,
@@ -555,7 +559,8 @@ function EncounterSidebar({
         // Desktop: sticky sidebar that scrolls independently
         !isMobile && "sticky top-4 max-h-[calc(100vh-2rem)]",
         // Mobile: fixed overlay with background
-        isMobile && "fixed inset-y-0 left-0 z-50 bg-background border-r shadow-lg pl-4 pt-4"
+        isMobile && "fixed inset-y-0 left-0 z-50 bg-background border-r shadow-lg pl-4 pt-4",
+        className,
       )}
     >
       <div className="mb-3 flex items-start justify-between">
@@ -972,6 +977,39 @@ function EncounterSidebar({
   );
 }
 
+/** The instance page's encounter sidebar for embedding elsewhere (no ads, rankings, or time ranges). */
+export function EncounterPicker({ instance, selectedIds, onChange, onCollapse, className }: {
+  instance: Instance;
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  onCollapse: () => void;
+  className?: string;
+}) {
+  const [includeWipes, setIncludeWipes] = useState(false);
+  const trashGroups = useMemo(() => groupTrashEncounters(instance.encounters), [instance.encounters]);
+  return (
+    <EncounterSidebar
+      instanceId={instance.id}
+      encounters={instance.encounters}
+      trashGroups={trashGroups}
+      selectedIds={selectedIds}
+      activePhaseId={null}
+      onSelect={(id, mode) => onChange(mode === "single" ? [id]
+        : selectedIds.includes(id) ? selectedIds.filter(sid => sid !== id) : [...selectedIds, id])}
+      onSelectMany={onChange}
+      onSelectPhase={(_phase, encounterId) => onChange([encounterId])}
+      onCollapse={onCollapse}
+      isMobile={false}
+      showHints={false}
+      includeWipes={includeWipes}
+      onIncludeWipesChange={setIncludeWipes}
+      instanceStartTime={instance.startTime}
+      showRankings={false}
+      hideAd
+      className={className}
+    />
+  );
+}
 
 export interface SharedViewPayload {
   version: number;

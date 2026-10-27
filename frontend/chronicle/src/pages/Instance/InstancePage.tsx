@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, type ComponentProps } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Loader2, Youtube, Timer, TriangleAlert } from "lucide-react";
 import { useInstance, useInstanceYoutube, useAuthorizationCheck, useSession } from "@/api/queries";
@@ -13,7 +13,7 @@ import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { shouldShowChronicleCompanionWarning } from "@/lib/logReliability";
-import { InstancePageView } from "./InstancePageView";
+import { EncounterPicker, InstancePageView } from "./InstancePageView";
 import { YouTubeOverlay } from "./YouTubeOverlay";
 import { SyncModeProvider, useSyncModeContext } from "./SyncModeContext";
 import { LiveSessionProvider } from "./LiveSessionContext";
@@ -406,6 +406,14 @@ function InstancePageInner({
 }
 
 // Connected component that fetches data
+/** Encounter sidebar for an API instance, used by tools outside the instance page (e.g. the Lua preview). */
+export function InstanceEncounterPicker({ apiInstance, ...props }: Omit<ComponentProps<typeof EncounterPicker>, "instance"> & {
+  apiInstance: Parameters<typeof transformToInstance>[0];
+}) {
+  const instance = useMemo(() => transformToInstance(apiInstance), [apiInstance]);
+  return <EncounterPicker instance={instance} {...props} />;
+}
+
 export function InstancePage() {
   const { instanceId } = useParams<{ instanceId: string }>();
   const navigate = useNavigate();
