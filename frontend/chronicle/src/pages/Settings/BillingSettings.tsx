@@ -19,7 +19,7 @@ import {
 import { MiniRow } from "@/features/characterCosmetics/CharacterCosmeticsEditor"
 import { useAuth } from "@/hooks/useAuth"
 import { cn } from "@/lib/utils"
-import { Check, CircleCheck, CreditCard, LogIn, Sparkles, XCircle } from "lucide-react"
+import { BadgeDollarSign, Check, CircleCheck, CreditCard, LogIn, Sparkles, XCircle } from "lucide-react"
 import { toast } from "sonner"
 import {
   PAID_BILLING_TIERS,
@@ -812,6 +812,13 @@ export function PlanPicker({ prices, change }: { prices: readonly BillingPrice[]
         </>
       ) : change ? (
         <>
+          <p className="flex items-start gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 p-2.5 text-xs leading-5 text-emerald-100">
+            <BadgeDollarSign className="mt-0.5 size-4 shrink-0 text-emerald-300" aria-hidden="true" />
+            <span>
+              <span className="font-semibold text-emerald-300">You keep what you've paid.</span> Switching tiers credits the unused time on your current plan toward the
+              new one.
+            </span>
+          </p>
           <button type="button" className={GOLD_BUTTON} disabled={changePortal.isPending} onClick={() => void openBilling(() => changePortal.mutateAsync())}>
             {changePortal.isPending ? "Opening Stripe…" : "Go to Stripe to change your subscription"}
           </button>
@@ -1022,7 +1029,8 @@ function TierSubscriptionSettings({ billing }: { billing: BillingSummary }) {
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">Stripe reports this subscription as paused. Open the billing portal to review its billing state.</p>
             ) : (
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                Change tiers, update your payment method, or view invoices in the Stripe billing portal. Stripe shows when a tier change takes effect before you confirm it. If you
+                Change tiers, update your payment method, or view invoices in the Stripe billing portal. Changing tiers credits the unused time on your current plan, and
+                Stripe shows the adjusted price before you confirm it. If you
                 cancel, your {tierLabel} rewards stay active until
                 {displayDate ? ` ${displayDate}` : " the end of your billing period"}.
               </p>
