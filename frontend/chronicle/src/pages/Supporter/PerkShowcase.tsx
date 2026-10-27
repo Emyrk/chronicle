@@ -5,7 +5,7 @@ import { Check, Download, FileText, LockKeyhole, Sparkles } from "lucide-react"
 import { COSMETIC_CSS, combineCosmetics } from "@/components/ui/PlayerMetricChart/PlayerCosmetics"
 import { MiniRow } from "@/features/characterCosmetics/CharacterCosmeticsEditor"
 import { TierPill } from "@/components/Supporter/Supporter"
-import { SUPPORTER_GOLD, type SupporterPerk } from "@/components/Supporter/supporterUpsell"
+import type { SupporterPerk } from "@/components/Supporter/supporterUpsell"
 import { cn } from "@/lib/utils"
 import { UnlistedBadge } from "@/pages/Logs/components/UnlistedBadge"
 import { COSMETIC_SHOWCASE, PAID_BILLING_TIERS, TIER_COLOR, billingTierLabel, billingTierStorageLabel, type PaidBillingTier } from "@/pages/Settings/billingPricing"
@@ -262,11 +262,7 @@ export function PerkShowcase() {
   }, [])
 
   return (
-    <section ref={sectionRef} aria-labelledby="perks-heading" className="scroll-mt-4 space-y-4">
-      <h2 id="perks-heading" className="font-wow text-2xl" style={{ color: SUPPORTER_GOLD }}>
-        What you unlock
-      </h2>
-
+    <section ref={sectionRef} aria-label="Supporter perks" className="scroll-mt-4">
       <div className={cn(PANEL, "overflow-hidden")}>
         <div role="tablist" aria-label="Perks" className="styled-scrollbar flex overflow-x-auto border-b border-border bg-black/20">
           {SLIDES.map((s, i) => (
