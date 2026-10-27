@@ -100,21 +100,22 @@ function VisualRow({ label, color, note, children }: { label: string; color: str
 }
 
 /** Wireframe page with or without an ad slot. */
-const AD_SLOT =
-  "flex h-10 items-center justify-center rounded border border-dashed border-rose-400/40 bg-[repeating-linear-gradient(45deg,transparent,transparent_6px,rgba(244,63,94,0.08)_6px,rgba(244,63,94,0.08)_12px)] text-[9px] uppercase tracking-[0.2em] text-rose-300/70"
+const AD_RAIL =
+  "flex w-[30%] shrink-0 items-center justify-center rounded border border-dashed border-rose-400/40 bg-[repeating-linear-gradient(45deg,transparent,transparent_6px,rgba(244,63,94,0.08)_6px,rgba(244,63,94,0.08)_12px)] text-[9px] uppercase tracking-[0.2em] text-rose-300/70 [writing-mode:vertical-rl]"
 
-/** Wireframe raid page, with or without an ad slot. */
+/** Wireframe raid page. Ads only ever sit in a side rail; without one the content takes the full width. */
 function AdMockPage({ withAd, label }: { withAd: boolean; label: ReactNode }) {
   return (
     <div className="flex-1 space-y-2">
       <div className="text-center text-xs">{label}</div>
-      <div className="space-y-1.5 rounded-md border border-border bg-background/60 p-2">
-        <div className="h-2 w-2/3 rounded bg-muted-foreground/30" />
-        {withAd ? <div className={AD_SLOT}>Advertisement</div> : null}
-        {["mage", "warrior", "priest", "rogue"].map((cls, i) => (
-          <div key={cls} className="h-2.5 rounded" style={{ width: `${92 - i * 14}%`, backgroundColor: `color-mix(in srgb, var(--color-class-${cls}) 55%, transparent)` }} />
-        ))}
-        {withAd ? null : <div className="h-2.5 w-1/2 rounded" style={{ backgroundColor: "color-mix(in srgb, var(--color-class-paladin) 55%, transparent)" }} />}
+      <div className="flex gap-1.5 rounded-md border border-border bg-background/60 p-2">
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="h-2 w-2/3 rounded bg-muted-foreground/30" />
+          {["mage", "warrior", "priest", "rogue", "paladin"].map((cls, i) => (
+            <div key={cls} className="h-2.5 rounded" style={{ width: `${96 - i * 12}%`, backgroundColor: `color-mix(in srgb, var(--color-class-${cls}) 55%, transparent)` }} />
+          ))}
+        </div>
+        {withAd ? <div className={AD_RAIL}>Ad</div> : null}
       </div>
     </div>
   )
@@ -128,7 +129,7 @@ function AdFreeVisual() {
         withAd={false}
         label={
           <span className="inline-flex items-center gap-1 rounded-full border border-lime-500/30 bg-lime-500/10 px-2 py-0.5 font-medium text-lime-300">
-            <Sparkles className="h-3 w-3" aria-hidden="true" /> You see no ads
+            <Sparkles className="h-3 w-3" aria-hidden="true" /> No ads, wider charts
           </span>
         }
       />
@@ -315,10 +316,10 @@ const SLIDES: PerkSlide[] = [
     tab: "Ad-Free",
     tier: "honored",
     headline: "You see no ads. Anywhere.",
-    body: "Every page on Chronicle is ad-free for you: raid reports, rankings, armory, and everything else. Clear line of sight to every pull.",
+    body: "Every page on Chronicle is ad-free for you: raid reports, rankings, armory, and everything else. The ad rail disappears, so your charts and panels get the extra width.",
     levels: [
-      { tier: "free", text: "Limited ads on some pages" },
-      { tier: "honored", text: "No ads anywhere on Chronicle" },
+      { tier: "free", text: "An ad rail beside some pages" },
+      { tier: "honored", text: "No ads, and the rail's space goes to your content" },
     ],
     visual: <AdFreeVisual />,
   },
