@@ -3,7 +3,6 @@ package serviceinference
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,17 +27,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
-
-func TestCredentialCipherConfig(t *testing.T) {
-	t.Parallel()
-	_, err := credentialCipher("not-base64")
-	require.ErrorContains(t, err, "decode")
-	_, err = credentialCipher(base64.StdEncoding.EncodeToString(make([]byte, 31)))
-	require.ErrorContains(t, err, "32 bytes")
-	cipher, err := credentialCipher(base64.StdEncoding.EncodeToString(make([]byte, 32)))
-	require.NoError(t, err)
-	require.NotNil(t, cipher)
-}
 
 func TestDisabledRoutesReturnServiceUnavailable(t *testing.T) {
 	t.Parallel()

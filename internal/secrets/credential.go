@@ -5,6 +5,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -122,4 +123,20 @@ func parseCredentialEnvelope(envelope []byte) (keyID string, nonce, sealed []byt
 	keyIDStart := headerSize + 2
 	nonceStart := keyIDStart + keyIDLen
 	return string(envelope[keyIDStart:nonceStart]), envelope[nonceStart:payloadOffset], envelope[payloadOffset:], nil
+}
+
+// NewCredentialCipherFromBase64 constructs a credential cipher from a
+// base64-encoded 32-byte AES-256 key.
+func NewCredentialCipherFromBase64(keyID, encodedKey string) (*CredentialCipher, error) {
+	key, err := base64.StdEncoding.DecodeString(encodedKey)
+	if err != nil {
+		return nil, fmt.Errorf("decode credential encryption key: %w", err)
+	}
+	return NewCredentialCipher(keyID, key)
+}
+
+// UserCredentialAAD binds a ciphertext to the owning user and its purpose so
+// it cannot be replayed into another user's row or another credential slot.
+func UserCredentialAAD(userID, purpose string) []byte {
+	return []byte(userID + ":" + purpose)
 }
