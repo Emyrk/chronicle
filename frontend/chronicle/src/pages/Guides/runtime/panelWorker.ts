@@ -3,7 +3,7 @@ import { createGuideRuntime } from "./runtime"
 import { PANEL_STREAM_SCOPES, PANEL_STREAMS, type PanelStream, type PanelStreamScope } from "./panelEvents"
 import { FastDamageCursor } from "@/api/protodecode/decode"
 import type { PanelUnits } from "./panelUnits"
-import { parseWorkerMessage } from "../protocol/protocol"
+import { parseWorkerMessage, splitBatchOperations } from "../protocol/protocol"
 import type { GuideCapability } from "../protocol/types"
 
 /** Per-replay timings sent with damage-complete; phases add up to roughly totalMs. */
@@ -41,7 +41,7 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
   let maxEvents: number | undefined
   let startupMs = 0
   const flush = (operations: ReturnType<NonNullable<typeof runtime>["flush"]>) => {
-    if (operations.length) send(parseWorkerMessage({ type: "batch", batchId: String(++batchId), operations }))
+    for (const chunk of splitBatchOperations(operations)) send(parseWorkerMessage({ type: "batch", batchId: String(++batchId), operations: chunk }))
   }
   return (input: Input) => {
     try {

@@ -35,6 +35,16 @@ describe("Lua panel worker capability boundary", () => {
       .toContainEqual(expect.objectContaining({ type: "error", message: expect.stringMatching(/input capability/) }))
   })
 
+  it("splits a large redraw into several batches under the message limit", () => {
+    // 500 labels with ~1 KiB of text each is ~500 KiB of UI operations in one startup.
+    const messages = start(`for i = 1, 500 do UIParent:CreateFontString("t" .. i):SetText(string.rep("x", 1000)) end`, ["ui"])
+    const batches = messages.filter((m): m is { type: "batch"; operations: unknown[] } => (m as { type: string }).type === "batch")
+    expect(messages).not.toContainEqual(expect.objectContaining({ type: "error" }))
+    expect(batches.length).toBeGreaterThan(1)
+    expect(batches.flatMap(b => b.operations)).toHaveLength(1000)
+    for (const batch of batches) expect(new TextEncoder().encode(JSON.stringify(batch)).byteLength).toBeLessThanOrEqual(64 * 1024)
+  })
+
   it("allows UI without input callbacks", () => {
     expect(start(`CreateFrame("Frame", "f", UIParent)`, ["ui"]))
       .toContainEqual(expect.objectContaining({ type: "ready" }))
