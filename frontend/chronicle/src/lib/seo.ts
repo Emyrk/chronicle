@@ -7,6 +7,7 @@ const SEO_PRODUCT_NAMES = [
   ["octowow", "OctoWoW"],
   ["capybara", "CapybaraCraft"],
   ["ravencraft", "Ravencraft"],
+  ["sunreach", "Sun Reach"],
 ] as const;
 
 export function seoProductName(flavor: readonly string[] | undefined): string {

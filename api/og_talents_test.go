@@ -22,6 +22,7 @@ func TestSEOProductName(t *testing.T) {
 		{"VanillaPlus", database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}, "VanillaPlus"},
 		{"OctoWoW", database.WoWFlavor{database.FlavorVanilla, database.FlavorOctoWoW}, "OctoWoW"},
 		{"CapybaraCraft", database.WoWFlavor{database.FlavorVanilla, database.FlavorCapybara}, "CapybaraCraft"},
+		{"Sun Reach", database.WoWFlavor{database.FlavorVanilla, database.FlavorSunreach}, "Sun Reach"},
 		{"Generic", database.WoWFlavor{database.FlavorVanilla, database.FlavorTurtle}, ""},
 	}
 	for _, tc := range cases {
