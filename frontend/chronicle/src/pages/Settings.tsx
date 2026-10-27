@@ -805,7 +805,8 @@ export function CharacterSettings() {
                   <p className="text-sm text-muted-foreground">Could not verify photo proof access. Please refresh the page or try again shortly.</p>
                 ) : siteConfig?.billing_enabled ? (
                   <p className="text-sm">
-                    <span className="font-medium text-[#1eff00]">Photo proof linking is an Honored perk.</span>{" "}
+                    <span className="text-muted-foreground">You can&apos;t link characters with photo proof yet.</span>{" "}
+                    <span className="font-medium text-[#1eff00]">Become an Honored supporter to unlock it.</span>{" "}
                     <Link to="/supporter#linking" className="font-medium text-[#f0c060] underline-offset-4 hover:underline">
                       See supporter perks
                     </Link>
