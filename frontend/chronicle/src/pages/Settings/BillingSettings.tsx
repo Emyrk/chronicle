@@ -188,7 +188,7 @@ export function BillingSignInPrompt() {
 }
 
 /** Shared supporter-tier overview used by account billing and the public /supporter route. */
-export function SupporterOverview({ billing, panel, hideHeading = false }: { billing?: BillingSummary; panel: React.ReactNode; hideHeading?: boolean }) {
+export function SupporterOverview({ billing, panel }: { billing?: BillingSummary; panel: React.ReactNode }) {
   const hasTierAccess = billing?.ads_free ?? false
   const currentTier = hasTierAccess ? (billing?.tier ?? "honored") : "free"
   const tierLabel = billingTierLabel(currentTier)
@@ -196,11 +196,9 @@ export function SupporterOverview({ billing, panel, hideHeading = false }: { bil
 
   return (
     <section className="max-w-5xl space-y-8">
-      {hideHeading ? null : (
-        <h2 className="font-wow text-3xl leading-tight sm:text-4xl">
-          <span style={{ color: GOLD }}>{hasTierAccess ? `You are ${tierLabel}` : "Support Chronicle"}</span> <span className="text-white">and earn reputation</span>
-        </h2>
-      )}
+      <h2 className="font-wow text-3xl leading-tight sm:text-4xl">
+        <span style={{ color: GOLD }}>{hasTierAccess ? `You are ${tierLabel}` : "Support Chronicle"}</span> <span className="text-white">and earn reputation</span>
+      </h2>
 
       <Achievement billing={billing} />
 
@@ -350,7 +348,7 @@ const CURRENT_TIER_COLUMN = "-mx-2 bg-white/[0.06] px-2"
 const COMPARISON_GRID = "md:grid-cols-[minmax(0,2.4fr)_repeat(4,minmax(0,1fr))]"
 
 /** Plain-language breakdown of what each supporter tier changes compared to free access. */
-function ComparisonTable({ currentTier }: { currentTier: string }) {
+export function ComparisonTable({ currentTier }: { currentTier: string }) {
   return (
     <div id="compare" className={cn(FRAME, "scroll-mt-4")}>
       <style>{COSMETIC_CSS}</style>

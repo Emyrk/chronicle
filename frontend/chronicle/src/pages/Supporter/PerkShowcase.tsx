@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react"
 import type { ReactNode } from "react"
-import { Link, useLocation, useNavigate } from "react-router-dom"
-import { ArrowRight, Check, ChevronLeft, ChevronRight, Download, FileText, LockKeyhole, Sparkles } from "lucide-react"
+import { useLocation, useNavigate } from "react-router-dom"
+import { Check, Download, FileText, LockKeyhole, Sparkles } from "lucide-react"
 import { COSMETIC_CSS, combineCosmetics } from "@/components/ui/PlayerMetricChart/PlayerCosmetics"
 import { MiniRow } from "@/features/characterCosmetics/CharacterCosmeticsEditor"
 import { TierPill } from "@/components/Supporter/Supporter"
@@ -243,8 +243,8 @@ function slideIndexFromHash(hash: string): number {
   return Math.max(0, index)
 }
 
-/** Tabbed carousel of supporter perks. The URL hash selects the slide so locked hints can deep-link. */
-export function PerkShowcase({ ctaTo }: { ctaTo: string }) {
+/** Tabbed panel of supporter perks. The URL hash selects the tab so locked hints can deep-link. */
+export function PerkShowcase() {
   const location = useLocation()
   const navigate = useNavigate()
   const sectionRef = useRef<HTMLElement>(null)
@@ -261,101 +261,58 @@ export function PerkShowcase({ ctaTo }: { ctaTo: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const select = (next: number) => {
-    const wrapped = (next + SLIDES.length) % SLIDES.length
-    navigate({ hash: SLIDES[wrapped].id }, { replace: true, preventScrollReset: true })
-  }
-
   return (
-    <section ref={sectionRef} aria-label="Supporter perks" className="scroll-mt-4 space-y-3">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h2 className="font-wow text-2xl" style={{ color: SUPPORTER_GOLD }}>
-            Supporter Perks
-          </h2>
-          <p className="text-sm text-muted-foreground">Everything your reputation unlocks. Core analysis stays free for everyone.</p>
-        </div>
-        <a href="#compare" className="hidden shrink-0 items-center gap-1 text-sm text-muted-foreground hover:text-foreground sm:inline-flex">
-          Compare tiers <ChevronRight className="h-4 w-4" />
-        </a>
-      </div>
+    <section ref={sectionRef} aria-labelledby="perks-heading" className="scroll-mt-4 space-y-4">
+      <h2 id="perks-heading" className="font-wow text-2xl" style={{ color: SUPPORTER_GOLD }}>
+        What you unlock
+      </h2>
 
-      <div className={cn(PANEL, "relative overflow-hidden")}>
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 opacity-60"
-          style={{ background: `radial-gradient(ellipse at 85% 30%, ${tierColor}26, transparent 60%)` }}
-        />
-        <div className="relative grid items-center gap-8 p-6 sm:p-8 lg:px-14 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <TierPill tier={slide.tier} />
-              {slide.id === "future" ? null : <span>and above</span>}
-            </div>
-            <h3 className="font-wow text-2xl leading-tight text-white sm:text-3xl">{slide.headline}</h3>
-            <p className="text-sm leading-relaxed text-zinc-300 sm:text-base">{slide.body}</p>
-            <ul className="space-y-1.5 text-sm">
-              <li className="flex items-start gap-2 text-muted-foreground">
-                <Check className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500" aria-hidden="true" />
-                <span>
-                  <span className="font-wow text-zinc-400">Friendly</span> – {slide.friendly}
-                </span>
-              </li>
-              <li className="flex items-start gap-2 text-zinc-200">
-                <Check className="mt-0.5 h-4 w-4 shrink-0" style={{ color: tierColor }} aria-hidden="true" />
-                <span>
-                  <span className="font-wow" style={{ color: tierColor }}>
-                    {billingTierLabel(slide.tier)}
-                  </span>{" "}
-                  – {slide.supporter}
-                </span>
-              </li>
-            </ul>
-            <Link
-              to={ctaTo}
-              className="inline-flex items-center gap-2 rounded-md border-2 px-4 py-2 font-wow text-sm font-bold transition-colors hover:bg-white/5"
-              style={{ borderColor: `${tierColor}b3`, color: tierColor, backgroundColor: `${tierColor}1a` }}
+      <div className={cn(PANEL, "overflow-hidden")}>
+        <div role="tablist" aria-label="Perks" className="styled-scrollbar flex overflow-x-auto border-b border-border bg-black/20">
+          {SLIDES.map((s, i) => (
+            <button
+              key={s.id}
+              type="button"
+              role="tab"
+              aria-selected={i === index}
+              onClick={() => navigate({ hash: s.id }, { replace: true, preventScrollReset: true })}
+              className={cn(
+                "shrink-0 border-b-2 px-4 py-3 text-sm transition-colors",
+                i === index ? "text-white" : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+              style={i === index ? { borderColor: TIER_COLOR[s.tier] } : undefined}
             >
-              Become {billingTierLabel(slide.tier)} <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-          <div className="rounded-lg border border-white/10 bg-black/30 p-4 sm:p-5">{slide.visual}</div>
+              {s.tab}
+            </button>
+          ))}
         </div>
 
-        <button
-          type="button"
-          onClick={() => select(index - 1)}
-          aria-label="Previous perk"
-          className="absolute left-2 top-1/2 hidden -translate-y-1/2 rounded-full border border-border bg-background/80 p-1.5 text-muted-foreground hover:text-foreground lg:block"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => select(index + 1)}
-          aria-label="Next perk"
-          className="absolute right-2 top-1/2 hidden -translate-y-1/2 rounded-full border border-border bg-background/80 p-1.5 text-muted-foreground hover:text-foreground lg:block"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      </div>
-
-      <div role="tablist" aria-label="Perks" className="styled-scrollbar flex gap-1 overflow-x-auto pb-1">
-        {SLIDES.map((s, i) => (
-          <button
-            key={s.id}
-            type="button"
-            role="tab"
-            aria-selected={i === index}
-            onClick={() => select(i)}
-            className={cn(
-              "shrink-0 rounded-md border px-3 py-1.5 text-sm transition-colors",
-              i === index ? "border-[#c9a227]/60 bg-[#f0c060]/10 text-[#f0c060]" : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {s.tab}
-          </button>
-        ))}
+        <div className="relative">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 opacity-60"
+            style={{ background: `radial-gradient(ellipse at 85% 40%, ${tierColor}22, transparent 60%)` }}
+          />
+          <div role="tabpanel" className="relative grid items-center gap-8 p-6 sm:p-8 lg:grid-cols-2">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <TierPill tier={slide.tier} />
+                {slide.id === "future" ? null : <span>and above</span>}
+              </div>
+              <h3 className="font-wow text-2xl leading-tight text-white sm:text-3xl">{slide.headline}</h3>
+              <p className="text-sm leading-relaxed text-zinc-300 sm:text-base">{slide.body}</p>
+              <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
+                <dt className="font-wow text-zinc-500">Friendly</dt>
+                <dd className="text-muted-foreground">{slide.friendly}</dd>
+                <dt className="font-wow" style={{ color: tierColor }}>
+                  {billingTierLabel(slide.tier)}
+                </dt>
+                <dd className="text-zinc-200">{slide.supporter}</dd>
+              </dl>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-black/30 p-4 sm:p-5">{slide.visual}</div>
+          </div>
+        </div>
       </div>
     </section>
   )
