@@ -44,7 +44,7 @@ import { MeterWindows } from "./MeterWindows";
 import { useMeterWindows } from "./meterWindowsState";
 import {
   dismissMapTelemetryWarning,
-  hasLimitedSuperWowPositionTelemetry,
+  hasLimitedHostilePositionTelemetry,
   isMapTelemetryWarningDismissed,
   MAP_TELEMETRY_WARNING_STORAGE_KEY,
 } from "./mapTelemetryWarning";
@@ -933,8 +933,11 @@ function MapTelemetryWarning({ props, children }: { props: PanelRenderProps<MapR
   const [dismissedInstances, setDismissedInstances] = useLocalStorage<unknown>(MAP_TELEMETRY_WARNING_STORAGE_KEY, []);
   const instanceId = props.context.instance.id;
   const showWarning = props.variant !== "overlay"
-    && hasLimitedSuperWowPositionTelemetry(props.context.instance)
+    && hasLimitedHostilePositionTelemetry(props.context.instance)
     && !isMapTelemetryWarningDismissed(dismissedInstances, instanceId);
+  const warningDetail = props.context.instance.format === "3.3.5a-cc-addon"
+    ? "3.3.5a position telemetry only includes allied units. Hostile entities will not be shown."
+    : "SuperWoW only emits positional data for friendly units. Hostile entities will not be shown. Switch to ClassicAPI for positional data on all units.";
 
   return (
     <div className="relative h-full min-h-0">
@@ -947,7 +950,7 @@ function MapTelemetryWarning({ props, children }: { props: PanelRenderProps<MapR
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
           <p className="min-w-0 flex-1 leading-relaxed">
             <strong>Incomplete hostile positions.</strong>{" "}
-            SuperWoW only emits positional data for friendly units. Hostile entities will not be shown. Switch to ClassicAPI for positional data on all units.
+            {warningDetail}
           </p>
           <button
             type="button"
