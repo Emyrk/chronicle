@@ -123,7 +123,7 @@ export function LuaProjectPage() {
     <header className="border-b pb-6"><p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">{project.kind} / {project.slug} / revision {project.revision}</p><h1 className="mt-2 text-3xl font-semibold">{project.name}</h1>
       {project.kind === "panel" && <div className="mt-4 flex flex-wrap items-center gap-3">
         <Link className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90" to={`/lua-projects/${encodeURIComponent(project.id)}/edit`}><Code2 className="size-4" /> Open editor &amp; AI chat</Link>
-        <span className="text-sm text-muted-foreground">Build the panel with the AI assistant, edit the code and preview it on an instance.</span>
+        <span className="text-sm text-muted-foreground">Build the panel with the AI assistant, edit the code and preview it on an instance. See the <Link className="text-primary underline underline-offset-2" to="/lua-projects/api">Lua API reference</Link>.</span>
       </div>}
     </header>
     {error && <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}{error.includes("revision") && " Reload the project before retrying."}</p>}

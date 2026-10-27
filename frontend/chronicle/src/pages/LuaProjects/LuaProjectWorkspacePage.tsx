@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, useParams } from "react-router-dom"
-import { ArrowLeftRight, GitCompare, PanelLeft, PanelRightClose, PanelRightOpen, Rocket, Save, Undo2 } from "lucide-react"
+import { ArrowLeftRight, BookOpen, GitCompare, PanelLeft, PanelRightClose, PanelRightOpen, Rocket, Save, Undo2 } from "lucide-react"
 import { toast } from "sonner"
 import { useInstance } from "@/api/queries"
 import type { RecentInstancesResponse } from "@/api/typesGenerated"
@@ -237,6 +237,8 @@ export default function LuaProjectWorkspacePage() {
       <span aria-hidden className="h-4 w-px bg-border" />
       <h1 className="text-base font-semibold">{project.name}</h1>
       <span className="font-mono text-xs text-muted-foreground">{project.slug}</span>
+      <a className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" href="/lua-projects/api" target="_blank" rel="noreferrer"
+        title="Lua panel API reference and FAQ (opens in a new tab)"><BookOpen className="size-3.5" /> API reference</a>
       <div className="ml-auto flex flex-wrap items-center gap-2">
         <span role="status" className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground" title={copy?.validation || undefined}>
           <span aria-hidden className={`size-2 rounded-full ${status.tone}`} />{status.label}
