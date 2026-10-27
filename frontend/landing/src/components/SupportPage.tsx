@@ -391,27 +391,25 @@ export function SupportPage() {
         {/* <p className="text-lg text-muted-foreground">Support Chronicle for WoW communities.</p> */}
       </div>
 
-      <div className="hidden">
-        <aside className="mt-10 flex flex-col gap-4 rounded-xl border-2 border-[#3d8fe6] bg-gradient-to-r from-[#0a2747] via-[#0f3a69] to-[#0a2747] p-4 shadow-xl shadow-black/30 sm:flex-row sm:items-center sm:p-5">
-          <Crown aria-hidden="true" className="h-8 w-8 shrink-0 text-[#f0c060]" />
-          <div className="min-w-0 flex-1">
-            <h2 className="font-wow text-base font-bold text-[#f0c060]">Earn Standing with Chronicle</h2>
-            <p className="mt-1 text-sm leading-snug text-[#cfe0f5]">
-              Before donating, check out Chronicle&apos;s paid Standing tiers: Honored, Revered, and Exalted. They support
-              Chronicle the same way and come with rewards like ad-free browsing.
-            </p>
-          </div>
-          <a
-            href={trackedTenantUrl(STANDING_URL, "support_standing")}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-[#f0c060] bg-[#f0c060] px-4 py-2 text-sm font-semibold text-[#1a1206] transition-colors hover:bg-[#ffd27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
-          >
-            View Standing Tiers
-            <ExternalLink aria-hidden="true" className="h-4 w-4" />
-          </a>
-        </aside>
-      </div>
+      <aside className="mt-10 flex flex-col gap-4 rounded-xl border-2 border-[#3d8fe6] bg-gradient-to-r from-[#0a2747] via-[#0f3a69] to-[#0a2747] p-4 shadow-xl shadow-black/30 sm:flex-row sm:items-center sm:p-5">
+        <Crown aria-hidden="true" className="h-8 w-8 shrink-0 text-[#f0c060]" />
+        <div className="min-w-0 flex-1">
+          <h2 className="font-wow text-base font-bold text-[#f0c060]">Earn Standing with Chronicle</h2>
+          <p className="mt-1 text-sm leading-snug text-[#cfe0f5]">
+            Before donating, check out Chronicle&apos;s paid Standing tiers: Honored, Revered, and Exalted. They support
+            Chronicle the same way and come with rewards like ad-free browsing.
+          </p>
+        </div>
+        <a
+          href={trackedTenantUrl(STANDING_URL, "support_standing")}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-[#f0c060] bg-[#f0c060] px-4 py-2 text-sm font-semibold text-[#1a1206] transition-colors hover:bg-[#ffd27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+        >
+          View Standing Tiers
+          <ExternalLink aria-hidden="true" className="h-4 w-4" />
+        </a>
+      </aside>
 
       <details className="group mt-14 overflow-hidden rounded-xl border border-[#6b5320] bg-[#1e1710] shadow-xl shadow-black/30">
         <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-300 [&::-webkit-details-marker]:hidden">
