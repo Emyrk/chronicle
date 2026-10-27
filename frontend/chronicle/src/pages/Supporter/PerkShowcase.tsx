@@ -27,9 +27,8 @@ interface PerkSlide {
   tier: SlideTier
   headline: string
   body: string
-  /** Friendly vs. tier comparison; omitted on the Friendly slide itself. */
-  friendly?: string
-  supporter?: string
+  /** What each standing gets for this perk, lowest first; omitted on the Friendly slide itself. */
+  levels?: { tier: SlideTier; text: string }[]
   visual: ReactNode
 }
 
@@ -278,8 +277,12 @@ const SLIDES: PerkSlide[] = [
     tier: "honored",
     headline: "Stand out in every raid chart.",
     body: "Animated name, background, and border styles follow your characters across damage, healing, and every other player row on Chronicle.",
-    friendly: "Plain class-colored rows",
-    supporter: "Name styles at Honored, backgrounds at Revered, borders at Exalted",
+    levels: [
+      { tier: "free", text: "Plain class-colored rows" },
+      { tier: "honored", text: "Animated name styles" },
+      { tier: "revered", text: "+ Animated backgrounds" },
+      { tier: "exalted", text: "+ Animated borders" },
+    ],
     visual: <CosmeticsVisual />,
   },
   {
@@ -288,8 +291,10 @@ const SLIDES: PerkSlide[] = [
     tier: "honored",
     headline: "Clear line of sight to every pull.",
     body: "Remove every advertisement from Chronicle. Your own logs and characters go ad-free for everyone who views them, so your raid sees a clean report too.",
-    friendly: "Limited ads on some pages",
-    supporter: "No ads for you, and none on your logs for your raid",
+    levels: [
+      { tier: "free", text: "Limited ads on some pages" },
+      { tier: "honored", text: "No ads for you, and none on your logs for your raid" },
+    ],
     visual: <AdFreeVisual />,
   },
   {
@@ -298,8 +303,12 @@ const SLIDES: PerkSlide[] = [
     tier: "honored",
     headline: "Keep a whole season of wipes.",
     body: "Extra raw log storage on top of the standard allowance, so you can keep the files behind your reports instead of pruning them.",
-    friendly: "Standard storage allowance",
-    supporter: "+300 MB at Honored, +1 GB at Revered, +2 GB at Exalted",
+    levels: [
+      { tier: "free", text: "Standard allowance" },
+      { tier: "honored", text: "+300 MB" },
+      { tier: "revered", text: "+1 GB" },
+      { tier: "exalted", text: "+2 GB" },
+    ],
     visual: <StorageVisual />,
   },
   {
@@ -308,8 +317,10 @@ const SLIDES: PerkSlide[] = [
     tier: "revered",
     headline: "Your combat logs, archived.",
     body: "Download the original combat log file behind any of your uploads. Use Chronicle as the archive for your raw data.",
-    friendly: "Parsed reports only",
-    supporter: "Download every original file you've uploaded",
+    levels: [
+      { tier: "free", text: "Parsed reports only" },
+      { tier: "revered", text: "Download every original file you've uploaded" },
+    ],
     visual: <DownloadsVisual />,
   },
   {
@@ -318,8 +329,10 @@ const SLIDES: PerkSlide[] = [
     tier: "revered",
     headline: "Progression stays in progression.",
     body: "Mark uploads unlisted so only people with the link can find them. Unlisting is permanent and removes the log from rankings.",
-    friendly: "Uploads are publicly listed",
-    supporter: "Unlist any log you upload",
+    levels: [
+      { tier: "free", text: "Uploads are publicly listed" },
+      { tier: "revered", text: "Unlist any log you upload" },
+    ],
     visual: <UnlistedVisual />,
   },
   {
@@ -328,8 +341,10 @@ const SLIDES: PerkSlide[] = [
     tier: "revered",
     headline: "Every future perk, included.",
     body: "New supporter perks are on the way. Revered and Exalted supporters get them automatically as they ship.",
-    friendly: "Core analysis, always free",
-    supporter: "New perks unlock as they release",
+    levels: [
+      { tier: "free", text: "Core analysis, always free" },
+      { tier: "revered", text: "New perks unlock as they release" },
+    ],
     visual: <FutureVisual />,
   },
 ]
@@ -404,16 +419,18 @@ export function PerkShowcase() {
               </div>
               <h3 className="font-wow text-2xl leading-tight text-white sm:text-3xl">{slide.headline}</h3>
               <p className="text-sm leading-relaxed text-zinc-300 sm:text-base">{slide.body}</p>
-              {slide.tier === "free" ? null : (
+              {slide.levels ? (
                 <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
-                  <dt className="font-wow text-zinc-500">Friendly</dt>
-                  <dd className="text-muted-foreground">{slide.friendly}</dd>
-                  <dt className="font-wow" style={{ color: tierColor }}>
-                    {billingTierLabel(slide.tier)}
-                  </dt>
-                  <dd className="text-zinc-200">{slide.supporter}</dd>
+                  {slide.levels.map((level) => (
+                    <div key={level.tier} className="contents">
+                      <dt className="font-wow" style={{ color: level.tier === "free" ? "#71717a" : slideColor(level.tier) }}>
+                        {level.tier === "free" ? "Friendly" : billingTierLabel(level.tier)}
+                      </dt>
+                      <dd className={level.tier === "free" ? "text-muted-foreground" : "text-zinc-200"}>{level.text}</dd>
+                    </div>
+                  ))}
                 </dl>
-              )}
+              ) : null}
             </div>
             <div className="rounded-lg border border-white/10 bg-black/30 p-4 sm:p-5">{slide.visual}</div>
           </div>
