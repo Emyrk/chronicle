@@ -1,11 +1,16 @@
-import { useState } from "react";
-import { Braces, ChevronRight, Download, FileText, Gauge, Puzzle, Wrench } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Braces, ChevronRight, Download, ExternalLink, FileText, Gauge, Puzzle, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { serializeInferenceDebug } from "./debugExport";
+import { openDebugViewer, useDebugBroadcast } from "./debugChannel";
 import type { ClientToolRequestEvent, DebugSnapshotEvent } from "./protocol";
 
 interface DebugInspectorProps {
+  /** Channel the pop-out debug viewer listens on. */
+  channelId: string;
+  /** Chat title shown in the pop-out viewer. */
+  title?: string;
   snapshots: readonly DebugSnapshotEvent[];
   clientToolRequests: readonly ClientToolRequestEvent[];
   error?: string;
@@ -125,8 +130,10 @@ function Snapshot({ snapshot, latest }: { snapshot: DebugSnapshotEvent; latest: 
   );
 }
 
-export function DebugInspector({ snapshots, clientToolRequests, error }: DebugInspectorProps) {
+export function DebugInspector({ channelId, title, snapshots, clientToolRequests, error }: DebugInspectorProps) {
   const [expanded, setExpanded] = useState(false);
+  const bundle = useMemo(() => ({ snapshots: [...snapshots], clientToolRequests: [...clientToolRequests], ...(error ? { error } : {}) }), [snapshots, clientToolRequests, error]);
+  useDebugBroadcast(channelId, bundle, title);
   const empty = snapshots.length === 0;
   return (
     <div className="bg-muted/10 border-b">
@@ -154,6 +161,17 @@ export function DebugInspector({ snapshots, clientToolRequests, error }: DebugIn
           aria-label="Download JSON"
         >
           <Download className="size-3.5" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-6"
+          onClick={() => openDebugViewer(channelId)}
+          title="Open the debug viewer in its own window"
+          aria-label="Open debug viewer"
+        >
+          <ExternalLink className="size-3.5" />
         </Button>
       </div>
       {expanded && !empty && (

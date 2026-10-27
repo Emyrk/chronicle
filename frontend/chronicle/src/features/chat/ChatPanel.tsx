@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/Switch/Switch";
 import { cn } from "@/lib/utils";
 import { DebugInspector } from "./DebugInspector";
+import { newDebugChannelId } from "./debugChannel";
 import { useOptionalInferenceRuntime } from "./runtime";
 import type { ChatMessage, ChatToolCall } from "./protocol";
 import type { AssistantChatController } from "./useAssistantChat";
@@ -152,6 +153,8 @@ export function ChatPanel({
   const runtime = useOptionalInferenceRuntime();
   const [composer, setComposer] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Stable across debug toggles so a popped-out debug viewer reconnects when debugging is re-enabled.
+  const [debugChannelId] = useState(newDebugChannelId);
   const pendingConfirmation = runtime?.pendingConfirmation ?? null;
   const messageEndRef = useRef<HTMLDivElement>(null);
 
@@ -265,6 +268,8 @@ export function ChatPanel({
       )}
       {debugAvailable && debugEnabled && (
         <DebugInspector
+          channelId={debugChannelId}
+          title={title}
           snapshots={controller.debugSnapshots}
           error={controller.error}
           clientToolRequests={controller.clientToolRequests}

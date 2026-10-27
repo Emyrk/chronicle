@@ -117,6 +117,7 @@ const LuaProjectsPage = lazy(() => import("./pages/LuaProjects/LuaProjectsPage")
 const LuaProjectPage = lazy(() => import("./pages/LuaProjects/LuaProjectsPage").then(({ LuaProjectPage }) => ({ default: LuaProjectPage })))
 const LuaProjectWorkspacePage = lazy(() => import("./pages/LuaProjects/LuaProjectWorkspacePage"))
 const LuaPanelApiPage = lazy(() => import("./pages/LuaProjects/LuaPanelApiPage"))
+const AssistantDebugPage = lazy(() => import("./pages/AssistantDebug/AssistantDebugPage"))
 const CustomPanelsPage = lazy(() => import("./pages/Tools/CustomPanelsPage").then(({ CustomPanelsPage }) => ({ default: CustomPanelsPage })))
 const ToolsPage = lazy(() => import("./pages/Tools/ToolsPage").then(({ ToolsPage }) => ({ default: ToolsPage })))
 const SpeedrunningPage = lazy(() => import("./pages/Speedrunning/SpeedrunningPage").then(({ SpeedrunningPage }) => ({ default: SpeedrunningPage })))
@@ -162,6 +163,8 @@ function App() {
       <Route path="/youtube-sync" element={<LegacyYouTubeSyncRedirect />} />
       <Route path="/youtube-sync-v2" element={<LegacyYouTubeSyncRedirect />} />
       <Route path="/youtube-sync-v3" element={<YouTubeSyncV3Page />} />
+      {/* Pop-out window opened from a chat's Prompt inspector; no site chrome. */}
+      <Route path="/debug/assistant" element={<AssistantDebugPage />} />
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
         <Route path="/recent" element={<RecentRaids />} />
