@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Bot, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { AssistantChat } from "./AssistantChat";
 import {
   isInferenceAuthorizationError,
@@ -68,6 +69,11 @@ function SiteHelpEmptyState() {
 }
 
 export function GlobalSiteHelpChat() {
+  const isMobile = useIsMobile();
+  return isMobile ? null : <DesktopGlobalSiteHelpChat />;
+}
+
+function DesktopGlobalSiteHelpChat() {
   const { session, isAuthenticated } = useAuth();
   const permission = useInferencePermission(isAuthenticated);
   const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed);
@@ -119,7 +125,12 @@ export function GlobalSiteHelpChat() {
   );
 }
 
-export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId: string; instanceName: string }) {
+export function InstanceAssistantChat(props: { instanceId: string; instanceName: string }) {
+  const isMobile = useIsMobile();
+  return isMobile ? null : <DesktopInstanceAssistantChat {...props} />;
+}
+
+function DesktopInstanceAssistantChat({ instanceId, instanceName }: { instanceId: string; instanceName: string }) {
   const { session, isAuthenticated } = useAuth();
   const permission = useInferencePermission(isAuthenticated);
   const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed);

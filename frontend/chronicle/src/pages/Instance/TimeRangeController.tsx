@@ -82,7 +82,7 @@ export function TimeRangeController({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 w-80 bg-popover border rounded-lg shadow-lg p-4">
+    <div data-floating-corner="bottom-right" className="fixed bottom-4 right-4 z-40 w-80 bg-popover border rounded-lg shadow-lg p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-1.5 text-sm font-medium">
           <Clock className="h-4 w-4" />

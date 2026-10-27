@@ -4551,6 +4551,7 @@ function InstancePageViewContent({
             setActionBarOpen((prev) => !prev);
             setSidebarOpen(false);
           }}
+          data-floating-corner="bottom-right"
           className="fixed bottom-8 right-8 z-50 h-14 w-14 rounded-full shadow-lg"
           title={actionBarOpen ? "Close action bar" : "Open action bar"}
         >
