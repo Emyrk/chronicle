@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react"
 import type { ReactNode } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import { Activity, Check, Download, FileText, LockKeyhole, Map as MapIcon, Plus, Shield, Sparkles, Swords, Timer, Trophy, Users } from "lucide-react"
-import { COSMETIC_CSS, combineCosmetics } from "@/components/ui/PlayerMetricChart/PlayerCosmetics"
+import { Activity, Check, Download, ExternalLink, FileText, LockKeyhole, Map as MapIcon, Plus, Shield, Sparkles, Swords, Timer, Trophy, Users } from "lucide-react"
+import { BACKGROUND_STYLES, BORDER_STYLES, COSMETIC_CSS, NAME_STYLES, TIER_RANK, combineCosmetics, tierFromAPI, type Preset } from "@/components/ui/PlayerMetricChart/PlayerCosmetics"
 import { MiniRow } from "@/features/characterCosmetics/CharacterCosmeticsEditor"
 import { TierPill } from "@/components/Supporter/Supporter"
 import type { SupporterPerk } from "@/components/Supporter/supporterUpsell"
@@ -35,29 +35,67 @@ interface PerkSlide {
 
 const PLAIN_COSMETIC = combineCosmetics({ name: "none", background: "none", border: "none" })
 
+const COSMETIC_PLAYGROUND_PATH = "/technical/cosmetic"
+
+/** The cosmetic slot each tier adds on top of the ones below it. */
+const COSMETIC_SLOT: Record<PaidBillingTier, { label: string; styles: Record<string, Preset> }> = {
+  honored: { label: "Name styles", styles: NAME_STYLES },
+  revered: { label: "+ Backgrounds", styles: BACKGROUND_STYLES },
+  exalted: { label: "+ Borders", styles: BORDER_STYLES },
+}
+
+/** Paid presets in a slot that a tier can use, so the counts track the cosmetics catalog. */
+function slotStyleCount(styles: Record<string, Preset>, tier: PaidBillingTier): number {
+  const rank = TIER_RANK[tierFromAPI(tier)]
+  return Object.values(styles).filter((style) => style.tier !== "Free" && TIER_RANK[style.tier] <= rank).length
+}
+
 function CosmeticsVisual() {
   return (
     <div className="space-y-2">
       <style>{COSMETIC_CSS}</style>
-      <VisualRow label="Friendly" color="#a1a1aa">
+      <VisualRow label="Friendly" color="#a1a1aa" note={<span className="text-muted-foreground">Default</span>}>
         <MiniRow character={{ name: "Thrall", class: "Shaman" }} cosmetic={PLAIN_COSMETIC} />
       </VisualRow>
-      {PAID_BILLING_TIERS.map((tier) => (
-        <VisualRow key={tier} label={billingTierLabel(tier)} color={TIER_COLOR[tier]}>
-          <MiniRow character={COSMETIC_SHOWCASE[tier].character} cosmetic={combineCosmetics(COSMETIC_SHOWCASE[tier].selection)} />
-        </VisualRow>
-      ))}
+      {PAID_BILLING_TIERS.map((tier) => {
+        const slot = COSMETIC_SLOT[tier]
+        return (
+          <VisualRow
+            key={tier}
+            label={billingTierLabel(tier)}
+            color={TIER_COLOR[tier]}
+            note={
+              <>
+                <span style={{ color: TIER_COLOR[tier] }}>{slot.label}</span>
+                <span className="text-muted-foreground"> · {slotStyleCount(slot.styles, tier)}</span>
+              </>
+            }
+          >
+            <MiniRow character={COSMETIC_SHOWCASE[tier].character} cosmetic={combineCosmetics(COSMETIC_SHOWCASE[tier].selection)} />
+          </VisualRow>
+        )
+      })}
+      <a
+        href={COSMETIC_PLAYGROUND_PATH}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-center gap-1.5 pt-2 text-xs font-medium text-[#f0c060] underline-offset-4 hover:underline"
+      >
+        See every style in the cosmetic playground
+        <ExternalLink className="size-3" aria-hidden="true" />
+      </a>
     </div>
   )
 }
 
-function VisualRow({ label, color, children }: { label: string; color: string; children: ReactNode }) {
+function VisualRow({ label, color, note, children }: { label: string; color: string; note?: ReactNode; children: ReactNode }) {
   return (
-    <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-3">
+    <div className={cn("grid items-center gap-3", note ? "grid-cols-[4.5rem_minmax(0,1fr)_7.5rem]" : "grid-cols-[5rem_minmax(0,1fr)]")}>
       <span className="font-wow text-xs font-bold" style={{ color }}>
         {label}
       </span>
       {children}
+      {note ? <span className="text-xs">{note}</span> : null}
     </div>
   )
 }
