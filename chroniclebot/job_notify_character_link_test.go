@@ -100,4 +100,8 @@ func TestDiscordEmbedFieldValueTruncates(t *testing.T) {
 	value := discordEmbedFieldValue(strings.Repeat("é", 1025))
 	require.Len(t, []rune(value), 1024)
 	require.True(t, strings.HasSuffix(value, "..."))
+
+	message := characterLinkDecisionMessage(ArgsNotifyCharacterLinkDecision{TenantName: strings.Repeat("é", 1025)})
+	require.Len(t, []rune(message.Embeds[0].Fields[0].Value), 1024)
+	require.True(t, strings.HasSuffix(message.Embeds[0].Fields[0].Value, "..."))
 }

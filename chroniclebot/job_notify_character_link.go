@@ -97,7 +97,7 @@ func characterLinkDecisionMessage(args ArgsNotifyCharacterLinkDecision) *discord
 		tenantName = "Unknown site"
 	}
 	fields := make([]*discordgo.MessageEmbedField, 0, 4)
-	fields = append(fields, &discordgo.MessageEmbedField{Name: "Site", Value: tenantName})
+	fields = append(fields, &discordgo.MessageEmbedField{Name: "Site", Value: discordEmbedFieldValue(tenantName)})
 	if len(args.ApprovedCharacters) > 0 {
 		fields = append(fields, &discordgo.MessageEmbedField{
 			Name:  "Approved characters",
