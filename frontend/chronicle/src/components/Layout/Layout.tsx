@@ -20,7 +20,7 @@ export function Layout() {
   const location = useLocation();
   const isInstancePage = location.pathname.startsWith("/instances/");
   // The Lua workshop embeds its own project chat.
-  const hasPageChat = isInstancePage || /^\/lua-projects\/[^/]+\/edit$/.test(location.pathname);
+  const hasPageChat = isInstancePage || /^\/addons\/[^/]+\/edit$/.test(location.pathname);
 
   return (
     <TooltipProvider>

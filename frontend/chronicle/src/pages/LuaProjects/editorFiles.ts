@@ -35,7 +35,7 @@ export function initialEditorFiles(project: Pick<LuaProject, "kind" | "name" | "
   return {
     manifest: JSON.stringify({ manifest_version: 1, kind: project.kind, name: project.name, slug: project.slug,
       entrypoint: "main.lua", capabilities: ["ui"], streams: [], assets: [] }, null, 2) + "\n",
-    lua: "-- Write your Lua panel here\nreturn {}\n",
+    lua: "-- Write your addon here\nreturn {}\n",
   }
 }
 

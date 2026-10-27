@@ -17,10 +17,10 @@ const components: Components = {
   h3: ({ children }) => <h3 id={slug(children)} className="scroll-mt-20">{children}</h3>,
 }
 
-/** Author-facing Lua panel API reference, rendered from lua-panel-api.md (the same file reviewers read in the repo). */
+/** Author-facing addon API reference, rendered from lua-panel-api.md (the same file reviewers read in the repo). */
 export default function LuaPanelApiPage() {
   return <main className="container mx-auto max-w-4xl px-4 py-10">
-    <Link className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" to="/lua-projects"><ArrowLeft className="size-4" /> Lua projects</Link>
+    <Link className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" to="/addons"><ArrowLeft className="size-4" /> Addons</Link>
     <article className="prose prose-sm dark:prose-invert max-w-none prose-a:text-primary prose-pre:bg-muted/60 prose-pre:text-foreground prose-table:text-xs prose-th:px-2 prose-td:px-2 prose-code:font-normal prose-code:before:content-none prose-code:after:content-none [&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-muted [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:py-0.5">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{reference}</ReactMarkdown>
     </article>

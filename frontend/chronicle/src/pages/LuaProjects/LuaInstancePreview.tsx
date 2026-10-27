@@ -60,7 +60,7 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events, un
     if (!instanceId || !panel.sources[panel.entrypoint] ||
       Object.values(panel.sources).some(source => source.includes("\0") || new TextEncoder().encode(source).length > 64 * 1024) ||
       panel.streams.some(stream => stream !== "damage") || panel.capabilities.some(cap => cap !== "ui" && cap !== "input")) {
-      setError("Select an instance and provide a supported unsaved Lua panel package")
+      setError("Select an instance and provide a supported unsaved addon package")
       return
     }
     if (!encounterIds.length || new Set(encounterIds).size !== encounterIds.length) {
@@ -95,8 +95,8 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events, un
   useEffect(() => () => { for (const url of assetUrls.values()) URL.revokeObjectURL(url) }, [assetUrls])
 
   const active = run && !safeMode && run.panel === panel && run.instanceId === instanceId && run.selection === selection
-  return <section className="space-y-3" aria-label="Unsaved Lua instance preview">
-    {safeMode ? <p className="text-xs">Lua preview is disabled by ?safe=1.</p> : <>
+  return <section className="space-y-3" aria-label="Unsaved addon instance preview">
+    {safeMode ? <p className="text-xs">Addon preview is disabled by ?safe=1.</p> : <>
       <div className="flex items-center gap-2">
         <button className={`${button} border-primary bg-primary text-primary-foreground hover:bg-primary/90`} type="button" disabled={busy || !instanceId || !panel.sources[panel.entrypoint]} onClick={() => void start()}>{busy ? "Loading events…" : run ? "Re-run preview" : "Run preview"}</button>
         {(busy || run) && <button className={button} type="button" onClick={cancel}>{busy ? "Cancel" : "Clear"}</button>}
