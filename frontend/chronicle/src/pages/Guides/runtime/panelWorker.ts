@@ -5,9 +5,11 @@ import { FastDamageCursor } from "@/api/protodecode/decode"
 import { parseWorkerMessage } from "../protocol/protocol"
 import type { GuideCapability } from "../protocol/types"
 
+const MAX_BATCH_OPERATIONS = 10_000
+
 // Dedicated worker entry. The caller owns termination and treats all returned scene batches as untrusted.
 type Input =
-  | { type: "start"; entrypoint: string; sources: Record<string, string>; streams: PanelStream[]; capabilities: GuideCapability[]; streamScope?: PanelStreamScope }
+  | { type: "start"; entrypoint: string; sources: Record<string, string>; streams: PanelStream[]; capabilities: GuideCapability[]; streamScope?: PanelStreamScope; maxEvents?: number }
   | { type: "event"; event: unknown }
   | { type: "damage-stream"; data: Uint8Array; encounterIds: string[] }
   | { type: "click"; nodeId: string }
@@ -17,6 +19,7 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
   let runtime: ReturnType<typeof createGuideRuntime> | null = null
   let batchId = 0
   let streamScope: PanelStreamScope = "selection"
+  let maxEvents: number | undefined
   const flush = (operations: ReturnType<NonNullable<typeof runtime>["flush"]>) => {
     if (operations.length) send(parseWorkerMessage({ type: "batch", batchId: String(++batchId), operations }))
   }
@@ -28,6 +31,8 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
         if (!Array.isArray(input.capabilities) || input.capabilities.some((cap) => cap !== "ui" && cap !== "input")) throw new Error("unsupported capabilities")
         if (input.streamScope !== undefined && !PANEL_STREAM_SCOPES.includes(input.streamScope)) throw new Error("unsupported stream scope")
         streamScope = input.streamScope ?? "selection"
+        if (input.maxEvents !== undefined && (!Number.isSafeInteger(input.maxEvents) || input.maxEvents < 1)) throw new Error("invalid max_events")
+        maxEvents = input.maxEvents
         runtime = createGuideRuntime({ entrypoint: input.entrypoint, sources: input.sources,
           capabilities: input.capabilities, panelStreams: input.streams })
         const initial = runtime.start(); send({ type: "ready", protocolVersion: 1 }); flush(initial)
@@ -36,28 +41,29 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
         runtime.panelEvent(input.event); flush(runtime.flush())
       } else if (input.type === "damage-stream") {
         if (!runtime) throw new Error("panel not started")
-        if (!(input.data instanceof Uint8Array) || input.data.byteLength > 32_000_000 ||
-          !Array.isArray(input.encounterIds) || input.encounterIds.length > 1_000) throw new Error("invalid damage stream")
+        // No host-imposed data caps: panels see every event in scope. Only the manifest's optional max_events bounds a replay.
+        if (!(input.data instanceof Uint8Array) || !Array.isArray(input.encounterIds)) throw new Error("invalid damage stream")
         const selected = new Set(input.encounterIds)
         const cursor = new FastDamageCursor(input.data)
         let count = 0
-        let scanned = 0
-        let totalOperations = 0
         while (cursor.currentHeader) {
           if (!cursor.hasMoreInEncounter) { cursor.nextEncounter(); continue }
-          if (++scanned > 500_000) throw new Error("panel scan limit exceeded")
           const encounter = cursor.currentHeader.encounterID
           const event = cursor.next()
           const isSelected = selected.has(encounter)
           if (!event || (!isSelected && streamScope === "selection")) continue
-          if (++count > 50_000) throw new Error("panel event limit exceeded")
+          if (maxEvents !== undefined && count >= maxEvents) throw new Error(`panel exceeded its max_events (${maxEvents})`)
+          count++
           runtime.panelEvent({ stream: "damage", source: event.caster ?? "", target: event.target ?? "",
             amount: event.amount, offsetMs: event.offsetMilli, encounterId: encounter, selected: isSelected })
           if (count % 100 === 0) {
-            const batch = runtime.flush(); totalOperations += batch.length
-            if (totalOperations > 10_000) throw new Error("panel output limit exceeded")
+            // Bound each UI batch, not the whole replay, so long replays are never cut off for size alone.
+            const batch = runtime.flush()
+            if (batch.length > MAX_BATCH_OPERATIONS) throw new Error(`panel output limit exceeded (over ${MAX_BATCH_OPERATIONS} UI operations per 100 events)`)
             flush(batch)
           }
+          // Lets the host tell a long replay from a stalled one.
+          if (count % 1_000 === 0) send({ type: "progress", events: count })
         }
         runtime.panelComplete()
         flush(runtime.flush())

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { boundPreviewDamage, MAX_PREVIEW_SELECTED_BYTES, MAX_PREVIEW_STREAM_BYTES } from "./luaPreviewBounds"
+import { selectPreviewDamage } from "./luaPreviewBounds"
 
 function varint(value: number): number[] {
   const bytes: number[] = []
@@ -16,12 +16,12 @@ function concat(...parts: Uint8Array[]): Uint8Array {
   return result
 }
 
-describe("unsaved Lua preview encounter bounds", () => {
+describe("unsaved Lua preview encounter selection", () => {
   it("copies only selected frames, not unrelated instance encounters", () => {
     const a = frame("a", 1, new Uint8Array([3]))
     const b = frame("b", 2, new Uint8Array([4]))
     const source = concat(a, b)
-    const selected = boundPreviewDamage(source, ["b"])
+    const selected = selectPreviewDamage(source, ["b"])
     expect(selected).toEqual(b)
     source.fill(0)
     expect(selected).toEqual(b)
@@ -29,21 +29,18 @@ describe("unsaved Lua preview encounter bounds", () => {
   it("keeps every encounter for stream_scope instance, still requiring the selection", () => {
     const a = frame("a", 1, new Uint8Array([3]))
     const b = frame("b", 2, new Uint8Array([4]))
-    expect(boundPreviewDamage(concat(a, b), ["b"], "instance")).toEqual(concat(a, b))
-    expect(() => boundPreviewDamage(a, ["b"], "instance")).toThrow(/unavailable/)
-    expect(() => boundPreviewDamage(concat(frame("a", 30_000), frame("b", 30_000)), ["b"], "instance")).toThrow(/stream_scope "instance"/)
+    expect(selectPreviewDamage(concat(a, b), ["b"], "instance")).toEqual(concat(a, b))
+    expect(() => selectPreviewDamage(a, ["b"], "instance")).toThrow(/unavailable/)
   })
-  it("rejects missing, duplicate, excessive and malformed encounter data", () => {
-    expect(() => boundPreviewDamage(frame("a", 1), [])).toThrow(/Select/)
-    expect(() => boundPreviewDamage(frame("a", 1), ["a", "a"])).toThrow(/distinct/)
-    expect(() => boundPreviewDamage(frame("a", 1), ["a", "b", "c", "d"])).toThrow(/Select/)
-    expect(() => boundPreviewDamage(frame("a", 1), ["b"])).toThrow(/unavailable/)
-    expect(() => boundPreviewDamage(concat(frame("a", 1), frame("a", 1)), ["a"])).toThrow(/Duplicate/)
-    expect(() => boundPreviewDamage(frame("a", 50_001), ["a"])).toThrow(/limit/)
-    expect(() => boundPreviewDamage(new Uint8Array([1, 97, 1, 0, 5]), ["a"])).toThrow(/Invalid/)
+  it("passes large selections and event counts through without a host cap", () => {
+    const frames = ["a", "b", "c", "d", "e"].map(id => frame(id, 1_000_000, new Uint8Array(4)))
+    expect(selectPreviewDamage(concat(...frames), ["a", "b", "c", "d", "e"])).toEqual(concat(...frames))
   })
-  it("rejects oversized selected payloads and oversized provider input", () => {
-    expect(() => boundPreviewDamage(frame("a", 1, new Uint8Array(MAX_PREVIEW_SELECTED_BYTES)), ["a"])).toThrow(/limit/)
-    expect(() => boundPreviewDamage(new Uint8Array(MAX_PREVIEW_STREAM_BYTES + 1), ["a"])).toThrow(/input limit/)
+  it("rejects missing, duplicate and malformed encounter data", () => {
+    expect(() => selectPreviewDamage(frame("a", 1), [])).toThrow(/Select/)
+    expect(() => selectPreviewDamage(frame("a", 1), ["a", "a"])).toThrow(/Select/)
+    expect(() => selectPreviewDamage(frame("a", 1), ["b"])).toThrow(/unavailable/)
+    expect(() => selectPreviewDamage(concat(frame("a", 1), frame("a", 1)), ["a"])).toThrow(/Duplicate/)
+    expect(() => selectPreviewDamage(new Uint8Array([1, 97, 1, 0, 5]), ["a"])).toThrow(/Invalid/)
   })
 })

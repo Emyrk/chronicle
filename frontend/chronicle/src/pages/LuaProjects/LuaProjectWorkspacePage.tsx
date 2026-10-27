@@ -10,7 +10,6 @@ import { LuaBrowserTest } from "./LuaBrowserTest"
 import { panelPackageFromWorkingCopy, validateEditorFiles, type EditorFiles } from "./editorFiles"
 import { applyLuaFileEdit, LUA_EDITOR_CAPABILITY, parseLuaFileEdit, type LuaToolFile } from "./luaEditorTools"
 import { fetchPreviewDamage } from "./previewStream"
-import { MAX_PREVIEW_ENCOUNTERS } from "./luaPreviewBounds"
 import { runStartupCheck } from "./startupCheck"
 import type { LuaSourceProposal, LuaWorkingCopy } from "./LuaSourceEditor"
 
@@ -262,8 +261,7 @@ export default function LuaProjectWorkspacePage() {
             {localPanel?.error && <p role="alert" className="text-xs text-destructive">{localPanel.error}</p>}
             {!copy?.valid && copy && <p className="text-xs text-muted-foreground">Fix the source errors to enable previews.</p>}
             {instance.data && encounterIds.length === 0 && <p className="text-xs text-muted-foreground">Select an encounter to preview. Ctrl/⌘-click selects several.</p>}
-            {encounterIds.length > MAX_PREVIEW_ENCOUNTERS && <p role="alert" className="text-xs text-amber-300">The preview runs on up to {MAX_PREVIEW_ENCOUNTERS} encounters. Deselect {encounterIds.length - MAX_PREVIEW_ENCOUNTERS} to continue.</p>}
-            {instance.data && localPanel?.value && encounterIds.length > 0 && encounterIds.length <= MAX_PREVIEW_ENCOUNTERS && <Suspense fallback={<p role="status" className="text-xs">Loading local preview…</p>}>
+            {instance.data && localPanel?.value && encounterIds.length > 0 && <Suspense fallback={<p role="status" className="text-xs">Loading local preview…</p>}>
               <LuaInstancePreview panel={localPanel.value} instanceId={instanceId} encounterIds={encounterIds} events={events} />
             </Suspense>}
           </div>
