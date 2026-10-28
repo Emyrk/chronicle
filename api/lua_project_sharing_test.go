@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/gorilla/sessions"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -137,4 +138,33 @@ func TestLuaProjectPermissions(t *testing.T) {
 	require.Equal(t, http.StatusOK, code)
 	require.Equal(t, chroniclesdk.LuaProjectPermissions{View: true, Use: true}, removed.Permissions)
 	require.Equal(t, http.StatusForbidden, call(editor, http.MethodGet, contributors, "").Code)
+}
+
+// The real public routes must see the signed-in user; requests carry session claims, not a SpiceDB actor.
+func TestPublicLuaProjectRoutesSeeTheSignedInUser(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(testservices.Authz(t))
+	owner := uuid.New()
+	_, err := zed.InsertUser(ctx, database.InsertUserParams{ID: owner, Username: "owner-" + owner.String()[:4]})
+	require.NoError(t, err)
+	project, err := zed.CreateLuaProject(ctx, database.CreateLuaProjectParams{OwnerID: owner, Kind: "panel", Name: "Mine", Slug: "mine"})
+	require.NoError(t, err)
+
+	// Both requests take the production path: session middleware first, then the public routes.
+	auth := &chronauth.Service{Store: sessions.NewCookieStore([]byte("test-session-secret"))}
+	api := &API{Opts: &Options{Zed: zed, Logger: slog.Default()}, Auth: auth}
+	router := chi.NewRouter()
+	router.Use(auth.AuthenticationMiddleware)
+	router.Group(api.publicLuaProjectRoutes)
+	page := func(requestCtx context.Context) chroniclesdk.LuaProjectPermissions {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/lua-projects/"+project.ID.String()+"/page", nil).WithContext(requestCtx))
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		var out chroniclesdk.LuaProjectPage
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+		return out.Permissions
+	}
+	require.True(t, page(chronauth.WithClaims(ctx, &claims.Claims{Subject: owner})).Manage, "the owner must get the owner view")
+	require.False(t, page(ctx).Edit, "signed-out visitors still get the public view")
 }
