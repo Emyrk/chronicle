@@ -797,6 +797,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
           <Suspense fallback={<MapMessage title="Loading 3D view" detail="Fetching the 3D renderer…" />}>
             <MapView3D
               ground={ready.ground}
+              alignmentGround={ready.alignmentGround}
               markers={ready.markers}
               routePoints={ready.routePoints}
               projectSample={ready.projectSample}

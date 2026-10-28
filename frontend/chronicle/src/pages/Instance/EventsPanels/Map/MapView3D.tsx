@@ -25,7 +25,7 @@ import {
   type MapUnitRoles,
 } from "./MapScene3D";
 import { collectCastSpellIds, DEFAULT_EFFECT_OPTIONS, effectiveCastIconGuids, iconPreloadUrls, schoolNameColor, type EncounterEffects } from "./replayEffects";
-import type { MapViewRequest } from "./MapView2D";
+import { MapArtworkLayer, type MapViewRequest } from "./MapView2D";
 import type { MapSceneGround, MapSceneMarker } from "./useMapScene";
 import { DEFAULT_AD_STRAFE } from "./mapControls";
 import { DEFAULT_EFFECT_SETTINGS, type EffectSettings } from "./mapViewSettings";
@@ -35,6 +35,8 @@ import { MapCompass } from "./MapCompass";
 
 export interface MapView3DProps {
   ground: MapSceneGround;
+  /** Preferred 2D artwork to blend over the mesh for alignment debugging. */
+  alignmentGround?: MapSceneGround | null;
   markers: MapSceneMarker[];
   routePoints: MapPoint[];
   projectSample: (sample: MapPositionSample) => MapPoint | null;
@@ -164,6 +166,7 @@ function EffectTooltip({ hover }: { hover: MapScene3DEffectHover }) {
 
 export default function MapView3D({
   ground,
+  alignmentGround = null,
   markers,
   routePoints,
   projectSample,
@@ -221,6 +224,7 @@ export default function MapView3D({
     return cameraPoseAt(cameraPath, smoothMs - cameraPathStartMs);
   }, [cameraPath, cameraPathStartMs, cameraPose, smoothMs]);
   const effectSettings = effectSettingsProp ?? DEFAULT_EFFECT_SETTINGS;
+  const showAlignmentOverlay = effectSettings.alignmentOverlay && alignmentGround !== null;
   const showBars = effectSettings.bars;
   const [effectHover, setEffectHover] = useState<MapScene3DEffectHover | null>(null);
   const [compassYaw, setCompassYaw] = useState(0);
@@ -270,8 +274,8 @@ export default function MapView3D({
   }, [frozen, ground]);
 
   useEffect(() => {
-    sceneRef.current?.setAlignmentOverlay(effectSettings.alignmentOverlay);
-  }, [effectSettings.alignmentOverlay]);
+    sceneRef.current?.setAlignmentOverlay(showAlignmentOverlay);
+  }, [showAlignmentOverlay]);
 
   useEffect(() => {
     if (!frozen) sceneRef.current?.setRoute(routePoints);
@@ -541,6 +545,16 @@ export default function MapView3D({
   return (
     <div data-live-presence-surface={presenceSurface} className="relative h-full w-full">
       <div ref={containerRef} className="absolute inset-0" />
+      {showAlignmentOverlay && alignmentGround && (
+        <div className="pointer-events-none absolute inset-0 z-20 opacity-50" aria-hidden="true">
+          <div
+            className="relative mx-auto h-full max-w-full overflow-hidden"
+            style={{ aspectRatio: `${alignmentGround.canvas.width} / ${alignmentGround.canvas.height}` }}
+          >
+            <MapArtworkLayer ground={alignmentGround} viewport={view.viewport} />
+          </div>
+        </div>
+      )}
       <MapCompass northRadians={compassYaw} />
       {effectHover && <EffectTooltip hover={effectHover} />}
     </div>

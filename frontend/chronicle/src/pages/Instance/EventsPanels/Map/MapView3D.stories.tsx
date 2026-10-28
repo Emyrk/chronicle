@@ -1032,6 +1032,7 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
       {scene.status === "ready" ? (
         <MapView3D
           ground={scene.ground}
+          alignmentGround={scene.alignmentGround}
           markers={scene.markers}
           projectSample={scene.projectSample}
           cursorMs={scene.cursorMs}

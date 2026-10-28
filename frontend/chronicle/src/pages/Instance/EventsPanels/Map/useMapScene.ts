@@ -249,6 +249,8 @@ export type MapScene =
     encounterStartMs: number;
     encounterEndMs: number;
     ground: MapSceneGround;
+    /** The preferred 2D artwork retained while the active ground switches to mesh coordinates. */
+    alignmentGround: MapSceneGround | null;
     markers: MapSceneMarker[];
     /** The encounter's median player route projected onto the active 2D canvas. */
     routePoints: MapPoint[];
@@ -578,6 +580,9 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       canvas,
       overlays: artwork.kind === "zone" ? zoneSelection?.art.overlays : undefined,
     },
+    alignmentGround: artwork.kind === "instance" && availableFlatCanvas
+      ? { iconBaseUrl, canvas: availableFlatCanvas.canvas }
+      : null,
     markers,
     routePoints,
     debuffSpellIds: encounterDebuffSpellIds(encounter.debuffsByUnit),
