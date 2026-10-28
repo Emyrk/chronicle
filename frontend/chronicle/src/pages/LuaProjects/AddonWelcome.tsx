@@ -1,7 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from "react"
 import { Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { AtSign, Check, LogIn, Sparkles, Tag, TriangleAlert } from "lucide-react"
+import { AtSign, Check, Globe, LogIn, Sparkles, Tag, TriangleAlert } from "lucide-react"
 import { claimAuthor, suggestAuthor, urlNameInput } from "./api"
 import { button, card, errorMessage, primaryButton } from "./addonUi"
 
@@ -76,9 +76,11 @@ export function ClaimAuthorForm({ onClaimed }: { onClaimed: (name: string) => vo
         onChange={event => setTyped(urlNameInput(event.target.value))} placeholder={suggestion.isPending ? "Loading…" : "your-name"} minLength={2} maxLength={32} required /></label>
     <p className="break-all font-mono text-xs text-muted-foreground">/addons/<span className="text-foreground">{name || "your-name"}</span>/my-addon</p>
     {suggestion.data && typed === null && !confirming && <p className="text-xs text-muted-foreground">Suggested from your username. You can change it before you claim it.</p>}
+    <p className="flex gap-2 rounded-md border border-border bg-muted/30 p-2.5 text-xs text-muted-foreground"><Globe className="mt-0.5 size-3.5 shrink-0" />
+      <span>Becoming an addon author makes this name public. Anyone can see it on your addons and in their links, so pick one you are happy to share.</span></p>
     {confirming ? <div role="alert" className="space-y-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
       <p className="flex gap-2"><TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-500" />
-        <span>Claim <strong className="font-mono">{name}</strong> for good? Author names cannot be changed later, because your addon links use them.</span></p>
+        <span>Claim <strong className="font-mono">{name}</strong> for good? It will be public, and author names cannot be changed later, because your addon links use them.</span></p>
       <div className="flex flex-wrap gap-2">
         <button className={primaryButton} disabled={busy} type="submit">{busy ? "Claiming…" : `Yes, claim “${name}”`}</button>
         <button className={button} disabled={busy} type="button" onClick={() => setConfirming(false)}>Change it</button>

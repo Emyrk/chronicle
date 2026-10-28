@@ -6,11 +6,11 @@ import remarkGfm from "remark-gfm"
 import { ArrowLeft, BookOpen, Code2, Download, FileCode, FileImage, FileJson, FileText, Upload } from "lucide-react"
 import { addonPath, createRelease, deleteRelease, latestRelease, nextReleaseTag, uploadDraft } from "./api"
 import { AddonIcon } from "./AddonIcon"
-import { AddonReleases } from "./AddonReleases"
+import { AddonReleases, VersionPicker } from "./AddonReleases"
 import { AddonAiUsage, AddonContributors } from "./AddonTeam"
 import { useAddonPage } from "./addonRoute"
 import { card, errorMessage, kindLabel, smallButton } from "./addonUi"
-import { browsableRefs, defaultRef, formatBytes, isImagePath, MAIN_REF, manifestSummary, packageDownloadURL, packageSha, readPackageFiles, shortSha, type PackageFile, type PackageRef } from "./packageFiles"
+import { defaultRef, formatBytes, isImagePath, MAIN_REF, manifestSummary, packageDownloadURL, packageSha, readPackageFiles, shortSha, type PackageFile, type PackageRef } from "./packageFiles"
 
 const formatDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
 const prose = "prose prose-sm dark:prose-invert max-w-none prose-a:text-primary prose-pre:bg-muted/60 prose-pre:text-foreground prose-code:font-normal prose-code:before:content-none prose-code:after:content-none [&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-muted [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:py-0.5"
@@ -118,7 +118,6 @@ export function LuaProjectPage() {
   if (!project || !can) return <main className="container mx-auto px-4 py-10"><Link to="/addons">← Addons</Link><p role="alert" className="mt-4">{pageQuery.error ? errorMessage(pageQuery.error) : "Addon not found."}</p></main>
 
   const latest = latestRelease(project)
-  const refs = browsableRefs(project)
   const refIcon = ref === MAIN_REF ? project.main?.icon : project.releases.find(release => release.tag === ref)?.icon
   const workshop = addonPath(project, "/edit")
   const canTag = can.release && !!project.main && latest?.sha256 !== project.main.sha256
@@ -151,10 +150,7 @@ export function LuaProjectPage() {
           : "This addon has not been published yet."}</div> : <>
           <section aria-label="Files" className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
             <div className="flex flex-wrap items-center gap-3 border-b border-border bg-muted/30 px-4 py-2">
-              <div role="tablist" aria-label="Build" className="flex flex-wrap rounded-md border border-border bg-background p-0.5">
-                {refs.map(option => <button key={option} type="button" role="tab" aria-selected={ref === option} onClick={() => show({ ref: option })}
-                  className={`rounded px-2.5 py-1 font-mono text-xs font-medium ${ref === option ? "bg-primary/20 text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{option}</button>)}
-              </div>
+              <VersionPicker project={project} latest={latest} viewing={ref} onView={next => show({ ref: next })} />
               <span className="font-mono text-xs text-muted-foreground" title={sha}>{shortSha(sha)}</span>
               {files && <span className="text-xs text-muted-foreground">{files.length} {files.length === 1 ? "file" : "files"}</span>}
               <a className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" href={packageDownloadURL(project, sha)} download={`${project.slug}-${shortSha(sha)}.zip`}><Download className="size-3.5" /> Download</a>

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
-import { Tag, Trash2 } from "lucide-react"
+import { Check, ChevronDown, GitCommitHorizontal, Tag, Trash2 } from "lucide-react"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/DropdownMenu/DropdownMenu"
 import type { LuaProject, LuaRelease } from "./api"
 import { smallButton } from "./addonUi"
 import { MAIN_REF, shortSha, timeAgo, type PackageRef } from "./packageFiles"
@@ -78,4 +79,36 @@ function Entry({ dot, last, children }: { dot: string; last: boolean; children: 
 function ViewLink({ active, onClick }: { active: boolean; onClick: () => void }) {
   return active ? <span className="text-xs font-medium text-primary">Viewing files</span> :
     <button type="button" className="text-xs text-primary underline-offset-2 hover:underline" onClick={onClick}>View files</button>
+}
+
+const latestBadge = <span className="rounded-full border border-emerald-400/40 bg-emerald-400/10 px-1.5 text-[10px] font-medium uppercase tracking-wide text-emerald-300">Latest</span>
+
+/** Picks which build's files to show: the latest release by default, older releases and main from the menu. */
+export function VersionPicker({ project, latest, viewing, onView }: Pick<Props, "project" | "latest" | "onView"> & { viewing: PackageRef }) {
+  const main = project.main
+  const item = (ref: PackageRef, label: ReactNode, detail: string, disabled = false) =>
+    <DropdownMenuItem key={ref} disabled={disabled} onSelect={() => onView(ref)} className="flex items-center gap-2">
+      <Check className={`size-3.5 shrink-0 ${viewing === ref ? "" : "invisible"}`} />
+      <span className="flex min-w-0 flex-1 items-center gap-2">{label}</span>
+      <span className="shrink-0 text-xs text-muted-foreground">{detail}</span>
+    </DropdownMenuItem>
+  return <DropdownMenu>
+    <DropdownMenuTrigger className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1 text-xs hover:bg-accent" aria-label="Version">
+      {viewing === MAIN_REF ? <GitCommitHorizontal className="size-3.5 text-muted-foreground" /> : <Tag className="size-3.5 text-muted-foreground" />}
+      <span className="font-mono font-semibold">{viewing}</span>
+      {viewing === latest?.tag && latestBadge}
+      <ChevronDown className="size-3.5 text-muted-foreground" />
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="start" className="w-72">
+      <DropdownMenuLabel className="text-xs text-muted-foreground">Releases</DropdownMenuLabel>
+      {project.releases.map(release => item(release.tag,
+        <><span className="truncate font-mono">{release.tag}</span>{release === latest && latestBadge}</>,
+        release.available ? timeAgo(release.published_at) : "files removed", !release.available))}
+      {!project.releases.length && <p className="px-2 py-1.5 text-xs text-muted-foreground">Nothing released yet.</p>}
+      {main && <>
+        <DropdownMenuSeparator />
+        {item(MAIN_REF, <span className="font-mono">main</span>, latest?.sha256 === main.sha256 ? `same as ${latest.tag}` : "unreleased changes")}
+      </>}
+    </DropdownMenuContent>
+  </DropdownMenu>
 }

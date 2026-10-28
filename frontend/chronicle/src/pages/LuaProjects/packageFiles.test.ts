@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { strToU8, zipSync } from "fflate"
-import { browsableRefs, defaultRef, formatBytes, timeAgo, manifestSummary, packageDownloadURL, packageSha, readPackageFiles } from "./packageFiles"
+import { defaultRef, formatBytes, timeAgo, manifestSummary, packageDownloadURL, packageSha, readPackageFiles } from "./packageFiles"
 
 const release = (tag: string, available = true) => ({ tag, available, ...(available && { sha256: tag + "-sha" }), published_at: "2026-10-01T00:00:00Z" })
 
@@ -22,7 +22,6 @@ describe("package files", () => {
     expect(defaultRef({ releases: [release("v2", false), release("v1")], main })).toBe("v1")
     expect(defaultRef({ releases: [release("v1", false)], main })).toBe("main")
     expect(defaultRef({ releases: [], main: undefined })).toBeNull()
-    expect(browsableRefs({ releases: [release("v3"), release("v2", false), release("v1")], main })).toEqual(["main", "v3", "v1"])
     expect(packageSha({ releases: [release("v2", false)], main }, "v2")).toBeNull()
     expect(packageSha({ releases: [], main }, "main")).toBe("m")
   })

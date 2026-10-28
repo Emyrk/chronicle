@@ -19,11 +19,6 @@ export function defaultRef(project: Pick<LuaProject, "releases" | "main">): Pack
   return latestRelease(project)?.tag ?? (project.main ? MAIN_REF : null)
 }
 
-/** Every build that can be browsed: main, then releases that still have files. */
-export function browsableRefs(project: Pick<LuaProject, "releases" | "main">): PackageRef[] {
-  return [...(project.main ? [MAIN_REF] : []), ...project.releases.filter(release => release.available).map(release => release.tag)]
-}
-
 /** Main and releases are both served by hash to anyone who can view the addon. */
 export function packageDownloadURL(project: Pick<LuaProject, "id">, sha: string): string {
   return publicPackageURL(project.id, sha)
