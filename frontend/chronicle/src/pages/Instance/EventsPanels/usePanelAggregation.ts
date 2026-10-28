@@ -394,7 +394,7 @@ export function usePanelAggregation<TResult>(
       };
 
       const workerStartMs = performance.now();
-      const response = await executeRequest(workerRequest);
+      const response = await executeRequest(workerRequest, panelContext.instance.id);
       const workerRoundTripMs = performance.now() - workerStartMs;
 
       // Ignore stale responses
