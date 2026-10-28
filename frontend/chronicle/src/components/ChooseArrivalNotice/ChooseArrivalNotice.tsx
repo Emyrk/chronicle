@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 import { useSiteConfig } from "@/api/queries";
 import { ARRIVAL_PARAM, chooserURL, parseArrival, type ChooseArrival } from "./chooseArrival";
 
-const AUTO_HIDE_MS = 15_000;
+const AUTO_HIDE_MS = 6_000;
 
 const HEADINGS: Record<ChooseArrival, string> = {
   saved: "Taken here because of your saved choice",
@@ -53,12 +53,6 @@ export function ChooseArrivalNotice() {
     );
   }, [searchParams, setSearchParams]);
 
-  useEffect(() => {
-    if (!visible || paused) return;
-    const timer = setTimeout(() => setVisible(false), AUTO_HIDE_MS);
-    return () => clearTimeout(timer);
-  }, [visible, paused]);
-
   const chooseOrigin = siteConfig?.choose_url;
   if (!visible || !arrival || !siteConfig || !chooseOrigin) return null;
 
@@ -76,7 +70,7 @@ export function ChooseArrivalNotice() {
       <div
         ref={cardRef}
         role="status"
-        className="pointer-events-auto w-full max-w-md rounded-xl border border-border bg-card/95 p-4 shadow-2xl backdrop-blur animate-choose-drop"
+        className="pointer-events-auto relative w-full max-w-md overflow-hidden rounded-xl border border-border bg-card/95 p-4 shadow-2xl backdrop-blur animate-choose-drop"
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
         onFocus={() => setPaused(true)}
@@ -127,6 +121,18 @@ export function ChooseArrivalNotice() {
           >
             <X className="h-4 w-4" />
           </button>
+        </div>
+        {/* The countdown bar drives auto-hide, so pausing it on hover/focus
+            keeps the visual and the timer in sync. */}
+        <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-1 bg-border/60">
+          <div
+            className="animate-choose-countdown h-full origin-left bg-primary"
+            style={{
+              animationDuration: `${AUTO_HIDE_MS}ms`,
+              animationPlayState: paused ? "paused" : "running",
+            }}
+            onAnimationEnd={() => setVisible(false)}
+          />
         </div>
       </div>
     </div>
