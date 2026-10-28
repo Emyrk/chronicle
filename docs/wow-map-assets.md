@@ -164,6 +164,8 @@ The exporter's liquid planes (`liquid_*` nodes) are plain translucent blue. Wher
 
 Meshes are produced outside this repository by the `rendered-maps` pipeline (`render_set.py <slug> glb --glb`), which writes `<slug>-open-top.glb` (the WMO with ceilings culled, Blizzard textures embedded, glTF Y-up, centred) and `height.json` beside it. The frontend zeroes the GLB's centring node translations, so the file is used as exported.
 
+A mesh may be published meshopt-compressed (the loader registers the decoder). Ruins of Lordaeron's is `gltfpack -cc -kn -km -vp 16` (15.6 → 6.1 MB, WebP textures unchanged). Keep `-kn`: it preserves the `liquid_*` node names and puts the dequantization transform on child mesh nodes, so zeroing the named nodes' translations still leaves raw WoW positions. Decode both files and compare floor probes before swapping the path; the bounds stay those of the source GLB.
+
 `height.json` records the full model's extent as `bounds_wow.min`/`max` triples in the pipeline's own frame, which negates both horizontal world axes. Convert it to the manifest entry as:
 
 | Manifest field | From `height.json`     |

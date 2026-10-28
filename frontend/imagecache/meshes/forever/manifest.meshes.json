@@ -40,7 +40,7 @@
       "mapID": 2999,
       "name": "Ruins of Lordaeron",
       "mesh": {
-        "path": "3d/ruins-of-lordaeron-open-top.glb",
+        "path": "3d/2999-6d5be0c422265317-ruins-of-lordaeron-open-top-meshopt.glb",
         "bounds": {
           "minX": 1333.3337,
           "maxX": 1900.0,
