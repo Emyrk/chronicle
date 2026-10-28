@@ -26,7 +26,7 @@ import { useTenantGate } from "./TenantGate";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import { InstanceAssistantChat } from "@/features/chat/InferenceChats";
 import { AdSuppressionProvider } from "@/components/Ads/AdSuppressionProvider";
-import { AdSlot } from "@/components/Ads/AdSlot";
+import { AdRailStack } from "@/components/Ads/AdRailStack";
 import { shouldShowAdPreview } from "@/components/Ads/adPreview";
 import { useAdSiteConfig } from "@/components/Ads/useAdSiteConfig";
 import { getReplayResetTimestamp, type SelectedEncounterTimes } from "./replaySelection";
@@ -574,21 +574,11 @@ export function InstancePage() {
                 />
               </div>
               {showAdRail && (
-                <div className="hidden w-40 shrink-0 self-start 2xl:sticky 2xl:top-20 2xl:block">
-                  <AdSlot
-                    placement="instance-right-rail"
-                    format="rail"
-                    railLayout="compact"
-                    className="2xl:static"
-                  />
-                  <AdSlot
-                    placement="instance-right-rail-lower"
-                    format="rail"
-                    railLayout="compact"
-                    minViewportHeight={1360}
-                    className="mt-6 2xl:static"
-                  />
-                </div>
+                <AdRailStack
+                  primaryPlacement="instance-right-rail"
+                  secondaryPlacement="instance-right-rail-lower"
+                  railLayout="compact"
+                />
               )}
             </div>
             <InstanceAssistantChat key={instance.id} instanceId={instance.id} instanceName={instance.name} />

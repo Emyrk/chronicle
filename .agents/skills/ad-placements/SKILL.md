@@ -30,6 +30,19 @@ Wide-screen rail:
 <AdSlot placement="leaderboards-right-rail" format="rail" />
 ```
 
+Tall-screen stacked rail:
+
+```tsx
+import { AdRailStack } from "@/components/Ads/AdRailStack"
+
+<AdRailStack
+  primaryPlacement="leaderboards-right-rail"
+  secondaryPlacement="leaderboards-right-rail-lower"
+/>
+```
+
+`AdRailStack` keeps both units in one sticky column and mounts the lower placement only when the viewport is at least 1360px tall. Use it instead of rendering two sticky `AdSlot` siblings, which would overlap while scrolling.
+
 Use `railLayout="paired"` when a page renders rails on both sides. Single rails reserve 300px at 1920px; paired rails wait until 2080px so the page can reserve 300px on both sides without reducing the primary content width. Pages whose primary content is no wider than 72rem may use `railLayout="paired-wide"` to reserve 300px on both sides at 1840px. Use `railLayout="compact"` for a rail that must remain fixed at 160×600 at every eligible viewport width.
 
 Fixed-width content sidebar:
@@ -101,17 +114,17 @@ Add a new format only when neither existing format can represent the required di
 |---|---|---|
 | `instance-right-rail` | `pages/Instance/InstancePage.tsx` | Upper instance-detail rail outside focus mode; fixed 160×600 and visible at `2xl`; suppressed when the upload owner is ad-free |
 | `instance-right-rail-lower` | `pages/Instance/InstancePage.tsx` | Lower instance-detail rail; fixed 160×600 and mounted only at `2xl` with at least 1360px viewport height; suppressed when the upload owner is ad-free |
-| `leaderboards-right-rail` | `pages/Leaderboards/LeaderboardsPage.tsx` | Leaderboard landing and detail layouts; visible at `2xl` |
+| `leaderboards-right-rail`, `leaderboards-right-rail-lower` | `pages/Leaderboards/LeaderboardsPage.tsx` | Leaderboard landing and detail layouts; upper visible at `2xl`, lower also requires at least 1360px viewport height |
 | `statistics-encounter-sidebar` | `pages/Rankings/InstanceView.tsx` | Non-mobile statistics detail with any non-empty encounter list; fixed 250px width and scrolls below the encounters |
-| `recent-right-rail` | `pages/Recent/RecentRaids.tsx` | Recent uploads; visible at `2xl` |
-| `recent-left-rail` | `pages/Recent/RecentRaids.tsx` | Recent uploads; visible with the right rail at 1800px and wider |
+| `recent-right-rail`, `recent-right-rail-lower` | `pages/Recent/RecentRaids.tsx` | Recent uploads; upper visible at `2xl`, lower also requires at least 1360px viewport height |
+| `recent-left-rail`, `recent-left-rail-lower` | `pages/Recent/RecentRaids.tsx` | Recent uploads; upper visible with the right rail at 1800px and wider, lower also requires at least 1360px viewport height |
 | `recent-grid-card-*` | `pages/Recent/RecentRaids.tsx` | Recent uploads; 300×100 on mobile and 300×250 on desktop, inserted after pseudo-random groups of 4 to 8 raids |
-| `census-left-rail` | `pages/Census/CensusPage.tsx` | Census statistics; paired left rail visible at `2xl` |
-| `census-right-rail` | `pages/Census/CensusPage.tsx` | Census statistics; paired right rail visible at `2xl` |
-| `armory-left-rail` | `pages/ArmoryPage/ArmoryPage.tsx` | Character armory outside Activity; joins the right rail at `2xl`, widening at 1840px; suppressed when the linked account is ad-free |
-| `armory-right-rail` | `pages/ArmoryPage/ArmoryPage.tsx` | Character armory outside Activity; single rail from `xl`, paired at `2xl`, widening at 1840px; suppressed when the linked account is ad-free |
-| `armory-search-left-rail` | `pages/ArmorySearch/ArmorySearchPage.tsx` | Armory character and guild search; joins the right rail at `2xl`, widening at 1840px |
-| `armory-search-right-rail` | `pages/ArmorySearch/ArmorySearchPage.tsx` | Armory character and guild search; single rail from `xl`, paired at `2xl`, widening at 1840px |
+| `census-left-rail`, `census-left-rail-lower` | `pages/Census/CensusPage.tsx` | Census statistics; paired left rail visible at `2xl`, lower also requires at least 1360px viewport height |
+| `census-right-rail`, `census-right-rail-lower` | `pages/Census/CensusPage.tsx` | Census statistics; paired right rail visible at `2xl`, lower also requires at least 1360px viewport height |
+| `armory-left-rail`, `armory-left-rail-lower` | `pages/ArmoryPage/ArmoryPage.tsx` | Character armory outside Activity; joins the right rail at `2xl`, widening at 1840px; lower also requires at least 1360px viewport height; suppressed when the linked account is ad-free |
+| `armory-right-rail`, `armory-right-rail-lower` | `pages/ArmoryPage/ArmoryPage.tsx` | Character armory outside Activity; single rail from `xl`, paired at `2xl`, widening at 1840px; lower also requires at least 1360px viewport height; suppressed when the linked account is ad-free |
+| `armory-search-left-rail`, `armory-search-left-rail-lower` | `pages/ArmorySearch/ArmorySearchPage.tsx` | Armory character and guild search; joins the right rail at `2xl`, widening at 1840px; lower also requires at least 1360px viewport height |
+| `armory-search-right-rail`, `armory-search-right-rail-lower` | `pages/ArmorySearch/ArmorySearchPage.tsx` | Armory character and guild search; single rail from `xl`, paired at `2xl`, widening at 1840px; lower also requires at least 1360px viewport height |
 | `armory-search-empty` | `pages/ArmorySearch/ArmorySearchPage.tsx` | Centered adaptive placement on the Characters tab before a valid search value is entered; 300×100 on mobile and responsive sizes through 970×250 from `lg` |
 
 ## Enablement model
