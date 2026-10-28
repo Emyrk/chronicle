@@ -25,11 +25,11 @@ func DefaultClientPath(server string) string {
 	case "ascension":
 		return "/home/steven/Games/ascension-wow/drive_c/Program Files/Ascension Launcher/resources/ascension-live"
 	case "vanillaplus":
-		return "/home/steven/Games/World of Warcraft Vanilla+"
+		return "/mnt/windows-z/ChronicleGames/World of Warcraft Vanilla+"
 	case "octowow":
 		return "/home/steven/Games/OctoWoW"
 	case "lunatic":
-		return "/home/steven/Games/LunaticPTR"
+		return "/mnt/windows-z/ChronicleGames/LunaticPTR"
 	case "tbc":
 		return "/home/steven/Games/World of Warcraft 2.4.3"
 	case "forever":
