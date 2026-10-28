@@ -6,11 +6,17 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { useAuthorizationCheck, useSession } from "@/api/queries"
 import { LuaProjectsPage } from "./LuaProjectsPage"
 import { NewAddonForm } from "./NewAddonForm"
+import type { LuaProject } from "./api"
 
 vi.mock("@/api/queries", () => ({ useAuthorizationCheck: vi.fn(), useSession: vi.fn() }))
 
-function render(element: ReactElement) {
-  return renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}><MemoryRouter>{element}</MemoryRouter></QueryClientProvider>)
+function render(element: ReactElement, client = new QueryClient()) {
+  return renderToStaticMarkup(<QueryClientProvider client={client}><MemoryRouter>{element}</MemoryRouter></QueryClientProvider>)
+}
+
+function addon(name: string, stars: number, publishedAt: string): LuaProject {
+  return { id: name, owner_id: "o", kind: "panel", name, slug: name, revision: 1, author: "someone", stars, starred: false, created_at: publishedAt, updated_at: publishedAt,
+    releases: [{ tag: "v1", available: true, sha256: "x", published_at: publishedAt }] }
 }
 
 describe("addons home", () => {
@@ -21,6 +27,18 @@ describe("addons home", () => {
     expect(html).toContain("Sign in to get started.")
     expect(html).toContain("Browse addons")
     expect(html).not.toContain("My addons")
+  })
+
+  it("shows released addons as a gallery in the server's most-tracked order", () => {
+    vi.mocked(useSession).mockReturnValue({ data: null, isLoading: false } as ReturnType<typeof useSession>)
+    const client = new QueryClient()
+    client.setQueryData(["public-addons"], [addon("Big Pumper", 42, "2026-01-01T00:00:00Z"), addon("Fresh Panel", 1, "2026-10-01T00:00:00Z")])
+    const html = render(<LuaProjectsPage />, client)
+    expect(html.indexOf("Big Pumper")).toBeLessThan(html.indexOf("Fresh Panel"))
+    expect(html).toContain('aria-checked="true"')
+    expect(html).toContain(">Popular</button>")
+    expect(html).toContain("42 people track this addon")
+    expect(html).toContain("by someone")
   })
 })
 

@@ -697,7 +697,7 @@ type sqlcQuerier interface {
 	// requests and characters removed from the armory still render without them.
 	ListProofSubjectClasses(ctx context.Context, requestID uuid.UUID) ([]ListProofSubjectClassesRow, error)
 	ListProofSubjects(ctx context.Context, requestID uuid.UUID) ([]ProofRequestSubject, error)
-	// Addons with a release people can still run, newest release first.
+	// Addons with a release people can still run, most tracked first, then newest release.
 	ListPublicLuaProjects(ctx context.Context) ([]LuaProject, error)
 	ListRaidCompositionsByUser(ctx context.Context, arg ListRaidCompositionsByUserParams) ([]RaidComposition, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
