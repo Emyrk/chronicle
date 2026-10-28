@@ -36,17 +36,11 @@ The build also writes `dist/sitemap.xml`; `public/robots.txt` advertises it to c
 
 Deployed to GitHub Pages via `.github/workflows/deploy-landing.yml` on push to `main`.
 
-### NitroPay and ads.txt
+### NitroPay ads.txt
 
-The landing site loads NitroPay and renders its home-page placement when a public site ID is configured:
+The landing site does not load NitroPay or render ad placements. The deployment workflow still reads the `NITROPAY_SITE_ID` GitHub Actions variable, downloads NitroPay's current managed ads.txt file, and publishes it as `https://chronicleclassic.com/ads.txt`. If the variable is unset, the build does not contain ads.txt.
 
-```bash
-CHRONICLE_NITROPAY_SITE_ID=12345 pnpm build
-```
-
-The deployment workflow reads the `NITROPAY_SITE_ID` GitHub Actions variable, downloads NitroPay's current managed ads.txt file, and publishes it as `https://chronicleclassic.com/ads.txt`. If the variable is unset, the build contains neither NitroPay nor ads.txt.
-
-Official Chronicle instances can share that authorization and enable NitroPay for tenants whose **Enable Ads** toggle is on:
+Official Chronicle instances can use that authorization and enable NitroPay for tenants whose **Enable Ads** toggle is on:
 
 ```bash
 CHRONICLE_NITROPAY_SITE_ID=12345
