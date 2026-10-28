@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_INSTANCE_PANEL_OPTIONS, defaultInstanceLayout } from "./viewDefaults";
+import { DEFAULT_INSTANCE_PANEL_OPTIONS } from "./viewDefaults";
 import {
+  arrangeWatchPresetForFocus,
   DEFAULT_PRESET_ID,
+  defaultInstanceLayout,
   getAvailablePresetLayouts,
   isPanelPresetLayout,
   mapPresetRowsForViewport,
   resizeMapPresetForViewport,
   resizePresetForViewport,
   resizeWatchPresetForViewport,
+  watchDirectorRows,
   watchPresetSideRows,
   withoutOwnerSidekickStrip,
   PRESET_LAYOUTS,
@@ -181,12 +184,11 @@ describe("Summary mini map", () => {
     expect(getAvailablePresetLayouts([]).find((preset) => preset.id === "summary")).toBe(PRESET_LAYOUTS_BY_ID.summary);
   });
 
-  it("is the built-in default layout for logs with positions", () => {
-    const withPositions = defaultInstanceLayout(["unit-position"]);
-    expect(withPositions.items.some((item) => withPositions.panelTypes[item.id] === "mini_map")).toBe(true);
-
+  it("is the built-in default only for logs without positions", () => {
     const without = defaultInstanceLayout([]);
+    expect(without.presetId).toBe(DEFAULT_PRESET_ID);
     expect(without.items.some((item) => without.panelTypes[item.id] === "mini_map")).toBe(false);
+    expect(defaultInstanceLayout(["unit-position"]).presetId).toBe("watch");
   });
 });
 
@@ -202,7 +204,7 @@ describe("Watch preset", () => {
     expect(PRESET_LAYOUTS[0].label).toBe("Watch");
     expect(getAvailablePresetLayouts([]).map((preset) => preset.id)).not.toContain("watch");
     expect(getAvailablePresetLayouts(["unit-position"])[0].id).toBe("watch");
-    // The default tab is still Summary; the default rule is its own change.
+    // Summary stays the fallback; Watch is the default only where it is offered.
     expect(DEFAULT_PRESET_ID).toBe("summary");
   });
 
@@ -286,6 +288,62 @@ describe("Watch preset", () => {
     if (!isPanelPresetLayout(summary)) throw new Error("Summary should be a panels preset");
     expect(resizePresetForViewport("summary", summary.layoutItems, 720)).toBe(summary.layoutItems);
     expect(resizePresetForViewport(null, watch, 720)).toBe(watch);
+  });
+
+  it("is the built-in default for logs with positions on desktop", () => {
+    const layout = defaultInstanceLayout(["unit-position"]);
+    expect(layout.presetId).toBe("watch");
+    expect(layout.items).toBe(watchPreset().layoutItems);
+    expect(layout.panelTypes).toBe(watchPreset().panelTypes);
+    expect(layout.panelOptions).toBe(watchPreset().panelOptions);
+    expect(layout.panelFilters).toBe(watchPreset().panelFilters);
+    expect(layout.appearance).toEqual({ seamless: true, fit: true });
+    // Phones keep the plain Summary grid.
+    expect(defaultInstanceLayout(["unit-position"], true).presetId).toBe(DEFAULT_PRESET_ID);
+  });
+
+  it("opens on a ?preset= the log offers, and ignores one it doesn't", () => {
+    expect(defaultInstanceLayout(["unit-position"], false, "damage")).toMatchObject({
+      presetId: "damage",
+      items: (PRESET_LAYOUTS_BY_ID.damage as { layoutItems: unknown }).layoutItems,
+    });
+    expect(defaultInstanceLayout(["unit-position"], false, "watch").presetId).toBe("watch");
+    // Summary asked for by name is the Summary tab (mini map for position logs).
+    const summary = defaultInstanceLayout(["unit-position"], false, "summary");
+    expect(summary.presetId).toBe("summary");
+    expect(Object.values(summary.panelTypes)).toContain("mini_map");
+    expect(defaultInstanceLayout([], false, "watch").presetId).toBe(DEFAULT_PRESET_ID);
+    expect(defaultInstanceLayout(["unit-position"], false, "nope").presetId).toBe("watch");
+  });
+
+  it.each([720, 900, 1080, 1440])("arranges the Director stage in focus mode on a %ipx-tall viewport", (viewportHeight) => {
+    const watch = watchPreset().layoutItems;
+    const director = resizePresetForViewport("watch", watch, viewportHeight, true);
+    expect(director).toEqual(arrangeWatchPresetForFocus(watch, viewportHeight));
+    const rows = watchDirectorRows(viewportHeight);
+    const byId = Object.fromEntries(director.map((item) => [item.id, item]));
+    expect(byId["panel-1"]).toMatchObject({ x: 0, y: 0, w: 12, h: rows.map });
+    expect(byId["strip-1"]).toMatchObject({ x: 0, y: rows.map, w: 9, h: 1 });
+    expect(byId["strip-2"]).toMatchObject({ x: 9, y: rows.map, w: 3, h: 1 });
+    expect([byId["panel-2"], byId["panel-3"], byId["panel-4"]].map((item) => [item.x, item.y, item.w, item.h])).toEqual([
+      [0, rows.map + 1, 4, rows.row], [4, rows.map + 1, 4, rows.row], [8, rows.map + 1, 4, rows.row],
+    ]);
+    // Every row keeps fit's 96px minimum inside the focus-mode viewport.
+    expect(72 + 96 * (rows.map + 1 + rows.row)).toBeLessThanOrEqual(viewportHeight);
+    expect(rows.map).toBeGreaterThan(rows.row);
+    // Same items, so the panels stay mounted.
+    expect(director.map((item) => item.id)).toEqual(watch.map((item) => item.id));
+  });
+
+  it("uses the full Director grid (map 6 over a row of 3) on tall screens; other presets ignore focus", () => {
+    expect(watchDirectorRows(1080)).toEqual({ map: 6, row: 3 });
+    // The owner's Watch has no Sidekick strip: the replay strip takes the full row.
+    const owner = resizePresetForViewport("watch", withoutOwnerSidekickStrip("watch", watchPreset().layoutItems, true), 1080, true);
+    expect(owner.find((item) => item.id === "strip-2")).toBeUndefined();
+    expect(owner.find((item) => item.id === "strip-1")).toMatchObject({ x: 0, y: 6, w: 12, h: 1 });
+    const map = PRESET_LAYOUTS_BY_ID.map;
+    if (!isPanelPresetLayout(map)) throw new Error("Map should be a panels preset");
+    expect(resizePresetForViewport("map", map.layoutItems, 720, true)).toEqual(resizeMapPresetForViewport(map.layoutItems, 720));
   });
 
   it("leaves the other presets where they were", () => {

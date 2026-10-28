@@ -102,9 +102,9 @@ import { parsePanelLayout, readLayoutAppearance, type LayoutAppearance, type Lay
 import {
   ALTERNATE_INSTANCE_LAYOUT_ITEMS,
   DEFAULT_INSTANCE_PANEL_FILTERS,
-  defaultInstanceLayout,
 } from "./viewDefaults";
 import {
+  defaultInstanceLayout,
   getAvailablePresetLayouts,
   isPanelPresetLayout,
   presetLayoutById,
@@ -1605,8 +1605,8 @@ function EncounterDetail({
   const isLogOwner = useSidekickStripViewer(instance.logOwner) === "owner";
   const visibleLayoutItems = useMemo(() => {
     const items = withoutOwnerSidekickStrip(activePresetId, layoutItems, isLogOwner);
-    return isMobile ? items : resizePresetForViewport(activePresetId, items, viewportHeight);
-  }, [activePresetId, isLogOwner, isMobile, layoutItems, viewportHeight]);
+    return isMobile ? items : resizePresetForViewport(activePresetId, items, viewportHeight, focused);
+  }, [activePresetId, focused, isLogOwner, isMobile, layoutItems, viewportHeight]);
   // Active tab and collapsible state
   const [activeTab, setActiveTab] = useState<'enemies' | 'players'>('enemies');
   const [isEntityPanelOpen, setIsEntityPanelOpen] = useState(false);
@@ -2150,7 +2150,7 @@ function EncounterDetail({
       </>)}
 
       {/* Preset layout tabs */}
-      <div className={cn("flex shrink-0 gap-1 overflow-x-auto pb-1 pt-1 styled-scrollbar", focused ? "mb-2" : "mb-3")}>
+      <div className={cn("flex shrink-0 gap-1 pb-1 pt-1", focused ? "mb-2" : "mb-3")}>
         {focused && onShowSidebar && (
           <button
             type="button"
@@ -2162,23 +2162,26 @@ function EncounterDetail({
             <span className="sr-only">Show sidebar</span>
           </button>
         )}
-        {availablePresetLayouts.map((preset) => (
-          <button
-            key={preset.id}
-            type="button"
-            onClick={() => onPresetChange(preset.id)}
-            disabled={Boolean(layoutEditor)}
-            title={layoutEditor ? "Finish editing the layout to switch presets" : undefined}
-            className={cn(
-              "px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors disabled:pointer-events-none disabled:opacity-50",
-              activePresetId === preset.id
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted",
-            )}
-          >
-            {preset.label}
-          </button>
-        ))}
+        {/* The tabs scroll on their own so the actions on the right stay in view. */}
+        <div className="flex min-w-0 gap-1 overflow-x-auto styled-scrollbar">
+          {availablePresetLayouts.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => onPresetChange(preset.id)}
+              disabled={Boolean(layoutEditor)}
+              title={layoutEditor ? "Finish editing the layout to switch presets" : undefined}
+              className={cn(
+                "px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors disabled:pointer-events-none disabled:opacity-50",
+                activePresetId === preset.id
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted",
+              )}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
         {pageType && <PageModeIndicator presets={availablePresetLayouts} onPresetChange={onPresetChange} />}
         {!isMobile && (
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
@@ -2522,8 +2525,16 @@ function InstancePageViewContent({
   useAutoJoinLiveSession(instance.id, showLiveSessionControls);
   const createShare = useCreateShare();
   const instanceDefaults = useInstanceDefaultsCache(isLoggedIn);
+  // A `?preset=` deep link picks the preset to open on. Read once: switching tabs later doesn't fight it.
+  const [requestedPresetId] = useState(() => searchParams.get("preset"));
+  const builtInDefaultLayout = useMemo(
+    () => defaultInstanceLayout(instance.capabilities ?? [], isMobile, requestedPresetId),
+    [instance.capabilities, isMobile, requestedPresetId],
+  );
+  const opensRequestedPreset = requestedPresetId !== null && builtInDefaultLayout.presetId === requestedPresetId;
 
   const cachedDefaultLayout = useMemo(() => {
+    if (opensRequestedPreset) return null;
     const layout = isMobile
       ? instanceDefaults?.default_mobile_layout
       : instanceDefaults?.default_desktop_layout;
@@ -2532,14 +2543,17 @@ function InstancePageViewContent({
     }
 
     return parsePanelLayout(layout);
-  }, [instanceDefaults?.default_desktop_layout, instanceDefaults?.default_mobile_layout, isMobile]);
+  }, [instanceDefaults?.default_desktop_layout, instanceDefaults?.default_mobile_layout, isMobile, opensRequestedPreset]);
 
-  const defaultLayoutId = isMobile
-    ? instanceDefaults?.default_mobile_layout?.id ?? null
-    : instanceDefaults?.default_desktop_layout?.id ?? null;
+  const defaultLayoutId = opensRequestedPreset
+    ? null
+    : isMobile
+      ? instanceDefaults?.default_mobile_layout?.id ?? null
+      : instanceDefaults?.default_desktop_layout?.id ?? null;
 
-  // A user's saved default layout wins; otherwise the built-in one for this log.
-  const builtInDefaultLayout = useMemo(() => defaultInstanceLayout(instance.capabilities ?? [], isMobile), [instance.capabilities, isMobile]);
+  // A user's saved default layout wins (on the Summary tab, as before); otherwise
+  // the built-in one for this log: Watch for logs with positions.
+  const defaultPresetId = cachedDefaultLayout ? DEFAULT_PRESET_ID : builtInDefaultLayout.presetId;
 
   const standardOrderedLayoutItems = useMemo(
     () => orderLayoutItems(normalizeLayoutItems(cachedDefaultLayout?.items ?? builtInDefaultLayout.items)),
@@ -2618,7 +2632,8 @@ function InstancePageViewContent({
     setViewState(createDefaultViewState());
     setImportedLayoutItems(null);
     setActiveLayoutId(defaultLayoutId);
-  }, [createDefaultViewState, defaultLayoutId, instance.id]);
+    setActivePresetId(defaultPresetId);
+  }, [createDefaultViewState, defaultLayoutId, defaultPresetId, instance.id]);
 
   const setEncounters = useCallback((ids: string[]) => {
     if (!canEditSharedView) return;
@@ -2697,11 +2712,23 @@ function InstancePageViewContent({
     setViewState(createDefaultViewState());
     setImportedLayoutItems(null);
     setActiveLayoutId(defaultLayoutId);
-    setActivePresetId(DEFAULT_PRESET_ID);
-  }, [canEditSharedView, createDefaultViewState, defaultLayoutId]);
+    setActivePresetId(defaultPresetId);
+  }, [canEditSharedView, createDefaultViewState, defaultLayoutId, defaultPresetId]);
 
   // ── Preset layouts ──────────────────────────────────────────────────────
-  const [activePresetId, setActivePresetId] = useState<string | null>(DEFAULT_PRESET_ID);
+  const [activePresetId, setActivePresetId] = useState<string | null>(defaultPresetId);
+
+  // A saved default layout can arrive after the first render (signed in, nothing
+  // cached yet). While the view is still the untouched built-in default, switch to it.
+  const previousDefaultPresetIdRef = useRef(defaultPresetId);
+  useEffect(() => {
+    const previous = previousDefaultPresetIdRef.current;
+    previousDefaultPresetIdRef.current = defaultPresetId;
+    if (previous === defaultPresetId || importedLayoutItems !== null || activePresetId !== previous) return;
+    const defaults = createDefaultViewState();
+    setViewState((prev) => ({ ...prev, panels: defaults.panels, panelOptions: defaults.panelOptions }));
+    setActivePresetId(defaultPresetId);
+  }, [activePresetId, createDefaultViewState, defaultPresetId, importedLayoutItems]);
   const activePreset = activePresetId ? PRESET_LAYOUTS_BY_ID[activePresetId] : null;
   const activePageType = activePreset?.kind === "page" ? activePreset.pageType : null;
 
@@ -2892,8 +2919,9 @@ function InstancePageViewContent({
   );
   const layoutAppearance = useMemo((): LayoutAppearance => importedLayoutItems
     ? importedLayoutAppearance
-    : viewState.layout !== "alternate" ? readLayoutAppearance(cachedDefaultLayout) : {},
-  [cachedDefaultLayout, importedLayoutAppearance, importedLayoutItems, viewState.layout]);
+    : viewState.layout === "alternate" ? {}
+    : cachedDefaultLayout ? readLayoutAppearance(cachedDefaultLayout) : builtInDefaultLayout.appearance,
+  [builtInDefaultLayout.appearance, cachedDefaultLayout, importedLayoutAppearance, importedLayoutItems, viewState.layout]);
 
   const panelTypesByID = useMemo<Record<string, EventsPanelType>>(() => {
     const next: Record<string, EventsPanelType> = {};
@@ -2917,7 +2945,7 @@ function InstancePageViewContent({
 
   // Per-panel filters: collected from EventsPanel children for persistence in shared layouts.
   const [panelFiltersByID, setPanelFiltersByID] = useState<Record<string, PanelFilter[]>>(
-    () => isMobile ? {} : { ...DEFAULT_INSTANCE_PANEL_FILTERS }
+    () => isMobile ? {} : { ...(cachedDefaultLayout ? DEFAULT_INSTANCE_PANEL_FILTERS : builtInDefaultLayout.panelFilters) }
   );
   // Filters seeded from an imported shared view / layout book (consumed once by EventsPanel).
   const [seedFiltersByID, setSeedFiltersByID] = useState<Record<string, PanelFilter[]>>({});
