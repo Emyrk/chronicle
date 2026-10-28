@@ -35,10 +35,15 @@ export function damageRuleRows(instance: SupportedInstance) {
   const units = new Map(
     [...(instance.bosses ?? []), ...(instance.trash ?? [])].map((unit) => [unit.entry_id, unit.name]),
   )
+  const bossIDs = new Set((instance.bosses ?? []).map((unit) => unit.entry_id))
   return names.map((name) => ({
     name,
     mode: rules[name].mode,
-    targets: (rules[name].entry_ids ?? []).map((id) => ({ id, name: units.get(id) ?? `Creature ${id}` })),
+    targets: (rules[name].entry_ids ?? []).map((id) => ({
+      id,
+      name: units.get(id) ?? `Creature ${id}`,
+      boss: bossIDs.has(id),
+    })),
   }))
 }
 

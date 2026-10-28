@@ -17,9 +17,9 @@ describe("DPS ruleset", () => {
     }
     expect(damageRuleRows(instance)).toEqual([
       { name: "Garr", mode: "entries", targets: [
-        { id: 12057, name: "Garr" },
-        { id: 12099, name: "Firesworn" },
-        { id: 999, name: "Creature 999" },
+        { id: 12057, name: "Garr", boss: true },
+        { id: 12099, name: "Firesworn", boss: false },
+        { id: 999, name: "Creature 999", boss: false },
       ] },
       { name: "Lucifron", mode: "boss-only", targets: [] },
     ])
