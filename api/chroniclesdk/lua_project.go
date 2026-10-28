@@ -33,6 +33,8 @@ type LuaProjectRelease struct {
 	Icon        string     `json:"icon,omitempty"`
 	PublishedAt time.Time  `json:"published_at"`
 	PublishedBy *uuid.UUID `json:"published_by,omitempty"`
+	// PublishedByAuthor is the publisher's addon author name.
+	PublishedByAuthor string `json:"published_by_author,omitempty"`
 }
 
 type LuaProject struct {

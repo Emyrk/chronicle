@@ -138,6 +138,7 @@ func TestLuaProjectPermissions(t *testing.T) {
 	require.Len(t, released.Releases, 1)
 	require.Equal(t, "v1.0", released.Releases[0].Tag)
 	require.True(t, released.Releases[0].Available)
+	require.Equal(t, "helper", released.Releases[0].PublishedByAuthor, "a contributor's release names them")
 	require.Equal(t, http.StatusConflict, call(editor, http.MethodPost, "/me/lua-projects/"+project.ID.String()+"/releases", `{"tag":"v1.0","expected_revision":3}`).Code, "tags are unique")
 	require.Equal(t, http.StatusOK, call(owner, http.MethodDelete, contributors+"/helper", "").Code)
 	code, removed := page(editor, byID)

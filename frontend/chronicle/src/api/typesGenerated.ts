@@ -2942,6 +2942,10 @@ export interface LuaProjectRelease {
     readonly icon?: string;
     readonly published_at: string;
     readonly published_by?: string;
+    /**
+     * PublishedByAuthor is the publisher's addon author name.
+     */
+    readonly published_by_author?: string;
 }
 
 // From chroniclesdk/unlisted_logs.go

@@ -3,9 +3,10 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from "reac
 import { useQuery } from "@tanstack/react-query"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { ArrowLeft, BookOpen, Code2, Download, FileCode, FileImage, FileJson, FileText, GitCommitHorizontal, Tag, Trash2, Upload } from "lucide-react"
+import { ArrowLeft, BookOpen, Code2, Download, FileCode, FileImage, FileJson, FileText, Upload } from "lucide-react"
 import { addonPath, createRelease, deleteRelease, latestRelease, nextReleaseTag, uploadDraft } from "./api"
 import { AddonIcon } from "./AddonIcon"
+import { AddonReleases } from "./AddonReleases"
 import { AddonAiUsage, AddonContributors } from "./AddonTeam"
 import { useAddonPage } from "./addonRoute"
 import { card, errorMessage, kindLabel, smallButton } from "./addonUi"
@@ -192,32 +193,11 @@ export function LuaProjectPage() {
           {can.edit && project.kind === "panel" && <AddonAiUsage projectId={project.id} />}
           <p className="border-t border-border pt-3 text-xs text-muted-foreground">Created {formatDate(project.created_at)} · <Link className="text-primary underline-offset-2 hover:underline" to="/addons/api">API reference</Link></p>
         </section>
-        <section className={`${card} space-y-2 text-sm`} aria-label="Releases">
-          <h2 className="font-semibold">Releases</h2>
-          <p className="text-xs text-muted-foreground">Panels run the latest release. Choose main in the panel picker to try unreleased changes.</p>
-          <ul className="-mx-2 space-y-0.5">
-            {project.main && <li className={`flex items-center gap-2 rounded-md px-2 py-1.5 ${ref === MAIN_REF ? "bg-muted" : ""}`}>
-              <button type="button" onClick={() => show({ ref: MAIN_REF })} className="min-w-0 flex-1 text-left" title="View the files saved to main">
-                <span className="flex items-center gap-2 font-medium"><GitCommitHorizontal className="size-4 text-muted-foreground" /><span className="font-mono">main</span>
-                  <span className="font-mono text-xs font-normal text-muted-foreground" title={project.main.sha256}>{shortSha(project.main.sha256)}</span></span>
-                <span className="block pl-6 text-xs text-muted-foreground">Saved {formatDate(project.main.updated_at)}{latest?.sha256 === project.main.sha256 && ` · same as ${latest.tag}`}</span>
-              </button>
-              {canTag && <button type="button" className={`${smallButton} inline-flex items-center gap-1`} disabled={busy} onClick={tagRelease}><Tag className="size-3" /> Tag release</button>}
-            </li>}
-            {project.releases.map(release => <li key={release.tag} className={`flex items-center gap-2 rounded-md px-2 py-1.5 ${ref === release.tag ? "bg-muted" : ""} ${release.available ? "" : "opacity-50"}`}>
-              <button type="button" disabled={!release.available} onClick={() => show({ ref: release.tag })} className="min-w-0 flex-1 text-left disabled:cursor-default"
-                title={release.available ? `View the ${release.tag} files` : "Only the newest releases keep their files"}>
-                <span className="flex items-center gap-2 font-medium"><Tag className="size-4 text-muted-foreground" /><span className="truncate font-mono">{release.tag}</span>
-                  {release === latest && <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-normal text-emerald-500">latest</span>}</span>
-                <span className="block pl-6 text-xs text-muted-foreground">{formatDate(release.published_at)}{release.available ? "" : " · no longer available"}</span>
-              </button>
-              {can.release && <button type="button" className="text-muted-foreground hover:text-destructive disabled:opacity-50" disabled={busy} aria-label={`Delete ${release.tag}`}
-                onClick={() => { if (window.confirm(release === latest ? `Delete ${release.tag}? Panels fall back to the previous release that still has files.` : `Delete ${release.tag}?`)) void mutate(() => deleteRelease(project.id, release.tag), `Deleted ${release.tag}.`) }}>
-                <Trash2 className="size-3.5" /></button>}
-            </li>)}
-          </ul>
-          {!project.releases.length && <p className="text-xs text-muted-foreground">{can.release ? "Nothing released yet. Tag main when it is ready." : "Nothing released yet."}</p>}
-          {can.edit && <details className="border-t border-border pt-3 text-xs">
+        <AddonReleases project={project} latest={latest} viewing={sha ? ref : null} canTag={canTag} canRelease={can.release} busy={busy}
+          onView={next => show({ ref: next })} onTag={tagRelease} onDelete={release => {
+            if (window.confirm(release === latest ? `Delete ${release.tag}? Panels fall back to the previous release that still has files.` : `Delete ${release.tag}?`)) void mutate(() => deleteRelease(project.id, release.tag), `Deleted ${release.tag}.`)
+          }}>
+          {can.edit && <details className="mt-4 border-t border-border pt-3 text-xs">
             <summary className="flex cursor-pointer items-center gap-1.5 font-medium text-muted-foreground hover:text-foreground"><Upload className="size-3.5" /> Upload a tar archive</summary>
             <div className="mt-2 space-y-2">
               <p className="text-muted-foreground">An uncompressed tar with project.json at its root, a Lua entrypoint and an optional README.md. It replaces main.</p>
@@ -225,7 +205,7 @@ export function LuaProjectPage() {
               <button className={smallButton} type="button" disabled={busy || !archive} onClick={() => { if (archive) void mutate(() => uploadDraft(project.id, project.revision, archive), "Uploaded to main.") }}>Upload draft</button>
             </div>
           </details>}
-        </section>
+        </AddonReleases>
         {can.edit && <AddonContributors project={project} canManage={can.manage} />}
       </aside>
     </div>

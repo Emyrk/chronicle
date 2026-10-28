@@ -42,19 +42,13 @@ func suggestAddonAuthorName(username string) string {
 
 var nonAddonAuthorChars = regexp.MustCompile(`[^a-z0-9]+`)
 
-// luaProjectAuthors maps each project owner to their author name, when they have one.
-func (a *API) luaProjectAuthors(ctx context.Context, projects ...database.LuaProject) (map[uuid.UUID]string, error) {
-	owners := make([]uuid.UUID, 0, len(projects))
-	for _, p := range projects {
-		if !slices.Contains(owners, p.OwnerID) {
-			owners = append(owners, p.OwnerID)
-		}
-	}
-	names := make(map[uuid.UUID]string, len(owners))
-	if len(owners) == 0 {
+// addonAuthorNames maps each user to their author name, when they have one.
+func (a *API) addonAuthorNames(ctx context.Context, users []uuid.UUID) (map[uuid.UUID]string, error) {
+	names := make(map[uuid.UUID]string, len(users))
+	if len(users) == 0 {
 		return names, nil
 	}
-	rows, err := a.Opts.Zed.ListAddonAuthorsByUsers(ctx, owners)
+	rows, err := a.Opts.Zed.ListAddonAuthorsByUsers(ctx, users)
 	if err != nil {
 		return nil, err
 	}

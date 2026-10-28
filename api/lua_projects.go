@@ -125,9 +125,10 @@ const luaReleasesWithFiles = 3
 // luaReleaseTag matches the lua_project_releases tag check.
 var luaReleaseTag = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$`)
 
-func luaProjectResponse(p database.LuaProject, releases []database.LuaProjectRelease, author string) chroniclesdk.LuaProject {
+// luaProjectResponse builds the API project; authors maps the owner and release publishers to their author names.
+func luaProjectResponse(p database.LuaProject, releases []database.LuaProjectRelease, authors map[uuid.UUID]string) chroniclesdk.LuaProject {
 	result := chroniclesdk.LuaProject{ID: p.ID, OwnerID: p.OwnerID, Kind: p.Kind, Name: p.Name, Slug: p.Slug, Revision: p.Revision,
-		Author: author, Releases: make([]chroniclesdk.LuaProjectRelease, 0, len(releases)), CreatedAt: p.CreatedAt.Time, UpdatedAt: p.UpdatedAt.Time}
+		Author: authors[p.OwnerID], Releases: make([]chroniclesdk.LuaProjectRelease, 0, len(releases)), CreatedAt: p.CreatedAt.Time, UpdatedAt: p.UpdatedAt.Time}
 	if p.DraftHash.Valid {
 		result.Main = &chroniclesdk.LuaProjectMain{SHA256: p.DraftHash.String, Icon: p.DraftIcon.String, UpdatedAt: p.UpdatedAt.Time}
 	}
@@ -135,6 +136,7 @@ func luaProjectResponse(p database.LuaProject, releases []database.LuaProjectRel
 		item := chroniclesdk.LuaProjectRelease{Tag: release.Tag, SHA256: release.Hash.String, Available: release.Hash.Valid, Icon: release.Icon.String, PublishedAt: release.PublishedAt.Time}
 		if release.PublishedBy.Valid {
 			item.PublishedBy = &release.PublishedBy.UUID
+			item.PublishedByAuthor = authors[release.PublishedBy.UUID]
 		}
 		result.Releases = append(result.Releases, item)
 	}
@@ -157,13 +159,27 @@ func (a *API) luaProjectResponses(ctx context.Context, projects ...database.LuaP
 			releases[row.ProjectID] = append(releases[row.ProjectID], row)
 		}
 	}
-	authors, err := a.luaProjectAuthors(ctx, projects...)
+	users := make([]uuid.UUID, 0, len(projects))
+	add := func(id uuid.UUID) {
+		if !slices.Contains(users, id) {
+			users = append(users, id)
+		}
+	}
+	for _, p := range projects {
+		add(p.OwnerID)
+		for _, release := range releases[p.ID] {
+			if release.PublishedBy.Valid {
+				add(release.PublishedBy.UUID)
+			}
+		}
+	}
+	authors, err := a.addonAuthorNames(ctx, users)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]chroniclesdk.LuaProject, 0, len(projects))
 	for _, p := range projects {
-		out = append(out, luaProjectResponse(p, releases[p.ID], authors[p.OwnerID]))
+		out = append(out, luaProjectResponse(p, releases[p.ID], authors))
 	}
 	return out, nil
 }

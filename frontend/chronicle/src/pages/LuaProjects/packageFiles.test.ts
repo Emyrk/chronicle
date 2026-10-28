@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { strToU8, zipSync } from "fflate"
-import { browsableRefs, defaultRef, formatBytes, manifestSummary, packageDownloadURL, packageSha, readPackageFiles } from "./packageFiles"
+import { browsableRefs, defaultRef, formatBytes, timeAgo, manifestSummary, packageDownloadURL, packageSha, readPackageFiles } from "./packageFiles"
 
 const release = (tag: string, available = true) => ({ tag, available, ...(available && { sha256: tag + "-sha" }), published_at: "2026-10-01T00:00:00Z" })
 
@@ -29,6 +29,13 @@ describe("package files", () => {
 
   it("serves every build from the public endpoint", () => {
     expect(packageDownloadURL({ id: "p 1" }, "abc")).toBe("/api/v1/lua-projects/p%201/artifacts/abc/package")
+  })
+
+  it("says how long ago a release was published", () => {
+    const now = Date.parse("2026-10-28T17:00:00Z")
+    expect(timeAgo("2026-10-28T16:55:00Z", now)).toMatch(/5 minutes ago/)
+    expect(timeAgo("2026-10-26T17:00:00Z", now)).toMatch(/2 days ago/)
+    expect(timeAgo("2026-08-01T12:00:00Z", now)).toMatch(/2026/)
   })
 
   it("formats sizes", () => {

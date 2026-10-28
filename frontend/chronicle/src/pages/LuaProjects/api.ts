@@ -2,7 +2,7 @@
 import type { AddonAuthor, InferenceContributorUsage, LuaProjectContributor, LuaProjectPermissions } from "@/api/typesGenerated"
 export type LuaProjectKind = "panel" | "guide"
 /** A tagged snapshot of main. Only the newest few keep their files; older ones are listed with available false. */
-export type LuaRelease = { tag: string; sha256?: string; available: boolean; icon?: string; published_at: string; published_by?: string }
+export type LuaRelease = { tag: string; sha256?: string; available: boolean; icon?: string; published_at: string; published_by?: string; published_by_author?: string }
 /** The addon's latest saved source. Anyone who can view the addon can run it. */
 export type LuaMain = { sha256: string; icon?: string; updated_at: string }
 export type LuaProject = {
