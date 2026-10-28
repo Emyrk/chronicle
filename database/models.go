@@ -2025,6 +2025,9 @@ type LuaProject struct {
 	StablePublishedBy   uuid.NullUUID      `db:"stable_published_by" json:"stable_published_by"`
 	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	DraftIcon           pgtype.Text        `db:"draft_icon" json:"draft_icon"`
+	UnstableIcon        pgtype.Text        `db:"unstable_icon" json:"unstable_icon"`
+	StableIcon          pgtype.Text        `db:"stable_icon" json:"stable_icon"`
 }
 
 type LuaProjectArtifact struct {

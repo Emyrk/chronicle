@@ -118,12 +118,13 @@ func luaProjectResponse(p database.LuaProject, private bool) chroniclesdk.LuaPro
 	result := chroniclesdk.LuaProject{ID: p.ID, OwnerID: p.OwnerID, Kind: p.Kind, Name: p.Name, Slug: p.Slug, Revision: p.Revision, CreatedAt: p.CreatedAt.Time, UpdatedAt: p.UpdatedAt.Time}
 	if private && p.DraftHash.Valid {
 		result.DraftSHA256 = p.DraftHash.String
+		result.DraftIcon = p.DraftIcon.String
 	}
 	if p.UnstableHash.Valid {
-		result.Unstable = &chroniclesdk.LuaProjectChannel{SHA256: p.UnstableHash.String, PublishedAt: p.UnstablePublishedAt.Time, PublishedBy: p.UnstablePublishedBy.UUID}
+		result.Unstable = &chroniclesdk.LuaProjectChannel{SHA256: p.UnstableHash.String, PublishedAt: p.UnstablePublishedAt.Time, PublishedBy: p.UnstablePublishedBy.UUID, Icon: p.UnstableIcon.String}
 	}
 	if p.StableHash.Valid {
-		result.Stable = &chroniclesdk.LuaProjectChannel{SHA256: p.StableHash.String, PublishedAt: p.StablePublishedAt.Time, PublishedBy: p.StablePublishedBy.UUID}
+		result.Stable = &chroniclesdk.LuaProjectChannel{SHA256: p.StableHash.String, PublishedAt: p.StablePublishedAt.Time, PublishedBy: p.StablePublishedBy.UUID, Icon: p.StableIcon.String}
 	}
 	return result
 }
@@ -290,6 +291,11 @@ func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
+	icon, err := luaPackageIcon(archive)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
 	hash := sha256.Sum256(archive)
 	digest := hex.EncodeToString(hash[:])
 	if a.Opts.Storage == nil {
@@ -317,7 +323,7 @@ func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 	var storedKey string
 	err = a.Opts.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
 		var err error
-		project, err = tx.SetLuaProjectDraft(r.Context(), database.SetLuaProjectDraftParams{ID: id, OwnerID: owner, TechnicalAdmin: technicalAdmin, Hash: pgtype.Text{String: digest, Valid: true}, ExpectedRevision: revision})
+		project, err = tx.SetLuaProjectDraft(r.Context(), database.SetLuaProjectDraftParams{ID: id, OwnerID: owner, TechnicalAdmin: technicalAdmin, Hash: pgtype.Text{String: digest, Valid: true}, Icon: pgtype.Text{String: icon, Valid: icon != ""}, ExpectedRevision: revision})
 		if err != nil {
 			return err
 		}

@@ -2839,6 +2839,7 @@ export interface LuaProject {
     readonly slug: string;
     readonly revision: number;
     readonly draft_sha256?: string;
+    readonly draft_icon?: string;
     readonly unstable?: LuaProjectChannel;
     readonly stable?: LuaProjectChannel;
     readonly created_at: string;
@@ -2850,6 +2851,10 @@ export interface LuaProjectChannel {
     readonly sha256: string;
     readonly published_at: string;
     readonly published_by: string;
+    /**
+     * Icon is the release's project.json "icon", absent when it named none.
+     */
+    readonly icon?: string;
 }
 
 // From chroniclesdk/lua_project.go

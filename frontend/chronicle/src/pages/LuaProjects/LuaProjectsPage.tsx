@@ -3,11 +3,12 @@ import { Link, useParams, useSearchParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { ArrowLeft, ArrowUpRight, BookOpen, Code2, Download, FileCode, FileImage, FileJson, FileText, FlaskConical, Package, PencilLine, Plus, ShieldCheck, Upload } from "lucide-react"
+import { ArrowLeft, ArrowUpRight, BookOpen, Code2, Download, FileCode, FileImage, FileJson, FileText, FlaskConical, PencilLine, Plus, ShieldCheck, Upload } from "lucide-react"
 import { useAuthorizationCheck, useSession } from "@/api/queries"
 import { useInferenceContextUsage } from "@/features/chat/api"
 import { describeUsage, formatUsage, usageFromApi } from "@/features/chat/usage"
 import { createProject, getProject, listProjects, promoteStable, publishUnstable, uploadDraft, type LuaProject, type LuaProjectKind } from "./api"
+import { AddonIcon } from "./AddonIcon"
 import { defaultRef, formatBytes, isImagePath, manifestSummary, PACKAGE_REFS, packageDownloadURL, packageSha, readPackageFiles, shortSha, type PackageFile, type PackageRef } from "./packageFiles"
 
 /** User-facing names for addon kinds; the API and manifests keep "panel" and "guide". */
@@ -64,7 +65,8 @@ export function LuaProjectsPage() {
         <h2 className="text-lg font-semibold">Your addons</h2>
         {loading ? <p className="text-sm text-muted-foreground">Loading addons…</p> : projects.length === 0 ? <p className={card}>No addons yet. Create one to begin.</p> : projects.map(project =>
           <Link key={project.id} to={`/addons/${encodeURIComponent(project.id)}`} className={`${card} group flex items-center justify-between gap-4 hover:border-primary/50`}>
-            <div><span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">{kindLabel(project.kind)} · r{project.revision}</span><h3 className="mt-1 font-semibold">{project.name}</h3><p className="font-mono text-xs text-muted-foreground">/{project.slug}</p></div>
+            <AddonIcon name={project.stable?.icon ?? project.unstable?.icon ?? project.draft_icon} className="size-6 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1"><span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">{kindLabel(project.kind)} · r{project.revision}</span><h3 className="mt-1 font-semibold">{project.name}</h3><p className="font-mono text-xs text-muted-foreground">/{project.slug}</p></div>
             <ArrowUpRight className="size-5 shrink-0 text-muted-foreground group-hover:text-primary" aria-hidden="true" />
           </Link>) }
       </section>
@@ -210,7 +212,7 @@ export function LuaProjectPage() {
     <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" to="/addons"><ArrowLeft className="size-4" /> All addons</Link>
     <header className="flex flex-wrap items-end justify-between gap-4 border-b pb-5">
       <div className="min-w-0">
-        <h1 className="flex items-center gap-3 text-2xl font-semibold"><Package className="size-6 text-muted-foreground" />{project.name}
+        <h1 className="flex items-center gap-3 text-2xl font-semibold"><AddonIcon name={ref === "draft" ? project.draft_icon : ref ? project[ref]?.icon : undefined} className="size-6 text-muted-foreground" />{project.name}
           <span className="rounded-full border border-border px-2 py-0.5 text-xs font-normal text-muted-foreground">{kindLabel(project.kind)}</span></h1>
         <p className="mt-1 font-mono text-xs text-muted-foreground">/{project.slug} · revision {project.revision} · updated {formatDate(project.updated_at)}</p>
       </div>

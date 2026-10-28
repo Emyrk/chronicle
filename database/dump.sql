@@ -1638,6 +1638,9 @@ CREATE TABLE lua_projects (
     stable_published_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    draft_icon text,
+    unstable_icon text,
+    stable_icon text,
     CONSTRAINT lua_projects_kind_check CHECK ((kind = ANY (ARRAY['panel'::text, 'guide'::text])))
 );
 
