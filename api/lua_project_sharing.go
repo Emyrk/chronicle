@@ -26,11 +26,16 @@ import (
 var addonAuthorName = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 // reservedAddonAuthorNames would collide with /addons routes or read as official. Names under
-// minAddonAuthorName characters, such as "api", "id" and "edit", are already ruled out by length.
+// minAddonAuthorName characters, such as "api", "id", "edit" and GitHub's "page", are already
+// ruled out by length. GitHub's reserved oddballs are documented at:
+// https://github.com/Mottie/github-reserved-names/blob/master/oddballs.md
 var reservedAddonAuthorNames = map[string]bool{
-	"admin": true, "addons": true, "author": true, "authors": true, "browse": true, "chronicle": true,
-	"create": true, "explore": true, "featured": true, "help": true, "login": true, "my-addons": true,
-	"official": true, "popular": true, "settings": true, "shared": true, "support": true, "workshop": true,
+	"admin": true, "addons": true, "assets": true, "author": true, "authors": true, "avatars": true,
+	"bookmarks": true, "browse": true, "checks": true, "chronicle": true, "conversations": true,
+	"create": true, "explore": true, "featured": true, "help": true, "labels": true, "login": true,
+	"media": true, "my-addons": true, "nodes": true, "official": true, "owners": true, "popular": true,
+	"registry": true, "seats": true, "settings": true, "shared": true, "support": true, "tasks": true,
+	"uploads": true, "workshop": true,
 }
 
 // minAddonAuthorName applies to new names only: the database still allows the shorter names claimed before.

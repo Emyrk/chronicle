@@ -187,6 +187,17 @@ func TestPublicLuaProjectRoutesSeeTheSignedInUser(t *testing.T) {
 	require.False(t, page(ctx).Edit, "signed-out visitors still get the public view")
 }
 
+func TestReservedAddonAuthorNames(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{
+		"assets", "avatars", "bookmarks", "checks", "conversations", "labels", "media", "nodes",
+		"owners", "registry", "seats", "shared", "tasks", "uploads",
+	} {
+		require.False(t, validAddonAuthorName(name), name)
+	}
+	require.True(t, validAddonAuthorName("community-author"))
+}
+
 func TestSuggestAddonAuthor(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "steven-m", suggestAddonAuthorName("  Steven M.!"))
