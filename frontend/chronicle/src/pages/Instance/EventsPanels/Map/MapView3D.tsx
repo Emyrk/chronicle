@@ -224,7 +224,7 @@ export default function MapView3D({
     return cameraPoseAt(cameraPath, smoothMs - cameraPathStartMs);
   }, [cameraPath, cameraPathStartMs, cameraPose, smoothMs]);
   const effectSettings = effectSettingsProp ?? DEFAULT_EFFECT_SETTINGS;
-  const showAlignmentOverlay = effectSettings.alignmentOverlay && alignmentGround !== null;
+  const showAlignmentOverlay = effectSettings.alignmentOverlay && alignmentGround !== null && dungeonMesh !== null;
   const showBars = effectSettings.bars;
   const [effectHover, setEffectHover] = useState<MapScene3DEffectHover | null>(null);
   const [compassYaw, setCompassYaw] = useState(0);

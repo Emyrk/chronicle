@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createMapPanel, mapPresentationForSelection, preferredMeshState } from "./Map";
+import {
+  alignmentOverlayForMapMode,
+  createMapPanel,
+  mapPresentationForSelection,
+  preferredMeshState,
+  routePointsForMapMode,
+} from "./Map";
 
 describe("map presentation", () => {
   it("uses the 3D replay for exactly one selected encounter", () => {
@@ -27,6 +33,20 @@ describe("map presentation", () => {
     expect(panel.keybinds).not.toBe("dynamic");
     expect(panel.keybinds).toHaveLength(13);
     expect(panel.renderCardBack).toBeUndefined();
+  });
+
+  it("turns off the alignment overlay outside mesh mode", () => {
+    expect(alignmentOverlayForMapMode(true, true)).toBe(true);
+    expect(alignmentOverlayForMapMode(true, false)).toBe(false);
+    expect(alignmentOverlayForMapMode(false, true)).toBe(false);
+  });
+
+  it("hides a single encounter route in 2D mode", () => {
+    const route = [{ leftPercent: 25, topPercent: 75 }];
+
+    expect(routePointsForMapMode(route, false, false)).toEqual([]);
+    expect(routePointsForMapMode(route, true, false)).toBe(route);
+    expect(routePointsForMapMode(route, false, true)).toBe(route);
   });
 
   it("prefers published dungeon meshes until the user explicitly chooses otherwise", () => {
