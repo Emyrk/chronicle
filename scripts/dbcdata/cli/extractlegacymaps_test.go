@@ -73,10 +73,14 @@ func TestBuildLegacyMapManifest(t *testing.T) {
 	require.Len(t, manifest.Maps[0].Art[0].Layers[0].Tiles, 12)
 	require.Len(t, manifest.Maps[0].Art[0].Overlays, 1)
 	require.Len(t, manifest.Maps[0].Art[0].Overlays[0].Tiles, 2)
-	require.Len(t, manifest.Instances, 1)
+	require.Len(t, manifest.Instances, 2)
 	require.Equal(t, int32(33), manifest.Instances[0].MapID)
 	require.Equal(t, &wowMapFloorBounds{MinX: -100, MaxX: 300, MinY: -50, MaxY: 150}, manifest.Instances[0].Floors[0].Bounds)
 	require.Len(t, manifest.Instances[0].Floors[0].Tiles, 12)
+	require.Equal(t, int32(309), manifest.Instances[1].MapID)
+	require.Equal(t, "Zul'gurub", manifest.Instances[1].Directory)
+	require.NotNil(t, manifest.Instances[1].Floors)
+	require.Empty(t, manifest.Instances[1].Floors)
 	require.Len(t, sourcePaths, 26)
 }
 
@@ -128,7 +132,9 @@ func TestPruneUnavailableLegacyMapTiles(t *testing.T) {
 	skipped := pruneUnavailableLegacyMapTiles(&manifest, map[int32]struct{}{3: {}, 4: {}})
 	require.Equal(t, []string{`"Loch Modan" overlay 281`, `"Naxxramas" floor 1`}, skipped)
 	require.Empty(t, manifest.Maps[0].Art[0].Overlays)
-	require.Empty(t, manifest.Instances)
+	require.Len(t, manifest.Instances, 1)
+	require.Equal(t, "Naxxramas", manifest.Instances[0].Name)
+	require.Empty(t, manifest.Instances[0].Floors)
 }
 
 func addLegacyTestFile(files map[string]string, path string) {

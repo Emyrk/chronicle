@@ -322,9 +322,7 @@ func pruneUnavailableLegacyMapTiles(manifest *wowMapManifest, unavailable map[in
 			floors = append(floors, floor)
 		}
 		instance.Floors = floors
-		if len(instance.Floors) > 0 {
-			instances = append(instances, instance)
-		}
+		instances = append(instances, instance)
 	}
 	manifest.Instances = instances
 	return skipped
@@ -599,12 +597,15 @@ func buildLegacyMapInstances(maps []wowdataMap, files []legacyMapFile, dungeonBo
 				break
 			}
 		}
+		instance := wowMapInstance{
+			MapID: mapRow.ID, Name: mapRow.Name, InstanceType: mapRow.InstanceType,
+			Directory: mapRow.Directory, Floors: []wowMapInstanceFloor{},
+		}
 		if asset == nil {
+			instances = append(instances, instance)
 			continue
 		}
-		instance := wowMapInstance{
-			MapID: mapRow.ID, Name: mapRow.Name, InstanceType: mapRow.InstanceType, Directory: asset.Directory,
-		}
+		instance.Directory = asset.Directory
 		var floorNumbers []int32
 		for floor := range asset.Floors {
 			floorNumbers = append(floorNumbers, floor)
@@ -630,9 +631,6 @@ func buildLegacyMapInstances(maps []wowdataMap, files []legacyMapFile, dungeonBo
 			if len(floor.Tiles) == 12 {
 				instance.Floors = append(instance.Floors, floor)
 			}
-		}
-		if len(instance.Floors) == 0 {
-			continue
 		}
 		claimedAssets[assetKey] = struct{}{}
 		instances = append(instances, instance)
