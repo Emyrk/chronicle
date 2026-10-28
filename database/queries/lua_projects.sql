@@ -20,10 +20,10 @@ SELECT p.* FROM lua_projects p JOIN addon_authors a ON a.user_id = p.owner_id
 WHERE a.name = @author AND p.slug = @slug;
 
 -- name: ListPublicLuaProjects :many
--- Addons with a release people can still run, newest release first.
+-- Addons with a release people can still run, most tracked first, then newest release.
 SELECT p.* FROM lua_projects p
 JOIN LATERAL (SELECT max(r.published_at) AS published_at FROM lua_project_releases r WHERE r.project_id = p.id AND r.hash IS NOT NULL) latest ON latest.published_at IS NOT NULL
-ORDER BY latest.published_at DESC LIMIT 100;
+ORDER BY (SELECT count(*) FROM lua_project_stars s WHERE s.project_id = p.id) DESC, latest.published_at DESC LIMIT 100;
 
 -- name: GetPublicLuaProject :one
 -- An addon with something to run: main or a release with files.
@@ -158,3 +158,24 @@ RETURNING *;
 
 -- name: DeleteLuaProjectContributor :execrows
 DELETE FROM lua_project_contributors WHERE project_id = @project_id AND user_id = @user_id;
+
+-- name: StarLuaProject :exec
+INSERT INTO lua_project_stars (project_id, user_id) VALUES (@project_id, @user_id) ON CONFLICT DO NOTHING;
+
+-- name: UnstarLuaProject :exec
+DELETE FROM lua_project_stars WHERE project_id = @project_id AND user_id = @user_id;
+
+-- name: ListStarredLuaProjects :many
+-- Addons the user tracks, most recently starred first.
+SELECT p.* FROM lua_projects p JOIN lua_project_stars s ON s.project_id = p.id
+WHERE s.user_id = @user_id ORDER BY s.created_at DESC LIMIT 200;
+
+-- name: CountLuaProjectStars :many
+SELECT project_id, count(*) AS stars FROM lua_project_stars WHERE project_id = ANY(@project_ids::uuid[]) GROUP BY project_id;
+
+-- name: ListUserStarsForProjects :many
+SELECT project_id FROM lua_project_stars WHERE user_id = @user_id AND project_id = ANY(@project_ids::uuid[]);
+
+-- name: SetLuaProjectDescription :one
+-- Leaves updated_at alone: it dates main.
+UPDATE lua_projects SET description = @description WHERE id = @id RETURNING *;

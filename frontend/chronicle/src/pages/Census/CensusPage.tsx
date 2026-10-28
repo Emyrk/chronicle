@@ -135,11 +135,11 @@ export function CensusPage() {
         <AdRailStack
           primaryPlacement="census-left-rail"
           secondaryPlacement="census-left-rail-lower"
-          railLayout="paired"
+          railLayout="paired-wide"
         />
       </div>
 
-      <main className="w-full max-w-5xl space-y-6">
+      <main className="w-full min-w-0 max-w-6xl space-y-6">
         {/* Header */}
         <div className="space-y-1">
           <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -198,7 +198,7 @@ export function CensusPage() {
       <AdRailStack
         primaryPlacement="census-right-rail"
         secondaryPlacement="census-right-rail-lower"
-        railLayout="paired"
+        railLayout="paired-wide"
       />
     </div>
   );

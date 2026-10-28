@@ -44,13 +44,32 @@ type LuaProject struct {
 	Name     string    `json:"name"`
 	Slug     string    `json:"slug"`
 	Revision int64     `json:"revision"`
+	// Description is a short summary, up to LuaProjectDescriptionMax characters. It lives outside the manifest.
+	Description string `json:"description"`
 	// Author is the owner's addon author name, the first part of /addons/<author>/<slug>. Absent until claimed.
 	Author string          `json:"author,omitempty"`
 	Main   *LuaProjectMain `json:"main,omitempty"`
 	// Releases are newest first. Panels run the newest one that is still available.
-	Releases  []LuaProjectRelease `json:"releases"`
-	CreatedAt time.Time           `json:"created_at"`
-	UpdatedAt time.Time           `json:"updated_at"`
+	Releases []LuaProjectRelease `json:"releases"`
+	// Stars counts the people tracking the addon. Starred says whether the caller is one of them.
+	Stars     int64     `json:"stars"`
+	Starred   bool      `json:"starred"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// LuaProjectDescriptionMax is the longest description, in characters.
+const LuaProjectDescriptionMax = 300
+
+// UpdateLuaProjectRequest changes an addon's settings.
+type UpdateLuaProjectRequest struct {
+	Description string `json:"description"`
+}
+
+// LuaProjectStar answers a star or unstar.
+type LuaProjectStar struct {
+	Stars   int64 `json:"stars"`
+	Starred bool  `json:"starred"`
 }
 
 // LuaProjectPermissions are what the viewing user may do with an addon.

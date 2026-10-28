@@ -461,3 +461,32 @@ func TestLuaZIPObjectStorage(t *testing.T) {
 		require.Equal(t, http.StatusInternalServerError, rec.Code)
 	}
 }
+
+func TestPublicLuaProjectsMostTrackedFirst(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	db, _ := dbtestutil.NewDB(t)
+	users := make([]uuid.UUID, 3)
+	for i := range users {
+		users[i] = uuid.New()
+		_, err := db.InsertUser(ctx, database.InsertUserParams{ID: users[i], Username: "u" + users[i].String(), Email: users[i].String() + "@example.org"})
+		require.NoError(t, err)
+	}
+	release := func(name string) uuid.UUID {
+		project, err := db.CreateLuaProject(ctx, database.CreateLuaProjectParams{OwnerID: users[0], Kind: "panel", Name: name, Slug: name})
+		require.NoError(t, err)
+		saved, err := db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: strings.Repeat("1", 64), Valid: true}, ExpectedRevision: 1})
+		require.NoError(t, err)
+		_, err = db.CreateLuaProjectRelease(ctx, database.CreateLuaProjectReleaseParams{ID: project.ID, Tag: "v1", ExpectedRevision: saved.Revision})
+		require.NoError(t, err)
+		return project.ID
+	}
+	popular, newest := release("popular"), release("newest")
+	for _, user := range users[1:] {
+		require.NoError(t, db.StarLuaProject(ctx, database.StarLuaProjectParams{ProjectID: popular, UserID: user}))
+	}
+	projects, err := db.ListPublicLuaProjects(ctx)
+	require.NoError(t, err)
+	require.Len(t, projects, 2)
+	require.Equal(t, []uuid.UUID{popular, newest}, []uuid.UUID{projects[0].ID, projects[1].ID}, "stars outrank a newer release")
+}

@@ -59,6 +59,7 @@ type sqlcQuerier interface {
 	CountAllWoWLogGroups(ctx context.Context, arg CountAllWoWLogGroupsParams) (int32, error)
 	CountGuildDiscordInstallationsByDiscordGuildID(ctx context.Context, discordGuildID string) (int64, error)
 	CountGuilds(ctx context.Context, arg CountGuildsParams) (int64, error)
+	CountLuaProjectStars(ctx context.Context, projectIds []uuid.UUID) ([]CountLuaProjectStarsRow, error)
 	CountRaidCompositionsByUser(ctx context.Context, arg CountRaidCompositionsByUserParams) (int64, error)
 	CountReadyLuaProjectArtifactGarbage(ctx context.Context) (int64, error)
 	CountUserAuthLinks(ctx context.Context) (int64, error)
@@ -696,7 +697,7 @@ type sqlcQuerier interface {
 	// requests and characters removed from the armory still render without them.
 	ListProofSubjectClasses(ctx context.Context, requestID uuid.UUID) ([]ListProofSubjectClassesRow, error)
 	ListProofSubjects(ctx context.Context, requestID uuid.UUID) ([]ProofRequestSubject, error)
-	// Addons with a release people can still run, newest release first.
+	// Addons with a release people can still run, most tracked first, then newest release.
 	ListPublicLuaProjects(ctx context.Context) ([]LuaProject, error)
 	ListRaidCompositionsByUser(ctx context.Context, arg ListRaidCompositionsByUserParams) ([]RaidComposition, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
@@ -738,6 +739,8 @@ type sqlcQuerier interface {
 	ListSpellRadiiByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellRadii, error)
 	ListSpellRangesByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellRange, error)
 	ListSpellVariantsForCheck(ctx context.Context, datasetID uuid.UUID) ([]ListSpellVariantsForCheckRow, error)
+	// Addons the user tracks, most recently starred first.
+	ListStarredLuaProjects(ctx context.Context, userID uuid.UUID) ([]LuaProject, error)
 	ListTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListTenants(ctx context.Context) ([]Tenant, error)
 	// Tenants that use this dataset, either directly (tenant.default_dataset_id)
@@ -765,6 +768,7 @@ type sqlcQuerier interface {
 	// Projects the user owns or contributes to.
 	ListUserLuaProjects(ctx context.Context, userID uuid.UUID) ([]LuaProject, error)
 	ListUserPanelLayouts(ctx context.Context, userID uuid.NullUUID) ([]ListUserPanelLayoutsRow, error)
+	ListUserStarsForProjects(ctx context.Context, arg ListUserStarsForProjectsParams) ([]uuid.UUID, error)
 	ListUserTalentBuilds(ctx context.Context, arg ListUserTalentBuildsParams) ([]UserTalentBuild, error)
 	ListUsersReferencingCosmetic(ctx context.Context, cosmeticID string) ([]uuid.UUID, error)
 	ListUsersWithCharacterCosmetics(ctx context.Context) ([]uuid.UUID, error)
@@ -922,6 +926,8 @@ type sqlcQuerier interface {
 	SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateGroupIDsParams) error
 	// Replaces one top-level key, leaving the user's other settings untouched.
 	SetInferenceUserConfigKey(ctx context.Context, arg SetInferenceUserConfigKeyParams) error
+	// Leaves updated_at alone: it dates main.
+	SetLuaProjectDescription(ctx context.Context, arg SetLuaProjectDescriptionParams) (LuaProject, error)
 	SetLuaProjectDraft(ctx context.Context, arg SetLuaProjectDraftParams) (LuaProject, error)
 	SetPanelLayoutCode(ctx context.Context, arg SetPanelLayoutCodeParams) (int64, error)
 	SetPrimaryUserCharacter(ctx context.Context, arg SetPrimaryUserCharacterParams) (UserCharacterLink, error)
@@ -964,6 +970,7 @@ type sqlcQuerier interface {
 	SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeaderboardParams) ([]SpeedrunLeaderboardRow, error)
 	// Returns distinct realm names that have at least one qualified speedrun.
 	SpeedrunRealmNames(ctx context.Context) ([]string, error)
+	StarLuaProject(ctx context.Context, arg StarLuaProjectParams) error
 	TelemetryGetActiveFileBytes(ctx context.Context) (int64, error)
 	TelemetryGetDeletedFileBytes(ctx context.Context) (int64, error)
 	TelemetryGetLogCountByZone(ctx context.Context) ([]TelemetryGetLogCountByZoneRow, error)
@@ -983,6 +990,7 @@ type sqlcQuerier interface {
 	UnassignWorldFromServer(ctx context.Context, arg UnassignWorldFromServerParams) error
 	UnlinkDuplicateGroup(ctx context.Context, id uuid.UUID) (UnlinkDuplicateGroupRow, error)
 	UnsetPrimaryUserCharacter(ctx context.Context, userID uuid.UUID) error
+	UnstarLuaProject(ctx context.Context, arg UnstarLuaProjectParams) error
 	UntrackUserPanelLayout(ctx context.Context, arg UntrackUserPanelLayoutParams) (int64, error)
 	// Only non-null params are applied; NULL means "keep existing value".
 	UpdateDataset(ctx context.Context, arg UpdateDatasetParams) (Dataset, error)

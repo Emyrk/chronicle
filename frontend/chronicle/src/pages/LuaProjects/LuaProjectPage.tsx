@@ -4,9 +4,11 @@ import { useQuery } from "@tanstack/react-query"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ArrowLeft, BookOpen, Code2, Download, FileCode, FileImage, FileJson, FileText, Upload } from "lucide-react"
-import { addonPath, createRelease, deleteRelease, latestRelease, nextReleaseTag, uploadDraft } from "./api"
+import { addonPath, authorPath, createRelease, deleteRelease, latestRelease, nextReleaseTag, uploadDraft } from "./api"
 import { AddonIcon } from "./AddonIcon"
 import { AddonReleases, VersionPicker } from "./AddonReleases"
+import { AddonDescription } from "./AddonDescription"
+import { AddonStar } from "./AddonStar"
 import { AddonAiUsage, AddonContributors } from "./AddonTeam"
 import { isAddonId, useAddonPage } from "./addonRoute"
 import { card, errorMessage, kindLabel, smallButton } from "./addonUi"
@@ -135,15 +137,19 @@ function AddonPage({ projectId }: { projectId?: string }) {
   return <main className="container mx-auto max-w-6xl space-y-6 px-4 py-8">
     <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" to="/addons"><ArrowLeft className="size-4" /> All addons</Link>
     <header className="flex flex-wrap items-end justify-between gap-4 border-b pb-5">
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <h1 className="flex items-center gap-3 text-2xl font-semibold"><AddonIcon name={refIcon} className="size-6 text-muted-foreground" />{project.name}
           <span className="rounded-full border border-border px-2 py-0.5 text-xs font-normal text-muted-foreground">{kindLabel(project.kind)}</span></h1>
         <p className="mt-1 text-xs text-muted-foreground">
-          {project.author ? <>by <span className="font-mono">{project.author}</span></> : "Unnamed author"}
+          {project.author ? <>by <Link to={authorPath(project.author)} className="font-mono hover:text-foreground hover:underline">{project.author}</Link></> : "Unnamed author"}
           {can.edit && <span className="font-mono"> · /{project.slug} · revision {project.revision}</span>} · updated {formatDate(project.updated_at)}
         </p>
+        <AddonDescription key={project.id} project={project} canEdit={can.release} onSaved={() => void pageQuery.refetch()} />
       </div>
-      {project.kind === "panel" && can.edit && <Link className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90" to={workshop}><Code2 className="size-4" /> Open in Addon Workshop</Link>}
+      <div className="flex flex-wrap items-start gap-2">
+        <AddonStar key={project.id} project={project} canUse={can.use} />
+        {project.kind === "panel" && can.edit && <Link className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90" to={workshop}><Code2 className="size-4" /> Open in Addon Workshop</Link>}
+      </div>
     </header>
     {can.manage && !project.author && <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
       This addon has no named address yet. <Link className="text-primary underline underline-offset-2" to="/addons">Claim an author name</Link> to publish it at /addons/&lt;you&gt;/{project.slug}.</p>}
