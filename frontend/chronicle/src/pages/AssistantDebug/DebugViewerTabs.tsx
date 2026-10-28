@@ -347,7 +347,10 @@ export function RunTab({ snapshot, diff, error }: { snapshot: DebugSnapshotEvent
       <Card title="Usage">
         <Facts items={[
           ["Prompt tokens", number.format(snapshot.usage.promptTokens)], ["Completion tokens", number.format(snapshot.usage.completionTokens)],
-          ["Total tokens", number.format(snapshot.usage.totalTokens)], ["Messages", snapshot.messages.length], ["Tools offered", snapshot.tools.length],
+          ["Total tokens", number.format(snapshot.usage.totalTokens)],
+          ["Cached tokens", number.format(snapshot.usage.cachedTokens ?? 0)], ["Reasoning tokens", number.format(snapshot.usage.reasoningTokens ?? 0)],
+          ["Cost so far", snapshot.usage.costUsd === undefined ? "Not reported" : `$${snapshot.usage.costUsd.toFixed(6)}`],
+          ["Messages", snapshot.messages.length], ["Tools offered", snapshot.tools.length],
         ]} />
       </Card>
       <Card title="Changes since previous snapshot">

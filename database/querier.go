@@ -288,9 +288,12 @@ type sqlcQuerier interface {
 	GetGuildSettings(ctx context.Context, guildID uuid.UUID) (GuildSetting, error)
 	GetInferenceClientToolRequestForUpdate(ctx context.Context, arg GetInferenceClientToolRequestForUpdateParams) (InferenceClientToolRequest, error)
 	GetInferenceConnectionByOwner(ctx context.Context, arg GetInferenceConnectionByOwnerParams) (InferenceConnection, error)
+	GetInferenceContextUsage(ctx context.Context, arg GetInferenceContextUsageParams) (GetInferenceContextUsageRow, error)
 	GetInferenceRunByIdempotencyKey(ctx context.Context, arg GetInferenceRunByIdempotencyKeyParams) (InferenceRun, error)
 	GetInferenceRunByOwner(ctx context.Context, arg GetInferenceRunByOwnerParams) (InferenceRun, error)
+	GetInferenceRunUsage(ctx context.Context, runID uuid.UUID) (GetInferenceRunUsageRow, error)
 	GetInferenceThreadByOwner(ctx context.Context, arg GetInferenceThreadByOwnerParams) (InferenceThread, error)
+	GetInferenceThreadUsage(ctx context.Context, arg GetInferenceThreadUsageParams) (GetInferenceThreadUsageRow, error)
 	// Returns only clean boss kills for an instance, excluding partial kills.
 	// Used by the time-parse handler so the primary instance is scored against
 	// the clean-only snapshot cohort consistently.
@@ -510,6 +513,7 @@ type sqlcQuerier interface {
 	InsertInferenceOAuthTransaction(ctx context.Context, arg InsertInferenceOAuthTransactionParams) (InferenceOauthTransaction, error)
 	InsertInferenceRun(ctx context.Context, arg InsertInferenceRunParams) (InferenceRun, error)
 	InsertInferenceThread(ctx context.Context, arg InsertInferenceThreadParams) (InferenceThread, error)
+	InsertInferenceUsage(ctx context.Context, arg InsertInferenceUsageParams) error
 	InsertInstance(ctx context.Context, arg InsertInstanceParams) (LogInstance, error)
 	InsertInstanceLoot(ctx context.Context, arg []InsertInstanceLootParams) *InsertInstanceLootBatchResults
 	InsertInstancePlayers(ctx context.Context, arg []InsertInstancePlayersParams) *InsertInstancePlayersBatchResults
@@ -634,6 +638,7 @@ type sqlcQuerier interface {
 	ListInferenceInstanceEncounters(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounter, error)
 	ListInferenceInstancePlayers(ctx context.Context, instanceID uuid.UUID) ([]LogInstancePlayer, error)
 	ListInferenceThreadsByOwner(ctx context.Context, userID uuid.UUID) ([]InferenceThread, error)
+	ListInferenceUsageByMessageKeys(ctx context.Context, arg ListInferenceUsageByMessageKeysParams) ([]ListInferenceUsageByMessageKeysRow, error)
 	ListInstancesByDuplicateGroup(ctx context.Context, duplicateGroupID uuid.NullUUID) ([]ListInstancesByDuplicateGroupRow, error)
 	ListInstancesByParserVersion(ctx context.Context, parserVersion string) ([]ListInstancesByParserVersionRow, error)
 	ListInstancesByTimeRange(ctx context.Context, arg ListInstancesByTimeRangeParams) ([]ListInstancesByTimeRangeRow, error)

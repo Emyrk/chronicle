@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { serializeInferenceDebug } from "./debugExport";
 import { openDebugViewer, useDebugBroadcast } from "./debugChannel";
 import type { ClientToolRequestEvent, DebugSnapshotEvent } from "./protocol";
+import { formatCost } from "./usage";
 
 interface DebugInspectorProps {
   /** Channel the pop-out debug viewer listens on. */
@@ -120,6 +121,9 @@ function Snapshot({ snapshot, latest }: { snapshot: DebugSnapshotEvent; latest: 
               <dt>Prompt tokens</dt><dd>{snapshot.usage.promptTokens}</dd>
               <dt>Completion</dt><dd>{snapshot.usage.completionTokens}</dd>
               <dt>Total</dt><dd>{snapshot.usage.totalTokens}</dd>
+              {!!snapshot.usage.cachedTokens && <><dt>Cached</dt><dd>{snapshot.usage.cachedTokens}</dd></>}
+              {!!snapshot.usage.reasoningTokens && <><dt>Reasoning</dt><dd>{snapshot.usage.reasoningTokens}</dd></>}
+              {snapshot.usage.costUsd !== undefined && <><dt>Cost</dt><dd title={`$${snapshot.usage.costUsd.toFixed(6)}`}>{formatCost(snapshot.usage.costUsd)}</dd></>}
               {snapshot.contextType && <><dt>Context</dt><dd>{snapshot.contextType}</dd></>}
               {snapshot.contextId && <><dt>Context ID</dt><dd className="truncate font-mono" title={snapshot.contextId}>{snapshot.contextId}</dd></>}
             </dl>

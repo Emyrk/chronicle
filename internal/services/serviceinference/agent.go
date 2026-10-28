@@ -69,6 +69,8 @@ type debugRunContext struct {
 	Persistence string
 	ContextType string
 	ContextID   string
+	// UsageEvents is set when the client asked for USAGE events.
+	UsageEvents bool
 }
 
 func debugSnapshotEvent(debug debugRunContext, iteration int, phase, model string, a assistant, messages []Message, usage Usage) agui.DebugSnapshotEvent {
@@ -118,11 +120,7 @@ func debugSnapshotEvent(debug debugRunContext, iteration int, phase, model strin
 			MaxToolOutput:      maxToolOutput,
 			MaxAssistantText:   maxAssistantText,
 		},
-		Usage: agui.DebugUsage{
-			PromptTokens:     usage.PromptTokens,
-			CompletionTokens: usage.CompletionTokens,
-			TotalTokens:      usage.TotalTokens,
-		},
+		Usage: debugUsage(usage),
 	}
 }
 
@@ -593,6 +591,7 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 	}
 	debug := debugRunContext{
 		Enabled:     req.Debug,
+		UsageEvents: req.UsageEvents,
 		RunID:       req.RunID,
 		ThreadID:    streamThread,
 		Persistence: "ephemeral",
@@ -611,7 +610,11 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 	pause := func(assistantMessage Message, toolMessages []Message, pending clientToolPause, state agentLoopState) error {
 		return s.pauseForClientTool(r.Context(), runRow, thread.ID, assistantMessage, toolMessages, pending, state)
 	}
-	result, err := s.agentLoop(r.Context(), writer, provider, cred, req.Model, a, history, tc, debug, client, agentLoopState{}, persist, pause)
+	var usageThread *database.InferenceThread
+	if a.Durable {
+		usageThread = &thread
+	}
+	result, err := s.agentLoop(r.Context(), writer, provider, cred, req.Model, a, history, tc, debug, client, agentLoopState{}, persist, pause, s.usageRecorder(r.Context(), runRow, usageThread))
 	if err != nil {
 		if s.logger != nil {
 			s.logger.Warn("inference run failed", "run_id", req.RunID, "error", err)
@@ -690,6 +693,53 @@ func (s *Service) finishRun(ctx context.Context, row database.InferenceRun, stat
 	return err
 }
 
+func debugUsage(usage Usage) agui.DebugUsage {
+	out := agui.DebugUsage{
+		PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens, TotalTokens: usage.TotalTokens,
+		CachedTokens: usage.CachedTokens, ReasoningTokens: usage.ReasoningTokens,
+	}
+	if usage.CostNanos != nil {
+		cost := float64(*usage.CostNanos) / 1e9
+		out.CostUSD = &cost
+	}
+	return out
+}
+
+// usageRecorder saves one model call's usage. It logs failures rather than failing the run.
+type usageRecorder func(messageKey string, usage Usage)
+
+func (s *Service) usageRecorder(ctx context.Context, run database.InferenceRun, thread *database.InferenceThread) usageRecorder {
+	return func(messageKey string, usage Usage) {
+		ctx, cancel := finalizationContext(ctx)
+		defer cancel()
+		params := database.InsertInferenceUsageParams{
+			RunID: run.ID, UserID: run.UserID, Model: run.Model,
+			MessageKey:   pgtype.Text{String: messageKey, Valid: messageKey != ""},
+			GenerationID: pgtype.Text{String: usage.GenerationID, Valid: usage.GenerationID != ""},
+			PromptTokens: int64(usage.PromptTokens), CompletionTokens: int64(usage.CompletionTokens),
+			CachedTokens: int64(usage.CachedTokens), ReasoningTokens: int64(usage.ReasoningTokens),
+			CostNanos: int64PointerPG(usage.CostNanos), UpstreamCostNanos: int64PointerPG(usage.UpstreamCostNanos),
+		}
+		if usage.BYOK != nil {
+			params.IsByok = pgtype.Bool{Bool: *usage.BYOK, Valid: true}
+		}
+		if thread != nil {
+			params.ThreadID = uuid.NullUUID{UUID: thread.ID, Valid: true}
+			params.ContextType, params.ContextID = thread.ContextType, thread.ContextID
+		}
+		if err := s.db.InsertInferenceUsage(ctx, params); err != nil && s.logger != nil {
+			s.logger.Error("record inference usage", "run_id", run.ID, "error", err)
+		}
+	}
+}
+
+func writeUsage(w *agui.Writer, debug debugRunContext, messageID string, usage *Usage) error {
+	if usage == nil || !debug.UsageEvents {
+		return nil
+	}
+	return w.Write(agui.UsageEvent{RunID: debug.RunID, MessageID: messageID, Usage: debugUsage(*usage)})
+}
+
 func writeDebugSnapshot(w *agui.Writer, debug debugRunContext, iteration int, phase, model string, a assistant, messages []Message, usage Usage) error {
 	if !debug.Enabled {
 		return nil
@@ -748,7 +798,7 @@ type agentLoopResult struct {
 
 type pauseClientToolFunc func(Message, []Message, clientToolPause, agentLoopState) error
 
-func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provider, credential []byte, model string, a assistant, messages []Message, tc toolContext, debug debugRunContext, capability *clientCapability, state agentLoopState, persist func(...Message) error, pause pauseClientToolFunc) (agentLoopResult, error) {
+func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provider, credential []byte, model string, a assistant, messages []Message, tc toolContext, debug debugRunContext, capability *clientCapability, state agentLoopState, persist func(...Message) error, pause pauseClientToolFunc, record usageRecorder) (agentLoopResult, error) {
 	messages = append([]Message{{Role: RoleSystem, Content: a.System}}, messages...)
 	usedCallIDs := usedToolCallIDs(messages)
 	for state.IterationCount <= maxIterations {
@@ -774,6 +824,7 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 		calls := map[int]*toolCallAccumulator{}
 		started := false
 		finish := FinishReasonOther
+		var callUsage *Usage
 		err := provider.StreamChat(ctx, credential, ChatRequest{Model: model, Messages: requestMessages, Tools: requestAssistant.Tools}, func(event StreamEvent) error {
 			switch event.Type {
 			case StreamEventTextDelta:
@@ -803,12 +854,19 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 			case StreamEventFinish:
 				finish = event.FinishReason
 			case StreamEventUsage:
-				state.Usage.PromptTokens += event.Usage.PromptTokens
-				state.Usage.CompletionTokens += event.Usage.CompletionTokens
-				state.Usage.TotalTokens += event.Usage.TotalTokens
+				state.Usage.Add(event.Usage)
+				if callUsage == nil {
+					callUsage = &Usage{}
+				}
+				callUsage.Add(event.Usage)
+				callUsage.GenerationID, callUsage.BYOK = event.Usage.GenerationID, event.Usage.BYOK
 			}
 			return nil
 		})
+		// Record before checking err: a call that failed after reporting usage was still billed.
+		if callUsage != nil && record != nil {
+			record(messageID, *callUsage)
+		}
 		if err != nil {
 			return agentLoopResult{State: state}, err
 		}
@@ -825,6 +883,9 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 				if err := w.Write(agui.TextMessageEndEvent{MessageID: messageID}); err != nil {
 					return agentLoopResult{State: state}, err
 				}
+			}
+			if err := writeUsage(w, debug, messageID, callUsage); err != nil {
+				return agentLoopResult{State: state}, err
 			}
 			return agentLoopResult{State: state}, nil
 		}
@@ -904,6 +965,10 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 			}
 		}
 		if pending != nil {
+			// Clients stop reading a segment at CLIENT_TOOL_REQUEST, so report usage first.
+			if err := writeUsage(w, debug, messageID, callUsage); err != nil {
+				return agentLoopResult{State: state}, err
+			}
 			if err := w.Write(agui.ClientToolRequestEvent{
 				RunID: debug.RunID, ThreadID: debug.ThreadID, ToolCallID: pending.Call.ID,
 				ToolName: pending.Call.Name, Arguments: pending.Arguments,
@@ -918,6 +983,9 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 				return agentLoopResult{State: state}, err
 			}
 			return agentLoopResult{State: state, Paused: pending}, nil
+		}
+		if err := writeUsage(w, debug, messageID, callUsage); err != nil {
+			return agentLoopResult{State: state}, err
 		}
 	}
 	return agentLoopResult{State: state}, errAgentIterationLimit

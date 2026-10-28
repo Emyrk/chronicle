@@ -1,5 +1,6 @@
 import type { InferenceMessage, InferenceModel, InferenceRunRequest } from "@/api/typesGenerated";
 import type { ChatMessage } from "./protocol";
+import { addUsage, usageFromApi, type ChatUsage } from "./usage";
 import type { CreateChatRunRequestInput } from "./useAssistantChat";
 
 export type FrontendInferenceRunRequest = InferenceRunRequest & {
@@ -23,6 +24,7 @@ export function buildSiteHelpRunRequest(
     model: selection.modelId,
     assistant_id: "site-help",
     ...(debug ? { debug: true } : {}),
+    usage_events: true,
     messages: input.messages.map(toInferenceMessage),
   };
 }
@@ -44,6 +46,7 @@ export function buildInstanceAnalystRunRequest(
     model: selection.modelId,
     assistant_id: "instance-analyst",
     ...(debug ? { debug: true } : {}),
+    usage_events: true,
     thread_id: input.threadId,
     instance: instanceId,
     message: toInferenceMessage(message),
@@ -66,6 +69,7 @@ export function buildLuaWorkshopRunRequest(
     model: selection.modelId,
     assistant_id: "lua-workshop",
     ...(debug ? { debug: true } : {}),
+    usage_events: true,
     thread_id: input.threadId,
     message: toInferenceMessage(message),
   };
@@ -76,12 +80,19 @@ export function toInferenceMessage(message: ChatMessage): InferenceMessage {
 }
 
 export function toChatMessages(messages: readonly InferenceMessage[]): ChatMessage[] {
+  // Assistant steps that only called tools are hidden; their usage joins the turn's next shown reply.
+  let carried: ChatUsage | undefined;
   return messages.flatMap((message, index) => {
+    if (message.role === "user") carried = undefined;
+    if (message.role === "assistant") carried = addUsage(carried, message.usage && usageFromApi(message.usage));
     if ((message.role !== "user" && message.role !== "assistant") || !message.content) return [];
+    const usage = message.role === "assistant" ? carried : undefined;
+    if (message.role === "assistant") carried = undefined;
     return [{
       id: message.id ?? `stored-message-${index}`,
       role: message.role,
       content: message.content,
+      ...(usage && { usage }),
     } satisfies ChatMessage];
   });
 }

@@ -203,7 +203,7 @@ function validateClientToolRequest(value: Record<string, unknown>, event: SseEve
   }
 }
 
-function validateAgUiEvent(value: unknown, transportEvent: SseEvent): AgUiEvent {
+function validateAgUiEvent(value: unknown, transportEvent: SseEvent): AgUiEvent | null {
   if (!isRecord(value)) {
     throw new AgUiClientError("parse", "AG-UI event data must be a JSON object.", {
       event: transportEvent,
@@ -211,11 +211,13 @@ function validateAgUiEvent(value: unknown, transportEvent: SseEvent): AgUiEvent 
   }
 
   const type = value.type ?? transportEvent.event;
-  if (typeof type !== "string" || !AG_UI_EVENT_TYPE_SET.has(type)) {
+  if (typeof type !== "string") {
     throw new AgUiClientError("parse", `Unsupported or missing AG-UI event type: ${String(type)}.`, {
       event: transportEvent,
     });
   }
+  // Skip event types this build does not know, so the server can add events without breaking open tabs.
+  if (!AG_UI_EVENT_TYPE_SET.has(type)) return null;
 
   const withTransportType = value.type === undefined ? { ...value, type } : value;
   switch (type as AgUiEventType) {
@@ -267,12 +269,22 @@ function validateAgUiEvent(value: unknown, transportEvent: SseEvent): AgUiEvent 
     case "TOOL_CALL_END":
       requireString(withTransportType, "toolCallId", transportEvent);
       break;
+    case "USAGE": {
+      requireString(withTransportType, "runId", transportEvent);
+      requireString(withTransportType, "messageId", transportEvent);
+      const usage = requireRecord(withTransportType.usage, "usage", transportEvent);
+      requireNumber(usage, "promptTokens", transportEvent);
+      requireNumber(usage, "completionTokens", transportEvent);
+      if (usage.costUsd !== undefined) requireNumber(usage, "costUsd", transportEvent);
+      break;
+    }
   }
 
   return withTransportType as unknown as AgUiEvent;
 }
 
-export function parseAgUiEvent(transportEvent: SseEvent): AgUiEvent {
+/** Returns null for an event type this build does not know. */
+export function parseAgUiEvent(transportEvent: SseEvent): AgUiEvent | null {
   let value: unknown;
   try {
     value = JSON.parse(transportEvent.data);
@@ -497,6 +509,7 @@ async function consumeSegment(
 ): Promise<"terminal" | ClientToolRequestEvent> {
   for await (const transportEvent of parseSseStream(response.body!, options.signal)) {
     const event = parseAgUiEvent(transportEvent);
+    if (!event) continue;
     options.onEvent(event, transportEvent);
     if (event.type === "RUN_FINISHED" || event.type === "RUN_ERROR") return "terminal";
     if (event.type === "CLIENT_TOOL_REQUEST") return event;
@@ -529,6 +542,7 @@ export async function runAgUi(options: RunAgUiOptions): Promise<void> {
       throw new AgUiClientError("stream", "The client tool runtime failed.", { cause: error });
     }
     const continuationUrl = `/api/v1/inference/runs/${encodeURIComponent(outcome.runId)}/client-tools/${encodeURIComponent(outcome.toolCallId)}`;
-    response = await postSse(options, continuationUrl, continuation);
+    // This build understands USAGE events; the server sends them only when asked.
+    response = await postSse(options, continuationUrl, { ...continuation, usage_events: true });
   }
 }

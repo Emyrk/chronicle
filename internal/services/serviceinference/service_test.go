@@ -236,22 +236,37 @@ func (p *scriptedProvider) StreamChat(_ context.Context, _ []byte, request ChatR
 func TestAgentLoopTextAndToolCall(t *testing.T) {
 	t.Parallel()
 	provider := &scriptedProvider{streams: [][]StreamEvent{
-		{{Type: StreamEventToolCallDelta, ToolCall: ToolCallDelta{Index: 0, ID: "call-1", Name: "list_pages", Arguments: "{}"}}, {Type: StreamEventFinish, FinishReason: FinishReasonToolCalls}},
-		{{Type: StreamEventTextDelta, Text: "Use Rankings."}, {Type: StreamEventUsage, Usage: Usage{PromptTokens: 4, CompletionTokens: 2, TotalTokens: 6}}, {Type: StreamEventFinish, FinishReason: FinishReasonStop}},
+		{{Type: StreamEventToolCallDelta, ToolCall: ToolCallDelta{Index: 0, ID: "call-1", Name: "list_pages", Arguments: "{}"}}, {Type: StreamEventFinish, FinishReason: FinishReasonToolCalls},
+			{Type: StreamEventUsage, Usage: Usage{PromptTokens: 1, CompletionTokens: 1, TotalTokens: 2, CostNanos: ptr(int64(500))}}},
+		{{Type: StreamEventTextDelta, Text: "Use Rankings."}, {Type: StreamEventUsage, Usage: Usage{PromptTokens: 3, CompletionTokens: 2, TotalTokens: 5, CachedTokens: 1, CostNanos: ptr(int64(1500))}}, {Type: StreamEventFinish, FinishReason: FinishReasonStop}},
 	}}
 	var stream bytes.Buffer
 	writer := agui.NewStreamWriter(&stream, nil)
 	var persisted []Message
 	var persistBatches []int
 	s := &Service{}
-	result, err := s.agentLoop(context.Background(), writer, provider, nil, "model", assistants["site-help"], []Message{{Role: RoleUser, Content: "Where are rankings?"}}, toolContext{service: s}, debugRunContext{}, nil, agentLoopState{}, func(messages ...Message) error {
+	type recordedUsage struct {
+		messageKey string
+		usage      Usage
+	}
+	var recorded []recordedUsage
+	result, err := s.agentLoop(context.Background(), writer, provider, nil, "model", assistants["site-help"], []Message{{Role: RoleUser, Content: "Where are rankings?"}}, toolContext{service: s}, debugRunContext{UsageEvents: true}, nil, agentLoopState{}, func(messages ...Message) error {
 		persistBatches = append(persistBatches, len(messages))
 		persisted = append(persisted, messages...)
 		return nil
-	}, nil)
+	}, nil, func(messageKey string, usage Usage) {
+		recorded = append(recorded, recordedUsage{messageKey, usage})
+	})
 	require.NoError(t, err)
 	require.Equal(t, 2, provider.calls)
 	require.Equal(t, 4, result.State.Usage.PromptTokens)
+	// One usage row per model call, keyed by the assistant message that call produced.
+	require.Len(t, recorded, 2)
+	require.Equal(t, persisted[0].ID, recorded[0].messageKey)
+	require.Equal(t, persisted[2].ID, recorded[1].messageKey)
+	require.Equal(t, 2000, int(*result.State.Usage.CostNanos))
+	require.Equal(t, 1, result.State.Usage.CachedTokens)
+	require.Equal(t, 2, strings.Count(stream.String(), `"type":"USAGE"`))
 	require.Equal(t, []int{2, 1}, persistBatches)
 	require.Len(t, persisted, 3)
 	require.Equal(t, RoleTool, persisted[1].Role)
@@ -288,7 +303,7 @@ func TestAgentLoopUsesARequiredFinalResponseAfterToolStepLimit(t *testing.T) {
 		func(messages ...Message) error {
 			persisted = append(persisted, messages...)
 			return nil
-		}, nil,
+		}, nil, nil,
 	)
 	require.NoError(t, err)
 	require.Equal(t, maxIterations, result.State.IterationCount)
@@ -322,7 +337,7 @@ func TestAgentLoopDebugSnapshotsMatchProviderRequestsAndResults(t *testing.T) {
 	writer := agui.NewStreamWriter(&stream, nil)
 	s := &Service{}
 	debug := debugRunContext{Enabled: true, RunID: "run-1", Persistence: "ephemeral"}
-	result, err := s.agentLoop(context.Background(), writer, provider, []byte("provider-secret"), "provider/model", assistants["site-help"], []Message{{Role: RoleUser, Content: "Where are rankings?"}}, toolContext{service: s}, debug, nil, agentLoopState{}, func(...Message) error { return nil }, nil)
+	result, err := s.agentLoop(context.Background(), writer, provider, []byte("provider-secret"), "provider/model", assistants["site-help"], []Message{{Role: RoleUser, Content: "Where are rankings?"}}, toolContext{service: s}, debug, nil, agentLoopState{}, func(...Message) error { return nil }, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, Usage{PromptTokens: 7, CompletionTokens: 3, TotalTokens: 10}, result.State.Usage)
 	require.NotContains(t, stream.String(), "provider-secret")
@@ -392,7 +407,7 @@ func TestAgentLoopDoesNotEndMessageBeforePersistence(t *testing.T) {
 	sentinel := errors.New("persist failed")
 	_, err := (&Service{}).agentLoop(context.Background(), writer, provider, nil, "model", assistants["site-help"], []Message{{Role: RoleUser, Content: "question"}}, toolContext{}, debugRunContext{}, nil, agentLoopState{}, func(...Message) error {
 		return sentinel
-	}, nil)
+	}, nil, nil)
 	require.ErrorIs(t, err, sentinel)
 	require.Contains(t, stream.String(), "TEXT_MESSAGE_START")
 	require.Contains(t, stream.String(), "TEXT_MESSAGE_CONTENT")
@@ -426,7 +441,7 @@ func TestBoundedDurableHistoryStartsAtUserAndLimitsBytes(t *testing.T) {
 	require.Equal(t, RoleUser, history[0].Role)
 	require.Equal(t, "current question", history[0].Content)
 
-	threadMessages := boundedThreadMessages(rows)
+	threadMessages, _ := boundedThreadMessages(rows)
 	require.Len(t, threadMessages, 2)
 	require.Equal(t, string(RoleUser), threadMessages[0].Role)
 
@@ -655,7 +670,7 @@ func TestAgentLoopPausesAndCanPauseAgainForClientTools(t *testing.T) {
 		return nil
 	}
 	debug := debugRunContext{RunID: "run-1", ThreadID: "thread-1", Persistence: "durable"}
-	first, err := (&Service{}).agentLoop(context.Background(), writer, provider, nil, "model", assistantDefinition, []Message{{Role: RoleUser, Content: "inspect"}}, toolContext{}, debug, capability, agentLoopState{}, persist, pause)
+	first, err := (&Service{}).agentLoop(context.Background(), writer, provider, nil, "model", assistantDefinition, []Message{{Role: RoleUser, Content: "inspect"}}, toolContext{}, debug, capability, agentLoopState{}, persist, pause, nil)
 	require.NoError(t, err)
 	require.NotNil(t, first.Paused)
 	require.Equal(t, 1, first.State.IterationCount)
@@ -664,7 +679,7 @@ func TestAgentLoopPausesAndCanPauseAgainForClientTools(t *testing.T) {
 	require.Contains(t, stream.String(), `"effect":"read"`)
 	require.NotContains(t, stream.String(), "RUN_FINISHED")
 
-	second, err := (&Service{}).agentLoop(context.Background(), writer, provider, nil, "model", assistantDefinition, []Message{{Role: RoleUser, Content: "inspect"}, {Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "call-1", Name: "inspect_instance_ui", Arguments: `{}`}}}, {Role: RoleTool, Name: "inspect_instance_ui", ToolCallID: "call-1", Content: `{"status":"success","result":{}}`}}, toolContext{}, debug, capability, first.State, persist, pause)
+	second, err := (&Service{}).agentLoop(context.Background(), writer, provider, nil, "model", assistantDefinition, []Message{{Role: RoleUser, Content: "inspect"}, {Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "call-1", Name: "inspect_instance_ui", Arguments: `{}`}}}, {Role: RoleTool, Name: "inspect_instance_ui", ToolCallID: "call-1", Content: `{"status":"success","result":{}}`}}, toolContext{}, debug, capability, first.State, persist, pause, nil)
 	require.NoError(t, err)
 	require.NotNil(t, second.Paused)
 	require.Equal(t, 2, second.State.IterationCount)
@@ -674,4 +689,72 @@ func TestAgentLoopPausesAndCanPauseAgainForClientTools(t *testing.T) {
 	require.NotEqual(t, "call-1", pauses[1].Call.ID)
 	require.NotEmpty(t, pauses[1].Call.ID)
 	require.Contains(t, stream.String(), pauses[1].Call.ID)
+}
+
+func ptr[T any](value T) *T { return &value }
+
+func TestInferenceUsageTotals(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	store, _ := dbtestutil.NewDB(t)
+	userID := uuid.New()
+	_, err := store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "usage-" + userID.String()[:8]})
+	require.NoError(t, err)
+	connection, err := store.InsertInferenceConnection(ctx, database.InsertInferenceConnectionParams{
+		UserID: userID, Provider: "openrouter", AuthMode: "oauth", Label: "OpenRouter",
+		EncryptedCredential: []byte("encrypted-secret"), CredentialKeyVersion: "v1", Status: "active",
+	})
+	require.NoError(t, err)
+	projectID := uuid.NewString()
+	thread, err := store.InsertInferenceThread(ctx, database.InsertInferenceThreadParams{
+		UserID: userID, AssistantID: "lua-workshop", Persistence: "durable",
+		ContextType: pgtype.Text{String: "lua_project", Valid: true}, ContextID: pgtype.Text{String: projectID, Valid: true}, Title: "Test",
+	})
+	require.NoError(t, err)
+	run, err := store.InsertInferenceRun(ctx, database.InsertInferenceRunParams{
+		ThreadID: uuid.NullUUID{UUID: thread.ID, Valid: true}, UserID: userID, ConnectionID: connection.ID,
+		AssistantID: "lua-workshop", Model: "model", Status: "completed", IdempotencyKey: "usage-run",
+	})
+	require.NoError(t, err)
+	require.NoError(t, insertInferenceMessages(ctx, store, thread.ID,
+		Message{Role: RoleUser, Content: "build it"},
+		Message{ID: "answer", Role: RoleAssistant, Content: "Done."}))
+
+	service := &Service{db: store}
+	record := service.usageRecorder(ctx, run, &thread)
+	// A tool-call step whose message is not shown, then the visible answer; the second call reports no cost.
+	record("tool-step", Usage{PromptTokens: 100, CompletionTokens: 10, CachedTokens: 40, CostNanos: ptr(int64(1_250_000)), BYOK: ptr(false), GenerationID: "gen-1"})
+	record("answer", Usage{PromptTokens: 200, CompletionTokens: 20, ReasoningTokens: 5, CostNanos: ptr(int64(2_000_000))})
+	record("answer", Usage{PromptTokens: 1, CompletionTokens: 1})
+	// Ephemeral runs are recorded without a chat or context.
+	service.usageRecorder(ctx, run, nil)("ephemeral", Usage{PromptTokens: 7, CostNanos: ptr(int64(1))})
+
+	response := httptest.NewRecorder()
+	service.writeThread(response, httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx), thread)
+	require.Equal(t, http.StatusOK, response.Code)
+	var body chroniclesdk.InferenceThreadResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	require.Equal(t, int64(301), body.Usage.PromptTokens)
+	require.Equal(t, int64(3), body.Usage.Calls)
+	require.InDelta(t, 0.00325, *body.Usage.CostUSD, 1e-12)
+	require.Len(t, body.Messages, 2)
+	require.Nil(t, body.Messages[0].Usage)
+	require.Equal(t, &chroniclesdk.InferenceUsage{PromptTokens: 201, CompletionTokens: 21, ReasoningTokens: 5, CostUSD: ptr(0.002), Calls: 2}, body.Messages[1].Usage)
+
+	// Clearing starts the chat total over; the project total keeps everything.
+	_, err = service.clearThreadMessages(ctx, thread.ID, userID)
+	require.NoError(t, err)
+	cleared, err := store.GetInferenceThreadUsage(ctx, database.GetInferenceThreadUsageParams{ID: thread.ID, UserID: userID})
+	require.NoError(t, err)
+	require.Zero(t, cleared.Calls)
+	require.Zero(t, usageSDK(cleared.PromptTokens, cleared.CompletionTokens, cleared.CachedTokens, cleared.ReasoningTokens, cleared.CostNanos, cleared.CostedCalls, cleared.Calls).PromptTokens)
+
+	project := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/usage?context_type=lua_project&context_id="+projectID, nil)
+	service.getContextUsage(project, request.WithContext(chronauth.WithClaims(ctx, &claims.Claims{Subject: userID})))
+	require.Equal(t, http.StatusOK, project.Code, project.Body.String())
+	var projectUsage chroniclesdk.InferenceUsage
+	require.NoError(t, json.Unmarshal(project.Body.Bytes(), &projectUsage))
+	require.Equal(t, int64(3), projectUsage.Calls)
+	require.Equal(t, int64(40), projectUsage.CachedTokens)
 }

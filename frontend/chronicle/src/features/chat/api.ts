@@ -8,6 +8,7 @@ import type {
   InferenceModelsResponse,
   InferenceSettings,
   InferenceThreadResponse,
+  InferenceUsage,
   UpdateInferenceSettingsRequest,
 } from "@/api/typesGenerated";
 import type { DebugSnapshotEvent } from "./protocol";
@@ -264,6 +265,21 @@ export function useInferenceThread(
       return response.json() as Promise<InferenceThreadResponse>;
     },
     enabled: Boolean(threadId) && (options?.enabled ?? true),
+    retry: false,
+  });
+}
+
+/** The caller's own AI usage for a context, e.g. every chat about one addon project. */
+export function useInferenceContextUsage(contextType: string, contextId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ["inference", "usage", contextType, contextId ?? ""] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams({ context_type: contextType, context_id: contextId ?? "" });
+      const response = await fetch(`/api/v1/inference/usage?${params}`, { credentials: "include" });
+      if (!response.ok) throw await readError(response, "Failed to load AI usage");
+      return response.json() as Promise<InferenceUsage>;
+    },
+    enabled: Boolean(contextId) && enabled,
     retry: false,
   });
 }

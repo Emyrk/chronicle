@@ -5,6 +5,8 @@ import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ArrowLeft, ArrowUpRight, BookOpen, Code2, Download, FileCode, FileImage, FileJson, FileText, FlaskConical, Package, PencilLine, Plus, ShieldCheck, Upload } from "lucide-react"
 import { useAuthorizationCheck, useSession } from "@/api/queries"
+import { useInferenceContextUsage } from "@/features/chat/api"
+import { describeUsage, formatUsage, usageFromApi } from "@/features/chat/usage"
 import { createProject, getProject, listProjects, promoteStable, publishUnstable, uploadDraft, type LuaProject, type LuaProjectKind } from "./api"
 import { defaultRef, formatBytes, isImagePath, manifestSummary, PACKAGE_REFS, packageDownloadURL, packageSha, readPackageFiles, shortSha, type PackageFile, type PackageRef } from "./packageFiles"
 
@@ -153,6 +155,8 @@ export function LuaProjectPage() {
   useEffect(() => () => { for (const url of images.values()) URL.revokeObjectURL(url) }, [images])
   const selected = files?.find(file => file.path === search.get("file")) ?? files?.find(file => file.path === "README.md")
   const about = files ? manifestSummary(files) : null
+  // Only the viewer's own Workshop chats count; the query fails quietly without AI access.
+  const aiUsage = useInferenceContextUsage("lua_project", project?.id, project?.kind === "panel")
 
   function show(next: { ref?: PackageRef; file?: string | null }) {
     setSearch(current => {
@@ -257,6 +261,10 @@ export function LuaProjectPage() {
             <div><dt className="text-muted-foreground">Capabilities</dt><dd className="mt-1 font-mono">{about.capabilities.join(", ") || "None"}</dd></div>
             <div><dt className="text-muted-foreground">Replays</dt><dd className="mt-1">{about.streamScope === "instance" ? "Whole instance" : "Selected encounters"}{about.maxEvents !== undefined && `, up to ${about.maxEvents.toLocaleString()} events`}</dd></div>
           </dl> : <p className="text-xs text-muted-foreground">{ref ? "Details appear once the files load." : "Details appear after the first draft."}</p>}
+          {aiUsage.data && aiUsage.data.calls > 0 && <div className="text-xs" title={describeUsage(usageFromApi(aiUsage.data))}>
+            <p className="text-muted-foreground">AI assistant</p>
+            <p className="mt-1 tabular-nums">{formatUsage(usageFromApi(aiUsage.data))}</p>
+          </div>}
           <p className="border-t border-border pt-3 text-xs text-muted-foreground">Created {formatDate(project.created_at)} · <Link className="text-primary underline-offset-2 hover:underline" to="/addons/api">API reference</Link></p>
         </section>
         <section className={`${card} space-y-2 text-sm`} aria-label="Releases">
