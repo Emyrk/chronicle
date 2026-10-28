@@ -5,7 +5,7 @@ import type { ClientToolRequestEvent, DebugMessage, DebugSnapshotEvent } from ".
 
 function snapshot(runId: string, iteration: number, phase: DebugSnapshotEvent["phase"], messages: DebugMessage[], totalTokens = 10): DebugSnapshotEvent {
   return {
-    type: "DEBUG_SNAPSHOT", runId, iteration, phase, assistantId: "lua-workshop", model: "m", persistence: "durable", messages,
+    type: "DEBUG_SNAPSHOT", runId, iteration, phase, assistantId: "addon-workshop-panel", model: "m", persistence: "durable", messages,
     tools: [{ name: "read_lua_files", description: "Read", parameters: { type: "object" } }], skills: [],
     limits: { maxHistoryMessages: 1, maxHistoryBytes: 1, maxIterations: 1, maxToolCalls: 1, maxToolArguments: 1, maxToolOutput: 1, maxAssistantText: 1 },
     usage: { promptTokens: totalTokens, completionTokens: 0, totalTokens },

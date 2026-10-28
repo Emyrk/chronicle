@@ -32,6 +32,9 @@ func (s *Service) AccountRoutes() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", s.getInferenceSettings)
 	r.Put("/", s.updateInferenceSettings)
+	// Stored credentials stay visible and removable even while AI features are off for the account.
+	r.Get("/connections", s.listConnections)
+	r.Delete("/connections/{connectionID}", s.deleteConnection)
 	return r
 }
 
@@ -54,9 +57,21 @@ func (s *Service) updateInferenceSettings(w http.ResponseWriter, r *http.Request
 		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "AI features are not enabled for this account."})
 		return
 	}
-	if err := s.zed.SetInferenceDisabled(r.Context(), userID(r), req.Disabled); err != nil {
-		s.internalError(w, "update inference preference", err)
-		return
+	if req.Disabled != nil {
+		if err := s.zed.SetInferenceDisabled(r.Context(), userID(r), *req.Disabled); err != nil {
+			s.internalError(w, "update inference preference", err)
+			return
+		}
+	}
+	if len(req.Assistants) > 0 {
+		if err := s.setAssistantsEnabled(r.Context(), userID(r), req.Assistants); err != nil {
+			if errors.Is(err, errUnknownAssistant) {
+				badRequest(w, r, err.Error())
+				return
+			}
+			s.internalError(w, "update assistant preferences", err)
+			return
+		}
 	}
 	s.writeInferenceSettings(w, r)
 }
@@ -80,11 +95,22 @@ func (s *Service) writeInferenceSettings(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	available, disabled, permitted := checks[0], checks[1], checks[2]
+	off, err := s.disabledAssistants(r.Context(), userID(r))
+	if err != nil {
+		s.internalError(w, "read assistant preferences", err)
+		return
+	}
+	settings := make([]chroniclesdk.InferenceAssistantSetting, 0, len(assistantSettingsOrder))
+	for _, id := range assistantSettingsOrder {
+		a := assistants[id]
+		settings = append(settings, chroniclesdk.InferenceAssistantSetting{ID: a.ID, Name: a.Name, Description: a.Description, Enabled: !off[a.ID]})
+	}
 	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceSettings{
 		Available:        available,
 		Disabled:         disabled,
 		Enabled:          s.enabled && permitted,
 		ServiceAvailable: s.enabled,
+		Assistants:       settings,
 	})
 }
 
@@ -355,6 +381,9 @@ func (s *Service) createInstanceThread(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "You cannot view this instance."})
 		return
 	}
+	if !s.requireAssistantEnabled(w, r, "instance-analyst") {
+		return
+	}
 	thread, err := s.db.GetOrCreateInferenceThread(r.Context(), database.GetOrCreateInferenceThreadParams{UserID: userID(r), AssistantID: "instance-analyst", ContextType: pgtype.Text{String: "instance", Valid: true}, ContextID: pgtype.Text{String: inst.ID.String(), Valid: true}, Title: inst.Name})
 	if err != nil {
 		s.internalError(w, "create inference thread", err)
@@ -368,7 +397,10 @@ func (s *Service) createLuaProjectThread(w http.ResponseWriter, r *http.Request)
 		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "You cannot edit this Lua project."})
 		return
 	}
-	thread, err := s.db.GetOrCreateInferenceThread(r.Context(), database.GetOrCreateInferenceThreadParams{UserID: userID(r), AssistantID: "lua-workshop", ContextType: pgtype.Text{String: "lua_project", Valid: true}, ContextID: pgtype.Text{String: project.ID.String(), Valid: true}, Title: project.Name})
+	if !s.requireAssistantEnabled(w, r, addonWorkshopPanelAssistantID) {
+		return
+	}
+	thread, err := s.db.GetOrCreateInferenceThread(r.Context(), database.GetOrCreateInferenceThreadParams{UserID: userID(r), AssistantID: addonWorkshopPanelAssistantID, ContextType: pgtype.Text{String: "lua_project", Valid: true}, ContextID: pgtype.Text{String: project.ID.String(), Valid: true}, Title: project.Name})
 	if err != nil {
 		s.internalError(w, "create inference thread", err)
 		return

@@ -1320,6 +1320,13 @@ CREATE TABLE inference_usage (
     CONSTRAINT inference_usage_context_check CHECK (((context_type IS NULL) = (context_id IS NULL)))
 );
 
+CREATE TABLE inference_user_config (
+    user_id uuid NOT NULL,
+    config jsonb DEFAULT '{}'::jsonb NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT inference_user_config_object CHECK ((jsonb_typeof(config) = 'object'::text))
+);
+
 CREATE TABLE instance_loot (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     instance_id uuid NOT NULL,
@@ -2841,6 +2848,9 @@ ALTER TABLE ONLY inference_threads
 ALTER TABLE ONLY inference_usage
     ADD CONSTRAINT inference_usage_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY inference_user_config
+    ADD CONSTRAINT inference_user_config_pkey PRIMARY KEY (user_id);
+
 ALTER TABLE ONLY instance_loot
     ADD CONSTRAINT instance_loot_pkey PRIMARY KEY (id);
 
@@ -3751,6 +3761,9 @@ ALTER TABLE ONLY inference_usage
 
 ALTER TABLE ONLY inference_usage
     ADD CONSTRAINT inference_usage_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY inference_user_config
+    ADD CONSTRAINT inference_user_config_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY instance_loot
     ADD CONSTRAINT instance_loot_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;

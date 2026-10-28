@@ -13,7 +13,7 @@ import (
 
 func TestLuaWorkshopIsDurableAndUsesOnlyLuaEditorTools(t *testing.T) {
 	t.Parallel()
-	a := assistants["lua-workshop"]
+	a := assistants[addonWorkshopPanelAssistantID]
 	require.True(t, a.Durable)
 	require.Equal(t, "lua_project", a.ContextType)
 	require.Empty(t, a.Tools)
@@ -102,7 +102,7 @@ func TestLuaEditorContinuationIsBoundToProjectScope(t *testing.T) {
 
 func TestLuaWorkshopPromptIncludesAPIReference(t *testing.T) {
 	t.Parallel()
-	system := assistants["lua-workshop"].System
+	system := assistants[addonWorkshopPanelAssistantID].System
 	for _, want := range []string{"# Addon API reference", "## Events", "Chronicle.GetUnit", "## Limits", "chronicle.v1.ui"} {
 		require.Contains(t, system, want)
 	}

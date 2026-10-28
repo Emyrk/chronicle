@@ -45,8 +45,11 @@ func TestInferenceAccountSettingsOptOutAndBackIn(t *testing.T) {
 	ctx := testutil.Context(t, testutil.WaitLong)
 	userID := uuid.New()
 	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"inference_capable"}))
+	store, _ := dbtestutil.NewDB(t)
+	_, err := store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "optout-" + userID.String()[:8]})
+	require.NoError(t, err)
 
-	service := &Service{zed: zed, enabled: true, logger: slog.Default()}
+	service := &Service{zed: zed, db: store, enabled: true, logger: slog.Default()}
 	handler := service.AccountRoutes()
 	request := func(method, body string) chroniclesdk.InferenceSettings {
 		req := httptest.NewRequest(method, "/", strings.NewReader(body))
@@ -73,10 +76,44 @@ func TestInferenceAccountSettingsOptOutAndBackIn(t *testing.T) {
 	require.True(t, disabled.Disabled)
 	require.False(t, disabled.Enabled)
 
+	// Connections stay listable and removable from account settings while AI is off.
+	connection, err := store.InsertInferenceConnection(ctx, database.InsertInferenceConnectionParams{
+		UserID: userID, Provider: "openrouter", AuthMode: "oauth", Label: "OpenRouter",
+		EncryptedCredential: []byte("encrypted-secret"), CredentialKeyVersion: "v1", Status: "active",
+	})
+	require.NoError(t, err)
+	account := func(method, path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, nil).WithContext(chronauth.WithClaims(ctx, &claims.Claims{Subject: userID}))
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, req)
+		return recorder
+	}
+	listed := account(http.MethodGet, "/connections")
+	require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())
+	require.Contains(t, listed.Body.String(), connection.ID.String())
+	require.NotContains(t, listed.Body.String(), "encrypted-secret")
+	removed := account(http.MethodDelete, "/connections/"+connection.ID.String())
+	require.Equal(t, http.StatusNoContent, removed.Code, removed.Body.String())
+	require.Equal(t, http.StatusNotFound, account(http.MethodDelete, "/connections/"+connection.ID.String()).Code)
+
 	reenabled := request(http.MethodPut, `{"disabled":false}`)
 	require.True(t, reenabled.Available)
 	require.False(t, reenabled.Disabled)
 	require.True(t, reenabled.Enabled)
+
+	enabledIDs := func(settings chroniclesdk.InferenceSettings) map[string]bool {
+		out := map[string]bool{}
+		for _, a := range settings.Assistants {
+			out[a.ID] = a.Enabled
+		}
+		return out
+	}
+	require.Equal(t, map[string]bool{"site-help": true, "instance-analyst": true, addonWorkshopPanelAssistantID: true}, enabledIDs(initial))
+	// Changing one assistant leaves the master switch alone.
+	siteHelpOff := request(http.MethodPut, `{"assistants":{"site-help":false}}`)
+	require.False(t, siteHelpOff.Disabled)
+	require.Equal(t, map[string]bool{"site-help": false, "instance-analyst": true, addonWorkshopPanelAssistantID: true}, enabledIDs(siteHelpOff))
+	require.Equal(t, "Ask Chronicle", siteHelpOff.Assistants[0].Name)
 }
 
 func TestInferenceAccountSettingsRejectsOptOutWithoutCapability(t *testing.T) {
@@ -102,8 +139,9 @@ func TestInferenceAccountSettingsAvailableWhenServiceDisabled(t *testing.T) {
 	ctx := testutil.Context(t, testutil.WaitLong)
 	userID := uuid.New()
 	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"inference_capable"}))
+	store, _ := dbtestutil.NewDB(t)
 
-	service := &Service{zed: zed, enabled: false, logger: slog.Default()}
+	service := &Service{zed: zed, db: store, enabled: false, logger: slog.Default()}
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req = req.WithContext(chronauth.WithClaims(req.Context(), &claims.Claims{Subject: userID}))
 	recorder := httptest.NewRecorder()
@@ -707,13 +745,13 @@ func TestInferenceUsageTotals(t *testing.T) {
 	require.NoError(t, err)
 	projectID := uuid.NewString()
 	thread, err := store.InsertInferenceThread(ctx, database.InsertInferenceThreadParams{
-		UserID: userID, AssistantID: "lua-workshop", Persistence: "durable",
+		UserID: userID, AssistantID: addonWorkshopPanelAssistantID, Persistence: "durable",
 		ContextType: pgtype.Text{String: "lua_project", Valid: true}, ContextID: pgtype.Text{String: projectID, Valid: true}, Title: "Test",
 	})
 	require.NoError(t, err)
 	run, err := store.InsertInferenceRun(ctx, database.InsertInferenceRunParams{
 		ThreadID: uuid.NullUUID{UUID: thread.ID, Valid: true}, UserID: userID, ConnectionID: connection.ID,
-		AssistantID: "lua-workshop", Model: "model", Status: "completed", IdempotencyKey: "usage-run",
+		AssistantID: addonWorkshopPanelAssistantID, Model: "model", Status: "completed", IdempotencyKey: "usage-run",
 	})
 	require.NoError(t, err)
 	require.NoError(t, insertInferenceMessages(ctx, store, thread.ID,
@@ -757,4 +795,51 @@ func TestInferenceUsageTotals(t *testing.T) {
 	require.NoError(t, json.Unmarshal(project.Body.Bytes(), &projectUsage))
 	require.Equal(t, int64(3), projectUsage.Calls)
 	require.Equal(t, int64(40), projectUsage.CachedTokens)
+}
+
+func TestAssistantPreferences(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	store, _ := dbtestutil.NewDB(t)
+	userID := uuid.New()
+	_, err := store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "prefs-" + userID.String()[:8]})
+	require.NoError(t, err)
+	service := &Service{db: store}
+
+	off, err := service.disabledAssistants(ctx, userID)
+	require.NoError(t, err)
+	require.Empty(t, off, "every assistant is on until turned off")
+
+	require.NoError(t, service.setAssistantsEnabled(ctx, userID, map[string]bool{"site-help": false, addonWorkshopPanelAssistantID: false}))
+	require.NoError(t, service.setAssistantsEnabled(ctx, userID, map[string]bool{addonWorkshopPanelAssistantID: true}))
+	off, err = service.disabledAssistants(ctx, userID)
+	require.NoError(t, err)
+	require.Equal(t, map[string]bool{"site-help": true}, off)
+	require.ErrorIs(t, service.setAssistantsEnabled(ctx, userID, map[string]bool{"lua-workshop": false}), errUnknownAssistant)
+
+	// Other config keys survive assistant updates.
+	require.NoError(t, store.SetInferenceUserConfigKey(ctx, database.SetInferenceUserConfigKeyParams{UserID: userID, Key: "saved_models", Value: []byte(`["m1"]`)}))
+	require.NoError(t, service.setAssistantsEnabled(ctx, userID, map[string]bool{"instance-analyst": false}))
+	raw, err := store.GetInferenceUserConfig(ctx, userID)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"saved_models":["m1"],"disabled_assistants":["instance-analyst","site-help"]}`, string(raw))
+
+	request := httptest.NewRequest(http.MethodPost, "/", nil).WithContext(chronauth.WithClaims(ctx, &claims.Claims{Subject: userID}))
+	response := httptest.NewRecorder()
+	require.False(t, service.requireAssistantEnabled(response, request, "site-help"))
+	require.Equal(t, http.StatusForbidden, response.Code)
+	require.Contains(t, response.Body.String(), "Ask Chronicle is turned off in your AI settings.")
+	require.True(t, service.requireAssistantEnabled(httptest.NewRecorder(), request, addonWorkshopPanelAssistantID))
+}
+
+func TestAssistantSettingsCatalog(t *testing.T) {
+	t.Parallel()
+	require.Len(t, assistantSettingsOrder, len(assistants), "every assistant must appear in the settings")
+	for _, id := range assistantSettingsOrder {
+		a, ok := assistants[id]
+		require.True(t, ok, id)
+		require.Equal(t, id, a.ID)
+		require.NotEmpty(t, a.Name, id)
+		require.NotEmpty(t, a.Description, id)
+	}
 }

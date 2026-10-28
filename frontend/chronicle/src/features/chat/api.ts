@@ -57,12 +57,24 @@ async function readError(response: Response, fallback: string): Promise<Inferenc
   return new InferenceAPIError(inferenceAPIErrorMessage(response.status, body, fallback), response.status);
 }
 
-export function useInferencePermission(enabled = true) {
+/**
+ * Whether the user may use AI chat at all and, given an assistant ID, whether they left that assistant on
+ * in their AI settings. Assistants are on unless turned off.
+ */
+export function useInferencePermission(enabled = true, assistantId?: string) {
   const query = useAuthorizationCheck(
     { inferenceChat: "chronicle:chronicle#use_inference_chat" },
     { enabled, retry: false },
   );
-  return { ...query, allowed: query.data?.inferenceChat ?? false };
+  const chatAllowed = query.data?.inferenceChat ?? false;
+  const settings = useInferenceSettings(enabled && chatAllowed && Boolean(assistantId));
+  return { ...query, allowed: chatAllowed && (!assistantId || assistantEnabled(settings.data, assistantId)) };
+}
+
+/** False until settings load, so a turned-off assistant never flashes on. An assistant the server does not list is on. */
+export function assistantEnabled(settings: Pick<InferenceSettings, "assistants"> | undefined, assistantId: string): boolean {
+  if (!settings) return false;
+  return settings.assistants?.find((assistant) => assistant.id === assistantId)?.enabled ?? true;
 }
 
 export function useInferenceDebugPermission(enabled = true) {
@@ -115,7 +127,7 @@ export function useInferenceConnections(
   return useQuery({
     queryKey: inferenceKeys.connections,
     queryFn: async () => {
-      const response = await fetch("/api/v1/inference/connections", { credentials: "include" });
+      const response = await fetch("/api/v1/me/inference/connections", { credentials: "include" });
       if (!response.ok) throw await readError(response, "Failed to load AI connections");
       return response.json() as Promise<InferenceConnectionsResponse>;
     },
@@ -163,7 +175,7 @@ export function useDeleteInferenceConnection() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (connectionId: string) => {
-      const response = await fetch(`/api/v1/inference/connections/${encodeURIComponent(connectionId)}`, {
+      const response = await fetch(`/api/v1/me/inference/connections/${encodeURIComponent(connectionId)}`, {
         method: "DELETE",
         credentials: "include",
       });

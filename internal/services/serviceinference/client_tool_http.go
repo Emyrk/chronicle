@@ -112,6 +112,9 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, "load inference assistant", errors.New("unknown assistant"))
 		return
 	}
+	if !s.requireAssistantEnabled(w, r, assistantDefinition.ID) {
+		return
+	}
 	assistantDefinition = withClientTools(assistantDefinition, capability)
 	writer := agui.NewWriter(w)
 	if err := writer.Write(agui.RunStartedEvent{ThreadID: thread.ID.String(), RunID: run.IdempotencyKey, ProtocolVersion: "1.0"}); err != nil {

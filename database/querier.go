@@ -294,6 +294,7 @@ type sqlcQuerier interface {
 	GetInferenceRunUsage(ctx context.Context, runID uuid.UUID) (GetInferenceRunUsageRow, error)
 	GetInferenceThreadByOwner(ctx context.Context, arg GetInferenceThreadByOwnerParams) (InferenceThread, error)
 	GetInferenceThreadUsage(ctx context.Context, arg GetInferenceThreadUsageParams) (GetInferenceThreadUsageRow, error)
+	GetInferenceUserConfig(ctx context.Context, userID uuid.UUID) ([]byte, error)
 	// Returns only clean boss kills for an instance, excluding partial kills.
 	// Used by the time-parse handler so the primary instance is scored against
 	// the clean-only snapshot cohort consistently.
@@ -901,6 +902,8 @@ type sqlcQuerier interface {
 	SetDiscordAnnouncementDeliveryError(ctx context.Context, arg SetDiscordAnnouncementDeliveryErrorParams) error
 	SetDiscordAnnouncementMessage(ctx context.Context, arg SetDiscordAnnouncementMessageParams) (GuildDiscordLogAnnouncement, error)
 	SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateGroupIDsParams) error
+	// Replaces one top-level key, leaving the user's other settings untouched.
+	SetInferenceUserConfigKey(ctx context.Context, arg SetInferenceUserConfigKeyParams) error
 	SetLuaProjectDraft(ctx context.Context, arg SetLuaProjectDraftParams) (LuaProject, error)
 	SetPanelLayoutCode(ctx context.Context, arg SetPanelLayoutCodeParams) (int64, error)
 	SetPrimaryUserCharacter(ctx context.Context, arg SetPrimaryUserCharacterParams) (UserCharacterLink, error)

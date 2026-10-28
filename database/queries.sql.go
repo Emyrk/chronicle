@@ -9859,6 +9859,17 @@ func (q *sqlQuerier) GetInferenceThreadUsage(ctx context.Context, arg GetInferen
 	return i, err
 }
 
+const getInferenceUserConfig = `-- name: GetInferenceUserConfig :one
+SELECT config FROM inference_user_config WHERE user_id = $1
+`
+
+func (q *sqlQuerier) GetInferenceUserConfig(ctx context.Context, userID uuid.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getInferenceUserConfig, userID)
+	var config []byte
+	err := row.Scan(&config)
+	return config, err
+}
+
 const getOrCreateInferenceThread = `-- name: GetOrCreateInferenceThread :one
 INSERT INTO inference_threads (
   user_id, assistant_id, persistence, context_type, context_id, title
@@ -10643,6 +10654,25 @@ func (q *sqlQuerier) ResumeInferenceRun(ctx context.Context, arg ResumeInference
 		&i.ToolCallCount,
 	)
 	return i, err
+}
+
+const setInferenceUserConfigKey = `-- name: SetInferenceUserConfigKey :exec
+INSERT INTO inference_user_config (user_id, config)
+VALUES ($1, jsonb_build_object($2::text, $3::jsonb))
+ON CONFLICT (user_id) DO UPDATE
+SET config = inference_user_config.config || jsonb_build_object($2::text, $3::jsonb), updated_at = now()
+`
+
+type SetInferenceUserConfigKeyParams struct {
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+	Key    string    `db:"key" json:"key"`
+	Value  []byte    `db:"value" json:"value"`
+}
+
+// Replaces one top-level key, leaving the user's other settings untouched.
+func (q *sqlQuerier) SetInferenceUserConfigKey(ctx context.Context, arg SetInferenceUserConfigKeyParams) error {
+	_, err := q.db.Exec(ctx, setInferenceUserConfigKey, arg.UserID, arg.Key, arg.Value)
+	return err
 }
 
 const updateInferenceConnectionLastUsedByOwner = `-- name: UpdateInferenceConnectionLastUsedByOwner :one

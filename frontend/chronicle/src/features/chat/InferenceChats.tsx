@@ -56,7 +56,7 @@ export function AssistantConfiguration({
 }
 
 export function ConnectRequiredAction() {
-  return <Button asChild size="sm"><Link to="/account/settings">Open AI settings</Link></Button>;
+  return <Button asChild size="sm"><Link to="/account/ai">Open AI settings</Link></Button>;
 }
 
 function SiteHelpEmptyState() {
@@ -76,7 +76,7 @@ export function GlobalSiteHelpChat() {
 
 function DesktopGlobalSiteHelpChat() {
   const { session, isAuthenticated } = useAuth();
-  const permission = useInferencePermission(isAuthenticated);
+  const permission = useInferencePermission(isAuthenticated, "site-help");
   const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed);
   const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed);
   const debugPreview = useInferenceDebugPreview();
@@ -133,7 +133,7 @@ export function InstanceAssistantChat(props: { instanceId: string; instanceName:
 
 function DesktopInstanceAssistantChat({ instanceId, instanceName }: { instanceId: string; instanceName: string }) {
   const { session, isAuthenticated } = useAuth();
-  const permission = useInferencePermission(isAuthenticated);
+  const permission = useInferencePermission(isAuthenticated, "instance-analyst");
   const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed);
   const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed);
   const debugPreview = useInferenceDebugPreview();
