@@ -380,8 +380,10 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
                     Ranked
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[240px]">
-                  <p className="text-xs">Show ranked damage; move unranked damage and overkill to Excluded.</p>
+                <TooltipContent side="bottom" className="max-w-[280px] space-y-1 text-xs">
+                  <p className="font-medium">Damage that counts toward encounter rankings</p>
+                  <p>When on, damage to non-ranking targets and overkill move to Excluded. Absorbed damage still counts.</p>
+                  <p>Turn off to show all damage together. Hit counts and crit stats always reflect the original hits.</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
