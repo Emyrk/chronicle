@@ -1,5 +1,18 @@
 [
   {
+    "id": "ranked-damage",
+    "title": "Ranked and Excluded damage",
+    "description": "Turn on Ranked in Damage Done to see the damage that counts toward rankings. Overkill and damage to non-ranked targets move to Excluded, and every encounter's targets are listed on the new Rulesets tab.",
+    "publishedAt": "2026-10-28",
+    "rarity": "rare",
+    "tag": "Feature",
+    "icon": "ability_warrior_decisivestrike",
+    "flavor": "Overkill is just showing off.",
+    "hintTitle": "Ranked damage",
+    "hintDescription": "Turn on Ranked in Damage Done to split damage into what counts toward rankings and what is Excluded. Each encounter's targets are on Leaderboards → Rulesets.",
+    "hintHref": "/leaderboards/rulesets"
+  },
+  {
     "id": "character-cosmetics",
     "title": "Character cosmetics are live",
     "description": "Supporters can customize linked characters with separate name, background, and border treatments that appear across raid analysis.",

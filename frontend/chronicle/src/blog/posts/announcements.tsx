@@ -348,6 +348,42 @@ export function CooldownUsagePost({ post }: PostProps) {
   );
 }
 
+export function RankedDamagePost({ post }: PostProps) {
+  return (
+    <ShortPost post={post}>
+      <p>
+        Not every point of damage on the meter counts toward encounter rankings. Overkill never counts, and on many
+        bosses only certain targets do: on Garr, damage to Garr and the Firesworn counts, but cleaving a Lava Surger that
+        wandered in does not. Damage Done can now show you exactly that split.
+      </p>
+      <p>
+        Turn on <strong>Ranked</strong> in the Damage Done panel and every player&apos;s damage is divided in two:
+      </p>
+      <ul>
+        <li>
+          <strong>Ranked</strong> is the damage that counts toward rankings: effective damage to the encounter&apos;s
+          ranking targets. Absorbed damage still counts.
+        </li>
+        <li>
+          <strong>Excluded</strong> is everything else: overkill, and damage to targets the encounter does not rank. It
+          shows as its own column, and in each player&apos;s ability and target breakdown.
+        </li>
+      </ul>
+      <p>
+        The meter reorders by ranked damage, so the mage who AoE&apos;d already-dying adds may drop a few places. Hit
+        counts, crit rate, and hit sizes still reflect every original hit. Ranked is off by default, so the meter shows
+        raw damage until you turn it on. To find the individual hits, use the new <strong>Has Excluded</strong> filter.
+      </p>
+      <p>
+        Which targets count for each encounter is listed on the new{" "}
+        <a href="/leaderboards/rulesets">Rulesets</a> tab in Leaderboards. Each raid&apos;s ruleset shows its DPS ranking
+        targets, marked as bosses or adds, alongside its speedrun requirements: required kills, level range, and when
+        the timer starts. Encounters without a listed rule count all eligible hostile damage, including trash.
+      </p>
+    </ShortPost>
+  );
+}
+
 export function CharacterCosmeticsPost({ post }: PostProps) {
   return (
     <ShortPost post={post}>
