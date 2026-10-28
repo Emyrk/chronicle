@@ -114,7 +114,7 @@ describe("Lua panel worker damage replay", () => {
       local label = CreateFrame("FontString", "out", UIParent)
       local damage = require("chronicle.v1.events.damage")
       local n = 0
-      damage.onEvent(function() n = n + 1; label:SetText(n) end)
+      damage.onEvent(function() n = n + 1 end)
       damage.onComplete(function() label:SetText("done " .. n) end)
     `
     const messages = replay("selection", { lua: counter, data: encounter("e2", new Array(60_000).fill(1)) })
