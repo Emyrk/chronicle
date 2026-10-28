@@ -13,6 +13,7 @@ import {
 } from "@/pages/Logs/utils/instanceProgressionOrder"
 import { useSupportedInstances } from "@/api/queries"
 import type { RankingsInstanceSummary } from "@/api/typesGenerated"
+import { rankingsSummariesWithStats } from "./rankingsLandingState"
 
 /** Instance picker. `showTopPlayers` lists each raid's top DPS on its card. */
 export function RankingsLanding({ showTopPlayers = true }: { showTopPlayers?: boolean }) {
@@ -39,7 +40,9 @@ export function RankingsLanding({ showTopPlayers = true }: { showTopPlayers?: bo
     )
   }
 
-  if (!summaries || summaries.length === 0) {
+  const visibleSummaries = rankingsSummariesWithStats(summaries)
+
+  if (visibleSummaries.length === 0) {
     return (
       <div className="space-y-6">
         <div className="rounded-xl border p-8 text-center text-muted-foreground">
@@ -49,7 +52,7 @@ export function RankingsLanding({ showTopPlayers = true }: { showTopPlayers?: bo
     )
   }
 
-  const raids = summaries
+  const raids = visibleSummaries
     .filter((s) => getInstanceCategory(s.instance_name, supportedInstances) === "raid")
     .sort((left, right) =>
       compareByRaidProgression(left.instance_name, right.instance_name, supportedInstances),
@@ -59,7 +62,7 @@ export function RankingsLanding({ showTopPlayers = true }: { showTopPlayers?: bo
     (raid) => raid.instance_name,
     supportedInstances,
   )
-  const dungeons = summaries.filter(
+  const dungeons = visibleSummaries.filter(
     (s) => getInstanceCategory(s.instance_name, supportedInstances) !== "raid",
   )
 
