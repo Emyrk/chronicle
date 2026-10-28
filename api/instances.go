@@ -196,8 +196,22 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	group, err := db.GetWoWLogGroupByID(ctx, inst.LogGroupID)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to fetch instance log group",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
 	out := db2sdk.WowDecoratedInstance(inst, units, players, encounters, fights, phases)
 	setDataset(&out.WoWInstance)
+	upload := landingUpload(group, inst.EndTime.Time)
+	out.Upload = &upload
+	out.LogOwner = &group.WoWLogGroup.Owner
 	httpapi.Write(ctx, w, http.StatusOK, out)
 }
 

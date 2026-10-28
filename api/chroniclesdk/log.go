@@ -169,6 +169,10 @@ type WoWInstance struct {
 	InvalidatedAt           *time.Time              `json:"invalidated_at,omitempty"`
 	InvalidReason           string                  `json:"invalid_reason,omitempty"`
 	VehicleControlIntervals *VehicleControlMetadata `json:"vehicle_control_intervals,omitempty"`
+	// Upload is the log group's upload provenance, and LogOwner the user who
+	// uploaded it. Both are only populated on the detail endpoint.
+	Upload   *LandingFeaturedUpload `json:"upload,omitempty"`
+	LogOwner *uuid.UUID             `json:"log_owner,omitempty"`
 }
 
 // KillType represents the outcome of an encounter.

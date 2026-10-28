@@ -28,7 +28,7 @@ on the current URL, or else stored in the `chronicle_utm` cookie set on landing
 | `land` | `/start` is opened (once per visit to the page). | utm only |
 | `hero_play_3s` | Once per page view: the 3D hero has rendered and played for 3 s without a break while on screen in a visible tab, or, when 3D is suppressed (reduced motion, data saver, no WebGL2, or no featured run), the poster was on screen for 3 s once the featured run lookup has finished. | `mode`: `3d` or `poster` |
 | `scrub_or_bossjump` | The first use of the hero scrubber's controls in a page view (a click, a drag on the bar, or Space while the scrubber has focus). | `control`: `play_pause` (the button or Space), `boss_jump` (a boss chip), `drag` (dragging the bar), `death_jump` (a death dot) |
-| `cta_sidekick` | Any Get Sidekick / Download click on `/start`. | `placement`: `nav` (top bar), `hero` (hero button), `band` (closing download band), `ghost_card` ("Your run goes here" card) |
+| `cta_sidekick` | Any Get Sidekick / Download click on `/start`, or Get yours / Get Sidekick in the run page's Sidekick strip. | `placement`: `nav` (top bar), `hero` (hero button), `band` (closing download band), `ghost_card` ("Your run goes here" card), `run_strip` (run page Sidekick strip) |
 | `download_start` | A Sidekick asset link is clicked on `/download` (the main button or the "Also for" links). | `os`: `macos`, `windows` or `linux` |
 
 If the 3D hero fails to load, the poster stays up but `hero_play_3s` is not sent.
