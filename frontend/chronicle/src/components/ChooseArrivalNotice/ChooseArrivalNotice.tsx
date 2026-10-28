@@ -15,7 +15,7 @@ const HEADINGS: Record<ChooseArrival, string> = {
 /** Label of the link back to the chooser. */
 const ACTION_LABELS: Record<ChooseArrival, string> = {
   saved: "Change choice",
-  remembered: "Change",
+  remembered: "Change choice",
   picked: "Pick a different community",
 };
 
