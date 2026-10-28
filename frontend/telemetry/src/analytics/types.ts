@@ -18,6 +18,7 @@ export interface AnalyticsHostRow {
   change7dPercent: number | null;
   change14dPercent: number | null;
   change30dPercent: number | null;
+  trend30d: number[];
   activeUsers: number;
   sessions: number;
   nonChinaPageViews: number;

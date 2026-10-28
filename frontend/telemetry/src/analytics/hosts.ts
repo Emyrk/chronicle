@@ -73,12 +73,34 @@ export function buildHostChangeWindows(
   );
 }
 
+export function buildHostTrends(
+  rows: DatedHostPageViews[],
+  periodEnd: string,
+  days = 30
+): Map<string, number[]> {
+  const end = Date.parse(`${periodEnd}T00:00:00Z`);
+  const trends = new Map<string, number[]>();
+
+  for (const row of rows) {
+    const day = Date.parse(`${row.date}T00:00:00Z`);
+    const offset = Math.round((end - day) / 86_400_000);
+    if (!Number.isFinite(offset) || offset < 0 || offset >= days) continue;
+
+    const trend = trends.get(row.hostname) ?? Array<number>(days).fill(0);
+    trend[days - 1 - offset] += row.pageViews;
+    trends.set(row.hostname, trend);
+  }
+
+  return trends;
+}
+
 export function buildHostRows(
   currentHosts: CurrentHostMetrics[],
   previousPageViews: Map<string, number>,
   currentChinaPageViews: Map<string, number>,
   previousChinaPageViews: Map<string, number>,
-  changeWindows: Map<string, HostChangeWindows> = new Map()
+  changeWindows: Map<string, HostChangeWindows> = new Map(),
+  trends: Map<string, number[]> = new Map()
 ): AnalyticsHostRow[] {
   return currentHosts.map((host) => {
     const previous = previousPageViews.get(host.hostname) ?? 0;
@@ -97,6 +119,7 @@ export function buildHostRows(
       previousPageViews: previous,
       changePercent: changePercent(host.pageViews, previous),
       ...windows,
+      trend30d: trends.get(host.hostname) ?? [],
       nonChinaPageViews: nonChina,
       previousNonChinaPageViews: previousNonChina,
       nonChinaChangePercent: changePercent(nonChina, previousNonChina),

@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   buildHostChangeWindows,
   buildHostRows,
+  buildHostTrends,
 } from "../src/analytics/hosts.ts";
 
 test("builds total and non-China server growth", () => {
@@ -15,7 +16,8 @@ test("builds total and non-China server growth", () => {
     new Map([[
       "octo.chronicleclassic.com",
       { change7dPercent: 40, change14dPercent: 30, change30dPercent: 20 },
-    ]])
+    ]]),
+    new Map([["octo.chronicleclassic.com", [10, 20, 30]]])
   );
 
   assert.deepEqual(rows, [{
@@ -26,6 +28,7 @@ test("builds total and non-China server growth", () => {
     change7dPercent: 40,
     change14dPercent: 30,
     change30dPercent: 20,
+    trend30d: [10, 20, 30],
     activeUsers: 20,
     sessions: 30,
     nonChinaPageViews: 90,
@@ -57,6 +60,19 @@ test("builds fixed 7, 14, and 30 day server comparisons", () => {
   );
 });
 
+test("builds oldest-to-newest server sparkline points", () => {
+  const rows = [
+    { date: "2026-10-27", hostname: "octo.chronicleclassic.com", pageViews: 30 },
+    { date: "2026-10-25", hostname: "octo.chronicleclassic.com", pageViews: 10 },
+    { date: "2026-10-25", hostname: "octo.chronicleclassic.com", pageViews: 5 },
+  ];
+
+  assert.deepEqual(
+    buildHostTrends(rows, "2026-10-27", 4).get("octo.chronicleclassic.com"),
+    [0, 15, 0, 30]
+  );
+});
+
 test("handles new servers and missing China rows", () => {
   const [row] = buildHostRows(
     [{ hostname: "new.chronicleclassic.com", pageViews: 12, activeUsers: 3, sessions: 4 }],
@@ -69,6 +85,7 @@ test("handles new servers and missing China rows", () => {
   assert.equal(row.change7dPercent, null);
   assert.equal(row.change14dPercent, null);
   assert.equal(row.change30dPercent, null);
+  assert.deepEqual(row.trend30d, []);
   assert.equal(row.nonChinaChangePercent, null);
   assert.equal(row.nonChinaPageViews, 12);
   assert.equal(row.chinaPageViews, 0);
