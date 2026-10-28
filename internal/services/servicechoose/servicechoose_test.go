@@ -40,13 +40,12 @@ func newService(t *testing.T, accessURL string) *servicechoose.Service {
 
 func TestDestinations(t *testing.T) {
 	t.Parallel()
-	ctx := testutil.Context(t, testutil.WaitShort)
 	svc := newService(t, "http://legacy.localhost:4000")
 
 	require.Equal(t, []servicechoose.Destination{
 		{Key: "capy", Name: "Capy", Tagline: "Capybara realm", Logo: "/c/capy/logo.png", Origin: "http://capy.localhost:4000"},
 		{Key: "octo", Name: "OctoWoW", Origin: "http://octo.localhost:4000"},
-	}, svc.Destinations(ctx), "only discoverable tenants, alphabetical without popularity")
+	}, svc.Destinations(), "only discoverable tenants, alphabetical before any popularity refresh")
 	require.Equal(t, "http://choose.localhost:4000", svc.ChooseURL())
 }
 
@@ -57,21 +56,39 @@ func TestDestinationsByPopularity(t *testing.T) {
 	require.NoError(t, err)
 	busy := tenant("zeta", "Zeta", true, "")
 	quiet := tenant("mid", "Mid", true, "")
+	tied := tenant("tied", "Tied", true, "")
 	tenants := servicetenant.NewTestWithTenants(*u, "localhost",
+		tenant("bravo", "Bravo", true, ""), // no activity
 		tenant("alpha", "Alpha", true, ""), // no activity
 		quiet,
 		busy,
+		tied,
 	)
 	svc := servicechoose.NewTest("choose", tenants, *u)
-	svc.SetPopularity(func(context.Context) map[uuid.UUID]int64 {
-		return map[uuid.UUID]int64{busy.ID: 500, quiet.ID: 20}
-	})
+	stats := fakeStats{rows: []database.TenantDiscoveryStatsRow{
+		{TenantID: quiet.ID, UniquePlayerCount: 20, InstanceCount: 9},
+		{TenantID: tied.ID, UniquePlayerCount: 20, InstanceCount: 30},
+		{TenantID: busy.ID, UniquePlayerCount: 500, InstanceCount: 1},
+		{TenantID: uuid.New(), UniquePlayerCount: 900}, // unknown tenant is ignored
+	}}
+	require.NoError(t, svc.RefreshOrder(ctx, stats))
 
 	var keys []string
-	for _, d := range svc.Destinations(ctx) {
+	for _, d := range svc.Destinations() {
 		keys = append(keys, d.Key)
 	}
-	require.Equal(t, []string{"zeta", "mid", "alpha"}, keys)
+	require.Equal(t, []string{"zeta", "tied", "mid", "alpha", "bravo"}, keys,
+		"by players, then instances; tenants without stats last by name")
+}
+
+// fakeStats answers TenantDiscoveryStats; any other Store call panics.
+type fakeStats struct {
+	database.Store
+	rows []database.TenantDiscoveryStatsRow
+}
+
+func (f fakeStats) TenantDiscoveryStats(context.Context, pgtype.Timestamptz) ([]database.TenantDiscoveryStatsRow, error) {
+	return f.rows, nil
 }
 
 func TestPrimaryDomainWithPort(t *testing.T) {
@@ -82,7 +99,7 @@ func TestPrimaryDomainWithPort(t *testing.T) {
 	svc := servicechoose.NewTest("choose", tenants, *u)
 
 	require.Equal(t, "http://choose.localhost:4000", svc.ChooseURL())
-	require.Equal(t, "http://kronos.localhost:4000", svc.Destinations(testutil.Context(t, testutil.WaitShort))[0].Origin)
+	require.Equal(t, "http://kronos.localhost:4000", svc.Destinations()[0].Origin)
 }
 
 func TestMiddleware(t *testing.T) {

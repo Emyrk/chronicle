@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -22,8 +21,6 @@ type discoveryStatsCache struct {
 	mu      sync.Mutex
 	stats   map[uuid.UUID]database.TenantDiscoveryStatsRow
 	expires time.Time
-	// last mirrors stats for readers that must not wait on a refresh.
-	last atomic.Pointer[map[uuid.UUID]database.TenantDiscoveryStatsRow]
 }
 
 type discoveryStatsQuerier interface {
@@ -50,37 +47,8 @@ func (c *discoveryStatsCache) get(ctx context.Context, q discoveryStatsQuerier) 
 		m[r.TenantID] = r
 	}
 	c.stats = m
-	c.last.Store(&m)
 	c.expires = time.Now().Add(6 * time.Hour)
 	return m
-}
-
-// cached returns the last computed stats without waiting on the query, which
-// may be nil. When they are missing or expired, it refreshes in the background.
-func (c *discoveryStatsCache) cached(ctx context.Context, q discoveryStatsQuerier) map[uuid.UUID]database.TenantDiscoveryStatsRow {
-	// A held lock means a refresh is already running.
-	if c.mu.TryLock() {
-		stale := c.stats == nil || !time.Now().Before(c.expires)
-		c.mu.Unlock()
-		if stale {
-			go c.get(context.WithoutCancel(ctx), q)
-		}
-	}
-	if m := c.last.Load(); m != nil {
-		return *m
-	}
-	return nil
-}
-
-// choosePopularity ranks communities in the chooser by unique players over
-// the discovery stats window.
-func (a *API) choosePopularity(ctx context.Context) map[uuid.UUID]int64 {
-	stats := a.discoveryStats.cached(servicetenant.AdminBypass(ctx), a.Opts.Zed)
-	out := make(map[uuid.UUID]int64, len(stats))
-	for id, s := range stats {
-		out[id] = s.UniquePlayerCount
-	}
-	return out
 }
 
 // Discovery returns branding for this deployment and all its tenants.

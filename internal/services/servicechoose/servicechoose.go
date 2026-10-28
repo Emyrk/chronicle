@@ -17,14 +17,17 @@ import (
 	"sort"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
+	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 
 	"github.com/coder/serpent"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var _ services.Servicer = (*Service)(nil)
@@ -54,13 +57,16 @@ type Service struct {
 	slug      string
 	tenantSvc *servicetenant.Service
 	accessURL url.URL
-	// popularity scores tenants for ordering, higher first. It must not block
-	// on slow queries. Nil or missing scores sort alphabetically.
-	popularity atomic.Pointer[PopularityFunc]
+	db        database.Store
+	// order holds tenant slugs, most popular first, refreshed in the
+	// background. Tenants missing from it are listed after, by name.
+	order atomic.Pointer[[]string]
 }
 
-// PopularityFunc returns a popularity score per tenant ID.
-type PopularityFunc func(ctx context.Context) map[uuid.UUID]int64
+const (
+	orderRefreshInterval = 30 * time.Minute
+	popularityWindow     = 14 * 24 * time.Hour
+)
 
 func New(broker *services.Services) *Service {
 	return &Service{broker: broker}
@@ -77,6 +83,7 @@ func (s *Service) DependsOn() []string {
 	return []string{
 		servicetenant.OnTenant(),
 		serviceaccessurl.OnAccessURL(),
+		servicepgxpool.OnPGXPool(),
 	}
 }
 
@@ -93,7 +100,7 @@ func (s *Service) Options() serpent.OptionSet {
 	}
 }
 
-func (s *Service) Start(_ context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	s.slug = strings.ToLower(strings.TrimSpace(s.slug))
 	if s.slug == "" {
 		return nil
@@ -112,18 +119,56 @@ func (s *Service) Start(_ context.Context) error {
 		}
 	}
 	s.tenantSvc = tenantSvc
+	s.db = database.New(servicepgxpool.PGXPool(s.broker))
+	go s.orderLoop(ctx)
 	return nil
 }
 
 func (s *Service) Close(_ context.Context) error { return nil }
 
-// SetPopularity sets how destinations are ranked. Safe to call on a nil
-// Service.
-func (s *Service) SetPopularity(fn PopularityFunc) {
-	if s == nil {
-		return
+// orderLoop refreshes the popularity order now and every
+// orderRefreshInterval until ctx is done. A failed refresh keeps the
+// previous order.
+func (s *Service) orderLoop(ctx context.Context) {
+	ticker := time.NewTicker(orderRefreshInterval)
+	defer ticker.Stop()
+	for {
+		_ = s.refreshOrder(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
-	s.popularity.Store(&fn)
+}
+
+// refreshOrder ranks tenants by unique players, then instances, over the
+// popularity window.
+func (s *Service) refreshOrder(ctx context.Context) error {
+	since := pgtype.Timestamptz{Time: time.Now().Add(-popularityWindow), Valid: true}
+	rows, err := s.db.TenantDiscoveryStats(servicetenant.AdminBypass(ctx), since)
+	if err != nil {
+		return err
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].UniquePlayerCount != rows[j].UniquePlayerCount {
+			return rows[i].UniquePlayerCount > rows[j].UniquePlayerCount
+		}
+		return rows[i].InstanceCount > rows[j].InstanceCount
+	})
+
+	slugs := make(map[uuid.UUID]string)
+	for _, t := range s.tenantSvc.CachedTenants() {
+		slugs[t.ID] = t.Slug.String
+	}
+	order := make([]string, 0, len(rows))
+	for _, r := range rows {
+		if slug, ok := slugs[r.TenantID]; ok {
+			order = append(order, slug)
+		}
+	}
+	s.order.Store(&order)
+	return nil
 }
 
 // Enabled reports whether this deployment serves the chooser.
@@ -213,38 +258,34 @@ type pageData struct {
 	Destinations []Destination `json:"destinations"`
 }
 
-// Destinations lists every discoverable tenant, most popular first, then by
-// name.
-func (s *Service) Destinations(ctx context.Context) []Destination {
-	var scores map[uuid.UUID]int64
-	if fn := s.popularity.Load(); fn != nil {
-		scores = (*fn)(ctx)
-	}
-
-	type ranked struct {
-		Destination
-		score int64
-	}
-	tenants := s.tenantSvc.CachedTenants()
-	all := make([]ranked, 0, len(tenants))
-	for _, t := range tenants {
+// Destinations lists every discoverable tenant in the cached popularity
+// order, followed by the rest by name.
+func (s *Service) Destinations() []Destination {
+	bySlug := make(map[string]Destination)
+	for _, t := range s.tenantSvc.CachedTenants() {
 		if !t.Discoverable || !t.Slug.Valid || t.Slug.String == "" || t.Slug.String == s.slug {
 			continue
 		}
-		all = append(all, ranked{Destination: s.tenantDestination(t), score: scores[t.ID]})
+		bySlug[t.Slug.String] = s.tenantDestination(t)
 	}
-	sort.Slice(all, func(i, j int) bool {
-		if all[i].score != all[j].score {
-			return all[i].score > all[j].score
-		}
-		return strings.ToLower(all[i].Name) < strings.ToLower(all[j].Name)
-	})
 
-	out := make([]Destination, len(all))
-	for i, r := range all {
-		out[i] = r.Destination
+	out := make([]Destination, 0, len(bySlug))
+	if order := s.order.Load(); order != nil {
+		for _, slug := range *order {
+			if d, ok := bySlug[slug]; ok {
+				out = append(out, d)
+				delete(bySlug, slug)
+			}
+		}
 	}
-	return out
+	rest := make([]Destination, 0, len(bySlug))
+	for _, d := range bySlug {
+		rest = append(rest, d)
+	}
+	sort.Slice(rest, func(i, j int) bool {
+		return strings.ToLower(rest[i].Name) < strings.ToLower(rest[j].Name)
+	})
+	return append(out, rest...)
 }
 
 func (s *Service) tenantDestination(t database.Tenant) Destination {
@@ -271,7 +312,7 @@ func (s *Service) tenantDestination(t database.Tenant) Destination {
 func (s *Service) servePage(w http.ResponseWriter, r *http.Request) {
 	data, err := json.Marshal(pageData{
 		ChooseHost:   r.Host,
-		Destinations: s.Destinations(r.Context()),
+		Destinations: s.Destinations(),
 	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

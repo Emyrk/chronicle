@@ -263,9 +263,6 @@ func New(ctx context.Context, opts Options) (*API, error) {
 			}
 		}
 	}()
-	if opts.Choose != nil {
-		opts.Choose.SetPopularity(api.choosePopularity)
-	}
 	return api, nil
 }
 
