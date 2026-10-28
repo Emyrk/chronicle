@@ -52,6 +52,10 @@ const (
 	FlavorRavencraft FlavorTag = "ravencraft"
 	// FlavorSunreach is Sun Reach-specific behavior.
 	FlavorSunreach FlavorTag = "sunreach"
+	// FlavorFaebright is Faebright-specific behavior.
+	FlavorFaebright FlavorTag = "faebright"
+	// FlavorCrusaderStorm is Crusader Storm-specific behavior.
+	FlavorCrusaderStorm FlavorTag = "crusader-storm"
 	// FlavorAzerothcoreProgression enables progression-server behavior where
 	// multiple expansion versions of the same instance can coexist.
 	FlavorAzerothcoreProgression FlavorTag = "azerothcore-progression"
@@ -86,6 +90,8 @@ func AllFlavorTagValues() []FlavorTag {
 		FlavorCapybara,
 		FlavorRavencraft,
 		FlavorSunreach,
+		FlavorFaebright,
+		FlavorCrusaderStorm,
 		FlavorAzerothcoreProgression,
 		FlavorVanillaPlus,
 		FlavorOctoWoW,

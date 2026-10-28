@@ -13,6 +13,9 @@ describe("seoProductName", () => {
     [["vanilla", "capybara"], "CapybaraCraft"],
     [["vanilla", "ravencraft"], "Ravencraft"],
     [["vanilla", "sunreach"], "Sun Reach"],
+    [["vanilla", "faebright"], "Faebright"],
+    [["vanilla", "crusader-storm"], "Crusader Storm"],
+    [["vanilla", "lunatic"], "Level One Lunatics"],
   ])("maps %j to %s", (flavor, expected) => {
     expect(seoProductName(flavor)).toBe(expected);
   });

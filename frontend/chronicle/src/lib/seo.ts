@@ -9,6 +9,9 @@ const SEO_PRODUCT_NAMES = [
   ["capybara", "CapybaraCraft"],
   ["ravencraft", "Ravencraft"],
   ["sunreach", "Sun Reach"],
+  ["faebright", "Faebright"],
+  ["crusader-storm", "Crusader Storm"],
+  ["lunatic", "Level One Lunatics"],
 ] as const;
 
 export function seoProductName(flavor: readonly string[] | undefined): string {
