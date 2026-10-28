@@ -9,6 +9,7 @@ import { NewAddonForm } from "./NewAddonForm"
 import type { LuaProject } from "./api"
 
 vi.mock("@/api/queries", () => ({ useAuthorizationCheck: vi.fn(), useSession: vi.fn() }))
+vi.mock("@/components/Ads/AdRailStack", () => ({ AdRailStack: ({ primaryPlacement }: { primaryPlacement: string }) => <aside data-ad={primaryPlacement} /> }))
 
 function render(element: ReactElement, client = new QueryClient()) {
   return renderToStaticMarkup(<QueryClientProvider client={client}><MemoryRouter>{element}</MemoryRouter></QueryClientProvider>)
@@ -38,7 +39,10 @@ describe("addons home", () => {
     expect(html).toContain('aria-checked="true"')
     expect(html).toContain(">Popular</button>")
     expect(html).toContain("42 people track this addon")
-    expect(html).toContain("by someone")
+    expect(html).toContain("<table")
+    expect(html).toContain('data-ad="addons-left-rail"')
+    expect(html).toContain('data-ad="addons-right-rail"')
+    expect(html, "popular order is ranked").toMatch(/<td[^>]*>1<\/td>/)
   })
 })
 

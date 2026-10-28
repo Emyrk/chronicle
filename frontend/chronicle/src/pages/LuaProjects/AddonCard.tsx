@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { ArrowUpRight, Star, Users } from "lucide-react"
 import { addonPath, latestRelease, type LuaProject } from "./api"
 import { AddonIcon } from "./AddonIcon"
@@ -22,20 +22,42 @@ export function AddonCard({ project, shared = false }: { project: LuaProject; sh
   </Link>
 }
 
-/** One addon in the gallery: icon, name, author, then how many track it and its latest release. */
-export function AddonTile({ project }: { project: LuaProject }) {
-  const latest = latestRelease(project)
-  return <Link to={addonPath(project)} className="group flex flex-col rounded-xl border border-border/80 bg-card p-4 shadow-sm transition-colors hover:border-primary/50 hover:bg-accent/30">
-    <div className="flex items-start justify-between gap-3">
-      <span className="flex size-12 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-background">
-        <AddonIcon name={latest?.icon ?? project.main?.icon} className="size-6 text-muted-foreground group-hover:text-primary" /></span>
-      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs tabular-nums ${project.starred ? "border-amber-300/40 bg-amber-300/10 text-amber-200" : "border-border text-muted-foreground"}`}
-        title={`${project.stars} people track this addon`}>
-        <Star className={`size-3.5 ${project.starred ? "fill-amber-300 text-amber-300" : ""}`} />{project.stars.toLocaleString()}</span>
-    </div>
-    <h3 className="mt-3 truncate font-semibold">{project.name}</h3>
-    <p className="truncate text-sm text-muted-foreground">{project.author ? `by ${project.author}` : "Unknown author"}</p>
-    <p className="mt-auto truncate pt-4 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-      {kindLabel(project.kind)}{latest && <> · {latest.tag} · {timeAgo(latest.published_at)}</>}</p>
-  </Link>
+/** The /addons gallery: one row per addon, in the order given. Rows open the addon page. */
+export function AddonTable({ projects, ranked }: { projects: LuaProject[]; ranked: boolean }) {
+  const navigate = useNavigate()
+  const head = "px-3 py-2 text-left font-mono text-[11px] font-normal uppercase tracking-wider text-muted-foreground"
+  return <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
+    <table className="w-full text-sm">
+      <thead className="border-b border-border/80 bg-muted/30"><tr>
+        {ranked && <th className={`${head} w-10 text-right`}>#</th>}
+        <th className={`${head} w-full`}>Addon</th>
+        <th className={`${head} hidden md:table-cell`}>Author</th>
+        <th className={`${head} hidden sm:table-cell`}>Version</th>
+        <th className={`${head} hidden lg:table-cell`}>Released</th>
+        <th className={`${head} text-right`}>Stars</th>
+      </tr></thead>
+      <tbody className="divide-y divide-border/60">{projects.map((project, index) => {
+        const latest = latestRelease(project)
+        return <tr key={project.id} onClick={() => navigate(addonPath(project))} className="group cursor-pointer hover:bg-accent/40">
+          {ranked && <td className="px-3 py-3 text-right tabular-nums text-muted-foreground">{index + 1}</td>}
+          <td className="max-w-0 px-3 py-3">
+            <div className="flex items-center gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border/80 bg-background">
+                <AddonIcon name={latest?.icon ?? project.main?.icon} className="size-5 text-muted-foreground group-hover:text-primary" /></span>
+              <div className="min-w-0">
+                <Link to={addonPath(project)} onClick={event => event.stopPropagation()} className="block truncate font-medium hover:underline">{project.name}</Link>
+                <p className="truncate text-xs text-muted-foreground">{kindLabel(project.kind)}<span className="md:hidden">{project.author && ` · by ${project.author}`}</span></p>
+              </div>
+            </div>
+          </td>
+          <td className="hidden whitespace-nowrap px-3 py-3 text-muted-foreground md:table-cell">{project.author ?? "Unknown"}</td>
+          <td className="hidden px-3 py-3 font-mono text-xs sm:table-cell">{latest?.tag ?? "—"}</td>
+          <td className="hidden whitespace-nowrap px-3 py-3 text-muted-foreground lg:table-cell">{latest ? timeAgo(latest.published_at) : "—"}</td>
+          <td className="px-3 py-3 text-right" title={`${project.stars} people track this addon`}>
+            <span className={`inline-flex items-center gap-1 tabular-nums ${project.starred ? "text-amber-200" : "text-muted-foreground"}`}>
+              <Star className={`size-3.5 ${project.starred ? "fill-amber-300 text-amber-300" : ""}`} />{project.stars.toLocaleString()}</span></td>
+        </tr>
+      })}</tbody>
+    </table>
+  </div>
 }
