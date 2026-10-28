@@ -29,6 +29,7 @@ import {
 } from "./cameraDirector";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, IDLE_MOBILE_MAP_INPUT, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, type MapControlAction, type MobileMapInput } from "./mapControls";
+import { unwrapCompassRadians } from "./mapCompassModel";
 import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanPoint } from "./plan/mapPlan";
@@ -968,6 +969,8 @@ export class MapScene3D {
   private readonly onContextLost: () => void;
   private readonly onUserViewport: (viewport: MapViewport) => void;
   private readonly onDungeonMesh: (state: DungeonMeshState) => void;
+  private readonly onCompassYaw: (yaw: number) => void;
+  private lastCompassYaw = Number.NaN;
 
   constructor(
     container: HTMLElement,
@@ -975,6 +978,7 @@ export class MapScene3D {
     onEffectHover: (hover: MapScene3DEffectHover | null) => void = () => {},
     onUserViewport: (viewport: MapViewport) => void = () => {},
     onDungeonMesh: (state: DungeonMeshState) => void = () => {},
+    onCompassYaw: (yaw: number) => void = () => {},
   ) {
     this.container = container;
     this.keyWindow = container.ownerDocument.defaultView ?? window;
@@ -982,6 +986,7 @@ export class MapScene3D {
     this.onEffectHover = onEffectHover;
     this.onUserViewport = onUserViewport;
     this.onDungeonMesh = onDungeonMesh;
+    this.onCompassYaw = onCompassYaw;
     // Throws when WebGL is unavailable; the caller falls back to 2D.
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -1842,6 +1847,13 @@ export class MapScene3D {
   private cameraYaw(): number {
     const offset = this.directorVector.copy(this.camera.position).sub(this.controls.target);
     return Math.abs(offset.x) + Math.abs(offset.z) < 1e-6 ? 0 : Math.atan2(offset.x, offset.z);
+  }
+
+  private emitCompassYaw() {
+    const yaw = unwrapCompassRadians(this.lastCompassYaw, this.cameraYaw());
+    if (Number.isFinite(this.lastCompassYaw) && Math.abs(yaw - this.lastCompassYaw) < Math.PI / 360) return;
+    this.lastCompassYaw = yaw;
+    this.onCompassYaw(yaw);
   }
 
   // Puts the camera `distance` from (x, z) on the floor, `elevationDeg` above
@@ -4320,6 +4332,7 @@ export class MapScene3D {
       this.updateTokens(now);
       this.updateBars();
       this.updateEffectHover();
+      this.emitCompassYaw();
       // The nameplate keeps its screen size as the camera moves.
       if (this.hoveredGuid) this.updateLabel();
       this.renderer.render(this.scene, this.camera);

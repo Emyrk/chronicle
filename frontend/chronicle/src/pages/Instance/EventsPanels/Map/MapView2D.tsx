@@ -20,6 +20,7 @@ import {
 } from "./mapModel";
 import type { MapPositionSample } from "./map.processor";
 import type { MapSceneGround, MapSceneMarker, MapUnitHealth } from "./useMapScene";
+import { MapCompass } from "./MapCompass";
 
 /**
  * A framing for the views to apply. A view applies `viewport` when it mounts
@@ -309,6 +310,7 @@ export function MapView2D({ ground, markers, routePoints, projectSample, trailSe
       <EncounterRoute points={routePoints} viewport={viewport} />
       <MovementTrails markers={markers} viewport={viewport} trailSeconds={trailSeconds} projectSample={projectSample} />
       {markers.map((marker) => <MapMarker key={marker.guid} marker={marker} viewport={viewport} />)}
+      <MapCompass />
     </div>
   );
 }

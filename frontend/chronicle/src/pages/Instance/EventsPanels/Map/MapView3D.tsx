@@ -31,6 +31,7 @@ import { DEFAULT_AD_STRAFE } from "./mapControls";
 import { DEFAULT_EFFECT_SETTINGS, type EffectSettings } from "./mapViewSettings";
 import { CAPSULE_AVATAR } from "./walkAvatars";
 import type { MobileMapInput } from "./mapControls";
+import { MapCompass } from "./MapCompass";
 
 export interface MapView3DProps {
   ground: MapSceneGround;
@@ -222,6 +223,7 @@ export default function MapView3D({
   const effectSettings = effectSettingsProp ?? DEFAULT_EFFECT_SETTINGS;
   const showBars = effectSettings.bars;
   const [effectHover, setEffectHover] = useState<MapScene3DEffectHover | null>(null);
+  const [compassYaw, setCompassYaw] = useState(0);
   // A player's token shows their spec's icon when their talents give one, else their class's.
   const specializations = usePlayerSpecializations();
   // The dispel type of each debuff (from its spell data), to tint debuffed players.
@@ -250,6 +252,7 @@ export default function MapView3D({
         setEffectHover,
         (viewport) => onUserViewportRef.current?.(viewport),
         (state) => onDungeonMeshStateRef.current?.(state),
+        setCompassYaw,
       );
     } catch {
       onUnavailableRef.current();
@@ -534,6 +537,7 @@ export default function MapView3D({
   return (
     <div data-live-presence-surface={presenceSurface} className="relative h-full w-full">
       <div ref={containerRef} className="absolute inset-0" />
+      <MapCompass northRadians={compassYaw} />
       {effectHover && <EffectTooltip hover={effectHover} />}
     </div>
   );
