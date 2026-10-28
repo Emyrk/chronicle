@@ -35,7 +35,9 @@ const (
 
 type assistant struct {
 	ID, System string
-	Durable    bool
+	// Name and Description are shown in the user's AI settings.
+	Name, Description string
+	Durable           bool
 	// ContextType scopes durable threads ("instance" or "lua_project").
 	ContextType string
 	// ClientCapability is the browser capability whose tools this assistant may call.
@@ -49,15 +51,16 @@ var pageCatalog = []map[string]string{
 	{"path": "/guilds", "name": "Guilds", "description": "Guild discovery and public guild pages"},
 	{"path": "/upload", "name": "Upload", "description": "Upload a combat log"},
 	{"path": "/account/settings", "name": "Account settings", "description": "Account profile and settings"},
+	{"path": "/account/ai", "name": "AI assistant settings", "description": "Turn AI features and individual assistants on or off, and connect OpenRouter"},
 }
 var assistants = map[string]assistant{
-	"site-help": {ID: "site-help", System: "You are Chronicle site help. Explain how to navigate Chronicle and answer rankings questions using tools. Never invent pages or ranking results.", Tools: []ToolDefinition{
+	"site-help": {ID: "site-help", Name: "Ask Chronicle", Description: "Site help on every page: finding pages and answering rankings questions.", System: "You are Chronicle site help. Explain how to navigate Chronicle and answer rankings questions using tools. Never invent pages or ranking results.", Tools: []ToolDefinition{
 		{Name: "list_pages", Description: "List known Chronicle pages.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		{Name: "find_pages", Description: "Find Chronicle pages by name or description.", Parameters: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","maxLength":100}},"required":["query"],"additionalProperties":false}`)},
 		{Name: "query_rankings", Description: "Query a bounded Chronicle player leaderboard.", Parameters: json.RawMessage(`{"type":"object","properties":{"instance_name":{"type":"string","maxLength":100},"encounter":{"type":"string","maxLength":100},"class":{"type":"string","maxLength":30},"spec":{"type":"string","maxLength":50},"role":{"type":"string","maxLength":30},"metric":{"type":"string","enum":["dps","hps"]},"limit":{"type":"integer","minimum":1,"maximum":10}},"required":["instance_name"],"additionalProperties":false}`)},
 	}},
-	"lua-workshop": {ID: "lua-workshop", Durable: true, ContextType: "lua_project", ClientCapability: luaEditorCapabilityID, System: luaWorkshopSystem},
-	"instance-analyst": {ID: "instance-analyst", Durable: true, ContextType: "instance", ClientCapability: instancePageCapabilityID, System: "You are a Chronicle raid instance analyst. Use instance_summary for bounded metadata, encounter, and roster context. You may inspect, query, or update the current instance UI only through advertised client tools. Do not claim access to raw event streams. If a client tool returns user_rejected or capability_unavailable, do not retry the same mutation; explain why it could not be completed. After stale_state, inspect once for fresh state before retrying at most once.", Tools: []ToolDefinition{
+	addonWorkshopPanelAssistantID: {ID: addonWorkshopPanelAssistantID, Name: "Addon Workshop: instance panels", Description: "Builds and edits Lua instance panel addons in the Addon Workshop.", Durable: true, ContextType: "lua_project", ClientCapability: luaEditorCapabilityID, System: luaWorkshopSystem},
+	"instance-analyst": {ID: "instance-analyst", Name: "Raid instance analyst", Description: "Answers questions about a raid on its instance page and can adjust that page's panels.", Durable: true, ContextType: "instance", ClientCapability: instancePageCapabilityID, System: "You are a Chronicle raid instance analyst. Use instance_summary for bounded metadata, encounter, and roster context. You may inspect, query, or update the current instance UI only through advertised client tools. Do not claim access to raw event streams. If a client tool returns user_rejected or capability_unavailable, do not retry the same mutation; explain why it could not be completed. After stale_state, inspect once for fresh state before retrying at most once.", Tools: []ToolDefinition{
 		{Name: "instance_summary", Description: "Return bounded metadata, encounters, and players for this authorized raid instance.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
 	}},
 }
@@ -458,6 +461,9 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "Inference debug access is not enabled for this account."})
 			return
 		}
+	}
+	if !s.requireAssistantEnabled(w, r, a.ID) {
+		return
 	}
 	if _, err := s.db.GetInferenceRunByIdempotencyKey(r.Context(), database.GetInferenceRunByIdempotencyKeyParams{UserID: uid, IdempotencyKey: req.RunID}); err == nil {
 		httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "This run_id was already used."})

@@ -12,10 +12,22 @@ type InferenceSettings struct {
 	Disabled         bool `json:"disabled"`
 	Enabled          bool `json:"enabled"`
 	ServiceAvailable bool `json:"service_available"`
+	// Assistants lists every assistant with the user's choice. Each still needs AI features to be enabled.
+	Assistants []InferenceAssistantSetting `json:"assistants"`
 }
 
+type InferenceAssistantSetting struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Enabled     bool   `json:"enabled"`
+}
+
+// UpdateInferenceSettingsRequest changes only the fields that are present.
 type UpdateInferenceSettingsRequest struct {
-	Disabled bool `json:"disabled"`
+	Disabled *bool `json:"disabled,omitempty"`
+	// Assistants maps assistant IDs to whether the user wants them on.
+	Assistants map[string]bool `json:"assistants,omitempty"`
 }
 
 type InferenceConnection struct {

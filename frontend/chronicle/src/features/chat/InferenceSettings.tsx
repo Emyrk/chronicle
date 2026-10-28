@@ -3,6 +3,7 @@ import { ChevronDown, CircleCheck, CircleMinus, ExternalLink, LoaderCircle, Serv
 import { toast } from "sonner";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/Checkbox/Checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/Collapsible/Collapsible";
 import { Switch } from "@/components/ui/Switch/Switch";
 import { useAuth } from "@/hooks/useAuth";
@@ -66,7 +67,7 @@ export function InferenceSettings() {
         <Collapsible>
           <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-muted/30">
             <div className="min-w-0">
-              <h3 className="font-medium">AI assistant</h3>
+              <h3 className="font-medium">AI features</h3>
               <p className="text-muted-foreground mt-0.5 text-sm">
                 AI features are not enabled for this account.
               </p>
@@ -93,7 +94,7 @@ export function InferenceSettings() {
     <section className="rounded-lg border p-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="max-w-2xl">
-          <h3 className="font-medium">AI assistant</h3>
+          <h3 className="font-medium">AI features</h3>
           <p className="text-muted-foreground mt-1 text-sm">
             Control whether Chronicle AI features appear for your account. When enabled, you can connect your own OpenRouter account to fund assistant requests.
           </p>
@@ -130,6 +131,32 @@ export function InferenceSettings() {
             aria-label="Allow AI features on my account"
           />
         </div>
+      )}
+
+      {preference && preference.assistants?.length > 0 && (
+        <fieldset className={`mt-3 space-y-2 border-l-2 pl-4 ${preference.disabled ? "opacity-60" : ""}`} disabled={preference.disabled || updateSettings.isPending}>
+          <legend className="text-sm font-medium">Assistants</legend>
+          <p className="text-muted-foreground text-xs">
+            {preference.disabled ? "Turn on AI features to choose assistants." : "Choose which assistants appear. A turned-off assistant is hidden and cannot run for your account."}
+          </p>
+          {preference.assistants.map((assistant) => (
+            <label key={assistant.id} htmlFor={`assistant-${assistant.id}`} className="bg-muted/20 flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2.5 has-[:disabled]:cursor-not-allowed">
+              <Checkbox
+                id={`assistant-${assistant.id}`}
+                className="mt-0.5"
+                checked={assistant.enabled}
+                onCheckedChange={(checked) => updateSettings.mutate(
+                  { assistants: { [assistant.id]: checked === true } },
+                  { onError: (error) => toast.error(`Could not update ${assistant.name}`, { description: error.message }) },
+                )}
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">{assistant.name}</span>
+                <span className="text-muted-foreground block text-xs">{assistant.description}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
       )}
 
       {preference?.enabled && (

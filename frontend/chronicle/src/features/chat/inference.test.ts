@@ -86,7 +86,7 @@ describe("inference selection and OAuth", () => {
 
   it("only returns a local OAuth return path", () => {
     expect(safeLocalReturnPath("/account/settings", "?tab=ai")).toBe("/account/settings?tab=ai");
-    expect(safeLocalReturnPath("//attacker.example", "")).toBe("/account/settings");
+    expect(safeLocalReturnPath("//attacker.example", "")).toBe("/account/ai");
   });
 });
 

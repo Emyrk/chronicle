@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop, BadgeCheck, Crown, Camera, RefreshCw, Lock, Sparkles } from "lucide-react";
+import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop, BadgeCheck, Crown, Camera, RefreshCw, Lock, Sparkles, Bot } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
@@ -132,6 +132,7 @@ const allTabs: Tab[] = [
   // { path: "/account/notifications", label: "Notifications", icon: Bell },
   // { path: "/account/privacy", label: "Privacy", icon: Shield },
   // { path: "/account/appearance", label: "Appearance", icon: Palette },
+  { path: "/account/ai", label: "AI assistant", icon: Bot },
   { path: "/account/sidekick", label: "Sidekick", icon: Laptop },
   { path: "/account/developer-panels", label: "Developer panels", icon: Blocks },
   { path: "/account/layout-book", label: "Layout Book", icon: BookOpenText },
@@ -377,7 +378,6 @@ export function ProfileSettings() {
         </div>
       </div>
 
-      <InferenceSettings />
     </div>
   );
 }
@@ -849,6 +849,18 @@ export function CharacterSettings() {
       >
         <FavoritesList data={favorites.data} isLoading={favorites.isLoading} />
       </CharacterSection>
+    </div>
+  );
+}
+
+export function AiAssistantSettings() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold">AI assistant</h2>
+        <p className="text-muted-foreground">Choose which AI assistants appear for your account and connect the provider that pays for them.</p>
+      </div>
+      <InferenceSettings />
     </div>
   );
 }

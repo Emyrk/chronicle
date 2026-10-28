@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
+import { Link } from "react-router-dom"
 import { Code2, LoaderCircle, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/useAuth"
@@ -62,7 +63,7 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls, onShow
   onShowCode?: () => void
 }) {
   const { session, isAuthenticated } = useAuth()
-  const permission = useInferencePermission(isAuthenticated)
+  const permission = useInferencePermission(isAuthenticated, "addon-workshop-panel")
   const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed)
   const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed)
   const debugPreview = useInferenceDebugPreview()
@@ -88,7 +89,7 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls, onShow
   const previewDebug = useCallback(async (input: DebugCommandInput) => {
     if (!threadId || !selection.modelId) throw new Error("Open the conversation and select a model first.")
     const snapshot = await debugPreview.mutateAsync({
-      assistant_id: "lua-workshop", thread_id: threadId, model: selection.modelId,
+      assistant_id: "addon-workshop-panel", thread_id: threadId, model: selection.modelId,
       ...(input.client ? { client: input.client } : {}),
     })
     setDebugEnabled(true)
@@ -105,7 +106,7 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls, onShow
     return <div className="flex h-full flex-col">
       <div className="flex justify-end border-b border-border p-1.5">{windowControls}</div>
       <div className="m-auto flex max-w-xs flex-col items-center gap-4 p-6 text-center">
-        <p className="text-sm text-muted-foreground">AI chat isn't available for this account. You can still edit and test the code directly.</p>
+        <p className="text-sm text-muted-foreground">AI chat isn't available for this account, or the Addon Workshop assistant is turned off in your <Link className="text-primary underline underline-offset-2" to="/account/ai">AI settings</Link>. You can still edit and test the code directly.</p>
         {showCodeButton}
       </div>
     </div>

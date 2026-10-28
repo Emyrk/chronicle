@@ -1948,6 +1948,14 @@ export interface IdentitySpell {
 }
 
 // From chroniclesdk/inference.go
+export interface InferenceAssistantSetting {
+    readonly id: string;
+    readonly name: string;
+    readonly description: string;
+    readonly enabled: boolean;
+}
+
+// From chroniclesdk/inference.go
 export interface InferenceAuthorizeRequest {
     readonly return_path: string;
 }
@@ -2063,6 +2071,10 @@ export interface InferenceSettings {
     readonly disabled: boolean;
     readonly enabled: boolean;
     readonly service_available: boolean;
+    /**
+     * Assistants lists every assistant with the user's choice. Each still needs AI features to be enabled.
+     */
+    readonly assistants: readonly InferenceAssistantSetting[];
 }
 
 // From chroniclesdk/inference.go
@@ -4749,8 +4761,15 @@ export interface UpdateGuildSettingsRequest {
 }
 
 // From chroniclesdk/inference.go
+/**
+ * UpdateInferenceSettingsRequest changes only the fields that are present.
+ */
 export interface UpdateInferenceSettingsRequest {
-    readonly disabled: boolean;
+    readonly disabled?: boolean;
+    /**
+     * Assistants maps assistant IDs to whether the user wants them on.
+     */
+    readonly assistants?: Record<string, boolean>;
 }
 
 // From chroniclesdk/panel_layout.go

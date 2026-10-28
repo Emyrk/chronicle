@@ -67,7 +67,7 @@ export function buildLuaWorkshopRunRequest(
     ...(input.client ? { client: input.client } : {}),
     connection_id: selection.connectionId,
     model: selection.modelId,
-    assistant_id: "lua-workshop",
+    assistant_id: "addon-workshop-panel",
     ...(debug ? { debug: true } : {}),
     usage_events: true,
     thread_id: input.threadId,
@@ -106,7 +106,7 @@ export function chooseDefaultModel(models: readonly InferenceModel[], storedMode
 
 export function safeLocalReturnPath(pathname: string, search: string): string {
   const path = `${pathname}${search}`;
-  return pathname.startsWith("/") && !pathname.startsWith("//") ? path : "/account/settings";
+  return pathname.startsWith("/") && !pathname.startsWith("//") ? path : "/account/ai";
 }
 
 export interface InferenceOAuthResult {

@@ -1739,6 +1739,12 @@ type InferenceUsage struct {
 	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
+type InferenceUserConfig struct {
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	Config    []byte             `db:"config" json:"config"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type InstanceLoot struct {
 	ID           uuid.UUID          `db:"id" json:"id"`
 	InstanceID   uuid.UUID          `db:"instance_id" json:"instance_id"`

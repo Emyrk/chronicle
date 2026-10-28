@@ -83,6 +83,7 @@ const BillingSettings = lazy(() => import("./pages/Settings").then(({ BillingSet
 const CharacterSettings = lazy(() => import("./pages/Settings").then(({ CharacterSettings }) => ({ default: CharacterSettings })))
 const StorageSettings = lazy(() => import("./pages/Settings").then(({ StorageSettings }) => ({ default: StorageSettings })))
 const SidekickSettings = lazy(() => import("./pages/Settings").then(({ SidekickSettings }) => ({ default: SidekickSettings })))
+const AiAssistantSettings = lazy(() => import("./pages/Settings").then(({ AiAssistantSettings }) => ({ default: AiAssistantSettings })))
 const NotificationSettings = lazy(() => import("./pages/Settings").then(({ NotificationSettings }) => ({ default: NotificationSettings })))
 const PrivacySettings = lazy(() => import("./pages/Settings").then(({ PrivacySettings }) => ({ default: PrivacySettings })))
 const AppearanceSettings = lazy(() => import("./pages/Settings").then(({ AppearanceSettings }) => ({ default: AppearanceSettings })))
@@ -302,6 +303,7 @@ function App() {
           <Route path="billing" element={<BillingSettings />} />
           <Route path="characters" element={<CharacterSettings />} />
           <Route path="storage" element={<StorageSettings />} />
+          <Route path="ai" element={<AiAssistantSettings />} />
           <Route path="sidekick" element={<SidekickSettings />} />
           <Route path="notifications" element={<NotificationSettings />} />
           <Route path="privacy" element={<PrivacySettings />} />

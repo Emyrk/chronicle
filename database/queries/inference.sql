@@ -281,3 +281,13 @@ SELECT
   COALESCE(SUM(cost_nanos), 0)::bigint AS cost_nanos, COUNT(cost_nanos)::bigint AS costed_calls, COUNT(*)::bigint AS calls
 FROM inference_usage
 WHERE user_id = $1 AND context_type = $2 AND context_id = $3;
+
+-- name: GetInferenceUserConfig :one
+SELECT config FROM inference_user_config WHERE user_id = $1;
+
+-- name: SetInferenceUserConfigKey :exec
+-- Replaces one top-level key, leaving the user's other settings untouched.
+INSERT INTO inference_user_config (user_id, config)
+VALUES (@user_id, jsonb_build_object(@key::text, @value::jsonb))
+ON CONFLICT (user_id) DO UPDATE
+SET config = inference_user_config.config || jsonb_build_object(@key::text, @value::jsonb), updated_at = now();
