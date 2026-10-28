@@ -36,6 +36,7 @@ import {
   MAX_HEALTH_BARS,
   mapPointToScene,
   movementTrailPoints,
+  topDownMapDistance,
   overviewDungeonCanvas,
   replayDungeonCanvas,
   replayDungeonCanvasForCoordinates,
@@ -687,6 +688,18 @@ describe("mapPointToScene", () => {
     expect(mapPointToScene({ leftPercent: 50, topPercent: 50 }, 0.5, 100)).toEqual({ x: 0, z: 0 });
     expect(mapPointToScene({ leftPercent: 0, topPercent: 0 }, 0.5, 100)).toEqual({ x: -50, z: -25 });
     expect(mapPointToScene({ leftPercent: 100, topPercent: 100 }, 0.5, 100)).toEqual({ x: 50, z: 25 });
+  });
+});
+
+describe("topDownMapDistance", () => {
+  const fov = Math.PI / 2;
+
+  it("fits the map height in a wider viewport", () => {
+    expect(topDownMapDistance(100, 50, 4, fov)).toBeCloseTo(25);
+  });
+
+  it("fits the map width in a narrower viewport", () => {
+    expect(topDownMapDistance(100, 50, 1, fov)).toBeCloseTo(50);
   });
 });
 

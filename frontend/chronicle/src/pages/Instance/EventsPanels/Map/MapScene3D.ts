@@ -48,7 +48,7 @@ import {
   medianHeight,
 } from "./dungeonMeshes";
 import { MAP_CURSOR, MAP_HOSTILE_CURSOR, MAP_UNIT_CURSOR } from "./mapCursors";
-import { flatArtworkUnitScale, FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, type MapPoint, type MapViewport } from "./mapModel";
+import { flatArtworkUnitScale, FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, topDownMapDistance, type MapPoint, type MapViewport } from "./mapModel";
 import { deepBreathLaneForSpell, extendedDeepBreathLane } from "./deepBreathLanes";
 import { projectMapDebugPath, type MapDebugOverlay } from "./mapDebugOverlays";
 import {
@@ -158,9 +158,7 @@ const BOSS_MINI_BAR_GAP = 0.6;
 const DEAD_LIFT = 0.9;
 // Default camera directions from the target.
 const ANGLED_OFFSET = new THREE.Vector3(0, 0.85, 0.75);
-// A tiny +z offset keeps OrbitControls' up vector stable while leaving
-// artwork-up at the top of the screen, as in the 2D view.
-const TOP_DOWN_OFFSET = new THREE.Vector3(0, 1, 0.0001);
+const TOP_DOWN_OFFSET = new THREE.Vector3(0, 1, 0);
 const TILES_MAX_DISTANCE = 400;
 // Flat artwork has no yard scale. Keep token geometry fixed in map space so
 // zooming in makes units larger with the artwork instead of shrinking them.
@@ -1224,14 +1222,17 @@ export class MapScene3D {
     this.requestRender();
   }
 
-  /** Keeps the camera top-down while the DOM artwork is aligned over this scene. */
+  /** Keeps the camera and DOM artwork on the same exact top-down projection. */
   setAlignmentOverlay(enabled: boolean) {
     if (enabled === this.alignmentOverlay) return;
     this.alignmentOverlay = enabled;
     this.controls.enableRotate = !enabled;
+    // Looking straight down makes the normal +Y up vector degenerate. In
+    // alignment mode artwork top is scene -Z, so use that as screen up.
+    this.camera.up.set(0, enabled ? 0 : 1, enabled ? -1 : 0);
     if (enabled) this.resetCamera(true);
     else if (this.director && this.dungeonMesh) this.engageDirector(true);
-    else this.requestRender();
+    else this.resetCamera(false);
   }
 
   setRoute(points: readonly MapPoint[]) {
@@ -1543,7 +1544,7 @@ export class MapScene3D {
       this.moveWalkTo(viewport);
       return;
     }
-    if (this.director && this.dungeonMesh) {
+    if (this.director && this.dungeonMesh && !this.alignmentOverlay) {
       this.viewport = viewport;
       this.viewAnimation = null;
       // Back to the group: Follow and encounter jumps drop a followed unit.
@@ -1616,6 +1617,14 @@ export class MapScene3D {
   }
 
   private baseDistance(): number {
+    if (this.alignmentOverlay) {
+      return topDownMapDistance(
+        GROUND_WIDTH,
+        GROUND_WIDTH * this.aspect,
+        this.camera.aspect,
+        THREE.MathUtils.degToRad(this.camera.fov),
+      );
+    }
     return Math.max(GROUND_WIDTH, GROUND_WIDTH * this.aspect) * ANGLED_OFFSET.length();
   }
 
@@ -4311,6 +4320,7 @@ export class MapScene3D {
   };
 
   private readonly resize = () => {
+    const viewport = this.alignmentOverlay ? this.cameraViewport() : null;
     const width = Math.max(1, this.container.clientWidth);
     const height = Math.max(1, this.container.clientHeight);
     this.renderer.setSize(width, height, false);
@@ -4318,7 +4328,8 @@ export class MapScene3D {
     this.renderer.domElement.style.height = "100%";
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.requestRender();
+    if (viewport) this.placeCamera(viewport, TOP_DOWN_OFFSET);
+    else this.requestRender();
   };
 
   private readonly requestRender = () => {

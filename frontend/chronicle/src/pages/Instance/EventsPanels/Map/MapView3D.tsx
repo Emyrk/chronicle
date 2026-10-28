@@ -549,7 +549,7 @@ export default function MapView3D({
         <div className="pointer-events-none absolute inset-0 z-20 opacity-50" aria-hidden="true">
           <div
             className="relative mx-auto h-full max-w-full overflow-hidden"
-            style={{ aspectRatio: `${alignmentGround.canvas.width} / ${alignmentGround.canvas.height}` }}
+            style={{ aspectRatio: `${ground.canvas.width} / ${ground.canvas.height}` }}
           >
             <MapArtworkLayer ground={alignmentGround} viewport={view.viewport} />
           </div>
