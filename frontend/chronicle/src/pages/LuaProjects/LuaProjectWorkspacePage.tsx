@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, useParams } from "react-router-dom"
-import { ArrowLeftRight, BookOpen, GitCompare, PanelRightClose, PanelRightOpen, Rocket, Save, Undo2 } from "lucide-react"
+import { ArrowLeftRight, BookOpen, ChevronLeft, GitCompare, PanelRightClose, PanelRightOpen, Rocket, Save, Undo2 } from "lucide-react"
 import { toast } from "sonner"
 import { useInstance } from "@/api/queries"
 import type { RecentInstancesResponse } from "@/api/typesGenerated"
@@ -74,6 +74,8 @@ export default function LuaProjectWorkspacePage() {
   const [savedSelection] = useState(() => readPreviewSelection(projectId))
   const [instanceId, setInstanceId] = useState(savedSelection?.instanceId ?? "")
   const [instanceInput, setInstanceInput] = useState("")
+  // Once an instance is loaded the picker collapses to its name; the back button reopens it.
+  const [choosingInstance, setChoosingInstance] = useState(false)
   const [encounterIds, setEncounterIds] = useState<string[]>([])
   const recent = useQuery({ queryKey: ["lua-editor-recent-instances"],
     queryFn: async () => {
@@ -259,7 +261,7 @@ export default function LuaProjectWorkspacePage() {
   if (projectQuery.isError || !project) return <div className="container mx-auto p-8" role="alert">Project unavailable or access denied.</div>
   if (project.kind !== "panel") return <div className="container mx-auto p-8" role="alert">Browser source editing currently supports panel projects only.</div>
 
-  const selectInstance = (id: string) => { setInstanceId(id); setEncounterIds([]) }
+  const selectInstance = (id: string) => { setInstanceId(id); setEncounterIds([]); setChoosingInstance(false) }
   const { focus, sideOpen } = layout
   const sideWidth = dragWidth ?? layout.sideWidth
   const sideName = focus === "chat" ? "code" : "chat"
@@ -363,6 +365,14 @@ export default function LuaProjectWorkspacePage() {
       </section>
       <section aria-label="Instance preview" className={`${sideTab === "preview" ? "flex" : "hidden"} order-1 h-[70vh] min-w-0 flex-col bg-black/20 lg:col-start-2 lg:row-start-2 lg:h-auto ${sideHidden}`}>
         <div className="flex flex-wrap items-center gap-2 border-b border-border p-2">
+          {instance.data && !choosingInstance ? <div className="flex min-w-0 basis-full items-center gap-1.5">
+            <button type="button" className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => setChoosingInstance(true)}
+              title="Choose another instance" aria-label="Choose another instance"><ChevronLeft className="size-4" /></button>
+            <span className="min-w-0 truncate text-xs" title={instance.data.id}>
+              <span className="font-medium">{instance.data.name}</span>
+              <span className="text-muted-foreground"> · {instance.data.realm_name}{instance.data.start_time && ` · ${new Date(instance.data.start_time).toLocaleDateString()}`}</span>
+            </span>
+          </div> : <>
           {recent.data && <select aria-label="Recent instance" className="min-w-0 flex-1 basis-56 rounded-md border border-border bg-background px-2 py-1.5 text-xs" value={recent.data.instances.some(item => item.id === instanceId) ? instanceId : ""} onChange={event => selectInstance(event.target.value)}>
             <option value="">Choose a recent instance…</option>
             {recent.data.instances.map(item => <option key={item.id} value={item.id}>{item.name} · {item.realm_name} · {new Date(item.uploaded_at).toLocaleDateString()}</option>)}
@@ -371,6 +381,8 @@ export default function LuaProjectWorkspacePage() {
             <input aria-label="Instance ID" className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs" value={instanceInput} onChange={event => setInstanceInput(event.target.value)} placeholder={recent.data ? "…or paste an instance ID" : "Paste an instance ID"} />
             <button className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50" type="submit" disabled={!instanceInput.trim()}>Load</button>
           </form>
+          {instance.data && <button type="button" className="rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => setChoosingInstance(false)}>Cancel</button>}
+          </>}
           {instance.data && <div className="basis-full"><EncounterStrip encounters={instance.data.encounters ?? []} selectedIds={encounterIds} onChange={setEncounterIds} /></div>}
         </div>
         <div className="styled-scrollbar flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
