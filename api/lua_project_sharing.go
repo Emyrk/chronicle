@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
 )
 
 // addonAuthorName matches the addon_authors name check: the first part of /addons/<author>/<slug>.
@@ -201,10 +202,15 @@ func (a *API) PutLuaProjectContributor(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "The owner already has every permission."})
 		return
 	}
-	if _, err := a.Opts.Zed.UpsertLuaProjectContributor(r.Context(), database.UpsertLuaProjectContributorParams{
-		ProjectID: id, UserID: contributor.UserID, Permissions: permissions,
-		AddedBy: uuid.NullUUID{UUID: chronauth.MustAuthenticatedClaims(r.Context()).Subject, Valid: true},
-	}); err != nil {
+	// InTx keeps Postgres and SpiceDB together: a failed relation write rolls back the row, and a failed
+	// commit reverts the relations. Outside it, a revoke could stick in the table but not in SpiceDB.
+	if err := a.Opts.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
+		_, err := tx.UpsertLuaProjectContributor(r.Context(), database.UpsertLuaProjectContributorParams{
+			ProjectID: id, UserID: contributor.UserID, Permissions: permissions,
+			AddedBy: uuid.NullUUID{UUID: chronauth.MustAuthenticatedClaims(r.Context()).Subject, Valid: true},
+		})
+		return err
+	}, nil); err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
@@ -220,7 +226,10 @@ func (a *API) DeleteLuaProjectContributor(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	if _, err := a.Opts.Zed.DeleteLuaProjectContributor(r.Context(), database.DeleteLuaProjectContributorParams{ProjectID: id, UserID: contributor.UserID}); err != nil {
+	if err := a.Opts.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
+		_, err := tx.DeleteLuaProjectContributor(r.Context(), database.DeleteLuaProjectContributorParams{ProjectID: id, UserID: contributor.UserID})
+		return err
+	}, nil); err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
