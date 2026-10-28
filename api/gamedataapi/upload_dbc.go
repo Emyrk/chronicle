@@ -20,7 +20,13 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const maxDBCFileSize = 50 * 1024 * 1024 // 50 MB
+// Custom-server Spell.dbc files can exceed the stock-client size substantially.
+// Keep the upload bounded while allowing current Epoch data (~59 MiB).
+const maxDBCFileSize int64 = 128 * 1024 * 1024 // 128 MiB
+
+func dbcFileSizeAllowed(size int64) bool {
+	return size <= maxDBCFileSize
+}
 
 // knownBuilds lists builds to try when auto-detecting the DBC layout.
 // Order: vanilla (1.12.x), TBC (2.4.3), WotLK (3.3.5a).
@@ -57,7 +63,7 @@ func (h *Handler) UploadDBC(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = file.Close() }()
 
-	if header.Size > maxDBCFileSize {
+	if !dbcFileSizeAllowed(header.Size) {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
 			Message: fmt.Sprintf("File too large (%d bytes), maximum is %d bytes", header.Size, maxDBCFileSize),
 		})
