@@ -16,6 +16,7 @@ import { placeableDungeonMesh } from "@/pages/Instance/EventsPanels/Map/dungeonM
 import { mapDebugOverlays } from "@/pages/Instance/EventsPanels/Map/mapDebugOverlays";
 import {
   mapAssetUrl,
+  mapFloorMesh,
   mapGalleryItems,
   mapManifestUrl,
   overlayTilePlacement,
@@ -38,6 +39,13 @@ function meshExtent(mesh: WowMapMeshInstance): { width: number; height: number }
 
 function galleryCanvasSize(item: MapGalleryItem): { width: number; height: number } {
   return item.kind === "zone" ? item.layer : item.kind === "instance" ? item.floor : item.kind === "mesh" ? meshExtent(item.mesh) : item.kind === "renders" ? item.render : item.rendered;
+}
+
+function galleryItemMesh(item: MapGalleryItem): WowMapMeshInstance | undefined {
+  if (item.kind === "zone") return undefined;
+  if (item.kind === "mesh") return item.mesh;
+  if (item.kind === "styled") return item.instance.mesh;
+  return mapFloorMesh(item.instance, item.floor);
 }
 
 function useMapManifest(iconBaseUrl: string | undefined) {
@@ -170,11 +178,12 @@ function MapCard({
         <div className="shrink-0 text-right font-mono text-[9px] uppercase leading-4 tracking-wider text-muted-foreground">
           <div>{canvas.width}×{canvas.height}{item.kind === "mesh" ? " yd" : ""}</div>
           {item.kind === "mesh" && <div>3D mesh only</div>}
-          {item.kind !== "zone" && placeableDungeonMesh(item.instance.mesh) && <div className="text-amber-300/65">3D available</div>}
+          {placeableDungeonMesh(galleryItemMesh(item)) && <div className="text-amber-300/65">3D available</div>}
           {item.kind === "zone" && (item.art.phaseID !== 0 || item.layer.index !== 0) && (
             <div>phase {item.art.phaseID} · layer {item.layer.index}</div>
           )}
           {item.kind === "instance" && <div>art floor {item.floor.floor}</div>}
+          {(item.kind === "renders" || item.kind === "mesh") && item.floor && <div>floor {item.floor.floor}</div>}
           {item.kind === "renders" && <div>{item.render.bounds ? "calibrated" : "uncalibrated"} render</div>}
           {item.kind === "styled" && <div>stylized art</div>}
         </div>
@@ -197,7 +206,7 @@ function MapModal({
   if (!item || !iconBaseUrl) return null;
 
   const instance = item.kind === "zone" ? null : item.instance;
-  const mesh = placeableDungeonMesh(instance?.mesh);
+  const mesh = placeableDungeonMesh(galleryItemMesh(item));
   const debugOverlays = instance ? mapDebugOverlays(instance.mapID) : [];
   const name = item.kind === "zone" ? (item.map.name || `Map ${item.map.id}`) : item.instance.name;
   const canvas = galleryCanvasSize(item);
@@ -206,8 +215,8 @@ function MapModal({
     : item.kind === "instance"
       ? `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"}, world ${item.instance.mapID}, art floor ${item.floor.floor}`
       : item.kind === "mesh"
-        ? `Dungeon, world ${item.instance.mapID}, no map artwork, 3D mesh only (${item.mesh.path})`
-        : `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"}, world ${item.instance.mapID}, ${item.kind === "styled" ? "stylized render" : `manual render (${item.render.bounds ? "calibrated" : "uncalibrated"})`}`;
+        ? `Dungeon, world ${item.instance.mapID}${item.floor ? `, floor ${item.floor.floor}` : ""}, no map artwork, 3D mesh only (${item.mesh.path})`
+        : `${item.instance.instanceType === 2 ? "Raid" : "Dungeon"}, world ${item.instance.mapID}${item.kind === "renders" && item.floor ? `, floor ${item.floor.floor}` : ""}, ${item.kind === "styled" ? "stylized render" : `manual render (${item.render.bounds ? "calibrated" : "uncalibrated"})`}`;
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
@@ -243,7 +252,7 @@ function MapModal({
           <div className="mx-auto overflow-hidden rounded-md border border-white/10 bg-black shadow-2xl">
             {viewMode === "3d" && mesh && instance ? (
               <Suspense fallback={<div className="flex h-[min(72vh,900px)] min-h-[420px] items-center justify-center font-mono text-xs uppercase tracking-widest text-amber-100/50">Loading 3D renderer…</div>}>
-                <MapGallery3D key={item.key} instance={instance} iconBaseUrl={iconBaseUrl} overlays={debugOverlays} />
+                <MapGallery3D key={item.key} mesh={mesh} iconBaseUrl={iconBaseUrl} overlays={debugOverlays} />
               </Suspense>
             ) : (
               <MapArtwork item={item} iconBaseUrl={iconBaseUrl} />

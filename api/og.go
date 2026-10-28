@@ -77,12 +77,28 @@ func seoProductName(flavor database.WoWFlavor) string {
 		return "Kronos"
 	case flavor.Has(database.FlavorChromieCraft):
 		return "ChromieCraft"
+	case flavor.Has(database.FlavorWarmane):
+		return "Warmane"
+	case flavor.Has(database.FlavorEpoch):
+		return "Epoch Reborn"
 	case flavor.Has(database.FlavorVanillaPlus):
 		return "VanillaPlus"
 	case flavor.Has(database.FlavorOctoWoW):
 		return "OctoWoW"
 	case flavor.Has(database.FlavorCapybara):
 		return "CapybaraCraft"
+	case flavor.Has(database.FlavorSunreach):
+		return "Sun Reach"
+	case flavor.Has(database.FlavorFaebright):
+		return "Faebright"
+	case flavor.Has(database.FlavorMoonwell):
+		return "Moonwell"
+	case flavor.Has(database.FlavorAshenWoW):
+		return "AshenWoW"
+	case flavor.Has(database.FlavorCrusaderStorm):
+		return "Crusader Storm"
+	case flavor.Has(database.FlavorLunatic):
+		return "Level One Lunatics"
 	default:
 		return ""
 	}

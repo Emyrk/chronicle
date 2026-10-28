@@ -1,6 +1,8 @@
 /* eslint-disable react-refresh/only-export-components -- The legend's art components share their hooks. */
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
+  BOSS_SPIRE,
+  bossSpireCastGlow,
   DEAD_RING,
   DEBUFF_PLANE,
   DISPEL_COLORS,
@@ -10,7 +12,6 @@ import {
   MARKS_SCALE,
   TOKEN_ART_SIZE,
   TOKEN_LAYOUT,
-  drawBossPin,
   drawCastArc,
   drawDebuffTint,
   drawDisc,
@@ -251,7 +252,7 @@ function Columns({ column, radius }: { column: NonNullable<TokenProps["column"]>
   );
 }
 
-/** A boss sigil (with its turning ticks), and, without a model, the hexagon pin over it. */
+/** A boss sigil (with its turning ticks), and, without a model, the crystal standing on it. */
 export function BossToken({ seconds, facing = 0, dead = false, model = true, halo = null, cast = null, scale = 18, tilt = 58 }: {
   seconds: number;
   facing?: number;
@@ -267,6 +268,7 @@ export function BossToken({ seconds, facing = 0, dead = false, model = true, hal
   const spin = (seconds * TOKEN_LAYOUT.sigilSpin * 180) / Math.PI;
   const castColor = useCssColor(cast?.color ?? "#fff");
   const grey: CSSProperties = dead ? { filter: "grayscale(1) brightness(0.55)" } : {};
+  const spireHeight = radius * BOSS_SPIRE.profile[BOSS_SPIRE.profile.length - 1][1];
   return (
     <div className="relative h-0 w-0">
       <div style={{ position: "absolute", left: 0, top: 0, transform: `perspective(600px) rotateX(${tilt}deg)`, ...grey }}>
@@ -277,20 +279,17 @@ export function BossToken({ seconds, facing = 0, dead = false, model = true, hal
         {halo && <ArtCanvas key={halo} draw={(context) => drawHalo(context, halo, hexCss(HALO_COLORS[halo]))} style={layer(radius, plane.halo)} />}
       </div>
       {!model && (
-        <>
-          <div style={{ position: "absolute", left: -1, bottom: 0, width: 2, height: radius * TOKEN_LAYOUT.bossPinHeight * 0.55, background: `linear-gradient(to top, transparent, ${ENEMY_RED})`, ...grey }} />
-          <ArtCanvas
-            draw={drawBossPin}
-            style={{
-              position: "absolute",
-              left: (-radius * TOKEN_LAYOUT.bossPinSize) / 2,
-              bottom: radius * TOKEN_LAYOUT.bossPinHeight * 0.55,
-              width: radius * TOKEN_LAYOUT.bossPinSize,
-              height: radius * TOKEN_LAYOUT.bossPinSize,
-              filter: `drop-shadow(0 4px 6px rgba(0,0,0,.7))${dead ? " grayscale(1) brightness(0.55)" : ""}`,
-            }}
-          />
-        </>
+        <ArtCanvas
+          draw={(context) => drawBossSpire(context, seconds * BOSS_SPIRE.spin, cast ? { color: castColor, glow: bossSpireCastGlow(cast.fraction, seconds) } : null)}
+          style={{
+            position: "absolute",
+            left: -spireHeight / 2,
+            bottom: 0,
+            width: spireHeight,
+            height: spireHeight,
+            filter: `drop-shadow(0 4px 6px rgba(0,0,0,.7))${dead ? " grayscale(1) brightness(0.55)" : ""}`,
+          }}
+        />
       )}
       {model && (
         <div
@@ -309,6 +308,39 @@ export function BossToken({ seconds, facing = 0, dead = false, model = true, hal
       )}
     </div>
   );
+}
+
+// The map's boss crystal (a lathe of BOSS_SPIRE.profile), seen from the side
+// and turned by `turn` radians: each face toward the viewer, lit from the left.
+// Casting, it is painted over in the spell's colour, as the map turns it.
+function drawBossSpire(context: CanvasRenderingContext2D, turn: number, cast: { color: string; glow: number } | null) {
+  const profile = BOSS_SPIRE.profile;
+  const scale = TOKEN_ART_SIZE / profile[profile.length - 1][1];
+  const step = (Math.PI * 2) / BOSS_SPIRE.sides;
+  const point = ([width, height]: readonly number[], angle: number) => [TOKEN_ART_SIZE / 2 + Math.sin(angle) * width * scale, TOKEN_ART_SIZE - height * scale];
+  for (let side = 0; side < BOSS_SPIRE.sides; side++) {
+    const from = turn + side * step;
+    const middle = from + step / 2;
+    if (Math.cos(middle) <= 0) continue;
+    const light = 0.55 + 0.45 * Math.max(0, Math.cos(middle + 0.7));
+    for (let ring = 0; ring < profile.length - 1; ring++) {
+      const corners = [point(profile[ring], from), point(profile[ring], from + step), point(profile[ring + 1], from + step), point(profile[ring + 1], from)];
+      // The underside, facing the floor, is darker.
+      const shade = ring === 0 ? light * 0.65 : light;
+      context.fillStyle = `rgb(${239 * shade}, ${68 * shade}, ${68 * shade})`;
+      context.beginPath();
+      corners.forEach(([x, y], index) => (index === 0 ? context.moveTo(x, y) : context.lineTo(x, y)));
+      context.closePath();
+      context.fill();
+      if (cast) {
+        context.save();
+        context.globalAlpha = cast.glow * shade;
+        context.fillStyle = cast.color;
+        context.fill();
+        context.restore();
+      }
+    }
+  }
 }
 
 function drawBossMarks(context: CanvasRenderingContext2D) {

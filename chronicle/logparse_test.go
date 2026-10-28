@@ -230,6 +230,60 @@ func TestInferTalentSubSpec(t *testing.T) {
 	}
 }
 
+func TestExtractTalentInfoUsesObservedFeralForm(t *testing.T) {
+	t.Parallel()
+
+	treeData := &talents.TalentTreeData{Classes: map[int32]talents.ClassTalentData{
+		11: {Tabs: []talents.TalentTabData{{Name: "Balance"}, {Name: "Feral Combat", Talents: []talents.TalentEntry{
+			{Name: "Thick Hide", TabIndex: 0},
+			{Name: "Feral Charge", TabIndex: 1},
+			{Name: "Feral Instinct", TabIndex: 2},
+		}}}},
+	}}
+	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol}
+
+	for _, tt := range []struct {
+		name         string
+		talents      *combatant.Talents
+		observedForm string
+		flavor       database.WoWFlavor
+		want         string
+	}{
+		{
+			name:         "observed bear overrides cat talent fallback",
+			talents:      &combatant.Talents{Summary: [3]uint8{0, 3, 0}, Trees: [3][]uint8{nil, {0, 0, 0}, nil}},
+			observedForm: "Bear",
+			flavor:       flavor,
+			want:         "Bear",
+		},
+		{
+			name:         "observed cat overrides bear talent markers",
+			talents:      &combatant.Talents{Summary: [3]uint8{0, 3, 0}, Trees: [3][]uint8{nil, {1, 1, 1}, nil}},
+			observedForm: "Cat",
+			flavor:       flavor,
+			want:         "Cat",
+		},
+		{
+			name:    "missing form keeps talent classification",
+			talents: &combatant.Talents{Summary: [3]uint8{0, 3, 0}, Trees: [3][]uint8{nil, {1, 1, 1}, nil}},
+			flavor:  flavor,
+			want:    "Bear",
+		},
+		{
+			name:         "non nightmare ignores observed form",
+			talents:      &combatant.Talents{Summary: [3]uint8{0, 3, 0}, Trees: [3][]uint8{nil, {0, 0, 0}, nil}},
+			observedForm: "Bear",
+			flavor:       database.WoWFlavor{database.FlavorVanilla},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, subSpec, _, _ := extractTalentInfoFromSnapshot("DRUID", tt.talents, tt.observedForm, tt.flavor, treeData)
+			require.Equal(t, tt.want, subSpec)
+		})
+	}
+}
+
 func TestInsertInstanceWithSlugFallback(t *testing.T) {
 	t.Parallel()
 

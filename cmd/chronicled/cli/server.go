@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicebilling"
 	"github.com/Emyrk/chronicle/internal/services/servicebot"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
+	"github.com/Emyrk/chronicle/internal/services/servicechoose"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
@@ -31,6 +32,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/Emyrk/chronicle/internal/services/serviceretention"
 	"github.com/Emyrk/chronicle/internal/services/serviceriver"
+	"github.com/Emyrk/chronicle/internal/services/servicesecrets"
 	"github.com/Emyrk/chronicle/internal/services/servicesidekick"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
 	"github.com/Emyrk/chronicle/internal/services/servicestripecli"
@@ -48,6 +50,7 @@ func ServerCmd() *serpent.Command {
 	apiService := serviceapi.New(srvs)
 	err := srvs.Register(
 		serviceaccessurl.New(srvs),
+		servicesecrets.New(srvs),
 		servicelogger.New(srvs),
 		servicepprof.New(srvs),
 		serviceprometheus.New(srvs),
@@ -55,6 +58,7 @@ func ServerCmd() *serpent.Command {
 		servicestorage.New(srvs),
 		servicepgxpool.New(srvs),
 		servicetenant.New(srvs),
+		servicechoose.New(srvs),
 		servicedbstore.New(srvs),
 		servicebilling.New(srvs),
 		serviceriver.New(srvs),

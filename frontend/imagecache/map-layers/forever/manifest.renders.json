@@ -18,7 +18,13 @@
       "renders": {
         "path": "renders/RoL-shaded-aligned.png",
         "width": 1024,
-        "height": 1024
+        "height": 1024,
+        "bounds": {
+          "minX": 1333.3337,
+          "maxX": 1900.0,
+          "minY": -33.3333,
+          "maxY": 500.0
+        }
       },
       "name": "Ruins of Lordaeron"
     },
@@ -27,7 +33,13 @@
       "renders": {
         "path": "renders/WC-shaded-water.png",
         "width": 2400,
-        "height": 1533
+        "height": 1533,
+        "bounds": {
+          "minX": -389.07001,
+          "maxX": 191.6667,
+          "minY": -370.83331,
+          "maxY": 538.3512
+        }
       },
       "name": "Wailing Caverns"
     }

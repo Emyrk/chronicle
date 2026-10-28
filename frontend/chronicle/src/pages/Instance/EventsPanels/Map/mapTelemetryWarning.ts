@@ -3,12 +3,13 @@ import type { Instance } from "../../InstancePage";
 export const MAP_TELEMETRY_WARNING_STORAGE_KEY = "chronicle:map-superwow-warning-dismissed";
 export const MAP_TELEMETRY_WARNING_CACHE_SIZE = 20;
 
-type TelemetryWarningInstance = Pick<Instance, "capabilities" | "versions">;
+type TelemetryWarningInstance = Pick<Instance, "capabilities" | "format" | "versions">;
 
-export function hasLimitedSuperWowPositionTelemetry(instance: TelemetryWarningInstance): boolean {
-  return instance.capabilities.includes("unit-position")
-    && Boolean(instance.versions?.superwow)
-    && !instance.versions?.classicapi;
+export function hasLimitedHostilePositionTelemetry(instance: TelemetryWarningInstance): boolean {
+  if (!instance.capabilities.includes("unit-position")) return false;
+
+  return instance.format === "3.3.5a-cc-addon"
+    || (Boolean(instance.versions?.superwow) && !instance.versions?.classicapi);
 }
 
 function validInstanceIds(value: unknown): string[] {

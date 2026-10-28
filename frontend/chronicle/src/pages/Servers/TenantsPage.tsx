@@ -13,10 +13,25 @@ import {
   type TenantPatch,
 } from "@/api/queries";
 import { LOG_FORMAT_OPTIONS } from "@/config/serverCapabilities";
-import { Loader2, Trash2, Plus, Pencil, ChevronDown, ChevronRight } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import type { Tenant } from "@/api/typesGenerated";
 import { TenantForm } from "./TenantForm";
 import { TenantProofGrants } from "./TenantProofGrants";
+import {
+  sortTenants,
+  type TenantSortDirection,
+  type TenantSortField,
+} from "./tenantSorting";
 
 const LINKING_METHODS = [
   { key: "zug-zug", label: "Zug Zug" },
@@ -252,6 +267,42 @@ function Flag({ on, title }: { on: boolean; title?: string }) {
   );
 }
 
+function SortableHeader({
+  label,
+  field,
+  currentField,
+  direction,
+  onSort,
+  className,
+}: {
+  label: string;
+  field: TenantSortField;
+  currentField: TenantSortField;
+  direction: TenantSortDirection;
+  onSort: (field: TenantSortField) => void;
+  className: string;
+}) {
+  const isActive = currentField === field;
+  const ariaSort = isActive ? (direction === "asc" ? "ascending" : "descending") : "none";
+
+  return (
+    <th className={className} aria-sort={ariaSort}>
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+        onClick={() => onSort(field)}
+      >
+        {label}
+        {isActive ? (
+          direction === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-40" />
+        )}
+      </button>
+    </th>
+  );
+}
+
 const FILTERS: { key: string; label: string; match: (t: Tenant) => boolean }[] = [
   { key: "", label: "All tenants", match: () => true },
   { key: "discoverable", label: "Discoverable", match: (t) => t.discoverable },
@@ -267,9 +318,12 @@ const FILTERS: { key: string; label: string; match: (t: Tenant) => boolean }[] =
 export function TenantsPage() {
   const { data: tenants, isLoading } = useAdminTenants();
   const { data: servers } = useAzerothcoreServers();
+  const { data: datasets } = useDatasets();
   const deleteTenant = useDeleteTenant();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("");
+  const [sortField, setSortField] = useState<TenantSortField>("tenant");
+  const [sortDirection, setSortDirection] = useState<TenantSortDirection>("asc");
   const [selectedIDs, setSelectedIDs] = useState<Set<string>>(new Set());
   // null = closed, "new" = create, otherwise the tenant id being edited.
   const [editing, setEditing] = useState<string | null>(null);
@@ -283,13 +337,19 @@ export function TenantsPage() {
     return counts;
   }, [servers]);
 
+  const datasetNames = useMemo(
+    () => new Map((datasets ?? []).map((dataset) => [dataset.id, dataset.name])),
+    [datasets],
+  );
+
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     const match = FILTERS.find((f) => f.key === filter)?.match ?? (() => true);
-    return (tenants ?? []).filter(
+    const filtered = (tenants ?? []).filter(
       (t) => match(t) && (!q || t.name.toLowerCase().includes(q) || (t.slug ?? "").toLowerCase().includes(q)),
     );
-  }, [tenants, search, filter]);
+    return sortTenants(filtered, sortField, sortDirection, serverCounts, datasetNames);
+  }, [tenants, search, filter, sortField, sortDirection, serverCounts, datasetNames]);
 
   // Derive from the latest tenant data so bulk patches diff against fresh values.
   const selected = useMemo(() => (tenants ?? []).filter((t) => selectedIDs.has(t.id)), [tenants, selectedIDs]);
@@ -313,6 +373,15 @@ export function TenantsPage() {
       }
       return next;
     });
+
+  const toggleSort = (field: TenantSortField) => {
+    if (sortField === field) {
+      setSortDirection((current) => current === "asc" ? "desc" : "asc");
+      return;
+    }
+    setSortField(field);
+    setSortDirection("asc");
+  };
 
   const closeSheet = () => {
     setEditing(null);
@@ -359,16 +428,26 @@ export function TenantsPage() {
                 <th className={th}>
                   <input type="checkbox" aria-label="Select all shown" checked={allVisibleSelected} onChange={toggleAllVisible} />
                 </th>
-                <th className={th}>Tenant</th>
-                <th className={th}>Servers</th>
-                <th className={th}>Discoverable</th>
-                <th className={th}>Root</th>
-                <th className={th}>Uploads</th>
-                <th className={th}>Ads</th>
-                {LINKING_METHODS.map((m) => <th key={m.key} className={th}>{m.label}</th>)}
-                <th className={th}>Parse mode</th>
-                <th className={th}>Format</th>
-                <th className={th}>Dataset</th>
+                <SortableHeader label="Tenant" field="tenant" currentField={sortField} direction={sortDirection} onSort={toggleSort} className={th} />
+                <SortableHeader label="Servers" field="servers" currentField={sortField} direction={sortDirection} onSort={toggleSort} className={th} />
+                <SortableHeader label="Discoverable" field="discoverable" currentField={sortField} direction={sortDirection} onSort={toggleSort} className={th} />
+                <SortableHeader label="Root" field="root" currentField={sortField} direction={sortDirection} onSort={toggleSort} className={th} />
+                <SortableHeader label="Uploads" field="uploads" currentField={sortField} direction={sortDirection} onSort={toggleSort} className={th} />
+                <SortableHeader label="Ads" field="ads" currentField={sortField} direction={sortDirection} onSort={toggleSort} className={th} />
+                {LINKING_METHODS.map((m) => (
+                  <SortableHeader
+                    key={m.key}
+                    label={m.label}
+                    field={`linking:${m.key}`}
+                    currentField={sortField}
+                    direction={sortDirection}
+                    onSort={toggleSort}
+                    className={th}
+                  />
+                ))}
+                <SortableHeader label="Parse mode" field="parse_mode" currentField={sortField} direction={sortDirection} onSort={toggleSort} className={th} />
+                <SortableHeader label="Format" field="format" currentField={sortField} direction={sortDirection} onSort={toggleSort} className={th} />
+                <SortableHeader label="Dataset" field="dataset" currentField={sortField} direction={sortDirection} onSort={toggleSort} className={th} />
                 <th className={th} />
               </tr>
             </thead>

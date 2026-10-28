@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/paidtier"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stripe/stripe-go/v87"
@@ -63,6 +64,18 @@ func (s *Service) syncStripeEntitlements(ctx context.Context, customerID string)
 	if s.runEntitlementTransaction == nil {
 		return fmt.Errorf("billing entitlement transactions are not configured")
 	}
+	previousTiers := make(map[uuid.UUID]string, 2)
+	if s.discordRoleSyncEnqueuer != nil {
+		for _, owner := range []uuid.UUID{persistedOwner, userID} {
+			if owner == uuid.Nil {
+				continue
+			}
+			rows, err := s.store.ListBillingEntitlementsByUserID(ctx, owner)
+			if err == nil {
+				previousTiers[owner] = paidtier.Effective(rows)
+			}
+		}
+	}
 	if err := s.runEntitlementTransaction(ctx, func(tx EntitlementTransaction) error {
 		if persistedOwner != uuid.Nil && persistedOwner != userID {
 			if err := revokeAllStripeEntitlements(ctx, tx, persistedOwner); err != nil {
@@ -108,6 +121,15 @@ func (s *Service) syncStripeEntitlements(ctx context.Context, customerID string)
 	}); err != nil {
 		return err
 	}
+	if s.discordRoleSyncEnqueuer != nil {
+		for owner, previousTier := range previousTiers {
+			rows, err := s.store.ListBillingEntitlementsByUserID(ctx, owner)
+			if err == nil && paidtier.Effective(rows) != previousTier {
+				// Discord role changes are best-effort and must not block billing.
+				_ = s.discordRoleSyncEnqueuer(ctx, owner)
+			}
+		}
+	}
 	if s.cosmeticAuditEnqueuer != nil {
 		_ = s.cosmeticAuditEnqueuer(ctx, userID)
 		if persistedOwner != uuid.Nil && persistedOwner != userID {
@@ -120,6 +142,11 @@ func (s *Service) syncStripeEntitlements(ctx context.Context, customerID string)
 func revokeAllStripeEntitlements(ctx context.Context, tx EntitlementTransaction, userID uuid.UUID) error {
 	if err := tx.DeleteDataGrant(ctx, database.DeleteDataGrantParams{UserID: userID, Source: stripePaidTierStorageGrantSource}); err != nil {
 		return fmt.Errorf("revoke storage grant: %w", err)
+	}
+	for _, role := range legacyPaidFeatureRoles {
+		if err := tx.SetStripeEntitlementRole(ctx, userID, role, false); err != nil {
+			return fmt.Errorf("revoke legacy Stripe feature role %q: %w", role, err)
+		}
 	}
 
 	revoked := make(map[string]struct{}, len(stripeEntitlements))

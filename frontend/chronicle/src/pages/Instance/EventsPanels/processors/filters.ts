@@ -18,6 +18,7 @@ export type PanelFilterType =
   | "shield_caster"
   | "time_range"
   | "event_value"
+  | "has_excluded"
   | "event_type";
 
 export interface PanelFilter {
@@ -424,6 +425,11 @@ const FILTER_COMPILERS: Record<PanelFilterType, FilterCompiler> = {
     return (event) => typeSet.has(event.type);
   },
 
+  // An event can contain ranked and excluded damage at once. Match the hit,
+  // not a synthetic slice of it; non-damage streams pass through below.
+  has_excluded: () => (event) =>
+    event.type === "damage" && ((event.unranked ?? 0) > 0 || event.overkill > 0),
+
   event_value: (value) => {
     const raw = typeof value === "string" ? value : (value[0] ?? "");
     const match = raw.match(/^([><=!]+):(.+)$/);
@@ -471,13 +477,14 @@ function compileSingleFilter(filter: PanelFilter, context: ProcessorContext): Fi
 
   // Scope to specific event types — events outside applyTo pass through.
   // "*" means all events (no wrapping needed). Single-item uses === for speed.
-  if (filter.applyTo && filter.applyTo.length > 0 && !(filter.applyTo.length === 1 && filter.applyTo[0] === "*")) {
+  const applyTo = filter.type === "has_excluded" ? ["damage"] : filter.applyTo;
+  if (applyTo && applyTo.length > 0 && !(applyTo.length === 1 && applyTo[0] === "*")) {
     const inner = pred;
-    if (filter.applyTo.length === 1) {
-      const single = filter.applyTo[0];
+    if (applyTo.length === 1) {
+      const single = applyTo[0];
       pred = (event) => event.type !== single ? true : inner(event);
     } else {
-      const applyToSet = new Set(filter.applyTo);
+      const applyToSet = new Set(applyTo);
       pred = (event) => !applyToSet.has(event.type) ? true : inner(event);
     }
   }
@@ -493,7 +500,7 @@ function isEmptyFilterValue(value: string | string[]): boolean {
 
 export function compileFilters(filters: PanelFilter[], context: ProcessorContext): FilterPredicate {
   // Strip filters with empty values — they compile to pass-all and just add overhead.
-  const effective = filters.filter((f) => !isEmptyFilterValue(f.value));
+  const effective = filters.filter((f) => f.type === "has_excluded" || !isEmptyFilterValue(f.value));
   if (effective.length === 0) return () => true;
 
   // Compile each filter into a predicate

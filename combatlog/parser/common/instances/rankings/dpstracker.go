@@ -2,9 +2,11 @@ package rankings
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/combatmetrics"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
@@ -13,12 +15,20 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 )
 
-var _ instancehook.Hook = (*DPSTracker)(nil)
+var (
+	_ instancehook.Hook               = (*DPSTracker)(nil)
+	_ instancehook.FightFinalizedHook = (*DPSTracker)(nil)
+)
 
 // UnitCombatStats holds accumulated combat metrics for a single unit in an encounter.
 type UnitCombatStats struct {
-	DamageDone  int64
-	DamageTaken int64
+	// DamageDone is all player-attributable damage to hostile non-player targets.
+	DamageDone int64
+	// RankedDamageDone is effective damage eligible under the encounter's target rule.
+	// Without a rule, all player-attributable hostile damage is ranked.
+	RankedDamageDone   int64
+	UnrankedDamageDone int64
+	DamageTaken        int64
 	// HealingDone is effective healing only (overheal subtracted).
 	HealingDone int64
 	// HealingAbsorbed is damage prevented by absorb shields cast by this unit
@@ -29,6 +39,9 @@ type UnitCombatStats struct {
 	// Talents snapshot at fight end. Nil if the player had no talent data
 	// (e.g., talents were invalidated by a respec, or addon didn't report).
 	Talents *combatant.Talents
+	// ObservedForm is the dominant Cat/Bear form during the encounter. It is
+	// empty when neither form was observed or their observed durations tie.
+	ObservedForm string
 }
 
 // DPSResult holds per-unit combat stats for a single encounter.
@@ -43,28 +56,37 @@ type DPSResult struct {
 type DPSTracker struct {
 	instancehook.BaseHook
 	units          *unitdb.Units
+	identifier     *identifier.Identifier
 	assemblyOfIron *DPSTrackerAssemblyOfIron
 
 	// Per-encounter state, reset on FightStarted.
-	damageDone  map[guid.GUID]int64
-	damageTaken map[guid.GUID]int64
-	healingDone map[guid.GUID]int64
-	absorbDone  map[guid.GUID]int64
+	damageDone       map[guid.GUID]int64
+	rankedDamageDone map[guid.GUID]int64
+	damageCredits    map[*messages.Damage]guid.GUID
+	assemblyPending  map[guid.GUID][]*messages.Damage
+	assemblyExcluded map[*messages.Damage]bool
+	damageTaken      map[guid.GUID]int64
+	healingDone      map[guid.GUID]int64
+	absorbDone       map[guid.GUID]int64
+	forms            *druidFormTracker
 
 	// Results across all encounters.
 	results map[uuid.UUID]*DPSResult
 }
 
-// NewDPSTracker creates a DPS tracker that uses the given unit database for
-// classifying GUIDs at fight end.
-func NewDPSTracker(units *unitdb.Units, rule DamageRule) *DPSTracker {
+// NewDPSTracker creates a DPS tracker that uses the unit database and instance
+// identifier to classify targets for raw and ranked damage totals.
+func NewDPSTracker(units *unitdb.Units, idf *identifier.Identifier, rule DamageRule) *DPSTracker {
 	tracker := &DPSTracker{
-		units:       units,
-		damageDone:  make(map[guid.GUID]int64),
-		damageTaken: make(map[guid.GUID]int64),
-		healingDone: make(map[guid.GUID]int64),
-		absorbDone:  make(map[guid.GUID]int64),
-		results:     make(map[uuid.UUID]*DPSResult),
+		units:            units,
+		identifier:       idf,
+		damageDone:       make(map[guid.GUID]int64),
+		rankedDamageDone: make(map[guid.GUID]int64),
+		damageTaken:      make(map[guid.GUID]int64),
+		healingDone:      make(map[guid.GUID]int64),
+		absorbDone:       make(map[guid.GUID]int64),
+		forms:            newDruidFormTracker(),
+		results:          make(map[uuid.UUID]*DPSResult),
 	}
 	if rule == DamageRuleAssemblyOfIron {
 		tracker.assemblyOfIron = newDPSTrackerAssemblyOfIron()
@@ -72,17 +94,94 @@ func NewDPSTracker(units *unitdb.Units, rule DamageRule) *DPSTracker {
 	return tracker
 }
 
-func (t *DPSTracker) FightStarted(_ uuid.UUID, _ messages.Message) {
+func (t *DPSTracker) FightStarted(_ uuid.UUID, m messages.Message) {
 	t.damageDone = make(map[guid.GUID]int64)
+	t.rankedDamageDone = make(map[guid.GUID]int64)
+	t.damageCredits = make(map[*messages.Damage]guid.GUID)
 	t.damageTaken = make(map[guid.GUID]int64)
 	t.healingDone = make(map[guid.GUID]int64)
 	t.absorbDone = make(map[guid.GUID]int64)
+	t.forms.FightStarted(m)
 	if t.assemblyOfIron != nil {
 		t.assemblyOfIron.reset()
+		t.assemblyPending = make(map[guid.GUID][]*messages.Damage)
+		t.assemblyExcluded = make(map[*messages.Damage]bool)
 	}
 }
 
+func (t *DPSTracker) isRankedDamageTarget(target guid.GUID) bool {
+	if info, ok := t.units.Info[target]; ok && info.Boss {
+		return true
+	}
+	if t.identifier == nil {
+		return false
+	}
+	entry, ok := target.GetEntry()
+	if !ok {
+		return false
+	}
+	identity, ok := t.identifier.HostileEntries()[entry]
+	return ok && identity.Boss
+}
+
+// ClassifyDamage assigns the encounter's finalized target rule to a buffered
+// message and updates the already-snapshotted per-player ranking totals.
+func (t *DPSTracker) ClassifyDamage(encounterID uuid.UUID, rule DamageTargets, msg *messages.Damage) {
+	msg.Unranked = 0
+	eligible := combatmetrics.EffectiveDamage(msg)
+	if eligible <= 0 {
+		return
+	}
+	if t.assemblyOfIron != nil {
+		if t.assemblyExcluded[msg] {
+			msg.Unranked = eligible
+		}
+		return
+	}
+	ranked := true
+	switch rule.Mode {
+	case DamageTargetsBossOnly:
+		ranked = t.isRankedDamageTarget(msg.Target)
+	case DamageTargetsEntries:
+		ranked = false
+		if entry, ok := msg.Target.GetEntry(); ok {
+			for _, allowed := range rule.EntryIDs {
+				if entry == allowed {
+					ranked = true
+					break
+				}
+			}
+		}
+	}
+	if ranked {
+		return
+	}
+	msg.Unranked = eligible
+	credit, ok := t.damageCredits[msg]
+	if !ok || t.assemblyOfIron != nil {
+		return
+	}
+	if stats := t.results[encounterID].Units[credit]; stats != nil {
+		stats.RankedDamageDone -= eligible
+		stats.UnrankedDamageDone += eligible
+	}
+}
+
+// FinishDamageClassification keeps Assembly's phase-specific ranking total and
+// exposes the remainder as unranked without changing its phase algorithm.
+func (t *DPSTracker) FinishDamageClassification(encounterID uuid.UUID) {
+	if t.assemblyOfIron != nil {
+		for _, stats := range t.results[encounterID].Units {
+			stats.UnrankedDamageDone = stats.DamageDone - stats.RankedDamageDone
+		}
+	}
+	t.damageCredits = nil
+	t.assemblyPending = nil
+	t.assemblyExcluded = nil
+}
+
 func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message) error {
+	t.forms.ProcessMessage(active, m)
 	if !active {
 		return nil
 	}
@@ -136,14 +235,28 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 		}
 
 		if targetCls.Affiliation == unitdb.AffiliationHostile {
-			if t.assemblyOfIron == nil || !t.assemblyOfIron.trackDamage(msg.Target, creditGUID, effectiveDamage) {
-				t.damageDone[creditGUID] += effectiveDamage
+			t.damageDone[creditGUID] += effectiveDamage
+			t.damageCredits[msg] = creditGUID
+			if t.assemblyOfIron != nil && t.assemblyOfIron.trackDamage(msg.Target, creditGUID, effectiveDamage) {
+				t.assemblyPending[msg.Target] = append(t.assemblyPending[msg.Target], msg)
+				return nil
 			}
+			t.rankedDamageDone[creditGUID] += effectiveDamage
 		}
 
 	case *messages.Slain:
 		if t.assemblyOfIron != nil {
-			t.assemblyOfIron.commitSlainTarget(msg.Victim, t.damageDone)
+			if t.assemblyOfIron.isPhaseTarget(msg.Victim) {
+				for target, pending := range t.assemblyPending {
+					if target != msg.Victim {
+						for _, damage := range pending {
+							t.assemblyExcluded[damage] = true
+						}
+					}
+				}
+				clear(t.assemblyPending)
+			}
+			t.assemblyOfIron.commitSlainTarget(msg.Victim, t.rankedDamageDone)
 		}
 
 	case *messages.Heal:
@@ -171,9 +284,9 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 	return nil
 }
 
-func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
+func (t *DPSTracker) FightEnded(encounterID uuid.UUID, m messages.Message) {
 	if t.assemblyOfIron != nil {
-		t.assemblyOfIron.commitUnresolved(t.damageDone)
+		t.assemblyOfIron.commitUnresolved(t.rankedDamageDone)
 	}
 
 	// Merge all GUIDs seen across all three metric maps.
@@ -207,13 +320,23 @@ func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
 				talents = &cp
 			}
 		}
+		var observedForm string
+		if isPlayer {
+			var fightEnd time.Time
+			if m != nil {
+				fightEnd = m.Date()
+			}
+			observedForm = t.forms.Dominant(g, fightEnd).String()
+		}
 		stats := &UnitCombatStats{
-			DamageDone:      t.damageDone[g],
-			DamageTaken:     t.damageTaken[g],
-			HealingDone:     t.healingDone[g],
-			HealingAbsorbed: t.absorbDone[g],
-			IsPlayer:        isPlayer,
-			Talents:         talents,
+			DamageDone:       t.damageDone[g],
+			RankedDamageDone: t.rankedDamageDone[g],
+			DamageTaken:      t.damageTaken[g],
+			HealingDone:      t.healingDone[g],
+			HealingAbsorbed:  t.absorbDone[g],
+			IsPlayer:         isPlayer,
+			Talents:          talents,
+			ObservedForm:     observedForm,
 		}
 		if cls.Relation.HasOwner() {
 			owner := *cls.Relation.Owner
@@ -223,6 +346,23 @@ func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
 	}
 
 	t.results[encounterID] = result
+}
+
+// FightFinalized corrects form durations to the materialized fight boundaries.
+// FightStarted receives the message that triggered detection, which can be later
+// than an authoritative encounter boundary or character activity start.
+func (t *DPSTracker) FightFinalized(encounterID uuid.UUID, start, end time.Time) {
+	t.forms.FightFinalized(start)
+
+	result := t.results[encounterID]
+	if result == nil {
+		return
+	}
+	for unit, stats := range result.Units {
+		if stats.IsPlayer {
+			stats.ObservedForm = t.forms.Dominant(unit, end).String()
+		}
+	}
 }
 
 func (t *DPSTracker) Finalize(_ context.Context) error {

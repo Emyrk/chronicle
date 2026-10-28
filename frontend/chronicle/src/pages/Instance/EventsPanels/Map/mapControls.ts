@@ -136,6 +136,8 @@ export const MAP_CONTROL_KEYBINDS = [
   { keys: "X", action: "Play / pause the replay" },
   { keys: keyLabel(WALK_TOGGLE_KEY), action: "Walk mode on / off: join the fight on the ground" },
   { keys: "Esc", action: "Leave walk mode" },
+  { keys: "Ctrl + Shift + F", action: "Map fills the browser window on / off (pointer over the map); Esc leaves" },
+  { keys: "Ctrl + Alt + F", action: "Map fullscreen on / off (pointer over the map)" },
   { keys: "Left-drag / right-drag", action: "While walking: free-look / steer character and camera. The cursor hides while you drag" },
   { keys: "Left + right mouse", action: "While walking: run forward and steer with the mouse" },
   { keys: "Right-drag + A / D", action: "Strafe left / right relative to the camera, whatever A/D strafe is set to" },

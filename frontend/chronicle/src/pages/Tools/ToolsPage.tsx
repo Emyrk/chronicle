@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { Swords, FileText, Youtube, Code, Shirt, Users, Timer, BookOpen, GitBranch, ChartNoAxesCombined, Blocks, Map } from "lucide-react"
+import { Swords, FileText, Youtube, Code, Shirt, Users, Timer, BookOpen, GitBranch, ChartNoAxesCombined, Blocks, Puzzle, Map } from "lucide-react"
 
 const faq = [
   {
@@ -66,9 +66,15 @@ const tools = [
     icon: <Youtube className="h-6 w-6" />,
   },
   {
-    name: "Custom panels",
-    description: "How trusted panel plugins are resolved, isolated, and fed data.",
-    to: "/tools/custom-panels",
+    name: "Addons",
+    description: "Build and share sandboxed Lua panels in the Addon Workshop.",
+    to: "/addons",
+    icon: <Puzzle className="h-6 w-6" />,
+  },
+  {
+    name: "Developer panels",
+    description: "How trusted JavaScript panel plugins are resolved, isolated, and fed data.",
+    to: "/tools/developer-panels",
     icon: <Blocks className="h-6 w-6" />,
   },
   {

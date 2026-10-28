@@ -16,22 +16,36 @@ import (
 )
 
 func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
-	state := chronauth.AuthenticationState(r)
 	ctx := r.Context()
-	roles, err := a.Zed.UserChronicleRoles(ctx, state.Claims.Subject)
+	claims, authenticated := chronauth.AuthenticatedClaims(ctx)
+	if !authenticated {
+		state := chronauth.AuthenticationState(r)
+		if state == nil || state.Error == nil || state.Error == chronauth.ErrNotAuthorized {
+			httpapi.Write(ctx, w, http.StatusNoContent, nil)
+			return
+		}
+		if errors.Is(state.Error, chronauth.ErrNotAuthorized) {
+			httpapi.Write(ctx, w, http.StatusUnauthorized, chroniclesdk.Response{Message: "Invalid session token"})
+			return
+		}
+		httpapi.InternalServerError(w, state.Error)
+		return
+	}
+
+	roles, err := a.Zed.UserChronicleRoles(ctx, claims.Subject)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 
 	// Fetch user storage info
-	user, err := a.Opts.Zed.GetUserByID(ctx, state.Claims.Subject)
+	user, err := a.Opts.Zed.GetUserByID(ctx, claims.Subject)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 
-	actor := policy.New().User(state.Claims.Subject)
+	actor := policy.New().User(claims.Subject)
 	chronicle := policy.New().GlobalChronicle()
 	permissions, err := a.Zed.Check(ctx, nil,
 		chronicle.CanAd_free_User(actor),
@@ -49,8 +63,8 @@ func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 	canDownloadRawLogs := permissions[1]
 
 	sess := chroniclesdk.Session{
-		UserID:               state.Claims.Subject,
-		SessionID:            state.Claims.SessionID,
+		UserID:               claims.Subject,
+		SessionID:            claims.SessionID,
 		Roles:                roles,
 		MaxStorageBytes:      user.MaxStorageBytes,
 		ConsumedStorageBytes: user.ConsumedStorageBytes,
@@ -58,13 +72,13 @@ func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 		CanDownloadRawLogs:   canDownloadRawLogs,
 		AdsFree:              adsFree,
 		Email:                user.Email,
-		AuthProvider:         state.Claims.Provider,
+		AuthProvider:         claims.Provider,
 		CreatedAt:            user.CreatedAt.Time,
 	}
 
 	// For password-auth users, look up email verification status
-	if state.Claims.Provider == chronauth.PasswordProvider {
-		pw, err := a.Opts.Zed.GetUserPasswordByAuthID(ctx, state.Claims.UserAuthID)
+	if claims.Provider == chronauth.PasswordProvider {
+		pw, err := a.Opts.Zed.GetUserPasswordByAuthID(ctx, claims.UserAuthID)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			httpapi.InternalServerError(w, err)
 			return

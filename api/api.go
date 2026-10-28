@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -36,12 +37,14 @@ import (
 	"github.com/Emyrk/chronicle/internal/itempricing"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
+	"github.com/Emyrk/chronicle/internal/services/servicechoose"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicelivesession"
 	"github.com/Emyrk/chronicle/internal/services/serviceproof"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewhatsnew"
 	"github.com/authzed/gochugaru/rel"
+	"github.com/aws/smithy-go"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
@@ -66,6 +69,12 @@ type SidekickService interface {
 type InferenceService interface {
 	Routes() http.Handler
 	AccountRoutes() http.Handler
+}
+
+const openRouterCallbackPath = "/api/v1/inference/openrouter/callback"
+
+func browserOnlyMiddleware(accessURL *url.URL) func(http.Handler) http.Handler {
+	return httpmw.BrowserOnly(accessURL, discordInstallCallbackPath, openRouterCallbackPath)
 }
 
 type Options struct {
@@ -127,6 +136,10 @@ type Options struct {
 	// If nil, tenant middleware is a no-op.
 	Tenant *servicetenant.Service
 
+	// Choose serves the community chooser subdomain. If nil or disabled, the
+	// chooser is not served.
+	Choose *servicechoose.Service
+
 	// Application is the server application service for onboarding new servers.
 	// If nil, application routes are not registered.
 	Application *serviceapplication.Service
@@ -142,16 +155,17 @@ type Options struct {
 }
 
 type API struct {
-	AppContext     context.Context
-	Opts           *Options
-	Auth           *chronauth.Service
-	Chronicle      *chronicle.Chronicle
-	Queues         *riverqueue.Queues
-	Zed            *authz.Authz
-	CustomPanels   *custompanelapi.Handler
-	liveSessions   *servicelivesession.Service
-	discoveryStats discoveryStatsCache
-	landing        landingFeaturedCache
+	AppContext         context.Context
+	Opts               *Options
+	Auth               *chronauth.Service
+	Chronicle          *chronicle.Chronicle
+	Queues             *riverqueue.Queues
+	Zed                *authz.Authz
+	CustomPanels       *custompanelapi.Handler
+	liveSessions       *servicelivesession.Service
+	luaArtifactBacklog prometheus.Gauge
+	discoveryStats     discoveryStatsCache
+	landing            landingFeaturedCache
 
 	sidekickRelease *sidekickReleaseCache
 }
@@ -159,6 +173,14 @@ type API struct {
 func New(ctx context.Context, opts Options) (*API, error) {
 	if err := serviceproof.EnsureBucket(ctx, opts.Storage); err != nil {
 		return nil, err
+	}
+	if opts.Storage != nil {
+		if _, err := opts.Storage.CreateBucket(ctx, luaProjectBucket, storage.BucketOptions{Public: false, AllowedMimeTypes: []string{"application/zip"}}); err != nil {
+			var apiErr smithy.APIError
+			if err.Error() != "The resource already exists" && (!errors.As(err, &apiErr) || apiErr.ErrorCode() != "BucketAlreadyOwnedByYou") {
+				return nil, fmt.Errorf("create Lua project bucket: %w", err)
+			}
+		}
 	}
 	if opts.Registry == nil {
 		opts.Registry = prometheus.NewRegistry()
@@ -199,14 +221,24 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		return nil, err
 	}
 
-	return &API{
-		Opts:         &opts,
-		AppContext:   ctx,
-		Auth:         service,
-		Chronicle:    opts.Chronicle,
-		Queues:       opts.RiverQueue,
-		Zed:          opts.Zed,
-		CustomPanels: custompanelapi.New(custompanelapi.Options{HTTPClient: opts.CustomPanelHTTPClient}),
+	luaArtifactBacklog := prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "chronicle",
+		Subsystem: "lua_projects",
+		Name:      "artifact_gc_backlog",
+		Help:      "Number of eligible, unreferenced Lua ZIPs awaiting object-storage deletion.",
+	})
+	if err := opts.Registry.Register(luaArtifactBacklog); err != nil {
+		return nil, fmt.Errorf("register Lua artifact GC metric: %w", err)
+	}
+	api := &API{
+		luaArtifactBacklog: luaArtifactBacklog,
+		Opts:               &opts,
+		AppContext:         ctx,
+		Auth:               service,
+		Chronicle:          opts.Chronicle,
+		Queues:             opts.RiverQueue,
+		Zed:                opts.Zed,
+		CustomPanels:       custompanelapi.New(custompanelapi.Options{HTTPClient: opts.CustomPanelHTTPClient}),
 		liveSessions: servicelivesession.New(servicelivesession.Options{
 			AccessURL: opts.AccessURL,
 			ResolveUsername: func(ctx context.Context, userID uuid.UUID) (string, error) {
@@ -222,7 +254,27 @@ func New(ctx context.Context, opts Options) (*API, error) {
 			client: &http.Client{Timeout: 15 * time.Second},
 			logger: opts.Logger,
 		},
-	}, nil
+	}
+	gcCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	api.drainLuaArtifactGarbage(gcCtx)
+	cancel()
+	// Upload intents become eligible after their I/O grace period; a one-off
+	// startup sweep would miss intents that age while the service stays up.
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				gcCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				api.drainLuaArtifactGarbage(gcCtx)
+				cancel()
+			}
+		}
+	}()
+	return api, nil
 }
 
 func (api *API) Routes() chi.Router {
@@ -269,7 +321,7 @@ func (api *API) Routes() chi.Router {
 		}
 
 		r.Group(func(r chi.Router) {
-			r.Use(httpmw.BrowserOnly(api.Opts.AccessURL, discordInstallCallbackPath))
+			r.Use(browserOnlyMiddleware(api.Opts.AccessURL))
 			if api.Opts.OAuth != nil {
 				r.Use(api.Opts.OAuth.AuthenticationMiddleware)
 			}
@@ -280,10 +332,14 @@ func (api *API) Routes() chi.Router {
 			r.Get("/live-sessions/{code}/ws", api.liveSessions.WebSocket)
 
 			r.Group(func(r chi.Router) {
+				r.Use(api.Auth.Authenticated(true))
+				r.Get("/whoami", api.WhoAmI)
+			})
+
+			r.Group(func(r chi.Router) {
 				r.Use(
 					api.Auth.Authenticated(false),
 				)
-				r.Get("/whoami", api.WhoAmI)
 				r.Get("/whoami/dump", api.DumpToken)
 				r.Post("/authcheck", api.checkAuthorization)
 				r.Post("/live-sessions", api.liveSessions.Create)
@@ -302,6 +358,23 @@ func (api *API) Routes() chi.Router {
 				if api.Opts.Inference != nil {
 					r.Mount("/me/inference", api.Opts.Inference.AccountRoutes())
 				}
+				r.With(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanCreate_lua_project_User)).Post("/me/lua-projects", api.CreateLuaProject)
+				r.Get("/me/lua-projects", api.ListMyLuaProjects)
+				r.Get("/me/lua-projects/starred", api.ListStarredLuaProjects)
+				r.Put("/me/lua-projects/{projectID}/star", api.StarLuaProject)
+				r.Delete("/me/lua-projects/{projectID}/star", api.UnstarLuaProject)
+				r.Get("/me/addon-author", api.GetMyAddonAuthor)
+				r.Put("/me/addon-author", api.ClaimAddonAuthor)
+				r.Get("/me/addon-author/suggestion", api.SuggestAddonAuthor)
+				r.Get("/me/lua-projects/{projectID}/contributors", api.ListLuaProjectContributors)
+				r.Put("/me/lua-projects/{projectID}/contributors/{author}", api.PutLuaProjectContributor)
+				r.Delete("/me/lua-projects/{projectID}/contributors/{author}", api.DeleteLuaProjectContributor)
+				r.Get("/me/lua-projects/{projectID}", api.GetMyLuaProject)
+				r.Patch("/me/lua-projects/{projectID}", api.UpdateLuaProject)
+				r.Get("/me/lua-projects/{projectID}/draft/{hash}/package", api.DownloadMyLuaProjectDraft)
+				r.Put("/me/lua-projects/{projectID}/draft", api.PutLuaProjectDraft)
+				r.Post("/me/lua-projects/{projectID}/releases", api.CreateLuaProjectRelease)
+				r.Delete("/me/lua-projects/{projectID}/releases/{tag}", api.DeleteLuaProjectRelease)
 				r.Get("/me/custom-panels", api.GetMyCustomPanelSettings)
 				r.Put("/me/custom-panels", api.UpdateMyCustomPanelSettings)
 				r.Patch("/me/preferences", api.UpdateMyPreferences)
@@ -335,6 +408,7 @@ func (api *API) Routes() chi.Router {
 					r.Mount("/inference", api.Opts.Inference.Routes())
 				})
 			}
+			r.Group(api.publicLuaProjectRoutes)
 			r.Mount("/custom-panels", api.CustomPanels.Routes())
 			r.Mount("/panel-layout", panellayoutapi.New(api.Opts.Zed, api.Auth).Routes())
 			r.Mount("/gear-builder", gearbuilderapi.New(api.Opts.Zed, api.Auth, api.Opts.CacheSvc).Routes())

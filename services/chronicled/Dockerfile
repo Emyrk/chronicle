@@ -3,10 +3,11 @@ FROM node:20.19.1-alpine AS frontend
 ARG SERVER=turtle
 ENV SERVER=${SERVER}
 
-RUN apk --no-cache add make && npm install -g pnpm@9
+RUN apk --no-cache add make && npm install -g pnpm@10.34.5
 
 WORKDIR /chronicle/frontend/chronicle
 COPY frontend/chronicle/package.json frontend/chronicle/pnpm-lock.yaml ./
+COPY frontend/chronicle/patches/ ./patches/
 RUN pnpm install --frozen-lockfile
 
 # Sibling packages consumed through TypeScript path aliases. They have no

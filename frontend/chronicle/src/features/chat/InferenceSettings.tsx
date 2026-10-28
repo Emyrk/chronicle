@@ -1,9 +1,8 @@
-import { useEffect } from "react";
-import { ChevronDown, CircleCheck, CircleMinus, ExternalLink, LoaderCircle, ServerOff, Trash2 } from "lucide-react";
+import { useEffect, type ReactNode } from "react";
+import { CircleCheck, CircleMinus, ExternalLink, LoaderCircle, ServerOff, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/Collapsible/Collapsible";
 import { Switch } from "@/components/ui/Switch/Switch";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -27,7 +26,8 @@ export function InferenceSettings() {
   const { isAuthenticated } = useAuth();
   const settings = useInferenceSettings(isAuthenticated);
   const updateSettings = useUpdateInferenceSettings();
-  const connections = useInferenceConnections({ enabled: isAuthenticated && Boolean(settings.data?.enabled) });
+  // Listed even while AI is off: a stored credential still exists and should stay removable.
+  const connections = useInferenceConnections({ enabled: isAuthenticated && Boolean(settings.data) });
   const authorize = useAuthorizeOpenRouter();
   const disconnect = useDeleteInferenceConnection();
   const location = useLocation();
@@ -59,122 +59,144 @@ export function InferenceSettings() {
   const preference = settings.data;
   const status = statusPresentation[preference ? inferenceStatus(preference) : "unavailable"];
   const StatusIcon = status.icon;
+  const statusBadge = settings.isLoading ? (
+    <span className="text-muted-foreground flex items-center gap-1.5 text-xs"><LoaderCircle className="size-3.5 animate-spin" /> Checking…</span>
+  ) : settings.error ? (
+    <span className="text-destructive text-xs">Could not load AI status.</span>
+  ) : (
+    <span className={`flex items-center gap-1.5 text-xs font-medium ${status.className}`}><StatusIcon className="size-3.5" /> {status.label}</span>
+  );
 
   if (preference && !preference.available) {
     return (
-      <section className="overflow-hidden rounded-lg border">
-        <Collapsible>
-          <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-muted/30">
-            <div className="min-w-0">
-              <h3 className="font-medium">AI assistant</h3>
-              <p className="text-muted-foreground mt-0.5 text-sm">
-                AI features are not enabled for this account.
-              </p>
-            </div>
-            <div className="text-muted-foreground flex shrink-0 items-center gap-2 text-xs font-medium">
-              <CircleMinus className="size-4" />
-              No access
-              <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" />
-            </div>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="bg-muted/20 border-t px-4 py-3">
-              <p className="text-muted-foreground text-sm">
-                Your account has not been granted AI assistant access. There are no AI settings or actions available for this account.
-              </p>
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
-      </section>
+      <SettingsSection title="General">
+        <Row title="AI features" description="Your account has not been granted AI assistant access, so there are no AI settings or actions for it." aside={statusBadge} />
+      </SettingsSection>
     );
   }
 
+  const connectionList = connections.data?.connections ?? [];
   return (
-    <section className="rounded-lg border p-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="max-w-2xl">
-          <h3 className="font-medium">AI assistant</h3>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Control whether Chronicle AI features appear for your account. When enabled, you can connect your own OpenRouter account to fund assistant requests.
-          </p>
-        </div>
-        {settings.isLoading ? (
-          <span className="text-muted-foreground flex items-center gap-2 text-sm"><LoaderCircle className="size-4 animate-spin" /> Checking status…</span>
-        ) : settings.error ? (
-          <span className="text-destructive text-sm">Could not load AI status.</span>
-        ) : (
-          <span className={`flex items-center gap-2 text-sm font-medium ${status.className}`}>
-            <StatusIcon className="size-4" /> {status.label}
-          </span>
-        )}
-      </div>
-
-      {preference && (
-        <div className="bg-muted/30 mt-4 flex items-start justify-between gap-4 rounded-md border px-3 py-3">
-          <div>
-            <label htmlFor="allow-inference" className="text-sm font-medium">Allow AI features on my account</label>
-            <p className="text-muted-foreground mt-0.5 text-xs">
-              {!preference.available
-                ? "Your preference will be saved and applied if AI access is granted later."
-                : "Turn this off to hide AI controls and block assistant requests for your account."}
-            </p>
-          </div>
-          <Switch
-            id="allow-inference"
-            checked={!preference.disabled}
-            disabled={updateSettings.isPending}
-            onCheckedChange={(checked) => updateSettings.mutate(
-              { disabled: !checked },
-              { onError: (error) => toast.error("Could not update AI preference", { description: error.message }) },
+    <div className="space-y-8">
+      <SettingsSection title="General">
+        <Row
+          title={<label htmlFor="allow-inference">Allow AI features on my account</label>}
+          description="Turn this off to hide every AI control and block assistant requests for your account."
+          aside={<>
+            {statusBadge}
+            {preference && (
+              <Switch
+                id="allow-inference"
+                checked={!preference.disabled}
+                disabled={updateSettings.isPending}
+                onCheckedChange={(checked) => updateSettings.mutate(
+                  { disabled: !checked },
+                  { onError: (error) => toast.error("Could not update AI preference", { description: error.message }) },
+                )}
+                aria-label="Allow AI features on my account"
+              />
             )}
-            aria-label="Allow AI features on my account"
-          />
-        </div>
+          </>}
+        />
+      </SettingsSection>
+
+      {preference && preference.assistants?.length > 0 && (
+        <SettingsSection
+          title="Assistants"
+          description={preference.disabled ? "Turn on AI features to choose assistants." : "Choose which assistants appear. A turned-off assistant is hidden and cannot run for your account."}
+        >
+          {preference.assistants.map((assistant) => (
+            <Row
+              key={assistant.id}
+              muted={preference.disabled}
+              title={<label htmlFor={`assistant-${assistant.id}`}>{assistant.name}</label>}
+              description={assistant.description}
+              aside={
+                <Switch
+                  id={`assistant-${assistant.id}`}
+                  checked={assistant.enabled}
+                  disabled={preference.disabled || updateSettings.isPending}
+                  onCheckedChange={(checked) => updateSettings.mutate(
+                    { assistants: { [assistant.id]: checked } },
+                    { onError: (error) => toast.error(`Could not update ${assistant.name}`, { description: error.message }) },
+                  )}
+                  aria-label={assistant.name}
+                />
+              }
+            />
+          ))}
+        </SettingsSection>
       )}
 
-      {preference?.enabled && (
-        <div className="mt-4 border-t pt-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <p className="text-muted-foreground max-w-2xl text-sm">
-              Authorization happens on OpenRouter; Chronicle never receives your OpenRouter password, and no API key is stored in this browser.
-            </p>
-            <Button onClick={() => void connect()} disabled={authorize.isPending}>
+      {preference && (
+        <SettingsSection
+          title="Provider"
+          description={preference.enabled
+            ? "Assistant requests are paid for by your own OpenRouter account. Authorization happens on OpenRouter; Chronicle never sees your password and stores no API key in this browser."
+            : "Turn on AI features to connect a provider. Existing connections stay stored, and you can still disconnect them."}
+          action={preference.enabled && (
+            <Button size="sm" onClick={() => void connect()} disabled={authorize.isPending}>
               {authorize.isPending ? <LoaderCircle className="animate-spin" /> : <ExternalLink />}
               Connect OpenRouter
             </Button>
-          </div>
-
-          {connections.isLoading ? (
-            <p className="text-muted-foreground mt-4 flex items-center gap-2 text-sm"><LoaderCircle className="size-4 animate-spin" /> Loading connections…</p>
-          ) : connections.error ? (
-            <p className="text-destructive mt-4 text-sm">{connections.error.message}</p>
-          ) : connections.data?.connections.length ? (
-            <div className="mt-4 space-y-2">
-              {connections.data.connections.map((connection) => (
-                <div key={connection.id} className="bg-muted/30 flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{connection.label}</p>
-                    <p className="text-muted-foreground text-xs capitalize">{connection.provider} · {connection.status}</p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={disconnect.isPending}
-                    onClick={() => disconnect.mutate(connection.id, {
-                      onSuccess: () => toast.success("AI connection removed."),
-                      onError: (error) => toast.error("Could not disconnect provider", { description: error.message }),
-                    })}
-                  >
-                    <Trash2 /> Disconnect
-                  </Button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-muted-foreground mt-4 text-sm">No AI provider is connected yet.</p>
           )}
-        </div>
+        >
+          {connections.isLoading ? (
+            <Row title={<span className="text-muted-foreground flex items-center gap-2 font-normal"><LoaderCircle className="size-4 animate-spin" /> Loading connections…</span>} />
+          ) : connections.error ? (
+            <Row title={<span className="text-destructive font-normal">{connections.error.message}</span>} />
+          ) : connectionList.length ? connectionList.map((connection) => (
+            <Row
+              key={connection.id}
+              title={connection.label}
+              description={<span className="capitalize">{connection.status}</span>}
+              aside={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={disconnect.isPending}
+                  onClick={() => disconnect.mutate(connection.id, {
+                    onSuccess: () => toast.success("AI connection removed."),
+                    onError: (error) => toast.error("Could not disconnect provider", { description: error.message }),
+                  })}
+                >
+                  <Trash2 /> Disconnect
+                </Button>
+              }
+            />
+          )) : (
+            <Row title={<span className="text-muted-foreground font-normal">No AI provider is connected yet.</span>} />
+          )}
+        </SettingsSection>
       )}
+    </div>
+  );
+}
+
+/** A titled group of settings rows: one bordered list, rows separated by dividers. */
+function SettingsSection({ title, description, action, children }: { title: string; description?: string; action?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="space-y-3">
+      <div className="flex items-end justify-between gap-4">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold">{title}</h3>
+          {description && <p className="text-muted-foreground mt-1 max-w-2xl text-sm">{description}</p>}
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
+      </div>
+      <div className="divide-y rounded-lg border">{children}</div>
     </section>
+  );
+}
+
+function Row({ title, description, aside, muted }: { title: ReactNode; description?: ReactNode; aside?: ReactNode; muted?: boolean }) {
+  return (
+    <div className={`flex items-center justify-between gap-4 px-4 py-3 ${muted ? "opacity-60" : ""}`}>
+      <div className="min-w-0">
+        <div className="text-sm font-medium">{title}</div>
+        {description && <div className="text-muted-foreground mt-0.5 text-xs">{description}</div>}
+      </div>
+      {aside && <div className="flex shrink-0 items-center gap-3">{aside}</div>}
+    </div>
   );
 }

@@ -11,12 +11,20 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+type bufferedMessage[M messages.Message] struct {
+	message M
+	index   int32
+}
+
 type Builder[M messages.Message, PM proto.Message] struct {
 	First time.Time
 	Count int64
 
-	done bool
-	data *bytes.Buffer
+	done     bool
+	data     *bytes.Buffer
+	buffered bool
+	pending  []bufferedMessage[M]
+	convert  func(time.Time, int32, M) PM
 }
 
 func NewBuilder[M messages.Message, PM proto.Message]() *Builder[M, PM] {
@@ -24,6 +32,33 @@ func NewBuilder[M messages.Message, PM proto.Message]() *Builder[M, PM] {
 		First: time.Time{},
 		data:  bytes.NewBuffer(nil),
 	}
+}
+
+// NewBufferedBuilder defers encoding until SerializeBuffered runs. This allows
+// callers to update messages once the completed encounter is identified.
+func NewBufferedBuilder[M messages.Message, PM proto.Message]() *Builder[M, PM] {
+	b := NewBuilder[M, PM]()
+	b.buffered = true
+	return b
+}
+
+// SerializeBuffered applies a finalizer in event order and then encodes the
+// messages. It must be called before Finalize on buffered builders.
+func (b *Builder[M, PM]) SerializeBuffered(finalize func(M)) error {
+	if !b.buffered || b.done {
+		return fmt.Errorf("builder is not awaiting buffered serialization")
+	}
+	for _, entry := range b.pending {
+		if finalize != nil {
+			finalize(entry.message)
+		}
+		if err := b.write(entry.message, entry.index, b.convert); err != nil {
+			return err
+		}
+	}
+	b.pending = nil
+	b.buffered = false
+	return nil
 }
 
 // Finalize builds the final byte array for the encounter events.
@@ -34,6 +69,9 @@ func NewBuilder[M messages.Message, PM proto.Message]() *Builder[M, PM] {
 // Body
 // - Repeated PM messages
 func (b *Builder[M, PM]) Finalize(encounterID uuid.UUID) ([]byte, error) {
+	if b.buffered {
+		return nil, fmt.Errorf("buffered builder must be serialized before finalization")
+	}
 	if b.done {
 		return nil, fmt.Errorf("builder already finalized")
 	}
@@ -67,6 +105,15 @@ func AddToBuilder[M messages.Message, PM proto.Message](b *Builder[M, PM], m M, 
 	}
 
 	b.Count++
+	if b.buffered {
+		b.convert = conv
+		b.pending = append(b.pending, bufferedMessage[M]{message: m, index: idx})
+		return nil
+	}
+	return b.write(m, idx, conv)
+}
+
+func (b *Builder[M, PM]) write(m M, idx int32, conv func(time.Time, int32, M) PM) error {
 	pm := conv(b.First, idx, m)
 	data, err := proto.Marshal(pm)
 	if err != nil {

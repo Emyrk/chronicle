@@ -1,3 +1,5 @@
+import { addUsage, EMPTY_USAGE, type ChatUsage } from "./usage";
+
 export const AG_UI_EVENT_TYPES = [
   "RUN_STARTED",
   "RUN_FINISHED",
@@ -10,6 +12,7 @@ export const AG_UI_EVENT_TYPES = [
   "TOOL_CALL_END",
   "CLIENT_TOOL_REQUEST",
   "DEBUG_SNAPSHOT",
+  "USAGE",
 ] as const;
 
 export type AgUiEventType = (typeof AG_UI_EVENT_TYPES)[number];
@@ -141,6 +144,18 @@ export interface DebugUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  cachedTokens?: number;
+  reasoningTokens?: number;
+  /** OpenRouter credits (1 credit = 1 USD); absent when the provider reported no cost. */
+  costUsd?: number;
+}
+
+/** Chronicle extension: usage for one model call, sent after that call's message and tool events. */
+export interface UsageEvent extends AgUiEventBase {
+  type: "USAGE";
+  runId: string;
+  messageId: string;
+  usage: DebugUsage;
 }
 
 export interface DebugSnapshotEvent extends AgUiEventBase {
@@ -171,7 +186,8 @@ export type AgUiEvent =
   | ToolCallArgsEvent
   | ToolCallEndEvent
   | ClientToolRequestEvent
-  | DebugSnapshotEvent;
+  | DebugSnapshotEvent
+  | UsageEvent;
 
 export type ChatRole = "user" | "assistant";
 export type ChatRunStatus = "idle" | "running" | "finished" | "error";
@@ -191,6 +207,8 @@ export interface ChatMessage {
   streaming?: boolean;
   interrupted?: boolean;
   toolCalls?: ChatToolCall[];
+  /** Model calls that produced this message. */
+  usage?: ChatUsage;
 }
 
 export interface ChatState {
@@ -201,6 +219,8 @@ export interface ChatState {
   threadId?: string;
   status: ChatRunStatus;
   error?: string;
+  /** The whole conversation's usage: what the server reported when it loaded, plus calls since. */
+  usageTotal: ChatUsage;
 }
 
 export type ChatAction =
@@ -213,13 +233,36 @@ export type ChatAction =
   | { type: "reset_conversation"; messages?: ChatMessage[] }
   | { type: "clear_error" };
 
-export function createInitialChatState(messages: ChatMessage[] = []): ChatState {
+export function createInitialChatState(messages: ChatMessage[] = [], usageTotal: ChatUsage = EMPTY_USAGE): ChatState {
   return {
     messages,
     debugSnapshots: [],
     clientToolRequests: [],
     status: "idle",
+    usageTotal,
   };
+}
+
+export function chatUsageFromEvent(usage: DebugUsage): ChatUsage {
+  return {
+    promptTokens: usage.promptTokens, completionTokens: usage.completionTokens,
+    cachedTokens: usage.cachedTokens ?? 0, reasoningTokens: usage.reasoningTokens ?? 0,
+    ...(usage.costUsd !== undefined && { costUsd: usage.costUsd }), calls: 1,
+  };
+}
+
+/**
+ * A tool-only step has no message of its own, so its usage joins the turn's latest assistant message, or the
+ * turn's user message when no reply exists yet. turnUsageByMessage counts both.
+ */
+function attachUsage(messages: ChatMessage[], messageId: string, usage: ChatUsage): ChatMessage[] {
+  let index = messages.findIndex((message) => message.id === messageId);
+  if (index === -1) {
+    index = messages.length - 1;
+    while (index >= 0 && messages[index].role !== "assistant" && messages[index].role !== "user") index--;
+    if (index === -1) return messages;
+  }
+  return messages.map((message, i) => (i === index ? { ...message, usage: addUsage(message.usage, usage) } : message));
 }
 
 function updateMessage(
@@ -418,6 +461,14 @@ function applyEvent(state: ChatState, event: AgUiEvent): ChatState {
         ...state,
         debugSnapshots: [...state.debugSnapshots, event],
       };
+    case "USAGE": {
+      const usage = chatUsageFromEvent(event.usage);
+      return {
+        ...state,
+        messages: attachUsage(state.messages, event.messageId, usage),
+        usageTotal: addUsage(state.usageTotal, usage)!,
+      };
+    }
     case "TOOL_CALL_END":
       return {
         ...state,
@@ -457,6 +508,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         debugSnapshots: [],
         clientToolRequests: [],
         status: "idle",
+        usageTotal: EMPTY_USAGE,
       };
     case "clear_error":
       return { ...state, error: undefined, status: state.status === "error" ? "idle" : state.status };

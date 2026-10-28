@@ -49,12 +49,35 @@ export const TOKEN_LAYOUT = {
   columnGap: 0.08,
   /** The boss sigil's tick ring turns this fast (radians per second). */
   sigilSpin: 0.14,
-  /** A boss without a model: its hexagon pin stands this high (per radius) over the sigil, this big. */
-  bossPinHeight: 1.9,
-  bossPinSize: 1.15,
   /** A muted unit (another player is selected) fades to this opacity. */
   mutedOpacity: 0.28,
 } as const;
+
+/**
+ * A boss without a model: a six-sided crystal standing point-down on its sigil,
+ * turning `spin` radians per second. `profile` is its outline from the tip on
+ * the sigil to the top, as [half-width, height] per token radius.
+ */
+export const BOSS_SPIRE = {
+  profile: [[0, 0], [0.42, 0.55], [0.3, 2.3], [0, 2.9]],
+  sides: 6,
+  spin: 0.5,
+  /** Its faint inner glow; dead, it goes this grey with none. */
+  glow: 0x3f0d0d,
+  dead: 0x57534e,
+  /** Casting, it turns toward the spell's school colour, up to this much at the cast's end, and glows half that. */
+  castGlow: 0.85,
+  /** ...pulsing this many times a second. */
+  castPulse: 2,
+} as const;
+
+/**
+ * How far a casting boss crystal has turned to the spell's colour (0..1): faint as the cast starts, building as it fills, with a pulse.
+ */
+export function bossSpireCastGlow(progress: number, seconds: number): number {
+  const pulse = 0.5 + 0.5 * Math.sin(seconds * Math.PI * 2 * BOSS_SPIRE.castPulse);
+  return BOSS_SPIRE.castGlow * (0.3 + 0.7 * progress) * (0.75 + 0.25 * pulse);
+}
 
 /** Target lines: ribbon widths and dash period (geometry units), and the dashes' speed. */
 export const TARGET_LINE = {
@@ -402,28 +425,6 @@ export function drawSigilTicks(context: CanvasRenderingContext2D) {
 }
 
 /** A boss without a model: a hexagon in enemy red with a skull, standing over its sigil. */
-export function drawBossPin(context: CanvasRenderingContext2D) {
-  const size = TOKEN_ART_SIZE;
-  const hexagon = (inset: number) => {
-    const points = [[0.25, 0.03], [0.75, 0.03], [1, 0.5], [0.75, 0.97], [0.25, 0.97], [0, 0.5]];
-    context.beginPath();
-    points.forEach(([x, y], index) => {
-      const px = inset + x * (size - inset * 2);
-      const py = inset + y * (size - inset * 2);
-      if (index === 0) context.moveTo(px, py);
-      else context.lineTo(px, py);
-    });
-    context.closePath();
-  };
-  hexagon(2);
-  context.fillStyle = ENEMY_RED;
-  context.fill();
-  hexagon(10);
-  context.fillStyle = "#141414";
-  context.fill();
-  drawSkull(context, size / 2, size * 0.5);
-}
-
 /**
  * One period of a target line's dash (it repeats along the line), in
  * `color`: long dashes for the selected unit's line, dots for the target's target.

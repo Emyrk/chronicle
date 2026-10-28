@@ -108,6 +108,16 @@ func extractLegacyMaps(ctx context.Context, stdout io.Writer, client *dbcdb.WoWC
 		return err
 	}
 
+	var dungeonMapRows []dbdefs.Ent_DungeonMap
+	if dungeonMaps, dungeonErr := client.DungeonMap(); dungeonErr != nil {
+		_, _ = fmt.Fprintf(stdout, "Warning: DungeonMap.dbc unavailable; instance floors will not have world bounds: %v\n", dungeonErr)
+	} else if err := dungeonMaps.Range(func(row *dbdefs.Ent_DungeonMap) bool {
+		dungeonMapRows = append(dungeonMapRows, *row)
+		return true
+	}); err != nil {
+		return fmt.Errorf("iterate DungeonMap.dbc: %w", err)
+	}
+
 	var areaRows []dbdefs.Ent_WorldMapArea
 	if err := areas.Range(func(row *dbdefs.Ent_WorldMapArea) bool {
 		areaRows = append(areaRows, *row)
@@ -123,7 +133,7 @@ func extractLegacyMaps(ctx context.Context, stdout io.Writer, client *dbcdb.WoWC
 		return fmt.Errorf("iterate WorldMapOverlay.dbc: %w", err)
 	}
 
-	manifest, sourcePaths, err := buildLegacyMapManifest(areaRows, overlayRows, areaNames, worldMaps, fileIndex, resolveFile, wowMapTarget{
+	manifest, sourcePaths, err := buildLegacyMapManifest(areaRows, overlayRows, areaNames, worldMaps, legacyDungeonMapBounds(dungeonMapRows), fileIndex, resolveFile, wowMapTarget{
 		Product: server,
 		Build:   client.Build().String(),
 	})
@@ -312,9 +322,7 @@ func pruneUnavailableLegacyMapTiles(manifest *wowMapManifest, unavailable map[in
 			floors = append(floors, floor)
 		}
 		instance.Floors = floors
-		if len(instance.Floors) > 0 {
-			instances = append(instances, instance)
-		}
+		instances = append(instances, instance)
 	}
 	manifest.Instances = instances
 	return skipped
@@ -325,6 +333,7 @@ func buildLegacyMapManifest(
 	overlays []dbdefs.Ent_WorldMapOverlay,
 	areaNames map[int32]string,
 	worldMaps []wowdataMap,
+	dungeonBounds map[[2]int32]wowMapFloorBounds,
 	fileIndex map[string]string,
 	resolveFile func(string) (string, bool),
 	target wowMapTarget,
@@ -407,7 +416,7 @@ func buildLegacyMapManifest(
 		}
 		instanceFiles = append(instanceFiles, legacyMapFile{FileDataID: id, FileName: normalized})
 	}
-	manifest.Instances = buildLegacyMapInstances(worldMaps, instanceFiles)
+	manifest.Instances = buildLegacyMapInstances(worldMaps, instanceFiles, dungeonBounds)
 	return manifest, sourcePaths, nil
 }
 
@@ -495,7 +504,53 @@ func strconvFormatInt32(value int32) string {
 	return fmt.Sprint(value)
 }
 
-func buildLegacyMapInstances(maps []wowdataMap, files []legacyMapFile) []wowMapInstance {
+func legacyDungeonMapBounds(rows []dbdefs.Ent_DungeonMap) map[[2]int32]wowMapFloorBounds {
+	bounds := make(map[[2]int32]wowMapFloorBounds, len(rows))
+	for _, row := range rows {
+		var value wowMapFloorBounds
+		var ok bool
+		if len(row.Min) >= 2 && len(row.Max) >= 2 {
+			value, ok = normalizedDungeonMapBounds(
+				float64(row.Min[0]), float64(row.Max[0]),
+				float64(row.Min[1]), float64(row.Max[1]),
+			)
+		}
+		if !ok {
+			value, ok = normalizedDungeonMapBounds(
+				float64(row.MinX), float64(row.MaxX),
+				float64(row.MinY), float64(row.MaxY),
+			)
+		}
+		if ok {
+			bounds[[2]int32{row.MapID, row.FloorIndex + 1}] = value
+		}
+	}
+	return bounds
+}
+
+func normalizedDungeonMapBounds(minX, maxX, minY, maxY float64) (wowMapFloorBounds, bool) {
+	if !isFinite(minX) || !isFinite(maxX) || !isFinite(minY) || !isFinite(maxY) || minX == maxX || minY == maxY {
+		return wowMapFloorBounds{}, false
+	}
+	return wowMapFloorBounds{
+		MinX: math.Min(minX, maxX), MaxX: math.Max(minX, maxX),
+		MinY: math.Min(minY, maxY), MaxY: math.Max(minY, maxY),
+	}, true
+}
+
+func isFinite(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
+}
+
+func dungeonFloorBounds(bounds map[[2]int32]wowMapFloorBounds, mapID, floor int32) *wowMapFloorBounds {
+	value, ok := bounds[[2]int32{mapID, floor}]
+	if !ok {
+		return classicDungeonFloorBounds(mapID, floor)
+	}
+	return &value
+}
+
+func buildLegacyMapInstances(maps []wowdataMap, files []legacyMapFile, dungeonBounds map[[2]int32]wowMapFloorBounds) []wowMapInstance {
 	assets := make(map[string]*wowMapInstanceAsset)
 	for _, file := range files {
 		directory, floor, tileIndex, ok := parseLegacyMapInstanceTile(file.FileName)
@@ -542,12 +597,15 @@ func buildLegacyMapInstances(maps []wowdataMap, files []legacyMapFile) []wowMapI
 				break
 			}
 		}
+		instance := wowMapInstance{
+			MapID: mapRow.ID, Name: mapRow.Name, InstanceType: mapRow.InstanceType,
+			Directory: mapRow.Directory, Floors: []wowMapInstanceFloor{},
+		}
 		if asset == nil {
+			instances = append(instances, instance)
 			continue
 		}
-		instance := wowMapInstance{
-			MapID: mapRow.ID, Name: mapRow.Name, InstanceType: mapRow.InstanceType, Directory: asset.Directory,
-		}
+		instance.Directory = asset.Directory
 		var floorNumbers []int32
 		for floor := range asset.Floors {
 			floorNumbers = append(floorNumbers, floor)
@@ -560,7 +618,7 @@ func buildLegacyMapInstances(maps []wowdataMap, files []legacyMapFile) []wowMapI
 			}
 			floor := wowMapInstanceFloor{
 				Floor: floorNumber, Width: 1002, Height: 668, TileWidth: 256, TileHeight: 256,
-				Bounds: classicDungeonFloorBounds(mapRow.ID, floorNumber),
+				Bounds: dungeonFloorBounds(dungeonBounds, mapRow.ID, floorNumber),
 			}
 			for tileIndex := int32(1); tileIndex <= 12; tileIndex++ {
 				tile, ok := tilesByIndex[tileIndex]
@@ -573,9 +631,6 @@ func buildLegacyMapInstances(maps []wowdataMap, files []legacyMapFile) []wowMapI
 			if len(floor.Tiles) == 12 {
 				instance.Floors = append(instance.Floors, floor)
 			}
-		}
-		if len(instance.Floors) == 0 {
-			continue
 		}
 		claimedAssets[assetKey] = struct{}{}
 		instances = append(instances, instance)

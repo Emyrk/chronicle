@@ -831,6 +831,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
           variant="default"
           size="icon"
           onClick={() => setSidebarOpen(!sidebarOpen)}
+          data-floating-corner="bottom-right"
           className="fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-50 h-11 w-11 rounded-full border border-white/10 shadow-xl sm:right-6 sm:h-12 sm:w-12"
           title={sidebarOpen ? "Close encounters" : "Show encounters"}
           aria-label={sidebarOpen ? "Close encounter filters" : "Show encounter filters"}

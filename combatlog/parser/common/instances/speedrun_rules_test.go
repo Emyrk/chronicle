@@ -8,6 +8,61 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestMoltenCoreDamageTargets(t *testing.T) {
+	t.Parallel()
+	bossOnly := rankings.DamageTargets{Mode: rankings.DamageTargetsBossOnly}
+	entries := func(ids ...uint32) rankings.DamageTargets {
+		return rankings.DamageTargets{Mode: rankings.DamageTargetsEntries, EntryIDs: ids}
+	}
+	common := map[string]rankings.DamageTargets{
+		"Lucifron":                 entries(12118, 12119),
+		"Magmadar":                 entries(11982),
+		"Garr":                     entries(12057, 12099),
+		"Shazzrah":                 bossOnly,
+		"Baron Geddon":             bossOnly,
+		"Sulfuron Harbinger":       entries(12098, 11662, 12143),
+		"Golemagg the Incinerator": entries(11988, 11672),
+		"Majordomo Executus":       entries(12018, 11663, 11664),
+		"Ragnaros":                 entries(11502, 12143),
+	}
+	for _, tc := range []struct {
+		name   string
+		flavor database.WoWFlavor
+		extra  map[string]rankings.DamageTargets
+	}{
+		{name: "vanilla", flavor: database.WoWFlavor{database.FlavorVanilla}, extra: map[string]rankings.DamageTargets{
+			"Gehennas": entries(12259, 11661),
+		}},
+		{name: "turtle", flavor: database.WoWFlavor{database.FlavorTurtle}, extra: map[string]rankings.DamageTargets{
+			"Incindis":                  bossOnly,
+			"Basalthar & Smoldaris":     bossOnly,
+			"Sorcerer-Thane Thaurissan": entries(57642, 57643),
+		}},
+		{name: "nightmare", flavor: database.WoWFlavor{database.FlavorNightmareOfUrsol}, extra: map[string]rankings.DamageTargets{
+			"Incindis":                  bossOnly,
+			"Basalthar & Smoldaris":     bossOnly,
+			"Sorcerer-Thane Thaurissan": entries(57642, 57643),
+		}},
+		{name: "octowow", flavor: database.WoWFlavor{database.FlavorOctoWoW}, extra: map[string]rankings.DamageTargets{
+			"Incindis":                  bossOnly,
+			"Basalthar & Smoldaris":     bossOnly,
+			"Sorcerer-Thane Thaurissan": entries(57642, 57643),
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			want := make(map[string]rankings.DamageTargets, len(common)+len(tc.extra))
+			for name, rule := range common {
+				want[name] = rule
+			}
+			for name, rule := range tc.extra {
+				want[name] = rule
+			}
+			require.Equal(t, want, MoltenCoreFactory.FlavoredRankings(tc.flavor).DamageByEncounter)
+		})
+	}
+}
+
 func TestLevel60Cap(t *testing.T) {
 	t.Parallel()
 

@@ -19,9 +19,9 @@ const pipeline: { step: string; title: string; detail: ReactNode }[] = [
 ]
 
 const userFaq = [
-  { q: "Is a custom panel sandboxed?", a: "No. The entry module runs in Chronicle's page with the same authority as first-party code: it can read page state, use your session, and make requests. The Shadow Root isolates styles only. Install only from authors you trust." },
+  { q: "Is a developer panel sandboxed?", a: "No. The entry module runs in Chronicle's page with the same authority as first-party code: it can read page state, use your session, and make requests. The Shadow Root isolates styles only. Install only from authors you trust." },
   { q: "What exactly am I approving?", a: "One repository at one immutable commit SHA. Chronicle validates the manifest, artifact paths, sizes and SHA-256 digests, but does not audit the JavaScript." },
-  { q: "What do I need to install one?", a: "A signed-in Chronicle account and the global “Enable trusted custom JavaScript panels” switch. No GitHub account or token. Only public repositories work. Up to 32 installations per account." },
+  { q: "What do I need to install one?", a: "A signed-in Chronicle account and the global “Enable trusted developer panels” switch. No GitHub account or token. Only public repositories work. Up to 32 installations per account." },
   { q: "Are installations synced across devices?", a: "Yes. Installations and the master switch are stored on your account. Accounts installing the same commit share one release record." },
   { q: "Does opening a shared link install a plugin?", a: "Never. Shared URLs and saved layouts keep the panel reference. If you don't have the plugin, you see a placeholder with the repository, panel ID and a button to the install flow." },
   { q: "How do updates work?", a: "Check for update re-resolves the ref to a new commit and asks you to confirm when hashes change. Layouts reference repository + panel ID, not a version, so they keep working." },
@@ -135,14 +135,17 @@ export function CustomPanelsPage() {
       <header className="grid items-end gap-x-16 gap-y-8 md:grid-cols-2">
         <div className="flex flex-col gap-3.5">
           <ToolsBackLink />
-          <h1 className="text-balance text-4xl font-semibold leading-none tracking-tight md:text-5xl">Custom panel plugins</h1>
+          <h1 className="text-balance text-4xl font-semibold leading-none tracking-tight md:text-5xl">Developer panels</h1>
           <p className="max-w-[560px] text-pretty leading-relaxed text-muted-foreground">
             A plugin is a public GitHub repository, pinned to one commit, that provides fully custom panel views. Panels render any
             browser UI, read Chronicle's cached event streams, and can process them in their own Web Worker.
           </p>
           <div className="flex flex-wrap gap-3 pt-1 text-sm">
-            <Link to="/account/custom-panels" className="rounded-md bg-primary px-4 py-2 font-semibold text-primary-foreground hover:bg-primary/90">
+            <Link to="/account/developer-panels" className="rounded-md bg-primary px-4 py-2 font-semibold text-primary-foreground hover:bg-primary/90">
               Manage panels
+            </Link>
+            <Link to="/addons" className="rounded-md border px-4 py-2 font-semibold hover:bg-accent">
+              Want something shareable and sandboxed? Build an addon
             </Link>
             <a
               href="https://github.com/Emyrk/chronicle-panel"
@@ -265,7 +268,7 @@ export function CustomPanelsPage() {
       </section>
 
       <p className="max-w-[820px] text-pretty text-[13.5px] leading-relaxed text-muted-foreground">
-        <span className="font-medium text-foreground">Zero cost when unused.</span> With no custom panel installed or selected there
+        <span className="font-medium text-foreground">Zero cost when unused.</span> With no developer panel installed or selected there
         are no plugin requests, imports, workers, stream copies, observers or timers. Installed-but-unselected plugins only contribute
         labels to the panel selector.
       </p>
@@ -300,7 +303,7 @@ export function CustomPanelsPage() {
       <section className="flex flex-col gap-2.5 rounded-lg bg-destructive/12 px-7 py-6">
         <div className="font-mono text-xs text-muted-foreground">Shown on every install</div>
         <p className="max-w-[860px] text-pretty text-[17px] font-medium leading-normal">
-          Custom panels execute arbitrary JavaScript with access to the Chronicle page, your authenticated session, and combat-log data.
+          Developer panels execute arbitrary JavaScript with access to the Chronicle page, your authenticated session, and combat-log data.
           Only install panels from authors you trust.
         </p>
       </section>

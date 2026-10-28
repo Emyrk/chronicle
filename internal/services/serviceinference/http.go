@@ -32,6 +32,9 @@ func (s *Service) AccountRoutes() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", s.getInferenceSettings)
 	r.Put("/", s.updateInferenceSettings)
+	// Stored credentials stay visible and removable even while AI features are off for the account.
+	r.Get("/connections", s.listConnections)
+	r.Delete("/connections/{connectionID}", s.deleteConnection)
 	return r
 }
 
@@ -54,9 +57,21 @@ func (s *Service) updateInferenceSettings(w http.ResponseWriter, r *http.Request
 		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "AI features are not enabled for this account."})
 		return
 	}
-	if err := s.zed.SetInferenceDisabled(r.Context(), userID(r), req.Disabled); err != nil {
-		s.internalError(w, "update inference preference", err)
-		return
+	if req.Disabled != nil {
+		if err := s.zed.SetInferenceDisabled(r.Context(), userID(r), *req.Disabled); err != nil {
+			s.internalError(w, "update inference preference", err)
+			return
+		}
+	}
+	if len(req.Assistants) > 0 {
+		if err := s.setAssistantsEnabled(r.Context(), userID(r), req.Assistants); err != nil {
+			if errors.Is(err, errUnknownAssistant) {
+				badRequest(w, r, err.Error())
+				return
+			}
+			s.internalError(w, "update assistant preferences", err)
+			return
+		}
 	}
 	s.writeInferenceSettings(w, r)
 }
@@ -80,11 +95,22 @@ func (s *Service) writeInferenceSettings(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	available, disabled, permitted := checks[0], checks[1], checks[2]
+	off, err := s.disabledAssistants(r.Context(), userID(r))
+	if err != nil {
+		s.internalError(w, "read assistant preferences", err)
+		return
+	}
+	settings := make([]chroniclesdk.InferenceAssistantSetting, 0, len(assistantSettingsOrder))
+	for _, id := range assistantSettingsOrder {
+		a := assistants[id]
+		settings = append(settings, chroniclesdk.InferenceAssistantSetting{ID: a.ID, Name: a.Name, Description: a.Description, Enabled: !off[a.ID]})
+	}
 	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceSettings{
 		Available:        available,
 		Disabled:         disabled,
 		Enabled:          s.enabled && permitted,
 		ServiceAvailable: s.enabled,
+		Assistants:       settings,
 	})
 }
 
@@ -97,9 +123,12 @@ func (s *Service) routes() http.Handler {
 	r.Delete("/connections/{connectionID}", s.deleteConnection)
 	r.Get("/connections/{connectionID}/models", s.listModels)
 	r.Post("/threads/instance/{instance}", s.createInstanceThread)
+	r.Post("/threads/lua-project/{project}", s.createLuaProjectThread)
 	r.Get("/threads", s.listThreads)
 	r.Get("/threads/{threadID}", s.getThread)
 	r.Delete("/threads/{threadID}/messages", s.clearThread)
+	r.Get("/usage", s.getContextUsage)
+	r.Get("/usage/lua-project/{project}/contributors", s.getLuaProjectContributorUsage)
 	r.Post("/debug/preview", s.previewDebug)
 	r.Post("/runs/{runID}/client-tools/{toolCallID}", s.continueClientTool)
 	r.Post("/runs", s.run)
@@ -353,6 +382,9 @@ func (s *Service) createInstanceThread(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "You cannot view this instance."})
 		return
 	}
+	if !s.requireAssistantEnabled(w, r, "instance-analyst") {
+		return
+	}
 	thread, err := s.db.GetOrCreateInferenceThread(r.Context(), database.GetOrCreateInferenceThreadParams{UserID: userID(r), AssistantID: "instance-analyst", ContextType: pgtype.Text{String: "instance", Valid: true}, ContextID: pgtype.Text{String: inst.ID.String(), Valid: true}, Title: inst.Name})
 	if err != nil {
 		s.internalError(w, "create inference thread", err)
@@ -360,6 +392,72 @@ func (s *Service) createInstanceThread(w http.ResponseWriter, r *http.Request) {
 	}
 	s.writeThread(w, r, thread)
 }
+func (s *Service) createLuaProjectThread(w http.ResponseWriter, r *http.Request) {
+	project, err := s.luaProjectForUser(r, chi.URLParam(r, "project"))
+	if err != nil {
+		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "You cannot edit this Lua project."})
+		return
+	}
+	if !s.requireAssistantEnabled(w, r, addonWorkshopPanelAssistantID) {
+		return
+	}
+	thread, err := s.db.GetOrCreateInferenceThread(r.Context(), database.GetOrCreateInferenceThreadParams{UserID: userID(r), AssistantID: addonWorkshopPanelAssistantID, ContextType: pgtype.Text{String: "lua_project", Valid: true}, ContextID: pgtype.Text{String: project.ID.String(), Valid: true}, Title: project.Name})
+	if err != nil {
+		s.internalError(w, "create inference thread", err)
+		return
+	}
+	s.writeThread(w, r, thread)
+}
+
+// luaProjectForUser returns a Lua project the caller may update. Lua threads
+// only expose the browser working copy, but still require edit access.
+func (s *Service) luaProjectForUser(r *http.Request, identifier string) (database.LuaProject, error) {
+	id, err := uuid.Parse(identifier)
+	if err != nil {
+		return database.LuaProject{}, pgx.ErrNoRows
+	}
+	actor := policy.New().User(userID(r))
+	allowed, err := s.zed.CheckOne(r.Context(), nil, policy.New().Lua_project(id).CanUpdate_User(actor))
+	if err != nil {
+		return database.LuaProject{}, err
+	}
+	if !allowed {
+		return database.LuaProject{}, pgx.ErrNoRows
+	}
+	return s.db.GetLuaProject(r.Context(), id)
+}
+
+// authorizeThreadContext re-checks access to a durable thread's context on every use.
+func (s *Service) authorizeThreadContext(r *http.Request, thread database.InferenceThread) error {
+	switch thread.ContextType.String {
+	case "instance":
+		_, err := s.instanceForUser(r, thread.ContextID.String)
+		return err
+	case "lua_project":
+		_, err := s.luaProjectForUser(r, thread.ContextID.String)
+		return err
+	case "":
+		return nil
+	default:
+		return pgx.ErrNoRows
+	}
+}
+
+func threadContextForbidden(thread database.InferenceThread) string {
+	if thread.ContextType.String == "lua_project" {
+		return "You cannot edit this Lua project."
+	}
+	return "You cannot view this instance."
+}
+
+func threadToolContext(s *Service, thread database.InferenceThread) toolContext {
+	tc := toolContext{service: s}
+	if thread.ContextType.String == "instance" {
+		tc.instanceID, _ = uuid.Parse(thread.ContextID.String)
+	}
+	return tc
+}
+
 func (s *Service) listThreads(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.ListInferenceThreadsByOwner(r.Context(), userID(r))
 	if err != nil {
@@ -374,8 +472,8 @@ func (s *Service) listThreads(w http.ResponseWriter, r *http.Request) {
 		if c := r.URL.Query().Get("context"); c != "" && row.ContextType.String != c {
 			continue
 		}
-		if row.ContextType.String == "instance" {
-			if _, err := s.instanceForUser(r, row.ContextID.String); err != nil {
+		if row.ContextType.Valid {
+			if err := s.authorizeThreadContext(r, row); err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
 					continue
 				}
@@ -398,11 +496,9 @@ func (s *Service) getThread(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Thread not found."})
 		return
 	}
-	if thread.ContextType.String == "instance" {
-		if _, err := s.instanceForUser(r, thread.ContextID.String); err != nil {
-			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "You cannot view this instance."})
-			return
-		}
+	if err := s.authorizeThreadContext(r, thread); err != nil {
+		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: threadContextForbidden(thread)})
+		return
 	}
 	s.writeThread(w, r, thread)
 }
@@ -436,21 +532,20 @@ func (s *Service) previewDebug(w http.ResponseWriter, r *http.Request) {
 	debug := debugRunContext{Enabled: true, RunID: "preview-" + uuid.NewString(), Persistence: "ephemeral"}
 	messages := make([]Message, 0, maxHistoryMessages+1)
 	if assistantDefinition.Durable {
-		if request.ThreadID == nil || request.Instance == "" {
-			badRequest(w, r, "Durable debug previews require thread_id and instance.")
+		if request.ThreadID == nil || (assistantDefinition.ContextType == "instance") != (request.Instance != "") {
+			badRequest(w, r, "Durable debug previews require thread_id, and instance for instance threads.")
 			return
 		}
 		thread, err := s.db.GetInferenceThreadByOwner(r.Context(), database.GetInferenceThreadByOwnerParams{ID: *request.ThreadID, UserID: uid})
-		if err != nil || thread.AssistantID != assistantDefinition.ID || thread.Persistence != "durable" || thread.ContextType.String != "instance" || thread.ContextID.String != request.Instance {
+		if err != nil || thread.AssistantID != assistantDefinition.ID || thread.Persistence != "durable" || thread.ContextType.String != assistantDefinition.ContextType || (request.Instance != "" && thread.ContextID.String != request.Instance) {
 			httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Thread not found."})
 			return
 		}
-		instance, err := s.instanceForUser(r, thread.ContextID.String)
-		if err != nil {
-			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "You cannot view this instance."})
+		if err := s.authorizeThreadContext(r, thread); err != nil {
+			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: threadContextForbidden(thread)})
 			return
 		}
-		capability, err := advertisedInstancePageClient(request.Client, instance.ID.String())
+		capability, err := advertisedClient(request.Client, clientCapabilities[assistantDefinition.ClientCapability], thread.ContextID.String)
 		if err != nil {
 			badRequest(w, r, err.Error())
 			return
@@ -516,11 +611,9 @@ func (s *Service) clearThread(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Thread not found."})
 		return
 	}
-	if thread.ContextType.String == "instance" {
-		if _, err := s.instanceForUser(r, thread.ContextID.String); err != nil {
-			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "You cannot view this instance."})
-			return
-		}
+	if err := s.authorizeThreadContext(r, thread); err != nil {
+		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: threadContextForbidden(thread)})
+		return
 	}
 
 	thread, err = s.clearThreadMessages(r.Context(), id, uid)
@@ -532,14 +625,17 @@ func (s *Service) clearThread(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, "clear inference thread", err)
 		return
 	}
-	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceThreadResponse{Thread: threadSDK(thread), Messages: []chroniclesdk.InferenceMessage{}})
+	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceThreadResponse{Thread: threadSDK(thread), Messages: []chroniclesdk.InferenceMessage{}, Usage: chroniclesdk.InferenceUsage{}})
 }
 
 func threadSDK(t database.InferenceThread) chroniclesdk.InferenceThread {
 	return chroniclesdk.InferenceThread{ID: t.ID, AssistantID: t.AssistantID, Persistence: t.Persistence, ContextType: t.ContextType.String, ContextID: t.ContextID.String, Title: t.Title, CreatedAt: t.CreatedAt.Time, UpdatedAt: t.UpdatedAt.Time}
 }
-func boundedThreadMessages(rows []database.InferenceMessage) []chroniclesdk.InferenceMessage {
+
+// boundedThreadMessages also returns each message's key (its id inside the stored content), aligned with the messages.
+func boundedThreadMessages(rows []database.InferenceMessage) ([]chroniclesdk.InferenceMessage, []string) {
 	messages := make([]chroniclesdk.InferenceMessage, 0, len(rows))
+	keys := make([]string, 0, len(rows))
 	bytes := 0
 	for i := len(rows) - 1; i >= 0; i-- {
 		if bytes+len(rows[i].Content) > maxHistoryBytes {
@@ -551,12 +647,65 @@ func boundedThreadMessages(rows []database.InferenceMessage) []chroniclesdk.Infe
 		}
 		bytes += len(rows[i].Content)
 		messages = append(messages, chroniclesdk.InferenceMessage{ID: rows[i].ID.String(), Role: string(message.Role), Content: message.Content, Name: message.Name, ToolCallID: message.ToolCallID})
+		keys = append(keys, message.ID)
 	}
 	slices.Reverse(messages)
+	slices.Reverse(keys)
 	for len(messages) > 0 && messages[0].Role != string(RoleUser) {
-		messages = messages[1:]
+		messages, keys = messages[1:], keys[1:]
 	}
-	return messages
+	return messages, keys
+}
+
+// usageSDK converts summed usage columns; cost is reported only when at least one call reported it.
+func usageSDK(prompt, completion, cached, reasoning, costNanos, costedCalls, calls int64) chroniclesdk.InferenceUsage {
+	usage := chroniclesdk.InferenceUsage{PromptTokens: prompt, CompletionTokens: completion, CachedTokens: cached, ReasoningTokens: reasoning, Calls: calls}
+	if costedCalls > 0 {
+		cost := float64(costNanos) / 1e9
+		usage.CostUSD = &cost
+	}
+	return usage
+}
+
+// getLuaProjectContributorUsage breaks an addon's AI usage down by person, for anyone who may edit it.
+func (s *Service) getLuaProjectContributorUsage(w http.ResponseWriter, r *http.Request) {
+	project, err := s.luaProjectForUser(r, chi.URLParam(r, "project"))
+	if err != nil {
+		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "You cannot edit this addon."})
+		return
+	}
+	rows, err := s.db.ListInferenceContextUsageByUser(r.Context(), database.ListInferenceContextUsageByUserParams{
+		ContextType: pgtype.Text{String: "lua_project", Valid: true}, ContextID: pgtype.Text{String: project.ID.String(), Valid: true},
+	})
+	if err != nil {
+		s.internalError(w, "load addon usage", err)
+		return
+	}
+	out := make([]chroniclesdk.InferenceContributorUsage, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, chroniclesdk.InferenceContributorUsage{
+			UserID: row.UserID, Username: row.Username, Author: row.AuthorName.String,
+			Usage: usageSDK(row.PromptTokens, row.CompletionTokens, row.CachedTokens, row.ReasoningTokens, row.CostNanos, row.CostedCalls, row.Calls),
+		})
+	}
+	httpapi.Write(r.Context(), w, http.StatusOK, out)
+}
+
+// getContextUsage totals the caller's own usage for a context, such as every chat about one addon project.
+func (s *Service) getContextUsage(w http.ResponseWriter, r *http.Request) {
+	contextType, contextID := r.URL.Query().Get("context_type"), r.URL.Query().Get("context_id")
+	if contextType == "" || contextID == "" || len(contextType) > 64 || len(contextID) > 200 {
+		badRequest(w, r, "context_type and context_id are required.")
+		return
+	}
+	row, err := s.db.GetInferenceContextUsage(r.Context(), database.GetInferenceContextUsageParams{
+		UserID: userID(r), ContextType: pgtype.Text{String: contextType, Valid: true}, ContextID: pgtype.Text{String: contextID, Valid: true},
+	})
+	if err != nil {
+		s.internalError(w, "load inference usage", err)
+		return
+	}
+	httpapi.Write(r.Context(), w, http.StatusOK, usageSDK(row.PromptTokens, row.CompletionTokens, row.CachedTokens, row.ReasoningTokens, row.CostNanos, row.CostedCalls, row.Calls))
 }
 
 func (s *Service) writeThread(w http.ResponseWriter, r *http.Request, t database.InferenceThread) {
@@ -565,7 +714,35 @@ func (s *Service) writeThread(w http.ResponseWriter, r *http.Request, t database
 		s.internalError(w, "load inference thread", err)
 		return
 	}
-	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceThreadResponse{Thread: threadSDK(t), Messages: boundedThreadMessages(rows)})
+	messages, keys := boundedThreadMessages(rows)
+	total, err := s.db.GetInferenceThreadUsage(r.Context(), database.GetInferenceThreadUsageParams{ID: t.ID, UserID: t.UserID})
+	if err != nil {
+		s.internalError(w, "load inference thread usage", err)
+		return
+	}
+	assistantKeys := make([]string, 0, len(keys))
+	for i, key := range keys {
+		if key != "" && messages[i].Role == string(RoleAssistant) {
+			assistantKeys = append(assistantKeys, key)
+		}
+	}
+	if len(assistantKeys) > 0 {
+		usageRows, err := s.db.ListInferenceUsageByMessageKeys(r.Context(), database.ListInferenceUsageByMessageKeysParams{ThreadID: uuid.NullUUID{UUID: t.ID, Valid: true}, MessageKeys: assistantKeys})
+		if err != nil {
+			s.internalError(w, "load inference message usage", err)
+			return
+		}
+		byKey := make(map[string]chroniclesdk.InferenceUsage, len(usageRows))
+		for _, row := range usageRows {
+			byKey[row.MessageKey] = usageSDK(row.PromptTokens, row.CompletionTokens, row.CachedTokens, row.ReasoningTokens, row.CostNanos, row.CostedCalls, row.Calls)
+		}
+		for i, key := range keys {
+			if usage, ok := byKey[key]; ok && messages[i].Role == string(RoleAssistant) {
+				messages[i].Usage = &usage
+			}
+		}
+	}
+	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceThreadResponse{Thread: threadSDK(t), Messages: messages, Usage: usageSDK(total.PromptTokens, total.CompletionTokens, total.CachedTokens, total.ReasoningTokens, total.CostNanos, total.CostedCalls, total.Calls)})
 }
 
 func writeJSONMessage(m Message) []byte { b, _ := json.Marshal(m); return b }

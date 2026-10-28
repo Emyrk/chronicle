@@ -32,4 +32,6 @@ const (
 	ServiceBilling     = "billing"
 	ServiceStripeCLI   = "stripe-cli"
 	ServiceInference   = "inference"
+	ServiceSecrets     = "secrets"
+	ServiceChoose      = "choose"
 )

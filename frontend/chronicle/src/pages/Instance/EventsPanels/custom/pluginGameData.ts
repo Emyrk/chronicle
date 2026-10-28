@@ -7,7 +7,7 @@ function normalizeItemIds(itemIds: number[]): number[] {
   const normalized = [...new Set(itemIds.filter((itemId) => Number.isInteger(itemId) && itemId > 0))]
     .sort((a, b) => a - b);
   if (normalized.length > MAX_ITEM_METADATA_IDS) {
-    throw new Error(`Custom panel requested more than ${MAX_ITEM_METADATA_IDS} item IDs.`);
+    throw new Error(`Developer panel requested more than ${MAX_ITEM_METADATA_IDS} item IDs.`);
   }
   return normalized;
 }

@@ -3,6 +3,7 @@
 */icons/
 */icon-list.json
 */failed_conversions.log
+*/talent-backgrounds/
 
 # Generated map and loading-screen assets are published outside source control.
 */maps/

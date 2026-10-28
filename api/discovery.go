@@ -55,9 +55,13 @@ func (c *discoveryStatsCache) get(ctx context.Context, q discoveryStatsQuerier) 
 // On a tenant subdomain: returns a single-element array for that tenant.
 // On the primary domain: returns site-level branding plus every tenant.
 // Used by the landing site (chronicleclassic.com) to aggregate server info.
+// With ?scope=all, a tenant subdomain returns the primary-domain list too,
+// e.g. to show every server a supporter tier applies to. The requesting
+// tenant is always included and flagged as current.
 //
 //	@Summary  Discovery info for landing page aggregation
 //	@Tags     Public
+//	@Param    scope query string false "Set to 'all' to list every discoverable server, even from a tenant subdomain"
 //	@Success  200 {array} chroniclesdk.DiscoveryEntry
 //	@Router   /api/v1/discovery [get]
 func (a *API) Discovery(w http.ResponseWriter, r *http.Request) {
@@ -66,8 +70,10 @@ func (a *API) Discovery(w http.ResponseWriter, r *http.Request) {
 	// Cache for 1 hour — this data changes slowly.
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 
+	current := servicetenant.TenantFromContext(ctx)
+
 	// On a tenant subdomain, return just that tenant (if discoverable).
-	if t := servicetenant.TenantFromContext(ctx); t != nil {
+	if t := current; t != nil && r.URL.Query().Get("scope") != "all" {
 		if !t.Discoverable {
 			httpapi.Write(ctx, w, http.StatusOK, []chroniclesdk.DiscoveryEntry{})
 			return
@@ -86,11 +92,13 @@ func (a *API) Discovery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Primary domain: return site-level branding (if discoverable) + all discoverable tenants.
+	// Primary domain (or scope=all): return site-level branding (if discoverable) + all discoverable tenants.
+	// Read across every tenant, not just the one serving this request.
+	listCtx := servicetenant.AdminBypass(ctx)
 	var entries []chroniclesdk.DiscoveryEntry
 
 	// Site-level branding.
-	config, err := a.Opts.Zed.GetSiteConfig(ctx)
+	config, err := a.Opts.Zed.GetSiteConfig(listCtx)
 	if err == nil && config.Discoverable {
 		if b := unmarshalBranding(config.Branding); b != nil {
 			url := ""
@@ -100,22 +108,24 @@ func (a *API) Discovery(w http.ResponseWriter, r *http.Request) {
 			entries = append(entries, chroniclesdk.DiscoveryEntry{
 				Branding: b,
 				URL:      url,
+				Current:  current == nil,
 			})
 		}
 	}
 
 	// All discoverable tenants.
 	if a.Opts.Tenant != nil {
-		tenants, err := a.Opts.Zed.ListTenants(servicetenant.AdminBypass(ctx))
+		tenants, err := a.Opts.Zed.ListTenants(listCtx)
 		if err == nil {
-			stats := a.discoveryStats.get(servicetenant.AdminBypass(ctx), a.Opts.Zed)
+			stats := a.discoveryStats.get(listCtx, a.Opts.Zed)
 			primaryDomain := a.Opts.Tenant.PrimaryDomain()
 			scheme := "https"
 			if a.Opts.AccessURL != nil {
 				scheme = a.Opts.AccessURL.Scheme
 			}
 			for _, t := range tenants {
-				if !t.Discoverable {
+				isCurrent := current != nil && t.ID == current.ID
+				if !t.Discoverable && !isCurrent {
 					continue
 				}
 				sdkTenant := chroniclesdk.TenantFromDB(t)
@@ -129,6 +139,7 @@ func (a *API) Discovery(w http.ResponseWriter, r *http.Request) {
 				entry := chroniclesdk.DiscoveryEntry{
 					Branding: sdkTenant.Branding,
 					URL:      url,
+					Current:  isCurrent,
 				}
 				if s, ok := stats[t.ID]; ok {
 					entry.Instances14d = &s.InstanceCount

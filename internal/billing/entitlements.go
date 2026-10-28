@@ -111,43 +111,26 @@ const (
 	stripeReveredStorageGrantBytes int64 = 1_000_000_000
 	stripeExaltedStorageGrantBytes int64 = 2_000_000_000
 
-	stripeRoleAdFree           = "stripe_ad_free"
-	stripeRoleDownloadRawLogs  = "stripe_download_raw_logs"
-	stripeRoleUnlistedLogs     = "stripe_unlisted_logs"
-	stripeRoleSubmitPhotoProof = "stripe_submit_photo_proof"
-	stripeRoleHonored          = "stripe_honored"
-	stripeRoleRevered          = "stripe_revered"
-	stripeRoleExalted          = "stripe_exalted"
+	stripeRoleHonored = "stripe_honored"
+	stripeRoleRevered = "stripe_revered"
+	stripeRoleExalted = "stripe_exalted"
 )
 
 var (
-	chronicleHonoredStripeRoles = []string{
-		stripeRoleAdFree,
-		stripeRoleSubmitPhotoProof,
-		stripeRoleHonored,
-	}
-	chronicleReveredStripeRoles = []string{
-		stripeRoleAdFree,
-		stripeRoleSubmitPhotoProof,
-		stripeRoleDownloadRawLogs,
-		stripeRoleUnlistedLogs,
-		stripeRoleHonored,
-		stripeRoleRevered,
-	}
-	chronicleExaltedStripeRoles = []string{
-		stripeRoleAdFree,
-		stripeRoleSubmitPhotoProof,
-		stripeRoleDownloadRawLogs,
-		stripeRoleUnlistedLogs,
-		stripeRoleHonored,
-		stripeRoleRevered,
-		stripeRoleExalted,
+	chronicleHonoredStripeRoles = []string{stripeRoleHonored}
+	chronicleReveredStripeRoles = []string{stripeRoleRevered}
+	chronicleExaltedStripeRoles = []string{stripeRoleExalted}
+
+	// Older billing snapshots granted each feature directly. Clear those roles
+	// during reconciliation so a canceled tier cannot retain a legacy perk.
+	legacyPaidFeatureRoles = []string{
+		"stripe_ad_free", "stripe_submit_photo_proof",
+		"stripe_download_raw_logs", "stripe_unlisted_logs",
 	}
 )
 
-// Grant expands a Chronicle paid-tier Stripe feature into the benefits owned by
-// that tier. Future benefit changes remain application code instead of Stripe
-// catalog changes, so they apply without another Stripe billing cycle.
+// Grant persists storage and the Stripe-owned tier relation. Feature access is
+// derived from the effective tier in the SpiceDB schema.
 func (entitlement chroniclePaidEntitlement) Grant(ctx context.Context, tx EntitlementTransaction, userID uuid.UUID) error {
 	if _, err := tx.UpsertDataGrant(ctx, database.UpsertDataGrantParams{
 		UserID:       userID,

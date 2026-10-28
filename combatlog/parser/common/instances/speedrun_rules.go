@@ -94,6 +94,35 @@ func VanillaPlusScarletMonasterySpeedrunRequirements() *rankings.Rankings {
 	}
 }
 
+// MoltenCoreDamageTargets selects the boss and encounter adds that contribute
+// to ranked damage. The encounter names match MoltenCoreHostiles; only bosses
+// available in the selected flavor receive a rule.
+func MoltenCoreDamageTargets(fl database.WoWFlavor) map[string]rankings.DamageTargets {
+	bossOnly := rankings.DamageTargets{Mode: rankings.DamageTargetsBossOnly}
+	entries := func(ids ...uint32) rankings.DamageTargets {
+		return rankings.DamageTargets{Mode: rankings.DamageTargetsEntries, EntryIDs: ids}
+	}
+	rules := map[string]rankings.DamageTargets{
+		"Lucifron":                 entries(12118, 12119), // Flamewaker Protector
+		"Magmadar":                 entries(11982),        // No adds
+		"Garr":                     entries(12057, 12099), // Firesworn
+		"Shazzrah":                 bossOnly,
+		"Baron Geddon":             bossOnly,
+		"Sulfuron Harbinger":       entries(12098, 11662, 12143), // Flamewaker Priest, Son of Flame
+		"Golemagg the Incinerator": entries(11988, 11672),        // Core Rager
+		"Majordomo Executus":       entries(12018, 11663, 11664), // Flamewaker Healer, Elite
+		"Ragnaros":                 entries(11502, 12143),        // Son of Flame
+	}
+	if fl.Has(database.FlavorTurtle, database.FlavorNightmareOfUrsol, database.FlavorOctoWoW) {
+		rules["Incindis"] = bossOnly
+		rules["Basalthar & Smoldaris"] = bossOnly
+		rules["Sorcerer-Thane Thaurissan"] = entries(57642, 57643) // Image of Sorcerer-Thane
+	} else {
+		rules["Gehennas"] = entries(12259, 11661) // Flamewaker
+	}
+	return rules
+}
+
 // MoltenCoreSpeedrunRequirements returns the 10 boss kills required for a
 // valid Molten Core speedrun.
 func MoltenCoreSpeedrunRequirements(fl database.WoWFlavor) []rankings.SpeedrunRequirement {

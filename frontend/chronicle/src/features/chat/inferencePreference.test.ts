@@ -8,6 +8,7 @@ function settings(overrides: Partial<InferenceSettings> = {}): InferenceSettings
     disabled: false,
     enabled: true,
     service_available: true,
+    assistants: [],
     ...overrides,
   };
 }

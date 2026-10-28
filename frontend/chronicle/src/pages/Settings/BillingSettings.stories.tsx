@@ -51,7 +51,7 @@ function handlers({ summary, signedIn = true, billingEnabled = true, loading = f
       HttpResponse.json({ signups_enabled: true, client_uploads_disabled: false, billing_enabled: billingEnabled, ads_enabled: false, tenant: null }),
     ),
     http.get("/api/v1/whoami", () =>
-      signedIn ? HttpResponse.json({ user_id: "user-1", session_id: "session-1", roles: [], ads_free: summary?.ads_free ?? false }) : new HttpResponse(null, { status: 401 }),
+      signedIn ? HttpResponse.json({ user_id: "user-1", session_id: "session-1", roles: [], ads_free: summary?.ads_free ?? false }) : new HttpResponse(null, { status: 204 }),
     ),
     http.get("/api/v1/me/billing", async () => {
       if (loading) await delay("infinite")

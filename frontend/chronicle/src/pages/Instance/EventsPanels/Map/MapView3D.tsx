@@ -13,30 +13,35 @@ import type { MapPositionSample } from "./map.processor";
 import { cameraPoseAt, type MapCameraMark, type MapCameraPose } from "./cameraPath";
 import { DISPEL_KINDS, DISPEL_ORDER, type DispelKind } from "./unitTokenArt";
 import type { PlanInput, PlanItem } from "./plan/mapPlan";
-import { prefersReducedMotion, replayPositionAt, VIEW_TRANSITION_MS, type MapPoint, type MapViewport } from "./mapModel";
+import { flatYardStep, floorBoundsYardStep, movementTrailPoints, prefersReducedMotion, replayPositionAt, VIEW_TRANSITION_MS, type MapPoint, type MapViewport } from "./mapModel";
 import {
   MapScene3D,
   type DungeonMeshRequest,
   type DungeonMeshState,
   type MapScene3DEffectHover,
-  type MapScene3DTrailPoint,
   type MapScene3DUnit,
   type MapSceneDirector,
   type MapSceneFocus,
   type MapUnitRoles,
 } from "./MapScene3D";
 import { collectCastSpellIds, DEFAULT_EFFECT_OPTIONS, effectiveCastIconGuids, iconPreloadUrls, schoolNameColor, type EncounterEffects } from "./replayEffects";
-import type { MapViewRequest } from "./MapView2D";
+import { MapArtworkLayer, type MapViewRequest } from "./MapView2D";
 import type { MapSceneGround, MapSceneMarker } from "./useMapScene";
 import { DEFAULT_AD_STRAFE } from "./mapControls";
 import { DEFAULT_EFFECT_SETTINGS, type EffectSettings } from "./mapViewSettings";
 import { CAPSULE_AVATAR } from "./walkAvatars";
 import type { MobileMapInput } from "./mapControls";
+import { MapCompass } from "./MapCompass";
 
 export interface MapView3DProps {
   ground: MapSceneGround;
+  /** Preferred 2D artwork to blend over the mesh for alignment debugging. */
+  alignmentGround?: MapSceneGround | null;
   markers: MapSceneMarker[];
+  routePoints: MapPoint[];
   projectSample: (sample: MapPositionSample) => MapPoint | null;
+  /** Whether x/y are world-yard coordinates; normalized UI-map coordinates cannot calibrate physical scale. */
+  worldCoordinates?: boolean;
   cursorMs: number;
   playing: boolean;
   playbackSpeed: number;
@@ -120,20 +125,6 @@ export interface MapView3DProps {
 const NO_DEBUFFS: readonly number[] = [];
 const NO_PLAN_ITEMS: readonly PlanItem[] = [];
 
-// How far one yard of world x and of world y moves a point on the artwork,
-// measured with the units' own projection around `sample` (walking the flat map).
-function flatYardStep(project: (sample: MapPositionSample) => MapPoint | null, sample: MapPositionSample): { x: MapPoint; y: MapPoint } | null {
-  const half = 5;
-  const step = (dx: number, dy: number): MapPoint | null => {
-    const from = project({ ...sample, x: sample.x - dx, y: sample.y - dy });
-    const to = project({ ...sample, x: sample.x + dx, y: sample.y + dy });
-    return from && to ? { leftPercent: (to.leftPercent - from.leftPercent) / (2 * half), topPercent: (to.topPercent - from.topPercent) / (2 * half) } : null;
-  };
-  const x = step(half, 0);
-  const y = step(0, half);
-  return x && y ? { x, y } : null;
-}
-
 const NO_ROLES: MapUnitRoles = { selected: null, target: null, targetsTarget: null, pinned: new Set() };
 
 export interface MapLivePresence {
@@ -175,35 +166,13 @@ function EffectTooltip({ hover }: { hover: MapScene3DEffectHover }) {
   );
 }
 
-// Gap between a movement trail's points.
-const TRAIL_STEP_MS = 100;
-
-// Where the unit was every TRAIL_STEP_MS over the last `spanMs`, newest first
-// (from `sample`, the unit now), stopping at a map change or before its first sample.
-function sampleTrail(
-  marker: MapSceneMarker,
-  sample: MapPositionSample,
-  spanMs: number,
-  projectSample: (sample: MapPositionSample) => MapPoint | null,
-): MapScene3DTrailPoint[] {
-  const trail: MapScene3DTrailPoint[] = [];
-  const first = marker.positions[0];
-  for (let ago = 0; ago <= spanMs; ago += TRAIL_STEP_MS) {
-    const at = sample.timestampMs - ago;
-    if (!first || at < first.timestampMs) break;
-    const past = ago === 0 ? sample : replayPositionAt(marker.positions, at, marker.kind === "player");
-    if (!past || past.mapId !== sample.mapId) break;
-    const point = projectSample(past);
-    if (!point) break;
-    trail.push({ point, z: past.z });
-  }
-  return trail;
-}
-
 export default function MapView3D({
   ground,
+  alignmentGround = null,
   markers,
+  routePoints,
   projectSample,
+  worldCoordinates = true,
   cursorMs,
   playing,
   playbackSpeed,
@@ -258,8 +227,10 @@ export default function MapView3D({
     return cameraPoseAt(cameraPath, smoothMs - cameraPathStartMs);
   }, [cameraPath, cameraPathStartMs, cameraPose, smoothMs]);
   const effectSettings = effectSettingsProp ?? DEFAULT_EFFECT_SETTINGS;
+  const showAlignmentOverlay = effectSettings.alignmentOverlay && alignmentGround !== null && dungeonMesh !== null;
   const showBars = effectSettings.bars;
   const [effectHover, setEffectHover] = useState<MapScene3DEffectHover | null>(null);
+  const [compassYaw, setCompassYaw] = useState(0);
   // A player's token shows their spec's icon when their talents give one, else their class's.
   const specializations = usePlayerSpecializations();
   // The dispel type of each debuff (from its spell data), to tint debuffed players.
@@ -288,6 +259,7 @@ export default function MapView3D({
         setEffectHover,
         (viewport) => onUserViewportRef.current?.(viewport),
         (state) => onDungeonMeshStateRef.current?.(state),
+        setCompassYaw,
       );
     } catch {
       onUnavailableRef.current();
@@ -304,10 +276,27 @@ export default function MapView3D({
     if (!frozen) sceneRef.current?.setGround(ground);
   }, [frozen, ground]);
 
-  const yardSample = markers[0]?.sample;
   useEffect(() => {
-    if (!frozen) sceneRef.current?.setFlatYards(yardSample ? flatYardStep(projectSample, yardSample) : null);
-  }, [frozen, projectSample, yardSample]);
+    sceneRef.current?.setAlignmentOverlay(showAlignmentOverlay);
+  }, [showAlignmentOverlay]);
+
+  useEffect(() => {
+    if (!frozen) sceneRef.current?.setRoute(routePoints);
+  }, [frozen, routePoints]);
+
+  const yardSample = markers[0]?.sample;
+  const floorBounds = "bounds" in ground.canvas ? ground.canvas.bounds : undefined;
+  useEffect(() => {
+    if (frozen) return;
+    const scale = worldCoordinates
+      ? yardSample ? flatYardStep(projectSample, yardSample, true) : null
+      : floorBoundsYardStep(floorBounds);
+    sceneRef.current?.setFlatYards(scale);
+  }, [floorBounds, frozen, projectSample, worldCoordinates, yardSample]);
+
+  useEffect(() => {
+    if (!frozen) sceneRef.current?.setPreferLowestUnitFloor(!worldCoordinates);
+  }, [frozen, worldCoordinates]);
 
   useEffect(() => {
     if (!frozen) sceneRef.current?.setDungeonMesh(dungeonMesh);
@@ -350,7 +339,9 @@ export default function MapView3D({
         : marker.sample;
       const point = sample === marker.sample ? marker.point : projectSample(sample) ?? marker.point;
       const modelUrl = miniatureUrl(marker.entry, miniatureUrls);
-      const trail = effectSettings.trailSeconds > 0 ? sampleTrail(marker, sample, effectSettings.trailSeconds * 1000, projectSample) : undefined;
+      const trail = effectSettings.trailSeconds > 0
+        ? movementTrailPoints(marker.positions, sample, effectSettings.trailSeconds * 1000, marker.kind === "player", projectSample)
+        : undefined;
       return [{
         guid: marker.guid,
         point,
@@ -561,6 +552,17 @@ export default function MapView3D({
   return (
     <div data-live-presence-surface={presenceSurface} className="relative h-full w-full">
       <div ref={containerRef} className="absolute inset-0" />
+      {showAlignmentOverlay && alignmentGround && (
+        <div className="pointer-events-none absolute inset-0 z-20 opacity-50" aria-hidden="true">
+          <div
+            className="relative mx-auto h-full max-w-full overflow-hidden"
+            style={{ aspectRatio: `${ground.canvas.width} / ${ground.canvas.height}` }}
+          >
+            <MapArtworkLayer ground={alignmentGround} viewport={view.viewport} />
+          </div>
+        </div>
+      )}
+      <MapCompass northRadians={compassYaw} />
       {effectHover && <EffectTooltip hover={effectHover} />}
     </div>
   );

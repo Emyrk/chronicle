@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom"
 import type { Session } from "@/api/queries"
 import type { SiteConfig } from "@/api/typesGenerated"
 import { describe, expect, it, vi } from "vitest"
+import { AdRailStack } from "./AdRailStack"
 import { AdSlot } from "./AdSlot"
 import { adFallbackPresentation, adRequestStateForKey } from "./adRequestState"
 import { AdSuppressionProvider } from "./AdSuppressionProvider"
@@ -64,6 +65,44 @@ describe("AdSlot", () => {
     expect(markup).toContain("self-start")
     expect(markup).toContain('aria-label="Advertisement preview"')
     expect(markup).toContain('data-ad-placement="leaderboards-right-rail"')
+  })
+
+  it("keeps a tall-screen rail pair in one sticky stack", () => {
+    const markup = renderAdSlot(
+      <AdRailStack
+        primaryPlacement="leaderboards-right-rail"
+        secondaryPlacement="leaderboards-right-rail-lower"
+        viewportHeight={1360}
+        hostname="localhost"
+        previewEnabled
+      />,
+    )
+
+    expect(markup).toContain("2xl:sticky")
+    expect(markup).toContain("2xl:top-20")
+    expect(markup).toContain('data-ad-placement="leaderboards-right-rail"')
+    expect(markup).toContain('data-ad-placement="leaderboards-right-rail-lower"')
+    expect(markup.match(/2xl:static/g)).toHaveLength(2)
+    expect(markup).toContain("mt-6")
+  })
+
+  it("can keep a stacked rail sticky from the xl breakpoint", () => {
+    const markup = renderAdSlot(
+      <AdRailStack
+        primaryPlacement="armory-right-rail"
+        secondaryPlacement="armory-right-rail-lower"
+        railLayout="paired-wide"
+        railBreakpoint="xl"
+        viewportHeight={1360}
+        hostname="localhost"
+        previewEnabled
+      />,
+    )
+
+    expect(markup).toContain("xl:sticky")
+    expect(markup).toContain("xl:top-20")
+    expect(markup.match(/xl:static/g)).toHaveLength(2)
+    expect(markup).toContain("min-[1840px]:w-[300px]")
   })
 
   it("waits for extra viewport width when rails are paired", () => {

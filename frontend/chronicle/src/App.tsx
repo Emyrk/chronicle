@@ -87,6 +87,7 @@ const BillingSettings = lazy(() => import("./pages/Settings").then(({ BillingSet
 const CharacterSettings = lazy(() => import("./pages/Settings").then(({ CharacterSettings }) => ({ default: CharacterSettings })))
 const StorageSettings = lazy(() => import("./pages/Settings").then(({ StorageSettings }) => ({ default: StorageSettings })))
 const SidekickSettings = lazy(() => import("./pages/Settings").then(({ SidekickSettings }) => ({ default: SidekickSettings })))
+const AiAssistantSettings = lazy(() => import("./pages/Settings").then(({ AiAssistantSettings }) => ({ default: AiAssistantSettings })))
 const NotificationSettings = lazy(() => import("./pages/Settings").then(({ NotificationSettings }) => ({ default: NotificationSettings })))
 const PrivacySettings = lazy(() => import("./pages/Settings").then(({ PrivacySettings }) => ({ default: PrivacySettings })))
 const AppearanceSettings = lazy(() => import("./pages/Settings").then(({ AppearanceSettings }) => ({ default: AppearanceSettings })))
@@ -117,6 +118,13 @@ const LeaderboardsPage = lazy(() => import("./pages/Leaderboards/LeaderboardsPag
 const LegacyLeaderboardsRedirect = lazy(() => import("./pages/Leaderboards/LeaderboardsPage").then(({ LegacyLeaderboardsRedirect }) => ({ default: LegacyLeaderboardsRedirect })))
 const CensusPage = lazy(() => import("./pages/Census/CensusPage").then(({ CensusPage }) => ({ default: CensusPage })))
 const APIExplorer = lazy(() => import("./pages/APIExplorer/APIExplorer").then(({ APIExplorer }) => ({ default: APIExplorer })))
+const LuaProjectsPage = lazy(() => import("./pages/LuaProjects/LuaProjectsPage").then(({ LuaProjectsPage }) => ({ default: LuaProjectsPage })))
+const LuaProjectPage = lazy(() => import("./pages/LuaProjects/LuaProjectPage").then(({ LuaProjectPage }) => ({ default: LuaProjectPage })))
+const LuaProjectWorkspacePage = lazy(() => import("./pages/LuaProjects/LuaProjectWorkspacePage"))
+const AddonAuthorPage = lazy(() => import("./pages/LuaProjects/AddonAuthorPage").then(({ AddonAuthorPage }) => ({ default: AddonAuthorPage })))
+const AddonWorkspaceByPath = lazy(() => import("./pages/LuaProjects/LuaProjectWorkspacePage").then(({ AddonWorkspaceByPath }) => ({ default: AddonWorkspaceByPath })))
+const LuaPanelApiPage = lazy(() => import("./pages/LuaProjects/LuaPanelApiPage"))
+const AssistantDebugPage = lazy(() => import("./pages/AssistantDebug/AssistantDebugPage"))
 const CustomPanelsPage = lazy(() => import("./pages/Tools/CustomPanelsPage").then(({ CustomPanelsPage }) => ({ default: CustomPanelsPage })))
 const ToolsPage = lazy(() => import("./pages/Tools/ToolsPage").then(({ ToolsPage }) => ({ default: ToolsPage })))
 const SpeedrunningPage = lazy(() => import("./pages/Speedrunning/SpeedrunningPage").then(({ SpeedrunningPage }) => ({ default: SpeedrunningPage })))
@@ -131,6 +139,12 @@ const BACKEND_PATHS = ["/saffron", "/river", "/api", "/auth"]
 function LegacyYouTubeSyncRedirect() {
   const location = useLocation()
   return <Navigate to={`/youtube-sync-v3${location.search}${location.hash}`} replace />
+}
+
+/** Moves a renamed section (e.g. /lua-projects → /addons), keeping the rest of the path, query and hash. */
+function RenamedPathRedirect({ from, to }: { from: string; to: string }) {
+  const location = useLocation()
+  return <Navigate to={`${to}${location.pathname.slice(from.length)}${location.search}${location.hash}`} replace />
 }
 
 function CatchAllRoute() {
@@ -165,6 +179,8 @@ function App() {
       <Route path="/youtube-sync" element={<LegacyYouTubeSyncRedirect />} />
       <Route path="/youtube-sync-v2" element={<LegacyYouTubeSyncRedirect />} />
       <Route path="/youtube-sync-v3" element={<YouTubeSyncV3Page />} />
+      {/* Pop-out window opened from a chat's Prompt inspector; no site chrome. */}
+      <Route path="/debug/assistant" element={<AssistantDebugPage />} />
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
         <Route path="/recent" element={<RecentRaids />} />
@@ -186,6 +202,8 @@ function App() {
         <Route path="/leaderboards" element={<LegacyLeaderboardsRedirect />} />
         <Route path="/leaderboards/statistics" element={<LeaderboardsPage mode="statistics" />} />
         <Route path="/leaderboards/speedruns" element={<LeaderboardsPage mode="speedruns" />} />
+        <Route path="/leaderboards/ruleset" element={<LeaderboardsPage mode="ruleset" />} />
+        <Route path="/leaderboards/rulesets" element={<LeaderboardsPage mode="rulesets" />} />
         <Route path="/leaderboards/parsing" element={<LeaderboardsPage mode="parsing" />} />
         <Route path="/leaderboard" element={<LegacyLeaderboardsRedirect />} />
         <Route path="/rankings" element={<LegacyLeaderboardsRedirect />} />
@@ -193,7 +211,16 @@ function App() {
         <Route path="/apply/:id" element={<ApplicationPage />} />
         <Route path="/census" element={<CensusPage />} />
         <Route path="/tools" element={<ToolsPage />} />
-        <Route path="/tools/custom-panels" element={<CustomPanelsPage />} />
+        <Route path="/addons" element={<LuaProjectsPage />} />
+        <Route path="/addons/api" element={<LuaPanelApiPage />} />
+        <Route path="/addons/id/:projectId" element={<LuaProjectPage />} />
+        <Route path="/addons/id/:projectId/edit" element={<LuaProjectWorkspacePage />} />
+        <Route path="/addons/:author" element={<AddonAuthorPage />} />
+        <Route path="/addons/:author/:slug" element={<LuaProjectPage />} />
+        <Route path="/addons/:author/:slug/edit" element={<AddonWorkspaceByPath />} />
+        <Route path="/lua-projects/*" element={<RenamedPathRedirect from="/lua-projects" to="/addons" />} />
+        <Route path="/tools/developer-panels" element={<CustomPanelsPage />} />
+        <Route path="/tools/custom-panels" element={<RenamedPathRedirect from="/tools/custom-panels" to="/tools/developer-panels" />} />
         <Route path="/developers/api" element={<APIExplorer />} />
         <Route path="/debug/proto" element={<ProtoDecode />} />
         <Route path="/admin" element={<AdminLayout />}>
@@ -296,11 +323,13 @@ function App() {
           <Route path="billing" element={<BillingSettings />} />
           <Route path="characters" element={<CharacterSettings />} />
           <Route path="storage" element={<StorageSettings />} />
+          <Route path="ai" element={<AiAssistantSettings />} />
           <Route path="sidekick" element={<SidekickSettings />} />
           <Route path="notifications" element={<NotificationSettings />} />
           <Route path="privacy" element={<PrivacySettings />} />
           <Route path="appearance" element={<AppearanceSettings />} />
-          <Route path="custom-panels" element={<CustomPanelSettings />} />
+          <Route path="developer-panels" element={<CustomPanelSettings />} />
+          <Route path="custom-panels" element={<Navigate to="/account/developer-panels" replace />} />
           <Route path="layout-book" element={<LayoutBookSettings />} />
           <Route path="layout-lab" element={<LayoutLabSettings />} />
         </Route>

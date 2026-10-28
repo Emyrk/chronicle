@@ -39,6 +39,9 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 	}
 	if flavor.Has(database.FlavorWrath) {
 		wrath := characters.CreatureFactories(
+			// Violet Hold
+			NewVoidSentry,
+
 			// The Nexus
 			NewAzureEnforcer,
 			NewCrazedManaWraith,

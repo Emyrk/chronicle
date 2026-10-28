@@ -118,6 +118,24 @@ func (s *Service) Options() serpent.OptionSet {
 	}
 }
 
+// NewTestWithTenants creates a test Service with a primary domain and a
+// pre-populated slug cache.
+func NewTestWithTenants(accessURL url.URL, primaryDomain string, tenants ...database.Tenant) *Service {
+	s := NewTest(accessURL)
+	s.primaryDomain = primaryDomain
+	for _, t := range tenants {
+		if t.Slug.Valid && t.Slug.String != "" {
+			s.slugs.Set(t.Slug.String, t)
+		}
+	}
+	return s
+}
+
+// CachedTenants returns a snapshot of every cached tenant that has a slug.
+func (s *Service) CachedTenants() []database.Tenant {
+	return s.slugs.Values()
+}
+
 // GetTenantBySlug returns the cached tenant for a slug.
 func (s *Service) GetTenantBySlug(slug string) (database.Tenant, bool) {
 	return s.slugs.Get(slug)

@@ -13,8 +13,19 @@ export interface AnalyticsTimeseriesPoint {
 export interface AnalyticsHostRow {
   hostname: string;
   pageViews: number;
+  previousPageViews: number;
+  changePercent: number | null;
+  change7dPercent: number | null;
+  change14dPercent: number | null;
+  change30dPercent: number | null;
+  trend30d: number[];
   activeUsers: number;
   sessions: number;
+  nonChinaPageViews: number;
+  previousNonChinaPageViews: number;
+  nonChinaChangePercent: number | null;
+  chinaPageViews: number;
+  chinaShare: number;
 }
 
 export interface AnalyticsAcquisitionRow {

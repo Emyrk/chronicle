@@ -18,6 +18,8 @@ type unitPositionSnapshot struct {
 	z         float64
 	hasZ      bool
 	mapID     int32
+	floor     int32
+	hasFloor  bool
 	facing    float64
 	hasFacing bool
 	synthetic bool
@@ -128,6 +130,10 @@ func positionSnapshot(position *messages.UnitPosition) unitPositionSnapshot {
 	if position.Z != nil {
 		snapshot.z = *position.Z
 		snapshot.hasZ = true
+	}
+	if position.Floor != nil {
+		snapshot.floor = *position.Floor
+		snapshot.hasFloor = true
 	}
 	return snapshot
 }

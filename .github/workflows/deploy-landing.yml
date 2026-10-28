@@ -48,8 +48,6 @@ jobs:
           fi
 
       - name: Build
-        env:
-          CHRONICLE_NITROPAY_SITE_ID: ${{ vars.NITROPAY_SITE_ID }}
         run: pnpm -C frontend/landing build
 
       - name: Upload artifact

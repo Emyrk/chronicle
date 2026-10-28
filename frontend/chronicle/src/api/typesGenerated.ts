@@ -29,6 +29,20 @@ export interface AddGuildMemberRequest {
     readonly user_id: string;
 }
 
+// From chroniclesdk/lua_project.go
+export interface AddonAuthor {
+    readonly name: string;
+}
+
+// From chroniclesdk/lua_project.go
+/**
+ * AddonAuthorPage is /addons/<author>: the author and the addons the caller may view.
+ */
+export interface AddonAuthorPage {
+    readonly author: string;
+    readonly projects: readonly LuaProject[];
+}
+
 // From chroniclesdk/custom_panel.go
 export interface AdminActiveCustomPanelInstallation {
     readonly user_id: string;
@@ -95,6 +109,9 @@ export interface AdminBillingReconciliationRun {
 // From chroniclesdk/billing.go
 export interface AdminBillingSubscription {
     readonly user_id: string;
+    readonly username: string;
+    readonly email: string;
+    readonly discord_id?: string;
     readonly provider: string;
     readonly provider_customer_id: string;
     readonly provider_subscription_id?: string;
@@ -392,7 +409,7 @@ export interface ArmoryPlayer {
      */
     readonly icon_base_url?: string;
     /**
-     * OwnerAdsFree is true when this character is linked to an account with ad-free access.
+     * OwnerAdsFree is true when this character is linked to an account whose tier makes linked characters ad-free.
      */
     readonly owner_ads_free: boolean;
 }
@@ -712,6 +729,11 @@ export interface ChronicleEncounterEvents {
     readonly start_time: string;
 }
 
+// From chroniclesdk/lua_project.go
+export interface ClaimAddonAuthorRequest {
+    readonly name: string;
+}
+
 // From chroniclesdk/class_buffs.go
 export interface ClassBuffIgnorePolicy {
     readonly dataset_id: string;
@@ -820,6 +842,22 @@ export interface CreateLiveSessionResponse {
     readonly code: string;
     readonly leader_token: string;
     readonly url: string;
+}
+
+// From chroniclesdk/lua_project.go
+/**
+ * CreateLuaProjectReleaseRequest tags the current main as a release.
+ */
+export interface CreateLuaProjectReleaseRequest {
+    readonly tag: string;
+    readonly expected_revision: number;
+}
+
+// From chroniclesdk/lua_project.go
+export interface CreateLuaProjectRequest {
+    readonly kind: string;
+    readonly name: string;
+    readonly slug: string;
 }
 
 // From chroniclesdk/server_application.go
@@ -1180,6 +1218,10 @@ export interface DiscoveryEntry {
      * UniquePlayers14d is the number of distinct players across instances in the last 14 days.
      */
     readonly unique_players_14d?: number;
+    /**
+     * Current is true for the server/tenant that served this request.
+     */
+    readonly current?: boolean;
 }
 
 // From chroniclesdk/log.go
@@ -1934,6 +1976,14 @@ export interface IdentitySpell {
 }
 
 // From chroniclesdk/inference.go
+export interface InferenceAssistantSetting {
+    readonly id: string;
+    readonly name: string;
+    readonly description: string;
+    readonly enabled: boolean;
+}
+
+// From chroniclesdk/inference.go
 export interface InferenceAuthorizeRequest {
     readonly return_path: string;
 }
@@ -1968,6 +2018,10 @@ export interface InferenceClientToolResultRequest {
     readonly state_revision?: number;
     readonly status: string;
     readonly result?: Record<string, string>;
+    /**
+     * UsageEvents asks for a USAGE event after each model call. Older clients reject unknown events, so it is opt-in.
+     */
+    readonly usage_events?: boolean;
 }
 
 // From chroniclesdk/inference.go
@@ -1987,6 +2041,17 @@ export interface InferenceConnectionsResponse {
 }
 
 // From chroniclesdk/inference.go
+/**
+ * InferenceContributorUsage is one person's usage within a shared context, such as an addon project.
+ */
+export interface InferenceContributorUsage {
+    readonly user_id: string;
+    readonly username: string;
+    readonly author?: string;
+    readonly usage: InferenceUsage;
+}
+
+// From chroniclesdk/inference.go
 export interface InferenceDebugPreviewRequest {
     readonly assistant_id: string;
     readonly thread_id?: string;
@@ -2002,6 +2067,10 @@ export interface InferenceMessage {
     readonly content: string;
     readonly name?: string;
     readonly tool_call_id?: string;
+    /**
+     * Usage is the model call that wrote this assistant message, when it was recorded.
+     */
+    readonly usage?: InferenceUsage;
 }
 
 // From chroniclesdk/inference.go
@@ -2029,6 +2098,10 @@ export interface InferenceRunRequest {
     readonly client?: InferenceClient;
     readonly messages?: readonly InferenceMessage[];
     readonly message?: InferenceMessage;
+    /**
+     * UsageEvents asks for a USAGE event after each model call. Older clients reject unknown events, so it is opt-in.
+     */
+    readonly usage_events?: boolean;
 }
 
 // From chroniclesdk/inference.go
@@ -2037,6 +2110,10 @@ export interface InferenceSettings {
     readonly disabled: boolean;
     readonly enabled: boolean;
     readonly service_available: boolean;
+    /**
+     * Assistants lists every assistant with the user's choice. Each still needs AI features to be enabled.
+     */
+    readonly assistants: readonly InferenceAssistantSetting[];
 }
 
 // From chroniclesdk/inference.go
@@ -2055,11 +2132,34 @@ export interface InferenceThread {
 export interface InferenceThreadResponse {
     readonly thread: InferenceThread;
     readonly messages: readonly InferenceMessage[];
+    /**
+     * Usage covers the whole chat since it was last cleared, including calls whose messages are not shown.
+     */
+    readonly usage: InferenceUsage;
 }
 
 // From chroniclesdk/inference.go
 export interface InferenceThreadsResponse {
     readonly threads: readonly InferenceThread[];
+}
+
+// From chroniclesdk/inference.go
+/**
+ * InferenceUsage is token and cost accounting summed over one or more model calls.
+ */
+export interface InferenceUsage {
+    readonly prompt_tokens: number;
+    readonly completion_tokens: number;
+    /**
+     * CachedTokens and ReasoningTokens are subsets of PromptTokens and CompletionTokens.
+     */
+    readonly cached_tokens: number;
+    readonly reasoning_tokens: number;
+    /**
+     * CostUSD is what the provider charged, in OpenRouter credits (1 credit = 1 USD). Absent when no call reported a cost.
+     */
+    readonly cost_usd?: number;
+    readonly calls: number;
 }
 
 // From chroniclesdk/characters.go
@@ -2833,6 +2933,118 @@ export interface LogosPayload {
     readonly background_banner: string;
 }
 
+// From chroniclesdk/lua_project.go
+export interface LuaProject {
+    readonly id: string;
+    readonly owner_id: string;
+    readonly kind: string;
+    readonly name: string;
+    readonly slug: string;
+    readonly revision: number;
+    /**
+     * Description is a short summary, up to LuaProjectDescriptionMax characters. It lives outside the manifest.
+     */
+    readonly description: string;
+    /**
+     * Author is the owner's addon author name, the first part of /addons/<author>/<slug>. Absent until claimed.
+     */
+    readonly author?: string;
+    readonly main?: LuaProjectMain;
+    /**
+     * Releases are newest first. Panels run the newest one that is still available.
+     */
+    readonly releases: readonly LuaProjectRelease[];
+    /**
+     * Stars counts the people tracking the addon. Starred says whether the caller is one of them.
+     */
+    readonly stars: number;
+    readonly starred: boolean;
+    readonly created_at: string;
+    readonly updated_at: string;
+}
+
+// From chroniclesdk/lua_project.go
+/**
+ * LuaProjectContributor is someone the owner shared an addon with.
+ */
+export interface LuaProjectContributor {
+    readonly user_id: string;
+    /**
+     * Author is their addon author name; Username is their display name.
+     */
+    readonly author?: string;
+    readonly username: string;
+    /**
+     * Permissions are any of "edit" and "release".
+     */
+    readonly permissions: readonly string[];
+    readonly added_at: string;
+}
+
+// From chroniclesdk/lua_project.go
+/**
+ * LuaProjectDescriptionMax is the longest description, in characters.
+ */
+export const LuaProjectDescriptionMax = 300;
+
+// From chroniclesdk/lua_project.go
+/**
+ * LuaProjectMain is the addon's latest saved source. Anyone who can view the addon can run it.
+ */
+export interface LuaProjectMain {
+    readonly sha256: string;
+    readonly icon?: string;
+    readonly updated_at: string;
+}
+
+// From chroniclesdk/lua_project.go
+/**
+ * LuaProjectPage is an addon with what the viewing user may do with it.
+ */
+export interface LuaProjectPage {
+    readonly project: LuaProject;
+    readonly permissions: LuaProjectPermissions;
+}
+
+// From chroniclesdk/lua_project.go
+/**
+ * LuaProjectPermissions are what the viewing user may do with an addon.
+ */
+export interface LuaProjectPermissions {
+    readonly view: boolean;
+    readonly use: boolean;
+    readonly edit: boolean;
+    readonly release: boolean;
+    readonly manage: boolean;
+}
+
+// From chroniclesdk/lua_project.go
+/**
+ * LuaProjectRelease is a tagged snapshot of main. Only the newest few keep their files; older ones stay
+ * listed with no SHA256 and Available false.
+ */
+export interface LuaProjectRelease {
+    readonly tag: string;
+    readonly sha256?: string;
+    readonly available: boolean;
+    readonly icon?: string;
+    readonly published_at: string;
+    readonly published_by?: string;
+    /**
+     * PublishedByAuthor is the publisher's addon author name.
+     */
+    readonly published_by_author?: string;
+}
+
+// From chroniclesdk/lua_project.go
+/**
+ * LuaProjectStar answers a star or unstar.
+ */
+export interface LuaProjectStar {
+    readonly stars: number;
+    readonly starred: boolean;
+}
+
 // From chroniclesdk/unlisted_logs.go
 export interface MarkLogUnlistedRequest {
     readonly unlisted: boolean;
@@ -3213,6 +3425,11 @@ export interface ProofSubject extends ProofCharacter {
     readonly guild_name?: string;
     readonly status: string;
     readonly warning?: string;
+}
+
+// From chroniclesdk/lua_project.go
+export interface PutLuaProjectContributorRequest {
+    readonly permissions: readonly string[];
 }
 
 // From chroniclesdk/raid_compositions.go
@@ -4085,6 +4302,11 @@ export interface SiteConfig {
      */
     readonly access_url?: string;
     /**
+     * ChooseURL is the community chooser's origin (e.g.
+     * https://choose.chronicleclassic.com). Empty when the chooser is disabled.
+     */
+    readonly choose_url?: string;
+    /**
      * Branding is the visual identity for the primary domain.
      * On tenant subdomains, use Tenant.Branding instead.
      */
@@ -4409,11 +4631,33 @@ export interface SupportedInstance {
     readonly boss_count?: number;
     readonly progression_bosses?: readonly string[];
     readonly ranking_encounter_sets?: readonly RankingEncounterSet[];
+    readonly damage_by_encounter?: Record<string, SupportedInstanceDamageRule>;
+    readonly speedrun_rules?: SupportedInstanceSpeedrunRules;
+    readonly derived_speedrun_rules?: Record<string, SupportedInstanceSpeedrunRules>;
     readonly raid_progression_order?: number;
     readonly derived_raid_progression_orders?: Record<string, number>;
     readonly ranked_start_after_requirement?: string;
     readonly bosses?: readonly SupportedInstanceUnit[];
     readonly trash?: readonly SupportedInstanceUnit[];
+}
+
+// From chroniclesdk/supported_instance.go
+/**
+ * SupportedInstanceDamageRule selects the ranked targets for an encounter.
+ */
+export interface SupportedInstanceDamageRule {
+    readonly mode: string;
+    readonly entry_ids?: readonly number[];
+}
+
+// From chroniclesdk/supported_instance.go
+/**
+ * SupportedInstanceSpeedrunRules lists the requirements for a qualifying clear.
+ */
+export interface SupportedInstanceSpeedrunRules {
+    readonly requirements: readonly SpeedrunRequirement[];
+    readonly level_range?: SpeedrunLevelRangeRequirement;
+    readonly ranked_start_after_requirement?: string;
 }
 
 // From chroniclesdk/supported_instance.go
@@ -4776,14 +5020,29 @@ export interface UpdateGuildSettingsRequest {
 }
 
 // From chroniclesdk/inference.go
+/**
+ * UpdateInferenceSettingsRequest changes only the fields that are present.
+ */
 export interface UpdateInferenceSettingsRequest {
-    readonly disabled: boolean;
+    readonly disabled?: boolean;
+    /**
+     * Assistants maps assistant IDs to whether the user wants them on.
+     */
+    readonly assistants?: Record<string, boolean>;
 }
 
 // From chroniclesdk/panel_layout.go
 export interface UpdateLayoutDefaultsRequest {
     readonly default_desktop_layout_id?: string;
     readonly default_mobile_layout_id?: string;
+}
+
+// From chroniclesdk/lua_project.go
+/**
+ * UpdateLuaProjectRequest changes an addon's settings.
+ */
+export interface UpdateLuaProjectRequest {
+    readonly description: string;
 }
 
 // From chroniclesdk/user.go

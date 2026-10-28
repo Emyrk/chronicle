@@ -20,6 +20,7 @@ const FILTER_TYPES: { value: PanelFilterType; label: string }[] = [
   { value: "shield_caster", label: "Shield Caster" },
   { value: "time_range", label: "Time Range" },
   { value: "event_value", label: "Event Value" },
+  { value: "has_excluded", label: "Has Excluded" },
   { value: "event_type", label: "Event Type" },
 ];
 
@@ -702,6 +703,8 @@ function ValueEditor({ filter, onChange }: { filter: PanelFilter; onChange: (nex
       return <TimeRangeEditor filter={filter} onChange={onChange} />;
     case "event_value":
       return <EventValueEditor filter={filter} onChange={onChange} />;
+    case "has_excluded":
+      return <span className="text-xs text-muted-foreground">Unranked damage or overkill</span>;
     case "event_type":
       return <SegmentedToggle options={APPLY_TO_OPTIONS} values={arrayValues} onToggle={toggleValue} />;
     default:

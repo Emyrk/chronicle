@@ -31,6 +31,32 @@ test("links the ads explanation from the landing footer, not the support page", 
   assert.match(footer, /Why Chronicle Runs Ads/);
 });
 
+test("does not load or render advertising on the landing site", async () => {
+  const [serverGrid, footer, privacyPage, viteConfig, workflow] = await Promise.all([
+    read("src/components/ServerGrid.tsx"),
+    read("src/components/Footer.tsx"),
+    read("src/components/PrivacyPage.tsx"),
+    read("vite.config.ts"),
+    read("../../.github/workflows/deploy-landing.yml"),
+  ]);
+
+  assert.doesNotMatch(serverGrid, /NitroAd|data-ad-placement/);
+  assert.doesNotMatch(footer, /ncmp-consent-link|data-ccpa-link|NITROPAY_SITE_ID/);
+  assert.doesNotMatch(privacyPage, /data-ccpa-link/);
+  assert.doesNotMatch(viteConfig, /nitroAds|nitropay\.com|NITROPAY_SITE_ID/);
+  assert.doesNotMatch(workflow, /name: Build\s+env:/);
+  assert.match(workflow, /name: Prepare NitroPay ads\.txt/);
+});
+
+test("shows the Standing tier promotion on the support page", async () => {
+  const supportPage = await read("src/components/SupportPage.tsx");
+
+  assert.match(supportPage, /Earn Standing with Chronicle/);
+  assert.match(supportPage, /View Standing Tiers/);
+  assert.match(supportPage, /trackedTenantUrl\(STANDING_URL, "support_standing"\)/);
+  assert.doesNotMatch(supportPage, /className="hidden">\s*<aside[^>]*>[\s\S]*?Earn Standing with Chronicle/);
+});
+
 test("unknown landing paths show a local not-found page instead of redirecting", async () => {
   const [notFoundPage, servers] = await Promise.all([
     read("public/404.html"),

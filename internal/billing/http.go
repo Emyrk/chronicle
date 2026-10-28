@@ -85,14 +85,15 @@ func (s *Service) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 			Price:    stripe.String(req.PriceID),
 			Quantity: stripe.Int64(1),
 		}},
-		ManagedPayments: &stripe.CheckoutSessionCreateManagedPaymentsParams{Enabled: stripe.Bool(true)},
-		Mode:            stripe.String(string(stripe.CheckoutSessionModeSubscription)),
-		SuccessURL:      stripe.String(success),
-		CancelURL:       stripe.String(cancel),
+		ManagedPayments:         &stripe.CheckoutSessionCreateManagedPaymentsParams{Enabled: stripe.Bool(true)},
+		Mode:                    stripe.String(string(stripe.CheckoutSessionModeSubscription)),
+		PaymentMethodCollection: stripe.String(string(stripe.CheckoutSessionPaymentMethodCollectionIfRequired)),
+		SuccessURL:              stripe.String(success),
+		CancelURL:               stripe.String(cancel),
 		SubscriptionData: &stripe.CheckoutSessionCreateSubscriptionDataParams{Metadata: map[string]string{
-			"chronicle_user_id":      claims.Subject.String(),
-			"chronicle_product_code": string(selectedProduct),
-			"chronicle_price_id":     req.PriceID,
+			stripeMetadataChronicleUserID: claims.Subject.String(),
+			"chronicle_product_code":      string(selectedProduct),
+			"chronicle_price_id":          req.PriceID,
 		}},
 	}
 	params.SetIdempotencyKey(fmt.Sprintf("chronicle-checkout:%s:%s", claims.Subject, operationID))
@@ -288,24 +289,28 @@ func (s *Service) AdminActivity(w http.ResponseWriter, r *http.Request) {
 		result.WebhookDeliveries = append(result.WebhookDeliveries, item)
 	}
 	for _, sub := range subscriptions {
+		billingSubscription := sub.BillingSubscription
 		item := chroniclesdk.AdminBillingSubscription{
-			UserID:                 sub.UserID.String(),
-			Provider:               sub.Provider,
-			ProviderCustomerID:     sub.ProviderCustomerID,
-			ProviderSubscriptionID: sub.ProviderSubscriptionID.String,
-			ProviderProductID:      sub.ProviderProductID.String,
-			ProviderPriceID:        sub.ProviderPriceID.String,
-			ProductCode:            sub.ProductCode,
-			Status:                 sub.Status,
-			CancelAtPeriodEnd:      sub.CancelAtPeriodEnd,
-			UpdatedAt:              sub.UpdatedAt.Time,
+			UserID:                 billingSubscription.UserID.String(),
+			Username:               sub.Username,
+			Email:                  sub.Email,
+			DiscordID:              sub.DiscordID,
+			Provider:               billingSubscription.Provider,
+			ProviderCustomerID:     billingSubscription.ProviderCustomerID,
+			ProviderSubscriptionID: billingSubscription.ProviderSubscriptionID.String,
+			ProviderProductID:      billingSubscription.ProviderProductID.String,
+			ProviderPriceID:        billingSubscription.ProviderPriceID.String,
+			ProductCode:            billingSubscription.ProductCode,
+			Status:                 billingSubscription.Status,
+			CancelAtPeriodEnd:      billingSubscription.CancelAtPeriodEnd,
+			UpdatedAt:              billingSubscription.UpdatedAt.Time,
 		}
-		if sub.CancelAt.Valid {
-			cancelAt := sub.CancelAt.Time
+		if billingSubscription.CancelAt.Valid {
+			cancelAt := billingSubscription.CancelAt.Time
 			item.CancelAt = &cancelAt
 		}
-		if sub.CurrentPeriodEnd.Valid {
-			periodEnd := sub.CurrentPeriodEnd.Time
+		if billingSubscription.CurrentPeriodEnd.Valid {
+			periodEnd := billingSubscription.CurrentPeriodEnd.Time
 			item.CurrentPeriodEnd = &periodEnd
 		}
 		result.Subscriptions = append(result.Subscriptions, item)
@@ -523,7 +528,7 @@ func (s *Service) subscriptionOwner(ctx context.Context, sub *stripe.Subscriptio
 	if sub == nil || sub.ID == "" {
 		return uuid.Nil, fmt.Errorf("subscription is missing")
 	}
-	userID, userErr := uuid.Parse(sub.Metadata["chronicle_user_id"])
+	userID, userErr := uuid.Parse(sub.Metadata[stripeMetadataChronicleUserID])
 	if userErr == nil {
 		return userID, nil
 	}
@@ -572,9 +577,13 @@ func (s *Service) markSubscriptionCanceled(ctx context.Context, subscriptionID s
 }
 
 type stripePurchase struct {
-	productID string
-	priceID   string
-	periodEnd pgtype.Timestamptz
+	productID      string
+	priceID        string
+	unitAmount     int64
+	currency       string
+	intervalMonths int64
+	quantity       int64
+	periodEnd      pgtype.Timestamptz
 }
 
 func stripeSubscriptionPurchase(sub *stripe.Subscription) (stripePurchase, error) {
@@ -596,6 +605,21 @@ func stripeSubscriptionPurchase(sub *stripe.Subscription) (stripePurchase, error
 		}
 		purchase.productID = productID
 		purchase.priceID = priceID
+		purchase.unitAmount = item.Price.UnitAmount
+		purchase.currency = string(item.Price.Currency)
+		if item.Price.Recurring != nil && item.Price.Recurring.IntervalCount > 0 {
+			purchase.intervalMonths = item.Price.Recurring.IntervalCount
+			if item.Price.Recurring.Interval == stripe.PriceRecurringIntervalYear {
+				purchase.intervalMonths *= 12
+			} else if item.Price.Recurring.Interval != stripe.PriceRecurringIntervalMonth {
+				purchase.intervalMonths = 0
+			}
+		}
+		quantity := item.Quantity
+		if quantity <= 0 {
+			quantity = 1
+		}
+		purchase.quantity += quantity
 		if item.CurrentPeriodEnd > purchase.periodEnd.Time.Unix() {
 			purchase.periodEnd = pgtype.Timestamptz{Time: time.Unix(item.CurrentPeriodEnd, 0).UTC(), Valid: true}
 		}
@@ -641,5 +665,5 @@ func (s *Service) upsertSubscription(ctx context.Context, userID uuid.UUID, sub 
 	if err != nil {
 		return fmt.Errorf("upsert billing subscription: %w", err)
 	}
-	return nil
+	return s.syncStripeCustomerMetadata(ctx, sub.Customer.ID, userID)
 }
