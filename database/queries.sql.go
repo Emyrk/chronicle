@@ -11663,7 +11663,7 @@ func (q *sqlQuerier) CountReadyLuaProjectArtifactGarbage(ctx context.Context) (i
 }
 
 const createLuaProject = `-- name: CreateLuaProject :one
-INSERT INTO lua_projects (owner_id, kind, name, slug) VALUES ($1, $2, $3, $4) RETURNING id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at
+INSERT INTO lua_projects (owner_id, kind, name, slug) VALUES ($1, $2, $3, $4) RETURNING id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at, draft_icon, unstable_icon, stable_icon
 `
 
 type CreateLuaProjectParams struct {
@@ -11697,6 +11697,9 @@ func (q *sqlQuerier) CreateLuaProject(ctx context.Context, arg CreateLuaProjectP
 		&i.StablePublishedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DraftIcon,
+		&i.UnstableIcon,
+		&i.StableIcon,
 	)
 	return i, err
 }
@@ -11742,7 +11745,7 @@ func (q *sqlQuerier) GetLuaProjectArtifact(ctx context.Context, arg GetLuaProjec
 }
 
 const getOwnerLuaProject = `-- name: GetOwnerLuaProject :one
-SELECT id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at FROM lua_projects WHERE id = $1 AND (owner_id = $2 OR $3::boolean)
+SELECT id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at, draft_icon, unstable_icon, stable_icon FROM lua_projects WHERE id = $1 AND (owner_id = $2 OR $3::boolean)
 `
 
 type GetOwnerLuaProjectParams struct {
@@ -11770,12 +11773,15 @@ func (q *sqlQuerier) GetOwnerLuaProject(ctx context.Context, arg GetOwnerLuaProj
 		&i.StablePublishedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DraftIcon,
+		&i.UnstableIcon,
+		&i.StableIcon,
 	)
 	return i, err
 }
 
 const getOwnerLuaProjectDraftPackage = `-- name: GetOwnerLuaProjectDraftPackage :one
-SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.unstable_hash, p.stable_hash, p.unstable_published_at, p.unstable_published_by, p.stable_published_at, p.stable_published_by, p.created_at, p.updated_at, a.object_key, a.mime_type, a.content_encoding
+SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.unstable_hash, p.stable_hash, p.unstable_published_at, p.unstable_published_by, p.stable_published_at, p.stable_published_by, p.created_at, p.updated_at, p.draft_icon, p.unstable_icon, p.stable_icon, a.object_key, a.mime_type, a.content_encoding
 FROM lua_projects p
 JOIN lua_project_artifacts a ON a.project_id = p.id AND a.hash = p.draft_hash
 WHERE p.id = $1 AND (p.owner_id = $2 OR $3::boolean)
@@ -11813,6 +11819,9 @@ func (q *sqlQuerier) GetOwnerLuaProjectDraftPackage(ctx context.Context, arg Get
 		&i.LuaProject.StablePublishedBy,
 		&i.LuaProject.CreatedAt,
 		&i.LuaProject.UpdatedAt,
+		&i.LuaProject.DraftIcon,
+		&i.LuaProject.UnstableIcon,
+		&i.LuaProject.StableIcon,
 		&i.ObjectKey,
 		&i.MimeType,
 		&i.ContentEncoding,
@@ -11821,7 +11830,7 @@ func (q *sqlQuerier) GetOwnerLuaProjectDraftPackage(ctx context.Context, arg Get
 }
 
 const getPublicLuaProject = `-- name: GetPublicLuaProject :one
-SELECT id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at FROM lua_projects WHERE id = $1 AND (stable_hash IS NOT NULL OR unstable_hash IS NOT NULL)
+SELECT id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at, draft_icon, unstable_icon, stable_icon FROM lua_projects WHERE id = $1 AND (stable_hash IS NOT NULL OR unstable_hash IS NOT NULL)
 `
 
 func (q *sqlQuerier) GetPublicLuaProject(ctx context.Context, id uuid.UUID) (LuaProject, error) {
@@ -11843,12 +11852,15 @@ func (q *sqlQuerier) GetPublicLuaProject(ctx context.Context, id uuid.UUID) (Lua
 		&i.StablePublishedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DraftIcon,
+		&i.UnstableIcon,
+		&i.StableIcon,
 	)
 	return i, err
 }
 
 const getPublishedLuaProjectArtifact = `-- name: GetPublishedLuaProjectArtifact :one
-SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.unstable_hash, p.stable_hash, p.unstable_published_at, p.unstable_published_by, p.stable_published_at, p.stable_published_by, p.created_at, p.updated_at, a.object_key, a.mime_type, a.content_encoding
+SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.unstable_hash, p.stable_hash, p.unstable_published_at, p.unstable_published_by, p.stable_published_at, p.stable_published_by, p.created_at, p.updated_at, p.draft_icon, p.unstable_icon, p.stable_icon, a.object_key, a.mime_type, a.content_encoding
 FROM lua_projects p
 JOIN lua_project_artifacts a ON a.project_id = p.id AND a.hash = $1
 WHERE p.id = $2 AND (p.stable_hash = $1 OR p.unstable_hash = $1)
@@ -11885,6 +11897,9 @@ func (q *sqlQuerier) GetPublishedLuaProjectArtifact(ctx context.Context, arg Get
 		&i.LuaProject.StablePublishedBy,
 		&i.LuaProject.CreatedAt,
 		&i.LuaProject.UpdatedAt,
+		&i.LuaProject.DraftIcon,
+		&i.LuaProject.UnstableIcon,
+		&i.LuaProject.StableIcon,
 		&i.ObjectKey,
 		&i.MimeType,
 		&i.ContentEncoding,
@@ -11917,7 +11932,7 @@ func (q *sqlQuerier) ListLuaProjectArtifactGarbage(ctx context.Context) ([]strin
 }
 
 const listOwnerLuaProjects = `-- name: ListOwnerLuaProjects :many
-SELECT id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at FROM lua_projects WHERE owner_id = $1 ORDER BY updated_at DESC LIMIT 100
+SELECT id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at, draft_icon, unstable_icon, stable_icon FROM lua_projects WHERE owner_id = $1 ORDER BY updated_at DESC LIMIT 100
 `
 
 func (q *sqlQuerier) ListOwnerLuaProjects(ctx context.Context, ownerID uuid.UUID) ([]LuaProject, error) {
@@ -11945,6 +11960,9 @@ func (q *sqlQuerier) ListOwnerLuaProjects(ctx context.Context, ownerID uuid.UUID
 			&i.StablePublishedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DraftIcon,
+			&i.UnstableIcon,
+			&i.StableIcon,
 		); err != nil {
 			return nil, err
 		}
@@ -11957,7 +11975,7 @@ func (q *sqlQuerier) ListOwnerLuaProjects(ctx context.Context, ownerID uuid.UUID
 }
 
 const listPublicLuaProjects = `-- name: ListPublicLuaProjects :many
-SELECT id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at FROM lua_projects WHERE stable_hash IS NOT NULL ORDER BY stable_published_at DESC LIMIT 100
+SELECT id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at, draft_icon, unstable_icon, stable_icon FROM lua_projects WHERE stable_hash IS NOT NULL ORDER BY stable_published_at DESC LIMIT 100
 `
 
 func (q *sqlQuerier) ListPublicLuaProjects(ctx context.Context) ([]LuaProject, error) {
@@ -11985,6 +12003,9 @@ func (q *sqlQuerier) ListPublicLuaProjects(ctx context.Context) ([]LuaProject, e
 			&i.StablePublishedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DraftIcon,
+			&i.UnstableIcon,
+			&i.StableIcon,
 		); err != nil {
 			return nil, err
 		}
@@ -11997,11 +12018,11 @@ func (q *sqlQuerier) ListPublicLuaProjects(ctx context.Context) ([]LuaProject, e
 }
 
 const promoteLuaProjectStable = `-- name: PromoteLuaProjectStable :one
-UPDATE lua_projects SET stable_hash = unstable_hash, stable_published_at = now(), stable_published_by = $1,
+UPDATE lua_projects SET stable_hash = unstable_hash, stable_icon = unstable_icon, stable_published_at = now(), stable_published_by = $1,
  revision = revision + 1, updated_at = now()
 WHERE id = $2 AND (owner_id = $1 OR $3::boolean) AND kind = 'panel' AND revision = $4
  AND unstable_hash = $5 AND unstable_hash IS NOT NULL
-RETURNING id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at
+RETURNING id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at, draft_icon, unstable_icon, stable_icon
 `
 
 type PromoteLuaProjectStableParams struct {
@@ -12037,6 +12058,9 @@ func (q *sqlQuerier) PromoteLuaProjectStable(ctx context.Context, arg PromoteLua
 		&i.StablePublishedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DraftIcon,
+		&i.UnstableIcon,
+		&i.StableIcon,
 	)
 	return i, err
 }
@@ -12066,10 +12090,10 @@ func (q *sqlQuerier) PruneLuaProjectArtifacts(ctx context.Context, arg PruneLuaP
 }
 
 const publishLuaProjectUnstable = `-- name: PublishLuaProjectUnstable :one
-UPDATE lua_projects SET unstable_hash = draft_hash, unstable_published_at = now(), unstable_published_by = $1,
+UPDATE lua_projects SET unstable_hash = draft_hash, unstable_icon = draft_icon, unstable_published_at = now(), unstable_published_by = $1,
  revision = revision + 1, updated_at = now()
 WHERE id = $2 AND (owner_id = $1 OR $3::boolean) AND kind = 'panel' AND revision = $4 AND draft_hash IS NOT NULL
-RETURNING id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at
+RETURNING id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at, draft_icon, unstable_icon, stable_icon
 `
 
 type PublishLuaProjectUnstableParams struct {
@@ -12103,6 +12127,9 @@ func (q *sqlQuerier) PublishLuaProjectUnstable(ctx context.Context, arg PublishL
 		&i.StablePublishedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DraftIcon,
+		&i.UnstableIcon,
+		&i.StableIcon,
 	)
 	return i, err
 }
@@ -12150,12 +12177,13 @@ func (q *sqlQuerier) RegisterLuaProjectUpload(ctx context.Context, objectKey str
 }
 
 const setLuaProjectDraft = `-- name: SetLuaProjectDraft :one
-UPDATE lua_projects SET draft_hash = $1, revision = revision + 1, updated_at = now()
-WHERE id = $2 AND (owner_id = $3 OR $4::boolean) AND revision = $5 RETURNING id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at
+UPDATE lua_projects SET draft_hash = $1, draft_icon = $2, revision = revision + 1, updated_at = now()
+WHERE id = $3 AND (owner_id = $4 OR $5::boolean) AND revision = $6 RETURNING id, owner_id, kind, name, slug, revision, draft_hash, unstable_hash, stable_hash, unstable_published_at, unstable_published_by, stable_published_at, stable_published_by, created_at, updated_at, draft_icon, unstable_icon, stable_icon
 `
 
 type SetLuaProjectDraftParams struct {
 	Hash             pgtype.Text `db:"hash" json:"hash"`
+	Icon             pgtype.Text `db:"icon" json:"icon"`
 	ID               uuid.UUID   `db:"id" json:"id"`
 	OwnerID          uuid.UUID   `db:"owner_id" json:"owner_id"`
 	TechnicalAdmin   bool        `db:"technical_admin" json:"technical_admin"`
@@ -12165,6 +12193,7 @@ type SetLuaProjectDraftParams struct {
 func (q *sqlQuerier) SetLuaProjectDraft(ctx context.Context, arg SetLuaProjectDraftParams) (LuaProject, error) {
 	row := q.db.QueryRow(ctx, setLuaProjectDraft,
 		arg.Hash,
+		arg.Icon,
 		arg.ID,
 		arg.OwnerID,
 		arg.TechnicalAdmin,
@@ -12187,6 +12216,9 @@ func (q *sqlQuerier) SetLuaProjectDraft(ctx context.Context, arg SetLuaProjectDr
 		&i.StablePublishedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DraftIcon,
+		&i.UnstableIcon,
+		&i.StableIcon,
 	)
 	return i, err
 }

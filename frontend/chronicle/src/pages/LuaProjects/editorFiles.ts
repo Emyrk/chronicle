@@ -2,6 +2,7 @@ import { unzip, type Unzipped } from "fflate"
 import { inspectArchive, normalizeExtractedFiles } from "../Guides/package/archive"
 import type { PanelPackage } from "../Guides/package/panelLoader"
 import { PANEL_STREAM_SCOPES, PANEL_STREAMS, type PanelStream, type PanelStreamScope } from "../Guides/runtime/panelEvents"
+import { ADDON_ICON_NAMES } from "./addonIcons"
 import type { LuaProject } from "./api"
 
 const encoder = new TextEncoder()
@@ -60,11 +61,14 @@ export function validateEditorFiles(project: Pick<LuaProject, "kind" | "name" | 
   try { parsed = JSON.parse(files.manifest) } catch { throw new Error("project.json must contain valid JSON.") }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("project.json must be an object.")
   const manifest = parsed as Record<string, unknown>
-  const fields = ["manifest_version", "kind", "name", "slug", "entrypoint", "capabilities", "streams", "stream_scope", "max_events", "assets"]
+  const fields = ["manifest_version", "kind", "name", "slug", "entrypoint", "capabilities", "streams", "stream_scope", "max_events", "assets", "icon"]
   if (Object.keys(manifest).some(key => !fields.includes(key)) || manifest.manifest_version !== 1 ||
     manifest.kind !== project.kind || manifest.name !== project.name || manifest.slug !== project.slug ||
     manifest.entrypoint !== "main.lua") {
     throw new Error("project.json must match this project's kind, name and slug, use manifest_version 1 and main.lua, with no unknown fields.")
+  }
+  if (manifest.icon !== undefined && (typeof manifest.icon !== "string" || !ADDON_ICON_NAMES.includes(manifest.icon))) {
+    throw new Error(`Unknown icon in project.json. Use a name from the icon list in the Addon API reference, such as "swords" or "heart-pulse".`)
   }
   assertStringList(manifest.capabilities, ["ui", "input"], "capabilities")
   assertStringList(manifest.streams, PANEL_STREAMS, "streams")

@@ -20,6 +20,8 @@ type LuaProjectChannel struct {
 	SHA256      string    `json:"sha256"`
 	PublishedAt time.Time `json:"published_at"`
 	PublishedBy uuid.UUID `json:"published_by"`
+	// Icon is the release's project.json "icon", absent when it named none.
+	Icon string `json:"icon,omitempty"`
 }
 
 type LuaProject struct {
@@ -30,6 +32,7 @@ type LuaProject struct {
 	Slug        string             `json:"slug"`
 	Revision    int64              `json:"revision"`
 	DraftSHA256 string             `json:"draft_sha256,omitempty"`
+	DraftIcon   string             `json:"draft_icon,omitempty"`
 	Unstable    *LuaProjectChannel `json:"unstable,omitempty"`
 	Stable      *LuaProjectChannel `json:"stable,omitempty"`
 	CreatedAt   time.Time          `json:"created_at"`

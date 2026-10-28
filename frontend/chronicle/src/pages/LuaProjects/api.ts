@@ -1,6 +1,7 @@
 /** Owner-scoped Lua project API. The browser never evaluates package contents. */
 export type LuaProjectKind = "panel" | "guide"
-export type LuaRelease = { sha256: string; published_at: string; published_by: string }
+/** icon is the release's project.json "icon", absent when it named none. */
+export type LuaRelease = { sha256: string; published_at: string; published_by: string; icon?: string }
 export type LuaProject = {
   id: string
   owner_id: string
@@ -9,6 +10,7 @@ export type LuaProject = {
   slug: string
   revision: number
   draft_sha256: string | null
+  draft_icon?: string
   unstable: LuaRelease | null
   stable: LuaRelease | null
   created_at: string

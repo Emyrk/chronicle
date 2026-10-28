@@ -16,8 +16,8 @@ export interface LuaProjectCatalogEntry {
   id: string
   kind: "panel" | "guide"
   name: string
-  stable?: { sha256: string }
-  unstable?: { sha256: string }
+  stable?: { sha256: string; icon?: string }
+  unstable?: { sha256: string; icon?: string }
 }
 
 export async function fetchOwnedLuaPanels(ownerId: string): Promise<LuaProjectCatalogEntry[]> {

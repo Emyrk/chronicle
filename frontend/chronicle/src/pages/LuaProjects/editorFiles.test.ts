@@ -42,6 +42,13 @@ describe("Lua browser source model", () => {
     ])
   })
 
+  it("accepts a listed icon and rejects any other", () => {
+    const withIcon = (icon: unknown) => ({ ...files, manifest: JSON.stringify({ ...JSON.parse(files.manifest), icon }) })
+    expect(() => validateEditorFiles(project, withIcon("heart-pulse"))).not.toThrow()
+    expect(() => validateEditorFiles(project, withIcon("HeartPulse"))).toThrow(/Unknown icon/)
+    expect(() => validateEditorFiles(project, withIcon(7))).toThrow(/Unknown icon/)
+  })
+
   it("treats README.md as optional", async () => {
     expect(files.readme).toContain("# Example")
     const withoutReadme = await readLuaDraftZip(zip(), project)

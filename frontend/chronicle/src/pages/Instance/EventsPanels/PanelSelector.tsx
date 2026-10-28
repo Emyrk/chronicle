@@ -14,6 +14,7 @@ import { PANELS, type EventsPanelType } from "./EventsPanel";
 import { listSelectableCustomPanels, resolveCustomPanel, useCustomPanelRegistry } from "./custom/pluginRegistry";
 import { isCustomPanelRef } from "./custom/pluginTypes";
 import { isLuaPanelRef, parseLuaPanelRef, useLuaPanelCatalog, type LuaPanelRef } from "./LuaPanel/luaPanelRegistry";
+import { AddonIcon } from "../../LuaProjects/AddonIcon";
 
 interface PanelOption {
   value: EventsPanelType;
@@ -296,13 +297,16 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
   const luaCatalog = useLuaPanelCatalog(isOpen || isLuaPanelRef(value));
   const luaPanels = useMemo(() => (luaCatalog.data ?? []).flatMap((project) =>
     (["stable", "unstable"] as const).filter((channel) => project[channel]).map((channel) => ({
-      ref: `lua:${project.id}:${channel}` as LuaPanelRef, label: `${project.name} (${channel})`,
+      ref: `lua:${project.id}:${channel}` as LuaPanelRef, label: `${project.name} (${channel})`, icon: project[channel]?.icon,
     }))), [luaCatalog.data]);
   const selectedLua = parseLuaPanelRef(value);
   const selectedCustom = isCustomPanelRef(value) ? resolveCustomPanel(value, customRegistry) : null;
   const selectedOption = selectedCustom
     ? { value, label: selectedCustom.panel?.name ?? selectedCustom.panelId ?? "Unavailable developer panel", icon: <Blocks className="h-4 w-4" /> }
-    : selectedLua ? { value, label: luaPanels.find((item) => item.ref === value)?.label ?? `Addon (${selectedLua.channel})`, icon: <Blocks className="h-4 w-4" /> }
+    : selectedLua ? (() => {
+      const item = luaPanels.find((candidate) => candidate.ref === value);
+      return { value, label: item?.label ?? `Addon (${selectedLua.channel})`, icon: <AddonIcon name={item?.icon} className="h-4 w-4" /> };
+    })()
     : getPanelOption(value);
   const [searchParams] = useSearchParams();
   const portalContainer = usePortalContainer();
@@ -444,7 +448,7 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
 
     for (const item of luaPanels) {
       const { match, score } = fuzzyMatch(searchQuery, item.label);
-      if (match) results.push({ option: { value: item.ref, label: item.label, icon: <Blocks className="h-4 w-4" /> }, category: "Addons", score });
+      if (match) results.push({ option: { value: item.ref, label: item.label, icon: <AddonIcon name={item.icon} className="h-4 w-4" /> }, category: "Addons", score });
     }
     // Sort by score descending
     return results.sort((a, b) => b.score - a.score);
@@ -571,7 +575,9 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
                         <span className="ml-auto text-xs text-muted-foreground">{luaPanels.length}</span>
                       </button>
                       {expandedPaths.has("Lua") && <div className="ml-2 border-l pl-1">{luaPanels.map((item) => (
-                        <button key={item.ref} type="button" onClick={() => handleSelect(item.ref)} className={cn("w-full truncate pl-6 pr-2 py-1.5 text-left text-sm rounded-sm hover:bg-accent", item.ref === value && "bg-accent/50")}>{item.label}</button>
+                        <button key={item.ref} type="button" onClick={() => handleSelect(item.ref)} className={cn("flex w-full items-center gap-2 pl-6 pr-2 py-1.5 text-left text-sm rounded-sm hover:bg-accent", item.ref === value && "bg-accent/50")}>
+                          <AddonIcon name={item.icon} className="h-4 w-4 shrink-0 text-muted-foreground" /><span className="truncate">{item.label}</span>
+                        </button>
                       ))}</div>}
                     </div>
                   )}

@@ -14,7 +14,7 @@ SELECT * FROM lua_projects WHERE stable_hash IS NOT NULL ORDER BY stable_publish
 SELECT * FROM lua_projects WHERE id = @id AND (stable_hash IS NOT NULL OR unstable_hash IS NOT NULL);
 
 -- name: SetLuaProjectDraft :one
-UPDATE lua_projects SET draft_hash = @hash, revision = revision + 1, updated_at = now()
+UPDATE lua_projects SET draft_hash = @hash, draft_icon = @icon, revision = revision + 1, updated_at = now()
 WHERE id = @id AND (owner_id = @owner_id OR @technical_admin::boolean) AND revision = @expected_revision RETURNING *;
 
 -- name: PutLuaProjectArtifact :one
@@ -24,13 +24,13 @@ ON CONFLICT (project_id, hash) DO UPDATE SET hash = EXCLUDED.hash
 RETURNING object_key;
 
 -- name: PublishLuaProjectUnstable :one
-UPDATE lua_projects SET unstable_hash = draft_hash, unstable_published_at = now(), unstable_published_by = @owner_id,
+UPDATE lua_projects SET unstable_hash = draft_hash, unstable_icon = draft_icon, unstable_published_at = now(), unstable_published_by = @owner_id,
  revision = revision + 1, updated_at = now()
 WHERE id = @id AND (owner_id = @owner_id OR @technical_admin::boolean) AND kind = 'panel' AND revision = @expected_revision AND draft_hash IS NOT NULL
 RETURNING *;
 
 -- name: PromoteLuaProjectStable :one
-UPDATE lua_projects SET stable_hash = unstable_hash, stable_published_at = now(), stable_published_by = @owner_id,
+UPDATE lua_projects SET stable_hash = unstable_hash, stable_icon = unstable_icon, stable_published_at = now(), stable_published_by = @owner_id,
  revision = revision + 1, updated_at = now()
 WHERE id = @id AND (owner_id = @owner_id OR @technical_admin::boolean) AND kind = 'panel' AND revision = @expected_revision
  AND unstable_hash = @tested_sha256 AND unstable_hash IS NOT NULL

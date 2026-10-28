@@ -47,7 +47,8 @@ When the viewer changes the encounter selection, the addon starts again from ste
   "streams": ["damage"],
   "stream_scope": "selection",
   "max_events": 2000000,
-  "assets": []
+  "assets": [],
+  "icon": "swords"
 }
 ```
 
@@ -60,6 +61,13 @@ When the viewer changes the encounter selection, the addon starts again from ste
 | `stream_scope` | no | `"selection"` (default): only the encounters the viewer selected. `"instance"`: every encounter in the log, each tagged with `selected`. |
 | `max_events` | no | A positive integer. The addon stops with an error after this many events. Omit it to receive everything. |
 | `assets` | no | Image files (PNG, JPEG, WebP, up to 2 MiB each) for `SetTexture`. Uploaded packages only; the browser editor is asset-free. |
+| `icon` | no | The icon shown next to the addon in the panel selector and on its page. One of the [icon names](#icons) below; omit it for the generic addon icon. |
+
+### Icons
+
+`icon` takes one of these names (each is a [Lucide](https://lucide.dev/icons) icon). Each release keeps the icon it was published with.
+
+`activity`, `anchor`, `axe`, `backpack`, `banknote`, `bell`, `blocks`, `book-open`, `bomb`, `bot`, `brain`, `chart-bar`, `chart-column`, `chart-line`, `chart-pie`, `chart-scatter`, `clock`, `cloud`, `compass`, `crosshair`, `crown`, `droplet`, `eye`, `feather`, `flag`, `flame`, `flask-conical`, `footprints`, `gauge`, `gem`, `ghost`, `hammer`, `heart`, `heart-pulse`, `hourglass`, `info`, `leaf`, `list`, `list-ordered`, `map`, `map-pin`, `medal`, `moon`, `mountain`, `radar`, `repeat`, `route`, `ruler`, `scroll-text`, `shield`, `shield-alert`, `shield-check`, `skull`, `snowflake`, `sparkles`, `star`, `sun`, `sword`, `swords`, `table`, `target`, `tent`, `timer`, `trophy`, `trending-up`, `users`, `wand`, `wand-sparkles`, `wind`, `zap`
 
 A package may also include a `README.md` at its root (Markdown, up to 64 KiB). The addon's page shows it, like a repository README; edit it in the Workshop's **README.md** tab. It is never run, and its images load only from the package's own files.
 

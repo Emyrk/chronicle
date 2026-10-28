@@ -12,11 +12,26 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/Emyrk/chronicle/frontend"
 )
 
 const maxLuaTarBytes = 8 << 20
 const maxLuaExpandedBytes = 16 << 20
 const maxLuaFiles = 128
+
+// luaAddonIcons are the icon names project.json "icon" may use; the browser draws the same list.
+var luaAddonIcons = func() map[string]bool {
+	var names []string
+	if err := json.Unmarshal(frontend.AddonIcons, &names); err != nil {
+		panic(fmt.Sprintf("decode addon icons: %v", err))
+	}
+	icons := make(map[string]bool, len(names))
+	for _, name := range names {
+		icons[name] = true
+	}
+	return icons
+}()
 
 // luaReadmeName is the package's optional Markdown README, shown on the addon page. It is never executed.
 const luaReadmeName = "README.md"
@@ -157,6 +172,7 @@ func canonicalLuaZIP(input io.Reader, kind, projectName, slug string) ([]byte, e
 		StreamScope     string   `json:"stream_scope"`
 		MaxEvents       *int64   `json:"max_events"`
 		Assets          []string `json:"assets"`
+		Icon            string   `json:"icon"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(manifestBytes))
 	decoder.DisallowUnknownFields()
@@ -182,6 +198,9 @@ func canonicalLuaZIP(input io.Reader, kind, projectName, slug string) ([]byte, e
 	// Panels replay every event in scope; max_events is the author's optional bound, never a host cap.
 	if manifest.MaxEvents != nil && (*manifest.MaxEvents < 1 || *manifest.MaxEvents > 1<<53) {
 		return nil, errors.New("max_events must be a positive integer")
+	}
+	if manifest.Icon != "" && !luaAddonIcons[manifest.Icon] {
+		return nil, fmt.Errorf("unsupported icon %q; use a name from the Addon API reference", manifest.Icon)
 	}
 	seenCapabilities := map[string]bool{}
 	for _, capability := range manifest.Capabilities {
@@ -246,4 +265,24 @@ func canonicalLuaZIP(input io.Reader, kind, projectName, slug string) ([]byte, e
 		return nil, errors.New("ZIP exceeds runtime archive limit")
 	}
 	return out.Bytes(), nil
+}
+
+// luaPackageIcon returns project.json "icon" from a package canonicalLuaZIP produced, or "" when unset.
+func luaPackageIcon(archive []byte) (string, error) {
+	reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	if err != nil {
+		return "", err
+	}
+	file, err := reader.Open("project.json")
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = file.Close() }()
+	var manifest struct {
+		Icon string `json:"icon"`
+	}
+	if err := json.NewDecoder(io.LimitReader(file, 32<<10)).Decode(&manifest); err != nil {
+		return "", err
+	}
+	return manifest.Icon, nil
 }
