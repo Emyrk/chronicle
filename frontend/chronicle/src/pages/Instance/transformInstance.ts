@@ -1,4 +1,4 @@
-import type { InstancePlayer, InstanceUnit, WoWEncounterWithHostiles, VehicleControlMetadata } from "@/api/typesGenerated";
+import type { InstancePlayer, InstanceUnit, LandingFeaturedUpload, WoWEncounterWithHostiles, VehicleControlMetadata } from "@/api/typesGenerated";
 import type { EnemyUnit, Encounter, Instance } from "./InstancePage";
 import { resolveInstanceUnits, type ResolvedInstanceUnit } from "./instanceUnits";
 import { defaultPositionCoordinateSpace, type PositionCoordinateSpace } from "./positionCoordinateSpace";
@@ -58,6 +58,8 @@ export function transformToInstance(
     tenant_name?: string;
     tenant_slug?: string;
     tenant_include_in_all?: boolean;
+    upload?: LandingFeaturedUpload;
+    log_owner?: string;
   },
 ): Instance {
   const players = normalizeRecord(apiInstance.players);
@@ -150,5 +152,7 @@ export function transformToInstance(
     tenantName: apiInstance.tenant_name,
     tenantSlug: apiInstance.tenant_slug,
     tenantIncludeInAll: apiInstance.tenant_include_in_all,
+    upload: apiInstance.upload,
+    logOwner: apiInstance.log_owner,
   };
 }

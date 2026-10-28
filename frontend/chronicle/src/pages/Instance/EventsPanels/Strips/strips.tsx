@@ -1,10 +1,14 @@
 /* eslint-disable react-refresh/only-export-components -- strip definitions and their renderers are intentionally colocated */
-import { Activity, Coins, Timer } from "lucide-react";
+import { Activity, Coins, Download, Timer } from "lucide-react";
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
+import { toast } from "sonner";
 import { useConsumableDisambiguations } from "@/api/queries";
 import type { ConsumableDisambiguation } from "@/api/typesGenerated";
 import { cn } from "@/lib/utils";
+import { trackFunnel } from "@/utils/funnel";
 import { useDatasetId } from "@/hooks/useDatasetId";
+import { emptyProcessor, type EmptyResult } from "../Empty/empty.processor";
 import { ReplayTransportBar, usePlayerDeathTimes } from "../../ReplayControlOverlay";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { useReplayToggleKey } from "../../replayToggleKey";
@@ -29,6 +33,7 @@ import {
   stripTitleMode,
 } from "./stripOptions";
 import { raidHealthColor } from "./raidHealthColor";
+import { sidekickDownloadUrl, sidekickStripCopy, useSidekickStripViewer } from "./sidekickStrip";
 import { replayControllerProcessor, type ReplayControllerResult } from "./replayController.processor";
 import { ReplayControllerStrip } from "./ReplayControllerStrip";
 import { stripReplayProgress } from "./stripReplay";
@@ -184,6 +189,55 @@ function RaidDurabilityStrip({ result, context, panelOption }: StripRenderProps<
   );
 }
 
+/** The pitch for visitors (with the run's Sidekick provenance), Share for signed-in members, nothing for the owner. */
+function SidekickStrip({ context }: StripRenderProps<EmptyResult>) {
+  const { instance } = context;
+  const viewer = useSidekickStripViewer(instance.logOwner);
+  if (viewer === null || viewer === "owner") return null;
+
+  if (viewer === "member") {
+    const share = async () => {
+      const url = `${window.location.origin}/instances/${instance.slug || instance.id}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        toast.success("Link copied", { description: url });
+      } catch {
+        toast.error("Failed to copy link");
+      }
+    };
+    return (
+      <div className="flex h-full min-h-0 items-center justify-end px-3">
+        <button
+          type="button"
+          onClick={() => { void share(); }}
+          className="min-h-9 rounded-lg border border-[#5f6d88] bg-transparent px-3.5 text-[13px] font-medium hover:bg-white/5"
+        >
+          Share
+        </button>
+      </div>
+    );
+  }
+
+  const copy = sidekickStripCopy(instance.upload);
+  return (
+    <div className="flex h-full min-h-0 items-center p-1.5">
+      <Link
+        to={sidekickDownloadUrl(instance.id)}
+        onClick={() => trackFunnel("cta_sidekick", { placement: "run_strip" })}
+        className="flex h-full min-h-9 w-full min-w-0 items-center justify-between gap-2.5 rounded-lg border border-[#5a2a2a] bg-[#3a1c1c] px-3 text-[#e8eef8] no-underline"
+      >
+        <span className="min-w-0 truncate text-xs leading-tight">
+          {copy.text}
+          {copy.accent ? <span className="text-[#f4c18c]">{copy.accent}</span> : null}
+        </span>
+        <span className="shrink-0 whitespace-nowrap rounded-md bg-[#e0b45c] px-2.5 py-1.5 text-xs font-semibold text-[#0c1322]">
+          {copy.button}
+        </span>
+      </Link>
+    </div>
+  );
+}
+
 function StripEmpty({ label }: { label: string }) {
   return (
     <StripFrame label={label} summary="No matching data">
@@ -300,6 +354,17 @@ export const STRIPS: Record<StripType, StripDefinition<any, any>> = {
     defaultOrientation: "horizontal",
     size: DEFAULT_SIZE,
     render: (props) => <ConsumablesCostStrip {...props} />,
+  },
+  sidekick: {
+    ...emptyProcessor,
+    label: "Sidekick",
+    icon: <Download className="h-4 w-4" />,
+    keybinds: [],
+    supportedOrientations: HORIZONTAL_ONLY,
+    defaultOrientation: "horizontal",
+    size: { minLength: 3, preferredLength: 3, minThickness: 1, preferredThickness: 1, maxThickness: 1 },
+    hoverChrome: "above",
+    render: (props) => <SidekickStrip {...props} />,
   },
 };
 

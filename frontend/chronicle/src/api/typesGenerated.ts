@@ -5558,6 +5558,12 @@ export interface WoWInstance {
     readonly invalidated_at?: string;
     readonly invalid_reason?: string;
     readonly vehicle_control_intervals?: VehicleControlMetadata;
+    /**
+     * Upload is the log group's upload provenance, and LogOwner the user who
+     * uploaded it. Both are only populated on the detail endpoint.
+     */
+    readonly upload?: LandingFeaturedUpload;
+    readonly log_owner?: string;
 }
 
 // From chroniclesdk/log.go

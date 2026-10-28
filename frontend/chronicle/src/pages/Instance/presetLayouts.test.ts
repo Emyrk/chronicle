@@ -9,6 +9,7 @@ import {
   resizePresetForViewport,
   resizeWatchPresetForViewport,
   watchPresetSideRows,
+  withoutOwnerSidekickStrip,
   PRESET_LAYOUTS,
   PRESET_LAYOUTS_BY_ID,
   presetLayoutById,
@@ -205,12 +206,13 @@ describe("Watch preset", () => {
     expect(DEFAULT_PRESET_ID).toBe("summary");
   });
 
-  it("puts the map beside party, deaths and one meter under a full-width replay strip", () => {
+  it("puts the map beside party, deaths and one meter under the replay and Sidekick strips", () => {
     const preset = watchPreset();
     expect(preset.seamless).toBe(true);
     expect(preset.fit).toBe(true);
     const byId = Object.fromEntries(preset.layoutItems.map((item) => [item.id, item]));
-    expect(byId["strip-1"]).toMatchObject({ kind: "strip", stripType: "replay", x: 0, y: 0, w: 12, h: 1 });
+    expect(byId["strip-1"]).toMatchObject({ kind: "strip", stripType: "replay", x: 0, y: 0, w: 9, h: 1 });
+    expect(byId["strip-2"]).toMatchObject({ kind: "strip", stripType: "sidekick", x: 9, y: 0, w: 3, h: 1 });
     expect(byId["panel-1"]).toMatchObject({ x: 0, y: 1, w: 8, h: 9 });
     expect(byId["panel-2"]).toMatchObject({ x: 8, y: 1, w: 4, h: 3 });
     expect(byId["panel-3"]).toMatchObject({ x: 8, y: 4, w: 4, h: 4 });
@@ -240,7 +242,19 @@ describe("Watch preset", () => {
       ["strip-1", 4, 12, 1],
       ["panel-2", 5, 12, 2],
       ["panel-3", 7, 12, 3],
+      ["strip-2", 10, 12, 1],
     ]);
+  });
+
+  it("drops the Sidekick strip for the owner and gives the replay strip the full row", () => {
+    const items = watchPreset().layoutItems;
+    expect(withoutOwnerSidekickStrip("watch", items, false)).toBe(items);
+    expect(withoutOwnerSidekickStrip("summary", items, true)).toBe(items);
+    const owner = withoutOwnerSidekickStrip("watch", items, true);
+    expect(owner.map((item) => item.id)).not.toContain("strip-2");
+    expect(owner.find((item) => item.id === "strip-1")).toMatchObject({ x: 0, w: 12 });
+    const mobile = withoutOwnerSidekickStrip("watch", watchPreset(true).layoutItems, true);
+    expect(mobile.map((item) => item.id)).toEqual(["panel-1", "strip-1", "panel-2", "panel-3"]);
   });
 
   it.each([4, 5, 6, 7, 8, 9])("splits %i map rows into a side column of the same height", (mapRows) => {
