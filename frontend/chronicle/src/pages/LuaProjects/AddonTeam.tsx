@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Trash2, UserPlus } from "lucide-react"
+import { ArrowLeft, Trash2, UserPlus } from "lucide-react"
 import { describeUsage, formatUsage, usageFromApi, addUsage, type ChatUsage } from "@/features/chat/usage"
 import { getContributorUsage, listContributors, putContributor, removeContributor, urlNameInput, type LuaContributorPermission, type LuaProject, type LuaProjectContributor } from "./api"
-import { card, errorMessage, smallButton } from "./addonUi"
+import { errorMessage, smallButton } from "./addonUi"
 
 const PERMISSIONS: { id: LuaContributorPermission; label: string; title: string }[] = [
   { id: "edit", label: "Edit", title: "Open the Workshop and save to main" },
@@ -12,8 +12,8 @@ const PERMISSIONS: { id: LuaContributorPermission; label: string; title: string 
 
 const contributorName = (contributor: LuaProjectContributor) => contributor.author || contributor.username
 
-/** People the owner shared the addon with. Anyone who can edit sees the list; only the owner changes it. */
-export function AddonContributors({ project, canManage }: { project: Pick<LuaProject, "id" | "author">; canManage: boolean }) {
+/** People the owner shared the addon with, in the main column. Anyone who can edit sees the list; only the owner changes it. */
+export function AddonContributors({ project, canManage, onClose }: { project: Pick<LuaProject, "id" | "author">; canManage: boolean; onClose: () => void }) {
   const query = useQuery({ queryKey: ["addon-contributors", project.id], queryFn: () => listContributors(project.id) })
   const [author, setAuthor] = useState("")
   const [grants, setGrants] = useState<LuaContributorPermission[]>(["edit"])
@@ -32,40 +32,41 @@ export function AddonContributors({ project, canManage }: { project: Pick<LuaPro
   }
   const toggle = (list: LuaContributorPermission[], id: LuaContributorPermission) =>
     list.includes(id) ? list.filter(item => item !== id) : [...list, id]
+  const chip = (on: boolean) => `rounded px-2 py-0.5 text-xs disabled:cursor-not-allowed disabled:opacity-50 ${on ? "bg-primary/20 text-foreground" : "bg-muted text-muted-foreground hover:text-foreground"}`
 
-  return <section className={`${card} space-y-3 text-sm`} aria-label="Contributors">
-    <h2 className="font-semibold">Contributors</h2>
-    {project.author && <p className="text-xs text-muted-foreground">Owned by <span className="font-mono">{project.author}</span>, who can do everything.</p>}
-    {query.isPending ? <p className="text-xs text-muted-foreground">Loading…</p>
-      : query.isError ? <p role="alert" className="text-xs text-destructive">{query.error.message}</p>
-      : query.data.length === 0 ? <p className="text-xs text-muted-foreground">{canManage ? "Not shared with anyone yet." : "No other contributors."}</p>
-      : <ul className="-mx-1 space-y-1">{query.data.map(contributor => <li key={contributor.user_id} className="rounded-md px-1 py-1.5">
-        <div className="flex items-center gap-2">
-          <span className="min-w-0 flex-1 truncate font-medium" title={contributor.username}>{contributorName(contributor)}</span>
-          {canManage && contributor.author && <button type="button" className="text-muted-foreground hover:text-destructive disabled:opacity-50" disabled={busy}
-            aria-label={`Remove ${contributorName(contributor)}`} onClick={() => void save(() => removeContributor(project.id, contributor.author!))}><Trash2 className="size-3.5" /></button>}
-        </div>
-        <div className="mt-1 flex flex-wrap gap-1">{PERMISSIONS.map(permission => {
+  return <section aria-label="Contributors" className="overflow-hidden rounded-xl border border-border/80 bg-card text-sm shadow-sm">
+    <div className="flex items-center gap-3 border-b border-border bg-muted/30 px-4 py-2">
+      <button type="button" onClick={onClose} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><ArrowLeft className="size-3.5" /> Back to files</button>
+      <h2 className="text-sm font-medium">Contributors <span className="font-normal text-muted-foreground">{query.data?.length || ""}</span></h2>
+      {project.author && <span className="ml-auto text-xs text-muted-foreground">Owned by <span className="font-mono">{project.author}</span>, who can do everything.</span>}
+    </div>
+    {query.isPending ? <p className="p-4 text-muted-foreground">Loading…</p>
+      : query.isError ? <p role="alert" className="p-4 text-destructive">{query.error.message}</p>
+      : query.data.length === 0 ? <p className="p-4 text-muted-foreground">{canManage ? "Not shared with anyone yet." : "No other contributors."}</p>
+      : <ul className="divide-y divide-border/60">{query.data.map(contributor => <li key={contributor.user_id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+        <span className="min-w-0 flex-1 truncate font-medium" title={contributor.username}>{contributorName(contributor)}</span>
+        <div className="flex flex-wrap gap-1">{PERMISSIONS.map(permission => {
           const on = contributor.permissions.includes(permission.id)
-          if (!canManage) return on && <span key={permission.id} className="rounded bg-muted px-1.5 py-0.5 text-[11px]">{permission.label}</span>
+          if (!canManage) return on && <span key={permission.id} className="rounded bg-muted px-2 py-0.5 text-xs">{permission.label}</span>
           const next = toggle(contributor.permissions as LuaContributorPermission[], permission.id)
           return <button key={permission.id} type="button" title={permission.title} aria-pressed={on} disabled={busy || !contributor.author || next.length === 0}
-            onClick={() => void save(() => putContributor(project.id, contributor.author!, next))}
-            className={`rounded px-1.5 py-0.5 text-[11px] disabled:cursor-not-allowed disabled:opacity-50 ${on ? "bg-primary/20 text-foreground" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{permission.label}</button>
+            onClick={() => void save(() => putContributor(project.id, contributor.author!, next))} className={chip(on)}>{permission.label}</button>
         })}</div>
+        {canManage && contributor.author && <button type="button" className="text-muted-foreground hover:text-destructive disabled:opacity-50" disabled={busy}
+          aria-label={`Remove ${contributorName(contributor)}`} onClick={() => void save(() => removeContributor(project.id, contributor.author!))}><Trash2 className="size-4" /></button>}
       </li>)}</ul>}
-    {canManage && <form onSubmit={add} className="space-y-2 border-t border-border pt-3">
-      <label className="block text-xs font-medium">Share with an author name
-        <input className="mt-1 w-full rounded-md border bg-background px-2 py-1.5 font-mono text-xs" value={author} placeholder="their-author-name"
+    {canManage && <form onSubmit={add} className="space-y-2 border-t border-border bg-muted/10 px-4 py-3">
+      <label className="block text-xs font-medium" htmlFor="contributor-author">Share with an author name</label>
+      <div className="flex flex-wrap items-center gap-2">
+        <input id="contributor-author" className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1.5 font-mono text-xs sm:max-w-xs" value={author} placeholder="their-author-name"
           onChange={event => setAuthor(urlNameInput(event.target.value))} required />
-      </label>
-      <div className="flex flex-wrap gap-1">{PERMISSIONS.map(permission => <button key={permission.id} type="button" title={permission.title} aria-pressed={grants.includes(permission.id)}
-        onClick={() => setGrants(current => toggle(current, permission.id))}
-        className={`rounded px-1.5 py-0.5 text-[11px] ${grants.includes(permission.id) ? "bg-primary/20 text-foreground" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{permission.label}</button>)}</div>
-      <button type="submit" className={`${smallButton} inline-flex items-center gap-1.5`} disabled={busy || !author || grants.length === 0}><UserPlus className="size-3.5" /> Share</button>
+        <div className="flex gap-1">{PERMISSIONS.map(permission => <button key={permission.id} type="button" title={permission.title} aria-pressed={grants.includes(permission.id)}
+          onClick={() => setGrants(current => toggle(current, permission.id))} className={chip(grants.includes(permission.id))}>{permission.label}</button>)}</div>
+        <button type="submit" className={`${smallButton} inline-flex items-center gap-1.5`} disabled={busy || !author || grants.length === 0}><UserPlus className="size-3.5" /> Share</button>
+      </div>
       <p className="text-[11px] text-muted-foreground">They need an author name, which they claim on the Addons page.</p>
     </form>}
-    {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
+    {error && <p role="alert" className="px-4 pb-3 text-xs text-destructive">{error}</p>}
   </section>
 }
 
