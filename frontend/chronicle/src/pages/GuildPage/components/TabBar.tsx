@@ -96,7 +96,7 @@ function TabSidebar({
                     ? "bg-primary-darker text-primary-foreground border-l-3 border-l-primary-foreground/70 shadow-sm"
                     : "hover:bg-accent/50 hover:translate-x-0.5 text-muted-foreground"
               )}
-              title={isRequired ? "This page is required" : undefined}
+              title={isRequired ? "Built-in page: always shows your raid calendar" : undefined}
               onClick={() => onTabChange(tab.slug)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
@@ -120,8 +120,8 @@ function TabSidebar({
                   value={tab.label}
                   onChange={(e) => onTabRename?.(tab.id, e.target.value)}
                   onClick={(e) => e.stopPropagation()}
-                  placeholder="Tab name"
-                  title="Rename tab"
+                  placeholder="Page name"
+                  title="Rename page"
                   className="min-w-0 flex-1 truncate bg-transparent text-sm font-medium border-b border-transparent hover:border-border focus:border-primary focus:outline-none"
                 />
               ) : (
@@ -182,7 +182,7 @@ function TabSidebar({
             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-accent/50 rounded-md transition-colors"
           >
             <Plus className="h-4 w-4" />
-            Add Tab
+            Add Page
           </button>
         )}
       </div>
