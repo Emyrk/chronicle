@@ -127,7 +127,7 @@ export function useInferenceConnections(
   return useQuery({
     queryKey: inferenceKeys.connections,
     queryFn: async () => {
-      const response = await fetch("/api/v1/inference/connections", { credentials: "include" });
+      const response = await fetch("/api/v1/me/inference/connections", { credentials: "include" });
       if (!response.ok) throw await readError(response, "Failed to load AI connections");
       return response.json() as Promise<InferenceConnectionsResponse>;
     },
@@ -175,7 +175,7 @@ export function useDeleteInferenceConnection() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (connectionId: string) => {
-      const response = await fetch(`/api/v1/inference/connections/${encodeURIComponent(connectionId)}`, {
+      const response = await fetch(`/api/v1/me/inference/connections/${encodeURIComponent(connectionId)}`, {
         method: "DELETE",
         credentials: "include",
       });

@@ -32,6 +32,9 @@ func (s *Service) AccountRoutes() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", s.getInferenceSettings)
 	r.Put("/", s.updateInferenceSettings)
+	// Stored credentials stay visible and removable even while AI features are off for the account.
+	r.Get("/connections", s.listConnections)
+	r.Delete("/connections/{connectionID}", s.deleteConnection)
 	return r
 }
 

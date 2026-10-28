@@ -26,7 +26,8 @@ export function InferenceSettings() {
   const { isAuthenticated } = useAuth();
   const settings = useInferenceSettings(isAuthenticated);
   const updateSettings = useUpdateInferenceSettings();
-  const connections = useInferenceConnections({ enabled: isAuthenticated && Boolean(settings.data?.enabled) });
+  // Listed even while AI is off: a stored credential still exists and should stay removable.
+  const connections = useInferenceConnections({ enabled: isAuthenticated && Boolean(settings.data) });
   const authorize = useAuthorizeOpenRouter();
   const disconnect = useDeleteInferenceConnection();
   const location = useLocation();
@@ -127,16 +128,18 @@ export function InferenceSettings() {
         </SettingsSection>
       )}
 
-      {preference?.enabled && (
+      {preference && (
         <SettingsSection
           title="Provider"
-          description="Assistant requests are paid for by your own OpenRouter account. Authorization happens on OpenRouter; Chronicle never sees your password and stores no API key in this browser."
-          action={
+          description={preference.enabled
+            ? "Assistant requests are paid for by your own OpenRouter account. Authorization happens on OpenRouter; Chronicle never sees your password and stores no API key in this browser."
+            : "Turn on AI features to connect a provider. Existing connections stay stored, and you can still disconnect them."}
+          action={preference.enabled && (
             <Button size="sm" onClick={() => void connect()} disabled={authorize.isPending}>
               {authorize.isPending ? <LoaderCircle className="animate-spin" /> : <ExternalLink />}
               Connect OpenRouter
             </Button>
-          }
+          )}
         >
           {connections.isLoading ? (
             <Row title={<span className="text-muted-foreground flex items-center gap-2 font-normal"><LoaderCircle className="size-4 animate-spin" /> Loading connections…</span>} />

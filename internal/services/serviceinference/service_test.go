@@ -76,6 +76,26 @@ func TestInferenceAccountSettingsOptOutAndBackIn(t *testing.T) {
 	require.True(t, disabled.Disabled)
 	require.False(t, disabled.Enabled)
 
+	// Connections stay listable and removable from account settings while AI is off.
+	connection, err := store.InsertInferenceConnection(ctx, database.InsertInferenceConnectionParams{
+		UserID: userID, Provider: "openrouter", AuthMode: "oauth", Label: "OpenRouter",
+		EncryptedCredential: []byte("encrypted-secret"), CredentialKeyVersion: "v1", Status: "active",
+	})
+	require.NoError(t, err)
+	account := func(method, path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, nil).WithContext(chronauth.WithClaims(ctx, &claims.Claims{Subject: userID}))
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, req)
+		return recorder
+	}
+	listed := account(http.MethodGet, "/connections")
+	require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())
+	require.Contains(t, listed.Body.String(), connection.ID.String())
+	require.NotContains(t, listed.Body.String(), "encrypted-secret")
+	removed := account(http.MethodDelete, "/connections/"+connection.ID.String())
+	require.Equal(t, http.StatusNoContent, removed.Code, removed.Body.String())
+	require.Equal(t, http.StatusNotFound, account(http.MethodDelete, "/connections/"+connection.ID.String()).Code)
+
 	reenabled := request(http.MethodPut, `{"disabled":false}`)
 	require.True(t, reenabled.Available)
 	require.False(t, reenabled.Disabled)
