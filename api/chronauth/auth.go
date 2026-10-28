@@ -26,6 +26,8 @@ import (
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
 	"github.com/markbates/goth/providers/discord"
+	"github.com/markbates/goth/providers/openidConnect"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -74,6 +76,8 @@ type Service struct {
 
 	loginMu       sync.Mutex
 	loginAttempts map[string]time.Time
+
+	refreshes singleflight.Group
 }
 
 func newCookieStore(secure bool) *sessions.CookieStore {
@@ -106,7 +110,9 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 			"email", "identify",
 		)
 		d.SetName(name)
-		providers[d.Name()] = d
+		providers[d.Name()] = withContextualTokenRefresh(
+			d, d.ClientKey, d.Secret, discordTokenURL,
+		)
 	}
 
 	store := newCookieStore(opts.AccessURL.Scheme == "https")
@@ -125,6 +131,14 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 			return nil, fmt.Errorf("mock oidc: %w", err)
 		}
 
+		if oidcProvider, ok := devProv.(*openidConnect.Provider); ok {
+			devProv = withContextualTokenRefresh(
+				devProv,
+				oidcProvider.ClientKey,
+				oidcProvider.Secret,
+				oidcProvider.OpenIDConfig.TokenEndpoint,
+			)
+		}
 		providers[devProv.Name()] = devProv
 	}
 

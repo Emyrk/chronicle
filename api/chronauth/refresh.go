@@ -17,7 +17,16 @@ var (
 	ErrRefreshSkipped = fmt.Errorf("session refresh skipped")
 )
 
-const RefreshFailedCookieName = "chronicle_refresh_failed"
+const (
+	RefreshFailedCookieName = "chronicle_refresh_failed"
+	sessionRefreshTimeout   = 30 * time.Second
+)
+
+type refreshResult struct {
+	session    database.UserAuthSession
+	refreshed  bool
+	markFailed bool
+}
 
 // RefreshSession refreshes the OAuth token and issues a new JWT.
 // Call this when the current JWT's OAuthExpire claim is near/past expiry.
@@ -30,32 +39,74 @@ func (s *Service) RefreshSession(ctx context.Context, w http.ResponseWriter, r *
 		return ErrRefreshSkipped
 	}
 
-	// 2. Get the OAuth provider
+	key := currentClaims.SessionID.String() + ":" + currentClaims.ID.String()
+	resultCh := s.refreshes.DoChan(key, func() (any, error) {
+		// A disconnected leader must not cancel the refresh for healthy waiters,
+		// but abandoned refresh work must still have a bounded lifetime.
+		refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sessionRefreshTimeout)
+		defer cancel()
+		result, err := s.refreshSession(refreshCtx, currentClaims)
+		if err == nil && result.refreshed {
+			s.logger.Debug("successfully refreshed session",
+				slog.String("user_id", currentClaims.Subject.String()),
+				slog.String("session_id", currentClaims.SessionID.String()),
+			)
+		}
+		return result, err
+	})
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case shared := <-resultCh:
+		result, ok := shared.Val.(refreshResult)
+		if !ok {
+			return fmt.Errorf("unexpected session refresh result %T", shared.Val)
+		}
+		if result.markFailed {
+			s.markRefreshFailed(w, r, currentClaims.SessionID)
+		}
+		if shared.Err != nil {
+			return shared.Err
+		}
+		if err := s.SetSessionCookie(w, r, currentClaims.Provider, result.session); err != nil {
+			s.markRefreshFailed(w, r, currentClaims.SessionID)
+			return fmt.Errorf("set session cookie: %w", err)
+		}
+		return nil
+	}
+}
+
+func (s *Service) refreshSession(ctx context.Context, currentClaims *claims.Claims) (refreshResult, error) {
 	provider, ok := s.Providers[currentClaims.Provider]
 	if !ok {
-		s.markRefreshFailed(w, r, currentClaims.SessionID)
-		return fmt.Errorf("provider not found")
+		return refreshResult{markFailed: true}, fmt.Errorf("provider not found")
 	}
 
+	result := refreshResult{}
 	err := s.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
-		// 1. Get the existing session from DB
 		session, err := tx.GetUserAuthSessionByID(ctx, currentClaims.SessionID)
 		if err != nil {
 			return fmt.Errorf("get session: %w", err)
 		}
 
 		if session.JwtID != currentClaims.ID {
-			// Whatever happened, the session JWT ID doesn't match the DB record.
-			// So someone updated the session.
+			// A concurrent request or another replica already refreshed the session.
+			result.session = session
 			return nil
 		}
 
 		if session.RefreshToken == "" {
-			s.markRefreshFailed(w, r, session.ID)
+			result.markFailed = true
 			return fmt.Errorf("no refresh token available")
 		}
 
-		newToken, err := provider.RefreshToken(session.RefreshToken)
+		refresher, ok := provider.(contextualTokenRefresher)
+		if !ok {
+			result.markFailed = true
+			return fmt.Errorf("provider does not support contextual token refresh")
+		}
+		newToken, err := refresher.RefreshTokenContext(ctx, session.RefreshToken)
 		if err != nil {
 			_, _ = tx.UpdateUserAuthSessionTokens(ctx, database.UpdateUserAuthSessionTokensParams{
 				ID:                session.ID,
@@ -67,7 +118,7 @@ func (s *Service) RefreshSession(ctx context.Context, w http.ResponseWriter, r *
 				// Just keep the old ID, since we did not issue a new one.
 				JwtID: session.JwtID,
 			})
-			s.markRefreshFailed(w, r, session.ID)
+			result.markFailed = true
 			return fmt.Errorf("refresh token: %w", err)
 		}
 
@@ -81,28 +132,18 @@ func (s *Service) RefreshSession(ctx context.Context, w http.ResponseWriter, r *
 			JwtID:             uuid.New(),
 		})
 		if err != nil {
-			s.markRefreshFailed(w, r, session.ID)
+			result.markFailed = true
 			return fmt.Errorf("update session tokens: %w", err)
 		}
 
-		err = s.SetSessionCookie(w, r, currentClaims.Provider, newSession)
-		if err != nil {
-			s.markRefreshFailed(w, r, session.ID)
-			return fmt.Errorf("set session cookie: %w", err)
-		}
-
+		result.session = newSession
+		result.refreshed = true
 		return nil
 	}, nil)
 	if err != nil {
-		return fmt.Errorf("database transaction: %w", err)
+		return result, fmt.Errorf("database transaction: %w", err)
 	}
-
-	s.logger.Debug("successfully refreshed session",
-		slog.String("user_id", currentClaims.Subject.String()),
-		slog.String("session_id", currentClaims.SessionID.String()),
-	)
-
-	return nil
+	return result, nil
 }
 
 // Mark this session as having a failed refresh - don't try again
