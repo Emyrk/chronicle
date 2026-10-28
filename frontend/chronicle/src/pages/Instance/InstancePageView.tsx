@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams, Link } from "react-router-dom";
-import { useSession, useCreateShare, fetchSharedView, toastError, type UserPanelLayout } from "@/api/queries";
+import { useSession, useCreateShare, fetchInstanceSpeedrun, fetchSharedView, toastError, type UserPanelLayout } from "@/api/queries";
 import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, LayoutPanelTop, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown, RotateCcw, Maximize2, Minimize2, LockKeyhole, Pencil } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { toast } from "sonner";
@@ -14,7 +14,7 @@ import { type LayoutType, type PanelType } from "@/hooks/useUrlState";
 import { useTimeRangeContextOptional } from "./TimeRangeContext";
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
 import { buildLayoutSections, type LayoutSection } from "@/components/layout/layoutGroups";
-import type { ActivityPeriod, InstancePlayer, SpeedrunResult } from "@/api/typesGenerated";
+import type { ActivityPeriod, InstancePlayer } from "@/api/typesGenerated";
 import { PeriodMomentDisplay } from "@/components/PeriodMomentDisplay";
 import { Card } from "@/components/ui/Card/Card";
 import { PortalContainerProvider } from "@/components/ui/PortalContainerContext";
@@ -2388,11 +2388,7 @@ function InstancePageViewContent({
   const instanceTimeParsesQuery = useInstanceTimeParses(instance.unlisted ? undefined : instance.id);
   const { data: instanceSpeedrun } = useQuery({
     queryKey: ["instance-speedrun", instance.id],
-    queryFn: async (): Promise<SpeedrunResult | null> => {
-      const response = await fetch(`/api/v1/raidlogs/instances/${encodeURIComponent(instance.id)}/speedrun`);
-      if (!response.ok) return null;
-      return response.json() as Promise<SpeedrunResult>;
-    },
+    queryFn: () => fetchInstanceSpeedrun(instance.id),
     staleTime: Infinity,
     retry: false,
     enabled: !instance.unlisted,

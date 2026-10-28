@@ -161,6 +161,61 @@ func TestGetInstanceYoutubeWithoutVideo(t *testing.T) {
 	require.Empty(t, response.Body.String())
 }
 
+func TestGetInstanceSpeedrunWithoutData(t *testing.T) {
+	t.Parallel()
+
+	store, _ := dbtestutil.NewDB(t)
+	ctx := testutil.Context(t, testutil.WaitShort)
+	zed := authz.NewDatabaseOnly(testutil.Logger(t), store)
+
+	serverID := uuid.New()
+	realmID := uuid.New()
+	userID := uuid.New()
+	logGroupID := uuid.New()
+	instanceID := uuid.New()
+	now := time.Now()
+
+	_, err := store.InsertWoWServer(ctx, database.InsertWoWServerParams{
+		ID: serverID, Name: "speedrun-server-" + serverID.String()[:8],
+	})
+	require.NoError(t, err)
+	_, err = store.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{
+		ID: realmID, ServerID: serverID, Name: "speedrun-realm-" + realmID.String()[:8],
+	})
+	require.NoError(t, err)
+	_, err = store.InsertUser(ctx, database.InsertUserParams{
+		ID: userID, Username: "speedrun-user-" + userID.String()[:8],
+	})
+	require.NoError(t, err)
+	_, err = store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+		ID: logGroupID, Owner: userID, LogType: database.LogTypeV1,
+		CreatedAt: database.Timestamptz(now), UpdatedAt: database.Timestamptz(now),
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
+	_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
+		ID: instanceID, RealmID: realmID, LogGroupID: logGroupID,
+		Name: "Molten Core", DifficultyName: "Normal", MaxPlayers: 40,
+		StartTime: database.Timestamptz(now), EndTime: database.Timestamptz(now.Add(time.Hour)),
+		Capabilities: []string{},
+	})
+	require.NoError(t, err)
+
+	handlerAPI := &API{Opts: &Options{Zed: zed}}
+	router := chi.NewRouter()
+	router.Route("/instances/{instance_id}", func(r chi.Router) {
+		r.Use(httpmw.InstanceIDMiddleware(zed))
+		r.Get("/speedrun", handlerAPI.InstanceSpeedrun)
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/instances/"+instanceID.String()+"/speedrun", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusNoContent, response.Code, response.Body.String())
+	require.Empty(t, response.Body.String())
+}
+
 func TestUngroupInstanceMaintainsDuplicateGroupURLsAndLists(t *testing.T) {
 	t.Parallel()
 

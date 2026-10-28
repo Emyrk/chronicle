@@ -6,7 +6,7 @@ import {
   recordPublicNoticeResult,
   shouldFetchPublicNotices,
 } from "@/components/NoticeBanner/publicNoticeCache";
-import type { WoWServer, WoWServerRealm, UploadKey, CreateWoWServerRequest, CreateWoWServerRealmRequest, CreateUploadKeyRequest, RetentionPolicy, RetentionPreviewResponse, RetentionPreviewRequest, SupportedInstance, RankingEncounterSet, CensusEntry, Tenant, UpsertTenantRequest, ServerApplication, CreateServerApplicationRequest, CreateModificationRequestPayload, ApplicationAdminEntry, GuildCharacterRosterResponse, ListRaidCompositionsResponse, RaidComposition, CreateRaidCompositionRequest, UpdateRaidCompositionRequest, UpdateRaidCompositionSharingRequest, InstanceItemPricesResponse } from "./typesGenerated";
+import type { WoWServer, WoWServerRealm, UploadKey, CreateWoWServerRequest, CreateWoWServerRealmRequest, CreateUploadKeyRequest, RetentionPolicy, RetentionPreviewResponse, RetentionPreviewRequest, SupportedInstance, RankingEncounterSet, CensusEntry, Tenant, UpsertTenantRequest, ServerApplication, CreateServerApplicationRequest, CreateModificationRequestPayload, ApplicationAdminEntry, GuildCharacterRosterResponse, ListRaidCompositionsResponse, RaidComposition, CreateRaidCompositionRequest, UpdateRaidCompositionRequest, UpdateRaidCompositionSharingRequest, InstanceItemPricesResponse, SpeedrunResult } from "./typesGenerated";
 import type { 
   WoWLogGroup as WoWLogGroupGenerated, 
   WoWLogArtifact as WoWLogArtifactGenerated,
@@ -1439,6 +1439,15 @@ export function useInstance(instanceId: string, options?: Omit<UseQueryOptions<W
     },
     ...options,
   });
+}
+
+export async function fetchInstanceSpeedrun(instanceId: string): Promise<SpeedrunResult | null> {
+  const response = await fetch(
+    `/api/v1/raidlogs/instances/${encodeURIComponent(instanceId)}/speedrun`,
+  );
+  if (response.status === 204 || response.status === 404) return null;
+  if (!response.ok) throw new Error("Failed to fetch speedrun data");
+  return response.json() as Promise<SpeedrunResult>;
 }
 
 export function useInstanceYoutube(instanceId: string, options?: Omit<UseQueryOptions<Video | null>, "queryKey" | "queryFn">) {

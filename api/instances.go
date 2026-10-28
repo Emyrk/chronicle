@@ -261,9 +261,16 @@ func (api *API) InstanceSpeedrun(w http.ResponseWriter, r *http.Request) {
 	inst := httpmw.Instance(ctx)
 
 	sr, err := api.Opts.Zed.GetInstanceSpeedrun(ctx, inst.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if err != nil {
-		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
-			Message: "No speedrun data for this instance",
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to fetch speedrun data for this instance",
+				Detail:  err.Error(),
+			},
 		})
 		return
 	}
