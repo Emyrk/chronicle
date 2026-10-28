@@ -43,8 +43,7 @@ func TestDestinations(t *testing.T) {
 	require.Equal(t, []servicechoose.Destination{
 		{Key: "capy", Name: "Capy", Tagline: "Capybara realm", Logo: "/c/capy/logo.png", Origin: "http://capy.localhost:4000"},
 		{Key: "octo", Name: "OctoWoW", Origin: "http://octo.localhost:4000"},
-		{Key: "@main", Name: "Main site", Tagline: "Every server Chronicle supports", Origin: "http://legacy.localhost:4000"},
-	}, svc.Destinations())
+	}, svc.Destinations(), "only discoverable tenants, no main site")
 	require.Equal(t, "http://choose.localhost:4000", svc.ChooseURL())
 }
 
@@ -106,6 +105,7 @@ func TestPageData(t *testing.T) {
 	require.NotContains(t, body, "{{CHOOSE_DATA}}")
 	require.Contains(t, body, `"origin":"https://capy.localhost"`)
 	require.NotContains(t, body, "secret", "non-discoverable tenants are not offered")
+	require.Contains(t, body, "Hidden communities are not listed.")
 }
 
 func TestDisabled(t *testing.T) {

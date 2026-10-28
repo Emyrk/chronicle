@@ -86,6 +86,7 @@
   .bar{margin:1.25rem auto 0;height:3px;max-width:240px;border-radius:3px;background:var(--border);overflow:hidden}
   .bar span{display:block;height:100%;width:100%;background:var(--accent);transform-origin:left;animation:fill var(--delay) linear forwards}
   .actions{margin-top:1.5rem;display:flex;gap:.6rem;justify-content:center;flex-wrap:wrap}
+  .hint{margin-top:.6rem;color:var(--faint);font-size:.8rem;text-align:center}
   .empty{margin-top:2rem;text-align:center;color:var(--muted)}
   footer{margin-top:2.5rem;font-size:.75rem;color:var(--faint);text-align:center;line-height:1.6}
   @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
@@ -263,7 +264,7 @@
     }
 
     if (destinations.length === 0) {
-      children.push(el("p", { "class": "empty", text: "No communities are available right now." }));
+      children.push(el("p", { "class": "empty", text: "No communities are available right now. Hidden communities are not listed." }));
       app.replaceChildren.apply(app, children);
       return;
     }
@@ -296,6 +297,7 @@
       list.appendChild(btn);
     });
     children.push(list);
+    children.push(el("p", { "class": "hint", text: "Hidden communities are not listed." }));
 
     children.push(el("label", { "class": "remember", "for": "remember" }, [
       remember,

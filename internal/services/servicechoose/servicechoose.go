@@ -186,14 +186,10 @@ type pageData struct {
 	Destinations []Destination `json:"destinations"`
 }
 
-// mainSiteKey is the saved-choice key for the access URL (the main site).
-const mainSiteKey = "@main"
-
-// Destinations lists every discoverable tenant sorted by name, followed by
-// the main site.
+// Destinations lists every discoverable tenant sorted by name.
 func (s *Service) Destinations() []Destination {
 	tenants := s.tenantSvc.CachedTenants()
-	out := make([]Destination, 0, len(tenants)+1)
+	out := make([]Destination, 0, len(tenants))
 	for _, t := range tenants {
 		if !t.Discoverable || !t.Slug.Valid || t.Slug.String == "" || t.Slug.String == s.slug {
 			continue
@@ -203,15 +199,6 @@ func (s *Service) Destinations() []Destination {
 	sort.Slice(out, func(i, j int) bool {
 		return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
 	})
-
-	if s.accessURL.Host != "" {
-		out = append(out, Destination{
-			Key:     mainSiteKey,
-			Name:    "Main site",
-			Tagline: "Every server Chronicle supports",
-			Origin:  s.accessURL.Scheme + "://" + s.accessURL.Host,
-		})
-	}
 	return out
 }
 
