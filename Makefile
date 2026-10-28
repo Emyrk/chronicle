@@ -333,11 +333,13 @@ maps/legacy-upload: maps/legacy-extract
 .PHONY: maps/legacy
 maps/legacy: maps/legacy-upload
 
-.PHONY: maps/turtle maps/azerothcore maps/tbc
+.PHONY: maps/turtle maps/azerothcore maps/vanillaplus maps/tbc
 maps/turtle: SERVER=turtle
 maps/turtle: maps/legacy
 maps/azerothcore: SERVER=azerothcore
 maps/azerothcore: maps/legacy
+maps/vanillaplus: SERVER=vanillaplus
+maps/vanillaplus: maps/legacy
 maps/tbc: SERVER=tbc
 maps/tbc: maps/legacy
 

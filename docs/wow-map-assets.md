@@ -17,15 +17,16 @@ The frontend accepts v1 published manifests during migration; all new imports us
 
 ## MPQ-era clients
 
-Turtle WoW, AzerothCore 3.3.5a, and the 2.4.3 TBC client use the legacy extractor. It reads `WorldMapArea.dbc`, `WorldMapOverlay.dbc`, `AreaTable.dbc`, and `Map.dbc`, discovers `Interface/WorldMap` BLP files from the MPQ listfiles, converts referenced artwork to WebP, and emits the shared manifest.
+Turtle WoW, VanillaPlus, AzerothCore 3.3.5a, and the 2.4.3 TBC client use the legacy extractor. It reads `WorldMapArea.dbc`, `WorldMapOverlay.dbc`, `AreaTable.dbc`, and `Map.dbc`, discovers `Interface/WorldMap` BLP files from the MPQ listfiles, converts referenced artwork to WebP, and emits the shared manifest.
 
 ```bash
 make maps/turtle
+make maps/vanillaplus
 make maps/azerothcore
 make maps/tbc
 ```
 
-The corresponding public paths are `turtle/maps`, `azerothcore/maps`, and `tbc/maps`. Each dataset's `icon_base_url` must point at the matching server root.
+The corresponding public paths are `turtle/maps`, `vanillaplus/maps`, `azerothcore/maps`, and `tbc/maps`. Each dataset's `icon_base_url` must point at the matching server root.
 
 Use `WOW_CLIENT_PATH` to override the configured client directory:
 
