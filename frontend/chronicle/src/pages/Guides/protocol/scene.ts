@@ -103,6 +103,14 @@ function string(value: unknown, label: string, max = MAX_STRING_LENGTH): string 
   return value
 }
 
+/** Display text may be empty (SetText("") clears a label) and may contain newlines and tabs. */
+function displayText(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.length > MAX_STRING_LENGTH || hasControlCharacters(value.replace(/[\n\t]/g, ""))) {
+    throw new SceneValidationError(`${label} must be text of at most ${MAX_STRING_LENGTH} characters without control characters other than newlines and tabs`)
+  }
+  return value
+}
+
 function id(value: unknown, label = "id"): string { return string(value, label, MAX_ID_LENGTH) }
 
 function color(value: unknown, label: string): string {
@@ -128,7 +136,8 @@ function validateProps(kind: NodeKind, input: unknown, partial: boolean): Record
   if (!partial) for (const key of REQUIRED[kind]) if (!(key in props)) throw new SceneValidationError(`${kind} props require ${key}`)
 
   for (const [key, value] of Object.entries(props)) {
-    if (["text", "asset", "unit", "label", "role"].includes(key)) string(value, `${kind}.${key}`)
+    if (key === "text") displayText(value, `${kind}.text`)
+    else if (["asset", "unit", "label", "role"].includes(key)) string(value, `${kind}.${key}`)
     else if (["color", "fillColor", "tint", "backgroundColor", "borderColor"].includes(key)) color(value, `${kind}.${key}`)
     else if (["visible", "enabled"].includes(key)) boolean(value, `${kind}.${key}`)
     else if (key === "alpha") bounded(value, 0, 1, `${kind}.alpha`)

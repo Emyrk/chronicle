@@ -42,6 +42,7 @@ const EMPTY_ASSETS: ReadonlyMap<string, string> = new Map()
 // Shared by the author preview and embedded EventsPanels. No Lua executes on the main thread.
 export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", maxEvents, capabilities, events = EMPTY_EVENTS, eventStreams, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS, units, onMetrics, onAskAssistant }: LuaPanelHostProps) {
   const [scene, setScene] = useState<RetainedScene>(createInitialScene)
+  const sceneRef = useRef(scene)
   const [error, setError] = useState<AddonErrorExplanation | null>(null)
   const [progress, setProgress] = useState<number | null>(null)
   const [metrics, setMetrics] = useState<LuaPanelRunMetrics | null>(null)
@@ -87,17 +88,17 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
         }
         const message = parseWorkerMessage(data)
         if (message.type === "ready") {
-          setScene(createInitialScene()); setError(null); setMetrics(null); setProgress(replaying ? 0 : null)
+          sceneRef.current = createInitialScene()
+          setScene(sceneRef.current); setError(null); setMetrics(null); setProgress(replaying ? 0 : null)
           if (replaying) armWatchdog()
           else clearTimeout(watchdog)
         }
         if (message.type === "batch") {
-          setScene((current) => {
-            const drawStart = performance.now()
-            const next = applySceneBatch(current, message.operations)
-            drawMs.current += performance.now() - drawStart
-            return next
-          })
+          // Apply here, not in a state updater, so an invalid batch stops the panel instead of crashing the page.
+          const drawStart = performance.now()
+          sceneRef.current = applySceneBatch(sceneRef.current, message.operations)
+          drawMs.current += performance.now() - drawStart
+          setScene(sceneRef.current)
           if (replaying) armWatchdog()
         }
       } catch (caught) {

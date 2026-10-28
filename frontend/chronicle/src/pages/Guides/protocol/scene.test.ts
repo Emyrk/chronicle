@@ -88,6 +88,15 @@ describe("retained guide scene reducer", () => {
     for (const operation of cases) expect(() => applySceneBatch(createInitialScene(), [operation])).toThrow(SceneValidationError)
   })
 
+  it("allows empty and multi-line display text but not other control characters", () => {
+    const label = (text: string): SceneOperation => ({ op: "create", id: "label", kind: "text", parentId: UI_ROOT_ID, props: { x: 0, y: 0, text, fontSize: 12, color: "#fff", anchor: "center" } })
+    const scene = applySceneBatch(createInitialScene(), [label("Kicks:\n\tAlice 3")])
+    expect(scene.nodes.get("label")?.props.text).toBe("Kicks:\n\tAlice 3")
+    expect(applySceneBatch(scene, [{ op: "set", id: "label", props: { text: "" } }]).nodes.get("label")?.props.text).toBe("")
+    expect(() => applySceneBatch(createInitialScene(), [label("bell\u0007")])).toThrow(SceneValidationError)
+    expect(() => applySceneBatch(createInitialScene(), [label("x".repeat(4097))])).toThrow(SceneValidationError)
+  })
+
   it("rejects parent cycles and excessive nesting", () => {
     const scene = applySceneBatch(createInitialScene(), [create("a"), create("b", "frame", "a")])
     expect(() => applySceneBatch(scene, [{ op: "set", id: "a", parentId: "b", props: {} }])).toThrow(/cycle/)
