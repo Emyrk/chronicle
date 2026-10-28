@@ -1,7 +1,7 @@
 import type { AnalyticsDashboard } from "../analytics/types";
 
 export interface DeviceAnalyticsDashboard {
-  schemaVersion: 2;
+  schemaVersion: 3;
   contentHash: string;
   generatedAt: string;
   timezone: string;
@@ -30,6 +30,9 @@ export interface DeviceAnalyticsDashboard {
     pageViews: number;
     previousPageViews: number;
     changePercent: number | null;
+    change7dPercent: number | null;
+    change14dPercent: number | null;
+    change30dPercent: number | null;
     nonChinaPageViews: number;
     previousNonChinaPageViews: number;
     nonChinaChangePercent: number | null;
@@ -54,7 +57,7 @@ export function projectDeviceAnalytics(
   dashboard: AnalyticsDashboard
 ): DeviceAnalyticsWithoutHash {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatedAt: dashboard.generatedAt,
     timezone: dashboard.timezone,
     mock: dashboard.mock,
@@ -72,6 +75,9 @@ export function projectDeviceAnalytics(
       pageViews: host.pageViews,
       previousPageViews: host.previousPageViews,
       changePercent: host.changePercent,
+      change7dPercent: host.change7dPercent,
+      change14dPercent: host.change14dPercent,
+      change30dPercent: host.change30dPercent,
       nonChinaPageViews: host.nonChinaPageViews,
       previousNonChinaPageViews: host.previousNonChinaPageViews,
       nonChinaChangePercent: host.nonChinaChangePercent,

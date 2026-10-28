@@ -7,7 +7,12 @@ import type {
   AnalyticsMetric,
   AnalyticsTimeseriesPoint,
 } from "./types";
-import { buildHostRows, type CurrentHostMetrics } from "./hosts";
+import {
+  buildHostChangeWindows,
+  buildHostRows,
+  type CurrentHostMetrics,
+  type DatedHostPageViews,
+} from "./hosts";
 import {
   aggregateLeaderboards,
   aggregateRouteFamilies,
@@ -350,6 +355,14 @@ export async function fetchAnalyticsDashboard(env: Env, days: number): Promise<A
             orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
             limit: "50000",
           },
+          {
+            dateRanges: [{ startDate: "60daysAgo", endDate: "yesterday" }],
+            dimensions: [{ name: "date" }, { name: "hostName" }],
+            metrics: [{ name: "screenPageViews" }],
+            dimensionFilter: hostFilter(),
+            orderBys: [{ dimension: { dimensionName: "date" } }],
+            limit: "50000",
+          },
         ],
       }),
     }
@@ -363,8 +376,12 @@ export async function fetchAnalyticsDashboard(env: Env, days: number): Promise<A
     payload.reports ?? [];
   const [previousOverviewReport, routesReportRaw, leaderboardLocationsReportRaw] =
     productPayload.reports ?? [];
-  const [previousHostsReportRaw, currentHostCountriesReportRaw, previousHostCountriesReportRaw] =
-    serverPayload.reports ?? [];
+  const [
+    previousHostsReportRaw,
+    currentHostCountriesReportRaw,
+    previousHostCountriesReportRaw,
+    datedHostsReportRaw,
+  ] = serverPayload.reports ?? [];
   const previousHostsReport = requireCompleteReport(previousHostsReportRaw, "previous hosts");
   const currentHostCountriesReport = requireCompleteReport(
     currentHostCountriesReportRaw,
@@ -374,6 +391,7 @@ export async function fetchAnalyticsDashboard(env: Env, days: number): Promise<A
     previousHostCountriesReportRaw,
     "previous host-country"
   );
+  const datedHostsReport = requireCompleteReport(datedHostsReportRaw, "dated hosts");
   const routesReport = requireCompleteReport(routesReportRaw, "route-family");
   const leaderboardLocationsReport = requireCompleteReport(
     leaderboardLocationsReportRaw,
@@ -381,6 +399,7 @@ export async function fetchAnalyticsDashboard(env: Env, days: number): Promise<A
   );
   const current = requireOverviewRow(overviewReport, "current overview", metrics.length);
   const previous = requireOverviewRow(previousOverviewReport, "previous overview", metrics.length);
+  const timeZone = overviewReport?.metadata?.timeZone ?? "UTC";
 
   const timeseries: AnalyticsTimeseriesPoint[] = (timeseriesReport?.rows ?? []).map((row) => ({
     date: parseGaDate(dimensionValue(row, 0)),
@@ -399,6 +418,17 @@ export async function fetchAnalyticsDashboard(env: Env, days: number): Promise<A
       numberValue(row, 0),
     ])
   );
+  const datedHostPageViews: DatedHostPageViews[] = (datedHostsReport.rows ?? []).map(
+    (row) => ({
+      date: parseGaDate(dimensionValue(row, 0)),
+      hostname: dimensionValue(row, 1),
+      pageViews: numberValue(row, 0),
+    })
+  );
+  const hostChangeWindows = buildHostChangeWindows(
+    datedHostPageViews,
+    dateFromToday(timeZone, -1)
+  );
   const chinaPageViews = (report: GaReport) => new Map(
     (report.rows ?? [])
       .filter((row) => dimensionValue(row, 1) === "China")
@@ -408,7 +438,8 @@ export async function fetchAnalyticsDashboard(env: Env, days: number): Promise<A
     currentHosts,
     previousHostPageViews,
     chinaPageViews(currentHostCountriesReport),
-    chinaPageViews(previousHostCountriesReport)
+    chinaPageViews(previousHostCountriesReport),
+    hostChangeWindows
   );
   const acquisition: AnalyticsAcquisitionRow[] = (acquisitionReport?.rows ?? []).map((row) => {
     const source = dimensionValue(row, 0);
@@ -457,7 +488,6 @@ export async function fetchAnalyticsDashboard(env: Env, days: number): Promise<A
     leaderboardLocationRows
   );
 
-  const timeZone = overviewReport?.metadata?.timeZone ?? "UTC";
   return {
     period: {
       days,

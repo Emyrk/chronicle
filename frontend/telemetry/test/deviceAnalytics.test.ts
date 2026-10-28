@@ -11,7 +11,7 @@ test("projects the GA4 dashboard into a compact device payload", () => {
   const source = createMockAnalyticsDashboard(30);
   const projected = projectDeviceAnalytics(source);
 
-  assert.equal(projected.schemaVersion, 2);
+  assert.equal(projected.schemaVersion, 3);
   assert.deepEqual(projected.overview, source.overview);
   assert.equal(projected.trend.length, source.timeseries.length);
   assert.deepEqual(projected.topHost, source.hosts[0]);
@@ -22,6 +22,9 @@ test("projects the GA4 dashboard into a compact device payload", () => {
     pageViews: source.hosts[0].pageViews,
     previousPageViews: source.hosts[0].previousPageViews,
     changePercent: source.hosts[0].changePercent,
+    change7dPercent: source.hosts[0].change7dPercent,
+    change14dPercent: source.hosts[0].change14dPercent,
+    change30dPercent: source.hosts[0].change30dPercent,
     nonChinaPageViews: source.hosts[0].nonChinaPageViews,
     previousNonChinaPageViews: source.hosts[0].previousNonChinaPageViews,
     nonChinaChangePercent: source.hosts[0].nonChinaChangePercent,
