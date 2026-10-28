@@ -21530,7 +21530,7 @@ SET disconnected_at = NOW(),
 WHERE id = $1
   AND user_id = $2
   AND disconnected_at IS NULL
-RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at, utm_source, utm_medium, utm_campaign, utm_content
 `
 
 type DisconnectSidekickInstallationParams struct {
@@ -21552,6 +21552,10 @@ func (q *sqlQuerier) DisconnectSidekickInstallation(ctx context.Context, arg Dis
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UtmSource,
+		&i.UtmMedium,
+		&i.UtmCampaign,
+		&i.UtmContent,
 	)
 	return i, err
 }
@@ -21590,7 +21594,7 @@ func (q *sqlQuerier) GetSidekickConfigOverride(ctx context.Context, arg GetSidek
 }
 
 const getSidekickInstallationByUser = `-- name: GetSidekickInstallationByUser :one
-SELECT id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+SELECT id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at, utm_source, utm_medium, utm_campaign, utm_content
 FROM sidekick_installations
 WHERE id = $1
   AND user_id = $2
@@ -21615,6 +21619,10 @@ func (q *sqlQuerier) GetSidekickInstallationByUser(ctx context.Context, arg GetS
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UtmSource,
+		&i.UtmMedium,
+		&i.UtmCampaign,
+		&i.UtmContent,
 	)
 	return i, err
 }
@@ -21660,7 +21668,7 @@ func (q *sqlQuerier) InsertSidekickOAuthGrant(ctx context.Context, arg InsertSid
 }
 
 const listSidekickInstallationsByUser = `-- name: ListSidekickInstallationsByUser :many
-SELECT id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+SELECT id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at, utm_source, utm_medium, utm_campaign, utm_content
 FROM sidekick_installations
 WHERE user_id = $1
 ORDER BY disconnected_at NULLS FIRST, created_at DESC
@@ -21686,6 +21694,10 @@ func (q *sqlQuerier) ListSidekickInstallationsByUser(ctx context.Context, userID
 			&i.DisconnectedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UtmSource,
+			&i.UtmMedium,
+			&i.UtmCampaign,
+			&i.UtmContent,
 		); err != nil {
 			return nil, err
 		}
@@ -21781,7 +21793,7 @@ SET name = $1,
 WHERE id = $2
   AND user_id = $3
   AND disconnected_at IS NULL
-RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at, utm_source, utm_medium, utm_campaign, utm_content
 `
 
 type RenameSidekickInstallationParams struct {
@@ -21804,6 +21816,10 @@ func (q *sqlQuerier) RenameSidekickInstallation(ctx context.Context, arg RenameS
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UtmSource,
+		&i.UtmMedium,
+		&i.UtmCampaign,
+		&i.UtmContent,
 	)
 	return i, err
 }
@@ -21857,6 +21873,42 @@ func (q *sqlQuerier) RevokeActiveSidekickOAuthGrants(ctx context.Context, sideki
 	return items, nil
 }
 
+const setSidekickInstallationCampaign = `-- name: SetSidekickInstallationCampaign :exec
+UPDATE sidekick_installations
+SET utm_source = $1,
+    utm_medium = $2,
+    utm_campaign = $3,
+    utm_content = $4
+WHERE id = $5
+  AND user_id = $6
+  AND utm_source IS NULL
+  AND utm_medium IS NULL
+  AND utm_campaign IS NULL
+  AND utm_content IS NULL
+`
+
+type SetSidekickInstallationCampaignParams struct {
+	UtmSource   pgtype.Text `db:"utm_source" json:"utm_source"`
+	UtmMedium   pgtype.Text `db:"utm_medium" json:"utm_medium"`
+	UtmCampaign pgtype.Text `db:"utm_campaign" json:"utm_campaign"`
+	UtmContent  pgtype.Text `db:"utm_content" json:"utm_content"`
+	ID          uuid.UUID   `db:"id" json:"id"`
+	UserID      uuid.UUID   `db:"user_id" json:"user_id"`
+}
+
+// The first campaign wins: a row that already holds any utm_* is left as is.
+func (q *sqlQuerier) SetSidekickInstallationCampaign(ctx context.Context, arg SetSidekickInstallationCampaignParams) error {
+	_, err := q.db.Exec(ctx, setSidekickInstallationCampaign,
+		arg.UtmSource,
+		arg.UtmMedium,
+		arg.UtmCampaign,
+		arg.UtmContent,
+		arg.ID,
+		arg.UserID,
+	)
+	return err
+}
+
 const touchSidekickUpload = `-- name: TouchSidekickUpload :execrows
 UPDATE sidekick_installations
 SET last_seen_at = NOW(),
@@ -21889,7 +21941,7 @@ SET platform = $1,
 WHERE id = $3
   AND user_id = $4
   AND disconnected_at IS NULL
-RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at, utm_source, utm_medium, utm_campaign, utm_content
 `
 
 type UpdateSidekickHeartbeatParams struct {
@@ -21918,6 +21970,10 @@ func (q *sqlQuerier) UpdateSidekickHeartbeat(ctx context.Context, arg UpdateSide
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UtmSource,
+		&i.UtmMedium,
+		&i.UtmCampaign,
+		&i.UtmContent,
 	)
 	return i, err
 }
@@ -22018,7 +22074,7 @@ ON CONFLICT (id) DO UPDATE SET
   disconnected_at = NULL,
   updated_at = NOW()
 WHERE sidekick_installations.user_id = EXCLUDED.user_id
-RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at, utm_source, utm_medium, utm_campaign, utm_content
 `
 
 type UpsertSidekickInstallationParams struct {
@@ -22049,6 +22105,10 @@ func (q *sqlQuerier) UpsertSidekickInstallation(ctx context.Context, arg UpsertS
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UtmSource,
+		&i.UtmMedium,
+		&i.UtmCampaign,
+		&i.UtmContent,
 	)
 	return i, err
 }

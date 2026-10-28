@@ -25,6 +25,7 @@ import (
 	"github.com/coder/serpent"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/ory/fosite"
 	"github.com/ory/fosite/compose"
 	"github.com/ory/fosite/handler/rfc8628"
@@ -282,6 +283,32 @@ func campaignCookie(r *http.Request) url.Values {
 	return campaign
 }
 
+// installationCampaign is the campaign stored on a Sidekick installation at
+// device approval.
+type installationCampaign struct {
+	Source, Medium, Campaign, Content pgtype.Text
+}
+
+func (c installationCampaign) present() bool {
+	return c.Source.Valid || c.Medium.Valid || c.Campaign.Valid || c.Content.Valid
+}
+
+// campaignFromCookie returns the stored utm_* fields from the landing cookie.
+// A missing, empty or over-long (> 100 chars) value is left NULL.
+func campaignFromCookie(r *http.Request) installationCampaign {
+	campaign := campaignCookie(r)
+	field := func(key string) pgtype.Text {
+		value := campaign.Get(key)
+		return pgtype.Text{String: value, Valid: value != "" && len(value) <= 100}
+	}
+	return installationCampaign{
+		Source:   field("utm_source"),
+		Medium:   field("utm_medium"),
+		Campaign: field("utm_campaign"),
+		Content:  field("utm_content"),
+	}
+}
+
 // withCampaign returns the pairing URL with the visitor's campaign utm_* params
 // added, so they survive the sign-in round trip and a new account can be
 // attributed to the ad that brought it.
@@ -371,7 +398,7 @@ func (s *Service) browserApprovalHandler(w http.ResponseWriter, r *http.Request)
 			}
 		}
 		subject := authClaims.Subject.String()
-		if err := s.store.approveDevice(r.Context(), signature, subject, state); err != nil {
+		if err := s.store.approveDevice(r.Context(), signature, subject, state, campaignFromCookie(r)); err != nil {
 			if errors.Is(err, fosite.ErrNotFound) {
 				renderDevicePage(w, http.StatusNotFound, devicePageData{
 					State: devicePageError, Title: "This code has expired",

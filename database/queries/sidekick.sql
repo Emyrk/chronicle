@@ -10,6 +10,20 @@ ON CONFLICT (id) DO UPDATE SET
 WHERE sidekick_installations.user_id = EXCLUDED.user_id
 RETURNING *;
 
+-- name: SetSidekickInstallationCampaign :exec
+-- The first campaign wins: a row that already holds any utm_* is left as is.
+UPDATE sidekick_installations
+SET utm_source = @utm_source,
+    utm_medium = @utm_medium,
+    utm_campaign = @utm_campaign,
+    utm_content = @utm_content
+WHERE id = @id
+  AND user_id = @user_id
+  AND utm_source IS NULL
+  AND utm_medium IS NULL
+  AND utm_campaign IS NULL
+  AND utm_content IS NULL;
+
 -- name: RevokeActiveSidekickOAuthGrants :many
 UPDATE sidekick_oauth_grants
 SET revoked_at = NOW()

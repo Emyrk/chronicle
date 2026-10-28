@@ -2042,8 +2042,16 @@ CREATE TABLE sidekick_installations (
     disconnected_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    utm_source text,
+    utm_medium text,
+    utm_campaign text,
+    utm_content text,
     CONSTRAINT sidekick_installations_name_check CHECK (((char_length(name) >= 1) AND (char_length(name) <= 100))),
     CONSTRAINT sidekick_installations_platform_check CHECK ((char_length(platform) <= 100)),
+    CONSTRAINT sidekick_installations_utm_campaign_check CHECK (((utm_campaign IS NULL) OR (char_length(utm_campaign) <= 100))),
+    CONSTRAINT sidekick_installations_utm_content_check CHECK (((utm_content IS NULL) OR (char_length(utm_content) <= 100))),
+    CONSTRAINT sidekick_installations_utm_medium_check CHECK (((utm_medium IS NULL) OR (char_length(utm_medium) <= 100))),
+    CONSTRAINT sidekick_installations_utm_source_check CHECK (((utm_source IS NULL) OR (char_length(utm_source) <= 100))),
     CONSTRAINT sidekick_installations_version_check CHECK ((char_length(version) <= 100))
 );
 

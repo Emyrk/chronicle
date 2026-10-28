@@ -2451,6 +2451,10 @@ type SidekickInstallation struct {
 	DisconnectedAt pgtype.Timestamptz `db:"disconnected_at" json:"disconnected_at"`
 	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	UtmSource      pgtype.Text        `db:"utm_source" json:"utm_source"`
+	UtmMedium      pgtype.Text        `db:"utm_medium" json:"utm_medium"`
+	UtmCampaign    pgtype.Text        `db:"utm_campaign" json:"utm_campaign"`
+	UtmContent     pgtype.Text        `db:"utm_content" json:"utm_content"`
 }
 
 type SidekickIssue struct {
