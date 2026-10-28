@@ -19,24 +19,33 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 )
 
 // addonAuthorName matches the addon_authors name check: the first part of /addons/<author>/<slug>.
 var addonAuthorName = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
-// reservedAddonAuthorNames would collide with /addons routes or read as official.
+// reservedAddonAuthorNames would collide with /addons routes or read as official. Names under
+// minAddonAuthorName characters, such as "api", "id" and "edit", are already ruled out by length.
 var reservedAddonAuthorNames = map[string]bool{
-	"api": true, "new": true, "edit": true, "me": true, "admin": true, "addons": true, "settings": true,
-	"chronicle": true, "official": true, "support": true, "help": true,
+	"admin": true, "addons": true, "author": true, "authors": true, "browse": true, "chronicle": true,
+	"create": true, "explore": true, "featured": true, "help": true, "login": true, "my-addons": true,
+	"official": true, "popular": true, "settings": true, "shared": true, "support": true, "workshop": true,
 }
 
+// minAddonAuthorName applies to new names only: the database still allows the shorter names claimed before.
+const minAddonAuthorName = 5
+
 func validAddonAuthorName(name string) bool {
-	return len(name) >= 2 && len(name) <= 32 && addonAuthorName.MatchString(name) && !reservedAddonAuthorNames[name]
+	return len(name) >= minAddonAuthorName && len(name) <= 32 && addonAuthorName.MatchString(name) && !reservedAddonAuthorNames[name]
 }
 
 // suggestAddonAuthorName turns a username into an author name: lowercase letters, digits and single hyphens.
 func suggestAddonAuthorName(username string) string {
 	name := strings.Trim(nonAddonAuthorChars.ReplaceAllString(strings.ToLower(username), "-"), "-")
+	if name != "" && len(name) < minAddonAuthorName {
+		name += "-addons"
+	}
 	return strings.TrimRight(name[:min(len(name), 32)], "-")
 }
 
@@ -112,7 +121,7 @@ func (a *API) ClaimAddonAuthor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validAddonAuthorName(req.Name) {
-		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Author names are 2-32 lowercase letters, digits and single hyphens, and some names are reserved."})
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Author names are 5-32 lowercase letters, digits and single hyphens, and some names are reserved."})
 		return
 	}
 	author, err := a.Opts.Zed.InsertAddonAuthor(r.Context(), database.InsertAddonAuthorParams{UserID: chronauth.MustAuthenticatedClaims(r.Context()).Subject, Name: req.Name})
@@ -182,6 +191,46 @@ func (a *API) GetLuaProjectPageByPath(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.writeLuaProjectPage(w, r, p)
+}
+
+// GetAddonAuthorPage lists an author's addons for /addons/<author>, keeping only those the caller may view.
+func (a *API) GetAddonAuthorPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	author, err := a.Opts.Zed.GetAddonAuthorByName(ctx, chi.URLParam(r, "author"))
+	if errors.Is(err, pgx.ErrNoRows) {
+		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{Message: "Author not found."})
+		return
+	}
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	projects, err := a.Opts.Zed.ListLuaProjectsByOwner(ctx, author.UserID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	actor, ok := authz.ActorFromContext(ctx)
+	if !ok {
+		actor = policy.New().User(uuid.Nil)
+	}
+	visible := make([]database.LuaProject, 0, len(projects))
+	for _, p := range projects {
+		allowed, err := a.Opts.Zed.CheckOne(ctx, nil, policy.New().Lua_project(p.ID).CanView_User(actor))
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		if allowed {
+			visible = append(visible, p)
+		}
+	}
+	out, err := a.luaProjectResponses(ctx, visible...)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.AddonAuthorPage{Author: author.Name, Projects: out})
 }
 
 func (a *API) ListLuaProjectContributors(w http.ResponseWriter, r *http.Request) {
@@ -295,6 +344,7 @@ func (a *API) publicLuaProjectRoutes(r chi.Router) {
 	r.Get("/lua-projects", a.ListPublicLuaProjects)
 	r.Get("/lua-projects/{projectID}", a.GetPublicLuaProject)
 	r.Get("/lua-projects/{projectID}/page", a.GetLuaProjectPage)
+	r.Get("/addons/{author}", a.GetAddonAuthorPage)
 	r.Get("/addons/{author}/{slug}", a.GetLuaProjectPageByPath)
 	r.Get("/lua-projects/{projectID}/artifacts/{hash}/package", a.DownloadLuaProject)
 }

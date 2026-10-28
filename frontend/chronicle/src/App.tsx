@@ -117,6 +117,7 @@ const APIExplorer = lazy(() => import("./pages/APIExplorer/APIExplorer").then(({
 const LuaProjectsPage = lazy(() => import("./pages/LuaProjects/LuaProjectsPage").then(({ LuaProjectsPage }) => ({ default: LuaProjectsPage })))
 const LuaProjectPage = lazy(() => import("./pages/LuaProjects/LuaProjectPage").then(({ LuaProjectPage }) => ({ default: LuaProjectPage })))
 const LuaProjectWorkspacePage = lazy(() => import("./pages/LuaProjects/LuaProjectWorkspacePage"))
+const AddonAuthorPage = lazy(() => import("./pages/LuaProjects/AddonAuthorPage").then(({ AddonAuthorPage }) => ({ default: AddonAuthorPage })))
 const AddonWorkspaceByPath = lazy(() => import("./pages/LuaProjects/LuaProjectWorkspacePage").then(({ AddonWorkspaceByPath }) => ({ default: AddonWorkspaceByPath })))
 const LuaPanelApiPage = lazy(() => import("./pages/LuaProjects/LuaPanelApiPage"))
 const AssistantDebugPage = lazy(() => import("./pages/AssistantDebug/AssistantDebugPage"))
@@ -197,8 +198,9 @@ function App() {
         <Route path="/tools" element={<ToolsPage />} />
         <Route path="/addons" element={<LuaProjectsPage />} />
         <Route path="/addons/api" element={<LuaPanelApiPage />} />
-        <Route path="/addons/:projectId" element={<LuaProjectPage />} />
-        <Route path="/addons/:projectId/edit" element={<LuaProjectWorkspacePage />} />
+        <Route path="/addons/id/:projectId" element={<LuaProjectPage />} />
+        <Route path="/addons/id/:projectId/edit" element={<LuaProjectWorkspacePage />} />
+        <Route path="/addons/:author" element={<AddonAuthorPage />} />
         <Route path="/addons/:author/:slug" element={<LuaProjectPage />} />
         <Route path="/addons/:author/:slug/edit" element={<AddonWorkspaceByPath />} />
         <Route path="/lua-projects/*" element={<RenamedPathRedirect from="/lua-projects" to="/addons" />} />

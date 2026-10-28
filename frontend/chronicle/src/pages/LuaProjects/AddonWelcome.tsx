@@ -2,8 +2,8 @@ import { useState, type FormEvent, type ReactNode } from "react"
 import { Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { AtSign, Check, Globe, LogIn, Sparkles, Tag, TriangleAlert } from "lucide-react"
-import { claimAuthor, suggestAuthor, urlNameInput } from "./api"
-import { button, card, errorMessage, primaryButton } from "./addonUi"
+import { claimAuthor, MIN_AUTHOR_NAME, suggestAuthor, urlNameInput, validAuthorName } from "./api"
+import { button, card, errorMessage, primaryButton, welcomeBox } from "./addonUi"
 
 // Each step has its own color: name (blue), build (violet), release (emerald).
 const STEPS: { icon: ReactNode; title: string; text: string; tone: string; ring: string }[] = [
@@ -14,9 +14,6 @@ const STEPS: { icon: ReactNode; title: string; text: string; tone: string; ring:
   { icon: <Tag className="size-4" />, title: "Tag a release", tone: "border-emerald-400/50 bg-emerald-400/15 text-emerald-300", ring: "ring-emerald-400/15",
     text: "Save your work to main while it is in progress. Tag a release when it is ready, and everyone can add it to their panels." },
 ]
-
-/** Boxes inside the welcome card: lighter than a card, so they do not read as boxes on boxes. */
-export const welcomeBox = "h-fit min-w-0 rounded-lg border bg-background/60 p-5"
 
 /**
  * What a newcomer sees on /addons until their first addon exists: the three steps, with `step` the one to do now.
@@ -59,7 +56,7 @@ export function ClaimAuthorForm({ onClaimed }: { onClaimed: (name: string) => vo
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
-  const valid = /^[a-z0-9]+(-[a-z0-9]+)*$/.test(name) && name.length >= 2
+  const valid = validAuthorName(name)
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -73,8 +70,9 @@ export function ClaimAuthorForm({ onClaimed }: { onClaimed: (name: string) => vo
     <div className="flex items-center gap-2 text-sm font-semibold"><span className="flex size-6 items-center justify-center rounded-full bg-sky-400/15 text-sky-300"><AtSign className="size-3.5" /></span> Step 1: your author name</div>
     <label className="block text-sm font-medium">Author name
       <input className="mt-1 w-full rounded-md border bg-background px-3 py-2 font-mono disabled:opacity-60" value={name} disabled={confirming || busy}
-        onChange={event => setTyped(urlNameInput(event.target.value))} placeholder={suggestion.isPending ? "Loading…" : "your-name"} minLength={2} maxLength={32} required /></label>
+        onChange={event => setTyped(urlNameInput(event.target.value))} placeholder={suggestion.isPending ? "Loading…" : "your-name"} minLength={MIN_AUTHOR_NAME} maxLength={32} required /></label>
     <p className="break-all font-mono text-xs text-muted-foreground">/addons/<span className="text-foreground">{name || "your-name"}</span>/my-addon</p>
+    {name && !valid && <p className="text-xs text-amber-300">Use at least {MIN_AUTHOR_NAME} characters: lowercase letters, numbers and single hyphens.</p>}
     {suggestion.data && typed === null && !confirming && <p className="text-xs text-muted-foreground">Suggested from your username. You can change it before you claim it.</p>}
     <p className="flex gap-2 rounded-md border border-border bg-muted/30 p-2.5 text-xs text-muted-foreground"><Globe className="mt-0.5 size-3.5 shrink-0" />
       <span>Becoming an addon author makes this name public. Anyone can see it on your addons and in their links, so pick one you are happy to share.</span></p>

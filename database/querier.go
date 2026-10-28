@@ -670,6 +670,8 @@ type sqlcQuerier interface {
 	ListLuaProjectContributors(ctx context.Context, projectID uuid.UUID) ([]ListLuaProjectContributorsRow, error)
 	ListLuaProjectReleases(ctx context.Context, projectID uuid.UUID) ([]LuaProjectRelease, error)
 	ListLuaProjectReleasesForProjects(ctx context.Context, projectIds []uuid.UUID) ([]LuaProjectRelease, error)
+	// An author's own addons, for /addons/<author>.
+	ListLuaProjectsByOwner(ctx context.Context, ownerID uuid.UUID) ([]LuaProject, error)
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)
 	ListMyProofRequests(ctx context.Context, arg ListMyProofRequestsParams) ([]ProofRequest, error)
 	ListObservedItemIDsForDate(ctx context.Context, arg ListObservedItemIDsForDateParams) ([]int32, error)

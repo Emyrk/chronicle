@@ -105,10 +105,32 @@ export type LuaContributorPermission = "edit" | "release"
 /** An addon with what the viewer may do with it. */
 export type LuaProjectPage = { project: LuaProject; permissions: LuaProjectPermissions }
 
-/** The addon's address: /addons/<author>/<slug>, or /addons/<id> until its owner claims an author name. */
+/** The addon's address: /addons/<author>/<slug>, or /addons/id/<id> until its owner claims an author name. */
 export function addonPath(project: Pick<LuaProject, "id" | "author" | "slug">, suffix = ""): string {
-  const base = project.author ? `/addons/${encodeURIComponent(project.author)}/${encodeURIComponent(project.slug)}` : `/addons/${encodeURIComponent(project.id)}`
+  const base = project.author ? `${authorPath(project.author)}/${encodeURIComponent(project.slug)}` : `/addons/id/${encodeURIComponent(project.id)}`
   return base + suffix
+}
+
+/** An author's addons: /addons/<author>. */
+export function authorPath(author: string): string {
+  return `/addons/${encodeURIComponent(author)}`
+}
+
+export type AuthorPage = { author: string; projects: LuaProject[] }
+
+export function getAuthorPage(author: string, signal?: AbortSignal): Promise<AuthorPage> {
+  return request<AuthorPage>(`/api/v1/addons/${encodeURIComponent(author)}`, { signal, cache: "no-store" })
+}
+
+/** Released addons anyone may use, newest release first. */
+export function listPublicProjects(signal?: AbortSignal): Promise<LuaProject[]> {
+  return request<LuaProject[]>("/api/v1/lua-projects", { signal })
+}
+
+/** New author names: 5-32 lowercase letters, digits and single hyphens. The server also reserves some names. */
+export const MIN_AUTHOR_NAME = 5
+export function validAuthorName(name: string): boolean {
+  return name.length >= MIN_AUTHOR_NAME && name.length <= 32 && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)
 }
 
 export function getProjectPage(id: string, signal?: AbortSignal): Promise<LuaProjectPage> {

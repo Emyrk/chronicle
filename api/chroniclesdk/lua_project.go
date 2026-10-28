@@ -68,6 +68,12 @@ type LuaProjectPage struct {
 	Permissions LuaProjectPermissions `json:"permissions"`
 }
 
+// AddonAuthorPage is /addons/<author>: the author and the addons the caller may view.
+type AddonAuthorPage struct {
+	Author   string       `json:"author"`
+	Projects []LuaProject `json:"projects"`
+}
+
 type AddonAuthor struct {
 	Name string `json:"name"`
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -8,7 +8,7 @@ import { addonPath, createRelease, deleteRelease, latestRelease, nextReleaseTag,
 import { AddonIcon } from "./AddonIcon"
 import { AddonReleases, VersionPicker } from "./AddonReleases"
 import { AddonAiUsage, AddonContributors } from "./AddonTeam"
-import { useAddonPage } from "./addonRoute"
+import { isAddonId, useAddonPage } from "./addonRoute"
 import { card, errorMessage, kindLabel, smallButton } from "./addonUi"
 import { defaultRef, formatBytes, isImagePath, MAIN_REF, manifestSummary, packageDownloadURL, packageSha, readPackageFiles, shortSha, type PackageFile, type PackageRef } from "./packageFiles"
 
@@ -48,7 +48,13 @@ function FileViewer({ file, images }: { file: PackageFile; images: ReadonlyMap<s
 }
 
 export function LuaProjectPage() {
-  const { projectId } = useParams<{ projectId?: string }>()
+  const { projectId, author, slug } = useParams<{ projectId?: string; author?: string; slug?: string }>()
+  // Old links were /addons/<id>/edit, which now reads as author <id> and slug "edit" (a reserved slug).
+  if (isAddonId(author) && slug === "edit") return <Navigate to={`/addons/id/${author}/edit`} replace />
+  return <AddonPage projectId={projectId} />
+}
+
+function AddonPage({ projectId }: { projectId?: string }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [search, setSearch] = useSearchParams()
@@ -60,7 +66,7 @@ export function LuaProjectPage() {
   const [busy, setBusy] = useState(false)
   const [archive, setArchive] = useState<File | null>(null)
 
-  // /addons/<id> keeps working, but shows the addon's named address once it has one.
+  // /addons/id/<id> keeps working, but shows the addon's named address once it has one.
   useEffect(() => {
     if (projectId && project?.author) navigate(addonPath(project) + location.search, { replace: true })
   }, [projectId, project, navigate, location.search])

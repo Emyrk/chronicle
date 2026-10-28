@@ -45,6 +45,7 @@ func TestLuaProjectPermissions(t *testing.T) {
 	router.Delete("/me/lua-projects/{projectID}/contributors/{author}", api.DeleteLuaProjectContributor)
 	router.Post("/me/lua-projects/{projectID}/releases", api.CreateLuaProjectRelease)
 	router.Get("/lua-projects/{projectID}/page", api.GetLuaProjectPage)
+	router.Get("/addons/{author}", api.GetAddonAuthorPage)
 	router.Get("/addons/{author}/{slug}", api.GetLuaProjectPageByPath)
 	as := func(user uuid.UUID) context.Context {
 		if user == uuid.Nil {
@@ -75,6 +76,8 @@ func TestLuaProjectPermissions(t *testing.T) {
 	require.Equal(t, http.StatusConflict, call(owner, http.MethodPost, "/me/lua-projects", create).Code)
 	require.Equal(t, http.StatusBadRequest, call(owner, http.MethodPut, "/me/addon-author", `{"name":"Steven"}`).Code)
 	require.Equal(t, http.StatusBadRequest, call(owner, http.MethodPut, "/me/addon-author", `{"name":"api"}`).Code)
+	require.Equal(t, http.StatusBadRequest, call(owner, http.MethodPut, "/me/addon-author", `{"name":"stev"}`).Code, "names need 5 characters")
+	require.Equal(t, http.StatusBadRequest, call(owner, http.MethodPut, "/me/addon-author", `{"name":"browse"}`).Code, "reserved name")
 	require.Equal(t, http.StatusCreated, call(owner, http.MethodPut, "/me/addon-author", `{"name":"steven"}`).Code)
 	require.Equal(t, http.StatusConflict, call(owner, http.MethodPut, "/me/addon-author", `{"name":"steven-2"}`).Code, "the name cannot change")
 	require.Equal(t, http.StatusConflict, call(editor, http.MethodPut, "/me/addon-author", `{"name":"steven"}`).Code, "names are unique")
@@ -97,6 +100,14 @@ func TestLuaProjectPermissions(t *testing.T) {
 	code, byPath := page(stranger, "/addons/steven/interrupt-tracker")
 	require.Equal(t, http.StatusOK, code)
 	require.Equal(t, project.ID, byPath.Project.ID)
+	rec = call(stranger, http.MethodGet, "/addons/steven", "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var authorPage chroniclesdk.AddonAuthorPage
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &authorPage))
+	require.Equal(t, "steven", authorPage.Author)
+	require.Len(t, authorPage.Projects, 1)
+	require.Equal(t, project.ID, authorPage.Projects[0].ID)
+	require.Equal(t, http.StatusNotFound, call(stranger, http.MethodGet, "/addons/nobody-here", "").Code)
 	code, _ = page(stranger, "/addons/steven/missing")
 	require.Equal(t, http.StatusNotFound, code)
 	code, mine := page(owner, byID)
@@ -180,6 +191,7 @@ func TestSuggestAddonAuthor(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "steven-m", suggestAddonAuthorName("  Steven M.!"))
 	require.Equal(t, "", suggestAddonAuthorName("✨✨"))
+	require.Equal(t, "bob-addons", suggestAddonAuthorName("Bob"), "short names are padded to the minimum")
 	require.Len(t, suggestAddonAuthorName(strings.Repeat("ab-", 20)), 32)
 
 	ctx := testutil.Context(t, testutil.WaitLong)
