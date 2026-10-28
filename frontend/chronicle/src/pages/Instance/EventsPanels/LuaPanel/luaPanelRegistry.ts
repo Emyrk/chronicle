@@ -20,9 +20,10 @@ export interface LuaProjectCatalogEntry {
   unstable?: { sha256: string; icon?: string }
 }
 
-export async function fetchOwnedLuaPanels(ownerId: string): Promise<LuaProjectCatalogEntry[]> {
+/** Panel addons the user owns or was given access to, with at least one published channel. */
+export async function fetchOwnedLuaPanels(): Promise<LuaProjectCatalogEntry[]> {
   const projects = await listProjects()
-  return projects.filter(project => project.owner_id === ownerId && project.kind === "panel" &&
+  return projects.filter(project => project.kind === "panel" &&
     !!parseLuaPanelRef(`lua:${project.id}:stable`) && (project.stable || project.unstable))
     .map(project => ({ id: project.id, kind: project.kind, name: project.name,
       stable: project.stable ?? undefined, unstable: project.unstable ?? undefined }))
@@ -35,7 +36,7 @@ export function useLuaPanelCatalog(enabled = true) {
     queryKey: ["lua-panel-catalog", ownerId], enabled: enabled && !!ownerId, staleTime: 60_000,
     queryFn: () => {
       if (!ownerId) throw new Error("Sign in to view your addons")
-      return fetchOwnedLuaPanels(ownerId)
+      return fetchOwnedLuaPanels()
     },
   })
 }

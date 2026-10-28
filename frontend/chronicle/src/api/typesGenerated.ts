@@ -29,6 +29,11 @@ export interface AddGuildMemberRequest {
     readonly user_id: string;
 }
 
+// From chroniclesdk/lua_project.go
+export interface AddonAuthor {
+    readonly name: string;
+}
+
 // From chroniclesdk/custom_panel.go
 export interface AdminActiveCustomPanelInstallation {
     readonly user_id: string;
@@ -713,6 +718,11 @@ export interface ChronicleEncounterEvents {
     readonly type: string;
     readonly payload: string;
     readonly start_time: string;
+}
+
+// From chroniclesdk/lua_project.go
+export interface ClaimAddonAuthorRequest {
+    readonly name: string;
 }
 
 // From chroniclesdk/class_buffs.go
@@ -2013,6 +2023,17 @@ export interface InferenceConnectionsResponse {
 }
 
 // From chroniclesdk/inference.go
+/**
+ * InferenceContributorUsage is one person's usage within a shared context, such as an addon project.
+ */
+export interface InferenceContributorUsage {
+    readonly user_id: string;
+    readonly username: string;
+    readonly author?: string;
+    readonly usage: InferenceUsage;
+}
+
+// From chroniclesdk/inference.go
 export interface InferenceDebugPreviewRequest {
     readonly assistant_id: string;
     readonly thread_id?: string;
@@ -2838,6 +2859,10 @@ export interface LuaProject {
     readonly name: string;
     readonly slug: string;
     readonly revision: number;
+    /**
+     * Author is the owner's addon author name, the first part of /addons/<author>/<slug>. Absent until claimed.
+     */
+    readonly author?: string;
     readonly draft_sha256?: string;
     readonly draft_icon?: string;
     readonly unstable?: LuaProjectChannel;
@@ -2855,6 +2880,46 @@ export interface LuaProjectChannel {
      * Icon is the release's project.json "icon", absent when it named none.
      */
     readonly icon?: string;
+}
+
+// From chroniclesdk/lua_project.go
+/**
+ * LuaProjectContributor is someone the owner shared an addon with.
+ */
+export interface LuaProjectContributor {
+    readonly user_id: string;
+    /**
+     * Author is their addon author name; Username is their display name.
+     */
+    readonly author?: string;
+    readonly username: string;
+    /**
+     * Permissions are any of "edit", "publish_unstable" and "publish".
+     */
+    readonly permissions: readonly string[];
+    readonly added_at: string;
+}
+
+// From chroniclesdk/lua_project.go
+/**
+ * LuaProjectPage is an addon as the viewing user may see it: the draft and unstable release only with edit.
+ */
+export interface LuaProjectPage {
+    readonly project: LuaProject;
+    readonly permissions: LuaProjectPermissions;
+}
+
+// From chroniclesdk/lua_project.go
+/**
+ * LuaProjectPermissions are what the viewing user may do with an addon.
+ */
+export interface LuaProjectPermissions {
+    readonly view: boolean;
+    readonly use: boolean;
+    readonly edit: boolean;
+    readonly publish_unstable: boolean;
+    readonly publish: boolean;
+    readonly manage: boolean;
 }
 
 // From chroniclesdk/lua_project.go
@@ -3243,6 +3308,11 @@ export interface ProofSubject extends ProofCharacter {
     readonly guild_name?: string;
     readonly status: string;
     readonly warning?: string;
+}
+
+// From chroniclesdk/lua_project.go
+export interface PutLuaProjectContributorRequest {
+    readonly permissions: readonly string[];
 }
 
 // From chroniclesdk/raid_compositions.go

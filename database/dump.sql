@@ -190,6 +190,13 @@ CREATE FUNCTION river_job_state_in_bitmask(bitmask bit, state river_job_state) R
     END = 1;
 $$;
 
+CREATE TABLE addon_authors (
+    user_id uuid NOT NULL,
+    name text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT addon_authors_name_check CHECK (((name ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text) AND ((char_length(name) >= 2) AND (char_length(name) <= 32))))
+);
+
 CREATE TABLE application_modification_requests (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     application_id uuid NOT NULL,
@@ -1622,6 +1629,16 @@ CREATE TABLE lua_project_artifacts (
     CONSTRAINT lua_project_artifacts_uncompressed_size_bytes_check CHECK ((uncompressed_size_bytes >= 0))
 );
 
+CREATE TABLE lua_project_contributors (
+    project_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    permissions text[] NOT NULL,
+    added_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT lua_project_contributors_permissions_check CHECK (((cardinality(permissions) > 0) AND (permissions <@ ARRAY['edit'::text, 'publish_unstable'::text, 'publish'::text])))
+);
+
 CREATE TABLE lua_projects (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     owner_id uuid NOT NULL,
@@ -2599,6 +2616,12 @@ ALTER TABLE ONLY river_job ALTER COLUMN id SET DEFAULT nextval('river_job_id_seq
 
 ALTER TABLE ONLY river_notification ALTER COLUMN id SET DEFAULT nextval('river_notification_id_seq'::regclass);
 
+ALTER TABLE ONLY addon_authors
+    ADD CONSTRAINT addon_authors_name_key UNIQUE (name);
+
+ALTER TABLE ONLY addon_authors
+    ADD CONSTRAINT addon_authors_pkey PRIMARY KEY (user_id);
+
 ALTER TABLE ONLY application_modification_requests
     ADD CONSTRAINT application_modification_requests_pkey PRIMARY KEY (id);
 
@@ -2925,6 +2948,9 @@ ALTER TABLE ONLY lua_project_artifact_gc
 
 ALTER TABLE ONLY lua_project_artifacts
     ADD CONSTRAINT lua_project_artifacts_pkey PRIMARY KEY (project_id, hash);
+
+ALTER TABLE ONLY lua_project_contributors
+    ADD CONSTRAINT lua_project_contributors_pkey PRIMARY KEY (project_id, user_id);
 
 ALTER TABLE ONLY lua_projects
     ADD CONSTRAINT lua_projects_owner_id_slug_key UNIQUE (owner_id, slug);
@@ -3436,6 +3462,8 @@ CREATE UNIQUE INDEX log_instance_youtube_timestamped_slug_idx ON log_instance_yo
 
 CREATE UNIQUE INDEX log_instances_hashed_slug_idx ON log_instances USING btree (hashed_slug) WHERE (hashed_slug IS NOT NULL);
 
+CREATE INDEX lua_project_contributors_user_idx ON lua_project_contributors USING btree (user_id);
+
 CREATE INDEX lua_projects_owner_idx ON lua_projects USING btree (owner_id, updated_at DESC);
 
 CREATE INDEX lua_projects_public_idx ON lua_projects USING btree (stable_published_at DESC) WHERE (stable_hash IS NOT NULL);
@@ -3515,6 +3543,9 @@ CREATE TRIGGER trg_cleanup_after_untrack AFTER DELETE ON user_tracked_layouts FO
 CREATE TRIGGER trg_reattach_by_slug AFTER INSERT ON log_instances FOR EACH ROW EXECUTE FUNCTION reattach_by_slug();
 
 CREATE TRIGGER trigger_insert_default_data_grant AFTER INSERT ON users FOR EACH ROW EXECUTE FUNCTION insert_default_data_grant();
+
+ALTER TABLE ONLY addon_authors
+    ADD CONSTRAINT addon_authors_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY application_modification_requests
     ADD CONSTRAINT application_modification_requests_application_id_fkey FOREIGN KEY (application_id) REFERENCES server_applications(id) ON DELETE CASCADE;
@@ -3842,6 +3873,15 @@ ALTER TABLE ONLY log_instances
 
 ALTER TABLE ONLY lua_project_artifacts
     ADD CONSTRAINT lua_project_artifacts_project_id_fkey FOREIGN KEY (project_id) REFERENCES lua_projects(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY lua_project_contributors
+    ADD CONSTRAINT lua_project_contributors_added_by_fkey FOREIGN KEY (added_by) REFERENCES users(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY lua_project_contributors
+    ADD CONSTRAINT lua_project_contributors_project_id_fkey FOREIGN KEY (project_id) REFERENCES lua_projects(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY lua_project_contributors
+    ADD CONSTRAINT lua_project_contributors_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY lua_projects
     ADD CONSTRAINT lua_projects_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES users(id);

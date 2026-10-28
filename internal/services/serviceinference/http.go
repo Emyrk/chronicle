@@ -128,6 +128,7 @@ func (s *Service) routes() http.Handler {
 	r.Get("/threads/{threadID}", s.getThread)
 	r.Delete("/threads/{threadID}/messages", s.clearThread)
 	r.Get("/usage", s.getContextUsage)
+	r.Get("/usage/lua-project/{project}/contributors", s.getLuaProjectContributorUsage)
 	r.Post("/debug/preview", s.previewDebug)
 	r.Post("/runs/{runID}/client-tools/{toolCallID}", s.continueClientTool)
 	r.Post("/runs", s.run)
@@ -423,11 +424,7 @@ func (s *Service) luaProjectForUser(r *http.Request, identifier string) (databas
 	if !allowed {
 		return database.LuaProject{}, pgx.ErrNoRows
 	}
-	technicalAdmin, err := s.zed.CheckOne(r.Context(), nil, policy.New().GlobalChronicle().CanAdminister_authz_User(actor))
-	if err != nil {
-		return database.LuaProject{}, err
-	}
-	return s.db.GetOwnerLuaProject(r.Context(), database.GetOwnerLuaProjectParams{ID: id, OwnerID: userID(r), TechnicalAdmin: technicalAdmin})
+	return s.db.GetLuaProject(r.Context(), id)
 }
 
 // authorizeThreadContext re-checks access to a durable thread's context on every use.
@@ -668,6 +665,30 @@ func usageSDK(prompt, completion, cached, reasoning, costNanos, costedCalls, cal
 		usage.CostUSD = &cost
 	}
 	return usage
+}
+
+// getLuaProjectContributorUsage breaks an addon's AI usage down by person, for anyone who may edit it.
+func (s *Service) getLuaProjectContributorUsage(w http.ResponseWriter, r *http.Request) {
+	project, err := s.luaProjectForUser(r, chi.URLParam(r, "project"))
+	if err != nil {
+		httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "You cannot edit this addon."})
+		return
+	}
+	rows, err := s.db.ListInferenceContextUsageByUser(r.Context(), database.ListInferenceContextUsageByUserParams{
+		ContextType: pgtype.Text{String: "lua_project", Valid: true}, ContextID: pgtype.Text{String: project.ID.String(), Valid: true},
+	})
+	if err != nil {
+		s.internalError(w, "load addon usage", err)
+		return
+	}
+	out := make([]chroniclesdk.InferenceContributorUsage, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, chroniclesdk.InferenceContributorUsage{
+			UserID: row.UserID, Username: row.Username, Author: row.AuthorName.String,
+			Usage: usageSDK(row.PromptTokens, row.CompletionTokens, row.CachedTokens, row.ReasoningTokens, row.CostNanos, row.CostedCalls, row.Calls),
+		})
+	}
+	httpapi.Write(r.Context(), w, http.StatusOK, out)
 }
 
 // getContextUsage totals the caller's own usage for a context, such as every chat about one addon project.

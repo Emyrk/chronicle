@@ -291,3 +291,16 @@ INSERT INTO inference_user_config (user_id, config)
 VALUES (@user_id, jsonb_build_object(@key::text, @value::jsonb))
 ON CONFLICT (user_id) DO UPDATE
 SET config = inference_user_config.config || jsonb_build_object(@key::text, @value::jsonb), updated_at = now();
+
+-- name: ListInferenceContextUsageByUser :many
+-- Everyone's usage for one context, e.g. each contributor's Workshop chats on an addon.
+SELECT usage.user_id, users.username, author.name AS author_name,
+  SUM(usage.prompt_tokens)::bigint AS prompt_tokens, SUM(usage.completion_tokens)::bigint AS completion_tokens,
+  SUM(usage.cached_tokens)::bigint AS cached_tokens, SUM(usage.reasoning_tokens)::bigint AS reasoning_tokens,
+  COALESCE(SUM(usage.cost_nanos), 0)::bigint AS cost_nanos, COUNT(usage.cost_nanos)::bigint AS costed_calls, COUNT(*)::bigint AS calls
+FROM inference_usage usage
+JOIN users ON users.id = usage.user_id
+LEFT JOIN addon_authors author ON author.user_id = usage.user_id
+WHERE usage.context_type = @context_type AND usage.context_id = @context_id
+GROUP BY usage.user_id, users.username, author.name
+ORDER BY cost_nanos DESC, calls DESC;

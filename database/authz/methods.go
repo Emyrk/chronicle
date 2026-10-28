@@ -385,11 +385,62 @@ func (z *interceptor) CreateLuaProject(ctx context.Context, arg database.CreateL
 		return project, err
 	}
 	b := policy.New()
-	b.Lua_project(project.ID).Owner(b.User(arg.OwnerID)).Chronicle(b.GlobalChronicle()).Public_viewerWildcard()
+	// Everyone may view and use a new addon until private addons exist; the owner manages it.
+	b.Lua_project(project.ID).Owner(b.User(arg.OwnerID)).Chronicle(b.GlobalChronicle()).ViewerWildcard().RunnerWildcard()
 	if _, err := z.Write(ctx, *b.Txn()); err != nil {
 		return database.LuaProject{}, fmt.Errorf("write lua project relations: %w", err)
 	}
 	return project, nil
+}
+
+// luaContributorRelations maps lua_project_contributors permissions to SpiceDB relations.
+var luaContributorRelations = []string{"edit", "publish_unstable", "publish"}
+
+// UpsertLuaProjectContributor replaces one contributor's grants in Postgres and SpiceDB together.
+func (z *interceptor) UpsertLuaProjectContributor(ctx context.Context, arg database.UpsertLuaProjectContributorParams) (database.LuaProjectContributor, error) {
+	contributor, err := z.Store.UpsertLuaProjectContributor(ctx, arg)
+	if err != nil {
+		return contributor, err
+	}
+	b := policy.New()
+	project, user := b.Lua_project(arg.ProjectID), b.User(arg.UserID)
+	granted := map[string]bool{}
+	for _, permission := range arg.Permissions {
+		granted[permission] = true
+	}
+	for _, permission := range luaContributorRelations {
+		relates := project.Delete()
+		if granted[permission] {
+			relates = project.Touch()
+		}
+		switch permission {
+		case "edit":
+			relates.Editor(user)
+		case "publish_unstable":
+			relates.Unstable_publisher(user)
+		case "publish":
+			relates.Publisher(user)
+		}
+	}
+	if _, err := z.Write(ctx, *b.Txn()); err != nil {
+		return database.LuaProjectContributor{}, fmt.Errorf("write lua project contributor relations: %w", err)
+	}
+	return contributor, nil
+}
+
+// DeleteLuaProjectContributor removes a contributor and every grant they held.
+func (z *interceptor) DeleteLuaProjectContributor(ctx context.Context, arg database.DeleteLuaProjectContributorParams) (int64, error) {
+	removed, err := z.Store.DeleteLuaProjectContributor(ctx, arg)
+	if err != nil {
+		return removed, err
+	}
+	b := policy.New()
+	user := b.User(arg.UserID)
+	b.Lua_project(arg.ProjectID).Delete().Editor(user).Unstable_publisher(user).Publisher(user)
+	if _, err := z.Write(ctx, *b.Txn()); err != nil {
+		return 0, fmt.Errorf("delete lua project contributor relations: %w", err)
+	}
+	return removed, nil
 }
 
 func (z *interceptor) CreateRaidComposition(ctx context.Context, arg database.CreateRaidCompositionParams) (database.RaidComposition, error) {

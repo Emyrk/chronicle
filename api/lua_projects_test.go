@@ -44,30 +44,19 @@ func TestLuaProjectOwnerAndPublication(t *testing.T) {
 	}
 	project, err := db.CreateLuaProject(ctx, database.CreateLuaProjectParams{OwnerID: owner, Kind: "panel", Name: "Example", Slug: "example"})
 	require.NoError(t, err)
-	_, err = db.GetOwnerLuaProject(ctx, database.GetOwnerLuaProjectParams{ID: project.ID, OwnerID: other})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
-	adminProject, err := db.GetOwnerLuaProject(ctx, database.GetOwnerLuaProjectParams{ID: project.ID, OwnerID: technicalAdmin, TechnicalAdmin: true})
-	require.NoError(t, err)
-	require.Equal(t, project.ID, adminProject.ID)
-	_, err = db.GetOwnerLuaProject(ctx, database.GetOwnerLuaProjectParams{ID: project.ID, OwnerID: technicalAdmin})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
 	_, err = db.GetPublicLuaProject(ctx, project.ID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	_, err = db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, OwnerID: other, Hash: pgtype.Text{String: "draft", Valid: true}, ExpectedRevision: 1})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
-	_, err = db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, OwnerID: owner, Hash: pgtype.Text{String: "draft", Valid: true}, Icon: pgtype.Text{String: "swords", Valid: true}, ExpectedRevision: 1})
+	_, err = db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: "draft", Valid: true}, Icon: pgtype.Text{String: "swords", Valid: true}, ExpectedRevision: 1})
 	require.NoError(t, err)
-	_, err = db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, OwnerID: owner, Hash: pgtype.Text{String: "stale", Valid: true}, ExpectedRevision: 1})
+	_, err = db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: "stale", Valid: true}, ExpectedRevision: 1})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	unstable, err := db.PublishLuaProjectUnstable(ctx, database.PublishLuaProjectUnstableParams{ID: project.ID, OwnerID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 2})
+	unstable, err := db.PublishLuaProjectUnstable(ctx, database.PublishLuaProjectUnstableParams{ID: project.ID, ActorID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 2})
 	require.NoError(t, err)
 	require.Equal(t, "draft", unstable.UnstableHash.String)
 	require.Equal(t, "swords", unstable.UnstableIcon.String, "the icon travels with the release")
-	_, err = db.PromoteLuaProjectStable(ctx, database.PromoteLuaProjectStableParams{ID: project.ID, OwnerID: uuid.NullUUID{UUID: other, Valid: true}, ExpectedRevision: 3, TestedSha256: pgtype.Text{String: "draft", Valid: true}})
+	_, err = db.PromoteLuaProjectStable(ctx, database.PromoteLuaProjectStableParams{ID: project.ID, ActorID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 3, TestedSha256: pgtype.Text{String: "untested", Valid: true}})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	_, err = db.PromoteLuaProjectStable(ctx, database.PromoteLuaProjectStableParams{ID: project.ID, OwnerID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 3, TestedSha256: pgtype.Text{String: "untested", Valid: true}})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
-	stable, err := db.PromoteLuaProjectStable(ctx, database.PromoteLuaProjectStableParams{ID: project.ID, OwnerID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 3, TestedSha256: pgtype.Text{String: "draft", Valid: true}})
+	stable, err := db.PromoteLuaProjectStable(ctx, database.PromoteLuaProjectStableParams{ID: project.ID, ActorID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 3, TestedSha256: pgtype.Text{String: "draft", Valid: true}})
 	require.NoError(t, err)
 	require.Equal(t, unstable.UnstableHash, stable.StableHash)
 	require.Equal(t, "swords", stable.StableIcon.String)
@@ -75,21 +64,17 @@ func TestLuaProjectOwnerAndPublication(t *testing.T) {
 	visible, err := db.GetPublicLuaProject(ctx, project.ID)
 	require.NoError(t, err)
 	require.Equal(t, stable.StableHash, visible.StableHash)
-	_, err = db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, OwnerID: technicalAdmin, Hash: pgtype.Text{String: "admin-draft", Valid: true}, ExpectedRevision: 4})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
-	adminEdited, err := db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, OwnerID: technicalAdmin, TechnicalAdmin: true, Hash: pgtype.Text{String: "admin-draft", Valid: true}, ExpectedRevision: 4})
+	adminEdited, err := db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: "admin-draft", Valid: true}, ExpectedRevision: 4})
 	require.NoError(t, err)
 	require.Equal(t, owner, adminEdited.OwnerID, "admin update must not transfer ownership")
-	_, err = db.PublishLuaProjectUnstable(ctx, database.PublishLuaProjectUnstableParams{ID: project.ID, OwnerID: uuid.NullUUID{UUID: technicalAdmin, Valid: true}, ExpectedRevision: 5})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
-	adminPublished, err := db.PublishLuaProjectUnstable(ctx, database.PublishLuaProjectUnstableParams{ID: project.ID, OwnerID: uuid.NullUUID{UUID: technicalAdmin, Valid: true}, TechnicalAdmin: true, ExpectedRevision: 5})
+	adminPublished, err := db.PublishLuaProjectUnstable(ctx, database.PublishLuaProjectUnstableParams{ID: project.ID, ActorID: uuid.NullUUID{UUID: technicalAdmin, Valid: true}, ExpectedRevision: 5})
 	require.NoError(t, err)
 	require.Equal(t, technicalAdmin, adminPublished.UnstablePublishedBy.UUID)
-	// The install and preview reads must never expose another owner's draft.
+	// SpiceDB decides who may read drafts (see TestLuaProjectPermissions); SQL only scopes by project.
 	draft, err := db.CreateLuaProject(ctx, database.CreateLuaProjectParams{OwnerID: owner, Kind: "panel", Name: "Preview", Slug: "preview"})
 	require.NoError(t, err)
 	packageHash := strings.Repeat("a", 64)
-	_, err = db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: draft.ID, OwnerID: owner, Hash: pgtype.Text{String: packageHash, Valid: true}, ExpectedRevision: 1})
+	_, err = db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: draft.ID, Hash: pgtype.Text{String: packageHash, Valid: true}, ExpectedRevision: 1})
 	require.NoError(t, err)
 	objectKey := draft.ID.String() + "/test.zip"
 	storedKey, err := db.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: draft.ID, Hash: packageHash, ObjectKey: objectKey, MimeType: "application/zip", UncompressedSizeBytes: 42, StoredSizeBytes: 64})
@@ -105,14 +90,7 @@ func TestLuaProjectOwnerAndPublication(t *testing.T) {
 	require.False(t, artifact.ContentEncoding.Valid)
 	require.Equal(t, int64(42), artifact.UncompressedSizeBytes)
 	require.Equal(t, int64(64), artifact.StoredSizeBytes)
-	_, err = db.GetOwnerLuaProjectDraftPackage(ctx, database.GetOwnerLuaProjectDraftPackageParams{ID: draft.ID, OwnerID: other})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
-	adminPreview, err := db.GetOwnerLuaProjectDraftPackage(ctx, database.GetOwnerLuaProjectDraftPackageParams{ID: draft.ID, OwnerID: technicalAdmin, TechnicalAdmin: true})
-	require.NoError(t, err)
-	require.Equal(t, objectKey, adminPreview.ObjectKey)
-	require.Equal(t, "application/zip", adminPreview.MimeType)
-	require.False(t, adminPreview.ContentEncoding.Valid)
-	preview, err := db.GetOwnerLuaProjectDraftPackage(ctx, database.GetOwnerLuaProjectDraftPackageParams{ID: draft.ID, OwnerID: owner})
+	preview, err := db.GetLuaProjectDraftPackage(ctx, draft.ID)
 	require.NoError(t, err)
 	require.Equal(t, objectKey, preview.ObjectKey)
 	require.Equal(t, "application/zip", preview.MimeType)
@@ -121,11 +99,11 @@ func TestLuaProjectOwnerAndPublication(t *testing.T) {
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	// A replaced draft queues its former object key for post-commit removal.
 	newHash := strings.Repeat("b", 64)
-	_, err = db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: draft.ID, OwnerID: owner, Hash: pgtype.Text{String: newHash, Valid: true}, ExpectedRevision: 2})
+	_, err = db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: draft.ID, Hash: pgtype.Text{String: newHash, Valid: true}, ExpectedRevision: 2})
 	require.NoError(t, err)
 	_, err = db.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: draft.ID, Hash: newHash, ObjectKey: draft.ID.String() + "/new.zip", MimeType: "application/zip", UncompressedSizeBytes: 1, StoredSizeBytes: 1})
 	require.NoError(t, err)
-	require.NoError(t, db.PruneLuaProjectArtifacts(ctx, database.PruneLuaProjectArtifactsParams{ID: draft.ID, OwnerID: owner}))
+	require.NoError(t, db.PruneLuaProjectArtifacts(ctx, draft.ID))
 	garbage, err := db.ListLuaProjectArtifactGarbage(ctx)
 	require.NoError(t, err)
 	require.Contains(t, garbage, objectKey)
@@ -134,9 +112,9 @@ func TestLuaProjectOwnerAndPublication(t *testing.T) {
 
 	guide, err := db.CreateLuaProject(ctx, database.CreateLuaProjectParams{OwnerID: owner, Kind: "guide", Name: "Future", Slug: "future"})
 	require.NoError(t, err)
-	_, err = db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: guide.ID, OwnerID: owner, Hash: pgtype.Text{String: "draft", Valid: true}, ExpectedRevision: 1})
+	_, err = db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: guide.ID, Hash: pgtype.Text{String: "draft", Valid: true}, ExpectedRevision: 1})
 	require.NoError(t, err)
-	_, err = db.PublishLuaProjectUnstable(ctx, database.PublishLuaProjectUnstableParams{ID: guide.ID, OwnerID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 2})
+	_, err = db.PublishLuaProjectUnstable(ctx, database.PublishLuaProjectUnstableParams{ID: guide.ID, ActorID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 2})
 	require.True(t, errors.Is(err, pgx.ErrNoRows))
 }
 
@@ -158,13 +136,13 @@ func TestLuaArtifactGarbageRemoval(t *testing.T) {
 	key := luaProjectObjectKey(project.ID)
 	_, err = objects.UploadFile(ctx, luaProjectBucket, key, bytes.NewReader([]byte("zip")))
 	require.NoError(t, err)
-	_, err = zed.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, OwnerID: owner, Hash: pgtype.Text{String: oldHash, Valid: true}, ExpectedRevision: 1})
+	_, err = zed.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: oldHash, Valid: true}, ExpectedRevision: 1})
 	require.NoError(t, err)
 	_, err = zed.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: project.ID, Hash: oldHash, ObjectKey: key, MimeType: "application/zip", UncompressedSizeBytes: 1, StoredSizeBytes: 1})
 	require.NoError(t, err)
-	_, err = zed.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, OwnerID: owner, Hash: pgtype.Text{String: newHash, Valid: true}, ExpectedRevision: 2})
+	_, err = zed.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: newHash, Valid: true}, ExpectedRevision: 2})
 	require.NoError(t, err)
-	require.NoError(t, zed.PruneLuaProjectArtifacts(ctx, database.PruneLuaProjectArtifactsParams{ID: project.ID, OwnerID: owner}))
+	require.NoError(t, zed.PruneLuaProjectArtifacts(ctx, project.ID))
 
 	backlog := prometheus.NewGauge(prometheus.GaugeOpts{Name: "lua_test_gc_backlog"})
 	api := &API{Opts: &Options{Zed: zed, Storage: objects, Logger: slog.Default()}, luaArtifactBacklog: backlog}
@@ -248,7 +226,7 @@ func TestLuaUploadIntentFinalization(t *testing.T) {
 	require.NoError(t, zed.RegisterLuaProjectUpload(ctx, key))
 	hash := strings.Repeat("a", 64)
 	require.NoError(t, zed.InTx(ctx, func(tx database.Store) error {
-		if _, err := tx.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, OwnerID: owner, Hash: pgtype.Text{String: hash, Valid: true}, ExpectedRevision: 1}); err != nil {
+		if _, err := tx.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: hash, Valid: true}, ExpectedRevision: 1}); err != nil {
 			return err
 		}
 		if _, err := tx.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: project.ID, Hash: hash, ObjectKey: key, MimeType: "application/zip", UncompressedSizeBytes: 1, StoredSizeBytes: 1}); err != nil {
@@ -280,7 +258,7 @@ func TestLuaUploadIntentFinalization(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, claimed, staleKey)
 	err = zed.InTx(ctx, func(tx database.Store) error {
-		if _, err := tx.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, OwnerID: owner, Hash: pgtype.Text{String: strings.Repeat("b", 64), Valid: true}, ExpectedRevision: 2}); err != nil {
+		if _, err := tx.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: strings.Repeat("b", 64), Valid: true}, ExpectedRevision: 2}); err != nil {
 			return err
 		}
 		if _, err := tx.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: project.ID, Hash: strings.Repeat("b", 64), ObjectKey: staleKey, MimeType: "application/zip", UncompressedSizeBytes: 1, StoredSizeBytes: 1}); err != nil {
@@ -290,7 +268,7 @@ func TestLuaUploadIntentFinalization(t *testing.T) {
 		return err
 	}, nil)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	unchanged, err := zed.GetOwnerLuaProject(ctx, database.GetOwnerLuaProjectParams{ID: project.ID, OwnerID: owner})
+	unchanged, err := zed.GetLuaProject(ctx, project.ID)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, unchanged.Revision)
 }
@@ -326,7 +304,7 @@ func TestLuaPublishedHashCaching(t *testing.T) {
 	key := luaProjectObjectKey(project.ID)
 	_, err = objects.UploadFile(ctx, luaProjectBucket, key, bytes.NewReader(data))
 	require.NoError(t, err)
-	_, err = zed.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, OwnerID: owner, Hash: pgtype.Text{String: hash, Valid: true}, ExpectedRevision: 1})
+	_, err = zed.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: hash, Valid: true}, ExpectedRevision: 1})
 	require.NoError(t, err)
 	_, err = zed.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: project.ID, Hash: hash, ObjectKey: key, MimeType: "application/zip", UncompressedSizeBytes: int64(len(data)), StoredSizeBytes: int64(len(data))})
 	require.NoError(t, err)
@@ -356,7 +334,7 @@ func TestLuaPublishedHashCaching(t *testing.T) {
 	require.Equal(t, "private, no-store", rec.Header().Get("Cache-Control"))
 	require.Equal(t, http.StatusNotFound, get("/me/lua-projects/"+project.ID.String()+"/draft/"+strings.Repeat("a", 64)+"/package", ownerCtx, nil).Code)
 	require.Equal(t, http.StatusForbidden, get(draftURL, ctx, nil).Code)
-	_, err = zed.PublishLuaProjectUnstable(ctx, database.PublishLuaProjectUnstableParams{ID: project.ID, OwnerID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 2})
+	_, err = zed.PublishLuaProjectUnstable(ctx, database.PublishLuaProjectUnstableParams{ID: project.ID, ActorID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 2})
 	require.NoError(t, err)
 	rec = get(url, ctx, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -389,18 +367,21 @@ func TestLuaPublishedHashCaching(t *testing.T) {
 	nextKey := luaProjectObjectKey(project.ID)
 	_, err = objects.UploadFile(ctx, luaProjectBucket, nextKey, bytes.NewReader(nextData))
 	require.NoError(t, err)
-	_, err = zed.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, OwnerID: owner, Hash: pgtype.Text{String: nextHash, Valid: true}, ExpectedRevision: 3})
+	_, err = zed.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: nextHash, Valid: true}, ExpectedRevision: 3})
 	require.NoError(t, err)
 	_, err = zed.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: project.ID, Hash: nextHash, ObjectKey: nextKey, MimeType: "application/zip", UncompressedSizeBytes: int64(len(nextData)), StoredSizeBytes: int64(len(nextData))})
 	require.NoError(t, err)
-	_, err = zed.PublishLuaProjectUnstable(ctx, database.PublishLuaProjectUnstableParams{ID: project.ID, OwnerID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 4})
+	_, err = zed.PublishLuaProjectUnstable(ctx, database.PublishLuaProjectUnstableParams{ID: project.ID, ActorID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 4})
 	require.NoError(t, err)
 	require.Equal(t, http.StatusNotFound, get(url, ctx, map[string]string{"If-None-Match": `"` + hash + `"`}).Code, "rotated hashes cannot be revalidated")
 	url = "/lua-projects/" + project.ID.String() + "/artifacts/" + nextHash + "/package"
 	require.Equal(t, http.StatusOK, get(url, ctx, nil).Code)
 
 	publicRelation := policy.New().Lua_project(project.ID).Object()
-	require.NoError(t, zed.Delete(ctx, rel.NewPreconditionedFilter(rel.NewFilter(publicRelation.Typ, publicRelation.ID, "public_viewer"))))
+	// Making the addon private removes both public grants: reading the source and running it.
+	for _, relation := range []string{"viewer", "runner"} {
+		require.NoError(t, zed.Delete(ctx, rel.NewPreconditionedFilter(rel.NewFilter(publicRelation.Typ, publicRelation.ID, relation))))
+	}
 	require.Equal(t, http.StatusForbidden, get(url, ctx, map[string]string{"If-None-Match": `"` + nextHash + `"`}).Code)
 	rec = get(url, authz.AsUser(ctx, owner), nil)
 	require.Equal(t, http.StatusOK, rec.Code)

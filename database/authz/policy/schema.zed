@@ -175,10 +175,25 @@ definition layout {
 definition lua_project {
   relation chronicle: chronicle
   relation owner: user
+  // Older projects grant both view and use to everyone through public_viewer.
   relation public_viewer: user:*
+  // viewer may read the addon page and source; runner may run it in a panel. New projects grant
+  // both to user:*; removing them makes an addon private.
+  relation viewer: user | user:*
+  relation runner: user | user:*
+  // Contributor grants, chosen per person by the owner.
+  relation editor: user
+  relation unstable_publisher: user
+  relation publisher: user
 
-  permission update = owner + chronicle->administer_authz
-  permission view = owner + public_viewer + chronicle->administer_authz
+  permission manage = owner + chronicle->administer_authz
+  permission edit = editor + manage
+  permission publish_unstable = unstable_publisher + manage
+  permission publish = publisher + manage
+  permission view = viewer + public_viewer + edit + publish_unstable + publish
+  permission use = runner + public_viewer + edit + publish_unstable + publish
+  // update is the Workshop's permission: editing the working copy and its AI chat.
+  permission update = edit
 }
 
 // Talent builds are always publicly viewable — no view permission needed.
