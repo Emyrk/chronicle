@@ -1,0 +1,122 @@
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
+import { X } from "lucide-react";
+import { useSiteConfig } from "@/api/queries";
+import { ARRIVAL_PARAM, chooserURL, parseArrival, type ChooseArrival } from "./chooseArrival";
+
+const AUTO_HIDE_MS = 15_000;
+
+const HEADINGS: Record<ChooseArrival, string> = {
+  saved: "Taken here because of your saved choice",
+  remembered: "Choice saved — future links will open here",
+  picked: "Opened on your chosen community",
+};
+
+/**
+ * Explains a redirect from the community chooser (choose.<primary-domain>):
+ * animates the hop from the chooser to this community and offers links back
+ * to change or forget the saved choice. The choice lives in the chooser
+ * origin's localStorage, so changing it has to happen there.
+ */
+export function ChooseArrivalNotice() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const { data: siteConfig } = useSiteConfig();
+  // Captured once so stripping the param below doesn't hide the notice.
+  const [arrival] = useState(() => parseArrival(searchParams.get(ARRIVAL_PARAM)));
+  const [visible, setVisible] = useState(arrival !== null);
+  const [paused, setPaused] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Keep the param out of the address bar so a copied URL doesn't replay it.
+  useEffect(() => {
+    if (!searchParams.has(ARRIVAL_PARAM)) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete(ARRIVAL_PARAM);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!visible || paused) return;
+    const timer = setTimeout(() => setVisible(false), AUTO_HIDE_MS);
+    return () => clearTimeout(timer);
+  }, [visible, paused]);
+
+  const chooseOrigin = siteConfig?.choose_url;
+  if (!visible || !arrival || !siteConfig || !chooseOrigin) return null;
+
+  const tenant = siteConfig.tenant;
+  const branding = tenant?.branding ?? siteConfig.branding;
+  const destName = branding?.display_name || tenant?.name || "Chronicle";
+  const destLogo = branding?.square_logo || "/c/chronicle/ChronicleIconSquare.webp";
+  const chooseHost = new URL(chooseOrigin).host;
+  const manageHref = chooserURL(chooseOrigin, location, "manage");
+  const forgetHref = chooserURL(chooseOrigin, location, "forget");
+  const hasSavedChoice = arrival !== "picked";
+
+  return (
+    <div className="pointer-events-none fixed inset-x-0 top-3 z-50 flex justify-center px-4">
+      <div
+        ref={cardRef}
+        role="status"
+        className="pointer-events-auto w-full max-w-md rounded-xl border border-border bg-card/95 p-4 shadow-2xl backdrop-blur animate-choose-drop"
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
+        onFocus={() => setPaused(true)}
+        onBlur={(e) => {
+          if (!cardRef.current?.contains(e.relatedTarget as Node | null)) setPaused(false);
+        }}
+      >
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="truncate rounded-full border border-border px-2 py-0.5 font-mono">{chooseHost}</span>
+              <span aria-hidden="true" className="relative h-px min-w-8 flex-1 bg-border">
+                <span className="animate-choose-travel absolute -top-1 h-2 w-2 rounded-full bg-primary" />
+              </span>
+              <span className="animate-choose-arrive flex shrink-0 items-center gap-1.5 font-medium text-foreground">
+                <img src={destLogo} alt="" className="h-5 w-5 rounded object-contain" />
+                <span className="max-w-32 truncate">{destName}</span>
+              </span>
+            </div>
+            <p className="mt-3 text-sm font-semibold text-foreground">{HEADINGS[arrival]}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {hasSavedChoice
+                ? `Links from ${chooseHost} now open on ${destName} in this browser.`
+                : `This link came from ${chooseHost}.`}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <a
+                href={manageHref}
+                className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                {hasSavedChoice ? "Change choice" : "Pick a different community"}
+              </a>
+              {hasSavedChoice && (
+                <a
+                  href={forgetHref}
+                  className="rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  Forget choice
+                </a>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            onClick={() => setVisible(false)}
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

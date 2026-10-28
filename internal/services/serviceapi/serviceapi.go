@@ -40,6 +40,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceriver"
 	"github.com/Emyrk/chronicle/internal/services/servicesidekick"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
+	"github.com/Emyrk/chronicle/internal/services/servicechoose"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewhatsnew"
 	"github.com/Emyrk/chronicle/internal/services/servicewowdb"
@@ -124,6 +125,7 @@ func (s *Service) DependsOn() []string {
 		servicemail.OnMailer(),
 		serviceaccessurl.OnAccessURL(),
 		servicetenant.OnTenant(),
+		servicechoose.OnChoose(),
 		serviceapplication.OnApplication(),
 		servicewhatsnew.OnWhatsNew(),
 		servicedataset.OnDataset(),
@@ -260,6 +262,7 @@ func (s *Service) Start(ctx context.Context) error {
 		Discord:               s.discordAuth,
 		SecretPEM:             decodedSecret,
 		Tenant:                tenantSvc,
+		Choose:                servicechoose.Choose(s.broker),
 		Application:           appSvc,
 		Dataset:               datasetSvc,
 		CacheSvc:              servicecache.CacheService(s.broker),

@@ -239,6 +239,9 @@ type SiteConfig struct {
 	// AccessURL is the main domain URL used for OAuth redirects.
 	// On tenant subdomains the frontend redirects OAuth to this origin.
 	AccessURL string `json:"access_url,omitempty"`
+	// ChooseURL is the community chooser's origin (e.g.
+	// https://choose.chronicleclassic.com). Empty when the chooser is disabled.
+	ChooseURL string `json:"choose_url,omitempty"`
 	// Branding is the visual identity for the primary domain.
 	// On tenant subdomains, use Tenant.Branding instead.
 	Branding *Branding `json:"branding"`

@@ -853,6 +853,7 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 	if a.Opts.AccessURL != nil {
 		resp.AccessURL = a.Opts.AccessURL.String()
 	}
+	resp.ChooseURL = a.Opts.Choose.ChooseURL()
 	resp.Branding = unmarshalBranding(config.Branding)
 	resp.Discoverable = config.Discoverable
 	if config.DefaultFormat.Valid {
