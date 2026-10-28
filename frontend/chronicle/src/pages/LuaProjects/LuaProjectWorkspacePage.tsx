@@ -10,7 +10,7 @@ import { useConfirmLinkNavigation } from "@/hooks/useConfirmLinkNavigation"
 import { getProject, publishUnstable, type LuaProject } from "./api"
 import { LuaBrowserTest } from "./LuaBrowserTest"
 import { panelPackageFromWorkingCopy, validateEditorFiles, type EditorFiles } from "./editorFiles"
-import { applyLuaFileEdit, LUA_EDITOR_CAPABILITY, parseLuaFileEdit, type LuaToolFile } from "./luaEditorTools"
+import { applyLuaFileEdit, editorFileKey, LUA_EDITOR_CAPABILITY, parseLuaFileEdit, workingCopyFiles, type LuaToolFile } from "./luaEditorTools"
 import { createCachedStreamProvider, loadPreviewStreams } from "./previewStream"
 import type { WorkshopChatRequest } from "./LuaWorkshopChat"
 import { parseRunPreviewArgs, runPreview } from "./previewRun"
@@ -187,7 +187,7 @@ export default function LuaProjectWorkspacePage() {
     tools: {
       read_lua_files: () => {
         const current = requireCopy()
-        return { revision: current.revision, files: { "main.lua": current.source, "project.json": current.manifest },
+        return { revision: current.revision, files: workingCopyFiles({ lua: current.source, manifest: current.manifest, readme: current.readme }),
           unsaved_changes: current.dirty, validation_error: current.validation || null }
       },
       edit_lua_file: async (args) => {
@@ -351,7 +351,7 @@ export default function LuaProjectWorkspacePage() {
               <button type="button" className="hover:text-foreground" onClick={() => setDiffOpen(false)}>Close</button>
             </div>
             <Suspense fallback={<p className="p-3 text-xs">Loading diff…</p>}>
-              <LuaDiffReview before={aiEdit.file === "main.lua" ? aiEdit.before.lua : aiEdit.before.manifest} after={aiEdit.file === "main.lua" ? aiEdit.after.lua : aiEdit.after.manifest} />
+              <LuaDiffReview before={aiEdit.before[editorFileKey(aiEdit.file)]} after={aiEdit.after[editorFileKey(aiEdit.file)]} />
             </Suspense>
           </div>}
           <Suspense fallback={<p role="status" className="p-4 text-sm text-muted-foreground">Loading code editor…</p>}>

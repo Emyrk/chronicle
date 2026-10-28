@@ -42,16 +42,36 @@ func TestLuaWorkshopIsDurableAndUsesOnlyLuaEditorTools(t *testing.T) {
 
 func TestLuaEditorToolArguments(t *testing.T) {
 	t.Parallel()
+	edit, ok := clientToolByName("lua-editor", "edit_lua_file")
+	require.True(t, ok)
+	var schema struct {
+		Properties struct {
+			File struct {
+				Pattern string `json:"pattern"`
+			} `json:"file"`
+		} `json:"properties"`
+	}
+	require.NoError(t, json.Unmarshal(edit.Parameters, &schema))
+	require.Equal(t, luaEditorFilePattern.String(), schema.Properties.File.Pattern, "the advertised schema and the server check must agree")
 	for _, args := range []string{
 		`{"file":"main.lua","expected_revision":3,"edits":[{"old_text":"return {}","new_text":"return { ok = true }"}]}`,
 		`{"file":"project.json","expected_revision":0,"content":"{}"}`,
+		`{"file":"README.md","expected_revision":2,"content":"# Panel"}`,
+		`{"file":"ui/bars.lua","expected_revision":2,"content":"return {}"}`,
+		`{"file":"lib/util.v2.lua","expected_revision":2,"content":"return {}"}`,
 	} {
 		_, err := validateClientToolArguments("edit_lua_file", args)
 		require.NoError(t, err, args)
 	}
 	for _, args := range []string{
 		`{"file":"main.lua","edits":[{"old_text":"a","new_text":"b"}]}`,
-		`{"file":"other.lua","expected_revision":1,"content":"x"}`,
+		`{"file":"notes.txt","expected_revision":1,"content":"x"}`,
+		`{"file":"../main.lua","expected_revision":1,"content":"x"}`,
+		`{"file":"ui/../main.lua","expected_revision":1,"content":"x"}`,
+		`{"file":"/main.lua","expected_revision":1,"content":"x"}`,
+		`{"file":"ui\\main.lua","expected_revision":1,"content":"x"}`,
+		`{"file":"docs/README.md","expected_revision":1,"content":"x"}`,
+		`{"file":".lua","expected_revision":1,"content":"x"}`,
 		`{"file":"main.lua","expected_revision":1}`,
 		`{"file":"main.lua","expected_revision":1,"content":"x","edits":[{"old_text":"a","new_text":"b"}]}`,
 		`{"file":"main.lua","expected_revision":1,"edits":[{"old_text":"","new_text":"b"}]}`,
