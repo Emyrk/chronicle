@@ -38,6 +38,7 @@ type oauthStore interface {
 	RotateOAuthRefreshToken(context.Context, database.RotateOAuthRefreshTokenParams) (int64, error)
 	DeleteOAuthTokenSessionsByRequestID(context.Context, string) (int64, error)
 	UpsertSidekickInstallation(context.Context, database.UpsertSidekickInstallationParams) (database.SidekickInstallation, error)
+	SetSidekickInstallationCampaign(context.Context, database.SetSidekickInstallationCampaignParams) error
 	RevokeActiveSidekickOAuthGrants(context.Context, uuid.UUID) ([]string, error)
 	InsertSidekickOAuthGrant(context.Context, database.InsertSidekickOAuthGrantParams) error
 	GetSidekickInstallationForOAuthRequest(context.Context, database.GetSidekickInstallationForOAuthRequestParams) (uuid.UUID, error)
@@ -312,7 +313,7 @@ func (s *storage) InvalidateDeviceCodeSession(ctx context.Context, signature str
 	return nil
 }
 
-func (s *storage) approveDevice(ctx context.Context, userSignature, subject string, state fosite.UserCodeState) error {
+func (s *storage) approveDevice(ctx context.Context, userSignature, subject string, state fosite.UserCodeState, campaign installationCampaign) error {
 	row, err := s.dbFor(ctx).GetOAuthDeviceSession(ctx, userSignature)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fosite.ErrNotFound
@@ -353,6 +354,15 @@ func (s *storage) approveDevice(ctx context.Context, userSignature, subject stri
 				Platform: metadata.Platform, Version: metadata.Version,
 			}); err != nil {
 				return err
+			}
+			if campaign.present() {
+				if err := tx.SetSidekickInstallationCampaign(ctx, database.SetSidekickInstallationCampaignParams{
+					ID: metadata.ID, UserID: userID,
+					UtmSource: campaign.Source, UtmMedium: campaign.Medium,
+					UtmCampaign: campaign.Campaign, UtmContent: campaign.Content,
+				}); err != nil {
+					return err
+				}
 			}
 			requestIDs, err := tx.RevokeActiveSidekickOAuthGrants(ctx, metadata.ID)
 			if err != nil {

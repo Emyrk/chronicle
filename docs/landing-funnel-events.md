@@ -49,16 +49,18 @@ The backend has no analytics sink, so these are info log lines with the message
 | Event | When | Params |
 | --- | --- | --- |
 | `pair_complete` | A signed-in user approves a Sidekick device code on `/oauth/device` (`internal/services/serviceoauth`). | The pairing browser's `utm_*` params from the `chronicle_utm` cookie, if present |
-| `first_upload` | A Sidekick upload makes the account's first log group from any Sidekick installation (`internal/services/servicesidekick` `RecordUpload`). | none |
+| `first_upload` | A Sidekick upload makes the account's first log group from any Sidekick installation (`internal/services/servicesidekick` `RecordUpload`). | The uploading installation's stored `utm_*` params, if any |
 
 ## The three ratios
 
 GA4 counts the frontend events. Postgres counts first uploads:
 `wow_log_groups.sidekick_installation_id` has been recorded since #1313, so the
-account's first Sidekick log group is its `first_upload`. Paste the GA4 event
-totals for the same window, per `utm_content`, into the `ga` CTE (Explore → Free
-form: rows `utm_content`, columns `Event name`, values `Event count`, filtered to
-the four events):
+account's first Sidekick log group is its `first_upload`. The campaign comes
+from `sidekick_installations.utm_*`, written once when the installation is first
+approved with a `chronicle_utm` cookie and never overwritten (#1319). Paste the
+GA4 event totals for the same window, per `utm_content`, into the `ga` CTE
+(Explore → Free form: rows `utm_content`, columns `Event name`, values `Event
+count`, filtered to the four events):
 
 ```sql
 WITH params AS (
@@ -69,31 +71,41 @@ ga (utm_content, land, hero_play_3s, cta_sidekick, download_start) AS (
   VALUES ('hero-a', 1000, 640, 120, 80),
          ('hero-b', 900, 510, 70, 50)
 ),
--- Accounts whose first Sidekick log group arrived in the window.
+-- Each account's first Sidekick log group, with the campaign of the
+-- installation that uploaded it ('(not set)' without one, as in GA4).
+firsts AS (
+  SELECT DISTINCT ON (si.user_id)
+         g.created_at AS first_at,
+         COALESCE(si.utm_content, '(not set)') AS utm_content
+  FROM wow_log_groups g
+  JOIN sidekick_installations si ON si.id = g.sidekick_installation_id
+  ORDER BY si.user_id, g.created_at
+),
+-- First uploads that arrived in the window, per utm_content.
 first_uploads AS (
-  SELECT COUNT(*) AS n
-  FROM (
-    SELECT si.user_id, MIN(g.created_at) AS first_at
-    FROM wow_log_groups g
-    JOIN sidekick_installations si ON si.id = g.sidekick_installation_id
-    GROUP BY si.user_id
-  ) f, params p
+  SELECT f.utm_content, COUNT(*) AS n
+  FROM firsts f, params p
   WHERE f.first_at >= p.since AND f.first_at < p.until
+  GROUP BY f.utm_content
 )
-SELECT utm_content,
+SELECT ga.utm_content,
        round(hero_play_3s::numeric / NULLIF(land, 0), 3) AS watch_rate,
        round(cta_sidekick::numeric / NULLIF(land, 0), 3) AS install_intent,
-       NULL::numeric AS loop_close
+       round(COALESCE(fu.n, 0)::numeric / NULLIF(download_start, 0), 3) AS loop_close
 FROM ga
+LEFT JOIN first_uploads fu ON fu.utm_content = ga.utm_content
 UNION ALL
 SELECT 'all',
        round(sum(hero_play_3s)::numeric / NULLIF(sum(land), 0), 3),
        round(sum(cta_sidekick)::numeric / NULLIF(sum(land), 0), 3),
-       round((SELECT n FROM first_uploads)::numeric / NULLIF(sum(download_start), 0), 3)
+       round((SELECT COALESCE(sum(n), 0) FROM first_uploads)::numeric / NULLIF(sum(download_start), 0), 3)
 FROM ga;
 ```
 
-Loop close is reported for the whole window only. The database does not record
-which campaign an account came from, so first uploads cannot be split by
-`utm_content`. A Sidekick log group whose installation was deleted no longer
-counts, because `sidekick_installation_id` is set to NULL on delete.
+`loop_close` per `utm_content` only counts installations approved after #1319
+shipped; older installations have no stored campaign and fall under
+`(not set)`, which only shows up in the `all` row unless `ga` has a
+`(not set)` row too. The campaign is the pairing browser's, so an install
+paired from a different browser than the one that saw the ad is `(not set)`.
+A Sidekick log group whose installation was deleted no longer counts, because
+`sidekick_installation_id` is set to NULL on delete.

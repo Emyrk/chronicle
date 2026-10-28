@@ -941,6 +941,8 @@ type sqlcQuerier interface {
 	// Assigns or removes a tenant from a server.
 	// Pass NULL to remove the tenant assignment.
 	SetServerTenant(ctx context.Context, arg SetServerTenantParams) error
+	// The first campaign wins: a row that already holds any utm_* is left as is.
+	SetSidekickInstallationCampaign(ctx context.Context, arg SetSidekickInstallationCampaignParams) error
 	// Assigns or removes a default dataset from a tenant.
 	// Pass NULL to remove the assignment.
 	SetTenantDataset(ctx context.Context, arg SetTenantDatasetParams) error
