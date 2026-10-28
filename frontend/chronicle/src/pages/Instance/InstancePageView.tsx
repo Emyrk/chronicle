@@ -49,6 +49,7 @@ import { isQueryablePanelType, PANEL_AI_DESCRIPTIONS } from "./EventsPanels/pane
 import { Strip } from "./EventsPanels/Strips/Strip";
 import { STRIPS, resolveStripType } from "./EventsPanels/Strips/strips";
 import type { StripType } from "./EventsPanels/Strips/types";
+import { useSidekickStripViewer } from "./EventsPanels/Strips/sidekickStrip";
 import { PanelTimingProvider, PanelTimingDisplay, PanelTimingResetter } from "./EventsPanels/PanelTimingContext";
 import { ChartDataRegistryProvider } from "./EventsPanels/ChartDataRegistry";
 import { InstanceInferenceCapability } from "./inference/InstanceInferenceCapability";
@@ -108,6 +109,7 @@ import {
   isPanelPresetLayout,
   presetLayoutById,
   resizePresetForViewport,
+  withoutOwnerSidekickStrip,
   PRESET_LAYOUTS,
   PRESET_LAYOUTS_BY_ID,
   DEFAULT_PRESET_ID,
@@ -1325,9 +1327,10 @@ function PoppedOutLayoutContent({
   const [activePresetId, setActivePresetId] = useState(session.snapshot.activePresetId);
   const [appearance, setAppearance] = useState(session.snapshot.appearance);
   const viewportHeight = useViewportHeight(session.window);
+  const isLogOwner = useSidekickStripViewer(context.instance.logOwner) === "owner";
   const visibleLayoutItems = useMemo(
-    () => resizePresetForViewport(activePresetId, layoutItems, viewportHeight),
-    [activePresetId, layoutItems, viewportHeight],
+    () => resizePresetForViewport(activePresetId, withoutOwnerSidekickStrip(activePresetId, layoutItems, isLogOwner), viewportHeight),
+    [activePresetId, isLogOwner, layoutItems, viewportHeight],
   );
 
 
@@ -1599,10 +1602,11 @@ function EncounterDetail({
 }: EncounterDetailProps) {
   const availablePresetLayouts = getAvailablePresetLayouts(instance.capabilities ?? [], isMobile);
   const viewportHeight = useViewportHeight(typeof window === "undefined" ? null : window);
-  const visibleLayoutItems = useMemo(
-    () => isMobile ? layoutItems : resizePresetForViewport(activePresetId, layoutItems, viewportHeight),
-    [activePresetId, isMobile, layoutItems, viewportHeight],
-  );
+  const isLogOwner = useSidekickStripViewer(instance.logOwner) === "owner";
+  const visibleLayoutItems = useMemo(() => {
+    const items = withoutOwnerSidekickStrip(activePresetId, layoutItems, isLogOwner);
+    return isMobile ? items : resizePresetForViewport(activePresetId, items, viewportHeight);
+  }, [activePresetId, isLogOwner, isMobile, layoutItems, viewportHeight]);
   // Active tab and collapsible state
   const [activeTab, setActiveTab] = useState<'enemies' | 'players'>('enemies');
   const [isEntityPanelOpen, setIsEntityPanelOpen] = useState(false);
