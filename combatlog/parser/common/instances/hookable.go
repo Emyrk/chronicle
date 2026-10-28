@@ -932,14 +932,33 @@ func (h *Hookable) finalizeFight() error {
 	if rules != nil {
 		damageRule = rules.DamageByEncounter[resolved.Name]
 	}
+	durationRule := rules.DurationTargets(resolved.Name)
+	// Assembly's phase-dependent ranking totals are not classified by the
+	// generic target rule. Do not shorten its denominator without also updating
+	// that specialized numerator.
+	if resolved.Boss && (rules == nil || rules.Damage != rankings.DamageRuleAssemblyOfIron) {
+		fight.RankingWindow = rankings.RankingWindow(fight, durationRule, func(id guid.GUID) bool {
+			if info, ok := h.units.Info[id]; ok && info.Boss {
+				return true
+			}
+			return h.IdentifyUnit(id).Boss
+		})
+	}
+	if fight.RankingWindow != nil && h.survivabilityTracker != nil {
+		// Recompute boss-ranking survivability using the same interval as DPS
+		// and HPS. Transitions before the interval still establish whether a
+		// player was already dead at its start.
+		h.survivabilityTracker.FightFinalized(fight.EncounterID, fight.RankingWindow.Start, fight.RankingWindow.End)
+	}
 	if err := h.currentFight.Events.Damage.SerializeBuffered(func(msg *messages.Damage) {
 		if h.dpsTracker != nil {
-			h.dpsTracker.ClassifyDamage(fight.EncounterID, damageRule, msg)
+			h.dpsTracker.ClassifyDamage(fight.EncounterID, damageRule, msg, fight.RankingWindow)
 		}
 	}); err != nil {
 		return fmt.Errorf("serializing classified damage: %w", err)
 	}
 	if h.dpsTracker != nil {
+		h.dpsTracker.ClassifyHealing(fight.EncounterID, fight.RankingWindow)
 		h.dpsTracker.FinishDamageClassification(fight.EncounterID)
 	}
 
@@ -1169,6 +1188,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		if err != nil {
 			return nil, err
 		}
+		enc.RankingWindow = fight.RankingWindow
 		encounters = append(encounters, enc)
 	}
 

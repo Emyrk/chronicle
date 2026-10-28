@@ -10415,7 +10415,7 @@ func (q *sqlQuerier) ListInferenceContextUsageByUser(ctx context.Context, arg Li
 }
 
 const listInferenceInstanceEncounters = `-- name: ListInferenceInstanceEncounters :many
-SELECT id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id
+SELECT id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms
 FROM log_instance_encounters
 WHERE instance_id = $1
 ORDER BY start_time, id
@@ -10441,6 +10441,8 @@ func (q *sqlQuerier) ListInferenceInstanceEncounters(ctx context.Context, instan
 			&i.EndTime,
 			&i.KillType,
 			&i.MapID,
+			&i.RankingStartOffsetMs,
+			&i.RankingEndOffsetMs,
 		); err != nil {
 			return nil, err
 		}
@@ -13193,7 +13195,7 @@ func (q *sqlQuerier) DeleteLogInstanceByIDAndGroup(ctx context.Context, arg Dele
 
 const encountersByInstanceID = `-- name: EncountersByInstanceID :many
 SELECT
-  id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id
+  id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms
 FROM
   log_instance_encounters
 WHERE
@@ -13219,6 +13221,8 @@ func (q *sqlQuerier) EncountersByInstanceID(ctx context.Context, instanceID uuid
 			&i.EndTime,
 			&i.KillType,
 			&i.MapID,
+			&i.RankingStartOffsetMs,
+			&i.RankingEndOffsetMs,
 		); err != nil {
 			return nil, err
 		}
@@ -13560,22 +13564,24 @@ func (q *sqlQuerier) GetParsedLogGroupByID(ctx context.Context, id uuid.UUID) (P
 
 const insertEncounter = `-- name: InsertEncounter :one
 INSERT INTO
-  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time)
+  log_instance_encounters (id, instance_id, name, map_id, kill_type, remaining, boss, start_time, end_time, ranking_start_offset_ms, ranking_end_offset_ms)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING id, instance_id, name, remaining, boss, start_time, end_time, kill_type, map_id, ranking_start_offset_ms, ranking_end_offset_ms
 `
 
 type InsertEncounterParams struct {
-	ID         uuid.UUID          `db:"id" json:"id"`
-	InstanceID uuid.UUID          `db:"instance_id" json:"instance_id"`
-	Name       string             `db:"name" json:"name"`
-	MapID      int32              `db:"map_id" json:"map_id"`
-	KillType   KillType           `db:"kill_type" json:"kill_type"`
-	Remaining  guid.GUIDs         `db:"remaining" json:"remaining"`
-	Boss       bool               `db:"boss" json:"boss"`
-	StartTime  pgtype.Timestamptz `db:"start_time" json:"start_time"`
-	EndTime    pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	ID                   uuid.UUID          `db:"id" json:"id"`
+	InstanceID           uuid.UUID          `db:"instance_id" json:"instance_id"`
+	Name                 string             `db:"name" json:"name"`
+	MapID                int32              `db:"map_id" json:"map_id"`
+	KillType             KillType           `db:"kill_type" json:"kill_type"`
+	Remaining            guid.GUIDs         `db:"remaining" json:"remaining"`
+	Boss                 bool               `db:"boss" json:"boss"`
+	StartTime            pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime              pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	RankingStartOffsetMs pgtype.Int8        `db:"ranking_start_offset_ms" json:"ranking_start_offset_ms"`
+	RankingEndOffsetMs   pgtype.Int8        `db:"ranking_end_offset_ms" json:"ranking_end_offset_ms"`
 }
 
 func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error) {
@@ -13589,6 +13595,8 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 		arg.Boss,
 		arg.StartTime,
 		arg.EndTime,
+		arg.RankingStartOffsetMs,
+		arg.RankingEndOffsetMs,
 	)
 	var i LogInstanceEncounter
 	err := row.Scan(
@@ -13601,6 +13609,8 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 		&i.EndTime,
 		&i.KillType,
 		&i.MapID,
+		&i.RankingStartOffsetMs,
+		&i.RankingEndOffsetMs,
 	)
 	return i, err
 }

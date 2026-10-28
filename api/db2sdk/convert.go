@@ -804,16 +804,27 @@ func WoWHostile(hostile database.LogInstanceEncounterHostile) chroniclesdk.WoWEn
 }
 
 func WoWEncounter(encounter database.LogInstanceEncounter) chroniclesdk.WoWEncounter {
+	var window *chroniclesdk.WoWRankingWindow
+	if encounter.RankingStartOffsetMs.Valid && encounter.RankingEndOffsetMs.Valid {
+		start, end := encounter.RankingStartOffsetMs.Int64, encounter.RankingEndOffsetMs.Int64
+		window = &chroniclesdk.WoWRankingWindow{
+			Basis:         "selected-unit-activity",
+			StartOffsetMs: start,
+			EndOffsetMs:   end,
+			DurationMs:    end - start,
+		}
+	}
 	return chroniclesdk.WoWEncounter{
-		ID:         encounter.ID,
-		InstanceID: encounter.InstanceID,
-		Boss:       encounter.Boss,
-		Name:       encounter.Name,
-		MapID:      int(encounter.MapID),
-		KillType:   chroniclesdk.KillType(encounter.KillType),
-		Remaining:  encounter.Remaining,
-		StartTime:  encounter.StartTime.Time,
-		EndTime:    encounter.EndTime.Time,
+		RankingWindow: window,
+		ID:            encounter.ID,
+		InstanceID:    encounter.InstanceID,
+		Boss:          encounter.Boss,
+		Name:          encounter.Name,
+		MapID:         int(encounter.MapID),
+		KillType:      chroniclesdk.KillType(encounter.KillType),
+		Remaining:     encounter.Remaining,
+		StartTime:     encounter.StartTime.Time,
+		EndTime:       encounter.EndTime.Time,
 	}
 }
 

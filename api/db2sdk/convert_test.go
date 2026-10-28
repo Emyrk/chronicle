@@ -6,6 +6,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/vehicles"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,6 +71,20 @@ func TestWoWEncounterIncludesMapID(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, 43, WoWEncounter(database.LogInstanceEncounter{MapID: 43}).MapID)
+}
+
+func TestWoWEncounterRankingWindow(t *testing.T) {
+	t.Parallel()
+	require.Nil(t, WoWEncounter(database.LogInstanceEncounter{}).RankingWindow)
+	converted := WoWEncounter(database.LogInstanceEncounter{
+		RankingStartOffsetMs: pgtype.Int8{Int64: 10000, Valid: true},
+		RankingEndOffsetMs:   pgtype.Int8{Int64: 70000, Valid: true},
+	})
+	require.NotNil(t, converted.RankingWindow)
+	require.Equal(t, "selected-unit-activity", converted.RankingWindow.Basis)
+	require.Equal(t, int64(10000), converted.RankingWindow.StartOffsetMs)
+	require.Equal(t, int64(70000), converted.RankingWindow.EndOffsetMs)
+	require.Equal(t, int64(60000), converted.RankingWindow.DurationMs)
 }
 
 func TestInstanceUnitsCompactsNamesAndOwners(t *testing.T) {
