@@ -101,6 +101,17 @@ func TestLegacyDungeonMapBounds(t *testing.T) {
 	require.False(t, exists)
 }
 
+func TestClassicDungeonFloorBoundsIncludesVioletHold(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, &wowMapFloorBounds{
+		MinX: 665.346985,
+		MaxX: 921.575989,
+		MinY: 1813.349976,
+		MaxY: 1984.170044,
+	}, classicDungeonFloorBounds(608, 1))
+}
+
 func TestPruneUnavailableLegacyMapTiles(t *testing.T) {
 	t.Parallel()
 
