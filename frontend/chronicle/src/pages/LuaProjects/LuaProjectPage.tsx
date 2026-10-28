@@ -83,10 +83,15 @@ export function LuaProjectPage() {
   const selected = files?.find(file => file.path === search.get("file")) ?? files?.find(file => file.path === "README.md")
   const about = files ? manifestSummary(files) : null
 
-  function show(next: { ref?: PackageRef; file?: string | null }) {
+  // The default build stays out of the URL, so the page keeps following the latest release.
+  function show(next: { ref?: PackageRef | null; file?: string | null }) {
     setSearch(current => {
       const params = new URLSearchParams(current)
-      if (next.ref) { params.set("ref", next.ref); params.delete("file") }
+      if (next.ref !== undefined) {
+        if (next.ref && project && next.ref !== defaultRef(project)) params.set("ref", next.ref)
+        else params.delete("ref")
+        params.delete("file")
+      }
       if (next.file) params.set("file", next.file)
       else if (next.file === null) params.delete("file")
       return params
@@ -118,7 +123,7 @@ export function LuaProjectPage() {
   const canTag = can.release && !!project.main && latest?.sha256 !== project.main.sha256
   const tagRelease = () => {
     const tag = window.prompt("Tag this release. Everyone running the addon gets it:", nextReleaseTag(project.releases))?.trim()
-    if (tag) void mutate(() => createRelease(project.id, project.revision, tag), `Released ${tag}.`)
+    if (tag) void mutate(async () => { await createRelease(project.id, project.revision, tag); show({ ref: null }) }, `Released ${tag}.`)
   }
 
   return <main className="container mx-auto max-w-6xl space-y-6 px-4 py-8">
