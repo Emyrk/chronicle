@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Trophy, CheckCircle2, XCircle, Clock, Loader2 } from "lucide-react";
+import { fetchInstanceSpeedrun } from "@/api/queries";
 import type { SpeedrunResult } from "@/api/typesGenerated";
 import type { ProcessorEvent } from "../processorTypes";
 import type { PanelDefinition, PanelRenderProps } from "../types";
@@ -63,13 +64,7 @@ function LeaderboardQueryContent(
   const unlisted = props.context.instance.unlisted;
   const { data: speedrun, isLoading: loading } = useQuery({
     queryKey: ["instance-speedrun", instanceId],
-    queryFn: async () => {
-      const res = await fetch(
-        `/api/v1/raidlogs/instances/${encodeURIComponent(instanceId)}/speedrun`,
-      );
-      if (!res.ok) return null;
-      return res.json() as Promise<SpeedrunResult>;
-    },
+    queryFn: () => fetchInstanceSpeedrun(instanceId),
     staleTime: Infinity,
     retry: false,
     enabled: shouldLoadPublicRankingData(unlisted),

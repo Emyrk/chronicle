@@ -56,10 +56,18 @@ if ! command -v rclone >/dev/null 2>&1; then
   exit 1
 fi
 # Validate and merge all source manifests before modifying remote objects.
-# A transport/auth failure cannot masquerade as an absent optional layer.
-listing="$(rclone lsf "${remote}/" --files-only)"
+# A transport/auth failure cannot masquerade as an absent optional layer. A new
+# original map namespace may not exist yet, so allow that exact bootstrap case.
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
+if ! listing="$(rclone lsf "${remote}/" --files-only 2>"${tmp}/listing-error")"; then
+  if [[ "${MAPS_UPLOAD_MODE}" =~ ^(all|original)$ ]] && grep -qi 'directory not found' "${tmp}/listing-error"; then
+    listing=""
+  else
+    cat "${tmp}/listing-error" >&2
+    exit 1
+  fi
+fi
 for layer in original styled meshes renders; do
   local_source="${MAPS_DIR}/manifest.${layer}.json"
   if [[ "${MAPS_UPLOAD_MODE}" == "styled" && "${layer}" == "styled" ]]; then

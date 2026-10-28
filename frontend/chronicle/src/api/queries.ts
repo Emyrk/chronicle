@@ -1,12 +1,12 @@
 import { useRef } from "react";
 import { useQueries, useQuery, useMutation, useQueryClient, keepPreviousData, type QueryClient, type UseQueryOptions } from "@tanstack/react-query";
-import type { CharacterCosmeticsResponse, ListSidekicksResponse, RenameSidekickRequest, SidekickAccountConfigResponse, SidekickConfig, SidekickConfigState, SidekickInstallation, UpdateCharacterCosmeticsRequest, WhatsNewStatus } from "./typesGenerated";
+import type { CharacterCosmeticsResponse, DiscoveryEntry, ListSidekicksResponse, RenameSidekickRequest, SidekickAccountConfigResponse, SidekickConfig, SidekickConfigState, SidekickInstallation, UpdateCharacterCosmeticsRequest, WhatsNewStatus } from "./typesGenerated";
 import type { WoWSpell } from "./wowdb";
 import {
   recordPublicNoticeResult,
   shouldFetchPublicNotices,
 } from "@/components/NoticeBanner/publicNoticeCache";
-import type { WoWServer, WoWServerRealm, UploadKey, CreateWoWServerRequest, CreateWoWServerRealmRequest, CreateUploadKeyRequest, RetentionPolicy, RetentionPreviewResponse, RetentionPreviewRequest, SupportedInstance, RankingEncounterSet, CensusEntry, Tenant, UpsertTenantRequest, ServerApplication, CreateServerApplicationRequest, CreateModificationRequestPayload, ApplicationAdminEntry, GuildCharacterRosterResponse, ListRaidCompositionsResponse, RaidComposition, CreateRaidCompositionRequest, UpdateRaidCompositionRequest, UpdateRaidCompositionSharingRequest, InstanceItemPricesResponse } from "./typesGenerated";
+import type { WoWServer, WoWServerRealm, UploadKey, CreateWoWServerRequest, CreateWoWServerRealmRequest, CreateUploadKeyRequest, RetentionPolicy, RetentionPreviewResponse, RetentionPreviewRequest, SupportedInstance, RankingEncounterSet, CensusEntry, Tenant, UpsertTenantRequest, ServerApplication, CreateServerApplicationRequest, CreateModificationRequestPayload, ApplicationAdminEntry, GuildCharacterRosterResponse, ListRaidCompositionsResponse, RaidComposition, CreateRaidCompositionRequest, UpdateRaidCompositionRequest, UpdateRaidCompositionSharingRequest, InstanceItemPricesResponse, SpeedrunResult } from "./typesGenerated";
 import type { 
   WoWLogGroup as WoWLogGroupGenerated, 
   WoWLogArtifact as WoWLogArtifactGenerated,
@@ -224,7 +224,7 @@ export function useSession(options?: Omit<UseQueryOptions<Session | null>, "quer
     queryKey: ["session"],
     queryFn: async () => {
       const response = await fetch("/api/v1/whoami");
-      if (!response.ok) return null;
+      if (response.status === 204 || !response.ok) return null;
       return response.json() as Promise<Session>;
     },
     retry: false,
@@ -1441,13 +1441,22 @@ export function useInstance(instanceId: string, options?: Omit<UseQueryOptions<W
   });
 }
 
+export async function fetchInstanceSpeedrun(instanceId: string): Promise<SpeedrunResult | null> {
+  const response = await fetch(
+    `/api/v1/raidlogs/instances/${encodeURIComponent(instanceId)}/speedrun`,
+  );
+  if (response.status === 204 || response.status === 404) return null;
+  if (!response.ok) throw new Error("Failed to fetch speedrun data");
+  return response.json() as Promise<SpeedrunResult>;
+}
+
 export function useInstanceYoutube(instanceId: string, options?: Omit<UseQueryOptions<Video | null>, "queryKey" | "queryFn">) {
   return useQuery({
     queryKey: ["instanceYoutube", instanceId],
     retry: false,
     queryFn: async () => {
       const response = await fetch(`/api/v1/raidlogs/instances/${instanceId}/youtube`);
-      if (response.status === 404) return null;
+      if (response.status === 204 || response.status === 404) return null;
       if (!response.ok) throw new Error("Failed to fetch YouTube data");
       return response.json() as Promise<Video>;
     },
@@ -1553,7 +1562,7 @@ export function useAdminActiveCustomPanels(
     queryKey: ["admin", "custom-panels"],
     queryFn: async () => {
       const response = await fetch("/api/v1/admin/custom-panels");
-      if (!response.ok) throw new Error("Failed to fetch active custom panels");
+      if (!response.ok) throw new Error("Failed to fetch active developer panels");
       return response.json() as Promise<AdminActiveCustomPanelsResponse>;
     },
     retry: false,
@@ -1750,6 +1759,19 @@ export function useAdminOutdatedInstances(instanceName?: string, parserVersion?:
   });
 }
 export { useSiteConfig } from "./siteConfigQuery";
+
+// useDiscoverableServers lists every discoverable Chronicle server, even from a tenant subdomain.
+export function useDiscoverableServers() {
+  return useQuery({
+    queryKey: ["discovery", "all"],
+    staleTime: 60 * 60 * 1000,
+    queryFn: async () => {
+      const response = await fetch("/api/v1/discovery?scope=all");
+      if (!response.ok) throw new Error("Failed to fetch servers");
+      return response.json() as Promise<DiscoveryEntry[]>;
+    },
+  });
+}
 
 // useDatasets lists the available game-data datasets (id, name, slug, version).
 // Used by the talent-tree dataset selector.

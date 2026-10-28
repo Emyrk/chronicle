@@ -184,7 +184,7 @@ func (s *Service) Authenticated(optional bool) func(next http.Handler) http.Hand
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			state := AuthenticationState(r)
-			if optional && (state.Error != nil || state.Claims == nil || state == nil) {
+			if optional && (state == nil || state.Error != nil || state.Claims == nil) {
 				next.ServeHTTP(w, r)
 				return
 			}

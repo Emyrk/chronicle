@@ -119,6 +119,28 @@ export interface WowMapInstanceFloor {
   tileHeight: number;
   bounds?: WowMapFloorBounds;
   tiles: WowMapTile[];
+  /** Preferred automatic 2D source for this floor; absent preserves render-first behavior. */
+  preferred2D?: "renders" | "art";
+  renders?: WowMapManualRender;
+  mesh?: WowMapMeshInstance;
+}
+
+export function mapFloorRender(
+  instance: WowMapInstance,
+  floor: WowMapInstanceFloor | undefined,
+): WowMapManualRender | undefined {
+  return floor?.renders ?? instance.renders;
+}
+
+export function mapFloorMesh(
+  instance: WowMapInstance,
+  floor: WowMapInstanceFloor | undefined,
+): WowMapMeshInstance | undefined {
+  return floor?.mesh ?? instance.mesh;
+}
+
+export function hasNativeMapFloorArtwork(floor: WowMapInstanceFloor | undefined): boolean {
+  return Boolean(floor && floor.width > 0 && floor.height > 0 && floor.tiles.length > 0);
 }
 
 export interface WowMapLayer {
@@ -158,6 +180,7 @@ export type MapGalleryItem =
     kind: "renders";
     key: string;
     instance: WowMapInstance;
+    floor?: WowMapInstanceFloor;
     render: WowMapManualRender;
   }
   | {
@@ -167,10 +190,11 @@ export type MapGalleryItem =
     rendered: WowMapRenderedInstance;
   }
   | {
-    /** A mesh-only instance: no map artwork at all, only the Replay Map's 3D mesh. */
+    /** A mesh-only instance or floor: no map artwork at all, only the Replay Map's 3D mesh. */
     kind: "mesh";
     key: string;
     instance: WowMapInstance;
+    floor?: WowMapInstanceFloor;
     mesh: WowMapMeshInstance;
   };
 
@@ -224,42 +248,76 @@ export function mapGalleryItems(manifest: WowMapManifest): MapGalleryItem[] {
         })),
     ),
   );
-  const instances: MapGalleryItem[] = (manifest.instances ?? []).flatMap((instance) => [
-    ...instance.floors
-      .filter((floor) => floor.width > 0 && floor.height > 0 && floor.tiles.length > 0)
-      .map((floor) => ({
-        kind: "instance" as const,
-        key: `instance-${instance.mapID}-${floor.floor}`,
+  const instances: MapGalleryItem[] = (manifest.instances ?? []).flatMap((instance) => {
+    const instanceRender = instance.renders && instance.renders.width > 0 && instance.renders.height > 0
+      ? instance.renders
+      : undefined;
+    const styled = instance.styled && instance.styled.width > 0 && instance.styled.height > 0
+      ? instance.styled
+      : undefined;
+    const items: MapGalleryItem[] = [];
+    for (const floor of instance.floors) {
+      const hasNativeArtwork = hasNativeMapFloorArtwork(floor);
+      const floorRender = floor.renders && floor.renders.width > 0 && floor.renders.height > 0
+        ? floor.renders
+        : undefined;
+      if (hasNativeArtwork) {
+        items.push({
+          kind: "instance",
+          key: `instance-${instance.mapID}-${floor.floor}`,
+          instance,
+          floor,
+        });
+      }
+      if (floorRender) {
+        items.push({
+          kind: "renders",
+          key: `renders-${instance.mapID}-${floor.floor}`,
+          instance,
+          floor,
+          render: floorRender,
+        });
+      }
+      // A floor-specific mesh gets its own card only when that floor has no
+      // image. Native and rendered floor cards expose the same mesh in 3D.
+      if (floor.mesh && !hasNativeArtwork && !floorRender && !instanceRender && !styled) {
+        items.push({
+          kind: "mesh",
+          key: `mesh-${instance.mapID}-${floor.floor}`,
+          instance,
+          floor,
+          mesh: floor.mesh,
+        });
+      }
+    }
+    if (instanceRender) {
+      items.push({
+        kind: "renders",
+        key: `renders-${instance.mapID}`,
         instance,
-        floor,
-      })),
-    ...(instance.renders && instance.renders.width > 0 && instance.renders.height > 0
-      ? [{
-          kind: "renders" as const,
-          key: `renders-${instance.mapID}`,
-          instance,
-          render: instance.renders,
-        }]
-      : []),
-    ...(instance.styled && instance.styled.width > 0 && instance.styled.height > 0
-      ? [{
-          kind: "styled" as const,
-          key: `styled-${instance.mapID}`,
-          instance,
-          rendered: instance.styled,
-        }]
-      : []),
-    // An instance with artwork is listed by it; one with only a mesh (a
-    // dungeon without an in-game map) still gets a card.
-    ...(instance.mesh && instance.floors.length === 0 && !instance.renders && !instance.styled
-      ? [{
-          kind: "mesh" as const,
-          key: `mesh-${instance.mapID}`,
-          instance,
-          mesh: instance.mesh,
-        }]
-      : []),
-  ]);
+        render: instanceRender,
+      });
+    }
+    if (styled) {
+      items.push({
+        kind: "styled",
+        key: `styled-${instance.mapID}`,
+        instance,
+        rendered: styled,
+      });
+    }
+    // Preserve the legacy instance-level mesh-only card. Do not repeat an
+    // instance mesh for every metadata-only floor.
+    if (instance.mesh && instance.floors.length === 0 && !instanceRender && !styled) {
+      items.push({
+        kind: "mesh",
+        key: `mesh-${instance.mapID}`,
+        instance,
+        mesh: instance.mesh,
+      });
+    }
+    return items;
+  });
 
   return [...zones, ...instances].sort((left, right) => {
     const leftName = left.kind === "zone" ? left.map.name : left.instance.name;
@@ -275,6 +333,11 @@ export function mapGalleryItems(manifest: WowMapManifest): MapGalleryItem[] {
     }
     if (left.kind === "instance" && right.kind === "instance") {
       return left.instance.mapID - right.instance.mapID || left.floor.floor - right.floor.floor;
+    }
+    if (left.kind !== "zone" && right.kind !== "zone") {
+      return left.instance.mapID - right.instance.mapID
+        || ("floor" in left ? left.floor?.floor ?? 0 : 0) - ("floor" in right ? right.floor?.floor ?? 0 : 0)
+        || left.key.localeCompare(right.key);
     }
     return 0;
   });

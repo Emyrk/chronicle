@@ -201,7 +201,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 	var survivabilityTracker *rankings.SurvivabilityTracker
 	var speedrunTracker *rankings.SpeedrunTracker
 	if ip.Rankings != nil {
-		dpsTracker = rankings.NewDPSTracker(db, ip.Rankings.Damage)
+		dpsTracker = rankings.NewDPSTracker(db, ip.Idf, ip.Rankings.Damage)
 		survivabilityTracker = rankings.NewSurvivabilityTracker()
 		if ip.Rankings.Speedrun != nil {
 			speedrunTracker = rankings.NewSpeedrunTracker(*ip.Rankings.Speedrun, db, engagementTracker)
@@ -379,7 +379,7 @@ func (h *Hookable) initDerivedRankings(flavor database.WoWFlavor, derivedRanking
 
 	// Ensure a shared DPS tracker exists (created once, shared across all derived sub-instances).
 	if h.dpsTracker == nil {
-		h.dpsTracker = rankings.NewDPSTracker(h.units, rankings.DamageRuleNone)
+		h.dpsTracker = rankings.NewDPSTracker(h.units, h.Identifier, rankings.DamageRuleNone)
 		h.hooks = append(h.hooks, h.dpsTracker)
 	}
 	if h.survivabilityTracker == nil {
@@ -916,7 +916,34 @@ func (h *Hookable) finalizeFight() error {
 		}
 	}
 
-	err := h.currentFight.Events.Finalize(h.events, fight.EncounterID)
+	resolved, err := h.fightEncounter(fight)
+	if err != nil {
+		return fmt.Errorf("identifying encounter before damage serialization: %w", err)
+	}
+	rules := h.rankingRules
+	if h.derivedName != nil {
+		if derivedName, ok := h.derivedName.Name(append(h.completedFights, fight)); ok {
+			if derivedRules, exists := h.derivedRankingRules[derivedName]; exists {
+				rules = derivedRules
+			}
+		}
+	}
+	var damageRule rankings.DamageTargets
+	if rules != nil {
+		damageRule = rules.DamageByEncounter[resolved.Name]
+	}
+	if err := h.currentFight.Events.Damage.SerializeBuffered(func(msg *messages.Damage) {
+		if h.dpsTracker != nil {
+			h.dpsTracker.ClassifyDamage(fight.EncounterID, damageRule, msg)
+		}
+	}); err != nil {
+		return fmt.Errorf("serializing classified damage: %w", err)
+	}
+	if h.dpsTracker != nil {
+		h.dpsTracker.FinishDamageClassification(fight.EncounterID)
+	}
+
+	err = h.currentFight.Events.Finalize(h.events, fight.EncounterID)
 	if err != nil {
 		return fmt.Errorf("finalizing encounter messages: %w", err)
 	}

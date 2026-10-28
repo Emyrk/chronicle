@@ -107,5 +107,10 @@ func TestCharacterOwnerAdsFree(t *testing.T) {
 	require.NoError(t, zed.SetUserChronicleRoles(ctx, ownerID, []string{"ad_free_capable"}))
 	adsFree, err = handlerAPI.characterOwnerAdsFree(ctx, characterGUID, realmID)
 	require.NoError(t, err)
+	require.False(t, adsFree, "personal ad-free access must not make linked character pages ad-free")
+
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, ownerID, []string{"revered"}))
+	adsFree, err = handlerAPI.characterOwnerAdsFree(ctx, characterGUID, realmID)
+	require.NoError(t, err)
 	require.True(t, adsFree)
 }

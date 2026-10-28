@@ -18,9 +18,17 @@ func TestSEOProductName(t *testing.T) {
 		{"WoWForever", database.WoWFlavor{database.FlavorVanilla, database.FlavorWoWForever}, "WoW Forever"},
 		{"Kronos", database.WoWFlavor{database.FlavorVanilla, database.FlavorKronos}, "Kronos"},
 		{"ChromieCraft", database.WoWFlavor{database.FlavorWrath, database.FlavorAzerothcore, database.FlavorChromieCraft}, "ChromieCraft"},
+		{"Warmane", database.WoWFlavor{database.FlavorWrath, database.FlavorWarmane}, "Warmane"},
+		{"Epoch Reborn", database.WoWFlavor{database.FlavorWrath, database.FlavorEpoch}, "Epoch Reborn"},
 		{"VanillaPlus", database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}, "VanillaPlus"},
 		{"OctoWoW", database.WoWFlavor{database.FlavorVanilla, database.FlavorOctoWoW}, "OctoWoW"},
 		{"CapybaraCraft", database.WoWFlavor{database.FlavorVanilla, database.FlavorCapybara}, "CapybaraCraft"},
+		{"Sun Reach", database.WoWFlavor{database.FlavorVanilla, database.FlavorSunreach}, "Sun Reach"},
+		{"Faebright", database.WoWFlavor{database.FlavorVanilla, database.FlavorFaebright}, "Faebright"},
+		{"Moonwell", database.WoWFlavor{database.FlavorVanilla, database.FlavorMoonwell}, "Moonwell"},
+		{"AshenWoW", database.WoWFlavor{database.FlavorVanilla, database.FlavorAshenWoW}, "AshenWoW"},
+		{"Crusader Storm", database.WoWFlavor{database.FlavorVanilla, database.FlavorCrusaderStorm}, "Crusader Storm"},
+		{"Level One Lunatics", database.WoWFlavor{database.FlavorVanilla, database.FlavorLunatic}, "Level One Lunatics"},
 		{"Generic", database.WoWFlavor{database.FlavorVanilla, database.FlavorTurtle}, ""},
 	}
 	for _, tc := range cases {

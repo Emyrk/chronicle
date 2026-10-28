@@ -47,7 +47,7 @@ func New(verbose bool) *EncounterEventsInProgress {
 	return &EncounterEventsInProgress{
 		unitTelemetry:  newUnitTelemetryDeduplicator(),
 		verbose:        verbose,
-		Damage:         NewBuilder[*messages.Damage, *chronicleproto.Damage](),
+		Damage:         NewBufferedBuilder[*messages.Damage, *chronicleproto.Damage](),
 		Heal:           NewBuilder[*messages.Heal, *chronicleproto.Heal](),
 		UnitPosition:   NewPositionBuilder(),
 		UnitResources:  NewBuilder[*messages.UnitResources, *chronicleproto.UnitResources](),

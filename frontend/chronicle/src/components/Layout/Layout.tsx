@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { NavBar } from "../NavBar/NavBar";
 import { Footer } from "../Footer/Footer";
 import { SupportBanner } from "../SupportBanner";
+import { ChooseArrivalNotice } from "../ChooseArrivalNotice/ChooseArrivalNotice";
 import { Toaster } from "../ui/Sonner/Sonner";
 import { TooltipProvider } from "../ui/Tooltip/tooltip";
 import { usePageTracking } from "@/hooks/usePageTracking";
@@ -19,6 +20,8 @@ export function Layout() {
   const hideChrome = useHideSiteChrome();
   const location = useLocation();
   const isInstancePage = location.pathname.startsWith("/instances/");
+  // The Lua workshop embeds its own project chat.
+  const hasPageChat = isInstancePage || /^\/addons\/[^/]+\/edit$/.test(location.pathname);
 
   return (
     <TooltipProvider>
@@ -35,7 +38,8 @@ export function Layout() {
         </Suspense>
       </main>
       {!hideChrome && <Footer />}
-      {!hideChrome && !isInstancePage && <GlobalSiteHelpChat />}
+      {!hideChrome && !hasPageChat && <GlobalSiteHelpChat />}
+      <ChooseArrivalNotice />
       <Toaster />
     </TooltipProvider>
   );

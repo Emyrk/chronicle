@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   isSupportedMapManifestFormat,
   mapAssetUrl,
+  mapFloorMesh,
+  mapFloorRender,
   mapGalleryItems,
   mapManifestUrl,
   overlayTilePlacement,
   tilePlacement,
+  type WowMapInstance,
   type WowMapLayer,
   type WowMapManifest,
 } from "./mapGallery";
@@ -138,6 +141,78 @@ describe("map gallery rendering model", () => {
       "zone-1411-1-2170-1",
       "zone-1412-0-1200-0",
     ]);
+  });
+});
+
+describe("floor-specific instance assets", () => {
+  const legacyRender = { path: "renders/legacy.png", width: 800, height: 600 };
+  const floorRender = { path: "renders/floor-2.png", width: 900, height: 700 };
+  const legacyMesh = {
+    path: "3d/legacy.glb",
+    bounds: { minX: 0, maxX: 10, minY: 0, maxY: 20 },
+    zMin: 0,
+    zMax: 5,
+    frame: "wow-yup-mirrored-x",
+  };
+  const floorMesh = { ...legacyMesh, path: "3d/floor-2.glb" };
+  const instance: WowMapInstance = {
+    mapID: 595,
+    name: "The Culling of Stratholme",
+    instanceType: 1,
+    directory: "StratholmeCOT",
+    renders: legacyRender,
+    mesh: legacyMesh,
+    floors: [{
+      floor: 1,
+      width: 1002,
+      height: 668,
+      tileWidth: 256,
+      tileHeight: 256,
+      tiles: [{ row: 0, column: 0, fileDataID: 1, path: "original/1.webp" }],
+    }, {
+      floor: 2,
+      width: 1002,
+      height: 668,
+      tileWidth: 256,
+      tileHeight: 256,
+      tiles: [{ row: 0, column: 0, fileDataID: 2, path: "original/2.webp" }],
+      renders: floorRender,
+      mesh: floorMesh,
+    }],
+  };
+
+  it("resolves selected-floor assets before instance-level fallbacks", () => {
+    expect(mapFloorRender(instance, instance.floors[1])).toBe(floorRender);
+    expect(mapFloorMesh(instance, instance.floors[1])).toBe(floorMesh);
+    expect(mapFloorRender(instance, instance.floors[0])).toBe(legacyRender);
+    expect(mapFloorMesh(instance, instance.floors[0])).toBe(legacyMesh);
+  });
+
+  it("lists floor renders with stable keys without separate mesh cards beside artwork", () => {
+    const items = mapGalleryItems({
+      format: "chronicle-wow-map-art-v2",
+      target: { product: "wow_classic_beta", build: "1.60.1.70205", region: "us", locale: "enUS" },
+      maps: [],
+      instances: [instance],
+    });
+    expect(items.map((item) => item.key)).toEqual([
+      "instance-595-1",
+      "instance-595-2",
+      "renders-595",
+      "renders-595-2",
+    ]);
+    expect(items.filter((item) => item.kind === "mesh")).toEqual([]);
+  });
+
+  it("lists one mesh-only card for a floor that has no image", () => {
+    const meshOnlyFloor = { ...instance.floors[1], tiles: [], renders: undefined, mesh: floorMesh };
+    const items = mapGalleryItems({
+      format: "chronicle-wow-map-art-v2",
+      target: { product: "wow_classic_beta", build: "1.60.1.70205", region: "us", locale: "enUS" },
+      maps: [],
+      instances: [{ ...instance, renders: undefined, mesh: undefined, floors: [meshOnlyFloor] }],
+    });
+    expect(items).toMatchObject([{ kind: "mesh", key: "mesh-595-2", floor: { floor: 2 }, mesh: floorMesh }]);
   });
 });
 

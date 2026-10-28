@@ -38,10 +38,12 @@ export function PanelCard({
   const shouldMountBack = back != null && mountBack;
 
   return (
-    <div className={cn("[perspective:1400px]", !contentHeight && "h-full")} onMouseDown={onMouseDown}>
+    // A descendant filling the browser window (the Map's window fullscreen) needs
+  // position: fixed against the viewport, so the flip's 3D context steps aside.
+  <div className={cn("[perspective:1400px] has-[[data-window-fullscreen]]:[perspective:none]", !contentHeight && "h-full")} onMouseDown={onMouseDown}>
       <div
         className={cn(
-          "relative transition-transform duration-300 [transform-style:preserve-3d]",
+          "relative transition-transform duration-300 [transform-style:preserve-3d] has-[[data-window-fullscreen]]:[transform-style:flat]",
           contentHeight ? "grid" : "h-full",
           flipped && "[transform:rotateY(180deg)]",
         )}
@@ -51,7 +53,7 @@ export function PanelCard({
             the natural height while preserving the flip animation. */}
         <Card
           className={cn(
-            "group/panel gap-2 mb-0 flex flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(0deg)]",
+            "group/panel gap-2 mb-0 flex flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(0deg)] has-[[data-window-fullscreen]]:[transform:none]",
             contentHeight ? "[grid-area:1/1]" : "absolute inset-0 h-full",
             bleed ? "p-0" : "p-2 sm:p-4",
             underConstruction && "border-yellow-500/50",

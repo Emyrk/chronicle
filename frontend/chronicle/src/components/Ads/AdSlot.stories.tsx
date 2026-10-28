@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { MemoryRouter } from "react-router-dom"
+import { AdRailStack } from "./AdRailStack"
 import { AdSlot } from "./AdSlot"
 
 const meta = {
@@ -56,15 +57,13 @@ export const CompactRail: Story = {
           <div className="mb-6 border-b pb-3 text-lg font-semibold">Instance</div>
           <div className="h-[720px] rounded-xl border bg-card" />
         </main>
-        <div className="w-40 shrink-0">
-          <AdSlot {...args} className="2xl:static" />
-          <AdSlot
-            {...args}
-            placement="instance-right-rail-lower"
-            minViewportHeight={0}
-            className="mt-6 2xl:static"
-          />
-        </div>
+        <AdRailStack
+          primaryPlacement={args.placement}
+          secondaryPlacement="instance-right-rail-lower"
+          railLayout={args.railLayout}
+          secondaryMinViewportHeight={0}
+          hostname={args.hostname}
+        />
       </div>
     </div>
   ),

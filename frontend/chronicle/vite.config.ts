@@ -87,6 +87,9 @@ export default defineConfig({
       }
     },
   }],
+  optimizeDeps: {
+    include: ["fengari", "fflate"],
+  },
   resolve: {
     alias: {
       // Server-specific generated constants (must come before generic "@")

@@ -43,7 +43,7 @@ const tabs: Tab[] = [
   { path: "/admin/regression", label: "Regression", icon: FlaskConical },
   { path: "/admin/outdated-instances", label: "Outdated Instances", icon: RefreshCw },
   { path: "/admin/applications", label: "Applications", icon: ClipboardList },
-  { path: "/admin/custom-panels", label: "Custom Panels", icon: PanelsTopLeft },
+  { path: "/admin/custom-panels", label: "Developer Panels", icon: PanelsTopLeft },
   { path: "/admin/cache-stats", label: "Cache Stats", icon: Database },
   { path: "/admin/billing", label: "Billing", icon: CreditCard },
   { path: "/admin/parsing", label: "Parsing", icon: Camera },

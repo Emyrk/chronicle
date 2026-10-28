@@ -974,6 +974,29 @@ const (
 	foreverLegacyPointsPerColumn = 5
 )
 
+var foreverTalentBackgroundsByClass = map[int32][]string{
+	1:  {"WarriorArms", "WarriorFury", "WarriorProtection"},
+	2:  {"PaladinHoly", "PaladinProtection", "PaladinCombat"},
+	3:  {"HunterBeastMastery", "HunterMarksmanship", "HunterSurvival"},
+	4:  {"RogueAssassination", "RogueCombat", "RogueSubtlety"},
+	5:  {"PriestDiscipline", "PriestHoly", "PriestShadow"},
+	7:  {"ShamanElementalCombat", "ShamanEnhancement", "ShamanRestoration"},
+	8:  {"MageArcane", "MageFire", "MageFrost"},
+	9:  {"WarlockCurses", "WarlockSummoning", "WarlockDestruction"},
+	11: {"DruidBalance", "DruidFeralCombat", "DruidRestoration"},
+}
+
+// ForeverTalentBackgroundNames returns every classic talent-tree background
+// name referenced by the Forever talent conversion.
+func ForeverTalentBackgroundNames() []string {
+	var names []string
+	for _, backgrounds := range foreverTalentBackgroundsByClass {
+		names = append(names, backgrounds...)
+	}
+	sort.Strings(names)
+	return names
+}
+
 var foreverClassBySkillLine = map[int32]int32{
 	26: 1, 184: 2, 50: 3, 38: 4, 613: 5,
 	373: 7, 237: 8, 354: 9, 574: 11,
@@ -1155,8 +1178,12 @@ func convertTalents(dir string, out *Import) error {
 		}
 		columns := compactTraitCoordinates(xs)
 		tiers := compactTraitCoordinates(ys)
+		backgrounds := foreverTalentBackgroundsByClass[classID]
+		if display.OrderIndex < 0 || int(display.OrderIndex) >= len(backgrounds) {
+			return fmt.Errorf("trait display %d has invalid background index %d for class %d", display.ID, display.OrderIndex, classID)
+		}
 		tab := talentTab{
-			ID: display.ID, Name: skillLine.DisplayName, OrderIndex: display.OrderIndex,
+			ID: display.ID, Name: skillLine.DisplayName, BackgroundFile: backgrounds[display.OrderIndex], OrderIndex: display.OrderIndex,
 			SpellIconID: skillLine.SpellIconFileID, IconTexture: iconTextures[skillLine.SpellIconFileID],
 			Talents: []talentEntry{},
 		}

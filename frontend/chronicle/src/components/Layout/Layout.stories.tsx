@@ -29,7 +29,7 @@ export const LoggedOut: Story = {
   parameters: {
     msw: {
       handlers: [
-        http.get("/api/v1/whoami", () => new HttpResponse(null, { status: 401 })),
+        http.get("/api/v1/whoami", () => new HttpResponse(null, { status: 204 })),
       ],
     },
   },

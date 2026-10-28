@@ -51,9 +51,10 @@ export function SubspecsPage() {
               <div>
                 <h2 className="font-semibold text-amber-100">Subspecs are an approximation</h2>
                 <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                  Chronicle classifies subspecs from a small set of talent markers. Hybrid or unusual
-                  builds may be grouped unexpectedly, and a subspec does not confirm a player&apos;s
-                  role, gear, rotation, or assignment in a specific encounter.
+                  Chronicle classifies subspecs from talent markers and, where available, encounter
+                  evidence such as a Druid&apos;s active form. Hybrid or unusual builds may be grouped
+                  unexpectedly, and a subspec does not confirm a player&apos;s role, gear, rotation, or
+                  assignment in a specific encounter.
                 </p>
               </div>
             </div>
@@ -141,11 +142,12 @@ export function SubspecsPage() {
                         <div className="flex items-start gap-3">
                           <Info className="mt-0.5 h-5 w-5 shrink-0 text-sky-300" />
                           <div>
-                            <h3 className="font-semibold text-sky-100">Spec only, not active form</h3>
+                            <h3 className="font-semibold text-sky-100">Active form can override talents</h3>
                             <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                              Chronicle only checks the player&apos;s Feral talent spec. We do not
-                              check whether they are actually in Bear Form or Cat Form during the
-                              encounter.
+                              A Feral Druid is classified as Cat or Bear when Chronicle observes that
+                              form for more than 51% of the encounter. Time outside Cat and Bear Form
+                              counts toward the encounter total. If neither form exceeds 51%, Chronicle
+                              falls back to the talent-marker rules below.
                             </p>
                           </div>
                         </div>

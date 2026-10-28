@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { MAJOR_COOLDOWN_MIN_MS } from "@/api/cooldownSpells";
 import { AIRBORNE_YARDS } from "@/pages/Instance/EventsPanels/Map/dungeonMeshes";
 import { MAP_CONTROL_KEYBINDS } from "@/pages/Instance/EventsPanels/Map/mapControls";
-import { DEAD_ENEMY_FRAME_LINGER_MS, DEAD_ENEMY_MODEL_FADE_MS } from "@/pages/Instance/EventsPanels/Map/mapDeathVisibility";
+import { DEAD_ENEMY_FRAME_FADE_MS } from "@/pages/Instance/EventsPanels/Map/mapDeathVisibility";
 import { healthBarColor, MAX_HEALTH_BARS, RECENT_HEALTH_MS } from "@/pages/Instance/EventsPanels/Map/mapModel";
 import { BAR_ABSORB, BAR_BACKGROUND, BAR_DEAD, BAR_HEAL, COOLDOWN_ICON_SCALE, hexCss, WALK_AVATAR_COLOR } from "@/pages/Instance/EventsPanels/Map/mapPalette";
 import { ABOVE_DISC_MODES, CAST_MODES, TRAIL_OPTIONS } from "@/pages/Instance/EventsPanels/Map/mapViewSettings";
@@ -198,7 +198,7 @@ export function MapLegend() {
             Anything a player owns (pets, summons, totems): a smaller disc with a paw, or a totem pole for totems. One with a 3D model (a totem) stands on that disc, grown so even small ones read. Slain totems disappear immediately.
           </Card>
           <Card title="Enemy" demo={<Ground><At x={50} y={55}><Token kind="hostile" ring="#fb7185" facing={200} /></At></Ground>}>
-            Enemy red, with a dark red well instead of an icon. Units with a 3D model show the model instead. When a non-boss dies, its enemy frame stays for {ms(DEAD_ENEMY_FRAME_LINGER_MS)}, then disappears; its 3D model and shadow fade together over {ms(DEAD_ENEMY_MODEL_FADE_MS)}. Boss frames and models remain.
+            Enemy red, with a dark red well instead of an icon. Units with a 3D model show the model instead. When a non-boss dies, its top-right enemy frame, 3D model and shadow fade away together over {ms(DEAD_ENEMY_FRAME_FADE_MS)}. Boss frames and models remain.
           </Card>
           <Card title="Facing" demo={<Ground><At x={50} y={55}><Token {...MAGE} facing={(seconds * 40) % 360} /></At></Ground>}>
             The notch on the ring points where the unit faces and turns on the ground. When the log doesn&apos;t record facing, enemies face whoever they last hit and everyone else shows no notch.
@@ -252,13 +252,13 @@ export function MapLegend() {
             The boss&apos;s model stands on the sigil.
           </Card>
           <Card title="No model" demo={<Ground height={170}><At x={50} y={75}><BossToken seconds={seconds} facing={200} model={false} /></At></Ground>}>
-            A hexagon pin rises from the sigil so the boss still reads as a figure.
+            A red crystal stands on the sigil, turning slowly, so the boss still reads as a figure.
           </Card>
           <Card title="Casting" demo={<Ground height={170}><At x={50} y={75}><BossToken seconds={seconds} model={false} cast={{ fraction: cycle(seconds, 3), color: nature }} /></At></Ground>}>
-            The cast arc wraps the sigil.
+            The cast arc wraps the sigil, and the crystal glows in the spell&apos;s colour, building as the cast fills.
           </Card>
           <Card title="Dead" demo={<Ground height={170}><At x={50} y={75}><BossToken seconds={seconds} model={false} dead /></At></Ground>}>
-            Sigil and pin go grey.
+            Sigil and crystal go grey.
           </Card>
         </Grid>
       </Section>

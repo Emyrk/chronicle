@@ -49,13 +49,13 @@ async function updateCustomPanelSettings(input: UpdateCustomPanelAccountSettings
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
   });
-  if (!response.ok) throw new Error(response.status === 409 ? "Custom panel settings changed in another session. Reload and try again." : `Custom panel settings update failed (${response.status}).`);
+  if (!response.ok) throw new Error(response.status === 409 ? "Developer panel settings changed in another session. Reload and try again." : `Developer panel settings update failed (${response.status}).`);
   return await normalizeSettings(await response.json() as CustomPanelSettings);
 }
 
 export async function fetchCustomPanelSettings(): Promise<CustomPanelAccountSnapshot> {
   const response = await fetch("/api/v1/me/custom-panels");
-  if (!response.ok) throw new Error(`Custom panel settings request failed (${response.status}).`);
+  if (!response.ok) throw new Error(`Developer panel settings request failed (${response.status}).`);
   const settings = await normalizeSettings(await response.json() as CustomPanelSettings);
   if (typeof window === "undefined" || settings.revision !== 0) return settings;
 

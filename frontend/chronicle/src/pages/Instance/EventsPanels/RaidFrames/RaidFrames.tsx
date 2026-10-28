@@ -24,7 +24,7 @@ import {
   type RaidFramesProcessorEvent,
   type RaidFramesResult,
 } from "./raidFrames.processor";
-import { deadEnemyFrameVisible } from "../Map/mapDeathVisibility";
+import { deadEnemyFrameOpacity } from "../Map/mapDeathVisibility";
 import { INCOMING_HEAL_WINDOW_MS, POWER_COLORS, percent, useDisplayTimestamp } from "./raidFrameShared";
 
 export function selectRaidFramesEncounter(
@@ -412,6 +412,7 @@ function OverlayRaidFrame({
   incomingHeals,
   spellNames,
   timestampMs,
+  opacity,
 }: {
   guid?: string;
   name: string;
@@ -421,6 +422,7 @@ function OverlayRaidFrame({
   incomingHeals: readonly RaidFrameHeal[];
   spellNames: ReadonlyMap<number, string>;
   timestampMs: number;
+  opacity?: number;
 }) {
   const [hoveredHeal, setHoveredHeal] = useState<RaidFrameHeal | null>(null);
   const inspect = useUnitInspect();
@@ -434,7 +436,8 @@ function OverlayRaidFrame({
     <Tooltip>
       <TooltipTrigger asChild>
         <div
-          className={`pointer-events-auto flex w-20 flex-col overflow-hidden rounded-sm border bg-black/80 ${inspected ? "border-white ring-1 ring-white/70" : "border-black/80"} ${dead ? "opacity-60" : ""} ${inspect && guid ? "cursor-pointer" : ""}`}
+          className={`pointer-events-auto flex w-20 flex-col overflow-hidden rounded-sm border bg-black/80 transition-opacity duration-100 ease-linear ${inspected ? "border-white ring-1 ring-white/70" : "border-black/80"} ${dead && opacity === undefined ? "opacity-60" : ""} ${inspect && guid ? "cursor-pointer" : ""}`}
+          style={opacity === undefined ? undefined : { opacity }}
           onClick={inspect && guid ? () => inspect.select(guid) : undefined}
         >
           <div className="relative h-4">
@@ -548,7 +551,7 @@ function InspectCastBar({ cast, timestampMs }: { cast: RaidFrameCast; timestampM
 
 /** Panel option token for enemy raid frames. */
 const ENEMIES_OPTION = "enemies";
-/** Map overlay option: remove dead non-boss enemy frames after their short linger. */
+/** Map overlay option: fade dead non-boss enemy frames with their 3D models, then remove them. */
 export const HIDE_DEAD_ENEMIES_OPTION = "hide-dead-enemies";
 
 const BREAKOUT_WIDTH = 400;
@@ -618,6 +621,11 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
   const encounterEnemies = props.context.instance.encounters.find((candidate) => candidate.id === encounter.encounterId)?.enemies ?? [];
   const bossGuids = new Set(encounterEnemies.filter((enemy) => enemy.boss).map((enemy) => enemy.id));
   const encounterEnemyGuids = new Set(encounterEnemies.map((enemy) => enemy.id));
+  const enemyOpacity = (guid: string) => deadEnemyFrameOpacity(
+    resourceDeathStartedAt(encounter.resourcesByUnit.get(guid) ?? [], timestampMs),
+    timestampMs,
+    bossGuids.has(guid),
+  );
   const players: (readonly [string, { name: string; class: string }])[] = enemiesMode
     ? enemyFrameUnits(
         encounter,
@@ -627,11 +635,7 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
         bossGuids,
         encounterEnemyGuids,
       )
-        .filter(({ guid }) => !hideDeadEnemies || deadEnemyFrameVisible(
-          resourceDeathStartedAt(encounter.resourcesByUnit.get(guid) ?? [], timestampMs),
-          timestampMs,
-          bossGuids.has(guid),
-        ))
+        .filter(({ guid }) => !hideDeadEnemies || enemyOpacity(guid) > 0)
         .map(({ guid, name }) => [guid, { name, class: "enemy" }] as const)
     : Object.entries(instancePlayers)
       .sort(([, left], [, right]) => left.class.localeCompare(right.class) || left.name.localeCompare(right.name));
@@ -650,6 +654,7 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
     sample: latestResourceAt(encounter.resourcesByUnit.get(entry[0]) ?? [], timestampMs),
     cast: activeCastAt(encounter.castsByUnit.get(entry[0]) ?? [], timestampMs),
     incomingHeals: incomingHealsAt(encounter.healsByUnit.get(entry[0]) ?? [], timestampMs, INCOMING_HEAL_WINDOW_MS),
+    opacity: enemiesMode && hideDeadEnemies ? enemyOpacity(entry[0]) : undefined,
   }));
 
   if (overlay) {
@@ -668,6 +673,7 @@ function RaidFramesContent(props: PanelRenderProps<RaidFramesResult>) {
               incomingHeals={frame.incomingHeals}
               spellNames={props.result.spellNames}
               timestampMs={timestampMs}
+              opacity={frame.opacity}
             />
           ))}
         </div>

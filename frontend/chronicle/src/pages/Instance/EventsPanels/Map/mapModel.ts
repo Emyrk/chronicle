@@ -1,9 +1,14 @@
-import type {
-  WowMap,
-  WowMapAssignment,
-  WowMapFloorBounds,
-  WowMapInstance,
-  WowMapManifest,
+import {
+  hasNativeMapFloorArtwork,
+  mapFloorRender,
+  type WowMap,
+  type WowMapAssignment,
+  type WowMapFloorBounds,
+  type WowMapInstance,
+  type WowMapInstanceFloor,
+  type WowMapManifest,
+  type WowMapManualRender,
+  type WowMapRenderedInstance,
 } from "@/pages/Technical/mapGallery";
 import type { MapEncounterPositions, MapHealthSample, MapPositionSample } from "./map.processor";
 
@@ -311,7 +316,11 @@ export function replayPositionAt(
   }
   const latest = positions[index];
   const next = positions[index + 1];
-  if (!next || next.mapId !== latest.mapId || next.timestampMs <= latest.timestampMs || next.timestampMs - latest.timestampMs > maxInterpolationGapMs) return latest;
+  if (!next
+    || next.mapId !== latest.mapId
+    || next.floor !== latest.floor
+    || next.timestampMs <= latest.timestampMs
+    || next.timestampMs - latest.timestampMs > maxInterpolationGapMs) return latest;
   const t = (timestampMs - latest.timestampMs) / (next.timestampMs - latest.timestampMs);
   const sample: MapPositionSample = {
     timestampMs,
@@ -319,6 +328,7 @@ export function replayPositionAt(
     y: latest.y + (next.y - latest.y) * t,
     mapId: latest.mapId,
   };
+  if (latest.floor !== undefined) sample.floor = latest.floor;
   // Facing blends when both samples have it, else holds the earlier one's (if any).
   if (latest.facing !== undefined && next.facing !== undefined) sample.facing = lerpAngle(latest.facing, next.facing, t);
   else if (latest.facing !== undefined) sample.facing = latest.facing;
@@ -327,6 +337,36 @@ export function replayPositionAt(
   if (latest.z !== undefined && next.z !== undefined) sample.z = smoothHeight(positions, index, t);
   else if (latest.z !== undefined) sample.z = latest.z;
   return sample;
+}
+
+export interface MapTrailPoint {
+  point: MapPoint;
+  z?: number;
+}
+
+/** Gap between projected movement-trail points. */
+export const TRAIL_STEP_MS = 100;
+
+/** Project a unit's recent movement, newest first, stopping at its first sample or a map change. */
+export function movementTrailPoints(
+  positions: MapPositionSample[],
+  sample: MapPositionSample,
+  spanMs: number,
+  showInitialPosition: boolean,
+  projectSample: (sample: MapPositionSample) => MapPoint | null,
+): MapTrailPoint[] {
+  const trail: MapTrailPoint[] = [];
+  const first = positions[0];
+  for (let ago = 0; ago <= spanMs; ago += TRAIL_STEP_MS) {
+    const at = sample.timestampMs - ago;
+    if (!first || at < first.timestampMs) break;
+    const past = ago === 0 ? sample : replayPositionAt(positions, at, showInitialPosition);
+    if (!past || past.mapId !== sample.mapId) break;
+    const point = projectSample(past);
+    if (!point) break;
+    trail.push({ point, z: past.z });
+  }
+  return trail;
 }
 
 // The height `t` (0-1) of the way from sample `index` to the next: a cubic
@@ -443,6 +483,33 @@ export function dominantMapId(samples: MapPositionSample[]): number | null {
   return selected;
 }
 
+export function resolveMapFloorNumber(
+  instance: WowMapInstance,
+  requestedFloor: number | null,
+  samples: readonly MapPositionSample[],
+): number | null {
+  const available = new Set(instance.floors.map((floor) => floor.floor));
+  if (requestedFloor !== null && available.has(requestedFloor)) return requestedFloor;
+
+  const counts = new Map<number, number>();
+  for (const sample of samples) {
+    if (sample.floor !== undefined && available.has(sample.floor)) {
+      counts.set(sample.floor, (counts.get(sample.floor) ?? 0) + 1);
+    }
+  }
+  let detected: number | null = null;
+  let detectedCount = 0;
+  for (const [floor, count] of counts) {
+    if (count > detectedCount) {
+      detected = floor;
+      detectedCount = count;
+    }
+  }
+  if (detected !== null) return detected;
+
+  return instance.floors[0]?.floor ?? null;
+}
+
 function assignmentContains(assignment: WowMapAssignment, sample: MapPositionSample): boolean {
   const [minWorldX, minWorldY, , maxWorldX, maxWorldY] = assignment.region;
   return sample.x >= Math.min(minWorldX, maxWorldX)
@@ -460,7 +527,20 @@ function normalizedMapName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
-export type OverviewMapSource = "renders" | "styled" | "art";
+const calibratedRenderCache = new WeakMap<WowMapManualRender, WowMapRenderedInstance>();
+
+function calibratedManualRender(render: WowMapManualRender | undefined): WowMapRenderedInstance | WowMapManualRender | undefined {
+  if (!render || render.width <= 0 || render.height <= 0) return undefined;
+  const bounds = render.bounds;
+  if (!bounds) return render;
+  const cached = calibratedRenderCache.get(render);
+  if (cached) return cached;
+  const calibrated = { ...render, bounds, source: "renders" };
+  calibratedRenderCache.set(render, calibrated);
+  return calibrated;
+}
+
+export type OverviewMapSource = "auto" | "renders" | "styled" | "art";
 
 /** Choose 2D artwork without borrowing calibration from a different image. */
 export function overviewDungeonCanvas(
@@ -468,13 +548,60 @@ export function overviewDungeonCanvas(
   floor: WowMapInstance["floors"][number] | undefined,
   source: OverviewMapSource,
 ) {
-  const render = instance.renders && instance.renders.width > 0 && instance.renders.height > 0 ? instance.renders : undefined;
+  const render = calibratedManualRender(mapFloorRender(instance, floor));
   const styled = instance.styled && instance.styled.width > 0 && instance.styled.height > 0 ? instance.styled : undefined;
-  if (source === "art" && floor) return { canvas: floor, source: "art" as const };
+  if (source === "art" && hasNativeMapFloorArtwork(floor)) return { canvas: floor, source: "art" as const };
+  if (source === "renders" && render) return { canvas: render, source: "renders" as const };
   if (source === "styled" && styled) return { canvas: styled, source: "styled" as const };
+  // The manifest preference applies only to automatic selection. An explicit
+  // UI choice above remains in effect for the session, including across floors.
+  if (floor?.preferred2D === "art" && hasNativeMapFloorArtwork(floor)) return { canvas: floor, source: "art" as const };
+  // The overview needs the chosen image's own bounds to project a route. In
+  // automatic mode, prefer a calibrated render rather than displaying an
+  // uncalibrated image that cannot carry the overlay.
+  if (render?.bounds) return { canvas: render, source: "renders" as const };
+  if (styled?.bounds) return { canvas: styled, source: "styled" as const };
   if (render) return { canvas: render, source: "renders" as const };
   if (styled) return { canvas: styled, source: "styled" as const };
-  return { canvas: floor, source: "art" as const };
+  return { canvas: hasNativeMapFloorArtwork(floor) ? floor : undefined, source: "art" as const };
+}
+
+export type ReplayDungeonCanvas =
+  | { canvas: WowMapRenderedInstance; rendered: true }
+  | { canvas: WowMapInstanceFloor; rendered: false };
+
+/** Prefer the floor's automatic 2D source in flat mode, while retaining every source as fallback. */
+export function replayDungeonCanvas(
+  instance: WowMapInstance,
+  floor: WowMapInstanceFloor | undefined,
+  preferRendered: boolean,
+): ReplayDungeonCanvas | null {
+  const render = calibratedManualRender(mapFloorRender(instance, floor));
+  const boundedRender = render && "source" in render ? render : null;
+  const styled = instance.styled && instance.styled.width > 0 && instance.styled.height > 0
+    ? instance.styled
+    : null;
+  const rendered = boundedRender ?? styled;
+  const nativeArtwork = floor && hasNativeMapFloorArtwork(floor) ? floor : null;
+  if (preferRendered && floor?.preferred2D === "art" && nativeArtwork) {
+    return { canvas: nativeArtwork, rendered: false };
+  }
+  if (preferRendered && rendered) return { canvas: rendered, rendered: true };
+  if (nativeArtwork) return { canvas: nativeArtwork, rendered: false };
+  return rendered ? { canvas: rendered, rendered: true } : null;
+}
+
+/** Normalized UI-map coordinates must use native floor artwork, never world-calibrated renders. */
+export function replayDungeonCanvasForCoordinates(
+  instance: WowMapInstance,
+  floor: WowMapInstanceFloor | undefined,
+  normalizedUIMap: boolean,
+  preferRendered: boolean,
+): ReplayDungeonCanvas | null {
+  if (normalizedUIMap) {
+    return floor && hasNativeMapFloorArtwork(floor) ? { canvas: floor, rendered: false } : null;
+  }
+  return replayDungeonCanvas(instance, floor, preferRendered);
 }
 
 export function resolveMapArtwork(
@@ -510,8 +637,9 @@ export function resolveMapArtwork(
   const instanceHasProjection = instance && (
     instance.mapID === 43
       || Boolean(instance.renders?.bounds)
+      || Boolean(instance.mesh?.bounds)
       || Boolean(instance.styled?.bounds)
-      || instance.floors.some((floor) => Boolean(floor.bounds))
+      || instance.floors.some((floor) => Boolean(floor.bounds || floor.renders?.bounds || floor.mesh?.bounds))
   );
   if (instance && (!sample || instanceHasProjection || !zone)) return { kind: "instance", instance };
   if (zone) return zone;
@@ -691,9 +819,54 @@ export function dungeonMapPoint(sample: MapPositionSample, bounds: WowMapFloorBo
   };
 }
 
+// How far one world yard moves on flat artwork around `sample`. Normalized UI
+// coordinates are percentages rather than yards, so they must never be probed
+// this way: the ±5-yard samples clamp to the canvas edges and invent a huge scale.
+export function flatYardStep(
+  project: (sample: MapPositionSample) => MapPoint | null,
+  sample: MapPositionSample,
+  worldCoordinates: boolean,
+): { x: MapPoint; y: MapPoint } | null {
+  if (!worldCoordinates) return null;
+  const half = 5;
+  const step = (dx: number, dy: number): MapPoint | null => {
+    const from = project({ ...sample, x: sample.x - dx, y: sample.y - dy });
+    const to = project({ ...sample, x: sample.x + dx, y: sample.y + dy });
+    return from && to ? {
+      leftPercent: (to.leftPercent - from.leftPercent) / (2 * half),
+      topPercent: (to.topPercent - from.topPercent) / (2 * half),
+    } : null;
+  };
+  const x = step(half, 0);
+  const y = step(0, half);
+  return x && y ? { x, y } : null;
+}
+
+export function floorBoundsYardStep(bounds: WowMapFloorBounds | undefined): { x: MapPoint; y: MapPoint } | null {
+  if (!bounds) return null;
+  const spanX = Math.abs(bounds.maxX - bounds.minX);
+  const spanY = Math.abs(bounds.maxY - bounds.minY);
+  if (!Number.isFinite(spanX) || !Number.isFinite(spanY) || spanX <= 0 || spanY <= 0) return null;
+  // Dungeon floor artwork runs horizontally along world Y and vertically along world X.
+  return {
+    x: { leftPercent: 0, topPercent: 100 / spanX },
+    y: { leftPercent: 100 / spanY, topPercent: 0 },
+  };
+}
+
+/**
+ * Flat artwork without published world bounds cannot be yard-calibrated. Keep
+ * its chips smaller than native geometry so dense raid stacks stay readable.
+ */
+export const FLAT_ARTWORK_UNIT_SCALE = 0.65;
+
 export interface ScenePoint {
   x: number;
   z: number;
+}
+
+export function flatArtworkUnitScale(): number {
+  return FLAT_ARTWORK_UNIT_SCALE;
 }
 
 // Places a 2D artwork point on a ground plane centred on the origin that is
@@ -704,6 +877,20 @@ export function mapPointToScene(point: MapPoint, aspect: number, width = 1): Sce
     x: (point.leftPercent / 100 - 0.5) * width,
     z: (point.topPercent / 100 - 0.5) * width * aspect,
   };
+}
+
+/**
+ * Camera distance that contains a flat map exactly in a perspective viewport.
+ * The camera looks straight down and uses `verticalFovRadians` as its vertical FOV.
+ */
+export function topDownMapDistance(
+  mapWidth: number,
+  mapHeight: number,
+  viewportAspect: number,
+  verticalFovRadians: number,
+): number {
+  const visibleHeight = Math.max(mapHeight, mapWidth / viewportAspect);
+  return visibleHeight / (2 * Math.tan(verticalFovRadians / 2));
 }
 
 /** A box in artwork percentages, like MapPoint. */

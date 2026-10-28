@@ -257,10 +257,11 @@ export function AdminBillingPage() {
             </div>
           </div>
           <div className="styled-scrollbar max-h-96 overflow-auto">
-            <table className="w-full min-w-[620px] text-sm">
+            <table className="w-full min-w-[820px] text-sm">
               <thead className="sticky top-0 bg-card text-left text-xs text-muted-foreground">
                 <tr>
-                  <th className="px-5 py-3 font-medium">Subscription</th>
+                  <th className="px-5 py-3 font-medium">User</th>
+                  <th className="px-3 py-3 font-medium">Subscription</th>
                   <th className="px-3 py-3 font-medium">Status</th>
                   <th className="px-3 py-3 font-medium">Period end</th>
                   <th className="px-5 py-3 font-medium">Updated</th>
@@ -270,6 +271,13 @@ export function AdminBillingPage() {
                 {(data?.subscriptions ?? []).map((subscription) => (
                   <tr key={`${subscription.provider}:${subscription.provider_customer_id}`} className="border-t hover:bg-muted/20">
                     <td className="px-5 py-3">
+                      <p className="font-medium">{subscription.username}</p>
+                      <p className="text-xs text-muted-foreground">{subscription.email}</p>
+                      {subscription.discord_id ? (
+                        <code className="text-xs text-muted-foreground">Discord: {subscription.discord_id}</code>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-3">
                       <p className="font-medium">{subscription.product_code}</p>
                       <code className="text-xs text-muted-foreground">
                         {subscription.provider_subscription_id || subscription.provider_customer_id}
@@ -282,7 +290,7 @@ export function AdminBillingPage() {
                 ))}
                 {!data?.subscriptions.length ? (
                   <tr>
-                    <td colSpan={4} className="px-5 py-8 text-center text-muted-foreground">
+                    <td colSpan={5} className="px-5 py-8 text-center text-muted-foreground">
                       No local subscriptions recorded.
                     </td>
                   </tr>

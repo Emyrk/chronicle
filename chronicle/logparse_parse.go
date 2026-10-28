@@ -193,7 +193,7 @@ func (w *WorkerLogParse) parseCombatLog(
 				if artifact.Kind != ArtifactKindSidekickStorage {
 					continue
 				}
-				if artifact.SchemaVersion != 1 && artifact.SchemaVersion != 2 {
+				if artifact.SchemaVersion != 1 && artifact.SchemaVersion != 2 && artifact.SchemaVersion != 3 {
 					return nil, fmt.Errorf("unsupported Sidekick storage artifact schema version %d", artifact.SchemaVersion)
 				}
 				contents, err := w.parent.Storage.DownloadFile(ctx, BucketRaidLogs, artifact.ObjectKey)

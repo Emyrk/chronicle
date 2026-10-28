@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
@@ -22,6 +24,28 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
+
+func supportedSpeedrunRules(rules *rankings.SpeedrunRules) *chroniclesdk.SupportedInstanceSpeedrunRules {
+	if rules == nil {
+		return nil
+	}
+	requirements := make([]chroniclesdk.SpeedrunRequirement, len(rules.Requirements))
+	for i, req := range rules.Requirements {
+		requirements[i] = chroniclesdk.SpeedrunRequirement{
+			Name: req.Name, EntryIDs: req.EntryIDs, Count: req.Count, Category: string(req.Category),
+		}
+	}
+	result := &chroniclesdk.SupportedInstanceSpeedrunRules{
+		Requirements:                requirements,
+		RankedStartAfterRequirement: rules.RankedStartAfterRequirement,
+	}
+	if rules.LevelRange != nil {
+		result.LevelRange = &chroniclesdk.SpeedrunLevelRangeRequirement{
+			MinLevel: rules.LevelRange.MinLevel, MaxLevel: rules.LevelRange.MaxLevel,
+		}
+	}
+	return result
+}
 
 func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -49,6 +73,22 @@ func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 				Encounters: set.Encounters,
 			}
 		}
+		var damageByEncounter map[string]chroniclesdk.SupportedInstanceDamageRule
+		if len(d.DamageByEncounter) > 0 {
+			damageByEncounter = make(map[string]chroniclesdk.SupportedInstanceDamageRule, len(d.DamageByEncounter))
+			for name, rule := range d.DamageByEncounter {
+				damageByEncounter[name] = chroniclesdk.SupportedInstanceDamageRule{Mode: rule.Mode, EntryIDs: rule.EntryIDs}
+			}
+		}
+		var derivedSpeedrunRules map[string]chroniclesdk.SupportedInstanceSpeedrunRules
+		if len(d.DerivedSpeedrunRules) > 0 {
+			derivedSpeedrunRules = make(map[string]chroniclesdk.SupportedInstanceSpeedrunRules, len(d.DerivedSpeedrunRules))
+			for name, rules := range d.DerivedSpeedrunRules {
+				if converted := supportedSpeedrunRules(rules); converted != nil {
+					derivedSpeedrunRules[name] = *converted
+				}
+			}
+		}
 		result[i] = chroniclesdk.SupportedInstance{
 			Name:                         d.Name,
 			Comment:                      d.Comment,
@@ -59,6 +99,9 @@ func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 			BossCount:                    d.BossCount,
 			ProgressionBosses:            d.ProgressionBosses,
 			RankingEncounterSets:         rankingEncounterSets,
+			DamageByEncounter:            damageByEncounter,
+			SpeedrunRules:                supportedSpeedrunRules(d.SpeedrunRules),
+			DerivedSpeedrunRules:         derivedSpeedrunRules,
 			RaidProgressionOrder:         d.RaidProgressionOrder,
 			DerivedRaidProgressionOrders: d.DerivedRaidProgressionOrders,
 			RankedStartAfterRequirement:  d.RankedStartAfterRequirement,
@@ -210,7 +253,7 @@ func (api *API) instanceOwnerAdsFree(ctx context.Context, instanceID uuid.UUID) 
 	return api.Opts.Zed.CheckOne(
 		ctx,
 		nil,
-		policy.New().GlobalChronicle().CanAd_free_User(policy.New().User(ownerID)),
+		policy.New().GlobalChronicle().CanUploaded_logs_ad_free_User(policy.New().User(ownerID)),
 	)
 }
 
@@ -260,9 +303,16 @@ func (api *API) InstanceSpeedrun(w http.ResponseWriter, r *http.Request) {
 	inst := httpmw.Instance(ctx)
 
 	sr, err := api.Opts.Zed.GetInstanceSpeedrun(ctx, inst.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if err != nil {
-		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
-			Message: "No speedrun data for this instance",
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to fetch speedrun data for this instance",
+				Detail:  err.Error(),
+			},
 		})
 		return
 	}
@@ -470,6 +520,10 @@ func (api *API) GetInstanceYoutube(w http.ResponseWriter, r *http.Request) {
 		LogInstanceID: uuid.NullUUID{UUID: inst.ID, Valid: true},
 		InstanceSlug:  inst.HashedSlug,
 	})
+	if errors.Is(err, sql.ErrNoRows) {
+		httpapi.Write(ctx, w, http.StatusNoContent, nil)
+		return
+	}
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{

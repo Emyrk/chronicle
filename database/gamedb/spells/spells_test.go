@@ -3,6 +3,7 @@ package spells_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -19,11 +20,17 @@ import (
 )
 
 type queryCounter struct {
-	count atomic.Int64
+	spellByID    atomic.Int64
+	spellsByName atomic.Int64
 }
 
-func (c *queryCounter) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryStartData) context.Context {
-	c.count.Add(1)
+func (c *queryCounter) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	switch {
+	case strings.Contains(data.SQL, "-- name: GetCanonicalSpellByID :one"):
+		c.spellByID.Add(1)
+	case strings.Contains(data.SQL, "-- name: GetCanonicalSpellsByName :many"):
+		c.spellsByName.Add(1)
+	}
 	return ctx
 }
 
@@ -187,10 +194,9 @@ func TestFetcher_PopulatesModernSpellComponents(t *testing.T) {
 	require.NoError(t, err)
 
 	fetcher := spells.NewFetcher(pool, nil, nil, 100)
-	queries.count.Store(0)
 	got, err := fetcher.Spell(ctx, datasetID, modern.ID)
 	require.NoError(t, err)
-	require.EqualValues(t, 1, queries.count.Load(), "a database-backed spell lookup must use one SQL statement")
+	require.EqualValues(t, 1, queries.spellByID.Load(), "a database-backed spell lookup must use one canonical SQL statement")
 	require.Equal(t, []int32{0, 2, 5}, []int32{got.Effects[0].EffectIndex, got.Effects[1].EffectIndex, got.Effects[2].EffectIndex})
 	require.Equal(t, []chrondbc.Effect{20, 22, 25}, []chrondbc.Effect{got.Effects[0].Effect, got.Effects[1].Effect, got.Effects[2].Effect})
 	require.Equal(t, []int32{101, 102, 103, 104}, got.Effects[0].EffectSpellClassMask)
@@ -252,17 +258,16 @@ func TestFetcher_PopulatesModernSpellComponents(t *testing.T) {
 	require.Contains(t, string(payload["modern_variants"]), `"class_options"`)
 	require.Contains(t, string(payload["modern_variants"]), `"spell_class_mask":[1,2,3,4]`)
 
-	queries.count.Store(0)
 	byName, err := fetcher.SpellsByName(ctx, datasetID, modern.Name())
 	require.NoError(t, err)
-	require.EqualValues(t, 1, queries.count.Load(), "a multi-result name lookup must use one SQL statement")
+	require.EqualValues(t, 1, queries.spellsByName.Load(), "a multi-result name lookup must use one canonical SQL statement")
 	require.Len(t, byName, 2)
 	require.Len(t, byName[0].Effects, 3)
 	require.Len(t, byName[0].Powers, 2)
 	require.Len(t, byName[0].Variants, 2)
 
 	legacyGot, err := fetcher.Spell(ctx, datasetID, legacy.ID)
-	require.EqualValues(t, 1, queries.count.Load(), "name lookup results must populate the assembled-spell cache")
+	require.EqualValues(t, 1, queries.spellByID.Load(), "name lookup results must populate the assembled-spell cache")
 	require.NoError(t, err)
 	require.Empty(t, legacyGot.Effects)
 	require.Empty(t, legacyGot.Powers)

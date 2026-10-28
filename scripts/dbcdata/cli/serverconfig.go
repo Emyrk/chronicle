@@ -11,27 +11,27 @@ import (
 func DefaultClientPath(server string) string {
 	switch server {
 	case "faebright":
-		return "/home/steven/Games/Faebright"
+		return "/mnt/windows-z/ChronicleGames/Faebright"
 	case "triumvirate":
 		return "/home/steven/Games/TriumvirateWoW"
 	case "turtle":
 		return "/home/steven/Games/turtlewow/drive_c/Program Files (x86)/TurtleWoW"
 	case "epoch":
-		return "/home/steven/Games/ascension-wow/drive_c/Program Files/Ascension Launcher/resources/epoch-live"
+		return "/mnt/windows-z/ChronicleGames/Epoch"
 	case "kronos":
-		return "/home/steven/Games/kronos-wow/drive_c/Program Files (x86)/Kronos"
+		return "/mnt/windows-z/ChronicleGames/Kronos"
 	case "azerothcore":
 		return "/home/steven/Games/Warmane"
 	case "ascension":
 		return "/home/steven/Games/ascension-wow/drive_c/Program Files/Ascension Launcher/resources/ascension-live"
 	case "vanillaplus":
-		return "/home/steven/Games/World of Warcraft Vanilla+"
+		return "/mnt/windows-z/ChronicleGames/World of Warcraft Vanilla+"
 	case "octowow":
 		return "/home/steven/Games/OctoWoW"
 	case "lunatic":
-		return "/home/steven/Games/LunaticPTR"
+		return "/mnt/windows-z/ChronicleGames/LunaticPTR"
 	case "tbc":
-		return "/home/steven/Games/World of Warcraft 2.4.3"
+		return "/mnt/windows-z/ChronicleGames/World of Warcraft 2.4.3"
 	case "forever":
 		return "/home/steven/.steam/steam/steamapps/compatdata/3492500670/pfx/drive_c/Program Files (x86)/World of Warcraft"
 	default:
@@ -43,7 +43,7 @@ func DefaultClientPath(server string) string {
 func ServerOption(dst *string) serpent.Option {
 	return serpent.Option{
 		Name:        "server",
-		Description: "Server name (for example turtle, azerothcore, tbc, or forever). Determines default --dbc path.",
+		Description: "Server name (for example turtle, vanillaplus, azerothcore, tbc, or forever). Determines default --dbc path.",
 		Flag:        "server",
 		Value:       serpent.StringOf(dst),
 		Default:     "turtle",

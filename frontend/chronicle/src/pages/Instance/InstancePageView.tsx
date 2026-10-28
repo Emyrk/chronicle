@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams, Link } from "react-router-dom";
-import { useSession, useCreateShare, fetchSharedView, toastError, type UserPanelLayout } from "@/api/queries";
+import { useSession, useCreateShare, fetchInstanceSpeedrun, fetchSharedView, toastError, type UserPanelLayout } from "@/api/queries";
 import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, LayoutPanelTop, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown, RotateCcw, Maximize2, Minimize2, LockKeyhole, Pencil } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { toast } from "sonner";
@@ -10,11 +10,12 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { useHelpfulHints } from "@/hooks/useHelpfulHints";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { useInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
+import { useConfirmLinkNavigation } from "@/hooks/useConfirmLinkNavigation";
 import { type LayoutType, type PanelType } from "@/hooks/useUrlState";
 import { useTimeRangeContextOptional } from "./TimeRangeContext";
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
 import { buildLayoutSections, type LayoutSection } from "@/components/layout/layoutGroups";
-import type { ActivityPeriod, InstancePlayer, SpeedrunResult } from "@/api/typesGenerated";
+import type { ActivityPeriod, InstancePlayer } from "@/api/typesGenerated";
 import { PeriodMomentDisplay } from "@/components/PeriodMomentDisplay";
 import { Card } from "@/components/ui/Card/Card";
 import { PortalContainerProvider } from "@/components/ui/PortalContainerContext";
@@ -41,6 +42,7 @@ import { activePhaseForTimeRange, phaseTimeRangeSelection, phaseWidthPercent } f
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
 import type { PanelFilter } from "./EventsPanels/processors/filters";
 import { listSelectableCustomPanels, useCustomPanelRegistry } from "./EventsPanels/custom/pluginRegistry";
+import { isLuaPanelRef, luaPanelRef, useLuaPanelCatalog } from "./EventsPanels/LuaPanel/luaPanelRegistry";
 import { canonicalizeCustomPanelRef, isCustomPanelRef } from "./EventsPanels/custom/pluginTypes";
 import { PANELS, type BuiltinPanelType } from "./EventsPanels/EventsPanel";
 import { isQueryablePanelType, PANEL_AI_DESCRIPTIONS } from "./EventsPanels/panelCatalog";
@@ -115,6 +117,7 @@ import {
 import { openLayoutPopup, syncPopupAppearance, type LayoutPopup } from "./EventsPanels/panelPopup";
 import { InstanceKeybindProvider, useRegisterInstanceKeybinds } from "./InstanceKeybinds";
 import { shouldShowEncounterSidebarAd } from "./encounterSidebarAd";
+import { instanceNavigationWarning } from "./instanceNavigationGuard";
 
 function useViewportHeight(targetWindow: Window | null): number {
   const [height, setHeight] = useState(() => targetWindow?.innerHeight ?? 1080);
@@ -469,6 +472,8 @@ function EncounterSidebar({
   instanceStartTime,
   instanceId,
   showRankings,
+  hideAd = false,
+  className,
 }: {
   encounters: Encounter[];
   trashGroups: TrashGroup[];
@@ -485,6 +490,8 @@ function EncounterSidebar({
   instanceStartTime: string;
   instanceId: string;
   showRankings: boolean;
+  hideAd?: boolean;
+  className?: string;
 }) {
   const timeParsesQuery = useInstanceTimeParses(showRankings ? instanceId : undefined);
   const killParses = bossKillParsesByEncounter(timeParsesQuery.data);
@@ -520,7 +527,7 @@ function EncounterSidebar({
   const isDebug = searchParams.get("debug") === "true";
 
   const effectiveTrashOpen = trashOpen || hasSelectedTrash;
-  const showEncounterAd = shouldShowEncounterSidebarAd({
+  const showEncounterAd = !hideAd && shouldShowEncounterSidebarAd({
     isMobile,
     showChronological,
     trashOpen: effectiveTrashOpen,
@@ -554,7 +561,8 @@ function EncounterSidebar({
         // Desktop: sticky sidebar that scrolls independently
         !isMobile && "sticky top-4 max-h-[calc(100vh-2rem)]",
         // Mobile: fixed overlay with background
-        isMobile && "fixed inset-y-0 left-0 z-50 bg-background border-r shadow-lg pl-4 pt-4"
+        isMobile && "fixed inset-y-0 left-0 z-50 bg-background border-r shadow-lg pl-4 pt-4",
+        className,
       )}
     >
       <div className="mb-3 flex items-start justify-between">
@@ -971,7 +979,6 @@ function EncounterSidebar({
   );
 }
 
-
 export interface SharedViewPayload {
   version: number;
   instanceId?: string;
@@ -1356,7 +1363,7 @@ function PoppedOutLayoutContent({
       setPanelTypesById(Object.fromEntries(
         items.map((item) => {
           const candidate = parsed.panelTypesById[item.id] ?? "empty";
-          return [item.id, candidate in PANELS || isCustomPanelRef(candidate) ? candidate : "empty"];
+          return [item.id, candidate in PANELS || isCustomPanelRef(candidate) || isLuaPanelRef(candidate) ? candidate : "empty"];
         }),
       ));
       setPanelOptionsById(Object.fromEntries(
@@ -2381,11 +2388,7 @@ function InstancePageViewContent({
   const instanceTimeParsesQuery = useInstanceTimeParses(instance.unlisted ? undefined : instance.id);
   const { data: instanceSpeedrun } = useQuery({
     queryKey: ["instance-speedrun", instance.id],
-    queryFn: async (): Promise<SpeedrunResult | null> => {
-      const response = await fetch(`/api/v1/raidlogs/instances/${encodeURIComponent(instance.id)}/speedrun`);
-      if (!response.ok) return null;
-      return response.json() as Promise<SpeedrunResult>;
-    },
+    queryFn: () => fetchInstanceSpeedrun(instance.id),
     staleTime: Infinity,
     retry: false,
     enabled: !instance.unlisted,
@@ -2894,7 +2897,7 @@ function InstancePageViewContent({
       const urlType = viewState.panels[index];
       const defaultType = (defaultPanelTypesByID[item.id] ?? "empty") as EventsPanelType;
       const resolved = (urlType ?? defaultType) as EventsPanelType;
-      const valid = resolved in PANELS || isCustomPanelRef(resolved);
+      const valid = resolved in PANELS || isCustomPanelRef(resolved) || isLuaPanelRef(resolved);
       next[item.id] = valid ? resolved : "empty";
     });
     return next;
@@ -3275,7 +3278,7 @@ function InstancePageViewContent({
       const importedTypes: Record<string, EventsPanelType> = {};
       normalizedItems.forEach((item) => {
         const candidate = panelTypesById[item.id] ?? "empty";
-        importedTypes[item.id] = candidate in PANELS || isCustomPanelRef(candidate) ? candidate : "empty";
+        importedTypes[item.id] = candidate in PANELS || isCustomPanelRef(candidate) || isLuaPanelRef(candidate) ? candidate : "empty";
       });
 
       orderedItems = orderLayoutItems(normalizedItems);
@@ -3408,7 +3411,7 @@ function InstancePageViewContent({
     const importedTypes: Record<string, EventsPanelType> = {};
     normalizedItems.forEach((item) => {
       const candidate = parsed.panelTypesById?.[item.id] ?? "empty";
-      importedTypes[item.id] = candidate in PANELS || isCustomPanelRef(candidate) ? candidate : "empty";
+      importedTypes[item.id] = candidate in PANELS || isCustomPanelRef(candidate) || isLuaPanelRef(candidate) ? candidate : "empty";
     });
 
     const orderedItems = orderLayoutItems(normalizedItems);
@@ -3489,6 +3492,12 @@ function InstancePageViewContent({
   const layoutDraftSignature = layoutEditActive ? JSON.stringify(layoutDraftToExport(layoutDraft.draft)) : "";
   const layoutDirty = layoutEditActive && layoutDraftSignature !== layoutEditBaseline;
   const hasUnsavedLayoutEdits = layoutDirty || (editedLayoutItems !== null && editedLayoutItems === importedLayoutItems);
+  const navigationWarning = instanceNavigationWarning({
+    layoutEditing,
+    hasUnsavedLayoutEdits,
+    liveSessionStatus: liveSession.status,
+  });
+  useConfirmLinkNavigation(navigationWarning !== null, navigationWarning ?? "");
 
   const enterLayoutEdit = useCallback(() => {
     if (!canEditLayout) return;
@@ -3535,15 +3544,15 @@ function InstancePageViewContent({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [canEditLayout, cancelLayoutEdit, enterLayoutEdit, finishLayoutEdit, layoutEditActive]);
 
-  // Edits live only in memory, so warn before the tab reloads or closes.
+  // Layout edits live only in memory, and navigation leaves an active live session.
   useEffect(() => {
-    if (!hasUnsavedLayoutEdits) return;
+    if (!navigationWarning) return;
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [hasUnsavedLayoutEdits]);
+  }, [navigationWarning]);
 
   // ── Save As ─────────────────────────────────────────────────────────────
   const [saveLayoutOpen, setSaveLayoutOpen] = useState(false);
@@ -3737,7 +3746,7 @@ function InstancePageViewContent({
       const castTypes: Record<string, EventsPanelType> = {};
       normalizedItems.forEach((item) => {
         const candidate = parsed.panelTypesById?.[item.id] ?? "empty";
-        castTypes[item.id] = candidate in PANELS || isCustomPanelRef(candidate) ? candidate : "empty";
+        castTypes[item.id] = candidate in PANELS || isCustomPanelRef(candidate) || isLuaPanelRef(candidate) ? candidate : "empty";
       });
 
       const orderedItems = orderLayoutItems(normalizedItems);
@@ -3908,12 +3917,22 @@ function InstancePageViewContent({
     () => listSelectableCustomPanels(customPanelRegistry).map(({ ref, panel, installation }) => ({
       id: canonicalizeCustomPanelRef(ref) ?? ref,
       label: panel.name,
-      description: panel.description ?? installation.manifest.plugin.description ?? `Custom panel from ${installation.repository}`,
+      description: panel.description ?? installation.manifest.plugin.description ?? `Developer panel from ${installation.repository}`,
       queryable: false,
       hidden: false,
     })),
     [customPanelRegistry],
   );
+  const luaPanelCatalog = useLuaPanelCatalog();
+  const selectableLuaPanels = useMemo(() => (luaPanelCatalog.data ?? [])
+    .filter((project) => project.release)
+    .map((project) => ({
+      id: luaPanelRef(project.id, "release"),
+      label: project.name,
+      description: "Sandboxed addon (automatically follows its latest release)",
+      queryable: false,
+      hidden: false,
+    })), [luaPanelCatalog.data]);
   const availableStripCatalog = useMemo(() => Object.entries(STRIPS).map(([id, strip]) => ({
     id,
     label: strip.label,
@@ -3936,6 +3955,7 @@ function InstancePageViewContent({
     panelOptionsByID,
     panelFiltersByID,
     selectableCustomPanelIds: selectableCustomPanels.map((panel) => panel.id),
+    selectableLuaPanelIds: selectableLuaPanels.map((panel) => panel.id),
     availableStripCatalog,
   });
   const inferenceRevisionRef = useRef({ signature: inferenceStateSignature, revision: 0 });
@@ -3976,8 +3996,9 @@ function InstancePageViewContent({
         hidden: panel.hidden === true,
       })),
       ...selectableCustomPanels,
+      ...selectableLuaPanels,
     ],
-    availablePanelTypes: [...Object.keys(PANELS), ...selectableCustomPanels.map((panel) => panel.id)],
+    availablePanelTypes: [...Object.keys(PANELS), ...selectableCustomPanels.map((panel) => panel.id), ...selectableLuaPanels.map((panel) => panel.id)],
     availableStripCatalog,
     availablePresets: getAvailablePresetLayouts(instance.capabilities ?? [], isMobile).map((preset) => preset.id),
   };
@@ -4532,6 +4553,7 @@ function InstancePageViewContent({
             setActionBarOpen((prev) => !prev);
             setSidebarOpen(false);
           }}
+          data-floating-corner="bottom-right"
           className="fixed bottom-8 right-8 z-50 h-14 w-14 rounded-full shadow-lg"
           title={actionBarOpen ? "Close action bar" : "Open action bar"}
         >

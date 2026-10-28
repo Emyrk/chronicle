@@ -35,8 +35,14 @@ const (
 
 type assistant struct {
 	ID, System string
-	Durable    bool
-	Tools      []ToolDefinition
+	// Name and Description are shown in the user's AI settings.
+	Name, Description string
+	Durable           bool
+	// ContextType scopes durable threads ("instance" or "lua_project").
+	ContextType string
+	// ClientCapability is the browser capability whose tools this assistant may call.
+	ClientCapability string
+	Tools            []ToolDefinition
 }
 
 var pageCatalog = []map[string]string{
@@ -45,14 +51,16 @@ var pageCatalog = []map[string]string{
 	{"path": "/guilds", "name": "Guilds", "description": "Guild discovery and public guild pages"},
 	{"path": "/upload", "name": "Upload", "description": "Upload a combat log"},
 	{"path": "/account/settings", "name": "Account settings", "description": "Account profile and settings"},
+	{"path": "/account/ai", "name": "AI assistant settings", "description": "Turn AI features and individual assistants on or off, and connect OpenRouter"},
 }
 var assistants = map[string]assistant{
-	"site-help": {ID: "site-help", System: "You are Chronicle site help. Explain how to navigate Chronicle and answer rankings questions using tools. Never invent pages or ranking results.", Tools: []ToolDefinition{
+	"site-help": {ID: "site-help", Name: "Ask Chronicle", Description: "Site help on every page: finding pages and answering rankings questions.", System: "You are Chronicle site help. Explain how to navigate Chronicle and answer rankings questions using tools. Never invent pages or ranking results.", Tools: []ToolDefinition{
 		{Name: "list_pages", Description: "List known Chronicle pages.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		{Name: "find_pages", Description: "Find Chronicle pages by name or description.", Parameters: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","maxLength":100}},"required":["query"],"additionalProperties":false}`)},
 		{Name: "query_rankings", Description: "Query a bounded Chronicle player leaderboard.", Parameters: json.RawMessage(`{"type":"object","properties":{"instance_name":{"type":"string","maxLength":100},"encounter":{"type":"string","maxLength":100},"class":{"type":"string","maxLength":30},"spec":{"type":"string","maxLength":50},"role":{"type":"string","maxLength":30},"metric":{"type":"string","enum":["dps","hps"]},"limit":{"type":"integer","minimum":1,"maximum":10}},"required":["instance_name"],"additionalProperties":false}`)},
 	}},
-	"instance-analyst": {ID: "instance-analyst", Durable: true, System: "You are a Chronicle raid instance analyst. Use instance_summary for bounded metadata, encounter, and roster context. You may inspect, query, or update the current instance UI only through advertised client tools. Do not claim access to raw event streams. If a client tool returns user_rejected or capability_unavailable, do not retry the same mutation; explain why it could not be completed. After stale_state, inspect once for fresh state before retrying at most once.", Tools: []ToolDefinition{
+	addonWorkshopPanelAssistantID: {ID: addonWorkshopPanelAssistantID, Name: "Addon Workshop: instance panels", Description: "Builds and edits Lua instance panel addons in the Addon Workshop.", Durable: true, ContextType: "lua_project", ClientCapability: luaEditorCapabilityID, System: luaWorkshopSystem},
+	"instance-analyst": {ID: "instance-analyst", Name: "Raid instance analyst", Description: "Answers questions about a raid on its instance page and can adjust that page's panels.", Durable: true, ContextType: "instance", ClientCapability: instancePageCapabilityID, System: "You are a Chronicle raid instance analyst. Use instance_summary for bounded metadata, encounter, and roster context. You may inspect, query, or update the current instance UI only through advertised client tools. Do not claim access to raw event streams. If a client tool returns user_rejected or capability_unavailable, do not retry the same mutation; explain why it could not be completed. After stale_state, inspect once for fresh state before retrying at most once.", Tools: []ToolDefinition{
 		{Name: "instance_summary", Description: "Return bounded metadata, encounters, and players for this authorized raid instance.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
 	}},
 }
@@ -64,6 +72,8 @@ type debugRunContext struct {
 	Persistence string
 	ContextType string
 	ContextID   string
+	// UsageEvents is set when the client asked for USAGE events.
+	UsageEvents bool
 }
 
 func debugSnapshotEvent(debug debugRunContext, iteration int, phase, model string, a assistant, messages []Message, usage Usage) agui.DebugSnapshotEvent {
@@ -113,11 +123,7 @@ func debugSnapshotEvent(debug debugRunContext, iteration int, phase, model strin
 			MaxToolOutput:      maxToolOutput,
 			MaxAssistantText:   maxAssistantText,
 		},
-		Usage: agui.DebugUsage{
-			PromptTokens:     usage.PromptTokens,
-			CompletionTokens: usage.CompletionTokens,
-			TotalTokens:      usage.TotalTokens,
-		},
+		Usage: debugUsage(usage),
 	}
 }
 
@@ -456,6 +462,9 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if !s.requireAssistantEnabled(w, r, a.ID) {
+		return
+	}
 	if _, err := s.db.GetInferenceRunByIdempotencyKey(r.Context(), database.GetInferenceRunByIdempotencyKeyParams{UserID: uid, IdempotencyKey: req.RunID}); err == nil {
 		httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "This run_id was already used."})
 		return
@@ -491,26 +500,25 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		thread, err = s.db.GetInferenceThreadByOwner(r.Context(), database.GetInferenceThreadByOwnerParams{ID: *req.ThreadID, UserID: uid})
-		if err != nil || thread.AssistantID != a.ID || thread.Persistence != "durable" || thread.ContextType.String != "instance" {
+		if err != nil || thread.AssistantID != a.ID || thread.Persistence != "durable" || thread.ContextType.String != a.ContextType {
 			httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Thread not found."})
 			return
 		}
-		if req.Instance == "" || req.Instance != thread.ContextID.String {
+		if (a.ContextType == "instance" && req.Instance != thread.ContextID.String) || (a.ContextType != "instance" && req.Instance != "") {
 			badRequest(w, r, "Thread does not belong to the requested instance.")
 			return
 		}
-		inst, err := s.instanceForUser(r, thread.ContextID.String)
-		if err != nil {
-			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: "You cannot view this instance."})
+		if err := s.authorizeThreadContext(r, thread); err != nil {
+			httpapi.Write(r.Context(), w, http.StatusForbidden, chroniclesdk.Response{Message: threadContextForbidden(thread)})
 			return
 		}
-		client, err = advertisedInstancePageClient(req.Client, inst.ID.String())
+		client, err = advertisedClient(req.Client, clientCapabilities[a.ClientCapability], thread.ContextID.String)
 		if err != nil {
 			badRequest(w, r, err.Error())
 			return
 		}
 		a = withClientTools(a, client)
-		tc.instanceID = inst.ID
+		tc = threadToolContext(s, thread)
 		threadID = uuid.NullUUID{UUID: thread.ID, Valid: true}
 		rows, err := s.db.ListRecentInferenceMessagesByThread(r.Context(), database.ListRecentInferenceMessagesByThreadParams{ThreadID: thread.ID, Limit: maxHistoryMessages})
 		if err != nil {
@@ -589,6 +597,7 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 	}
 	debug := debugRunContext{
 		Enabled:     req.Debug,
+		UsageEvents: req.UsageEvents,
 		RunID:       req.RunID,
 		ThreadID:    streamThread,
 		Persistence: "ephemeral",
@@ -607,7 +616,11 @@ func (s *Service) run(w http.ResponseWriter, r *http.Request) {
 	pause := func(assistantMessage Message, toolMessages []Message, pending clientToolPause, state agentLoopState) error {
 		return s.pauseForClientTool(r.Context(), runRow, thread.ID, assistantMessage, toolMessages, pending, state)
 	}
-	result, err := s.agentLoop(r.Context(), writer, provider, cred, req.Model, a, history, tc, debug, client, agentLoopState{}, persist, pause)
+	var usageThread *database.InferenceThread
+	if a.Durable {
+		usageThread = &thread
+	}
+	result, err := s.agentLoop(r.Context(), writer, provider, cred, req.Model, a, history, tc, debug, client, agentLoopState{}, persist, pause, s.usageRecorder(r.Context(), runRow, usageThread))
 	if err != nil {
 		if s.logger != nil {
 			s.logger.Warn("inference run failed", "run_id", req.RunID, "error", err)
@@ -686,6 +699,53 @@ func (s *Service) finishRun(ctx context.Context, row database.InferenceRun, stat
 	return err
 }
 
+func debugUsage(usage Usage) agui.DebugUsage {
+	out := agui.DebugUsage{
+		PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens, TotalTokens: usage.TotalTokens,
+		CachedTokens: usage.CachedTokens, ReasoningTokens: usage.ReasoningTokens,
+	}
+	if usage.CostNanos != nil {
+		cost := float64(*usage.CostNanos) / 1e9
+		out.CostUSD = &cost
+	}
+	return out
+}
+
+// usageRecorder saves one model call's usage. It logs failures rather than failing the run.
+type usageRecorder func(messageKey string, usage Usage)
+
+func (s *Service) usageRecorder(ctx context.Context, run database.InferenceRun, thread *database.InferenceThread) usageRecorder {
+	return func(messageKey string, usage Usage) {
+		ctx, cancel := finalizationContext(ctx)
+		defer cancel()
+		params := database.InsertInferenceUsageParams{
+			RunID: run.ID, UserID: run.UserID, Model: run.Model,
+			MessageKey:   pgtype.Text{String: messageKey, Valid: messageKey != ""},
+			GenerationID: pgtype.Text{String: usage.GenerationID, Valid: usage.GenerationID != ""},
+			PromptTokens: int64(usage.PromptTokens), CompletionTokens: int64(usage.CompletionTokens),
+			CachedTokens: int64(usage.CachedTokens), ReasoningTokens: int64(usage.ReasoningTokens),
+			CostNanos: int64PointerPG(usage.CostNanos), UpstreamCostNanos: int64PointerPG(usage.UpstreamCostNanos),
+		}
+		if usage.BYOK != nil {
+			params.IsByok = pgtype.Bool{Bool: *usage.BYOK, Valid: true}
+		}
+		if thread != nil {
+			params.ThreadID = uuid.NullUUID{UUID: thread.ID, Valid: true}
+			params.ContextType, params.ContextID = thread.ContextType, thread.ContextID
+		}
+		if err := s.db.InsertInferenceUsage(ctx, params); err != nil && s.logger != nil {
+			s.logger.Error("record inference usage", "run_id", run.ID, "error", err)
+		}
+	}
+}
+
+func writeUsage(w *agui.Writer, debug debugRunContext, messageID string, usage *Usage) error {
+	if usage == nil || !debug.UsageEvents {
+		return nil
+	}
+	return w.Write(agui.UsageEvent{RunID: debug.RunID, MessageID: messageID, Usage: debugUsage(*usage)})
+}
+
 func writeDebugSnapshot(w *agui.Writer, debug debugRunContext, iteration int, phase, model string, a assistant, messages []Message, usage Usage) error {
 	if !debug.Enabled {
 		return nil
@@ -744,7 +804,7 @@ type agentLoopResult struct {
 
 type pauseClientToolFunc func(Message, []Message, clientToolPause, agentLoopState) error
 
-func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provider, credential []byte, model string, a assistant, messages []Message, tc toolContext, debug debugRunContext, capability *clientCapability, state agentLoopState, persist func(...Message) error, pause pauseClientToolFunc) (agentLoopResult, error) {
+func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provider, credential []byte, model string, a assistant, messages []Message, tc toolContext, debug debugRunContext, capability *clientCapability, state agentLoopState, persist func(...Message) error, pause pauseClientToolFunc, record usageRecorder) (agentLoopResult, error) {
 	messages = append([]Message{{Role: RoleSystem, Content: a.System}}, messages...)
 	usedCallIDs := usedToolCallIDs(messages)
 	for state.IterationCount <= maxIterations {
@@ -770,6 +830,7 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 		calls := map[int]*toolCallAccumulator{}
 		started := false
 		finish := FinishReasonOther
+		var callUsage *Usage
 		err := provider.StreamChat(ctx, credential, ChatRequest{Model: model, Messages: requestMessages, Tools: requestAssistant.Tools}, func(event StreamEvent) error {
 			switch event.Type {
 			case StreamEventTextDelta:
@@ -799,12 +860,19 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 			case StreamEventFinish:
 				finish = event.FinishReason
 			case StreamEventUsage:
-				state.Usage.PromptTokens += event.Usage.PromptTokens
-				state.Usage.CompletionTokens += event.Usage.CompletionTokens
-				state.Usage.TotalTokens += event.Usage.TotalTokens
+				state.Usage.Add(event.Usage)
+				if callUsage == nil {
+					callUsage = &Usage{}
+				}
+				callUsage.Add(event.Usage)
+				callUsage.GenerationID, callUsage.BYOK = event.Usage.GenerationID, event.Usage.BYOK
 			}
 			return nil
 		})
+		// Record before checking err: a call that failed after reporting usage was still billed.
+		if callUsage != nil && record != nil {
+			record(messageID, *callUsage)
+		}
 		if err != nil {
 			return agentLoopResult{State: state}, err
 		}
@@ -821,6 +889,9 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 				if err := w.Write(agui.TextMessageEndEvent{MessageID: messageID}); err != nil {
 					return agentLoopResult{State: state}, err
 				}
+			}
+			if err := writeUsage(w, debug, messageID, callUsage); err != nil {
+				return agentLoopResult{State: state}, err
 			}
 			return agentLoopResult{State: state}, nil
 		}
@@ -842,7 +913,12 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 			if state.ToolCallCount > maxToolCalls {
 				return agentLoopResult{State: state}, errAgentToolLimit
 			}
-			if clientTool, ok := clientToolByName(call.Name); ok && capability != nil {
+			var clientTool clientToolDefinition
+			var isClientTool bool
+			if capability != nil {
+				clientTool, isClientTool = clientToolByName(capability.ID, call.Name)
+			}
+			if isClientTool {
 				if pending != nil {
 					return agentLoopResult{State: state}, errors.New("multiple client tool calls are not supported")
 				}
@@ -895,6 +971,10 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 			}
 		}
 		if pending != nil {
+			// Clients stop reading a segment at CLIENT_TOOL_REQUEST, so report usage first.
+			if err := writeUsage(w, debug, messageID, callUsage); err != nil {
+				return agentLoopResult{State: state}, err
+			}
 			if err := w.Write(agui.ClientToolRequestEvent{
 				RunID: debug.RunID, ThreadID: debug.ThreadID, ToolCallID: pending.Call.ID,
 				ToolName: pending.Call.Name, Arguments: pending.Arguments,
@@ -909,6 +989,9 @@ func (s *Service) agentLoop(ctx context.Context, w *agui.Writer, provider Provid
 				return agentLoopResult{State: state}, err
 			}
 			return agentLoopResult{State: state, Paused: pending}, nil
+		}
+		if err := writeUsage(w, debug, messageID, callUsage); err != nil {
+			return agentLoopResult{State: state}, err
 		}
 	}
 	return agentLoopResult{State: state}, errAgentIterationLimit

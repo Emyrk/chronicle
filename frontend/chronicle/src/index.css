@@ -659,3 +659,57 @@
     transform: translateY(var(--travel)) scale(0.3);
   }
 }
+
+/* Community chooser arrival notice: a dot travels from the chooser to here */
+@keyframes choose-travel {
+  0% { left: 0; opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { left: calc(100% - 0.5rem); opacity: 0; }
+}
+
+@keyframes choose-arrive {
+  0%, 55% { opacity: 0; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes choose-drop {
+  from { opacity: 0; transform: translateY(-1rem); }
+  to { opacity: 1; transform: none; }
+}
+
+.animate-choose-drop {
+  animation: choose-drop 0.3s ease-out both;
+}
+
+@keyframes choose-countdown {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+/* Same duration, no movement: the notice still auto-hides on animationend. */
+@keyframes choose-countdown-still {
+  from { opacity: 1; }
+  to { opacity: 1; }
+}
+
+.animate-choose-countdown {
+  animation-name: choose-countdown;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+.animate-choose-travel {
+  animation: choose-travel 1.1s ease-in-out 0.2s both;
+}
+
+.animate-choose-arrive {
+  animation: choose-arrive 1.3s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-choose-travel { animation: none; opacity: 0; }
+  .animate-choose-arrive,
+  .animate-choose-drop { animation: none; }
+  .animate-choose-countdown { animation-name: choose-countdown-still; }
+}

@@ -1,15 +1,19 @@
-export const DEAD_ENEMY_FRAME_LINGER_MS = 3_000;
 export const DEAD_ENEMY_MODEL_FADE_MS = 5_000;
+export const DEAD_ENEMY_FRAME_FADE_MS = DEAD_ENEMY_MODEL_FADE_MS;
 
-/** Bosses stay visible; a dead trash enemy's frame lingers briefly for recognition. */
-export function deadEnemyFrameVisible(deadSinceMs: number | null, cursorMs: number, boss: boolean): boolean {
-  return boss || deadSinceMs === null || cursorMs - deadSinceMs < DEAD_ENEMY_FRAME_LINGER_MS;
+function deadEnemyOpacity(deadSinceMs: number | null, cursorMs: number, boss: boolean, fadeMs: number): number {
+  if (boss || deadSinceMs === null) return 1;
+  return Math.max(0, Math.min(1, 1 - (cursorMs - deadSinceMs) / fadeMs));
+}
+
+/** Bosses and living enemies stay opaque; a dead trash enemy's top-right frame fades with its model. */
+export function deadEnemyFrameOpacity(deadSinceMs: number | null, cursorMs: number, boss: boolean): number {
+  return deadEnemyOpacity(deadSinceMs, cursorMs, boss, DEAD_ENEMY_FRAME_FADE_MS);
 }
 
 /** Bosses and living enemies stay opaque; a dead trash enemy's model fades linearly. */
 export function deadEnemyModelOpacity(deadSinceMs: number | null, cursorMs: number, boss: boolean): number {
-  if (boss || deadSinceMs === null) return 1;
-  return Math.max(0, Math.min(1, 1 - (cursorMs - deadSinceMs) / DEAD_ENEMY_MODEL_FADE_MS));
+  return deadEnemyOpacity(deadSinceMs, cursorMs, boss, DEAD_ENEMY_MODEL_FADE_MS);
 }
 
 export interface DeadUnitVisualState {

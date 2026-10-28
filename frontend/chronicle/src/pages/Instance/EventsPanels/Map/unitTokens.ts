@@ -4,7 +4,6 @@ import {
   DASH_ART_SIZE,
   EDGE_ART_SIZE,
   TOKEN_ART_SIZE,
-  drawBossPin,
   drawCastArc,
   drawDash,
   drawDebuffTint,
@@ -165,10 +164,6 @@ export class UnitTokenTextures {
 
   sigilTicks(): THREE.CanvasTexture {
     return this.single("ticks", drawSigilTicks);
-  }
-
-  bossPin(): THREE.CanvasTexture {
-    return this.single("pin", drawBossPin);
   }
 
   /** A target line's repeating dash (dots for the target's target). */

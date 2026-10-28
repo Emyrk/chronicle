@@ -18,7 +18,12 @@ import (
 
 var ErrMustJoinDiscordServer = errors.New("must be in the discord server to use chronicle")
 
-const protectedTechnicalAdminDiscordID = "221411580535898113"
+const (
+	protectedTechnicalAdminDiscordID = "221411580535898113"
+	// Discord-owned supporter sources must not be managed as billing tier roles.
+	boosterRoleID   = "1476428881677389865"
+	supporterRoleID = "1476558127552790812"
+)
 
 func ensureProtectedTechnicalAdmin(ctx context.Context, zed authz.Authorizer, discordID string, userID uuid.UUID) error {
 	if discordID != protectedTechnicalAdminDiscordID {
@@ -33,10 +38,9 @@ func ensureProtectedTechnicalAdmin(ctx context.Context, zed authz.Authorizer, di
 	return nil
 }
 
-// SyncDiscordUser manages only the chronicle_guild_member and supporter
-// relations for a user based on their Discord guild membership and roles.
-// All other roles are left untouched, except that the protected Discord user
-// is always granted technical_admin.
+// SyncDiscordUser manages Discord-owned membership and supporter relations,
+// and best-effort Chronicle-owned paid-tier roles in the configured guild.
+// The protected Discord user is always granted technical_admin.
 func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorizer, discordID string, userID uuid.UUID) error {
 	if bot.disabled {
 		return nil
@@ -62,6 +66,12 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 			slog.String("error", safeError),
 		)
 		return nil
+	}
+
+	if member != nil {
+		if err := bot.syncEntitlementRoles(ctx, discordID, userID, member.Roles); err != nil {
+			bot.logger.Warn("sync Discord paid-tier roles", slog.String("user_id", userID.String()), slog.String("error", err.Error()))
+		}
 	}
 
 	// --- chronicle_guild_member ---
@@ -91,8 +101,7 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 
 	if member != nil {
 		for _, roleID := range member.Roles {
-			if roleID == "1476428881677389865" || // Booster
-				roleID == "1476558127552790812" { // Supporter
+			if roleID == boosterRoleID || roleID == supporterRoleID {
 				b := policy.New()
 				b.GlobalChronicle().Supporter(b.User(userID))
 				if _, err := zed.Write(ctx, *b.Txn()); err != nil {

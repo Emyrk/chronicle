@@ -41,6 +41,50 @@ The dashboard currently includes:
 
 The server × product map includes a **Rest / uncategorized** column. It is the exact sum of page views whose paths do not match any named product-family rule, so each server can be reconciled without silently dropping traffic.
 
+## Device analytics API
+
+The compact GA4 endpoint for the reTerminal E1002 and other trusted displays is:
+
+```text
+/device/api/v1/analytics/dashboard?days=30
+```
+
+It reuses the same validated GA4 query and normalized data as the desktop analytics view, but returns only the overview metrics, daily trend, top host, top product family, and the eight busiest Chronicle servers. Each server includes current and previous page views, total growth, non-China page views and growth, and China page views. Supported periods are 7, 30, and 90 completed days.
+
+Responses use device schema version 2 and include a stable `contentHash` with a matching `ETag`. The hash excludes `generatedAt`, so a device can send `If-None-Match` and skip an expensive ePaper refresh when the underlying analytics values have not changed. Successful responses are browser-private for five minutes.
+
+### Cloudflare Access authentication
+
+Production must have a separate Cloudflare Access self-hosted application or path policy covering:
+
+```text
+telemetry.chronicleclassic.com/device/*
+```
+
+Create a Cloudflare Access service token for each physical device, then add a **Service Auth** policy that includes that token. The device authenticates at the Cloudflare edge with these headers:
+
+```http
+CF-Access-Client-Id: <service-token-client-id>
+CF-Access-Client-Secret: <service-token-client-secret>
+```
+
+For a command-line check, keep the credentials in environment variables rather than shell history:
+
+```sh
+curl \
+  -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+  -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
+  'https://telemetry.chronicleclassic.com/device/api/v1/analytics/dashboard?days=30'
+```
+
+The E1002 stores its service-token credentials in an ignored local secrets header or provisioning store. It never receives the Google service-account credentials. Revoke the device service token in Cloudflare if the hardware or credential is lost.
+
+Cloudflare Access is not applied by local Wrangler. With `ANALYTICS_MOCK=true`, the endpoint can be previewed locally without authentication:
+
+```text
+http://localhost:8787/device/api/v1/analytics/dashboard?days=30
+```
+
 ## Drill-down views
 
 Use the overview for monitoring and follow its linked route families or server names into:

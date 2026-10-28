@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Emyrk/chronicle/database/gamedb/dbcdb"
+	"github.com/Gophercraft/core/format/content"
 )
 
 // DBCFile is a file extractable from a WoW client's DBFilesClient directory.
@@ -101,20 +102,37 @@ func ImporterByKey(key string) (Importer, bool) {
 	return nil, false
 }
 
+type dbcFileReader interface {
+	ReadFile(name string) ([]byte, error)
+}
+
 // extractFiles reads each requested DBC file from the client exactly once.
+// Direct MPQ lookup is preferred because custom patch archives frequently omit
+// their (listfile), making their files invisible to the indexed WoWClient pool.
 // Files already present in the map are not re-read, so callers can share a
 // single map across many importers.
-func extractFiles(wc *dbcdb.WoWClient, into map[DBCFile][]byte, needed []DBCFile) error {
+func extractFiles(indexed, direct dbcFileReader, into map[DBCFile][]byte, needed []DBCFile) error {
 	for _, f := range needed {
 		if _, ok := into[f]; ok {
 			continue
 		}
-		data, err := wc.ReadFile("DBFilesClient\\" + string(f))
+
+		name := "DBFilesClient\\" + string(f)
+		var (
+			data []byte
+			err  error
+		)
+		if direct != nil {
+			data, err = direct.ReadFile(name)
+		}
+		if direct == nil || err != nil {
+			data, err = indexed.ReadFile(name)
+		}
 		if err != nil {
 			// Treat "not found" as non-fatal — some DBC files don't exist
 			// in every client version (e.g. SpellDescriptionVariables.dbc
 			// is absent in vanilla 1.12 clients).
-			if strings.Contains(err.Error(), "not found") {
+			if strings.Contains(strings.ToLower(err.Error()), "not found") {
 				fmt.Printf("warning: %s not found, skipping importers that need it\n", f)
 				continue
 			}
@@ -123,6 +141,24 @@ func extractFiles(wc *dbcdb.WoWClient, into map[DBCFile][]byte, needed []DBCFile
 		into[f] = data
 	}
 	return nil
+}
+
+type extractedDBCVolume struct {
+	content.Volume
+	files map[DBCFile][]byte
+}
+
+func (v *extractedDBCVolume) ReadFile(name string) ([]byte, error) {
+	file := DBCFile(strings.TrimPrefix(name, "DBFilesClient\\"))
+	data, ok := v.files[file]
+	if !ok {
+		return nil, fmt.Errorf("file not found in extracted DBCs: %s", name)
+	}
+	return data, nil
+}
+
+func wowClientFromExtractedFiles(wc *dbcdb.WoWClient, files map[DBCFile][]byte) *dbcdb.WoWClient {
+	return &dbcdb.WoWClient{Volume: &extractedDBCVolume{Volume: wc.Volume, files: files}}
 }
 
 // ─── Raw DBC importer ────────────────────────────────────────────
@@ -166,8 +202,8 @@ func (t *talentImporter) RequiredFiles() []DBCFile {
 	return []DBCFile{FileTalent, FileTalentTab, FileSpellIcon, FileSpell}
 }
 
-func (t *talentImporter) Produce(wc *dbcdb.WoWClient, _ map[DBCFile][]byte) ([]Artifact, error) {
-	data, err := collectTalentTrees(wc)
+func (t *talentImporter) Produce(wc *dbcdb.WoWClient, files map[DBCFile][]byte) ([]Artifact, error) {
+	data, err := collectTalentTrees(wowClientFromExtractedFiles(wc, files))
 	if err != nil {
 		return nil, fmt.Errorf("collect talent trees: %w", err)
 	}

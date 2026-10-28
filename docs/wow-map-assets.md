@@ -17,15 +17,16 @@ The frontend accepts v1 published manifests during migration; all new imports us
 
 ## MPQ-era clients
 
-Turtle WoW, AzerothCore 3.3.5a, and the 2.4.3 TBC client use the legacy extractor. It reads `WorldMapArea.dbc`, `WorldMapOverlay.dbc`, `AreaTable.dbc`, and `Map.dbc`, discovers `Interface/WorldMap` BLP files from the MPQ listfiles, converts referenced artwork to WebP, and emits the shared manifest.
+Turtle WoW, VanillaPlus, AzerothCore 3.3.5a, and the 2.4.3 TBC client use the legacy extractor. It reads `WorldMapArea.dbc`, `WorldMapOverlay.dbc`, `AreaTable.dbc`, and `Map.dbc`, discovers `Interface/WorldMap` BLP files from the MPQ listfiles, converts referenced artwork to WebP, and emits the shared manifest.
 
 ```bash
 make maps/turtle
+make maps/vanillaplus
 make maps/azerothcore
 make maps/tbc
 ```
 
-The corresponding public paths are `turtle/maps`, `azerothcore/maps`, and `tbc/maps`. Each dataset's `icon_base_url` must point at the matching server root.
+The corresponding public paths are `turtle/maps`, `vanillaplus/maps`, `azerothcore/maps`, and `tbc/maps`. Each dataset's `icon_base_url` must point at the matching server root.
 
 Use `WOW_CLIENT_PATH` to override the configured client directory:
 
@@ -42,7 +43,9 @@ go run ./scripts/dbcdata extract-legacy-maps \
   --out=/tmp/turtle-maps
 ```
 
-Legacy base-zone maps use the twelve standard 256-pixel tiles plus explored overlays from `WorldMapOverlay.dbc`. Instance floors are included when a client contains a complete twelve-tile floor matching an instance in `Map.dbc`. The stock 2.4.3 client does not include dungeon floor artwork, so its manifest contains outdoor maps but no instance floors.
+Legacy base-zone maps use the twelve standard 256-pixel tiles plus explored overlays from `WorldMapOverlay.dbc`. Every dungeon and raid in `Map.dbc` is included in the instance inventory so Map Foundry can attach manual renders and meshes. Native floors are included when the client contains a complete twelve-tile floor matching that instance. The stock 2.4.3 client does not include dungeon floor artwork, so its instance entries have no native floors.
+
+For Wrath-era clients, the legacy extractor also reads `DungeonMap.dbc` and writes each matching `instances[].floors[].bounds` as the floor's world-coordinate extent. The frontend uses those bounds to recover yards-per-artwork-unit for normalized UI-map telemetry, including unit-token scale. Artwork dimensions such as `1002 × 668` describe pixels only and must not be treated as physical size. If a client has no usable `DungeonMap` row, bounds remain absent and replay falls back to uncalibrated flat-map sizing.
 
 ## Modern CASC clients
 
@@ -70,6 +73,70 @@ The Replay Map's "3D map" toggle stands the units on the dungeon's real geometry
 ```
 
 `bounds` is the mesh's extent in world coordinates (`minX..maxX` world X, `minY..maxY` world Y) and `zMin`/`zMax` its height range. The frontend places the mesh and projects unit positions from these bounds alone, so an instance needs neither tile artwork nor a render for the toggle. `frame` names the glTF axis convention and must be `wow-yup-mirrored-x`: Y-up with X mirrored, glTF `(x, y, z) = (-wow_x, wow_z, wow_y)`, the only frame the frontend places. An instance without a `mesh` entry shows no toggle and requests nothing.
+
+### Floor-aware manual renders and meshes
+
+Manual render and mesh layers retain the legacy map-level fields for single-floor and floorless
+instances. Multi-floor publication nests those same payloads under the native floor identifier:
+
+```json
+{
+  "mapID": 555,
+  "floors": [
+    {
+      "floor": 1,
+      "renders": {
+        "path": "renders/555-a1b2-floor-1.png",
+        "width": 2400,
+        "height": 1800,
+        "bounds": { "minX": -100, "maxX": 200, "minY": -300, "maxY": 100 }
+      },
+      "mesh": {
+        "path": "3d/555-c3d4-floor-1.glb",
+        "bounds": { "minX": -100, "maxX": 200, "minY": -300, "maxY": 100 },
+        "zMin": -20,
+        "zMax": 15,
+        "frame": "wow-yup-mirrored-x"
+      }
+    }
+  ]
+}
+```
+
+The renders layer uses `floors[].renders`; the meshes layer uses `floors[].mesh`. A layer may also
+retain `instances[].renders` or `instances[].mesh` for a legacy map-level asset. Do not copy one
+floor's bounds, height range, or calibration to another floor. A floor render and mesh should use the
+same horizontal bounds, but each floor is generated and verified from its own selected geometry.
+The renderer does not infer floor membership from the WMO. Configure object-prefix selection and/or
+world-Z slicing explicitly, or use an OBJ that already contains only that floor.
+
+#### Map Foundry workflow
+
+For multi-floor maps, prefer a deterministic `chronicle-map-foundry-bundle-v1` ZIP built by
+`scripts/render-map/tools/foundry_bundle.py`. It contains root `foundry.json` plus canonical assets
+such as `maps/533/floor-1/render.png` and `maps/533/floor-1/mesh.glb`. The generator verifies exact
+local byte counts and SHA-256 hashes, the 100 MB per-asset limit, unique map and floor IDs, identical
+render and mesh bounds, and complete dimensions, Z range, frame, and optional liquid calibration.
+It writes `ZIP_STORED` entries with normalized order, timestamps, and permissions for byte-identical
+runs. Absolute source paths are not included.
+
+Each bundled floor has `preferred2D`. `renders` selects the calibrated render and is emitted by
+default when staging omits the field. `art` requests native floor art where usable. The bundle still
+contains the calibrated render and mesh either way.
+
+The Foundry UI extracts the ZIP in the browser, rejects archives over 512 MB, archives with more than
+512 entries, and entries not referenced by `foundry.json`, then uploads each asset
+individually and saves one draft containing all floor changes. The draft save is a single conditional
+write. Asset storage is not transactional, so a failed import may leave unreferenced content-addressed
+objects. Importing a bundle never publishes it. Inspect the completed draft and preview every floor
+against a real log before publishing. If an unrelated draft already exists, stop rather than replacing
+someone else's unpublished work.
+
+Publication is ordered, not transactional. The Foundry validates all referenced assets before writing,
+then writes the source-layer manifests, writes the merged reader `manifest.json` last, and clears the
+draft afterward. A failed publish can leave source manifests ahead of the reader manifest or retain an
+already-published draft; retry publication to reconcile them. Consumers of the merged reader manifest
+see either its previous object or the complete replacement object.
 
 ### Mesh-only instances
 
