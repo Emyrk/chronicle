@@ -39,7 +39,7 @@ export function LuaProjectsPage() {
     <div className="hidden self-stretch 2xl:block">
       <AdRailStack primaryPlacement="addons-left-rail" secondaryPlacement="addons-left-rail-lower" railLayout="paired" />
     </div>
-    <main className="w-full min-w-0 max-w-5xl space-y-8">
+    <main className="min-w-0 flex-1 space-y-8">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b pb-7">
         <div>
           <p className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">Creator workspace / Addons</p>
