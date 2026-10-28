@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { addonPath, urlName, urlNameInput } from "./api"
+import { addonPath, authorPath, urlName, urlNameInput, validAuthorName } from "./api"
+import { isAddonId } from "./addonRoute"
 
 describe("addon names", () => {
   it("suggests URL-safe names from display text", () => {
@@ -15,7 +16,11 @@ describe("addon names", () => {
 
   it("uses the named address once the owner has an author name", () => {
     expect(addonPath({ id: "00000000-0000-4000-8000-000000000001", author: "steven", slug: "interrupt-tracker" }, "/edit")).toBe("/addons/steven/interrupt-tracker/edit")
-    expect(addonPath({ id: "00000000-0000-4000-8000-000000000001", slug: "interrupt-tracker" })).toBe("/addons/00000000-0000-4000-8000-000000000001")
+    expect(addonPath({ id: "00000000-0000-4000-8000-000000000001", slug: "interrupt-tracker" })).toBe("/addons/id/00000000-0000-4000-8000-000000000001")
+    expect(authorPath("steven")).toBe("/addons/steven")
+    expect(isAddonId("00000000-0000-4000-8000-000000000001")).toBe(true)
+    expect(isAddonId("steven")).toBe(false)
+    expect([validAuthorName("stev"), validAuthorName("steven"), validAuthorName("steven-"), validAuthorName("a".repeat(33))]).toEqual([false, true, false, false])
   })
 })
 

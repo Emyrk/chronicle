@@ -1,40 +1,53 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { renderToStaticMarkup } from "react-dom/server"
+import type { ReactElement } from "react"
 import { MemoryRouter } from "react-router-dom"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { useAuthorizationCheck, useSession } from "@/api/queries"
 import { LuaProjectsPage } from "./LuaProjectsPage"
+import { NewAddonForm } from "./NewAddonForm"
 
 vi.mock("@/api/queries", () => ({ useAuthorizationCheck: vi.fn(), useSession: vi.fn() }))
 
-function renderPage() {
-  return renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}><MemoryRouter><LuaProjectsPage /></MemoryRouter></QueryClientProvider>)
+function render(element: ReactElement) {
+  return renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}><MemoryRouter>{element}</MemoryRouter></QueryClientProvider>)
 }
 
-describe("addon creation permission", () => {
+describe("addons home", () => {
+  it("welcomes anonymous visitors, asks them to sign in, and lists released addons", () => {
+    vi.mocked(useSession).mockReturnValue({ data: null, isLoading: false } as ReturnType<typeof useSession>)
+    const html = render(<LuaProjectsPage />)
+    expect(html).toContain("Welcome! Make your first addon")
+    expect(html).toContain("Sign in to get started.")
+    expect(html).toContain("Browse addons")
+    expect(html).not.toContain("My addons")
+  })
+})
+
+describe("new addon form", () => {
   beforeEach(() => {
     vi.mocked(useSession).mockReturnValue({ data: { user_id: "me" }, isLoading: false } as ReturnType<typeof useSession>)
   })
 
-  it("hides the create form and explains a denied permission", () => {
+  it("explains a denied permission instead of showing the form", () => {
     vi.mocked(useAuthorizationCheck).mockReturnValue({ data: { createLuaProject: false }, isPending: false } as unknown as ReturnType<typeof useAuthorizationCheck>)
-    const html = renderPage()
+    const html = render(<NewAddonForm author="steven" />)
     expect(html).toContain("You do not have permission to create addons")
     expect(html).not.toContain("New addon</h2>")
     expect(useAuthorizationCheck).toHaveBeenCalledWith({ createLuaProject: "chronicle:chronicle#create_lua_project" }, { enabled: true })
   })
 
-  it("asks anonymous visitors to sign in without checking a permission", () => {
-    vi.mocked(useSession).mockReturnValue({ data: null, isLoading: false } as ReturnType<typeof useSession>)
-    vi.mocked(useAuthorizationCheck).mockReturnValue({ isPending: true } as unknown as ReturnType<typeof useAuthorizationCheck>)
-    const html = renderPage()
-    expect(html).toContain("Sign in to create addons.")
-    expect(html).not.toContain("New addon</h2>")
-    expect(useAuthorizationCheck).toHaveBeenCalledWith({ createLuaProject: "chronicle:chronicle#create_lua_project" }, { enabled: false })
+  it("lets authors pick the address", () => {
+    vi.mocked(useAuthorizationCheck).mockReturnValue({ data: { createLuaProject: true }, isPending: false } as unknown as ReturnType<typeof useAuthorizationCheck>)
+    const html = render(<NewAddonForm author="steven" />)
+    expect(html).toContain("Create addon</button>")
+    expect(html).toContain('aria-label="Slug"')
   })
 
-  it("shows the create form to an authorized user", () => {
+  it("asks only for a name for a first addon", () => {
     vi.mocked(useAuthorizationCheck).mockReturnValue({ data: { createLuaProject: true }, isPending: false } as unknown as ReturnType<typeof useAuthorizationCheck>)
-    expect(renderPage()).toContain("Create addon</button>")
+    const html = render(<NewAddonForm author="steven" first />)
+    expect(html).toContain("Create and open the Workshop")
+    expect(html).not.toContain('aria-label="Slug"')
   })
 })

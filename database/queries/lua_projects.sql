@@ -7,6 +7,10 @@ SELECT * FROM lua_projects
 WHERE owner_id = @user_id OR id IN (SELECT project_id FROM lua_project_contributors WHERE user_id = @user_id)
 ORDER BY updated_at DESC LIMIT 100;
 
+-- name: ListLuaProjectsByOwner :many
+-- An author's own addons, for /addons/<author>.
+SELECT * FROM lua_projects WHERE owner_id = @owner_id ORDER BY updated_at DESC LIMIT 100;
+
 -- name: GetLuaProject :one
 -- Callers check the project permission in SpiceDB first.
 SELECT * FROM lua_projects WHERE id = @id;

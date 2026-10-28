@@ -12212,6 +12212,42 @@ func (q *sqlQuerier) ListLuaProjectReleasesForProjects(ctx context.Context, proj
 	return items, nil
 }
 
+const listLuaProjectsByOwner = `-- name: ListLuaProjectsByOwner :many
+SELECT id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon FROM lua_projects WHERE owner_id = $1 ORDER BY updated_at DESC LIMIT 100
+`
+
+// An author's own addons, for /addons/<author>.
+func (q *sqlQuerier) ListLuaProjectsByOwner(ctx context.Context, ownerID uuid.UUID) ([]LuaProject, error) {
+	rows, err := q.db.Query(ctx, listLuaProjectsByOwner, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LuaProject
+	for rows.Next() {
+		var i LuaProject
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Kind,
+			&i.Name,
+			&i.Slug,
+			&i.Revision,
+			&i.DraftHash,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DraftIcon,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPublicLuaProjects = `-- name: ListPublicLuaProjects :many
 SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.created_at, p.updated_at, p.draft_icon FROM lua_projects p
 JOIN LATERAL (SELECT max(r.published_at) AS published_at FROM lua_project_releases r WHERE r.project_id = p.id AND r.hash IS NOT NULL) latest ON latest.published_at IS NOT NULL

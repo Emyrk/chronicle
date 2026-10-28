@@ -34,6 +34,15 @@ export interface AddonAuthor {
     readonly name: string;
 }
 
+// From chroniclesdk/lua_project.go
+/**
+ * AddonAuthorPage is /addons/<author>: the author and the addons the caller may view.
+ */
+export interface AddonAuthorPage {
+    readonly author: string;
+    readonly projects: readonly LuaProject[];
+}
+
 // From chroniclesdk/custom_panel.go
 export interface AdminActiveCustomPanelInstallation {
     readonly user_id: string;
@@ -2942,6 +2951,10 @@ export interface LuaProjectRelease {
     readonly icon?: string;
     readonly published_at: string;
     readonly published_by?: string;
+    /**
+     * PublishedByAuthor is the publisher's addon author name.
+     */
+    readonly published_by_author?: string;
 }
 
 // From chroniclesdk/unlisted_logs.go

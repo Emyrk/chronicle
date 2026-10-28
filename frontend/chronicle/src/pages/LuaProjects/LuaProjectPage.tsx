@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { ArrowLeft, BookOpen, Code2, Download, FileCode, FileImage, FileJson, FileText, GitCommitHorizontal, Tag, Trash2, Upload } from "lucide-react"
+import { ArrowLeft, BookOpen, Code2, Download, FileCode, FileImage, FileJson, FileText, Upload } from "lucide-react"
 import { addonPath, createRelease, deleteRelease, latestRelease, nextReleaseTag, uploadDraft } from "./api"
 import { AddonIcon } from "./AddonIcon"
+import { AddonReleases, VersionPicker } from "./AddonReleases"
 import { AddonAiUsage, AddonContributors } from "./AddonTeam"
-import { useAddonPage } from "./addonRoute"
+import { isAddonId, useAddonPage } from "./addonRoute"
 import { card, errorMessage, kindLabel, smallButton } from "./addonUi"
-import { browsableRefs, defaultRef, formatBytes, isImagePath, MAIN_REF, manifestSummary, packageDownloadURL, packageSha, readPackageFiles, shortSha, type PackageFile, type PackageRef } from "./packageFiles"
+import { defaultRef, formatBytes, isImagePath, MAIN_REF, manifestSummary, packageDownloadURL, packageSha, readPackageFiles, shortSha, type PackageFile, type PackageRef } from "./packageFiles"
 
 const formatDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
 const prose = "prose prose-sm dark:prose-invert max-w-none prose-a:text-primary prose-pre:bg-muted/60 prose-pre:text-foreground prose-code:font-normal prose-code:before:content-none prose-code:after:content-none [&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-muted [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:py-0.5"
@@ -47,7 +48,13 @@ function FileViewer({ file, images }: { file: PackageFile; images: ReadonlyMap<s
 }
 
 export function LuaProjectPage() {
-  const { projectId } = useParams<{ projectId?: string }>()
+  const { projectId, author, slug } = useParams<{ projectId?: string; author?: string; slug?: string }>()
+  // Old links were /addons/<id>/edit, which now reads as author <id> and slug "edit" (a reserved slug).
+  if (isAddonId(author) && slug === "edit") return <Navigate to={`/addons/id/${author}/edit`} replace />
+  return <AddonPage projectId={projectId} />
+}
+
+function AddonPage({ projectId }: { projectId?: string }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [search, setSearch] = useSearchParams()
@@ -59,7 +66,7 @@ export function LuaProjectPage() {
   const [busy, setBusy] = useState(false)
   const [archive, setArchive] = useState<File | null>(null)
 
-  // /addons/<id> keeps working, but shows the addon's named address once it has one.
+  // /addons/id/<id> keeps working, but shows the addon's named address once it has one.
   useEffect(() => {
     if (projectId && project?.author) navigate(addonPath(project) + location.search, { replace: true })
   }, [projectId, project, navigate, location.search])
@@ -83,10 +90,15 @@ export function LuaProjectPage() {
   const selected = files?.find(file => file.path === search.get("file")) ?? files?.find(file => file.path === "README.md")
   const about = files ? manifestSummary(files) : null
 
-  function show(next: { ref?: PackageRef; file?: string | null }) {
+  // The default build stays out of the URL, so the page keeps following the latest release.
+  function show(next: { ref?: PackageRef | null; file?: string | null }) {
     setSearch(current => {
       const params = new URLSearchParams(current)
-      if (next.ref) { params.set("ref", next.ref); params.delete("file") }
+      if (next.ref !== undefined) {
+        if (next.ref && project && next.ref !== defaultRef(project)) params.set("ref", next.ref)
+        else params.delete("ref")
+        params.delete("file")
+      }
       if (next.file) params.set("file", next.file)
       else if (next.file === null) params.delete("file")
       return params
@@ -112,13 +124,12 @@ export function LuaProjectPage() {
   if (!project || !can) return <main className="container mx-auto px-4 py-10"><Link to="/addons">← Addons</Link><p role="alert" className="mt-4">{pageQuery.error ? errorMessage(pageQuery.error) : "Addon not found."}</p></main>
 
   const latest = latestRelease(project)
-  const refs = browsableRefs(project)
   const refIcon = ref === MAIN_REF ? project.main?.icon : project.releases.find(release => release.tag === ref)?.icon
   const workshop = addonPath(project, "/edit")
   const canTag = can.release && !!project.main && latest?.sha256 !== project.main.sha256
   const tagRelease = () => {
     const tag = window.prompt("Tag this release. Everyone running the addon gets it:", nextReleaseTag(project.releases))?.trim()
-    if (tag) void mutate(() => createRelease(project.id, project.revision, tag), `Released ${tag}.`)
+    if (tag) void mutate(async () => { await createRelease(project.id, project.revision, tag); show({ ref: null }) }, `Released ${tag}.`)
   }
 
   return <main className="container mx-auto max-w-6xl space-y-6 px-4 py-8">
@@ -145,10 +156,7 @@ export function LuaProjectPage() {
           : "This addon has not been published yet."}</div> : <>
           <section aria-label="Files" className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
             <div className="flex flex-wrap items-center gap-3 border-b border-border bg-muted/30 px-4 py-2">
-              <div role="tablist" aria-label="Build" className="flex flex-wrap rounded-md border border-border bg-background p-0.5">
-                {refs.map(option => <button key={option} type="button" role="tab" aria-selected={ref === option} onClick={() => show({ ref: option })}
-                  className={`rounded px-2.5 py-1 font-mono text-xs font-medium ${ref === option ? "bg-primary/20 text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{option}</button>)}
-              </div>
+              <VersionPicker project={project} latest={latest} viewing={ref} onView={next => show({ ref: next })} />
               <span className="font-mono text-xs text-muted-foreground" title={sha}>{shortSha(sha)}</span>
               {files && <span className="text-xs text-muted-foreground">{files.length} {files.length === 1 ? "file" : "files"}</span>}
               <a className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" href={packageDownloadURL(project, sha)} download={`${project.slug}-${shortSha(sha)}.zip`}><Download className="size-3.5" /> Download</a>
@@ -187,32 +195,11 @@ export function LuaProjectPage() {
           {can.edit && project.kind === "panel" && <AddonAiUsage projectId={project.id} />}
           <p className="border-t border-border pt-3 text-xs text-muted-foreground">Created {formatDate(project.created_at)} · <Link className="text-primary underline-offset-2 hover:underline" to="/addons/api">API reference</Link></p>
         </section>
-        <section className={`${card} space-y-2 text-sm`} aria-label="Releases">
-          <h2 className="font-semibold">Releases</h2>
-          <p className="text-xs text-muted-foreground">Panels run the latest release. Choose main in the panel picker to try unreleased changes.</p>
-          <ul className="-mx-2 space-y-0.5">
-            {project.main && <li className={`flex items-center gap-2 rounded-md px-2 py-1.5 ${ref === MAIN_REF ? "bg-muted" : ""}`}>
-              <button type="button" onClick={() => show({ ref: MAIN_REF })} className="min-w-0 flex-1 text-left" title="View the files saved to main">
-                <span className="flex items-center gap-2 font-medium"><GitCommitHorizontal className="size-4 text-muted-foreground" /><span className="font-mono">main</span>
-                  <span className="font-mono text-xs font-normal text-muted-foreground" title={project.main.sha256}>{shortSha(project.main.sha256)}</span></span>
-                <span className="block pl-6 text-xs text-muted-foreground">Saved {formatDate(project.main.updated_at)}{latest?.sha256 === project.main.sha256 && ` · same as ${latest.tag}`}</span>
-              </button>
-              {canTag && <button type="button" className={`${smallButton} inline-flex items-center gap-1`} disabled={busy} onClick={tagRelease}><Tag className="size-3" /> Tag release</button>}
-            </li>}
-            {project.releases.map(release => <li key={release.tag} className={`flex items-center gap-2 rounded-md px-2 py-1.5 ${ref === release.tag ? "bg-muted" : ""} ${release.available ? "" : "opacity-50"}`}>
-              <button type="button" disabled={!release.available} onClick={() => show({ ref: release.tag })} className="min-w-0 flex-1 text-left disabled:cursor-default"
-                title={release.available ? `View the ${release.tag} files` : "Only the newest releases keep their files"}>
-                <span className="flex items-center gap-2 font-medium"><Tag className="size-4 text-muted-foreground" /><span className="truncate font-mono">{release.tag}</span>
-                  {release === latest && <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-normal text-emerald-500">latest</span>}</span>
-                <span className="block pl-6 text-xs text-muted-foreground">{formatDate(release.published_at)}{release.available ? "" : " · no longer available"}</span>
-              </button>
-              {can.release && <button type="button" className="text-muted-foreground hover:text-destructive disabled:opacity-50" disabled={busy} aria-label={`Delete ${release.tag}`}
-                onClick={() => { if (window.confirm(release === latest ? `Delete ${release.tag}? Panels fall back to the previous release that still has files.` : `Delete ${release.tag}?`)) void mutate(() => deleteRelease(project.id, release.tag), `Deleted ${release.tag}.`) }}>
-                <Trash2 className="size-3.5" /></button>}
-            </li>)}
-          </ul>
-          {!project.releases.length && <p className="text-xs text-muted-foreground">{can.release ? "Nothing released yet. Tag main when it is ready." : "Nothing released yet."}</p>}
-          {can.edit && <details className="border-t border-border pt-3 text-xs">
+        <AddonReleases project={project} latest={latest} viewing={sha ? ref : null} canTag={canTag} canRelease={can.release} busy={busy}
+          onView={next => show({ ref: next })} onTag={tagRelease} onDelete={release => {
+            if (window.confirm(release === latest ? `Delete ${release.tag}? Panels fall back to the previous release that still has files.` : `Delete ${release.tag}?`)) void mutate(() => deleteRelease(project.id, release.tag), `Deleted ${release.tag}.`)
+          }}>
+          {can.edit && <details className="mt-4 border-t border-border pt-3 text-xs">
             <summary className="flex cursor-pointer items-center gap-1.5 font-medium text-muted-foreground hover:text-foreground"><Upload className="size-3.5" /> Upload a tar archive</summary>
             <div className="mt-2 space-y-2">
               <p className="text-muted-foreground">An uncompressed tar with project.json at its root, a Lua entrypoint and an optional README.md. It replaces main.</p>
@@ -220,7 +207,7 @@ export function LuaProjectPage() {
               <button className={smallButton} type="button" disabled={busy || !archive} onClick={() => { if (archive) void mutate(() => uploadDraft(project.id, project.revision, archive), "Uploaded to main.") }}>Upload draft</button>
             </div>
           </details>}
-        </section>
+        </AddonReleases>
         {can.edit && <AddonContributors project={project} canManage={can.manage} />}
       </aside>
     </div>

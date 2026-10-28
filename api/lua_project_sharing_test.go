@@ -45,6 +45,7 @@ func TestLuaProjectPermissions(t *testing.T) {
 	router.Delete("/me/lua-projects/{projectID}/contributors/{author}", api.DeleteLuaProjectContributor)
 	router.Post("/me/lua-projects/{projectID}/releases", api.CreateLuaProjectRelease)
 	router.Get("/lua-projects/{projectID}/page", api.GetLuaProjectPage)
+	router.Get("/addons/{author}", api.GetAddonAuthorPage)
 	router.Get("/addons/{author}/{slug}", api.GetLuaProjectPageByPath)
 	as := func(user uuid.UUID) context.Context {
 		if user == uuid.Nil {
@@ -75,6 +76,8 @@ func TestLuaProjectPermissions(t *testing.T) {
 	require.Equal(t, http.StatusConflict, call(owner, http.MethodPost, "/me/lua-projects", create).Code)
 	require.Equal(t, http.StatusBadRequest, call(owner, http.MethodPut, "/me/addon-author", `{"name":"Steven"}`).Code)
 	require.Equal(t, http.StatusBadRequest, call(owner, http.MethodPut, "/me/addon-author", `{"name":"api"}`).Code)
+	require.Equal(t, http.StatusBadRequest, call(owner, http.MethodPut, "/me/addon-author", `{"name":"stev"}`).Code, "names need 5 characters")
+	require.Equal(t, http.StatusBadRequest, call(owner, http.MethodPut, "/me/addon-author", `{"name":"browse"}`).Code, "reserved name")
 	require.Equal(t, http.StatusCreated, call(owner, http.MethodPut, "/me/addon-author", `{"name":"steven"}`).Code)
 	require.Equal(t, http.StatusConflict, call(owner, http.MethodPut, "/me/addon-author", `{"name":"steven-2"}`).Code, "the name cannot change")
 	require.Equal(t, http.StatusConflict, call(editor, http.MethodPut, "/me/addon-author", `{"name":"steven"}`).Code, "names are unique")
@@ -97,6 +100,14 @@ func TestLuaProjectPermissions(t *testing.T) {
 	code, byPath := page(stranger, "/addons/steven/interrupt-tracker")
 	require.Equal(t, http.StatusOK, code)
 	require.Equal(t, project.ID, byPath.Project.ID)
+	rec = call(stranger, http.MethodGet, "/addons/steven", "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var authorPage chroniclesdk.AddonAuthorPage
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &authorPage))
+	require.Equal(t, "steven", authorPage.Author)
+	require.Len(t, authorPage.Projects, 1)
+	require.Equal(t, project.ID, authorPage.Projects[0].ID)
+	require.Equal(t, http.StatusNotFound, call(stranger, http.MethodGet, "/addons/nobody-here", "").Code)
 	code, _ = page(stranger, "/addons/steven/missing")
 	require.Equal(t, http.StatusNotFound, code)
 	code, mine := page(owner, byID)
@@ -138,6 +149,7 @@ func TestLuaProjectPermissions(t *testing.T) {
 	require.Len(t, released.Releases, 1)
 	require.Equal(t, "v1.0", released.Releases[0].Tag)
 	require.True(t, released.Releases[0].Available)
+	require.Equal(t, "helper", released.Releases[0].PublishedByAuthor, "a contributor's release names them")
 	require.Equal(t, http.StatusConflict, call(editor, http.MethodPost, "/me/lua-projects/"+project.ID.String()+"/releases", `{"tag":"v1.0","expected_revision":3}`).Code, "tags are unique")
 	require.Equal(t, http.StatusOK, call(owner, http.MethodDelete, contributors+"/helper", "").Code)
 	code, removed := page(editor, byID)
@@ -173,4 +185,47 @@ func TestPublicLuaProjectRoutesSeeTheSignedInUser(t *testing.T) {
 	}
 	require.True(t, page(chronauth.WithClaims(ctx, &claims.Claims{Subject: owner})).Manage, "the owner must get the owner view")
 	require.False(t, page(ctx).Edit, "signed-out visitors still get the public view")
+}
+
+func TestSuggestAddonAuthor(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "steven-m", suggestAddonAuthorName("  Steven M.!"))
+	require.Equal(t, "", suggestAddonAuthorName("✨✨"))
+	require.Equal(t, "bob-addons", suggestAddonAuthorName("Bob"), "short names are padded to the minimum")
+	require.Len(t, suggestAddonAuthorName(strings.Repeat("ab-", 20)), 32)
+
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(testservices.Authz(t))
+	api := &API{Opts: &Options{Zed: zed, Logger: slog.Default()}}
+	tag := uuid.NewString()[:8]
+	user := func(username string) uuid.UUID {
+		id := uuid.New()
+		_, err := zed.InsertUser(ctx, database.InsertUserParams{ID: id, Username: username})
+		require.NoError(t, err)
+		return id
+	}
+	suggest := func(user uuid.UUID) string {
+		ctx := authz.AsUser(chronauth.WithClaims(ctx, &claims.Claims{Subject: user}), user)
+		rec := httptest.NewRecorder()
+		api.SuggestAddonAuthor(rec, httptest.NewRequest(http.MethodGet, "/me/addon-author/suggestion", nil).WithContext(ctx))
+		require.Equal(t, http.StatusOK, rec.Code)
+		var out chroniclesdk.AddonAuthor
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+		return out.Name
+	}
+
+	first := user("Tester " + tag)
+	require.Equal(t, "tester-"+tag, suggest(first))
+	mine := func(user uuid.UUID) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		api.GetMyAddonAuthor(rec, httptest.NewRequest(http.MethodGet, "/me/addon-author", nil).WithContext(authz.AsUser(chronauth.WithClaims(ctx, &claims.Claims{Subject: user}), user)))
+		return rec
+	}
+	require.Equal(t, http.StatusNoContent, mine(first).Code, "no name yet is not an error")
+	_, err := zed.InsertAddonAuthor(ctx, database.InsertAddonAuthorParams{UserID: first, Name: "tester-" + tag})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, mine(first).Code)
+	require.Equal(t, "tester-"+tag+"-2", suggest(user("TESTER_"+tag)), "a taken name gets a number")
+	require.Equal(t, "admin-2", suggest(user("Admin")), "reserved names get a number")
+	require.Equal(t, "", suggest(user("✨")), "no usable characters, no suggestion")
 }

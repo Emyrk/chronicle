@@ -19,11 +19,6 @@ export function defaultRef(project: Pick<LuaProject, "releases" | "main">): Pack
   return latestRelease(project)?.tag ?? (project.main ? MAIN_REF : null)
 }
 
-/** Every build that can be browsed: main, then releases that still have files. */
-export function browsableRefs(project: Pick<LuaProject, "releases" | "main">): PackageRef[] {
-  return [...(project.main ? [MAIN_REF] : []), ...project.releases.filter(release => release.available).map(release => release.tag)]
-}
-
 /** Main and releases are both served by hash to anyone who can view the addon. */
 export function packageDownloadURL(project: Pick<LuaProject, "id">, sha: string): string {
   return publicPackageURL(project.id, sha)
@@ -65,3 +60,15 @@ export function formatBytes(bytes: number): string {
 }
 
 export const shortSha = (sha: string) => sha.slice(0, 7)
+
+/** "5 minutes ago", "3 days ago", then a date; the exact time is in the tooltip. */
+export function timeAgo(iso: string, now = Date.now()): string {
+  const seconds = Math.round((new Date(iso).getTime() - now) / 1000)
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" })
+  const abs = Math.abs(seconds)
+  if (abs < 60) return formatter.format(seconds, "second")
+  if (abs < 3600) return formatter.format(Math.round(seconds / 60), "minute")
+  if (abs < 86_400) return formatter.format(Math.round(seconds / 3600), "hour")
+  if (abs < 30 * 86_400) return formatter.format(Math.round(seconds / 86_400), "day")
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+}

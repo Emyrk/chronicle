@@ -35,12 +35,43 @@ export async function readLuaDraftZip(bytes: Uint8Array, project: Pick<LuaProjec
   return result
 }
 
+/** A new addon's starting point: a hello-world panel that runs as is, with pointers to the next step. */
 export function initialEditorFiles(project: Pick<LuaProject, "kind" | "name" | "slug">): EditorFiles {
   return {
     manifest: JSON.stringify({ manifest_version: 1, kind: project.kind, name: project.name, slug: project.slug,
       entrypoint: "main.lua", capabilities: ["ui"], streams: [], assets: [] }, null, 2) + "\n",
-    lua: "-- Write your addon here\nreturn {}\n",
-    readme: `# ${project.name}\n\nDescribe what this addon shows and how to use it.\n`,
+    lua: `-- ${project.name}
+-- main.lua runs once when the panel opens. Create your frames here.
+
+local title = CreateFrame("FontString", "title", UIParent)
+title:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 12, -12)
+title:SetFontSize(20)
+title:SetColor(1, 0.82, 0)
+title:SetText("Hello, world!")
+
+local hint = CreateFrame("FontString", "hint", UIParent)
+hint:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 12, -44)
+hint:SetText("Edit main.lua, then press Run preview to see your changes.")
+
+-- Next step: add "damage" to "streams" in project.json, then count events:
+--
+-- local damage = require("chronicle.v1.events.damage")
+-- local total = 0
+-- damage.onEvent(function(event) total = total + event.amount end)
+-- damage.onComplete(function() title:SetText("Total damage: " .. total) end)
+`,
+    readme: `# ${project.name}
+
+Describe what this addon shows and how to use it. This README appears on the addon's page.
+
+## Files
+
+- \`main.lua\` draws the panel. It starts as a hello-world example.
+- \`project.json\` says what the panel needs, such as the event streams it reads.
+- \`README.md\` is this page.
+
+See the Addon API reference for every event, frame and method.
+`,
   }
 }
 

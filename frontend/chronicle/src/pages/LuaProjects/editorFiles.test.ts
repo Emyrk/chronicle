@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { zipSync } from "fflate"
+import { createGuideRuntime } from "../Guides/runtime/runtime"
 import { applySourceProposal, buildEditorTar, initialEditorFiles, panelPackageFromWorkingCopy, readLuaDraftZip, validateEditorFiles } from "./editorFiles"
 
 const project = { kind: "panel" as const, name: "Example", slug: "example" }
@@ -97,5 +98,15 @@ describe("Lua browser source model", () => {
     }
     for (const lua of ["", "a\0b", "x".repeat(65537)]) expect(() => buildEditorTar(project, { ...files, lua })).toThrow()
     expect(() => buildEditorTar({ ...project, kind: "guide" }, files)).toThrow()
+  })
+
+  it("starts new addons with a hello-world panel that runs as is", () => {
+    validateEditorFiles(project, files)
+    const manifest = JSON.parse(files.manifest) as { capabilities: ("ui" | "input")[] }
+    const runtime = createGuideRuntime({ entrypoint: "main.lua", sources: { "main.lua": files.lua }, capabilities: manifest.capabilities, panelStreams: [] })
+    const texts = [...runtime.start()].filter(op => op.op === "set").map(op => (op as { props: { text?: string } }).props.text).filter(Boolean)
+    runtime.stop()
+    expect(texts).toEqual(["Hello, world!", "Edit main.lua, then press Run preview to see your changes."])
+    expect(files.readme).toContain("main.lua")
   })
 })
