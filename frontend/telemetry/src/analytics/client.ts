@@ -10,6 +10,7 @@ import type {
 import {
   buildHostChangeWindows,
   buildHostRows,
+  buildHostTrends,
   type CurrentHostMetrics,
   type DatedHostPageViews,
 } from "./hosts";
@@ -425,6 +426,10 @@ export async function fetchAnalyticsDashboard(env: Env, days: number): Promise<A
       pageViews: numberValue(row, 0),
     })
   );
+  const hostTrends = buildHostTrends(
+    datedHostPageViews,
+    dateFromToday(timeZone, -1)
+  );
   const hostChangeWindows = buildHostChangeWindows(
     datedHostPageViews,
     dateFromToday(timeZone, -1)
@@ -439,7 +444,8 @@ export async function fetchAnalyticsDashboard(env: Env, days: number): Promise<A
     previousHostPageViews,
     chinaPageViews(currentHostCountriesReport),
     chinaPageViews(previousHostCountriesReport),
-    hostChangeWindows
+    hostChangeWindows,
+    hostTrends
   );
   const acquisition: AnalyticsAcquisitionRow[] = (acquisitionReport?.rows ?? []).map((row) => {
     const source = dimensionValue(row, 0);

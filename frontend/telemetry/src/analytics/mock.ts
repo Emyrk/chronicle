@@ -197,6 +197,9 @@ export function createMockAnalyticsDashboard(days: number): AnalyticsDashboard {
         change7dPercent: (Number(previousRatio) - 1) * 120,
         change14dPercent: (Number(previousRatio) - 1) * 110,
         change30dPercent: (Number(previousRatio) - 1) * 100,
+        trend30d: Array.from({ length: 30 }, (_, day) =>
+          Math.round((Number(pageViewsRaw) / 30) * factor * (0.75 + ((day * 7) % 11) / 20))
+        ),
         activeUsers: Math.round(Number(activeUsers) * factor),
         sessions: Math.round(Number(sessions) * factor),
         nonChinaPageViews,
