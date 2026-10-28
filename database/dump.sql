@@ -1636,7 +1636,18 @@ CREATE TABLE lua_project_contributors (
     added_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT lua_project_contributors_permissions_check CHECK (((cardinality(permissions) > 0) AND (permissions <@ ARRAY['edit'::text, 'publish_unstable'::text, 'publish'::text])))
+    CONSTRAINT lua_project_contributors_permissions_check CHECK (((cardinality(permissions) > 0) AND (permissions <@ ARRAY['edit'::text, 'release'::text])))
+);
+
+CREATE TABLE lua_project_releases (
+    project_id uuid NOT NULL,
+    tag text NOT NULL,
+    hash text,
+    icon text,
+    published_at timestamp with time zone DEFAULT now() NOT NULL,
+    published_by uuid,
+    CONSTRAINT lua_project_releases_hash_check CHECK (((hash IS NULL) OR (hash ~ '^[0-9a-f]{64}$'::text))),
+    CONSTRAINT lua_project_releases_tag_check CHECK ((tag ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$'::text))
 );
 
 CREATE TABLE lua_projects (
@@ -1647,17 +1658,9 @@ CREATE TABLE lua_projects (
     slug text NOT NULL,
     revision bigint DEFAULT 1 NOT NULL,
     draft_hash text,
-    unstable_hash text,
-    stable_hash text,
-    unstable_published_at timestamp with time zone,
-    unstable_published_by uuid,
-    stable_published_at timestamp with time zone,
-    stable_published_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     draft_icon text,
-    unstable_icon text,
-    stable_icon text,
     CONSTRAINT lua_projects_kind_check CHECK ((kind = ANY (ARRAY['panel'::text, 'guide'::text])))
 );
 
@@ -2952,6 +2955,9 @@ ALTER TABLE ONLY lua_project_artifacts
 ALTER TABLE ONLY lua_project_contributors
     ADD CONSTRAINT lua_project_contributors_pkey PRIMARY KEY (project_id, user_id);
 
+ALTER TABLE ONLY lua_project_releases
+    ADD CONSTRAINT lua_project_releases_pkey PRIMARY KEY (project_id, tag);
+
 ALTER TABLE ONLY lua_projects
     ADD CONSTRAINT lua_projects_owner_id_slug_key UNIQUE (owner_id, slug);
 
@@ -3464,9 +3470,9 @@ CREATE UNIQUE INDEX log_instances_hashed_slug_idx ON log_instances USING btree (
 
 CREATE INDEX lua_project_contributors_user_idx ON lua_project_contributors USING btree (user_id);
 
-CREATE INDEX lua_projects_owner_idx ON lua_projects USING btree (owner_id, updated_at DESC);
+CREATE INDEX lua_project_releases_recent_idx ON lua_project_releases USING btree (project_id, published_at DESC);
 
-CREATE INDEX lua_projects_public_idx ON lua_projects USING btree (stable_published_at DESC) WHERE (stable_hash IS NOT NULL);
+CREATE INDEX lua_projects_owner_idx ON lua_projects USING btree (owner_id, updated_at DESC);
 
 CREATE INDEX oauth_device_sessions_expires_at_idx ON oauth_device_sessions USING btree (expires_at);
 
@@ -3883,14 +3889,14 @@ ALTER TABLE ONLY lua_project_contributors
 ALTER TABLE ONLY lua_project_contributors
     ADD CONSTRAINT lua_project_contributors_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY lua_project_releases
+    ADD CONSTRAINT lua_project_releases_project_id_fkey FOREIGN KEY (project_id) REFERENCES lua_projects(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY lua_project_releases
+    ADD CONSTRAINT lua_project_releases_published_by_fkey FOREIGN KEY (published_by) REFERENCES users(id) ON DELETE SET NULL;
+
 ALTER TABLE ONLY lua_projects
     ADD CONSTRAINT lua_projects_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES users(id);
-
-ALTER TABLE ONLY lua_projects
-    ADD CONSTRAINT lua_projects_stable_published_by_fkey FOREIGN KEY (stable_published_by) REFERENCES users(id);
-
-ALTER TABLE ONLY lua_projects
-    ADD CONSTRAINT lua_projects_unstable_published_by_fkey FOREIGN KEY (unstable_published_by) REFERENCES users(id);
 
 ALTER TABLE ONLY oauth_relay_codes
     ADD CONSTRAINT oauth_relay_codes_user_auth_session_id_fkey FOREIGN KEY (user_auth_session_id) REFERENCES user_auth_session(id) ON DELETE CASCADE;

@@ -14,7 +14,7 @@ const maxZipBytes = 8 * 1024 * 1024
 
 /** Fetch with a cap before parsing; never interpret package source as JavaScript. */
 async function fetchPrivateDraft(project: LuaProject, signal: AbortSignal): Promise<EditorFiles> {
-  const response = await fetch(`/api/v1/me/lua-projects/${encodeURIComponent(project.id)}/draft/${encodeURIComponent(project.draft_sha256!)}/package`, {
+  const response = await fetch(`/api/v1/me/lua-projects/${encodeURIComponent(project.id)}/draft/${encodeURIComponent(project.main!.sha256)}/package`, {
     credentials: "same-origin", cache: "no-store", signal,
   })
   if (!response.ok) throw new Error(`Private draft unavailable (${response.status}).`)
@@ -111,7 +111,7 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
   const [active, setActive] = useState<keyof EditorFiles>("lua")
-  const identity = `${project.id}:${project.draft_sha256 ?? "new"}`
+  const identity = `${project.id}:${project.main?.sha256 ?? "new"}`
   const loadedIdentity = useRef<string | null>(null)
   const localRevision = useRef(0)
   const handledProposal = useRef<string | null>(null)
@@ -136,7 +136,7 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
     }
     loadedIdentity.current = identity
     const controller = new AbortController()
-    if (!project.draft_sha256) {
+    if (!project.main) {
       localRevision.current += 1
       setFiles(initialEditorFiles(project)); setBaseline(null); setLoading(false); setError("")
     } else {

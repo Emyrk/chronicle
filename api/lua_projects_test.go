@@ -46,30 +46,58 @@ func TestLuaProjectOwnerAndPublication(t *testing.T) {
 	require.NoError(t, err)
 	_, err = db.GetPublicLuaProject(ctx, project.ID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	_, err = db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: "draft", Valid: true}, Icon: pgtype.Text{String: "swords", Valid: true}, ExpectedRevision: 1})
+	first := strings.Repeat("1", 64)
+	saved, err := db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: first, Valid: true}, Icon: pgtype.Text{String: "swords", Valid: true}, ExpectedRevision: 1})
 	require.NoError(t, err)
 	_, err = db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: "stale", Valid: true}, ExpectedRevision: 1})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	unstable, err := db.PublishLuaProjectUnstable(ctx, database.PublishLuaProjectUnstableParams{ID: project.ID, ActorID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 2})
+	_, err = db.GetPublicLuaProject(ctx, project.ID)
+	require.NoError(t, err, "main is runnable before any release")
+
+	// A release tags the current main, keeping its icon and who tagged it.
+	release, err := db.CreateLuaProjectRelease(ctx, database.CreateLuaProjectReleaseParams{ID: project.ID, Tag: "v1", ActorID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: saved.Revision})
 	require.NoError(t, err)
-	require.Equal(t, "draft", unstable.UnstableHash.String)
-	require.Equal(t, "swords", unstable.UnstableIcon.String, "the icon travels with the release")
-	_, err = db.PromoteLuaProjectStable(ctx, database.PromoteLuaProjectStableParams{ID: project.ID, ActorID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 3, TestedSha256: pgtype.Text{String: "untested", Valid: true}})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
-	stable, err := db.PromoteLuaProjectStable(ctx, database.PromoteLuaProjectStableParams{ID: project.ID, ActorID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 3, TestedSha256: pgtype.Text{String: "draft", Valid: true}})
+	require.Equal(t, first, release.Hash.String)
+	require.Equal(t, "swords", release.Icon.String, "the icon travels with the release")
+	require.Equal(t, owner, release.PublishedBy.UUID)
+	_, err = db.CreateLuaProjectRelease(ctx, database.CreateLuaProjectReleaseParams{ID: project.ID, Tag: "v2", ExpectedRevision: saved.Revision})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "a stale revision cannot tag a newer main")
+	current, err := db.GetLuaProject(ctx, project.ID)
 	require.NoError(t, err)
-	require.Equal(t, unstable.UnstableHash, stable.StableHash)
-	require.Equal(t, "swords", stable.StableIcon.String)
-	require.Equal(t, "swords", luaProjectResponse(stable, false).Stable.Icon)
-	visible, err := db.GetPublicLuaProject(ctx, project.ID)
+	_, err = db.CreateLuaProjectRelease(ctx, database.CreateLuaProjectReleaseParams{ID: project.ID, Tag: "v1", ExpectedRevision: current.Revision})
+	require.Error(t, err, "tags are unique")
+
+	// Only the newest releases keep files; older ones stay listed without a package.
+	for index, tag := range []string{"v2", "v3", "v4"} {
+		current, err = db.GetLuaProject(ctx, project.ID)
+		require.NoError(t, err)
+		saved, err = db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: strings.Repeat(string(rune('2'+index)), 64), Valid: true}, ExpectedRevision: current.Revision})
+		require.NoError(t, err)
+		actor := owner
+		if tag == "v4" {
+			actor = technicalAdmin
+		}
+		_, err = db.CreateLuaProjectRelease(ctx, database.CreateLuaProjectReleaseParams{ID: project.ID, Tag: tag, ActorID: uuid.NullUUID{UUID: actor, Valid: true}, ExpectedRevision: saved.Revision})
+		require.NoError(t, err)
+		require.NoError(t, db.TrimLuaProjectReleaseFiles(ctx, database.TrimLuaProjectReleaseFilesParams{ProjectID: project.ID, Keep: luaReleasesWithFiles}))
+	}
+	releases, err := db.ListLuaProjectReleases(ctx, project.ID)
 	require.NoError(t, err)
-	require.Equal(t, stable.StableHash, visible.StableHash)
-	adminEdited, err := db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: "admin-draft", Valid: true}, ExpectedRevision: 4})
+	tags := make([]string, 0, len(releases))
+	for _, release := range releases {
+		tags = append(tags, release.Tag)
+	}
+	require.Equal(t, []string{"v4", "v3", "v2", "v1"}, tags)
+	require.False(t, releases[3].Hash.Valid, "v1 no longer has files")
+	require.True(t, releases[2].Hash.Valid)
+	require.Equal(t, technicalAdmin, releases[0].PublishedBy.UUID)
+	response := luaProjectResponse(current, releases, "steven")
+	require.False(t, response.Releases[3].Available)
+	require.True(t, response.Releases[0].Available)
+	require.Equal(t, "steven", response.Author)
+	adminEdited, err := db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: strings.Repeat("9", 64), Valid: true}, ExpectedRevision: mustRevision(t, ctx, db, project.ID)})
 	require.NoError(t, err)
 	require.Equal(t, owner, adminEdited.OwnerID, "admin update must not transfer ownership")
-	adminPublished, err := db.PublishLuaProjectUnstable(ctx, database.PublishLuaProjectUnstableParams{ID: project.ID, ActorID: uuid.NullUUID{UUID: technicalAdmin, Valid: true}, ExpectedRevision: 5})
-	require.NoError(t, err)
-	require.Equal(t, technicalAdmin, adminPublished.UnstablePublishedBy.UUID)
 	// SpiceDB decides who may read drafts (see TestLuaProjectPermissions); SQL only scopes by project.
 	draft, err := db.CreateLuaProject(ctx, database.CreateLuaProjectParams{OwnerID: owner, Kind: "panel", Name: "Preview", Slug: "preview"})
 	require.NoError(t, err)
@@ -95,8 +123,9 @@ func TestLuaProjectOwnerAndPublication(t *testing.T) {
 	require.Equal(t, objectKey, preview.ObjectKey)
 	require.Equal(t, "application/zip", preview.MimeType)
 	require.False(t, preview.ContentEncoding.Valid)
-	_, err = db.GetPublishedLuaProjectArtifact(ctx, database.GetPublishedLuaProjectArtifactParams{ID: draft.ID, Hash: packageHash})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	served, err := db.GetPublishedLuaProjectArtifact(ctx, database.GetPublishedLuaProjectArtifactParams{ID: draft.ID, Hash: packageHash})
+	require.NoError(t, err, "main is servable to anyone who can view")
+	require.Equal(t, objectKey, served.ObjectKey)
 	// A replaced draft queues its former object key for post-commit removal.
 	newHash := strings.Repeat("b", 64)
 	_, err = db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: draft.ID, Hash: pgtype.Text{String: newHash, Valid: true}, ExpectedRevision: 2})
@@ -114,8 +143,15 @@ func TestLuaProjectOwnerAndPublication(t *testing.T) {
 	require.NoError(t, err)
 	_, err = db.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: guide.ID, Hash: pgtype.Text{String: "draft", Valid: true}, ExpectedRevision: 1})
 	require.NoError(t, err)
-	_, err = db.PublishLuaProjectUnstable(ctx, database.PublishLuaProjectUnstableParams{ID: guide.ID, ActorID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 2})
-	require.True(t, errors.Is(err, pgx.ErrNoRows))
+	_, err = db.CreateLuaProjectRelease(ctx, database.CreateLuaProjectReleaseParams{ID: guide.ID, Tag: "v1", ActorID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 2})
+	require.True(t, errors.Is(err, pgx.ErrNoRows), "guides cannot be released yet")
+}
+
+func mustRevision(t *testing.T, ctx context.Context, db database.Store, id uuid.UUID) int64 {
+	t.Helper()
+	project, err := db.GetLuaProject(ctx, id)
+	require.NoError(t, err)
+	return project.Revision
 }
 
 func TestLuaArtifactGarbageRemoval(t *testing.T) {
@@ -325,7 +361,7 @@ func TestLuaPublishedHashCaching(t *testing.T) {
 		return rec
 	}
 
-	require.Equal(t, http.StatusNotFound, get(url, ctx, nil).Code, "draft hashes are not public")
+	// Main is runnable by anyone who can view, so its package is public like a release's.
 	draftURL := "/me/lua-projects/" + project.ID.String() + "/draft/" + hash + "/package"
 	ownerCtx := authz.AsUser(chronauth.WithClaims(ctx, &claims.Claims{Subject: owner}), owner)
 	rec := get(draftURL, ownerCtx, nil)
@@ -334,8 +370,6 @@ func TestLuaPublishedHashCaching(t *testing.T) {
 	require.Equal(t, "private, no-store", rec.Header().Get("Cache-Control"))
 	require.Equal(t, http.StatusNotFound, get("/me/lua-projects/"+project.ID.String()+"/draft/"+strings.Repeat("a", 64)+"/package", ownerCtx, nil).Code)
 	require.Equal(t, http.StatusForbidden, get(draftURL, ctx, nil).Code)
-	_, err = zed.PublishLuaProjectUnstable(ctx, database.PublishLuaProjectUnstableParams{ID: project.ID, ActorID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 2})
-	require.NoError(t, err)
 	rec = get(url, ctx, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, data, rec.Body.Bytes())
@@ -367,13 +401,11 @@ func TestLuaPublishedHashCaching(t *testing.T) {
 	nextKey := luaProjectObjectKey(project.ID)
 	_, err = objects.UploadFile(ctx, luaProjectBucket, nextKey, bytes.NewReader(nextData))
 	require.NoError(t, err)
-	_, err = zed.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: nextHash, Valid: true}, ExpectedRevision: 3})
+	_, err = zed.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: nextHash, Valid: true}, ExpectedRevision: 2})
 	require.NoError(t, err)
 	_, err = zed.PutLuaProjectArtifact(ctx, database.PutLuaProjectArtifactParams{ProjectID: project.ID, Hash: nextHash, ObjectKey: nextKey, MimeType: "application/zip", UncompressedSizeBytes: int64(len(nextData)), StoredSizeBytes: int64(len(nextData))})
 	require.NoError(t, err)
-	_, err = zed.PublishLuaProjectUnstable(ctx, database.PublishLuaProjectUnstableParams{ID: project.ID, ActorID: uuid.NullUUID{UUID: owner, Valid: true}, ExpectedRevision: 4})
-	require.NoError(t, err)
-	require.Equal(t, http.StatusNotFound, get(url, ctx, map[string]string{"If-None-Match": `"` + hash + `"`}).Code, "rotated hashes cannot be revalidated")
+	require.Equal(t, http.StatusNotFound, get(url, ctx, map[string]string{"If-None-Match": `"` + hash + `"`}).Code, "an old main that was never released cannot be revalidated")
 	url = "/lua-projects/" + project.ID.String() + "/artifacts/" + nextHash + "/package"
 	require.Equal(t, http.StatusOK, get(url, ctx, nil).Code)
 

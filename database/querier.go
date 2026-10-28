@@ -83,6 +83,8 @@ type sqlcQuerier interface {
 	// Guild Join Requests
 	CreateGuildJoinRequest(ctx context.Context, arg CreateGuildJoinRequestParams) (GuildJoinRequest, error)
 	CreateLuaProject(ctx context.Context, arg CreateLuaProjectParams) (LuaProject, error)
+	// Tags the current main. Bumping the revision keeps a stale page from tagging a newer main by mistake.
+	CreateLuaProjectRelease(ctx context.Context, arg CreateLuaProjectReleaseParams) (LuaProjectRelease, error)
 	CreateOAuthDeviceSession(ctx context.Context, arg CreateOAuthDeviceSessionParams) error
 	CreateOAuthTokenSession(ctx context.Context, arg CreateOAuthTokenSessionParams) error
 	CreateRaidComposition(ctx context.Context, arg CreateRaidCompositionParams) (RaidComposition, error)
@@ -128,6 +130,7 @@ type sqlcQuerier interface {
 	DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
 	DeleteLuaProjectArtifactGarbage(ctx context.Context, objectKey string) error
 	DeleteLuaProjectContributor(ctx context.Context, arg DeleteLuaProjectContributorParams) (int64, error)
+	DeleteLuaProjectRelease(ctx context.Context, arg DeleteLuaProjectReleaseParams) (int64, error)
 	DeleteModificationRequest(ctx context.Context, id uuid.UUID) error
 	DeleteOAuthTokenSession(ctx context.Context, arg DeleteOAuthTokenSessionParams) (int64, error)
 	DeleteOAuthTokenSessionsByRequestID(ctx context.Context, requestID string) (int64, error)
@@ -374,6 +377,7 @@ type sqlcQuerier interface {
 	// The existing proof_requests_applicant_created index supports this lookup.
 	GetProofCooldown(ctx context.Context, arg GetProofCooldownParams) (pgtype.Timestamptz, error)
 	GetProofRequest(ctx context.Context, id uuid.UUID) (ProofRequest, error)
+	// An addon with something to run: main or a release with files.
 	GetPublicLuaProject(ctx context.Context, id uuid.UUID) (LuaProject, error)
 	GetPublishedLuaProjectArtifact(ctx context.Context, arg GetPublishedLuaProjectArtifactParams) (GetPublishedLuaProjectArtifactRow, error)
 	GetRaidCompositionByID(ctx context.Context, id uuid.UUID) (RaidComposition, error)
@@ -664,6 +668,8 @@ type sqlcQuerier interface {
 	ListLogGroupArtifacts(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)
 	ListLuaProjectArtifactGarbage(ctx context.Context) ([]string, error)
 	ListLuaProjectContributors(ctx context.Context, projectID uuid.UUID) ([]ListLuaProjectContributorsRow, error)
+	ListLuaProjectReleases(ctx context.Context, projectID uuid.UUID) ([]LuaProjectRelease, error)
+	ListLuaProjectReleasesForProjects(ctx context.Context, projectIds []uuid.UUID) ([]LuaProjectRelease, error)
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)
 	ListMyProofRequests(ctx context.Context, arg ListMyProofRequestsParams) ([]ProofRequest, error)
 	ListObservedItemIDsForDate(ctx context.Context, arg ListObservedItemIDsForDateParams) ([]int32, error)
@@ -688,6 +694,7 @@ type sqlcQuerier interface {
 	// requests and characters removed from the armory still render without them.
 	ListProofSubjectClasses(ctx context.Context, requestID uuid.UUID) ([]ListProofSubjectClassesRow, error)
 	ListProofSubjects(ctx context.Context, requestID uuid.UUID) ([]ProofRequestSubject, error)
+	// Addons with a release people can still run, newest release first.
 	ListPublicLuaProjects(ctx context.Context) ([]LuaProject, error)
 	ListRaidCompositionsByUser(ctx context.Context, arg ListRaidCompositionsByUserParams) ([]RaidComposition, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
@@ -783,7 +790,6 @@ type sqlcQuerier interface {
 	MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) (WoWLogGroup, error)
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
 	PauseInferenceRun(ctx context.Context, arg PauseInferenceRunParams) (InferenceRun, error)
-	PromoteLuaProjectStable(ctx context.Context, arg PromoteLuaProjectStableParams) (LuaProject, error)
 	PruneLuaProjectArtifacts(ctx context.Context, id uuid.UUID) error
 	PruneParsedInstanceFromLogOutput(ctx context.Context, arg PruneParsedInstanceFromLogOutputParams) error
 	// Removes summary cards whose instance/difficulty/player-count combination no
@@ -792,7 +798,6 @@ type sqlcQuerier interface {
 	PublicInstance(ctx context.Context, id uuid.UUID) (LogInstancesGuild, error)
 	PublicInstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (LogInstancesGuild, error)
 	PublishCacheGeneration(ctx context.Context, arg PublishCacheGenerationParams) (PublishCacheGenerationRow, error)
-	PublishLuaProjectUnstable(ctx context.Context, arg PublishLuaProjectUnstableParams) (LuaProject, error)
 	PutLuaProjectArtifact(ctx context.Context, arg PutLuaProjectArtifactParams) (string, error)
 	RankingRunByID(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	RankingRunIdentitiesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]RankingRunIdentitiesByInstanceIDsRow, error)
@@ -970,6 +975,8 @@ type sqlcQuerier interface {
 	TouchSidekickUpload(ctx context.Context, arg TouchSidekickUploadParams) (int64, error)
 	TouchUploadKeyLastUsed(ctx context.Context, id uuid.UUID) error
 	TrackUserPanelLayout(ctx context.Context, arg TrackUserPanelLayoutParams) (UserTrackedLayout, error)
+	// Only the newest @keep releases keep their files; older ones stay listed without a package.
+	TrimLuaProjectReleaseFiles(ctx context.Context, arg TrimLuaProjectReleaseFilesParams) error
 	TryAcquireAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)
 	UnassignWorldFromServer(ctx context.Context, arg UnassignWorldFromServerParams) error
 	UnlinkDuplicateGroup(ctx context.Context, id uuid.UUID) (UnlinkDuplicateGroupRow, error)

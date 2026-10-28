@@ -394,7 +394,7 @@ func (z *interceptor) CreateLuaProject(ctx context.Context, arg database.CreateL
 }
 
 // luaContributorRelations maps lua_project_contributors permissions to SpiceDB relations.
-var luaContributorRelations = []string{"edit", "publish_unstable", "publish"}
+var luaContributorRelations = []string{"edit", "release"}
 
 // UpsertLuaProjectContributor replaces one contributor's grants in Postgres and SpiceDB together.
 func (z *interceptor) UpsertLuaProjectContributor(ctx context.Context, arg database.UpsertLuaProjectContributorParams) (database.LuaProjectContributor, error) {
@@ -416,12 +416,12 @@ func (z *interceptor) UpsertLuaProjectContributor(ctx context.Context, arg datab
 		switch permission {
 		case "edit":
 			relates.Editor(user)
-		case "publish_unstable":
-			relates.Unstable_publisher(user)
-		case "publish":
+		case "release":
 			relates.Publisher(user)
 		}
 	}
+	// The legacy unstable channel grant now counts as release; clear it so the stored grants are exact.
+	project.Delete().Unstable_publisher(user)
 	if _, err := z.Write(ctx, *b.Txn()); err != nil {
 		return database.LuaProjectContributor{}, fmt.Errorf("write lua project contributor relations: %w", err)
 	}

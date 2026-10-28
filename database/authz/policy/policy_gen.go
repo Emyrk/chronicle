@@ -2508,12 +2508,8 @@ func (obj *ObjLua_project) PermissionEdit() string {
 	return "edit"
 }
 
-func (obj *ObjLua_project) PermissionPublish_unstable() string {
-	return "publish_unstable"
-}
-
-func (obj *ObjLua_project) PermissionPublish() string {
-	return "publish"
+func (obj *ObjLua_project) PermissionRelease() string {
+	return "release"
 }
 
 func (obj *ObjLua_project) PermissionView() string {
@@ -2692,25 +2688,7 @@ func (r *Lua_projectRelates) Editor(subs ...*ObjUser) *Lua_projectRelates {
 	return r
 }
 
-// Unstable_publisher schema.zed:186
-// Relationship: lua_project:<id>#unstable_publisher@user:<id>
-// Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Unstable_publisher() etc.
-func (obj *ObjLua_project) Unstable_publisher(subs ...*ObjUser) *ObjLua_project {
-	for _, sub := range subs {
-		obj.src.Touch().Add("unstable_publisher", sub.src.Obj, "")
-	}
-	return obj
-}
-
-// Unstable_publisher on Relates uses the specified operation (Touch/Create/Delete)
-func (r *Lua_projectRelates) Unstable_publisher(subs ...*ObjUser) *Lua_projectRelates {
-	for _, sub := range subs {
-		r.rel.Add("unstable_publisher", sub.src.Obj, "")
-	}
-	return r
-}
-
-// Publisher schema.zed:187
+// Publisher schema.zed:186
 // Relationship: lua_project:<id>#publisher@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Publisher() etc.
 func (obj *ObjLua_project) Publisher(subs ...*ObjUser) *ObjLua_project {
@@ -2724,6 +2702,24 @@ func (obj *ObjLua_project) Publisher(subs ...*ObjUser) *ObjLua_project {
 func (r *Lua_projectRelates) Publisher(subs ...*ObjUser) *Lua_projectRelates {
 	for _, sub := range subs {
 		r.rel.Add("publisher", sub.src.Obj, "")
+	}
+	return r
+}
+
+// Unstable_publisher schema.zed:188
+// Relationship: lua_project:<id>#unstable_publisher@user:<id>
+// Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Unstable_publisher() etc.
+func (obj *ObjLua_project) Unstable_publisher(subs ...*ObjUser) *ObjLua_project {
+	for _, sub := range subs {
+		obj.src.Touch().Add("unstable_publisher", sub.src.Obj, "")
+	}
+	return obj
+}
+
+// Unstable_publisher on Relates uses the specified operation (Touch/Create/Delete)
+func (r *Lua_projectRelates) Unstable_publisher(subs ...*ObjUser) *Lua_projectRelates {
+	for _, sub := range subs {
+		r.rel.Add("unstable_publisher", sub.src.Obj, "")
 	}
 	return r
 }
@@ -2788,60 +2784,30 @@ func (obj *ObjLua_project) CanEdit_User(sub *ObjUser) rel.Relationship {
 	}
 }
 
-// CanPublish_unstable_Chronicle checks if the subject has publish_unstable permission
+// CanRelease_Chronicle checks if the subject has release permission
 // // Object: lua_project:<id>
-// Schema: permission publish_unstable = unstable_publisher + manage
-func (obj *ObjLua_project) CanPublish_unstable_Chronicle(sub *ObjChronicle) rel.Relationship {
+// Schema: permission release = publisher + unstable_publisher + manage
+func (obj *ObjLua_project) CanRelease_Chronicle(sub *ObjChronicle) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
 		ResourceType:     r.ObjectType,
 		ResourceID:       r.ObjectId,
-		ResourceRelation: "publish_unstable",
+		ResourceRelation: "release",
 		SubjectType:      s.Obj.ObjectType,
 		SubjectID:        s.Obj.ObjectId,
 		SubjectRelation:  s.OptionalRelation,
 	}
 }
 
-// CanPublish_unstable_User checks if the subject has publish_unstable permission
+// CanRelease_User checks if the subject has release permission
 // // Object: lua_project:<id>
-// Schema: permission publish_unstable = unstable_publisher + manage
-func (obj *ObjLua_project) CanPublish_unstable_User(sub *ObjUser) rel.Relationship {
+// Schema: permission release = publisher + unstable_publisher + manage
+func (obj *ObjLua_project) CanRelease_User(sub *ObjUser) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
 		ResourceType:     r.ObjectType,
 		ResourceID:       r.ObjectId,
-		ResourceRelation: "publish_unstable",
-		SubjectType:      s.Obj.ObjectType,
-		SubjectID:        s.Obj.ObjectId,
-		SubjectRelation:  s.OptionalRelation,
-	}
-}
-
-// CanPublish_Chronicle checks if the subject has publish permission
-// // Object: lua_project:<id>
-// Schema: permission publish = publisher + manage
-func (obj *ObjLua_project) CanPublish_Chronicle(sub *ObjChronicle) rel.Relationship {
-	r, s := obj.src.Obj, sub.src
-	return rel.Relationship{
-		ResourceType:     r.ObjectType,
-		ResourceID:       r.ObjectId,
-		ResourceRelation: "publish",
-		SubjectType:      s.Obj.ObjectType,
-		SubjectID:        s.Obj.ObjectId,
-		SubjectRelation:  s.OptionalRelation,
-	}
-}
-
-// CanPublish_User checks if the subject has publish permission
-// // Object: lua_project:<id>
-// Schema: permission publish = publisher + manage
-func (obj *ObjLua_project) CanPublish_User(sub *ObjUser) rel.Relationship {
-	r, s := obj.src.Obj, sub.src
-	return rel.Relationship{
-		ResourceType:     r.ObjectType,
-		ResourceID:       r.ObjectId,
-		ResourceRelation: "publish",
+		ResourceRelation: "release",
 		SubjectType:      s.Obj.ObjectType,
 		SubjectID:        s.Obj.ObjectId,
 		SubjectRelation:  s.OptionalRelation,
@@ -2850,7 +2816,7 @@ func (obj *ObjLua_project) CanPublish_User(sub *ObjUser) rel.Relationship {
 
 // CanView_Chronicle checks if the subject has view permission
 // // Object: lua_project:<id>
-// Schema: permission view = viewer + public_viewer + edit + publish_unstable + publish
+// Schema: permission view = viewer + public_viewer + edit + release
 func (obj *ObjLua_project) CanView_Chronicle(sub *ObjChronicle) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
@@ -2865,7 +2831,7 @@ func (obj *ObjLua_project) CanView_Chronicle(sub *ObjChronicle) rel.Relationship
 
 // CanView_User checks if the subject has view permission
 // // Object: lua_project:<id>
-// Schema: permission view = viewer + public_viewer + edit + publish_unstable + publish
+// Schema: permission view = viewer + public_viewer + edit + release
 func (obj *ObjLua_project) CanView_User(sub *ObjUser) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
@@ -2880,7 +2846,7 @@ func (obj *ObjLua_project) CanView_User(sub *ObjUser) rel.Relationship {
 
 // CanUse_Chronicle checks if the subject has use permission
 // // Object: lua_project:<id>
-// Schema: permission use = runner + public_viewer + edit + publish_unstable + publish
+// Schema: permission use = runner + public_viewer + edit + release
 func (obj *ObjLua_project) CanUse_Chronicle(sub *ObjChronicle) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
@@ -2895,7 +2861,7 @@ func (obj *ObjLua_project) CanUse_Chronicle(sub *ObjChronicle) rel.Relationship 
 
 // CanUse_User checks if the subject has use permission
 // // Object: lua_project:<id>
-// Schema: permission use = runner + public_viewer + edit + publish_unstable + publish
+// Schema: permission use = runner + public_viewer + edit + release
 func (obj *ObjLua_project) CanUse_User(sub *ObjUser) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{

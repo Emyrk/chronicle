@@ -41,7 +41,7 @@ import { activePhaseForTimeRange, phaseTimeRangeSelection, phaseWidthPercent } f
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
 import type { PanelFilter } from "./EventsPanels/processors/filters";
 import { listSelectableCustomPanels, useCustomPanelRegistry } from "./EventsPanels/custom/pluginRegistry";
-import { isLuaPanelRef, useLuaPanelCatalog } from "./EventsPanels/LuaPanel/luaPanelRegistry";
+import { isLuaPanelRef, luaPanelRef, useLuaPanelCatalog } from "./EventsPanels/LuaPanel/luaPanelRegistry";
 import { canonicalizeCustomPanelRef, isCustomPanelRef } from "./EventsPanels/custom/pluginTypes";
 import { PANELS, type BuiltinPanelType } from "./EventsPanels/EventsPanel";
 import { isQueryablePanelType, PANEL_AI_DESCRIPTIONS } from "./EventsPanels/panelCatalog";
@@ -3919,11 +3919,11 @@ function InstancePageViewContent({
   );
   const luaPanelCatalog = useLuaPanelCatalog();
   const selectableLuaPanels = useMemo(() => (luaPanelCatalog.data ?? [])
-    .filter((project) => project.stable)
+    .filter((project) => project.release)
     .map((project) => ({
-      id: `lua:${project.id}:stable`,
+      id: luaPanelRef(project.id, "release"),
       label: project.name,
-      description: "Sandboxed addon (automatically follows its Stable release)",
+      description: "Sandboxed addon (automatically follows its latest release)",
       queryable: false,
       hidden: false,
     })), [luaPanelCatalog.data]);

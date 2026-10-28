@@ -1,14 +1,20 @@
 import { useQuery } from "@tanstack/react-query"
 import { useSession } from "@/api/queries"
-import { listProjects } from "../../../LuaProjects/api"
+import { latestRelease, listProjects, type LuaChannel } from "../../../LuaProjects/api"
 
-export type LuaPanelRef = `lua:${string}:${"stable" | "unstable"}`
-const REF = /^lua:([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}):(stable|unstable)$/i
+export type LuaPanelRef = `lua:${string}:${LuaChannel}`
+// Saved layouts may still say stable or unstable, from before releases; they mean release and main.
+const REF = /^lua:([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}):(release|main|stable|unstable)$/i
+const LEGACY_CHANNELS: Readonly<Record<string, LuaChannel>> = { stable: "release", unstable: "main" }
 
-export function parseLuaPanelRef(value: string): { id: string; channel: "stable" | "unstable" } | null {
+export function parseLuaPanelRef(value: string): { id: string; channel: LuaChannel } | null {
   const match = REF.exec(value)
-  return match ? { id: match[1].toLowerCase(), channel: match[2].toLowerCase() as "stable" | "unstable" } : null
+  if (!match) return null
+  const channel = match[2].toLowerCase()
+  return { id: match[1].toLowerCase(), channel: LEGACY_CHANNELS[channel] ?? channel as LuaChannel }
 }
+
+export function luaPanelRef(id: string, channel: LuaChannel): LuaPanelRef { return `lua:${id}:${channel}` }
 
 export function isLuaPanelRef(value: string): value is LuaPanelRef { return parseLuaPanelRef(value) !== null }
 
@@ -16,17 +22,21 @@ export interface LuaProjectCatalogEntry {
   id: string
   kind: "panel" | "guide"
   name: string
-  stable?: { sha256: string; icon?: string }
-  unstable?: { sha256: string; icon?: string }
+  /** The latest release with files: what the panel runs by default. */
+  release?: { tag: string; sha256: string; icon?: string }
+  main?: { sha256: string; icon?: string }
 }
 
-/** Panel addons the user owns or was given access to, with at least one published channel. */
+/** Panel addons the user owns or was given access to, with a release or a saved main. */
 export async function fetchOwnedLuaPanels(): Promise<LuaProjectCatalogEntry[]> {
   const projects = await listProjects()
-  return projects.filter(project => project.kind === "panel" &&
-    !!parseLuaPanelRef(`lua:${project.id}:stable`) && (project.stable || project.unstable))
-    .map(project => ({ id: project.id, kind: project.kind, name: project.name,
-      stable: project.stable ?? undefined, unstable: project.unstable ?? undefined }))
+  return projects.flatMap(project => {
+    const latest = latestRelease(project)
+    if (project.kind !== "panel" || !parseLuaPanelRef(luaPanelRef(project.id, "release")) || (!latest && !project.main)) return []
+    return [{ id: project.id, kind: project.kind, name: project.name,
+      ...(latest?.sha256 && { release: { tag: latest.tag, sha256: latest.sha256, icon: latest.icon } }),
+      ...(project.main && { main: { sha256: project.main.sha256, icon: project.main.icon } }) }]
+  })
 }
 
 export function useLuaPanelCatalog(enabled = true) {

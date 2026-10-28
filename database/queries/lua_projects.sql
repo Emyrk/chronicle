@@ -16,10 +16,15 @@ SELECT p.* FROM lua_projects p JOIN addon_authors a ON a.user_id = p.owner_id
 WHERE a.name = @author AND p.slug = @slug;
 
 -- name: ListPublicLuaProjects :many
-SELECT * FROM lua_projects WHERE stable_hash IS NOT NULL ORDER BY stable_published_at DESC LIMIT 100;
+-- Addons with a release people can still run, newest release first.
+SELECT p.* FROM lua_projects p
+JOIN LATERAL (SELECT max(r.published_at) AS published_at FROM lua_project_releases r WHERE r.project_id = p.id AND r.hash IS NOT NULL) latest ON latest.published_at IS NOT NULL
+ORDER BY latest.published_at DESC LIMIT 100;
 
 -- name: GetPublicLuaProject :one
-SELECT * FROM lua_projects WHERE id = @id AND (stable_hash IS NOT NULL OR unstable_hash IS NOT NULL);
+-- An addon with something to run: main or a release with files.
+SELECT * FROM lua_projects p WHERE p.id = @id
+  AND (p.draft_hash IS NOT NULL OR EXISTS (SELECT 1 FROM lua_project_releases r WHERE r.project_id = p.id AND r.hash IS NOT NULL));
 
 -- name: SetLuaProjectDraft :one
 UPDATE lua_projects SET draft_hash = @hash, draft_icon = @icon, revision = revision + 1, updated_at = now()
@@ -31,25 +36,40 @@ VALUES (@project_id, @hash, @object_key, @mime_type, @content_encoding, @uncompr
 ON CONFLICT (project_id, hash) DO UPDATE SET hash = EXCLUDED.hash
 RETURNING object_key;
 
--- name: PublishLuaProjectUnstable :one
-UPDATE lua_projects SET unstable_hash = draft_hash, unstable_icon = draft_icon, unstable_published_at = now(), unstable_published_by = @actor_id,
- revision = revision + 1, updated_at = now()
-WHERE id = @id AND kind = 'panel' AND revision = @expected_revision AND draft_hash IS NOT NULL
+-- name: CreateLuaProjectRelease :one
+-- Tags the current main. Bumping the revision keeps a stale page from tagging a newer main by mistake.
+WITH project AS (
+  UPDATE lua_projects SET revision = revision + 1, updated_at = now()
+  WHERE id = @id AND kind = 'panel' AND revision = @expected_revision AND draft_hash IS NOT NULL
+  RETURNING id, draft_hash, draft_icon
+)
+INSERT INTO lua_project_releases (project_id, tag, hash, icon, published_by)
+SELECT id, @tag, draft_hash, draft_icon, @actor_id FROM project
 RETURNING *;
 
--- name: PromoteLuaProjectStable :one
-UPDATE lua_projects SET stable_hash = unstable_hash, stable_icon = unstable_icon, stable_published_at = now(), stable_published_by = @actor_id,
- revision = revision + 1, updated_at = now()
-WHERE id = @id AND kind = 'panel' AND revision = @expected_revision
- AND unstable_hash = @tested_sha256 AND unstable_hash IS NOT NULL
-RETURNING *;
+-- name: TrimLuaProjectReleaseFiles :exec
+-- Only the newest @keep releases keep their files; older ones stay listed without a package.
+UPDATE lua_project_releases old SET hash = NULL
+WHERE old.project_id = @project_id AND old.hash IS NOT NULL AND old.tag NOT IN (
+  SELECT kept.tag FROM lua_project_releases kept WHERE kept.project_id = @project_id AND kept.hash IS NOT NULL
+  ORDER BY kept.published_at DESC, kept.tag DESC LIMIT @keep::int
+);
+
+-- name: DeleteLuaProjectRelease :execrows
+DELETE FROM lua_project_releases WHERE project_id = @project_id AND tag = @tag;
+
+-- name: ListLuaProjectReleases :many
+SELECT * FROM lua_project_releases WHERE project_id = @project_id ORDER BY published_at DESC, tag DESC LIMIT 100;
+
+-- name: ListLuaProjectReleasesForProjects :many
+SELECT * FROM lua_project_releases WHERE project_id = ANY(@project_ids::uuid[]) ORDER BY project_id, published_at DESC, tag DESC;
 
 -- name: PruneLuaProjectArtifacts :exec
 WITH removed AS (
   DELETE FROM lua_project_artifacts a USING lua_projects p
   WHERE a.project_id = p.id AND p.id = @id
-   AND a.hash IS DISTINCT FROM p.draft_hash AND a.hash IS DISTINCT FROM p.unstable_hash
-   AND a.hash IS DISTINCT FROM p.stable_hash
+   AND a.hash IS DISTINCT FROM p.draft_hash
+   AND NOT EXISTS (SELECT 1 FROM lua_project_releases r WHERE r.project_id = p.id AND r.hash = a.hash)
   RETURNING a.object_key
 )
 INSERT INTO lua_project_artifact_gc (object_key)
@@ -100,7 +120,7 @@ WHERE p.id = @id;
 SELECT sqlc.embed(p), a.object_key, a.mime_type, a.content_encoding
 FROM lua_projects p
 JOIN lua_project_artifacts a ON a.project_id = p.id AND a.hash = @hash
-WHERE p.id = @id AND (p.stable_hash = @hash OR p.unstable_hash = @hash);
+WHERE p.id = @id AND (p.draft_hash = @hash OR EXISTS (SELECT 1 FROM lua_project_releases r WHERE r.project_id = p.id AND r.hash = @hash));
 
 -- name: GetLuaProjectArtifact :one
 SELECT object_key, mime_type, content_encoding, uncompressed_size_bytes, stored_size_bytes
