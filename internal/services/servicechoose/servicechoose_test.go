@@ -47,6 +47,17 @@ func TestDestinations(t *testing.T) {
 	require.Equal(t, "http://choose.localhost:4000", svc.ChooseURL())
 }
 
+func TestPrimaryDomainWithPort(t *testing.T) {
+	t.Parallel()
+	u, err := url.Parse("http://localhost:4000")
+	require.NoError(t, err)
+	tenants := servicetenant.NewTestWithTenants(*u, "localhost:4000", tenant("kronos", "Kronos", true, ""))
+	svc := servicechoose.NewTest("choose", tenants, *u)
+
+	require.Equal(t, "http://choose.localhost:4000", svc.ChooseURL())
+	require.Equal(t, "http://kronos.localhost:4000", svc.Destinations()[0].Origin)
+}
+
 func TestMiddleware(t *testing.T) {
 	t.Parallel()
 	svc := newService(t, "https://legacy.localhost")
@@ -102,6 +113,8 @@ func TestPageData(t *testing.T) {
 
 	body := rec.Body.String()
 	require.Equal(t, "text/html; charset=utf-8", rec.Header().Get("Content-Type"))
+	require.Contains(t, rec.Header().Get("Content-Security-Policy"), "img-src 'self' data: https:",
+		"tenant logos are hosted off-site")
 	require.NotContains(t, body, "{{CHOOSE_DATA}}")
 	require.Contains(t, body, `"origin":"https://capy.localhost"`)
 	require.NotContains(t, body, "secret", "non-discoverable tenants are not offered")

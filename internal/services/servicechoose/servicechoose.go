@@ -10,6 +10,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -32,6 +33,9 @@ var chooseHTML []byte
 // dataPlaceholder is replaced with the page's JSON data. json.Marshal escapes
 // <, > and &, so the payload cannot break out of its <script> element.
 var dataPlaceholder = []byte("{{CHOOSE_DATA}}")
+
+const pageCSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " +
+	"img-src 'self' data: https:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 
 func Choose(broker *services.Services) *Service {
 	return services.MustGet[*Service](broker)
@@ -131,7 +135,13 @@ func (s *Service) originFor(slug string) string {
 	if scheme == "" {
 		scheme = "https"
 	}
-	host := slug + "." + s.tenantSvc.PrimaryDomain()
+	// The primary domain may carry a port (e.g. "localhost:4000"); the access
+	// URL's port is the one browsers use.
+	domain := s.tenantSvc.PrimaryDomain()
+	if h, _, err := net.SplitHostPort(domain); err == nil {
+		domain = h
+	}
+	host := slug + "." + domain
 	if port := s.accessURL.Port(); port != "" {
 		host += ":" + port
 	}
@@ -235,6 +245,9 @@ func (s *Service) servePage(w http.ResponseWriter, r *http.Request) {
 	body := bytes.Replace(chooseHTML, dataPlaceholder, data, 1)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Replaces the site-wide policy: this page is self-contained, but tenant
+	// logos live on other hosts (e.g. the landing site).
+	w.Header().Set("Content-Security-Policy", pageCSP)
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Robots-Tag", "noindex")
 	w.WriteHeader(http.StatusOK)
