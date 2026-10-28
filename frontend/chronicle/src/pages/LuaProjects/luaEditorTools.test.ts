@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { applyLuaFileEdit, parseLuaFileEdit } from "./luaEditorTools"
 
-const files = { lua: "local a = 1\nlocal b = 1\nreturn {}\n", manifest: "{}\n" }
+const files = { lua: "local a = 1\nlocal b = 1\nreturn {}\n", manifest: "{}\n", readme: "" }
 
 describe("lua editor tools", () => {
   it("parses bounded edit arguments", () => {

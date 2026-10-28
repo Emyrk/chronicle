@@ -75,7 +75,7 @@ function LuaCodeMirror({ value, onChange, disabled }: { value: string; onChange:
 }
 
 export type LuaWorkingCopy = {
-  source: string; manifest: string; revision: number; dirty: boolean; valid: boolean; validation: string
+  source: string; manifest: string; readme: string; revision: number; dirty: boolean; valid: boolean; validation: string
   /** A private draft exists on the server for this working copy. */
   saved: boolean
   saving: boolean
@@ -83,6 +83,13 @@ export type LuaWorkingCopy = {
 /** Lets the page save from anywhere (header, publish) while the editor keeps owning its draft baseline. */
 export type LuaSourceEditorHandle = { save(): Promise<{ ok: boolean; error?: string }> }
 /** Replaces working-copy files if the revision still matches; used by AI tools and undo. */
+const tabLabel: Record<keyof EditorFiles, string> = { lua: "main.lua", manifest: "project.json", readme: "README.md" }
+const statusHint: Record<keyof EditorFiles, string> = {
+  lua: "Lua 5.3 · private working copy",
+  manifest: "Identity, entrypoint and assets are fixed; capabilities and streams are editable.",
+  readme: "Markdown · shown on the addon's page",
+}
+
 export type LuaSourceProposal = { id: string; files: EditorFiles; expectedRevision: number }
 export type LuaSourceEditorProps = {
   project: LuaProject
@@ -103,7 +110,7 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
-  const [active, setActive] = useState<"lua" | "manifest">("lua")
+  const [active, setActive] = useState<keyof EditorFiles>("lua")
   const identity = `${project.id}:${project.draft_sha256 ?? "new"}`
   const loadedIdentity = useRef<string | null>(null)
   const localRevision = useRef(0)
@@ -113,7 +120,7 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
   onWorkingCopyRef.current = onWorkingCopy
   const onProposalResultRef = useRef(onProposalResult)
   onProposalResultRef.current = onProposalResult
-  const dirty = !!files && (!baseline || files.lua !== baseline.lua || files.manifest !== baseline.manifest)
+  const dirty = !!files && (!baseline || files.lua !== baseline.lua || files.manifest !== baseline.manifest || files.readme !== baseline.readme)
   dirtyRef.current = dirty
   useEffect(() => {
     if (!dirty) return
@@ -149,7 +156,7 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
 
   useEffect(() => {
     onWorkingCopyRef.current?.(files && !loading ? {
-      source: files.lua, manifest: files.manifest, revision: localRevision.current,
+      source: files.lua, manifest: files.manifest, readme: files.readme, revision: localRevision.current,
       dirty, valid: !validation && !error, validation: validation || error, saved: !!baseline, saving,
     } : null)
   }, [files, loading, dirty, validation, error, baseline, saving])
@@ -158,10 +165,10 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
     if (!proposedSource || !files || loading || handledProposal.current === proposedSource.id) return
     handledProposal.current = proposedSource.id
     const next = !saving && !error ? applySourceProposal(files, localRevision.current, proposedSource) : null
-    if (next && (next.lua !== files.lua || next.manifest !== files.manifest)) {
+    if (next && (next.lua !== files.lua || next.manifest !== files.manifest || next.readme !== files.readme)) {
       localRevision.current += 1
       setFiles(next)
-      setActive(next.lua === files.lua ? "manifest" : "lua")
+      setActive(next.lua !== files.lua ? "lua" : next.manifest !== files.manifest ? "manifest" : "readme")
     }
     onProposalResultRef.current?.(proposedSource.id, !!next, localRevision.current)
   }, [proposedSource, files, loading, saving, error])
@@ -203,9 +210,9 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
   return <section aria-label="Lua source editor" className="flex h-full min-h-0 flex-col bg-background">
     <div className="flex items-center gap-2 border-b border-border bg-card/60 pr-2">
       {files && project.kind === "panel" && <div className="flex self-stretch" role="tablist" aria-label="Project files">
-        {(["lua", "manifest"] as const).map(tab => <button key={tab} id={`lua-editor-tab-${tab}`} type="button" role="tab" aria-selected={active === tab} aria-controls={`lua-editor-panel-${tab}`}
+        {(["lua", "manifest", "readme"] as const).map(tab => <button key={tab} id={`lua-editor-tab-${tab}`} type="button" role="tab" aria-selected={active === tab} aria-controls={`lua-editor-panel-${tab}`}
           className={`-mb-px border-b-2 border-r border-r-border px-4 py-2 font-mono text-xs ${focusRing} ${active === tab ? "border-b-primary bg-background text-foreground" : "border-b-transparent text-muted-foreground hover:text-foreground"}`}
-          onClick={() => setActive(tab)}>{tab === "lua" ? "main.lua" : "project.json"}</button>)}
+          onClick={() => setActive(tab)}>{tabLabel[tab]}</button>)}
       </div>}
     </div>
     <div className="relative min-h-0 flex-1">
@@ -216,12 +223,16 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
         <div id="lua-editor-panel-manifest" role="tabpanel" aria-labelledby="lua-editor-tab-manifest" hidden={active !== "manifest"} className="h-full">
           <textarea id="lua-editor-manifest" aria-label="project.json" className="styled-scrollbar block h-full w-full resize-none bg-background p-4 font-mono text-[13px] leading-relaxed focus-visible:outline-none" spellCheck={false} value={files.manifest} disabled={saving} onChange={event => edit("manifest", event.target.value)} />
         </div>
+        <div id="lua-editor-panel-readme" role="tabpanel" aria-labelledby="lua-editor-tab-readme" hidden={active !== "readme"} className="h-full">
+          <textarea aria-label="README.md" className="styled-scrollbar block h-full w-full resize-none bg-background p-4 font-mono text-[13px] leading-relaxed focus-visible:outline-none" value={files.readme} disabled={saving}
+            placeholder="# My addon&#10;&#10;Markdown shown on the addon's page. Leave empty for no README." onChange={event => edit("readme", event.target.value)} />
+        </div>
       </> : !error && <p className="p-4 text-sm text-muted-foreground">This editor currently supports panel projects only.</p>}
     </div>
     <div className="flex min-h-8 items-center gap-3 border-t border-border bg-card/60 px-3 py-1 text-xs">
       {message ? <p role="alert" className="text-destructive">{message}</p>
         : notice ? <p role="status" className="text-emerald-400">{notice}</p>
-        : <p className="text-muted-foreground">{active === "manifest" ? "Identity, entrypoint and assets are fixed; capabilities and streams are editable." : "Lua 5.3 · private working copy"}</p>}
+        : <p className="text-muted-foreground">{statusHint[active]}</p>}
       <div className="ml-auto flex min-w-0 shrink-0 items-center gap-3">{footer}<span className="font-mono text-muted-foreground">rev {project.revision}</span></div>
     </div>
   </section>

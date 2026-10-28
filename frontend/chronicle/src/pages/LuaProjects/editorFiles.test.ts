@@ -31,15 +31,24 @@ function tarEntries(bytes: Uint8Array) {
 
 describe("Lua browser source model", () => {
   it("loads a validated private ZIP and deterministically exports upload TAR", async () => {
-    const loaded = await readLuaDraftZip(zip(), project)
+    const loaded = await readLuaDraftZip(zip(files.manifest, files.lua, { "README.md": encoder.encode(files.readme) }), project)
     expect(loaded).toEqual(files)
     const first = buildEditorTar(project, loaded)
     const second = buildEditorTar(project, loaded)
     expect(first.type).toBe("application/x-tar")
     expect(new Uint8Array(await first.arrayBuffer())).toEqual(new Uint8Array(await second.arrayBuffer()))
     expect(tarEntries(new Uint8Array(await first.arrayBuffer()))).toEqual([
-      { name: "project.json", content: files.manifest }, { name: "main.lua", content: files.lua },
+      { name: "project.json", content: files.manifest }, { name: "main.lua", content: files.lua }, { name: "README.md", content: files.readme },
     ])
+  })
+
+  it("treats README.md as optional", async () => {
+    expect(files.readme).toContain("# Example")
+    const withoutReadme = await readLuaDraftZip(zip(), project)
+    expect(withoutReadme.readme).toBe("")
+    expect(tarEntries(new Uint8Array(await buildEditorTar(project, withoutReadme).arrayBuffer())).map(entry => entry.name)).toEqual(["project.json", "main.lua"])
+    expect(() => validateEditorFiles(project, { ...files, readme: "x".repeat(64 * 1024 + 1) })).toThrow("README.md")
+    await expect(readLuaDraftZip(zip(files.manifest, files.lua, { "docs/README.md": encoder.encode("# x") }), project)).rejects.toThrow("only")
   })
 
   it("rejects unsupported packages instead of silently dropping their files", async () => {

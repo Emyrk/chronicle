@@ -61,6 +61,8 @@ When the viewer changes the encounter selection, the addon starts again from ste
 | `max_events` | no | A positive integer. The addon stops with an error after this many events. Omit it to receive everything. |
 | `assets` | no | Image files (PNG, JPEG, WebP, up to 2 MiB each) for `SetTexture`. Uploaded packages only; the browser editor is asset-free. |
 
+A package may also include a `README.md` at its root (Markdown, up to 64 KiB). The addon's page shows it, like a repository README; edit it in the Workshop's **README.md** tab. It is never run, and its images load only from the package's own files.
+
 ## Events
 
 Subscribe per stream, or to every declared stream at once:
@@ -243,7 +245,7 @@ The footer under every addon panel shows events processed, events per second and
 
 1. **Save draft** keeps a private copy. Nothing runs for anyone else.
 2. **Publish unstable** makes that draft available to test in instance layouts. It appears under **Addons** in the panel selector only for you, but anyone with the link can load it.
-3. **Promote to stable** on the Releases page, after testing that exact unstable release.
+3. **Promote** the unstable release to stable from the Releases box on the addon's page, after testing that exact release.
 
 The Addon Workshop header shows whether your working copy is unsaved, saved, or published. Ctrl/⌘+S saves from anywhere on the page.
 
