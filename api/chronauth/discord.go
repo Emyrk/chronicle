@@ -36,6 +36,13 @@ func withContextualTokenRefresh(provider goth.Provider, clientID, clientSecret, 
 	}
 }
 
+func authorizeSession(session goth.Session, provider goth.Provider, params goth.Params) (string, error) {
+	if contextualProvider, ok := provider.(*contextualRefreshProvider); ok {
+		provider = contextualProvider.Provider
+	}
+	return session.Authorize(provider, params)
+}
+
 func (p *contextualRefreshProvider) RefreshTokenContext(ctx context.Context, refreshToken string) (*oauth2.Token, error) {
 	token := &oauth2.Token{RefreshToken: refreshToken}
 	return p.config.TokenSource(ctx, token).Token()

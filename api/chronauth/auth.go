@@ -248,7 +248,7 @@ func (s *Service) CompleteUserAuth(res http.ResponseWriter, req *http.Request) (
 	}
 
 	// get new token and retry fetch
-	_, err = sess.Authorize(provider, params)
+	_, err = authorizeSession(sess, provider, params)
 	if err != nil {
 		return goth.User{}, err
 	}
