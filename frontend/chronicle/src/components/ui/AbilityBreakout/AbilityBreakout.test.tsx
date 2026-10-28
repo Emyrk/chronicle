@@ -104,6 +104,12 @@ describe("AbilityBreakout target stacked detail", () => {
     expect(collapsed).toContain("50");
   });
 
+  it("keeps the Excluded column visible when every target has zero excluded damage", () => {
+    const targets = [{ targetId: "boss", targetName: "Boss", value: 100, hitCount: 1, critCount: 0 }];
+    const collapsed = renderToStaticMarkup(<AbilityBreakout {...props} targets={targets} alwaysShowTargetStacked />);
+    expect(collapsed).toContain("Excluded</th>");
+  });
+
   it("preserves the original deferred target column for other panels", () => {
     const collapsed = renderToStaticMarkup(<AbilityBreakout {...props} />);
     expect(collapsed).not.toContain("Excluded</th>");

@@ -828,6 +828,8 @@ export interface TargetTableProps {
   showOverheal?: boolean
   /** Label for the stacked secondary column */
   stackedLabel?: string
+  /** Keep the stacked column visible even when its values are zero. */
+  alwaysShowStackedColumn?: boolean
   /** Group duplicate target names into a single row */
   groupByName?: boolean
 }
@@ -841,6 +843,7 @@ export function TargetTable({
   valueLabel = 'Value',
   showOverheal = false,
   stackedLabel = 'Overheal',
+  alwaysShowStackedColumn = false,
   groupByName = false,
 }: TargetTableProps) {
   const { hover, setHover, clearHover } = useBreakoutHover()
@@ -860,7 +863,7 @@ export function TargetTable({
   }
   
   // Check if any target has overheal data
-  const hasOverhealData = showOverheal && sorted.some(t => t.overheal !== undefined && t.overheal > 0)
+  const hasOverhealData = showOverheal && (alwaysShowStackedColumn || sorted.some(t => t.overheal !== undefined && t.overheal > 0))
 
   // Column IDs for hover tracking (shared with AbilityTable where applicable)
   const COL = {
@@ -1146,6 +1149,7 @@ export function AbilityBreakout({
           valueLabel={valueLabel}
           showOverheal={showStacked || (showOverheal && alwaysShowTargetStacked)}
           stackedLabel={stackedLabel}
+          alwaysShowStackedColumn={alwaysShowTargetStacked}
           groupByName={groupTargets}
         />
       )}
