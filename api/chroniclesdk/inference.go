@@ -150,3 +150,11 @@ type InferenceRunRequest struct {
 	// UsageEvents asks for a USAGE event after each model call. Older clients reject unknown events, so it is opt-in.
 	UsageEvents bool `json:"usage_events,omitempty"`
 }
+
+// InferenceContributorUsage is one person's usage within a shared context, such as an addon project.
+type InferenceContributorUsage struct {
+	UserID   uuid.UUID      `json:"user_id"`
+	Username string         `json:"username"`
+	Author   string         `json:"author,omitempty"`
+	Usage    InferenceUsage `json:"usage"`
+}

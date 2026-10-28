@@ -7,7 +7,8 @@ import { useInstance } from "@/api/queries"
 import type { RecentInstancesResponse } from "@/api/typesGenerated"
 import { useInferenceCapability } from "@/features/chat/runtime"
 import { useConfirmLinkNavigation } from "@/hooks/useConfirmLinkNavigation"
-import { getProject, publishUnstable, type LuaProject } from "./api"
+import { addonPath, getProject, publishUnstable, type LuaProject } from "./api"
+import { useAddonPage } from "./addonRoute"
 import { LuaBrowserTest } from "./LuaBrowserTest"
 import { panelPackageFromWorkingCopy, validateEditorFiles, type EditorFiles } from "./editorFiles"
 import { applyLuaFileEdit, editorFileKey, LUA_EDITOR_CAPABILITY, parseLuaFileEdit, workingCopyFiles, type LuaToolFile } from "./luaEditorTools"
@@ -63,8 +64,17 @@ function releaseStatus(project: LuaProject, copy: LuaWorkingCopy | null): { labe
 const iconButton = "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
 const paneButton = "inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
 
-export default function LuaProjectWorkspacePage() {
-  const { projectId = "" } = useParams<{ projectId: string }>()
+/** The Workshop at /addons/<author>/<slug>/edit: resolves the addon, then opens it by ID. */
+export function AddonWorkspaceByPath() {
+  const page = useAddonPage()
+  if (page.data) return <LuaProjectWorkspacePage projectId={page.data.project.id} />
+  return <main className="container mx-auto px-4 py-10 text-sm">{page.isPending ? "Loading addon…"
+    : <><Link to="/addons">← Addons</Link><p role="alert" className="mt-4">{page.error?.message ?? "Addon not found."}</p></>}</main>
+}
+
+export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { projectId?: string } = {}) {
+  const params = useParams<{ projectId: string }>()
+  const projectId = resolvedId ?? params.projectId ?? ""
   const projectQuery = useQuery({ queryKey: ["lua-editor-project", projectId], enabled: !!projectId,
     queryFn: () => getProject(projectId), retry: false })
   const [copy, setCopy] = useState<LuaWorkingCopy | null>(null)
@@ -286,7 +296,7 @@ export default function LuaProjectWorkspacePage() {
 
   return <div className="flex flex-col border-b border-border lg:h-[calc(100dvh-70px)] lg:min-h-[560px]">
     <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-4 py-2">
-      <Link className="text-xs text-muted-foreground hover:text-foreground" to={`/addons/${encodeURIComponent(project.id)}`}>← Overview</Link>
+      <Link className="text-xs text-muted-foreground hover:text-foreground" to={addonPath(project)}>← Overview</Link>
       <span aria-hidden className="h-4 w-px bg-border" />
       <h1 className="text-base font-semibold">{project.name}</h1>
       <span className="font-mono text-xs text-muted-foreground">{project.slug}</span>

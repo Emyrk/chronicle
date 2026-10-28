@@ -342,6 +342,11 @@ func (api *API) Routes() chi.Router {
 				}
 				r.With(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanCreate_lua_project_User)).Post("/me/lua-projects", api.CreateLuaProject)
 				r.Get("/me/lua-projects", api.ListMyLuaProjects)
+				r.Get("/me/addon-author", api.GetMyAddonAuthor)
+				r.Put("/me/addon-author", api.ClaimAddonAuthor)
+				r.Get("/me/lua-projects/{projectID}/contributors", api.ListLuaProjectContributors)
+				r.Put("/me/lua-projects/{projectID}/contributors/{author}", api.PutLuaProjectContributor)
+				r.Delete("/me/lua-projects/{projectID}/contributors/{author}", api.DeleteLuaProjectContributor)
 				r.Get("/me/lua-projects/{projectID}", api.GetMyLuaProject)
 				r.Get("/me/lua-projects/{projectID}/draft/{hash}/package", api.DownloadMyLuaProjectDraft)
 				r.Put("/me/lua-projects/{projectID}/draft", api.PutLuaProjectDraft)
@@ -381,6 +386,8 @@ func (api *API) Routes() chi.Router {
 			}
 			r.Get("/lua-projects", api.ListPublicLuaProjects)
 			r.Get("/lua-projects/{projectID}", api.GetPublicLuaProject)
+			r.Get("/lua-projects/{projectID}/page", api.GetLuaProjectPage)
+			r.Get("/addons/{author}/{slug}", api.GetLuaProjectPageByPath)
 			r.Get("/lua-projects/{projectID}/artifacts/{hash}/package", api.DownloadLuaProject)
 			r.Mount("/custom-panels", api.CustomPanels.Routes())
 			r.Mount("/panel-layout", panellayoutapi.New(api.Opts.Zed, api.Auth).Routes())

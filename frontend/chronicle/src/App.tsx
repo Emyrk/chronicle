@@ -115,8 +115,9 @@ const LegacyLeaderboardsRedirect = lazy(() => import("./pages/Leaderboards/Leade
 const CensusPage = lazy(() => import("./pages/Census/CensusPage").then(({ CensusPage }) => ({ default: CensusPage })))
 const APIExplorer = lazy(() => import("./pages/APIExplorer/APIExplorer").then(({ APIExplorer }) => ({ default: APIExplorer })))
 const LuaProjectsPage = lazy(() => import("./pages/LuaProjects/LuaProjectsPage").then(({ LuaProjectsPage }) => ({ default: LuaProjectsPage })))
-const LuaProjectPage = lazy(() => import("./pages/LuaProjects/LuaProjectsPage").then(({ LuaProjectPage }) => ({ default: LuaProjectPage })))
+const LuaProjectPage = lazy(() => import("./pages/LuaProjects/LuaProjectPage").then(({ LuaProjectPage }) => ({ default: LuaProjectPage })))
 const LuaProjectWorkspacePage = lazy(() => import("./pages/LuaProjects/LuaProjectWorkspacePage"))
+const AddonWorkspaceByPath = lazy(() => import("./pages/LuaProjects/LuaProjectWorkspacePage").then(({ AddonWorkspaceByPath }) => ({ default: AddonWorkspaceByPath })))
 const LuaPanelApiPage = lazy(() => import("./pages/LuaProjects/LuaPanelApiPage"))
 const AssistantDebugPage = lazy(() => import("./pages/AssistantDebug/AssistantDebugPage"))
 const CustomPanelsPage = lazy(() => import("./pages/Tools/CustomPanelsPage").then(({ CustomPanelsPage }) => ({ default: CustomPanelsPage })))
@@ -198,6 +199,8 @@ function App() {
         <Route path="/addons/api" element={<LuaPanelApiPage />} />
         <Route path="/addons/:projectId" element={<LuaProjectPage />} />
         <Route path="/addons/:projectId/edit" element={<LuaProjectWorkspacePage />} />
+        <Route path="/addons/:author/:slug" element={<LuaProjectPage />} />
+        <Route path="/addons/:author/:slug/edit" element={<AddonWorkspaceByPath />} />
         <Route path="/lua-projects/*" element={<RenamedPathRedirect from="/lua-projects" to="/addons" />} />
         <Route path="/tools/developer-panels" element={<CustomPanelsPage />} />
         <Route path="/tools/custom-panels" element={<RenamedPathRedirect from="/tools/custom-panels" to="/tools/developer-panels" />} />

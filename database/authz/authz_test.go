@@ -155,7 +155,13 @@ func TestLuaProjectPermissions(t *testing.T) {
 	require.True(t, anonymousView)
 
 	publicRelation := b.Lua_project(project.ID).Object()
-	require.NoError(t, zed.Delete(ctx, rel.NewPreconditionedFilter(rel.NewFilter(publicRelation.Typ, publicRelation.ID, "public_viewer"))))
+	// New projects are public through viewer and runner wildcards; removing them makes the addon private.
+	for _, relation := range []string{"viewer", "runner"} {
+		require.NoError(t, zed.Delete(ctx, rel.NewPreconditionedFilter(rel.NewFilter(publicRelation.Typ, publicRelation.ID, relation))))
+	}
+	publicUse, err := zed.CheckOne(ctx, nil, b.Lua_project(project.ID).CanUse_User(b.User(other)))
+	require.NoError(t, err)
+	require.False(t, publicUse)
 	adminView, err = zed.CheckOne(ctx, nil, b.Lua_project(project.ID).CanView_User(b.User(techAdmin)))
 	require.NoError(t, err)
 	require.True(t, adminView, "technical admins can view private projects")

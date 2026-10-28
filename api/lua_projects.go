@@ -20,6 +20,7 @@ import (
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/database/storage"
+	"github.com/authzed/gochugaru/rel"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -114,6 +115,9 @@ func (a *API) luaZIP(w http.ResponseWriter, r *http.Request, key, digest, mimeTy
 
 var luaProjectSlug = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
+// reservedLuaProjectSlugs would collide with /addons/<author>/<slug> sub-routes.
+var reservedLuaProjectSlugs = map[string]bool{"edit": true, "new": true, "api": true}
+
 func luaProjectResponse(p database.LuaProject, private bool) chroniclesdk.LuaProject {
 	result := chroniclesdk.LuaProject{ID: p.ID, OwnerID: p.OwnerID, Kind: p.Kind, Name: p.Name, Slug: p.Slug, Revision: p.Revision, CreatedAt: p.CreatedAt.Time, UpdatedAt: p.UpdatedAt.Time}
 	if private && p.DraftHash.Valid {
@@ -149,25 +153,55 @@ func luaProjectHash(w http.ResponseWriter, r *http.Request) (string, bool) {
 	return hash, true
 }
 
-// canLuaProject checks the project object in SpiceDB. Public reads use a
-// wildcard-matching user subject even when the request has no session.
-func (a *API) canLuaProject(w http.ResponseWriter, r *http.Request, id uuid.UUID, update bool) bool {
+// luaPermission names a lua_project permission in SpiceDB.
+type luaPermission string
+
+const (
+	luaView            luaPermission = "view"
+	luaUse             luaPermission = "use"
+	luaEdit            luaPermission = "edit"
+	luaPublishUnstable luaPermission = "publish_unstable"
+	luaPublish         luaPermission = "publish"
+	luaManage          luaPermission = "manage"
+)
+
+var luaPermissions = []luaPermission{luaView, luaUse, luaEdit, luaPublishUnstable, luaPublish, luaManage}
+
+func luaProjectCheck(project *policy.ObjLua_project, permission luaPermission, actor *policy.ObjUser) rel.Interface {
+	switch permission {
+	case luaUse:
+		return project.CanUse_User(actor)
+	case luaEdit:
+		return project.CanEdit_User(actor)
+	case luaPublishUnstable:
+		return project.CanPublish_unstable_User(actor)
+	case luaPublish:
+		return project.CanPublish_User(actor)
+	case luaManage:
+		return project.CanManage_User(actor)
+	default:
+		return project.CanView_User(actor)
+	}
+}
+
+// luaActor is the request's user, or a subject that matches only user:* grants when signed out.
+func luaActor(r *http.Request) (*policy.ObjUser, bool) {
 	actor, authenticated := authz.ActorFromContext(r.Context())
 	if !authenticated {
-		if update {
-			httpapi.Forbidden(w, nil)
-			return false
-		}
-		actor = policy.New().User(uuid.Nil)
+		return policy.New().User(uuid.Nil), false
 	}
-	project := policy.New().Lua_project(id)
-	var allowed bool
-	var err error
-	if update {
-		allowed, err = a.Opts.Zed.CheckOne(r.Context(), nil, project.CanUpdate_User(actor))
-	} else {
-		allowed, err = a.Opts.Zed.CheckOne(r.Context(), nil, project.CanView_User(actor))
+	return actor, true
+}
+
+// canLuaProject checks one project permission in SpiceDB and writes a 403 when it is missing. Only view
+// and use can be granted to signed-out visitors. SQL queries no longer filter by owner: this is the check.
+func (a *API) canLuaProject(w http.ResponseWriter, r *http.Request, id uuid.UUID, permission luaPermission) bool {
+	actor, authenticated := luaActor(r)
+	if !authenticated && permission != luaView && permission != luaUse {
+		httpapi.Forbidden(w, nil)
+		return false
 	}
+	allowed, err := a.Opts.Zed.CheckOne(r.Context(), nil, luaProjectCheck(policy.New().Lua_project(id), permission, actor))
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return false
@@ -179,20 +213,37 @@ func (a *API) canLuaProject(w http.ResponseWriter, r *http.Request, id uuid.UUID
 	return true
 }
 
-// SQL keeps the owner predicate as defense in depth. Only a verified site
-// technical administrator may bypass it after the project permission check.
-func (a *API) luaProjectTechnicalAdmin(w http.ResponseWriter, r *http.Request) (bool, bool) {
-	actor, ok := authz.ActorFromContext(r.Context())
-	if !ok {
-		httpapi.Forbidden(w, nil)
-		return false, false
-	}
-	allowed, err := a.Opts.Zed.CheckOne(r.Context(), nil, policy.New().GlobalChronicle().CanAdminister_authz_User(actor))
+// canLuaProjectViewOrUse gates a published package: viewers read its source and users run it.
+func (a *API) canLuaProjectViewOrUse(w http.ResponseWriter, r *http.Request, id uuid.UUID) bool {
+	actor, _ := luaActor(r)
+	project := policy.New().Lua_project(id)
+	results, err := a.Opts.Zed.Check(r.Context(), nil, project.CanView_User(actor), project.CanUse_User(actor))
 	if err != nil {
 		httpapi.InternalServerError(w, err)
-		return false, false
+		return false
 	}
-	return allowed, true
+	if !results[0] && !results[1] {
+		httpapi.Forbidden(w, nil)
+		return false
+	}
+	return true
+}
+
+// luaProjectPermissions reports every project permission the request's user holds.
+func (a *API) luaProjectPermissions(r *http.Request, id uuid.UUID) (chroniclesdk.LuaProjectPermissions, error) {
+	actor, _ := luaActor(r)
+	project := policy.New().Lua_project(id)
+	checks := make([]rel.Interface, 0, len(luaPermissions))
+	for _, permission := range luaPermissions {
+		checks = append(checks, luaProjectCheck(project, permission, actor))
+	}
+	results, err := a.Opts.Zed.Check(r.Context(), nil, checks...)
+	if err != nil {
+		return chroniclesdk.LuaProjectPermissions{}, err
+	}
+	return chroniclesdk.LuaProjectPermissions{
+		View: results[0], Use: results[1], Edit: results[2], PublishUnstable: results[3], Publish: results[4], Manage: results[5],
+	}, nil
 }
 
 func (a *API) CreateLuaProject(w http.ResponseWriter, r *http.Request) {
@@ -205,10 +256,24 @@ func (a *API) CreateLuaProject(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid project name, kind or slug."})
 		return
 	}
+	owner := chronauth.MustAuthenticatedClaims(r.Context()).Subject
+	author, err := a.Opts.Zed.GetAddonAuthorByUser(r.Context(), owner)
+	if errors.Is(err, pgx.ErrNoRows) {
+		httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "Claim an author name first; it is part of every addon's address."})
+		return
+	}
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if reservedLuaProjectSlugs[req.Slug] {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "That address is reserved; choose another slug."})
+		return
+	}
 	var p database.LuaProject
-	err := a.Opts.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
+	err = a.Opts.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
 		var err error
-		p, err = tx.CreateLuaProject(r.Context(), database.CreateLuaProjectParams{OwnerID: chronauth.MustAuthenticatedClaims(r.Context()).Subject, Kind: req.Kind, Name: req.Name, Slug: req.Slug})
+		p, err = tx.CreateLuaProject(r.Context(), database.CreateLuaProjectParams{OwnerID: owner, Kind: req.Kind, Name: req.Name, Slug: req.Slug})
 		return err
 	}, nil)
 	if err != nil {
@@ -220,32 +285,38 @@ func (a *API) CreateLuaProject(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	httpapi.Write(r.Context(), w, http.StatusCreated, luaProjectResponse(p, true))
+	created := luaProjectResponse(p, true)
+	created.Author = author.Name
+	httpapi.Write(r.Context(), w, http.StatusCreated, created)
 }
 
 func (a *API) ListMyLuaProjects(w http.ResponseWriter, r *http.Request) {
-	projects, err := a.Opts.Zed.ListOwnerLuaProjects(r.Context(), chronauth.MustAuthenticatedClaims(r.Context()).Subject)
+	projects, err := a.Opts.Zed.ListUserLuaProjects(r.Context(), chronauth.MustAuthenticatedClaims(r.Context()).Subject)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	authors, err := a.luaProjectAuthors(r.Context(), projects...)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 	out := make([]chroniclesdk.LuaProject, 0, len(projects))
 	for _, p := range projects {
-		out = append(out, luaProjectResponse(p, true))
+		item := luaProjectResponse(p, true)
+		item.Author = authors[p.OwnerID]
+		out = append(out, item)
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, out)
 }
 
 func (a *API) GetMyLuaProject(w http.ResponseWriter, r *http.Request) {
 	id, ok := luaProjectID(w, r)
-	if !ok || !a.canLuaProject(w, r, id, false) {
+	// The private view includes the draft, so it needs edit; the public page uses GetLuaProjectPage.
+	if !ok || !a.canLuaProject(w, r, id, luaEdit) {
 		return
 	}
-	technicalAdmin, ok := a.luaProjectTechnicalAdmin(w, r)
-	if !ok {
-		return
-	}
-	p, err := a.Opts.Zed.GetOwnerLuaProject(r.Context(), database.GetOwnerLuaProjectParams{ID: id, OwnerID: chronauth.MustAuthenticatedClaims(r.Context()).Subject, TechnicalAdmin: technicalAdmin})
+	p, err := a.Opts.Zed.GetLuaProject(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Project not found."})
 		return
@@ -259,7 +330,7 @@ func (a *API) GetMyLuaProject(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 	id, ok := luaProjectID(w, r)
-	if !ok || !a.canLuaProject(w, r, id, true) {
+	if !ok || !a.canLuaProject(w, r, id, luaEdit) {
 		return
 	}
 	revision, err := strconv.ParseInt(r.URL.Query().Get("expected_revision"), 10, 64)
@@ -267,12 +338,7 @@ func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Expected revision and application/x-tar required."})
 		return
 	}
-	owner := chronauth.MustAuthenticatedClaims(r.Context()).Subject
-	technicalAdmin, ok := a.luaProjectTechnicalAdmin(w, r)
-	if !ok {
-		return
-	}
-	current, err := a.Opts.Zed.GetOwnerLuaProject(r.Context(), database.GetOwnerLuaProjectParams{ID: id, OwnerID: owner, TechnicalAdmin: technicalAdmin})
+	current, err := a.Opts.Zed.GetLuaProject(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Project not found."})
 		return
@@ -323,7 +389,7 @@ func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 	var storedKey string
 	err = a.Opts.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
 		var err error
-		project, err = tx.SetLuaProjectDraft(r.Context(), database.SetLuaProjectDraftParams{ID: id, OwnerID: owner, TechnicalAdmin: technicalAdmin, Hash: pgtype.Text{String: digest, Valid: true}, Icon: pgtype.Text{String: icon, Valid: icon != ""}, ExpectedRevision: revision})
+		project, err = tx.SetLuaProjectDraft(r.Context(), database.SetLuaProjectDraftParams{ID: id, Hash: pgtype.Text{String: digest, Valid: true}, Icon: pgtype.Text{String: icon, Valid: icon != ""}, ExpectedRevision: revision})
 		if err != nil {
 			return err
 		}
@@ -335,7 +401,7 @@ func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		if err := tx.PruneLuaProjectArtifacts(r.Context(), database.PruneLuaProjectArtifactsParams{ID: id, OwnerID: owner, TechnicalAdmin: technicalAdmin}); err != nil {
+		if err := tx.PruneLuaProjectArtifacts(r.Context(), id); err != nil {
 			return err
 		}
 		if storedKey == key {
@@ -355,7 +421,15 @@ func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) PublishLuaProject(w http.ResponseWriter, r *http.Request) {
 	id, ok := luaProjectID(w, r)
-	if !ok || !a.canLuaProject(w, r, id, true) {
+	if !ok {
+		return
+	}
+	channel := chi.URLParam(r, "channel")
+	permission := luaPublishUnstable
+	if channel == "stable" {
+		permission = luaPublish
+	}
+	if !a.canLuaProject(w, r, id, permission) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
@@ -363,28 +437,23 @@ func (a *API) PublishLuaProject(w http.ResponseWriter, r *http.Request) {
 	if !httpapi.Read(r.Context(), w, r, &req) {
 		return
 	}
-	channel := chi.URLParam(r, "channel")
 	if req.ExpectedRevision < 1 || (channel == "stable" && (len(req.TestedSHA256) != 64 || !isLowerHex(req.TestedSHA256))) {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid revision or tested unstable SHA-256."})
 		return
 	}
-	owner := chronauth.MustAuthenticatedClaims(r.Context()).Subject
-	technicalAdmin, ok := a.luaProjectTechnicalAdmin(w, r)
-	if !ok {
-		return
-	}
+	actor := chronauth.MustAuthenticatedClaims(r.Context()).Subject
 	var project database.LuaProject
 	err := a.Opts.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
 		var err error
 		if channel == "stable" {
-			project, err = tx.PromoteLuaProjectStable(r.Context(), database.PromoteLuaProjectStableParams{ID: id, OwnerID: uuid.NullUUID{UUID: owner, Valid: true}, TechnicalAdmin: technicalAdmin, ExpectedRevision: req.ExpectedRevision, TestedSha256: pgtype.Text{String: req.TestedSHA256, Valid: true}})
+			project, err = tx.PromoteLuaProjectStable(r.Context(), database.PromoteLuaProjectStableParams{ID: id, ActorID: uuid.NullUUID{UUID: actor, Valid: true}, ExpectedRevision: req.ExpectedRevision, TestedSha256: pgtype.Text{String: req.TestedSHA256, Valid: true}})
 		} else {
-			project, err = tx.PublishLuaProjectUnstable(r.Context(), database.PublishLuaProjectUnstableParams{ID: id, OwnerID: uuid.NullUUID{UUID: owner, Valid: true}, TechnicalAdmin: technicalAdmin, ExpectedRevision: req.ExpectedRevision})
+			project, err = tx.PublishLuaProjectUnstable(r.Context(), database.PublishLuaProjectUnstableParams{ID: id, ActorID: uuid.NullUUID{UUID: actor, Valid: true}, ExpectedRevision: req.ExpectedRevision})
 		}
 		if err != nil {
 			return err
 		}
-		return tx.PruneLuaProjectArtifacts(r.Context(), database.PruneLuaProjectArtifactsParams{ID: id, OwnerID: owner, TechnicalAdmin: technicalAdmin})
+		return tx.PruneLuaProjectArtifacts(r.Context(), id)
 	}, nil)
 	if err == nil {
 		a.drainLuaArtifactGarbageAfterWrite()
@@ -421,7 +490,7 @@ func (a *API) ListPublicLuaProjects(w http.ResponseWriter, r *http.Request) {
 		actor = policy.New().User(uuid.Nil)
 	}
 	for _, p := range projects {
-		allowed, err := a.Opts.Zed.CheckOne(r.Context(), nil, policy.New().Lua_project(p.ID).CanView_User(actor))
+		allowed, err := a.Opts.Zed.CheckOne(r.Context(), nil, policy.New().Lua_project(p.ID).CanUse_User(actor))
 		if err != nil {
 			httpapi.InternalServerError(w, err)
 			return
@@ -462,7 +531,8 @@ func (a *API) publicLuaProject(w http.ResponseWriter, r *http.Request) (database
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Channel not published."})
 		return database.LuaProject{}, "", false
 	}
-	if !a.canLuaProject(w, r, id, false) {
+	// Panels resolve a channel to run it.
+	if !a.canLuaProject(w, r, id, luaUse) {
 		return database.LuaProject{}, "", false
 	}
 	return p, channel, true
@@ -488,15 +558,10 @@ func (a *API) DownloadMyLuaProjectDraft(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	hash, ok := luaProjectHash(w, r)
-	if !ok || !a.canLuaProject(w, r, id, true) {
+	if !ok || !a.canLuaProject(w, r, id, luaEdit) {
 		return
 	}
-	owner := chronauth.MustAuthenticatedClaims(r.Context()).Subject
-	technicalAdmin, ok := a.luaProjectTechnicalAdmin(w, r)
-	if !ok {
-		return
-	}
-	result, err := a.Opts.Zed.GetOwnerLuaProjectDraftPackage(r.Context(), database.GetOwnerLuaProjectDraftPackageParams{ID: id, OwnerID: owner, TechnicalAdmin: technicalAdmin})
+	result, err := a.Opts.Zed.GetLuaProjectDraftPackage(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Draft package not found."})
 		return
@@ -526,7 +591,7 @@ func (a *API) DownloadLuaProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hash, ok := luaProjectHash(w, r)
-	if !ok || !a.canLuaProject(w, r, id, false) {
+	if !ok || !a.canLuaProjectViewOrUse(w, r, id) {
 		return
 	}
 	// Only currently published hashes are retrievable. An older package may

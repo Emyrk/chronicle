@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { renderToStaticMarkup } from "react-dom/server"
 import { MemoryRouter } from "react-router-dom"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { useAuthorizationCheck, useSession } from "@/api/queries"
 import { LuaProjectsPage } from "./LuaProjectsPage"
 
 vi.mock("@/api/queries", () => ({ useAuthorizationCheck: vi.fn(), useSession: vi.fn() }))
 
 function renderPage() {
-  return renderToStaticMarkup(<MemoryRouter><LuaProjectsPage /></MemoryRouter>)
+  return renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}><MemoryRouter><LuaProjectsPage /></MemoryRouter></QueryClientProvider>)
 }
 
 describe("addon creation permission", () => {

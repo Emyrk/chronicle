@@ -787,6 +787,12 @@ func AllWowPlayableRaceValues() []WowPlayableRace {
 	}
 }
 
+type AddonAuthor struct {
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	Name      string             `db:"name" json:"name"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type ApplicationModificationRequest struct {
 	ID            uuid.UUID          `db:"id" json:"id"`
 	ApplicationID uuid.UUID          `db:"application_id" json:"application_id"`
@@ -2044,6 +2050,15 @@ type LuaProjectArtifactGc struct {
 	ObjectKey   string             `db:"object_key" json:"object_key"`
 	AttemptedAt pgtype.Timestamptz `db:"attempted_at" json:"attempted_at"`
 	ReadyAt     pgtype.Timestamptz `db:"ready_at" json:"ready_at"`
+}
+
+type LuaProjectContributor struct {
+	ProjectID   uuid.UUID          `db:"project_id" json:"project_id"`
+	UserID      uuid.UUID          `db:"user_id" json:"user_id"`
+	Permissions []string           `db:"permissions" json:"permissions"`
+	AddedBy     uuid.NullUUID      `db:"added_by" json:"added_by"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type OauthDeviceSession struct {
