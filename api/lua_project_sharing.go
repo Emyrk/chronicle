@@ -66,8 +66,9 @@ func (a *API) luaProjectAuthors(ctx context.Context, projects ...database.LuaPro
 
 func (a *API) GetMyAddonAuthor(w http.ResponseWriter, r *http.Request) {
 	author, err := a.Opts.Zed.GetAddonAuthorByUser(r.Context(), chronauth.MustAuthenticatedClaims(r.Context()).Subject)
+	// No name yet is a normal state, so it is not an error the browser logs.
 	if errors.Is(err, pgx.ErrNoRows) {
-		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "No author name claimed yet."})
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	if err != nil {

@@ -49,6 +49,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     const body = await response.json().catch(() => null) as { message?: string; detail?: string } | null
     throw new LuaProjectError(body?.detail ?? body?.message ?? `Request failed (${response.status})`, response.status)
   }
+  if (response.status === 204) return null as T
   return response.json() as Promise<T>
 }
 
@@ -119,9 +120,9 @@ export function getProjectPageByPath(author: string, slug: string, signal?: Abor
 }
 
 /** The caller's author name, or null before they claim one. */
+/** The caller's author name, or null before they claim one (204). */
 export async function getMyAuthor(): Promise<string | null> {
-  try { return (await request<AddonAuthor>("/api/v1/me/addon-author")).name }
-  catch (error) { if (error instanceof LuaProjectError && error.status === 404) return null; throw error }
+  return (await request<AddonAuthor | null>("/api/v1/me/addon-author"))?.name ?? null
 }
 
 /** The caller's username as a free author name, or "" when none fits. */

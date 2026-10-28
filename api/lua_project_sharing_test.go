@@ -203,8 +203,15 @@ func TestSuggestAddonAuthor(t *testing.T) {
 
 	first := user("Tester " + tag)
 	require.Equal(t, "tester-"+tag, suggest(first))
+	mine := func(user uuid.UUID) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		api.GetMyAddonAuthor(rec, httptest.NewRequest(http.MethodGet, "/me/addon-author", nil).WithContext(authz.AsUser(chronauth.WithClaims(ctx, &claims.Claims{Subject: user}), user)))
+		return rec
+	}
+	require.Equal(t, http.StatusNoContent, mine(first).Code, "no name yet is not an error")
 	_, err := zed.InsertAddonAuthor(ctx, database.InsertAddonAuthorParams{UserID: first, Name: "tester-" + tag})
 	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, mine(first).Code)
 	require.Equal(t, "tester-"+tag+"-2", suggest(user("TESTER_"+tag)), "a taken name gets a number")
 	require.Equal(t, "admin-2", suggest(user("Admin")), "reserved names get a number")
 	require.Equal(t, "", suggest(user("✨")), "no usable characters, no suggestion")
