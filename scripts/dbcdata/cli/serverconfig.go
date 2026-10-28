@@ -11,13 +11,13 @@ import (
 func DefaultClientPath(server string) string {
 	switch server {
 	case "faebright":
-		return "/home/steven/Games/Faebright"
+		return "/mnt/windows-z/ChronicleGames/Faebright"
 	case "triumvirate":
 		return "/home/steven/Games/TriumvirateWoW"
 	case "turtle":
 		return "/home/steven/Games/turtlewow/drive_c/Program Files (x86)/TurtleWoW"
 	case "epoch":
-		return "/home/steven/Games/ascension-wow/drive_c/Program Files/Ascension Launcher/resources/epoch-live"
+		return "/mnt/windows-z/ChronicleGames/Epoch"
 	case "kronos":
 		return "/home/steven/Games/kronos-wow/drive_c/Program Files (x86)/Kronos"
 	case "azerothcore":
