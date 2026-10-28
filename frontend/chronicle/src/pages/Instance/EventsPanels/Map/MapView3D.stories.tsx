@@ -1201,7 +1201,7 @@ const WC_MESH: WowMapMeshInstance = {
   frame: "wow-yup-mirrored-x",
 };
 
-function KreshRealReplay({ selectPlayers, mesh = false, walkAvatar }: { selectPlayers: boolean; mesh?: boolean; walkAvatar?: string }) {
+function KreshRealReplay({ selectPlayers, mesh = false, alignmentOverlay = false, walkAvatar }: { selectPlayers: boolean; mesh?: boolean; alignmentOverlay?: boolean; walkAvatar?: string }) {
   const [fixture] = useState(() => {
     const loaded = loadMapFixture(kreshReal, { selectPlayers });
     if (selectPlayers) (loaded.props.context.entitySelection.playerIds as Set<string>).delete(KRESH_UNSELECTED);
@@ -1228,7 +1228,12 @@ function KreshRealReplay({ selectPlayers, mesh = false, walkAvatar }: { selectPl
     <QueryClientProvider client={queryClient}>
       <WithSpellIcons>
         <SyncModeProvider>
-          <FixturePlayer fixture={fixture} mesh={mesh} walkAvatar={walkAvatar} />
+          <FixturePlayer
+            fixture={fixture}
+            mesh={mesh}
+            effectSettings={{ ...DEFAULT_EFFECT_SETTINGS, alignmentOverlay }}
+            walkAvatar={walkAvatar}
+          />
         </SyncModeProvider>
       </WithSpellIcons>
     </QueryClientProvider>
@@ -1778,6 +1783,11 @@ export const KreshRealSelected: Story = {
  */
 export const KreshRealMesh: Story = {
   render: () => <KreshRealReplay selectPlayers={false} mesh />,
+};
+
+/** The Wailing Caverns artwork rendered translucently over its dungeon mesh for alignment debugging. */
+export const KreshAlignmentOverlay: Story = {
+  render: () => <KreshRealReplay selectPlayers={false} mesh alignmentOverlay />,
 };
 
 /**

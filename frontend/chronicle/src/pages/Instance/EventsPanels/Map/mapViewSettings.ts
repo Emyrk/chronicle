@@ -18,6 +18,8 @@ export interface EffectSettings {
   aboveDisc: AboveDiscMode;
   /** Seconds of movement trail behind each unit; 0 for none. */
   trailSeconds: number;
+  /** Translucent 2D artwork over the dungeon mesh for coordinate debugging. */
+  alignmentOverlay: boolean;
 }
 
 export const EFFECTS_STORAGE_KEY = "chronicle.map.effects3d";
@@ -33,6 +35,7 @@ export const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
   castMode: "selected",
   aboveDisc: "none",
   trailSeconds: 0,
+  alignmentOverlay: false,
 };
 
 export const ABOVE_DISC_MODES: { value: AboveDiscMode; label: string; title: string }[] = [

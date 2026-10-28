@@ -270,6 +270,10 @@ export default function MapView3D({
   }, [frozen, ground]);
 
   useEffect(() => {
+    sceneRef.current?.setAlignmentOverlay(effectSettings.alignmentOverlay);
+  }, [effectSettings.alignmentOverlay]);
+
+  useEffect(() => {
     if (!frozen) sceneRef.current?.setRoute(routePoints);
   }, [frozen, routePoints]);
 
