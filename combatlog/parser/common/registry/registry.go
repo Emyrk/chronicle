@@ -355,6 +355,8 @@ type InstanceDetail struct {
 	ProgressionBosses            []string
 	RankingEncounterSets         []instances.RankingEncounterSet
 	DamageByEncounter            map[string]rankings.DamageTargets
+	SpeedrunRules                *rankings.SpeedrunRules
+	DerivedSpeedrunRules         map[string]*rankings.SpeedrunRules
 	RaidProgressionOrder         int
 	DerivedRaidProgressionOrders map[string]int
 	RankedStartAfterRequirement  string
@@ -521,6 +523,8 @@ func (r *Registry) AllInstanceDetails() []InstanceDetail {
 				ProgressionBosses:            progressionBosses(entry),
 				RankingEncounterSets:         rankingEncounterSets(entry),
 				DamageByEncounter:            entry.DamageByEncounter,
+				SpeedrunRules:                entry.SpeedrunRules,
+				DerivedSpeedrunRules:         entry.DerivedSpeedrunRules,
 				RaidProgressionOrder:         entry.RaidProgressionOrder,
 				DerivedRaidProgressionOrders: entry.DerivedRaidProgressionOrders,
 				RankedStartAfterRequirement:  rankedStartAfterRequirement(entry),

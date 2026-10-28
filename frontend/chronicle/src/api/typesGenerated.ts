@@ -4504,6 +4504,8 @@ export interface SupportedInstance {
     readonly progression_bosses?: readonly string[];
     readonly ranking_encounter_sets?: readonly RankingEncounterSet[];
     readonly damage_by_encounter?: Record<string, SupportedInstanceDamageRule>;
+    readonly speedrun_rules?: SupportedInstanceSpeedrunRules;
+    readonly derived_speedrun_rules?: Record<string, SupportedInstanceSpeedrunRules>;
     readonly raid_progression_order?: number;
     readonly derived_raid_progression_orders?: Record<string, number>;
     readonly ranked_start_after_requirement?: string;
@@ -4518,6 +4520,16 @@ export interface SupportedInstance {
 export interface SupportedInstanceDamageRule {
     readonly mode: string;
     readonly entry_ids?: readonly number[];
+}
+
+// From chroniclesdk/supported_instance.go
+/**
+ * SupportedInstanceSpeedrunRules lists the requirements for a qualifying clear.
+ */
+export interface SupportedInstanceSpeedrunRules {
+    readonly requirements: readonly SpeedrunRequirement[];
+    readonly level_range?: SpeedrunLevelRangeRequirement;
+    readonly ranked_start_after_requirement?: string;
 }
 
 // From chroniclesdk/supported_instance.go

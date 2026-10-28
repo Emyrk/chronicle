@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
@@ -23,6 +24,28 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
+
+func supportedSpeedrunRules(rules *rankings.SpeedrunRules) *chroniclesdk.SupportedInstanceSpeedrunRules {
+	if rules == nil {
+		return nil
+	}
+	requirements := make([]chroniclesdk.SpeedrunRequirement, len(rules.Requirements))
+	for i, req := range rules.Requirements {
+		requirements[i] = chroniclesdk.SpeedrunRequirement{
+			Name: req.Name, EntryIDs: req.EntryIDs, Count: req.Count, Category: string(req.Category),
+		}
+	}
+	result := &chroniclesdk.SupportedInstanceSpeedrunRules{
+		Requirements:                requirements,
+		RankedStartAfterRequirement: rules.RankedStartAfterRequirement,
+	}
+	if rules.LevelRange != nil {
+		result.LevelRange = &chroniclesdk.SpeedrunLevelRangeRequirement{
+			MinLevel: rules.LevelRange.MinLevel, MaxLevel: rules.LevelRange.MaxLevel,
+		}
+	}
+	return result
+}
 
 func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -57,6 +80,15 @@ func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 				damageByEncounter[name] = chroniclesdk.SupportedInstanceDamageRule{Mode: rule.Mode, EntryIDs: rule.EntryIDs}
 			}
 		}
+		var derivedSpeedrunRules map[string]chroniclesdk.SupportedInstanceSpeedrunRules
+		if len(d.DerivedSpeedrunRules) > 0 {
+			derivedSpeedrunRules = make(map[string]chroniclesdk.SupportedInstanceSpeedrunRules, len(d.DerivedSpeedrunRules))
+			for name, rules := range d.DerivedSpeedrunRules {
+				if converted := supportedSpeedrunRules(rules); converted != nil {
+					derivedSpeedrunRules[name] = *converted
+				}
+			}
+		}
 		result[i] = chroniclesdk.SupportedInstance{
 			Name:                         d.Name,
 			Comment:                      d.Comment,
@@ -68,6 +100,8 @@ func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 			ProgressionBosses:            d.ProgressionBosses,
 			RankingEncounterSets:         rankingEncounterSets,
 			DamageByEncounter:            damageByEncounter,
+			SpeedrunRules:                supportedSpeedrunRules(d.SpeedrunRules),
+			DerivedSpeedrunRules:         derivedSpeedrunRules,
 			RaidProgressionOrder:         d.RaidProgressionOrder,
 			DerivedRaidProgressionOrders: d.DerivedRaidProgressionOrders,
 			RankedStartAfterRequirement:  d.RankedStartAfterRequirement,

@@ -103,6 +103,8 @@ func TestInstanceDetailsDamageRules(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, "entries", rule.Mode)
 			require.Equal(t, []uint32{12057, 12099}, rule.EntryIDs)
+			require.NotNil(t, detail.SpeedrunRules)
+			require.NotEmpty(t, detail.SpeedrunRules.Requirements)
 		case "Shadowfang Keep":
 			foundShadowfangKeep = true
 			require.Empty(t, detail.DamageByEncounter)
