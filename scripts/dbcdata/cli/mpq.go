@@ -79,6 +79,7 @@ func (f *mpqFallback) ReadFile(name string) ([]byte, error) {
 		if err != nil {
 			continue
 		}
+		fmt.Printf("[MPQ Direct] OpenFile %q -> %s\n", name, m.Path)
 		return data, nil
 	}
 	return nil, fmt.Errorf("file not found in any MPQ: %s", name)
