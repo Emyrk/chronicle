@@ -74,6 +74,19 @@ function MapTiles({ ground: { canvas, iconBaseUrl, overlays } }: { ground: MapSc
   );
 }
 
+export function MapArtworkLayer({ ground, viewport }: { ground: MapSceneGround; viewport: MapViewport }) {
+  return (
+    <div
+      className="absolute inset-0 origin-top-left"
+      style={{
+        transform: `translate(${(0.5 - viewport.centerX * viewport.zoom) * 100}%, ${(0.5 - viewport.centerY * viewport.zoom) * 100}%) scale(${viewport.zoom})`,
+      }}
+    >
+      <MapTiles ground={ground} />
+    </div>
+  );
+}
+
 // Same colour rule as the 3D bars: fill by percentage, a pale green chunk
 // for recent healing at its end, a pale absorb segment past current health,
 // grey when dead.
@@ -298,14 +311,7 @@ export function MapView2D({ ground, markers, routePoints, projectSample, trailSe
       className={`relative mx-auto h-full max-w-full touch-none overflow-hidden bg-[#11100d] ${viewport.zoom > 1 ? "cursor-grab active:cursor-grabbing" : ""}`}
       style={{ aspectRatio: `${ground.canvas.width} / ${ground.canvas.height}` }}
     >
-      <div
-        className="absolute inset-0 origin-top-left"
-        style={{
-          transform: `translate(${(0.5 - viewport.centerX * viewport.zoom) * 100}%, ${(0.5 - viewport.centerY * viewport.zoom) * 100}%) scale(${viewport.zoom})`,
-        }}
-      >
-        <MapTiles ground={ground} />
-      </div>
+      <MapArtworkLayer ground={ground} viewport={viewport} />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_45%,rgba(0,0,0,.28))]" />
       <EncounterRoute points={routePoints} viewport={viewport} />
       <MovementTrails markers={markers} viewport={viewport} trailSeconds={trailSeconds} projectSample={projectSample} />
