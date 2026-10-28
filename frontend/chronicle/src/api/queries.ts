@@ -85,7 +85,6 @@ import type {
   AdminActiveCustomPanelsResponse,
   SiteConfig,
   UpdateSiteConfigRequest,
-  LandingFeaturedResponse,
   Dataset,
   UpsertDatasetRequest,
   UserFavoritesResponse,
@@ -1760,19 +1759,6 @@ export function useAdminOutdatedInstances(instanceName?: string, parserVersion?:
   });
 }
 export { useSiteConfig } from "./siteConfigQuery";
-
-// useLandingFeatured loads the /start hero's featured run (null when none is set).
-export function useLandingFeatured() {
-  return useQuery({
-    queryKey: ["landing-featured"],
-    queryFn: async () => {
-      const response = await fetch("/api/v1/landing/featured");
-      if (!response.ok) throw new Error("Failed to fetch featured run");
-      return response.json() as Promise<LandingFeaturedResponse>;
-    },
-    staleTime: 60 * 1000,
-  });
-}
 
 // useDiscoverableServers lists every discoverable Chronicle server, even from a tenant subdomain.
 export function useDiscoverableServers() {

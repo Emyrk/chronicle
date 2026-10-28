@@ -43,10 +43,20 @@ function mount(application: ReactNode) {
   }
 }
 
+// On /start the app stylesheet does not block first paint (see vite.config.ts); mount once it has loaded.
+function stylesheetReady(): Promise<void> {
+  const link = document.querySelector<HTMLLinkElement>('link[rel="stylesheet"][media="print"]')
+  if (!link) return Promise.resolve()
+  return new Promise((resolve) => {
+    link.addEventListener('load', () => resolve(), { once: true })
+    link.addEventListener('error', () => resolve(), { once: true })
+  })
+}
+
 // The blog is its own app; load it only on /blog so it stays out of the entry chunk.
 // It is imported before mounting so the prerendered blog markup hydrates as before.
 if (isBlogRoute) {
   void import('./blog/BlogApp').then(({ BlogApp }) => mount(<BlogApp />))
 } else {
-  mount(app)
+  void stylesheetReady().then(() => mount(app))
 }

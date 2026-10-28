@@ -2,7 +2,7 @@
 <html lang="en" class="dark" style="{{ .ThemeCSS }}">
   <head>
     <script>
-      // /start: start the hero poster fetch before the render-blocking stylesheet; the
+      // /start: start the hero poster fetch before the app stylesheet and bundle; the
       // pre-JS poster shell at the end of <body> paints it (media queries must match).
       if (location.pathname === "/start") {
         [["(max-width: 1023px)", "ruins-courtyard-poster-portrait.jpg"], ["(min-width: 1024px)", "ruins-courtyard-poster.jpg"]].forEach(function (p) {

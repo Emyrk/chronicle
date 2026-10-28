@@ -59,6 +59,22 @@ export default defineConfig({
       plugins: [['babel-plugin-react-compiler']]
     }
   }), tailwindcss(), {
+    // The app stylesheet blocks first paint on every route but /start, whose pre-JS poster shell
+    // in index.html styles itself: there it loads without blocking, and main.tsx mounts once it has.
+    name: 'start-nonblocking-stylesheet',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html) {
+        return html.replace(/<link rel="stylesheet" crossorigin href="([^"]+\.css)">/, (link, href: string) => `<script>
+      document.write(location.pathname === "/start"
+        ? '<link rel="stylesheet" crossorigin href="${href}" media="print" onload="this.media=\\'all\\'">'
+        : '${link}');
+    </script>
+    <noscript>${link}</noscript>`);
+      },
+    },
+  }, {
     name: 'react-scan-dev',
     transformIndexHtml(_html, ctx) {
       // eslint-disable-next-line no-constant-condition -- Keep the React Scan hook available but disabled by default.

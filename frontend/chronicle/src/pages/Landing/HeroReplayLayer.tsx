@@ -1,14 +1,13 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { trackFunnel } from "@/utils/funnel";
 import type { HeroReplay } from "./heroReplay";
+import { whenIdle } from "./whenIdle";
 
 // The 3D chunk (three.js, the Map scene, the featured run's data): requested only once the trigger below fires.
 const LandingHero3D = lazy(() => import("./LandingHero3D"));
 
 /** Where in the featured run the replay starts, in seconds from its start. */
 const FEATURED_START_OFFSET_MS = (Number(import.meta.env.VITE_LANDING_FEATURED_START_S) || 0) * 1000;
-/** requestIdleCallback's deadline: the 3D layer starts loading by then even on a busy page. */
-const IDLE_TIMEOUT_MS = 1500;
 /** How long the hero must play (or the poster stay in view) before hero_play_3s. */
 const HERO_PLAY_EVENT_MS = 3000;
 
@@ -27,15 +26,6 @@ function canShow3D(): boolean {
   } catch {
     return false;
   }
-}
-
-function whenIdle(callback: () => void): () => void {
-  if (typeof window.requestIdleCallback === "function") {
-    const handle = window.requestIdleCallback(callback, { timeout: IDLE_TIMEOUT_MS });
-    return () => window.cancelIdleCallback(handle);
-  }
-  const timer = window.setTimeout(callback, IDLE_TIMEOUT_MS);
-  return () => window.clearTimeout(timer);
 }
 
 // A failed 3D chunk or scene leaves the poster as it is.

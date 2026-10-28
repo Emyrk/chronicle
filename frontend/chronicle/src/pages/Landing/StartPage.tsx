@@ -1,28 +1,21 @@
-import { useEffect, useLayoutEffect, useState, type FormEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { useLandingFeatured, useSupportedInstances } from "@/api/queries";
-import type { RecentInstance, RecentInstancesResponse } from "@/api/typesGenerated";
-import { useTenantDatasetScope } from "@/hooks/useDatasetId";
+import { useLandingFeatured } from "@/api/landingFeatured";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { getInstanceArtCrop } from "@/pages/Logs/utils/instanceImages";
-import { fetchMapManifest } from "@/pages/Technical/mapManifest";
 import { trackFunnel } from "@/utils/funnel";
-import { dungeonMapKind, dungeonNames, dungeonShelfCards } from "./dungeonShelf";
 import { HeroReplayLayer } from "./HeroReplayLayer";
 import type { HeroReplay } from "./heroReplay";
 import { LandingHero } from "./LandingHero";
-import { formatRunDuration, runBadge, runStillUrl, type RunBadge } from "./recentRuns";
+import { HEADING_FONT, IMAGES } from "./startPageStyle";
+import { whenIdle } from "./whenIdle";
+
+// The sections below how-it-works and their queries: requested only once the trigger in BelowFold fires.
+const StartBelowFold = lazy(() => import("./StartBelowFold"));
 
 const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
-// Public Sidekick downloads; the utm cookie set on landing carries attribution.
-const DOWNLOAD_MAC_URL = "/download?os=macos";
-const DOWNLOAD_WINDOWS_URL = "/download?os=windows";
 
-const IMAGES = "/c/images/landing";
 // The 3D hero's run when the site setting names none.
 const FALLBACK_FEATURED_INSTANCE: string | undefined = import.meta.env.VITE_LANDING_FEATURED_INSTANCE || undefined;
-const HEADING_FONT = "font-['Libre_Baskerville',Georgia,serif]";
 
 const STEPS = [
   {
@@ -40,27 +33,6 @@ const STEPS = [
   {
     title: "Your run appears here",
     body: "Minutes after you leave the instance. Replay it, share it, argue about it.",
-  },
-];
-
-const FIRST_MINUTE = [
-  {
-    src: `${IMAGES}/still-walk-the-run.jpg`,
-    alt: "Replay still: the group entering the Ruins courtyard",
-    title: "Walk the whole run",
-    body: "Camera follows the party from the first pull to the last boss. Jump between bosses with one click.",
-  },
-  {
-    src: `${IMAGES}/still-casts-land.jpg`,
-    alt: "Replay still: fight by the courtyard fence with cast icons over the players",
-    title: "See the casts land",
-    body: "Spell icons float over the players as they cast. Heals, DoT ticks and overheal, toggled on when you want them.",
-  },
-  {
-    src: `${IMAGES}/still-who-died.jpg`,
-    alt: "Replay still: the party on the platform at Viktor the Vile",
-    title: "Find out who died to what",
-    body: "Every death is a marker on the bar. Hover it, the killing blow and the last ten seconds of damage are right there.",
   },
 ];
 
@@ -200,218 +172,41 @@ function HowItWorks() {
   );
 }
 
-function FirstMinute() {
-  return (
-    <section className="mx-auto box-border flex w-full max-w-[1180px] flex-col gap-[18px] px-4 pb-3 pt-8 lg:px-8 lg:pt-10">
-      <h2 className={`m-0 text-[22px] font-bold lg:text-[28px] ${HEADING_FONT}`}>Three things people do in the first minute</h2>
-      <div className="grid grid-cols-1 gap-[18px] md:grid-cols-3">
-        {FIRST_MINUTE.map((card) => (
-          <div key={card.title} className="flex flex-col overflow-hidden rounded-xl border border-[#27324a] bg-[#141d30]">
-            <img src={card.src} alt={card.alt} loading="lazy" className="block h-40 w-full object-cover" />
-            <div className="flex flex-col gap-1.5 px-4 py-3.5">
-              <div className="text-[15px] font-semibold">{card.title}</div>
-              <div className="text-[13px] leading-normal text-[#b7c2d6]">{card.body}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
+/**
+ * Mounts StartBelowFold after the shell's first paint: when the browser is idle (or 1.5 s
+ * passed) or this slot nears the viewport, whichever comes first. Holds a screen of
+ * height until then, so the footer never shows (or shifts) in its place.
+ */
+function BelowFold() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [load, setLoad] = useState(false);
 
-/** The maps manifest: the same query as the Map panel's, so they share one cached fetch. */
-function useMapManifest() {
-  const { iconBaseUrl } = useTenantDatasetScope();
-  return useQuery({
-    queryKey: ["wow-map-manifest", iconBaseUrl],
-    enabled: Boolean(iconBaseUrl),
-    staleTime: 60 * 60 * 1000,
-    queryFn: () => fetchMapManifest(iconBaseUrl!),
-  });
-}
+  useEffect(() => {
+    const element = ref.current;
+    if (load || !element) return;
+    const observer = new IntersectionObserver(([entry]) => entry.isIntersecting && setLoad(true), { rootMargin: "0px 0px 400px 0px" });
+    // Two frames: the shell has painted at least once before the chunk and its requests go out.
+    let cancelIdle: (() => void) | null = null;
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        observer.observe(element);
+        cancelIdle = whenIdle(() => setLoad(true));
+      });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      cancelIdle?.();
+      observer.disconnect();
+    };
+  }, [load]);
 
-// Only runs with a replay: their cards show a still, never a wall of placeholders.
-const RECENT_RUNS_URL = "/api/v1/raidlogs/recent?days=60&limit=3&has_positions=true";
-
-function useRecentRuns() {
-  return useQuery({
-    queryKey: ["landing", "recent-runs"],
-    staleTime: 60 * 1000,
-    queryFn: async () => {
-      const response = await fetch(RECENT_RUNS_URL);
-      if (!response.ok) throw new Error(`API error: ${response.status}`);
-      return (await response.json()) as RecentInstancesResponse;
-    },
-  });
-}
-
-function RunCard({ run, badge }: { run: RecentInstance; badge: RunBadge | null }) {
-  const [still, setStill] = useState<"loading" | "loaded" | "missing">("loading");
-  const [artFailed, setArtFailed] = useState(false);
-  const duration = formatRunDuration(run.duration_ms);
-  const href = `/instances/${run.slug || run.id}`;
-
-  return (
-    <Link
-      to={href}
-      className="flex flex-col overflow-hidden rounded-xl border border-[#27324a] bg-[#141d30] text-[#e8eef8] no-underline hover:border-[#5f6d88]"
-    >
-      <div className="relative h-[130px] overflow-hidden bg-[#1b2740]">
-        {/* Until this run's still loads (or when it has none yet): a muted crop of the dungeon's art. */}
-        {still !== "loaded" && !artFailed && (
-          <img
-            src={getInstanceArtCrop(run.name)}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            onError={() => setArtFailed(true)}
-            className="absolute inset-0 h-full w-full object-cover opacity-40 grayscale-[60%]"
-          />
-        )}
-        {still !== "missing" && (
-          <img
-            src={runStillUrl(run.id)}
-            alt={`Replay still of ${run.name}`}
-            loading="lazy"
-            decoding="async"
-            width={640}
-            height={360}
-            onLoad={() => setStill("loaded")}
-            onError={() => setStill("missing")}
-            className={`absolute inset-0 h-full w-full object-cover ${still === "loaded" ? "" : "invisible"}`}
-          />
-        )}
-        {badge && (
-          <span
-            className={`absolute left-2.5 top-2.5 rounded-md bg-[#0c1322]/85 px-2 py-[3px] text-[11px] font-semibold tracking-[0.08em] ${
-              badge === "3d" ? "text-[#4fd1c5]" : "text-[#b7c2d6]"
-            }`}
-          >
-            {badge === "3d" ? "3D REPLAY" : "2D MAP"}
-          </span>
-        )}
-        {duration && (
-          <span className="absolute bottom-2.5 right-2.5 rounded-md bg-[#0c1322]/85 px-2 py-[3px] font-mono text-[11px] text-[#e8eef8]">
-            {duration}
-          </span>
-        )}
-      </div>
-      <div className="flex flex-col gap-1 px-3.5 py-3">
-        <div className="text-[15px] font-semibold">{run.name}</div>
-        <div className="text-xs text-[#b7c2d6]">
-          {run.player_count} players · {run.boss_kills} {run.boss_kills === 1 ? "boss" : "bosses"}
-        </div>
-      </div>
-    </Link>
-  );
-}
-
-function RecentRuns() {
-  const { data } = useRecentRuns();
-  const { data: instances } = useSupportedInstances();
-  const { data: manifest } = useMapManifest();
-  const runs = (data?.instances ?? [])
-    // The endpoint lists every upload of a duplicate run, its representative first; one card per run.
-    .filter((run, i, all) => !run.duplicate_group_id || all.findIndex((other) => other.duplicate_group_id === run.duplicate_group_id) === i)
-    .slice(0, 3);
-
-  return (
-    <section id="runs" className="mx-auto box-border flex w-full max-w-[1180px] flex-col gap-3.5 px-4 pb-3 pt-7 lg:px-8">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <h2 className={`m-0 text-xl font-bold lg:text-2xl ${HEADING_FONT}`}>Recent runs</h2>
-        <Link to="/recent" className="text-sm text-[#4fd1c5] hover:text-[#8ee6dd]">
-          All recent runs
-        </Link>
-      </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {runs.map((run) => (
-          <RunCard key={run.id} run={run} badge={runBadge(run, dungeonMapKind(dungeonNames(run.name, instances ?? []), manifest))} />
-        ))}
-        <Link
-          to="/download"
-          onClick={() => trackFunnel("cta_sidekick", { placement: "ghost_card" })}
-          className="flex flex-col overflow-hidden rounded-xl border border-dashed border-[#5f6d88] bg-[#141d30] text-[#e8eef8] no-underline hover:border-[#e0b45c]"
-        >
-          <div className="flex h-[130px] flex-col items-center justify-center gap-1.5 bg-[#101829] p-4 text-center">
-            <div className={`text-lg font-bold ${HEADING_FONT}`}>Your run goes here</div>
-            <div className="text-xs text-[#b7c2d6]">Tonight, if Sidekick is running.</div>
-          </div>
-          <div className="flex flex-col gap-1 px-3.5 py-3">
-            <div className="text-[15px] font-semibold text-[#e0b45c]">Get Sidekick</div>
-            <div className="text-xs text-[#b7c2d6]">2 minutes to set up</div>
-          </div>
-        </Link>
-      </div>
-    </section>
-  );
-}
-
-function DungeonShelf() {
-  const { data: instances } = useSupportedInstances();
-  const { data: manifest } = useMapManifest();
-  const cards = dungeonShelfCards(instances ?? [], manifest);
-
-  return (
-    <section id="dungeons" className="mx-auto box-border flex w-full max-w-[1180px] flex-col gap-3.5 px-4 pb-9 pt-7 lg:px-8">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <h2 className={`m-0 text-xl font-bold lg:text-2xl ${HEADING_FONT}`}>Real floors, not dots on a map</h2>
-        <Link to="/supported" className="text-sm text-[#4fd1c5] hover:text-[#8ee6dd]">
-          All supported instances
-        </Link>
-      </div>
-      <ul className="styled-scrollbar m-0 flex list-none gap-3 overflow-x-auto p-0 pb-1.5">
-        {cards.map((d) => (
-          <li key={d.name} className="flex shrink-0 basis-[190px]">
-            <Link
-              to={`/recent?inst=${encodeURIComponent(d.name)}`}
-              className={`flex w-full flex-col gap-1 rounded-[10px] border bg-[#141d30] p-3.5 text-[#e8eef8] no-underline hover:bg-[#1a2540] ${
-                d.kind === "3d" ? "border-[#4fd1c5]" : "border-[#27324a]"
-              }`}
-            >
-              <div className="font-semibold">{d.name}</div>
-              <div
-                className={`text-xs ${
-                  d.kind === "3d" ? "text-[#8ee6dd]" : d.kind === "2d" ? "text-[#b7c2d6]" : "text-[#8a97ad]"
-                }`}
-              >
-                {d.kind === "3d" ? "3D floor" : d.kind === "2d" ? "2D map" : "Coming"}
-              </div>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function ClosingBand() {
-  return (
-    <section id="get" className="hidden border-t border-[#27324a] bg-[#101829] lg:block">
-      <div className="mx-auto flex max-w-[1180px] flex-wrap items-center justify-between gap-6 p-8">
-        <div className="flex max-w-[560px] flex-col gap-1.5">
-          <h2 className={`m-0 text-[26px] font-bold ${HEADING_FONT}`}>Tonight's run could be on this page.</h2>
-          <p className="m-0 text-sm leading-normal text-[#b7c2d6]">
-            Sidekick is a 9 MB tray app. It never opens a window, never asks you to upload anything, and the stone
-            tells you it is working.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2.5">
-          {[
-            [DOWNLOAD_MAC_URL, "Download for macOS"],
-            [DOWNLOAD_WINDOWS_URL, "Download for Windows"],
-          ].map(([href, label]) => (
-            <a
-              key={href}
-              href={href}
-              onClick={() => trackFunnel("cta_sidekick", { placement: "band" })}
-              className="rounded-[10px] bg-[#e0b45c] px-5 py-[13px] text-[15px] font-semibold text-[#0c1322] no-underline hover:bg-[#e8c477]"
-            >
-              {label}
-            </a>
-          ))}
-        </div>
-      </div>
-    </section>
+  const placeholder = <div ref={ref} className="min-h-screen" />;
+  return load ? (
+    <Suspense fallback={placeholder}>
+      <StartBelowFold />
+    </Suspense>
+  ) : (
+    placeholder
   );
 }
 
@@ -448,10 +243,7 @@ export function StartPage() {
       />
       <SendLinkSection />
       <HowItWorks />
-      <FirstMinute />
-      <RecentRuns />
-      <DungeonShelf />
-      <ClosingBand />
+      <BelowFold />
       <footer className="mt-auto flex flex-wrap gap-3 border-t border-[#27324a] px-4 py-3.5 text-[11px] text-[#8a97ad] lg:gap-[18px] lg:px-8 lg:py-[18px] lg:text-xs">
         <span>Chronicle for WoW Forever</span>
         {FOOTER_LINKS.map((link) => (
