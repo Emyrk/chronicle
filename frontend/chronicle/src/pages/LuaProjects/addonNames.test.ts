@@ -18,3 +18,13 @@ describe("addon names", () => {
     expect(addonPath({ id: "00000000-0000-4000-8000-000000000001", slug: "interrupt-tracker" })).toBe("/addons/00000000-0000-4000-8000-000000000001")
   })
 })
+
+describe("release tags", () => {
+  it("suggests the next tag after the newest release", async () => {
+    const { nextReleaseTag } = await import("./api")
+    expect(nextReleaseTag([])).toBe("v1")
+    expect(nextReleaseTag([{ tag: "v1.2" }, { tag: "v1.1" }])).toBe("v1.3")
+    expect(nextReleaseTag([{ tag: "7" }])).toBe("8")
+    expect(nextReleaseTag([{ tag: "beta" }])).toBe("beta-2")
+  })
+})

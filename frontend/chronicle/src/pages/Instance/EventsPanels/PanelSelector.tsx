@@ -13,7 +13,7 @@ import { PANELS, type EventsPanelType } from "./EventsPanel";
 
 import { listSelectableCustomPanels, resolveCustomPanel, useCustomPanelRegistry } from "./custom/pluginRegistry";
 import { isCustomPanelRef } from "./custom/pluginTypes";
-import { isLuaPanelRef, parseLuaPanelRef, useLuaPanelCatalog, type LuaPanelRef } from "./LuaPanel/luaPanelRegistry";
+import { isLuaPanelRef, luaPanelRef, parseLuaPanelRef, useLuaPanelCatalog } from "./LuaPanel/luaPanelRegistry";
 import { AddonIcon } from "../../LuaProjects/AddonIcon";
 
 interface PanelOption {
@@ -296,8 +296,9 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
   const customPanels = useMemo(() => listSelectableCustomPanels(customRegistry), [customRegistry]);
   const luaCatalog = useLuaPanelCatalog(isOpen || isLuaPanelRef(value));
   const luaPanels = useMemo(() => (luaCatalog.data ?? []).flatMap((project) =>
-    (["stable", "unstable"] as const).filter((channel) => project[channel]).map((channel) => ({
-      ref: `lua:${project.id}:${channel}` as LuaPanelRef, label: `${project.name} (${channel})`, icon: project[channel]?.icon,
+    (["release", "main"] as const).filter((channel) => project[channel]).map((channel) => ({
+      ref: luaPanelRef(project.id, channel), icon: project[channel]?.icon,
+      label: channel === "release" ? `${project.name} ${project.release?.tag ?? ""}`.trim() : `${project.name} (main)`,
     }))), [luaCatalog.data]);
   const selectedLua = parseLuaPanelRef(value);
   const selectedCustom = isCustomPanelRef(value) ? resolveCustomPanel(value, customRegistry) : null;

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
 import { strToU8, zipSync } from "fflate"
-import { defaultRef, formatBytes, manifestSummary, packageDownloadURL, readPackageFiles } from "./packageFiles"
+import { browsableRefs, defaultRef, formatBytes, manifestSummary, packageDownloadURL, packageSha, readPackageFiles } from "./packageFiles"
 
-const release = (sha256: string) => ({ sha256, published_at: "2026-10-01T00:00:00Z", published_by: "me" })
+const release = (tag: string, available = true) => ({ tag, available, ...(available && { sha256: tag + "-sha" }), published_at: "2026-10-01T00:00:00Z" })
 
 describe("package files", () => {
   it("lists files with README.md first", async () => {
@@ -17,16 +17,18 @@ describe("package files", () => {
     expect(manifestSummary([])).toBeNull()
   })
 
-  it("defaults to stable, then unstable, then the draft", () => {
-    expect(defaultRef({ stable: release("s"), unstable: release("u"), draft_sha256: "d" })).toBe("stable")
-    expect(defaultRef({ stable: null, unstable: release("u"), draft_sha256: "d" })).toBe("unstable")
-    expect(defaultRef({ stable: null, unstable: null, draft_sha256: "d" })).toBe("draft")
-    expect(defaultRef({ stable: null, unstable: null, draft_sha256: null })).toBeNull()
+  it("defaults to the latest release with files, then main", () => {
+    const main = { sha256: "m", updated_at: "2026-10-27T00:00:00Z" }
+    expect(defaultRef({ releases: [release("v2", false), release("v1")], main })).toBe("v1")
+    expect(defaultRef({ releases: [release("v1", false)], main })).toBe("main")
+    expect(defaultRef({ releases: [], main: undefined })).toBeNull()
+    expect(browsableRefs({ releases: [release("v3"), release("v2", false), release("v1")], main })).toEqual(["main", "v3", "v1"])
+    expect(packageSha({ releases: [release("v2", false)], main }, "v2")).toBeNull()
+    expect(packageSha({ releases: [], main }, "main")).toBe("m")
   })
 
-  it("downloads drafts from the private endpoint", () => {
-    expect(packageDownloadURL({ id: "p 1" }, "draft", "abc")).toBe("/api/v1/me/lua-projects/p%201/draft/abc/package")
-    expect(packageDownloadURL({ id: "p" }, "stable", "abc")).toBe("/api/v1/lua-projects/p/artifacts/abc/package")
+  it("serves every build from the public endpoint", () => {
+    expect(packageDownloadURL({ id: "p 1" }, "abc")).toBe("/api/v1/lua-projects/p%201/artifacts/abc/package")
   })
 
   it("formats sizes", () => {

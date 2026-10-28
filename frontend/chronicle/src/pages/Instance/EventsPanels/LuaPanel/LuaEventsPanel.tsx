@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useInstanceEventsContext } from "@/hooks/instanceEvents"
 import { loadPanelPackage } from "../../../Guides/package/panelLoader"
-import { getPublicProject, publicPackageURL } from "../../../LuaProjects/api"
+import { channelSha, getPublicProject, publicPackageURL } from "../../../LuaProjects/api"
 import type { EventsPanelProps } from "../EventsPanel"
 import { PanelSelector } from "../PanelSelector"
 import { usePanelTiming, usePanelTimingContext } from "../PanelTimingContext"
@@ -26,7 +26,7 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
       return getPublicProject(ref.id, ref.channel, signal)
     },
   })
-  const hash = ref?.channel === "unstable" ? channelQuery.data?.unstable?.sha256 : channelQuery.data?.stable?.sha256
+  const hash = channelQuery.data && ref ? channelSha(channelQuery.data, ref.channel) : undefined
   const packageQuery = useQuery({
     queryKey: ["lua-panel-package", ref?.id, hash], enabled: !!ref && !!hash,
     staleTime: Infinity, // Hash-addressed bytes never change while published.

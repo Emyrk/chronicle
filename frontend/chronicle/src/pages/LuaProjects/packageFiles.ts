@@ -1,24 +1,32 @@
 import { unzip, type Unzipped } from "fflate"
 import { inspectArchive, normalizeExtractedFiles } from "../Guides/package/archive"
-import { publicPackageURL, type LuaProject } from "./api"
+import { latestRelease, publicPackageURL, type LuaProject } from "./api"
 
-/** Which build of an addon the page is showing. */
-export type PackageRef = "stable" | "unstable" | "draft"
+/** Which build of an addon the page is showing: "main" or a release tag. */
+export type PackageRef = string
 export type PackageFile = { path: string; bytes: Uint8Array }
 
-export const PACKAGE_REFS: readonly PackageRef[] = ["stable", "unstable", "draft"]
+export const MAIN_REF = "main"
 
-export function packageSha(project: Pick<LuaProject, "stable" | "unstable" | "draft_sha256">, ref: PackageRef): string | null {
-  return ref === "draft" ? project.draft_sha256 : project[ref]?.sha256 ?? null
+/** The build's hash, or null when it does not exist or its files are gone. */
+export function packageSha(project: Pick<LuaProject, "releases" | "main">, ref: PackageRef): string | null {
+  if (ref === MAIN_REF) return project.main?.sha256 ?? null
+  return project.releases.find(release => release.tag === ref && release.available)?.sha256 ?? null
 }
 
-/** The released build people install, else the newest build that exists. */
-export function defaultRef(project: Pick<LuaProject, "stable" | "unstable" | "draft_sha256">): PackageRef | null {
-  return PACKAGE_REFS.find(ref => packageSha(project, ref)) ?? null
+/** The latest release people run, else main. */
+export function defaultRef(project: Pick<LuaProject, "releases" | "main">): PackageRef | null {
+  return latestRelease(project)?.tag ?? (project.main ? MAIN_REF : null)
 }
 
-export function packageDownloadURL(project: Pick<LuaProject, "id">, ref: PackageRef, sha: string): string {
-  return ref === "draft" ? `/api/v1/me/lua-projects/${encodeURIComponent(project.id)}/draft/${encodeURIComponent(sha)}/package` : publicPackageURL(project.id, sha)
+/** Every build that can be browsed: main, then releases that still have files. */
+export function browsableRefs(project: Pick<LuaProject, "releases" | "main">): PackageRef[] {
+  return [...(project.main ? [MAIN_REF] : []), ...project.releases.filter(release => release.available).map(release => release.tag)]
+}
+
+/** Main and releases are both served by hash to anyone who can view the addon. */
+export function packageDownloadURL(project: Pick<LuaProject, "id">, sha: string): string {
+  return publicPackageURL(project.id, sha)
 }
 
 /** Lists a package ZIP's files for display. Nothing in it is executed. README.md sorts first, like a repository. */

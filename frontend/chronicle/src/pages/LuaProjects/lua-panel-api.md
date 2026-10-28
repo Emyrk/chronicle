@@ -251,11 +251,13 @@ The footer under every addon panel shows events processed, events per second and
 
 ## Publishing
 
-1. **Save draft** keeps a private copy. Nothing runs for anyone else.
-2. **Publish unstable** makes that draft available to test in instance layouts. It appears under **Addons** in the panel selector only for you, but anyone with the link can load it.
-3. **Promote** the unstable release to stable from the Releases box on the addon's page, after testing that exact release.
+An addon has one **main** and a few **releases**.
 
-The Addon Workshop header shows whether your working copy is unsaved, saved, or published. Ctrl/⌘+S saves from anywhere on the page.
+1. **Save to main** stores your changes. Anyone who can view the addon can choose main in the panel selector to try unreleased changes; everyone else keeps the latest release.
+2. **Tag release** snapshots main under a tag you choose, such as `v1.2` (letters, digits, `.`, `-` and `_`, up to 32 characters; not `main`). Panels run the newest release, so tagging is how changes reach everyone.
+3. Only the newest three releases keep their files. Older releases stay listed on the addon's page as "no longer available", and panels never fall back to them.
+
+The Addon Workshop header shows whether your working copy is unsaved, saved to main, or released. Ctrl/⌘+S saves from anywhere on the page.
 
 ## FAQ
 

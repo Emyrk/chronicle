@@ -5,7 +5,7 @@
 
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { isLuaPanelRef, type LuaPanelRef } from "@/pages/Instance/EventsPanels/LuaPanel/luaPanelRegistry";
+import { isLuaPanelRef, luaPanelRef, parseLuaPanelRef, type LuaPanelRef } from "@/pages/Instance/EventsPanels/LuaPanel/luaPanelRegistry";
 import { isCustomPanelRef, parseCustomPanelRef, type CustomPanelRef } from "@/pages/Instance/EventsPanels/custom/pluginTypes";
 import type { EventsPanelType } from "@/pages/Instance/EventsPanels/EventsPanel";
 
@@ -767,7 +767,9 @@ export function encodeLuaPanelToken(ref: LuaPanelRef): string {
 export function decodeLuaPanelToken(token: string): LuaPanelRef | null {
   if (!token.startsWith("y")) return null;
   const value = hexToString(token.slice(1));
-  return value && isLuaPanelRef(value) ? value : null;
+  // Older links say stable or unstable; normalize them to release and main.
+  const parsed = value ? parseLuaPanelRef(value) : null;
+  return parsed ? luaPanelRef(parsed.id, parsed.channel) : null;
 }
 
 /** Panel option list (aligned with panel list order) */

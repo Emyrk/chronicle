@@ -836,6 +836,15 @@ export interface CreateLiveSessionResponse {
 }
 
 // From chroniclesdk/lua_project.go
+/**
+ * CreateLuaProjectReleaseRequest tags the current main as a release.
+ */
+export interface CreateLuaProjectReleaseRequest {
+    readonly tag: string;
+    readonly expected_revision: number;
+}
+
+// From chroniclesdk/lua_project.go
 export interface CreateLuaProjectRequest {
     readonly kind: string;
     readonly name: string;
@@ -2863,23 +2872,13 @@ export interface LuaProject {
      * Author is the owner's addon author name, the first part of /addons/<author>/<slug>. Absent until claimed.
      */
     readonly author?: string;
-    readonly draft_sha256?: string;
-    readonly draft_icon?: string;
-    readonly unstable?: LuaProjectChannel;
-    readonly stable?: LuaProjectChannel;
+    readonly main?: LuaProjectMain;
+    /**
+     * Releases are newest first. Panels run the newest one that is still available.
+     */
+    readonly releases: readonly LuaProjectRelease[];
     readonly created_at: string;
     readonly updated_at: string;
-}
-
-// From chroniclesdk/lua_project.go
-export interface LuaProjectChannel {
-    readonly sha256: string;
-    readonly published_at: string;
-    readonly published_by: string;
-    /**
-     * Icon is the release's project.json "icon", absent when it named none.
-     */
-    readonly icon?: string;
 }
 
 // From chroniclesdk/lua_project.go
@@ -2894,7 +2893,7 @@ export interface LuaProjectContributor {
     readonly author?: string;
     readonly username: string;
     /**
-     * Permissions are any of "edit", "publish_unstable" and "publish".
+     * Permissions are any of "edit" and "release".
      */
     readonly permissions: readonly string[];
     readonly added_at: string;
@@ -2902,7 +2901,17 @@ export interface LuaProjectContributor {
 
 // From chroniclesdk/lua_project.go
 /**
- * LuaProjectPage is an addon as the viewing user may see it: the draft and unstable release only with edit.
+ * LuaProjectMain is the addon's latest saved source. Anyone who can view the addon can run it.
+ */
+export interface LuaProjectMain {
+    readonly sha256: string;
+    readonly icon?: string;
+    readonly updated_at: string;
+}
+
+// From chroniclesdk/lua_project.go
+/**
+ * LuaProjectPage is an addon with what the viewing user may do with it.
  */
 export interface LuaProjectPage {
     readonly project: LuaProject;
@@ -2917,15 +2926,22 @@ export interface LuaProjectPermissions {
     readonly view: boolean;
     readonly use: boolean;
     readonly edit: boolean;
-    readonly publish_unstable: boolean;
-    readonly publish: boolean;
+    readonly release: boolean;
     readonly manage: boolean;
 }
 
 // From chroniclesdk/lua_project.go
-export interface LuaProjectPublishRequest {
-    readonly expected_revision: number;
-    readonly tested_sha256?: string;
+/**
+ * LuaProjectRelease is a tagged snapshot of main. Only the newest few keep their files; older ones stay
+ * listed with no SHA256 and Available false.
+ */
+export interface LuaProjectRelease {
+    readonly tag: string;
+    readonly sha256?: string;
+    readonly available: boolean;
+    readonly icon?: string;
+    readonly published_at: string;
+    readonly published_by?: string;
 }
 
 // From chroniclesdk/unlisted_logs.go

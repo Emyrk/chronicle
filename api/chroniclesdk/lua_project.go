@@ -11,17 +11,28 @@ type CreateLuaProjectRequest struct {
 	Slug string `json:"slug"`
 }
 
-type LuaProjectPublishRequest struct {
+// CreateLuaProjectReleaseRequest tags the current main as a release.
+type CreateLuaProjectReleaseRequest struct {
+	Tag              string `json:"tag"`
 	ExpectedRevision int64  `json:"expected_revision"`
-	TestedSHA256     string `json:"tested_sha256,omitempty"`
 }
 
-type LuaProjectChannel struct {
-	SHA256      string    `json:"sha256"`
-	PublishedAt time.Time `json:"published_at"`
-	PublishedBy uuid.UUID `json:"published_by"`
-	// Icon is the release's project.json "icon", absent when it named none.
-	Icon string `json:"icon,omitempty"`
+// LuaProjectMain is the addon's latest saved source. Anyone who can view the addon can run it.
+type LuaProjectMain struct {
+	SHA256    string    `json:"sha256"`
+	Icon      string    `json:"icon,omitempty"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// LuaProjectRelease is a tagged snapshot of main. Only the newest few keep their files; older ones stay
+// listed with no SHA256 and Available false.
+type LuaProjectRelease struct {
+	Tag         string     `json:"tag"`
+	SHA256      string     `json:"sha256,omitempty"`
+	Available   bool       `json:"available"`
+	Icon        string     `json:"icon,omitempty"`
+	PublishedAt time.Time  `json:"published_at"`
+	PublishedBy *uuid.UUID `json:"published_by,omitempty"`
 }
 
 type LuaProject struct {
@@ -32,26 +43,24 @@ type LuaProject struct {
 	Slug     string    `json:"slug"`
 	Revision int64     `json:"revision"`
 	// Author is the owner's addon author name, the first part of /addons/<author>/<slug>. Absent until claimed.
-	Author      string             `json:"author,omitempty"`
-	DraftSHA256 string             `json:"draft_sha256,omitempty"`
-	DraftIcon   string             `json:"draft_icon,omitempty"`
-	Unstable    *LuaProjectChannel `json:"unstable,omitempty"`
-	Stable      *LuaProjectChannel `json:"stable,omitempty"`
-	CreatedAt   time.Time          `json:"created_at"`
-	UpdatedAt   time.Time          `json:"updated_at"`
+	Author string          `json:"author,omitempty"`
+	Main   *LuaProjectMain `json:"main,omitempty"`
+	// Releases are newest first. Panels run the newest one that is still available.
+	Releases  []LuaProjectRelease `json:"releases"`
+	CreatedAt time.Time           `json:"created_at"`
+	UpdatedAt time.Time           `json:"updated_at"`
 }
 
 // LuaProjectPermissions are what the viewing user may do with an addon.
 type LuaProjectPermissions struct {
-	View            bool `json:"view"`
-	Use             bool `json:"use"`
-	Edit            bool `json:"edit"`
-	PublishUnstable bool `json:"publish_unstable"`
-	Publish         bool `json:"publish"`
-	Manage          bool `json:"manage"`
+	View    bool `json:"view"`
+	Use     bool `json:"use"`
+	Edit    bool `json:"edit"`
+	Release bool `json:"release"`
+	Manage  bool `json:"manage"`
 }
 
-// LuaProjectPage is an addon as the viewing user may see it: the draft and unstable release only with edit.
+// LuaProjectPage is an addon with what the viewing user may do with it.
 type LuaProjectPage struct {
 	Project     LuaProject            `json:"project"`
 	Permissions LuaProjectPermissions `json:"permissions"`
@@ -71,7 +80,7 @@ type LuaProjectContributor struct {
 	// Author is their addon author name; Username is their display name.
 	Author   string `json:"author,omitempty"`
 	Username string `json:"username"`
-	// Permissions are any of "edit", "publish_unstable" and "publish".
+	// Permissions are any of "edit" and "release".
 	Permissions []string  `json:"permissions"`
 	AddedAt     time.Time `json:"added_at"`
 }

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -118,19 +119,62 @@ var luaProjectSlug = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 // reservedLuaProjectSlugs would collide with /addons/<author>/<slug> sub-routes.
 var reservedLuaProjectSlugs = map[string]bool{"edit": true, "new": true, "api": true}
 
-func luaProjectResponse(p database.LuaProject, private bool) chroniclesdk.LuaProject {
-	result := chroniclesdk.LuaProject{ID: p.ID, OwnerID: p.OwnerID, Kind: p.Kind, Name: p.Name, Slug: p.Slug, Revision: p.Revision, CreatedAt: p.CreatedAt.Time, UpdatedAt: p.UpdatedAt.Time}
-	if private && p.DraftHash.Valid {
-		result.DraftSHA256 = p.DraftHash.String
-		result.DraftIcon = p.DraftIcon.String
+// luaReleasesWithFiles is how many of an addon's newest releases keep their packages.
+const luaReleasesWithFiles = 3
+
+// luaReleaseTag matches the lua_project_releases tag check.
+var luaReleaseTag = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$`)
+
+func luaProjectResponse(p database.LuaProject, releases []database.LuaProjectRelease, author string) chroniclesdk.LuaProject {
+	result := chroniclesdk.LuaProject{ID: p.ID, OwnerID: p.OwnerID, Kind: p.Kind, Name: p.Name, Slug: p.Slug, Revision: p.Revision,
+		Author: author, Releases: make([]chroniclesdk.LuaProjectRelease, 0, len(releases)), CreatedAt: p.CreatedAt.Time, UpdatedAt: p.UpdatedAt.Time}
+	if p.DraftHash.Valid {
+		result.Main = &chroniclesdk.LuaProjectMain{SHA256: p.DraftHash.String, Icon: p.DraftIcon.String, UpdatedAt: p.UpdatedAt.Time}
 	}
-	if p.UnstableHash.Valid {
-		result.Unstable = &chroniclesdk.LuaProjectChannel{SHA256: p.UnstableHash.String, PublishedAt: p.UnstablePublishedAt.Time, PublishedBy: p.UnstablePublishedBy.UUID, Icon: p.UnstableIcon.String}
-	}
-	if p.StableHash.Valid {
-		result.Stable = &chroniclesdk.LuaProjectChannel{SHA256: p.StableHash.String, PublishedAt: p.StablePublishedAt.Time, PublishedBy: p.StablePublishedBy.UUID, Icon: p.StableIcon.String}
+	for _, release := range releases {
+		item := chroniclesdk.LuaProjectRelease{Tag: release.Tag, SHA256: release.Hash.String, Available: release.Hash.Valid, Icon: release.Icon.String, PublishedAt: release.PublishedAt.Time}
+		if release.PublishedBy.Valid {
+			item.PublishedBy = &release.PublishedBy.UUID
+		}
+		result.Releases = append(result.Releases, item)
 	}
 	return result
+}
+
+// luaProjectResponses loads releases and author names for several projects at once.
+func (a *API) luaProjectResponses(ctx context.Context, projects ...database.LuaProject) ([]chroniclesdk.LuaProject, error) {
+	ids := make([]uuid.UUID, 0, len(projects))
+	for _, p := range projects {
+		ids = append(ids, p.ID)
+	}
+	releases := map[uuid.UUID][]database.LuaProjectRelease{}
+	if len(ids) > 0 {
+		rows, err := a.Opts.Zed.ListLuaProjectReleasesForProjects(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			releases[row.ProjectID] = append(releases[row.ProjectID], row)
+		}
+	}
+	authors, err := a.luaProjectAuthors(ctx, projects...)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]chroniclesdk.LuaProject, 0, len(projects))
+	for _, p := range projects {
+		out = append(out, luaProjectResponse(p, releases[p.ID], authors[p.OwnerID]))
+	}
+	return out, nil
+}
+
+func (a *API) writeLuaProject(w http.ResponseWriter, r *http.Request, status int, p database.LuaProject) {
+	out, err := a.luaProjectResponses(r.Context(), p)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(r.Context(), w, status, out[0])
 }
 
 func luaProjectID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
@@ -157,15 +201,14 @@ func luaProjectHash(w http.ResponseWriter, r *http.Request) (string, bool) {
 type luaPermission string
 
 const (
-	luaView            luaPermission = "view"
-	luaUse             luaPermission = "use"
-	luaEdit            luaPermission = "edit"
-	luaPublishUnstable luaPermission = "publish_unstable"
-	luaPublish         luaPermission = "publish"
-	luaManage          luaPermission = "manage"
+	luaView    luaPermission = "view"
+	luaUse     luaPermission = "use"
+	luaEdit    luaPermission = "edit"
+	luaRelease luaPermission = "release"
+	luaManage  luaPermission = "manage"
 )
 
-var luaPermissions = []luaPermission{luaView, luaUse, luaEdit, luaPublishUnstable, luaPublish, luaManage}
+var luaPermissions = []luaPermission{luaView, luaUse, luaEdit, luaRelease, luaManage}
 
 func luaProjectCheck(project *policy.ObjLua_project, permission luaPermission, actor *policy.ObjUser) rel.Interface {
 	switch permission {
@@ -173,10 +216,8 @@ func luaProjectCheck(project *policy.ObjLua_project, permission luaPermission, a
 		return project.CanUse_User(actor)
 	case luaEdit:
 		return project.CanEdit_User(actor)
-	case luaPublishUnstable:
-		return project.CanPublish_unstable_User(actor)
-	case luaPublish:
-		return project.CanPublish_User(actor)
+	case luaRelease:
+		return project.CanRelease_User(actor)
 	case luaManage:
 		return project.CanManage_User(actor)
 	default:
@@ -242,7 +283,7 @@ func (a *API) luaProjectPermissions(r *http.Request, id uuid.UUID) (chroniclesdk
 		return chroniclesdk.LuaProjectPermissions{}, err
 	}
 	return chroniclesdk.LuaProjectPermissions{
-		View: results[0], Use: results[1], Edit: results[2], PublishUnstable: results[3], Publish: results[4], Manage: results[5],
+		View: results[0], Use: results[1], Edit: results[2], Release: results[3], Manage: results[4],
 	}, nil
 }
 
@@ -285,9 +326,8 @@ func (a *API) CreateLuaProject(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	created := luaProjectResponse(p, true)
-	created.Author = author.Name
-	httpapi.Write(r.Context(), w, http.StatusCreated, created)
+	_ = author // Checked above; the response loads it with the project.
+	a.writeLuaProject(w, r, http.StatusCreated, p)
 }
 
 func (a *API) ListMyLuaProjects(w http.ResponseWriter, r *http.Request) {
@@ -296,23 +336,17 @@ func (a *API) ListMyLuaProjects(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	authors, err := a.luaProjectAuthors(r.Context(), projects...)
+	out, err := a.luaProjectResponses(r.Context(), projects...)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
-	}
-	out := make([]chroniclesdk.LuaProject, 0, len(projects))
-	for _, p := range projects {
-		item := luaProjectResponse(p, true)
-		item.Author = authors[p.OwnerID]
-		out = append(out, item)
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, out)
 }
 
 func (a *API) GetMyLuaProject(w http.ResponseWriter, r *http.Request) {
 	id, ok := luaProjectID(w, r)
-	// The private view includes the draft, so it needs edit; the public page uses GetLuaProjectPage.
+	// The Workshop's view; the addon page uses GetLuaProjectPage.
 	if !ok || !a.canLuaProject(w, r, id, luaEdit) {
 		return
 	}
@@ -325,7 +359,7 @@ func (a *API) GetMyLuaProject(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	httpapi.Write(r.Context(), w, http.StatusOK, luaProjectResponse(p, true))
+	a.writeLuaProject(w, r, http.StatusOK, p)
 }
 
 func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
@@ -416,57 +450,88 @@ func (a *API) PutLuaProjectDraft(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		a.drainLuaArtifactGarbageAfterWrite()
 	}
-	luaProjectMutationResult(w, r, project, err)
+	a.luaProjectMutationResult(w, r, project, err)
 }
 
-func (a *API) PublishLuaProject(w http.ResponseWriter, r *http.Request) {
+// CreateLuaProjectRelease tags the current main. Only the newest few releases keep their files.
+func (a *API) CreateLuaProjectRelease(w http.ResponseWriter, r *http.Request) {
 	id, ok := luaProjectID(w, r)
-	if !ok {
-		return
-	}
-	channel := chi.URLParam(r, "channel")
-	permission := luaPublishUnstable
-	if channel == "stable" {
-		permission = luaPublish
-	}
-	if !a.canLuaProject(w, r, id, permission) {
+	if !ok || !a.canLuaProject(w, r, id, luaRelease) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
-	var req chroniclesdk.LuaProjectPublishRequest
+	var req chroniclesdk.CreateLuaProjectReleaseRequest
 	if !httpapi.Read(r.Context(), w, r, &req) {
 		return
 	}
-	if req.ExpectedRevision < 1 || (channel == "stable" && (len(req.TestedSHA256) != 64 || !isLowerHex(req.TestedSHA256))) {
-		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid revision or tested unstable SHA-256."})
+	// "main" names the unreleased build in addon links, so it cannot be a tag.
+	if req.ExpectedRevision < 1 || !luaReleaseTag.MatchString(req.Tag) || strings.EqualFold(req.Tag, "main") {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Tags are up to 32 letters, digits, dots, dashes and underscores, starting with a letter or digit, and cannot be \"main\"."})
 		return
 	}
 	actor := chronauth.MustAuthenticatedClaims(r.Context()).Subject
-	var project database.LuaProject
 	err := a.Opts.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
-		var err error
-		if channel == "stable" {
-			project, err = tx.PromoteLuaProjectStable(r.Context(), database.PromoteLuaProjectStableParams{ID: id, ActorID: uuid.NullUUID{UUID: actor, Valid: true}, ExpectedRevision: req.ExpectedRevision, TestedSha256: pgtype.Text{String: req.TestedSHA256, Valid: true}})
-		} else {
-			project, err = tx.PublishLuaProjectUnstable(r.Context(), database.PublishLuaProjectUnstableParams{ID: id, ActorID: uuid.NullUUID{UUID: actor, Valid: true}, ExpectedRevision: req.ExpectedRevision})
+		if _, err := tx.CreateLuaProjectRelease(r.Context(), database.CreateLuaProjectReleaseParams{ID: id, Tag: req.Tag, ActorID: uuid.NullUUID{UUID: actor, Valid: true}, ExpectedRevision: req.ExpectedRevision}); err != nil {
+			return err
 		}
-		if err != nil {
+		if err := tx.TrimLuaProjectReleaseFiles(r.Context(), database.TrimLuaProjectReleaseFilesParams{ProjectID: id, Keep: luaReleasesWithFiles}); err != nil {
 			return err
 		}
 		return tx.PruneLuaProjectArtifacts(r.Context(), id)
 	}, nil)
-	if err == nil {
-		a.drainLuaArtifactGarbageAfterWrite()
+	var pg *pgconn.PgError
+	if errors.As(err, &pg) && pg.Code == "23505" {
+		httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "That tag already exists."})
+		return
 	}
-	luaProjectMutationResult(w, r, project, err)
+	if errors.Is(err, pgx.ErrNoRows) {
+		httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "Nothing saved to release yet, or the addon changed. Reload and try again."})
+		return
+	}
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	a.drainLuaArtifactGarbageAfterWrite()
+	a.writeLuaProjectByID(w, r, id)
 }
 
-func isLowerHex(s string) bool {
-	_, err := hex.DecodeString(s)
-	return err == nil && strings.ToLower(s) == s
+// DeleteLuaProjectRelease removes a release and, if it still had files, its package.
+func (a *API) DeleteLuaProjectRelease(w http.ResponseWriter, r *http.Request) {
+	id, ok := luaProjectID(w, r)
+	if !ok || !a.canLuaProject(w, r, id, luaRelease) {
+		return
+	}
+	var removed int64
+	err := a.Opts.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
+		var err error
+		if removed, err = tx.DeleteLuaProjectRelease(r.Context(), database.DeleteLuaProjectReleaseParams{ProjectID: id, Tag: chi.URLParam(r, "tag")}); err != nil {
+			return err
+		}
+		return tx.PruneLuaProjectArtifacts(r.Context(), id)
+	}, nil)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if removed == 0 {
+		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Release not found."})
+		return
+	}
+	a.drainLuaArtifactGarbageAfterWrite()
+	a.writeLuaProjectByID(w, r, id)
 }
 
-func luaProjectMutationResult(w http.ResponseWriter, r *http.Request, p database.LuaProject, err error) {
+func (a *API) writeLuaProjectByID(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+	p, err := a.Opts.Zed.GetLuaProject(r.Context(), id)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	a.writeLuaProject(w, r, http.StatusOK, p)
+}
+
+func (a *API) luaProjectMutationResult(w http.ResponseWriter, r *http.Request, p database.LuaProject, err error) {
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpapi.Write(r.Context(), w, http.StatusConflict, chroniclesdk.Response{Message: "Project missing, revision changed, or publication prerequisites unmet."})
 		return
@@ -475,7 +540,7 @@ func luaProjectMutationResult(w http.ResponseWriter, r *http.Request, p database
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	httpapi.Write(r.Context(), w, http.StatusOK, luaProjectResponse(p, true))
+	a.writeLuaProject(w, r, http.StatusOK, p)
 }
 
 func (a *API) ListPublicLuaProjects(w http.ResponseWriter, r *http.Request) {
@@ -484,7 +549,7 @@ func (a *API) ListPublicLuaProjects(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	out := make([]chroniclesdk.LuaProject, 0, len(projects))
+	allowedProjects := make([]database.LuaProject, 0, len(projects))
 	actor, ok := authz.ActorFromContext(r.Context())
 	if !ok {
 		actor = policy.New().User(uuid.Nil)
@@ -498,58 +563,59 @@ func (a *API) ListPublicLuaProjects(w http.ResponseWriter, r *http.Request) {
 		if !allowed {
 			continue
 		}
-		item := luaProjectResponse(p, false)
-		item.Unstable = nil // Unstable releases are discoverable only through their project link.
-		out = append(out, item)
+		allowedProjects = append(allowedProjects, p)
+	}
+	out, err := a.luaProjectResponses(r.Context(), allowedProjects...)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, out)
 }
 
-func (a *API) publicLuaProject(w http.ResponseWriter, r *http.Request) (database.LuaProject, string, bool) {
+// GetPublicLuaProject is what panels poll to find the build to run: the latest release, or main.
+// ?channel=stable and ?channel=unstable are kept for saved layouts and mean release and main.
+func (a *API) GetPublicLuaProject(w http.ResponseWriter, r *http.Request) {
 	id, ok := luaProjectID(w, r)
 	if !ok {
-		return database.LuaProject{}, "", false
+		return
 	}
 	channel := r.URL.Query().Get("channel")
-	if channel == "" {
-		channel = "stable"
+	switch channel {
+	case "", "stable":
+		channel = "release"
+	case "unstable":
+		channel = "main"
 	}
-	if channel != "stable" && channel != "unstable" {
+	if channel != "release" && channel != "main" {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid channel."})
-		return database.LuaProject{}, "", false
+		return
 	}
 	p, err := a.Opts.Zed.GetPublicLuaProject(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Project not found."})
-		return database.LuaProject{}, "", false
+		return
 	}
 	if err != nil {
 		httpapi.InternalServerError(w, err)
-		return database.LuaProject{}, "", false
-	}
-	if channel == "stable" && !p.StableHash.Valid || channel == "unstable" && !p.UnstableHash.Valid {
-		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Channel not published."})
-		return database.LuaProject{}, "", false
+		return
 	}
 	// Panels resolve a channel to run it.
 	if !a.canLuaProject(w, r, id, luaUse) {
-		return database.LuaProject{}, "", false
-	}
-	return p, channel, true
-}
-
-func (a *API) GetPublicLuaProject(w http.ResponseWriter, r *http.Request) {
-	p, channel, ok := a.publicLuaProject(w, r)
-	if !ok {
 		return
 	}
-	result := luaProjectResponse(p, false)
-	if channel == "stable" {
-		result.Unstable = nil
+	out, err := a.luaProjectResponses(r.Context(), p)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
 	}
-	// Channel pointers are mutable; resolve the current hash on every poll.
+	if channel == "main" && out[0].Main == nil || channel == "release" && !slices.ContainsFunc(out[0].Releases, func(release chroniclesdk.LuaProjectRelease) bool { return release.Available }) {
+		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Nothing published on this channel."})
+		return
+	}
+	// The latest release and main move; resolve the current hash on every poll.
 	w.Header().Set("Cache-Control", "no-store")
-	httpapi.Write(r.Context(), w, http.StatusOK, result)
+	httpapi.Write(r.Context(), w, http.StatusOK, out[0])
 }
 
 func (a *API) DownloadMyLuaProjectDraft(w http.ResponseWriter, r *http.Request) {

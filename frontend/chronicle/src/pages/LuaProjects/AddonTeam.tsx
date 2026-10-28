@@ -6,9 +6,8 @@ import { getContributorUsage, listContributors, putContributor, removeContributo
 import { card, errorMessage, smallButton } from "./addonUi"
 
 const PERMISSIONS: { id: LuaContributorPermission; label: string; title: string }[] = [
-  { id: "edit", label: "Edit", title: "Open the Workshop and save drafts" },
-  { id: "publish_unstable", label: "Publish unstable", title: "Publish a draft to the unstable channel" },
-  { id: "publish", label: "Promote", title: "Promote the unstable release to stable" },
+  { id: "edit", label: "Edit", title: "Open the Workshop and save to main" },
+  { id: "release", label: "Release", title: "Tag main as a release, and delete releases" },
 ]
 
 const contributorName = (contributor: LuaProjectContributor) => contributor.author || contributor.username

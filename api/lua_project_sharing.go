@@ -95,8 +95,7 @@ func (a *API) ClaimAddonAuthor(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusCreated, chroniclesdk.AddonAuthor{Name: author.Name})
 }
 
-// writeLuaProjectPage answers for anyone who may view the addon. The draft and the unstable release are
-// left out unless the viewer may edit.
+// writeLuaProjectPage answers for anyone who may view the addon, including its main: viewers may run it.
 func (a *API) writeLuaProjectPage(w http.ResponseWriter, r *http.Request, p database.LuaProject) {
 	permissions, err := a.luaProjectPermissions(r, p.ID)
 	if err != nil {
@@ -108,18 +107,13 @@ func (a *API) writeLuaProjectPage(w http.ResponseWriter, r *http.Request, p data
 		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Addon not found."})
 		return
 	}
-	authors, err := a.luaProjectAuthors(r.Context(), p)
+	projects, err := a.luaProjectResponses(r.Context(), p)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	project := luaProjectResponse(p, permissions.Edit)
-	project.Author = authors[p.OwnerID]
-	if !permissions.Edit && !permissions.PublishUnstable {
-		project.Unstable = nil
-	}
 	w.Header().Set("Cache-Control", "private, no-store")
-	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.LuaProjectPage{Project: project, Permissions: permissions})
+	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.LuaProjectPage{Project: projects[0], Permissions: permissions})
 }
 
 func (a *API) GetLuaProjectPage(w http.ResponseWriter, r *http.Request) {
@@ -184,7 +178,7 @@ func (a *API) PutLuaProjectContributor(w http.ResponseWriter, r *http.Request) {
 	permissions := make([]string, 0, len(req.Permissions))
 	for _, permission := range req.Permissions {
 		if !slices.Contains(luaContributorPermissions, permission) || slices.Contains(permissions, permission) {
-			httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Permissions must be distinct values from edit, publish_unstable and publish."})
+			httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Permissions must be distinct values from edit and release."})
 			return
 		}
 		permissions = append(permissions, permission)
@@ -236,7 +230,7 @@ func (a *API) DeleteLuaProjectContributor(w http.ResponseWriter, r *http.Request
 	a.ListLuaProjectContributors(w, r)
 }
 
-var luaContributorPermissions = []string{"edit", "publish_unstable", "publish"}
+var luaContributorPermissions = []string{"edit", "release"}
 
 func (a *API) luaContributorTarget(w http.ResponseWriter, r *http.Request, id uuid.UUID) (database.LuaProject, database.AddonAuthor, bool) {
 	project, err := a.Opts.Zed.GetLuaProject(r.Context(), id)

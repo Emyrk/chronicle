@@ -43,7 +43,7 @@ func TestLuaProjectPermissions(t *testing.T) {
 	router.Get("/me/lua-projects/{projectID}/contributors", api.ListLuaProjectContributors)
 	router.Put("/me/lua-projects/{projectID}/contributors/{author}", api.PutLuaProjectContributor)
 	router.Delete("/me/lua-projects/{projectID}/contributors/{author}", api.DeleteLuaProjectContributor)
-	router.Post("/me/lua-projects/{projectID}/{channel:stable|unstable}", api.PublishLuaProject)
+	router.Post("/me/lua-projects/{projectID}/releases", api.CreateLuaProjectRelease)
 	router.Get("/lua-projects/{projectID}/page", api.GetLuaProjectPage)
 	router.Get("/addons/{author}/{slug}", api.GetLuaProjectPageByPath)
 	as := func(user uuid.UUID) context.Context {
@@ -93,7 +93,7 @@ func TestLuaProjectPermissions(t *testing.T) {
 	code, public := page(uuid.Nil, byID)
 	require.Equal(t, http.StatusOK, code)
 	require.Equal(t, chroniclesdk.LuaProjectPermissions{View: true, Use: true}, public.Permissions)
-	require.Empty(t, public.Project.DraftSHA256, "the public view never shows the draft")
+	require.NotNil(t, public.Project.Main, "viewers may run main, so they see it")
 	code, byPath := page(stranger, "/addons/steven/interrupt-tracker")
 	require.Equal(t, http.StatusOK, code)
 	require.Equal(t, project.ID, byPath.Project.ID)
@@ -101,8 +101,7 @@ func TestLuaProjectPermissions(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, code)
 	code, mine := page(owner, byID)
 	require.Equal(t, http.StatusOK, code)
-	require.Equal(t, chroniclesdk.LuaProjectPermissions{View: true, Use: true, Edit: true, PublishUnstable: true, Publish: true, Manage: true}, mine.Permissions)
-	require.NotEmpty(t, mine.Project.DraftSHA256)
+	require.Equal(t, chroniclesdk.LuaProjectPermissions{View: true, Use: true, Edit: true, Release: true, Manage: true}, mine.Permissions)
 	require.Equal(t, http.StatusForbidden, call(stranger, http.MethodGet, "/me/lua-projects/"+project.ID.String(), "").Code)
 
 	// Contributors get exactly the grants the owner picks.
@@ -122,17 +121,24 @@ func TestLuaProjectPermissions(t *testing.T) {
 	require.Equal(t, http.StatusOK, code)
 	require.Equal(t, chroniclesdk.LuaProjectPermissions{View: true, Use: true, Edit: true}, shared.Permissions)
 	require.Equal(t, http.StatusOK, call(editor, http.MethodGet, "/me/lua-projects/"+project.ID.String(), "").Code)
-	require.Equal(t, http.StatusForbidden, call(editor, http.MethodPost, "/me/lua-projects/"+project.ID.String()+"/unstable", `{"expected_revision":2}`).Code)
+	require.Equal(t, http.StatusForbidden, call(editor, http.MethodPost, "/me/lua-projects/"+project.ID.String()+"/releases", `{"tag":"v1","expected_revision":2}`).Code)
 	var listed []chroniclesdk.LuaProject
 	require.NoError(t, json.Unmarshal(call(editor, http.MethodGet, "/me/lua-projects", "").Body.Bytes(), &listed))
 	require.Len(t, listed, 1, "shared addons appear in the contributor's list")
 	require.Equal(t, "steven", listed[0].Author)
 
-	// Adding publish_unstable lets them publish; removing them takes everything away.
-	require.Equal(t, http.StatusOK, call(owner, http.MethodPut, contributors+"/helper", `{"permissions":["publish_unstable","edit"]}`).Code)
-	rec = call(editor, http.MethodPost, "/me/lua-projects/"+project.ID.String()+"/unstable", `{"expected_revision":2}`)
+	// Adding release lets them tag releases; removing them takes everything away.
+	require.Equal(t, http.StatusBadRequest, call(owner, http.MethodPut, contributors+"/helper", `{"permissions":["publish_unstable"]}`).Code, "the old grants are gone")
+	require.Equal(t, http.StatusOK, call(owner, http.MethodPut, contributors+"/helper", `{"permissions":["release","edit"]}`).Code)
+	require.Equal(t, http.StatusBadRequest, call(editor, http.MethodPost, "/me/lua-projects/"+project.ID.String()+"/releases", `{"tag":"bad tag","expected_revision":2}`).Code)
+	rec = call(editor, http.MethodPost, "/me/lua-projects/"+project.ID.String()+"/releases", `{"tag":"v1.0","expected_revision":2}`)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-	require.Equal(t, http.StatusForbidden, call(editor, http.MethodPost, "/me/lua-projects/"+project.ID.String()+"/stable", `{"expected_revision":3,"tested_sha256":"`+strings.Repeat("d", 64)+`"}`).Code)
+	var released chroniclesdk.LuaProject
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &released))
+	require.Len(t, released.Releases, 1)
+	require.Equal(t, "v1.0", released.Releases[0].Tag)
+	require.True(t, released.Releases[0].Available)
+	require.Equal(t, http.StatusConflict, call(editor, http.MethodPost, "/me/lua-projects/"+project.ID.String()+"/releases", `{"tag":"v1.0","expected_revision":3}`).Code, "tags are unique")
 	require.Equal(t, http.StatusOK, call(owner, http.MethodDelete, contributors+"/helper", "").Code)
 	code, removed := page(editor, byID)
 	require.Equal(t, http.StatusOK, code)

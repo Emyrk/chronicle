@@ -2016,24 +2016,16 @@ type LogInstancesGuild struct {
 }
 
 type LuaProject struct {
-	ID                  uuid.UUID          `db:"id" json:"id"`
-	OwnerID             uuid.UUID          `db:"owner_id" json:"owner_id"`
-	Kind                string             `db:"kind" json:"kind"`
-	Name                string             `db:"name" json:"name"`
-	Slug                string             `db:"slug" json:"slug"`
-	Revision            int64              `db:"revision" json:"revision"`
-	DraftHash           pgtype.Text        `db:"draft_hash" json:"draft_hash"`
-	UnstableHash        pgtype.Text        `db:"unstable_hash" json:"unstable_hash"`
-	StableHash          pgtype.Text        `db:"stable_hash" json:"stable_hash"`
-	UnstablePublishedAt pgtype.Timestamptz `db:"unstable_published_at" json:"unstable_published_at"`
-	UnstablePublishedBy uuid.NullUUID      `db:"unstable_published_by" json:"unstable_published_by"`
-	StablePublishedAt   pgtype.Timestamptz `db:"stable_published_at" json:"stable_published_at"`
-	StablePublishedBy   uuid.NullUUID      `db:"stable_published_by" json:"stable_published_by"`
-	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	DraftIcon           pgtype.Text        `db:"draft_icon" json:"draft_icon"`
-	UnstableIcon        pgtype.Text        `db:"unstable_icon" json:"unstable_icon"`
-	StableIcon          pgtype.Text        `db:"stable_icon" json:"stable_icon"`
+	ID        uuid.UUID          `db:"id" json:"id"`
+	OwnerID   uuid.UUID          `db:"owner_id" json:"owner_id"`
+	Kind      string             `db:"kind" json:"kind"`
+	Name      string             `db:"name" json:"name"`
+	Slug      string             `db:"slug" json:"slug"`
+	Revision  int64              `db:"revision" json:"revision"`
+	DraftHash pgtype.Text        `db:"draft_hash" json:"draft_hash"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	DraftIcon pgtype.Text        `db:"draft_icon" json:"draft_icon"`
 }
 
 type LuaProjectArtifact struct {
@@ -2059,6 +2051,15 @@ type LuaProjectContributor struct {
 	AddedBy     uuid.NullUUID      `db:"added_by" json:"added_by"`
 	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type LuaProjectRelease struct {
+	ProjectID   uuid.UUID          `db:"project_id" json:"project_id"`
+	Tag         string             `db:"tag" json:"tag"`
+	Hash        pgtype.Text        `db:"hash" json:"hash"`
+	Icon        pgtype.Text        `db:"icon" json:"icon"`
+	PublishedAt pgtype.Timestamptz `db:"published_at" json:"published_at"`
+	PublishedBy uuid.NullUUID      `db:"published_by" json:"published_by"`
 }
 
 type OauthDeviceSession struct {

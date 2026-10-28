@@ -181,17 +181,17 @@ definition lua_project {
   // both to user:*; removing them makes an addon private.
   relation viewer: user | user:*
   relation runner: user | user:*
-  // Contributor grants, chosen per person by the owner.
+  // Contributor grants, chosen per person by the owner: editor saves to main, publisher tags releases.
   relation editor: user
-  relation unstable_publisher: user
   relation publisher: user
+  // Legacy grant from the unstable channel; it now counts as release. Kept so existing relationships stay valid.
+  relation unstable_publisher: user
 
   permission manage = owner + chronicle->administer_authz
   permission edit = editor + manage
-  permission publish_unstable = unstable_publisher + manage
-  permission publish = publisher + manage
-  permission view = viewer + public_viewer + edit + publish_unstable + publish
-  permission use = runner + public_viewer + edit + publish_unstable + publish
+  permission release = publisher + unstable_publisher + manage
+  permission view = viewer + public_viewer + edit + release
+  permission use = runner + public_viewer + edit + release
   // update is the Workshop's permission: editing the working copy and its AI chat.
   permission update = edit
 }

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { ArrowUpRight, AtSign, Plus, Users } from "lucide-react"
 import { useAuthorizationCheck, useSession } from "@/api/queries"
-import { addonPath, claimAuthor, createProject, getMyAuthor, listProjects, urlName, urlNameInput, type LuaProject, type LuaProjectKind } from "./api"
+import { addonPath, claimAuthor, latestRelease, createProject, getMyAuthor, listProjects, urlName, urlNameInput, type LuaProject, type LuaProjectKind } from "./api"
 import { AddonIcon } from "./AddonIcon"
 import { button, card, errorMessage, kindLabel } from "./addonUi"
 
@@ -68,7 +68,7 @@ export function LuaProjectsPage() {
     <header className="border-b pb-7">
       <p className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">Creator workspace / Addons</p>
       <h1 className="text-3xl font-semibold tracking-tight">Addons</h1>
-      <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Build sandboxed Lua addons for Chronicle with the Addon Workshop. Keep a private draft, share an unstable release for testing, then promote exactly the version you tested.</p>
+      <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Build sandboxed Lua addons for Chronicle with the Addon Workshop. Save your work to main, try it on real raids, then tag a release when it is ready for everyone.</p>
     </header>
     {error && <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
     <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_19rem]">
@@ -76,7 +76,7 @@ export function LuaProjectsPage() {
         <h2 className="text-lg font-semibold">Your addons</h2>
         {loading ? <p className="text-sm text-muted-foreground">Loading addons…</p> : projects.length === 0 ? <p className={card}>No addons yet. Create one to begin.</p> : projects.map(project =>
           <Link key={project.id} to={addonPath(project)} className={`${card} group flex items-center justify-between gap-4 hover:border-primary/50`}>
-            <AddonIcon name={project.stable?.icon ?? project.unstable?.icon ?? project.draft_icon} className="size-6 shrink-0 text-muted-foreground" />
+            <AddonIcon name={latestRelease(project)?.icon ?? project.main?.icon} className="size-6 shrink-0 text-muted-foreground" />
             <div className="min-w-0 flex-1"><span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">{kindLabel(project.kind)} · r{project.revision}</span>
               <h3 className="mt-1 flex items-center gap-2 font-semibold">{project.name}
                 {session && project.owner_id !== session.user_id && <span className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-normal text-muted-foreground"><Users className="size-3" /> Shared with you</span>}</h3>
