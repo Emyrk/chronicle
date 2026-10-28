@@ -8,6 +8,7 @@ import api from "./routes/api";
 import dashboard from "./dashboard/index";
 import noticesDashboard from "./dashboard/notices";
 import analytics from "./routes/analytics";
+import device from "./routes/device";
 import analyticsDashboard from "./dashboard/analytics";
 import analyticsExplore from "./dashboard/analyticsExplore";
 import maps from "./routes/maps";
@@ -40,9 +41,10 @@ app.get("/logo.svg", async (c) => {
 // Public: ingest endpoint.
 app.route("/", ingest);
 
-// Protected: dashboard + read API (behind Cloudflare Access on /internal/*).
+// Protected by Cloudflare Access policies covering /internal/* and /device/*.
 app.route("/", api);
 app.route("/", analytics);
+app.route("/", device);
 app.route("/", dashboard);
 app.route("/", noticesDashboard);
 app.route("/", analyticsDashboard);
