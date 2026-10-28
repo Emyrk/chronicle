@@ -248,6 +248,9 @@ func TestConvertTraitsBuildsForeverTalentTrees(t *testing.T) {
 	require.Equal(t, []string{"Arms", "Fury", "Protection"}, []string{
 		warrior.Tabs[0].Name, warrior.Tabs[1].Name, warrior.Tabs[2].Name,
 	})
+	require.Equal(t, []string{"WarriorArms", "WarriorFury", "WarriorProtection"}, []string{
+		warrior.Tabs[0].BackgroundFile, warrior.Tabs[1].BackgroundFile, warrior.Tabs[2].BackgroundFile,
+	})
 	require.Equal(t, []int32{0, 1, 2}, []int32{
 		warrior.Tabs[0].OrderIndex, warrior.Tabs[1].OrderIndex, warrior.Tabs[2].OrderIndex,
 	})
