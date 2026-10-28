@@ -18,6 +18,8 @@ const (
 	ToolCallEnd        EventType = "TOOL_CALL_END"
 	ClientToolRequest  EventType = "CLIENT_TOOL_REQUEST"
 	DebugSnapshot      EventType = "DEBUG_SNAPSHOT"
+	// Usage is a Chronicle extension: token and cost accounting for one model call.
+	Usage EventType = "USAGE"
 )
 
 // Event is an AG-UI event that can be written to an SSE stream.
@@ -173,7 +175,21 @@ type DebugUsage struct {
 	PromptTokens     int `json:"promptTokens"`
 	CompletionTokens int `json:"completionTokens"`
 	TotalTokens      int `json:"totalTokens"`
+	CachedTokens     int `json:"cachedTokens"`
+	ReasoningTokens  int `json:"reasoningTokens"`
+	// CostUSD is nil when the provider did not report a cost.
+	CostUSD *float64 `json:"costUsd,omitempty"`
 }
+
+// UsageEvent reports one model call after its message and tool events, so clients can attach it.
+type UsageEvent struct {
+	BaseEvent
+	RunID     string     `json:"runId"`
+	MessageID string     `json:"messageId"`
+	Usage     DebugUsage `json:"usage"`
+}
+
+func (UsageEvent) EventType() EventType { return Usage }
 
 type DebugSnapshotEvent struct {
 	BaseEvent

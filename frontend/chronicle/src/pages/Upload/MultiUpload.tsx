@@ -128,9 +128,10 @@ export interface MultiUploadProps {
   unlistedLog: boolean;
   canMarkUnlisted: boolean;
   onUnlistedLogChange: (value: boolean) => void;
+  showUnlistedUpsell?: boolean;
 }
 
-export function MultiUpload({ format, unlistedLog, canMarkUnlisted, onUnlistedLogChange }: MultiUploadProps) {
+export function MultiUpload({ format, unlistedLog, canMarkUnlisted, onUnlistedLogChange, showUnlistedUpsell }: MultiUploadProps) {
   const [entries, setEntries] = useState<UploadEntry[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -273,7 +274,7 @@ export function MultiUpload({ format, unlistedLog, canMarkUnlisted, onUnlistedLo
       </div>
 
       <Card className="mb-4 p-4">
-        <VisibilityPicker unlistedLog={unlistedLog} canMarkUnlisted={canMarkUnlisted} onChange={onUnlistedLogChange} />
+        <VisibilityPicker unlistedLog={unlistedLog} canMarkUnlisted={canMarkUnlisted} onChange={onUnlistedLogChange} showUnlistedUpsell={showUnlistedUpsell} />
       </Card>
 
       {/* Drop zone */}

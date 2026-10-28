@@ -67,6 +67,98 @@ func TestProofNotificationIsBestEffort(t *testing.T) {
 	h.notifyPhotoProof(ctx, requestID, applicantID, "Turtle", subjects)
 }
 
+type characterLinkDecisionQueue struct {
+	args  chroniclebot.ArgsNotifyCharacterLinkDecision
+	calls int
+	err   error
+}
+
+func (q *characterLinkDecisionQueue) Insert(_ context.Context, args river.JobArgs, _ *river.InsertOpts) (*rivertype.JobInsertResult, error) {
+	q.calls++
+	q.args = args.(chroniclebot.ArgsNotifyCharacterLinkDecision)
+	return nil, q.err
+}
+
+func TestCharacterLinkDecisionNotificationIsBestEffort(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(testservices.Authz(t))
+	applicantID := uuid.New()
+	_, err := zed.InsertUser(ctx, database.InsertUserParams{ID: applicantID, Username: "applicant-" + applicantID.String()[:8]})
+	require.NoError(t, err)
+	_, err = zed.InsertUserAuth(ctx, database.InsertUserAuthParams{
+		ID: uuid.New(), UserID: applicantID, Provider: "discord", LinkedID: "discord-applicant",
+	})
+	require.NoError(t, err)
+	bot, err := chroniclebot.New(ctx, testutil.Logger(t), chroniclebot.Config{Token: "test", PrimaryDomain: "chronicle.example"})
+	require.NoError(t, err)
+	queue := &characterLinkDecisionQueue{err: errors.New("queue unavailable")}
+	h := &Handler{zed: zed, bot: bot, queue: queue, accessURL: &url.URL{Scheme: "https", Host: "legacy.chronicle.example"}}
+
+	proofID := uuid.New()
+	h.notifyCharacterLinkDecision(ctx, chroniclesdk.ProofRequest{
+		ID: proofID, ApplicantID: applicantID, TenantID: uuid.New(), TenantName: "Turtle WoW", TenantSlug: "turtle", Status: "partial", Response: "One photo was unclear.",
+		Subjects: []chroniclesdk.ProofSubject{
+			{Name: "Approved", RealmName: "Realm", Status: "approved"},
+			{Name: "Rejected", RealmName: "Realm", Status: "rejected"},
+		},
+	})
+	require.Equal(t, 1, queue.calls)
+	require.Equal(t, proofID.String(), queue.args.ProofID)
+	require.Equal(t, "discord-applicant", queue.args.DiscordID)
+	require.Equal(t, "partial", queue.args.Status)
+	require.Equal(t, []string{"Approved (Realm)"}, queue.args.ApprovedCharacters)
+	require.Equal(t, []string{"Rejected (Realm)"}, queue.args.RejectedCharacters)
+	require.Equal(t, "One photo was unclear.", queue.args.Response)
+	require.Equal(t, "Turtle WoW", queue.args.TenantName)
+	require.Equal(t, "https://turtle.chronicle.example/account/characters", queue.args.URL)
+
+	// Missing URL configuration omits the link without skipping the DM.
+	queue.err = nil
+	h.accessURL = nil
+	h.notifyCharacterLinkDecision(ctx, chroniclesdk.ProofRequest{
+		ID: uuid.New(), ApplicantID: applicantID, Status: "rejected",
+		Subjects: []chroniclesdk.ProofSubject{{Name: "Rejected", RealmName: "Realm", Status: "rejected"}},
+	})
+	require.Equal(t, 2, queue.calls)
+	require.Equal(t, "rejected", queue.args.Status)
+	require.Empty(t, queue.args.ApprovedCharacters)
+	require.Equal(t, []string{"Rejected (Realm)"}, queue.args.RejectedCharacters)
+	require.Empty(t, queue.args.URL)
+
+	// Accounts without linked Discord authentication are skipped.
+	unlinkedApplicantID := uuid.New()
+	_, err = zed.InsertUser(ctx, database.InsertUserParams{ID: unlinkedApplicantID, Username: "unlinked-" + unlinkedApplicantID.String()[:8]})
+	require.NoError(t, err)
+	h.notifyCharacterLinkDecision(ctx, chroniclesdk.ProofRequest{ID: uuid.New(), ApplicantID: unlinkedApplicantID, Status: "rejected"})
+	require.Equal(t, 2, queue.calls)
+}
+
+func TestCharacterLinkDecisionURL(t *testing.T) {
+	t.Parallel()
+	accessURL := &url.URL{Scheme: "https", Host: "legacy.chronicle.example"}
+	for _, tc := range []struct {
+		name          string
+		accessURL     *url.URL
+		primaryDomain string
+		proof         chroniclesdk.ProofRequest
+		want          string
+	}{
+		{name: "main site", accessURL: accessURL, proof: chroniclesdk.ProofRequest{}, want: "https://legacy.chronicle.example/account/characters"},
+		{name: "tenant site", accessURL: accessURL, primaryDomain: "chronicle.example", proof: chroniclesdk.ProofRequest{TenantID: uuid.New(), TenantSlug: "turtle"}, want: "https://turtle.chronicle.example/account/characters"},
+		{name: "tenant slug unavailable", accessURL: accessURL, primaryDomain: "chronicle.example", proof: chroniclesdk.ProofRequest{TenantID: uuid.New()}},
+		{name: "primary domain unavailable", accessURL: accessURL, proof: chroniclesdk.ProofRequest{TenantID: uuid.New(), TenantSlug: "turtle"}},
+		{name: "access URL unavailable", primaryDomain: "chronicle.example", proof: chroniclesdk.ProofRequest{TenantID: uuid.New(), TenantSlug: "turtle"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			bot, err := chroniclebot.New(t.Context(), testutil.Logger(t), chroniclebot.Config{Token: "test", PrimaryDomain: tc.primaryDomain})
+			require.NoError(t, err)
+			h := &Handler{bot: bot, accessURL: tc.accessURL}
+			require.Equal(t, tc.want, h.characterLinkDecisionURL(tc.proof))
+		})
+	}
+}
+
 func TestValidProofCharacters(t *testing.T) {
 	t.Parallel()
 	realm := uuid.New()

@@ -186,12 +186,6 @@ export function PrivacyPage() {
           . We may need to verify your request before responding. An authorized agent may
           submit a request where permitted by law.
         </p>
-        <div className="text-muted-foreground">
-          <span
-            data-ccpa-link="1"
-            className="cursor-pointer font-medium text-primary hover:underline"
-          />
-        </div>
       </section>
 
       {/* Who Controls the Data */}

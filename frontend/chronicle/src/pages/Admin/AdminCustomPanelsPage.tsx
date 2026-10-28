@@ -61,7 +61,7 @@ export function AdminCustomPanelsPage() {
             <PanelsTopLeft className="h-4 w-4" />
             Trusted plugin activity
           </div>
-          <h1 className="text-2xl font-bold">Active Custom Panels</h1>
+          <h1 className="text-2xl font-bold">Active Developer Panels</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Installations shown here are enabled both for the account and for the individual plugin.
           </p>
@@ -122,13 +122,13 @@ export function AdminCustomPanelsPage() {
           </div>
         ) : error ? (
           <div className="p-8 text-center">
-            <p className="font-medium text-destructive">Failed to load active custom panels.</p>
+            <p className="font-medium text-destructive">Failed to load active developer panels.</p>
             <p className="mt-1 text-sm text-muted-foreground">{error.message}</p>
           </div>
         ) : filteredInstallations.length === 0 ? (
           <div className="flex flex-col items-center gap-2 p-12 text-center text-muted-foreground">
             <PanelsTopLeft className="h-8 w-8" />
-            <p>{installations.length === 0 ? "No active custom panels." : "No installations match this filter."}</p>
+            <p>{installations.length === 0 ? "No active developer panels." : "No installations match this filter."}</p>
           </div>
         ) : (
           <div className="styled-scrollbar overflow-x-auto">

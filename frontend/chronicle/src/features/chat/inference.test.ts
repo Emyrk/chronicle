@@ -28,6 +28,7 @@ describe("inference request builders", () => {
       connection_id: "connection-1",
       model: "model-1",
       assistant_id: "site-help",
+      usage_events: true,
       messages: input.messages,
     });
   });
@@ -39,6 +40,7 @@ describe("inference request builders", () => {
       connection_id: "connection-1",
       model: "model-1",
       assistant_id: "instance-analyst",
+      usage_events: true,
       thread_id: "thread-1",
       instance: "instance-1",
       message: input.messages[2],
@@ -84,6 +86,23 @@ describe("inference selection and OAuth", () => {
 
   it("only returns a local OAuth return path", () => {
     expect(safeLocalReturnPath("/account/settings", "?tab=ai")).toBe("/account/settings?tab=ai");
-    expect(safeLocalReturnPath("//attacker.example", "")).toBe("/account/settings");
+    expect(safeLocalReturnPath("//attacker.example", "")).toBe("/account/ai");
+  });
+});
+
+describe("stored usage", () => {
+  it("folds hidden tool-only steps into the turn's shown reply", () => {
+    const usage = (prompt: number, cost?: number) => ({ prompt_tokens: prompt, completion_tokens: 1, cached_tokens: 0, reasoning_tokens: 0, calls: 1, ...(cost !== undefined && { cost_usd: cost }) });
+    const messages = toChatMessages([
+      { id: "u1", role: "user", content: "go" },
+      { id: "t1", role: "assistant", content: "", usage: usage(100, 0.01) },
+      { id: "x1", role: "tool", content: "{}", tool_call_id: "c1" },
+      { id: "a1", role: "assistant", content: "Done.", usage: usage(200) },
+      { id: "u2", role: "user", content: "again" },
+      { id: "a2", role: "assistant", content: "Sure." },
+    ]);
+    expect(messages.map((message) => message.id)).toEqual(["u1", "a1", "u2", "a2"]);
+    expect(messages[1].usage).toEqual({ promptTokens: 300, completionTokens: 2, cachedTokens: 0, reasoningTokens: 0, costUsd: 0.01, calls: 2 });
+    expect(messages[3].usage).toBeUndefined();
   });
 });

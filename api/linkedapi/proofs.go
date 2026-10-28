@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -222,6 +223,71 @@ func (h *Handler) notifyPhotoProof(ctx context.Context, id, applicantID uuid.UUI
 	if err != nil {
 		slog.ErrorContext(notifyCtx, "failed to enqueue photo proof notification", "request_id", id, "error", err)
 	}
+}
+
+// notifyCharacterLinkDecision is best effort and only runs after the proof
+// decision commits. Lookup or queue failures never change the review response.
+func (h *Handler) notifyCharacterLinkDecision(ctx context.Context, proof chroniclesdk.ProofRequest) {
+	if h.bot == nil || h.bot.Disabled() {
+		return
+	}
+	notifyCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	discord, err := h.zed.GetUserAuthLinkByUserIDAndProvider(notifyCtx, database.GetUserAuthLinkByUserIDAndProviderParams{
+		UserID:   proof.ApplicantID,
+		Provider: "discord",
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return
+	}
+	if err != nil {
+		slog.WarnContext(notifyCtx, "character-link decision Discord lookup failed", "request_id", proof.ID, "error", err)
+		return
+	}
+
+	approved := make([]string, 0, len(proof.Subjects))
+	rejected := make([]string, 0, len(proof.Subjects))
+	for _, subject := range proof.Subjects {
+		character := fmt.Sprintf("%s (%s)", subject.Name, subject.RealmName)
+		switch subject.Status {
+		case "approved":
+			approved = append(approved, character)
+		case "rejected":
+			rejected = append(rejected, character)
+		}
+	}
+	err = chroniclebot.EnqueueCharacterLinkDecision(notifyCtx, h.queue, h.bot, chroniclebot.ArgsNotifyCharacterLinkDecision{
+		ProofID:            proof.ID.String(),
+		DiscordID:          discord.LinkedID,
+		Status:             proof.Status,
+		URL:                h.characterLinkDecisionURL(proof),
+		TenantName:         proof.TenantName,
+		ApprovedCharacters: approved,
+		RejectedCharacters: rejected,
+		Response:           proof.Response,
+	})
+	if err != nil {
+		slog.ErrorContext(notifyCtx, "failed to enqueue character-link decision notification", "request_id", proof.ID, "error", err)
+	}
+}
+
+func (h *Handler) characterLinkDecisionURL(proof chroniclesdk.ProofRequest) string {
+	if h.accessURL == nil {
+		return ""
+	}
+	target := h.accessURL.ResolveReference(&url.URL{Path: "/account/characters"})
+	if target.Scheme == "" || target.Host == "" {
+		return ""
+	}
+	if proof.TenantID == uuid.Nil {
+		return target.String()
+	}
+	primaryDomain := h.bot.PrimaryDomain()
+	if proof.TenantSlug == "" || primaryDomain == "" {
+		return ""
+	}
+	target.Host = proof.TenantSlug + "." + primaryDomain
+	return target.String()
 }
 
 func validProofCharacters(choices []chroniclesdk.ProofCharacter) bool {
@@ -495,10 +561,12 @@ func (h *Handler) DecideProof(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
+
 	result, err := h.proofResponse(r.Context(), scope, id)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
+	h.notifyCharacterLinkDecision(r.Context(), result)
 	httpapi.Write(r.Context(), w, http.StatusOK, result)
 }

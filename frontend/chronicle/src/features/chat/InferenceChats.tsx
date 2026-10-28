@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Bot, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { AssistantChat } from "./AssistantChat";
 import {
   isInferenceAuthorizationError,
@@ -20,8 +21,9 @@ import { ModelCombobox } from "./ModelCombobox";
 import type { DebugCommandInput } from "./useAssistantChat";
 import { useChatWindow } from "./useChatWindow";
 import { useInferenceSelection } from "./useInferenceSelection";
+import { usageFromApi } from "./usage";
 
-function AssistantConfiguration({
+export function AssistantConfiguration({
   selection,
 }: {
   selection: ReturnType<typeof useInferenceSelection>;
@@ -53,8 +55,8 @@ function AssistantConfiguration({
   );
 }
 
-function ConnectRequiredAction() {
-  return <Button asChild size="sm"><Link to="/account/settings">Open AI settings</Link></Button>;
+export function ConnectRequiredAction() {
+  return <Button asChild size="sm"><Link to="/account/ai">Open AI settings</Link></Button>;
 }
 
 function SiteHelpEmptyState() {
@@ -68,8 +70,13 @@ function SiteHelpEmptyState() {
 }
 
 export function GlobalSiteHelpChat() {
+  const isMobile = useIsMobile();
+  return isMobile ? null : <DesktopGlobalSiteHelpChat />;
+}
+
+function DesktopGlobalSiteHelpChat() {
   const { session, isAuthenticated } = useAuth();
-  const permission = useInferencePermission(isAuthenticated);
+  const permission = useInferencePermission(isAuthenticated, "site-help");
   const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed);
   const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed);
   const debugPreview = useInferenceDebugPreview();
@@ -119,9 +126,14 @@ export function GlobalSiteHelpChat() {
   );
 }
 
-export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId: string; instanceName: string }) {
+export function InstanceAssistantChat(props: { instanceId: string; instanceName: string }) {
+  const isMobile = useIsMobile();
+  return isMobile ? null : <DesktopInstanceAssistantChat {...props} />;
+}
+
+function DesktopInstanceAssistantChat({ instanceId, instanceName }: { instanceId: string; instanceName: string }) {
   const { session, isAuthenticated } = useAuth();
-  const permission = useInferencePermission(isAuthenticated);
+  const permission = useInferencePermission(isAuthenticated, "instance-analyst");
   const debugPermission = useInferenceDebugPermission(isAuthenticated && permission.allowed);
   const selection = useInferenceSelection(session?.user_id, isAuthenticated && permission.allowed);
   const debugPreview = useInferenceDebugPreview();
@@ -192,6 +204,7 @@ export function InstanceAssistantChat({ instanceId, instanceName }: { instanceId
       endpoint="/api/v1/inference/runs"
       threadId={response?.thread.id}
       initialMessages={response ? toChatMessages(response.messages) : []}
+      initialUsage={response?.usage && usageFromApi(response.usage)}
       createRequest={createRequest}
       onDebugCommand={debugPermission.allowed ? previewDebug : undefined}
       onStartNewChat={startNewChat}

@@ -1,6 +1,7 @@
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Loader2, Castle, Search, Check, ChevronsUpDown } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
+import { AdRailStack } from "@/components/Ads/AdRailStack";
 import { AdSlot, type AdFallbackRenderer } from "@/components/Ads/AdSlot";
 import { TechnicalHintCard } from "@/components/TechnicalHints/TechnicalHintCard";
 import { selectTechnicalHint } from "@/components/TechnicalHints/technicalHintRotation";
@@ -398,7 +399,11 @@ export function RecentRaids() {
   return (
     <div className="mx-auto flex w-full max-w-[2080px] items-start justify-center gap-6 p-4 md:p-8">
       <div className="hidden self-stretch min-[1800px]:block">
-        <AdSlot placement="recent-left-rail" format="rail" railLayout="paired" />
+        <AdRailStack
+          primaryPlacement="recent-left-rail"
+          secondaryPlacement="recent-left-rail-lower"
+          railLayout="paired"
+        />
       </div>
 
       <main className="min-w-0 w-full max-w-7xl">
@@ -543,7 +548,11 @@ export function RecentRaids() {
         </div>
       </main>
 
-      <AdSlot placement="recent-right-rail" format="rail" railLayout="paired" />
+      <AdRailStack
+        primaryPlacement="recent-right-rail"
+        secondaryPlacement="recent-right-rail-lower"
+        railLayout="paired"
+      />
     </div>
   );
 }

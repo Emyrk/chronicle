@@ -29,7 +29,8 @@ import {
 } from "./cameraDirector";
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, IDLE_MOBILE_MAP_INPUT, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, type MapControlAction, type MobileMapInput } from "./mapControls";
-import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
+import { unwrapCompassRadians } from "./mapCompassModel";
+import { BOSS_SPIRE, bossSpireCastGlow, CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanPoint } from "./plan/mapPlan";
 import { PlanLayer, type PlanSurface } from "./plan/planLayer";
@@ -39,6 +40,7 @@ import {
   dungeonMeshBytes,
   dungeonMeshPlacement,
   floorBelow,
+  floorWithoutLoggedHeight,
   releaseDungeonMeshBytes,
   FloorHeightCache,
   AIRBORNE_YARDS,
@@ -46,7 +48,7 @@ import {
   medianHeight,
 } from "./dungeonMeshes";
 import { MAP_CURSOR, MAP_HOSTILE_CURSOR, MAP_UNIT_CURSOR } from "./mapCursors";
-import { FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, type MapPoint, type MapViewport } from "./mapModel";
+import { flatArtworkUnitScale, FOCUS_RADIUS_YARDS, FULL_MAP_VIEWPORT, healthBarColor, interpolateViewport, mapPointToScene, MAX_HEALTH_BARS, topDownMapDistance, type MapPoint, type MapViewport } from "./mapModel";
 import { deepBreathLaneForSpell, extendedDeepBreathLane } from "./deepBreathLanes";
 import { projectMapDebugPath, type MapDebugOverlay } from "./mapDebugOverlays";
 import {
@@ -156,13 +158,10 @@ const BOSS_MINI_BAR_GAP = 0.6;
 const DEAD_LIFT = 0.9;
 // Default camera directions from the target.
 const ANGLED_OFFSET = new THREE.Vector3(0, 0.85, 0.75);
-// A tiny +z offset keeps OrbitControls' up vector stable while leaving
-// artwork-up at the top of the screen, as in the 2D view.
-const TOP_DOWN_OFFSET = new THREE.Vector3(0, 1, 0.0001);
+const TOP_DOWN_OFFSET = new THREE.Vector3(0, 1, 0);
 const TILES_MAX_DISTANCE = 400;
-// On flat artwork without a world mapping (no yards), units are this many
-// times their full-map size on screen at every zoom.
-const TILES_UNIT_SCALE = 2;
+// Flat artwork has no yard scale. Keep token geometry fixed in map space so
+// zooming in makes units larger with the artwork instead of shrinking them.
 // How far the orbit camera may tilt from straight down. On the flat artwork it
 // stays 30 degrees above the horizon, where the token faces still show; on
 // the mesh it may go down to the floor.
@@ -174,6 +173,10 @@ const MESH_MAX_POLAR = Math.PI / 2 - 0.05;
 const MESH_PLAYER_HEIGHT_YARDS = 2;
 // The player capsule's geometry height (CapsuleGeometry radius 0.9, length 1.2).
 const PLAYER_GEOMETRY_HEIGHT = 3;
+// On calibrated flat artwork the disc represents a character's footprint, not
+// their standing height. Keeping that distinction makes close fight framing
+// readable even on physically small dungeon floors.
+const FLAT_PLAYER_TOKEN_DIAMETER_YARDS = 1.25;
 // Zoomed out, units never shrink below this fraction of their tiles-mode
 // (constant on-screen) size, so the raid stays visible without being giants
 // at Fit.
@@ -194,8 +197,9 @@ const MESH_PAN_RADIUS_YARDS = FOCUS_RADIUS_YARDS;
 const MESH_FULL_MAP_DISTANCE_FACTOR = 3;
 // The camera stays at least this far (scene units) above the floor beneath it.
 const MESH_CAMERA_CLEARANCE = 0.3;
-// Floor probes drop from this height (scene units), above any cave surface.
+// Floor probes span these scene heights, outside any published dungeon mesh.
 const FLOOR_PROBE_HEIGHT = 100;
+const FLOOR_PROBE_BOTTOM = -100;
 // The camera direction the mesh starts from: steeper than ANGLED_OFFSET so
 // the rock between the camera and a sunken chamber hides less of the fight.
 const MESH_ANGLED_OFFSET = new THREE.Vector3(0, 1.6, 0.75);
@@ -249,8 +253,6 @@ const COLUMN_WIDTH = TOKEN_LAYOUT.columnWidth;
 const COLUMN_HEIGHT = TOKEN_LAYOUT.columnHeight;
 const COLUMN_TRACK_OPACITY = TOKEN_LAYOUT.columnTrackOpacity;
 const SIGIL_SPIN = TOKEN_LAYOUT.sigilSpin;
-const BOSS_PIN_HEIGHT = TOKEN_LAYOUT.bossPinHeight;
-const BOSS_PIN_SIZE = TOKEN_LAYOUT.bossPinSize;
 // Target lines: ribbon width (geometry units), lift above the floor, and dash period and speed.
 const TARGET_LINE_WIDTH = TARGET_LINE.width;
 const TARGETS_TARGET_LINE_WIDTH = TARGET_LINE.targetsTargetWidth;
@@ -426,12 +428,12 @@ interface UnitToken {
   columnTrack: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   power: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   powerTrack: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  /** Bosses: the turning tick ring, the sigil under a model, and the pin while there is none. */
+  /** Bosses: the turning tick ring, the sigil under a model, and the crystal while there is none. */
   ticks: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
   sigil: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
   /** A guardian with a model stands on this: its disc's face (paw, ring). */
   chip: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
-  bossPin: THREE.Sprite | null;
+  bossSpire: THREE.Mesh<THREE.BufferGeometry, THREE.MeshLambertMaterial> | null;
 }
 
 interface BossMini {
@@ -742,6 +744,7 @@ export class MapScene3D {
   private readonly pointer = new THREE.Vector2();
   private readonly geometries = createUnitGeometries();
   private readonly groundGroup = new THREE.Group();
+  private alignmentOverlay = false;
   private readonly debugOverlayGroup = new THREE.Group();
   private debugOverlays: readonly MapDebugOverlay[] = [];
   private readonly unitsGroup = new THREE.Group();
@@ -761,6 +764,12 @@ export class MapScene3D {
   // Scene point of `focus` at its floor height while the mesh is on.
   private focusCentre: THREE.Vector3 | null = null;
   private readonly floorHeights = new FloorHeightCache((x, z, ceiling) => this.sampleFloor(x, z, ceiling));
+  private readonly unitFloorHeights = new FloorHeightCache((x, z, ceiling) => {
+    const highest = this.sampleFloor(x, z, ceiling);
+    if (ceiling !== undefined) return highest;
+    return floorWithoutLoggedHeight(highest, this.sampleLowestFloor(x, z), this.preferLowestUnitFloor);
+  });
+  private preferLowestUnitFloor = false;
   private readonly floorRay = new THREE.Ray();
   private constraining = false;
   // The hovered unit's nameplate (drawUnitPlate), redrawn when what it shows changes.
@@ -896,6 +905,8 @@ export class MapScene3D {
   private readonly columnBox = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
   // An open cylinder (radius 1, height 1) hanging below y = 0: a disc's edge.
   private readonly tokenEdge = new THREE.CylinderGeometry(1, 1, 1, 40, 1, true).translate(0, -0.5, 0);
+  // A boss's crystal while it has no model (radius 1), its tip at y = 0.
+  private readonly bossSpire = new THREE.LatheGeometry(BOSS_SPIRE.profile.map(([x, y]) => new THREE.Vector2(x, y)), BOSS_SPIRE.sides);
   private aboveDisc: AboveDiscMode = "none";
   private roles: MapUnitRoles = { selected: null, target: null, targetsTarget: null, pinned: new Set() };
   private readonly unitCasts = new Map<string, UnitCast>();
@@ -912,6 +923,11 @@ export class MapScene3D {
   private readonly ownerLinePositions = new Float32Array(MAX_OWNER_LINES * 6);
   private readonly ownerLineColors = new Float32Array(MAX_OWNER_LINES * 6);
   private readonly ownerLines: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+  // The encounter's projected route, drawn over flat artwork and hidden on the dungeon mesh.
+  private readonly routeGroup = new THREE.Group();
+  private readonly routeGeometry = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  private readonly routeOutlineMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.88, depthTest: false, depthWrite: false });
+  private readonly routeMaterial = new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.92, depthTest: false, depthWrite: false });
   // Movement trails, every unit's segments in one buffer; colours carry alpha for the fade.
   private readonly trailPositions = new Float32Array(MAX_TRAIL_SEGMENTS * 6);
   private readonly trailColors = new Float32Array(MAX_TRAIL_SEGMENTS * 8);
@@ -952,6 +968,8 @@ export class MapScene3D {
   private readonly onContextLost: () => void;
   private readonly onUserViewport: (viewport: MapViewport) => void;
   private readonly onDungeonMesh: (state: DungeonMeshState) => void;
+  private readonly onCompassYaw: (yaw: number) => void;
+  private lastCompassYaw = Number.NaN;
 
   constructor(
     container: HTMLElement,
@@ -959,6 +977,7 @@ export class MapScene3D {
     onEffectHover: (hover: MapScene3DEffectHover | null) => void = () => {},
     onUserViewport: (viewport: MapViewport) => void = () => {},
     onDungeonMesh: (state: DungeonMeshState) => void = () => {},
+    onCompassYaw: (yaw: number) => void = () => {},
   ) {
     this.container = container;
     this.keyWindow = container.ownerDocument.defaultView ?? window;
@@ -966,6 +985,7 @@ export class MapScene3D {
     this.onEffectHover = onEffectHover;
     this.onUserViewport = onUserViewport;
     this.onDungeonMesh = onDungeonMesh;
+    this.onCompassYaw = onCompassYaw;
     // Throws when WebGL is unavailable; the caller falls back to 2D.
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -994,7 +1014,7 @@ export class MapScene3D {
     // Lifts the cave's albedo textures (roughness 1, no vertex colour) while the mesh is on.
     this.meshLight.visible = false;
     this.scene.add(this.meshLight);
-    this.scene.add(this.groundGroup, this.debugOverlayGroup, this.unitsGroup, this.planLayer.group);
+    this.scene.add(this.groundGroup, this.routeGroup, this.debugOverlayGroup, this.unitsGroup, this.planLayer.group);
 
     const beamGeometry = new THREE.BufferGeometry();
     beamGeometry.setAttribute("position", new THREE.BufferAttribute(this.beamPositions, 3).setUsage(THREE.DynamicDrawUsage));
@@ -1202,6 +1222,44 @@ export class MapScene3D {
     this.requestRender();
   }
 
+  /** Keeps the camera and DOM artwork on the same exact top-down projection. */
+  setAlignmentOverlay(enabled: boolean) {
+    if (enabled === this.alignmentOverlay) return;
+    this.alignmentOverlay = enabled;
+    this.controls.enableRotate = !enabled;
+    // Looking straight down makes the normal +Y up vector degenerate. In
+    // alignment mode artwork top is scene -Z, so use that as screen up.
+    this.camera.up.set(0, enabled ? 0 : 1, enabled ? -1 : 0);
+    if (enabled) this.resetCamera(true);
+    else if (this.director && this.dungeonMesh) this.engageDirector(true);
+    else this.resetCamera(false);
+  }
+
+  setRoute(points: readonly MapPoint[]) {
+    this.routeGroup.clear();
+    const scenePoints = points.map((point) => mapPointToScene(point, this.aspect, GROUND_WIDTH));
+    for (let index = 1; index < scenePoints.length; index++) {
+      const from = scenePoints[index - 1];
+      const to = scenePoints[index];
+      const dx = to.x - from.x;
+      const dz = to.z - from.z;
+      const length = Math.hypot(dx, dz);
+      if (length <= 0) continue;
+      const yaw = Math.atan2(-dx, -dz);
+      const addSegment = (width: number, y: number, material: THREE.MeshBasicMaterial, order: number) => {
+        const segment = new THREE.Mesh(this.routeGeometry, material);
+        segment.position.set((from.x + to.x) / 2, y, (from.z + to.z) / 2);
+        segment.rotation.y = yaw;
+        segment.scale.set(width, 1, length * 1.04);
+        segment.renderOrder = order;
+        this.routeGroup.add(segment);
+      };
+      addSegment(0.8, 0.025, this.routeOutlineMaterial, 0);
+      addSegment(0.42, 0.03, this.routeMaterial, 1);
+    }
+    this.requestRender();
+  }
+
   setUnits(units: MapScene3DUnit[]) {
     const seen = new Set<string>();
     for (const unit of units) {
@@ -1330,6 +1388,17 @@ export class MapScene3D {
   }
 
   /**
+   * Normalized UI-map logs have no world Z. Prefer the lowest upward-facing
+   * mesh surface for their units so roofs and canopies do not capture them.
+   */
+  setPreferLowestUnitFloor(prefer: boolean) {
+    if (prefer === this.preferLowestUnitFloor) return;
+    this.preferLowestUnitFloor = prefer;
+    this.unitFloorHeights.clear();
+    for (const [guid, object] of this.units) this.placeUnit(guid, object, object.base.x, object.base.z);
+  }
+
+  /**
    * Swaps the tiles for the real dungeon mesh (`request`), loading it on first
    * use, or back to the tiles with `null`. Reports loading / ready / failed
    * through `onDungeonMesh`; a failed load leaves the tiles showing.
@@ -1365,12 +1434,12 @@ export class MapScene3D {
       this.scene.add(mesh.group);
       this.applyGroundMode();
       this.viewAnimation = null;
-      this.placeCamera(this.viewport, MESH_ANGLED_OFFSET.clone().normalize());
+      this.placeCamera(this.viewport, (this.alignmentOverlay ? TOP_DOWN_OFFSET : MESH_ANGLED_OFFSET).clone().normalize());
       // Start on the first valid cinematic shot immediately. The mesh already
       // had an asynchronous load; making the camera spend another few seconds
       // springing in from the overview makes the replay feel unnecessarily slow.
       this.directorRunning = false;
-      if (this.director) this.engageDirector(true);
+      if (this.director && !this.alignmentOverlay) this.engageDirector(true);
       this.onDungeonMesh("ready");
     });
   }
@@ -1392,7 +1461,7 @@ export class MapScene3D {
    */
   setDirector(director: MapSceneDirector | null) {
     this.director = director;
-    if (!director) {
+    if (!director || this.alignmentOverlay) {
       this.directorRunning = false;
       this.directorSnapPending = false;
       return;
@@ -1484,7 +1553,7 @@ export class MapScene3D {
       this.moveWalkTo(viewport);
       return;
     }
-    if (this.director && this.dungeonMesh) {
+    if (this.director && this.dungeonMesh && !this.alignmentOverlay) {
       this.viewport = viewport;
       this.viewAnimation = null;
       // Back to the group: Follow and encounter jumps drop a followed unit.
@@ -1557,20 +1626,28 @@ export class MapScene3D {
   }
 
   private baseDistance(): number {
+    if (this.alignmentOverlay) {
+      return topDownMapDistance(
+        GROUND_WIDTH,
+        GROUND_WIDTH * this.aspect,
+        this.camera.aspect,
+        THREE.MathUtils.degToRad(this.camera.fov),
+      );
+    }
     return Math.max(GROUND_WIDTH, GROUND_WIDTH * this.aspect) * ANGLED_OFFSET.length();
   }
 
-  // Where the ground has yards, units hold their true size, so they keep
-  // their size against the map as it zooms: on flat artwork with a world
-  // mapping always, and on the dungeon mesh down to a floor on screen (half
-  // the full-map on-screen size) so the raid stays visible zoomed out.
-  // Without yards they hold a constant on-screen size instead (scale 1 at
-  // the default full-map distance).
+  // Where the ground has yards, units hold their physical size against the map
+  // as it zooms. Mesh capsules use standing player height, while flat discs use
+  // a smaller character-footprint diameter. Without yards, flat artwork keeps
+  // native token geometry instead.
   private updateUnitScale(force = false) {
     const screenScale = this.camera.position.distanceTo(this.controls.target) / this.baseDistance();
     const yards = this.yardScale();
-    const trueScale = yards ? (MESH_PLAYER_HEIGHT_YARDS * yards) / PLAYER_GEOMETRY_HEIGHT : null;
-    const scale = trueScale === null ? TILES_UNIT_SCALE * screenScale
+    const trueScale = yards === null ? null : this.dungeonMesh
+      ? (MESH_PLAYER_HEIGHT_YARDS * yards) / PLAYER_GEOMETRY_HEIGHT
+      : (FLAT_PLAYER_TOKEN_DIAMETER_YARDS * yards) / (2 * TOKEN_RADIUS.player);
+    const scale = trueScale === null ? flatArtworkUnitScale()
       : this.dungeonMesh ? Math.max(trueScale, MESH_MIN_SCREEN_SCALE * screenScale)
       : trueScale;
     if (scale === this.unitScale && !force) return;
@@ -1595,7 +1672,7 @@ export class MapScene3D {
   private placeUnit(guid: string, object: UnitObject, x: number, z: number) {
     const mesh = this.dungeonMesh;
     const loggedZ = object.loggedZ;
-    const floor = mesh ? this.floorHeights.heightAt(guid, x, z, this.probeCeiling(loggedZ, mesh.scale)) : 0;
+    const floor = mesh ? this.unitFloorHeights.heightAt(guid, x, z, this.probeCeiling(loggedZ, mesh.scale)) : 0;
     const logged = mesh && loggedZ !== undefined ? loggedZ * mesh.scale : null;
     const y = mesh && logged !== null && logged - floor > AIRBORNE_YARDS * mesh.scale ? logged : floor;
     object.floorY = floor;
@@ -1652,6 +1729,27 @@ export class MapScene3D {
     return floorBelow((fromY) => this.castFloor(x, z, fromY), FLOOR_PROBE_HEIGHT, ceiling);
   }
 
+  // The lowest upward-facing cave or water surface at (x, z), or null for none.
+  // An upward probe finds the ground before roofs when the log has no height.
+  private sampleLowestFloor(x: number, z: number): number | null {
+    const mesh = this.dungeonMesh;
+    if (!mesh) return 0;
+    let best: number | null = null;
+    for (const cave of mesh.caves) best = this.lowestHit(cave, x, z, THREE.BackSide, best);
+    for (const liquid of mesh.liquids) best = this.lowestHit(liquid, x, z, THREE.DoubleSide, best);
+    return best;
+  }
+
+  private lowestHit(cave: DungeonMeshCave, x: number, z: number, side: THREE.Side, best: number | null): number | null {
+    this.floorRay.origin.set(x, FLOOR_PROBE_BOTTOM, z);
+    this.floorRay.direction.set(0, 1, 0);
+    this.floorRay.applyMatrix4(cave.inverse);
+    const hit = cave.bvh.raycastFirst(this.floorRay, side);
+    if (!hit) return best;
+    const y = this.vector.copy(hit.point).applyMatrix4(cave.mesh.matrixWorld).y;
+    return best === null || y < best ? y : best;
+  }
+
   // The highest cave or water surface below (x, fromY, z), or null for none:
   // a unit swimming near the surface stands on the water, not the lake bed.
   private castFloor(x: number, z: number, fromY: number): number | null {
@@ -1693,8 +1791,10 @@ export class MapScene3D {
     this.updatePlanSurface();
     const mesh = this.dungeonMesh !== null;
     this.groundGroup.visible = !mesh;
+    this.routeGroup.visible = !mesh;
     this.meshLight.visible = mesh;
     this.floorHeights.clear();
+    this.unitFloorHeights.clear();
     for (const [guid, object] of this.units) this.placeUnit(guid, object, object.base.x, object.base.z);
     this.updateCameraLimits();
     this.updateUnitScale(true);
@@ -1776,6 +1876,13 @@ export class MapScene3D {
   private cameraYaw(): number {
     const offset = this.directorVector.copy(this.camera.position).sub(this.controls.target);
     return Math.abs(offset.x) + Math.abs(offset.z) < 1e-6 ? 0 : Math.atan2(offset.x, offset.z);
+  }
+
+  private emitCompassYaw() {
+    const yaw = unwrapCompassRadians(this.lastCompassYaw, this.cameraYaw());
+    if (Number.isFinite(this.lastCompassYaw) && Math.abs(yaw - this.lastCompassYaw) < Math.PI / 360) return;
+    this.lastCompassYaw = yaw;
+    this.onCompassYaw(yaw);
   }
 
   // Puts the camera `distance` from (x, z) on the floor, `elevationDeg` above
@@ -2043,6 +2150,7 @@ export class MapScene3D {
     this.tokenPlane.dispose();
     this.columnBox.dispose();
     this.tokenEdge.dispose();
+    this.bossSpire.dispose();
     for (const presence of this.remotePresences.values()) this.disposeRemotePresence(presence);
     this.remotePresences.clear();
     clearTimeout(this.unitClickTimer);
@@ -2066,6 +2174,9 @@ export class MapScene3D {
     this.beams.material.dispose();
     this.ownerLines.geometry.dispose();
     this.ownerLines.material.dispose();
+    this.routeGeometry.dispose();
+    this.routeOutlineMaterial.dispose();
+    this.routeMaterial.dispose();
     this.trailLines.geometry.dispose();
     this.trailLines.material.dispose();
     this.deepBreathLane.geometry.dispose();
@@ -2128,19 +2239,18 @@ export class MapScene3D {
     columns.position.y = face;
     layoutColumns(columns, radius);
     const ticks = boss ? overlay(this.tokenTextures.sigilTicks(), radius * TOKEN_PLANE.ticks * TOKEN_PLANE.sigil, face + TOKEN_LIFT.marks) : null;
-    let bossPin: THREE.Sprite | null = null;
+    let bossSpire: UnitToken["bossSpire"] = null;
     if (boss) {
-      bossPin = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tokenTextures.bossPin(), transparent: true }));
-      bossPin.center.set(0.5, 0);
-      bossPin.scale.setScalar(radius * BOSS_PIN_SIZE);
-      bossPin.position.y = radius * BOSS_PIN_HEIGHT;
+      bossSpire = new THREE.Mesh(this.bossSpire, new THREE.MeshLambertMaterial({ color: ENEMY_RED, emissive: BOSS_SPIRE.glow, flatShading: true }));
+      bossSpire.scale.setScalar(radius);
+      bossSpire.position.y = face;
     }
     const group = new THREE.Group();
     group.userData.guid = unit.guid;
     body.userData.guid = unit.guid;
     group.add(shadow, edge, body, cone, debuff, arc, halo, pin, columns);
     if (ticks) group.add(ticks);
-    if (bossPin) group.add(bossPin);
+    if (bossSpire) group.add(bossSpire);
     this.unitsGroup.add(group);
     const object: UnitObject = {
       group,
@@ -2148,7 +2258,7 @@ export class MapScene3D {
       bodyMaterial,
       coneMaterial,
       cone,
-      token: { radius, face, edge, shadow, halo, pin, arc, debuff, columns, column, columnTrack, power, powerTrack, ticks, sigil: null, chip: null, bossPin },
+      token: { radius, face, edge, shadow, halo, pin, arc, debuff, columns, column, columnTrack, power, powerTrack, ticks, sigil: null, chip: null, bossSpire },
       icon: unit.icon ?? null,
       boss,
       mini: false,
@@ -2340,7 +2450,7 @@ export class MapScene3D {
     }
     token.columns.position.y = token.face;
     layoutColumns(token.columns, MINI_TOKEN_RADIUS);
-    if (token.bossPin) token.bossPin.visible = false;
+    if (token.bossSpire) token.bossSpire.visible = false;
     if (object.boss && !token.sigil) {
       // The model stands on the sigil.
       token.sigil = new THREE.Mesh(this.tokenPlane, new THREE.MeshBasicMaterial({
@@ -2426,10 +2536,11 @@ export class MapScene3D {
     object.coneMaterial.dispose();
     const { token } = object;
     for (const part of [token.shadow, token.edge, token.halo, token.pin, token.arc, token.debuff, token.column, token.columnTrack, token.power, token.powerTrack, token.ticks, token.sigil, token.chip]) part?.material.dispose();
-    token.bossPin?.material.dispose();
+    token.bossSpire?.material.dispose();
     object.drop?.material.dispose();
     this.units.delete(guid);
     this.floorHeights.delete(guid);
+    this.unitFloorHeights.delete(guid);
     const wobbling = this.wobbling.indexOf(object);
     if (wobbling >= 0) this.wobbling.splice(wobbling, 1);
     const lunging = this.lunging.indexOf(object);
@@ -3647,7 +3758,18 @@ export class MapScene3D {
       }
       token.pin.visible = roles.pinned.has(guid);
       if (token.ticks) token.ticks.rotation.y = (now / 1000) * SIGIL_SPIN - object.group.rotation.y;
-      if (token.bossPin) token.bossPin.material.color.setHex(object.dead ? 0x777777 : 0xffffff);
+      if (token.bossSpire) {
+        const { material } = token.bossSpire;
+        token.bossSpire.rotation.y = (now / 1000) * BOSS_SPIRE.spin - object.group.rotation.y;
+        material.color.set(object.dead ? BOSS_SPIRE.dead : ENEMY_RED);
+        material.emissive.setHex(object.dead ? 0x000000 : BOSS_SPIRE.glow);
+        // While casting, it turns and glows in the spell's colour, building as the cast fills.
+        if (cast && castColor) {
+          const glow = bossSpireCastGlow(cast.progress, now / 1000);
+          material.color.lerp(castColor, glow);
+          material.emissive.lerp(castColor, glow / 2);
+        }
+      }
     }
     this.updateTargetLines(dt);
     this.updateOwnerLines();
@@ -4219,6 +4341,7 @@ export class MapScene3D {
   };
 
   private readonly resize = () => {
+    const viewport = this.alignmentOverlay ? this.cameraViewport() : null;
     const width = Math.max(1, this.container.clientWidth);
     const height = Math.max(1, this.container.clientHeight);
     this.renderer.setSize(width, height, false);
@@ -4226,7 +4349,8 @@ export class MapScene3D {
     this.renderer.domElement.style.height = "100%";
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.requestRender();
+    if (viewport) this.placeCamera(viewport, TOP_DOWN_OFFSET);
+    else this.requestRender();
   };
 
   private readonly requestRender = () => {
@@ -4251,6 +4375,7 @@ export class MapScene3D {
       this.updateTokens(now);
       this.updateBars();
       this.updateEffectHover();
+      this.emitCompassYaw();
       // The nameplate keeps its screen size as the camera moves.
       if (this.hoveredGuid) this.updateLabel();
       this.renderer.render(this.scene, this.camera);

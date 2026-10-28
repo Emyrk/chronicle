@@ -42,6 +42,7 @@ const TAB_STORAGE_KEY = "chronicle.map.settingsTab";
 // The effect settings each tab owns, for its reset and its changed marks.
 const UNIT_KEYS = ["bars", "aboveDisc", "trailSeconds"] as const satisfies readonly (keyof EffectSettings)[];
 const COMBAT_KEYS = ["enabled", "heals", "overheal", "periodic", "castMode", "onlySelected", "maxEffects"] as const satisfies readonly (keyof EffectSettings)[];
+const WORLD_KEYS = ["alignmentOverlay"] as const satisfies readonly (keyof EffectSettings)[];
 
 function defaultsFor(keys: readonly (keyof EffectSettings)[]): Partial<EffectSettings> {
   return Object.fromEntries(keys.map((key) => [key, DEFAULT_EFFECT_SETTINGS[key]]));
@@ -182,6 +183,21 @@ export function MapSettingsOverlay({
               onChange={() => mesh.onToggle()}
             />
           )}
+          {mesh && !mesh.locked && (
+            <Toggle
+              label="2D alignment overlay"
+              detail={mesh.on
+                ? "Lay the map artwork over the dungeon mesh to compare their coordinate alignment"
+                : "Turn on the 3D map to compare it with the 2D artwork"}
+              checked={effectSettings.alignmentOverlay}
+              changed={changed("alignmentOverlay")}
+              disabled={!mesh.on}
+              onChange={(alignmentOverlay) => {
+                onEffectSettings({ alignmentOverlay });
+                if (alignmentOverlay) onTopDown();
+              }}
+            />
+          )}
           {floors && (
             <Choice
               label="Floor"
@@ -192,7 +208,13 @@ export function MapSettingsOverlay({
           )}
         </Section>
       ) : null,
-      reset: mesh && !mesh.locked ? { changed: !mesh.on, apply: () => { if (!mesh.on) mesh.onToggle(); } } : undefined,
+      reset: mesh && !mesh.locked ? {
+        changed: !mesh.on || WORLD_KEYS.some(changed),
+        apply: () => {
+          if (!mesh.on) mesh.onToggle();
+          onEffectSettings(defaultsFor(WORLD_KEYS));
+        },
+      } : undefined,
     },
     {
       id: "controls",

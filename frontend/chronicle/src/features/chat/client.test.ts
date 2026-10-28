@@ -58,6 +58,13 @@ describe("parseSseStream", () => {
 });
 
 describe("parseAgUiEvent", () => {
+  it("skips event types this build does not know and validates USAGE", () => {
+    expect(parseAgUiEvent({ data: JSON.stringify({ type: "SOMETHING_NEW", value: 1 }) })).toBeNull();
+    const usage = { type: "USAGE", runId: "run-1", messageId: "m1", usage: { promptTokens: 3, completionTokens: 1, totalTokens: 4, costUsd: 0.001 } };
+    expect(parseAgUiEvent({ data: JSON.stringify(usage) })).toEqual(usage);
+    expect(() => parseAgUiEvent({ data: JSON.stringify({ ...usage, usage: { promptTokens: "3", completionTokens: 1 } }) })).toThrow();
+  });
+
   it("uses the SSE event field when the JSON payload omits type", () => {
     expect(
       parseAgUiEvent({

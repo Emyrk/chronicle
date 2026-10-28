@@ -18,9 +18,16 @@
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.11.0",
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/legacy-modes": "^6.5.5",
+    "@codemirror/merge": "^6.12.3",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
     "@fontsource/inter": "^5.3.0",
     "@fontsource/libre-baskerville": "^5.3.0",
     "@fontsource/roboto-mono": "^5.3.0",
+    "@lezer/highlight": "^1.2.5",
     "@nivo/bar": "^0.99.0",
     "@nivo/core": "^0.99.0",
     "@nivo/line": "^0.99.0",
@@ -45,6 +52,8 @@
     "clsx": "^2.1.1",
     "codegenv1": "link:@bufbuild/protobuf/codegenv1",
     "date-fns": "^4.1.0",
+    "fengari": "0.1.5",
+    "fflate": "0.8.2",
     "html-to-image": "^1.11.13",
     "lucide-react": "^0.562.0",
     "next-themes": "^0.4.6",
@@ -102,6 +111,9 @@
   "pnpm": {
     "overrides": {
       "vite": "npm:rolldown-vite@7.2.5"
+    },
+    "patchedDependencies": {
+      "fengari@0.1.5": "patches/fengari@0.1.5.patch"
     }
   },
   "msw": {

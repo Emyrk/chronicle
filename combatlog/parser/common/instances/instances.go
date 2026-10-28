@@ -149,6 +149,7 @@ var (
 		Hostiles:  FromMap(MoltenCoreHostiles()),
 		FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
 			return &rankings.Rankings{
+				DamageByEncounter: MoltenCoreDamageTargets(fl),
 				Speedrun: &rankings.SpeedrunRules{
 					Requirements: MoltenCoreSpeedrunRequirements(fl),
 					LevelRange:   Level60Cap(fl),

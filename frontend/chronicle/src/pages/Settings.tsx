@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop, BadgeCheck, Crown, Camera, RefreshCw, Lock, Sparkles } from "lucide-react";
+import { Blocks, CreditCard, HardDrive, LayoutTemplate, Download, Upload, Plus, BookOpenText, Save, Pencil, Trash, Share2, Copy, Eye, Laptop, Monitor, Smartphone, Menu, X, User, Swords, Star, LayoutPanelTop, BadgeCheck, Crown, Camera, RefreshCw, Lock, Sparkles, Bot } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
@@ -132,8 +132,9 @@ const allTabs: Tab[] = [
   // { path: "/account/notifications", label: "Notifications", icon: Bell },
   // { path: "/account/privacy", label: "Privacy", icon: Shield },
   // { path: "/account/appearance", label: "Appearance", icon: Palette },
+  { path: "/account/ai", label: "AI assistant", icon: Bot },
   { path: "/account/sidekick", label: "Sidekick", icon: Laptop },
-  { path: "/account/custom-panels", label: "Custom panels", icon: Blocks },
+  { path: "/account/developer-panels", label: "Developer panels", icon: Blocks },
   { path: "/account/layout-book", label: "Layout Book", icon: BookOpenText },
   { path: "/account/layout-lab", label: "Layout Lab", icon: LayoutTemplate },
 ];
@@ -377,7 +378,6 @@ export function ProfileSettings() {
         </div>
       </div>
 
-      <InferenceSettings />
     </div>
   );
 }
@@ -514,7 +514,7 @@ function linkSourceLabel(source: string): string {
 }
 
 const SECTION_ACCENTS = {
-  linked: { border: "border-primary/30", header: "bg-primary/5" },
+  linked: { border: "border-sky-500/30", header: "bg-sky-500/5" },
   favorites: { border: "border-amber-500/30", header: "bg-amber-500/5" },
 };
 
@@ -548,9 +548,9 @@ function CharacterSection({ accent, icon: Icon, iconClassName, title, count, des
 function LinkedVsFavoritesExplainer() {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-2">
+      <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-4 space-y-2">
         <div className="flex items-center gap-2 font-medium">
-          <BadgeCheck className="size-4 text-primary" />
+          <BadgeCheck className="size-4 text-sky-400" />
           Linked characters
           <span className="text-xs font-normal text-muted-foreground">— characters you play</span>
         </div>
@@ -740,7 +740,7 @@ export function CharacterSettings() {
       <CharacterSection
         accent="linked"
         icon={BadgeCheck}
-        iconClassName="text-primary"
+        iconClassName="text-sky-400"
         title="Linked characters"
         count={characters?.length}
         description="Characters verified as yours."
@@ -786,15 +786,34 @@ export function CharacterSettings() {
             ) : proofAccess?.submit ? (
               <PhotoProofCard callout={photoProof.callout} />
             ) : (
-              <div className={cn("rounded-lg border p-4 space-y-2", !proofAccessError && "border-destructive/40 bg-destructive/5")}>
+              <div
+                className={cn(
+                  "rounded-lg border p-4 space-y-2",
+                  !proofAccessError && (siteConfig?.billing_enabled ? "border-[#1eff00]/30 bg-[#1eff00]/5" : "border-destructive/40 bg-destructive/5"),
+                )}
+              >
                 <h3 className="flex items-center gap-2 text-sm font-medium">
-                  {proofAccessError ? <Camera className="size-4 text-muted-foreground" /> : <Lock className="size-4 text-destructive" />}
+                  {proofAccessError ? (
+                    <Camera className="size-4 text-muted-foreground" />
+                  ) : (
+                    <Lock className={cn("size-4", siteConfig?.billing_enabled ? "text-[#1eff00]" : "text-destructive")} />
+                  )}
                   Link with photo proof
                 </h3>
                 {photoProof.callout && <p className="text-sm text-muted-foreground">{photoProof.callout}</p>}
-                {proofAccessError
-                  ? <p className="text-sm text-muted-foreground">Could not verify photo proof access. Please refresh the page or try again shortly.</p>
-                  : <p className="text-sm text-destructive/90">You do not have permission to submit photo proof on this server, so this method is unavailable for your account.</p>}
+                {proofAccessError ? (
+                  <p className="text-sm text-muted-foreground">Could not verify photo proof access. Please refresh the page or try again shortly.</p>
+                ) : siteConfig?.billing_enabled ? (
+                  <p className="text-sm">
+                    <span className="text-muted-foreground">You can&apos;t link characters with photo proof yet.</span>{" "}
+                    <span className="font-medium text-[#1eff00]">Become an Honored supporter to unlock it.</span>{" "}
+                    <Link to="/supporter#linking" className="font-medium text-[#f0c060] underline-offset-4 hover:underline">
+                      See supporter perks
+                    </Link>
+                  </p>
+                ) : (
+                  <p className="text-sm text-destructive/90">You do not have permission to submit photo proof on this server, so this method is unavailable for your account.</p>
+                )}
               </div>
             ))}
           </div>
@@ -830,6 +849,18 @@ export function CharacterSettings() {
       >
         <FavoritesList data={favorites.data} isLoading={favorites.isLoading} />
       </CharacterSection>
+    </div>
+  );
+}
+
+export function AiAssistantSettings() {
+  return (
+    <div className="max-w-3xl space-y-8">
+      <div>
+        <h2 className="text-xl font-semibold">AI assistant</h2>
+        <p className="text-muted-foreground mt-1 text-sm">Choose which AI assistants appear for your account and connect the provider that pays for them.</p>
+      </div>
+      <InferenceSettings />
     </div>
   );
 }

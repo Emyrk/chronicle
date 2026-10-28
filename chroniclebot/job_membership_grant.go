@@ -214,6 +214,9 @@ func (w *WorkerCheckDiscordMembershipGrant) Work(ctx context.Context, job *river
 		return fmt.Errorf("load discord auth link: %w", err)
 	}
 
+	// A full Discord user sync can replace this result and clear the claim while
+	// the API request is in flight. Completion then returns sql.ErrNoRows, which
+	// means this job is stale rather than failed.
 	member, fetchErr := w.bot.GetGuildMember(w.bot.ChronicleGuildID(), link.LinkedID)
 	if fetchErr != nil {
 		safeError := sanitizeMembershipError(fetchErr)
@@ -223,6 +226,9 @@ func (w *WorkerCheckDiscordMembershipGrant) Work(ctx context.Context, job *river
 			UserID:     job.Args.UserID,
 			ClaimToken: claimToken,
 		})
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
 		if err != nil {
 			return fmt.Errorf("record discord membership check error: %w", err)
 		}
@@ -236,6 +242,9 @@ func (w *WorkerCheckDiscordMembershipGrant) Work(ctx context.Context, job *river
 			UserID:     job.Args.UserID,
 			ClaimToken: claimToken,
 		})
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
 		if err != nil {
 			return fmt.Errorf("record discord non-member check: %w", err)
 		}
@@ -256,6 +265,9 @@ func (w *WorkerCheckDiscordMembershipGrant) Work(ctx context.Context, job *river
 		}
 		return nil
 	}, nil)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}

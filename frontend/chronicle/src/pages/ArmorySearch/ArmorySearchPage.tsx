@@ -3,6 +3,7 @@ import { useSearchParams, Link } from "react-router-dom";
 import { Search, Shield, Users, Loader2, Swords } from "lucide-react";
 import { useArmorySearch, useRealms } from "@/api/queries";
 import type { ArmorySearchResult } from "@/api/typesGenerated";
+import { AdRailStack } from "@/components/Ads/AdRailStack";
 import { AdSlot } from "@/components/Ads/AdSlot";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { GuildSearchContent } from "@/pages/GuildSearch/GuildSearchContent";
@@ -56,8 +57,12 @@ export function ArmorySearchPage() {
 
   return (
     <div className="flex w-full items-start justify-center gap-4 px-4 py-8">
-      <div className="hidden justify-end 2xl:flex">
-        <AdSlot placement="armory-search-left-rail" format="rail" railLayout="paired-wide" />
+      <div className="hidden self-stretch justify-end 2xl:flex">
+        <AdRailStack
+          primaryPlacement="armory-search-left-rail"
+          secondaryPlacement="armory-search-left-rail-lower"
+          railLayout="paired-wide"
+        />
       </div>
 
       <main className="min-w-0 w-full max-w-5xl">
@@ -104,10 +109,10 @@ export function ArmorySearchPage() {
         )}
       </main>
 
-      <div className="hidden justify-start xl:flex">
-        <AdSlot
-          placement="armory-search-right-rail"
-          format="rail"
+      <div className="hidden self-stretch justify-start xl:flex">
+        <AdRailStack
+          primaryPlacement="armory-search-right-rail"
+          secondaryPlacement="armory-search-right-rail-lower"
           railLayout="paired-wide"
           railBreakpoint="xl"
         />

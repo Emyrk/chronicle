@@ -196,6 +196,13 @@ CREATE FUNCTION river_job_state_in_bitmask(bitmask bit, state river_job_state) R
     END = 1;
 $$;
 
+CREATE TABLE addon_authors (
+    user_id uuid NOT NULL,
+    name text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT addon_authors_name_check CHECK (((name ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text) AND ((char_length(name) >= 2) AND (char_length(name) <= 32))))
+);
+
 CREATE TABLE application_modification_requests (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     application_id uuid NOT NULL,
@@ -972,7 +979,8 @@ CREATE TABLE encounter_dps_rankings (
     hps double precision DEFAULT 0 NOT NULL,
     player_sub_spec text DEFAULT ''::text NOT NULL,
     player_deaths integer,
-    alive_percentage double precision
+    alive_percentage double precision,
+    unranked_damage_done bigint DEFAULT 0 NOT NULL
 );
 
 ALTER TABLE ONLY encounter_dps_rankings FORCE ROW LEVEL SECURITY;
@@ -1303,7 +1311,36 @@ CREATE TABLE inference_threads (
     title text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    cleared_at timestamp with time zone,
     CONSTRAINT inference_threads_check CHECK (((context_type IS NULL) = (context_id IS NULL)))
+);
+
+CREATE TABLE inference_usage (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    run_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    thread_id uuid,
+    message_key text,
+    context_type text,
+    context_id text,
+    model text NOT NULL,
+    generation_id text,
+    prompt_tokens bigint DEFAULT 0 NOT NULL,
+    completion_tokens bigint DEFAULT 0 NOT NULL,
+    cached_tokens bigint DEFAULT 0 NOT NULL,
+    reasoning_tokens bigint DEFAULT 0 NOT NULL,
+    cost_nanos bigint,
+    upstream_cost_nanos bigint,
+    is_byok boolean,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT inference_usage_context_check CHECK (((context_type IS NULL) = (context_id IS NULL)))
+);
+
+CREATE TABLE inference_user_config (
+    user_id uuid NOT NULL,
+    config jsonb DEFAULT '{}'::jsonb NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT inference_user_config_object CHECK ((jsonb_typeof(config) = 'object'::text))
 );
 
 CREATE TABLE instance_loot (
@@ -1581,6 +1618,68 @@ CREATE VIEW log_instances_guild AS
      LEFT JOIN wow_servers ws ON ((wsr.server_id = ws.id)))
      LEFT JOIN tenants t ON ((ws.tenant_id = t.id)))
      LEFT JOIN guilds g ON ((li.guild_id = g.id)));
+
+CREATE TABLE lua_project_artifact_gc (
+    object_key text NOT NULL,
+    attempted_at timestamp with time zone,
+    ready_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE lua_project_artifacts (
+    project_id uuid NOT NULL,
+    hash text NOT NULL,
+    object_key text NOT NULL,
+    mime_type text DEFAULT 'application/zip'::text NOT NULL,
+    content_encoding text,
+    uncompressed_size_bytes bigint NOT NULL,
+    stored_size_bytes bigint NOT NULL,
+    CONSTRAINT lua_project_artifacts_hash_check CHECK ((hash ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT lua_project_artifacts_stored_size_bytes_check CHECK ((stored_size_bytes >= 0)),
+    CONSTRAINT lua_project_artifacts_uncompressed_size_bytes_check CHECK ((uncompressed_size_bytes >= 0))
+);
+
+CREATE TABLE lua_project_contributors (
+    project_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    permissions text[] NOT NULL,
+    added_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT lua_project_contributors_permissions_check CHECK (((cardinality(permissions) > 0) AND (permissions <@ ARRAY['edit'::text, 'release'::text])))
+);
+
+CREATE TABLE lua_project_releases (
+    project_id uuid NOT NULL,
+    tag text NOT NULL,
+    hash text,
+    icon text,
+    published_at timestamp with time zone DEFAULT now() NOT NULL,
+    published_by uuid,
+    CONSTRAINT lua_project_releases_hash_check CHECK (((hash IS NULL) OR (hash ~ '^[0-9a-f]{64}$'::text))),
+    CONSTRAINT lua_project_releases_tag_check CHECK ((tag ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$'::text))
+);
+
+CREATE TABLE lua_project_stars (
+    project_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE lua_projects (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    owner_id uuid NOT NULL,
+    kind text NOT NULL,
+    name text NOT NULL,
+    slug text NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    draft_hash text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    draft_icon text,
+    description text DEFAULT ''::text NOT NULL,
+    CONSTRAINT lua_projects_description_length CHECK ((char_length(description) <= 300)),
+    CONSTRAINT lua_projects_kind_check CHECK ((kind = ANY (ARRAY['panel'::text, 'guide'::text])))
+);
 
 CREATE TABLE oauth_device_sessions (
     device_signature text NOT NULL,
@@ -2538,6 +2637,12 @@ ALTER TABLE ONLY river_job ALTER COLUMN id SET DEFAULT nextval('river_job_id_seq
 
 ALTER TABLE ONLY river_notification ALTER COLUMN id SET DEFAULT nextval('river_notification_id_seq'::regclass);
 
+ALTER TABLE ONLY addon_authors
+    ADD CONSTRAINT addon_authors_name_key UNIQUE (name);
+
+ALTER TABLE ONLY addon_authors
+    ADD CONSTRAINT addon_authors_pkey PRIMARY KEY (user_id);
+
 ALTER TABLE ONLY application_modification_requests
     ADD CONSTRAINT application_modification_requests_pkey PRIMARY KEY (id);
 
@@ -2787,6 +2892,12 @@ ALTER TABLE ONLY inference_runs
 ALTER TABLE ONLY inference_threads
     ADD CONSTRAINT inference_threads_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY inference_usage
+    ADD CONSTRAINT inference_usage_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY inference_user_config
+    ADD CONSTRAINT inference_user_config_pkey PRIMARY KEY (user_id);
+
 ALTER TABLE ONLY instance_loot
     ADD CONSTRAINT instance_loot_pkey PRIMARY KEY (id);
 
@@ -2852,6 +2963,27 @@ ALTER TABLE ONLY log_instance_youtube_timestamped
 
 ALTER TABLE ONLY log_instances
     ADD CONSTRAINT log_instances_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY lua_project_artifact_gc
+    ADD CONSTRAINT lua_project_artifact_gc_pkey PRIMARY KEY (object_key);
+
+ALTER TABLE ONLY lua_project_artifacts
+    ADD CONSTRAINT lua_project_artifacts_pkey PRIMARY KEY (project_id, hash);
+
+ALTER TABLE ONLY lua_project_contributors
+    ADD CONSTRAINT lua_project_contributors_pkey PRIMARY KEY (project_id, user_id);
+
+ALTER TABLE ONLY lua_project_releases
+    ADD CONSTRAINT lua_project_releases_pkey PRIMARY KEY (project_id, tag);
+
+ALTER TABLE ONLY lua_project_stars
+    ADD CONSTRAINT lua_project_stars_pkey PRIMARY KEY (project_id, user_id);
+
+ALTER TABLE ONLY lua_projects
+    ADD CONSTRAINT lua_projects_owner_id_slug_key UNIQUE (owner_id, slug);
+
+ALTER TABLE ONLY lua_projects
+    ADD CONSTRAINT lua_projects_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY oauth_device_sessions
     ADD CONSTRAINT oauth_device_sessions_pkey PRIMARY KEY (device_signature);
@@ -3329,6 +3461,12 @@ CREATE UNIQUE INDEX inference_threads_durable_context_assistant_idx ON inference
 
 CREATE INDEX inference_threads_user_updated_idx ON inference_threads USING btree (user_id, updated_at DESC);
 
+CREATE INDEX inference_usage_run_idx ON inference_usage USING btree (run_id);
+
+CREATE INDEX inference_usage_thread_created_idx ON inference_usage USING btree (thread_id, created_at);
+
+CREATE INDEX inference_usage_user_context_idx ON inference_usage USING btree (user_id, context_type, context_id);
+
 CREATE INDEX instance_loot_received ON instance_loot USING btree (realm_id, received_guid, received_ts DESC);
 
 CREATE INDEX instance_speedruns_cohort_lookup_idx ON instance_speedruns USING btree (instance_name, start_time);
@@ -3352,6 +3490,14 @@ CREATE UNIQUE INDEX log_instance_youtube_timestamped_instance_id_idx ON log_inst
 CREATE UNIQUE INDEX log_instance_youtube_timestamped_slug_idx ON log_instance_youtube_timestamped USING btree (instance_slug) WHERE (instance_slug IS NOT NULL);
 
 CREATE UNIQUE INDEX log_instances_hashed_slug_idx ON log_instances USING btree (hashed_slug) WHERE (hashed_slug IS NOT NULL);
+
+CREATE INDEX lua_project_contributors_user_idx ON lua_project_contributors USING btree (user_id);
+
+CREATE INDEX lua_project_releases_recent_idx ON lua_project_releases USING btree (project_id, published_at DESC);
+
+CREATE INDEX lua_project_stars_user_idx ON lua_project_stars USING btree (user_id, created_at DESC);
+
+CREATE INDEX lua_projects_owner_idx ON lua_projects USING btree (owner_id, updated_at DESC);
 
 CREATE INDEX oauth_device_sessions_expires_at_idx ON oauth_device_sessions USING btree (expires_at);
 
@@ -3428,6 +3574,9 @@ CREATE TRIGGER trg_cleanup_after_untrack AFTER DELETE ON user_tracked_layouts FO
 CREATE TRIGGER trg_reattach_by_slug AFTER INSERT ON log_instances FOR EACH ROW EXECUTE FUNCTION reattach_by_slug();
 
 CREATE TRIGGER trigger_insert_default_data_grant AFTER INSERT ON users FOR EACH ROW EXECUTE FUNCTION insert_default_data_grant();
+
+ALTER TABLE ONLY addon_authors
+    ADD CONSTRAINT addon_authors_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY application_modification_requests
     ADD CONSTRAINT application_modification_requests_application_id_fkey FOREIGN KEY (application_id) REFERENCES server_applications(id) ON DELETE CASCADE;
@@ -3669,6 +3818,18 @@ ALTER TABLE ONLY inference_runs
 ALTER TABLE ONLY inference_threads
     ADD CONSTRAINT inference_threads_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY inference_usage
+    ADD CONSTRAINT inference_usage_run_id_fkey FOREIGN KEY (run_id) REFERENCES inference_runs(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY inference_usage
+    ADD CONSTRAINT inference_usage_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES inference_threads(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY inference_usage
+    ADD CONSTRAINT inference_usage_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY inference_user_config
+    ADD CONSTRAINT inference_user_config_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
 ALTER TABLE ONLY instance_loot
     ADD CONSTRAINT instance_loot_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
@@ -3740,6 +3901,33 @@ ALTER TABLE ONLY log_instances
 
 ALTER TABLE ONLY log_instances
     ADD CONSTRAINT log_instances_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY lua_project_artifacts
+    ADD CONSTRAINT lua_project_artifacts_project_id_fkey FOREIGN KEY (project_id) REFERENCES lua_projects(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY lua_project_contributors
+    ADD CONSTRAINT lua_project_contributors_added_by_fkey FOREIGN KEY (added_by) REFERENCES users(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY lua_project_contributors
+    ADD CONSTRAINT lua_project_contributors_project_id_fkey FOREIGN KEY (project_id) REFERENCES lua_projects(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY lua_project_contributors
+    ADD CONSTRAINT lua_project_contributors_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY lua_project_releases
+    ADD CONSTRAINT lua_project_releases_project_id_fkey FOREIGN KEY (project_id) REFERENCES lua_projects(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY lua_project_releases
+    ADD CONSTRAINT lua_project_releases_published_by_fkey FOREIGN KEY (published_by) REFERENCES users(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY lua_project_stars
+    ADD CONSTRAINT lua_project_stars_project_id_fkey FOREIGN KEY (project_id) REFERENCES lua_projects(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY lua_project_stars
+    ADD CONSTRAINT lua_project_stars_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY lua_projects
+    ADD CONSTRAINT lua_projects_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES users(id);
 
 ALTER TABLE ONLY oauth_relay_codes
     ADD CONSTRAINT oauth_relay_codes_user_auth_session_id_fkey FOREIGN KEY (user_auth_session_id) REFERENCES user_auth_session(id) ON DELETE CASCADE;

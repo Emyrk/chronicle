@@ -78,7 +78,7 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 		completedAt := time.Now()
 		completionCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		if err := w.Store.CompleteBillingReconciliationRun(completionCtx, database.CompleteBillingReconciliationRunParams{
+		completionErr := w.Store.CompleteBillingReconciliationRun(completionCtx, database.CompleteBillingReconciliationRunParams{
 			ID:                          runID,
 			Status:                      status,
 			ProviderCustomersFound:      counts.providerCustomersFound,
@@ -89,11 +89,16 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 			EntitlementCustomersFound:   counts.entitlementCustomersFound,
 			EntitlementCustomersSynced:  counts.entitlementCustomersSynced,
 			ErrorText:                   errorText,
-		}); err != nil {
+		})
+		if completionErr != nil {
 			if workErr == nil {
-				workErr = fmt.Errorf("record billing reconciliation completion: %w", err)
+				workErr = fmt.Errorf("record billing reconciliation completion: %w", completionErr)
 			} else if w.Logger != nil {
-				w.Logger.ErrorContext(ctx, "failed to record billing reconciliation failure", "error", err)
+				w.Logger.ErrorContext(ctx, "failed to record billing reconciliation failure", "error", completionErr)
+			}
+		} else if status == "completed" {
+			if _, err := w.Store.DeleteOldSuccessfulBillingReconciliationRuns(completionCtx); err != nil && w.Logger != nil {
+				w.Logger.ErrorContext(ctx, "failed to delete old successful billing reconciliation runs", "error", err)
 			}
 		}
 		metricStatus := status
@@ -183,6 +188,9 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 		}
 		if changed {
 			counts.subscriptionsChanged++
+			w.Billing.notifySubscriptionChange(ctx, w.Billing.stripeSubscriptionChange(
+				stripe.EventType(SubscriptionChangeEventReconciled), userID, sub,
+			))
 		}
 	}
 
@@ -206,6 +214,9 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 			}
 			if changed {
 				counts.subscriptionsChanged++
+				w.Billing.notifySubscriptionChange(ctx, deletedSubscriptionChange(
+					stripe.EventType(SubscriptionChangeEventReconciledCanceled), stripe.Subscription{ID: subscriptionID}, local,
+				))
 			}
 			if local.ProviderCustomerID != "" {
 				customers[local.ProviderCustomerID] = struct{}{}
@@ -222,6 +233,9 @@ func (w *ReconciliationWorker) Work(ctx context.Context, _ *river.Job[ArgsReconc
 		}
 		if changed {
 			counts.subscriptionsChanged++
+			w.Billing.notifySubscriptionChange(ctx, w.Billing.stripeSubscriptionChange(
+				stripe.EventType(SubscriptionChangeEventReconciled), local.UserID, sub,
+			))
 		}
 	}
 	counts.entitlementCustomersFound = int32(len(customers))
@@ -293,6 +307,9 @@ func (s *Service) upsertSubscriptionIfChanged(ctx context.Context, userID uuid.U
 	})
 	if err != nil {
 		return false, fmt.Errorf("upsert billing subscription: %w", err)
+	}
+	if err := s.syncStripeCustomerMetadata(ctx, sub.Customer.ID, userID); err != nil {
+		return false, err
 	}
 	return rows > 0, nil
 }

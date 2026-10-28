@@ -166,10 +166,19 @@ func ImportCmd() *serpent.Command {
 				return fmt.Errorf("open wow client: %w", err)
 			}
 
+			direct, directErr := newMPQFallback(resolved)
+			var directReader dbcFileReader
+			if directErr != nil {
+				_, _ = fmt.Fprintf(inv.Stdout, "warning: direct MPQ lookup unavailable: %v; using indexed archive lookup\n", directErr)
+			} else {
+				directReader = direct
+				defer direct.Close()
+			}
+
 			// Extract the union of required files once, shared across importers.
 			files := make(map[DBCFile][]byte)
 			for _, imp := range selected {
-				if err := extractFiles(wc, files, imp.RequiredFiles()); err != nil {
+				if err := extractFiles(wc, directReader, files, imp.RequiredFiles()); err != nil {
 					return err
 				}
 			}
@@ -270,6 +279,7 @@ func importerKeys() []string {
 	}
 	return keys
 }
+
 // formatSize returns a human-readable byte size (e.g. "1.2 MB", "340 KB").
 func formatSize(bytes int) string {
 	const (
@@ -285,4 +295,3 @@ func formatSize(bytes int) string {
 		return fmt.Sprintf("%d B", bytes)
 	}
 }
-

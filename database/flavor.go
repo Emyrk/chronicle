@@ -33,6 +33,8 @@ const (
 	FlavorWoWForever FlavorTag = "wow-forever"
 	// FlavorWrath is 3.3.5a (WotLK)-era behavior (Warmane, Epoch, AzerothCore).
 	FlavorWrath FlavorTag = "wrath"
+	// FlavorWarmane is Warmane-specific behavior.
+	FlavorWarmane FlavorTag = "warmane"
 	// FlavorTurtle is Turtle WoW-specific behavior.
 	FlavorTurtle FlavorTag = "turtle"
 	// FlavorKronos is Kronos-specific behavior.
@@ -48,6 +50,16 @@ const (
 	FlavorCapybara FlavorTag = "capybara"
 	// FlavorRavencraft is Ravencraft-specific behavior.
 	FlavorRavencraft FlavorTag = "ravencraft"
+	// FlavorSunreach is Sun Reach-specific behavior.
+	FlavorSunreach FlavorTag = "sunreach"
+	// FlavorFaebright is Faebright-specific behavior.
+	FlavorFaebright FlavorTag = "faebright"
+	// FlavorMoonwell is Moonwell-specific behavior.
+	FlavorMoonwell FlavorTag = "moonwell"
+	// FlavorAshenWoW is AshenWoW-specific behavior.
+	FlavorAshenWoW FlavorTag = "ashenwow"
+	// FlavorCrusaderStorm is Crusader Storm-specific behavior.
+	FlavorCrusaderStorm FlavorTag = "crusader-storm"
 	// FlavorAzerothcoreProgression enables progression-server behavior where
 	// multiple expansion versions of the same instance can coexist.
 	FlavorAzerothcoreProgression FlavorTag = "azerothcore-progression"
@@ -73,6 +85,7 @@ func AllFlavorTagValues() []FlavorTag {
 		FlavorTBCAnniversary,
 		FlavorWoWForever,
 		FlavorWrath,
+		FlavorWarmane,
 		FlavorTurtle,
 		FlavorKronos,
 		FlavorEpoch,
@@ -80,6 +93,11 @@ func AllFlavorTagValues() []FlavorTag {
 		FlavorChromieCraft,
 		FlavorCapybara,
 		FlavorRavencraft,
+		FlavorSunreach,
+		FlavorFaebright,
+		FlavorMoonwell,
+		FlavorAshenWoW,
+		FlavorCrusaderStorm,
 		FlavorAzerothcoreProgression,
 		FlavorVanillaPlus,
 		FlavorOctoWoW,
@@ -212,7 +230,7 @@ func (e LogType) Flavor() WoWFlavor {
 	case LogTypeKronos:
 		return WoWFlavor{FlavorVanilla, FlavorKronos}
 	case LogTypeWarmane:
-		return WoWFlavor{FlavorWrath}
+		return WoWFlavor{FlavorWrath, FlavorWarmane}
 	case LogTypeEpoch:
 		return WoWFlavor{FlavorWrath, FlavorEpoch}
 	case LogTypeAzerothcoreClientside, LogTypeAzerothcore:

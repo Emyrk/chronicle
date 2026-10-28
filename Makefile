@@ -217,9 +217,23 @@ icons: icons/wowdata
 else
 icons: icons/upload
 endif
+WOWDATA_TALENT_BACKGROUND_WORKERS ?= 4
+
 .PHONY: icons/talents-extract
+ifeq ($(SERVER),forever)
+icons/talents-extract:
+	go run ./scripts/dbcdata extract-wowdata-talent-backgrounds \
+		--server=$(SERVER) \
+		--out=frontend/imagecache/$(SERVER)/talent-backgrounds \
+		$(if $(WOW_CLIENT_PATH),--dbc="$(WOW_CLIENT_PATH)") \
+		$(if $(WOWDATA_BIN),--wowdata="$(WOWDATA_BIN)") \
+		$(if $(WOWDATA_CACHE),--cache="$(WOWDATA_CACHE)") \
+		$(if $(WOWDATA_BUILD),--build="$(WOWDATA_BUILD)") \
+		--workers="$(WOWDATA_TALENT_BACKGROUND_WORKERS)"
+else
 icons/talents-extract:
 	go run ./scripts/dbcdata extract-talent-backgrounds --server=$(SERVER) --out=frontend/imagecache/$(SERVER)/talent-backgrounds
+endif
 
 .PHONY: icons/talents-upload
 icons/talents-upload:
@@ -319,11 +333,13 @@ maps/legacy-upload: maps/legacy-extract
 .PHONY: maps/legacy
 maps/legacy: maps/legacy-upload
 
-.PHONY: maps/turtle maps/azerothcore maps/tbc
+.PHONY: maps/turtle maps/azerothcore maps/vanillaplus maps/tbc
 maps/turtle: SERVER=turtle
 maps/turtle: maps/legacy
 maps/azerothcore: SERVER=azerothcore
 maps/azerothcore: maps/legacy
+maps/vanillaplus: SERVER=vanillaplus
+maps/vanillaplus: maps/legacy
 maps/tbc: SERVER=tbc
 maps/tbc: maps/legacy
 

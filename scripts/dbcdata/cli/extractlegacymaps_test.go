@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/Gophercraft/core/format/dbc/dbdefs"
@@ -59,6 +60,7 @@ func TestBuildLegacyMapManifest(t *testing.T) {
 			{ID: 33, Name: "Shadowfang Keep", Directory: "Shadowfang", InstanceType: 1},
 			{ID: 309, Name: "Zul'Gurub", Directory: "Zul'gurub", InstanceType: 2},
 		},
+		map[[2]int32]wowMapFloorBounds{{33, 1}: {MinX: -100, MaxX: 300, MinY: -50, MaxY: 150}},
 		files,
 		resolveFile,
 		wowMapTarget{Product: "turtle", Build: "1.12.1.5875"},
@@ -71,10 +73,47 @@ func TestBuildLegacyMapManifest(t *testing.T) {
 	require.Len(t, manifest.Maps[0].Art[0].Layers[0].Tiles, 12)
 	require.Len(t, manifest.Maps[0].Art[0].Overlays, 1)
 	require.Len(t, manifest.Maps[0].Art[0].Overlays[0].Tiles, 2)
-	require.Len(t, manifest.Instances, 1)
+	require.Len(t, manifest.Instances, 2)
 	require.Equal(t, int32(33), manifest.Instances[0].MapID)
+	require.Equal(t, &wowMapFloorBounds{MinX: -100, MaxX: 300, MinY: -50, MaxY: 150}, manifest.Instances[0].Floors[0].Bounds)
 	require.Len(t, manifest.Instances[0].Floors[0].Tiles, 12)
+	require.Equal(t, int32(309), manifest.Instances[1].MapID)
+	require.Equal(t, "Zul'gurub", manifest.Instances[1].Directory)
+	require.NotNil(t, manifest.Instances[1].Floors)
+	require.Empty(t, manifest.Instances[1].Floors)
 	require.Len(t, sourcePaths, 26)
+}
+
+func TestLegacyDungeonMapBounds(t *testing.T) {
+	t.Parallel()
+
+	bounds := legacyDungeonMapBounds([]dbdefs.Ent_DungeonMap{
+		{MapID: 595, FloorIndex: 0, MinX: -10, MaxX: 90, MinY: -20, MaxY: 180},
+		{MapID: 595, FloorIndex: 1, Min: []float32{-30, -40}, Max: []float32{70, 160}},
+		{MapID: 600, FloorIndex: 0, MinX: -10, MaxX: 90, MinY: -20, MaxY: 180, Min: []float32{0, 0}, Max: []float32{0, 0}},
+		{MapID: 601, FloorIndex: 0, MinX: 90, MaxX: -10, MinY: 180, MaxY: -20},
+		{MapID: 602, FloorIndex: 0, MinX: float32(math.NaN()), MaxX: 90, MinY: -20, MaxY: 180},
+		{MapID: 1, FloorIndex: 0},
+	})
+	require.Equal(t, wowMapFloorBounds{MinX: -10, MaxX: 90, MinY: -20, MaxY: 180}, bounds[[2]int32{595, 1}])
+	require.Equal(t, wowMapFloorBounds{MinX: -30, MaxX: 70, MinY: -40, MaxY: 160}, bounds[[2]int32{595, 2}])
+	require.Equal(t, wowMapFloorBounds{MinX: -10, MaxX: 90, MinY: -20, MaxY: 180}, bounds[[2]int32{600, 1}], "degenerate vector fields fall back to scalar fields")
+	require.Equal(t, wowMapFloorBounds{MinX: -10, MaxX: 90, MinY: -20, MaxY: 180}, bounds[[2]int32{601, 1}], "inverted extents are normalized")
+	_, exists := bounds[[2]int32{602, 1}]
+	require.False(t, exists, "non-finite extents are rejected")
+	_, exists = bounds[[2]int32{1, 1}]
+	require.False(t, exists)
+}
+
+func TestClassicDungeonFloorBoundsIncludesVioletHold(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, &wowMapFloorBounds{
+		MinX: 665.346985,
+		MaxX: 921.575989,
+		MinY: 1813.349976,
+		MaxY: 1984.170044,
+	}, classicDungeonFloorBounds(608, 1))
 }
 
 func TestPruneUnavailableLegacyMapTiles(t *testing.T) {
@@ -93,7 +132,9 @@ func TestPruneUnavailableLegacyMapTiles(t *testing.T) {
 	skipped := pruneUnavailableLegacyMapTiles(&manifest, map[int32]struct{}{3: {}, 4: {}})
 	require.Equal(t, []string{`"Loch Modan" overlay 281`, `"Naxxramas" floor 1`}, skipped)
 	require.Empty(t, manifest.Maps[0].Art[0].Overlays)
-	require.Empty(t, manifest.Instances)
+	require.Len(t, manifest.Instances, 1)
+	require.Equal(t, "Naxxramas", manifest.Instances[0].Name)
+	require.Empty(t, manifest.Instances[0].Floors)
 }
 
 func addLegacyTestFile(files map[string]string, path string) {

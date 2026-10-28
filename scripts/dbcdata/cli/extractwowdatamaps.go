@@ -1279,6 +1279,9 @@ var classicDungeonMapBounds = map[[2]int32]wowMapFloorBounds{
 	{533, 4}: {MinX: -4287.350098, MaxX: -3087.020020, MinY: 2336.610107, MaxY: 3136.830078},
 	{533, 5}: {MinX: -4400.089844, MaxX: -2330.280029, MinY: 2311.340088, MaxY: 3691.219971},
 	{533, 6}: {MinX: -5522.290039, MaxX: -4866.350098, MinY: 3379.25, MaxY: 3816.540039},
+	// Stock 3.3.5 DungeonMap row 52. The local Warmane DBC's vector fields
+	// decode as degenerate, so retain its scalar calibration as a fallback.
+	{608, 1}: {MinX: 665.346985, MaxX: 921.575989, MinY: 1813.349976, MaxY: 1984.170044},
 }
 
 func classicDungeonFloorBounds(mapID, floor int32) *wowMapFloorBounds {

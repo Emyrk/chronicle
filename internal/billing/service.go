@@ -19,6 +19,8 @@ const (
 	TierRevered    = "revered"
 	TierExalted    = "exalted"
 	ProviderStripe = "stripe"
+
+	stripeMetadataChronicleUserID = "chronicle_user_id"
 )
 
 var paidProducts = []ProductCode{ProductHonored, ProductRevered, ProductExalted}
@@ -32,6 +34,7 @@ type priceRetriever func(context.Context, string, *stripe.PriceRetrieveParams) (
 type subscriptionRetriever func(context.Context, string, *stripe.SubscriptionRetrieveParams) (*stripe.Subscription, error)
 type checkoutSessionRetriever func(context.Context, string, *stripe.CheckoutSessionRetrieveParams) (*stripe.CheckoutSession, error)
 type checkoutSessionCreator func(context.Context, *stripe.CheckoutSessionCreateParams) (*stripe.CheckoutSession, error)
+type customerUpdater func(context.Context, string, *stripe.CustomerUpdateParams) (*stripe.Customer, error)
 type billingPortalSessionCreator func(context.Context, *stripe.BillingPortalSessionCreateParams) (*stripe.BillingPortalSession, error)
 type subscriptionLister func(context.Context) ([]*stripe.Subscription, error)
 type activeEntitlementLister func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error)
@@ -64,12 +67,14 @@ type Service struct {
 	retrieveSubscription       subscriptionRetriever
 	retrieveCheckoutSession    checkoutSessionRetriever
 	createCheckoutSession      checkoutSessionCreator
+	updateCustomer             customerUpdater
 	createBillingPortalSession billingPortalSessionCreator
 	listSubscriptions          subscriptionLister
 	listActiveEntitlements     activeEntitlementLister
 
 	subscriptionChangeNotifier func(context.Context, SubscriptionChangeNotification) error
 	cosmeticAuditEnqueuer      func(context.Context, uuid.UUID) error
+	discordRoleSyncEnqueuer    func(context.Context, uuid.UUID) error
 
 	pricesMu sync.Mutex
 	prices   []chroniclesdk.BillingPrice
@@ -83,6 +88,14 @@ func (s *Service) SetCosmeticAuditEnqueuer(enqueue func(context.Context, uuid.UU
 	}
 }
 
+// SetDiscordRoleSyncEnqueuer schedules a role repair when a user's effective
+// paid tier changes. The job reads the current tier, never a stale snapshot.
+func (s *Service) SetDiscordRoleSyncEnqueuer(enqueue func(context.Context, uuid.UUID) error) {
+	if s != nil {
+		s.discordRoleSyncEnqueuer = enqueue
+	}
+}
+
 func New(opts Options) *Service {
 	var client *stripe.Client
 	var retrieveAccount accountRetriever
@@ -90,6 +103,7 @@ func New(opts Options) *Service {
 	var retrieveSubscription subscriptionRetriever
 	var retrieveCheckoutSession checkoutSessionRetriever
 	var createCheckoutSession checkoutSessionCreator
+	var updateCustomer customerUpdater
 	var createBillingPortalSession billingPortalSessionCreator
 	var listSubscriptions subscriptionLister
 	var listActiveEntitlements activeEntitlementLister
@@ -100,6 +114,7 @@ func New(opts Options) *Service {
 		retrieveSubscription = client.V1Subscriptions.Retrieve
 		retrieveCheckoutSession = client.V1CheckoutSessions.Retrieve
 		createCheckoutSession = client.V1CheckoutSessions.Create
+		updateCustomer = client.V1Customers.Update
 		createBillingPortalSession = client.V1BillingPortalSessions.Create
 		listSubscriptions = func(ctx context.Context) ([]*stripe.Subscription, error) {
 			var subscriptions []*stripe.Subscription
@@ -163,6 +178,7 @@ func New(opts Options) *Service {
 		retrieveSubscription:       retrieveSubscription,
 		retrieveCheckoutSession:    retrieveCheckoutSession,
 		createCheckoutSession:      createCheckoutSession,
+		updateCustomer:             updateCustomer,
 		createBillingPortalSession: createBillingPortalSession,
 		listSubscriptions:          listSubscriptions,
 		listActiveEntitlements:     listActiveEntitlements,
@@ -197,6 +213,22 @@ func (s *Service) ValidateAccount(ctx context.Context, expectedAccountID string)
 
 func (s *Service) Enabled() bool {
 	return s != nil && s.stripe != nil && s.webhookSecret != "" && len(s.configuredPrices) > 0 && s.priceConfigurationErr == nil && s.accessURL != nil
+}
+
+func (s *Service) syncStripeCustomerMetadata(ctx context.Context, customerID string, userID uuid.UUID) error {
+	if s.updateCustomer == nil {
+		return nil
+	}
+	if customerID == "" {
+		return fmt.Errorf("stripe customer ID is required")
+	}
+	_, err := s.updateCustomer(ctx, customerID, &stripe.CustomerUpdateParams{Metadata: map[string]string{
+		stripeMetadataChronicleUserID: userID.String(),
+	}})
+	if err != nil {
+		return fmt.Errorf("update Stripe customer %q metadata: %w", customerID, err)
+	}
+	return nil
 }
 
 func uniqueStrings(values []string) []string {

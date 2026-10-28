@@ -8,15 +8,22 @@ import { WarcraftLogsComparisonPage } from "./components/WarcraftLogsComparisonP
 import { SupportRibbon } from "./components/SupportRibbon";
 import { useDiscovery } from "./hooks/useDiscovery";
 import { SERVERS, DISCOVERY_URLS } from "./data/servers";
+import type { ServerEntry } from "./types";
 
-function HomePage() {
-  const { servers, loading } = useDiscovery(SERVERS, DISCOVERY_URLS);
+export interface AppProps {
+  pathname: string;
+  initialServers?: ServerEntry[];
+  copyrightYear?: number;
+}
+
+function HomePage({ initialServers }: { initialServers?: ServerEntry[] }) {
+  const { servers, loading } = useDiscovery(SERVERS, DISCOVERY_URLS, initialServers);
 
   return <ServerGrid servers={servers} loading={loading} />;
 }
 
-export function App() {
-  const pathname = window.location.pathname.replace(/\/$/, "");
+export function App({ pathname, initialServers, copyrightYear }: AppProps) {
+  pathname = pathname.replace(/\/$/, "");
   const isSupportPage = pathname.endsWith("/support");
   const isSelfHostingPage = pathname.endsWith("/self-hosting");
   const isPrivacyPage = pathname.endsWith("/privacy");
@@ -24,7 +31,7 @@ export function App() {
   const isWarcraftLogsPage = pathname.endsWith("/warcraft-logs");
   const isStandalonePage = isSupportPage || isSelfHostingPage || isPrivacyPage || isAdsPage || isWarcraftLogsPage;
 
-  let page = <HomePage />;
+  let page = <HomePage initialServers={initialServers} />;
   if (isSupportPage) {
     page = <SupportPage />;
   } else if (isSelfHostingPage) {
@@ -41,7 +48,7 @@ export function App() {
     <div className="flex min-h-dvh flex-col">
       {!isStandalonePage && <SupportRibbon />}
       <main className="flex-1">{page}</main>
-      <Footer />
+      <Footer year={copyrightYear} />
     </div>
   );
 }

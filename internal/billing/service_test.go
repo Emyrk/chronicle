@@ -35,6 +35,58 @@ func TestPublicTierNames(t *testing.T) {
 	require.Equal(t, TierExalted, string(ProductExalted))
 }
 
+type adminActivityStore struct {
+	database.Store
+	subscriptions []database.ListRecentBillingSubscriptionsRow
+}
+
+func (s *adminActivityStore) ListRecentBillingReconciliationRuns(context.Context, int32) ([]database.BillingReconciliationRun, error) {
+	return nil, nil
+}
+
+func (s *adminActivityStore) ListRecentBillingWebhookEvents(context.Context, int32) ([]database.BillingWebhookEvent, error) {
+	return nil, nil
+}
+
+func (s *adminActivityStore) ListRecentBillingSubscriptions(context.Context, int32) ([]database.ListRecentBillingSubscriptionsRow, error) {
+	return s.subscriptions, nil
+}
+
+func TestAdminActivityIncludesSubscriptionUserIdentity(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	updatedAt := time.Date(2026, time.October, 27, 12, 0, 0, 0, time.UTC)
+	service := &Service{store: &adminActivityStore{
+		subscriptions: []database.ListRecentBillingSubscriptionsRow{{
+			BillingSubscription: database.BillingSubscription{
+				UserID:             userID,
+				Provider:           ProviderStripe,
+				ProviderCustomerID: "cus_example",
+				ProductCode:        string(ProductRevered),
+				Status:             string(stripe.SubscriptionStatusActive),
+				UpdatedAt:          pgtype.Timestamptz{Time: updatedAt, Valid: true},
+			},
+			Username:  "example-user",
+			Email:     "user@example.com",
+			DiscordID: "123456789",
+		}},
+	}}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/billing/activity", nil)
+	rec := httptest.NewRecorder()
+	service.AdminActivity(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var response chroniclesdk.AdminBillingActivityResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	require.Len(t, response.Subscriptions, 1)
+	require.Equal(t, userID.String(), response.Subscriptions[0].UserID)
+	require.Equal(t, "example-user", response.Subscriptions[0].Username)
+	require.Equal(t, "user@example.com", response.Subscriptions[0].Email)
+	require.Equal(t, "123456789", response.Subscriptions[0].DiscordID)
+}
+
 func TestSubscriptionHasCurrentBillingStateIsIndependentFromCheckoutAndAccess(t *testing.T) {
 	t.Parallel()
 
@@ -309,6 +361,7 @@ func TestCreateCheckoutReusesExistingStripeCustomer(t *testing.T) {
 	require.NotNil(t, checkoutParams.ManagedPayments)
 	require.True(t, stripe.BoolValue(checkoutParams.ManagedPayments.Enabled))
 	require.True(t, stripe.BoolValue(checkoutParams.AllowPromotionCodes))
+	require.Equal(t, string(stripe.CheckoutSessionPaymentMethodCollectionIfRequired), stripe.StringValue(checkoutParams.PaymentMethodCollection))
 	require.Equal(t, "cus_existing", stripe.StringValue(checkoutParams.Customer))
 	require.Nil(t, checkoutParams.CustomerEmail)
 }
@@ -699,6 +752,7 @@ type entitlementStore struct {
 	billingEntitled         bool
 	billingEntitlementByKey map[string]bool
 	billingEntitlements     []database.BillingEntitlement
+	entitlementsByUser      map[uuid.UUID][]database.BillingEntitlement
 	subscription            database.BillingSubscription
 	subscriptionErr         error
 	user                    database.ChronicleUser
@@ -726,7 +780,10 @@ func (s *entitlementStore) HasBillingEntitlement(_ context.Context, arg database
 	return s.billingEntitled, nil
 }
 
-func (s *entitlementStore) ListBillingEntitlementsByUserID(context.Context, uuid.UUID) ([]database.BillingEntitlement, error) {
+func (s *entitlementStore) ListBillingEntitlementsByUserID(_ context.Context, userID uuid.UUID) ([]database.BillingEntitlement, error) {
+	if s.entitlementsByUser != nil {
+		return s.entitlementsByUser[userID], nil
+	}
 	return s.billingEntitlements, nil
 }
 
@@ -761,11 +818,25 @@ func (s *entitlementStore) InTx(ctx context.Context, fn func(database.Store) err
 
 func (s *entitlementStore) DeleteBillingEntitlementsByProviderCustomerID(_ context.Context, arg database.DeleteBillingEntitlementsByProviderCustomerIDParams) error {
 	s.deletedCustomer = arg
+	for userID, rows := range s.entitlementsByUser {
+		kept := rows[:0:0]
+		for _, row := range rows {
+			if row.Provider != arg.Provider || row.ProviderCustomerID != arg.ProviderCustomerID {
+				kept = append(kept, row)
+			}
+		}
+		s.entitlementsByUser[userID] = kept
+	}
 	return nil
 }
 
 func (s *entitlementStore) UpsertBillingEntitlement(_ context.Context, arg database.UpsertBillingEntitlementParams) (database.BillingEntitlement, error) {
 	s.persisted = append(s.persisted, arg)
+	if s.entitlementsByUser != nil {
+		s.entitlementsByUser[arg.UserID] = append(s.entitlementsByUser[arg.UserID], database.BillingEntitlement{
+			UserID: arg.UserID, Provider: arg.Provider, ProviderCustomerID: arg.ProviderCustomerID, EntitlementKey: arg.EntitlementKey,
+		})
+	}
 	return database.BillingEntitlement{}, nil
 }
 
@@ -882,11 +953,11 @@ func TestSyncStripeEntitlementsPersistsAuthoritativeSnapshotAndStorageGrant(t *t
 	require.Equal(t, stripePaidTierStorageGrantSource, store.dataGrant.Source)
 	require.Equal(t, stripePaidTierStorageGrantSource, store.deletedDataGrant.Source)
 	require.Equal(t, []entitlementRoleChange{
-		{userID: userID, role: stripeRoleAdFree, granted: true},
-		{userID: userID, role: stripeRoleSubmitPhotoProof, granted: true},
-		{userID: userID, role: stripeRoleHonored, granted: true},
-		{userID: userID, role: stripeRoleDownloadRawLogs, granted: true},
-		{userID: userID, role: stripeRoleUnlistedLogs, granted: true},
+		{userID: userID, role: "stripe_ad_free", granted: false},
+		{userID: userID, role: "stripe_submit_photo_proof", granted: false},
+		{userID: userID, role: "stripe_download_raw_logs", granted: false},
+		{userID: userID, role: "stripe_unlisted_logs", granted: false},
+		{userID: userID, role: stripeRoleHonored, granted: false},
 		{userID: userID, role: stripeRoleRevered, granted: true},
 		{userID: userID, role: stripeRoleExalted, granted: false},
 	}, store.roleChanges)
@@ -951,21 +1022,77 @@ func TestSyncStripeEntitlementsTransfersOwnerAndAppliesRolePerEntitlement(t *tes
 		{UserID: currentOwner, Source: stripePaidTierStorageGrantSource},
 	}, store.deletedDataGrants)
 	require.Equal(t, []entitlementRoleChange{
-		{userID: previousOwner, role: stripeRoleAdFree, granted: false},
-		{userID: previousOwner, role: stripeRoleSubmitPhotoProof, granted: false},
+		{userID: previousOwner, role: "stripe_ad_free", granted: false},
+		{userID: previousOwner, role: "stripe_submit_photo_proof", granted: false},
+		{userID: previousOwner, role: "stripe_download_raw_logs", granted: false},
+		{userID: previousOwner, role: "stripe_unlisted_logs", granted: false},
 		{userID: previousOwner, role: stripeRoleHonored, granted: false},
-		{userID: previousOwner, role: stripeRoleDownloadRawLogs, granted: false},
-		{userID: previousOwner, role: stripeRoleUnlistedLogs, granted: false},
 		{userID: previousOwner, role: stripeRoleRevered, granted: false},
 		{userID: previousOwner, role: stripeRoleExalted, granted: false},
-		{userID: currentOwner, role: stripeRoleAdFree, granted: true},
-		{userID: currentOwner, role: stripeRoleSubmitPhotoProof, granted: true},
-		{userID: currentOwner, role: stripeRoleHonored, granted: true},
-		{userID: currentOwner, role: stripeRoleDownloadRawLogs, granted: true},
-		{userID: currentOwner, role: stripeRoleUnlistedLogs, granted: true},
+		{userID: currentOwner, role: "stripe_ad_free", granted: false},
+		{userID: currentOwner, role: "stripe_submit_photo_proof", granted: false},
+		{userID: currentOwner, role: "stripe_download_raw_logs", granted: false},
+		{userID: currentOwner, role: "stripe_unlisted_logs", granted: false},
+		{userID: currentOwner, role: stripeRoleHonored, granted: false},
 		{userID: currentOwner, role: stripeRoleRevered, granted: true},
 		{userID: currentOwner, role: stripeRoleExalted, granted: false},
 	}, store.roleChanges)
+}
+
+func TestStripeEntitlementRoleSyncOnlyOnEffectiveTierChange(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	userID := uuid.New()
+	store := &entitlementStore{
+		providerCustomer:   database.BillingSubscription{UserID: userID},
+		entitlementsByUser: make(map[uuid.UUID][]database.BillingEntitlement),
+	}
+	svc := New(Options{Store: store})
+	var active []*stripe.EntitlementsActiveEntitlement
+	svc.listActiveEntitlements = func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error) {
+		return active, nil
+	}
+	var enqueued []uuid.UUID
+	svc.SetDiscordRoleSyncEnqueuer(func(_ context.Context, id uuid.UUID) error {
+		enqueued = append(enqueued, id)
+		return errors.New("Discord queue unavailable")
+	})
+	require.NoError(t, svc.syncStripeEntitlements(ctx, "cus_123"))
+	require.Empty(t, enqueued)
+	active = []*stripe.EntitlementsActiveEntitlement{{ID: "ent_honored", LookupKey: string(EntitlementChronicleHonored)}}
+	require.NoError(t, svc.syncStripeEntitlements(ctx, "cus_123"))
+	require.Equal(t, []uuid.UUID{userID}, enqueued)
+	require.NoError(t, svc.syncStripeEntitlements(ctx, "cus_123"))
+	require.Len(t, enqueued, 1, "unchanged 15-minute reconciliation should not enqueue")
+	active = []*stripe.EntitlementsActiveEntitlement{{ID: "ent_revered", LookupKey: string(EntitlementChronicleRevered)}}
+	require.NoError(t, svc.syncStripeEntitlements(ctx, "cus_123"))
+	require.Len(t, enqueued, 2)
+	active = nil
+	require.NoError(t, svc.syncStripeEntitlements(ctx, "cus_123"))
+	require.Len(t, enqueued, 3, "revoking the tier should enqueue removal")
+}
+
+func TestStripeEntitlementRoleSyncTransfersOwner(t *testing.T) {
+	t.Parallel()
+	oldOwner, newOwner := uuid.New(), uuid.New()
+	store := &entitlementStore{
+		providerCustomer: database.BillingSubscription{UserID: newOwner},
+		entitlementOwner: oldOwner,
+		entitlementsByUser: map[uuid.UUID][]database.BillingEntitlement{
+			oldOwner: {{UserID: oldOwner, Provider: ProviderStripe, ProviderCustomerID: "cus_123", EntitlementKey: string(EntitlementChronicleExalted)}},
+		},
+	}
+	svc := New(Options{Store: store})
+	svc.listActiveEntitlements = func(context.Context, string) ([]*stripe.EntitlementsActiveEntitlement, error) {
+		return []*stripe.EntitlementsActiveEntitlement{{ID: "ent_revered", LookupKey: string(EntitlementChronicleRevered)}}, nil
+	}
+	var enqueued []uuid.UUID
+	svc.SetDiscordRoleSyncEnqueuer(func(_ context.Context, id uuid.UUID) error {
+		enqueued = append(enqueued, id)
+		return nil
+	})
+	require.NoError(t, svc.syncStripeEntitlements(context.Background(), "cus_123"))
+	require.ElementsMatch(t, []uuid.UUID{oldOwner, newOwner}, enqueued)
 }
 
 func TestEntitlementTransactionDoesNotApplyRolesWhenDatabaseCommitFails(t *testing.T) {
@@ -974,7 +1101,7 @@ func TestEntitlementTransactionDoesNotApplyRolesWhenDatabaseCommitFails(t *testi
 	store := &entitlementStore{transactionErr: errors.New("commit failed")}
 	run := NewEntitlementTransactionRunner(store, store)
 	err := run(context.Background(), func(tx EntitlementTransaction) error {
-		return tx.SetStripeEntitlementRole(context.Background(), uuid.New(), stripeRoleAdFree, true)
+		return tx.SetStripeEntitlementRole(context.Background(), uuid.New(), stripeRoleHonored, true)
 	})
 	require.ErrorContains(t, err, "commit failed")
 	require.Empty(t, store.roleChanges)
@@ -986,8 +1113,11 @@ func TestStripeSubscriptionPurchase(t *testing.T) {
 	firstEnd := time.Date(2026, time.November, 15, 12, 0, 0, 0, time.UTC)
 	latestEnd := firstEnd.AddDate(0, 1, 0)
 	sub := testStripeSubscription("prod_supporter", "price_monthly", firstEnd)
+	sub.Items.Data[0].Price = testStripePrice("price_monthly", 500, stripe.PriceRecurringIntervalMonth, 3)
+	sub.Items.Data[0].Quantity = 2
 	sub.Items.Data = append(sub.Items.Data, &stripe.SubscriptionItem{
-		Price:            &stripe.Price{ID: "price_monthly", Product: &stripe.Product{ID: "prod_supporter"}},
+		Price:            testStripePrice("price_monthly", 500, stripe.PriceRecurringIntervalMonth, 3),
+		Quantity:         3,
 		CurrentPeriodEnd: latestEnd.Unix(),
 	})
 
@@ -995,6 +1125,10 @@ func TestStripeSubscriptionPurchase(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "prod_supporter", got.productID)
 	require.Equal(t, "price_monthly", got.priceID)
+	require.Equal(t, int64(500), got.unitAmount)
+	require.Equal(t, "usd", got.currency)
+	require.Equal(t, int64(3), got.intervalMonths)
+	require.Equal(t, int64(5), got.quantity)
 	require.Equal(t, pgtype.Timestamptz{Time: latestEnd, Valid: true}, got.periodEnd)
 }
 

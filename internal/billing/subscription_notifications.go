@@ -10,6 +10,11 @@ import (
 	"github.com/stripe/stripe-go/v87"
 )
 
+const (
+	SubscriptionChangeEventReconciled         = "billing.reconciliation.subscription.updated"
+	SubscriptionChangeEventReconciledCanceled = "billing.reconciliation.subscription.canceled"
+)
+
 const subscriptionNotificationTimeout = 5 * time.Second
 
 // SubscriptionChangeNotification describes a persisted Stripe subscription
@@ -20,7 +25,12 @@ type SubscriptionChangeNotification struct {
 	ProviderCustomerID     string
 	ProviderSubscriptionID string
 	ProductCode            string
+	ProviderPriceID        string
 	Status                 string
+	UnitAmount             int64
+	Currency               string
+	IntervalMonths         int64
+	Quantity               int64
 	CurrentPeriodEnd       time.Time
 	CancelAtPeriodEnd      bool
 	CancelAt               time.Time
@@ -67,6 +77,11 @@ func (s *Service) stripeSubscriptionChange(eventType stripe.EventType, userID uu
 		change.CancelAt = time.Unix(sub.CancelAt, 0).UTC()
 	}
 	if purchase, err := stripeSubscriptionPurchase(sub); err == nil {
+		change.ProviderPriceID = purchase.priceID
+		change.UnitAmount = purchase.unitAmount
+		change.Currency = purchase.currency
+		change.IntervalMonths = purchase.intervalMonths
+		change.Quantity = purchase.quantity
 		change.CurrentPeriodEnd = purchase.periodEnd.Time
 		if product, err := s.validateSubscriptionPurchase(purchase); err == nil {
 			change.ProductCode = string(product)
@@ -82,6 +97,7 @@ func deletedSubscriptionChange(eventType stripe.EventType, snapshot stripe.Subsc
 		ProviderCustomerID:     row.ProviderCustomerID,
 		ProviderSubscriptionID: snapshot.ID,
 		ProductCode:            row.ProductCode,
+		ProviderPriceID:        row.ProviderPriceID.String,
 		Status:                 string(stripe.SubscriptionStatusCanceled),
 		CurrentPeriodEnd:       row.CurrentPeriodEnd.Time,
 		CancelAtPeriodEnd:      row.CancelAtPeriodEnd,

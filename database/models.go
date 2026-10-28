@@ -848,6 +848,12 @@ func AllWowPlayableRaceValues() []WowPlayableRace {
 	}
 }
 
+type AddonAuthor struct {
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	Name      string             `db:"name" json:"name"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type ApplicationModificationRequest struct {
 	ID            uuid.UUID          `db:"id" json:"id"`
 	ApplicationID uuid.UUID          `db:"application_id" json:"application_id"`
@@ -1464,37 +1470,38 @@ type DiscordMembershipGrantCheck struct {
 }
 
 type EncounterDpsRanking struct {
-	ID              uuid.UUID          `db:"id" json:"id"`
-	EncounterID     uuid.NullUUID      `db:"encounter_id" json:"encounter_id"`
-	InstanceID      uuid.UUID          `db:"instance_id" json:"instance_id"`
-	EncounterName   string             `db:"encounter_name" json:"encounter_name"`
-	InstanceName    string             `db:"instance_name" json:"instance_name"`
-	PlayerGuid      string             `db:"player_guid" json:"player_guid"`
-	PlayerName      string             `db:"player_name" json:"player_name"`
-	PlayerClass     string             `db:"player_class" json:"player_class"`
-	PlayerSpec      string             `db:"player_spec" json:"player_spec"`
-	PlayerRole      string             `db:"player_role" json:"player_role"`
-	PlayerLevel     int16              `db:"player_level" json:"player_level"`
-	TalentBuildID   uuid.NullUUID      `db:"talent_build_id" json:"talent_build_id"`
-	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers      int16              `db:"max_players" json:"max_players"`
-	RealmID         uuid.UUID          `db:"realm_id" json:"realm_id"`
-	RealmName       string             `db:"realm_name" json:"realm_name"`
-	GuildID         uuid.NullUUID      `db:"guild_id" json:"guild_id"`
-	GuildName       string             `db:"guild_name" json:"guild_name"`
-	DamageDone      int64              `db:"damage_done" json:"damage_done"`
-	DurationSecs    float64            `db:"duration_secs" json:"duration_secs"`
-	Dps             float64            `db:"dps" json:"dps"`
-	AvgIlvl         pgtype.Int2        `db:"avg_ilvl" json:"avg_ilvl"`
-	LogHashedSlug   string             `db:"log_hashed_slug" json:"log_hashed_slug"`
-	KilledAt        pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
-	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	HealingDone     int64              `db:"healing_done" json:"healing_done"`
-	AbsorbedDone    int64              `db:"absorbed_done" json:"absorbed_done"`
-	Hps             float64            `db:"hps" json:"hps"`
-	PlayerSubSpec   string             `db:"player_sub_spec" json:"player_sub_spec"`
-	PlayerDeaths    pgtype.Int4        `db:"player_deaths" json:"player_deaths"`
-	AlivePercentage pgtype.Float8      `db:"alive_percentage" json:"alive_percentage"`
+	ID                 uuid.UUID          `db:"id" json:"id"`
+	EncounterID        uuid.NullUUID      `db:"encounter_id" json:"encounter_id"`
+	InstanceID         uuid.UUID          `db:"instance_id" json:"instance_id"`
+	EncounterName      string             `db:"encounter_name" json:"encounter_name"`
+	InstanceName       string             `db:"instance_name" json:"instance_name"`
+	PlayerGuid         string             `db:"player_guid" json:"player_guid"`
+	PlayerName         string             `db:"player_name" json:"player_name"`
+	PlayerClass        string             `db:"player_class" json:"player_class"`
+	PlayerSpec         string             `db:"player_spec" json:"player_spec"`
+	PlayerRole         string             `db:"player_role" json:"player_role"`
+	PlayerLevel        int16              `db:"player_level" json:"player_level"`
+	TalentBuildID      uuid.NullUUID      `db:"talent_build_id" json:"talent_build_id"`
+	DifficultyName     string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers         int16              `db:"max_players" json:"max_players"`
+	RealmID            uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RealmName          string             `db:"realm_name" json:"realm_name"`
+	GuildID            uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	GuildName          string             `db:"guild_name" json:"guild_name"`
+	DamageDone         int64              `db:"damage_done" json:"damage_done"`
+	DurationSecs       float64            `db:"duration_secs" json:"duration_secs"`
+	Dps                float64            `db:"dps" json:"dps"`
+	AvgIlvl            pgtype.Int2        `db:"avg_ilvl" json:"avg_ilvl"`
+	LogHashedSlug      string             `db:"log_hashed_slug" json:"log_hashed_slug"`
+	KilledAt           pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	CreatedAt          pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	HealingDone        int64              `db:"healing_done" json:"healing_done"`
+	AbsorbedDone       int64              `db:"absorbed_done" json:"absorbed_done"`
+	Hps                float64            `db:"hps" json:"hps"`
+	PlayerSubSpec      string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PlayerDeaths       pgtype.Int4        `db:"player_deaths" json:"player_deaths"`
+	AlivePercentage    pgtype.Float8      `db:"alive_percentage" json:"alive_percentage"`
+	UnrankedDamageDone int64              `db:"unranked_damage_done" json:"unranked_damage_done"`
 }
 
 type ExternalCharacterLinkSync struct {
@@ -1777,6 +1784,33 @@ type InferenceThread struct {
 	Title       string             `db:"title" json:"title"`
 	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	ClearedAt   pgtype.Timestamptz `db:"cleared_at" json:"cleared_at"`
+}
+
+type InferenceUsage struct {
+	ID                uuid.UUID          `db:"id" json:"id"`
+	RunID             uuid.UUID          `db:"run_id" json:"run_id"`
+	UserID            uuid.UUID          `db:"user_id" json:"user_id"`
+	ThreadID          uuid.NullUUID      `db:"thread_id" json:"thread_id"`
+	MessageKey        pgtype.Text        `db:"message_key" json:"message_key"`
+	ContextType       pgtype.Text        `db:"context_type" json:"context_type"`
+	ContextID         pgtype.Text        `db:"context_id" json:"context_id"`
+	Model             string             `db:"model" json:"model"`
+	GenerationID      pgtype.Text        `db:"generation_id" json:"generation_id"`
+	PromptTokens      int64              `db:"prompt_tokens" json:"prompt_tokens"`
+	CompletionTokens  int64              `db:"completion_tokens" json:"completion_tokens"`
+	CachedTokens      int64              `db:"cached_tokens" json:"cached_tokens"`
+	ReasoningTokens   int64              `db:"reasoning_tokens" json:"reasoning_tokens"`
+	CostNanos         pgtype.Int8        `db:"cost_nanos" json:"cost_nanos"`
+	UpstreamCostNanos pgtype.Int8        `db:"upstream_cost_nanos" json:"upstream_cost_nanos"`
+	IsByok            pgtype.Bool        `db:"is_byok" json:"is_byok"`
+	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type InferenceUserConfig struct {
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	Config    []byte             `db:"config" json:"config"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type InstanceLoot struct {
@@ -2041,6 +2075,60 @@ type LogInstancesGuild struct {
 	TenantIncludeInAll      bool               `db:"tenant_include_in_all" json:"tenant_include_in_all"`
 	Format                  NullLogFormat      `db:"format" json:"format"`
 	Flavor                  []string           `db:"flavor" json:"flavor"`
+}
+
+type LuaProject struct {
+	ID          uuid.UUID          `db:"id" json:"id"`
+	OwnerID     uuid.UUID          `db:"owner_id" json:"owner_id"`
+	Kind        string             `db:"kind" json:"kind"`
+	Name        string             `db:"name" json:"name"`
+	Slug        string             `db:"slug" json:"slug"`
+	Revision    int64              `db:"revision" json:"revision"`
+	DraftHash   pgtype.Text        `db:"draft_hash" json:"draft_hash"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	DraftIcon   pgtype.Text        `db:"draft_icon" json:"draft_icon"`
+	Description string             `db:"description" json:"description"`
+}
+
+type LuaProjectArtifact struct {
+	ProjectID             uuid.UUID   `db:"project_id" json:"project_id"`
+	Hash                  string      `db:"hash" json:"hash"`
+	ObjectKey             string      `db:"object_key" json:"object_key"`
+	MimeType              string      `db:"mime_type" json:"mime_type"`
+	ContentEncoding       pgtype.Text `db:"content_encoding" json:"content_encoding"`
+	UncompressedSizeBytes int64       `db:"uncompressed_size_bytes" json:"uncompressed_size_bytes"`
+	StoredSizeBytes       int64       `db:"stored_size_bytes" json:"stored_size_bytes"`
+}
+
+type LuaProjectArtifactGc struct {
+	ObjectKey   string             `db:"object_key" json:"object_key"`
+	AttemptedAt pgtype.Timestamptz `db:"attempted_at" json:"attempted_at"`
+	ReadyAt     pgtype.Timestamptz `db:"ready_at" json:"ready_at"`
+}
+
+type LuaProjectContributor struct {
+	ProjectID   uuid.UUID          `db:"project_id" json:"project_id"`
+	UserID      uuid.UUID          `db:"user_id" json:"user_id"`
+	Permissions []string           `db:"permissions" json:"permissions"`
+	AddedBy     uuid.NullUUID      `db:"added_by" json:"added_by"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type LuaProjectRelease struct {
+	ProjectID   uuid.UUID          `db:"project_id" json:"project_id"`
+	Tag         string             `db:"tag" json:"tag"`
+	Hash        pgtype.Text        `db:"hash" json:"hash"`
+	Icon        pgtype.Text        `db:"icon" json:"icon"`
+	PublishedAt pgtype.Timestamptz `db:"published_at" json:"published_at"`
+	PublishedBy uuid.NullUUID      `db:"published_by" json:"published_by"`
+}
+
+type LuaProjectStar struct {
+	ProjectID uuid.UUID          `db:"project_id" json:"project_id"`
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 type OauthDeviceSession struct {

@@ -50,7 +50,7 @@ export function CustomPanelSettings() {
       const result = await resolveCustomPanelInstallation(repositoryInput, refInput);
       setPendingInstallation({ result, installedRef: refInput.trim(), update });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Custom panel request failed");
+      toast.error(error instanceof Error ? error.message : "Developer panel request failed");
     } finally {
       setBusy(null);
     }
@@ -81,9 +81,9 @@ export function CustomPanelSettings() {
       setPendingInstallation(null);
       setRepository("");
       setRef("");
-      toast.success(update ? "Custom panel updated" : "Custom panel installed");
+      toast.success(update ? "Developer panel updated" : "Developer panel installed");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Custom panel request failed");
+      toast.error(error instanceof Error ? error.message : "Developer panel request failed");
     } finally {
       setBusy(null);
     }
@@ -95,20 +95,20 @@ export function CustomPanelSettings() {
 
   return <div className="max-w-4xl space-y-6">
     <div>
-      <h2 className="flex items-center gap-2 text-xl font-semibold"><Blocks className="h-5 w-5" />Custom panels</h2>
+      <h2 className="flex items-center gap-2 text-xl font-semibold"><Blocks className="h-5 w-5" />Developer panels</h2>
       <p className="text-muted-foreground">Manage account-wide trusted JavaScript panel plugins. <a className="underline hover:text-foreground" href="https://github.com/Emyrk/chronicle-panel" target="_blank" rel="noreferrer">Read the example and authoring guide.</a></p>
     </div>
     <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
-      <div className="flex gap-3"><AlertTriangle className="h-5 w-5 shrink-0 text-amber-500" /><p><strong>Trusted code only.</strong> Custom panels execute arbitrary JavaScript with access to the Chronicle page, your authenticated session, and combat-log data. Only install panels from authors you trust.</p></div>
+      <div className="flex gap-3"><AlertTriangle className="h-5 w-5 shrink-0 text-amber-500" /><p><strong>Trusted code only.</strong> Developer panels execute arbitrary JavaScript with access to the Chronicle page, your authenticated session, and combat-log data. Only install panels from authors you trust.</p></div>
     </div>
     <div className="flex items-center justify-between rounded-lg border p-4">
-      <div><p className="font-medium">Enable trusted custom JavaScript panels</p><p className="text-sm text-muted-foreground">Disabled by default. Existing layout references remain preserved.</p></div>
+      <div><p className="font-medium">Enable trusted developer panels</p><p className="text-sm text-muted-foreground">Disabled by default. Existing layout references remain preserved.</p></div>
       <Switch checked={registry.enabled} disabled={registry.loading || updateSettings.isPending} onCheckedChange={(enabled) => {
         if (enabled) {
           setShowEnableWarning(true);
           return;
         }
-        void save(false).catch((error) => toast.error(error instanceof Error ? error.message : "Custom panel settings update failed"));
+        void save(false).catch((error) => toast.error(error instanceof Error ? error.message : "Developer panel settings update failed"));
       }} />
     </div>
     <div className="space-y-3 rounded-lg border p-4">
@@ -132,12 +132,12 @@ export function CustomPanelSettings() {
           </div>
           <div className="flex items-center gap-2">
             <Switch checked={installation.enabled} disabled={updateSettings.isPending} onCheckedChange={(enabled) => {
-              void save(registry.enabled, registry.installations.map((item) => item.repository === installation.repository ? { ...item, enabled, updatedAt: new Date().toISOString() } : item)).catch((error) => toast.error(error instanceof Error ? error.message : "Custom panel settings update failed"));
+              void save(registry.enabled, registry.installations.map((item) => item.repository === installation.repository ? { ...item, enabled, updatedAt: new Date().toISOString() } : item)).catch((error) => toast.error(error instanceof Error ? error.message : "Developer panel settings update failed"));
             }} />
             <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void resolveInstallation(installation.repository, installation.installedRef, true)}><RefreshCw className="mr-1 h-3.5 w-3.5" />Update</Button>
             <Button size="sm" variant="outline" onClick={() => {
               if (window.confirm(`Uninstall ${installation.repository}? Layout references will be preserved.`)) {
-                void save(registry.enabled, registry.installations.filter((item) => item.repository !== installation.repository)).catch((error) => toast.error(error instanceof Error ? error.message : "Custom panel uninstall failed"));
+                void save(registry.enabled, registry.installations.filter((item) => item.repository !== installation.repository)).catch((error) => toast.error(error instanceof Error ? error.message : "Developer panel uninstall failed"));
               }
             }}><Trash2 className="mr-1 h-3.5 w-3.5" />Uninstall</Button>
           </div>
@@ -152,7 +152,7 @@ export function CustomPanelSettings() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive"><AlertTriangle className="h-5 w-5" />Review trusted custom code</DialogTitle>
             <DialogDescription>
-              Custom panels execute arbitrary JavaScript inside Chronicle with access to this page, your authenticated session, and combat-log data. Install only code from authors you trust.
+              Developer panels execute arbitrary JavaScript inside Chronicle with access to this page, your authenticated session, and combat-log data. Install only code from authors you trust.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 text-sm">
@@ -192,7 +192,7 @@ export function CustomPanelSettings() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPendingInstallation(null)} disabled={updateSettings.isPending}>Cancel</Button>
-            <Button variant="destructive" disabled={updateSettings.isPending || busy !== null} onClick={() => void confirmInstallation()}>{pendingInstallation.update ? "Update custom panel" : "Install custom panel"}</Button>
+            <Button variant="destructive" disabled={updateSettings.isPending || busy !== null} onClick={() => void confirmInstallation()}>{pendingInstallation.update ? "Update developer panel" : "Install developer panel"}</Button>
           </DialogFooter>
         </>}
       </DialogContent>
@@ -208,7 +208,7 @@ export function CustomPanelSettings() {
         <p className="text-sm font-semibold">A malicious or compromised panel could expose your account data. Only continue if you understand the risk and trust every panel you install.</p>
         <DialogFooter>
           <Button variant="outline" onClick={() => setShowEnableWarning(false)} disabled={updateSettings.isPending}>Cancel</Button>
-          <Button variant="destructive" disabled={updateSettings.isPending} onClick={() => { void save(true).then(() => setShowEnableWarning(false)).catch((error) => toast.error(error instanceof Error ? error.message : "Custom panel settings update failed")); }}>I accept the risks</Button>
+          <Button variant="destructive" disabled={updateSettings.isPending} onClick={() => { void save(true).then(() => setShowEnableWarning(false)).catch((error) => toast.error(error instanceof Error ? error.message : "Developer panel settings update failed")); }}>I accept the risks</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

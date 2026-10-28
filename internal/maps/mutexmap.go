@@ -41,3 +41,14 @@ func (mm *MutexMap[K, V]) Len() int {
 	defer mm.mu.RUnlock()
 	return len(mm.m)
 }
+
+// Values returns a snapshot of all values in unspecified order.
+func (mm *MutexMap[K, V]) Values() []V {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+	out := make([]V, 0, len(mm.m))
+	for _, v := range mm.m {
+		out = append(out, v)
+	}
+	return out
+}

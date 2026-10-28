@@ -39,6 +39,7 @@ import { hasRequiredPanelCapabilities } from "./panelAvailability";
 import { useRegisterInstanceKeybinds, type InstanceKeybind } from "../InstanceKeybinds";
 
 import { isCustomPanelRef, type CustomPanelRef } from "./custom/pluginTypes";
+import { isLuaPanelRef, type LuaPanelRef } from "./LuaPanel/luaPanelRegistry";
 
 // Import panel definitions
 import { createDamageDonePanel } from "./DamageDone/DamageDone";
@@ -194,9 +195,10 @@ const ASSEMBLY_ENCOUNTER_NAME = "Assembly of Iron";
 const ASSEMBLY_DAMAGE_DONE_PANEL = createDamageDonePanel("players", assemblyDamageDoneProcessor);
 
 export type BuiltinPanelType = keyof typeof BUILTIN_PANELS;
-export type EventsPanelType = BuiltinPanelType | CustomPanelRef;
+export type EventsPanelType = BuiltinPanelType | CustomPanelRef | LuaPanelRef;
 
 const LazyCustomEventsPanel = lazy(() => import("./custom/CustomEventsPanel"));
+const LazyLuaEventsPanel = lazy(() => import("./LuaPanel/LuaEventsPanel"));
 
 /**
  * Get localStorage key for a panel's toggle state.
@@ -240,6 +242,7 @@ const FILTER_TYPE_LABELS: Record<PanelFilterType, string> = {
   enemies: "Enemies",
   time_range: "Time Range",
   event_value: "Event Value",
+  has_excluded: "Has Excluded",
   event_type: "Event Type",
 };
 
@@ -260,22 +263,23 @@ function buildFilterGroups(filters: PanelFilter[]): PanelFilter[][] {
 
 function FilterRow({ filter }: { filter: PanelFilter }) {
   const val = Array.isArray(filter.value) ? filter.value.join(", ") : filter.value;
-  if (!val || (Array.isArray(filter.value) && filter.value.length === 0)) return null;
+  if (filter.type !== "has_excluded" && (!val || (Array.isArray(filter.value) && filter.value.length === 0))) return null;
   return (
     <div className="flex items-center gap-1.5 text-xs">
       {filter.negate && (
         <span className="text-red-400 font-semibold text-[10px]">NOT</span>
       )}
       <span className="text-muted-foreground">
-        {FILTER_TYPE_LABELS[filter.type] ?? filter.type}:
+        {FILTER_TYPE_LABELS[filter.type] ?? filter.type}{filter.type === "has_excluded" ? "" : ":"}
       </span>
-      <span className="font-medium truncate">{val}</span>
+      {filter.type !== "has_excluded" && <span className="font-medium truncate">{val}</span>}
     </div>
   );
 }
 
 function FilterSummaryCard({ filters }: { filters: PanelFilter[] }) {
   const active = filters.filter((f) => {
+    if (f.type === "has_excluded") return true;
     const v = f.value;
     return Array.isArray(v) ? v.length > 0 : String(v).trim() !== "";
   });
@@ -778,13 +782,13 @@ function BuiltinEventsPanel({
         panelOption: string | null;
         filters: PanelFilter[];
       };
-      if (!parsed.panelType || (!(parsed.panelType in PANELS) && !isCustomPanelRef(parsed.panelType))) return;
+      if (!parsed.panelType || (!(parsed.panelType in PANELS) && !isCustomPanelRef(parsed.panelType) && !isLuaPanelRef(parsed.panelType))) return;
       onPanelTypeChange(parsed.panelType);
       onPanelOptionChange?.(parsed.panelOption);
       if (parsed.filters && parsed.filters.length > 0) {
         applyFilters(parsed.filters);
       } else {
-        applyFilters(isCustomPanelRef(parsed.panelType) ? [] : (PANELS[parsed.panelType].defaultFilters ?? []));
+        applyFilters(isCustomPanelRef(parsed.panelType) || isLuaPanelRef(parsed.panelType) ? [] : (PANELS[parsed.panelType].defaultFilters ?? []));
       }
       setPendingFilters(null);
     } catch {
@@ -1198,9 +1202,15 @@ function BuiltinEventsPanel({
 }
 
 export function EventsPanel(props: EventsPanelProps) {
+  if (isLuaPanelRef(props.panelType)) {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("safe") === "1") {
+      return <Card className="h-full p-4 text-sm text-muted-foreground">Addons are disabled by ?safe=1.</Card>;
+    }
+    return <Suspense fallback={<Card className="h-full p-4">Loading addon...</Card>}><LazyLuaEventsPanel {...props} /></Suspense>;
+  }
   if (isCustomPanelRef(props.panelType)) {
     return (
-      <Suspense fallback={<Card className="h-full p-4 text-sm text-muted-foreground">Loading custom panel runtime...</Card>}>
+      <Suspense fallback={<Card className="h-full p-4 text-sm text-muted-foreground">Loading developer panel runtime...</Card>}>
         <LazyCustomEventsPanel {...props} />
       </Suspense>
     );

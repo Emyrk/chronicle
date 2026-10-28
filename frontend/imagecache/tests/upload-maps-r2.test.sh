@@ -30,6 +30,10 @@ case "$operation" in
     ;;
   lsf)
     source="$(map_path "$1")"
+    if [[ ! -d "$source" ]]; then
+      echo "ERROR : error listing: directory not found" >&2
+      exit 3
+    fi
     find "$source" -maxdepth 1 -type f -printf '%f\n'
     ;;
   *) echo "unexpected rclone operation: $operation" >&2; exit 1 ;;
@@ -104,5 +108,16 @@ JSON
 MAPS_UPLOAD_MODE=original ./upload-maps-r2.sh >/dev/null
 jq -e '.format == "chronicle-wow-map-art-v2" and .target.product == "turtle" and (.maps|length) == 1' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
 [[ -f "$MOCK_MAP_REMOTE/original/2.webp" ]]
+
+# A new server namespace can bootstrap from an original map upload.
+export R2_PATH=vanillaplus/maps SERVER=vanillaplus MAPS_DIR="${tmp}/vanillaplus-maps" MOCK_MAP_REMOTE="${tmp}/remote-vanillaplus"
+mkdir -p "${MAPS_DIR}/original"
+printf 'legacy tile' > "${MAPS_DIR}/original/3.webp"
+cat > "${MAPS_DIR}/manifest.original.json" <<'JSON'
+{"format":"chronicle-wow-map-art-v2","target":{"product":"vanillaplus","build":"1.12.1"},"maps":[{"id":4,"name":"Durotar","parentID":0,"type":3,"flags":0}],"instances":[]}
+JSON
+MAPS_UPLOAD_MODE=original ./upload-maps-r2.sh >/dev/null
+jq -e '.target.product == "vanillaplus" and (.maps|length) == 1' "$MOCK_MAP_REMOTE/manifest.json" >/dev/null
+[[ -f "$MOCK_MAP_REMOTE/original/3.webp" ]]
 
 echo 'Map manifest upload modes passed'

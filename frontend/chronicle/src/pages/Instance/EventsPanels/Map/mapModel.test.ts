@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { WowMapManifest } from "@/pages/Technical/mapGallery";
+import type { WowMapInstance, WowMapManifest } from "@/pages/Technical/mapGallery";
 import type { MapEncounterPositions, MapPositionSample } from "./map.processor";
 import { createEncounterEffects } from "./replayEffects";
 import {
@@ -11,6 +11,9 @@ import {
   containScaleForCover,
   coverMapCanvasRect,
   fitFreeMapCameraToPoints,
+  flatArtworkUnitScale,
+  flatYardStep,
+  floorBoundsYardStep,
   zoomFreeMapCamera,
   focusCentre,
   INITIAL_MAP_FRAMING,
@@ -32,8 +35,14 @@ import {
   latestPositionAt,
   MAX_HEALTH_BARS,
   mapPointToScene,
+  movementTrailPoints,
+  topDownMapDistance,
+  overviewDungeonCanvas,
+  replayDungeonCanvas,
+  replayDungeonCanvasForCoordinates,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
+  resolveMapFloorNumber,
   selectHealthBars,
   selectMapEncounter,
   uiMapPoint,
@@ -138,6 +147,18 @@ describe("map replay model", () => {
     expect(latestPositionAt(samples, 200)).toBe(samples[1]);
     expect(latestPositionAt(samples, 250)).toBe(samples[1]);
     expect(latestPositionAt(samples, 999)).toBe(samples[2]);
+  });
+
+  it("projects recent movement trails with the active map transform", () => {
+    const trail = movementTrailPoints(samples, samples[2], 200, true, (sample) => ({
+      leftPercent: sample.x * 10,
+      topPercent: sample.y * 10,
+    }));
+    expect(trail).toEqual([
+      { point: { leftPercent: 50, topPercent: 60 }, z: undefined },
+      { point: { leftPercent: 30, topPercent: 40 }, z: undefined },
+      { point: { leftPercent: 10, topPercent: 20 }, z: undefined },
+    ]);
   });
 
   it("finds the latest health sample at or before the replay cursor", () => {
@@ -393,6 +414,150 @@ describe("map replay model", () => {
   });
 });
 
+describe("resolveMapFloorNumber", () => {
+  const instance: WowMapInstance = {
+    mapID: 595,
+    name: "The Culling of Stratholme",
+    instanceType: 1,
+    directory: "StratholmeCOT",
+    floors: [1, 2].map((floor) => ({
+      floor,
+      width: 1002,
+      height: 668,
+      tileWidth: 256,
+      tileHeight: 256,
+      tiles: [],
+    })),
+  };
+
+  it("uses the floor reported by position schema v3", () => {
+    expect(resolveMapFloorNumber(instance, null, [
+      { timestampMs: 0, x: 0.4, y: 0.5, mapId: 595, floor: 1 },
+      { timestampMs: 0, x: 0.4, y: 0.5, mapId: 595, floor: 2 },
+      { timestampMs: 0, x: 0.4, y: 0.5, mapId: 595, floor: 2 },
+    ])).toBe(2);
+  });
+
+  it("honours a manual floor selection", () => {
+    expect(resolveMapFloorNumber(instance, 1, [
+      { timestampMs: 0, x: 0.4, y: 0.5, mapId: 595, floor: 2 },
+    ])).toBe(1);
+  });
+
+  it("does not guess a floor for older position schemas", () => {
+    expect(resolveMapFloorNumber(instance, null, [
+      { timestampMs: 0, x: 0.4, y: 0.5, mapId: 595 },
+    ])).toBe(1);
+  });
+});
+
+describe("floor-specific dungeon canvases", () => {
+  const legacyRender = {
+    path: "renders/595.png",
+    width: 1200,
+    height: 800,
+    bounds: { minX: 0, maxX: 100, minY: 0, maxY: 100 },
+  };
+  const floorRender = {
+    path: "renders/595-floor-2.png",
+    width: 900,
+    height: 600,
+    bounds: { minX: 100, maxX: 200, minY: 100, maxY: 200 },
+  };
+  const nativeTile = { row: 0, column: 0, fileDataID: 1, path: "original/1.webp" };
+  const instance: WowMapInstance = {
+    mapID: 595,
+    name: "The Culling of Stratholme",
+    instanceType: 1,
+    directory: "StratholmeCOT",
+    renders: legacyRender,
+    floors: [{
+      floor: 1,
+      width: 1002,
+      height: 668,
+      tileWidth: 256,
+      tileHeight: 256,
+      tiles: [nativeTile],
+    }, {
+      floor: 2,
+      width: 1002,
+      height: 668,
+      tileWidth: 256,
+      tileHeight: 256,
+      tiles: [nativeTile],
+      renders: floorRender,
+    }],
+  };
+
+  it("keeps legacy floors render-first when preferred2D is absent", () => {
+    expect(overviewDungeonCanvas(instance, instance.floors[1], "auto").canvas).toMatchObject({ path: floorRender.path });
+    expect(replayDungeonCanvas(instance, instance.floors[1], true)?.canvas).toMatchObject({ path: floorRender.path });
+  });
+
+  it("falls back to the legacy instance render when the selected floor has none", () => {
+    expect(overviewDungeonCanvas(instance, instance.floors[0], "renders").canvas).toMatchObject({ path: legacyRender.path });
+    expect(replayDungeonCanvas(instance, instance.floors[0], true)?.canvas).toMatchObject({ path: legacyRender.path });
+  });
+
+  it("honours an art-preferring floor only for automatic 2D selection", () => {
+    const preferredFloor = { ...instance.floors[1], preferred2D: "art" as const };
+    const preferredInstance = { ...instance, floors: [instance.floors[0], preferredFloor] };
+
+    expect(overviewDungeonCanvas(preferredInstance, preferredFloor, "auto")).toEqual({
+      canvas: preferredFloor,
+      source: "art",
+    });
+    expect(replayDungeonCanvas(preferredInstance, preferredFloor, true)).toEqual({
+      canvas: preferredFloor,
+      rendered: false,
+    });
+    expect(overviewDungeonCanvas(preferredInstance, preferredFloor, "renders").canvas).toMatchObject({
+      path: floorRender.path,
+    });
+  });
+
+  it("re-evaluates automatic preference for each selected floor", () => {
+    const preferredFloor = { ...instance.floors[1], preferred2D: "art" as const };
+    const preferredInstance = { ...instance, floors: [instance.floors[0], preferredFloor] };
+
+    expect(overviewDungeonCanvas(preferredInstance, preferredFloor, "auto")).toMatchObject({ source: "art" });
+    expect(overviewDungeonCanvas(preferredInstance, instance.floors[0], "auto")).toMatchObject({
+      source: "renders",
+      canvas: { path: legacyRender.path },
+    });
+  });
+
+  it("falls back to renders when an art-preferring floor has no native artwork", () => {
+    const floor = { ...instance.floors[1], preferred2D: "art" as const, tiles: [] };
+    const preferredInstance = { ...instance, floors: [instance.floors[0], floor] };
+
+    expect(overviewDungeonCanvas(preferredInstance, floor, "auto")).toMatchObject({
+      source: "renders",
+      canvas: { path: floorRender.path },
+    });
+    expect(replayDungeonCanvas(preferredInstance, floor, true)?.canvas).toMatchObject({ path: floorRender.path });
+  });
+
+  it("uses native floor artwork for normalized instance coordinates", () => {
+    expect(replayDungeonCanvasForCoordinates(instance, instance.floors[1], true, true)).toEqual({
+      canvas: instance.floors[1],
+      rendered: false,
+    });
+  });
+
+  it("does not project normalized instance coordinates onto a render without native artwork", () => {
+    const floor = { ...instance.floors[1], tiles: [] };
+    expect(replayDungeonCanvasForCoordinates(instance, floor, true, true)).toBeNull();
+  });
+
+  it("keeps native floor artwork when rendered canvases are not preferred", () => {
+    expect(replayDungeonCanvas(instance, instance.floors[1], false)).toEqual({
+      canvas: instance.floors[1],
+      rendered: false,
+    });
+  });
+});
+
 describe("replayPositionAt", () => {
   it("allows small first-sample timestamp skew for every unit", () => {
     expect(replayPositionAt(samples, 89)).toBeNull();
@@ -455,6 +620,14 @@ describe("replayPositionAt", () => {
     expect(replayPositionAt(halfFaced, 50)!.facing).toBe(1.2);
   });
 
+  it("never interpolates across floor changes", () => {
+    const changingFloor: MapPositionSample[] = [
+      { timestampMs: 0, x: 0, y: 0, mapId: 595, floor: 1 },
+      { timestampMs: 100, x: 10, y: 0, mapId: 595, floor: 2 },
+    ];
+    expect(replayPositionAt(changingFloor, 50)).toBe(changingFloor[0]);
+  });
+
   it("can hold the last real sample instead of gliding across a long run gap", () => {
     const gapped: MapPositionSample[] = [
       { timestampMs: 0, x: 0, y: 0, mapId: 1 },
@@ -474,11 +647,59 @@ describe("replayPositionAt", () => {
   });
 });
 
+describe("flatYardStep", () => {
+  const sample: MapPositionSample = { timestampMs: 0, x: 0.5, y: 0.5, mapId: 595 };
+
+  it("does not invent a yard scale from normalized UI-map coordinates", () => {
+    expect(flatYardStep(uiMapPoint, sample, false)).toBeNull();
+  });
+
+  it("measures world-coordinate projections", () => {
+    const project = (value: MapPositionSample) => ({ leftPercent: value.x * 2, topPercent: value.y * 3 });
+    expect(flatYardStep(project, sample, true)).toEqual({
+      x: { leftPercent: 2, topPercent: 0 },
+      y: { leftPercent: 0, topPercent: 3 },
+    });
+  });
+});
+
+describe("floorBoundsYardStep", () => {
+  it("derives normalized floor scale from manifest world bounds", () => {
+    expect(floorBoundsYardStep({ minX: -100, maxX: 300, minY: -50, maxY: 150 })).toEqual({
+      x: { leftPercent: 0, topPercent: 0.25 },
+      y: { leftPercent: 0.5, topPercent: 0 },
+    });
+  });
+
+  it("requires usable bounds", () => {
+    expect(floorBoundsYardStep(undefined)).toBeNull();
+    expect(floorBoundsYardStep({ minX: 1, maxX: 1, minY: 0, maxY: 2 })).toBeNull();
+  });
+});
+
+describe("flatArtworkUnitScale", () => {
+  it("keeps compact token geometry fixed while the camera zooms", () => {
+    expect(flatArtworkUnitScale()).toBe(0.65);
+  });
+});
+
 describe("mapPointToScene", () => {
   it("centres the artwork on the origin and keeps its aspect", () => {
     expect(mapPointToScene({ leftPercent: 50, topPercent: 50 }, 0.5, 100)).toEqual({ x: 0, z: 0 });
     expect(mapPointToScene({ leftPercent: 0, topPercent: 0 }, 0.5, 100)).toEqual({ x: -50, z: -25 });
     expect(mapPointToScene({ leftPercent: 100, topPercent: 100 }, 0.5, 100)).toEqual({ x: 50, z: 25 });
+  });
+});
+
+describe("topDownMapDistance", () => {
+  const fov = Math.PI / 2;
+
+  it("fits the map height in a wider viewport", () => {
+    expect(topDownMapDistance(100, 50, 4, fov)).toBeCloseTo(25);
+  });
+
+  it("fits the map width in a narrower viewport", () => {
+    expect(topDownMapDistance(100, 50, 1, fov)).toBeCloseTo(50);
   });
 });
 

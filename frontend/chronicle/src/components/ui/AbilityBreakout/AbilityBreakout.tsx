@@ -828,6 +828,8 @@ export interface TargetTableProps {
   showOverheal?: boolean
   /** Label for the stacked secondary column */
   stackedLabel?: string
+  /** Keep the stacked column visible even when its values are zero. */
+  alwaysShowStackedColumn?: boolean
   /** Group duplicate target names into a single row */
   groupByName?: boolean
 }
@@ -841,6 +843,7 @@ export function TargetTable({
   valueLabel = 'Value',
   showOverheal = false,
   stackedLabel = 'Overheal',
+  alwaysShowStackedColumn = false,
   groupByName = false,
 }: TargetTableProps) {
   const { hover, setHover, clearHover } = useBreakoutHover()
@@ -860,7 +863,7 @@ export function TargetTable({
   }
   
   // Check if any target has overheal data
-  const hasOverhealData = showOverheal && sorted.some(t => t.overheal !== undefined && t.overheal > 0)
+  const hasOverhealData = showOverheal && (alwaysShowStackedColumn || sorted.some(t => t.overheal !== undefined && t.overheal > 0))
 
   // Column IDs for hover tracking (shared with AbilityTable where applicable)
   const COL = {
@@ -984,6 +987,8 @@ export interface AbilityBreakoutProps {
   stackedLabel?: string
   /** Only show the stacked column after More detail is expanded. */
   showStackedOnlyWhenExpanded?: boolean
+  /** Show the target tab's stacked column independently of More detail. */
+  alwaysShowTargetStacked?: boolean
   /** Move the primary value before the stacked column */
   valueBeforeStacked?: boolean
   /** Whether to show the absorbed column */
@@ -1023,6 +1028,7 @@ export function AbilityBreakout({
   showOverheal = false,
   stackedLabel = 'Overheal',
   showStackedOnlyWhenExpanded = false,
+  alwaysShowTargetStacked = false,
   valueBeforeStacked = false,
   showAbsorbed = false,
   absorbedIsAdditive = false,
@@ -1141,8 +1147,9 @@ export function AbilityBreakout({
           targets={targets}
           totalValue={totalValue}
           valueLabel={valueLabel}
-          showOverheal={showStacked}
+          showOverheal={showStacked || (showOverheal && alwaysShowTargetStacked)}
           stackedLabel={stackedLabel}
+          alwaysShowStackedColumn={alwaysShowTargetStacked}
           groupByName={groupTargets}
         />
       )}

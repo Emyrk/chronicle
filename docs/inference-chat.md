@@ -19,13 +19,13 @@ OpenRouter authorization uses PKCE. Chronicle stores the short-lived verifier an
 
 Configure the service with:
 
-- `CHRONICLE_INFERENCE_CREDENTIAL_ENCRYPTION_KEY`: base64-encoded 32-byte encryption key.
+- `CHRONICLE_CREDENTIAL_ENCRYPTION_KEY`: base64-encoded 32-byte encryption key shared by stored user-provided third-party credentials.
 - `CHRONICLE_INFERENCE_OPENROUTER_BASE_URL`: optional OpenRouter API override.
 - `CHRONICLE_INFERENCE_OPENROUTER_AUTH_URL`: optional OpenRouter authorization override.
 - `CHRONICLE_INFERENCE_ATTRIBUTION_TITLE`: optional provider attribution title.
 - `CHRONICLE_INFERENCE_ATTRIBUTION_REFERER`: optional provider attribution URL.
 
-The equivalent encryption-key flag is `--inference-credential-encryption-key`. When no encryption key is configured, inference routes return `503 Service Unavailable` and the rest of Chronicle starts normally. A configured but invalid key fails service startup.
+The equivalent encryption-key flag is `--credential-encryption-key`. When no encryption key is configured, inference routes return `503 Service Unavailable` and the rest of Chronicle starts normally. A configured but invalid key fails service startup.
 
 > [!WARNING]
 > The initial release supports one encryption key identified as `v1`; it does not yet provide online key rotation. Every replica must receive the same key, and changing or losing it requires users to reconnect their provider accounts. Back up the key under the production secret-recovery policy before enabling inference.

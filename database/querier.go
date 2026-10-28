@@ -34,6 +34,7 @@ type sqlcQuerier interface {
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
 	ClaimDiscordAnnouncementDelivery(ctx context.Context, id uuid.UUID) (GuildDiscordLogAnnouncement, error)
 	ClaimDueDiscordMembershipGrantChecks(ctx context.Context, arg ClaimDueDiscordMembershipGrantChecksParams) ([]ClaimDueDiscordMembershipGrantChecksRow, error)
+	ClaimLuaProjectArtifactGarbage(ctx context.Context, asOf pgtype.Timestamptz) ([]string, error)
 	ClearDiscordMembershipGrantCheckClaim(ctx context.Context, arg ClearDiscordMembershipGrantCheckClaimParams) (int64, error)
 	ClearInferenceThreadByOwner(ctx context.Context, arg ClearInferenceThreadByOwnerParams) (InferenceThread, error)
 	ClearResetToken(ctx context.Context, userAuthID uuid.UUID) error
@@ -50,6 +51,7 @@ type sqlcQuerier interface {
 	CompleteProofEvidenceCleanup(ctx context.Context, arg CompleteProofEvidenceCleanupParams) error
 	ConsumeGuildDiscordInstallState(ctx context.Context, state string) (GuildDiscordInstallState, error)
 	ConsumeInferenceOAuthTransaction(ctx context.Context, arg ConsumeInferenceOAuthTransactionParams) (InferenceOauthTransaction, error)
+	ConsumeLuaProjectUpload(ctx context.Context, objectKey string) (string, error)
 	CopyLegacySpellEffects(ctx context.Context, arg []CopyLegacySpellEffectsParams) *CopyLegacySpellEffectsBatchResults
 	CopyLegacySpellPowers(ctx context.Context, arg []CopyLegacySpellPowersParams) *CopyLegacySpellPowersBatchResults
 	CopyLegacySpellVariants(ctx context.Context, arg []CopyLegacySpellVariantsParams) *CopyLegacySpellVariantsBatchResults
@@ -57,7 +59,9 @@ type sqlcQuerier interface {
 	CountAllWoWLogGroups(ctx context.Context, arg CountAllWoWLogGroupsParams) (int32, error)
 	CountGuildDiscordInstallationsByDiscordGuildID(ctx context.Context, discordGuildID string) (int64, error)
 	CountGuilds(ctx context.Context, arg CountGuildsParams) (int64, error)
+	CountLuaProjectStars(ctx context.Context, projectIds []uuid.UUID) ([]CountLuaProjectStarsRow, error)
 	CountRaidCompositionsByUser(ctx context.Context, arg CountRaidCompositionsByUserParams) (int64, error)
+	CountReadyLuaProjectArtifactGarbage(ctx context.Context) (int64, error)
 	// Log groups uploaded by any of the user's Sidekick installations; 1 right
 	// after an upload means it was the account's first (the first_upload event).
 	CountSidekickLogGroupsByUser(ctx context.Context, userID uuid.UUID) (int64, error)
@@ -82,6 +86,9 @@ type sqlcQuerier interface {
 	CreateGuildDiscordInstallState(ctx context.Context, arg CreateGuildDiscordInstallStateParams) (GuildDiscordInstallState, error)
 	// Guild Join Requests
 	CreateGuildJoinRequest(ctx context.Context, arg CreateGuildJoinRequestParams) (GuildJoinRequest, error)
+	CreateLuaProject(ctx context.Context, arg CreateLuaProjectParams) (LuaProject, error)
+	// Tags the current main. Bumping the revision keeps a stale page from tagging a newer main by mistake.
+	CreateLuaProjectRelease(ctx context.Context, arg CreateLuaProjectReleaseParams) (LuaProjectRelease, error)
 	CreateOAuthDeviceSession(ctx context.Context, arg CreateOAuthDeviceSessionParams) error
 	CreateOAuthTokenSession(ctx context.Context, arg CreateOAuthTokenSessionParams) error
 	CreateRaidComposition(ctx context.Context, arg CreateRaidCompositionParams) (RaidComposition, error)
@@ -125,10 +132,14 @@ type sqlcQuerier interface {
 	DeleteInferenceConnectionByOwner(ctx context.Context, arg DeleteInferenceConnectionByOwnerParams) error
 	DeleteLogInstanceByIDAndGroup(ctx context.Context, arg DeleteLogInstanceByIDAndGroupParams) (uuid.UUID, error)
 	DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
+	DeleteLuaProjectArtifactGarbage(ctx context.Context, objectKey string) error
+	DeleteLuaProjectContributor(ctx context.Context, arg DeleteLuaProjectContributorParams) (int64, error)
+	DeleteLuaProjectRelease(ctx context.Context, arg DeleteLuaProjectReleaseParams) (int64, error)
 	DeleteModificationRequest(ctx context.Context, id uuid.UUID) error
 	DeleteOAuthTokenSession(ctx context.Context, arg DeleteOAuthTokenSessionParams) (int64, error)
 	DeleteOAuthTokenSessionsByRequestID(ctx context.Context, requestID string) (int64, error)
 	DeleteObsoleteRankingRuns(ctx context.Context, arg DeleteObsoleteRankingRunsParams) ([]uuid.UUID, error)
+	DeleteOldSuccessfulBillingReconciliationRuns(ctx context.Context) (int64, error)
 	DeleteOrphanCustomPanelReleases(ctx context.Context) (int64, error)
 	DeleteParseScoreMembershipsByInstance(ctx context.Context, instanceID uuid.UUID) error
 	// Compact current-known membership for DPS/HPS parse cohorts.
@@ -203,6 +214,8 @@ type sqlcQuerier interface {
 	// so results are self-contained.
 	GearTrendsSlotItems(ctx context.Context, arg GearTrendsSlotItemsParams) ([]GearTrendsSlotItemsRow, error)
 	GetActiveInferenceRunByThreadForUpdate(ctx context.Context, arg GetActiveInferenceRunByThreadForUpdateParams) (InferenceRun, error)
+	GetAddonAuthorByName(ctx context.Context, name string) (AddonAuthor, error)
+	GetAddonAuthorByUser(ctx context.Context, userID uuid.UUID) (AddonAuthor, error)
 	GetAnyParseScoreReceiptForTenantInstance(ctx context.Context, arg GetAnyParseScoreReceiptForTenantInstanceParams) (ParseScoreReceipt, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
 	GetBillingEntitlementOwnerByProviderCustomerID(ctx context.Context, arg GetBillingEntitlementOwnerByProviderCustomerIDParams) (uuid.UUID, error)
@@ -285,9 +298,13 @@ type sqlcQuerier interface {
 	GetGuildSettings(ctx context.Context, guildID uuid.UUID) (GuildSetting, error)
 	GetInferenceClientToolRequestForUpdate(ctx context.Context, arg GetInferenceClientToolRequestForUpdateParams) (InferenceClientToolRequest, error)
 	GetInferenceConnectionByOwner(ctx context.Context, arg GetInferenceConnectionByOwnerParams) (InferenceConnection, error)
+	GetInferenceContextUsage(ctx context.Context, arg GetInferenceContextUsageParams) (GetInferenceContextUsageRow, error)
 	GetInferenceRunByIdempotencyKey(ctx context.Context, arg GetInferenceRunByIdempotencyKeyParams) (InferenceRun, error)
 	GetInferenceRunByOwner(ctx context.Context, arg GetInferenceRunByOwnerParams) (InferenceRun, error)
+	GetInferenceRunUsage(ctx context.Context, runID uuid.UUID) (GetInferenceRunUsageRow, error)
 	GetInferenceThreadByOwner(ctx context.Context, arg GetInferenceThreadByOwnerParams) (InferenceThread, error)
+	GetInferenceThreadUsage(ctx context.Context, arg GetInferenceThreadUsageParams) (GetInferenceThreadUsageRow, error)
+	GetInferenceUserConfig(ctx context.Context, userID uuid.UUID) ([]byte, error)
 	// Returns only clean boss kills for an instance, excluding partial kills.
 	// Used by the time-parse handler so the primary instance is scored against
 	// the clean-only snapshot cohort consistently.
@@ -336,6 +353,11 @@ type sqlcQuerier interface {
 	// Return the start_time for a log instance. Used by the parses handler
 	// to resolve which snapshot cutoff applies to the instance.
 	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
+	// Callers check the project permission in SpiceDB first.
+	GetLuaProject(ctx context.Context, id uuid.UUID) (LuaProject, error)
+	GetLuaProjectArtifact(ctx context.Context, arg GetLuaProjectArtifactParams) (GetLuaProjectArtifactRow, error)
+	GetLuaProjectByAuthorSlug(ctx context.Context, arg GetLuaProjectByAuthorSlugParams) (LuaProject, error)
+	GetLuaProjectDraftPackage(ctx context.Context, id uuid.UUID) (GetLuaProjectDraftPackageRow, error)
 	GetModificationRequestByID(ctx context.Context, id uuid.UUID) (ApplicationModificationRequest, error)
 	GetOAuthDeviceSession(ctx context.Context, signature string) (GetOAuthDeviceSessionRow, error)
 	GetOAuthTokenSession(ctx context.Context, arg GetOAuthTokenSessionParams) ([]byte, error)
@@ -359,6 +381,9 @@ type sqlcQuerier interface {
 	// The existing proof_requests_applicant_created index supports this lookup.
 	GetProofCooldown(ctx context.Context, arg GetProofCooldownParams) (pgtype.Timestamptz, error)
 	GetProofRequest(ctx context.Context, id uuid.UUID) (ProofRequest, error)
+	// An addon with something to run: main or a release with files.
+	GetPublicLuaProject(ctx context.Context, id uuid.UUID) (LuaProject, error)
+	GetPublishedLuaProjectArtifact(ctx context.Context, arg GetPublishedLuaProjectArtifactParams) (GetPublishedLuaProjectArtifactRow, error)
 	GetRaidCompositionByID(ctx context.Context, id uuid.UUID) (RaidComposition, error)
 	// Returns all realm IDs that have an applicable retention policy
 	// (either directly or through their server).
@@ -481,6 +506,7 @@ type sqlcQuerier interface {
 	HasParseScoreResultsForTenantInstance(ctx context.Context, arg HasParseScoreResultsForTenantInstanceParams) (bool, error)
 	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
 	InitializeUserWhatsNewState(ctx context.Context, arg InitializeUserWhatsNewStateParams) (UserWhatsNewState, error)
+	InsertAddonAuthor(ctx context.Context, arg InsertAddonAuthorParams) (AddonAuthor, error)
 	InsertAffectedAuraDurationModifiers(ctx context.Context, arg []InsertAffectedAuraDurationModifiersParams) *InsertAffectedAuraDurationModifiersBatchResults
 	InsertAffectedAuraDurations(ctx context.Context, arg []InsertAffectedAuraDurationsParams) *InsertAffectedAuraDurationsBatchResults
 	InsertBillingReconciliationRun(ctx context.Context, id uuid.UUID) (BillingReconciliationRun, error)
@@ -502,6 +528,7 @@ type sqlcQuerier interface {
 	InsertInferenceOAuthTransaction(ctx context.Context, arg InsertInferenceOAuthTransactionParams) (InferenceOauthTransaction, error)
 	InsertInferenceRun(ctx context.Context, arg InsertInferenceRunParams) (InferenceRun, error)
 	InsertInferenceThread(ctx context.Context, arg InsertInferenceThreadParams) (InferenceThread, error)
+	InsertInferenceUsage(ctx context.Context, arg InsertInferenceUsageParams) error
 	InsertInstance(ctx context.Context, arg InsertInstanceParams) (LogInstance, error)
 	InsertInstanceLoot(ctx context.Context, arg []InsertInstanceLootParams) *InsertInstanceLootBatchResults
 	InsertInstancePlayers(ctx context.Context, arg []InsertInstancePlayersParams) *InsertInstancePlayersBatchResults
@@ -572,6 +599,7 @@ type sqlcQuerier interface {
 	IsParsedLogGroupVisible(ctx context.Context, id uuid.UUID) (bool, error)
 	ListActiveAdminTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListActivePublicTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
+	ListAddonAuthorsByUsers(ctx context.Context, userIds []uuid.UUID) ([]AddonAuthor, error)
 	ListAdminActiveCustomPanelInstallations(ctx context.Context) ([]ListAdminActiveCustomPanelInstallationsRow, error)
 	ListAdminProofRequests(ctx context.Context, tenantID uuid.UUID) ([]ProofRequest, error)
 	ListAffectedAuraDurationCandidates(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationCandidatesRow, error)
@@ -623,9 +651,12 @@ type sqlcQuerier interface {
 	ListGuildPageTabs(ctx context.Context, pageID uuid.UUID) ([]GuildPageTab, error)
 	ListGuildsWithPages(ctx context.Context, arg ListGuildsWithPagesParams) ([]ListGuildsWithPagesRow, error)
 	ListInferenceConnectionsByOwner(ctx context.Context, userID uuid.UUID) ([]InferenceConnection, error)
+	// Everyone's usage for one context, e.g. each contributor's Workshop chats on an addon.
+	ListInferenceContextUsageByUser(ctx context.Context, arg ListInferenceContextUsageByUserParams) ([]ListInferenceContextUsageByUserRow, error)
 	ListInferenceInstanceEncounters(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounter, error)
 	ListInferenceInstancePlayers(ctx context.Context, instanceID uuid.UUID) ([]LogInstancePlayer, error)
 	ListInferenceThreadsByOwner(ctx context.Context, userID uuid.UUID) ([]InferenceThread, error)
+	ListInferenceUsageByMessageKeys(ctx context.Context, arg ListInferenceUsageByMessageKeysParams) ([]ListInferenceUsageByMessageKeysRow, error)
 	ListInstancesByDuplicateGroup(ctx context.Context, duplicateGroupID uuid.NullUUID) ([]ListInstancesByDuplicateGroupRow, error)
 	ListInstancesByParserVersion(ctx context.Context, parserVersion string) ([]ListInstancesByParserVersionRow, error)
 	ListInstancesByTimeRange(ctx context.Context, arg ListInstancesByTimeRangeParams) ([]ListInstancesByTimeRangeRow, error)
@@ -639,6 +670,12 @@ type sqlcQuerier interface {
 	ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error)
 	ListLogFilePartsForDeletion(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListLogGroupArtifacts(ctx context.Context, logGroupID uuid.UUID) ([]LogGroupArtifact, error)
+	ListLuaProjectArtifactGarbage(ctx context.Context) ([]string, error)
+	ListLuaProjectContributors(ctx context.Context, projectID uuid.UUID) ([]ListLuaProjectContributorsRow, error)
+	ListLuaProjectReleases(ctx context.Context, projectID uuid.UUID) ([]LuaProjectRelease, error)
+	ListLuaProjectReleasesForProjects(ctx context.Context, projectIds []uuid.UUID) ([]LuaProjectRelease, error)
+	// An author's own addons, for /addons/<author>.
+	ListLuaProjectsByOwner(ctx context.Context, ownerID uuid.UUID) ([]LuaProject, error)
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)
 	ListMyProofRequests(ctx context.Context, arg ListMyProofRequestsParams) ([]ProofRequest, error)
 	ListObservedItemIDsForDate(ctx context.Context, arg ListObservedItemIDsForDateParams) ([]int32, error)
@@ -663,6 +700,8 @@ type sqlcQuerier interface {
 	// requests and characters removed from the armory still render without them.
 	ListProofSubjectClasses(ctx context.Context, requestID uuid.UUID) ([]ListProofSubjectClassesRow, error)
 	ListProofSubjects(ctx context.Context, requestID uuid.UUID) ([]ProofRequestSubject, error)
+	// Addons with a release people can still run, most tracked first, then newest release.
+	ListPublicLuaProjects(ctx context.Context) ([]LuaProject, error)
 	ListRaidCompositionsByUser(ctx context.Context, arg ListRaidCompositionsByUserParams) ([]RaidComposition, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
 	// Used by the parses handler to get the viewed instance's own metric values
@@ -671,7 +710,7 @@ type sqlcQuerier interface {
 	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ListRankingsForInstanceRow, error)
 	ListReadyLogFileParts(ctx context.Context, logFileID uuid.UUID) ([]LogFilePart, error)
 	ListRecentBillingReconciliationRuns(ctx context.Context, limit int32) ([]BillingReconciliationRun, error)
-	ListRecentBillingSubscriptions(ctx context.Context, limit int32) ([]BillingSubscription, error)
+	ListRecentBillingSubscriptions(ctx context.Context, limit int32) ([]ListRecentBillingSubscriptionsRow, error)
 	ListRecentBillingWebhookEvents(ctx context.Context, limit int32) ([]BillingWebhookEvent, error)
 	ListRecentInferenceMessagesByThread(ctx context.Context, arg ListRecentInferenceMessagesByThreadParams) ([]InferenceMessage, error)
 	// Pages logical runs, then returns every upload in each selected duplicate group.
@@ -703,6 +742,8 @@ type sqlcQuerier interface {
 	ListSpellRadiiByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellRadii, error)
 	ListSpellRangesByDataset(ctx context.Context, datasetID uuid.UUID) ([]DbcSpellRange, error)
 	ListSpellVariantsForCheck(ctx context.Context, datasetID uuid.UUID) ([]ListSpellVariantsForCheckRow, error)
+	// Addons the user tracks, most recently starred first.
+	ListStarredLuaProjects(ctx context.Context, userID uuid.UUID) ([]LuaProject, error)
 	ListTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListTenants(ctx context.Context) ([]Tenant, error)
 	// Tenants that use this dataset, either directly (tenant.default_dataset_id)
@@ -727,7 +768,10 @@ type sqlcQuerier interface {
 	ListUserCustomPanelInstallations(ctx context.Context, userID uuid.UUID) ([]ListUserCustomPanelInstallationsRow, error)
 	ListUserFavoriteGuilds(ctx context.Context, userID uuid.UUID) ([]ListUserFavoriteGuildsRow, error)
 	ListUserFavoritePlayers(ctx context.Context, userID uuid.UUID) ([]ListUserFavoritePlayersRow, error)
+	// Projects the user owns or contributes to.
+	ListUserLuaProjects(ctx context.Context, userID uuid.UUID) ([]LuaProject, error)
 	ListUserPanelLayouts(ctx context.Context, userID uuid.NullUUID) ([]ListUserPanelLayoutsRow, error)
+	ListUserStarsForProjects(ctx context.Context, arg ListUserStarsForProjectsParams) ([]uuid.UUID, error)
 	ListUserTalentBuilds(ctx context.Context, arg ListUserTalentBuildsParams) ([]UserTalentBuild, error)
 	ListUsersReferencingCosmetic(ctx context.Context, cosmeticID string) ([]uuid.UUID, error)
 	ListUsersWithCharacterCosmetics(ctx context.Context) ([]uuid.UUID, error)
@@ -755,6 +799,7 @@ type sqlcQuerier interface {
 	MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) (WoWLogGroup, error)
 	MoveDiscordAnnouncementSources(ctx context.Context, arg MoveDiscordAnnouncementSourcesParams) error
 	PauseInferenceRun(ctx context.Context, arg PauseInferenceRunParams) (InferenceRun, error)
+	PruneLuaProjectArtifacts(ctx context.Context, id uuid.UUID) error
 	PruneParsedInstanceFromLogOutput(ctx context.Context, arg PruneParsedInstanceFromLogOutputParams) error
 	// Removes summary cards whose instance/difficulty/player-count combination no
 	// longer has any ranking rows visible to the current tenant context.
@@ -762,6 +807,7 @@ type sqlcQuerier interface {
 	PublicInstance(ctx context.Context, id uuid.UUID) (LogInstancesGuild, error)
 	PublicInstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (LogInstancesGuild, error)
 	PublishCacheGeneration(ctx context.Context, arg PublishCacheGenerationParams) (PublishCacheGenerationRow, error)
+	PutLuaProjectArtifact(ctx context.Context, arg PutLuaProjectArtifactParams) (string, error)
 	RankingRunByID(ctx context.Context, runID uuid.UUID) (RankingRun, error)
 	RankingRunIdentitiesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]RankingRunIdentitiesByInstanceIDsRow, error)
 	RankingRunIdentitiesByLogGroupID(ctx context.Context, logGroupID uuid.UUID) ([]RankingRunIdentitiesByLogGroupIDRow, error)
@@ -837,6 +883,7 @@ type sqlcQuerier interface {
 	RefreshParseScoreMembershipsForLogGroup(ctx context.Context, arg RefreshParseScoreMembershipsForLogGroupParams) (RefreshParseScoreMembershipsForLogGroupRow, error)
 	RefreshTimeParseBossKillMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseBossKillMembershipsForLogGroupParams) (RefreshTimeParseBossKillMembershipsForLogGroupRow, error)
 	RefreshTimeParseClearTimeMembershipsForLogGroup(ctx context.Context, arg RefreshTimeParseClearTimeMembershipsForLogGroupParams) (RefreshTimeParseClearTimeMembershipsForLogGroupRow, error)
+	RegisterLuaProjectUpload(ctx context.Context, objectKey string) error
 	ReleaseAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)
 	RenameSidekickInstallation(ctx context.Context, arg RenameSidekickInstallationParams) (SidekickInstallation, error)
 	RepairDiscordMembershipGrantChecks(ctx context.Context, arg RepairDiscordMembershipGrantChecksParams) ([]DiscordMembershipGrantCheck, error)
@@ -880,6 +927,11 @@ type sqlcQuerier interface {
 	SetDiscordAnnouncementDeliveryError(ctx context.Context, arg SetDiscordAnnouncementDeliveryErrorParams) error
 	SetDiscordAnnouncementMessage(ctx context.Context, arg SetDiscordAnnouncementMessageParams) (GuildDiscordLogAnnouncement, error)
 	SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateGroupIDsParams) error
+	// Replaces one top-level key, leaving the user's other settings untouched.
+	SetInferenceUserConfigKey(ctx context.Context, arg SetInferenceUserConfigKeyParams) error
+	// Leaves updated_at alone: it dates main.
+	SetLuaProjectDescription(ctx context.Context, arg SetLuaProjectDescriptionParams) (LuaProject, error)
+	SetLuaProjectDraft(ctx context.Context, arg SetLuaProjectDraftParams) (LuaProject, error)
 	SetPanelLayoutCode(ctx context.Context, arg SetPanelLayoutCodeParams) (int64, error)
 	SetPrimaryUserCharacter(ctx context.Context, arg SetPrimaryUserCharacterParams) (UserCharacterLink, error)
 	SetResetToken(ctx context.Context, arg SetResetTokenParams) error
@@ -921,6 +973,7 @@ type sqlcQuerier interface {
 	SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeaderboardParams) ([]SpeedrunLeaderboardRow, error)
 	// Returns distinct realm names that have at least one qualified speedrun.
 	SpeedrunRealmNames(ctx context.Context) ([]string, error)
+	StarLuaProject(ctx context.Context, arg StarLuaProjectParams) error
 	TelemetryGetActiveFileBytes(ctx context.Context) (int64, error)
 	TelemetryGetDeletedFileBytes(ctx context.Context) (int64, error)
 	TelemetryGetLogCountByZone(ctx context.Context) ([]TelemetryGetLogCountByZoneRow, error)
@@ -934,10 +987,13 @@ type sqlcQuerier interface {
 	TouchSidekickUpload(ctx context.Context, arg TouchSidekickUploadParams) (int64, error)
 	TouchUploadKeyLastUsed(ctx context.Context, id uuid.UUID) error
 	TrackUserPanelLayout(ctx context.Context, arg TrackUserPanelLayoutParams) (UserTrackedLayout, error)
+	// Only the newest @keep releases keep their files; older ones stay listed without a package.
+	TrimLuaProjectReleaseFiles(ctx context.Context, arg TrimLuaProjectReleaseFilesParams) error
 	TryAcquireAdvisoryLock(ctx context.Context, lockKey int64) (bool, error)
 	UnassignWorldFromServer(ctx context.Context, arg UnassignWorldFromServerParams) error
 	UnlinkDuplicateGroup(ctx context.Context, id uuid.UUID) (UnlinkDuplicateGroupRow, error)
 	UnsetPrimaryUserCharacter(ctx context.Context, userID uuid.UUID) error
+	UnstarLuaProject(ctx context.Context, arg UnstarLuaProjectParams) error
 	UntrackUserPanelLayout(ctx context.Context, arg UntrackUserPanelLayoutParams) (int64, error)
 	// Only non-null params are applied; NULL means "keep existing value".
 	UpdateDataset(ctx context.Context, arg UpdateDatasetParams) (Dataset, error)
@@ -1011,6 +1067,7 @@ type sqlcQuerier interface {
 	UpsertInstanceOverviewMetrics(ctx context.Context, arg UpsertInstanceOverviewMetricsParams) error
 	UpsertItemDailyPrice(ctx context.Context, arg []UpsertItemDailyPriceParams) *UpsertItemDailyPriceBatchResults
 	UpsertLeaderboardVersionRequirements(ctx context.Context, arg UpsertLeaderboardVersionRequirementsParams) (LeaderboardVersionRequirement, error)
+	UpsertLuaProjectContributor(ctx context.Context, arg UpsertLuaProjectContributorParams) (LuaProjectContributor, error)
 	UpsertPendingModificationRequest(ctx context.Context, arg UpsertPendingModificationRequestParams) (ApplicationModificationRequest, error)
 	UpsertPlayerGearHistory(ctx context.Context, arg []UpsertPlayerGearHistoryParams) *UpsertPlayerGearHistoryBatchResults
 	UpsertPlayers(ctx context.Context, arg []UpsertPlayersParams) *UpsertPlayersBatchResults

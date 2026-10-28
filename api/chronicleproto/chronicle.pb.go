@@ -862,6 +862,7 @@ type Damage struct {
 	SpellData     *SpellData `protobuf:"bytes,10,opt,name=spellData,proto3,oneof" json:"spellData,omitempty"`
 	Overkill      int32      `protobuf:"varint,11,opt,name=overkill,proto3" json:"overkill,omitempty"`
 	Schools       []School   `protobuf:"varint,12,rep,packed,name=schools,proto3,enum=chronicleproto.School" json:"schools,omitempty"`
+	Unranked      int64      `protobuf:"varint,13,opt,name=unranked,proto3" json:"unranked,omitempty"` // Effective damage excluded from DPS rankings; zero means fully ranked.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -973,6 +974,13 @@ func (x *Damage) GetSchools() []School {
 	return nil
 }
 
+func (x *Damage) GetUnranked() int64 {
+	if x != nil {
+		return x.Unranked
+	}
+	return 0
+}
+
 type UnitPosition struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Meta          *EventMeta             `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
@@ -982,6 +990,7 @@ type UnitPosition struct {
 	MapId         int32                  `protobuf:"varint,5,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
 	Facing        *float64               `protobuf:"fixed64,6,opt,name=facing,proto3,oneof" json:"facing,omitempty"`
 	Z             *float64               `protobuf:"fixed64,7,opt,name=z,proto3,oneof" json:"z,omitempty"`
+	Floor         *int32                 `protobuf:"varint,8,opt,name=floor,proto3,oneof" json:"floor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1061,6 +1070,13 @@ func (x *UnitPosition) GetFacing() float64 {
 func (x *UnitPosition) GetZ() float64 {
 	if x != nil && x.Z != nil {
 		return *x.Z
+	}
+	return 0
+}
+
+func (x *UnitPosition) GetFloor() int32 {
+	if x != nil && x.Floor != nil {
+		return *x.Floor
 	}
 	return 0
 }
@@ -3420,7 +3436,7 @@ const file_chronicle_proto_rawDesc = "" +
 	"\babsorbed\x18\v \x01(\x05R\babsorbed\x120\n" +
 	"\aschools\x18\f \x03(\x0e2\x16.chronicleproto.SchoolR\aschoolsB\f\n" +
 	"\n" +
-	"_spellData\"\xc5\x03\n" +
+	"_spellData\"\xe1\x03\n" +
 	"\x06Damage\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x1b\n" +
 	"\x06caster\x18\x03 \x01(\tH\x00R\x06caster\x88\x01\x01\x12\x1e\n" +
@@ -3435,10 +3451,11 @@ const file_chronicle_proto_rawDesc = "" +
 	"\tspellData\x18\n" +
 	" \x01(\v2\x19.chronicleproto.SpellDataH\x01R\tspellData\x88\x01\x01\x12\x1a\n" +
 	"\boverkill\x18\v \x01(\x05R\boverkill\x120\n" +
-	"\aschools\x18\f \x03(\x0e2\x16.chronicleproto.SchoolR\aschoolsB\t\n" +
+	"\aschools\x18\f \x03(\x0e2\x16.chronicleproto.SchoolR\aschools\x12\x1a\n" +
+	"\bunranked\x18\r \x01(\x03R\bunrankedB\t\n" +
 	"\a_casterB\f\n" +
 	"\n" +
-	"_spellData\"\xc5\x01\n" +
+	"_spellData\"\xea\x01\n" +
 	"\fUnitPosition\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x12\n" +
 	"\x04unit\x18\x02 \x01(\tR\x04unit\x12\f\n" +
@@ -3446,9 +3463,11 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x01y\x18\x04 \x01(\x01R\x01y\x12\x15\n" +
 	"\x06map_id\x18\x05 \x01(\x05R\x05mapId\x12\x1b\n" +
 	"\x06facing\x18\x06 \x01(\x01H\x00R\x06facing\x88\x01\x01\x12\x11\n" +
-	"\x01z\x18\a \x01(\x01H\x01R\x01z\x88\x01\x01B\t\n" +
+	"\x01z\x18\a \x01(\x01H\x01R\x01z\x88\x01\x01\x12\x19\n" +
+	"\x05floor\x18\b \x01(\x05H\x02R\x05floor\x88\x01\x01B\t\n" +
 	"\a_facingB\x04\n" +
-	"\x02_z\"\xf8\x03\n" +
+	"\x02_zB\b\n" +
+	"\x06_floor\"\xf8\x03\n" +
 	"\rUnitResources\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x12\n" +
 	"\x04unit\x18\x02 \x01(\tR\x04unit\x12%\n" +
