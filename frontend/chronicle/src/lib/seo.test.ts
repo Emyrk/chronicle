@@ -14,6 +14,8 @@ describe("seoProductName", () => {
     [["vanilla", "ravencraft"], "Ravencraft"],
     [["vanilla", "sunreach"], "Sun Reach"],
     [["vanilla", "faebright"], "Faebright"],
+    [["vanilla", "moonwell"], "Moonwell"],
+    [["vanilla", "ashenwow"], "AshenWoW"],
     [["vanilla", "crusader-storm"], "Crusader Storm"],
     [["vanilla", "lunatic"], "Level One Lunatics"],
   ])("maps %j to %s", (flavor, expected) => {
