@@ -91,6 +91,29 @@ func TestFlavoredDeadminesHostiles(t *testing.T) {
 	require.Equal(t, "Masterpiece Harvester", masterpieceHarvester.EncounterName)
 }
 
+func TestInstanceDetailsDamageRules(t *testing.T) {
+	t.Parallel()
+	reg := RegistryForFlavor(nil, database.WoWFlavor{database.FlavorVanilla})
+	var foundMoltenCore, foundShadowfangKeep bool
+	for _, detail := range reg.AllInstanceDetails() {
+		switch detail.Name {
+		case "Molten Core":
+			foundMoltenCore = true
+			rule, ok := detail.DamageByEncounter["Garr"]
+			require.True(t, ok)
+			require.Equal(t, "entries", rule.Mode)
+			require.Equal(t, []uint32{12057, 12099}, rule.EntryIDs)
+			require.NotNil(t, detail.SpeedrunRules)
+			require.NotEmpty(t, detail.SpeedrunRules.Requirements)
+		case "Shadowfang Keep":
+			foundShadowfangKeep = true
+			require.Empty(t, detail.DamageByEncounter)
+		}
+	}
+	require.True(t, foundMoltenCore)
+	require.True(t, foundShadowfangKeep)
+}
+
 func TestInstanceDetailsBossCount(t *testing.T) {
 	t.Parallel()
 

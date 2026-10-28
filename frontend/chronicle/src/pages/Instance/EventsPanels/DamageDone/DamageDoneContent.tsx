@@ -4,13 +4,17 @@ import { RowContextMenu, getArmoryUrl } from "@/components/ui/PlayerMetricChart/
 import { AbilityBreakout, type AbilityData } from "@/components/ui/AbilityBreakout";
 import { GenericPanel } from "../GenericPanel";
 import type { EntitySelection, PanelRenderProps } from "../types";
-import type { DamageDoneResult, DamageSourceType } from "./damageDone.processor";
+import {
+  EXCLUDE_UNRANKED_DAMAGE_OPTION,
+  type DamageDoneResult,
+  type DamageSourceType,
+} from "./damageDone.processor";
 import { extractGroupingFromPanelOption, extractPetModeFromPanelOption } from "../processors/resolveEntity";
 import { useCachedValue } from "@/hooks/useCachedValue";
-import { useDamageDoneBreakout } from "./DamageDoneBreakout";
+import { useDamageDoneBreakout, withExcludedHitDetails } from "./DamageDoneBreakout";
 import { formatNumber } from "@/lib/format";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
-import { AlertTriangle, ChevronLeft, Layers } from "lucide-react";
+import { AlertTriangle, ChevronLeft, Layers, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useParsePills } from "../parsePills";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
@@ -25,6 +29,17 @@ function updatePanelOptionToken(
   const tokens = current ? current.split(",").filter(t => !t.startsWith(prefix)) : [];
   if (value) tokens.push(`${prefix}${value}`);
   return tokens.length > 0 ? tokens.join(",") : null;
+}
+
+function togglePanelOptionFlag(
+  current: string | null | undefined,
+  flag: string,
+  enabled: boolean,
+): string | null {
+  const tokens = current?.split(",").filter(Boolean) ?? [];
+  const next = tokens.filter((token) => token !== flag);
+  if (enabled) next.push(flag);
+  return next.length > 0 ? next.join(",") : null;
 }
 
 /**
@@ -110,6 +125,7 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
     () => parseMetricPanelLiveState(panelOption),
     [panelOption],
   );
+  const excludeUnrankedDamage = panelOption?.split(",").includes(EXCLUDE_UNRANKED_DAMAGE_OPTION) === true;
   const groupingDefault = sourceType === "pets" ? "default" : "merged";
   const grouping = extractGroupingFromPanelOption(panelOption, groupingDefault);
   const petMode = extractPetModeFromPanelOption(panelOption);
@@ -149,8 +165,10 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
 
   const { cachedValue: cachedResult, hasCache: hasData } = useCachedValue(
     result,
-    (r) => !!r && r.EncounterDamage instanceof Map && r.EncounterDamage.size > 0,
-    [sourceType, petGrouping, enemyGrouping, props.panelContextVersion]
+    (r) => !!r && r.EncounterDamage instanceof Map && (
+      r.EncounterDamage.size > 0 || (r.EncounterExcludedDamage?.size ?? 0) > 0
+    ),
+    [sourceType, petGrouping, enemyGrouping, excludeUnrankedDamage, props.panelContextVersion]
   );
 
   const damageData = useMemo(() => {
@@ -218,17 +236,25 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
   const focusedAbilityData = useMemo(() => {
     if (!focusedPlayerId || !cachedResult) return null;
     const abilities = cachedResult.ByAbility.get(focusedPlayerId);
-    if (!abilities) return null;
+    const excludedAbilities = cachedResult.ExcludedByAbility?.get(focusedPlayerId);
+    if (!abilities && !excludedAbilities) return null;
 
     const barClassName = focusedPlayer?.className ?? "foreground";
+    const abilityNames = new Set([
+      ...(abilities?.keys() ?? []),
+      ...(excludedAbilities?.keys() ?? []),
+    ]);
     const data: PlayerMetricChartData[] = [];
-    for (const [abilityName, stats] of abilities) {
+    for (const abilityName of abilityNames) {
+      const included = abilities?.get(abilityName)?.Total ?? 0;
+      const excluded = excludedAbilities?.get(abilityName)?.Total ?? 0;
       data.push({
         playerID: abilityName,
         playerName: abilityName,
         className: barClassName,
         specialization: "",
-        value: stats.Total,
+        value: included,
+        stackedValue: excluded || undefined,
       });
     }
     return data.sort((a, b) => b.value - a.value);
@@ -238,24 +264,35 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
   const focusedBreakout = useCallback(
     (abilityName: string, pinned: boolean) => {
       if (!focusedPlayerId || !cachedResult) return null;
-      const abilities = cachedResult.ByAbility.get(focusedPlayerId);
-      if (!abilities) return null;
-      const abilityData = abilities.get(abilityName);
-      if (!abilityData) return null;
+      const abilityData = cachedResult.ByAbility.get(focusedPlayerId)?.get(abilityName);
+      const excludedAbilityData = cachedResult.ExcludedByAbility?.get(focusedPlayerId)?.get(abilityName);
+      if (!abilityData && !excludedAbilityData) return null;
 
+      const included = abilityData ?? {
+        Total: 0,
+        Count: 0,
+        Crits: 0,
+        Hits: 0,
+        Misses: 0,
+      };
+      const combined = withExcludedHitDetails(included, excludedAbilityData);
       const perSec = props.perSecond && props.durationMs;
-      const rawDamage = abilityData.Total - (abilityData.Absorbed || 0);
+      const rawDamage = included.Total - (included.Absorbed || 0);
       const displayRawDamage = perSec ? (rawDamage / props.durationMs) * 1000 : rawDamage;
       const displayAbsorbed = perSec
-        ? ((abilityData.Absorbed || 0) / props.durationMs) * 1000
-        : abilityData.Absorbed;
-      const displayTotal = perSec ? (abilityData.Total / props.durationMs) * 1000 : abilityData.Total;
+        ? ((included.Absorbed || 0) / props.durationMs) * 1000
+        : included.Absorbed;
+      const displayExcluded = perSec
+        ? ((excludedAbilityData?.Total || 0) / props.durationMs) * 1000
+        : excludedAbilityData?.Total;
+      const displayTotal = perSec ? (included.Total / props.durationMs) * 1000 : included.Total;
 
       const singleAbility: AbilityData[] = [{
-        ...abilityData,
+        ...combined,
         name: abilityName,
         value: displayRawDamage,
         absorbed: displayAbsorbed,
+        overheal: displayExcluded,
       }];
 
       return (
@@ -316,6 +353,37 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
                   <p className="text-xs">
                     Replay shows raw Assembly damage. Exit replay to see ranking damage with excluded damage separated.
                   </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
+          {sourceType === "players" && (
+            <TooltipProvider>
+              <Tooltip delayDuration={300}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => setPanelOption?.(togglePanelOptionFlag(
+                      panelOption,
+                      EXCLUDE_UNRANKED_DAMAGE_OPTION,
+                      !excludeUnrankedDamage,
+                    ))}
+                    className={cn(
+                      "flex items-center gap-1 px-2 py-0.5 text-2xs rounded transition-colors cursor-pointer",
+                      excludeUnrankedDamage
+                        ? "bg-[color:var(--tertiary)]/20 text-[color:var(--tertiary)] border border-[color:var(--tertiary)]/30"
+                        : "bg-muted/50 text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <Trophy className="h-3 w-3" />
+                    Ranked
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[280px] space-y-1 text-xs">
+                  <p className="font-medium">Damage that counts toward encounter rankings</p>
+                  <p>When on, damage to non-ranking targets and overkill move to Excluded. Absorbed damage still counts.</p>
+                  <p>Turn off to show all damage together. Hit counts and crit stats always reflect the original hits.</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -455,6 +523,7 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
           perSecond={props.perSecond}
           animateValues={!syncMode?.enabled}
           breakout={focusedBreakout}
+          stackedLabel="Excluded"
           disableInteractions={props.context.renderMode === "layout_lab"}
         />
       ) : (

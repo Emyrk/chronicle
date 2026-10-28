@@ -391,6 +391,7 @@ export function useDamageDoneBreakout({
           stackedLabel="Excluded"
           valueBeforeStacked
           showStackedOnlyWhenExpanded
+          alwaysShowTargetStacked
           showAbsorbed
           absorbedIsAdditive
         />

@@ -18150,7 +18150,7 @@ INSERT INTO encounter_dps_rankings (
     player_guid, player_name, player_class, player_spec, player_sub_spec, player_role, player_level,
     talent_build_id, difficulty_name, max_players,
     realm_id, realm_name, guild_id, guild_name,
-    damage_done, duration_secs, dps, avg_ilvl,
+    damage_done, unranked_damage_done, duration_secs, dps, avg_ilvl,
     healing_done, absorbed_done, hps, player_deaths, alive_percentage,
     log_hashed_slug, killed_at
 )
@@ -18159,43 +18159,44 @@ VALUES (
     $5, $6, $7, $8, $9, $10, $11,
     $12, $13, $14,
     $15, $16, $17, $18,
-    $19, $20, $21, $22,
-    $23, $24, $25, $26, $27,
-    $28, $29
+    $19, $20, $21, $22, $23,
+    $24, $25, $26, $27, $28,
+    $29, $30
 )
 ON CONFLICT (encounter_id, player_guid) DO NOTHING
 `
 
 type InsertEncounterDpsRankingParams struct {
-	EncounterID     uuid.NullUUID      `db:"encounter_id" json:"encounter_id"`
-	InstanceID      uuid.UUID          `db:"instance_id" json:"instance_id"`
-	EncounterName   string             `db:"encounter_name" json:"encounter_name"`
-	InstanceName    string             `db:"instance_name" json:"instance_name"`
-	PlayerGuid      string             `db:"player_guid" json:"player_guid"`
-	PlayerName      string             `db:"player_name" json:"player_name"`
-	PlayerClass     string             `db:"player_class" json:"player_class"`
-	PlayerSpec      string             `db:"player_spec" json:"player_spec"`
-	PlayerSubSpec   string             `db:"player_sub_spec" json:"player_sub_spec"`
-	PlayerRole      string             `db:"player_role" json:"player_role"`
-	PlayerLevel     int16              `db:"player_level" json:"player_level"`
-	TalentBuildID   uuid.NullUUID      `db:"talent_build_id" json:"talent_build_id"`
-	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers      int16              `db:"max_players" json:"max_players"`
-	RealmID         uuid.UUID          `db:"realm_id" json:"realm_id"`
-	RealmName       string             `db:"realm_name" json:"realm_name"`
-	GuildID         uuid.NullUUID      `db:"guild_id" json:"guild_id"`
-	GuildName       string             `db:"guild_name" json:"guild_name"`
-	DamageDone      int64              `db:"damage_done" json:"damage_done"`
-	DurationSecs    float64            `db:"duration_secs" json:"duration_secs"`
-	Dps             float64            `db:"dps" json:"dps"`
-	AvgIlvl         pgtype.Int2        `db:"avg_ilvl" json:"avg_ilvl"`
-	HealingDone     int64              `db:"healing_done" json:"healing_done"`
-	AbsorbedDone    int64              `db:"absorbed_done" json:"absorbed_done"`
-	Hps             float64            `db:"hps" json:"hps"`
-	PlayerDeaths    pgtype.Int4        `db:"player_deaths" json:"player_deaths"`
-	AlivePercentage pgtype.Float8      `db:"alive_percentage" json:"alive_percentage"`
-	LogHashedSlug   string             `db:"log_hashed_slug" json:"log_hashed_slug"`
-	KilledAt        pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	EncounterID        uuid.NullUUID      `db:"encounter_id" json:"encounter_id"`
+	InstanceID         uuid.UUID          `db:"instance_id" json:"instance_id"`
+	EncounterName      string             `db:"encounter_name" json:"encounter_name"`
+	InstanceName       string             `db:"instance_name" json:"instance_name"`
+	PlayerGuid         string             `db:"player_guid" json:"player_guid"`
+	PlayerName         string             `db:"player_name" json:"player_name"`
+	PlayerClass        string             `db:"player_class" json:"player_class"`
+	PlayerSpec         string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec      string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PlayerRole         string             `db:"player_role" json:"player_role"`
+	PlayerLevel        int16              `db:"player_level" json:"player_level"`
+	TalentBuildID      uuid.NullUUID      `db:"talent_build_id" json:"talent_build_id"`
+	DifficultyName     string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers         int16              `db:"max_players" json:"max_players"`
+	RealmID            uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RealmName          string             `db:"realm_name" json:"realm_name"`
+	GuildID            uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	GuildName          string             `db:"guild_name" json:"guild_name"`
+	DamageDone         int64              `db:"damage_done" json:"damage_done"`
+	UnrankedDamageDone int64              `db:"unranked_damage_done" json:"unranked_damage_done"`
+	DurationSecs       float64            `db:"duration_secs" json:"duration_secs"`
+	Dps                float64            `db:"dps" json:"dps"`
+	AvgIlvl            pgtype.Int2        `db:"avg_ilvl" json:"avg_ilvl"`
+	HealingDone        int64              `db:"healing_done" json:"healing_done"`
+	AbsorbedDone       int64              `db:"absorbed_done" json:"absorbed_done"`
+	Hps                float64            `db:"hps" json:"hps"`
+	PlayerDeaths       pgtype.Int4        `db:"player_deaths" json:"player_deaths"`
+	AlivePercentage    pgtype.Float8      `db:"alive_percentage" json:"alive_percentage"`
+	LogHashedSlug      string             `db:"log_hashed_slug" json:"log_hashed_slug"`
+	KilledAt           pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
 }
 
 func (q *sqlQuerier) InsertEncounterDpsRanking(ctx context.Context, arg InsertEncounterDpsRankingParams) error {
@@ -18219,6 +18220,7 @@ func (q *sqlQuerier) InsertEncounterDpsRanking(ctx context.Context, arg InsertEn
 		arg.GuildID,
 		arg.GuildName,
 		arg.DamageDone,
+		arg.UnrankedDamageDone,
 		arg.DurationSecs,
 		arg.Dps,
 		arg.AvgIlvl,
@@ -18234,7 +18236,7 @@ func (q *sqlQuerier) InsertEncounterDpsRanking(ctx context.Context, arg InsertEn
 }
 
 const instanceRankingRecords = `-- name: InstanceRankingRecords :many
-SELECT edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at, edr.healing_done, edr.absorbed_done, edr.hps, edr.player_sub_spec, edr.player_deaths, edr.alive_percentage
+SELECT edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at, edr.healing_done, edr.absorbed_done, edr.hps, edr.player_sub_spec, edr.player_deaths, edr.alive_percentage, edr.unranked_damage_done
 FROM encounter_dps_rankings edr
 WHERE edr.instance_id = $1
 ORDER BY (encounter_id IS NULL), killed_at, encounter_name, player_name
@@ -18283,6 +18285,7 @@ func (q *sqlQuerier) InstanceRankingRecords(ctx context.Context, instanceID uuid
 			&i.PlayerSubSpec,
 			&i.PlayerDeaths,
 			&i.AlivePercentage,
+			&i.UnrankedDamageDone,
 		); err != nil {
 			return nil, err
 		}
@@ -18703,7 +18706,7 @@ representative_instances AS (
 ),
 deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
-        edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at, edr.healing_done, edr.absorbed_done, edr.hps, edr.player_sub_spec, edr.player_deaths, edr.alive_percentage
+        edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at, edr.healing_done, edr.absorbed_done, edr.hps, edr.player_sub_spec, edr.player_deaths, edr.alive_percentage, edr.unranked_damage_done
     FROM encounter_dps_rankings edr
 JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
 JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted

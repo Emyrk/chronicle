@@ -189,6 +189,8 @@ function App() {
         <Route path="/leaderboards" element={<LegacyLeaderboardsRedirect />} />
         <Route path="/leaderboards/statistics" element={<LeaderboardsPage mode="statistics" />} />
         <Route path="/leaderboards/speedruns" element={<LeaderboardsPage mode="speedruns" />} />
+        <Route path="/leaderboards/ruleset" element={<LeaderboardsPage mode="ruleset" />} />
+        <Route path="/leaderboards/rulesets" element={<LeaderboardsPage mode="rulesets" />} />
         <Route path="/leaderboards/parsing" element={<LeaderboardsPage mode="parsing" />} />
         <Route path="/leaderboard" element={<LegacyLeaderboardsRedirect />} />
         <Route path="/rankings" element={<LegacyLeaderboardsRedirect />} />

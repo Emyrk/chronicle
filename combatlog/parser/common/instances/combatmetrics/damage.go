@@ -10,7 +10,7 @@ import (
 // Damage-based metrics should use this helper so fully and partially absorbed
 // hits are accounted for consistently.
 func EffectiveDamage(msg *messages.Damage) int64 {
-	return int64(msg.Amount) + msg.Trailer.AbsorbedAmount()
+	return max(0, int64(msg.Amount)-int64(msg.Overkill)) + msg.Trailer.AbsorbedAmount()
 }
 
 func IsPlayerOrPlayerOwned(units *unitdb.Units, unitGUID guid.GUID) bool {

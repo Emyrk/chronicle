@@ -524,6 +524,27 @@ describe("time_range filter", () => {
     expect(evaluateFilters(filters, createDamageEvent({ globalOffsetMilli: 1000 }), createContext())).toBe(true);
   });
 });
+describe("has_excluded filter", () => {
+  const filter: PanelFilter = { type: "has_excluded", value: "" };
+
+  it("matches damage with an unranked portion or overkill, including partly ranked hits", () => {
+    const context = createContext();
+    expect(evaluateFilters([filter], createDamageEvent({ amount: 100, unranked: 20 }), context)).toBe(true);
+    expect(evaluateFilters([filter], createDamageEvent({ amount: 100, overkill: 30 }), context)).toBe(true);
+    expect(evaluateFilters([filter], createDamageEvent({ amount: 100, overkill: 30, unranked: 20 }), context)).toBe(true);
+    expect(evaluateFilters([filter], createDamageEvent({ amount: 100 }), context)).toBe(false);
+  });
+
+  it("preserves non-damage streams needed for phase tracking, even when negated", () => {
+    const context = createContext();
+    const heal = createHealEvent();
+    expect(evaluateFilters([filter], heal, context)).toBe(true);
+    expect(evaluateFilters([{ ...filter, negate: true }], heal, context)).toBe(true);
+    expect(evaluateFilters([{ ...filter, negate: true }], createDamageEvent({ unranked: 25 }), context)).toBe(false);
+    expect(evaluateFilters([{ ...filter, negate: true }], createDamageEvent(), context)).toBe(true);
+  });
+});
+
 describe("event_value filter", () => {
   it("filters > operator", () => {
     const filters: PanelFilter[] = [{ type: "event_value", value: ">:1000" }];

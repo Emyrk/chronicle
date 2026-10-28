@@ -68,4 +68,22 @@ describe("parsing tab routes", () => {
       "/leaderboards/speedruns",
     )
   })
+
+  it("only carries the instance into and out of DPS rules", () => {
+    const stats = new URLSearchParams("instance=Molten+Core&metric=dps&diff=10+Player")
+    expect(leaderboardsModeTarget("ruleset", stats, "statistics")).toBe(
+      "/leaderboards/ruleset?instance=Molten+Core",
+    )
+    expect(leaderboardsModeTarget("statistics", stats, "ruleset")).toBe(
+      "/leaderboards/statistics?instance=Molten+Core",
+    )
+  })
+
+  it("opens the rulesets index without carrying instance filters", () => {
+    const stats = new URLSearchParams("instance=Molten+Core&metric=dps&page=2")
+    expect(leaderboardsModeTarget("rulesets", stats, "statistics")).toBe("/leaderboards/rulesets")
+    expect(leaderboardsModeTarget("ruleset", new URLSearchParams("instance=Molten+Core"), "rulesets")).toBe(
+      "/leaderboards/ruleset?instance=Molten+Core",
+    )
+  })
 })

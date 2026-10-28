@@ -2,8 +2,10 @@ import { Link, Navigate, useSearchParams } from "react-router-dom"
 import { RankingsLanding } from "../Rankings/RankingsLanding"
 import { InstanceView } from "../Rankings/InstanceView"
 import { SpeedrunLeaderboard } from "../Leaderboard/SpeedrunLeaderboard"
-import { BarChart3, Swords, Timer } from "lucide-react"
+import { BarChart3, ScrollText, Swords, Timer } from "lucide-react"
 import { ParsingInstanceView } from "./Parsing/ParsingInstanceView"
+import { RulesetInstanceView } from "./RulesetInstanceView"
+import { RulesetsLanding } from "./RulesetsLanding"
 import { AdRailStack } from "../../components/Ads/AdRailStack"
 import {
   leaderboardsModeTarget,
@@ -21,10 +23,18 @@ export function LeaderboardsPage({ mode }: { mode: LeaderboardsMode }) {
   if (mode === "speedruns" && !speedrunsVisible) {
     return <Navigate to={leaderboardsModeTarget("statistics", params)} replace />
   }
+  if (mode === "ruleset" && !instance) {
+    return <Navigate to={leaderboardsModeTarget("rulesets", params)} replace />
+  }
+  if (mode === "rulesets" && instance) {
+    return <Navigate to={leaderboardsModeTarget("ruleset", params, mode)} replace />
+  }
 
   const statisticsTarget = leaderboardsModeTarget("statistics", params, mode)
   const speedrunsTarget = leaderboardsModeTarget("speedruns", params, mode)
   const parsingTarget = leaderboardsModeTarget("parsing", params, mode)
+  const rulesetTarget = leaderboardsModeTarget("ruleset", params, mode)
+  const rulesetsTarget = leaderboardsModeTarget("rulesets", params, mode)
 
   // If an instance is selected, show the tabbed detail view
   if (instance) {
@@ -54,6 +64,12 @@ export function LeaderboardsPage({ mode }: { mode: LeaderboardsMode }) {
                 icon={<BarChart3 className="h-4 w-4" />}
                 label="Parsing"
               />
+              <TabButton
+                active={mode === "ruleset"}
+                to={rulesetTarget}
+                icon={<ScrollText className="h-4 w-4" />}
+                label="Ruleset"
+              />
             </div>
           </div>
         </div>
@@ -64,6 +80,8 @@ export function LeaderboardsPage({ mode }: { mode: LeaderboardsMode }) {
               <InstanceView instanceName={instance} />
             ) : mode === "parsing" ? (
               <ParsingInstanceView key={instance} instanceName={instance} />
+            ) : mode === "ruleset" ? (
+              <RulesetInstanceView instanceName={instance} />
             ) : (
               <SpeedrunLeaderboard overrideInstance={instance} />
             )}
@@ -100,14 +118,22 @@ export function LeaderboardsPage({ mode }: { mode: LeaderboardsMode }) {
           icon={<BarChart3 className="h-4 w-4" />}
           label="Parsing"
         />
+        <TabButton
+          active={mode === "rulesets"}
+          to={rulesetsTarget}
+          icon={<ScrollText className="h-4 w-4" />}
+          label="Rulesets"
+        />
       </div>
 
       <div className="flex gap-6">
         <div className="min-w-0 flex-1">
-          {mode !== "speedruns" ? (
-            <RankingsLanding showTopPlayers={mode !== "parsing"} />
-          ) : (
+          {mode === "rulesets" ? (
+            <RulesetsLanding />
+          ) : mode === "speedruns" ? (
             <SpeedrunLeaderboard />
+          ) : (
+            <RankingsLanding showTopPlayers={mode !== "parsing"} />
           )}
         </div>
         <AdRailStack
