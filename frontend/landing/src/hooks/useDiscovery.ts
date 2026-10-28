@@ -145,16 +145,45 @@ function discoveryEndpoint(url: string): string {
   return `/__discovery/${new URL(url).hostname}`;
 }
 
+function isHTTPURL(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 async function fetchDiscovery(url: string): Promise<SourcedDiscoveryEntry[]> {
   try {
     const resp = await fetch(discoveryEndpoint(url));
     if (!resp.ok) return [];
     const data = (await resp.json()) as DiscoveryEntry[];
     if (!Array.isArray(data)) return [];
-    return data.map((entry) => ({ ...entry, discoverySource: url }));
+    return data
+      .filter((entry) => typeof entry.url === "string" && isHTTPURL(entry.url))
+      .map((entry) => ({ ...entry, discoverySource: url }));
   } catch {
     return [];
   }
+}
+
+async function fetchDiscoveryEntries(discoveryUrls: string[]): Promise<SourcedDiscoveryEntry[]> {
+  const results = await Promise.allSettled(discoveryUrls.map(fetchDiscovery));
+  const entries: SourcedDiscoveryEntry[] = [];
+  for (const result of results) {
+    if (result.status === "fulfilled") entries.push(...result.value);
+  }
+  return entries;
+}
+
+/** Resolve the complete directory for build-time prerendering. */
+export async function discoverServers(
+  baseline: ServerEntry[],
+  discoveryUrls: string[],
+): Promise<ServerEntry[]> {
+  if (discoveryUrls.length === 0) return baseline;
+  return mergeDiscovery(baseline, await fetchDiscoveryEntries(discoveryUrls));
 }
 
 /**
@@ -168,13 +197,16 @@ async function fetchDiscovery(url: string): Promise<SourcedDiscoveryEntry[]> {
 export function useDiscovery(
   baseline: ServerEntry[],
   discoveryUrls: string[],
+  initialServers?: ServerEntry[],
 ): { servers: ServerEntry[]; loading: boolean } {
-  // When discovery is configured, wait for every source before revealing the
-  // directory so hardcoded entries do not briefly appear on their own.
+  // The production build prerenders prefetched discovery data. Use that exact
+  // snapshot for the first client render so hydration matches the static HTML.
   const [servers, setServers] = useState<ServerEntry[]>(
-    discoveryUrls.length > 0 ? [] : baseline,
+    initialServers ?? (discoveryUrls.length > 0 ? [] : baseline),
   );
-  const [loading, setLoading] = useState(discoveryUrls.length > 0);
+  const [loading, setLoading] = useState(
+    initialServers === undefined && discoveryUrls.length > 0,
+  );
 
   useEffect(() => {
     if (discoveryUrls.length === 0) {
@@ -192,16 +224,14 @@ export function useDiscovery(
       return;
     }
 
-    Promise.allSettled(discoveryUrls.map(fetchDiscovery)).then((results) => {
+    fetchDiscoveryEntries(discoveryUrls).then((entries) => {
       if (cancelled) return;
-      const entries: SourcedDiscoveryEntry[] = [];
-      for (const r of results) {
-        if (r.status === "fulfilled") {
-          entries.push(...r.value);
-        }
-      }
       writeCache(key, entries);
-      setServers(mergeDiscovery(baseline, entries));
+      // Keep a successfully prerendered directory visible during a transient
+      // client-side discovery outage instead of collapsing to the baseline.
+      if (entries.length > 0 || initialServers === undefined) {
+        setServers(mergeDiscovery(baseline, entries));
+      }
       setLoading(false);
     });
 
