@@ -855,10 +855,10 @@ export function CharacterSettings() {
 
 export function AiAssistantSettings() {
   return (
-    <div className="space-y-6">
+    <div className="max-w-3xl space-y-8">
       <div>
         <h2 className="text-xl font-semibold">AI assistant</h2>
-        <p className="text-muted-foreground">Choose which AI assistants appear for your account and connect the provider that pays for them.</p>
+        <p className="text-muted-foreground mt-1 text-sm">Choose which AI assistants appear for your account and connect the provider that pays for them.</p>
       </div>
       <InferenceSettings />
     </div>
