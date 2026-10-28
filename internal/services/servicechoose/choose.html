@@ -19,7 +19,8 @@
     color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
   }
   main{width:100%;max-width:760px}
-  .brand{font-size:.75rem;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);font-weight:600;text-align:center}
+  /* The SVG has built-in padding; the negative margin trims it like the navbar does. */
+  .brand{display:block;height:84px;width:auto;margin:-1rem auto -.5rem}
   h1{margin-top:.75rem;font-size:1.6rem;font-weight:650;text-align:center;letter-spacing:-.01em}
   .lede{margin-top:.5rem;color:var(--muted);font-size:.95rem;line-height:1.55;text-align:center}
   .path{
@@ -249,6 +250,9 @@
     svg.appendChild(p);
     return svg;
   }
+  function brand() {
+    return el("img", { "class": "brand", src: "/c/chronicle/ChronicleLogoCenter.svg", alt: "Chronicle" });
+  }
   function pathChip() {
     var shown = forwardPath === "/" ? "Home page" : forwardPath;
     return el("div", { "class": "path" }, [el("code", { text: shown, title: shown })]);
@@ -263,7 +267,7 @@
     var go = function () { clearTimeout(timer); navigate(destinationURL(dest, "saved"), true); };
 
     app.replaceChildren(
-      el("div", { "class": "brand", text: "Chronicle" }),
+      brand(),
       el("h1", { text: "Opening your community" }),
       pathChip(),
       el("div", { "class": "going" }, [
@@ -306,7 +310,7 @@
     syncRemember();
 
     var children = [
-      el("div", { "class": "brand", text: "Chronicle" }),
+      brand(),
       el("h1", { text: "Where should this link open?" }),
       el("p", {
         "class": "lede",
