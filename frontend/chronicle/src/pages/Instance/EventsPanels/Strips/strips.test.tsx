@@ -24,4 +24,10 @@ describe("strip registration", () => {
     expect(STRIPS.consumables_cost.supportsFiltering).toBe(true);
     expect(STRIPS.consumables_cost.supportedOrientations).toEqual(["horizontal"]);
   });
+
+  it("registers the Sidekick strip as a stream-free horizontal strip", () => {
+    expect(isStripType("sidekick")).toBe(true);
+    expect(STRIPS.sidekick.streams).toEqual([]);
+    expect(STRIPS.sidekick.supportedOrientations).toEqual(["horizontal"]);
+  });
 });

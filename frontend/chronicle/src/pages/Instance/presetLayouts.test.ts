@@ -12,6 +12,7 @@ import {
   resizeWatchPresetForViewport,
   watchDirectorRows,
   watchPresetSideRows,
+  withoutOwnerSidekickStrip,
   PRESET_LAYOUTS,
   PRESET_LAYOUTS_BY_ID,
   presetLayoutById,
@@ -207,12 +208,13 @@ describe("Watch preset", () => {
     expect(DEFAULT_PRESET_ID).toBe("summary");
   });
 
-  it("puts the map beside party, deaths and one meter under a full-width replay strip", () => {
+  it("puts the map beside party, deaths and one meter under the replay and Sidekick strips", () => {
     const preset = watchPreset();
     expect(preset.seamless).toBe(true);
     expect(preset.fit).toBe(true);
     const byId = Object.fromEntries(preset.layoutItems.map((item) => [item.id, item]));
-    expect(byId["strip-1"]).toMatchObject({ kind: "strip", stripType: "replay", x: 0, y: 0, w: 12, h: 1 });
+    expect(byId["strip-1"]).toMatchObject({ kind: "strip", stripType: "replay", x: 0, y: 0, w: 9, h: 1 });
+    expect(byId["strip-2"]).toMatchObject({ kind: "strip", stripType: "sidekick", x: 9, y: 0, w: 3, h: 1 });
     expect(byId["panel-1"]).toMatchObject({ x: 0, y: 1, w: 8, h: 9 });
     expect(byId["panel-2"]).toMatchObject({ x: 8, y: 1, w: 4, h: 3 });
     expect(byId["panel-3"]).toMatchObject({ x: 8, y: 4, w: 4, h: 4 });
@@ -242,7 +244,19 @@ describe("Watch preset", () => {
       ["strip-1", 4, 12, 1],
       ["panel-2", 5, 12, 2],
       ["panel-3", 7, 12, 3],
+      ["strip-2", 10, 12, 1],
     ]);
+  });
+
+  it("drops the Sidekick strip for the owner and gives the replay strip the full row", () => {
+    const items = watchPreset().layoutItems;
+    expect(withoutOwnerSidekickStrip("watch", items, false)).toBe(items);
+    expect(withoutOwnerSidekickStrip("summary", items, true)).toBe(items);
+    const owner = withoutOwnerSidekickStrip("watch", items, true);
+    expect(owner.map((item) => item.id)).not.toContain("strip-2");
+    expect(owner.find((item) => item.id === "strip-1")).toMatchObject({ x: 0, w: 12 });
+    const mobile = withoutOwnerSidekickStrip("watch", watchPreset(true).layoutItems, true);
+    expect(mobile.map((item) => item.id)).toEqual(["panel-1", "strip-1", "panel-2", "panel-3"]);
   });
 
   it.each([4, 5, 6, 7, 8, 9])("splits %i map rows into a side column of the same height", (mapRows) => {
@@ -309,7 +323,8 @@ describe("Watch preset", () => {
     const rows = watchDirectorRows(viewportHeight);
     const byId = Object.fromEntries(director.map((item) => [item.id, item]));
     expect(byId["panel-1"]).toMatchObject({ x: 0, y: 0, w: 12, h: rows.map });
-    expect(byId["strip-1"]).toMatchObject({ x: 0, y: rows.map, w: 12, h: 1 });
+    expect(byId["strip-1"]).toMatchObject({ x: 0, y: rows.map, w: 9, h: 1 });
+    expect(byId["strip-2"]).toMatchObject({ x: 9, y: rows.map, w: 3, h: 1 });
     expect([byId["panel-2"], byId["panel-3"], byId["panel-4"]].map((item) => [item.x, item.y, item.w, item.h])).toEqual([
       [0, rows.map + 1, 4, rows.row], [4, rows.map + 1, 4, rows.row], [8, rows.map + 1, 4, rows.row],
     ]);
@@ -322,6 +337,10 @@ describe("Watch preset", () => {
 
   it("uses the full Director grid (map 6 over a row of 3) on tall screens; other presets ignore focus", () => {
     expect(watchDirectorRows(1080)).toEqual({ map: 6, row: 3 });
+    // The owner's Watch has no Sidekick strip: the replay strip takes the full row.
+    const owner = resizePresetForViewport("watch", withoutOwnerSidekickStrip("watch", watchPreset().layoutItems, true), 1080, true);
+    expect(owner.find((item) => item.id === "strip-2")).toBeUndefined();
+    expect(owner.find((item) => item.id === "strip-1")).toMatchObject({ x: 0, y: 6, w: 12, h: 1 });
     const map = PRESET_LAYOUTS_BY_ID.map;
     if (!isPanelPresetLayout(map)) throw new Error("Map should be a panels preset");
     expect(resizePresetForViewport("map", map.layoutItems, 720, true)).toEqual(resizeMapPresetForViewport(map.layoutItems, 720));

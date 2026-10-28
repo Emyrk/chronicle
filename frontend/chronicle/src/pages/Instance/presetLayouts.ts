@@ -117,6 +117,20 @@ export function resizeWatchPresetForViewport(layoutItems: readonly GridEditorIte
   });
 }
 
+/**
+ * The Watch preset as the log's owner sees it: the grid cannot collapse an
+ * empty strip, so the Sidekick strip is dropped and the replay strip takes
+ * the full row.
+ */
+export function withoutOwnerSidekickStrip(presetId: string | null, layoutItems: GridEditorItem[], isOwner: boolean): GridEditorItem[] {
+  if (presetId !== "watch" || !isOwner) return layoutItems;
+  const sidekick = layoutItems.find((item) => item.id === "strip-2" && item.stripType === "sidekick");
+  if (!sidekick) return layoutItems;
+  return layoutItems
+    .filter((item) => item !== sidekick)
+    .map((item) => item.id === "strip-1" && item.y === sidekick.y ? { ...item, x: 0, w: 12 } : item);
+}
+
 // Focus mode's chrome above the grid (padding plus the preset row), and fit's minimum row height.
 const FOCUS_CHROME_PX = 72;
 const GRID_ROW_MIN_PX = 96;
@@ -130,14 +144,17 @@ export function watchDirectorRows(viewportHeight: number): { map: number; row: n
 
 /**
  * Watch in focus mode, the Director stage: the map full width, the replay strip
- * under it, Party / Deaths / Damage as a row of three. Only the stable Watch
- * items move, and they keep their ids so the panels stay mounted.
+ * (and the Sidekick strip beside it, when shown) under it, Party / Deaths /
+ * Damage as a row of three. Only the stable Watch items move, and they keep
+ * their ids so the panels stay mounted.
  */
 export function arrangeWatchPresetForFocus(layoutItems: readonly GridEditorItem[], viewportHeight: number): GridEditorItem[] {
   const rows = watchDirectorRows(viewportHeight);
+  const sidekick = layoutItems.some((item) => item.id === "strip-2" && item.stripType === "sidekick");
   const placed: Record<string, { x: number; y: number; w: number; h: number }> = {
     "panel-1": { x: 0, y: 0, w: 12, h: rows.map },
-    "strip-1": { x: 0, y: rows.map, w: 12, h: 1 },
+    "strip-1": { x: 0, y: rows.map, w: sidekick ? 9 : 12, h: 1 },
+    ...(sidekick ? { "strip-2": { x: 9, y: rows.map, w: 3, h: 1 } } : {}),
     "panel-2": { x: 0, y: rows.map + 1, w: 4, h: rows.row },
     "panel-3": { x: 4, y: rows.map + 1, w: 4, h: rows.row },
     "panel-4": { x: 8, y: rows.map + 1, w: 4, h: rows.row },
@@ -228,8 +245,9 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
     seamless: true,
     fit: true,
     layoutItems: [
-      // Full width until the Sidekick strip takes the right three columns.
-      { id: "strip-1", title: "Replay", kind: "strip", stripType: "replay", orientation: "horizontal", x: 0, y: 0, w: 12, h: 1, minW: 6, minH: 1, maxH: 2 },
+      { id: "strip-1", title: "Replay", kind: "strip", stripType: "replay", orientation: "horizontal", x: 0, y: 0, w: 9, h: 1, minW: 6, minH: 1, maxH: 2 },
+      // The ask, for visitors; Share for members; dropped for the owner (withoutOwnerSidekickStrip).
+      { id: "strip-2", title: "Sidekick", kind: "strip", stripType: "sidekick", orientation: "horizontal", x: 9, y: 0, w: 3, h: 1, minW: 3, minH: 1, maxH: 1 },
       { id: "panel-1", title: "Map", x: 0, y: 1, w: 8, h: 9, minW: 6 },
       { id: "panel-2", title: "Party", x: 8, y: 1, w: 4, h: 3, minW: 3 },
       { id: "panel-3", title: "Deaths", x: 8, y: 4, w: 4, h: 4, minW: 3 },
@@ -242,6 +260,7 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
         { id: "strip-1", title: "Replay", kind: "strip", stripType: "replay", orientation: "horizontal", x: 0, y: 4, w: 12, h: 1, minW: 6, minH: 1, maxH: 2 },
         { id: "panel-2", title: "Party", x: 0, y: 5, w: 12, h: 2, minW: 4 },
         { id: "panel-3", title: "Deaths", x: 0, y: 7, w: 12, h: 3, minW: 4 },
+        { id: "strip-2", title: "Sidekick", kind: "strip", stripType: "sidekick", orientation: "horizontal", x: 0, y: 10, w: 12, h: 1, minW: 6, minH: 1, maxH: 1 },
       ],
     },
     panelTypes: {

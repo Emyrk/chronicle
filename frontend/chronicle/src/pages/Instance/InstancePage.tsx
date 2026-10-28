@@ -7,7 +7,7 @@ import { InstanceEventsProvider } from "@/hooks/instanceEvents";
 import { DatasetProvider } from "@/hooks/useDatasetId";
 import { PlayerSpecializationProvider } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 import { PlayerCosmeticsProvider } from "@/components/ui/PlayerMetricChart/PlayerCosmeticsContext";
-import type { ActivityPeriod, InstancePlayer, KillType, VehicleControlMetadata } from "@/api/typesGenerated";
+import type { ActivityPeriod, InstancePlayer, KillType, LandingFeaturedUpload, VehicleControlMetadata } from "@/api/typesGenerated";
 import type { ResolvedInstanceUnit } from "./instanceUnits";
 import { transformToInstance } from "./transformInstance";
 import { Card } from "@/components/ui/Card/Card";
@@ -118,6 +118,9 @@ export interface Instance {
   tenantName?: string;
   tenantSlug?: string;
   tenantIncludeInAll?: boolean;
+  // Upload provenance and the uploading user, for the Sidekick strip
+  upload?: LandingFeaturedUpload;
+  logOwner?: string;
 }
 
 /**

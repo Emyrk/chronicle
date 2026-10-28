@@ -205,7 +205,7 @@ func landingUpload(group database.GetWoWLogGroupByIDRow, lastEvent time.Time) ch
 		}
 	}
 	// A log appended to after the run, or a missing timestamp, gives no usable delay.
-	if delay := completed.Sub(lastEvent); !completed.IsZero() && delay >= 0 {
+	if delay := completed.Sub(lastEvent); !completed.IsZero() && !lastEvent.IsZero() && delay >= 0 {
 		ms := delay.Milliseconds()
 		out.DelayMs = &ms
 	}
