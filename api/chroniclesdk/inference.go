@@ -54,6 +54,20 @@ type InferenceMessage struct {
 	Content    string `json:"content"`
 	Name       string `json:"name,omitempty"`
 	ToolCallID string `json:"tool_call_id,omitempty"`
+	// Usage is the model call that wrote this assistant message, when it was recorded.
+	Usage *InferenceUsage `json:"usage,omitempty"`
+}
+
+// InferenceUsage is token and cost accounting summed over one or more model calls.
+type InferenceUsage struct {
+	PromptTokens     int64 `json:"prompt_tokens"`
+	CompletionTokens int64 `json:"completion_tokens"`
+	// CachedTokens and ReasoningTokens are subsets of PromptTokens and CompletionTokens.
+	CachedTokens    int64 `json:"cached_tokens"`
+	ReasoningTokens int64 `json:"reasoning_tokens"`
+	// CostUSD is what the provider charged, in OpenRouter credits (1 credit = 1 USD). Absent when no call reported a cost.
+	CostUSD *float64 `json:"cost_usd,omitempty"`
+	Calls   int64    `json:"calls"`
 }
 
 type InferenceThread struct {
@@ -69,6 +83,8 @@ type InferenceThread struct {
 type InferenceThreadResponse struct {
 	Thread   InferenceThread    `json:"thread"`
 	Messages []InferenceMessage `json:"messages"`
+	// Usage covers the whole chat since it was last cleared, including calls whose messages are not shown.
+	Usage InferenceUsage `json:"usage"`
 }
 type InferenceThreadsResponse struct {
 	Threads []InferenceThread `json:"threads"`
@@ -96,6 +112,8 @@ type InferenceClientToolResultRequest struct {
 	StateRevision     *int64          `json:"state_revision,omitempty"`
 	Status            string          `json:"status"`
 	Result            json.RawMessage `json:"result,omitempty"`
+	// UsageEvents asks for a USAGE event after each model call. Older clients reject unknown events, so it is opt-in.
+	UsageEvents bool `json:"usage_events,omitempty"`
 }
 
 type InferenceDebugPreviewRequest struct {
@@ -117,4 +135,6 @@ type InferenceRunRequest struct {
 	Client       *InferenceClient   `json:"client,omitempty"`
 	Messages     []InferenceMessage `json:"messages,omitempty"`
 	Message      *InferenceMessage  `json:"message,omitempty"`
+	// UsageEvents asks for a USAGE event after each model call. Older clients reject unknown events, so it is opt-in.
+	UsageEvents bool `json:"usage_events,omitempty"`
 }

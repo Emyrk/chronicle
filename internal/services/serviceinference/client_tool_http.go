@@ -122,8 +122,15 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 		_ = s.finishRun(r.Context(), run, "error", agentLoopState{Usage: Usage{PromptTokens: int(run.InputTokens), CompletionTokens: int(run.OutputTokens), TotalTokens: int(run.InputTokens + run.OutputTokens)}, IterationCount: int(run.IterationCount), ToolCallCount: int(run.ToolCallCount)}, "stream_error")
 		return
 	}
-	debug := debugRunContext{Enabled: run.Debug, RunID: run.IdempotencyKey, ThreadID: thread.ID.String(), Persistence: "durable", ContextType: thread.ContextType.String, ContextID: thread.ContextID.String}
+	debug := debugRunContext{Enabled: run.Debug, UsageEvents: request.UsageEvents, RunID: run.IdempotencyKey, ThreadID: thread.ID.String(), Persistence: "durable", ContextType: thread.ContextType.String, ContextID: thread.ContextID.String}
 	state := agentLoopState{Usage: Usage{PromptTokens: int(run.InputTokens), CompletionTokens: int(run.OutputTokens), TotalTokens: int(run.InputTokens + run.OutputTokens)}, IterationCount: int(run.IterationCount), ToolCallCount: int(run.ToolCallCount)}
+	// Debug snapshots show the whole run's usage, so carry over what the paused calls cost.
+	if prior, err := s.db.GetInferenceRunUsage(r.Context(), run.ID); err == nil {
+		state.Usage.CachedTokens, state.Usage.ReasoningTokens = int(prior.CachedTokens), int(prior.ReasoningTokens)
+		if prior.CostedCalls > 0 {
+			state.Usage.CostNanos = &prior.CostNanos
+		}
+	}
 	persist := func(messages ...Message) error {
 		return s.persistInferenceMessages(r.Context(), thread.ID, messages...)
 	}
@@ -174,7 +181,7 @@ func (s *Service) continueClientTool(w http.ResponseWriter, r *http.Request) {
 	pause := func(assistantMessage Message, toolMessages []Message, next clientToolPause, nextState agentLoopState) error {
 		return s.pauseForClientTool(r.Context(), run, thread.ID, assistantMessage, toolMessages, next, nextState)
 	}
-	result, err := s.agentLoop(r.Context(), writer, provider, credential, run.Model, assistantDefinition, history, threadToolContext(s, thread), debug, capability, state, persist, pause)
+	result, err := s.agentLoop(r.Context(), writer, provider, credential, run.Model, assistantDefinition, history, threadToolContext(s, thread), debug, capability, state, persist, pause, s.usageRecorder(r.Context(), run, &thread))
 	if err != nil {
 		if s.logger != nil {
 			s.logger.Warn("continued inference run failed", "run_id", run.IdempotencyKey, "error", err)

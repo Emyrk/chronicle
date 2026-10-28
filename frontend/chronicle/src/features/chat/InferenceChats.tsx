@@ -21,6 +21,7 @@ import { ModelCombobox } from "./ModelCombobox";
 import type { DebugCommandInput } from "./useAssistantChat";
 import { useChatWindow } from "./useChatWindow";
 import { useInferenceSelection } from "./useInferenceSelection";
+import { usageFromApi } from "./usage";
 
 export function AssistantConfiguration({
   selection,
@@ -203,6 +204,7 @@ function DesktopInstanceAssistantChat({ instanceId, instanceName }: { instanceId
       endpoint="/api/v1/inference/runs"
       threadId={response?.thread.id}
       initialMessages={response ? toChatMessages(response.messages) : []}
+      initialUsage={response?.usage && usageFromApi(response.usage)}
       createRequest={createRequest}
       onDebugCommand={debugPermission.allowed ? previewDebug : undefined}
       onStartNewChat={startNewChat}

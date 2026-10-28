@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -371,12 +372,8 @@ func processSSEData(dataLines []string, callback serviceinference.StreamCallback
 	}
 	if chunk.Usage != nil {
 		if err := callback(serviceinference.StreamEvent{
-			Type: serviceinference.StreamEventUsage,
-			Usage: serviceinference.Usage{
-				PromptTokens:     chunk.Usage.PromptTokens,
-				CompletionTokens: chunk.Usage.CompletionTokens,
-				TotalTokens:      chunk.Usage.TotalTokens,
-			},
+			Type:  serviceinference.StreamEventUsage,
+			Usage: chunk.Usage.normalized(chunk.ID),
 		}); err != nil {
 			return false, err
 		}
@@ -545,13 +542,57 @@ type chatChunk struct {
 		} `json:"delta"`
 		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
+	ID    string `json:"id"`
 	Usage *usage `json:"usage"`
 }
 
+// usage is OpenRouter's usage accounting, sent in the last streamed chunk of every completion.
 type usage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens        int `json:"prompt_tokens"`
+	CompletionTokens    int `json:"completion_tokens"`
+	TotalTokens         int `json:"total_tokens"`
+	PromptTokensDetails *struct {
+		CachedTokens int `json:"cached_tokens"`
+	} `json:"prompt_tokens_details"`
+	CompletionTokensDetails *struct {
+		ReasoningTokens int `json:"reasoning_tokens"`
+	} `json:"completion_tokens_details"`
+	// Cost is in credits (1 credit = 1 USD).
+	Cost        *json.Number `json:"cost"`
+	CostDetails *struct {
+		UpstreamInferenceCost *json.Number `json:"upstream_inference_cost"`
+	} `json:"cost_details"`
+	IsBYOK *bool `json:"is_byok"`
+}
+
+// creditsToNanos converts a decimal credit amount exactly, dropping anything below one nano-credit.
+func creditsToNanos(value *json.Number) *int64 {
+	if value == nil {
+		return nil
+	}
+	amount, ok := new(big.Rat).SetString(value.String())
+	if !ok || amount.Sign() < 0 {
+		return nil
+	}
+	nanos, _ := new(big.Float).SetRat(amount.Mul(amount, big.NewRat(1_000_000_000, 1))).Int64()
+	return &nanos
+}
+
+func (u usage) normalized(generationID string) serviceinference.Usage {
+	out := serviceinference.Usage{
+		PromptTokens: u.PromptTokens, CompletionTokens: u.CompletionTokens, TotalTokens: u.TotalTokens,
+		CostNanos: creditsToNanos(u.Cost), BYOK: u.IsBYOK, GenerationID: generationID,
+	}
+	if u.PromptTokensDetails != nil {
+		out.CachedTokens = u.PromptTokensDetails.CachedTokens
+	}
+	if u.CompletionTokensDetails != nil {
+		out.ReasoningTokens = u.CompletionTokensDetails.ReasoningTokens
+	}
+	if u.CostDetails != nil {
+		out.UpstreamCostNanos = creditsToNanos(u.CostDetails.UpstreamInferenceCost)
+	}
+	return out
 }
 
 type exchangeRequest struct {

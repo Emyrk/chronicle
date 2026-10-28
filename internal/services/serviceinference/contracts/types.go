@@ -81,11 +81,42 @@ const (
 	FinishReasonOther         FinishReason = "other"
 )
 
-// Usage is token accounting emitted by a provider when available.
+// Usage is token and cost accounting emitted by a provider when available.
 type Usage struct {
 	PromptTokens     int
 	CompletionTokens int
 	TotalTokens      int
+	// CachedTokens and ReasoningTokens are subsets of PromptTokens and CompletionTokens.
+	CachedTokens    int
+	ReasoningTokens int
+	// CostNanos is what the provider charged, in credits (1 credit = 1 USD) times 1e9. Nil when not reported.
+	CostNanos         *int64
+	UpstreamCostNanos *int64
+	BYOK              *bool
+	// GenerationID is the provider's id for the completion, for looking it up later.
+	GenerationID string
+}
+
+// Add sums token counts and costs; a cost stays nil only while every added cost was nil.
+func (u *Usage) Add(other Usage) {
+	u.PromptTokens += other.PromptTokens
+	u.CompletionTokens += other.CompletionTokens
+	u.TotalTokens += other.TotalTokens
+	u.CachedTokens += other.CachedTokens
+	u.ReasoningTokens += other.ReasoningTokens
+	u.CostNanos = addNanos(u.CostNanos, other.CostNanos)
+	u.UpstreamCostNanos = addNanos(u.UpstreamCostNanos, other.UpstreamCostNanos)
+}
+
+func addNanos(a, b *int64) *int64 {
+	if b == nil {
+		return a
+	}
+	sum := *b
+	if a != nil {
+		sum += *a
+	}
+	return &sum
 }
 
 // StreamEventType identifies a normalized streaming callback.

@@ -53,6 +53,8 @@ export interface DebugRun {
   snapshots: DebugSnapshotEvent[];
   clientToolRequests: ClientToolRequestEvent[];
   totalTokens: number;
+  /** The latest snapshot's run cost, when the provider reported one. */
+  costUsd?: number;
   toolCalls: number;
 }
 
@@ -67,6 +69,7 @@ export function groupRuns(bundle: DebugBundle): DebugRun[] {
     }
     run.snapshots.push(snapshot);
     run.totalTokens = Math.max(run.totalTokens, snapshot.usage.totalTokens);
+    if (snapshot.usage.costUsd !== undefined) run.costUsd = Math.max(run.costUsd ?? 0, snapshot.usage.costUsd);
   }
   for (const request of bundle.clientToolRequests) runs.get(request.runId)?.clientToolRequests.push(request);
   for (const run of runs.values()) {

@@ -10,6 +10,7 @@ import { DebugInspector } from "./DebugInspector";
 import { newDebugChannelId } from "./debugChannel";
 import { useOptionalInferenceRuntime } from "./runtime";
 import type { ChatMessage, ChatToolCall } from "./protocol";
+import { describeUsage, formatUsage, turnUsageByMessage, type ChatUsage } from "./usage";
 import type { AssistantChatController } from "./useAssistantChat";
 
 export interface ChatPanelProps {
@@ -62,7 +63,7 @@ function ToolCallCard({ toolCall }: { toolCall: ChatToolCall }) {
   );
 }
 
-function Message({ message }: { message: ChatMessage }) {
+function Message({ message, turnUsage }: { message: ChatMessage; turnUsage?: ChatUsage }) {
   const assistant = message.role === "assistant";
   return (
     <article
@@ -114,6 +115,9 @@ function Message({ message }: { message: ChatMessage }) {
         {message.toolCalls?.map((toolCall) => (
           <ToolCallCard key={toolCall.id} toolCall={toolCall} />
         ))}
+        {turnUsage && (
+          <p className="text-muted-foreground mt-2 text-[11px] tabular-nums" title={describeUsage(turnUsage)}>{formatUsage(turnUsage)}</p>
+        )}
       </div>
     </article>
   );
@@ -161,6 +165,7 @@ export function ChatPanel({
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ block: "end" });
   }, [controller.messages]);
+  const turnUsage = turnUsageByMessage(controller.messages, controller.isRunning);
 
   const send = () => {
     if (disabled || controller.isRunning || !composer.trim()) {
@@ -295,7 +300,7 @@ export function ChatPanel({
             ) : (
               <div className="space-y-4">
                 {controller.messages.map((message) => (
-                  <Message key={message.id} message={message} />
+                  <Message key={message.id} message={message} turnUsage={turnUsage.get(message.id)} />
                 ))}
                 <div ref={messageEndRef} />
               </div>
@@ -335,9 +340,14 @@ export function ChatPanel({
                 className="placeholder:text-muted-foreground styled-scrollbar max-h-40 min-h-14 w-full resize-none bg-transparent px-3.5 pt-3 text-sm outline-none disabled:opacity-60"
               />
               <div className="flex items-center justify-between px-2.5 pb-2.5">
-                <span className="text-muted-foreground truncate text-[11px]" title="Enter to send · Shift+Enter for a new line">
+                <span className="text-muted-foreground min-w-0 truncate text-[11px]" title="Enter to send · Shift+Enter for a new line">
                   /clear starts over{debugAvailable ? " · /debug previews the prompt" : ""}
                 </span>
+                {controller.usageTotal.calls > 0 && (
+                  <span className="text-muted-foreground ml-auto mr-2 shrink-0 text-[11px] tabular-nums" title={`This chat so far\n${describeUsage(controller.usageTotal)}`} aria-label={`This chat so far: ${formatUsage(controller.usageTotal)}`}>
+                    {formatUsage(controller.usageTotal)}
+                  </span>
+                )}
                 {controller.isRunning ? (
                   <Button type="button" variant="outline" size="sm" onClick={controller.cancel}>
                     <CircleStop /> Cancel

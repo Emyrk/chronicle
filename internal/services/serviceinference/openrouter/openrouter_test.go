@@ -106,7 +106,7 @@ func TestStreamChatTextAndUsage(t *testing.T) {
 
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = fmt.Fprint(w, ": keep-alive\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"Hello\\n\"},\"finish_reason\":null}]}\n\n")
-		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"world\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5}}\n\n")
+		_, _ = fmt.Fprint(w, "data: {\"id\":\"gen-1\",\"choices\":[{\"delta\":{\"content\":\"world\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5,\"prompt_tokens_details\":{\"cached_tokens\":1},\"completion_tokens_details\":{\"reasoning_tokens\":1},\"cost\":0.000123456789123,\"cost_details\":{\"upstream_inference_cost\":null},\"is_byok\":false}}\n\n")
 		_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
 	}))
 	defer server.Close()
@@ -139,8 +139,22 @@ func TestStreamChatTextAndUsage(t *testing.T) {
 		{Type: serviceinference.StreamEventTextDelta, Text: "Hello\n"},
 		{Type: serviceinference.StreamEventTextDelta, Text: "world"},
 		{Type: serviceinference.StreamEventFinish, FinishReason: serviceinference.FinishReasonStop},
-		{Type: serviceinference.StreamEventUsage, Usage: serviceinference.Usage{PromptTokens: 3, CompletionTokens: 2, TotalTokens: 5}},
+		{Type: serviceinference.StreamEventUsage, Usage: serviceinference.Usage{PromptTokens: 3, CompletionTokens: 2, TotalTokens: 5, CachedTokens: 1, ReasoningTokens: 1,
+			CostNanos: ptr(int64(123_456)), BYOK: ptr(false), GenerationID: "gen-1"}},
 	}, events)
+}
+
+func ptr[T any](value T) *T { return &value }
+
+func TestCreditsToNanos(t *testing.T) {
+	t.Parallel()
+	for input, want := range map[string]int64{"0": 0, "1": 1_000_000_000, "0.95": 950_000_000, "1e-9": 1, "4.2e-10": 0, "12.3456789019": 12_345_678_901} {
+		number := json.Number(input)
+		require.Equal(t, want, *creditsToNanos(&number), input)
+	}
+	require.Nil(t, creditsToNanos(nil))
+	negative := json.Number("-1")
+	require.Nil(t, creditsToNanos(&negative))
 }
 
 func TestStreamChatToolCallDeltas(t *testing.T) {

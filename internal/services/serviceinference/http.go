@@ -101,6 +101,7 @@ func (s *Service) routes() http.Handler {
 	r.Get("/threads", s.listThreads)
 	r.Get("/threads/{threadID}", s.getThread)
 	r.Delete("/threads/{threadID}/messages", s.clearThread)
+	r.Get("/usage", s.getContextUsage)
 	r.Post("/debug/preview", s.previewDebug)
 	r.Post("/runs/{runID}/client-tools/{toolCallID}", s.continueClientTool)
 	r.Post("/runs", s.run)
@@ -595,14 +596,17 @@ func (s *Service) clearThread(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, "clear inference thread", err)
 		return
 	}
-	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceThreadResponse{Thread: threadSDK(thread), Messages: []chroniclesdk.InferenceMessage{}})
+	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceThreadResponse{Thread: threadSDK(thread), Messages: []chroniclesdk.InferenceMessage{}, Usage: chroniclesdk.InferenceUsage{}})
 }
 
 func threadSDK(t database.InferenceThread) chroniclesdk.InferenceThread {
 	return chroniclesdk.InferenceThread{ID: t.ID, AssistantID: t.AssistantID, Persistence: t.Persistence, ContextType: t.ContextType.String, ContextID: t.ContextID.String, Title: t.Title, CreatedAt: t.CreatedAt.Time, UpdatedAt: t.UpdatedAt.Time}
 }
-func boundedThreadMessages(rows []database.InferenceMessage) []chroniclesdk.InferenceMessage {
+
+// boundedThreadMessages also returns each message's key (its id inside the stored content), aligned with the messages.
+func boundedThreadMessages(rows []database.InferenceMessage) ([]chroniclesdk.InferenceMessage, []string) {
 	messages := make([]chroniclesdk.InferenceMessage, 0, len(rows))
+	keys := make([]string, 0, len(rows))
 	bytes := 0
 	for i := len(rows) - 1; i >= 0; i-- {
 		if bytes+len(rows[i].Content) > maxHistoryBytes {
@@ -614,12 +618,41 @@ func boundedThreadMessages(rows []database.InferenceMessage) []chroniclesdk.Infe
 		}
 		bytes += len(rows[i].Content)
 		messages = append(messages, chroniclesdk.InferenceMessage{ID: rows[i].ID.String(), Role: string(message.Role), Content: message.Content, Name: message.Name, ToolCallID: message.ToolCallID})
+		keys = append(keys, message.ID)
 	}
 	slices.Reverse(messages)
+	slices.Reverse(keys)
 	for len(messages) > 0 && messages[0].Role != string(RoleUser) {
-		messages = messages[1:]
+		messages, keys = messages[1:], keys[1:]
 	}
-	return messages
+	return messages, keys
+}
+
+// usageSDK converts summed usage columns; cost is reported only when at least one call reported it.
+func usageSDK(prompt, completion, cached, reasoning, costNanos, costedCalls, calls int64) chroniclesdk.InferenceUsage {
+	usage := chroniclesdk.InferenceUsage{PromptTokens: prompt, CompletionTokens: completion, CachedTokens: cached, ReasoningTokens: reasoning, Calls: calls}
+	if costedCalls > 0 {
+		cost := float64(costNanos) / 1e9
+		usage.CostUSD = &cost
+	}
+	return usage
+}
+
+// getContextUsage totals the caller's own usage for a context, such as every chat about one addon project.
+func (s *Service) getContextUsage(w http.ResponseWriter, r *http.Request) {
+	contextType, contextID := r.URL.Query().Get("context_type"), r.URL.Query().Get("context_id")
+	if contextType == "" || contextID == "" || len(contextType) > 64 || len(contextID) > 200 {
+		badRequest(w, r, "context_type and context_id are required.")
+		return
+	}
+	row, err := s.db.GetInferenceContextUsage(r.Context(), database.GetInferenceContextUsageParams{
+		UserID: userID(r), ContextType: pgtype.Text{String: contextType, Valid: true}, ContextID: pgtype.Text{String: contextID, Valid: true},
+	})
+	if err != nil {
+		s.internalError(w, "load inference usage", err)
+		return
+	}
+	httpapi.Write(r.Context(), w, http.StatusOK, usageSDK(row.PromptTokens, row.CompletionTokens, row.CachedTokens, row.ReasoningTokens, row.CostNanos, row.CostedCalls, row.Calls))
 }
 
 func (s *Service) writeThread(w http.ResponseWriter, r *http.Request, t database.InferenceThread) {
@@ -628,7 +661,35 @@ func (s *Service) writeThread(w http.ResponseWriter, r *http.Request, t database
 		s.internalError(w, "load inference thread", err)
 		return
 	}
-	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceThreadResponse{Thread: threadSDK(t), Messages: boundedThreadMessages(rows)})
+	messages, keys := boundedThreadMessages(rows)
+	total, err := s.db.GetInferenceThreadUsage(r.Context(), database.GetInferenceThreadUsageParams{ID: t.ID, UserID: t.UserID})
+	if err != nil {
+		s.internalError(w, "load inference thread usage", err)
+		return
+	}
+	assistantKeys := make([]string, 0, len(keys))
+	for i, key := range keys {
+		if key != "" && messages[i].Role == string(RoleAssistant) {
+			assistantKeys = append(assistantKeys, key)
+		}
+	}
+	if len(assistantKeys) > 0 {
+		usageRows, err := s.db.ListInferenceUsageByMessageKeys(r.Context(), database.ListInferenceUsageByMessageKeysParams{ThreadID: uuid.NullUUID{UUID: t.ID, Valid: true}, MessageKeys: assistantKeys})
+		if err != nil {
+			s.internalError(w, "load inference message usage", err)
+			return
+		}
+		byKey := make(map[string]chroniclesdk.InferenceUsage, len(usageRows))
+		for _, row := range usageRows {
+			byKey[row.MessageKey] = usageSDK(row.PromptTokens, row.CompletionTokens, row.CachedTokens, row.ReasoningTokens, row.CostNanos, row.CostedCalls, row.Calls)
+		}
+		for i, key := range keys {
+			if usage, ok := byKey[key]; ok && messages[i].Role == string(RoleAssistant) {
+				messages[i].Usage = &usage
+			}
+		}
+	}
+	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.InferenceThreadResponse{Thread: threadSDK(t), Messages: messages, Usage: usageSDK(total.PromptTokens, total.CompletionTokens, total.CachedTokens, total.ReasoningTokens, total.CostNanos, total.CostedCalls, total.Calls)})
 }
 
 func writeJSONMessage(m Message) []byte { b, _ := json.Marshal(m); return b }

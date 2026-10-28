@@ -9366,9 +9366,9 @@ WITH deleted AS (
     )
 )
 UPDATE inference_threads thread
-SET updated_at = clock_timestamp()
+SET updated_at = clock_timestamp(), cleared_at = clock_timestamp()
 WHERE thread.id = $1 AND thread.user_id = $2
-RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at
+RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at, cleared_at
 `
 
 type ClearInferenceThreadByOwnerParams struct {
@@ -9389,6 +9389,7 @@ func (q *sqlQuerier) ClearInferenceThreadByOwner(ctx context.Context, arg ClearI
 		&i.Title,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ClearedAt,
 	)
 	return i, err
 }
@@ -9651,6 +9652,46 @@ func (q *sqlQuerier) GetInferenceConnectionByOwner(ctx context.Context, arg GetI
 	return i, err
 }
 
+const getInferenceContextUsage = `-- name: GetInferenceContextUsage :one
+SELECT
+  COALESCE(SUM(prompt_tokens), 0)::bigint AS prompt_tokens, COALESCE(SUM(completion_tokens), 0)::bigint AS completion_tokens,
+  COALESCE(SUM(cached_tokens), 0)::bigint AS cached_tokens, COALESCE(SUM(reasoning_tokens), 0)::bigint AS reasoning_tokens,
+  COALESCE(SUM(cost_nanos), 0)::bigint AS cost_nanos, COUNT(cost_nanos)::bigint AS costed_calls, COUNT(*)::bigint AS calls
+FROM inference_usage
+WHERE user_id = $1 AND context_type = $2 AND context_id = $3
+`
+
+type GetInferenceContextUsageParams struct {
+	UserID      uuid.UUID   `db:"user_id" json:"user_id"`
+	ContextType pgtype.Text `db:"context_type" json:"context_type"`
+	ContextID   pgtype.Text `db:"context_id" json:"context_id"`
+}
+
+type GetInferenceContextUsageRow struct {
+	PromptTokens     int64 `db:"prompt_tokens" json:"prompt_tokens"`
+	CompletionTokens int64 `db:"completion_tokens" json:"completion_tokens"`
+	CachedTokens     int64 `db:"cached_tokens" json:"cached_tokens"`
+	ReasoningTokens  int64 `db:"reasoning_tokens" json:"reasoning_tokens"`
+	CostNanos        int64 `db:"cost_nanos" json:"cost_nanos"`
+	CostedCalls      int64 `db:"costed_calls" json:"costed_calls"`
+	Calls            int64 `db:"calls" json:"calls"`
+}
+
+func (q *sqlQuerier) GetInferenceContextUsage(ctx context.Context, arg GetInferenceContextUsageParams) (GetInferenceContextUsageRow, error) {
+	row := q.db.QueryRow(ctx, getInferenceContextUsage, arg.UserID, arg.ContextType, arg.ContextID)
+	var i GetInferenceContextUsageRow
+	err := row.Scan(
+		&i.PromptTokens,
+		&i.CompletionTokens,
+		&i.CachedTokens,
+		&i.ReasoningTokens,
+		&i.CostNanos,
+		&i.CostedCalls,
+		&i.Calls,
+	)
+	return i, err
+}
+
 const getInferenceRunByIdempotencyKey = `-- name: GetInferenceRunByIdempotencyKey :one
 SELECT id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count FROM inference_runs
 WHERE user_id = $1 AND idempotency_key = $2
@@ -9723,8 +9764,35 @@ func (q *sqlQuerier) GetInferenceRunByOwner(ctx context.Context, arg GetInferenc
 	return i, err
 }
 
+const getInferenceRunUsage = `-- name: GetInferenceRunUsage :one
+SELECT
+  COALESCE(SUM(cached_tokens), 0)::bigint AS cached_tokens, COALESCE(SUM(reasoning_tokens), 0)::bigint AS reasoning_tokens,
+  COALESCE(SUM(cost_nanos), 0)::bigint AS cost_nanos, COUNT(cost_nanos)::bigint AS costed_calls
+FROM inference_usage
+WHERE run_id = $1
+`
+
+type GetInferenceRunUsageRow struct {
+	CachedTokens    int64 `db:"cached_tokens" json:"cached_tokens"`
+	ReasoningTokens int64 `db:"reasoning_tokens" json:"reasoning_tokens"`
+	CostNanos       int64 `db:"cost_nanos" json:"cost_nanos"`
+	CostedCalls     int64 `db:"costed_calls" json:"costed_calls"`
+}
+
+func (q *sqlQuerier) GetInferenceRunUsage(ctx context.Context, runID uuid.UUID) (GetInferenceRunUsageRow, error) {
+	row := q.db.QueryRow(ctx, getInferenceRunUsage, runID)
+	var i GetInferenceRunUsageRow
+	err := row.Scan(
+		&i.CachedTokens,
+		&i.ReasoningTokens,
+		&i.CostNanos,
+		&i.CostedCalls,
+	)
+	return i, err
+}
+
 const getInferenceThreadByOwner = `-- name: GetInferenceThreadByOwner :one
-SELECT id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at FROM inference_threads
+SELECT id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at, cleared_at FROM inference_threads
 WHERE id = $1 AND user_id = $2
 `
 
@@ -9746,6 +9814,47 @@ func (q *sqlQuerier) GetInferenceThreadByOwner(ctx context.Context, arg GetInfer
 		&i.Title,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ClearedAt,
+	)
+	return i, err
+}
+
+const getInferenceThreadUsage = `-- name: GetInferenceThreadUsage :one
+SELECT
+  COALESCE(SUM(usage.prompt_tokens), 0)::bigint AS prompt_tokens, COALESCE(SUM(usage.completion_tokens), 0)::bigint AS completion_tokens,
+  COALESCE(SUM(usage.cached_tokens), 0)::bigint AS cached_tokens, COALESCE(SUM(usage.reasoning_tokens), 0)::bigint AS reasoning_tokens,
+  COALESCE(SUM(usage.cost_nanos), 0)::bigint AS cost_nanos, COUNT(usage.cost_nanos)::bigint AS costed_calls, COUNT(usage.id)::bigint AS calls
+FROM inference_threads thread
+LEFT JOIN inference_usage usage ON usage.thread_id = thread.id AND usage.created_at > COALESCE(thread.cleared_at, '-infinity'::timestamptz)
+WHERE thread.id = $1 AND thread.user_id = $2
+`
+
+type GetInferenceThreadUsageParams struct {
+	ID     uuid.UUID `db:"id" json:"id"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+type GetInferenceThreadUsageRow struct {
+	PromptTokens     int64 `db:"prompt_tokens" json:"prompt_tokens"`
+	CompletionTokens int64 `db:"completion_tokens" json:"completion_tokens"`
+	CachedTokens     int64 `db:"cached_tokens" json:"cached_tokens"`
+	ReasoningTokens  int64 `db:"reasoning_tokens" json:"reasoning_tokens"`
+	CostNanos        int64 `db:"cost_nanos" json:"cost_nanos"`
+	CostedCalls      int64 `db:"costed_calls" json:"costed_calls"`
+	Calls            int64 `db:"calls" json:"calls"`
+}
+
+func (q *sqlQuerier) GetInferenceThreadUsage(ctx context.Context, arg GetInferenceThreadUsageParams) (GetInferenceThreadUsageRow, error) {
+	row := q.db.QueryRow(ctx, getInferenceThreadUsage, arg.ID, arg.UserID)
+	var i GetInferenceThreadUsageRow
+	err := row.Scan(
+		&i.PromptTokens,
+		&i.CompletionTokens,
+		&i.CachedTokens,
+		&i.ReasoningTokens,
+		&i.CostNanos,
+		&i.CostedCalls,
+		&i.Calls,
 	)
 	return i, err
 }
@@ -9757,7 +9866,7 @@ INSERT INTO inference_threads (
 ON CONFLICT (user_id, assistant_id, context_type, context_id)
   WHERE persistence = 'durable' AND context_type IS NOT NULL
 DO UPDATE SET updated_at = inference_threads.updated_at
-RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at
+RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at, cleared_at
 `
 
 type GetOrCreateInferenceThreadParams struct {
@@ -9787,6 +9896,7 @@ func (q *sqlQuerier) GetOrCreateInferenceThread(ctx context.Context, arg GetOrCr
 		&i.Title,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ClearedAt,
 	)
 	return i, err
 }
@@ -10108,7 +10218,7 @@ const insertInferenceThread = `-- name: InsertInferenceThread :one
 INSERT INTO inference_threads (
   user_id, assistant_id, persistence, context_type, context_id, title
 ) VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at
+RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at, cleared_at
 `
 
 type InsertInferenceThreadParams struct {
@@ -10140,8 +10250,55 @@ func (q *sqlQuerier) InsertInferenceThread(ctx context.Context, arg InsertInfere
 		&i.Title,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ClearedAt,
 	)
 	return i, err
+}
+
+const insertInferenceUsage = `-- name: InsertInferenceUsage :exec
+INSERT INTO inference_usage (
+  run_id, user_id, thread_id, message_key, context_type, context_id, model, generation_id,
+  prompt_tokens, completion_tokens, cached_tokens, reasoning_tokens, cost_nanos, upstream_cost_nanos, is_byok
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+`
+
+type InsertInferenceUsageParams struct {
+	RunID             uuid.UUID     `db:"run_id" json:"run_id"`
+	UserID            uuid.UUID     `db:"user_id" json:"user_id"`
+	ThreadID          uuid.NullUUID `db:"thread_id" json:"thread_id"`
+	MessageKey        pgtype.Text   `db:"message_key" json:"message_key"`
+	ContextType       pgtype.Text   `db:"context_type" json:"context_type"`
+	ContextID         pgtype.Text   `db:"context_id" json:"context_id"`
+	Model             string        `db:"model" json:"model"`
+	GenerationID      pgtype.Text   `db:"generation_id" json:"generation_id"`
+	PromptTokens      int64         `db:"prompt_tokens" json:"prompt_tokens"`
+	CompletionTokens  int64         `db:"completion_tokens" json:"completion_tokens"`
+	CachedTokens      int64         `db:"cached_tokens" json:"cached_tokens"`
+	ReasoningTokens   int64         `db:"reasoning_tokens" json:"reasoning_tokens"`
+	CostNanos         pgtype.Int8   `db:"cost_nanos" json:"cost_nanos"`
+	UpstreamCostNanos pgtype.Int8   `db:"upstream_cost_nanos" json:"upstream_cost_nanos"`
+	IsByok            pgtype.Bool   `db:"is_byok" json:"is_byok"`
+}
+
+func (q *sqlQuerier) InsertInferenceUsage(ctx context.Context, arg InsertInferenceUsageParams) error {
+	_, err := q.db.Exec(ctx, insertInferenceUsage,
+		arg.RunID,
+		arg.UserID,
+		arg.ThreadID,
+		arg.MessageKey,
+		arg.ContextType,
+		arg.ContextID,
+		arg.Model,
+		arg.GenerationID,
+		arg.PromptTokens,
+		arg.CompletionTokens,
+		arg.CachedTokens,
+		arg.ReasoningTokens,
+		arg.CostNanos,
+		arg.UpstreamCostNanos,
+		arg.IsByok,
+	)
+	return err
 }
 
 const listInferenceConnectionsByOwner = `-- name: ListInferenceConnectionsByOwner :many
@@ -10258,7 +10415,7 @@ func (q *sqlQuerier) ListInferenceInstancePlayers(ctx context.Context, instanceI
 }
 
 const listInferenceThreadsByOwner = `-- name: ListInferenceThreadsByOwner :many
-SELECT id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at FROM inference_threads
+SELECT id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at, cleared_at FROM inference_threads
 WHERE user_id = $1
 ORDER BY updated_at DESC
 `
@@ -10282,6 +10439,62 @@ func (q *sqlQuerier) ListInferenceThreadsByOwner(ctx context.Context, userID uui
 			&i.Title,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ClearedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInferenceUsageByMessageKeys = `-- name: ListInferenceUsageByMessageKeys :many
+SELECT message_key::text AS message_key,
+  SUM(prompt_tokens)::bigint AS prompt_tokens, SUM(completion_tokens)::bigint AS completion_tokens,
+  SUM(cached_tokens)::bigint AS cached_tokens, SUM(reasoning_tokens)::bigint AS reasoning_tokens,
+  SUM(cost_nanos)::bigint AS cost_nanos, COUNT(cost_nanos)::bigint AS costed_calls, COUNT(*)::bigint AS calls
+FROM inference_usage
+WHERE thread_id = $1 AND message_key = ANY($2::text[])
+GROUP BY message_key
+`
+
+type ListInferenceUsageByMessageKeysParams struct {
+	ThreadID    uuid.NullUUID `db:"thread_id" json:"thread_id"`
+	MessageKeys []string      `db:"message_keys" json:"message_keys"`
+}
+
+type ListInferenceUsageByMessageKeysRow struct {
+	MessageKey       string `db:"message_key" json:"message_key"`
+	PromptTokens     int64  `db:"prompt_tokens" json:"prompt_tokens"`
+	CompletionTokens int64  `db:"completion_tokens" json:"completion_tokens"`
+	CachedTokens     int64  `db:"cached_tokens" json:"cached_tokens"`
+	ReasoningTokens  int64  `db:"reasoning_tokens" json:"reasoning_tokens"`
+	CostNanos        int64  `db:"cost_nanos" json:"cost_nanos"`
+	CostedCalls      int64  `db:"costed_calls" json:"costed_calls"`
+	Calls            int64  `db:"calls" json:"calls"`
+}
+
+func (q *sqlQuerier) ListInferenceUsageByMessageKeys(ctx context.Context, arg ListInferenceUsageByMessageKeysParams) ([]ListInferenceUsageByMessageKeysRow, error) {
+	rows, err := q.db.Query(ctx, listInferenceUsageByMessageKeys, arg.ThreadID, arg.MessageKeys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInferenceUsageByMessageKeysRow
+	for rows.Next() {
+		var i ListInferenceUsageByMessageKeysRow
+		if err := rows.Scan(
+			&i.MessageKey,
+			&i.PromptTokens,
+			&i.CompletionTokens,
+			&i.CachedTokens,
+			&i.ReasoningTokens,
+			&i.CostNanos,
+			&i.CostedCalls,
+			&i.Calls,
 		); err != nil {
 			return nil, err
 		}
@@ -10531,7 +10744,7 @@ const updateInferenceThreadTitleByOwner = `-- name: UpdateInferenceThreadTitleBy
 UPDATE inference_threads
 SET title = $3, updated_at = now()
 WHERE id = $1 AND user_id = $2
-RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at
+RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at, cleared_at
 `
 
 type UpdateInferenceThreadTitleByOwnerParams struct {
@@ -10553,6 +10766,7 @@ func (q *sqlQuerier) UpdateInferenceThreadTitleByOwner(ctx context.Context, arg 
 		&i.Title,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ClearedAt,
 	)
 	return i, err
 }

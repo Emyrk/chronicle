@@ -11,6 +11,7 @@ import {
 } from "@/features/chat/debugViewerModel";
 import type { DebugSnapshotEvent } from "@/features/chat/protocol";
 import { ClientToolsTab, ConversationTab, EmptyTab, PromptTab, RunTab, SkillsTab, ToolsTab } from "./DebugViewerTabs";
+import { formatCost } from "@/features/chat/usage";
 
 const number = new Intl.NumberFormat();
 
@@ -148,7 +149,7 @@ export default function AssistantDebugPage() {
                   <header className="text-muted-foreground flex items-baseline gap-2 px-2 pb-1 text-[11px]">
                     <span className="text-foreground font-semibold">Run {runIndex + 1}</span>
                     <span className="truncate font-mono" title={candidate.runId}>{candidate.runId.slice(0, 8)}</span>
-                    <span className="ml-auto shrink-0">{number.format(candidate.totalTokens)} tok</span>
+                    <span className="ml-auto shrink-0">{number.format(candidate.totalTokens)} tok{candidate.costUsd !== undefined && ` · ${formatCost(candidate.costUsd)}`}</span>
                   </header>
                   {candidate.snapshots.map((item) => {
                     const key = snapshotKey(item);

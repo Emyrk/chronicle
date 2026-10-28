@@ -17,6 +17,7 @@ import {
 import { buildLuaWorkshopRunRequest, toChatMessages } from "@/features/chat/inference"
 import { useAssistantChat, type DebugCommandInput, type UseAssistantChatOptions } from "@/features/chat/useAssistantChat"
 import { useInferenceSelection } from "@/features/chat/useInferenceSelection"
+import { usageFromApi } from "@/features/chat/usage"
 
 type PanelProps = Omit<React.ComponentProps<typeof ChatPanel>, "controller">
 
@@ -126,6 +127,7 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls, onShow
     sentRef={sentRequest}
     chat={{
       endpoint: "/api/v1/inference/runs", threadId: response?.thread.id, initialMessages, createRequest,
+      initialUsage: response?.usage && usageFromApi(response.usage),
       onDebugCommand: debugPermission.allowed ? previewDebug : undefined, onStartNewChat: startNewChat, onRunSettled: refreshThread,
     }}
     panel={{

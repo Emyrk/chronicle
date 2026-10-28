@@ -1295,7 +1295,29 @@ CREATE TABLE inference_threads (
     title text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    cleared_at timestamp with time zone,
     CONSTRAINT inference_threads_check CHECK (((context_type IS NULL) = (context_id IS NULL)))
+);
+
+CREATE TABLE inference_usage (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    run_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    thread_id uuid,
+    message_key text,
+    context_type text,
+    context_id text,
+    model text NOT NULL,
+    generation_id text,
+    prompt_tokens bigint DEFAULT 0 NOT NULL,
+    completion_tokens bigint DEFAULT 0 NOT NULL,
+    cached_tokens bigint DEFAULT 0 NOT NULL,
+    reasoning_tokens bigint DEFAULT 0 NOT NULL,
+    cost_nanos bigint,
+    upstream_cost_nanos bigint,
+    is_byok boolean,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT inference_usage_context_check CHECK (((context_type IS NULL) = (context_id IS NULL)))
 );
 
 CREATE TABLE instance_loot (
@@ -2816,6 +2838,9 @@ ALTER TABLE ONLY inference_runs
 ALTER TABLE ONLY inference_threads
     ADD CONSTRAINT inference_threads_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY inference_usage
+    ADD CONSTRAINT inference_usage_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY instance_loot
     ADD CONSTRAINT instance_loot_pkey PRIMARY KEY (id);
 
@@ -3368,6 +3393,12 @@ CREATE UNIQUE INDEX inference_threads_durable_context_assistant_idx ON inference
 
 CREATE INDEX inference_threads_user_updated_idx ON inference_threads USING btree (user_id, updated_at DESC);
 
+CREATE INDEX inference_usage_run_idx ON inference_usage USING btree (run_id);
+
+CREATE INDEX inference_usage_thread_created_idx ON inference_usage USING btree (thread_id, created_at);
+
+CREATE INDEX inference_usage_user_context_idx ON inference_usage USING btree (user_id, context_type, context_id);
+
 CREATE INDEX instance_loot_received ON instance_loot USING btree (realm_id, received_guid, received_ts DESC);
 
 CREATE INDEX instance_speedruns_cohort_lookup_idx ON instance_speedruns USING btree (instance_name, start_time);
@@ -3711,6 +3742,15 @@ ALTER TABLE ONLY inference_runs
 
 ALTER TABLE ONLY inference_threads
     ADD CONSTRAINT inference_threads_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY inference_usage
+    ADD CONSTRAINT inference_usage_run_id_fkey FOREIGN KEY (run_id) REFERENCES inference_runs(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY inference_usage
+    ADD CONSTRAINT inference_usage_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES inference_threads(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY inference_usage
+    ADD CONSTRAINT inference_usage_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY instance_loot
     ADD CONSTRAINT instance_loot_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;

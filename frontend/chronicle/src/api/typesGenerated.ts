@@ -1982,6 +1982,10 @@ export interface InferenceClientToolResultRequest {
     readonly state_revision?: number;
     readonly status: string;
     readonly result?: Record<string, string>;
+    /**
+     * UsageEvents asks for a USAGE event after each model call. Older clients reject unknown events, so it is opt-in.
+     */
+    readonly usage_events?: boolean;
 }
 
 // From chroniclesdk/inference.go
@@ -2016,6 +2020,10 @@ export interface InferenceMessage {
     readonly content: string;
     readonly name?: string;
     readonly tool_call_id?: string;
+    /**
+     * Usage is the model call that wrote this assistant message, when it was recorded.
+     */
+    readonly usage?: InferenceUsage;
 }
 
 // From chroniclesdk/inference.go
@@ -2043,6 +2051,10 @@ export interface InferenceRunRequest {
     readonly client?: InferenceClient;
     readonly messages?: readonly InferenceMessage[];
     readonly message?: InferenceMessage;
+    /**
+     * UsageEvents asks for a USAGE event after each model call. Older clients reject unknown events, so it is opt-in.
+     */
+    readonly usage_events?: boolean;
 }
 
 // From chroniclesdk/inference.go
@@ -2069,11 +2081,34 @@ export interface InferenceThread {
 export interface InferenceThreadResponse {
     readonly thread: InferenceThread;
     readonly messages: readonly InferenceMessage[];
+    /**
+     * Usage covers the whole chat since it was last cleared, including calls whose messages are not shown.
+     */
+    readonly usage: InferenceUsage;
 }
 
 // From chroniclesdk/inference.go
 export interface InferenceThreadsResponse {
     readonly threads: readonly InferenceThread[];
+}
+
+// From chroniclesdk/inference.go
+/**
+ * InferenceUsage is token and cost accounting summed over one or more model calls.
+ */
+export interface InferenceUsage {
+    readonly prompt_tokens: number;
+    readonly completion_tokens: number;
+    /**
+     * CachedTokens and ReasoningTokens are subsets of PromptTokens and CompletionTokens.
+     */
+    readonly cached_tokens: number;
+    readonly reasoning_tokens: number;
+    /**
+     * CostUSD is what the provider charged, in OpenRouter credits (1 credit = 1 USD). Absent when no call reported a cost.
+     */
+    readonly cost_usd?: number;
+    readonly calls: number;
 }
 
 // From chroniclesdk/characters.go

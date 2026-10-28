@@ -1716,6 +1716,27 @@ type InferenceThread struct {
 	Title       string             `db:"title" json:"title"`
 	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	ClearedAt   pgtype.Timestamptz `db:"cleared_at" json:"cleared_at"`
+}
+
+type InferenceUsage struct {
+	ID                uuid.UUID          `db:"id" json:"id"`
+	RunID             uuid.UUID          `db:"run_id" json:"run_id"`
+	UserID            uuid.UUID          `db:"user_id" json:"user_id"`
+	ThreadID          uuid.NullUUID      `db:"thread_id" json:"thread_id"`
+	MessageKey        pgtype.Text        `db:"message_key" json:"message_key"`
+	ContextType       pgtype.Text        `db:"context_type" json:"context_type"`
+	ContextID         pgtype.Text        `db:"context_id" json:"context_id"`
+	Model             string             `db:"model" json:"model"`
+	GenerationID      pgtype.Text        `db:"generation_id" json:"generation_id"`
+	PromptTokens      int64              `db:"prompt_tokens" json:"prompt_tokens"`
+	CompletionTokens  int64              `db:"completion_tokens" json:"completion_tokens"`
+	CachedTokens      int64              `db:"cached_tokens" json:"cached_tokens"`
+	ReasoningTokens   int64              `db:"reasoning_tokens" json:"reasoning_tokens"`
+	CostNanos         pgtype.Int8        `db:"cost_nanos" json:"cost_nanos"`
+	UpstreamCostNanos pgtype.Int8        `db:"upstream_cost_nanos" json:"upstream_cost_nanos"`
+	IsByok            pgtype.Bool        `db:"is_byok" json:"is_byok"`
+	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 type InstanceLoot struct {
