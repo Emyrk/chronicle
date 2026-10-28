@@ -4180,6 +4180,11 @@ export interface SiteConfig {
      */
     readonly access_url?: string;
     /**
+     * ChooseURL is the community chooser's origin (e.g.
+     * https://choose.chronicleclassic.com). Empty when the chooser is disabled.
+     */
+    readonly choose_url?: string;
+    /**
      * Branding is the visual identity for the primary domain.
      * On tenant subdomains, use Tenant.Branding instead.
      */

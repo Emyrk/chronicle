@@ -37,6 +37,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/itempricing"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
+	"github.com/Emyrk/chronicle/internal/services/servicechoose"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicelivesession"
 	"github.com/Emyrk/chronicle/internal/services/serviceproof"
@@ -131,6 +132,10 @@ type Options struct {
 	// Tenant is the multi-tenant service for subdomain → tenant resolution.
 	// If nil, tenant middleware is a no-op.
 	Tenant *servicetenant.Service
+
+	// Choose serves the community chooser subdomain. If nil or disabled, the
+	// chooser is not served.
+	Choose *servicechoose.Service
 
 	// Application is the server application service for onboarding new servers.
 	// If nil, application routes are not registered.

@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { NavBar } from "../NavBar/NavBar";
 import { Footer } from "../Footer/Footer";
 import { SupportBanner } from "../SupportBanner";
+import { ChooseArrivalNotice } from "../ChooseArrivalNotice/ChooseArrivalNotice";
 import { Toaster } from "../ui/Sonner/Sonner";
 import { TooltipProvider } from "../ui/Tooltip/tooltip";
 import { usePageTracking } from "@/hooks/usePageTracking";
@@ -38,6 +39,7 @@ export function Layout() {
       </main>
       {!hideChrome && <Footer />}
       {!hideChrome && !hasPageChat && <GlobalSiteHelpChat />}
+      <ChooseArrivalNotice />
       <Toaster />
     </TooltipProvider>
   );
