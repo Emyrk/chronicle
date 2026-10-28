@@ -242,6 +242,7 @@ const FILTER_TYPE_LABELS: Record<PanelFilterType, string> = {
   enemies: "Enemies",
   time_range: "Time Range",
   event_value: "Event Value",
+  has_excluded: "Has Excluded",
   event_type: "Event Type",
 };
 
@@ -262,22 +263,23 @@ function buildFilterGroups(filters: PanelFilter[]): PanelFilter[][] {
 
 function FilterRow({ filter }: { filter: PanelFilter }) {
   const val = Array.isArray(filter.value) ? filter.value.join(", ") : filter.value;
-  if (!val || (Array.isArray(filter.value) && filter.value.length === 0)) return null;
+  if (filter.type !== "has_excluded" && (!val || (Array.isArray(filter.value) && filter.value.length === 0))) return null;
   return (
     <div className="flex items-center gap-1.5 text-xs">
       {filter.negate && (
         <span className="text-red-400 font-semibold text-[10px]">NOT</span>
       )}
       <span className="text-muted-foreground">
-        {FILTER_TYPE_LABELS[filter.type] ?? filter.type}:
+        {FILTER_TYPE_LABELS[filter.type] ?? filter.type}{filter.type === "has_excluded" ? "" : ":"}
       </span>
-      <span className="font-medium truncate">{val}</span>
+      {filter.type !== "has_excluded" && <span className="font-medium truncate">{val}</span>}
     </div>
   );
 }
 
 function FilterSummaryCard({ filters }: { filters: PanelFilter[] }) {
   const active = filters.filter((f) => {
+    if (f.type === "has_excluded") return true;
     const v = f.value;
     return Array.isArray(v) ? v.length > 0 : String(v).trim() !== "";
   });
