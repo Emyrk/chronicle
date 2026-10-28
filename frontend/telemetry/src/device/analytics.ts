@@ -1,7 +1,7 @@
 import type { AnalyticsDashboard } from "../analytics/types";
 
 export interface DeviceAnalyticsDashboard {
-  schemaVersion: 1;
+  schemaVersion: 2;
   contentHash: string;
   generatedAt: string;
   timezone: string;
@@ -25,6 +25,17 @@ export interface DeviceAnalyticsDashboard {
     pageViews: number;
     share: number;
   } | null;
+  servers: Array<{
+    hostname: string;
+    pageViews: number;
+    previousPageViews: number;
+    changePercent: number | null;
+    nonChinaPageViews: number;
+    previousNonChinaPageViews: number;
+    nonChinaChangePercent: number | null;
+    chinaPageViews: number;
+    chinaShare: number;
+  }>;
 }
 
 export type DeviceAnalyticsWithoutHash = Omit<DeviceAnalyticsDashboard, "contentHash">;
@@ -43,7 +54,7 @@ export function projectDeviceAnalytics(
   dashboard: AnalyticsDashboard
 ): DeviceAnalyticsWithoutHash {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: dashboard.generatedAt,
     timezone: dashboard.timezone,
     mock: dashboard.mock,
@@ -56,6 +67,17 @@ export function projectDeviceAnalytics(
     })),
     topHost: dashboard.hosts[0] ?? null,
     topProduct: dashboard.productFamilies[0] ?? null,
+    servers: dashboard.hosts.slice(0, 8).map((host) => ({
+      hostname: host.hostname,
+      pageViews: host.pageViews,
+      previousPageViews: host.previousPageViews,
+      changePercent: host.changePercent,
+      nonChinaPageViews: host.nonChinaPageViews,
+      previousNonChinaPageViews: host.previousNonChinaPageViews,
+      nonChinaChangePercent: host.nonChinaChangePercent,
+      chinaPageViews: host.chinaPageViews,
+      chinaShare: host.chinaShare,
+    })),
   };
 }
 

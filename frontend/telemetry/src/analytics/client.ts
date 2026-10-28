@@ -7,6 +7,7 @@ import type {
   AnalyticsMetric,
   AnalyticsTimeseriesPoint,
 } from "./types";
+import { buildHostRows, type CurrentHostMetrics } from "./hosts";
 import {
   aggregateLeaderboards,
   aggregateRouteFamilies,
@@ -315,10 +316,64 @@ export async function fetchAnalyticsDashboard(env: Env, days: number): Promise<A
   }
   const productPayload = await productResponse.json<GaBatchResponse>();
 
+  const serverResponse = await fetch(
+    `https://analyticsdata.googleapis.com/v1beta/properties/${env.GA4_PROPERTY_ID}:batchRunReports`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        requests: [
+          {
+            dateRanges: [ranges.previous],
+            dimensions: [{ name: "hostName" }],
+            metrics: [{ name: "screenPageViews" }],
+            dimensionFilter: hostFilter(),
+            orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
+            limit: "50",
+          },
+          {
+            dateRanges: [ranges.current],
+            dimensions: [{ name: "hostName" }, { name: "country" }],
+            metrics: [{ name: "screenPageViews" }],
+            dimensionFilter: hostFilter(),
+            orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
+            limit: "50000",
+          },
+          {
+            dateRanges: [ranges.previous],
+            dimensions: [{ name: "hostName" }, { name: "country" }],
+            metrics: [{ name: "screenPageViews" }],
+            dimensionFilter: hostFilter(),
+            orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
+            limit: "50000",
+          },
+        ],
+      }),
+    }
+  );
+  if (!serverResponse.ok) {
+    throw new Error(`GA4 server report failed (${serverResponse.status}): ${await serverResponse.text()}`);
+  }
+  const serverPayload = await serverResponse.json<GaBatchResponse>();
+
   const [overviewReport, timeseriesReport, hostsReport, acquisitionReport, countriesReport] =
     payload.reports ?? [];
   const [previousOverviewReport, routesReportRaw, leaderboardLocationsReportRaw] =
     productPayload.reports ?? [];
+  const [previousHostsReportRaw, currentHostCountriesReportRaw, previousHostCountriesReportRaw] =
+    serverPayload.reports ?? [];
+  const previousHostsReport = requireCompleteReport(previousHostsReportRaw, "previous hosts");
+  const currentHostCountriesReport = requireCompleteReport(
+    currentHostCountriesReportRaw,
+    "current host-country"
+  );
+  const previousHostCountriesReport = requireCompleteReport(
+    previousHostCountriesReportRaw,
+    "previous host-country"
+  );
   const routesReport = requireCompleteReport(routesReportRaw, "route-family");
   const leaderboardLocationsReport = requireCompleteReport(
     leaderboardLocationsReportRaw,
@@ -332,12 +387,29 @@ export async function fetchAnalyticsDashboard(env: Env, days: number): Promise<A
     pageViews: numberValue(row, 0),
     activeUsers: numberValue(row, 1),
   }));
-  const hosts: AnalyticsHostRow[] = (hostsReport?.rows ?? []).map((row) => ({
+  const currentHosts: CurrentHostMetrics[] = (hostsReport?.rows ?? []).map((row) => ({
     hostname: dimensionValue(row, 0),
     pageViews: numberValue(row, 0),
     activeUsers: numberValue(row, 1),
     sessions: numberValue(row, 2),
   }));
+  const previousHostPageViews = new Map(
+    (previousHostsReport.rows ?? []).map((row) => [
+      dimensionValue(row, 0),
+      numberValue(row, 0),
+    ])
+  );
+  const chinaPageViews = (report: GaReport) => new Map(
+    (report.rows ?? [])
+      .filter((row) => dimensionValue(row, 1) === "China")
+      .map((row) => [dimensionValue(row, 0), numberValue(row, 0)])
+  );
+  const hosts: AnalyticsHostRow[] = buildHostRows(
+    currentHosts,
+    previousHostPageViews,
+    chinaPageViews(currentHostCountriesReport),
+    chinaPageViews(previousHostCountriesReport)
+  );
   const acquisition: AnalyticsAcquisitionRow[] = (acquisitionReport?.rows ?? []).map((row) => {
     const source = dimensionValue(row, 0);
     const medium = dimensionValue(row, 1);

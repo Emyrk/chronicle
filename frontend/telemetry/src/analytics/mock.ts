@@ -175,19 +175,36 @@ export function createMockAnalyticsDashboard(days: number): AnalyticsDashboard {
     },
     timeseries,
     hosts: [
-      ["octo.chronicleclassic.com", 257_359, 3_208, 17_580],
-      ["capy.chronicleclassic.com", 235_773, 3_492, 12_905],
-      ["chromie.chronicleclassic.com", 19_174, 517, 2_236],
-      ["legacy.chronicleclassic.com", 5_565, 284, 538],
-      ["crusader-storm.chronicleclassic.com", 2_314, 55, 226],
-      ["kronos.chronicleclassic.com", 1_769, 91, 306],
-      ["forever.chronicleclassic.com", 1_568, 32, 94],
-    ].map(([hostname, pageViews, activeUsers, sessions]) => ({
-      hostname: String(hostname),
-      pageViews: Math.round(Number(pageViews) * factor),
-      activeUsers: Math.round(Number(activeUsers) * factor),
-      sessions: Math.round(Number(sessions) * factor),
-    })),
+      ["octo.chronicleclassic.com", 257_359, 3_208, 17_580, 0.31, 0.92],
+      ["capy.chronicleclassic.com", 235_773, 3_492, 12_905, 0.18, 0.88],
+      ["chromie.chronicleclassic.com", 19_174, 517, 2_236, 0.04, 1.08],
+      ["legacy.chronicleclassic.com", 5_565, 284, 538, 0.03, 0.95],
+      ["crusader-storm.chronicleclassic.com", 2_314, 55, 226, 0.01, 0.84],
+      ["kronos.chronicleclassic.com", 1_769, 91, 306, 0.02, 0.90],
+      ["forever.chronicleclassic.com", 1_568, 32, 94, 0.01, 0.78],
+    ].map(([hostname, pageViewsRaw, activeUsers, sessions, chinaShare, previousRatio]) => {
+      const pageViews = Math.round(Number(pageViewsRaw) * factor);
+      const previousPageViews = Math.round(pageViews / Number(previousRatio));
+      const chinaPageViews = Math.round(pageViews * Number(chinaShare));
+      const previousChinaPageViews = Math.round(previousPageViews * Number(chinaShare));
+      const nonChinaPageViews = pageViews - chinaPageViews;
+      const previousNonChinaPageViews = previousPageViews - previousChinaPageViews;
+      return {
+        hostname: String(hostname),
+        pageViews,
+        previousPageViews,
+        changePercent: ((pageViews - previousPageViews) / previousPageViews) * 100,
+        activeUsers: Math.round(Number(activeUsers) * factor),
+        sessions: Math.round(Number(sessions) * factor),
+        nonChinaPageViews,
+        previousNonChinaPageViews,
+        nonChinaChangePercent:
+          ((nonChinaPageViews - previousNonChinaPageViews) /
+            previousNonChinaPageViews) * 100,
+        chinaPageViews,
+        chinaShare: Number(chinaShare),
+      };
+    }),
     acquisition: [
       ["Direct / untagged", "—", 25_464, 21_443],
       ["discord.com", "referral", 3_099, 2_638],
