@@ -4,7 +4,7 @@ import { InstanceView } from "../Rankings/InstanceView"
 import { SpeedrunLeaderboard } from "../Leaderboard/SpeedrunLeaderboard"
 import { BarChart3, Swords, Timer } from "lucide-react"
 import { ParsingInstanceView } from "./Parsing/ParsingInstanceView"
-import { AdSlot } from "../../components/Ads/AdSlot"
+import { AdRailStack } from "../../components/Ads/AdRailStack"
 import {
   leaderboardsModeTarget,
   legacyLeaderboardsTarget,
@@ -68,7 +68,10 @@ export function LeaderboardsPage({ mode }: { mode: LeaderboardsMode }) {
               <SpeedrunLeaderboard overrideInstance={instance} />
             )}
           </div>
-          <AdSlot placement="leaderboards-right-rail" format="rail" />
+          <AdRailStack
+            primaryPlacement="leaderboards-right-rail"
+            secondaryPlacement="leaderboards-right-rail-lower"
+          />
         </div>
       </div>
     )
@@ -107,7 +110,10 @@ export function LeaderboardsPage({ mode }: { mode: LeaderboardsMode }) {
             <SpeedrunLeaderboard />
           )}
         </div>
-        <AdSlot placement="leaderboards-right-rail" format="rail" />
+        <AdRailStack
+          primaryPlacement="leaderboards-right-rail"
+          secondaryPlacement="leaderboards-right-rail-lower"
+        />
       </div>
     </div>
   )
