@@ -79,6 +79,8 @@ func seoProductName(flavor database.WoWFlavor) string {
 		return "ChromieCraft"
 	case flavor.Has(database.FlavorWarmane):
 		return "Warmane"
+	case flavor.Has(database.FlavorEpoch):
+		return "Epoch Reborn"
 	case flavor.Has(database.FlavorVanillaPlus):
 		return "VanillaPlus"
 	case flavor.Has(database.FlavorOctoWoW):
