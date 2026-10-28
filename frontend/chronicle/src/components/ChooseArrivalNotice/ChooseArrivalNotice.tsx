@@ -12,6 +12,18 @@ const HEADINGS: Record<ChooseArrival, string> = {
   picked: "Opened on your chosen community",
 };
 
+/** Label of the link back to the chooser. */
+const ACTION_LABELS: Record<ChooseArrival, string> = {
+  saved: "Change choice",
+  remembered: "Change",
+  picked: "Pick a different community",
+};
+
+const PRIMARY_ACTION_CLASSES =
+  "rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90";
+const SECONDARY_ACTION_CLASSES =
+  "rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground";
+
 /**
  * Explains a redirect from the community chooser (choose.<primary-domain>):
  * animates the hop from the chooser to this community and offers links back
@@ -91,25 +103,25 @@ export function ChooseArrivalNotice() {
                 : `This link came from ${chooseHost}.`}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <a
-                href={manageHref}
-                className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-              >
-                {hasSavedChoice ? "Change choice" : "Pick a different community"}
+              <a href={manageHref} className={PRIMARY_ACTION_CLASSES}>
+                {ACTION_LABELS[arrival]}
               </a>
-              {hasSavedChoice && (
-                <a
-                  href={forgetHref}
-                  className="rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                >
+              {arrival === "saved" && (
+                <a href={forgetHref} className={SECONDARY_ACTION_CLASSES}>
                   Forget choice
                 </a>
+              )}
+              {/* They just saved it, so offering to forget it would be odd. */}
+              {arrival === "remembered" && (
+                <button type="button" onClick={() => setVisible(false)} className={SECONDARY_ACTION_CLASSES}>
+                  Dismiss
+                </button>
               )}
             </div>
           </div>
           <button
             type="button"
-            aria-label="Dismiss"
+            aria-label="Close"
             onClick={() => setVisible(false)}
             className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
