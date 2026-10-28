@@ -3,6 +3,7 @@ const SEO_PRODUCT_NAMES = [
   ["kronos", "Kronos"],
   ["chromiecraft", "ChromieCraft"],
   ["warmane", "Warmane"],
+  ["epoch", "Epoch Reborn"],
   ["vanillaplus", "VanillaPlus"],
   ["octowow", "OctoWoW"],
   ["capybara", "CapybaraCraft"],
