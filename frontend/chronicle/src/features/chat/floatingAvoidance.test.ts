@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bottomRightAvoidanceOffset } from "./floatingAvoidance";
+import { bottomRightAvoidanceOffset, renderedTranslateY } from "./floatingAvoidance";
 
 const rect = (left: number, top: number, width: number, height: number) => ({
   top,
@@ -30,5 +30,14 @@ describe("bottomRightAvoidanceOffset", () => {
       rect(880, 720, 120, 40),
       [rect(700, 600, 100, 180)],
     )).toBe(0);
+  });
+});
+
+describe("renderedTranslateY", () => {
+  it("reads the translation from computed transforms", () => {
+    expect(renderedTranslateY("none")).toBe(0);
+    expect(renderedTranslateY("matrix(1, 0, 0, 1, 0, -37.5)")).toBe(-37.5);
+    expect(renderedTranslateY("matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, -12, 0, 1)")).toBe(-12);
+    expect(renderedTranslateY("rotate(1deg)")).toBe(0);
   });
 });
