@@ -277,7 +277,7 @@ func luaPackageIcon(archive []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	var manifest struct {
 		Icon string `json:"icon"`
 	}
