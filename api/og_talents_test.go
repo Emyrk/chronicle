@@ -25,6 +25,8 @@ func TestSEOProductName(t *testing.T) {
 		{"CapybaraCraft", database.WoWFlavor{database.FlavorVanilla, database.FlavorCapybara}, "CapybaraCraft"},
 		{"Sun Reach", database.WoWFlavor{database.FlavorVanilla, database.FlavorSunreach}, "Sun Reach"},
 		{"Faebright", database.WoWFlavor{database.FlavorVanilla, database.FlavorFaebright}, "Faebright"},
+		{"Moonwell", database.WoWFlavor{database.FlavorVanilla, database.FlavorMoonwell}, "Moonwell"},
+		{"AshenWoW", database.WoWFlavor{database.FlavorVanilla, database.FlavorAshenWoW}, "AshenWoW"},
 		{"Crusader Storm", database.WoWFlavor{database.FlavorVanilla, database.FlavorCrusaderStorm}, "Crusader Storm"},
 		{"Level One Lunatics", database.WoWFlavor{database.FlavorVanilla, database.FlavorLunatic}, "Level One Lunatics"},
 		{"Generic", database.WoWFlavor{database.FlavorVanilla, database.FlavorTurtle}, ""},

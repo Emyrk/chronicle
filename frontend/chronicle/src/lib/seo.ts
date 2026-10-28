@@ -10,6 +10,8 @@ const SEO_PRODUCT_NAMES = [
   ["ravencraft", "Ravencraft"],
   ["sunreach", "Sun Reach"],
   ["faebright", "Faebright"],
+  ["moonwell", "Moonwell"],
+  ["ashenwow", "AshenWoW"],
   ["crusader-storm", "Crusader Storm"],
   ["lunatic", "Level One Lunatics"],
 ] as const;
