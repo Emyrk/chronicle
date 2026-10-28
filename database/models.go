@@ -2426,23 +2426,24 @@ type TelemetryNotice struct {
 }
 
 type Tenant struct {
-	ID                  uuid.UUID          `db:"id" json:"id"`
-	Slug                pgtype.Text        `db:"slug" json:"slug"`
-	Name                string             `db:"name" json:"name"`
-	DisableClientUpload bool               `db:"disable_client_upload" json:"disable_client_upload"`
-	IncludeInAll        bool               `db:"include_in_all" json:"include_in_all"`
-	Branding            []byte             `db:"branding" json:"branding"`
-	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	Discoverable        bool               `db:"discoverable" json:"discoverable"`
-	DefaultDatasetID    uuid.NullUUID      `db:"default_dataset_id" json:"default_dataset_id"`
-	DefaultFormat       NullLogFormat      `db:"default_format" json:"default_format"`
-	AvailableFormats    []string           `db:"available_formats" json:"available_formats"`
-	ParseConfig         []byte             `db:"parse_config" json:"parse_config"`
-	ExternalLinking     []byte             `db:"external_linking" json:"external_linking"`
-	AdditionalFlavor    []string           `db:"additional_flavor" json:"additional_flavor"`
-	AdsEnabled          bool               `db:"ads_enabled" json:"ads_enabled"`
-	DisabledAds         []string           `db:"disabled_ads" json:"disabled_ads"`
+	ID                       uuid.UUID          `db:"id" json:"id"`
+	Slug                     pgtype.Text        `db:"slug" json:"slug"`
+	Name                     string             `db:"name" json:"name"`
+	DisableClientUpload      bool               `db:"disable_client_upload" json:"disable_client_upload"`
+	IncludeInAll             bool               `db:"include_in_all" json:"include_in_all"`
+	Branding                 []byte             `db:"branding" json:"branding"`
+	CreatedAt                pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt                pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	Discoverable             bool               `db:"discoverable" json:"discoverable"`
+	DefaultDatasetID         uuid.NullUUID      `db:"default_dataset_id" json:"default_dataset_id"`
+	DefaultFormat            NullLogFormat      `db:"default_format" json:"default_format"`
+	AvailableFormats         []string           `db:"available_formats" json:"available_formats"`
+	ParseConfig              []byte             `db:"parse_config" json:"parse_config"`
+	ExternalLinking          []byte             `db:"external_linking" json:"external_linking"`
+	AdditionalFlavor         []string           `db:"additional_flavor" json:"additional_flavor"`
+	AdsEnabled               bool               `db:"ads_enabled" json:"ads_enabled"`
+	DisabledAds              []string           `db:"disabled_ads" json:"disabled_ads"`
+	WowLogsForwardingEnabled bool               `db:"wow_logs_forwarding_enabled" json:"wow_logs_forwarding_enabled"`
 }
 
 type TimeParseBossKillMembership struct {
@@ -2696,6 +2697,14 @@ type UserWhatsNewState struct {
 	UserID uuid.UUID          `db:"user_id" json:"user_id"`
 	SeenID string             `db:"seen_id" json:"seen_id"`
 	SeenAt pgtype.Timestamptz `db:"seen_at" json:"seen_at"`
+}
+
+type UserWowLogsCredential struct {
+	UserID               uuid.UUID          `db:"user_id" json:"user_id"`
+	EncryptedToken       []byte             `db:"encrypted_token" json:"encrypted_token"`
+	CredentialKeyVersion string             `db:"credential_key_version" json:"credential_key_version"`
+	CreatedAt            pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type WoWLogGroup struct {

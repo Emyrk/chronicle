@@ -29,6 +29,7 @@ const (
 	QueueRetention            = riverconst.QueueRetention
 	QueueRankings             = riverconst.QueueRankings
 	QueueResync               = riverconst.QueueResync
+	QueueExternalUploads      = riverconst.QueueExternalUploads
 	PriorityHighest           = riverconst.PriorityHighest
 	PriorityHigh              = riverconst.PriorityHigh
 	PriorityDefault           = riverconst.PriorityDefault

@@ -1525,6 +1525,7 @@ CREATE TABLE tenants (
     additional_flavor text[] DEFAULT '{}'::text[] NOT NULL,
     ads_enabled boolean DEFAULT false NOT NULL,
     disabled_ads text[] DEFAULT '{}'::text[] NOT NULL,
+    wow_logs_forwarding_enabled boolean DEFAULT false NOT NULL,
     CONSTRAINT tenants_slug_format CHECK (((slug IS NULL) OR (slug ~ '^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$'::text))),
     CONSTRAINT tenants_slug_reserved CHECK ((slug <> ALL (ARRAY['www'::text, 'api'::text, 'auth'::text, 'admin'::text, 'legacy'::text, 'app'::text, 'mail'::text, 'staging'::text])))
 );
@@ -2319,6 +2320,14 @@ CREATE TABLE user_whats_new_state (
     seen_id text NOT NULL,
     seen_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT user_whats_new_state_seen_id_check CHECK ((seen_id <> ''::text))
+);
+
+CREATE TABLE user_wow_logs_credentials (
+    user_id uuid NOT NULL,
+    encrypted_token bytea NOT NULL,
+    credential_key_version text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 CREATE TABLE world (
@@ -3134,6 +3143,9 @@ ALTER TABLE ONLY user_tracked_layouts
 
 ALTER TABLE ONLY user_whats_new_state
     ADD CONSTRAINT user_whats_new_state_pkey PRIMARY KEY (user_id);
+
+ALTER TABLE ONLY user_wow_logs_credentials
+    ADD CONSTRAINT user_wow_logs_credentials_pkey PRIMARY KEY (user_id);
 
 ALTER TABLE ONLY users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
@@ -4039,6 +4051,9 @@ ALTER TABLE ONLY user_tracked_layouts
 
 ALTER TABLE ONLY user_whats_new_state
     ADD CONSTRAINT user_whats_new_state_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY user_wow_logs_credentials
+    ADD CONSTRAINT user_wow_logs_credentials_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY users
     ADD CONSTRAINT users_default_desktop_layout_id_fkey FOREIGN KEY (default_desktop_layout_id) REFERENCES user_panel_layouts(id) ON DELETE SET NULL;

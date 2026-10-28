@@ -166,6 +166,7 @@ type sqlcQuerier interface {
 	DeleteUserFavoritePlayer(ctx context.Context, arg DeleteUserFavoritePlayerParams) error
 	DeleteUserPanelLayoutByID(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteUserTalentBuildByID(ctx context.Context, arg DeleteUserTalentBuildByIDParams) (int64, error)
+	DeleteUserWoWLogsCredential(ctx context.Context, userID uuid.UUID) error
 	DeleteWoWLogGroup(ctx context.Context, id uuid.UUID) error
 	DeleteWoWLogGroupFiles(ctx context.Context, arg DeleteWoWLogGroupFilesParams) ([]LogFile, error)
 	DeleteWoWServer(ctx context.Context, id uuid.UUID) error
@@ -425,6 +426,7 @@ type sqlcQuerier interface {
 	GetUserPasswordByVerificationToken(ctx context.Context, verificationTokenHash pgtype.Text) (GetUserPasswordByVerificationTokenRow, error)
 	GetUserTalentBuildByID(ctx context.Context, id uuid.UUID) (UserTalentBuild, error)
 	GetUserWhatsNewState(ctx context.Context, userID uuid.UUID) (UserWhatsNewState, error)
+	GetUserWoWLogsCredential(ctx context.Context, userID uuid.UUID) (UserWowLogsCredential, error)
 	GetUsersByIDs(ctx context.Context, ids []uuid.UUID) ([]ChronicleUser, error)
 	GetWoWLogFilesByGroupID(ctx context.Context, wowLogID uuid.UUID) ([]LogFile, error)
 	GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetWoWLogGroupByIDRow, error)
@@ -1056,6 +1058,7 @@ type sqlcQuerier interface {
 	UpsertUserCharacterCosmetics(ctx context.Context, arg UpsertUserCharacterCosmeticsParams) (UserCharacterCosmetic, error)
 	UpsertUserCustomPanelInstallation(ctx context.Context, arg UpsertUserCustomPanelInstallationParams) (UserCustomPanelInstallation, error)
 	UpsertUserCustomPanelSettings(ctx context.Context, arg UpsertUserCustomPanelSettingsParams) (UserCustomPanelSetting, error)
+	UpsertUserWoWLogsCredential(ctx context.Context, arg UpsertUserWoWLogsCredentialParams) (UserWowLogsCredential, error)
 }
 
 var _ sqlcQuerier = (*sqlQuerier)(nil)

@@ -366,7 +366,11 @@ func observedUnitTelemetryCapabilities(resources, position bool) []string {
 // Used by scanRealmName where we need bytes (not io.Reader) and don't want to
 // consume the reader that loadFile returns.
 func (w *WorkerLogParse) loadFileBytes(ctx context.Context, file database.LogFile) ([]byte, error) {
-	rdr, err := w.loadFile(ctx, file)
+	return w.parent.loadFileBytes(ctx, file)
+}
+
+func (c *Chronicle) loadFileBytes(ctx context.Context, file database.LogFile) ([]byte, error) {
+	rdr, err := c.loadFile(ctx, file)
 	if err != nil {
 		return nil, err
 	}
@@ -381,9 +385,13 @@ func (w *WorkerLogParse) loadFileBytes(ctx context.Context, file database.LogFil
 // append parts. Client-sequenced parts are ordered first by source sequence;
 // legacy headerless parts follow in arrival order.
 func (w *WorkerLogParse) loadFile(ctx context.Context, file database.LogFile) (io.Reader, error) {
-	parts, err := listReadyLogFileParts(ctx, w.parent.Zed, w.parent.Storage, file.ID)
+	return w.parent.loadFile(ctx, file)
+}
+
+func (c *Chronicle) loadFile(ctx context.Context, file database.LogFile) (io.Reader, error) {
+	parts, err := listReadyLogFileParts(ctx, c.Zed, c.Storage, file.ID)
 	if err != nil {
 		return nil, err
 	}
-	return loadRawLogFileWithParts(ctx, w.parent.Storage, file, parts)
+	return loadRawLogFileWithParts(ctx, c.Storage, file, parts)
 }

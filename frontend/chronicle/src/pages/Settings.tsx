@@ -41,6 +41,7 @@ import { LayoutEditorCanvas } from "@/features/layoutEditor/LayoutEditorCanvas";
 import { MAX_LAYOUT_PANELS, layoutDraftFromExport, layoutDraftToExport } from "@/features/layoutEditor/layoutDraft";
 import { useLayoutDraft } from "@/features/layoutEditor/useLayoutDraft";
 import { Input } from "@/components/ui/input";
+import { WoWLogsSettings } from "@/pages/Settings/WoWLogsSettings";
 import { Button } from "@/components/ui/button";
 import { InstanceEventsProvider } from "@/hooks/instanceEvents";
 import { DatasetProvider, useTenantDatasetScope } from "@/hooks/useDatasetId";
@@ -378,6 +379,8 @@ export function ProfileSettings() {
       </div>
 
       <InferenceSettings />
+
+      <WoWLogsSettings />
     </div>
   );
 }

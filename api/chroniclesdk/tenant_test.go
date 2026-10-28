@@ -63,6 +63,33 @@ func TestTenantAdsEnabled(t *testing.T) {
 	require.Nil(t, unchangedParams.DisabledAds)
 }
 
+func TestTenantWoWLogsForwarding(t *testing.T) {
+	t.Parallel()
+
+	tenant := chroniclesdk.TenantFromDB(database.Tenant{
+		ID:                       uuid.New(),
+		Name:                     "Warmane",
+		WowLogsForwardingEnabled: true,
+	})
+	require.True(t, tenant.WoWLogsForwardingEnabled)
+
+	enabled := true
+	createParams := (chroniclesdk.UpsertTenantRequest{WoWLogsForwardingEnabled: &enabled}).ToInsertParams()
+	require.True(t, createParams.WowLogsForwardingEnabled)
+
+	updateParams := (chroniclesdk.UpsertTenantRequest{
+		ID:                       uuid.NullUUID{UUID: tenant.ID, Valid: true},
+		WoWLogsForwardingEnabled: &enabled,
+	}).ToUpdateParams()
+	require.True(t, updateParams.WowLogsForwardingEnabled.Valid)
+	require.True(t, updateParams.WowLogsForwardingEnabled.Bool)
+
+	unchangedParams := (chroniclesdk.UpsertTenantRequest{
+		ID: uuid.NullUUID{UUID: tenant.ID, Valid: true},
+	}).ToUpdateParams()
+	require.False(t, unchangedParams.WowLogsForwardingEnabled.Valid)
+}
+
 func TestTenantExternalLinkingMethods(t *testing.T) {
 	t.Parallel()
 

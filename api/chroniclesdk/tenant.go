@@ -11,17 +11,18 @@ import (
 
 // Tenant is the SDK type exposed to the frontend.
 type Tenant struct {
-	ID                  uuid.UUID    `json:"id"`
-	Slug                *string      `json:"slug"`
-	Name                string       `json:"name"`
-	DisableClientUpload bool         `json:"disable_client_upload"`
-	IncludeInAll        bool         `json:"include_in_all"`
-	Discoverable        bool         `json:"discoverable"`
-	AdsEnabled          bool         `json:"ads_enabled"`
-	DisabledAds         []string     `json:"disabled_ads"`
-	Branding            *Branding    `json:"branding"`
-	ParseConfig         *ParseConfig `json:"parse_config"`
-	DefaultDatasetID    *uuid.UUID   `json:"default_dataset_id"`
+	ID                       uuid.UUID    `json:"id"`
+	Slug                     *string      `json:"slug"`
+	Name                     string       `json:"name"`
+	DisableClientUpload      bool         `json:"disable_client_upload"`
+	IncludeInAll             bool         `json:"include_in_all"`
+	Discoverable             bool         `json:"discoverable"`
+	AdsEnabled               bool         `json:"ads_enabled"`
+	DisabledAds              []string     `json:"disabled_ads"`
+	WoWLogsForwardingEnabled bool         `json:"wow_logs_forwarding_enabled"`
+	Branding                 *Branding    `json:"branding"`
+	ParseConfig              *ParseConfig `json:"parse_config"`
+	DefaultDatasetID         *uuid.UUID   `json:"default_dataset_id"`
 	// DefaultFormat is the tenant's preferred log parse format (e.g.
 	// "1.12a-cc-addon"). Nil means no preference — the frontend falls back
 	// to the compiled-in server default.
@@ -67,16 +68,17 @@ type Branding struct {
 // TenantFromDB converts a database.Tenant to the SDK type.
 func TenantFromDB(t database.Tenant) Tenant {
 	out := Tenant{
-		ID:                  t.ID,
-		Name:                t.Name,
-		DisableClientUpload: t.DisableClientUpload,
-		IncludeInAll:        t.IncludeInAll,
-		Discoverable:        t.Discoverable,
-		AdsEnabled:          t.AdsEnabled,
-		DisabledAds:         t.DisabledAds,
-		AdditionalFlavor:    t.AdditionalFlavor,
-		CreatedAt:           t.CreatedAt.Time,
-		UpdatedAt:           t.UpdatedAt.Time,
+		ID:                       t.ID,
+		Name:                     t.Name,
+		DisableClientUpload:      t.DisableClientUpload,
+		IncludeInAll:             t.IncludeInAll,
+		Discoverable:             t.Discoverable,
+		AdsEnabled:               t.AdsEnabled,
+		DisabledAds:              t.DisabledAds,
+		WoWLogsForwardingEnabled: t.WowLogsForwardingEnabled,
+		AdditionalFlavor:         t.AdditionalFlavor,
+		CreatedAt:                t.CreatedAt.Time,
+		UpdatedAt:                t.UpdatedAt.Time,
 	}
 	if t.Slug.Valid {
 		out.Slug = &t.Slug.String
@@ -186,19 +188,20 @@ type SetDatasetRequest struct {
 // Pointer fields are optional — if nil on update, no change occurs (COALESCE
 // preserves the existing value).
 type UpsertTenantRequest struct {
-	ID                  uuid.NullUUID `json:"id"`
-	Slug                *string       `json:"slug"`
-	Name                string        `json:"name"`
-	DisableClientUpload *bool         `json:"disable_client_upload"`
-	IncludeInAll        *bool         `json:"include_in_all"`
-	Discoverable        *bool         `json:"discoverable"`
-	AdsEnabled          *bool         `json:"ads_enabled,omitempty"`
-	DisabledAds         []string      `json:"disabled_ads,omitempty"`
-	Branding            *Branding     `json:"branding"`
-	ParseConfig         *ParseConfig  `json:"parse_config"`
-	DefaultFormat       *string       `json:"default_format"`
-	AvailableFormats    []string      `json:"available_formats"`
-	AdditionalFlavor    []string      `json:"additional_flavor"`
+	ID                       uuid.NullUUID `json:"id"`
+	Slug                     *string       `json:"slug"`
+	Name                     string        `json:"name"`
+	DisableClientUpload      *bool         `json:"disable_client_upload"`
+	IncludeInAll             *bool         `json:"include_in_all"`
+	Discoverable             *bool         `json:"discoverable"`
+	AdsEnabled               *bool         `json:"ads_enabled,omitempty"`
+	DisabledAds              []string      `json:"disabled_ads,omitempty"`
+	WoWLogsForwardingEnabled *bool         `json:"wow_logs_forwarding_enabled,omitempty"`
+	Branding                 *Branding     `json:"branding"`
+	ParseConfig              *ParseConfig  `json:"parse_config"`
+	DefaultFormat            *string       `json:"default_format"`
+	AvailableFormats         []string      `json:"available_formats"`
+	AdditionalFlavor         []string      `json:"additional_flavor"`
 	// ExternalLinking updates the tenant's external character linking
 	// visibility. Omit to keep the existing value.
 	ExternalLinking *ExternalLinking `json:"external_linking,omitempty"`
@@ -272,26 +275,32 @@ func (r UpsertTenantRequest) ToInsertParams() database.InsertTenantParams {
 		adsEnabled = *r.AdsEnabled
 	}
 
+	wowLogsForwardingEnabled := false
+	if r.WoWLogsForwardingEnabled != nil {
+		wowLogsForwardingEnabled = *r.WoWLogsForwardingEnabled
+	}
+
 	var defaultFormat database.NullLogFormat
 	if r.DefaultFormat != nil {
 		defaultFormat = database.NullLogFormat{LogFormat: database.LogFormat(*r.DefaultFormat), Valid: true}
 	}
 
 	return database.InsertTenantParams{
-		ID:                  id,
-		Slug:                slug,
-		Name:                r.Name,
-		DisableClientUpload: disableUpload,
-		IncludeInAll:        includeInAll,
-		Discoverable:        discoverable,
-		AdsEnabled:          adsEnabled,
-		DisabledAds:         r.DisabledAds,
-		Branding:            r.marshalBranding(),
-		ParseConfig:         r.marshalParseConfig(),
-		ExternalLinking:     r.marshalExternalLinking(),
-		DefaultFormat:       defaultFormat,
-		AvailableFormats:    r.AvailableFormats,
-		AdditionalFlavor:    r.AdditionalFlavor,
+		ID:                       id,
+		Slug:                     slug,
+		Name:                     r.Name,
+		DisableClientUpload:      disableUpload,
+		IncludeInAll:             includeInAll,
+		Discoverable:             discoverable,
+		AdsEnabled:               adsEnabled,
+		DisabledAds:              r.DisabledAds,
+		WowLogsForwardingEnabled: wowLogsForwardingEnabled,
+		Branding:                 r.marshalBranding(),
+		ParseConfig:              r.marshalParseConfig(),
+		ExternalLinking:          r.marshalExternalLinking(),
+		DefaultFormat:            defaultFormat,
+		AvailableFormats:         r.AvailableFormats,
+		AdditionalFlavor:         r.AdditionalFlavor,
 	}
 }
 
@@ -328,25 +337,31 @@ func (r UpsertTenantRequest) ToUpdateParams() database.UpdateTenantParams {
 		adsEnabled = pgtype.Bool{Bool: *r.AdsEnabled, Valid: true}
 	}
 
+	var wowLogsForwardingEnabled pgtype.Bool
+	if r.WoWLogsForwardingEnabled != nil {
+		wowLogsForwardingEnabled = pgtype.Bool{Bool: *r.WoWLogsForwardingEnabled, Valid: true}
+	}
+
 	var defaultFormat database.NullLogFormat
 	if r.DefaultFormat != nil {
 		defaultFormat = database.NullLogFormat{LogFormat: database.LogFormat(*r.DefaultFormat), Valid: true}
 	}
 
 	return database.UpdateTenantParams{
-		ID:                  r.ID.UUID,
-		Slug:                slug,
-		Name:                name,
-		DisableClientUpload: disableUpload,
-		IncludeInAll:        includeInAll,
-		Discoverable:        discoverable,
-		AdsEnabled:          adsEnabled,
-		DisabledAds:         r.DisabledAds,
-		Branding:            r.marshalBranding(),
-		ParseConfig:         r.marshalParseConfig(),
-		ExternalLinking:     r.marshalExternalLinking(),
-		DefaultFormat:       defaultFormat,
-		AvailableFormats:    r.AvailableFormats,
-		AdditionalFlavor:    r.AdditionalFlavor,
+		ID:                       r.ID.UUID,
+		Slug:                     slug,
+		Name:                     name,
+		DisableClientUpload:      disableUpload,
+		IncludeInAll:             includeInAll,
+		Discoverable:             discoverable,
+		AdsEnabled:               adsEnabled,
+		DisabledAds:              r.DisabledAds,
+		WowLogsForwardingEnabled: wowLogsForwardingEnabled,
+		Branding:                 r.marshalBranding(),
+		ParseConfig:              r.marshalParseConfig(),
+		ExternalLinking:          r.marshalExternalLinking(),
+		DefaultFormat:            defaultFormat,
+		AvailableFormats:         r.AvailableFormats,
+		AdditionalFlavor:         r.AdditionalFlavor,
 	}
 }

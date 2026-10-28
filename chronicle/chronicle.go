@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/cleanup"
 	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/ptr"
+	"github.com/Emyrk/chronicle/internal/secrets"
 	"github.com/Emyrk/chronicle/internal/slice"
 	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 	"github.com/dustin/go-humanize"
@@ -89,6 +91,8 @@ type Chronicle struct {
 	defaultDatasetID   uuid.UUID
 	recordParseAbort   func(context.Context, parseGenerationAbortOutput) error
 	resolveDataset     func(ctx context.Context, realmID uuid.UUID) ResolvedDataset
+	wowLogsClient      wowLogsClient
+	credentialCipher   *secrets.CredentialCipher
 
 	mu                     sync.Mutex
 	insertParsedInstanceMu sync.Mutex
@@ -115,9 +119,26 @@ type Options struct {
 	// The resolver follows the server > tenant > default chain.
 	// If nil, the default dataset is always used.
 	ResolveDataset func(ctx context.Context, realmID uuid.UUID) ResolvedDataset
+	// WoWLogsBaseURL configures forwarding to the wow-logs.co.in native
+	// uploader API. Forwarding requires the tenant opt-in and the uploader's
+	// own token.
+	WoWLogsBaseURL    string
+	WoWLogsHTTPClient *http.Client
+	// CredentialCipher encrypts user-provided third-party tokens. Nil
+	// disables features that store them.
+	CredentialCipher *secrets.CredentialCipher
 }
 
 func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, error) {
+	wowLogsBaseURL := strings.TrimSpace(opts.WoWLogsBaseURL)
+	if wowLogsBaseURL == "" {
+		wowLogsBaseURL = defaultWoWLogsBaseURL
+	}
+	wowLogsHTTPClient := opts.WoWLogsHTTPClient
+	if wowLogsHTTPClient == nil {
+		wowLogsHTTPClient = defaultWoWLogsHTTPClient()
+	}
+
 	c := &Chronicle{
 		AppContext:         ctx,
 		primaryDomain:      opts.PrimaryDomain,
@@ -134,6 +155,11 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, er
 		emitParsingLogs:    opts.EmitParsingLogs,
 		registryByFlavor:   make(map[string]*registry.Registry),
 		resolveDataset:     opts.ResolveDataset,
+		wowLogsClient: wowLogsClient{
+			baseURL:    wowLogsBaseURL,
+			httpClient: wowLogsHTTPClient,
+		},
+		credentialCipher: opts.CredentialCipher,
 	}
 
 	err := c.initStorage(ctx)

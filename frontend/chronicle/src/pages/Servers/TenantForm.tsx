@@ -15,6 +15,7 @@ export function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => 
   const [disableUpload, setDisableUpload] = useState(tenant?.disable_client_upload ?? false);
   const [discoverable, setDiscoverable] = useState(tenant?.discoverable ?? false);
   const [adsEnabled, setAdsEnabled] = useState(tenant?.ads_enabled ?? false);
+  const [wowLogsForwardingEnabled, setWowLogsForwardingEnabled] = useState(tenant?.wow_logs_forwarding_enabled ?? false);
   const [disabledAds, setDisabledAds] = useState<string[]>([...(tenant?.disabled_ads ?? [])]);
 
   // Parse mode (spec / class / disabled)
@@ -56,6 +57,7 @@ export function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => 
         disable_client_upload: disableUpload,
         discoverable,
         ads_enabled: adsEnabled,
+        wow_logs_forwarding_enabled: wowLogsForwardingEnabled,
         disabled_ads: disabledAds,
         branding: hasBranding
           ? {
@@ -108,6 +110,15 @@ export function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => 
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={discoverable} onChange={(e) => setDiscoverable(e.target.checked)} />
         Discoverable (appear on chronicleclassic.com)
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={wowLogsForwardingEnabled}
+          onChange={(e) => setWowLogsForwardingEnabled(e.target.checked)}
+        />
+        Allow uploaders to forward to wow-logs.co.in
+        <span className="text-xs text-muted-foreground">(each uploader opts in with their own token; ChromieCraft and Warmane only)</span>
       </label>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={adsEnabled} onChange={(e) => setAdsEnabled(e.target.checked)} />

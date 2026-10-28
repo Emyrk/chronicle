@@ -37,6 +37,8 @@ func TestServiceOptionUsesSharedCredentialEnvironmentVariable(t *testing.T) {
 	t.Parallel()
 
 	options := (&Service{}).Options()
-	require.Len(t, options, 1)
+	require.Len(t, options, 2)
 	require.Equal(t, "CHRONICLE_CREDENTIAL_ENCRYPTION_KEY", options[0].Env)
+	require.Equal(t, "CHRONICLE_INFERENCE_CREDENTIAL_ENCRYPTION_KEY", options[1].Env)
+	require.True(t, options[1].Hidden)
 }
