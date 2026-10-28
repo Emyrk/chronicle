@@ -174,3 +174,38 @@ func TestPublicLuaProjectRoutesSeeTheSignedInUser(t *testing.T) {
 	require.True(t, page(chronauth.WithClaims(ctx, &claims.Claims{Subject: owner})).Manage, "the owner must get the owner view")
 	require.False(t, page(ctx).Edit, "signed-out visitors still get the public view")
 }
+
+func TestSuggestAddonAuthor(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "steven-m", suggestAddonAuthorName("  Steven M.!"))
+	require.Equal(t, "", suggestAddonAuthorName("✨✨"))
+	require.Len(t, suggestAddonAuthorName(strings.Repeat("ab-", 20)), 32)
+
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(testservices.Authz(t))
+	api := &API{Opts: &Options{Zed: zed, Logger: slog.Default()}}
+	tag := uuid.NewString()[:8]
+	user := func(username string) uuid.UUID {
+		id := uuid.New()
+		_, err := zed.InsertUser(ctx, database.InsertUserParams{ID: id, Username: username})
+		require.NoError(t, err)
+		return id
+	}
+	suggest := func(user uuid.UUID) string {
+		ctx := authz.AsUser(chronauth.WithClaims(ctx, &claims.Claims{Subject: user}), user)
+		rec := httptest.NewRecorder()
+		api.SuggestAddonAuthor(rec, httptest.NewRequest(http.MethodGet, "/me/addon-author/suggestion", nil).WithContext(ctx))
+		require.Equal(t, http.StatusOK, rec.Code)
+		var out chroniclesdk.AddonAuthor
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+		return out.Name
+	}
+
+	first := user("Tester " + tag)
+	require.Equal(t, "tester-"+tag, suggest(first))
+	_, err := zed.InsertAddonAuthor(ctx, database.InsertAddonAuthorParams{UserID: first, Name: "tester-" + tag})
+	require.NoError(t, err)
+	require.Equal(t, "tester-"+tag+"-2", suggest(user("TESTER_"+tag)), "a taken name gets a number")
+	require.Equal(t, "admin-2", suggest(user("Admin")), "reserved names get a number")
+	require.Equal(t, "", suggest(user("✨")), "no usable characters, no suggestion")
+}
