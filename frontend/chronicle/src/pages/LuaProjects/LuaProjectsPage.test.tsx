@@ -42,6 +42,7 @@ describe("new addon form", () => {
     const html = render(<NewAddonForm author="steven" />)
     expect(html).toContain("Create addon</button>")
     expect(html).toContain('aria-label="Slug"')
+    expect(html, "guides are not offered as a new kind").not.toContain("Guide")
   })
 
   it("asks only for a name for a first addon", () => {

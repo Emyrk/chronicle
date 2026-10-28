@@ -2,8 +2,8 @@ import { useState, type FormEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import { Plus, Sparkles } from "lucide-react"
 import { useAuthorizationCheck, useSession } from "@/api/queries"
-import { addonPath, createProject, urlName, urlNameInput, type LuaProject, type LuaProjectKind } from "./api"
-import { button, card, errorMessage, kindLabel, primaryButton, welcomeBox } from "./addonUi"
+import { addonPath, createProject, urlName, urlNameInput, type LuaProject } from "./api"
+import { button, card, errorMessage, primaryButton, welcomeBox } from "./addonUi"
 
 /**
  * Creates an addon for `author`. As a newcomer's first addon (`first`) it is step 2 of the welcome:
@@ -16,7 +16,6 @@ export function NewAddonForm({ author, first = false, onCreated }: { author: str
   const [name, setName] = useState("")
   const [slug, setSlug] = useState("")
   const [slugEdited, setSlugEdited] = useState(false)
-  const [kind, setKind] = useState<LuaProjectKind>("panel")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const box = first ? welcomeBox : `${card} h-fit`
@@ -25,7 +24,8 @@ export function NewAddonForm({ author, first = false, onCreated }: { author: str
     event.preventDefault()
     setBusy(true); setError("")
     try {
-      const project = await createProject(kind, name.trim(), slug.trim())
+      // Guides are hidden as a new addon kind for now; existing guide addons still work.
+      const project = await createProject("panel", name.trim(), slug.trim())
       if (first) { navigate(addonPath(project, "/edit")); return }
       onCreated?.(project)
       setName(""); setSlug(""); setSlugEdited(false)
@@ -53,8 +53,6 @@ export function NewAddonForm({ author, first = false, onCreated }: { author: str
               onChange={event => { setSlug(urlNameInput(event.target.value, 80)); setSlugEdited(true) }} />
           </span>
           <span className="mt-1 block text-xs text-muted-foreground">Unique among your addons. Lowercase letters, numbers and hyphens.</span></label>}
-      <label className="block text-sm font-medium">Kind<select className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={kind} onChange={event => setKind(event.target.value as LuaProjectKind)}>
-        <option value="panel">{kindLabel("panel")}</option><option value="guide">{kindLabel("guide")}</option></select></label>
       <button className={first ? `${primaryButton} w-full` : button} disabled={busy || !slug} type="submit">{busy ? "Creating…" : first ? "Create and open the Workshop" : "Create addon"}</button>
     </fieldset>
     {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
