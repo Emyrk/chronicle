@@ -26,6 +26,18 @@ export function bottomRightAvoidanceOffset(
   return Math.max(0, Math.ceil(launcher.bottom - top + gap));
 }
 
+/**
+ * The vertical translation the element is rendered with right now. The launcher animates its offset, so
+ * during a transition this differs from the offset last set.
+ */
+export function renderedTranslateY(transform: string): number {
+  if (!transform || transform === "none") return 0;
+  const values = /^matrix(3d)?\(([^)]*)\)$/.exec(transform)?.[2]?.split(",").map(Number);
+  if (!values) return 0;
+  const y = transform.startsWith("matrix3d") ? values[13] : values[5];
+  return Number.isFinite(y) ? y : 0;
+}
+
 export function useBottomRightAvoidance<T extends HTMLElement>(): {
   ref: RefObject<T | null>;
   offset: number;
@@ -43,7 +55,9 @@ export function useBottomRightAvoidance<T extends HTMLElement>(): {
 
     const measure = () => {
       const current = launcher.getBoundingClientRect();
-      const currentOffset = offsetRef.current;
+      // Undo the offset as rendered, not as last set: measuring mid-transition with the target offset
+      // overshoots, then undershoots, and can settle overlapping the obstacle.
+      const currentOffset = -renderedTranslateY(getComputedStyle(launcher).transform);
       const baseRect = {
         top: current.top + currentOffset,
         right: current.right,
