@@ -252,13 +252,13 @@ export function MapLegend() {
             The boss&apos;s model stands on the sigil.
           </Card>
           <Card title="No model" demo={<Ground height={170}><At x={50} y={75}><BossToken seconds={seconds} facing={200} model={false} /></At></Ground>}>
-            A hexagon pin rises from the sigil so the boss still reads as a figure.
+            A red crystal stands on the sigil, turning slowly, so the boss still reads as a figure.
           </Card>
           <Card title="Casting" demo={<Ground height={170}><At x={50} y={75}><BossToken seconds={seconds} model={false} cast={{ fraction: cycle(seconds, 3), color: nature }} /></At></Ground>}>
-            The cast arc wraps the sigil.
+            The cast arc wraps the sigil, and the crystal glows in the spell&apos;s colour, building as the cast fills.
           </Card>
           <Card title="Dead" demo={<Ground height={170}><At x={50} y={75}><BossToken seconds={seconds} model={false} dead /></At></Ground>}>
-            Sigil and pin go grey.
+            Sigil and crystal go grey.
           </Card>
         </Grid>
       </Section>

@@ -30,7 +30,7 @@ import {
 import { participantHue, participantLabel, type LiveMapPresence } from "../../liveSessionProtocol";
 import { actionForKey, clampMobileMapInput, DEFAULT_AD_STRAFE, easeAngleToward, IDLE_MOBILE_MAP_INPUT, rightDragWalkAxes, setWalkMouseButton, shouldFollowWalkCamera, walkMovementYaw, walkMouseControl, WALK_TOGGLE_KEY, type MapControlAction, type MobileMapInput } from "./mapControls";
 import { unwrapCompassRadians } from "./mapCompassModel";
-import { CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
+import { BOSS_SPIRE, bossSpireCastGlow, CAST_ARC_TEXTURE_STEPS, DEAD_RING, DEBUFF_PLANE, DISPEL_COLORS, DROP_LINE, drawUnitPlate, ENEMY_RED, guardianWell, HALO_COLORS, MARKS_SCALE, OWNER_LINE, TARGET_LINE, TRAIL_LINE, UNIT_PLATE, unitPlateSize, type UnitPlateInfo, TOKEN_LAYOUT, type DispelKind, type HaloKind } from "./unitTokenArt";
 import { UnitTokenTextures } from "./unitTokens";
 import type { PlanInput, PlanItem, PlanPoint } from "./plan/mapPlan";
 import { PlanLayer, type PlanSurface } from "./plan/planLayer";
@@ -253,8 +253,6 @@ const COLUMN_WIDTH = TOKEN_LAYOUT.columnWidth;
 const COLUMN_HEIGHT = TOKEN_LAYOUT.columnHeight;
 const COLUMN_TRACK_OPACITY = TOKEN_LAYOUT.columnTrackOpacity;
 const SIGIL_SPIN = TOKEN_LAYOUT.sigilSpin;
-const BOSS_PIN_HEIGHT = TOKEN_LAYOUT.bossPinHeight;
-const BOSS_PIN_SIZE = TOKEN_LAYOUT.bossPinSize;
 // Target lines: ribbon width (geometry units), lift above the floor, and dash period and speed.
 const TARGET_LINE_WIDTH = TARGET_LINE.width;
 const TARGETS_TARGET_LINE_WIDTH = TARGET_LINE.targetsTargetWidth;
@@ -430,12 +428,12 @@ interface UnitToken {
   columnTrack: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   power: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   powerTrack: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  /** Bosses: the turning tick ring, the sigil under a model, and the pin while there is none. */
+  /** Bosses: the turning tick ring, the sigil under a model, and the crystal while there is none. */
   ticks: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
   sigil: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
   /** A guardian with a model stands on this: its disc's face (paw, ring). */
   chip: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null;
-  bossPin: THREE.Sprite | null;
+  bossSpire: THREE.Mesh<THREE.BufferGeometry, THREE.MeshLambertMaterial> | null;
 }
 
 interface BossMini {
@@ -907,6 +905,8 @@ export class MapScene3D {
   private readonly columnBox = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
   // An open cylinder (radius 1, height 1) hanging below y = 0: a disc's edge.
   private readonly tokenEdge = new THREE.CylinderGeometry(1, 1, 1, 40, 1, true).translate(0, -0.5, 0);
+  // A boss's crystal while it has no model (radius 1), its tip at y = 0.
+  private readonly bossSpire = new THREE.LatheGeometry(BOSS_SPIRE.profile.map(([x, y]) => new THREE.Vector2(x, y)), BOSS_SPIRE.sides);
   private aboveDisc: AboveDiscMode = "none";
   private roles: MapUnitRoles = { selected: null, target: null, targetsTarget: null, pinned: new Set() };
   private readonly unitCasts = new Map<string, UnitCast>();
@@ -2141,6 +2141,7 @@ export class MapScene3D {
     this.tokenPlane.dispose();
     this.columnBox.dispose();
     this.tokenEdge.dispose();
+    this.bossSpire.dispose();
     for (const presence of this.remotePresences.values()) this.disposeRemotePresence(presence);
     this.remotePresences.clear();
     clearTimeout(this.unitClickTimer);
@@ -2229,19 +2230,18 @@ export class MapScene3D {
     columns.position.y = face;
     layoutColumns(columns, radius);
     const ticks = boss ? overlay(this.tokenTextures.sigilTicks(), radius * TOKEN_PLANE.ticks * TOKEN_PLANE.sigil, face + TOKEN_LIFT.marks) : null;
-    let bossPin: THREE.Sprite | null = null;
+    let bossSpire: UnitToken["bossSpire"] = null;
     if (boss) {
-      bossPin = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tokenTextures.bossPin(), transparent: true }));
-      bossPin.center.set(0.5, 0);
-      bossPin.scale.setScalar(radius * BOSS_PIN_SIZE);
-      bossPin.position.y = radius * BOSS_PIN_HEIGHT;
+      bossSpire = new THREE.Mesh(this.bossSpire, new THREE.MeshLambertMaterial({ color: ENEMY_RED, emissive: BOSS_SPIRE.glow, flatShading: true }));
+      bossSpire.scale.setScalar(radius);
+      bossSpire.position.y = face;
     }
     const group = new THREE.Group();
     group.userData.guid = unit.guid;
     body.userData.guid = unit.guid;
     group.add(shadow, edge, body, cone, debuff, arc, halo, pin, columns);
     if (ticks) group.add(ticks);
-    if (bossPin) group.add(bossPin);
+    if (bossSpire) group.add(bossSpire);
     this.unitsGroup.add(group);
     const object: UnitObject = {
       group,
@@ -2249,7 +2249,7 @@ export class MapScene3D {
       bodyMaterial,
       coneMaterial,
       cone,
-      token: { radius, face, edge, shadow, halo, pin, arc, debuff, columns, column, columnTrack, power, powerTrack, ticks, sigil: null, chip: null, bossPin },
+      token: { radius, face, edge, shadow, halo, pin, arc, debuff, columns, column, columnTrack, power, powerTrack, ticks, sigil: null, chip: null, bossSpire },
       icon: unit.icon ?? null,
       boss,
       mini: false,
@@ -2441,7 +2441,7 @@ export class MapScene3D {
     }
     token.columns.position.y = token.face;
     layoutColumns(token.columns, MINI_TOKEN_RADIUS);
-    if (token.bossPin) token.bossPin.visible = false;
+    if (token.bossSpire) token.bossSpire.visible = false;
     if (object.boss && !token.sigil) {
       // The model stands on the sigil.
       token.sigil = new THREE.Mesh(this.tokenPlane, new THREE.MeshBasicMaterial({
@@ -2527,7 +2527,7 @@ export class MapScene3D {
     object.coneMaterial.dispose();
     const { token } = object;
     for (const part of [token.shadow, token.edge, token.halo, token.pin, token.arc, token.debuff, token.column, token.columnTrack, token.power, token.powerTrack, token.ticks, token.sigil, token.chip]) part?.material.dispose();
-    token.bossPin?.material.dispose();
+    token.bossSpire?.material.dispose();
     object.drop?.material.dispose();
     this.units.delete(guid);
     this.floorHeights.delete(guid);
@@ -3748,7 +3748,18 @@ export class MapScene3D {
       }
       token.pin.visible = roles.pinned.has(guid);
       if (token.ticks) token.ticks.rotation.y = (now / 1000) * SIGIL_SPIN - object.group.rotation.y;
-      if (token.bossPin) token.bossPin.material.color.setHex(object.dead ? 0x777777 : 0xffffff);
+      if (token.bossSpire) {
+        const { material } = token.bossSpire;
+        token.bossSpire.rotation.y = (now / 1000) * BOSS_SPIRE.spin - object.group.rotation.y;
+        material.color.set(object.dead ? BOSS_SPIRE.dead : ENEMY_RED);
+        material.emissive.setHex(object.dead ? 0x000000 : BOSS_SPIRE.glow);
+        // While casting, it turns and glows in the spell's colour, building as the cast fills.
+        if (cast && castColor) {
+          const glow = bossSpireCastGlow(cast.progress, now / 1000);
+          material.color.lerp(castColor, glow);
+          material.emissive.lerp(castColor, glow / 2);
+        }
+      }
     }
     this.updateTargetLines(dt);
     this.updateOwnerLines();
