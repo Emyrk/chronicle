@@ -15,6 +15,9 @@ export interface AnalyticsHostRow {
   pageViews: number;
   previousPageViews: number;
   changePercent: number | null;
+  change7dPercent: number | null;
+  change14dPercent: number | null;
+  change30dPercent: number | null;
   activeUsers: number;
   sessions: number;
   nonChinaPageViews: number;
