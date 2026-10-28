@@ -16,6 +16,8 @@ export interface PanelPackage {
   maxEvents?: number
   capabilities: GuideCapability[]
   assets: ReadonlyMap<string, Uint8Array>
+  /** The optional root README.md, shown on the addon page and never executed. */
+  readme?: string
 }
 
 const decoder = new TextDecoder("utf-8", { fatal: true })
@@ -75,8 +77,9 @@ export async function loadPanelPackage(bytes: Uint8Array): Promise<PanelPackage>
     else if (assetSet.has(path)) {
       if (path === "project.json" || path.endsWith(".lua") || !rasterAsset(path, content)) throw new Error("invalid panel asset")
       assetFiles.set(path, content.slice())
-    } else if (path !== "project.json") throw new Error(`undeclared panel file: ${path}`)
+    } else if (path !== "project.json" && path !== "README.md") throw new Error(`undeclared panel file: ${path}`)
   }
   if (assetFiles.size !== assets.length) throw new Error("missing panel asset")
-  return { name: data.name, entrypoint, sources, streams: streams as PanelStream[], streamScope: streamScope as PanelStreamScope, ...(maxEvents !== undefined && { maxEvents }), capabilities: capabilities as GuideCapability[], assets: assetFiles }
+  const readme = files.get("README.md")
+  return { name: data.name, entrypoint, sources, ...(readme && { readme: decoder.decode(readme) }), streams: streams as PanelStream[], streamScope: streamScope as PanelStreamScope, ...(maxEvents !== undefined && { maxEvents }), capabilities: capabilities as GuideCapability[], assets: assetFiles }
 }

@@ -9,24 +9,27 @@ const decoder = new TextDecoder("utf-8", { fatal: true })
 const maxZipBytes = 8 * 1024 * 1024
 const maxLuaBytes = 64 * 1024
 const maxManifestBytes = 32 * 1024
+const maxReadmeBytes = 64 * 1024
+const editorPaths = new Set(["project.json", "main.lua", "README.md"])
 
-export type EditorFiles = { manifest: string; lua: string }
+/** An empty readme means the package has no README.md. */
+export type EditorFiles = { manifest: string; lua: string; readme: string }
 
-/** Only the two files this editor can round-trip are accepted. Never discard an unseen file on save. */
+/** Only the files this editor can round-trip are accepted. Never discard an unseen file on save. */
 export async function readLuaDraftZip(bytes: Uint8Array, project: Pick<LuaProject, "kind" | "name" | "slug">): Promise<EditorFiles> {
   if (bytes.byteLength > maxZipBytes) throw new Error("Draft ZIP exceeds 8 MiB.")
   const index = inspectArchive(bytes.slice())
-  if (index.entries.length !== 2 || index.entries.some(entry =>
-    (entry.path !== "project.json" && entry.path !== "main.lua") || entry.path !== entry.archivePath)) {
-    throw new Error("This editor supports drafts containing only project.json and main.lua. Download and edit other packages locally.")
+  if (index.entries.some(entry => !editorPaths.has(entry.path) || entry.path !== entry.archivePath)) {
+    throw new Error("This editor supports drafts containing only project.json, main.lua and README.md. Download and edit other packages locally.")
   }
   const expanded = await new Promise<Unzipped>((resolve, reject) => unzip(bytes.slice(), (error, result) => error ? reject(error) : resolve(result)))
   const files = normalizeExtractedFiles(index, expanded)
   const manifest = files.get("project.json")
   const lua = files.get("main.lua")
   if (!manifest || !lua) throw new Error("Draft is missing project.json or main.lua.")
-  if (manifest.length > maxManifestBytes || lua.length > maxLuaBytes) throw new Error("Draft source exceeds the editor limits.")
-  const result = { manifest: decoder.decode(manifest), lua: decoder.decode(lua) }
+  const readme = files.get("README.md")
+  if (manifest.length > maxManifestBytes || lua.length > maxLuaBytes || (readme?.length ?? 0) > maxReadmeBytes) throw new Error("Draft source exceeds the editor limits.")
+  const result = { manifest: decoder.decode(manifest), lua: decoder.decode(lua), readme: readme ? decoder.decode(readme) : "" }
   validateEditorFiles(project, result)
   return result
 }
@@ -36,6 +39,7 @@ export function initialEditorFiles(project: Pick<LuaProject, "kind" | "name" | "
     manifest: JSON.stringify({ manifest_version: 1, kind: project.kind, name: project.name, slug: project.slug,
       entrypoint: "main.lua", capabilities: ["ui"], streams: [], assets: [] }, null, 2) + "\n",
     lua: "-- Write your addon here\nreturn {}\n",
+    readme: `# ${project.name}\n\nDescribe what this addon shows and how to use it.\n`,
   }
 }
 
@@ -51,6 +55,7 @@ export function validateEditorFiles(project: Pick<LuaProject, "kind" | "name" | 
     throw new Error("main.lua must be nonempty, NUL-free, and at most 64 KiB.")
   }
   if (encoder.encode(files.manifest).length > maxManifestBytes) throw new Error("project.json exceeds 32 KiB.")
+  if (files.readme.includes("\0") || encoder.encode(files.readme).length > maxReadmeBytes) throw new Error("README.md must be NUL-free and at most 64 KiB.")
   let parsed: unknown
   try { parsed = JSON.parse(files.manifest) } catch { throw new Error("project.json must contain valid JSON.") }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("project.json must be an object.")
@@ -119,6 +124,7 @@ export function applySourceProposal(files: EditorFiles, revision: number, propos
 export function buildEditorTar(project: Pick<LuaProject, "kind" | "name" | "slug">, files: EditorFiles): File {
   validateEditorFiles(project, files)
   const entries = [entry("project.json", encoder.encode(files.manifest)), entry("main.lua", encoder.encode(files.lua))]
+  if (files.readme.trim()) entries.push(entry("README.md", encoder.encode(files.readme)))
   const result = new Uint8Array(entries.reduce((sum, part) => sum + part.length, 1024))
   if (result.length > maxZipBytes) throw new Error("Tar exceeds 8 MiB.")
   let offset = 0

@@ -11,11 +11,16 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 const maxLuaTarBytes = 8 << 20
 const maxLuaExpandedBytes = 16 << 20
 const maxLuaFiles = 128
+
+// luaReadmeName is the package's optional Markdown README, shown on the addon page. It is never executed.
+const luaReadmeName = "README.md"
+const maxLuaReadmeBytes = 64 << 10
 
 // luaPanelStreams are the instance event streams a panel may declare; they match /events/{type} and the
 // frontend's PANEL_STREAMS.
@@ -202,8 +207,11 @@ func canonicalLuaZIP(input io.Reader, kind, projectName, slug string) ([]byte, e
 			return nil, fmt.Errorf("declared asset %q is missing, oversized, or not a supported image", asset)
 		}
 	}
+	if readme, ok := files[luaReadmeName]; ok && (len(readme) > maxLuaReadmeBytes || !utf8.Valid(readme) || bytes.IndexByte(readme, 0) >= 0) {
+		return nil, errors.New("README.md must be UTF-8 text of at most 64 KiB")
+	}
 	for name := range files {
-		if name == "project.json" {
+		if name == "project.json" || name == luaReadmeName {
 			continue
 		}
 		if !safeLuaPackagePath(name) || (path.Ext(name) != ".lua" && (!rasterAsset(name) || !assets[name])) {

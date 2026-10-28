@@ -87,6 +87,18 @@ func TestCanonicalLuaZIP(t *testing.T) {
 	allStreams := strings.Replace(luaTestManifest, `"streams":[]`, `"streams":["damage","heal","aura","combatant_info","unit_position"]`, 1)
 	_, err = canonicalLuaZIP(bytes.NewReader(luaTestTar(t, luaTestEntry("main.lua", "return {}"), luaTestEntry("project.json", allStreams))), "panel", "Example", "example")
 	require.NoError(t, err)
+	// A root README.md is allowed as documentation; nested or invalid ones are not.
+	_, err = canonicalLuaZIP(bytes.NewReader(luaTestTar(t, append(entries, luaTestEntry("README.md", "# Example\n"))...)), "panel", "Example", "example")
+	require.NoError(t, err)
+	for _, readme := range []struct {
+		name    string
+		content []byte
+		kind    byte
+		link    string
+	}{luaTestEntry("docs/README.md", "# x"), luaTestEntry("README.md", "\xff"), luaTestEntry("README.md", strings.Repeat("x", maxLuaReadmeBytes+1))} {
+		_, err = canonicalLuaZIP(bytes.NewReader(luaTestTar(t, append(entries, readme)...)), "panel", "Example", "example")
+		require.Error(t, err, readme.name)
+	}
 	// Tar header ordering, timestamps and modes never affect package identity.
 	reversed := luaTestTar(t, entries[1], entries[0])
 	same, err := canonicalLuaZIP(bytes.NewReader(reversed), "panel", "Example", "example")

@@ -15,6 +15,12 @@ describe("Lua panel packages", () => {
     expect(pkg.sources["main.lua"]).toBe("return true")
     expect(pkg.sources["chronicle/v1/events/damage.lua"]).toBeUndefined()
   })
+  it("keeps an optional README.md as text, never as a Lua source", async () => {
+    expect((await loadPanelPackage(archive())).readme).toBeUndefined()
+    const pkg = await loadPanelPackage(archive({}, { "README.md": strToU8("# Damage") }))
+    expect(pkg.readme).toBe("# Damage")
+    expect(Object.keys(pkg.sources)).toEqual(["main.lua"])
+  })
   it("preserves declared capabilities for the worker", async () => {
     expect((await loadPanelPackage(archive({ capabilities: [] }))).capabilities).toEqual([])
     expect((await loadPanelPackage(archive({ capabilities: ["ui"] }))).capabilities).toEqual(["ui"])

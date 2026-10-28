@@ -10,7 +10,7 @@ import { useConfirmLinkNavigation } from "@/hooks/useConfirmLinkNavigation"
 import { getProject, publishUnstable, type LuaProject } from "./api"
 import { LuaBrowserTest } from "./LuaBrowserTest"
 import { panelPackageFromWorkingCopy, validateEditorFiles, type EditorFiles } from "./editorFiles"
-import { applyLuaFileEdit, LUA_EDITOR_CAPABILITY, parseLuaFileEdit, type LuaToolFile } from "./luaEditorTools"
+import { applyLuaFileEdit, editorFileKey, LUA_EDITOR_CAPABILITY, parseLuaFileEdit, workingCopyFiles, type LuaToolFile } from "./luaEditorTools"
 import { createCachedStreamProvider, loadPreviewStreams } from "./previewStream"
 import type { WorkshopChatRequest } from "./LuaWorkshopChat"
 import { parseRunPreviewArgs, runPreview } from "./previewRun"
@@ -189,13 +189,13 @@ export default function LuaProjectWorkspacePage() {
     tools: {
       read_lua_files: () => {
         const current = requireCopy()
-        return { revision: current.revision, files: { "main.lua": current.source, "project.json": current.manifest },
+        return { revision: current.revision, files: workingCopyFiles({ lua: current.source, manifest: current.manifest, readme: current.readme }),
           unsaved_changes: current.dirty, validation_error: current.validation || null }
       },
       edit_lua_file: async (args) => {
         const current = requireCopy()
         const project = projectQuery.data!
-        const before = { lua: current.source, manifest: current.manifest }
+        const before = { lua: current.source, manifest: current.manifest, readme: current.readme }
         let edit, after: EditorFiles
         try {
           edit = parseLuaFileEdit(args)
@@ -229,7 +229,7 @@ export default function LuaProjectWorkspacePage() {
         // Show the user what the assistant is previewing; Auto preview follows the same selection.
         if (requested) setEncounterIds(requested)
         let panel
-        try { panel = panelPackageFromWorkingCopy(projectQuery.data!, { manifest: current.manifest, lua: current.source }) }
+        try { panel = panelPackageFromWorkingCopy(projectQuery.data!, { manifest: current.manifest, lua: current.source, readme: current.readme }) }
         catch (error) { return { ok: false, error: `The working copy is invalid: ${errorMessage(error, "unknown error")}` } }
         const streams = await loadPreviewStreams(events, previewInstance, panel, selected, signal)
         const result = await runPreview({ panel, streams, encounterIds: selected, units }, signal)
@@ -238,7 +238,7 @@ export default function LuaProjectWorkspacePage() {
       run_startup_check: async (_args, { signal }) => {
         const current = requireCopy()
         try {
-          return await runStartupCheck(panelPackageFromWorkingCopy(projectQuery.data!, { manifest: current.manifest, lua: current.source }), signal)
+          return await runStartupCheck(panelPackageFromWorkingCopy(projectQuery.data!, { manifest: current.manifest, lua: current.source, readme: current.readme }), signal)
         } catch (error) {
           if (signal.aborted) throw error
           return { ok: false, message: `The working copy is invalid: ${errorMessage(error, "unknown error")}` }
@@ -253,7 +253,7 @@ export default function LuaProjectWorkspacePage() {
   }
   const localPanel = useMemo(() => {
     if (!project || !copy?.valid) return null
-    try { return { value: panelPackageFromWorkingCopy(project, { manifest: copy.manifest, lua: copy.source }), error: "" } }
+    try { return { value: panelPackageFromWorkingCopy(project, { manifest: copy.manifest, lua: copy.source, readme: copy.readme }), error: "" } }
     catch (error) { return { value: null, error: error instanceof Error ? error.message : "Invalid working copy" } }
   }, [project, copy])
 
@@ -286,7 +286,7 @@ export default function LuaProjectWorkspacePage() {
 
   return <div className="flex flex-col border-b border-border lg:h-[calc(100dvh-70px)] lg:min-h-[560px]">
     <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-4 py-2">
-      <Link className="text-xs text-muted-foreground hover:text-foreground" to={`/addons/${encodeURIComponent(project.id)}`}>← Releases</Link>
+      <Link className="text-xs text-muted-foreground hover:text-foreground" to={`/addons/${encodeURIComponent(project.id)}`}>← Overview</Link>
       <span aria-hidden className="h-4 w-px bg-border" />
       <h1 className="text-base font-semibold">{project.name}</h1>
       <span className="font-mono text-xs text-muted-foreground">{project.slug}</span>
@@ -302,7 +302,7 @@ export default function LuaProjectWorkspacePage() {
           className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${copy?.dirty ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border border-border hover:bg-accent"}`}>
           <Save className="size-3.5" /> {copy?.saving && !publishing ? "Saving…" : "Save draft"}</button>
         <button type="button" disabled={!canPublish} onClick={() => void publish()}
-          title={published ? "This draft is already the unstable release." : "Publish the saved draft to the unstable channel. Promote to stable from Releases after testing."}
+          title={published ? "This draft is already the unstable release." : "Publish the saved draft to the unstable channel. Promote to stable from the addon overview after testing."}
           className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${!copy?.dirty && canPublish ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border border-border hover:bg-accent"}`}>
           <Rocket className="size-3.5" /> {publishing ? "Publishing…" : copy?.dirty ? "Save & publish" : "Publish unstable"}</button>
       </div>
@@ -353,7 +353,7 @@ export default function LuaProjectWorkspacePage() {
               <button type="button" className="hover:text-foreground" onClick={() => setDiffOpen(false)}>Close</button>
             </div>
             <Suspense fallback={<p className="p-3 text-xs">Loading diff…</p>}>
-              <LuaDiffReview before={aiEdit.file === "main.lua" ? aiEdit.before.lua : aiEdit.before.manifest} after={aiEdit.file === "main.lua" ? aiEdit.after.lua : aiEdit.after.manifest} />
+              <LuaDiffReview before={aiEdit.before[editorFileKey(aiEdit.file)]} after={aiEdit.after[editorFileKey(aiEdit.file)]} />
             </Suspense>
           </div>}
           <Suspense fallback={<p role="status" className="p-4 text-sm text-muted-foreground">Loading code editor…</p>}>

@@ -26,6 +26,12 @@ const (
 
 var clientLayoutItemIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 
+// luaEditorFilePattern is the files edit_lua_file may name: the manifest, the README, or any relative
+// .lua path (directories allowed, no dot segments). The browser decides which files actually exist.
+var luaEditorFilePattern = regexp.MustCompile(`^(?:project\.json|README\.md|(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\.lua)$`)
+
+const maxLuaEditorPathBytes = 200
+
 type clientCapability struct {
 	ID            string
 	Version       int
@@ -66,11 +72,11 @@ var instancePageClientTools = []clientToolDefinition{
 // server never reads or writes Lua drafts on the assistant's behalf.
 var luaEditorClientTools = []clientToolDefinition{
 	{
-		ToolDefinition: ToolDefinition{Name: "read_lua_files", Description: "Read the current unsaved working copy: main.lua, project.json, the working-copy revision, and any validation error.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
+		ToolDefinition: ToolDefinition{Name: "read_lua_files", Description: "Read the current unsaved working copy: every file by path (project.json, README.md and the .lua files, e.g. main.lua), the working-copy revision, and any validation error.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		CapabilityID:   luaEditorCapabilityID, CapabilityVersion: luaEditorCapabilityVersion, Effect: "read", Confirmation: "never",
 	},
 	{
-		ToolDefinition: ToolDefinition{Name: "edit_lua_file", Description: "Edit one file in the unsaved working copy. Provide either edits (each old_text must appear exactly once in the current file) or content to replace the whole file. Pass expected_revision from read_lua_files; after stale_state, read again before retrying once. Edits are never saved or published; the user saves explicitly.", Parameters: json.RawMessage(`{"type":"object","properties":{"file":{"type":"string","enum":["main.lua","project.json"]},"expected_revision":{"type":"integer","minimum":0},"edits":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","properties":{"old_text":{"type":"string","minLength":1},"new_text":{"type":"string"}},"required":["old_text","new_text"],"additionalProperties":false}},"content":{"type":"string","minLength":1}},"required":["file","expected_revision"],"additionalProperties":false}`)},
+		ToolDefinition: ToolDefinition{Name: "edit_lua_file", Description: "Edit one file in the unsaved working copy: project.json, README.md (Markdown shown on the addon's page) or a .lua file returned by read_lua_files. Provide either edits (each old_text must appear exactly once in the current file) or content to replace the whole file. Pass expected_revision from read_lua_files; after stale_state, read again before retrying once. Edits are never saved or published; the user saves explicitly.", Parameters: json.RawMessage(`{"type":"object","properties":{"file":{"type":"string","maxLength":200,"pattern":"^(?:project\\.json|README\\.md|(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\\.lua)$"},"expected_revision":{"type":"integer","minimum":0},"edits":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","properties":{"old_text":{"type":"string","minLength":1},"new_text":{"type":"string"}},"required":["old_text","new_text"],"additionalProperties":false}},"content":{"type":"string","minLength":1}},"required":["file","expected_revision"],"additionalProperties":false}`)},
 		CapabilityID:   luaEditorCapabilityID, CapabilityVersion: luaEditorCapabilityVersion, Effect: "view_mutation", Confirmation: "never",
 	},
 	{
@@ -329,7 +335,7 @@ func validateClientToolArguments(name, raw string) (json.RawMessage, error) {
 				NewText string `json:"new_text"`
 			} `json:"edits"`
 		}
-		if err := decodeStrict(raw, &input); err != nil || (input.File != "main.lua" && input.File != "project.json") || input.ExpectedRevision == nil || *input.ExpectedRevision < 0 {
+		if err := decodeStrict(raw, &input); err != nil || len(input.File) > maxLuaEditorPathBytes || !luaEditorFilePattern.MatchString(input.File) || input.ExpectedRevision == nil || *input.ExpectedRevision < 0 {
 			return nil, errors.New("invalid edit_lua_file arguments")
 		}
 		// Total size is already bounded by maxToolArguments.
