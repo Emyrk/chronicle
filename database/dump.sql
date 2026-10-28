@@ -1668,6 +1668,8 @@ CREATE TABLE lua_projects (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     draft_icon text,
+    description text DEFAULT ''::text NOT NULL,
+    CONSTRAINT lua_projects_description_length CHECK ((char_length(description) <= 300)),
     CONSTRAINT lua_projects_kind_check CHECK ((kind = ANY (ARRAY['panel'::text, 'guide'::text])))
 );
 

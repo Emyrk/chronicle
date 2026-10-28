@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { useAuthorizationCheck, useSession } from "@/api/queries"
 import { LuaProjectsPage } from "./LuaProjectsPage"
 import { NewAddonForm } from "./NewAddonForm"
+import { AddonDescription } from "./AddonDescription"
 import type { LuaProject } from "./api"
 
 vi.mock("@/api/queries", () => ({ useAuthorizationCheck: vi.fn(), useSession: vi.fn() }))
@@ -16,7 +17,7 @@ function render(element: ReactElement, client = new QueryClient()) {
 }
 
 function addon(name: string, stars: number, publishedAt: string): LuaProject {
-  return { id: name, owner_id: "o", kind: "panel", name, slug: name, revision: 1, author: "someone", stars, starred: false, created_at: publishedAt, updated_at: publishedAt,
+  return { id: name, owner_id: "o", kind: "panel", name, slug: name, revision: 1, description: `${name} does things.`, author: "someone", stars, starred: false, created_at: publishedAt, updated_at: publishedAt,
     releases: [{ tag: "v1", available: true, sha256: "x", published_at: publishedAt }] }
 }
 
@@ -40,6 +41,7 @@ describe("addons home", () => {
     expect(html).toContain(">Popular</button>")
     expect(html).toContain("42 people track this addon")
     expect(html).toContain("<table")
+    expect(html, "descriptions show under the name").toContain("Big Pumper does things.")
     expect(html).toContain('data-ad="addons-left-rail"')
     expect(html).toContain('data-ad="addons-right-rail"')
     expect(html, "popular order is ranked").toMatch(/<td[^>]*>1<\/td>/)
@@ -72,5 +74,18 @@ describe("new addon form", () => {
     const html = render(<NewAddonForm author="steven" first />)
     expect(html).toContain("Create and open the Workshop")
     expect(html).not.toContain('aria-label="Slug"')
+  })
+})
+
+describe("addon description", () => {
+  const empty = { ...addon("Quiet", 0, "2026-01-01T00:00:00Z"), description: "" }
+  it("invites people who may release to add one", () => {
+    expect(render(<AddonDescription project={empty} canEdit onSaved={() => {}} />)).toContain("Add a description")
+  })
+  it("hides an empty description from everyone else, and shows a set one", () => {
+    expect(render(<AddonDescription project={empty} canEdit={false} onSaved={() => {}} />)).toBe("")
+    const html = render(<AddonDescription project={addon("Loud", 0, "2026-01-01T00:00:00Z")} canEdit={false} onSaved={() => {}} />)
+    expect(html).toContain("Loud does things.")
+    expect(html).not.toContain("Edit")
   })
 })

@@ -43,6 +43,7 @@ func TestLuaProjectPermissions(t *testing.T) {
 	router.Put("/me/lua-projects/{projectID}/star", api.StarLuaProject)
 	router.Delete("/me/lua-projects/{projectID}/star", api.UnstarLuaProject)
 	router.Get("/me/lua-projects/{projectID}", api.GetMyLuaProject)
+	router.Patch("/me/lua-projects/{projectID}", api.UpdateLuaProject)
 	router.Get("/me/lua-projects/{projectID}/contributors", api.ListLuaProjectContributors)
 	router.Put("/me/lua-projects/{projectID}/contributors/{author}", api.PutLuaProjectContributor)
 	router.Delete("/me/lua-projects/{projectID}/contributors/{author}", api.DeleteLuaProjectContributor)
@@ -128,6 +129,21 @@ func TestLuaProjectPermissions(t *testing.T) {
 	_, viewed = page(stranger, byID)
 	require.Equal(t, int64(1), viewed.Project.Stars)
 	require.False(t, viewed.Project.Starred)
+
+	// Descriptions: set by those who may release, trimmed, and at most 300 characters (not bytes).
+	settings := "/me/lua-projects/" + project.ID.String()
+	require.Equal(t, http.StatusForbidden, call(stranger, http.MethodPatch, settings, `{"description":"mine now"}`).Code)
+	require.Equal(t, http.StatusBadRequest, call(owner, http.MethodPatch, settings, `{"description":"`+strings.Repeat("a", 301)+`"}`).Code)
+	rec = call(owner, http.MethodPatch, settings, `{"description":"  `+strings.Repeat("é", 300)+`  "}`)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	rec = call(owner, http.MethodPatch, settings, `{"description":"  Tracks every kick and who missed one.  "}`)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var described chroniclesdk.LuaProject
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &described))
+	require.Equal(t, "Tracks every kick and who missed one.", described.Description)
+	require.Equal(t, int64(1), described.Stars, "the response is a full project")
+	_, viewed = page(uuid.Nil, byID)
+	require.Equal(t, "Tracks every kick and who missed one.", viewed.Project.Description)
 
 	rec = call(stranger, http.MethodGet, "/addons/steven", "")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())

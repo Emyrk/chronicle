@@ -2878,6 +2878,10 @@ export interface LuaProject {
     readonly slug: string;
     readonly revision: number;
     /**
+     * Description is a short summary, up to LuaProjectDescriptionMax characters. It lives outside the manifest.
+     */
+    readonly description: string;
+    /**
      * Author is the owner's addon author name, the first part of /addons/<author>/<slug>. Absent until claimed.
      */
     readonly author?: string;
@@ -2912,6 +2916,12 @@ export interface LuaProjectContributor {
     readonly permissions: readonly string[];
     readonly added_at: string;
 }
+
+// From chroniclesdk/lua_project.go
+/**
+ * LuaProjectDescriptionMax is the longest description, in characters.
+ */
+export const LuaProjectDescriptionMax = 300;
 
 // From chroniclesdk/lua_project.go
 /**
@@ -4921,6 +4931,14 @@ export interface UpdateInferenceSettingsRequest {
 export interface UpdateLayoutDefaultsRequest {
     readonly default_desktop_layout_id?: string;
     readonly default_mobile_layout_id?: string;
+}
+
+// From chroniclesdk/lua_project.go
+/**
+ * UpdateLuaProjectRequest changes an addon's settings.
+ */
+export interface UpdateLuaProjectRequest {
+    readonly description: string;
 }
 
 // From chroniclesdk/user.go

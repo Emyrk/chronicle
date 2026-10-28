@@ -44,6 +44,8 @@ type LuaProject struct {
 	Name     string    `json:"name"`
 	Slug     string    `json:"slug"`
 	Revision int64     `json:"revision"`
+	// Description is a short summary, up to LuaProjectDescriptionMax characters. It lives outside the manifest.
+	Description string `json:"description"`
 	// Author is the owner's addon author name, the first part of /addons/<author>/<slug>. Absent until claimed.
 	Author string          `json:"author,omitempty"`
 	Main   *LuaProjectMain `json:"main,omitempty"`
@@ -54,6 +56,14 @@ type LuaProject struct {
 	Starred   bool      `json:"starred"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// LuaProjectDescriptionMax is the longest description, in characters.
+const LuaProjectDescriptionMax = 300
+
+// UpdateLuaProjectRequest changes an addon's settings.
+type UpdateLuaProjectRequest struct {
+	Description string `json:"description"`
 }
 
 // LuaProjectStar answers a star or unstar.

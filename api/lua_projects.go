@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -127,7 +128,7 @@ var luaReleaseTag = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$`)
 
 // luaProjectResponse builds the API project; authors maps the owner and release publishers to their author names.
 func luaProjectResponse(p database.LuaProject, releases []database.LuaProjectRelease, authors map[uuid.UUID]string) chroniclesdk.LuaProject {
-	result := chroniclesdk.LuaProject{ID: p.ID, OwnerID: p.OwnerID, Kind: p.Kind, Name: p.Name, Slug: p.Slug, Revision: p.Revision,
+	result := chroniclesdk.LuaProject{ID: p.ID, OwnerID: p.OwnerID, Kind: p.Kind, Name: p.Name, Slug: p.Slug, Revision: p.Revision, Description: p.Description,
 		Author: authors[p.OwnerID], Releases: make([]chroniclesdk.LuaProjectRelease, 0, len(releases)), CreatedAt: p.CreatedAt.Time, UpdatedAt: p.UpdatedAt.Time}
 	if p.DraftHash.Valid {
 		result.Main = &chroniclesdk.LuaProjectMain{SHA256: p.DraftHash.String, Icon: p.DraftIcon.String, UpdatedAt: p.UpdatedAt.Time}
@@ -465,6 +466,35 @@ func (a *API) setLuaProjectStar(w http.ResponseWriter, r *http.Request, star boo
 		return
 	}
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.LuaProjectStar{Stars: stars[id], Starred: star})
+}
+
+// UpdateLuaProject sets an addon's description. Anyone who may release the addon may describe it.
+func (a *API) UpdateLuaProject(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id, ok := luaProjectID(w, r)
+	if !ok || !a.canLuaProject(w, r, id, luaRelease) {
+		return
+	}
+	var req chroniclesdk.UpdateLuaProjectRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+	description := strings.TrimSpace(req.Description)
+	if utf8.RuneCountInString(description) > chroniclesdk.LuaProjectDescriptionMax {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: fmt.Sprintf("Descriptions are at most %d characters.", chroniclesdk.LuaProjectDescriptionMax)})
+		return
+	}
+	p, err := a.Opts.Zed.SetLuaProjectDescription(ctx, database.SetLuaProjectDescriptionParams{ID: id, Description: description})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	responses, err := a.luaProjectResponses(ctx, p)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(ctx, w, http.StatusOK, responses[0])
 }
 
 func (a *API) GetMyLuaProject(w http.ResponseWriter, r *http.Request) {

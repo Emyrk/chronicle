@@ -16,7 +16,7 @@ const sorts: { id: GallerySort; label: string }[] = [{ id: "popular", label: "Po
 /** The server lists the most tracked first; "newest" re-sorts by latest release. */
 function galleryOrder(projects: LuaProject[], sort: GallerySort, query: string): LuaProject[] {
   const needle = query.trim().toLowerCase()
-  const matches = needle ? projects.filter(project => `${project.name} ${project.author ?? ""}`.toLowerCase().includes(needle)) : projects
+  const matches = needle ? projects.filter(project => `${project.name} ${project.author ?? ""} ${project.description}`.toLowerCase().includes(needle)) : projects
   if (sort === "popular") return matches
   const released = (project: LuaProject) => latestRelease(project)?.published_at ?? ""
   return [...matches].sort((a, b) => released(b).localeCompare(released(a)))

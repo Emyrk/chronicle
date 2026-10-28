@@ -7,6 +7,7 @@ import { ArrowLeft, BookOpen, Code2, Download, FileCode, FileImage, FileJson, Fi
 import { addonPath, authorPath, createRelease, deleteRelease, latestRelease, nextReleaseTag, uploadDraft } from "./api"
 import { AddonIcon } from "./AddonIcon"
 import { AddonReleases, VersionPicker } from "./AddonReleases"
+import { AddonDescription } from "./AddonDescription"
 import { AddonStar } from "./AddonStar"
 import { AddonAiUsage, AddonContributors } from "./AddonTeam"
 import { isAddonId, useAddonPage } from "./addonRoute"
@@ -136,13 +137,14 @@ function AddonPage({ projectId }: { projectId?: string }) {
   return <main className="container mx-auto max-w-6xl space-y-6 px-4 py-8">
     <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" to="/addons"><ArrowLeft className="size-4" /> All addons</Link>
     <header className="flex flex-wrap items-end justify-between gap-4 border-b pb-5">
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <h1 className="flex items-center gap-3 text-2xl font-semibold"><AddonIcon name={refIcon} className="size-6 text-muted-foreground" />{project.name}
           <span className="rounded-full border border-border px-2 py-0.5 text-xs font-normal text-muted-foreground">{kindLabel(project.kind)}</span></h1>
         <p className="mt-1 text-xs text-muted-foreground">
           {project.author ? <>by <Link to={authorPath(project.author)} className="font-mono hover:text-foreground hover:underline">{project.author}</Link></> : "Unnamed author"}
           {can.edit && <span className="font-mono"> · /{project.slug} · revision {project.revision}</span>} · updated {formatDate(project.updated_at)}
         </p>
+        <AddonDescription key={project.id} project={project} canEdit={can.release} onSaved={() => void pageQuery.refetch()} />
       </div>
       <div className="flex flex-wrap items-start gap-2">
         <AddonStar key={project.id} project={project} canUse={can.use} />

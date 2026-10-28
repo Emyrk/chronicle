@@ -14,6 +14,7 @@ export function AddonCard({ project, shared = false }: { project: LuaProject; sh
       <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">{kindLabel(project.kind)} · {latest ? latest.tag : "not released"}</span>
       <h3 className="mt-1 flex items-center gap-2 font-semibold">{project.name}
         {shared && <span className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-normal text-muted-foreground"><Users className="size-3" /> Shared with you</span>}</h3>
+      {project.description && <p className="truncate text-sm text-muted-foreground" title={project.description}>{project.description}</p>}
       <p className="truncate font-mono text-xs text-muted-foreground">{addonPath(project)}</p>
     </div>
     <span className="inline-flex shrink-0 items-center gap-1 text-xs tabular-nums text-muted-foreground" title={`${project.stars} people track this addon`}>
@@ -46,7 +47,7 @@ export function AddonTable({ projects, ranked }: { projects: LuaProject[]; ranke
                 <AddonIcon name={latest?.icon ?? project.main?.icon} className="size-5 text-muted-foreground group-hover:text-primary" /></span>
               <div className="min-w-0">
                 <Link to={addonPath(project)} onClick={event => event.stopPropagation()} className="block truncate font-medium hover:underline">{project.name}</Link>
-                <p className="truncate text-xs text-muted-foreground">{kindLabel(project.kind)}<span className="md:hidden">{project.author && ` · by ${project.author}`}</span></p>
+                <p className="truncate text-xs text-muted-foreground" title={project.description || undefined}>{project.description || kindLabel(project.kind)}<span className="md:hidden">{project.author && ` · by ${project.author}`}</span></p>
               </div>
             </div>
           </td>

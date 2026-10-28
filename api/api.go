@@ -357,6 +357,7 @@ func (api *API) Routes() chi.Router {
 				r.Put("/me/lua-projects/{projectID}/contributors/{author}", api.PutLuaProjectContributor)
 				r.Delete("/me/lua-projects/{projectID}/contributors/{author}", api.DeleteLuaProjectContributor)
 				r.Get("/me/lua-projects/{projectID}", api.GetMyLuaProject)
+				r.Patch("/me/lua-projects/{projectID}", api.UpdateLuaProject)
 				r.Get("/me/lua-projects/{projectID}/draft/{hash}/package", api.DownloadMyLuaProjectDraft)
 				r.Put("/me/lua-projects/{projectID}/draft", api.PutLuaProjectDraft)
 				r.Post("/me/lua-projects/{projectID}/releases", api.CreateLuaProjectRelease)

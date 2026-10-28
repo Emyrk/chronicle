@@ -2017,16 +2017,17 @@ type LogInstancesGuild struct {
 }
 
 type LuaProject struct {
-	ID        uuid.UUID          `db:"id" json:"id"`
-	OwnerID   uuid.UUID          `db:"owner_id" json:"owner_id"`
-	Kind      string             `db:"kind" json:"kind"`
-	Name      string             `db:"name" json:"name"`
-	Slug      string             `db:"slug" json:"slug"`
-	Revision  int64              `db:"revision" json:"revision"`
-	DraftHash pgtype.Text        `db:"draft_hash" json:"draft_hash"`
-	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	DraftIcon pgtype.Text        `db:"draft_icon" json:"draft_icon"`
+	ID          uuid.UUID          `db:"id" json:"id"`
+	OwnerID     uuid.UUID          `db:"owner_id" json:"owner_id"`
+	Kind        string             `db:"kind" json:"kind"`
+	Name        string             `db:"name" json:"name"`
+	Slug        string             `db:"slug" json:"slug"`
+	Revision    int64              `db:"revision" json:"revision"`
+	DraftHash   pgtype.Text        `db:"draft_hash" json:"draft_hash"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	DraftIcon   pgtype.Text        `db:"draft_icon" json:"draft_icon"`
+	Description string             `db:"description" json:"description"`
 }
 
 type LuaProjectArtifact struct {

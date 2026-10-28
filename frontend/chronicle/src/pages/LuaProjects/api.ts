@@ -12,6 +12,8 @@ export type LuaProject = {
   name: string
   slug: string
   revision: number
+  /** A short summary for lists and the addon page, up to DESCRIPTION_MAX characters. Set outside the manifest. */
+  description: string
   /** The owner's addon author name; the project's address is /addons/<author>/<slug> once it is set. */
   author?: string
   main?: LuaMain
@@ -63,6 +65,17 @@ export async function listProjects(): Promise<LuaProject[]> {
 
 export async function getProject(id: string): Promise<LuaProject> {
   return request<LuaProject>(`${base}/${encodeURIComponent(id)}`)
+}
+
+/** The longest addon description, in characters (code points, as the server counts them). */
+export const DESCRIPTION_MAX = 300
+
+export async function setDescription(id: string, description: string): Promise<LuaProject> {
+  return request<LuaProject>(`${base}/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ description }),
+  })
 }
 
 export async function createProject(kind: LuaProjectKind, name: string, slug: string): Promise<LuaProject> {
