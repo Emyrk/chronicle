@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -18,7 +19,7 @@ import (
 
 func setupDPSTracker() (*DPSTracker, *unitdb.Units) {
 	units := newTestUnits()
-	tracker := NewDPSTracker(units, DamageRuleNone)
+	tracker := NewDPSTracker(units, nil, DamageRuleNone)
 	return tracker, units
 }
 
@@ -31,7 +32,7 @@ func TestDPSTracker_BasicDamage(t *testing.T) {
 	encID := uuid.New()
 
 	units.Info[player] = unitinfo.Info{Guid: player, Name: "Warrior", IsPlayer: true, CanCooperate: true}
-	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false, Boss: true}
 
 	tracker.FightStarted(encID, nil)
 
@@ -51,8 +52,77 @@ func TestDPSTracker_BasicDamage(t *testing.T) {
 	require.Contains(t, results, encID)
 	require.Contains(t, results[encID].Units, player)
 	assert.Equal(t, int64(800), results[encID].Units[player].DamageDone)
+	assert.Equal(t, int64(800), results[encID].Units[player].RankedDamageDone)
 	assert.True(t, results[encID].Units[player].IsPlayer)
 	assert.Nil(t, results[encID].Units[player].OwnerGUID)
+}
+
+func TestDPSTracker_SeparatesRankedBossDamage(t *testing.T) {
+	t.Parallel()
+
+	units := newTestUnits()
+	player := makePlayerGUID(1)
+	boss := makeCreatureGUID(100, 1)
+	add := makeCreatureGUID(101, 2)
+	encID := uuid.New()
+	units.Info[player] = unitinfo.Info{Guid: player, Name: "Warrior", IsPlayer: true, CanCooperate: true}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+	units.Info[add] = unitinfo.Info{Guid: add, Name: "Add", CanCooperate: false}
+	idf := identifier.NewIdentifier(map[uint32]identifier.Identity{
+		100: {Name: "Boss", Boss: true},
+		101: {Name: "Add"},
+	})
+	tracker := NewDPSTracker(units, idf, DamageRuleNone)
+
+	tracker.FightStarted(encID, nil)
+	caster := player
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Damage{
+		Caster: &caster, Target: boss, Amount: 500,
+	}))
+	addDamage := &messages.Damage{Caster: &caster, Target: add, Amount: 200}
+	require.NoError(t, tracker.ProcessMessage(true, encID, addDamage))
+	tracker.FightEnded(encID, nil)
+
+	stats := tracker.Result()[encID].Units[player]
+	require.NotNil(t, stats)
+	assert.Equal(t, int64(700), stats.DamageDone)
+	assert.Equal(t, int64(700), stats.RankedDamageDone) // Default includes adds.
+	tracker.ClassifyDamage(encID, DamageTargets{Mode: DamageTargetsBossOnly}, addDamage)
+	tracker.FinishDamageClassification(encID)
+	assert.Equal(t, int64(200), addDamage.Unranked)
+	assert.Equal(t, int64(500), stats.RankedDamageDone)
+	assert.Equal(t, int64(200), stats.UnrankedDamageDone)
+}
+
+func TestDPSTracker_WhitelistExcludesEffectiveDamageButNotOverkill(t *testing.T) {
+	t.Parallel()
+	tracker, units := setupDPSTracker()
+	player := makePlayerGUID(1)
+	boss := makeCreatureGUID(12057, 1)
+	add := makeCreatureGUID(12099, 2)
+	other := makeCreatureGUID(101, 3)
+	for _, target := range []guid.GUID{boss, add, other} {
+		units.Info[target] = unitinfo.Info{Guid: target, CanCooperate: false}
+	}
+	units.Info[player] = unitinfo.Info{Guid: player, IsPlayer: true, CanCooperate: true}
+	encID := uuid.New()
+	tracker.FightStarted(encID, nil)
+	caster := player
+	allowed := &messages.Damage{Caster: &caster, Target: add, Amount: 100}
+	excluded := &messages.Damage{Caster: &caster, Target: other, Amount: 200, Overkill: 50}
+	require.NoError(t, tracker.ProcessMessage(true, encID, allowed))
+	require.NoError(t, tracker.ProcessMessage(true, encID, excluded))
+	tracker.FightEnded(encID, nil)
+	rule := DamageTargets{Mode: DamageTargetsEntries, EntryIDs: []uint32{12057, 12099}}
+	tracker.ClassifyDamage(encID, rule, allowed)
+	tracker.ClassifyDamage(encID, rule, excluded)
+	tracker.FinishDamageClassification(encID)
+	stats := tracker.Result()[encID].Units[player]
+	require.Equal(t, int64(250), stats.DamageDone)
+	require.Equal(t, int64(100), stats.RankedDamageDone)
+	require.Equal(t, int64(150), stats.UnrankedDamageDone)
+	require.Zero(t, allowed.Unranked)
+	require.Equal(t, int64(150), excluded.Unranked)
 }
 
 func TestDPSTrackerAssemblyOfIronTargets(t *testing.T) {
@@ -69,7 +139,7 @@ func TestDPSTracker_PhaseTargetsCommitOnlySlainTarget(t *testing.T) {
 	t.Parallel()
 
 	units := newTestUnits()
-	tracker := NewDPSTracker(units, DamageRuleAssemblyOfIron)
+	tracker := NewDPSTracker(units, nil, DamageRuleAssemblyOfIron)
 	player := makePlayerGUID(1)
 	steelbreaker := makeCreatureGUID(32867, 1)
 	molgeim := makeCreatureGUID(32927, 2)
@@ -83,20 +153,25 @@ func TestDPSTracker_PhaseTargetsCommitOnlySlainTarget(t *testing.T) {
 	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Damage{
 		Caster: &caster, Target: steelbreaker, Amount: 500,
 	}))
-	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Damage{
-		Caster: &caster, Target: molgeim, Amount: 80,
-	}))
+	molgeimDamage := &messages.Damage{Caster: &caster, Target: molgeim, Amount: 80}
+	require.NoError(t, tracker.ProcessMessage(true, encID, molgeimDamage))
 	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Slain{Victim: steelbreaker}))
 	tracker.FightEnded(encID, nil)
+	tracker.ClassifyDamage(encID, DamageTargets{}, molgeimDamage)
+	tracker.FinishDamageClassification(encID)
 
-	require.Equal(t, int64(500), tracker.Result()[encID].Units[player].DamageDone)
+	stats := tracker.Result()[encID].Units[player]
+	require.Equal(t, int64(580), stats.DamageDone)
+	require.Equal(t, int64(500), stats.RankedDamageDone)
+	require.Equal(t, int64(80), stats.UnrankedDamageDone)
+	require.Equal(t, int64(80), molgeimDamage.Unranked)
 }
 
 func TestDPSTracker_PhaseTargetsCommitUnresolvedDamageAtFightEnd(t *testing.T) {
 	t.Parallel()
 
 	units := newTestUnits()
-	tracker := NewDPSTracker(units, DamageRuleAssemblyOfIron)
+	tracker := NewDPSTracker(units, nil, DamageRuleAssemblyOfIron)
 	player := makePlayerGUID(1)
 	steelbreaker := makeCreatureGUID(32867, 1)
 	molgeim := makeCreatureGUID(32927, 2)
@@ -115,7 +190,9 @@ func TestDPSTracker_PhaseTargetsCommitUnresolvedDamageAtFightEnd(t *testing.T) {
 	}))
 	tracker.FightEnded(encID, nil)
 
-	require.Equal(t, int64(580), tracker.Result()[encID].Units[player].DamageDone)
+	stats := tracker.Result()[encID].Units[player]
+	require.Equal(t, int64(580), stats.DamageDone)
+	require.Equal(t, int64(580), stats.RankedDamageDone)
 }
 
 func TestDPSTracker_IncludesInjectedHostileVehicleDamage(t *testing.T) {
@@ -152,7 +229,7 @@ func TestDPSTracker_IncludesAbsorbedDamage(t *testing.T) {
 	encID := uuid.New()
 
 	units.Info[player] = unitinfo.Info{Guid: player, Name: "Warrior", IsPlayer: true, CanCooperate: true}
-	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false, Boss: true}
 
 	partialAbsorb := uint32(200)
 	fullAbsorb := uint32(500)
@@ -191,7 +268,7 @@ func TestDPSTracker_HostileOnly(t *testing.T) {
 
 	units.Info[player1] = unitinfo.Info{Guid: player1, Name: "Warrior", IsPlayer: true, CanCooperate: true}
 	units.Info[player2] = unitinfo.Info{Guid: player2, Name: "Mage", IsPlayer: true, CanCooperate: true}
-	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false, Boss: true}
 
 	tracker.FightStarted(encID, nil)
 
@@ -226,7 +303,7 @@ func TestDPSTracker_PetDamage(t *testing.T) {
 
 	units.Info[player] = unitinfo.Info{Guid: player, Name: "Hunter", IsPlayer: true, CanCooperate: true}
 	units.Info[pet] = unitinfo.Info{Guid: pet, Name: "Wolf", Owner: &player, CanCooperate: true}
-	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false, Boss: true}
 
 	tracker.FightStarted(encID, nil)
 
@@ -266,7 +343,7 @@ func TestDPSTracker_ChainedSummonDamageUsesRootOwner(t *testing.T) {
 	units.Update(unitinfo.Info{Guid: player, Name: "Shaman", IsPlayer: true, CanCooperate: true})
 	units.Update(unitinfo.Info{Guid: totem, Name: "Fire Elemental Totem", CanCooperate: true})
 	units.Update(unitinfo.Info{Guid: elemental, Name: "Greater Fire Elemental", CanCooperate: true})
-	units.Update(unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false})
+	units.Update(unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false, Boss: true})
 
 	// Match the combat-log order: the totem summons the elemental before the
 	// player-to-totem ownership event is observed.
@@ -373,7 +450,7 @@ func TestDPSTracker_AbsorbAttribution(t *testing.T) {
 
 	units.Info[priest] = unitinfo.Info{Guid: priest, Name: "Priest", IsPlayer: true, CanCooperate: true}
 	units.Info[tank] = unitinfo.Info{Guid: tank, Name: "Tank", IsPlayer: true, CanCooperate: true}
-	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false, Boss: true}
 
 	tracker.FightStarted(encID, nil)
 
@@ -419,7 +496,7 @@ func TestDPSTracker_DamageTakenPlayersOnly(t *testing.T) {
 	encID := uuid.New()
 
 	units.Info[player] = unitinfo.Info{Guid: player, Name: "Tank", IsPlayer: true, CanCooperate: true}
-	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false, Boss: true}
 
 	tracker.FightStarted(encID, nil)
 
@@ -455,7 +532,7 @@ func TestDPSTracker_FightStartedResets(t *testing.T) {
 	enc2 := uuid.New()
 
 	units.Info[player] = unitinfo.Info{Guid: player, Name: "Warrior", IsPlayer: true, CanCooperate: true}
-	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false, Boss: true}
 
 	// Encounter 1.
 	tracker.FightStarted(enc1, nil)
@@ -488,7 +565,7 @@ func TestDPSTracker_TalentSnapshot(t *testing.T) {
 	encID := uuid.New()
 
 	units.Info[player] = unitinfo.Info{Guid: player, Name: "Mage", IsPlayer: true, CanCooperate: true}
-	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false, Boss: true}
 	units.Players[player] = combatant.Combatant{
 		Name: "Mage",
 		Guid: player,
@@ -519,7 +596,7 @@ func TestDPSTracker_TalentSnapshotNilWhenInvalidated(t *testing.T) {
 	encID := uuid.New()
 
 	units.Info[player] = unitinfo.Info{Guid: player, Name: "Mage", IsPlayer: true, CanCooperate: true}
-	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false, Boss: true}
 	// Player has no talents (e.g., invalidated by respec).
 	units.Players[player] = combatant.Combatant{
 		Name:    "Mage",
@@ -550,7 +627,7 @@ func TestDPSTrackerForwardsFormLifecycle(t *testing.T) {
 	hookStart := actualStart.Add(10 * time.Second)
 	end := actualStart.Add(30 * time.Second)
 	units.Info[player] = unitinfo.Info{Guid: player, Name: "Druid", IsPlayer: true, CanCooperate: true}
-	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false, Boss: true}
 
 	require.NoError(t, tracker.ProcessMessage(false, uuid.Nil, &messages.Aura{
 		MessageBase: messages.Base(actualStart.Add(-time.Minute)),
@@ -588,7 +665,7 @@ func TestDPSTracker_InactiveMessagesIgnored(t *testing.T) {
 	encID := uuid.New()
 
 	units.Info[player] = unitinfo.Info{Guid: player, Name: "Warrior", IsPlayer: true, CanCooperate: true}
-	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false, Boss: true}
 
 	tracker.FightStarted(encID, nil)
 

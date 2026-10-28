@@ -99,6 +99,7 @@ message Damage {
   optional SpellData spellData = 10;
   int32 overkill = 11;
   repeated School schools = 12;
+  int64 unranked = 13; // Effective damage excluded from DPS rankings; zero means fully ranked.
 }
 
 message UnitPosition {

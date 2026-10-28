@@ -65,6 +65,7 @@ export interface DamageProcessorEvent extends EventMeta {
   spellId: number | null;
   /** AttackOutcome bitmask of possible hit table results (from SpellData) */
   spellAttackOutcome: number | null;
+  unranked?: number; // Effective damage excluded from rankings; absent in older streams.
   overkill: number;
 }
 

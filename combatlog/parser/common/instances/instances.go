@@ -149,6 +149,9 @@ var (
 		Hostiles:  FromMap(MoltenCoreHostiles()),
 		FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
 			return &rankings.Rankings{
+				DamageByEncounter: map[string]rankings.DamageTargets{
+					"Garr": {Mode: rankings.DamageTargetsEntries, EntryIDs: []uint32{12057, 12099}},
+				},
 				Speedrun: &rankings.SpeedrunRules{
 					Requirements: MoltenCoreSpeedrunRequirements(fl),
 					LevelRange:   Level60Cap(fl),

@@ -855,7 +855,7 @@ INSERT INTO encounter_dps_rankings (
     player_guid, player_name, player_class, player_spec, player_sub_spec, player_role, player_level,
     talent_build_id, difficulty_name, max_players,
     realm_id, realm_name, guild_id, guild_name,
-    damage_done, duration_secs, dps, avg_ilvl,
+    damage_done, unranked_damage_done, duration_secs, dps, avg_ilvl,
     healing_done, absorbed_done, hps, player_deaths, alive_percentage,
     log_hashed_slug, killed_at
 )
@@ -864,7 +864,7 @@ VALUES (
     @player_guid, @player_name, @player_class, @player_spec, @player_sub_spec, @player_role, @player_level,
     @talent_build_id, @difficulty_name, @max_players,
     @realm_id, @realm_name, @guild_id, @guild_name,
-    @damage_done, @duration_secs, @dps, @avg_ilvl,
+    @damage_done, @unranked_damage_done, @duration_secs, @dps, @avg_ilvl,
     @healing_done, @absorbed_done, @hps, @player_deaths, @alive_percentage,
     @log_hashed_slug, @killed_at
 )

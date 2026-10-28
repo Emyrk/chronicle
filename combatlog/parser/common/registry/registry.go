@@ -40,7 +40,8 @@ type Entry struct {
 	// HostileEntries are the creature entry IDs for this instance.
 	HostileEntries map[uint32]instances.Identity
 	// SpeedrunRules holds the speedrun rules captured at registration time.
-	SpeedrunRules *rankings.SpeedrunRules
+	SpeedrunRules     *rankings.SpeedrunRules
+	DamageByEncounter map[string]rankings.DamageTargets
 	// BossCount overrides the encounter count inferred from SpeedrunRules.
 	BossCount *int
 	// ProgressionBosses is the ordered boss encounter list used for progression.
@@ -73,9 +74,11 @@ func FromFlavoredFactory(flavor database.WoWFlavor, f *instances.CommonFactory) 
 	}
 
 	var speedrun *rankings.SpeedrunRules
+	var damageByEncounter map[string]rankings.DamageTargets
 	if f.FlavoredRankings != nil {
 		if r := f.FlavoredRankings(flavor); r != nil {
 			speedrun = r.Speedrun
+			damageByEncounter = r.DamageByEncounter
 		}
 	}
 
@@ -103,6 +106,7 @@ func FromFlavoredFactory(flavor database.WoWFlavor, f *instances.CommonFactory) 
 		ZoneNames:            f.ZoneNames,
 		HostileEntries:       hostiles,
 		SpeedrunRules:        speedrun,
+		DamageByEncounter:    damageByEncounter,
 		BossCount:            bossCount,
 		ProgressionBosses:    progressionBosses,
 		RankingEncounterSets: rankingEncounterSets,
@@ -350,6 +354,7 @@ type InstanceDetail struct {
 	BossCount                    *int
 	ProgressionBosses            []string
 	RankingEncounterSets         []instances.RankingEncounterSet
+	DamageByEncounter            map[string]rankings.DamageTargets
 	RaidProgressionOrder         int
 	DerivedRaidProgressionOrders map[string]int
 	RankedStartAfterRequirement  string
@@ -515,6 +520,7 @@ func (r *Registry) AllInstanceDetails() []InstanceDetail {
 				BossCount:                    progressionBossCount(entry),
 				ProgressionBosses:            progressionBosses(entry),
 				RankingEncounterSets:         rankingEncounterSets(entry),
+				DamageByEncounter:            entry.DamageByEncounter,
 				RaidProgressionOrder:         entry.RaidProgressionOrder,
 				DerivedRaidProgressionOrders: entry.DerivedRaidProgressionOrders,
 				RankedStartAfterRequirement:  rankedStartAfterRequirement(entry),

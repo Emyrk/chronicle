@@ -1483,12 +1483,14 @@ func insertDPSRankings(
 		// Sum pet/totem damage and healing into their owner's totals.
 		// The DPS tracker records metrics under the raw caster GUID (pet or player).
 		// We need to attribute pet contributions to the owning player.
-		ownerDamage := make(map[guid.GUID]int64)  // owner GUID → additional damage from pets
-		ownerHealing := make(map[guid.GUID]int64) // owner GUID → additional healing from pets/totems
-		ownerAbsorb := make(map[guid.GUID]int64)  // owner GUID → additional absorbs from pets/totems
+		ownerDamage := make(map[guid.GUID]int64)   // owner GUID → ranked damage from pets
+		ownerUnranked := make(map[guid.GUID]int64) // owner GUID → unranked damage from pets
+		ownerHealing := make(map[guid.GUID]int64)  // owner GUID → additional healing from pets/totems
+		ownerAbsorb := make(map[guid.GUID]int64)   // owner GUID → additional absorbs from pets/totems
 		for _, stats := range dpsResult.Units {
 			if stats.OwnerGUID != nil && !stats.IsPlayer {
-				ownerDamage[*stats.OwnerGUID] += stats.DamageDone
+				ownerDamage[*stats.OwnerGUID] += stats.RankedDamageDone
+				ownerUnranked[*stats.OwnerGUID] += stats.UnrankedDamageDone
 				ownerHealing[*stats.OwnerGUID] += stats.HealingDone
 				ownerAbsorb[*stats.OwnerGUID] += stats.HealingAbsorbed
 			}
@@ -1508,7 +1510,7 @@ func insertDPSRankings(
 				spec = wowspec.InferSpec(class, stats.Talents.Summary)
 			}
 			playerMetrics[unitGUID] = wowspec.PlayerMetrics{
-				DamageDone:  stats.DamageDone + ownerDamage[unitGUID],
+				DamageDone:  stats.RankedDamageDone + ownerDamage[unitGUID],
 				DamageTaken: stats.DamageTaken,
 				HealingDone: stats.HealingDone + ownerHealing[unitGUID] + stats.HealingAbsorbed + ownerAbsorb[unitGUID],
 				Class:       class,
@@ -1556,7 +1558,8 @@ func insertDPSRankings(
 				playerLevel = int16(*player.Level)
 			}
 
-			totalDamage := stats.DamageDone + ownerDamage[unitGUID]
+			totalDamage := stats.RankedDamageDone + ownerDamage[unitGUID]
+			totalUnranked := stats.UnrankedDamageDone + ownerUnranked[unitGUID]
 			dps := float64(totalDamage) / durationSecs
 			totalHealing := stats.HealingDone + ownerHealing[unitGUID]
 			totalAbsorbed := stats.HealingAbsorbed + ownerAbsorb[unitGUID]
@@ -1575,33 +1578,34 @@ func insertDPSRankings(
 					UUID:  enc.Combat.EncounterID,
 					Valid: true,
 				},
-				InstanceID:      dbinstance.ID,
-				EncounterName:   enc.Name,
-				InstanceName:    instanceName,
-				PlayerGuid:      unitGUID.String(),
-				PlayerName:      player.Name,
-				PlayerClass:     className,
-				PlayerSpec:      spec,
-				PlayerSubSpec:   subSpec,
-				PlayerRole:      roles[unitGUID],
-				PlayerLevel:     playerLevel,
-				TalentBuildID:   talentBuildID,
-				DifficultyName:  dbinstance.DifficultyName,
-				MaxPlayers:      int16(dbinstance.MaxPlayers),
-				RealmID:         dbinstance.RealmID,
-				RealmName:       realmName,
-				GuildID:         uuid.NullUUID{}, // guild_name is sufficient; avoid FK constraint issues
-				GuildName:       playerGuildName,
-				DamageDone:      totalDamage,
-				DurationSecs:    durationSecs,
-				Dps:             dps,
-				HealingDone:     totalHealing,
-				AbsorbedDone:    totalAbsorbed,
-				Hps:             hps,
-				AlivePercentage: pgtype.Float8{Float64: playerSurvivability.AlivePercentage, Valid: true},
-				PlayerDeaths:    pgtype.Int4{Int32: playerSurvivability.Deaths, Valid: true},
-				LogHashedSlug:   dbinstance.HashedSlug.String,
-				KilledAt:        database.Timestamptz(enc.Combat.End),
+				InstanceID:         dbinstance.ID,
+				EncounterName:      enc.Name,
+				InstanceName:       instanceName,
+				PlayerGuid:         unitGUID.String(),
+				PlayerName:         player.Name,
+				PlayerClass:        className,
+				PlayerSpec:         spec,
+				PlayerSubSpec:      subSpec,
+				PlayerRole:         roles[unitGUID],
+				PlayerLevel:        playerLevel,
+				TalentBuildID:      talentBuildID,
+				DifficultyName:     dbinstance.DifficultyName,
+				MaxPlayers:         int16(dbinstance.MaxPlayers),
+				RealmID:            dbinstance.RealmID,
+				RealmName:          realmName,
+				GuildID:            uuid.NullUUID{}, // guild_name is sufficient; avoid FK constraint issues
+				GuildName:          playerGuildName,
+				DamageDone:         totalDamage,
+				UnrankedDamageDone: totalUnranked,
+				DurationSecs:       durationSecs,
+				Dps:                dps,
+				HealingDone:        totalHealing,
+				AbsorbedDone:       totalAbsorbed,
+				Hps:                hps,
+				AlivePercentage:    pgtype.Float8{Float64: playerSurvivability.AlivePercentage, Valid: true},
+				PlayerDeaths:       pgtype.Int4{Int32: playerSurvivability.Deaths, Valid: true},
+				LogHashedSlug:      dbinstance.HashedSlug.String,
+				KilledAt:           database.Timestamptz(enc.Combat.End),
 			})
 			if err != nil {
 				if database.IsRLSViolation(err) {

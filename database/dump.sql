@@ -971,7 +971,8 @@ CREATE TABLE encounter_dps_rankings (
     hps double precision DEFAULT 0 NOT NULL,
     player_sub_spec text DEFAULT ''::text NOT NULL,
     player_deaths integer,
-    alive_percentage double precision
+    alive_percentage double precision,
+    unranked_damage_done bigint DEFAULT 0 NOT NULL
 );
 
 ALTER TABLE ONLY encounter_dps_rankings FORCE ROW LEVEL SECURITY;

@@ -53,6 +53,7 @@ func Damage(from time.Time, idx int32, dmg *messages.Damage) *chronicleproto.Dam
 		Schools:    Schools(school),
 		Tailers:    slice.List(dmg.Trailer, TrailerEntry),
 		SpellData:  SpellData(dmg.SpellData),
+		Unranked:   dmg.Unranked,
 		Overkill:   dmg.Overkill,
 	}
 }

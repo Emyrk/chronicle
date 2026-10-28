@@ -156,7 +156,31 @@ function mergeOwnerTargetValues(
   }
 }
 
+function mergeExcludedResult(destination: DamageDoneResult, source: DamageDoneResult): void {
+  if (source.EncounterExcludedDamage) {
+    destination.EncounterExcludedDamage ??= new Map();
+    for (const [encounterID, units] of source.EncounterExcludedDamage) {
+      const merged = destination.EncounterExcludedDamage.get(encounterID) ?? new Map<string, DamageDoneData>();
+      mergeUnitDamage(merged, units);
+      destination.EncounterExcludedDamage.set(encounterID, merged);
+    }
+  }
+  if (source.ExcludedByAbility) {
+    destination.ExcludedByAbility ??= new Map();
+    mergeBreakoutMap(destination.ExcludedByAbility, source.ExcludedByAbility);
+  }
+  if (source.ExcludedByAbilityBySpellId) {
+    destination.ExcludedByAbilityBySpellId ??= new Map();
+    mergeBreakoutMap<number, SpellIdAbilityBreakout>(destination.ExcludedByAbilityBySpellId, source.ExcludedByAbilityBySpellId);
+  }
+  if (source.ExcludedByTarget) {
+    destination.ExcludedByTarget ??= new Map();
+    mergeOwnerTargetValues(destination.ExcludedByTarget, source.ExcludedByTarget);
+  }
+}
+
 function mergeDamageDoneResult(destination: DamageDoneResult, source: DamageDoneResult): void {
+  mergeExcludedResult(destination, source);
   for (const [encounterID, sourceDamage] of source.EncounterDamage) {
     const destinationDamage = destination.EncounterDamage.get(encounterID) ?? new Map<string, DamageDoneData>();
     mergeUnitDamage(destinationDamage, sourceDamage);
@@ -195,6 +219,11 @@ function mergeExcludedBreakouts(
     source.ByAbilityBySpellId,
   );
   mergeOwnerTargetValues(state.ExcludedByTarget, source.ByTarget);
+  if (source.ExcludedByAbility) mergeBreakoutMap(state.ExcludedByAbility, source.ExcludedByAbility);
+  if (source.ExcludedByAbilityBySpellId) {
+    mergeBreakoutMap<number, SpellIdAbilityBreakout>(state.ExcludedByAbilityBySpellId, source.ExcludedByAbilityBySpellId);
+  }
+  if (source.ExcludedByTarget) mergeOwnerTargetValues(state.ExcludedByTarget, source.ExcludedByTarget);
 }
 
 function phaseDamage(
@@ -224,6 +253,8 @@ function commitSlainTarget(
   for (const [phaseTargetID, result] of phase) {
     if (phaseTargetID === targetID) continue;
     mergeEncounterDamage(encounterExcluded, result, encounterID);
+    const splitExcluded = result.EncounterExcludedDamage?.get(encounterID);
+    if (splitExcluded) mergeUnitDamage(encounterExcluded, splitExcluded);
     mergeExcludedBreakouts(state, result);
   }
   if (encounterExcluded.size > 0) {
@@ -268,8 +299,16 @@ export const assemblyDamageDoneProcessor: PanelProcessor<
 
     const phase = phaseDamage(state, encounterID);
     const targetResult = phase.get(event.target) ?? createDamageDoneResult();
-    const rankedEvent = event.overkill > 0 ? { ...event, overkill: 0 } : event;
-    damageDoneProcessor.processEvent(targetResult, rankedEvent, encounterID, firstTimestamp, streamType, context);
+    // Phase inclusion is decided on slain; the serialized unranked amount is
+    // phase-wide, not a reason to exclude the hit before that decision.
+    damageDoneProcessor.processEvent(
+      targetResult,
+      { ...event, unranked: 0 },
+      encounterID,
+      firstTimestamp,
+      streamType,
+      context,
+    );
     phase.set(event.target, targetResult);
   },
   finalizeEncounter: (state, encounterID, context) => {

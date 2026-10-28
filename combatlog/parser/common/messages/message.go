@@ -367,9 +367,12 @@ type Damage struct {
 	Target    guid.GUID
 	HitType   types.HitType
 	Amount    int32
-	Overkill  int32
-	School    types.School
-	Trailer   types.Trailer
+	// Unranked is the effective portion excluded from DPS ranking. Overkill is
+	// separate and does not contribute to either ranked or unranked damage.
+	Unranked int64
+	Overkill int32
+	School   types.School
+	Trailer  types.Trailer
 	// EnvironmentType is only set when the hit type is environmental.
 	// It adds some context, but not strictly necessary.
 	EnvironmentType *types.EnvironmentType

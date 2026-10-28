@@ -50,6 +50,13 @@ func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 				Encounters: set.Encounters,
 			}
 		}
+		var damageByEncounter map[string]chroniclesdk.SupportedInstanceDamageRule
+		if len(d.DamageByEncounter) > 0 {
+			damageByEncounter = make(map[string]chroniclesdk.SupportedInstanceDamageRule, len(d.DamageByEncounter))
+			for name, rule := range d.DamageByEncounter {
+				damageByEncounter[name] = chroniclesdk.SupportedInstanceDamageRule{Mode: rule.Mode, EntryIDs: rule.EntryIDs}
+			}
+		}
 		result[i] = chroniclesdk.SupportedInstance{
 			Name:                         d.Name,
 			Comment:                      d.Comment,
@@ -60,6 +67,7 @@ func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 			BossCount:                    d.BossCount,
 			ProgressionBosses:            d.ProgressionBosses,
 			RankingEncounterSets:         rankingEncounterSets,
+			DamageByEncounter:            damageByEncounter,
 			RaidProgressionOrder:         d.RaidProgressionOrder,
 			DerivedRaidProgressionOrders: d.DerivedRaidProgressionOrders,
 			RankedStartAfterRequirement:  d.RankedStartAfterRequirement,

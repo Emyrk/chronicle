@@ -237,6 +237,36 @@ describe('damageDoneProcessor', () => {
 
     expect(state.EncounterDamage.size).toBe(0);
   });
+  it('separates per-event unranked and overkill without changing raw hit statistics', () => {
+    const state = processor.createState();
+    const bossID = '0xF130000CE0000001';
+    const addID = '0xF130000CE0000003';
+    const context = createContext({ panelOption: 'exclude-unranked' });
+
+    processor.processEvent(state, createDamageEvent({ target: bossID, amount: 1000 }), 'enc1', new Date(), 'damage', context);
+    processor.processEvent(state, createDamageEvent({ target: addID, amount: 250, overkill: 50, unranked: 200 }), 'enc1', new Date(), 'damage', context);
+
+    const playerID = '0x0000000000001234';
+    expect(state.EncounterDamage.get('enc1')?.get(playerID)?.target.get(bossID)).toBe(1000);
+    expect(state.EncounterDamage.get('enc1')?.get(playerID)?.target.has(addID)).toBe(false);
+    expect(state.EncounterExcludedDamage?.get('enc1')?.get(playerID)?.target.get(addID)).toBe(250);
+    expect(state.ByAbility.get(playerID)?.get('Mortal Strike')?.Total).toBe(1000);
+    expect(state.ByAbility.get(playerID)?.get('Mortal Strike')?.Count).toBe(2);
+    expect(state.ExcludedByAbility?.get(playerID)?.get('Mortal Strike')?.Total).toBe(250);
+    expect(state.ByTarget.get(playerID)?.get(bossID)).toBe(1000);
+    expect(state.ExcludedByTarget?.get(playerID)?.get(addID)).toBe(250);
+  });
+
+  it('keeps all effective damage included when unranked is absent', () => {
+    const state = processor.createState();
+    const context = createContext({ panelOption: 'exclude-unranked' });
+
+    processor.processEvent(state, createDamageEvent({ amount: 400 }), 'enc1', new Date(), 'damage', context);
+
+    expect(state.EncounterDamage.get('enc1')?.get('0x0000000000001234')?.target.values().next().value).toBe(400);
+    expect(state.EncounterExcludedDamage?.size ?? 0).toBe(0);
+  });
+
   it('skips aura tracking when no vulnerability is selected', () => {
     const state = processor.createState();
     const context = createContext();
