@@ -11,11 +11,23 @@ test("projects the GA4 dashboard into a compact device payload", () => {
   const source = createMockAnalyticsDashboard(30);
   const projected = projectDeviceAnalytics(source);
 
-  assert.equal(projected.schemaVersion, 1);
+  assert.equal(projected.schemaVersion, 2);
   assert.deepEqual(projected.overview, source.overview);
   assert.equal(projected.trend.length, source.timeseries.length);
   assert.deepEqual(projected.topHost, source.hosts[0]);
   assert.deepEqual(projected.topProduct, source.productFamilies[0]);
+  assert.equal(projected.servers.length, source.hosts.length);
+  assert.deepEqual(projected.servers[0], {
+    hostname: source.hosts[0].hostname,
+    pageViews: source.hosts[0].pageViews,
+    previousPageViews: source.hosts[0].previousPageViews,
+    changePercent: source.hosts[0].changePercent,
+    nonChinaPageViews: source.hosts[0].nonChinaPageViews,
+    previousNonChinaPageViews: source.hosts[0].previousNonChinaPageViews,
+    nonChinaChangePercent: source.hosts[0].nonChinaChangePercent,
+    chinaPageViews: source.hosts[0].chinaPageViews,
+    chinaShare: source.hosts[0].chinaShare,
+  });
   assert.equal("hosts" in projected, false);
   assert.equal("countries" in projected, false);
   assert.equal("leaderboards" in projected, false);

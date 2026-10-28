@@ -49,9 +49,9 @@ The compact GA4 endpoint for the reTerminal E1002 and other trusted displays is:
 /device/api/v1/analytics/dashboard?days=30
 ```
 
-It reuses the same validated GA4 query and normalized data as the desktop analytics view, but returns only the overview metrics, daily trend, top host, and top product family. Supported periods are 7, 30, and 90 completed days.
+It reuses the same validated GA4 query and normalized data as the desktop analytics view, but returns only the overview metrics, daily trend, top host, top product family, and the eight busiest Chronicle servers. Each server includes current and previous page views, total growth, non-China page views and growth, and China page views. Supported periods are 7, 30, and 90 completed days.
 
-Responses include a stable `contentHash` and matching `ETag`. The hash excludes `generatedAt`, so a device can send `If-None-Match` and skip an expensive ePaper refresh when the underlying analytics values have not changed. Successful responses are browser-private for five minutes.
+Responses use device schema version 2 and include a stable `contentHash` with a matching `ETag`. The hash excludes `generatedAt`, so a device can send `If-None-Match` and skip an expensive ePaper refresh when the underlying analytics values have not changed. Successful responses are browser-private for five minutes.
 
 ### Cloudflare Access authentication
 
