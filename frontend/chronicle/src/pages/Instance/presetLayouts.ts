@@ -1,9 +1,11 @@
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
 import type { EventsPanelType } from "./EventsPanels";
 import type { PanelFilter } from "./EventsPanels/processors/filters";
+import { readLayoutAppearance } from "@/features/layoutBook/parseLayout";
 import {
   DEFAULT_INSTANCE_LAYOUT_ITEMS,
   DEFAULT_INSTANCE_PANEL_TYPES,
+  DEFAULT_INSTANCE_PANEL_OPTIONS,
   DEFAULT_INSTANCE_PANEL_FILTERS,
   POSITION_SUMMARY_CAPABILITY,
   POSITION_SUMMARY_LAYOUT_ITEMS,
@@ -115,10 +117,42 @@ export function resizeWatchPresetForViewport(layoutItems: readonly GridEditorIte
   });
 }
 
-/** The visible grid for a preset on this viewport: the Map and Watch presets fit it, others are untouched. */
-export function resizePresetForViewport(presetId: string | null, layoutItems: GridEditorItem[], viewportHeight: number): GridEditorItem[] {
+// Focus mode's chrome above the grid (padding plus the preset row), and fit's minimum row height.
+const FOCUS_CHROME_PX = 72;
+const GRID_ROW_MIN_PX = 96;
+
+/** Watch's Director stage rows on this viewport: map 6 over a row of 3 when they fit, fewer rows (map still on top) when they don't. */
+export function watchDirectorRows(viewportHeight: number): { map: number; row: number } {
+  const panelRows = Math.floor((viewportHeight - FOCUS_CHROME_PX - GRID_ROW_MIN_PX) / GRID_ROW_MIN_PX);
+  if (panelRows >= 9) return { map: 6, row: 3 };
+  return { map: Math.max(2, panelRows - 2), row: 2 };
+}
+
+/**
+ * Watch in focus mode, the Director stage: the map full width, the replay strip
+ * under it, Party / Deaths / Damage as a row of three. Only the stable Watch
+ * items move, and they keep their ids so the panels stay mounted.
+ */
+export function arrangeWatchPresetForFocus(layoutItems: readonly GridEditorItem[], viewportHeight: number): GridEditorItem[] {
+  const rows = watchDirectorRows(viewportHeight);
+  const placed: Record<string, { x: number; y: number; w: number; h: number }> = {
+    "panel-1": { x: 0, y: 0, w: 12, h: rows.map },
+    "strip-1": { x: 0, y: rows.map, w: 12, h: 1 },
+    "panel-2": { x: 0, y: rows.map + 1, w: 4, h: rows.row },
+    "panel-3": { x: 4, y: rows.map + 1, w: 4, h: rows.row },
+    "panel-4": { x: 8, y: rows.map + 1, w: 4, h: rows.row },
+  };
+  return layoutItems.map((item) => {
+    const place = placed[item.id];
+    if (!place) return item;
+    return item.x === place.x && item.y === place.y && item.w === place.w && item.h === place.h ? item : { ...item, ...place };
+  });
+}
+
+/** The visible grid for a preset on this viewport: the Map and Watch presets fit it (Watch becomes the Director stage in focus mode), others are untouched. */
+export function resizePresetForViewport(presetId: string | null, layoutItems: GridEditorItem[], viewportHeight: number, focused = false): GridEditorItem[] {
   if (presetId === "map") return resizeMapPresetForViewport(layoutItems, viewportHeight);
-  if (presetId === "watch") return resizeWatchPresetForViewport(layoutItems, viewportHeight);
+  if (presetId === "watch") return focused ? arrangeWatchPresetForFocus(layoutItems, viewportHeight) : resizeWatchPresetForViewport(layoutItems, viewportHeight);
   return layoutItems;
 }
 
@@ -495,3 +529,40 @@ export function presetLayoutById(presetId: string, capabilities: readonly string
 }
 
 export const DEFAULT_PRESET_ID = "summary";
+
+/** The preset a log opens on before the viewer picks one: Watch when it has positions (desktop only), else Summary. */
+export function defaultPresetIdFor(capabilities: readonly string[], mobile = false): string {
+  return !mobile && capabilities.includes(POSITION_SUMMARY_CAPABILITY) ? "watch" : DEFAULT_PRESET_ID;
+}
+
+/**
+ * The built-in default layout for a log: the preset `requestedPresetId` names
+ * (a `?preset=` deep link) when the log offers it, else Watch for logs with
+ * positions (desktop only), else the Summary grid.
+ */
+export function defaultInstanceLayout(capabilities: readonly string[], mobile = false, requestedPresetId?: string | null) {
+  const requested = requestedPresetId && getAvailablePresetLayouts(capabilities, mobile).some((preset) => preset.id === requestedPresetId)
+    ? requestedPresetId
+    : null;
+  const presetId = requested ?? defaultPresetIdFor(capabilities, mobile);
+  // Unrequested Summary keeps the historical default grid and options.
+  const preset = requested || presetId !== DEFAULT_PRESET_ID ? presetLayoutById(presetId, capabilities, mobile) : undefined;
+  if (preset && isPanelPresetLayout(preset)) {
+    return {
+      presetId,
+      items: preset.layoutItems,
+      panelTypes: preset.panelTypes,
+      panelOptions: preset.panelOptions,
+      panelFilters: preset.panelFilters,
+      appearance: readLayoutAppearance(preset),
+    };
+  }
+  return {
+    presetId: DEFAULT_PRESET_ID,
+    items: DEFAULT_INSTANCE_LAYOUT_ITEMS,
+    panelTypes: DEFAULT_INSTANCE_PANEL_TYPES,
+    panelOptions: DEFAULT_INSTANCE_PANEL_OPTIONS,
+    panelFilters: DEFAULT_INSTANCE_PANEL_FILTERS,
+    appearance: {},
+  };
+}
