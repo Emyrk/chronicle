@@ -91,6 +91,7 @@ const MAX_EXTRAPOLATE_MS = 250;
 const BEAM_HEIGHT = 1.5;
 const BOLT_WIDTH = 0.18;
 const DEBUG_PATH_SEGMENT_YARDS = 4;
+const ALIGNMENT_OVERLAY_OPACITY = 0.48;
 const DEEP_BREATH_WIDTH_YARDS = 18;
 const DEEP_BREATH_GROUND_LIFT = 0.12;
 // How far a melee attacker steps toward its target, at most.
@@ -748,6 +749,8 @@ export class MapScene3D {
   private readonly pointer = new THREE.Vector2();
   private readonly geometries = createUnitGeometries();
   private readonly groundGroup = new THREE.Group();
+  private readonly alignmentOverlayGroup = new THREE.Group();
+  private alignmentOverlay = false;
   private readonly debugOverlayGroup = new THREE.Group();
   private debugOverlays: readonly MapDebugOverlay[] = [];
   private readonly unitsGroup = new THREE.Group();
@@ -1015,7 +1018,8 @@ export class MapScene3D {
     // Lifts the cave's albedo textures (roughness 1, no vertex colour) while the mesh is on.
     this.meshLight.visible = false;
     this.scene.add(this.meshLight);
-    this.scene.add(this.groundGroup, this.routeGroup, this.debugOverlayGroup, this.unitsGroup, this.planLayer.group);
+    this.alignmentOverlayGroup.visible = false;
+    this.scene.add(this.groundGroup, this.alignmentOverlayGroup, this.routeGroup, this.debugOverlayGroup, this.unitsGroup, this.planLayer.group);
 
     const beamGeometry = new THREE.BufferGeometry();
     beamGeometry.setAttribute("position", new THREE.BufferAttribute(this.beamPositions, 3).setUsage(THREE.DynamicDrawUsage));
@@ -1156,24 +1160,36 @@ export class MapScene3D {
       const croppedWidth = Math.min(width, 1 - left);
       const croppedHeight = Math.min(height, 1 - top);
       if (croppedWidth <= 0 || croppedHeight <= 0) return;
+      const geometry = new THREE.PlaneGeometry(croppedWidth * GROUND_WIDTH, croppedHeight * depth).rotateX(-Math.PI / 2);
       const material = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false });
-      const mesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(croppedWidth * GROUND_WIDTH, croppedHeight * depth).rotateX(-Math.PI / 2),
-        material,
-      );
-      mesh.position.set(
+      const mesh = new THREE.Mesh(geometry, material);
+      const alignmentMaterial = new THREE.MeshBasicMaterial({
+        transparent: true,
+        opacity: ALIGNMENT_OVERLAY_OPACITY,
+        depthTest: false,
+        depthWrite: false,
+      });
+      const alignmentMesh = new THREE.Mesh(geometry, alignmentMaterial);
+      const position = new THREE.Vector3(
         (left + croppedWidth / 2 - 0.5) * GROUND_WIDTH,
         y,
         (top + croppedHeight / 2 - 0.5) * depth,
       );
+      mesh.position.copy(position);
+      alignmentMesh.position.copy(position);
       // The ground draws first (base tiles, then overlays): sorted by distance
       // like the tokens, a tile nearer the camera would paint over their faces.
       mesh.renderOrder = y > 0 ? -1 : -2;
+      // Transparent objects render after the opaque dungeon mesh. Keep this
+      // before tokens, routes and effects so diagnostics do not obscure them.
+      alignmentMesh.renderOrder = y > 0 ? -1 : -2;
       // Hidden until textured so pending or failed tiles show the backdrop.
       mesh.visible = false;
+      alignmentMesh.visible = false;
       this.groundGroup.add(mesh);
+      this.alignmentOverlayGroup.add(alignmentMesh);
       this.textureLoader.load(mapAssetUrl(iconBaseUrl, path), (texture) => {
-        if (this.disposed || mesh.parent !== this.groundGroup) {
+        if (this.disposed || (mesh.parent !== this.groundGroup && alignmentMesh.parent !== this.alignmentOverlayGroup)) {
           texture.dispose();
           return;
         }
@@ -1182,7 +1198,10 @@ export class MapScene3D {
         texture.offset.set(0, 1 - croppedHeight / height);
         material.map = texture;
         material.needsUpdate = true;
+        alignmentMaterial.map = texture;
+        alignmentMaterial.needsUpdate = true;
         mesh.visible = true;
+        alignmentMesh.visible = true;
         this.requestRender();
       });
     };
@@ -1220,6 +1239,14 @@ export class MapScene3D {
       // The plan's world <-> scene transform uses the aspect.
       this.updatePlanSurface();
     }
+    this.requestRender();
+  }
+
+  /** Shows the active 2D artwork over the dungeon mesh for coordinate debugging. */
+  setAlignmentOverlay(enabled: boolean) {
+    if (enabled === this.alignmentOverlay) return;
+    this.alignmentOverlay = enabled;
+    this.alignmentOverlayGroup.visible = enabled && this.dungeonMesh !== null;
     this.requestRender();
   }
 
@@ -1762,6 +1789,7 @@ export class MapScene3D {
     this.updatePlanSurface();
     const mesh = this.dungeonMesh !== null;
     this.groundGroup.visible = !mesh;
+    this.alignmentOverlayGroup.visible = mesh && this.alignmentOverlay;
     this.routeGroup.visible = !mesh;
     this.meshLight.visible = mesh;
     this.floorHeights.clear();
@@ -3176,13 +3204,21 @@ export class MapScene3D {
   }
 
   private clearGround() {
-    for (const child of [...this.groundGroup.children]) {
-      const mesh = child as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-      mesh.geometry.dispose();
-      mesh.material.map?.dispose();
-      mesh.material.dispose();
-      this.groundGroup.remove(mesh);
+    const geometries = new Set<THREE.BufferGeometry>();
+    const materials = new Set<THREE.MeshBasicMaterial>();
+    const textures = new Set<THREE.Texture>();
+    for (const group of [this.groundGroup, this.alignmentOverlayGroup]) {
+      for (const child of [...group.children]) {
+        const mesh = child as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+        geometries.add(mesh.geometry);
+        materials.add(mesh.material);
+        if (mesh.material.map) textures.add(mesh.material.map);
+        group.remove(mesh);
+      }
     }
+    for (const geometry of geometries) geometry.dispose();
+    for (const material of materials) material.dispose();
+    for (const texture of textures) texture.dispose();
   }
 
   // The hovered unit's nameplate: name, health, power and cast, live.
