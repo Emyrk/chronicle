@@ -255,3 +255,15 @@ func (a *API) luaContributorTarget(w http.ResponseWriter, r *http.Request, id uu
 	}
 	return project, author, true
 }
+
+// publicLuaProjectRoutes serves addons to everyone, signed in or not. They still need the signed-in user,
+// if any, so owners and contributors get their own view and permissions: optional authentication attaches
+// the SpiceDB actor without requiring a session.
+func (a *API) publicLuaProjectRoutes(r chi.Router) {
+	r.Use(a.Auth.Authenticated(true))
+	r.Get("/lua-projects", a.ListPublicLuaProjects)
+	r.Get("/lua-projects/{projectID}", a.GetPublicLuaProject)
+	r.Get("/lua-projects/{projectID}/page", a.GetLuaProjectPage)
+	r.Get("/addons/{author}/{slug}", a.GetLuaProjectPageByPath)
+	r.Get("/lua-projects/{projectID}/artifacts/{hash}/package", a.DownloadLuaProject)
+}

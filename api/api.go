@@ -384,11 +384,7 @@ func (api *API) Routes() chi.Router {
 					r.Mount("/inference", api.Opts.Inference.Routes())
 				})
 			}
-			r.Get("/lua-projects", api.ListPublicLuaProjects)
-			r.Get("/lua-projects/{projectID}", api.GetPublicLuaProject)
-			r.Get("/lua-projects/{projectID}/page", api.GetLuaProjectPage)
-			r.Get("/addons/{author}/{slug}", api.GetLuaProjectPageByPath)
-			r.Get("/lua-projects/{projectID}/artifacts/{hash}/package", api.DownloadLuaProject)
+			r.Group(api.publicLuaProjectRoutes)
 			r.Mount("/custom-panels", api.CustomPanels.Routes())
 			r.Mount("/panel-layout", panellayoutapi.New(api.Opts.Zed, api.Auth).Routes())
 			r.Mount("/gear-builder", gearbuilderapi.New(api.Opts.Zed, api.Auth, api.Opts.CacheSvc).Routes())
