@@ -23,7 +23,7 @@ export function LuaProjectsPage() {
       <div>
         <p className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">Creator workspace / Addons</p>
         <h1 className="text-3xl font-semibold tracking-tight">Addons</h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Panels and guides for Chronicle, written in Lua by the community. Add a released addon to your raid panels, or build your own in the Addon Workshop.</p>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Raid panels for Chronicle, written in Lua by the community. Add a released addon to your raid panels, or build your own in the Addon Workshop.</p>
       </div>
       {author && <Link to={authorPath(author)} className={button}><FolderOpen className="size-4" /> My addons</Link>}
     </header>

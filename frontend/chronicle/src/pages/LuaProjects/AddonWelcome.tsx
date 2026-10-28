@@ -23,7 +23,7 @@ export function AddonWelcome({ step, author, children }: { step: number; author?
   return <section aria-label="Get started" className={`${card} grid gap-8 p-6 md:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] md:p-8`}>
     <div>
       <h2 className="text-xl font-semibold tracking-tight">{step === 0 ? "Welcome! Make your first addon" : "Nice! Now make your first addon"}</h2>
-      <p className="mt-2 text-sm text-muted-foreground">Addons are your own panels and guides for Chronicle, written in Lua. Getting started takes three steps.</p>
+      <p className="mt-2 text-sm text-muted-foreground">Addons are your own panels for Chronicle's raid view, written in Lua. Getting started takes three steps.</p>
       <ol className="mt-6">
         {STEPS.map((item, index) => {
           const done = index < step, current = index === step
