@@ -70,6 +70,12 @@ type InferenceService interface {
 	AccountRoutes() http.Handler
 }
 
+const openRouterCallbackPath = "/api/v1/inference/openrouter/callback"
+
+func browserOnlyMiddleware(accessURL *url.URL) func(http.Handler) http.Handler {
+	return httpmw.BrowserOnly(accessURL, discordInstallCallbackPath, openRouterCallbackPath)
+}
+
 type Options struct {
 	Logger                *slog.Logger
 	Storage               storage.ObjectStorage
@@ -297,7 +303,7 @@ func (api *API) Routes() chi.Router {
 		}
 
 		r.Group(func(r chi.Router) {
-			r.Use(httpmw.BrowserOnly(api.Opts.AccessURL, discordInstallCallbackPath))
+			r.Use(browserOnlyMiddleware(api.Opts.AccessURL))
 			if api.Opts.OAuth != nil {
 				r.Use(api.Opts.OAuth.AuthenticationMiddleware)
 			}
