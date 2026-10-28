@@ -1,14 +1,66 @@
 #!/usr/bin/env bash
 # Shared runner — sourced by per-site scripts.
 # Expects TARGETS and/or WOWDATA_TARGETS arrays to be set by the caller.
-# Extra CLI flags ($@) are forwarded to each import run.
+# Extra CLI flags ($@) are forwarded to each import run. Use --select=<name>
+# to run only entries whose first field exactly matches that target name.
 #
 # TARGETS format: server|api-url|dataset-id
 # WOWDATA_TARGETS format: label|client-path|api-url|dataset-id|product|build|source
 #
-# Shows all targets upfront, asks once, then runs them all.
+# Shows the selected targets upfront, asks once, then runs them all.
 
 set -euo pipefail
+
+selected_target=""
+forward_args=()
+for arg in "$@"; do
+  case "$arg" in
+    --select=*)
+      selected_target="${arg#--select=}"
+      if [[ -z "$selected_target" ]]; then
+        echo "--select requires a target name." >&2
+        exit 1
+      fi
+      ;;
+    *)
+      forward_args+=("$arg")
+      ;;
+  esac
+done
+set -- "${forward_args[@]}"
+
+if [[ -n "$selected_target" ]]; then
+  matched=0
+
+  if declare -p TARGETS >/dev/null 2>&1; then
+    selected_targets=()
+    for entry in "${TARGETS[@]}"; do
+      target_name="${entry%%|*}"
+      if [[ "$target_name" == "$selected_target" ]]; then
+        selected_targets+=("$entry")
+        matched=1
+      fi
+    done
+    TARGETS=("${selected_targets[@]}")
+  fi
+
+  if declare -p WOWDATA_TARGETS >/dev/null 2>&1; then
+    selected_wowdata_targets=()
+    for entry in "${WOWDATA_TARGETS[@]}"; do
+      target_name="${entry%%|*}"
+      if [[ "$target_name" == "$selected_target" ]]; then
+        selected_wowdata_targets+=("$entry")
+        matched=1
+      fi
+    done
+    WOWDATA_TARGETS=("${selected_wowdata_targets[@]}")
+  fi
+
+  if ((matched == 0)); then
+    echo "No target named '${selected_target}'." >&2
+    exit 1
+  fi
+fi
 
 legacy_count=0
 wowdata_count=0
