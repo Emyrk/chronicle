@@ -1,9 +1,9 @@
 /* eslint-disable react-refresh/only-export-components -- Panel factory and colocated view components intentionally share this module. */
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, Crosshair, Focus, Footprints, Gamepad2, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Maximize2, Pause, Play, Route, Settings2, Skull, Timer, X } from "lucide-react";
+import { AlertTriangle, AppWindow, Crosshair, Expand, Focus, Footprints, Gamepad2, HeartPulse, Loader2, PenLine, Map as MapIcon, Maximize, Maximize2, Minimize2, Pause, Play, Route, Settings2, Shrink, Skull, Timer, X } from "lucide-react";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { parseLivePresenceSurface } from "../../liveSessionProtocol";
@@ -13,6 +13,10 @@ import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { ReplayToggleFlash } from "../../ReplayToggleFlash";
 import { useReplayStepKeys } from "../../replayStepKey";
 import { ReplayPlayTooltip } from "../../ReplayPlayTooltip";
+import { ReplayTransportBar, usePlayerDeathTimes } from "../../ReplayControlOverlay";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
+import { PortalContainerProvider, usePortalContainer } from "@/components/ui/PortalContainerContext";
+import type { Encounter } from "../../InstancePage";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { fetchMiniatureUrls } from "./bossMinis";
 import { dungeonMeshBytes, dungeonMeshLiquid, dungeonMeshUrl } from "./dungeonMeshes";
@@ -206,6 +210,97 @@ function MiniScrubber({ fraction, onSeek, raised = false }: { fraction: number; 
   );
 }
 
+/** A key drawn as a keycap. */
+function Keycap({ children }: { children: ReactNode }) {
+  return (
+    <kbd className="inline-grid h-5 min-w-5 place-items-center rounded border border-white/25 border-b-2 border-b-white/40 bg-gradient-to-b from-white/20 to-white/5 px-1 font-mono text-[10px] font-semibold leading-none text-white shadow-[0_1px_0_rgba(0,0,0,.6)]">
+      {children}
+    </kbd>
+  );
+}
+
+const WINDOW_FULLSCREEN_KEYS = ["Ctrl", "Shift", "F"];
+const BROWSER_FULLSCREEN_KEYS = ["Ctrl", "Alt", "F"];
+
+/** A map button's hover hint: what it does, then its key combinations (alternatives split by "or"). */
+function KeybindTooltip({ label, keys, children }: { label: string; keys: string[][]; children: ReactElement }) {
+  return (
+    <HintTooltip delayDuration={200}>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="left" className="flex items-center gap-1.5">
+        {label}
+        {keys.map((combo, index) => (
+          <span key={combo.join("+")} className="flex items-center gap-0.5">
+            {index > 0 && <span className="mr-1 text-zinc-400">or</span>}
+            {combo.map((key) => <Keycap key={key}>{key}</Keycap>)}
+          </span>
+        ))}
+      </TooltipContent>
+    </HintTooltip>
+  );
+}
+
+/** One walk-mode control: its keycaps, then what they do. */
+function WalkHint({ keys, children }: { keys: string[]; children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap">
+      {keys.map((key) => <Keycap key={key}>{key}</Keycap>)}
+      <span>{children}</span>
+    </span>
+  );
+}
+
+/** Fullscreen's Replay controls; its own component so death times load only while fullscreen. */
+function FullscreenReplayBar() {
+  const deaths = usePlayerDeathTimes();
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-3 z-40 flex justify-center px-4">
+      <ReplayTransportBar
+        deaths={deaths}
+        className="pointer-events-auto h-auto w-full max-w-4xl rounded-md border border-white/15 bg-black/70 shadow-[0_8px_32px_rgba(0,0,0,.6)] backdrop-blur-sm"
+      />
+    </div>
+  );
+}
+
+/** Fullscreen, middle left: the run's boss encounters, one click to replay another. */
+function FullscreenEncounterPicker({ encounters, selectedIds, onSelect }: {
+  encounters: Encounter[];
+  selectedIds: string[];
+  onSelect: (encounterIds: string[]) => void;
+}) {
+  const bosses = encounters.filter((encounter) => encounter.boss);
+  if (bosses.length === 0) return null;
+  return (
+    <nav
+      aria-label="Encounters"
+      className="styled-scrollbar absolute left-2 top-1/2 z-40 flex max-h-[60%] w-44 -translate-y-1/2 flex-col gap-0.5 overflow-y-auto rounded-sm border border-black/80 bg-black/75 p-1 shadow-[0_4px_16px_rgba(0,0,0,.5)]"
+    >
+      {bosses.map((encounter) => {
+        const selected = selectedIds.length === 1 && selectedIds[0] === encounter.id;
+        const failed = encounter.kill_type === "wipe" || encounter.kill_type === "reset";
+        return (
+          <button
+            key={encounter.id}
+            type="button"
+            onClick={() => onSelect([encounter.id])}
+            aria-pressed={selected}
+            title={failed ? `${encounter.name} (${encounter.kill_type})` : encounter.name}
+            className={cn(
+              "truncate rounded-sm px-2 py-1 text-left text-[11px]",
+              selected ? "bg-primary/80 text-primary-foreground" : "text-white/75 hover:bg-white/10 hover:text-white",
+              failed && !selected && "text-white/40",
+            )}
+          >
+            {encounter.name}
+            {failed && <span className="ml-1 text-[9px] uppercase">{encounter.kill_type}</span>}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
 interface ReplayMapProps extends PanelRenderProps<MapResult> {
   /** Replay the whole run instead of the one selected encounter. */
   wholeRun?: boolean;
@@ -229,7 +324,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   });
   // Walk mode ("join the fight"): your own character on the dungeon mesh.
   const [walkWanted, setWalking] = useState(false);
-  const mobileWorldRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const [mobileWorldOpen, setMobileWorldOpen] = useState(false);
   const [mobileInput, setMobileInput] = useState<MobileMapInput>(IDLE_MOBILE_MAP_INPUT);
   const closeMobileWorld = useCallback(() => {
@@ -242,7 +337,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   }, []);
   const openMobileWorld = useCallback(() => {
     setMobileWorldOpen(true);
-    const target = mobileWorldRef.current;
+    const target = rootRef.current;
     const request = target?.requestFullscreen?.();
     if (!request) return;
     void request.then(() => {
@@ -267,6 +362,47 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
     };
   }, [mobileWorldOpen]);
+  // Desktop fullscreen: the whole map (frames, settings, meters) fills the screen.
+  // The map's own element while it is the browser's fullscreen element: popovers
+  // portal into it then, since the browser shows nothing outside it.
+  const [fullscreenElement, setFullscreenElement] = useState<HTMLElement | null>(null);
+  const fullscreen = fullscreenElement !== null;
+  const inheritedPortalContainer = usePortalContainer();
+  useEffect(() => {
+    const handleFullscreenChange = () => setFullscreenElement(
+      document.fullscreenElement !== null && document.fullscreenElement === rootRef.current ? rootRef.current : null,
+    );
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+  // Window fullscreen: the map covers the browser window (the browser's own bar stays).
+  const [windowed, setWindowed] = useState(false);
+  const immersive = fullscreen || windowed;
+  const toggleFullscreen = useCallback(() => {
+    setWindowed(false);
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    else void rootRef.current?.requestFullscreen?.({ navigationUI: "hide" }).catch(() => undefined);
+  }, []);
+  const toggleWindowed = useCallback(() => {
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    setWindowed((current) => !current);
+  }, []);
+  useEffect(() => {
+    if (!windowed) return;
+    // The page scrolls on <html>: hide its scrollbar too, so the map gets the whole window.
+    const root = document.documentElement;
+    const previousRootOverflow = root.style.overflow;
+    const previousGutter = root.style.scrollbarGutter;
+    const previousOverflow = document.body.style.overflow;
+    root.style.overflow = "hidden";
+    root.style.scrollbarGutter = "auto";
+    document.body.style.overflow = "hidden";
+    return () => {
+      root.style.overflow = previousRootOverflow;
+      root.style.scrollbarGutter = previousGutter;
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [windowed]);
   const miniatureQuery = useQuery({
     queryKey: ["unit-miniatures"],
     staleTime: 60 * 60 * 1000,
@@ -473,6 +609,30 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     setFraming((current) => manualMapFraming(current, viewport));
   }, []);
 
+  // With the pointer over the map (or already immersive): Ctrl/Cmd+Shift+F fills
+  // the window, Ctrl/Cmd+Alt+F goes fullscreen; Esc leaves window fullscreen. On
+  // document, so they run before the page's own Ctrl+Shift+F and Esc (focus
+  // mode) on window; walk mode handles its Esc first.
+  useEffect(() => {
+    if (mini || mobile) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (event.key === "Escape" && windowed && !walkWanted && !planOpen && !settingsOpen) {
+        event.preventDefault();
+        setWindowed(false);
+        return;
+      }
+      if (event.code !== "KeyF" || !(event.ctrlKey || event.metaKey) || event.shiftKey === event.altKey) return;
+      const root = rootRef.current;
+      if (!root || (!immersive && !root.matches(":hover"))) return;
+      event.preventDefault();
+      if (event.shiftKey) toggleWindowed();
+      else toggleFullscreen();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [immersive, mini, mobile, planOpen, settingsOpen, toggleFullscreen, toggleWindowed, walkWanted, windowed]);
+
   if (!ready) return scene.status === "message" ? (
     <MapMessage title={scene.title} detail={scene.detail}>
       {scene.floors && scene.setFloorNumber && (
@@ -603,17 +763,20 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   );
 
   return (
+    <PortalContainerProvider container={fullscreenElement ?? inheritedPortalContainer}>
     <div
-      ref={mobileWorldRef}
+      ref={rootRef}
+      data-window-fullscreen={mobileWorldOpen || windowed ? "" : undefined}
       className={cn(
         "flex h-full min-h-0 flex-col bg-black",
-        !mini && !mobile && "p-1",
+        !mini && !mobile && !immersive && "p-1",
         mobileWorldOpen && "fixed inset-0 z-[100] h-[100dvh] w-screen",
+        windowed && "fixed inset-0 z-[100] h-auto",
       )}
     >
       {!mobile && (props.headerSlot ? createPortal(headerControls, props.headerSlot) : <div className="flex justify-end px-1">{headerControls}</div>)}
       {/* The card has no padding (hoverHeader): the full map keeps a thin window frame a hair inside it, the mini map runs to the edges. */}
-      <div className={cn("relative min-h-0 flex-1 overflow-hidden bg-black/70", !mini && !mobile && "rounded-sm border border-white/15")}>
+      <div className={cn("group/map relative min-h-0 flex-1 overflow-hidden bg-black/70", !mini && !mobile && !immersive && "rounded-sm border border-white/15")}>
         {mobile && !mobileWorldOpen ? (
           <>
             <div className="pointer-events-none absolute inset-0">{view2D}</div>
@@ -853,9 +1016,40 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
           {planOpen && canWalk && (
             <PlanControls editor={planEditor} roster={planRoster} onClose={closePlan} />
           )}
-          {walking && (
-            <div className="pointer-events-none absolute bottom-2 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-sm bg-black/75 px-2 py-1 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]">
-              <span className="font-semibold text-amber-300">Walking</span> · W/S move · {adStrafe ? "A/D strafe" : "A/D turn (strafe while right-dragging)"} · Q/E rewind/fast forward · Space jump (hold to fly) · Z down · drag to look · wheel zoom · G or Esc to leave
+          {(walking || show3D) && (
+            <div className={cn(
+              "pointer-events-none absolute left-1/2 z-30 flex w-max max-w-[calc(100%-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-sm bg-black/75 px-2.5 py-1.5 text-[11px] text-white/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]",
+              // Above the fullscreen Replay bar.
+              immersive ? "bottom-24" : "bottom-2",
+              // The camera keys work with the pointer over the map: their hint shows then.
+              !walking && "opacity-0 transition-opacity group-hover/map:opacity-100",
+            )}>
+              {walking ? (
+                <>
+                  <span className="font-semibold text-amber-300">Walking</span>
+                  <WalkHint keys={["W", "S"]}>move</WalkHint>
+                  <WalkHint keys={["A", "D"]}>{adStrafe ? "strafe" : "turn (strafe while right-dragging)"}</WalkHint>
+                  <WalkHint keys={["Q", "E"]}>rewind / fast forward</WalkHint>
+                  <WalkHint keys={["X"]}>play / pause replay</WalkHint>
+                  <WalkHint keys={["Space"]}>jump (hold to fly)</WalkHint>
+                  <WalkHint keys={["Z"]}>down</WalkHint>
+                  <span>drag to look · wheel zoom</span>
+                  <WalkHint keys={["G", "Esc"]}>leave</WalkHint>
+                </>
+              ) : (
+                <>
+                  <WalkHint keys={["W", "S"]}>move</WalkHint>
+                  <WalkHint keys={["A", "D"]}>turn</WalkHint>
+                  <WalkHint keys={["Space", "Z"]}>zoom out / in</WalkHint>
+                  <WalkHint keys={["Q", "E"]}>rewind / fast forward</WalkHint>
+                  <WalkHint keys={["X"]}>play / pause replay</WalkHint>
+                  <WalkHint keys={["G"]}>walk</WalkHint>
+                  {windowed
+                    ? <WalkHint keys={["Esc"]}>exit window fullscreen</WalkHint>
+                    : !fullscreen && <WalkHint keys={WINDOW_FULLSCREEN_KEYS}>fill window</WalkHint>}
+                  {!windowed && !fullscreen && <WalkHint keys={BROWSER_FULLSCREEN_KEYS}>fullscreen</WalkHint>}
+                </>
+              )}
             </div>
           )}
           {settingsOpen && (
@@ -886,8 +1080,56 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
             followGuid={followGuid}
             onFollow={onMesh ? followUnit : undefined}
           />
+          {/* Below Settings, Walk and Plan (the last two only with the 3D view): fill the window, then true fullscreen. */}
+          <KeybindTooltip
+            label={windowed ? "Exit window fullscreen" : "Fill the browser window"}
+            keys={windowed ? [WINDOW_FULLSCREEN_KEYS, ["Esc"]] : [WINDOW_FULLSCREEN_KEYS]}
+          >
+            <button
+              type="button"
+              onClick={toggleWindowed}
+              aria-pressed={windowed}
+              aria-label={windowed ? "Exit window fullscreen" : "Fill the browser window"}
+              className={cn(
+                "absolute right-2 z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]",
+                windowed ? "bg-amber-400/90 text-black hover:bg-amber-300" : "bg-black/75 text-white/70 hover:bg-black/90 hover:text-white",
+                show3D ? "top-[6.5rem]" : "top-10",
+              )}
+            >
+              {windowed ? <Minimize2 className="h-4 w-4" /> : <AppWindow className="h-4 w-4" />}
+            </button>
+          </KeybindTooltip>
+          {typeof document !== "undefined" && document.fullscreenEnabled && (
+            <KeybindTooltip
+              label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+              keys={fullscreen ? [BROWSER_FULLSCREEN_KEYS, ["Esc"]] : [BROWSER_FULLSCREEN_KEYS]}
+            >
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                aria-pressed={fullscreen}
+                aria-label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+                className={cn(
+                  "absolute right-2 z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 shadow-[0_4px_16px_rgba(0,0,0,.5)]",
+                  fullscreen ? "bg-amber-400/90 text-black hover:bg-amber-300" : "bg-black/75 text-white/70 hover:bg-black/90 hover:text-white",
+                  show3D ? "top-[8.5rem]" : "top-[4.5rem]",
+                )}
+              >
+                {fullscreen ? <Shrink className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
+              </button>
+            </KeybindTooltip>
+          )}
+          {immersive && props.context.onSelectEncounters && (
+            <FullscreenEncounterPicker
+              encounters={props.context.instance.encounters}
+              selectedIds={props.context.selectedEncounterIds}
+              onSelect={props.context.onSelectEncounters}
+            />
+          )}
           <InspectCards guids={pinned} onRemove={unpin} raidFrames={raidFrames} auras={auras} />
           <MeterWindows windows={meterWindows} onChange={setMeterWindows} context={props.context} durationMs={props.durationMs} />
+          {/* Fullscreen hides the page's Replay controls: the same transport bar over the map. */}
+          {immersive && <FullscreenReplayBar />}
         </>)}
       </div>
       {!mini && !mobile && jumps.length > 0 && ready.runStartMs !== null && (
@@ -926,6 +1168,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
         <p className="px-3 py-1 text-[9px] text-amber-300/80">No compatible world-coordinate mapping is available for this floor, so unit markers are hidden.</p>
       )}
     </div>
+    </PortalContainerProvider>
   );
 }
 

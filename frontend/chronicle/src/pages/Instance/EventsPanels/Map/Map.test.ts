@@ -25,7 +25,7 @@ describe("map presentation", () => {
   it("exposes fixed camera shortcuts without a settings card", () => {
     const panel = createMapPanel();
     expect(panel.keybinds).not.toBe("dynamic");
-    expect(panel.keybinds).toHaveLength(11);
+    expect(panel.keybinds).toHaveLength(13);
     expect(panel.renderCardBack).toBeUndefined();
   });
 
