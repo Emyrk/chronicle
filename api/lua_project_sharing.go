@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"regexp"
 	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -31,6 +33,14 @@ var reservedAddonAuthorNames = map[string]bool{
 func validAddonAuthorName(name string) bool {
 	return len(name) >= 2 && len(name) <= 32 && addonAuthorName.MatchString(name) && !reservedAddonAuthorNames[name]
 }
+
+// suggestAddonAuthorName turns a username into an author name: lowercase letters, digits and single hyphens.
+func suggestAddonAuthorName(username string) string {
+	name := strings.Trim(nonAddonAuthorChars.ReplaceAllString(strings.ToLower(username), "-"), "-")
+	return strings.TrimRight(name[:min(len(name), 32)], "-")
+}
+
+var nonAddonAuthorChars = regexp.MustCompile(`[^a-z0-9]+`)
 
 // luaProjectAuthors maps each project owner to their author name, when they have one.
 func (a *API) luaProjectAuthors(ctx context.Context, projects ...database.LuaProject) (map[uuid.UUID]string, error) {
@@ -65,6 +75,38 @@ func (a *API) GetMyAddonAuthor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.AddonAuthor{Name: author.Name})
+}
+
+// SuggestAddonAuthor offers the caller's username as an author name, numbered when it is taken.
+// The name is empty when no free variant was found; the caller then picks one.
+func (a *API) SuggestAddonAuthor(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, err := a.Opts.Zed.GetUserByID(ctx, chronauth.MustAuthenticatedClaims(ctx).Subject)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	base := suggestAddonAuthorName(user.Username)
+	for i := 1; i <= 9 && base != ""; i++ {
+		name := base
+		if i > 1 {
+			suffix := "-" + strconv.Itoa(i)
+			name = strings.TrimRight(base[:min(len(base), 32-len(suffix))], "-") + suffix
+		}
+		if !validAddonAuthorName(name) {
+			continue
+		}
+		_, err := a.Opts.Zed.GetAddonAuthorByName(ctx, name)
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.AddonAuthor{Name: name})
+			return
+		}
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+	}
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.AddonAuthor{})
 }
 
 // ClaimAddonAuthor sets the caller's author name once; addon URLs depend on it staying put.

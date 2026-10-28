@@ -344,6 +344,7 @@ func (api *API) Routes() chi.Router {
 				r.Get("/me/lua-projects", api.ListMyLuaProjects)
 				r.Get("/me/addon-author", api.GetMyAddonAuthor)
 				r.Put("/me/addon-author", api.ClaimAddonAuthor)
+				r.Get("/me/addon-author/suggestion", api.SuggestAddonAuthor)
 				r.Get("/me/lua-projects/{projectID}/contributors", api.ListLuaProjectContributors)
 				r.Put("/me/lua-projects/{projectID}/contributors/{author}", api.PutLuaProjectContributor)
 				r.Delete("/me/lua-projects/{projectID}/contributors/{author}", api.DeleteLuaProjectContributor)

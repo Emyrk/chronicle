@@ -124,6 +124,11 @@ export async function getMyAuthor(): Promise<string | null> {
   catch (error) { if (error instanceof LuaProjectError && error.status === 404) return null; throw error }
 }
 
+/** The caller's username as a free author name, or "" when none fits. */
+export async function suggestAuthor(): Promise<string> {
+  return (await request<AddonAuthor>("/api/v1/me/addon-author/suggestion")).name
+}
+
 export async function claimAuthor(name: string): Promise<string> {
   return (await request<AddonAuthor>("/api/v1/me/addon-author", {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),

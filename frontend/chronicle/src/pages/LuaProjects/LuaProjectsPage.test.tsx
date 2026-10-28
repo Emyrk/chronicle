@@ -24,11 +24,12 @@ describe("addon creation permission", () => {
     expect(useAuthorizationCheck).toHaveBeenCalledWith({ createLuaProject: "chronicle:chronicle#create_lua_project" }, { enabled: true })
   })
 
-  it("asks anonymous visitors to sign in without checking a permission", () => {
+  it("welcomes anonymous visitors and asks them to sign in without checking a permission", () => {
     vi.mocked(useSession).mockReturnValue({ data: null, isLoading: false } as ReturnType<typeof useSession>)
     vi.mocked(useAuthorizationCheck).mockReturnValue({ isPending: true } as unknown as ReturnType<typeof useAuthorizationCheck>)
     const html = renderPage()
-    expect(html).toContain("Sign in to create addons.")
+    expect(html).toContain("Make your first addon")
+    expect(html).toContain("Sign in to get started.")
     expect(html).not.toContain("New addon</h2>")
     expect(useAuthorizationCheck).toHaveBeenCalledWith({ createLuaProject: "chronicle:chronicle#create_lua_project" }, { enabled: false })
   })
