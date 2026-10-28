@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest"
-import { performanceAdsSuppressed } from "./performanceAds"
+import { performanceAdsSuppressed, shouldShowPerformanceSearchAd } from "./performanceAds"
+
+describe("shouldShowPerformanceSearchAd", () => {
+  it("shows the ad until enough search text is entered", () => {
+    expect(shouldShowPerformanceSearchAd("")).toBe(true)
+    expect(shouldShowPerformanceSearchAd(" a ")).toBe(true)
+    expect(shouldShowPerformanceSearchAd("ab")).toBe(false)
+  })
+})
 
 describe("performanceAdsSuppressed", () => {
   it("suppresses comparison ads when any selected player is ad-free", () => {

@@ -4,12 +4,13 @@ import { Navigate, useParams, useSearchParams } from "react-router-dom";
 import { useArmoryPlayers, useArmorySearch } from "@/api/queries";
 import type { ArmoryPlayer } from "@/api/typesGenerated";
 import { AdRailStack } from "@/components/Ads/AdRailStack";
+import { AdSlot } from "@/components/Ads/AdSlot";
 import { AdSuppressionProvider } from "@/components/Ads/AdSuppressionProvider";
 import { Card } from "@/components/ui/Card/Card";
 import { Input } from "@/components/ui/input";
 import { DatasetProvider } from "@/hooks/useDatasetId";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { performanceAdsSuppressed } from "./performanceAds";
+import { performanceAdsSuppressed, shouldShowPerformanceSearchAd } from "./performanceAds";
 import { getClassColorVar } from "./types";
 import {
   DEFAULT_PERFORMANCE_COMPARISON_STATE,
@@ -126,6 +127,13 @@ function PerformanceComparisonLanding({ onSelect }: { onSelect: (realmName: stri
             )}
           </div>
         </Card>
+        {shouldShowPerformanceSearchAd(debouncedQuery) && (
+          <AdSlot
+            placement="performance-search-empty"
+            format="adaptive"
+            className="mx-auto mt-8 max-w-[970px]"
+          />
+        )}
       </main>
       <AdRailStack
         primaryPlacement="performance-right-rail"

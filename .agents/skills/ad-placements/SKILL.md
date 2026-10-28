@@ -126,6 +126,7 @@ Add a new format only when neither existing format can represent the required di
 | `armory-search-left-rail`, `armory-search-left-rail-lower` | `pages/ArmorySearch/ArmorySearchPage.tsx` | Armory character and guild search; joins the right rail at `2xl`, widening at 1840px; lower also requires at least 1360px viewport height |
 | `armory-search-right-rail`, `armory-search-right-rail-lower` | `pages/ArmorySearch/ArmorySearchPage.tsx` | Armory character and guild search; single rail from `xl`, paired at `2xl`, widening at 1840px; lower also requires at least 1360px viewport height |
 | `performance-right-rail`, `performance-right-rail-lower` | `pages/ArmoryPage/AnalysisPage.tsx` | Player analysis landing and comparison workspace; upper visible at `2xl`, lower also requires at least 1360px viewport height; suppressed when any selected player is ad-free |
+| `performance-search-empty` | `pages/ArmoryPage/AnalysisPage.tsx` | Centered adaptive placement below the player search before two search characters are entered; 300×100 on mobile and responsive sizes through 970×250 from `lg` |
 | `armory-search-empty` | `pages/ArmorySearch/ArmorySearchPage.tsx` | Centered adaptive placement on the Characters tab before a valid search value is entered; 300×100 on mobile and responsive sizes through 970×250 from `lg` |
 
 ## Enablement model
