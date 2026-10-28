@@ -118,31 +118,52 @@
   var destinations = data.destinations || [];
   var app = document.getElementById("app");
 
-  var here = new URL(window.location.href);
+  // Storybook renders this page with data.preview to fake the URL, the saved
+  // choice and navigation. The server never sends it.
+  var preview = data.preview || null;
+  var previewSaved = preview && preview.saved ? JSON.stringify({ key: preview.saved }) : null;
+
+  var here = new URL(preview ? preview.url : window.location.href);
   var manage = here.searchParams.has(MANAGE_PARAM);
   var forget = here.searchParams.has(FORGET_PARAM);
   here.searchParams.delete(MANAGE_PARAM);
   here.searchParams.delete(FORGET_PARAM);
   var forwardPath = here.pathname + here.search + here.hash;
-  if (manage || forget) {
+  if ((manage || forget) && !preview) {
     history.replaceState(null, "", forwardPath);
   }
 
   function loadChoice() {
     try {
-      var v = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+      var v = JSON.parse((preview ? previewSaved : localStorage.getItem(STORAGE_KEY)) || "null");
       return v && typeof v.key === "string" ? v : null;
     } catch (e) {
       return null;
     }
   }
   function saveChoice(key) {
+    var v = JSON.stringify({ key: key, saved_at: new Date().toISOString() });
+    if (preview) { previewSaved = v; return; }
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ key: key, saved_at: new Date().toISOString() }));
+      localStorage.setItem(STORAGE_KEY, v);
     } catch (e) { /* storage unavailable: the choice just isn't remembered */ }
   }
   function clearChoice() {
+    if (preview) { previewSaved = null; return; }
     try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+  }
+  function navigate(url, replace) {
+    if (preview) {
+      app.replaceChildren(
+        el("div", { "class": "notice", role: "status", text: "Preview: would open " + url }),
+        el("div", { "class": "actions" }, [
+          el("button", { "class": "btn", type: "button", text: "Back to picker", onclick: function () { renderPicker(""); } }),
+        ])
+      );
+      return;
+    }
+    if (replace) window.location.replace(url);
+    else window.location.assign(url);
   }
   function findDestination(key) {
     for (var i = 0; i < destinations.length; i++) {
@@ -209,7 +230,7 @@
     var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     var bar = el("div", { "class": "bar" }, [el("span")]);
     bar.style.setProperty("--delay", AUTO_REDIRECT_MS + "ms");
-    var go = function () { window.location.replace(destinationURL(dest, "saved")); };
+    var go = function () { clearTimeout(timer); navigate(destinationURL(dest, "saved"), true); };
 
     app.replaceChildren(
       el("div", { "class": "brand", text: "Chronicle" }),
@@ -282,7 +303,7 @@
             saveChoice(dest.key);
             arrival = "remembered";
           }
-          window.location.assign(destinationURL(dest, arrival));
+          navigate(destinationURL(dest, arrival), false);
         },
       }, [
         logo(dest, false),
