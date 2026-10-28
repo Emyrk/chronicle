@@ -18,7 +18,7 @@
     background:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(95,143,166,.16),transparent 70%),var(--bg);
     color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
   }
-  main{width:100%;max-width:560px}
+  main{width:100%;max-width:760px}
   .brand{font-size:.75rem;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);font-weight:600;text-align:center}
   h1{margin-top:.75rem;font-size:1.6rem;font-weight:650;text-align:center;letter-spacing:-.01em}
   .lede{margin-top:.5rem;color:var(--muted);font-size:.95rem;line-height:1.55;text-align:center}
@@ -35,38 +35,67 @@
     background:var(--accent-soft);border:1px solid rgba(95,143,166,.35);color:#cfe0e8;
     display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;
   }
-  .list{margin-top:1.5rem;display:grid;gap:.5rem}
+  .list{
+    margin-top:1.25rem;display:grid;gap:.75rem;
+    grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  }
   .dest{
-    all:unset;box-sizing:border-box;cursor:pointer;width:100%;
-    display:flex;align-items:center;gap:.9rem;padding:.8rem 1rem;
-    background:var(--card);border:1px solid var(--border);border-radius:12px;
+    all:unset;box-sizing:border-box;cursor:pointer;position:relative;
+    display:flex;flex-direction:column;align-items:center;gap:.6rem;text-align:center;
+    padding:1.25rem .75rem 1rem;min-width:0;
+    background:var(--card);border:1px solid var(--border);border-radius:14px;
     transition:background .15s,border-color .15s,transform .15s;
     opacity:0;animation:rise .35s ease-out forwards;
   }
-  .dest:hover,.dest:focus-visible{background:var(--card-hover);border-color:var(--accent)}
+  .dest:hover,.dest:focus-visible{background:var(--card-hover);border-color:var(--accent);transform:translateY(-2px)}
   .dest:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  .dest:active{transform:scale(.99)}
+  .dest:active{transform:scale(.98)}
+  .dest.saved{border-color:var(--accent);background:linear-gradient(var(--accent-soft),var(--accent-soft)),var(--card)}
   .logo{
-    flex:none;width:40px;height:40px;border-radius:9px;display:grid;place-items:center;overflow:hidden;
-    background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:1.1rem;
+    flex:none;width:52px;height:52px;border-radius:12px;display:grid;place-items:center;overflow:hidden;
+    background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:1.35rem;
   }
   .logo img{width:100%;height:100%;object-fit:contain}
   .logo.lg{width:64px;height:64px;border-radius:14px;font-size:1.6rem}
-  .meta{min-width:0;flex:1}
-  .name{font-weight:600;font-size:.98rem;display:flex;align-items:center;gap:.5rem}
+  .meta{min-width:0;width:100%}
+  .name{font-weight:600;font-size:.95rem;line-height:1.3;overflow-wrap:anywhere}
   .sub{color:var(--muted);font-size:.8rem;margin-top:.15rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .tag{font-size:.65rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);
-    border:1px solid var(--accent);border-radius:999px;padding:.05rem .45rem}
-  .chev{color:var(--faint);flex:none;transition:transform .15s,color .15s}
-  .dest:hover .chev{color:var(--accent);transform:translateX(3px)}
-  .remember{
-    margin-top:1.5rem;display:flex;gap:.65rem;align-items:flex-start;cursor:pointer;
-    color:var(--text);font-size:.875rem;line-height:1.45;
-    padding:.75rem 1rem;border:1px solid var(--border);border-radius:12px;background:var(--card);
+  .dest .sub{
+    white-space:normal;line-height:1.35;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
   }
-  .remember + .list{margin-top:.75rem}
-  .remember input{margin-top:.2rem;accent-color:var(--accent);width:1rem;height:1rem;flex:none}
-  .remember small{display:block;color:var(--muted);font-size:.8rem}
+  .tag{
+    position:absolute;top:.5rem;right:.5rem;
+    font-size:.6rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#111;
+    background:var(--accent);border-radius:999px;padding:.1rem .45rem;
+  }
+  .remember{
+    margin-top:1.5rem;display:flex;gap:.85rem;align-items:center;cursor:pointer;
+    padding:.9rem 1rem;border-radius:14px;
+    background:var(--accent-soft);border:1px solid rgba(95,143,166,.45);
+    box-shadow:0 0 0 4px rgba(95,143,166,.06);
+    transition:background .2s,border-color .2s,box-shadow .2s;
+  }
+  .remember.off{background:var(--card);border-color:var(--border);box-shadow:none}
+  .remember .icon{
+    flex:none;width:36px;height:36px;border-radius:10px;display:grid;place-items:center;
+    background:var(--accent);color:#111;transition:background .2s,color .2s;
+  }
+  .remember.off .icon{background:var(--border);color:var(--muted)}
+  .remember .text{flex:1;min-width:0}
+  .remember strong{display:block;font-size:.95rem;font-weight:650;color:var(--text)}
+  .remember small{display:block;margin-top:.1rem;color:var(--muted);font-size:.8rem;line-height:1.4}
+  .switch{
+    appearance:none;-webkit-appearance:none;flex:none;cursor:pointer;position:relative;
+    width:2.75rem;height:1.6rem;border-radius:999px;background:#3a3a3a;transition:background .2s;
+  }
+  .switch::after{
+    content:"";position:absolute;top:3px;left:3px;width:calc(1.6rem - 6px);height:calc(1.6rem - 6px);
+    border-radius:50%;background:#fff;transition:transform .2s;
+  }
+  .switch:checked{background:var(--accent)}
+  .switch:checked::after{transform:translateX(1.15rem)}
+  .switch:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
   .btn{
     all:unset;box-sizing:border-box;cursor:pointer;font-size:.875rem;font-weight:550;
     padding:.55rem 1.1rem;border-radius:8px;border:1px solid var(--accent);color:var(--accent);
@@ -95,6 +124,7 @@
   @keyframes fill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
   @media (prefers-reduced-motion:reduce){
     .dest,.going{animation:none;opacity:1}
+    .dest:hover,.dest:focus-visible{transform:none}
     .bar span{animation:none}
   }
 </style>
@@ -204,18 +234,18 @@
     }
     return box;
   }
-  function chevron() {
+  function bookmarkIcon() {
     var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("class", "chev");
     svg.setAttribute("width", "18");
     svg.setAttribute("height", "18");
     svg.setAttribute("viewBox", "0 0 24 24");
     svg.setAttribute("fill", "none");
     svg.setAttribute("stroke", "currentColor");
-    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-width", "2.2");
+    svg.setAttribute("stroke-linejoin", "round");
     svg.setAttribute("aria-hidden", "true");
     var p = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    p.setAttribute("d", "m9 18 6-6-6-6");
+    p.setAttribute("d", "M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z");
     svg.appendChild(p);
     return svg;
   }
@@ -258,8 +288,22 @@
     var saved = loadChoice();
     var savedDest = saved ? findDestination(saved.key) : null;
 
-    var remember = el("input", { type: "checkbox", id: "remember" });
+    var remember = el("input", { type: "checkbox", id: "remember", role: "switch", "class": "switch" });
     remember.checked = true;
+    var rememberHint = el("small");
+    var rememberBox = el("label", { "class": "remember", "for": "remember" }, [
+      el("span", { "class": "icon" }, [bookmarkIcon()]),
+      el("span", { "class": "text" }, [el("strong", { text: "Remember my choice" }), rememberHint]),
+      remember,
+    ]);
+    function syncRemember() {
+      rememberBox.classList.toggle("off", !remember.checked);
+      rememberHint.textContent = remember.checked
+        ? "Future choose links will open your pick automatically. You can change it any time."
+        : "We'll ask again next time you open a choose link.";
+    }
+    remember.addEventListener("change", syncRemember);
+    syncRemember();
 
     var children = [
       el("div", { "class": "brand", text: "Chronicle" }),
@@ -296,7 +340,7 @@
     destinations.forEach(function (dest, i) {
       var isSaved = savedDest && savedDest.key === dest.key;
       var btn = el("button", {
-        "class": "dest", type: "button",
+        "class": isSaved ? "dest saved" : "dest", type: "button",
         onclick: function () {
           var arrival = "picked";
           if (remember.checked) {
@@ -306,27 +350,18 @@
           navigate(destinationURL(dest, arrival), false);
         },
       }, [
+        isSaved ? el("span", { "class": "tag", text: "Saved" }) : null,
         logo(dest, false),
         el("div", { "class": "meta" }, [
-          el("div", { "class": "name" }, [
-            document.createTextNode(dest.name),
-            isSaved ? el("span", { "class": "tag", text: "Saved" }) : null,
-          ]),
+          el("div", { "class": "name", text: dest.name }),
           el("div", { "class": "sub", text: dest.tagline || hostOf(dest) }),
         ]),
-        chevron(),
       ]);
       btn.style.animationDelay = Math.min(i * 40, 400) + "ms";
       list.appendChild(btn);
     });
     // Above the list so it's seen before picking, however long the list is.
-    children.push(el("label", { "class": "remember", "for": "remember" }, [
-      remember,
-      el("span", null, [
-        document.createTextNode("Remember my choice"),
-        el("small", { text: "Future Chronicle choose links will take you straight there. You can change it any time." }),
-      ]),
-    ]));
+    children.push(rememberBox);
     children.push(list);
     children.push(el("p", { "class": "hint", text: "Hidden communities are not listed." }));
 
