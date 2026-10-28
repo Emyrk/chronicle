@@ -82,6 +82,35 @@ describe("AbilityBreakout deferred stacked detail", () => {
   });
 });
 
+describe("AbilityBreakout target stacked detail", () => {
+  const props = {
+    abilities: [ability],
+    targets: [
+      { targetId: "boss", targetName: "Boss", value: 100, overheal: 25, hitCount: 1, critCount: 0 },
+      { targetId: "add", targetName: "Excluded add", value: 0, overheal: 50, hitCount: 1, critCount: 0 },
+    ],
+    totalValue: 100,
+    activeTab: "target" as const,
+    showOverheal: true,
+    stackedLabel: "Excluded",
+    showStackedOnlyWhenExpanded: true,
+    expanded: false,
+  };
+
+  it("shows excluded damage and excluded-only targets before More detail is expanded when requested", () => {
+    const collapsed = renderToStaticMarkup(<AbilityBreakout {...props} alwaysShowTargetStacked />);
+    expect(collapsed).toContain("Excluded</th>");
+    expect(collapsed).toContain("Excluded add");
+    expect(collapsed).toContain("50");
+  });
+
+  it("preserves the original deferred target column for other panels", () => {
+    const collapsed = renderToStaticMarkup(<AbilityBreakout {...props} />);
+    expect(collapsed).not.toContain("Excluded</th>");
+    expect(collapsed).not.toContain("Excluded add");
+  });
+});
+
 describe("AbilityTable detail controls", () => {
   it("shows More detail when hit outcome data is available", () => {
     expect(renderTable(false)).toContain("More detail");

@@ -984,6 +984,8 @@ export interface AbilityBreakoutProps {
   stackedLabel?: string
   /** Only show the stacked column after More detail is expanded. */
   showStackedOnlyWhenExpanded?: boolean
+  /** Show the target tab's stacked column independently of More detail. */
+  alwaysShowTargetStacked?: boolean
   /** Move the primary value before the stacked column */
   valueBeforeStacked?: boolean
   /** Whether to show the absorbed column */
@@ -1023,6 +1025,7 @@ export function AbilityBreakout({
   showOverheal = false,
   stackedLabel = 'Overheal',
   showStackedOnlyWhenExpanded = false,
+  alwaysShowTargetStacked = false,
   valueBeforeStacked = false,
   showAbsorbed = false,
   absorbedIsAdditive = false,
@@ -1141,7 +1144,7 @@ export function AbilityBreakout({
           targets={targets}
           totalValue={totalValue}
           valueLabel={valueLabel}
-          showOverheal={showStacked}
+          showOverheal={showStacked || (showOverheal && alwaysShowTargetStacked)}
           stackedLabel={stackedLabel}
           groupByName={groupTargets}
         />
