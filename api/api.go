@@ -37,10 +37,10 @@ import (
 	"github.com/Emyrk/chronicle/internal/itempricing"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
+	"github.com/Emyrk/chronicle/internal/services/servicechoose"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicelivesession"
 	"github.com/Emyrk/chronicle/internal/services/serviceproof"
-	"github.com/Emyrk/chronicle/internal/services/servicechoose"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewhatsnew"
 	"github.com/authzed/gochugaru/rel"
@@ -263,6 +263,9 @@ func New(ctx context.Context, opts Options) (*API, error) {
 			}
 		}
 	}()
+	if opts.Choose != nil {
+		opts.Choose.SetPopularity(api.choosePopularity)
+	}
 	return api, nil
 }
 

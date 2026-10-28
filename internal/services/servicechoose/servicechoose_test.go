@@ -1,6 +1,7 @@
 package servicechoose_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -9,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/servicechoose"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
@@ -38,13 +40,38 @@ func newService(t *testing.T, accessURL string) *servicechoose.Service {
 
 func TestDestinations(t *testing.T) {
 	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
 	svc := newService(t, "http://legacy.localhost:4000")
 
 	require.Equal(t, []servicechoose.Destination{
 		{Key: "capy", Name: "Capy", Tagline: "Capybara realm", Logo: "/c/capy/logo.png", Origin: "http://capy.localhost:4000"},
 		{Key: "octo", Name: "OctoWoW", Origin: "http://octo.localhost:4000"},
-	}, svc.Destinations(), "only discoverable tenants, no main site")
+	}, svc.Destinations(ctx), "only discoverable tenants, alphabetical without popularity")
 	require.Equal(t, "http://choose.localhost:4000", svc.ChooseURL())
+}
+
+func TestDestinationsByPopularity(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	u, err := url.Parse("https://legacy.localhost")
+	require.NoError(t, err)
+	busy := tenant("zeta", "Zeta", true, "")
+	quiet := tenant("mid", "Mid", true, "")
+	tenants := servicetenant.NewTestWithTenants(*u, "localhost",
+		tenant("alpha", "Alpha", true, ""), // no activity
+		quiet,
+		busy,
+	)
+	svc := servicechoose.NewTest("choose", tenants, *u)
+	svc.SetPopularity(func(context.Context) map[uuid.UUID]int64 {
+		return map[uuid.UUID]int64{busy.ID: 500, quiet.ID: 20}
+	})
+
+	var keys []string
+	for _, d := range svc.Destinations(ctx) {
+		keys = append(keys, d.Key)
+	}
+	require.Equal(t, []string{"zeta", "mid", "alpha"}, keys)
 }
 
 func TestPrimaryDomainWithPort(t *testing.T) {
@@ -55,7 +82,7 @@ func TestPrimaryDomainWithPort(t *testing.T) {
 	svc := servicechoose.NewTest("choose", tenants, *u)
 
 	require.Equal(t, "http://choose.localhost:4000", svc.ChooseURL())
-	require.Equal(t, "http://kronos.localhost:4000", svc.Destinations()[0].Origin)
+	require.Equal(t, "http://kronos.localhost:4000", svc.Destinations(testutil.Context(t, testutil.WaitShort))[0].Origin)
 }
 
 func TestMiddleware(t *testing.T) {

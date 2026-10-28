@@ -60,9 +60,11 @@
   .chev{color:var(--faint);flex:none;transition:transform .15s,color .15s}
   .dest:hover .chev{color:var(--accent);transform:translateX(3px)}
   .remember{
-    margin-top:1.25rem;display:flex;gap:.65rem;align-items:flex-start;cursor:pointer;
+    margin-top:1.5rem;display:flex;gap:.65rem;align-items:flex-start;cursor:pointer;
     color:var(--text);font-size:.875rem;line-height:1.45;
+    padding:.75rem 1rem;border:1px solid var(--border);border-radius:12px;background:var(--card);
   }
+  .remember + .list{margin-top:.75rem}
   .remember input{margin-top:.2rem;accent-color:var(--accent);width:1rem;height:1rem;flex:none}
   .remember small{display:block;color:var(--muted);font-size:.8rem}
   .btn{
@@ -296,9 +298,7 @@
       btn.style.animationDelay = Math.min(i * 40, 400) + "ms";
       list.appendChild(btn);
     });
-    children.push(list);
-    children.push(el("p", { "class": "hint", text: "Hidden communities are not listed." }));
-
+    // Above the list so it's seen before picking, however long the list is.
     children.push(el("label", { "class": "remember", "for": "remember" }, [
       remember,
       el("span", null, [
@@ -306,6 +306,8 @@
         el("small", { text: "Future Chronicle choose links will take you straight there. You can change it any time." }),
       ]),
     ]));
+    children.push(list);
+    children.push(el("p", { "class": "hint", text: "Hidden communities are not listed." }));
 
     app.replaceChildren.apply(app, children);
   }

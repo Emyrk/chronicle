@@ -16,6 +16,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services"
@@ -23,6 +24,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 
 	"github.com/coder/serpent"
+	"github.com/google/uuid"
 )
 
 var _ services.Servicer = (*Service)(nil)
@@ -52,7 +54,13 @@ type Service struct {
 	slug      string
 	tenantSvc *servicetenant.Service
 	accessURL url.URL
+	// popularity scores tenants for ordering, higher first. It must not block
+	// on slow queries. Nil or missing scores sort alphabetically.
+	popularity atomic.Pointer[PopularityFunc]
 }
+
+// PopularityFunc returns a popularity score per tenant ID.
+type PopularityFunc func(ctx context.Context) map[uuid.UUID]int64
 
 func New(broker *services.Services) *Service {
 	return &Service{broker: broker}
@@ -108,6 +116,15 @@ func (s *Service) Start(_ context.Context) error {
 }
 
 func (s *Service) Close(_ context.Context) error { return nil }
+
+// SetPopularity sets how destinations are ranked. Safe to call on a nil
+// Service.
+func (s *Service) SetPopularity(fn PopularityFunc) {
+	if s == nil {
+		return
+	}
+	s.popularity.Store(&fn)
+}
 
 // Enabled reports whether this deployment serves the chooser.
 func (s *Service) Enabled() bool {
@@ -196,19 +213,37 @@ type pageData struct {
 	Destinations []Destination `json:"destinations"`
 }
 
-// Destinations lists every discoverable tenant sorted by name.
-func (s *Service) Destinations() []Destination {
+// Destinations lists every discoverable tenant, most popular first, then by
+// name.
+func (s *Service) Destinations(ctx context.Context) []Destination {
+	var scores map[uuid.UUID]int64
+	if fn := s.popularity.Load(); fn != nil {
+		scores = (*fn)(ctx)
+	}
+
+	type ranked struct {
+		Destination
+		score int64
+	}
 	tenants := s.tenantSvc.CachedTenants()
-	out := make([]Destination, 0, len(tenants))
+	all := make([]ranked, 0, len(tenants))
 	for _, t := range tenants {
 		if !t.Discoverable || !t.Slug.Valid || t.Slug.String == "" || t.Slug.String == s.slug {
 			continue
 		}
-		out = append(out, s.tenantDestination(t))
+		all = append(all, ranked{Destination: s.tenantDestination(t), score: scores[t.ID]})
 	}
-	sort.Slice(out, func(i, j int) bool {
-		return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
+	sort.Slice(all, func(i, j int) bool {
+		if all[i].score != all[j].score {
+			return all[i].score > all[j].score
+		}
+		return strings.ToLower(all[i].Name) < strings.ToLower(all[j].Name)
 	})
+
+	out := make([]Destination, len(all))
+	for i, r := range all {
+		out[i] = r.Destination
+	}
 	return out
 }
 
@@ -236,7 +271,7 @@ func (s *Service) tenantDestination(t database.Tenant) Destination {
 func (s *Service) servePage(w http.ResponseWriter, r *http.Request) {
 	data, err := json.Marshal(pageData{
 		ChooseHost:   r.Host,
-		Destinations: s.Destinations(),
+		Destinations: s.Destinations(r.Context()),
 	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
