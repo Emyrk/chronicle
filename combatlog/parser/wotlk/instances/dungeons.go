@@ -607,7 +607,6 @@ func VioletHoldHostiles() map[uint32]instances.Identity {
 		30918: "Azure Binder",
 		30962: "Azure Spellbreaker",
 		31079: "Azure Saboteur",
-		31134: "Cyanigosa",
 		32191: "Azure Stalker",
 		29364: "Void Sentry",
 		29365: "Void Sentry",
@@ -622,6 +621,7 @@ func VioletHoldHostiles() map[uint32]instances.Identity {
 		29314: "Zuramat the Obliterator",
 		29315: "Erekem",
 		29316: "Moragg",
+		31134: "Cyanigosa",
 	})
 	return hostile
 }
