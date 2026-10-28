@@ -6,7 +6,7 @@ import (
 )
 
 func NewVoidSentry(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
-	if entry, ok := id.GetEntry(); !ok || !(entry == 29364 || entry == 29365) {
+	if entry, ok := id.GetEntry(); !ok || (entry != 29364 && entry != 29365) {
 		return nil, false
 	}
 
