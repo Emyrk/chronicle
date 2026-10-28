@@ -1,4 +1,4 @@
-export type LeaderboardsMode = "statistics" | "speedruns" | "parsing"
+export type LeaderboardsMode = "statistics" | "speedruns" | "parsing" | "ruleset" | "rulesets"
 
 const INSTANCES_WITHOUT_SPEEDRUNS = new Set(["Emerald Sanctum"])
 
@@ -7,9 +7,10 @@ export function leaderboardsModePath(mode: LeaderboardsMode): string {
 }
 
 /**
- * Builds the URL for switching to `mode`. The parsing tab shares param names
- * (metric, class, spec, period) with statistics but not their meanings, so
- * moving into or out of parsing only carries the instance across.
+ * Builds the URL for switching to `mode`. Parsing shares param names with
+ * statistics but not their meanings, and the per-instance ruleset has no
+ * filters. Moving into or out of either tab only carries the instance across.
+ * The rulesets index never carries instance filters.
  */
 export function leaderboardsModeTarget(
   mode: LeaderboardsMode,
@@ -17,7 +18,9 @@ export function leaderboardsModeTarget(
   from?: LeaderboardsMode,
 ): string {
   let params = new URLSearchParams(source)
-  if (mode !== from && (mode === "parsing" || from === "parsing")) {
+  if (mode === "rulesets") {
+    params = new URLSearchParams()
+  } else if (mode !== from && (mode === "parsing" || from === "parsing" || mode === "ruleset" || from === "ruleset")) {
     const instance = source.get("instance")
     params = new URLSearchParams(instance ? { instance } : {})
   }

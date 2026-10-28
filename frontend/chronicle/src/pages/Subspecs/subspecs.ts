@@ -19,11 +19,11 @@ const SUBSPEC_RULES: readonly SubspecRule[] = [
     subspecs: [
       {
         name: "Bear",
-        description: "Tank-oriented Feral builds that meet every required talent marker.",
+        description: "Feral Druids observed in Bear Form for more than 51% of an encounter, or builds that meet every Bear talent marker when neither form qualifies.",
       },
       {
         name: "Cat",
-        description: "All other Feral builds, including builds missing any Bear marker.",
+        description: "Feral Druids observed in Cat Form for more than 51% of an encounter, or the talent fallback when neither form qualifies and a Bear marker is missing.",
       },
     ],
     detection: ["Thick Hide", "Feral Charge", "Feral Instinct"],

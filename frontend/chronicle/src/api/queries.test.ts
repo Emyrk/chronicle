@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   billingCheckoutOperationID,
+  fetchInstanceSpeedrun,
   getLogGroupRefetchInterval,
   spellQueryOptions,
   type RiverJobState,
@@ -56,6 +57,40 @@ describe("spellQueryOptions", () => {
       "Spell not found",
     );
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/wowdb/spell/456");
+  });
+});
+
+describe("fetchInstanceSpeedrun", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each([204, 404])("returns null for an absent speedrun response (%s)", async (status) => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchInstanceSpeedrun("instance/id")).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/raidlogs/instances/instance%2Fid/speedrun",
+    );
+  });
+
+  it("returns speedrun data when available", async () => {
+    const speedrun = { qualified: true, duration_ms: 1234, proof: [] };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(speedrun)));
+
+    await expect(fetchInstanceSpeedrun("instance-id")).resolves.toEqual(speedrun);
+  });
+
+  it("rejects unexpected errors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 500 })),
+    );
+
+    await expect(fetchInstanceSpeedrun("instance-id")).rejects.toThrow(
+      "Failed to fetch speedrun data",
+    );
   });
 });
 

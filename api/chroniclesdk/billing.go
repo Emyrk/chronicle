@@ -59,6 +59,9 @@ type AdminBillingWebhookDelivery struct {
 
 type AdminBillingSubscription struct {
 	UserID                 string     `json:"user_id"`
+	Username               string     `json:"username"`
+	Email                  string     `json:"email"`
+	DiscordID              string     `json:"discord_id,omitempty"`
 	Provider               string     `json:"provider"`
 	ProviderCustomerID     string     `json:"provider_customer_id"`
 	ProviderSubscriptionID string     `json:"provider_subscription_id,omitempty"`

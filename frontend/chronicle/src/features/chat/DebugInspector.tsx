@@ -1,11 +1,17 @@
-import { useState } from "react";
-import { Braces, ChevronRight, Download, FileText, Gauge, Puzzle, Wrench } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Braces, ChevronRight, Download, ExternalLink, FileText, Gauge, Puzzle, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { serializeInferenceDebug } from "./debugExport";
+import { openDebugViewer, useDebugBroadcast } from "./debugChannel";
 import type { ClientToolRequestEvent, DebugSnapshotEvent } from "./protocol";
+import { formatCost } from "./usage";
 
 interface DebugInspectorProps {
+  /** Channel the pop-out debug viewer listens on. */
+  channelId: string;
+  /** Chat title shown in the pop-out viewer. */
+  title?: string;
   snapshots: readonly DebugSnapshotEvent[];
   clientToolRequests: readonly ClientToolRequestEvent[];
   error?: string;
@@ -115,6 +121,9 @@ function Snapshot({ snapshot, latest }: { snapshot: DebugSnapshotEvent; latest: 
               <dt>Prompt tokens</dt><dd>{snapshot.usage.promptTokens}</dd>
               <dt>Completion</dt><dd>{snapshot.usage.completionTokens}</dd>
               <dt>Total</dt><dd>{snapshot.usage.totalTokens}</dd>
+              {!!snapshot.usage.cachedTokens && <><dt>Cached</dt><dd>{snapshot.usage.cachedTokens}</dd></>}
+              {!!snapshot.usage.reasoningTokens && <><dt>Reasoning</dt><dd>{snapshot.usage.reasoningTokens}</dd></>}
+              {snapshot.usage.costUsd !== undefined && <><dt>Cost</dt><dd title={`$${snapshot.usage.costUsd.toFixed(6)}`}>{formatCost(snapshot.usage.costUsd)}</dd></>}
               {snapshot.contextType && <><dt>Context</dt><dd>{snapshot.contextType}</dd></>}
               {snapshot.contextId && <><dt>Context ID</dt><dd className="truncate font-mono" title={snapshot.contextId}>{snapshot.contextId}</dd></>}
             </dl>
@@ -125,8 +134,10 @@ function Snapshot({ snapshot, latest }: { snapshot: DebugSnapshotEvent; latest: 
   );
 }
 
-export function DebugInspector({ snapshots, clientToolRequests, error }: DebugInspectorProps) {
+export function DebugInspector({ channelId, title, snapshots, clientToolRequests, error }: DebugInspectorProps) {
   const [expanded, setExpanded] = useState(false);
+  const bundle = useMemo(() => ({ snapshots: [...snapshots], clientToolRequests: [...clientToolRequests], ...(error ? { error } : {}) }), [snapshots, clientToolRequests, error]);
+  useDebugBroadcast(channelId, bundle, title);
   const empty = snapshots.length === 0;
   return (
     <div className="bg-muted/10 border-b">
@@ -154,6 +165,17 @@ export function DebugInspector({ snapshots, clientToolRequests, error }: DebugIn
           aria-label="Download JSON"
         >
           <Download className="size-3.5" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-6"
+          onClick={() => openDebugViewer(channelId)}
+          title="Open the debug viewer in its own window"
+          aria-label="Open debug viewer"
+        >
+          <ExternalLink className="size-3.5" />
         </Button>
       </div>
       {expanded && !empty && (

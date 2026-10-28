@@ -90,6 +90,39 @@ export function createDamageDoneResult(): DamageDoneResult {
   };
 }
 
+export const EXCLUDE_UNRANKED_DAMAGE_OPTION = "exclude-unranked";
+
+function excludeUnrankedDamage(context: ProcessorContext): boolean {
+  return context.panelOption?.split(",").includes(EXCLUDE_UNRANKED_DAMAGE_OPTION) === true;
+}
+
+function addExcludedAbility(
+  store: Map<string, Map<string, DamageAbilityBreakout>>,
+  owner: string,
+  ability: string,
+  amount: number,
+): void {
+  const entries = store.get(owner) ?? new Map<string, DamageAbilityBreakout>();
+  const existing = entries.get(ability) ?? { Total: 0, Count: 0, Crits: 0, Hits: 0, Misses: 0 };
+  existing.Total += amount;
+  entries.set(ability, existing);
+  store.set(owner, entries);
+}
+
+function addExcludedSpell(
+  store: Map<string, Map<number, SpellIdAbilityBreakout>>,
+  owner: string,
+  id: number,
+  name: string,
+  amount: number,
+): void {
+  const entries = store.get(owner) ?? new Map<number, SpellIdAbilityBreakout>();
+  const existing = entries.get(id) ?? { Total: 0, Count: 0, Crits: 0, Hits: 0, Misses: 0, spellName: name };
+  existing.Total += amount;
+  entries.set(id, existing);
+  store.set(owner, entries);
+}
+
 interface DamageDoneProcessorOptions {
   id?: string;
   vulnerabilityMode?: boolean;
@@ -321,23 +354,30 @@ export function createDamageDoneProcessor(
         !schoolMaskOnly || selectedVulnerability == null ||
         (schoolMatchesSelectedVulnerability && !(flatOnlyVulnerability && isPeriodic));
 
-      if (!state.EncounterDamage.has(encounterID)) {
-        state.EncounterDamage.set(encounterID, new Map<string, DamageDoneData>());
-      }
-      const encounterDamage = state.EncounterDamage.get(encounterID)!;
-      const existing = encounterDamage.get(damageOwner) || {
-        playerID: damageOwner,
-        value: 0,
-        playerName: ownerName,
-        className: ownerClass,
-        specialization: "",
-        target: new Map<string, number>(),
-      } as DamageDoneData;
+      const splitRanked = sourceType === "players" && excludeUnrankedDamage(context);
+      const rawAmount = Math.max(0, event.amount) + absorbedAmount;
+      const rankedAmount = Math.max(0, effectiveAmount - Math.min(effectiveAmount, Math.max(0, event.unranked ?? 0)));
+      const includedAmount = splitRanked ? rankedAmount : rawAmount;
+      const excludedAmount = splitRanked ? rawAmount - rankedAmount : 0;
 
-      // Cached static info
-      existing.target.set(event.target, (existing.target.get(event.target) || 0) + effectiveAmount);
-      encounterDamage.set(damageOwner, existing);
-      state.EncounterDamage.set(encounterID, encounterDamage);
+      const addEncounterAmount = (store: Map<string, UnitDamage>, amount: number) => {
+        if (amount <= 0) return;
+        const encounterDamage = store.get(encounterID) ?? new Map<string, DamageDoneData>();
+        const existing = encounterDamage.get(damageOwner) ?? {
+          playerID: damageOwner,
+          playerName: ownerName,
+          className: ownerClass,
+          specialization: "",
+          target: new Map<string, number>(),
+        };
+        existing.target.set(event.target, (existing.target.get(event.target) || 0) + amount);
+        encounterDamage.set(damageOwner, existing);
+        store.set(encounterID, encounterDamage);
+      };
+      addEncounterAmount(state.EncounterDamage, includedAmount);
+      if (excludedAmount > 0) {
+        addEncounterAmount(state.EncounterExcludedDamage ??= new Map(), excludedAmount);
+      }
 
       // Vulnerability encounter totals (used by Vulnerability Effect panel)
       if (includeInVulnerabilityTotals) {
@@ -358,16 +398,20 @@ export function createDamageDoneProcessor(
           abilityName = abilityName + " (DoT)";
         }
 
+        // Outcomes and min/avg/max use the unsplit raw hit exactly once.
         accumulateAbilityBreakout(
           state.ByAbility,
           damageOwner,
           abilityName,
-          effectiveAmount,
+          includedAmount,
           event.hitType,
-          effectiveAmount,
+          rawAmount,
           absorbedAmount,
           fullyAbsorbed,
         );
+        if (excludedAmount > 0) {
+          addExcludedAbility(state.ExcludedByAbility ??= new Map(), damageOwner, abilityName, excludedAmount);
+        }
         // Use a composite key so periodic (DoT) events with the same spell ID as
         // direct damage (e.g. Immolate) get their own breakout row.
         const isPeriodicDmg = hasHitType(event.hitType, HitTypePeriodic);
@@ -384,12 +428,15 @@ export function createDamageDoneProcessor(
             damageOwner,
             breakoutSpellId,
             abilityName,
-            effectiveAmount,
+            includedAmount,
             event.hitType,
-            effectiveAmount,
+            rawAmount,
             absorbedAmount,
             fullyAbsorbed,
           );
+        }
+        if (breakoutSpellId != null && !isPetMerged && excludedAmount > 0) {
+          addExcludedSpell(state.ExcludedByAbilityBySpellId ??= new Map(), damageOwner, breakoutSpellId, abilityName, excludedAmount);
         }
         // Store spellId on the ByAbility entry for pet abilities so the breakout
         // can still show spell icons when pulling pet rows from ByAbility.
@@ -399,7 +446,10 @@ export function createDamageDoneProcessor(
           if (entry) entry.spellId = event.spellId;
         }
 
-        accumulateOwnerTargetValue(state.ByTarget, damageOwner, event.target, effectiveAmount);
+        accumulateOwnerTargetValue(state.ByTarget, damageOwner, event.target, includedAmount);
+        if (excludedAmount > 0) {
+          accumulateOwnerTargetValue(state.ExcludedByTarget ??= new Map(), damageOwner, event.target, excludedAmount);
+        }
 
         // Vulnerability breakouts
         if (includeInVulnerabilityTotals) {

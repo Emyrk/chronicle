@@ -9,6 +9,7 @@ import {
   type DebugSnapshotEvent,
   type ChatState,
 } from "./protocol";
+import type { ChatUsage } from "./usage";
 
 export interface CreateChatRunRequestInput {
   messages: ChatMessage[];
@@ -38,6 +39,8 @@ export interface UseAssistantChatOptions {
   endpoint: string;
   headers?: HeadersInit;
   initialMessages?: ChatMessage[];
+  /** The conversation's stored usage total, as loaded with initialMessages. */
+  initialUsage?: ChatUsage;
   threadId?: string;
   createRequest?: (input: CreateChatRunRequestInput) => unknown;
   onMessagesChange?: (messages: ChatMessage[]) => void;
@@ -89,8 +92,8 @@ export function useAssistantChat(options: UseAssistantChatOptions): AssistantCha
   const runtime = useOptionalInferenceRuntime();
   const [state, dispatch] = useReducer(
     chatReducer,
-    options.initialMessages ?? [],
-    createInitialChatState,
+    options,
+    (initial) => createInitialChatState(initial.initialMessages ?? [], initial.initialUsage),
   );
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeRunRef = useRef(false);

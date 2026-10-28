@@ -282,33 +282,56 @@ def refresh_wdt_index():
     log("wdt-index.csv: %d rows (listfile sha256 %s)" % (len(rows), sha(tmp)))
 
 
+def blp_to_png(blp, png, mode):
+    """Convert a BLP with Pillow, including BLP2 raw BGRA (encoding 3), which Pillow 13 rejects."""
+    from PIL import Image
+    try:
+        Image.open(blp).convert(mode).save(png)
+        return
+    except NotImplementedError as err:
+        buf = open(blp, "rb").read()
+        if buf[:4] != b"BLP2" or len(buf) < 148 or buf[8] != 3:
+            raise err
+        width, height = struct.unpack_from("<II", buf, 12)
+        offset = struct.unpack_from("<I", buf, 20)[0]
+        length = struct.unpack_from("<I", buf, 84)[0]
+        if length != width * height * 4 or offset + length > len(buf):
+            raise SystemExit("invalid BLP2 raw BGRA mip in %s" % blp)
+        Image.frombytes("RGBA", (width, height), buf[offset:offset + length], "raw", "BGRA").convert(mode).save(png)
+
+
 # ------------------------------------------------------------------ terrain (minimap tiles)
 
 def fetch_terrain(a, cfg, mdir, raw, product, region, build, wdt_fid, how, tiles, need):
     from PIL import Image
     json.dump(tiles, open(os.path.join(raw, "tiles.json"), "w"), indent=1)
-    missing = [t for t in tiles if not t.get("minimap")]
-    if missing:
-        raise SystemExit("%d tiles have no minimap texture id (MAID); terrain renderer needed" % len(missing))
-    mm = os.path.join(raw, "minimap")
-    os.makedirs(mm, exist_ok=True)
-    specs = []
-    for t in tiles:
-        p = os.path.join(mm, "%02d_%02d.blp" % (t["x"], t["y"]))
-        if need(p):
-            specs.append("%d=%s" % (t["minimap"], p))
-    if specs:
-        log("fetching %d minimap tiles" % len(specs))
-        cascget(product, region, specs)
+    use_minimap = cfg.get("minimap", True)
     sizes = set()
-    for t in tiles:
-        blp = os.path.join(mm, "%02d_%02d.blp" % (t["x"], t["y"]))
-        png = blp[:-4] + ".png"
-        if need(png):
-            Image.open(blp).convert("RGBA").save(png)
-        sizes.add(Image.open(png).size)
-    if len(sizes) != 1:
-        raise SystemExit("minimap tiles differ in size: %s" % sorted(sizes))
+    if use_minimap:
+        missing = [t for t in tiles if not t.get("minimap")]
+        if missing:
+            raise SystemExit("%d tiles have no minimap texture id (MAID); set map.yaml `minimap: false` "
+                             "to render without a Blizzard alignment reference" % len(missing))
+        mm = os.path.join(raw, "minimap")
+        os.makedirs(mm, exist_ok=True)
+        specs = []
+        for t in tiles:
+            p = os.path.join(mm, "%02d_%02d.blp" % (t["x"], t["y"]))
+            if need(p):
+                specs.append("%d=%s" % (t["minimap"], p))
+        if specs:
+            log("fetching %d minimap tiles" % len(specs))
+            cascget(product, region, specs)
+        for t in tiles:
+            blp = os.path.join(mm, "%02d_%02d.blp" % (t["x"], t["y"]))
+            png = blp[:-4] + ".png"
+            if need(png):
+                blp_to_png(blp, png, "RGBA")
+            sizes.add(Image.open(png).size)
+        if len(sizes) != 1:
+            raise SystemExit("minimap tiles differ in size: %s" % sorted(sizes))
+    else:
+        log("minimap disabled by map.yaml; render will have no Blizzard alignment reference")
     # ---- geometry for the Cycles render: ADTs of the tiles in the crop, their ground textures, placed WMOs
     crop = cfg.get("crop")
     sel = [t for t in tiles if tile_in_crop(t, crop)]
@@ -347,7 +370,7 @@ def fetch_terrain(a, cfg, mdir, raw, product, region, build, wdt_fid, how, tiles
     for f in sorted(tex_fids):
         blp = os.path.join(ttex, "%d.blp" % f)
         if need(blp[:-4] + ".png"):
-            Image.open(blp).convert("RGB").save(blp[:-4] + ".png")
+            blp_to_png(blp, blp[:-4] + ".png", "RGB")
     for f in sorted(wmo_fids):
         wdir = os.path.join(raw, "wmo", str(f))
         os.makedirs(os.path.join(wdir, "groups"), exist_ok=True)
@@ -380,7 +403,8 @@ def fetch_terrain(a, cfg, mdir, raw, product, region, build, wdt_fid, how, tiles
         "fetched": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
         "product": product, "region": region, "build": build, "wdt_fid": wdt_fid, "wdt_resolved_via": how,
         "root_fid": None, "casclib_commit": CASCLIB_COMMIT,
-        "tiles": tiles, "tile_px": sorted(sizes)[0][0], "tile_yards": 533.33333,
+        "tiles": tiles, "minimap": use_minimap,
+        "tile_px": sorted(sizes)[0][0] if sizes else None, "tile_yards": 533.33333,
         "tile_range": {"x": [min(xs), max(xs)], "y": [min(ys), max(ys)]},
         "mphd_flags": wdt_mphd_flags(os.path.join(raw, "map.wdt")),
         "crop": crop, "crop_tiles": [[t["x"], t["y"]] for t in sel],
@@ -399,8 +423,9 @@ def fetch_terrain(a, cfg, mdir, raw, product, region, build, wdt_fid, how, tiles
             p = os.path.join(dp, fn)
             prov["files"][os.path.relpath(p, raw)] = sha(p)
     json.dump(prov, open(os.path.join(mdir, "fetch.json"), "w"), indent=2)
-    log("done: terrain, %d tiles of %dpx (crop: %d tiles), %s" % (len(tiles), prov["tile_px"], len(sel),
-                                                                 json.dumps(prov["adt_stats"])))
+    minimap_summary = "%dpx" % prov["tile_px"] if prov["tile_px"] else "no minimap"
+    log("done: terrain, %d tiles (%s; crop: %d tiles), %s" % (len(tiles), minimap_summary, len(sel),
+                                                              json.dumps(prov["adt_stats"])))
 
 
 # ------------------------------------------------------------------ 1.12 MPQ client (WMO maps only)

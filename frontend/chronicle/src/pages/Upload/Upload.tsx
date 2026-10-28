@@ -118,6 +118,8 @@ export interface UploadViewProps {
   hasUploadPermission: boolean;
   hasAdminLogs: boolean;
   canMarkUnlisted: boolean;
+  /** Billing is on and the uploader can't unlist yet: point them at the Revered tier. */
+  showUnlistedUpsell?: boolean;
   combatLog: File | null;
   rawCombatLog: File | null;
   sidekickStorage: File | null;
@@ -156,6 +158,7 @@ export function UploadView({
   hasUploadPermission,
   hasAdminLogs,
   canMarkUnlisted,
+  showUnlistedUpsell,
   combatLog,
   rawCombatLog,
   sidekickStorage,
@@ -374,6 +377,7 @@ export function UploadView({
               unlistedLog={unlistedLog}
               canMarkUnlisted={canMarkUnlisted}
               onChange={onUnlistedLogChange}
+              showUnlistedUpsell={showUnlistedUpsell}
             />
 
             {/* Format selector — visible to everyone when >1 available, or always for admins */}
@@ -553,6 +557,7 @@ export function Upload() {
   const { data: siteConfig, isFetched: configLoaded } = useSiteConfig();
   const { data: flavorTags = [] } = useFlavors();
   const uploadsDisabled = siteConfig?.client_uploads_disabled && !hasAdminLogs;
+  const showUnlistedUpsell = !!siteConfig?.billing_enabled && !!authz && !canMarkUnlisted;
 
   // ── Format resolution ──────────────────────────────────────────────
   // Available formats: tenant > site config > all known formats.
@@ -766,7 +771,7 @@ export function Upload() {
   }, [combatLog, rawCombatLog, sidekickStorage, useV2Upload, effectiveFormat, flavorOverride, unlistedLog]);
 
   if (isMultiple) {
-    return <MultiUpload format={effectiveFormat} unlistedLog={unlistedLog} canMarkUnlisted={canMarkUnlisted} onUnlistedLogChange={setUnlistedLog} />;
+    return <MultiUpload format={effectiveFormat} unlistedLog={unlistedLog} canMarkUnlisted={canMarkUnlisted} onUnlistedLogChange={setUnlistedLog} showUnlistedUpsell={showUnlistedUpsell} />;
   }
 
   if (uploadsDisabled) {
@@ -790,6 +795,7 @@ export function Upload() {
       hasUploadPermission={hasUploadPermission}
       hasAdminLogs={hasAdminLogs}
       canMarkUnlisted={canMarkUnlisted}
+      showUnlistedUpsell={showUnlistedUpsell}
       combatLog={combatLog}
       rawCombatLog={rawCombatLog}
       sidekickStorage={sidekickStorage}

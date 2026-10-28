@@ -192,7 +192,7 @@ export function CustomPanelHost({
             throw new Error("The plugin worker artifact is not ready.");
           if (workerRef.current)
             throw new Error(
-              "Only one host-managed worker is allowed per custom panel.",
+              "Only one host-managed worker is allowed per developer panel.",
             );
           const worker = new Worker(verifiedArtifacts.workerUrl, {
             type: "module",
@@ -215,7 +215,7 @@ export function CustomPanelHost({
       panel: {
         setOption: (option) => {
           if (option && option.length > CUSTOM_PANEL_OPTION_MAX_LENGTH)
-            throw new Error("Custom panel option exceeds 2 KiB.");
+            throw new Error("Developer panel option exceeds 2 KiB.");
           onPanelOptionChange?.(option);
         },
         selectEncounters: (ids) => context.onSelectEncounters?.(ids),

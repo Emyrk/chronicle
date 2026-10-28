@@ -102,6 +102,81 @@ func TestManageConsumablesRole(t *testing.T) {
 	require.False(t, canManageWorldData)
 }
 
+func TestLuaProjectPermissions(t *testing.T) {
+	t.Parallel()
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	db := servicedbstore.DatabaseStore(broker)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	owner, other, techAdmin := uuid.New(), uuid.New(), uuid.New()
+	_, err := db.InsertUser(ctx, database.InsertUserParams{ID: owner, Username: "lua-owner-" + owner.String()})
+	require.NoError(t, err)
+
+	checkCreate := func(userID uuid.UUID) bool {
+		allowed, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanCreate_lua_project_User(policy.New().User(userID)))
+		require.NoError(t, err)
+		return allowed
+	}
+	require.False(t, checkCreate(owner))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, owner, []string{"admin"}))
+	require.False(t, checkCreate(owner), "non-technical administrators must opt in")
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, techAdmin, []string{"technical_admin"}))
+	require.True(t, checkCreate(techAdmin))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, owner, []string{"lua_project_author"}))
+	require.True(t, checkCreate(owner))
+	require.False(t, checkCreate(other))
+
+	var project database.LuaProject
+	err = zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		var createErr error
+		project, createErr = tx.CreateLuaProject(ctx, database.CreateLuaProjectParams{OwnerID: owner, Kind: "panel", Name: "Test", Slug: "test-" + owner.String()})
+		return createErr
+	}, nil)
+	require.NoError(t, err)
+
+	b := policy.New()
+	ownerUpdate, err := zed.CheckOne(ctx, nil, b.Lua_project(project.ID).CanUpdate_User(b.User(owner)))
+	require.NoError(t, err)
+	require.True(t, ownerUpdate)
+	otherUpdate, err := zed.CheckOne(ctx, nil, b.Lua_project(project.ID).CanUpdate_User(b.User(other)))
+	require.NoError(t, err)
+	require.False(t, otherUpdate)
+	adminUpdate, err := zed.CheckOne(ctx, nil, b.Lua_project(project.ID).CanUpdate_User(b.User(techAdmin)))
+	require.NoError(t, err)
+	require.True(t, adminUpdate)
+	adminView, err := zed.CheckOne(ctx, nil, b.Lua_project(project.ID).CanView_User(b.User(techAdmin)))
+	require.NoError(t, err)
+	require.True(t, adminView)
+	publicView, err := zed.CheckOne(ctx, nil, b.Lua_project(project.ID).CanView_User(b.User(other)))
+	require.NoError(t, err)
+	require.True(t, publicView)
+	anonymousView, err := zed.CheckOne(ctx, nil, b.Lua_project(project.ID).CanView_User(b.User(uuid.Nil)))
+	require.NoError(t, err)
+	require.True(t, anonymousView)
+
+	publicRelation := b.Lua_project(project.ID).Object()
+	// New projects are public through viewer and runner wildcards; removing them makes the addon private.
+	for _, relation := range []string{"viewer", "runner"} {
+		require.NoError(t, zed.Delete(ctx, rel.NewPreconditionedFilter(rel.NewFilter(publicRelation.Typ, publicRelation.ID, relation))))
+	}
+	publicUse, err := zed.CheckOne(ctx, nil, b.Lua_project(project.ID).CanUse_User(b.User(other)))
+	require.NoError(t, err)
+	require.False(t, publicUse)
+	adminView, err = zed.CheckOne(ctx, nil, b.Lua_project(project.ID).CanView_User(b.User(techAdmin)))
+	require.NoError(t, err)
+	require.True(t, adminView, "technical admins can view private projects")
+	publicView, err = zed.CheckOne(ctx, nil, b.Lua_project(project.ID).CanView_User(b.User(other)))
+	require.NoError(t, err)
+	require.False(t, publicView)
+
+	// Revoking the site-wide creation grant does not remove project ownership.
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, owner, nil))
+	require.False(t, checkCreate(owner))
+	ownerUpdate, err = zed.CheckOne(ctx, nil, b.Lua_project(project.ID).CanUpdate_User(b.User(owner)))
+	require.NoError(t, err)
+	require.True(t, ownerUpdate)
+}
+
 func TestInferenceChatPermission(t *testing.T) {
 	t.Parallel()
 
@@ -255,6 +330,114 @@ func TestStripeEntitlementRoles(t *testing.T) {
 	require.Equal(t, []bool{true, true}, allowed, "revoking a Stripe role must preserve Discord-owned supporter permissions")
 
 	require.ErrorContains(t, zed.SetStripeEntitlementRole(ctx, userID, "supporter", true), "invalid Stripe entitlement role")
+}
+
+func TestEffectiveSupporterTiers(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	ctx := testutil.Context(t, testutil.WaitLong)
+
+	for _, tc := range []struct {
+		name       string
+		role       string
+		stripeRole bool
+		allowed    []bool
+	}{
+		{name: "ordinary", allowed: []bool{false, false, false, false, false, false}},
+		{name: "admin honored", role: "honored", allowed: []bool{true, false, true, false, false, true}},
+		{name: "Stripe honored", role: "stripe_honored", stripeRole: true, allowed: []bool{true, false, true, false, false, true}},
+		{name: "admin revered", role: "revered", allowed: []bool{true, true, true, true, true, true}},
+		{name: "Stripe revered", role: "stripe_revered", stripeRole: true, allowed: []bool{true, true, true, true, true, true}},
+		{name: "admin exalted", role: "exalted", allowed: []bool{true, true, true, true, true, true}},
+		{name: "Stripe exalted", role: "stripe_exalted", stripeRole: true, allowed: []bool{true, true, true, true, true, true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			userID := uuid.New()
+			if tc.role != "" {
+				if tc.stripeRole {
+					require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, tc.role, true))
+				} else {
+					require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{tc.role}))
+				}
+			}
+			chronicle := policy.New().GlobalChronicle()
+			user := policy.New().User(userID)
+			allowed, err := zed.Check(ctx, nil,
+				chronicle.CanHas_honored_User(user),
+				chronicle.CanHas_revered_User(user),
+				chronicle.CanAd_free_User(user),
+				chronicle.CanDownload_raw_logs_User(user),
+				chronicle.CanUnlisted_logs_User(user),
+				chronicle.CanSubmit_photo_proof_User(user),
+			)
+			require.NoError(t, err)
+			require.Equal(t, tc.allowed, allowed)
+			if tc.stripeRole {
+				require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, tc.role, false))
+				allowed, err = zed.Check(ctx, nil, chronicle.CanHas_honored_User(user), chronicle.CanAd_free_User(user))
+				require.NoError(t, err)
+				require.Equal(t, []bool{false, false}, allowed)
+			}
+		})
+	}
+
+	// An administrator grant survives a Stripe revocation, and the proof ban
+	// still overrides the tier's proof permission.
+	userID := uuid.New()
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"honored", "photo_proof_banned"}))
+	require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, "stripe_honored", true))
+	require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, "stripe_honored", false))
+	chronicle := policy.New().GlobalChronicle()
+	user := policy.New().User(userID)
+	allowed, err := zed.Check(ctx, nil, chronicle.CanHas_honored_User(user), chronicle.CanSubmit_photo_proof_User(user))
+	require.NoError(t, err)
+	require.Equal(t, []bool{true, false}, allowed)
+}
+
+func TestOwnerAdFreeTierPermissions(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	ctx := testutil.Context(t, testutil.WaitLong)
+
+	for _, tc := range []struct {
+		name       string
+		role       string
+		stripeRole bool
+		allowed    bool
+	}{
+		{name: "ordinary user"},
+		{name: "personal ad-free", role: "ad_free_capable"},
+		{name: "honored", role: "honored"},
+		{name: "revered", role: "revered", allowed: true},
+		{name: "exalted", role: "exalted", allowed: true},
+		{name: "Stripe honored", role: "stripe_honored", stripeRole: true},
+		{name: "Stripe revered", role: "stripe_revered", stripeRole: true, allowed: true},
+		{name: "Stripe exalted", role: "stripe_exalted", stripeRole: true, allowed: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			userID := uuid.New()
+			if tc.role != "" {
+				if tc.stripeRole {
+					require.NoError(t, zed.SetStripeEntitlementRole(ctx, userID, tc.role, true))
+				} else {
+					require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{tc.role}))
+				}
+			}
+
+			chronicle := policy.New().GlobalChronicle()
+			user := policy.New().User(userID)
+			allowed, err := zed.Check(ctx, nil,
+				chronicle.CanLinked_characters_ad_free_User(user),
+				chronicle.CanUploaded_logs_ad_free_User(user),
+			)
+			require.NoError(t, err)
+			require.Equal(t, []bool{tc.allowed, tc.allowed}, allowed)
+		})
+	}
 }
 
 func TestGuildDiscordBotPermissions(t *testing.T) {

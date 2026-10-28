@@ -52,7 +52,7 @@ describe("DebugInspector", () => {
   });
 
   it("renders a JSON download control", () => {
-    const markup = renderToStaticMarkup(<DebugInspector snapshots={[snapshot]} clientToolRequests={[]} />);
+    const markup = renderToStaticMarkup(<DebugInspector channelId="test" snapshots={[snapshot]} clientToolRequests={[]} />);
     expect(markup).toContain("Download JSON");
     expect(markup).not.toContain("disabled=\"\"");
   });

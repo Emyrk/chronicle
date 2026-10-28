@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { chatReducer, createInitialChatState, type AgUiEvent, type ChatState } from "./protocol";
+import { EMPTY_USAGE, turnUsageByMessage } from "./usage";
 
 function apply(state: ChatState, event: AgUiEvent): ChatState {
   return chatReducer(state, { type: "apply_event", event });
@@ -161,6 +162,7 @@ describe("chatReducer", () => {
       debugSnapshots: [],
       clientToolRequests: [],
       status: "idle",
+      usageTotal: EMPTY_USAGE,
     });
   });
 
@@ -192,4 +194,25 @@ it("keeps a client tool request pending until the server emits TOOL_CALL_END", (
   expect(state.messages[0].toolCalls?.[0]).toMatchObject({ status: "streaming", arguments: '{"tab":"damage"}' });
   state = apply(state, { type: "TOOL_CALL_END", toolCallId: "tool-1" });
   expect(state.messages[0].toolCalls?.[0].status).toBe("complete");
+});
+
+describe("chat usage", () => {
+  it("attaches each call's usage to its message, or to the turn's latest reply, and keeps a chat total", () => {
+    const stored = { promptTokens: 1000, completionTokens: 100, cachedTokens: 0, reasoningTokens: 0, costUsd: 0.01, calls: 2 };
+    let state = createInitialChatState([{ id: "u0", role: "user", content: "earlier" }], stored);
+    state = chatReducer(state, { type: "append_message", message: { id: "u1", role: "user", content: "build it" } });
+    // A tool-only step arrives before any assistant message of this turn exists: it waits on the user message.
+    state = apply(state, { type: "USAGE", runId: "r", messageId: "tool-step", usage: { promptTokens: 10, completionTokens: 1, totalTokens: 11, costUsd: 0.001 } });
+    expect(state.messages.at(-1)?.usage?.promptTokens).toBe(10);
+    state = apply(state, { type: "TEXT_MESSAGE_START", messageId: "a1", role: "assistant" });
+    state = apply(state, { type: "USAGE", runId: "r", messageId: "a1", usage: { promptTokens: 20, completionTokens: 2, totalTokens: 22, cachedTokens: 5, costUsd: 0.002 } });
+    // A later step without its own message joins the latest reply of the same turn.
+    state = apply(state, { type: "USAGE", runId: "r", messageId: "missing", usage: { promptTokens: 30, completionTokens: 3, totalTokens: 33 } });
+    expect(state.messages.at(-1)?.usage).toEqual({ promptTokens: 50, completionTokens: 5, cachedTokens: 5, reasoningTokens: 0, costUsd: 0.002, calls: 2 });
+    expect(state.usageTotal.promptTokens).toBe(1060);
+    expect(state.usageTotal.calls).toBe(5);
+    expect(state.usageTotal.costUsd).toBeCloseTo(0.013);
+    expect(turnUsageByMessage(state.messages, false).get("a1")).toMatchObject({ promptTokens: 60, calls: 3 });
+    expect(chatReducer(state, { type: "reset_conversation" }).usageTotal).toEqual(EMPTY_USAGE);
+  });
 });

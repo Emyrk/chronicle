@@ -28,7 +28,7 @@ import sys
 
 import bmesh
 import bpy
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 
 def parse():
@@ -44,6 +44,12 @@ def parse():
     p.add_argument("--keep-ceiling", action="store_true")
     p.add_argument("--shaded", action="store_true")
     p.add_argument("--no-liquid", action="store_true")
+    p.add_argument("--object-include-prefix", default=None,
+                   help="comma-separated object-name prefixes to keep before framing/rendering")
+    p.add_argument("--object-exclude-prefix", default=None,
+                   help="comma-separated object-name prefixes to drop before framing/rendering")
+    p.add_argument("--z-min", type=float, default=None, help="bisect geometry below this world Z before framing/rendering")
+    p.add_argument("--z-max", type=float, default=None, help="bisect geometry above this world Z before framing/rendering")
     p.add_argument("--frame-exclude-prefix", default=None,
                    help="object-name prefix left out of the camera-frame bounds (e.g. m2_: doodads must not move the frame)")
     p.add_argument("--frame-include-prefix", default=None,
@@ -65,6 +71,51 @@ def import_obj(path):
     bpy.ops.wm.obj_import(filepath=path, forward_axis="Y", up_axis="Z")
     objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     print(f"imported {len(objs)} objects, {sum(len(o.data.polygons) for o in objs)} faces", file=sys.stderr)
+    return objs
+
+
+def prefixes(value):
+    return tuple(v.strip() for v in (value or "").split(",") if v.strip())
+
+
+def select_geometry(objs, include_value=None, exclude_value=None, z_min=None, z_max=None):
+    """Apply explicit object-prefix and world-Z selectors before any frame or pass-specific cull."""
+    includes, excludes = prefixes(include_value), prefixes(exclude_value)
+    drop = [o for o in objs if (includes and not o.name.startswith(includes)) or o.name.startswith(excludes)]
+    keep = [o for o in objs if o not in drop]
+    for ob in drop:
+        bpy.data.objects.remove(ob, do_unlink=True)
+    objs = keep
+    clipped = faces_removed = 0
+    if z_min is not None or z_max is not None:
+        planes = []
+        if z_max is not None:
+            planes.append(((0, 0, z_max), (0, 0, 1)))
+        if z_min is not None:
+            planes.append(((0, 0, z_min), (0, 0, -1)))
+        for ob in objs:
+            if ob.matrix_world != Matrix.Identity(4):
+                raise SystemExit(f"{ob.name}: OBJ import gave a non-identity transform; Z slice assumes world == local")
+            bm = bmesh.new()
+            bm.from_mesh(ob.data)
+            before = len(bm.faces)
+            for co, no in planes:
+                bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], dist=1e-4,
+                                       plane_co=co, plane_no=no, clear_outer=True)
+            loose = [v for v in bm.verts if not v.link_faces]
+            bmesh.ops.delete(bm, geom=loose, context="VERTS")
+            faces_removed += before - len(bm.faces)
+            bm.to_mesh(ob.data)
+            bm.free()
+            ob.data.update()
+            clipped += 1
+        for ob in [o for o in objs if not o.data.polygons]:
+            bpy.data.objects.remove(ob, do_unlink=True)
+        objs = [o for o in objs if o.data.polygons]
+    if not objs:
+        raise SystemExit("floor selection removed all mesh objects")
+    print(f"selection kept={len(objs)} excluded={len(drop)} z_clipped={clipped} faces_removed={faces_removed}",
+          file=sys.stderr)
     return objs
 
 
@@ -99,15 +150,19 @@ def cull_faces(objs, ceiling_thresh, floors_only):
 def world_bounds(objs, exclude_prefix=None, include_prefix=None):
     lo = Vector((math.inf,) * 3)
     hi = Vector((-math.inf,) * 3)
+    found = False
     for ob in objs:
         if exclude_prefix and ob.name.startswith(exclude_prefix):
             continue
         if include_prefix and not ob.name.startswith(include_prefix):
             continue
         for v in ob.data.vertices:
+            found = True
             w = ob.matrix_world @ v.co
             lo = Vector(map(min, lo, w))
             hi = Vector(map(max, hi, w))
+    if not found:
+        raise SystemExit("camera frame selectors matched no geometry")
     return lo, hi
 
 
@@ -268,7 +323,8 @@ def main():
     a = parse()
     mode = "water_mask" if a.water_mask else ("shaded" if a.shaded else "albedo")
     objs = import_obj(a.obj)
-    # frame from the FULL model (before any drop/cull), so every pass shares one camera
+    objs = select_geometry(objs, a.object_include_prefix, a.object_exclude_prefix, a.z_min, a.z_max)
+    # frame from the FULL selected model (before any pass-specific drop/cull), so every pass shares one camera
     lo, hi = world_bounds(objs, a.frame_exclude_prefix, a.frame_include_prefix)
     if a.frame_exclude_prefix or a.frame_include_prefix:
         # x/y from the framed objects, z from everything: the camera sits above hi.z, and a palace

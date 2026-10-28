@@ -3,7 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Map as MapIcon, RotateCcw, Skull } from "lucide-react";
 import type { Encounter } from "../../InstancePage";
 import {
+  hasNativeMapFloorArtwork,
   mapAssetUrl,
+  mapFloorMesh,
+  mapFloorRender,
   overlayTilePlacement,
   tilePlacement,
   type WowMapInstanceFloor,
@@ -14,7 +17,8 @@ import {
 } from "@/pages/Technical/mapGallery";
 import { fetchMapManifest } from "@/pages/Technical/mapManifest";
 import type { PanelRenderProps } from "../types";
-import { isMeshOnlyInstance } from "./dungeonMeshes";
+import { MapFloorPicker } from "./MapFloorPicker";
+import { isMeshOnlyInstance, placeableDungeonMesh } from "./dungeonMeshes";
 import type { MapEncounterPositions, MapPositionSample, MapResult } from "./map.processor";
 import {
   clampFreeMapCamera,
@@ -29,6 +33,7 @@ import {
   projectDungeonMapPoint,
   resolveDungeonMapCalibration,
   resolveMapArtwork,
+  resolveMapFloorNumber,
   selectMapJourneyEncounters,
   uiMapPoint,
   zoneMapPoint,
@@ -381,28 +386,41 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
   const encounterMapId = selectedEncounters.find(({ encounter }) => encounter.mapId !== 0)?.encounter.mapId ?? 0;
   const artworkMapId = encounterMapId || mapId;
   const normalizedUIMap = props.context.instance.positionCoordinateSpace === "ui-map-normalized";
-  const artwork = manifestQuery.data && artworkMapId !== null
+  const artwork = useMemo(() => manifestQuery.data && artworkMapId !== null
     ? resolveMapArtwork(
       manifestQuery.data,
       artworkMapId,
       normalizedUIMap ? undefined : representativeSample,
       props.context.instance.name,
     )
-    : null;
+    : null, [
+    artworkMapId,
+    manifestQuery.data,
+    normalizedUIMap,
+    props.context.instance.name,
+    representativeSample,
+  ]);
   const [floorNumber, setFloorNumber] = useState<number | null>(null);
-  const [mapSource, setMapSource] = useState<"styled" | "renders" | "art">("renders");
+  const [mapSource, setMapSource] = useState<"auto" | "styled" | "renders" | "art">("auto");
 
   const zoneSelection = artwork?.kind === "zone"
     ? artwork.map.art?.flatMap((art) => art.layers.map((layer) => ({ art, layer })))
       .find(({ layer }) => layer.width > 0 && layer.height > 0 && layer.tiles.length > 0)
     : undefined;
   const selectedFloorNumber = artwork?.kind === "instance"
-    && artwork.instance.floors.some((floor) => floor.floor === floorNumber)
-    ? floorNumber
-    : artwork?.kind === "instance" ? artwork.instance.floors[0]?.floor ?? null : null;
+    ? resolveMapFloorNumber(
+      artwork.instance,
+      floorNumber,
+      representativeSamples.filter((sample) => sample.mapId === mapId),
+    )
+    : null;
   const selectedFloor = artwork?.kind === "instance"
     ? artwork.instance.floors.find((floor) => floor.floor === selectedFloorNumber) ?? artwork.instance.floors[0]
     : undefined;
+  const selectedRender = artwork?.kind === "instance" ? mapFloorRender(artwork.instance, selectedFloor) : undefined;
+  const selectedMesh = artwork?.kind === "instance"
+    ? placeableDungeonMesh(mapFloorMesh(artwork.instance, selectedFloor))
+    : null;
   const instanceCanvas = artwork?.kind === "instance"
     ? overviewDungeonCanvas(artwork.instance, selectedFloor, normalizedUIMap ? "art" : mapSource)
     : null;
@@ -420,11 +438,12 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
 
   const projectSample = useCallback((sample: MapPositionSample, calibration: ReturnType<typeof resolveDungeonMapCalibration>): MapPoint | null => {
     if (!artwork || sample.mapId !== mapId) return null;
+    if (sample.floor !== undefined && selectedFloorNumber !== null && sample.floor !== selectedFloorNumber) return null;
     if (normalizedUIMap) return uiMapPoint(sample);
     if (artwork.kind === "zone") return zoneMapPoint(sample, artwork.assignment);
     if (!dungeonBounds) return null;
     return projectDungeonMapPoint(sample, dungeonBounds, artwork.instance.mapID, calibration, imageProjection);
-  }, [artwork, dungeonBounds, imageProjection, mapId, normalizedUIMap]);
+  }, [artwork, dungeonBounds, imageProjection, mapId, normalizedUIMap, selectedFloorNumber]);
 
   const journeyRoutes = useMemo<EncounterRoute[]>(() => {
     if (!artwork || selectedEncounters.length === 0) return [];
@@ -534,10 +553,28 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
     return <MapMessage title="No position telemetry" detail="The selected encounters do not contain unit-position data." />;
   }
   if (!artwork) return <MapMessage title={`Map ${artworkMapId} is unavailable`} detail="The active dataset does not publish artwork or rendered geometry for this world map." />;
-  if (artwork.kind === "instance" && isMeshOnlyInstance(artwork.instance)) {
-    return <MapMessage title="No map artwork for this instance" detail={`${artwork.instance.name} has no 2D map; it is 3D only. Select a single encounter to open its 3D Replay Map.`} />;
+  if (artwork.kind === "instance" && (isMeshOnlyInstance(artwork.instance) || (!canvas && selectedMesh))) {
+    return (
+      <MapMessage title="No map artwork for this floor" detail={`${artwork.instance.name} has no 2D map for this floor; it is 3D only. Select a single encounter to open its 3D Replay Map.`}>
+        <MapFloorPicker
+          floors={artwork.instance.floors.map((floor) => floor.floor)}
+          value={selectedFloorNumber}
+          onChange={setFloorNumber}
+        />
+      </MapMessage>
+    );
   }
-  if (!canvas) return <MapMessage title="Map assets unavailable" detail="No renderable map layer was published." />;
+  if (!canvas) return (
+    <MapMessage title="Map assets unavailable" detail="No renderable map layer was published for this floor. Choose another floor to try its artwork.">
+      {artwork.kind === "instance" && (
+        <MapFloorPicker
+          floors={artwork.instance.floors.map((floor) => floor.floor)}
+          value={selectedFloorNumber}
+          onChange={setFloorNumber}
+        />
+      )}
+    </MapMessage>
+  );
 
   const mapName = artwork.kind === "zone" ? artwork.map.name : artwork.instance.name;
   const displayedMapId = artwork.kind === "instance" ? artwork.instance.mapID : mapId;
@@ -550,21 +587,21 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
           <span className="ml-1.5 font-mono">world {displayedMapId}</span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {!normalizedUIMap && artwork.kind === "instance" && [artwork.instance.renders, artwork.instance.styled, selectedFloor].filter(Boolean).length > 1 && (
+          {!normalizedUIMap && artwork.kind === "instance" && [selectedRender, artwork.instance.styled, hasNativeMapFloorArtwork(selectedFloor) ? selectedFloor : null].filter(Boolean).length > 1 && (
             <select
               aria-label="Map source"
               value={instanceCanvas?.source}
               onChange={(event) => setMapSource(event.target.value as "styled" | "renders" | "art")}
               className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground [color-scheme:dark]"
             >
-              {artwork.instance.renders && <option value="renders">Raw render</option>}
+              {selectedRender && <option value="renders">Raw render</option>}
               {artwork.instance.styled && <option value="styled">Stylized</option>}
-              {selectedFloor && <option value="art">Original artwork</option>}
+              {hasNativeMapFloorArtwork(selectedFloor) && <option value="art">Original artwork</option>}
             </select>
           )}
           <span>{Math.round(mapScale * camera.scale * 100)}%</span>
           <span>{routes.length} encounters</span>
-          {artwork.kind === "instance" && !imageProjection && artwork.instance.floors.length > 1 && (
+          {artwork.kind === "instance" && artwork.instance.floors.length > 1 && (
             <select
               aria-label="Map floor"
               value={selectedFloorNumber ?? ""}
@@ -711,12 +748,13 @@ export function MapOverview2D({ mini = false, ...props }: PanelRenderProps<MapRe
   );
 }
 
-function MapMessage({ title, detail }: { title: string; detail: string }) {
+function MapMessage({ title, detail, children }: { title: string; detail: string; children?: ReactNode }) {
   return (
     <div className="flex h-full min-h-48 flex-col items-center justify-center gap-2 p-6 text-center">
       <MapIcon className="h-8 w-8 text-muted-foreground/50" />
       <div className="text-sm font-medium text-foreground">{title}</div>
       <p className="max-w-sm text-xs text-muted-foreground">{detail}</p>
+      {children}
     </div>
   );
 }

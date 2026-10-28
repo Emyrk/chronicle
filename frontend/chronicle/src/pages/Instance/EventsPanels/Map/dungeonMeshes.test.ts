@@ -7,10 +7,12 @@ import {
   dungeonMeshPlacement,
   dungeonMeshUrl,
   floorBelow,
+  floorWithoutLoggedHeight,
   FloorHeightCache,
   isMeshOnlyInstance,
   medianHeight,
   placeableDungeonMesh,
+  replayDungeonMesh,
 } from "./dungeonMeshes";
 import { mapPointToScene, renderedDungeonMapPoint } from "./mapModel";
 
@@ -91,6 +93,27 @@ describe("placeableDungeonMesh", () => {
     expect(placeableDungeonMesh({ ...WC_MESH, path: "" })).toBeNull();
     expect(placeableDungeonMesh({ ...WC_MESH, bounds: { ...WC_MESH.bounds, maxX: WC_MESH.bounds.minX } })).toBeNull();
     expect(placeableDungeonMesh({ ...WC_MESH, bounds: { ...WC_MESH.bounds, minY: WC_MESH.bounds.maxY + 1 } })).toBeNull();
+  });
+});
+
+describe("replayDungeonMesh", () => {
+  it("keeps a floor GLB available when flat mode uses native UI-map artwork", () => {
+    const floor = { ...WC_FLOOR, mesh: WC_MESH };
+    const instance: WowMapInstance = {
+      mapID: 595,
+      name: "The Culling of Stratholme",
+      instanceType: 0,
+      directory: "StratholmeCOT",
+      floors: [floor],
+      mesh: RFC_MESH,
+    };
+
+    expect(replayDungeonMesh(instance, floor)).toBe(WC_MESH);
+  });
+
+  it("retains the legacy instance mesh fallback", () => {
+    const instance: WowMapInstance = { ...RFC_INSTANCE, floors: [WC_FLOOR] };
+    expect(replayDungeonMesh(instance, WC_FLOOR)).toBe(RFC_MESH);
   });
 });
 
@@ -192,6 +215,20 @@ describe("floorBelow", () => {
   it("misses when nothing lies below the top", () => {
     expect(floorBelow(() => null, TOP, 3)).toBeNull();
     expect(floorBelow(() => null, TOP, undefined)).toBeNull();
+  });
+});
+
+describe("floorWithoutLoggedHeight", () => {
+  it("uses the lowest surface for normalized no-Z positions", () => {
+    expect(floorWithoutLoggedHeight(20, 0, true)).toBe(0);
+  });
+
+  it("keeps the highest surface for world-coordinate positions", () => {
+    expect(floorWithoutLoggedHeight(20, 0, false)).toBe(20);
+  });
+
+  it("falls back to the highest hit when no lower surface is found", () => {
+    expect(floorWithoutLoggedHeight(20, null, true)).toBe(20);
   });
 });
 

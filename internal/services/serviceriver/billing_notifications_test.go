@@ -23,6 +23,11 @@ func TestBillingSubscriptionNotificationArgs(t *testing.T) {
 		ProviderCustomerID:     "cus_123",
 		ProviderSubscriptionID: "sub_123",
 		ProductCode:            billing.TierExalted,
+		ProviderPriceID:        "price_annual",
+		UnitAmount:             1800,
+		Currency:               "usd",
+		IntervalMonths:         12,
+		Quantity:               2,
 		Status:                 string(stripe.SubscriptionStatusActive),
 		CurrentPeriodEnd:       periodEnd,
 		CancelAt:               cancelAt,
@@ -34,6 +39,11 @@ func TestBillingSubscriptionNotificationArgs(t *testing.T) {
 		{Name: "User", Value: userID.String(), Inline: true},
 		{Name: "Tier", Value: billing.TierExalted, Inline: true},
 		{Name: "Status", Value: string(stripe.SubscriptionStatusActive), Inline: true},
+		{Name: "Event", Value: string(stripe.EventTypeCustomerSubscriptionUpdated)},
+		{Name: "Subscription price", Value: "36.00 USD", Inline: true},
+		{Name: "Billing period", Value: "12 months", Inline: true},
+		{Name: "Quantity", Value: "2", Inline: true},
+		{Name: "Price", Value: "price_annual"},
 		{Name: "Subscription", Value: "sub_123"},
 		{Name: "Customer", Value: "cus_123"},
 		{Name: "Current period ends", Value: periodEnd.Format(time.RFC3339)},
@@ -41,9 +51,19 @@ func TestBillingSubscriptionNotificationArgs(t *testing.T) {
 	}, args.Fields)
 }
 
+func TestFormatMinorUnits(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "18.00 USD", formatMinorUnits(1800, "usd"))
+	require.Equal(t, "1800 JPY", formatMinorUnits(1800, "jpy"))
+	require.Equal(t, "1800 CUSTOM (minor units)", formatMinorUnits(1800, "custom"))
+}
+
 func TestStripeSubscriptionNotificationTitles(t *testing.T) {
 	t.Parallel()
 
+	require.Equal(t, "Stripe subscription changed during reconciliation", stripeSubscriptionNotificationTitle(billing.SubscriptionChangeEventReconciled))
+	require.Equal(t, "Stripe subscription canceled during reconciliation", stripeSubscriptionNotificationTitle(billing.SubscriptionChangeEventReconciledCanceled))
 	require.Equal(t, "Stripe subscription created", stripeSubscriptionNotificationTitle(string(stripe.EventTypeCustomerSubscriptionCreated)))
 	require.Equal(t, "Stripe subscription updated", stripeSubscriptionNotificationTitle(string(stripe.EventTypeCustomerSubscriptionUpdated)))
 	require.Equal(t, "Stripe subscription deleted", stripeSubscriptionNotificationTitle(string(stripe.EventTypeCustomerSubscriptionDeleted)))

@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/x-icon" href="/c/chronicle/favicon.ico">
+<title>Choose your community · Chronicle</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#1a1a1a;--card:#161616;--card-hover:#1f2326;--border:#2a2a2a;
+    --text:#e8e8ea;--muted:#8a8a8f;--faint:#555;--accent:#5F8FA6;--accent-soft:rgba(95,143,166,.14);
+  }
+  body{
+    min-height:100vh;display:flex;flex-direction:column;align-items:center;
+    padding:12vh 16px 48px;
+    background:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(95,143,166,.16),transparent 70%),var(--bg);
+    color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  main{width:100%;max-width:760px}
+  /* The SVG has built-in padding; the negative margin trims it like the navbar does. */
+  .brand{display:block;height:84px;width:auto;margin:-1rem auto -.5rem}
+  h1{margin-top:.75rem;font-size:1.6rem;font-weight:650;text-align:center;letter-spacing:-.01em}
+  .lede{margin-top:.5rem;color:var(--muted);font-size:.95rem;line-height:1.55;text-align:center}
+  .path{
+    display:flex;justify-content:center;margin-top:1rem;
+  }
+  .path code{
+    max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    font:500 .8rem ui-monospace,SFMono-Regular,Menlo,monospace;color:#bbb;
+    background:var(--card);border:1px solid var(--border);border-radius:999px;padding:.35rem .8rem;
+  }
+  .notice{
+    margin-top:1.5rem;padding:.75rem 1rem;border-radius:10px;font-size:.875rem;line-height:1.5;
+    background:var(--accent-soft);border:1px solid rgba(95,143,166,.35);color:#cfe0e8;
+    display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;
+  }
+  .list{
+    margin-top:1.25rem;display:grid;gap:.75rem;
+    grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  }
+  .dest{
+    all:unset;box-sizing:border-box;cursor:pointer;position:relative;
+    display:flex;flex-direction:column;align-items:center;gap:.6rem;text-align:center;
+    padding:1.25rem .75rem 1rem;min-width:0;
+    background:var(--card);border:1px solid var(--border);border-radius:14px;
+    transition:background .15s,border-color .15s,transform .15s;
+    opacity:0;animation:rise .35s ease-out forwards;
+  }
+  .dest:hover,.dest:focus-visible{background:var(--card-hover);border-color:var(--accent);transform:translateY(-2px)}
+  .dest:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .dest:active{transform:scale(.98)}
+  .dest.saved{border-color:var(--accent);background:linear-gradient(var(--accent-soft),var(--accent-soft)),var(--card)}
+  .logo{
+    flex:none;width:52px;height:52px;border-radius:12px;display:grid;place-items:center;overflow:hidden;
+    background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:1.35rem;
+  }
+  .logo img{width:100%;height:100%;object-fit:contain}
+  .logo.lg{width:64px;height:64px;border-radius:14px;font-size:1.6rem}
+  .meta{min-width:0;width:100%}
+  .name{font-weight:600;font-size:.95rem;line-height:1.3;overflow-wrap:anywhere}
+  .sub{color:var(--muted);font-size:.8rem;margin-top:.15rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dest .sub{
+    white-space:normal;line-height:1.35;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  }
+  .tag{
+    position:absolute;top:.5rem;right:.5rem;
+    font-size:.6rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#111;
+    background:var(--accent);border-radius:999px;padding:.1rem .45rem;
+  }
+  .remember{
+    margin-top:1.5rem;display:flex;gap:.85rem;align-items:center;cursor:pointer;
+    padding:.9rem 1rem;border-radius:14px;
+    background:var(--accent-soft);border:1px solid rgba(95,143,166,.45);
+    box-shadow:0 0 0 4px rgba(95,143,166,.06);
+    transition:background .2s,border-color .2s,box-shadow .2s;
+  }
+  .remember.off{background:var(--card);border-color:var(--border);box-shadow:none}
+  .remember .icon{
+    flex:none;width:36px;height:36px;border-radius:10px;display:grid;place-items:center;
+    background:var(--accent);color:#111;transition:background .2s,color .2s;
+  }
+  .remember.off .icon{background:var(--border);color:var(--muted)}
+  .remember .text{flex:1;min-width:0}
+  .remember strong{display:block;font-size:.95rem;font-weight:650;color:var(--text)}
+  .remember small{display:block;margin-top:.1rem;color:var(--muted);font-size:.8rem;line-height:1.4}
+  .switch{
+    appearance:none;-webkit-appearance:none;flex:none;cursor:pointer;position:relative;
+    width:2.75rem;height:1.6rem;border-radius:999px;background:#3a3a3a;transition:background .2s;
+  }
+  .switch::after{
+    content:"";position:absolute;top:3px;left:3px;width:calc(1.6rem - 6px);height:calc(1.6rem - 6px);
+    border-radius:50%;background:#fff;transition:transform .2s;
+  }
+  .switch:checked{background:var(--accent)}
+  .switch:checked::after{transform:translateX(1.15rem)}
+  .switch:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+  .btn{
+    all:unset;box-sizing:border-box;cursor:pointer;font-size:.875rem;font-weight:550;
+    padding:.55rem 1.1rem;border-radius:8px;border:1px solid var(--accent);color:var(--accent);
+    transition:background .15s,color .15s;text-align:center;
+  }
+  .btn:hover,.btn:focus-visible{background:var(--accent);color:#111}
+  .btn.primary{background:var(--accent);color:#111}
+  .btn.primary:hover{filter:brightness(1.1)}
+  .btn.link{border-color:transparent;padding:.25rem .4rem;color:#cfe0e8;text-decoration:underline;text-underline-offset:3px}
+  .btn.link:hover{background:transparent;color:var(--text)}
+  .going{
+    margin-top:2rem;padding:2rem 1.5rem;text-align:center;
+    background:var(--card);border:1px solid var(--border);border-radius:16px;
+    animation:rise .35s ease-out;
+  }
+  .going .logo{margin:0 auto}
+  .going .label{margin-top:1rem;color:var(--muted);font-size:.85rem}
+  .going .target{margin-top:.25rem;font-size:1.3rem;font-weight:650}
+  .bar{margin:1.25rem auto 0;height:3px;max-width:240px;border-radius:3px;background:var(--border);overflow:hidden}
+  .bar span{display:block;height:100%;width:100%;background:var(--accent);transform-origin:left;animation:fill var(--delay) linear forwards}
+  .actions{margin-top:1.5rem;display:flex;gap:.6rem;justify-content:center;flex-wrap:wrap}
+  .hint{margin-top:.6rem;color:var(--faint);font-size:.8rem;text-align:center}
+  .empty{margin-top:2rem;text-align:center;color:var(--muted)}
+  footer{margin-top:2.5rem;font-size:.75rem;color:var(--faint);text-align:center;line-height:1.6}
+  @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @keyframes fill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+  @media (prefers-reduced-motion:reduce){
+    .dest,.going{animation:none;opacity:1}
+    .dest:hover,.dest:focus-visible{transform:none}
+    .bar span{animation:none}
+  }
+</style>
+</head>
+<body>
+<main id="app" aria-live="polite"></main>
+<footer>Your choice is saved only in this browser.<br>Chronicle</footer>
+<script type="application/json" id="choose-data">{{CHOOSE_DATA}}</script>
+<script>
+(function () {
+  "use strict";
+  var STORAGE_KEY = "chronicle.choose.v1";
+  // Params the chooser consumes; everything else is forwarded.
+  var MANAGE_PARAM = "choose_manage";
+  var FORGET_PARAM = "choose_forget";
+  // Tells the destination how the visitor arrived so it can explain itself.
+  var ARRIVAL_PARAM = "from_choose";
+  var AUTO_REDIRECT_MS = 1400;
+
+  var data = JSON.parse(document.getElementById("choose-data").textContent);
+  var destinations = data.destinations || [];
+  var app = document.getElementById("app");
+
+  // Storybook renders this page with data.preview to fake the URL, the saved
+  // choice and navigation. The server never sends it.
+  var preview = data.preview || null;
+  var previewSaved = preview && preview.saved ? JSON.stringify({ key: preview.saved }) : null;
+
+  var here = new URL(preview ? preview.url : window.location.href);
+  var manage = here.searchParams.has(MANAGE_PARAM);
+  var forget = here.searchParams.has(FORGET_PARAM);
+  here.searchParams.delete(MANAGE_PARAM);
+  here.searchParams.delete(FORGET_PARAM);
+  var forwardPath = here.pathname + here.search + here.hash;
+  if ((manage || forget) && !preview) {
+    history.replaceState(null, "", forwardPath);
+  }
+
+  function loadChoice() {
+    try {
+      var v = JSON.parse((preview ? previewSaved : localStorage.getItem(STORAGE_KEY)) || "null");
+      return v && typeof v.key === "string" ? v : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  function saveChoice(key) {
+    var v = JSON.stringify({ key: key, saved_at: new Date().toISOString() });
+    if (preview) { previewSaved = v; return; }
+    try {
+      localStorage.setItem(STORAGE_KEY, v);
+    } catch (e) { /* storage unavailable: the choice just isn't remembered */ }
+  }
+  function clearChoice() {
+    if (preview) { previewSaved = null; return; }
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+  }
+  function navigate(url, replace) {
+    if (preview) {
+      app.replaceChildren(
+        el("div", { "class": "notice", role: "status", text: "Preview: would open " + url }),
+        el("div", { "class": "actions" }, [
+          el("button", { "class": "btn", type: "button", text: "Back to picker", onclick: function () { renderPicker(""); } }),
+        ])
+      );
+      return;
+    }
+    if (replace) window.location.replace(url);
+    else window.location.assign(url);
+  }
+  function findDestination(key) {
+    for (var i = 0; i < destinations.length; i++) {
+      if (destinations[i].key === key) return destinations[i];
+    }
+    return null;
+  }
+  function destinationURL(dest, arrival) {
+    var u = new URL(forwardPath, dest.origin);
+    u.searchParams.set(ARRIVAL_PARAM, arrival);
+    return u.toString();
+  }
+  function hostOf(dest) {
+    try { return new URL(dest.origin).host; } catch (e) { return dest.origin; }
+  }
+
+  function el(tag, attrs, children) {
+    var node = document.createElement(tag);
+    if (attrs) {
+      for (var k in attrs) {
+        if (k === "text") node.textContent = attrs[k];
+        else if (k === "onclick") node.addEventListener("click", attrs[k]);
+        else node.setAttribute(k, attrs[k]);
+      }
+    }
+    (children || []).forEach(function (c) { if (c) node.appendChild(c); });
+    return node;
+  }
+  function logo(dest, large) {
+    var box = el("div", { "class": large ? "logo lg" : "logo", "aria-hidden": "true" });
+    var initial = (dest.name || "?").trim().charAt(0).toUpperCase();
+    if (dest.logo && (dest.logo.charAt(0) === "/" || dest.logo.indexOf("https://") === 0)) {
+      var img = el("img", { src: dest.logo, alt: "" });
+      img.addEventListener("error", function () { box.textContent = initial; });
+      box.appendChild(img);
+    } else {
+      box.textContent = initial;
+    }
+    return box;
+  }
+  function bookmarkIcon() {
+    var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("width", "18");
+    svg.setAttribute("height", "18");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2.2");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
+    var p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    p.setAttribute("d", "M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z");
+    svg.appendChild(p);
+    return svg;
+  }
+  function brand() {
+    return el("img", { "class": "brand", src: "/c/chronicle/ChronicleLogoCenter.svg", alt: "Chronicle" });
+  }
+  function pathChip() {
+    var shown = forwardPath === "/" ? "Home page" : forwardPath;
+    return el("div", { "class": "path" }, [el("code", { text: shown, title: shown })]);
+  }
+
+  var timer = null;
+
+  function renderRedirect(dest) {
+    var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var bar = el("div", { "class": "bar" }, [el("span")]);
+    bar.style.setProperty("--delay", AUTO_REDIRECT_MS + "ms");
+    var go = function () { clearTimeout(timer); navigate(destinationURL(dest, "saved"), true); };
+
+    app.replaceChildren(
+      brand(),
+      el("h1", { text: "Opening your community" }),
+      pathChip(),
+      el("div", { "class": "going" }, [
+        logo(dest, true),
+        el("div", { "class": "label", text: "Taking you to your saved choice" }),
+        el("div", { "class": "target", text: dest.name }),
+        el("div", { "class": "sub", text: hostOf(dest) }),
+        reduced ? null : bar,
+        el("div", { "class": "actions" }, [
+          el("button", { "class": "btn primary", type: "button", text: "Go now", onclick: go }),
+          el("button", {
+            "class": "btn", type: "button", text: "Choose another",
+            onclick: function () { clearTimeout(timer); renderPicker(""); },
+          }),
+        ]),
+      ])
+    );
+    timer = setTimeout(go, AUTO_REDIRECT_MS);
+  }
+
+  function renderPicker(message) {
+    var saved = loadChoice();
+    var savedDest = saved ? findDestination(saved.key) : null;
+
+    var remember = el("input", { type: "checkbox", id: "remember", role: "switch", "class": "switch" });
+    remember.checked = true;
+    var rememberHint = el("small");
+    var rememberBox = el("label", { "class": "remember", "for": "remember" }, [
+      el("span", { "class": "icon" }, [bookmarkIcon()]),
+      el("span", { "class": "text" }, [el("strong", { text: "Remember my choice" }), rememberHint]),
+      remember,
+    ]);
+    function syncRemember() {
+      rememberBox.classList.toggle("off", !remember.checked);
+      rememberHint.textContent = remember.checked
+        ? "Future choose links will open your pick automatically. You can change it any time."
+        : "We'll ask again next time you open a choose link.";
+    }
+    remember.addEventListener("change", syncRemember);
+    syncRemember();
+
+    var children = [
+      brand(),
+      el("h1", { text: "Where should this link open?" }),
+      el("p", {
+        "class": "lede",
+        text: "Chronicle is home to many communities. Pick yours and we'll open this page there.",
+      }),
+      pathChip(),
+    ];
+
+    if (message) {
+      children.push(el("div", { "class": "notice", role: "status", text: message }));
+    } else if (savedDest) {
+      children.push(el("div", { "class": "notice" }, [
+        el("span", { text: "Links currently open on " + savedDest.name + "." }),
+        el("button", {
+          "class": "btn link", type: "button", text: "Forget my choice",
+          onclick: function () {
+            clearChoice();
+            renderPicker("Saved choice removed. Links will ask you again.");
+          },
+        }),
+      ]));
+    }
+
+    if (destinations.length === 0) {
+      children.push(el("p", { "class": "empty", text: "No communities are available right now. Hidden communities are not listed." }));
+      app.replaceChildren.apply(app, children);
+      return;
+    }
+
+    var list = el("div", { "class": "list" });
+    destinations.forEach(function (dest, i) {
+      var isSaved = savedDest && savedDest.key === dest.key;
+      var btn = el("button", {
+        "class": isSaved ? "dest saved" : "dest", type: "button",
+        onclick: function () {
+          var arrival = "picked";
+          if (remember.checked) {
+            saveChoice(dest.key);
+            arrival = "remembered";
+          }
+          navigate(destinationURL(dest, arrival), false);
+        },
+      }, [
+        isSaved ? el("span", { "class": "tag", text: "Saved" }) : null,
+        logo(dest, false),
+        el("div", { "class": "meta" }, [
+          el("div", { "class": "name", text: dest.name }),
+          el("div", { "class": "sub", text: dest.tagline || hostOf(dest) }),
+        ]),
+      ]);
+      btn.style.animationDelay = Math.min(i * 40, 400) + "ms";
+      list.appendChild(btn);
+    });
+    // Above the list so it's seen before picking, however long the list is.
+    children.push(rememberBox);
+    children.push(list);
+    children.push(el("p", { "class": "hint", text: "Hidden communities are not listed." }));
+
+    app.replaceChildren.apply(app, children);
+  }
+
+  if (forget) {
+    clearChoice();
+    renderPicker("Saved choice removed. Links will ask you again.");
+    return;
+  }
+  var saved = loadChoice();
+  var savedDest = saved ? findDestination(saved.key) : null;
+  if (savedDest && !manage) {
+    renderRedirect(savedDest);
+  } else {
+    renderPicker("");
+  }
+})();
+</script>
+</body>
+</html>

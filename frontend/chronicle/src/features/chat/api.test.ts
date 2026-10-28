@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assistantEnabled,
   InferenceAPIError,
   inferenceAPIErrorMessage,
   isInferenceAuthorizationError,
@@ -33,5 +34,17 @@ describe("inference authorization errors", () => {
       message: "Run conflict",
       detail: "Another response is still active",
     }, "Failed")).toBe("Run conflict: Another response is still active");
+  });
+});
+describe("assistantEnabled", () => {
+  it("waits for settings, honours the user's choice and defaults unknown assistants on", () => {
+    const settings = { assistants: [
+      { id: "site-help", name: "Ask Chronicle", description: "", enabled: false },
+      { id: "addon-workshop-panel", name: "Addon Workshop", description: "", enabled: true },
+    ] };
+    expect(assistantEnabled(undefined, "site-help")).toBe(false);
+    expect(assistantEnabled(settings, "site-help")).toBe(false);
+    expect(assistantEnabled(settings, "addon-workshop-panel")).toBe(true);
+    expect(assistantEnabled(settings, "instance-analyst")).toBe(true);
   });
 });

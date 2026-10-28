@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { PortalContainerProvider } from "@/components/ui/PortalContainerContext";
 import { cn } from "@/lib/utils";
 import { ChatPanel, type ChatPanelProps } from "./ChatPanel";
+import { useBottomRightAvoidance } from "./floatingAvoidance";
 import { useOptionalInferenceRuntime } from "./runtime";
 import type { ChatWindowController } from "./useChatWindow";
 import { useAssistantChat, type UseAssistantChatOptions } from "./useAssistantChat";
@@ -18,10 +19,16 @@ export function AssistantChatLauncher({
   label = "Ask Chronicle",
   variant = "default",
   running = false,
+  style,
   ...props
 }: AssistantChatLauncherProps) {
+  const { ref, offset } = useBottomRightAvoidance<HTMLButtonElement>();
+  const transform = offset > 0
+    ? `${style?.transform ? `${style.transform} ` : ""}translateY(-${offset}px)`
+    : style?.transform;
+
   return (
-    <Button variant={variant} {...props}>
+    <Button ref={ref} variant={variant} style={{ ...style, transform }} {...props}>
       {running ? <LoaderCircle className="animate-spin" /> : <MessageCircleMore />}
       {label}
     </Button>
@@ -85,6 +92,7 @@ export function AssistantChat({
   endpoint,
   headers,
   initialMessages,
+  initialUsage,
   threadId,
   createRequest,
   onMessagesChange,
@@ -99,6 +107,7 @@ export function AssistantChat({
     endpoint,
     headers,
     initialMessages,
+    initialUsage,
     threadId,
     createRequest,
     onMessagesChange,

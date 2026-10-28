@@ -25,6 +25,8 @@ const TICK_MS = 250;
 /** Fastest the whole run plays: quick enough to show the run, slow enough to read the fights. */
 const HERO_MAX_SPEED = 4;
 const NO_PLAN_ITEMS: [] = [];
+// The hero draws neither the encounter route nor movement trails.
+const NO_ROUTE: [] = [];
 // The deaths processor's streams the replay already fetched, so the death cards' recaps download nothing more.
 const HERO_DEATH_STREAMS = deathsProcessor.streams.filter((stream) => HERO_STREAMS.includes(stream));
 /** A death card's strip covers this long before the death. */
@@ -253,7 +255,7 @@ function HeroScene({ instance, startOffsetMs, active, onReplay, still = false }:
   if (stillTiles) {
     return (
       <div aria-hidden className="pointer-events-none absolute inset-0">
-        <MapView2D ground={ready.ground} markers={ready.markers} view={{ viewport: autoFit ?? FULL_MAP_VIEWPORT, key: "still" }} />
+        <MapView2D ground={ready.ground} markers={ready.markers} routePoints={NO_ROUTE} projectSample={ready.projectSample} trailSeconds={0} view={{ viewport: autoFit ?? FULL_MAP_VIEWPORT, key: "still" }} />
       </div>
     );
   }
@@ -267,6 +269,7 @@ function HeroScene({ instance, startOffsetMs, active, onReplay, still = false }:
       <MapView3D
         ground={ready.ground}
         markers={ready.markers}
+        routePoints={NO_ROUTE}
         projectSample={ready.projectSample}
         cursorMs={ready.cursorMs}
         playing={ready.playing}

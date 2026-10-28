@@ -55,8 +55,9 @@ type SpeedrunRules struct {
 // Rankings holds all rule sets for an instance.
 // Nil pointers and zero-valued rules mean that ranking category doesn't apply.
 type Rankings struct {
-	Speedrun *SpeedrunRules `json:"speedrun,omitempty"`
-	Damage   DamageRule     `json:"-"`
+	Speedrun          *SpeedrunRules           `json:"speedrun,omitempty"`
+	Damage            DamageRule               `json:"-"`
+	DamageByEncounter map[string]DamageTargets `json:"damage_by_encounter,omitempty"`
 }
 
 // DamageRule selects encounter-specific damage aggregation behavior.
@@ -65,6 +66,18 @@ type DamageRule uint8
 const (
 	DamageRuleNone DamageRule = iota
 	DamageRuleAssemblyOfIron
+)
+
+// DamageTargets defines which targets count for a named encounter. An omitted
+// rule counts every eligible hostile target, including trash.
+type DamageTargets struct {
+	Mode     string   `json:"mode"`                // "boss-only" or "entries"
+	EntryIDs []uint32 `json:"entry_ids,omitempty"` // complete whitelist for entries mode
+}
+
+const (
+	DamageTargetsBossOnly = "boss-only"
+	DamageTargetsEntries  = "entries"
 )
 
 // --- Proof (output, JSON-serializable) ---

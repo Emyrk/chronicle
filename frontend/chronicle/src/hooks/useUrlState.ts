@@ -5,6 +5,7 @@
 
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
+import { isLuaPanelRef, luaPanelRef, parseLuaPanelRef, type LuaPanelRef } from "@/pages/Instance/EventsPanels/LuaPanel/luaPanelRegistry";
 import { isCustomPanelRef, parseCustomPanelRef, type CustomPanelRef } from "@/pages/Instance/EventsPanels/custom/pluginTypes";
 import type { EventsPanelType } from "@/pages/Instance/EventsPanels/EventsPanel";
 
@@ -758,6 +759,19 @@ export function decodeCustomPanelToken(token: string): CustomPanelRef | null {
   return parsed ? `custom:github:${parsed.repository}:${parsed.panelId}` : (`custom:invalid:${token.slice(1)}` as CustomPanelRef);
 }
 
+/** Preserve a channel-following Lua panel reference in shared instance URLs. */
+export function encodeLuaPanelToken(ref: LuaPanelRef): string {
+  return `y${bytesToHex(ref)}`;
+}
+
+export function decodeLuaPanelToken(token: string): LuaPanelRef | null {
+  if (!token.startsWith("y")) return null;
+  const value = hexToString(token.slice(1));
+  // Older links say stable or unstable; normalize them to release and main.
+  const parsed = value ? parseLuaPanelRef(value) : null;
+  return parsed ? luaPanelRef(parsed.id, parsed.channel) : null;
+}
+
 /** Panel option list (aligned with panel list order) */
 export type PanelOptions = (string | null)[];
 
@@ -942,6 +956,7 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
       const panels: PanelType[] = Array.from({ length: minCount }, (_, i) => {
         const parsedCode = parsedPanels[i]?.code;
         if (parsedCode?.startsWith("x")) return decodeCustomPanelToken(parsedCode) ?? (`custom:invalid:${parsedCode.slice(1)}` as CustomPanelRef);
+        if (parsedCode?.startsWith("y")) return decodeLuaPanelToken(parsedCode) ?? 'empty';
         return (parsedCode ? CODE_TO_PANEL[parsedCode] : undefined) ?? fallbackPanels[i] ?? 'empty';
       });
 
@@ -992,7 +1007,7 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
     
     // Panels (with options)
     const panelPart = newState.panels.map((p, i) => {
-      const code = isCustomPanelRef(p) ? encodeCustomPanelToken(p) : PANEL_CODES[p];
+      const code = isCustomPanelRef(p) ? encodeCustomPanelToken(p) : isLuaPanelRef(p) ? encodeLuaPanelToken(p) : PANEL_CODES[p];
       const option = newState.panelOptions?.[i] ?? null;
       return serializePanelCode(code, option);
     }).join('-');

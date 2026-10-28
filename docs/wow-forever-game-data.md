@@ -94,6 +94,22 @@ This uses the configured default Forever client path, provisions the pinned `wow
 
 The Forever dataset should use its own icon base URL, for example `https://icons.chronicleclassic.com/forever`, in the dataset settings.
 
+## Extract and publish talent backgrounds
+
+Forever keeps the classic talent-tree artwork in modern CASC archives rather than the legacy `TalentTab.dbc` and MPQ layout. Extract the current build's four background quadrants, combine them into one WebP per class tree, and upload them through the shared icon pipeline:
+
+```bash
+SERVER=forever make icons/talents
+```
+
+To inspect the generated files before publishing, run only the extraction stage:
+
+```bash
+SERVER=forever make icons/talents-extract
+```
+
+The generated backgrounds are written under `frontend/imagecache/forever/talent-backgrounds/`. Raw quadrants are cached by exact WoW build under the user's cache directory so interrupted exports can resume.
+
 ## Extract and publish UI maps
 
 Chronicle can export WoW Forever's `UiMap` artwork for position visualizations. The extractor reads the UI map art and assignment tables, `WorldMapOverlay` and `WorldMapOverlayTile` for fully explored zone artwork, plus `Map` and the client listfile for available dungeon and raid floors. It then exports every referenced BLP FileDataID directly as WebP:

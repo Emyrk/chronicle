@@ -1394,6 +1394,21 @@ func (q *sqlQuerier) DeleteBillingEntitlementsByProviderCustomerID(ctx context.C
 	return err
 }
 
+const deleteOldSuccessfulBillingReconciliationRuns = `-- name: DeleteOldSuccessfulBillingReconciliationRuns :execrows
+DELETE FROM billing_reconciliation_runs
+WHERE status = 'completed'
+  AND error_text = ''
+  AND started_at < NOW() - INTERVAL '7 days'
+`
+
+func (q *sqlQuerier) DeleteOldSuccessfulBillingReconciliationRuns(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOldSuccessfulBillingReconciliationRuns)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getBillingEntitlementOwnerByProviderCustomerID = `-- name: GetBillingEntitlementOwnerByProviderCustomerID :one
 SELECT user_id FROM billing_entitlements
 WHERE provider = $1
@@ -1727,33 +1742,56 @@ func (q *sqlQuerier) ListRecentBillingReconciliationRuns(ctx context.Context, li
 }
 
 const listRecentBillingSubscriptions = `-- name: ListRecentBillingSubscriptions :many
-SELECT user_id, provider_customer_id, provider_subscription_id, product_code, status, current_period_end, cancel_at_period_end, updated_at, provider, provider_product_id, provider_price_id, cancel_at FROM billing_subscriptions
-ORDER BY updated_at DESC
+SELECT
+  billing_subscriptions.user_id, billing_subscriptions.provider_customer_id, billing_subscriptions.provider_subscription_id, billing_subscriptions.product_code, billing_subscriptions.status, billing_subscriptions.current_period_end, billing_subscriptions.cancel_at_period_end, billing_subscriptions.updated_at, billing_subscriptions.provider, billing_subscriptions.provider_product_id, billing_subscriptions.provider_price_id, billing_subscriptions.cancel_at,
+  chronicle_users.username,
+  chronicle_users.email,
+  COALESCE(discord_auth.linked_id, '')::text AS discord_id
+FROM billing_subscriptions
+JOIN chronicle_users ON chronicle_users.id = billing_subscriptions.user_id
+LEFT JOIN LATERAL (
+  SELECT linked_id
+  FROM user_auth_links
+  WHERE user_id = billing_subscriptions.user_id
+    AND provider = 'discord'
+  LIMIT 1
+) AS discord_auth ON true
+ORDER BY billing_subscriptions.updated_at DESC
 LIMIT $1
 `
 
-func (q *sqlQuerier) ListRecentBillingSubscriptions(ctx context.Context, limit int32) ([]BillingSubscription, error) {
+type ListRecentBillingSubscriptionsRow struct {
+	BillingSubscription BillingSubscription `db:"billing_subscription" json:"billing_subscription"`
+	Username            string              `db:"username" json:"username"`
+	Email               string              `db:"email" json:"email"`
+	DiscordID           string              `db:"discord_id" json:"discord_id"`
+}
+
+func (q *sqlQuerier) ListRecentBillingSubscriptions(ctx context.Context, limit int32) ([]ListRecentBillingSubscriptionsRow, error) {
 	rows, err := q.db.Query(ctx, listRecentBillingSubscriptions, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []BillingSubscription
+	var items []ListRecentBillingSubscriptionsRow
 	for rows.Next() {
-		var i BillingSubscription
+		var i ListRecentBillingSubscriptionsRow
 		if err := rows.Scan(
-			&i.UserID,
-			&i.ProviderCustomerID,
-			&i.ProviderSubscriptionID,
-			&i.ProductCode,
-			&i.Status,
-			&i.CurrentPeriodEnd,
-			&i.CancelAtPeriodEnd,
-			&i.UpdatedAt,
-			&i.Provider,
-			&i.ProviderProductID,
-			&i.ProviderPriceID,
-			&i.CancelAt,
+			&i.BillingSubscription.UserID,
+			&i.BillingSubscription.ProviderCustomerID,
+			&i.BillingSubscription.ProviderSubscriptionID,
+			&i.BillingSubscription.ProductCode,
+			&i.BillingSubscription.Status,
+			&i.BillingSubscription.CurrentPeriodEnd,
+			&i.BillingSubscription.CancelAtPeriodEnd,
+			&i.BillingSubscription.UpdatedAt,
+			&i.BillingSubscription.Provider,
+			&i.BillingSubscription.ProviderProductID,
+			&i.BillingSubscription.ProviderPriceID,
+			&i.BillingSubscription.CancelAt,
+			&i.Username,
+			&i.Email,
+			&i.DiscordID,
 		); err != nil {
 			return nil, err
 		}
@@ -9346,9 +9384,9 @@ WITH deleted AS (
     )
 )
 UPDATE inference_threads thread
-SET updated_at = clock_timestamp()
+SET updated_at = clock_timestamp(), cleared_at = clock_timestamp()
 WHERE thread.id = $1 AND thread.user_id = $2
-RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at
+RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at, cleared_at
 `
 
 type ClearInferenceThreadByOwnerParams struct {
@@ -9369,6 +9407,7 @@ func (q *sqlQuerier) ClearInferenceThreadByOwner(ctx context.Context, arg ClearI
 		&i.Title,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ClearedAt,
 	)
 	return i, err
 }
@@ -9631,6 +9670,46 @@ func (q *sqlQuerier) GetInferenceConnectionByOwner(ctx context.Context, arg GetI
 	return i, err
 }
 
+const getInferenceContextUsage = `-- name: GetInferenceContextUsage :one
+SELECT
+  COALESCE(SUM(prompt_tokens), 0)::bigint AS prompt_tokens, COALESCE(SUM(completion_tokens), 0)::bigint AS completion_tokens,
+  COALESCE(SUM(cached_tokens), 0)::bigint AS cached_tokens, COALESCE(SUM(reasoning_tokens), 0)::bigint AS reasoning_tokens,
+  COALESCE(SUM(cost_nanos), 0)::bigint AS cost_nanos, COUNT(cost_nanos)::bigint AS costed_calls, COUNT(*)::bigint AS calls
+FROM inference_usage
+WHERE user_id = $1 AND context_type = $2 AND context_id = $3
+`
+
+type GetInferenceContextUsageParams struct {
+	UserID      uuid.UUID   `db:"user_id" json:"user_id"`
+	ContextType pgtype.Text `db:"context_type" json:"context_type"`
+	ContextID   pgtype.Text `db:"context_id" json:"context_id"`
+}
+
+type GetInferenceContextUsageRow struct {
+	PromptTokens     int64 `db:"prompt_tokens" json:"prompt_tokens"`
+	CompletionTokens int64 `db:"completion_tokens" json:"completion_tokens"`
+	CachedTokens     int64 `db:"cached_tokens" json:"cached_tokens"`
+	ReasoningTokens  int64 `db:"reasoning_tokens" json:"reasoning_tokens"`
+	CostNanos        int64 `db:"cost_nanos" json:"cost_nanos"`
+	CostedCalls      int64 `db:"costed_calls" json:"costed_calls"`
+	Calls            int64 `db:"calls" json:"calls"`
+}
+
+func (q *sqlQuerier) GetInferenceContextUsage(ctx context.Context, arg GetInferenceContextUsageParams) (GetInferenceContextUsageRow, error) {
+	row := q.db.QueryRow(ctx, getInferenceContextUsage, arg.UserID, arg.ContextType, arg.ContextID)
+	var i GetInferenceContextUsageRow
+	err := row.Scan(
+		&i.PromptTokens,
+		&i.CompletionTokens,
+		&i.CachedTokens,
+		&i.ReasoningTokens,
+		&i.CostNanos,
+		&i.CostedCalls,
+		&i.Calls,
+	)
+	return i, err
+}
+
 const getInferenceRunByIdempotencyKey = `-- name: GetInferenceRunByIdempotencyKey :one
 SELECT id, thread_id, user_id, connection_id, assistant_id, model, status, idempotency_key, input_tokens, output_tokens, error_code, created_at, updated_at, completed_at, lease_expires_at, debug, iteration_count, tool_call_count FROM inference_runs
 WHERE user_id = $1 AND idempotency_key = $2
@@ -9703,8 +9782,35 @@ func (q *sqlQuerier) GetInferenceRunByOwner(ctx context.Context, arg GetInferenc
 	return i, err
 }
 
+const getInferenceRunUsage = `-- name: GetInferenceRunUsage :one
+SELECT
+  COALESCE(SUM(cached_tokens), 0)::bigint AS cached_tokens, COALESCE(SUM(reasoning_tokens), 0)::bigint AS reasoning_tokens,
+  COALESCE(SUM(cost_nanos), 0)::bigint AS cost_nanos, COUNT(cost_nanos)::bigint AS costed_calls
+FROM inference_usage
+WHERE run_id = $1
+`
+
+type GetInferenceRunUsageRow struct {
+	CachedTokens    int64 `db:"cached_tokens" json:"cached_tokens"`
+	ReasoningTokens int64 `db:"reasoning_tokens" json:"reasoning_tokens"`
+	CostNanos       int64 `db:"cost_nanos" json:"cost_nanos"`
+	CostedCalls     int64 `db:"costed_calls" json:"costed_calls"`
+}
+
+func (q *sqlQuerier) GetInferenceRunUsage(ctx context.Context, runID uuid.UUID) (GetInferenceRunUsageRow, error) {
+	row := q.db.QueryRow(ctx, getInferenceRunUsage, runID)
+	var i GetInferenceRunUsageRow
+	err := row.Scan(
+		&i.CachedTokens,
+		&i.ReasoningTokens,
+		&i.CostNanos,
+		&i.CostedCalls,
+	)
+	return i, err
+}
+
 const getInferenceThreadByOwner = `-- name: GetInferenceThreadByOwner :one
-SELECT id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at FROM inference_threads
+SELECT id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at, cleared_at FROM inference_threads
 WHERE id = $1 AND user_id = $2
 `
 
@@ -9726,8 +9832,60 @@ func (q *sqlQuerier) GetInferenceThreadByOwner(ctx context.Context, arg GetInfer
 		&i.Title,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ClearedAt,
 	)
 	return i, err
+}
+
+const getInferenceThreadUsage = `-- name: GetInferenceThreadUsage :one
+SELECT
+  COALESCE(SUM(usage.prompt_tokens), 0)::bigint AS prompt_tokens, COALESCE(SUM(usage.completion_tokens), 0)::bigint AS completion_tokens,
+  COALESCE(SUM(usage.cached_tokens), 0)::bigint AS cached_tokens, COALESCE(SUM(usage.reasoning_tokens), 0)::bigint AS reasoning_tokens,
+  COALESCE(SUM(usage.cost_nanos), 0)::bigint AS cost_nanos, COUNT(usage.cost_nanos)::bigint AS costed_calls, COUNT(usage.id)::bigint AS calls
+FROM inference_threads thread
+LEFT JOIN inference_usage usage ON usage.thread_id = thread.id AND usage.created_at > COALESCE(thread.cleared_at, '-infinity'::timestamptz)
+WHERE thread.id = $1 AND thread.user_id = $2
+`
+
+type GetInferenceThreadUsageParams struct {
+	ID     uuid.UUID `db:"id" json:"id"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+type GetInferenceThreadUsageRow struct {
+	PromptTokens     int64 `db:"prompt_tokens" json:"prompt_tokens"`
+	CompletionTokens int64 `db:"completion_tokens" json:"completion_tokens"`
+	CachedTokens     int64 `db:"cached_tokens" json:"cached_tokens"`
+	ReasoningTokens  int64 `db:"reasoning_tokens" json:"reasoning_tokens"`
+	CostNanos        int64 `db:"cost_nanos" json:"cost_nanos"`
+	CostedCalls      int64 `db:"costed_calls" json:"costed_calls"`
+	Calls            int64 `db:"calls" json:"calls"`
+}
+
+func (q *sqlQuerier) GetInferenceThreadUsage(ctx context.Context, arg GetInferenceThreadUsageParams) (GetInferenceThreadUsageRow, error) {
+	row := q.db.QueryRow(ctx, getInferenceThreadUsage, arg.ID, arg.UserID)
+	var i GetInferenceThreadUsageRow
+	err := row.Scan(
+		&i.PromptTokens,
+		&i.CompletionTokens,
+		&i.CachedTokens,
+		&i.ReasoningTokens,
+		&i.CostNanos,
+		&i.CostedCalls,
+		&i.Calls,
+	)
+	return i, err
+}
+
+const getInferenceUserConfig = `-- name: GetInferenceUserConfig :one
+SELECT config FROM inference_user_config WHERE user_id = $1
+`
+
+func (q *sqlQuerier) GetInferenceUserConfig(ctx context.Context, userID uuid.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getInferenceUserConfig, userID)
+	var config []byte
+	err := row.Scan(&config)
+	return config, err
 }
 
 const getOrCreateInferenceThread = `-- name: GetOrCreateInferenceThread :one
@@ -9737,7 +9895,7 @@ INSERT INTO inference_threads (
 ON CONFLICT (user_id, assistant_id, context_type, context_id)
   WHERE persistence = 'durable' AND context_type IS NOT NULL
 DO UPDATE SET updated_at = inference_threads.updated_at
-RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at
+RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at, cleared_at
 `
 
 type GetOrCreateInferenceThreadParams struct {
@@ -9767,6 +9925,7 @@ func (q *sqlQuerier) GetOrCreateInferenceThread(ctx context.Context, arg GetOrCr
 		&i.Title,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ClearedAt,
 	)
 	return i, err
 }
@@ -10088,7 +10247,7 @@ const insertInferenceThread = `-- name: InsertInferenceThread :one
 INSERT INTO inference_threads (
   user_id, assistant_id, persistence, context_type, context_id, title
 ) VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at
+RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at, cleared_at
 `
 
 type InsertInferenceThreadParams struct {
@@ -10120,8 +10279,55 @@ func (q *sqlQuerier) InsertInferenceThread(ctx context.Context, arg InsertInfere
 		&i.Title,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ClearedAt,
 	)
 	return i, err
+}
+
+const insertInferenceUsage = `-- name: InsertInferenceUsage :exec
+INSERT INTO inference_usage (
+  run_id, user_id, thread_id, message_key, context_type, context_id, model, generation_id,
+  prompt_tokens, completion_tokens, cached_tokens, reasoning_tokens, cost_nanos, upstream_cost_nanos, is_byok
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+`
+
+type InsertInferenceUsageParams struct {
+	RunID             uuid.UUID     `db:"run_id" json:"run_id"`
+	UserID            uuid.UUID     `db:"user_id" json:"user_id"`
+	ThreadID          uuid.NullUUID `db:"thread_id" json:"thread_id"`
+	MessageKey        pgtype.Text   `db:"message_key" json:"message_key"`
+	ContextType       pgtype.Text   `db:"context_type" json:"context_type"`
+	ContextID         pgtype.Text   `db:"context_id" json:"context_id"`
+	Model             string        `db:"model" json:"model"`
+	GenerationID      pgtype.Text   `db:"generation_id" json:"generation_id"`
+	PromptTokens      int64         `db:"prompt_tokens" json:"prompt_tokens"`
+	CompletionTokens  int64         `db:"completion_tokens" json:"completion_tokens"`
+	CachedTokens      int64         `db:"cached_tokens" json:"cached_tokens"`
+	ReasoningTokens   int64         `db:"reasoning_tokens" json:"reasoning_tokens"`
+	CostNanos         pgtype.Int8   `db:"cost_nanos" json:"cost_nanos"`
+	UpstreamCostNanos pgtype.Int8   `db:"upstream_cost_nanos" json:"upstream_cost_nanos"`
+	IsByok            pgtype.Bool   `db:"is_byok" json:"is_byok"`
+}
+
+func (q *sqlQuerier) InsertInferenceUsage(ctx context.Context, arg InsertInferenceUsageParams) error {
+	_, err := q.db.Exec(ctx, insertInferenceUsage,
+		arg.RunID,
+		arg.UserID,
+		arg.ThreadID,
+		arg.MessageKey,
+		arg.ContextType,
+		arg.ContextID,
+		arg.Model,
+		arg.GenerationID,
+		arg.PromptTokens,
+		arg.CompletionTokens,
+		arg.CachedTokens,
+		arg.ReasoningTokens,
+		arg.CostNanos,
+		arg.UpstreamCostNanos,
+		arg.IsByok,
+	)
+	return err
 }
 
 const listInferenceConnectionsByOwner = `-- name: ListInferenceConnectionsByOwner :many
@@ -10152,6 +10358,69 @@ func (q *sqlQuerier) ListInferenceConnectionsByOwner(ctx context.Context, userID
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.LastUsedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInferenceContextUsageByUser = `-- name: ListInferenceContextUsageByUser :many
+SELECT usage.user_id, users.username, author.name AS author_name,
+  SUM(usage.prompt_tokens)::bigint AS prompt_tokens, SUM(usage.completion_tokens)::bigint AS completion_tokens,
+  SUM(usage.cached_tokens)::bigint AS cached_tokens, SUM(usage.reasoning_tokens)::bigint AS reasoning_tokens,
+  COALESCE(SUM(usage.cost_nanos), 0)::bigint AS cost_nanos, COUNT(usage.cost_nanos)::bigint AS costed_calls, COUNT(*)::bigint AS calls
+FROM inference_usage usage
+JOIN users ON users.id = usage.user_id
+LEFT JOIN addon_authors author ON author.user_id = usage.user_id
+WHERE usage.context_type = $1 AND usage.context_id = $2
+GROUP BY usage.user_id, users.username, author.name
+ORDER BY cost_nanos DESC, calls DESC
+`
+
+type ListInferenceContextUsageByUserParams struct {
+	ContextType pgtype.Text `db:"context_type" json:"context_type"`
+	ContextID   pgtype.Text `db:"context_id" json:"context_id"`
+}
+
+type ListInferenceContextUsageByUserRow struct {
+	UserID           uuid.UUID   `db:"user_id" json:"user_id"`
+	Username         string      `db:"username" json:"username"`
+	AuthorName       pgtype.Text `db:"author_name" json:"author_name"`
+	PromptTokens     int64       `db:"prompt_tokens" json:"prompt_tokens"`
+	CompletionTokens int64       `db:"completion_tokens" json:"completion_tokens"`
+	CachedTokens     int64       `db:"cached_tokens" json:"cached_tokens"`
+	ReasoningTokens  int64       `db:"reasoning_tokens" json:"reasoning_tokens"`
+	CostNanos        int64       `db:"cost_nanos" json:"cost_nanos"`
+	CostedCalls      int64       `db:"costed_calls" json:"costed_calls"`
+	Calls            int64       `db:"calls" json:"calls"`
+}
+
+// Everyone's usage for one context, e.g. each contributor's Workshop chats on an addon.
+func (q *sqlQuerier) ListInferenceContextUsageByUser(ctx context.Context, arg ListInferenceContextUsageByUserParams) ([]ListInferenceContextUsageByUserRow, error) {
+	rows, err := q.db.Query(ctx, listInferenceContextUsageByUser, arg.ContextType, arg.ContextID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInferenceContextUsageByUserRow
+	for rows.Next() {
+		var i ListInferenceContextUsageByUserRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Username,
+			&i.AuthorName,
+			&i.PromptTokens,
+			&i.CompletionTokens,
+			&i.CachedTokens,
+			&i.ReasoningTokens,
+			&i.CostNanos,
+			&i.CostedCalls,
+			&i.Calls,
 		); err != nil {
 			return nil, err
 		}
@@ -10238,7 +10507,7 @@ func (q *sqlQuerier) ListInferenceInstancePlayers(ctx context.Context, instanceI
 }
 
 const listInferenceThreadsByOwner = `-- name: ListInferenceThreadsByOwner :many
-SELECT id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at FROM inference_threads
+SELECT id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at, cleared_at FROM inference_threads
 WHERE user_id = $1
 ORDER BY updated_at DESC
 `
@@ -10262,6 +10531,62 @@ func (q *sqlQuerier) ListInferenceThreadsByOwner(ctx context.Context, userID uui
 			&i.Title,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ClearedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInferenceUsageByMessageKeys = `-- name: ListInferenceUsageByMessageKeys :many
+SELECT message_key::text AS message_key,
+  SUM(prompt_tokens)::bigint AS prompt_tokens, SUM(completion_tokens)::bigint AS completion_tokens,
+  SUM(cached_tokens)::bigint AS cached_tokens, SUM(reasoning_tokens)::bigint AS reasoning_tokens,
+  SUM(cost_nanos)::bigint AS cost_nanos, COUNT(cost_nanos)::bigint AS costed_calls, COUNT(*)::bigint AS calls
+FROM inference_usage
+WHERE thread_id = $1 AND message_key = ANY($2::text[])
+GROUP BY message_key
+`
+
+type ListInferenceUsageByMessageKeysParams struct {
+	ThreadID    uuid.NullUUID `db:"thread_id" json:"thread_id"`
+	MessageKeys []string      `db:"message_keys" json:"message_keys"`
+}
+
+type ListInferenceUsageByMessageKeysRow struct {
+	MessageKey       string `db:"message_key" json:"message_key"`
+	PromptTokens     int64  `db:"prompt_tokens" json:"prompt_tokens"`
+	CompletionTokens int64  `db:"completion_tokens" json:"completion_tokens"`
+	CachedTokens     int64  `db:"cached_tokens" json:"cached_tokens"`
+	ReasoningTokens  int64  `db:"reasoning_tokens" json:"reasoning_tokens"`
+	CostNanos        int64  `db:"cost_nanos" json:"cost_nanos"`
+	CostedCalls      int64  `db:"costed_calls" json:"costed_calls"`
+	Calls            int64  `db:"calls" json:"calls"`
+}
+
+func (q *sqlQuerier) ListInferenceUsageByMessageKeys(ctx context.Context, arg ListInferenceUsageByMessageKeysParams) ([]ListInferenceUsageByMessageKeysRow, error) {
+	rows, err := q.db.Query(ctx, listInferenceUsageByMessageKeys, arg.ThreadID, arg.MessageKeys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInferenceUsageByMessageKeysRow
+	for rows.Next() {
+		var i ListInferenceUsageByMessageKeysRow
+		if err := rows.Scan(
+			&i.MessageKey,
+			&i.PromptTokens,
+			&i.CompletionTokens,
+			&i.CachedTokens,
+			&i.ReasoningTokens,
+			&i.CostNanos,
+			&i.CostedCalls,
+			&i.Calls,
 		); err != nil {
 			return nil, err
 		}
@@ -10412,6 +10737,25 @@ func (q *sqlQuerier) ResumeInferenceRun(ctx context.Context, arg ResumeInference
 	return i, err
 }
 
+const setInferenceUserConfigKey = `-- name: SetInferenceUserConfigKey :exec
+INSERT INTO inference_user_config (user_id, config)
+VALUES ($1, jsonb_build_object($2::text, $3::jsonb))
+ON CONFLICT (user_id) DO UPDATE
+SET config = inference_user_config.config || jsonb_build_object($2::text, $3::jsonb), updated_at = now()
+`
+
+type SetInferenceUserConfigKeyParams struct {
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+	Key    string    `db:"key" json:"key"`
+	Value  []byte    `db:"value" json:"value"`
+}
+
+// Replaces one top-level key, leaving the user's other settings untouched.
+func (q *sqlQuerier) SetInferenceUserConfigKey(ctx context.Context, arg SetInferenceUserConfigKeyParams) error {
+	_, err := q.db.Exec(ctx, setInferenceUserConfigKey, arg.UserID, arg.Key, arg.Value)
+	return err
+}
+
 const updateInferenceConnectionLastUsedByOwner = `-- name: UpdateInferenceConnectionLastUsedByOwner :one
 UPDATE inference_connections
 SET last_used_at = now(), updated_at = now()
@@ -10511,7 +10855,7 @@ const updateInferenceThreadTitleByOwner = `-- name: UpdateInferenceThreadTitleBy
 UPDATE inference_threads
 SET title = $3, updated_at = now()
 WHERE id = $1 AND user_id = $2
-RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at
+RETURNING id, user_id, assistant_id, persistence, context_type, context_id, title, created_at, updated_at, cleared_at
 `
 
 type UpdateInferenceThreadTitleByOwnerParams struct {
@@ -10533,6 +10877,7 @@ func (q *sqlQuerier) UpdateInferenceThreadTitleByOwner(ctx context.Context, arg 
 		&i.Title,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ClearedAt,
 	)
 	return i, err
 }
@@ -11335,6 +11680,976 @@ func (q *sqlQuerier) GetInstanceLoot(ctx context.Context, arg GetInstanceLootPar
 		return nil, err
 	}
 	return items, nil
+}
+
+const claimLuaProjectArtifactGarbage = `-- name: ClaimLuaProjectArtifactGarbage :many
+WITH candidates AS (
+  SELECT gc.object_key FROM lua_project_artifact_gc gc
+  -- A null override uses PostgreSQL time. Tests supply an explicit cutoff to
+  -- exercise grace periods and retries without sleeps.
+  WHERE gc.ready_at <= COALESCE($1::timestamptz, now())
+    AND (gc.attempted_at IS NULL OR gc.attempted_at + interval '2 minutes' < COALESCE($1::timestamptz, now()))
+    AND NOT EXISTS (SELECT 1 FROM lua_project_artifacts a WHERE a.object_key = gc.object_key)
+  ORDER BY gc.attempted_at NULLS FIRST, gc.object_key LIMIT 50 FOR UPDATE SKIP LOCKED
+)
+UPDATE lua_project_artifact_gc gc SET attempted_at = COALESCE($1::timestamptz, now())
+FROM candidates c WHERE gc.object_key = c.object_key
+RETURNING gc.object_key
+`
+
+func (q *sqlQuerier) ClaimLuaProjectArtifactGarbage(ctx context.Context, asOf pgtype.Timestamptz) ([]string, error) {
+	rows, err := q.db.Query(ctx, claimLuaProjectArtifactGarbage, asOf)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var object_key string
+		if err := rows.Scan(&object_key); err != nil {
+			return nil, err
+		}
+		items = append(items, object_key)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const consumeLuaProjectUpload = `-- name: ConsumeLuaProjectUpload :one
+DELETE FROM lua_project_artifact_gc
+WHERE object_key = $1 AND attempted_at IS NULL AND ready_at > now()
+RETURNING object_key
+`
+
+func (q *sqlQuerier) ConsumeLuaProjectUpload(ctx context.Context, objectKey string) (string, error) {
+	row := q.db.QueryRow(ctx, consumeLuaProjectUpload, objectKey)
+	var object_key string
+	err := row.Scan(&object_key)
+	return object_key, err
+}
+
+const countLuaProjectStars = `-- name: CountLuaProjectStars :many
+SELECT project_id, count(*) AS stars FROM lua_project_stars WHERE project_id = ANY($1::uuid[]) GROUP BY project_id
+`
+
+type CountLuaProjectStarsRow struct {
+	ProjectID uuid.UUID `db:"project_id" json:"project_id"`
+	Stars     int64     `db:"stars" json:"stars"`
+}
+
+func (q *sqlQuerier) CountLuaProjectStars(ctx context.Context, projectIds []uuid.UUID) ([]CountLuaProjectStarsRow, error) {
+	rows, err := q.db.Query(ctx, countLuaProjectStars, projectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountLuaProjectStarsRow
+	for rows.Next() {
+		var i CountLuaProjectStarsRow
+		if err := rows.Scan(&i.ProjectID, &i.Stars); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countReadyLuaProjectArtifactGarbage = `-- name: CountReadyLuaProjectArtifactGarbage :one
+SELECT count(*) FROM lua_project_artifact_gc gc
+WHERE gc.ready_at <= now()
+  AND NOT EXISTS (SELECT 1 FROM lua_project_artifacts a WHERE a.object_key = gc.object_key)
+`
+
+func (q *sqlQuerier) CountReadyLuaProjectArtifactGarbage(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countReadyLuaProjectArtifactGarbage)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createLuaProject = `-- name: CreateLuaProject :one
+INSERT INTO lua_projects (owner_id, kind, name, slug) VALUES ($1, $2, $3, $4) RETURNING id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description
+`
+
+type CreateLuaProjectParams struct {
+	OwnerID uuid.UUID `db:"owner_id" json:"owner_id"`
+	Kind    string    `db:"kind" json:"kind"`
+	Name    string    `db:"name" json:"name"`
+	Slug    string    `db:"slug" json:"slug"`
+}
+
+func (q *sqlQuerier) CreateLuaProject(ctx context.Context, arg CreateLuaProjectParams) (LuaProject, error) {
+	row := q.db.QueryRow(ctx, createLuaProject,
+		arg.OwnerID,
+		arg.Kind,
+		arg.Name,
+		arg.Slug,
+	)
+	var i LuaProject
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Kind,
+		&i.Name,
+		&i.Slug,
+		&i.Revision,
+		&i.DraftHash,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DraftIcon,
+		&i.Description,
+	)
+	return i, err
+}
+
+const createLuaProjectRelease = `-- name: CreateLuaProjectRelease :one
+WITH project AS (
+  UPDATE lua_projects SET revision = revision + 1, updated_at = now()
+  WHERE id = $3 AND kind = 'panel' AND revision = $4 AND draft_hash IS NOT NULL
+  RETURNING id, draft_hash, draft_icon
+)
+INSERT INTO lua_project_releases (project_id, tag, hash, icon, published_by)
+SELECT id, $1, draft_hash, draft_icon, $2 FROM project
+RETURNING project_id, tag, hash, icon, published_at, published_by
+`
+
+type CreateLuaProjectReleaseParams struct {
+	Tag              string        `db:"tag" json:"tag"`
+	ActorID          uuid.NullUUID `db:"actor_id" json:"actor_id"`
+	ID               uuid.UUID     `db:"id" json:"id"`
+	ExpectedRevision int64         `db:"expected_revision" json:"expected_revision"`
+}
+
+// Tags the current main. Bumping the revision keeps a stale page from tagging a newer main by mistake.
+func (q *sqlQuerier) CreateLuaProjectRelease(ctx context.Context, arg CreateLuaProjectReleaseParams) (LuaProjectRelease, error) {
+	row := q.db.QueryRow(ctx, createLuaProjectRelease,
+		arg.Tag,
+		arg.ActorID,
+		arg.ID,
+		arg.ExpectedRevision,
+	)
+	var i LuaProjectRelease
+	err := row.Scan(
+		&i.ProjectID,
+		&i.Tag,
+		&i.Hash,
+		&i.Icon,
+		&i.PublishedAt,
+		&i.PublishedBy,
+	)
+	return i, err
+}
+
+const deleteLuaProjectArtifactGarbage = `-- name: DeleteLuaProjectArtifactGarbage :exec
+DELETE FROM lua_project_artifact_gc WHERE object_key = $1
+`
+
+func (q *sqlQuerier) DeleteLuaProjectArtifactGarbage(ctx context.Context, objectKey string) error {
+	_, err := q.db.Exec(ctx, deleteLuaProjectArtifactGarbage, objectKey)
+	return err
+}
+
+const deleteLuaProjectContributor = `-- name: DeleteLuaProjectContributor :execrows
+DELETE FROM lua_project_contributors WHERE project_id = $1 AND user_id = $2
+`
+
+type DeleteLuaProjectContributorParams struct {
+	ProjectID uuid.UUID `db:"project_id" json:"project_id"`
+	UserID    uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) DeleteLuaProjectContributor(ctx context.Context, arg DeleteLuaProjectContributorParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteLuaProjectContributor, arg.ProjectID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteLuaProjectRelease = `-- name: DeleteLuaProjectRelease :execrows
+DELETE FROM lua_project_releases WHERE project_id = $1 AND tag = $2
+`
+
+type DeleteLuaProjectReleaseParams struct {
+	ProjectID uuid.UUID `db:"project_id" json:"project_id"`
+	Tag       string    `db:"tag" json:"tag"`
+}
+
+func (q *sqlQuerier) DeleteLuaProjectRelease(ctx context.Context, arg DeleteLuaProjectReleaseParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteLuaProjectRelease, arg.ProjectID, arg.Tag)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getAddonAuthorByName = `-- name: GetAddonAuthorByName :one
+SELECT user_id, name, created_at FROM addon_authors WHERE name = $1
+`
+
+func (q *sqlQuerier) GetAddonAuthorByName(ctx context.Context, name string) (AddonAuthor, error) {
+	row := q.db.QueryRow(ctx, getAddonAuthorByName, name)
+	var i AddonAuthor
+	err := row.Scan(&i.UserID, &i.Name, &i.CreatedAt)
+	return i, err
+}
+
+const getAddonAuthorByUser = `-- name: GetAddonAuthorByUser :one
+SELECT user_id, name, created_at FROM addon_authors WHERE user_id = $1
+`
+
+func (q *sqlQuerier) GetAddonAuthorByUser(ctx context.Context, userID uuid.UUID) (AddonAuthor, error) {
+	row := q.db.QueryRow(ctx, getAddonAuthorByUser, userID)
+	var i AddonAuthor
+	err := row.Scan(&i.UserID, &i.Name, &i.CreatedAt)
+	return i, err
+}
+
+const getLuaProject = `-- name: GetLuaProject :one
+SELECT id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description FROM lua_projects WHERE id = $1
+`
+
+// Callers check the project permission in SpiceDB first.
+func (q *sqlQuerier) GetLuaProject(ctx context.Context, id uuid.UUID) (LuaProject, error) {
+	row := q.db.QueryRow(ctx, getLuaProject, id)
+	var i LuaProject
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Kind,
+		&i.Name,
+		&i.Slug,
+		&i.Revision,
+		&i.DraftHash,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DraftIcon,
+		&i.Description,
+	)
+	return i, err
+}
+
+const getLuaProjectArtifact = `-- name: GetLuaProjectArtifact :one
+SELECT object_key, mime_type, content_encoding, uncompressed_size_bytes, stored_size_bytes
+FROM lua_project_artifacts WHERE project_id = $1 AND hash = $2
+`
+
+type GetLuaProjectArtifactParams struct {
+	ProjectID uuid.UUID `db:"project_id" json:"project_id"`
+	Hash      string    `db:"hash" json:"hash"`
+}
+
+type GetLuaProjectArtifactRow struct {
+	ObjectKey             string      `db:"object_key" json:"object_key"`
+	MimeType              string      `db:"mime_type" json:"mime_type"`
+	ContentEncoding       pgtype.Text `db:"content_encoding" json:"content_encoding"`
+	UncompressedSizeBytes int64       `db:"uncompressed_size_bytes" json:"uncompressed_size_bytes"`
+	StoredSizeBytes       int64       `db:"stored_size_bytes" json:"stored_size_bytes"`
+}
+
+func (q *sqlQuerier) GetLuaProjectArtifact(ctx context.Context, arg GetLuaProjectArtifactParams) (GetLuaProjectArtifactRow, error) {
+	row := q.db.QueryRow(ctx, getLuaProjectArtifact, arg.ProjectID, arg.Hash)
+	var i GetLuaProjectArtifactRow
+	err := row.Scan(
+		&i.ObjectKey,
+		&i.MimeType,
+		&i.ContentEncoding,
+		&i.UncompressedSizeBytes,
+		&i.StoredSizeBytes,
+	)
+	return i, err
+}
+
+const getLuaProjectByAuthorSlug = `-- name: GetLuaProjectByAuthorSlug :one
+SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.created_at, p.updated_at, p.draft_icon, p.description FROM lua_projects p JOIN addon_authors a ON a.user_id = p.owner_id
+WHERE a.name = $1 AND p.slug = $2
+`
+
+type GetLuaProjectByAuthorSlugParams struct {
+	Author string `db:"author" json:"author"`
+	Slug   string `db:"slug" json:"slug"`
+}
+
+func (q *sqlQuerier) GetLuaProjectByAuthorSlug(ctx context.Context, arg GetLuaProjectByAuthorSlugParams) (LuaProject, error) {
+	row := q.db.QueryRow(ctx, getLuaProjectByAuthorSlug, arg.Author, arg.Slug)
+	var i LuaProject
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Kind,
+		&i.Name,
+		&i.Slug,
+		&i.Revision,
+		&i.DraftHash,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DraftIcon,
+		&i.Description,
+	)
+	return i, err
+}
+
+const getLuaProjectDraftPackage = `-- name: GetLuaProjectDraftPackage :one
+SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.created_at, p.updated_at, p.draft_icon, p.description, a.object_key, a.mime_type, a.content_encoding
+FROM lua_projects p
+JOIN lua_project_artifacts a ON a.project_id = p.id AND a.hash = p.draft_hash
+WHERE p.id = $1
+`
+
+type GetLuaProjectDraftPackageRow struct {
+	LuaProject      LuaProject  `db:"lua_project" json:"lua_project"`
+	ObjectKey       string      `db:"object_key" json:"object_key"`
+	MimeType        string      `db:"mime_type" json:"mime_type"`
+	ContentEncoding pgtype.Text `db:"content_encoding" json:"content_encoding"`
+}
+
+func (q *sqlQuerier) GetLuaProjectDraftPackage(ctx context.Context, id uuid.UUID) (GetLuaProjectDraftPackageRow, error) {
+	row := q.db.QueryRow(ctx, getLuaProjectDraftPackage, id)
+	var i GetLuaProjectDraftPackageRow
+	err := row.Scan(
+		&i.LuaProject.ID,
+		&i.LuaProject.OwnerID,
+		&i.LuaProject.Kind,
+		&i.LuaProject.Name,
+		&i.LuaProject.Slug,
+		&i.LuaProject.Revision,
+		&i.LuaProject.DraftHash,
+		&i.LuaProject.CreatedAt,
+		&i.LuaProject.UpdatedAt,
+		&i.LuaProject.DraftIcon,
+		&i.LuaProject.Description,
+		&i.ObjectKey,
+		&i.MimeType,
+		&i.ContentEncoding,
+	)
+	return i, err
+}
+
+const getPublicLuaProject = `-- name: GetPublicLuaProject :one
+SELECT id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description FROM lua_projects p WHERE p.id = $1
+  AND (p.draft_hash IS NOT NULL OR EXISTS (SELECT 1 FROM lua_project_releases r WHERE r.project_id = p.id AND r.hash IS NOT NULL))
+`
+
+// An addon with something to run: main or a release with files.
+func (q *sqlQuerier) GetPublicLuaProject(ctx context.Context, id uuid.UUID) (LuaProject, error) {
+	row := q.db.QueryRow(ctx, getPublicLuaProject, id)
+	var i LuaProject
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Kind,
+		&i.Name,
+		&i.Slug,
+		&i.Revision,
+		&i.DraftHash,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DraftIcon,
+		&i.Description,
+	)
+	return i, err
+}
+
+const getPublishedLuaProjectArtifact = `-- name: GetPublishedLuaProjectArtifact :one
+SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.created_at, p.updated_at, p.draft_icon, p.description, a.object_key, a.mime_type, a.content_encoding
+FROM lua_projects p
+JOIN lua_project_artifacts a ON a.project_id = p.id AND a.hash = $1
+WHERE p.id = $2 AND (p.draft_hash = $1 OR EXISTS (SELECT 1 FROM lua_project_releases r WHERE r.project_id = p.id AND r.hash = $1))
+`
+
+type GetPublishedLuaProjectArtifactParams struct {
+	Hash string    `db:"hash" json:"hash"`
+	ID   uuid.UUID `db:"id" json:"id"`
+}
+
+type GetPublishedLuaProjectArtifactRow struct {
+	LuaProject      LuaProject  `db:"lua_project" json:"lua_project"`
+	ObjectKey       string      `db:"object_key" json:"object_key"`
+	MimeType        string      `db:"mime_type" json:"mime_type"`
+	ContentEncoding pgtype.Text `db:"content_encoding" json:"content_encoding"`
+}
+
+func (q *sqlQuerier) GetPublishedLuaProjectArtifact(ctx context.Context, arg GetPublishedLuaProjectArtifactParams) (GetPublishedLuaProjectArtifactRow, error) {
+	row := q.db.QueryRow(ctx, getPublishedLuaProjectArtifact, arg.Hash, arg.ID)
+	var i GetPublishedLuaProjectArtifactRow
+	err := row.Scan(
+		&i.LuaProject.ID,
+		&i.LuaProject.OwnerID,
+		&i.LuaProject.Kind,
+		&i.LuaProject.Name,
+		&i.LuaProject.Slug,
+		&i.LuaProject.Revision,
+		&i.LuaProject.DraftHash,
+		&i.LuaProject.CreatedAt,
+		&i.LuaProject.UpdatedAt,
+		&i.LuaProject.DraftIcon,
+		&i.LuaProject.Description,
+		&i.ObjectKey,
+		&i.MimeType,
+		&i.ContentEncoding,
+	)
+	return i, err
+}
+
+const insertAddonAuthor = `-- name: InsertAddonAuthor :one
+INSERT INTO addon_authors (user_id, name) VALUES ($1, $2) RETURNING user_id, name, created_at
+`
+
+type InsertAddonAuthorParams struct {
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+	Name   string    `db:"name" json:"name"`
+}
+
+func (q *sqlQuerier) InsertAddonAuthor(ctx context.Context, arg InsertAddonAuthorParams) (AddonAuthor, error) {
+	row := q.db.QueryRow(ctx, insertAddonAuthor, arg.UserID, arg.Name)
+	var i AddonAuthor
+	err := row.Scan(&i.UserID, &i.Name, &i.CreatedAt)
+	return i, err
+}
+
+const listAddonAuthorsByUsers = `-- name: ListAddonAuthorsByUsers :many
+SELECT user_id, name, created_at FROM addon_authors WHERE user_id = ANY($1::uuid[])
+`
+
+func (q *sqlQuerier) ListAddonAuthorsByUsers(ctx context.Context, userIds []uuid.UUID) ([]AddonAuthor, error) {
+	rows, err := q.db.Query(ctx, listAddonAuthorsByUsers, userIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AddonAuthor
+	for rows.Next() {
+		var i AddonAuthor
+		if err := rows.Scan(&i.UserID, &i.Name, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLuaProjectArtifactGarbage = `-- name: ListLuaProjectArtifactGarbage :many
+SELECT object_key FROM lua_project_artifact_gc ORDER BY object_key LIMIT 100
+`
+
+func (q *sqlQuerier) ListLuaProjectArtifactGarbage(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listLuaProjectArtifactGarbage)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var object_key string
+		if err := rows.Scan(&object_key); err != nil {
+			return nil, err
+		}
+		items = append(items, object_key)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLuaProjectContributors = `-- name: ListLuaProjectContributors :many
+SELECT c.user_id, c.permissions, c.created_at, a.name AS author_name, u.username
+FROM lua_project_contributors c
+JOIN users u ON u.id = c.user_id
+LEFT JOIN addon_authors a ON a.user_id = c.user_id
+WHERE c.project_id = $1
+ORDER BY c.created_at
+`
+
+type ListLuaProjectContributorsRow struct {
+	UserID      uuid.UUID          `db:"user_id" json:"user_id"`
+	Permissions []string           `db:"permissions" json:"permissions"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	AuthorName  pgtype.Text        `db:"author_name" json:"author_name"`
+	Username    string             `db:"username" json:"username"`
+}
+
+func (q *sqlQuerier) ListLuaProjectContributors(ctx context.Context, projectID uuid.UUID) ([]ListLuaProjectContributorsRow, error) {
+	rows, err := q.db.Query(ctx, listLuaProjectContributors, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLuaProjectContributorsRow
+	for rows.Next() {
+		var i ListLuaProjectContributorsRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Permissions,
+			&i.CreatedAt,
+			&i.AuthorName,
+			&i.Username,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLuaProjectReleases = `-- name: ListLuaProjectReleases :many
+SELECT project_id, tag, hash, icon, published_at, published_by FROM lua_project_releases WHERE project_id = $1 ORDER BY published_at DESC, tag DESC LIMIT 100
+`
+
+func (q *sqlQuerier) ListLuaProjectReleases(ctx context.Context, projectID uuid.UUID) ([]LuaProjectRelease, error) {
+	rows, err := q.db.Query(ctx, listLuaProjectReleases, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LuaProjectRelease
+	for rows.Next() {
+		var i LuaProjectRelease
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.Tag,
+			&i.Hash,
+			&i.Icon,
+			&i.PublishedAt,
+			&i.PublishedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLuaProjectReleasesForProjects = `-- name: ListLuaProjectReleasesForProjects :many
+SELECT project_id, tag, hash, icon, published_at, published_by FROM lua_project_releases WHERE project_id = ANY($1::uuid[]) ORDER BY project_id, published_at DESC, tag DESC
+`
+
+func (q *sqlQuerier) ListLuaProjectReleasesForProjects(ctx context.Context, projectIds []uuid.UUID) ([]LuaProjectRelease, error) {
+	rows, err := q.db.Query(ctx, listLuaProjectReleasesForProjects, projectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LuaProjectRelease
+	for rows.Next() {
+		var i LuaProjectRelease
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.Tag,
+			&i.Hash,
+			&i.Icon,
+			&i.PublishedAt,
+			&i.PublishedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLuaProjectsByOwner = `-- name: ListLuaProjectsByOwner :many
+SELECT id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description FROM lua_projects WHERE owner_id = $1 ORDER BY updated_at DESC LIMIT 100
+`
+
+// An author's own addons, for /addons/<author>.
+func (q *sqlQuerier) ListLuaProjectsByOwner(ctx context.Context, ownerID uuid.UUID) ([]LuaProject, error) {
+	rows, err := q.db.Query(ctx, listLuaProjectsByOwner, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LuaProject
+	for rows.Next() {
+		var i LuaProject
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Kind,
+			&i.Name,
+			&i.Slug,
+			&i.Revision,
+			&i.DraftHash,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DraftIcon,
+			&i.Description,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPublicLuaProjects = `-- name: ListPublicLuaProjects :many
+SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.created_at, p.updated_at, p.draft_icon, p.description FROM lua_projects p
+JOIN LATERAL (SELECT max(r.published_at) AS published_at FROM lua_project_releases r WHERE r.project_id = p.id AND r.hash IS NOT NULL) latest ON latest.published_at IS NOT NULL
+ORDER BY (SELECT count(*) FROM lua_project_stars s WHERE s.project_id = p.id) DESC, latest.published_at DESC LIMIT 100
+`
+
+// Addons with a release people can still run, most tracked first, then newest release.
+func (q *sqlQuerier) ListPublicLuaProjects(ctx context.Context) ([]LuaProject, error) {
+	rows, err := q.db.Query(ctx, listPublicLuaProjects)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LuaProject
+	for rows.Next() {
+		var i LuaProject
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Kind,
+			&i.Name,
+			&i.Slug,
+			&i.Revision,
+			&i.DraftHash,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DraftIcon,
+			&i.Description,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStarredLuaProjects = `-- name: ListStarredLuaProjects :many
+SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.created_at, p.updated_at, p.draft_icon, p.description FROM lua_projects p JOIN lua_project_stars s ON s.project_id = p.id
+WHERE s.user_id = $1 ORDER BY s.created_at DESC LIMIT 200
+`
+
+// Addons the user tracks, most recently starred first.
+func (q *sqlQuerier) ListStarredLuaProjects(ctx context.Context, userID uuid.UUID) ([]LuaProject, error) {
+	rows, err := q.db.Query(ctx, listStarredLuaProjects, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LuaProject
+	for rows.Next() {
+		var i LuaProject
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Kind,
+			&i.Name,
+			&i.Slug,
+			&i.Revision,
+			&i.DraftHash,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DraftIcon,
+			&i.Description,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserLuaProjects = `-- name: ListUserLuaProjects :many
+SELECT id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description FROM lua_projects
+WHERE owner_id = $1 OR id IN (SELECT project_id FROM lua_project_contributors WHERE user_id = $1)
+ORDER BY updated_at DESC LIMIT 100
+`
+
+// Projects the user owns or contributes to.
+func (q *sqlQuerier) ListUserLuaProjects(ctx context.Context, userID uuid.UUID) ([]LuaProject, error) {
+	rows, err := q.db.Query(ctx, listUserLuaProjects, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LuaProject
+	for rows.Next() {
+		var i LuaProject
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Kind,
+			&i.Name,
+			&i.Slug,
+			&i.Revision,
+			&i.DraftHash,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DraftIcon,
+			&i.Description,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserStarsForProjects = `-- name: ListUserStarsForProjects :many
+SELECT project_id FROM lua_project_stars WHERE user_id = $1 AND project_id = ANY($2::uuid[])
+`
+
+type ListUserStarsForProjectsParams struct {
+	UserID     uuid.UUID   `db:"user_id" json:"user_id"`
+	ProjectIds []uuid.UUID `db:"project_ids" json:"project_ids"`
+}
+
+func (q *sqlQuerier) ListUserStarsForProjects(ctx context.Context, arg ListUserStarsForProjectsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listUserStarsForProjects, arg.UserID, arg.ProjectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const pruneLuaProjectArtifacts = `-- name: PruneLuaProjectArtifacts :exec
+WITH removed AS (
+  DELETE FROM lua_project_artifacts a USING lua_projects p
+  WHERE a.project_id = p.id AND p.id = $1
+   AND a.hash IS DISTINCT FROM p.draft_hash
+   AND NOT EXISTS (SELECT 1 FROM lua_project_releases r WHERE r.project_id = p.id AND r.hash = a.hash)
+  RETURNING a.object_key
+)
+INSERT INTO lua_project_artifact_gc (object_key)
+SELECT object_key FROM removed WHERE object_key IS NOT NULL
+ON CONFLICT DO NOTHING
+`
+
+func (q *sqlQuerier) PruneLuaProjectArtifacts(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, pruneLuaProjectArtifacts, id)
+	return err
+}
+
+const putLuaProjectArtifact = `-- name: PutLuaProjectArtifact :one
+INSERT INTO lua_project_artifacts (project_id, hash, object_key, mime_type, content_encoding, uncompressed_size_bytes, stored_size_bytes)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (project_id, hash) DO UPDATE SET hash = EXCLUDED.hash
+RETURNING object_key
+`
+
+type PutLuaProjectArtifactParams struct {
+	ProjectID             uuid.UUID   `db:"project_id" json:"project_id"`
+	Hash                  string      `db:"hash" json:"hash"`
+	ObjectKey             string      `db:"object_key" json:"object_key"`
+	MimeType              string      `db:"mime_type" json:"mime_type"`
+	ContentEncoding       pgtype.Text `db:"content_encoding" json:"content_encoding"`
+	UncompressedSizeBytes int64       `db:"uncompressed_size_bytes" json:"uncompressed_size_bytes"`
+	StoredSizeBytes       int64       `db:"stored_size_bytes" json:"stored_size_bytes"`
+}
+
+func (q *sqlQuerier) PutLuaProjectArtifact(ctx context.Context, arg PutLuaProjectArtifactParams) (string, error) {
+	row := q.db.QueryRow(ctx, putLuaProjectArtifact,
+		arg.ProjectID,
+		arg.Hash,
+		arg.ObjectKey,
+		arg.MimeType,
+		arg.ContentEncoding,
+		arg.UncompressedSizeBytes,
+		arg.StoredSizeBytes,
+	)
+	var object_key string
+	err := row.Scan(&object_key)
+	return object_key, err
+}
+
+const registerLuaProjectUpload = `-- name: RegisterLuaProjectUpload :exec
+INSERT INTO lua_project_artifact_gc (object_key, ready_at)
+VALUES ($1, now() + interval '10 minutes')
+`
+
+func (q *sqlQuerier) RegisterLuaProjectUpload(ctx context.Context, objectKey string) error {
+	_, err := q.db.Exec(ctx, registerLuaProjectUpload, objectKey)
+	return err
+}
+
+const setLuaProjectDescription = `-- name: SetLuaProjectDescription :one
+UPDATE lua_projects SET description = $1 WHERE id = $2 RETURNING id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description
+`
+
+type SetLuaProjectDescriptionParams struct {
+	Description string    `db:"description" json:"description"`
+	ID          uuid.UUID `db:"id" json:"id"`
+}
+
+// Leaves updated_at alone: it dates main.
+func (q *sqlQuerier) SetLuaProjectDescription(ctx context.Context, arg SetLuaProjectDescriptionParams) (LuaProject, error) {
+	row := q.db.QueryRow(ctx, setLuaProjectDescription, arg.Description, arg.ID)
+	var i LuaProject
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Kind,
+		&i.Name,
+		&i.Slug,
+		&i.Revision,
+		&i.DraftHash,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DraftIcon,
+		&i.Description,
+	)
+	return i, err
+}
+
+const setLuaProjectDraft = `-- name: SetLuaProjectDraft :one
+UPDATE lua_projects SET draft_hash = $1, draft_icon = $2, revision = revision + 1, updated_at = now()
+WHERE id = $3 AND revision = $4 RETURNING id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description
+`
+
+type SetLuaProjectDraftParams struct {
+	Hash             pgtype.Text `db:"hash" json:"hash"`
+	Icon             pgtype.Text `db:"icon" json:"icon"`
+	ID               uuid.UUID   `db:"id" json:"id"`
+	ExpectedRevision int64       `db:"expected_revision" json:"expected_revision"`
+}
+
+func (q *sqlQuerier) SetLuaProjectDraft(ctx context.Context, arg SetLuaProjectDraftParams) (LuaProject, error) {
+	row := q.db.QueryRow(ctx, setLuaProjectDraft,
+		arg.Hash,
+		arg.Icon,
+		arg.ID,
+		arg.ExpectedRevision,
+	)
+	var i LuaProject
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Kind,
+		&i.Name,
+		&i.Slug,
+		&i.Revision,
+		&i.DraftHash,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DraftIcon,
+		&i.Description,
+	)
+	return i, err
+}
+
+const starLuaProject = `-- name: StarLuaProject :exec
+INSERT INTO lua_project_stars (project_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING
+`
+
+type StarLuaProjectParams struct {
+	ProjectID uuid.UUID `db:"project_id" json:"project_id"`
+	UserID    uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) StarLuaProject(ctx context.Context, arg StarLuaProjectParams) error {
+	_, err := q.db.Exec(ctx, starLuaProject, arg.ProjectID, arg.UserID)
+	return err
+}
+
+const trimLuaProjectReleaseFiles = `-- name: TrimLuaProjectReleaseFiles :exec
+UPDATE lua_project_releases old SET hash = NULL
+WHERE old.project_id = $1 AND old.hash IS NOT NULL AND old.tag NOT IN (
+  SELECT kept.tag FROM lua_project_releases kept WHERE kept.project_id = $1 AND kept.hash IS NOT NULL
+  ORDER BY kept.published_at DESC, kept.tag DESC LIMIT $2::int
+)
+`
+
+type TrimLuaProjectReleaseFilesParams struct {
+	ProjectID uuid.UUID `db:"project_id" json:"project_id"`
+	Keep      int32     `db:"keep" json:"keep"`
+}
+
+// Only the newest @keep releases keep their files; older ones stay listed without a package.
+func (q *sqlQuerier) TrimLuaProjectReleaseFiles(ctx context.Context, arg TrimLuaProjectReleaseFilesParams) error {
+	_, err := q.db.Exec(ctx, trimLuaProjectReleaseFiles, arg.ProjectID, arg.Keep)
+	return err
+}
+
+const unstarLuaProject = `-- name: UnstarLuaProject :exec
+DELETE FROM lua_project_stars WHERE project_id = $1 AND user_id = $2
+`
+
+type UnstarLuaProjectParams struct {
+	ProjectID uuid.UUID `db:"project_id" json:"project_id"`
+	UserID    uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) UnstarLuaProject(ctx context.Context, arg UnstarLuaProjectParams) error {
+	_, err := q.db.Exec(ctx, unstarLuaProject, arg.ProjectID, arg.UserID)
+	return err
+}
+
+const upsertLuaProjectContributor = `-- name: UpsertLuaProjectContributor :one
+INSERT INTO lua_project_contributors (project_id, user_id, permissions, added_by)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (project_id, user_id) DO UPDATE SET permissions = EXCLUDED.permissions, updated_at = now()
+RETURNING project_id, user_id, permissions, added_by, created_at, updated_at
+`
+
+type UpsertLuaProjectContributorParams struct {
+	ProjectID   uuid.UUID     `db:"project_id" json:"project_id"`
+	UserID      uuid.UUID     `db:"user_id" json:"user_id"`
+	Permissions []string      `db:"permissions" json:"permissions"`
+	AddedBy     uuid.NullUUID `db:"added_by" json:"added_by"`
+}
+
+func (q *sqlQuerier) UpsertLuaProjectContributor(ctx context.Context, arg UpsertLuaProjectContributorParams) (LuaProjectContributor, error) {
+	row := q.db.QueryRow(ctx, upsertLuaProjectContributor,
+		arg.ProjectID,
+		arg.UserID,
+		arg.Permissions,
+		arg.AddedBy,
+	)
+	var i LuaProjectContributor
+	err := row.Scan(
+		&i.ProjectID,
+		&i.UserID,
+		&i.Permissions,
+		&i.AddedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const deleteExpiredOAuthRelayCodes = `-- name: DeleteExpiredOAuthRelayCodes :execrows
@@ -17026,7 +18341,7 @@ INSERT INTO encounter_dps_rankings (
     player_guid, player_name, player_class, player_spec, player_sub_spec, player_role, player_level,
     talent_build_id, difficulty_name, max_players,
     realm_id, realm_name, guild_id, guild_name,
-    damage_done, duration_secs, dps, avg_ilvl,
+    damage_done, unranked_damage_done, duration_secs, dps, avg_ilvl,
     healing_done, absorbed_done, hps, player_deaths, alive_percentage,
     log_hashed_slug, killed_at
 )
@@ -17035,43 +18350,44 @@ VALUES (
     $5, $6, $7, $8, $9, $10, $11,
     $12, $13, $14,
     $15, $16, $17, $18,
-    $19, $20, $21, $22,
-    $23, $24, $25, $26, $27,
-    $28, $29
+    $19, $20, $21, $22, $23,
+    $24, $25, $26, $27, $28,
+    $29, $30
 )
 ON CONFLICT (encounter_id, player_guid) DO NOTHING
 `
 
 type InsertEncounterDpsRankingParams struct {
-	EncounterID     uuid.NullUUID      `db:"encounter_id" json:"encounter_id"`
-	InstanceID      uuid.UUID          `db:"instance_id" json:"instance_id"`
-	EncounterName   string             `db:"encounter_name" json:"encounter_name"`
-	InstanceName    string             `db:"instance_name" json:"instance_name"`
-	PlayerGuid      string             `db:"player_guid" json:"player_guid"`
-	PlayerName      string             `db:"player_name" json:"player_name"`
-	PlayerClass     string             `db:"player_class" json:"player_class"`
-	PlayerSpec      string             `db:"player_spec" json:"player_spec"`
-	PlayerSubSpec   string             `db:"player_sub_spec" json:"player_sub_spec"`
-	PlayerRole      string             `db:"player_role" json:"player_role"`
-	PlayerLevel     int16              `db:"player_level" json:"player_level"`
-	TalentBuildID   uuid.NullUUID      `db:"talent_build_id" json:"talent_build_id"`
-	DifficultyName  string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers      int16              `db:"max_players" json:"max_players"`
-	RealmID         uuid.UUID          `db:"realm_id" json:"realm_id"`
-	RealmName       string             `db:"realm_name" json:"realm_name"`
-	GuildID         uuid.NullUUID      `db:"guild_id" json:"guild_id"`
-	GuildName       string             `db:"guild_name" json:"guild_name"`
-	DamageDone      int64              `db:"damage_done" json:"damage_done"`
-	DurationSecs    float64            `db:"duration_secs" json:"duration_secs"`
-	Dps             float64            `db:"dps" json:"dps"`
-	AvgIlvl         pgtype.Int2        `db:"avg_ilvl" json:"avg_ilvl"`
-	HealingDone     int64              `db:"healing_done" json:"healing_done"`
-	AbsorbedDone    int64              `db:"absorbed_done" json:"absorbed_done"`
-	Hps             float64            `db:"hps" json:"hps"`
-	PlayerDeaths    pgtype.Int4        `db:"player_deaths" json:"player_deaths"`
-	AlivePercentage pgtype.Float8      `db:"alive_percentage" json:"alive_percentage"`
-	LogHashedSlug   string             `db:"log_hashed_slug" json:"log_hashed_slug"`
-	KilledAt        pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	EncounterID        uuid.NullUUID      `db:"encounter_id" json:"encounter_id"`
+	InstanceID         uuid.UUID          `db:"instance_id" json:"instance_id"`
+	EncounterName      string             `db:"encounter_name" json:"encounter_name"`
+	InstanceName       string             `db:"instance_name" json:"instance_name"`
+	PlayerGuid         string             `db:"player_guid" json:"player_guid"`
+	PlayerName         string             `db:"player_name" json:"player_name"`
+	PlayerClass        string             `db:"player_class" json:"player_class"`
+	PlayerSpec         string             `db:"player_spec" json:"player_spec"`
+	PlayerSubSpec      string             `db:"player_sub_spec" json:"player_sub_spec"`
+	PlayerRole         string             `db:"player_role" json:"player_role"`
+	PlayerLevel        int16              `db:"player_level" json:"player_level"`
+	TalentBuildID      uuid.NullUUID      `db:"talent_build_id" json:"talent_build_id"`
+	DifficultyName     string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers         int16              `db:"max_players" json:"max_players"`
+	RealmID            uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RealmName          string             `db:"realm_name" json:"realm_name"`
+	GuildID            uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	GuildName          string             `db:"guild_name" json:"guild_name"`
+	DamageDone         int64              `db:"damage_done" json:"damage_done"`
+	UnrankedDamageDone int64              `db:"unranked_damage_done" json:"unranked_damage_done"`
+	DurationSecs       float64            `db:"duration_secs" json:"duration_secs"`
+	Dps                float64            `db:"dps" json:"dps"`
+	AvgIlvl            pgtype.Int2        `db:"avg_ilvl" json:"avg_ilvl"`
+	HealingDone        int64              `db:"healing_done" json:"healing_done"`
+	AbsorbedDone       int64              `db:"absorbed_done" json:"absorbed_done"`
+	Hps                float64            `db:"hps" json:"hps"`
+	PlayerDeaths       pgtype.Int4        `db:"player_deaths" json:"player_deaths"`
+	AlivePercentage    pgtype.Float8      `db:"alive_percentage" json:"alive_percentage"`
+	LogHashedSlug      string             `db:"log_hashed_slug" json:"log_hashed_slug"`
+	KilledAt           pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
 }
 
 func (q *sqlQuerier) InsertEncounterDpsRanking(ctx context.Context, arg InsertEncounterDpsRankingParams) error {
@@ -17095,6 +18411,7 @@ func (q *sqlQuerier) InsertEncounterDpsRanking(ctx context.Context, arg InsertEn
 		arg.GuildID,
 		arg.GuildName,
 		arg.DamageDone,
+		arg.UnrankedDamageDone,
 		arg.DurationSecs,
 		arg.Dps,
 		arg.AvgIlvl,
@@ -17110,7 +18427,7 @@ func (q *sqlQuerier) InsertEncounterDpsRanking(ctx context.Context, arg InsertEn
 }
 
 const instanceRankingRecords = `-- name: InstanceRankingRecords :many
-SELECT edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at, edr.healing_done, edr.absorbed_done, edr.hps, edr.player_sub_spec, edr.player_deaths, edr.alive_percentage
+SELECT edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at, edr.healing_done, edr.absorbed_done, edr.hps, edr.player_sub_spec, edr.player_deaths, edr.alive_percentage, edr.unranked_damage_done
 FROM encounter_dps_rankings edr
 WHERE edr.instance_id = $1
 ORDER BY (encounter_id IS NULL), killed_at, encounter_name, player_name
@@ -17159,6 +18476,7 @@ func (q *sqlQuerier) InstanceRankingRecords(ctx context.Context, instanceID uuid
 			&i.PlayerSubSpec,
 			&i.PlayerDeaths,
 			&i.AlivePercentage,
+			&i.UnrankedDamageDone,
 		); err != nil {
 			return nil, err
 		}
@@ -17579,7 +18897,7 @@ representative_instances AS (
 ),
 deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
-        edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at, edr.healing_done, edr.absorbed_done, edr.hps, edr.player_sub_spec, edr.player_deaths, edr.alive_percentage
+        edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at, edr.healing_done, edr.absorbed_done, edr.hps, edr.player_sub_spec, edr.player_deaths, edr.alive_percentage, edr.unranked_damage_done
     FROM encounter_dps_rankings edr
 JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
 JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted

@@ -137,7 +137,7 @@ export function AdminLinkControls({ player }: { player: ArmoryPlayer }) {
 
   if (collapsed) {
     return (
-      <div className="fixed bottom-4 right-4 z-40">
+      <div data-floating-corner="bottom-right" className="fixed bottom-4 right-4 z-40">
         <Button
           variant="outline"
           size="icon"
@@ -152,7 +152,7 @@ export function AdminLinkControls({ player }: { player: ArmoryPlayer }) {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 w-80 rounded-lg border bg-popover shadow-lg">
+    <div data-floating-corner="bottom-right" className="fixed bottom-4 right-4 z-40 w-80 rounded-lg border bg-popover shadow-lg">
       <div className="flex items-center justify-between px-3 py-2 border-b">
         <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
           <ShieldCheck className="h-3.5 w-3.5" />

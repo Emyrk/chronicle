@@ -11,7 +11,7 @@ import {
 } from "@/api/queries";
 import { useCharacterParses } from "@/api/rankingsQueries";
 import { Button } from "@/components/ui/button";
-import { AdSlot } from "@/components/Ads/AdSlot";
+import { AdRailStack } from "@/components/Ads/AdRailStack";
 import { AdSuppressionProvider } from "@/components/Ads/AdSuppressionProvider";
 import { FavoriteButton } from "@/components/Favorites";
 import { useAuth } from "@/hooks/useAuth";
@@ -210,8 +210,12 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
     <div className="w-full px-1 py-8 sm:px-4">
       <div className="flex w-full items-start justify-center gap-4">
         {activeTab !== "activity" && (
-          <div className="hidden justify-end 2xl:flex">
-            <AdSlot placement="armory-left-rail" format="rail" railLayout="paired-wide" />
+          <div className="hidden self-stretch justify-end 2xl:flex">
+            <AdRailStack
+              primaryPlacement="armory-left-rail"
+              secondaryPlacement="armory-left-rail-lower"
+              railLayout="paired-wide"
+            />
           </div>
         )}
 
@@ -313,10 +317,10 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
         </main>
 
         {activeTab !== "activity" && (
-          <div className="hidden justify-start xl:flex">
-            <AdSlot
-              placement="armory-right-rail"
-              format="rail"
+          <div className="hidden self-stretch justify-start xl:flex">
+            <AdRailStack
+              primaryPlacement="armory-right-rail"
+              secondaryPlacement="armory-right-rail-lower"
               railLayout="paired-wide"
               railBreakpoint="xl"
             />

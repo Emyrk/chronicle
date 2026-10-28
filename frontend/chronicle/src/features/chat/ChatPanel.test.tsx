@@ -3,12 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 import { ChatPanel } from "./ChatPanel";
 import { InferenceRuntimeProvider } from "./runtime";
 import type { AssistantChatController } from "./useAssistantChat";
+import { EMPTY_USAGE } from "./usage";
 
 const controller: AssistantChatController = {
   messages: [],
   debugSnapshots: [],
   clientToolRequests: [],
   status: "idle",
+  usageTotal: EMPTY_USAGE,
   isRunning: false,
   submit: vi.fn(async () => true),
   startNewChat: vi.fn(async () => true),

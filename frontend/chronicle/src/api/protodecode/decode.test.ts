@@ -194,6 +194,7 @@ describe('unit telemetry cursors', () => {
       y: 1697.84,
       z: 42.5,
       mapId: 1420,
+      floor: 2,
       facing: 4.4674,
     });
     const encoded = toBinary(UnitPositionSchema, message);
@@ -209,6 +210,7 @@ describe('unit telemetry cursors', () => {
       y: 1697.84,
       z: 42.5,
       mapId: 1420,
+      floor: 2,
       facing: 4.4674,
     });
   });
@@ -229,6 +231,7 @@ describe('unit telemetry cursors', () => {
       type: 'unit_position',
       facing: undefined,
       z: undefined,
+      floor: undefined,
     });
   });
 

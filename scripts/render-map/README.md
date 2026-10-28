@@ -69,7 +69,7 @@ is used whole.
                      │  composite_water.py: dry + depth-tested water → textured.png
                      │  align_to_real.py (optional): register onto a reference frame
                      ▼
-  <workdir>/maps/<slug>/renders/vNNN-<label>/{dry,water,shaded,textured,shaded-water}.png
+  <workdir>/maps/<slug>/renders/vNNN[-floor-N]-<label>/{dry,water,shaded,textured,shaded-water}.png
                                                 + *-aligned.png, preview-*.webp (<= 1 MB each),
                                                   align.json, previews.json, log.txt, manifest.json
                      │
@@ -91,6 +91,72 @@ Always `.venv/bin/python -I` (numpy, Pillow, PyYAML), or local.yaml `python:`. B
 (local.yaml `blender:`). Run the tools from `scripts/render-map/`; slugs resolve under the workdir.
 First `fetch_map.py` builds CascLib + `cache/casc/cascget` (needs `cmake`, `clang++`; ~1 min).
 
+## Map Foundry bundles (preferred for multi-floor maps)
+
+After every floor has a calibrated render and mesh, collect their local paths and metadata in one
+staging JSON, then build a deterministic import bundle:
+
+```bash
+.venv/bin/python -I tools/foundry_bundle.py \
+  ~/.cache/chronicle-render-map/maps/naxxramas/naxxramas-foundry-stage.json
+# validate only, without writing a ZIP
+.venv/bin/python -I tools/foundry_bundle.py --check <staging.json>
+# optional explicit destination
+.venv/bin/python -I tools/foundry_bundle.py <staging.json> <bundle.zip>
+```
+
+The current single-map staging shape is:
+
+```json
+{
+  "namespace": "azerothcore",
+  "mapID": 533,
+  "name": "Naxxramas",
+  "floors": [
+    {
+      "floor": 1,
+      "name": "The Arachnid Quarter",
+      "preferred2D": "renders",
+      "render": {
+        "path": "/absolute/local/render.png",
+        "width": 2400,
+        "height": 1638,
+        "bounds": {"minX": 2925.3887, "maxX": 3564.1309, "minY": -3811.5806, "maxY": -2875.6465},
+        "bytes": 4079884,
+        "sha256": "..."
+      },
+      "mesh": {
+        "path": "/absolute/local/mesh.glb",
+        "bounds": {"minX": 2925.3887, "maxX": 3564.1309, "minY": -3811.5806, "maxY": -2875.6465},
+        "zMin": 245.5746,
+        "zMax": 436.5089,
+        "frame": "wow-yup-mirrored-x",
+        "bytes": 17733256,
+        "sha256": "..."
+      }
+    }
+  ]
+}
+```
+
+`preferred2D` is optional in staging and defaults to `renders` in `foundry.json`. Use `renders` for
+the calibrated render, or `art` to request native floor art where usable. The tool also accepts a
+shared `namespace` plus a `maps` array, rejects duplicate map or floor IDs, verifies every local
+file's exact byte count and SHA-256, requires identical render and mesh bounds, validates complete
+render and mesh calibration, and enforces the Foundry's 100 MB per-asset limit.
+
+The output is a `ZIP_STORED` archive with `foundry.json` at its root and canonical entries such as
+`maps/533/floor-1/render.png` and `maps/533/floor-1/mesh.glb`. ZIP timestamps, permissions, JSON,
+entry names, and entry order are normalized, so identical staging metadata and asset bytes produce
+an identical bundle. Absolute local paths never enter `foundry.json`.
+
+Import the ZIP through the Map Foundry UI. The browser extracts it locally, validates
+`chronicle-map-foundry-bundle-v1`, rejects archives over 512 MB, archives with more than 512 entries,
+and unreferenced entries, uploads the contained files individually, and saves one draft.
+The draft update is one conditional write, but asset storage is not transactional. A failed import can
+leave unreferenced content-addressed objects. Importing never publishes; inspect the draft and preview,
+then wait for the operator's explicit publish approval.
+
 ## Two kinds of map
 
 | kind | detected by | what you get |
@@ -108,7 +174,7 @@ Terrain, in detail (`tools/adt2obj.py`, run by `fetch_map.py`):
 - **Heightmap.** `MCNK.position` is `(world x, world y, z)` of the chunk's +x/+y corner;
   `IndexX` runs along −y, `IndexY` along −x; 145 heights per chunk (9×9 outer + 8×8 inner),
   holes from the high-res 64-bit mask when flag 0x10000 is set, else the 4×4 low-res mask.
-- **Ground textures.** `MDID` (tex0) lists texture file ids; per chunk `MCLY` layers (texture,
+- **Ground textures.** `MDID` (tex0) lists texture file ids; BLP2 raw BGRA (encoding 3) is decoded directly when Pillow cannot read it. Per chunk `MCLY` layers (texture,
   flags, alpha offset) and `MCAL` alpha maps: 8-bit when MPHD has 0x4 or 0x80 (big alpha /
   height texturing), RLE when the layer flag 0x200 is set, else 4-bit with the last row and
   column duplicated. Textures repeat 8× per chunk. One atlas per tile, `atlas_chunk_px` per
@@ -161,6 +227,9 @@ rot: 90                         # camera roll: 90 = WoW -Y -> screen right, -X -
 reference: ../some-frame.png    # optional, relative to the map folder: register renders onto this frame
 reference_bg: 12,17,20          # that image's flat background colour
 # terrain only: crop: {x: [min, max], y: [min, max]}  (world yards)   atlas_chunk_px: 512   (4x sets)
+# frame_include_all: true  # include placed WMOs outside the cropped terrain in the camera/GLB frame
+# frame_include_prefix: wmo_248358  # select what sets bounds; object_exclude_prefix: terrain_ drops blank terrain entirely
+# minimap: false  # only when this CDN product omits MAID textures; disables reference alignment / IoU
 # water_tint: 0.7  water_color: "214,96,32"          (lava; defaults 0.42 / 78,150,196)
 # source: mpq  client: <mpq_clients name>             (1.12 client, see below)  placed_wmo: <fid or name>
 ```
@@ -169,6 +238,53 @@ reference_bg: 12,17,20          # that image's flat background colour
    deliberately.
 3. `tools/render_set.py <slug> first`. Open `textured.png`; if the map is rotated against
    what you want, change `rot` and render again (new version).
+
+## Rendering one floor at a time
+
+Leave `floor` out for the legacy single-floor workflow. Its version folders and GLBs keep their old
+names. For an instance floor, set a non-negative integer ID in `map.yaml` or pass `--floor N`.
+A configured floor produces `vNNN-floor-N-<label>`, `<slug>-floor-N-open-top.glb`, floor metadata in
+`manifest.json` and `height.json`, and a floor-qualified `chronicle_render.py` PNG name. `--floor`
+overrides only the identifier; geometry selectors still come from `map.yaml`.
+
+The renderer cannot infer which geometry belongs to a floor. If the fetched OBJ contains several
+floors, describe membership explicitly. Prefixes match Blender object names before framing and
+before the top-down and GLB culls. Z limits bisect geometry at world-Z planes. Include prefixes are
+an allowlist, exclude prefixes apply after it, and both may be combined with either or both Z limits:
+
+```yaml
+floor:
+  id: 2
+  object_include_prefixes: [group_20, liquid_]  # include liquid_ explicitly when this floor needs water
+  object_exclude_prefixes: [group_20_ceiling]
+  z_min: -30
+  z_max: 15.5
+```
+
+A scalar is valid when the OBJ already contains only that floor:
+
+```yaml
+floor: 2
+```
+
+Invalid IDs, empty prefix lists, unknown floor keys, `z_min >= z_max`, selectors that remove every
+object, and frame selectors that no longer match selected geometry abort the run. A minimap-only
+terrain fetch can carry floor metadata only when its source image is already floor-specific; it
+rejects geometry selectors because there is no OBJ to select. Inspect object names in the OBJ or
+Blender import log and choose selectors from evidence. Do not use Z alone where ramps, stairs, or
+rooms from adjacent floors overlap that range.
+
+Render and calibrate each floor in its own run:
+
+```bash
+.venv/bin/python -I tools/render_set.py shadow-labyrinth glb --floor 1 --glb --note "floor 1 only"
+.venv/bin/python -I tools/chronicle_render.py "$W/maps/shadow-labyrinth/renders/v012-floor-1-glb"
+```
+
+`chronicle_render.py` prints a complete layer instance entry. Without a floor it retains the legacy
+`{"mapID": N, "renders": {...}}` shape. With a floor it prints
+`{"mapID": N, "floors": [{"floor": F, "renders": {...}}]}`. A `--source` pass must record the same
+floor as the GLB version, in addition to having the same camera frame.
 
 ## 1.12 clients (`source: mpq`) — private-server forks (OctoWoW, Cappy)
 

@@ -180,8 +180,8 @@ function manualEntries(value: unknown, field: "renders" | "meshes"): MapLayerIns
 
 async function verifyDraftAssets(bucket: R2Bucket, namespace: MapManifestNamespace, draft: ManualDraft): Promise<void> {
   const paths = [
-    ...draft.renders.instances.map((entry) => entry.renders?.path),
-    ...draft.meshes.instances.map((entry) => entry.mesh?.path),
+    ...draft.renders.instances.flatMap((entry) => [entry.renders?.path, ...(entry.floors ?? []).map((floor) => floor.renders?.path)]),
+    ...draft.meshes.instances.flatMap((entry) => [entry.mesh?.path, ...(entry.floors ?? []).map((floor) => floor.mesh?.path)]),
   ].filter((path): path is string => Boolean(path));
   const missing: string[] = [];
   await Promise.all(paths.map(async (path) => {
@@ -269,6 +269,7 @@ maps.get("/internal/api/v1/maps/:namespace", async (c) => {
         directory: instance.directory,
         original: originalInstanceIDs.has(instance.mapID),
         floor_count: instance.floors.length,
+        floors: instance.floors.map((floor) => ({ floor: floor.floor, preferred2D: floor.preferred2D, renders: floor.renders, mesh: floor.mesh })),
         styled: instance.styled,
         renders: instance.renders,
         mesh: instance.mesh,
@@ -289,6 +290,8 @@ maps.get("/internal/api/v1/maps/:namespace/instances/:mapID/preview", async (c) 
     const state = await loadState(c.env.MAPS, namespace);
     const instance = state.preview.instances.find((candidate) => candidate.mapID === mapID);
     if (!instance) return c.json({ error: "Map instance not found" }, 404);
+    const publishedRenders = state.published.renders.instances.find((entry) => entry.mapID === mapID);
+    const publishedMeshes = state.published.meshes.instances.find((entry) => entry.mapID === mapID);
     return c.json({
       mapID: instance.mapID,
       name: instance.name,
@@ -297,8 +300,10 @@ maps.get("/internal/api/v1/maps/:namespace/instances/:mapID/preview", async (c) 
       styled: instance.styled,
       renders: instance.renders,
       mesh: instance.mesh,
-      published_renders: state.published.renders.instances.find((entry) => entry.mapID === mapID)?.renders,
-      published_mesh: state.published.meshes.instances.find((entry) => entry.mapID === mapID)?.mesh,
+      published_renders: publishedRenders?.renders,
+      published_render_floors: publishedRenders?.floors ?? [],
+      published_mesh: publishedMeshes?.mesh,
+      published_mesh_floors: publishedMeshes?.floors ?? [],
     }, 200, { "Cache-Control": "private, no-store" });
   } catch (error) {
     return c.json({ error: errorMessage(error) }, 500);
@@ -390,8 +395,18 @@ maps.post("/internal/api/v1/maps/:namespace/assets/:kind", async (c) => {
     const body = await c.req.parseBody();
     const file = body.file;
     const mapID = Number(body.mapID);
+    const floor = body.floor === undefined ? undefined : Number(body.floor);
     if (!(file instanceof File)) throw new TypeError("file is required");
     if (!Number.isSafeInteger(mapID) || mapID <= 0) throw new TypeError("mapID must be a positive integer");
+    if (floor !== undefined) {
+      if (!Number.isSafeInteger(floor)) throw new TypeError("floor must be an integer");
+      const state = await loadState(c.env.MAPS, namespace);
+      const instance = state.preview.instances.find((candidate) => candidate.mapID === mapID);
+      if (!instance) throw new TypeError(`mapID ${mapID} cannot attach floor artwork without native floors`);
+      if (!instance.floors.some((candidate) => candidate.floor === floor)) {
+        throw new TypeError(`unknown mapID ${mapID} floor ${floor}`);
+      }
+    }
     if (file.size === 0 || file.size > 100 * 1024 * 1024) throw new TypeError("asset must be between 1 byte and 100 MB");
     const bytes = new Uint8Array(await file.arrayBuffer());
     let dimensions: { width: number; height: number } | undefined;
@@ -408,11 +423,12 @@ maps.post("/internal/api/v1/maps/:namespace/assets/:kind", async (c) => {
       contentType = "model/gltf-binary";
     }
     const filename = safeFilename(file.name, extension);
-    const path = `${kind === "meshes" ? "3d" : kind}/${mapID}-${await digest(bytes)}-${filename}`;
+    const floorStem = floor === undefined ? "" : `-floor-${floor}`;
+    const path = `${kind === "meshes" ? "3d" : kind}/${mapID}${floorStem}-${await digest(bytes)}-${filename}`;
     await c.env.MAPS.put(`${root(namespace)}/${path}`, bytes, {
       httpMetadata: { contentType, cacheControl: "public, max-age=31536000, immutable" },
     });
-    return c.json({ path, ...dimensions }, 201);
+    return c.json({ path, floor, ...dimensions }, 201);
   } catch (error) {
     return c.json({ error: errorMessage(error) }, 400);
   }

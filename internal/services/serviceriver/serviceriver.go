@@ -124,6 +124,7 @@ func (s *Service) Start(ctx context.Context) error {
 		bot.SetQueue(q)
 		riverqueue.AddWorker(q, bot.NewWorkerSyncDiscordUser())
 		riverqueue.AddWorker(q, bot.NewWorkerNotifyApplication())
+		riverqueue.AddWorker(q, bot.NewWorkerNotifyCharacterLinkDecision())
 		riverqueue.AddWorker(q, bot.NewWorkerNotifyAdmin())
 		riverqueue.AddWorker(q, bot.NewWorkerAnnounceRaidLog())
 		riverqueue.AddWorker(q, bot.NewWorkerDispatchDiscordMembershipGrantChecks())
@@ -155,6 +156,8 @@ func (s *Service) Start(ctx context.Context) error {
 	billingService.Billing.SetSubscriptionChangeNotifier(func(ctx context.Context, change billing.SubscriptionChangeNotification) error {
 		return chroniclebot.EnqueueAdminNotification(ctx, q, bot, billingSubscriptionNotificationArgs(serviceaccessurl.AccessURL(s.broker), change))
 	})
+
+	billingService.Billing.SetDiscordRoleSyncEnqueuer(bot.EnqueueEntitlementRoleSync)
 
 	// Register character cosmetic audits. The daily dispatcher repairs missed
 	// event-driven audits without producing a deployment-time burst.

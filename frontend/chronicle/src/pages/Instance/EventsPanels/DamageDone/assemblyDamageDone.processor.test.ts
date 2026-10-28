@@ -99,6 +99,18 @@ describe("assemblyDamageDoneProcessor", () => {
     expect(encounterDamage(state, true)).toBe(80);
   });
 
+  it("uses Assembly phase rules even when generic ranked damage is enabled", () => {
+    const state = assemblyDamageDoneProcessor.createState();
+    const ctx = context();
+    ctx.panelOption = "exclude-unranked";
+    assemblyDamageDoneProcessor.processEvent(state, damage({ amount: 500 }), ENCOUNTER, new Date(), "damage", ctx);
+    assemblyDamageDoneProcessor.processEvent(state, damage({ target: MOLGEIM, amount: 80 }), ENCOUNTER, new Date(), "damage", ctx);
+    assemblyDamageDoneProcessor.processEvent(state, slain(STEELBREAKER), ENCOUNTER, new Date(), "slain", ctx);
+
+    expect(encounterDamage(state)).toBe(500);
+    expect(encounterDamage(state, true)).toBe(80);
+  });
+
   it("includes absorbed damage and does not subtract overkill in static mode", () => {
     const state = assemblyDamageDoneProcessor.createState();
     const ctx = context();
@@ -112,6 +124,18 @@ describe("assemblyDamageDoneProcessor", () => {
     assemblyDamageDoneProcessor.processEvent(state, slain(STEELBREAKER), ENCOUNTER, new Date(), "slain", ctx);
 
     expect(encounterDamage(state)).toBe(100);
+  });
+
+  it("moves overkill to excluded on the slain target in ranked mode", () => {
+    const state = assemblyDamageDoneProcessor.createState();
+    const ctx = context();
+    ctx.panelOption = "exclude-unranked";
+    assemblyDamageDoneProcessor.processEvent(state, damage({ amount: 100, overkill: 40 }), ENCOUNTER, new Date(), "damage", ctx);
+    assemblyDamageDoneProcessor.processEvent(state, damage({ target: MOLGEIM, amount: 80 }), ENCOUNTER, new Date(), "damage", ctx);
+    assemblyDamageDoneProcessor.processEvent(state, slain(STEELBREAKER), ENCOUNTER, new Date(), "slain", ctx);
+    expect(encounterDamage(state)).toBe(60);
+    expect(encounterDamage(state, true)).toBe(120);
+    expect(state.ByAbility.get(PLAYER)?.get("Attack")?.Count).toBe(1);
   });
 
   it("commits every unresolved target when the encounter ends", () => {
@@ -134,7 +158,7 @@ describe("assemblyDamageDoneProcessor", () => {
     assemblyDamageDoneProcessor.processEvent(state, damage({ target: MOLGEIM, amount: 80 }), ENCOUNTER, new Date(), "damage", ctx);
     assemblyDamageDoneProcessor.processEvent(state, slain(STEELBREAKER), ENCOUNTER, new Date(), "slain", ctx);
 
-    expect(encounterDamage(state)).toBe(140);
+    expect(encounterDamage(state)).toBe(180);
     expect(encounterDamage(state, true)).toBe(0);
   });
 

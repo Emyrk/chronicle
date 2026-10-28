@@ -29,7 +29,7 @@ type ArmoryPlayer struct {
 	// use it to fetch icons matching the realm's game data instead of the
 	// compiled-in default.
 	IconBaseURL string `json:"icon_base_url,omitempty"`
-	// OwnerAdsFree is true when this character is linked to an account with ad-free access.
+	// OwnerAdsFree is true when this character is linked to an account whose tier makes linked characters ad-free.
 	OwnerAdsFree bool `json:"owner_ads_free"`
 }
 
