@@ -154,7 +154,7 @@ export function RulesetInstanceView({ instanceName }: { instanceName: string }) 
                         </span>
                       </td>
                       <td className="px-4 py-2 sm:px-5">
-                        {row.mode === "entries" ? (
+                        {row.mode === "entries" || row.mode === "phase-kill" ? (
                           <ul className="flex flex-wrap gap-1.5" aria-label={`${row.name} ranked targets`}>
                             {row.targets.map((target) => (
                               <li
@@ -175,6 +175,9 @@ export function RulesetInstanceView({ instanceName }: { instanceName: string }) 
                           ) : (
                             <span className="text-muted-foreground">All eligible hostile damage</span>
                           )
+                        )}
+                        {row.note && (
+                          <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-muted-foreground">{row.note}</p>
                         )}
                       </td>
                     </tr>

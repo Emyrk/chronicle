@@ -25,6 +25,22 @@ describe("DPS ruleset", () => {
     ])
   })
 
+  it("adds the hard-coded Assembly of Iron rule for Ulduar", () => {
+    const rows = damageRuleRows({ name: "Ulduar", category: "raid" })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      name: "Assembly of Iron",
+      mode: "phase-kill",
+      targets: [
+        { id: 32867, name: "Steelbreaker", boss: true },
+        { id: 32927, name: "Runemaster Molgeim", boss: true },
+        { id: 32857, name: "Stormcaller Brundir", boss: true },
+      ],
+    })
+    expect(rows[0].note).toContain("council member who dies")
+    expect(rulesetEntries([{ name: "Ulduar", category: "raid" }])[0].damageRuleCount).toBe(1)
+  })
+
   it("shows no encounter restrictions when no rules are configured", () => {
     expect(damageRuleRows({ name: "Other", category: "raid" })).toEqual([])
   })
