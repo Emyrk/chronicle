@@ -28,7 +28,7 @@ describe("addon creation permission", () => {
     vi.mocked(useSession).mockReturnValue({ data: null, isLoading: false } as ReturnType<typeof useSession>)
     vi.mocked(useAuthorizationCheck).mockReturnValue({ isPending: true } as unknown as ReturnType<typeof useAuthorizationCheck>)
     const html = renderPage()
-    expect(html).toContain("Welcome! Make your")
+    expect(html).toContain("Welcome! Make your first addon")
     expect(html).toContain("Sign in to get started.")
     expect(html).not.toContain("New addon</h2>")
     expect(useAuthorizationCheck).toHaveBeenCalledWith({ createLuaProject: "chronicle:chronicle#create_lua_project" }, { enabled: false })
