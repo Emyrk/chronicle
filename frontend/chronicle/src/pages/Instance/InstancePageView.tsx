@@ -10,6 +10,7 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { useHelpfulHints } from "@/hooks/useHelpfulHints";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { useInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
+import { useConfirmLinkNavigation } from "@/hooks/useConfirmLinkNavigation";
 import { type LayoutType, type PanelType } from "@/hooks/useUrlState";
 import { useTimeRangeContextOptional } from "./TimeRangeContext";
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
@@ -116,6 +117,7 @@ import {
 import { openLayoutPopup, syncPopupAppearance, type LayoutPopup } from "./EventsPanels/panelPopup";
 import { InstanceKeybindProvider, useRegisterInstanceKeybinds } from "./InstanceKeybinds";
 import { shouldShowEncounterSidebarAd } from "./encounterSidebarAd";
+import { instanceNavigationWarning } from "./instanceNavigationGuard";
 
 function useViewportHeight(targetWindow: Window | null): number {
   const [height, setHeight] = useState(() => targetWindow?.innerHeight ?? 1080);
@@ -3492,6 +3494,12 @@ function InstancePageViewContent({
   const layoutDraftSignature = layoutEditActive ? JSON.stringify(layoutDraftToExport(layoutDraft.draft)) : "";
   const layoutDirty = layoutEditActive && layoutDraftSignature !== layoutEditBaseline;
   const hasUnsavedLayoutEdits = layoutDirty || (editedLayoutItems !== null && editedLayoutItems === importedLayoutItems);
+  const navigationWarning = instanceNavigationWarning({
+    layoutEditing,
+    hasUnsavedLayoutEdits,
+    liveSessionStatus: liveSession.status,
+  });
+  useConfirmLinkNavigation(navigationWarning !== null, navigationWarning ?? "");
 
   const enterLayoutEdit = useCallback(() => {
     if (!canEditLayout) return;
@@ -3538,15 +3546,15 @@ function InstancePageViewContent({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [canEditLayout, cancelLayoutEdit, enterLayoutEdit, finishLayoutEdit, layoutEditActive]);
 
-  // Edits live only in memory, so warn before the tab reloads or closes.
+  // Layout edits live only in memory, and navigation leaves an active live session.
   useEffect(() => {
-    if (!hasUnsavedLayoutEdits) return;
+    if (!navigationWarning) return;
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [hasUnsavedLayoutEdits]);
+  }, [navigationWarning]);
 
   // ── Save As ─────────────────────────────────────────────────────────────
   const [saveLayoutOpen, setSaveLayoutOpen] = useState(false);
