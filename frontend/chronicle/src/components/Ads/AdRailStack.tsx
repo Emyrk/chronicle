@@ -22,6 +22,7 @@ export function AdRailStack({
   secondaryMinViewportHeight = 1360,
   hostname,
   previewEnabled,
+  viewportHeight,
   className,
 }: {
   primaryPlacement: AdPlacement
@@ -33,6 +34,8 @@ export function AdRailStack({
   hostname?: string
   /** Test seam for preview eligibility. Product callers should omit it. */
   previewEnabled?: boolean
+  /** Test seam for lower-placement height eligibility. Product callers should omit it. */
+  viewportHeight?: number
   className?: string
 }) {
   const staticClassName = railSlotStaticClasses[railBreakpoint]
@@ -56,6 +59,7 @@ export function AdRailStack({
         hostname={hostname}
         previewEnabled={previewEnabled}
         minViewportHeight={secondaryMinViewportHeight}
+        viewportHeight={viewportHeight}
         className={cn("mt-6", staticClassName)}
       />
     </div>

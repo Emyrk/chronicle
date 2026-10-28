@@ -72,7 +72,7 @@ describe("AdSlot", () => {
       <AdRailStack
         primaryPlacement="leaderboards-right-rail"
         secondaryPlacement="leaderboards-right-rail-lower"
-        secondaryMinViewportHeight={0}
+        viewportHeight={1360}
         hostname="localhost"
         previewEnabled
       />,
@@ -93,7 +93,7 @@ describe("AdSlot", () => {
         secondaryPlacement="armory-right-rail-lower"
         railLayout="paired-wide"
         railBreakpoint="xl"
-        secondaryMinViewportHeight={0}
+        viewportHeight={1360}
         hostname="localhost"
         previewEnabled
       />,
