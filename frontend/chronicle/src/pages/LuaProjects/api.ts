@@ -17,6 +17,9 @@ export type LuaProject = {
   main?: LuaMain
   /** Newest first. */
   releases: LuaRelease[]
+  /** People tracking the addon; `starred` says whether the viewer is one. Owners always are. */
+  stars: number
+  starred: boolean
   created_at: string
   updated_at: string
 }
@@ -90,6 +93,15 @@ export function createRelease(id: string, revision: number, tag: string): Promis
 
 export function deleteRelease(id: string, tag: string): Promise<LuaProject> {
   return request<LuaProject>(`${base}/${encodeURIComponent(id)}/releases/${encodeURIComponent(tag)}`, { method: "DELETE" })
+}
+
+/** Addons the user tracks: what their instance panel picker offers. */
+export function listStarredProjects(): Promise<LuaProject[]> {
+  return request<LuaProject[]>(`${base}/starred`)
+}
+
+export function setStarred(id: string, starred: boolean): Promise<{ stars: number; starred: boolean }> {
+  return request(`${base}/${encodeURIComponent(id)}/star`, { method: starred ? "PUT" : "DELETE" })
 }
 
 export async function getPublicProject(id: string, channel: LuaChannel, signal?: AbortSignal): Promise<LuaProject> {

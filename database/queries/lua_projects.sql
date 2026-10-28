@@ -158,3 +158,20 @@ RETURNING *;
 
 -- name: DeleteLuaProjectContributor :execrows
 DELETE FROM lua_project_contributors WHERE project_id = @project_id AND user_id = @user_id;
+
+-- name: StarLuaProject :exec
+INSERT INTO lua_project_stars (project_id, user_id) VALUES (@project_id, @user_id) ON CONFLICT DO NOTHING;
+
+-- name: UnstarLuaProject :exec
+DELETE FROM lua_project_stars WHERE project_id = @project_id AND user_id = @user_id;
+
+-- name: ListStarredLuaProjects :many
+-- Addons the user tracks, most recently starred first.
+SELECT p.* FROM lua_projects p JOIN lua_project_stars s ON s.project_id = p.id
+WHERE s.user_id = @user_id ORDER BY s.created_at DESC LIMIT 200;
+
+-- name: CountLuaProjectStars :many
+SELECT project_id, count(*) AS stars FROM lua_project_stars WHERE project_id = ANY(@project_ids::uuid[]) GROUP BY project_id;
+
+-- name: ListUserStarsForProjects :many
+SELECT project_id FROM lua_project_stars WHERE user_id = @user_id AND project_id = ANY(@project_ids::uuid[]);

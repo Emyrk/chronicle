@@ -48,9 +48,18 @@ type LuaProject struct {
 	Author string          `json:"author,omitempty"`
 	Main   *LuaProjectMain `json:"main,omitempty"`
 	// Releases are newest first. Panels run the newest one that is still available.
-	Releases  []LuaProjectRelease `json:"releases"`
-	CreatedAt time.Time           `json:"created_at"`
-	UpdatedAt time.Time           `json:"updated_at"`
+	Releases []LuaProjectRelease `json:"releases"`
+	// Stars counts the people tracking the addon. Starred says whether the caller is one of them.
+	Stars     int64     `json:"stars"`
+	Starred   bool      `json:"starred"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// LuaProjectStar answers a star or unstar.
+type LuaProjectStar struct {
+	Stars   int64 `json:"stars"`
+	Starred bool  `json:"starred"`
 }
 
 // LuaProjectPermissions are what the viewing user may do with an addon.

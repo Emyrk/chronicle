@@ -347,6 +347,9 @@ func (api *API) Routes() chi.Router {
 				}
 				r.With(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanCreate_lua_project_User)).Post("/me/lua-projects", api.CreateLuaProject)
 				r.Get("/me/lua-projects", api.ListMyLuaProjects)
+				r.Get("/me/lua-projects/starred", api.ListStarredLuaProjects)
+				r.Put("/me/lua-projects/{projectID}/star", api.StarLuaProject)
+				r.Delete("/me/lua-projects/{projectID}/star", api.UnstarLuaProject)
 				r.Get("/me/addon-author", api.GetMyAddonAuthor)
 				r.Put("/me/addon-author", api.ClaimAddonAuthor)
 				r.Get("/me/addon-author/suggestion", api.SuggestAddonAuthor)

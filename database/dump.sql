@@ -1651,6 +1651,12 @@ CREATE TABLE lua_project_releases (
     CONSTRAINT lua_project_releases_tag_check CHECK ((tag ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$'::text))
 );
 
+CREATE TABLE lua_project_stars (
+    project_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE lua_projects (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     owner_id uuid NOT NULL,
@@ -2959,6 +2965,9 @@ ALTER TABLE ONLY lua_project_contributors
 ALTER TABLE ONLY lua_project_releases
     ADD CONSTRAINT lua_project_releases_pkey PRIMARY KEY (project_id, tag);
 
+ALTER TABLE ONLY lua_project_stars
+    ADD CONSTRAINT lua_project_stars_pkey PRIMARY KEY (project_id, user_id);
+
 ALTER TABLE ONLY lua_projects
     ADD CONSTRAINT lua_projects_owner_id_slug_key UNIQUE (owner_id, slug);
 
@@ -3473,6 +3482,8 @@ CREATE INDEX lua_project_contributors_user_idx ON lua_project_contributors USING
 
 CREATE INDEX lua_project_releases_recent_idx ON lua_project_releases USING btree (project_id, published_at DESC);
 
+CREATE INDEX lua_project_stars_user_idx ON lua_project_stars USING btree (user_id, created_at DESC);
+
 CREATE INDEX lua_projects_owner_idx ON lua_projects USING btree (owner_id, updated_at DESC);
 
 CREATE INDEX oauth_device_sessions_expires_at_idx ON oauth_device_sessions USING btree (expires_at);
@@ -3895,6 +3906,12 @@ ALTER TABLE ONLY lua_project_releases
 
 ALTER TABLE ONLY lua_project_releases
     ADD CONSTRAINT lua_project_releases_published_by_fkey FOREIGN KEY (published_by) REFERENCES users(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY lua_project_stars
+    ADD CONSTRAINT lua_project_stars_project_id_fkey FOREIGN KEY (project_id) REFERENCES lua_projects(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY lua_project_stars
+    ADD CONSTRAINT lua_project_stars_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY lua_projects
     ADD CONSTRAINT lua_projects_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES users(id);

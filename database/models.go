@@ -2063,6 +2063,12 @@ type LuaProjectRelease struct {
 	PublishedBy uuid.NullUUID      `db:"published_by" json:"published_by"`
 }
 
+type LuaProjectStar struct {
+	ProjectID uuid.UUID          `db:"project_id" json:"project_id"`
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type OauthDeviceSession struct {
 	DeviceSignature              string             `db:"device_signature" json:"device_signature"`
 	UserSignature                string             `db:"user_signature" json:"user_signature"`

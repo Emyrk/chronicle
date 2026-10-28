@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { useSession } from "@/api/queries"
-import { latestRelease, listProjects, type LuaChannel } from "../../../LuaProjects/api"
+import { latestRelease, listStarredProjects, type LuaChannel } from "../../../LuaProjects/api"
 
 export type LuaPanelRef = `lua:${string}:${LuaChannel}`
 // Saved layouts may still say stable or unstable, from before releases; they mean release and main.
@@ -27,9 +27,9 @@ export interface LuaProjectCatalogEntry {
   main?: { sha256: string; icon?: string }
 }
 
-/** Panel addons the user owns or was given access to, with a release or a saved main. */
-export async function fetchOwnedLuaPanels(): Promise<LuaProjectCatalogEntry[]> {
-  const projects = await listProjects()
+/** Panel addons the user tracks (stars; owners always do), with a release or a saved main. */
+export async function fetchTrackedLuaPanels(): Promise<LuaProjectCatalogEntry[]> {
+  const projects = await listStarredProjects()
   return projects.flatMap(project => {
     const latest = latestRelease(project)
     if (project.kind !== "panel" || !parseLuaPanelRef(luaPanelRef(project.id, "release")) || (!latest && !project.main)) return []
@@ -46,7 +46,7 @@ export function useLuaPanelCatalog(enabled = true) {
     queryKey: ["lua-panel-catalog", ownerId], enabled: enabled && !!ownerId, staleTime: 60_000,
     queryFn: () => {
       if (!ownerId) throw new Error("Sign in to view your addons")
-      return fetchOwnedLuaPanels()
+      return fetchTrackedLuaPanels()
     },
   })
 }

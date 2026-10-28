@@ -11712,6 +11712,35 @@ func (q *sqlQuerier) ConsumeLuaProjectUpload(ctx context.Context, objectKey stri
 	return object_key, err
 }
 
+const countLuaProjectStars = `-- name: CountLuaProjectStars :many
+SELECT project_id, count(*) AS stars FROM lua_project_stars WHERE project_id = ANY($1::uuid[]) GROUP BY project_id
+`
+
+type CountLuaProjectStarsRow struct {
+	ProjectID uuid.UUID `db:"project_id" json:"project_id"`
+	Stars     int64     `db:"stars" json:"stars"`
+}
+
+func (q *sqlQuerier) CountLuaProjectStars(ctx context.Context, projectIds []uuid.UUID) ([]CountLuaProjectStarsRow, error) {
+	rows, err := q.db.Query(ctx, countLuaProjectStars, projectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountLuaProjectStarsRow
+	for rows.Next() {
+		var i CountLuaProjectStarsRow
+		if err := rows.Scan(&i.ProjectID, &i.Stars); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countReadyLuaProjectArtifactGarbage = `-- name: CountReadyLuaProjectArtifactGarbage :one
 SELECT count(*) FROM lua_project_artifact_gc gc
 WHERE gc.ready_at <= now()
@@ -12286,6 +12315,43 @@ func (q *sqlQuerier) ListPublicLuaProjects(ctx context.Context) ([]LuaProject, e
 	return items, nil
 }
 
+const listStarredLuaProjects = `-- name: ListStarredLuaProjects :many
+SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.created_at, p.updated_at, p.draft_icon FROM lua_projects p JOIN lua_project_stars s ON s.project_id = p.id
+WHERE s.user_id = $1 ORDER BY s.created_at DESC LIMIT 200
+`
+
+// Addons the user tracks, most recently starred first.
+func (q *sqlQuerier) ListStarredLuaProjects(ctx context.Context, userID uuid.UUID) ([]LuaProject, error) {
+	rows, err := q.db.Query(ctx, listStarredLuaProjects, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LuaProject
+	for rows.Next() {
+		var i LuaProject
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Kind,
+			&i.Name,
+			&i.Slug,
+			&i.Revision,
+			&i.DraftHash,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DraftIcon,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserLuaProjects = `-- name: ListUserLuaProjects :many
 SELECT id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon FROM lua_projects
 WHERE owner_id = $1 OR id IN (SELECT project_id FROM lua_project_contributors WHERE user_id = $1)
@@ -12317,6 +12383,35 @@ func (q *sqlQuerier) ListUserLuaProjects(ctx context.Context, userID uuid.UUID) 
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserStarsForProjects = `-- name: ListUserStarsForProjects :many
+SELECT project_id FROM lua_project_stars WHERE user_id = $1 AND project_id = ANY($2::uuid[])
+`
+
+type ListUserStarsForProjectsParams struct {
+	UserID     uuid.UUID   `db:"user_id" json:"user_id"`
+	ProjectIds []uuid.UUID `db:"project_ids" json:"project_ids"`
+}
+
+func (q *sqlQuerier) ListUserStarsForProjects(ctx context.Context, arg ListUserStarsForProjectsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listUserStarsForProjects, arg.UserID, arg.ProjectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -12419,6 +12514,20 @@ func (q *sqlQuerier) SetLuaProjectDraft(ctx context.Context, arg SetLuaProjectDr
 	return i, err
 }
 
+const starLuaProject = `-- name: StarLuaProject :exec
+INSERT INTO lua_project_stars (project_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING
+`
+
+type StarLuaProjectParams struct {
+	ProjectID uuid.UUID `db:"project_id" json:"project_id"`
+	UserID    uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) StarLuaProject(ctx context.Context, arg StarLuaProjectParams) error {
+	_, err := q.db.Exec(ctx, starLuaProject, arg.ProjectID, arg.UserID)
+	return err
+}
+
 const trimLuaProjectReleaseFiles = `-- name: TrimLuaProjectReleaseFiles :exec
 UPDATE lua_project_releases old SET hash = NULL
 WHERE old.project_id = $1 AND old.hash IS NOT NULL AND old.tag NOT IN (
@@ -12435,6 +12544,20 @@ type TrimLuaProjectReleaseFilesParams struct {
 // Only the newest @keep releases keep their files; older ones stay listed without a package.
 func (q *sqlQuerier) TrimLuaProjectReleaseFiles(ctx context.Context, arg TrimLuaProjectReleaseFilesParams) error {
 	_, err := q.db.Exec(ctx, trimLuaProjectReleaseFiles, arg.ProjectID, arg.Keep)
+	return err
+}
+
+const unstarLuaProject = `-- name: UnstarLuaProject :exec
+DELETE FROM lua_project_stars WHERE project_id = $1 AND user_id = $2
+`
+
+type UnstarLuaProjectParams struct {
+	ProjectID uuid.UUID `db:"project_id" json:"project_id"`
+	UserID    uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) UnstarLuaProject(ctx context.Context, arg UnstarLuaProjectParams) error {
+	_, err := q.db.Exec(ctx, unstarLuaProject, arg.ProjectID, arg.UserID)
 	return err
 }
 

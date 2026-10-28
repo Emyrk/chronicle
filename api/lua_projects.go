@@ -177,11 +177,42 @@ func (a *API) luaProjectResponses(ctx context.Context, projects ...database.LuaP
 	if err != nil {
 		return nil, err
 	}
+	stars, starred, err := a.luaProjectStars(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]chroniclesdk.LuaProject, 0, len(projects))
 	for _, p := range projects {
-		out = append(out, luaProjectResponse(p, releases[p.ID], authors))
+		item := luaProjectResponse(p, releases[p.ID], authors)
+		item.Stars, item.Starred = stars[p.ID], starred[p.ID]
+		out = append(out, item)
 	}
 	return out, nil
+}
+
+// luaProjectStars counts each project's stars, and notes which ones the signed-in caller, if any, starred.
+func (a *API) luaProjectStars(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]int64, map[uuid.UUID]bool, error) {
+	stars, starred := map[uuid.UUID]int64{}, map[uuid.UUID]bool{}
+	if len(ids) == 0 {
+		return stars, starred, nil
+	}
+	counts, err := a.Opts.Zed.CountLuaProjectStars(ctx, ids)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, row := range counts {
+		stars[row.ProjectID] = row.Stars
+	}
+	if claims, ok := chronauth.AuthenticatedClaims(ctx); ok {
+		mine, err := a.Opts.Zed.ListUserStarsForProjects(ctx, database.ListUserStarsForProjectsParams{UserID: claims.Subject, ProjectIds: ids})
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, id := range mine {
+			starred[id] = true
+		}
+	}
+	return stars, starred, nil
 }
 
 func (a *API) writeLuaProject(w http.ResponseWriter, r *http.Request, status int, p database.LuaProject) {
@@ -331,7 +362,11 @@ func (a *API) CreateLuaProject(w http.ResponseWriter, r *http.Request) {
 	err = a.Opts.Zed.InTx(r.Context(), func(tx *authz.AuthzTX) error {
 		var err error
 		p, err = tx.CreateLuaProject(r.Context(), database.CreateLuaProjectParams{OwnerID: owner, Kind: req.Kind, Name: req.Name, Slug: req.Slug})
-		return err
+		if err != nil {
+			return err
+		}
+		// Owners always track their own addons.
+		return tx.StarLuaProject(r.Context(), database.StarLuaProjectParams{ProjectID: p.ID, UserID: owner})
 	}, nil)
 	if err != nil {
 		var pg *pgconn.PgError
@@ -358,6 +393,78 @@ func (a *API) ListMyLuaProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, out)
+}
+
+// ListStarredLuaProjects lists the addons the caller tracks, which their instance panel picker offers.
+func (a *API) ListStarredLuaProjects(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	projects, err := a.Opts.Zed.ListStarredLuaProjects(ctx, chronauth.MustAuthenticatedClaims(ctx).Subject)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	// A star outlives access: only list addons the caller may still use.
+	actor, _ := luaActor(r)
+	usable := make([]database.LuaProject, 0, len(projects))
+	for _, p := range projects {
+		allowed, err := a.Opts.Zed.CheckOne(ctx, nil, luaProjectCheck(policy.New().Lua_project(p.ID), luaUse, actor))
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		if allowed {
+			usable = append(usable, p)
+		}
+	}
+	out, err := a.luaProjectResponses(ctx, usable...)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(ctx, w, http.StatusOK, out)
+}
+
+// StarLuaProject tracks an addon the caller may use.
+func (a *API) StarLuaProject(w http.ResponseWriter, r *http.Request) {
+	a.setLuaProjectStar(w, r, true)
+}
+
+// UnstarLuaProject stops tracking an addon. Owners always track their own.
+func (a *API) UnstarLuaProject(w http.ResponseWriter, r *http.Request) {
+	a.setLuaProjectStar(w, r, false)
+}
+
+func (a *API) setLuaProjectStar(w http.ResponseWriter, r *http.Request, star bool) {
+	ctx := r.Context()
+	id, ok := luaProjectID(w, r)
+	if !ok || !a.canLuaProject(w, r, id, luaUse) {
+		return
+	}
+	user := chronauth.MustAuthenticatedClaims(ctx).Subject
+	p, err := a.Opts.Zed.GetLuaProject(ctx, id)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if !star && p.OwnerID == user {
+		httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{Message: "Owners always track their own addons."})
+		return
+	}
+	if star {
+		err = a.Opts.Zed.StarLuaProject(ctx, database.StarLuaProjectParams{ProjectID: id, UserID: user})
+	} else {
+		err = a.Opts.Zed.UnstarLuaProject(ctx, database.UnstarLuaProjectParams{ProjectID: id, UserID: user})
+	}
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	stars, _, err := a.luaProjectStars(ctx, []uuid.UUID{id})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.LuaProjectStar{Stars: stars[id], Starred: star})
 }
 
 func (a *API) GetMyLuaProject(w http.ResponseWriter, r *http.Request) {

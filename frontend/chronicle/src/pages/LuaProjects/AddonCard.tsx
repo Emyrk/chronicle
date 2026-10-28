@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { ArrowUpRight, Users } from "lucide-react"
+import { ArrowUpRight, Star, Users } from "lucide-react"
 import { addonPath, latestRelease, type LuaProject } from "./api"
 import { AddonIcon } from "./AddonIcon"
 import { card, kindLabel } from "./addonUi"
@@ -15,6 +15,8 @@ export function AddonCard({ project, shared = false, showAuthor = false }: { pro
         {shared && <span className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-normal text-muted-foreground"><Users className="size-3" /> Shared with you</span>}</h3>
       <p className="truncate font-mono text-xs text-muted-foreground">{showAuthor && project.author ? `by ${project.author}` : addonPath(project)}</p>
     </div>
+    <span className="inline-flex shrink-0 items-center gap-1 text-xs tabular-nums text-muted-foreground" title={`${project.stars} people track this addon`}>
+      <Star className={`size-3.5 ${project.starred ? "fill-amber-300 text-amber-300" : ""}`} />{project.stars.toLocaleString()}</span>
     <ArrowUpRight className="size-5 shrink-0 text-muted-foreground group-hover:text-primary" aria-hidden="true" />
   </Link>
 }

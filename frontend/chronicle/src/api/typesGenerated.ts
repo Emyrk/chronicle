@@ -2886,6 +2886,11 @@ export interface LuaProject {
      * Releases are newest first. Panels run the newest one that is still available.
      */
     readonly releases: readonly LuaProjectRelease[];
+    /**
+     * Stars counts the people tracking the addon. Starred says whether the caller is one of them.
+     */
+    readonly stars: number;
+    readonly starred: boolean;
     readonly created_at: string;
     readonly updated_at: string;
 }
@@ -2955,6 +2960,15 @@ export interface LuaProjectRelease {
      * PublishedByAuthor is the publisher's addon author name.
      */
     readonly published_by_author?: string;
+}
+
+// From chroniclesdk/lua_project.go
+/**
+ * LuaProjectStar answers a star or unstar.
+ */
+export interface LuaProjectStar {
+    readonly stars: number;
+    readonly starred: boolean;
 }
 
 // From chroniclesdk/unlisted_logs.go

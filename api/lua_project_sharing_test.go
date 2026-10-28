@@ -39,6 +39,9 @@ func TestLuaProjectPermissions(t *testing.T) {
 	router.Put("/me/addon-author", api.ClaimAddonAuthor)
 	router.Post("/me/lua-projects", api.CreateLuaProject)
 	router.Get("/me/lua-projects", api.ListMyLuaProjects)
+	router.Get("/me/lua-projects/starred", api.ListStarredLuaProjects)
+	router.Put("/me/lua-projects/{projectID}/star", api.StarLuaProject)
+	router.Delete("/me/lua-projects/{projectID}/star", api.UnstarLuaProject)
 	router.Get("/me/lua-projects/{projectID}", api.GetMyLuaProject)
 	router.Get("/me/lua-projects/{projectID}/contributors", api.ListLuaProjectContributors)
 	router.Put("/me/lua-projects/{projectID}/contributors/{author}", api.PutLuaProjectContributor)
@@ -88,6 +91,8 @@ func TestLuaProjectPermissions(t *testing.T) {
 	var project chroniclesdk.LuaProject
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &project))
 	require.Equal(t, "steven", project.Author)
+	require.Equal(t, int64(1), project.Stars, "owners always track their own addons")
+	require.True(t, project.Starred)
 	_, err := zed.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: strings.Repeat("d", 64), Valid: true}, ExpectedRevision: 1})
 	require.NoError(t, err)
 	byID := "/lua-projects/" + project.ID.String() + "/page"
@@ -100,6 +105,30 @@ func TestLuaProjectPermissions(t *testing.T) {
 	code, byPath := page(stranger, "/addons/steven/interrupt-tracker")
 	require.Equal(t, http.StatusOK, code)
 	require.Equal(t, project.ID, byPath.Project.ID)
+	// Stars: anyone who may use an addon can track it; owners cannot stop tracking theirs.
+	star := "/me/lua-projects/" + project.ID.String() + "/star"
+	require.Equal(t, http.StatusConflict, call(owner, http.MethodDelete, star, "").Code)
+	rec = call(stranger, http.MethodPut, star, "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var starred chroniclesdk.LuaProjectStar
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &starred))
+	require.Equal(t, chroniclesdk.LuaProjectStar{Stars: 2, Starred: true}, starred)
+	require.Equal(t, http.StatusOK, call(stranger, http.MethodPut, star, "").Code, "starring twice is fine")
+	rec = call(stranger, http.MethodGet, "/me/lua-projects/starred", "")
+	var tracked []chroniclesdk.LuaProject
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &tracked))
+	require.Len(t, tracked, 1)
+	require.Equal(t, project.ID, tracked[0].ID)
+	_, viewed := page(stranger, byID)
+	require.True(t, viewed.Project.Starred)
+	require.Equal(t, int64(2), viewed.Project.Stars)
+	_, anonymous := page(uuid.Nil, byID)
+	require.False(t, anonymous.Project.Starred, "signed-out visitors see the count only")
+	require.Equal(t, http.StatusOK, call(stranger, http.MethodDelete, star, "").Code)
+	_, viewed = page(stranger, byID)
+	require.Equal(t, int64(1), viewed.Project.Stars)
+	require.False(t, viewed.Project.Starred)
+
 	rec = call(stranger, http.MethodGet, "/addons/steven", "")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	var authorPage chroniclesdk.AddonAuthorPage
