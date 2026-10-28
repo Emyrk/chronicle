@@ -12,9 +12,13 @@
 set -euo pipefail
 
 selected_target=""
+show_help=0
 forward_args=()
 for arg in "$@"; do
   case "$arg" in
+    --help|-h)
+      show_help=1
+      ;;
     --select=*)
       selected_target="${arg#--select=}"
       if [[ -z "$selected_target" ]]; then
@@ -28,6 +32,29 @@ for arg in "$@"; do
   esac
 done
 set -- "${forward_args[@]}"
+
+if ((show_help)); then
+  echo "Usage: $0 [--select=<target>] [import flags...]"
+  echo
+  echo "Options:"
+  echo "  --select=<target>  Run only the target with this exact name."
+  echo "  --help, -h         Show this help."
+  echo
+  echo "Available targets:"
+  if declare -p TARGETS >/dev/null 2>&1; then
+    for entry in "${TARGETS[@]}"; do
+      echo "  ${entry%%|*} (legacy)"
+    done
+  fi
+  if declare -p WOWDATA_TARGETS >/dev/null 2>&1; then
+    for entry in "${WOWDATA_TARGETS[@]}"; do
+      echo "  ${entry%%|*} (wowdata)"
+    done
+  fi
+  echo
+  echo "All other arguments are forwarded to the selected import command(s)."
+  exit 0
+fi
 
 if [[ -n "$selected_target" ]]; then
   matched=0
