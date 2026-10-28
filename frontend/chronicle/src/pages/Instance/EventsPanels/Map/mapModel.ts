@@ -879,6 +879,20 @@ export function mapPointToScene(point: MapPoint, aspect: number, width = 1): Sce
   };
 }
 
+/**
+ * Camera distance that contains a flat map exactly in a perspective viewport.
+ * The camera looks straight down and uses `verticalFovRadians` as its vertical FOV.
+ */
+export function topDownMapDistance(
+  mapWidth: number,
+  mapHeight: number,
+  viewportAspect: number,
+  verticalFovRadians: number,
+): number {
+  const visibleHeight = Math.max(mapHeight, mapWidth / viewportAspect);
+  return visibleHeight / (2 * Math.tan(verticalFovRadians / 2));
+}
+
 /** A box in artwork percentages, like MapPoint. */
 export interface MapPointBounds {
   minLeft: number;
