@@ -19,7 +19,7 @@ func DefaultClientPath(server string) string {
 	case "epoch":
 		return "/mnt/windows-z/ChronicleGames/Epoch"
 	case "kronos":
-		return "/home/steven/Games/kronos-wow/drive_c/Program Files (x86)/Kronos"
+		return "/mnt/windows-z/ChronicleGames/Kronos"
 	case "azerothcore":
 		return "/home/steven/Games/Warmane"
 	case "ascension":
@@ -31,7 +31,7 @@ func DefaultClientPath(server string) string {
 	case "lunatic":
 		return "/mnt/windows-z/ChronicleGames/LunaticPTR"
 	case "tbc":
-		return "/home/steven/Games/World of Warcraft 2.4.3"
+		return "/mnt/windows-z/ChronicleGames/World of Warcraft 2.4.3"
 	case "forever":
 		return "/home/steven/.steam/steam/steamapps/compatdata/3492500670/pfx/drive_c/Program Files (x86)/World of Warcraft"
 	default:
