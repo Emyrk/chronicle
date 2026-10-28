@@ -4,9 +4,9 @@ import { useQuery } from "@tanstack/react-query"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ArrowLeft, BookOpen, Code2, Download, FileCode, FileImage, FileJson, FileText, Upload } from "lucide-react"
-import { addonPath, authorPath, createRelease, deleteRelease, latestRelease, nextReleaseTag, uploadDraft } from "./api"
+import { addonPath, authorPath, createRelease, deleteRelease, latestRelease, nextReleaseTag, uploadDraft, type LuaRelease } from "./api"
 import { AddonIcon } from "./AddonIcon"
-import { AddonReleases, VersionPicker } from "./AddonReleases"
+import { AddonReleases, ReleasesTable, VersionPicker } from "./AddonReleases"
 import { AdRailStack } from "@/components/Ads/AdRailStack"
 import { AddonDescription } from "./AddonDescription"
 import { AddonStar } from "./AddonStar"
@@ -94,9 +94,12 @@ function AddonPage({ projectId }: { projectId?: string }) {
   const about = files ? manifestSummary(files) : null
 
   // The default build stays out of the URL, so the page keeps following the latest release.
-  function show(next: { ref?: PackageRef | null; file?: string | null }) {
+  function show(next: { ref?: PackageRef | null; file?: string | null; releases?: boolean }) {
     setSearch(current => {
       const params = new URLSearchParams(current)
+      // Opening a build or a file leaves the releases table.
+      if (next.releases) params.set("tab", "releases")
+      else params.delete("tab")
       if (next.ref !== undefined) {
         if (next.ref && project && next.ref !== defaultRef(project)) params.set("ref", next.ref)
         else params.delete("ref")
@@ -130,6 +133,10 @@ function AddonPage({ projectId }: { projectId?: string }) {
   const refIcon = ref === MAIN_REF ? project.main?.icon : project.releases.find(release => release.tag === ref)?.icon
   const workshop = addonPath(project, "/edit")
   const canTag = can.release && !!project.main && latest?.sha256 !== project.main.sha256
+  const showReleases = search.get("tab") === "releases"
+  const removeRelease = (release: LuaRelease) => {
+    if (window.confirm(release === latest ? `Delete ${release.tag}? Panels fall back to the previous release that still has files.` : `Delete ${release.tag}?`)) void mutate(() => deleteRelease(project.id, release.tag), `Deleted ${release.tag}.`)
+  }
   const tagRelease = () => {
     const tag = window.prompt("Tag this release. Everyone running the addon gets it:", nextReleaseTag(project.releases))?.trim()
     if (tag) void mutate(async () => { await createRelease(project.id, project.revision, tag); show({ ref: null }) }, `Released ${tag}.`)
@@ -162,7 +169,9 @@ function AddonPage({ projectId }: { projectId?: string }) {
       {notice && <p role="status" className="rounded-md border border-emerald-600/30 bg-emerald-600/10 p-3 text-sm">{notice}</p>}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="min-w-0 space-y-4">
-          {!ref || !sha ? <div className={`${card} text-sm text-muted-foreground`}>{can.edit
+          {showReleases ? <ReleasesTable project={project} latest={latest} viewing={null} canRelease={can.release} busy={busy}
+            onView={next => show({ ref: next })} onDelete={removeRelease} onClose={() => show({})} /> :
+          !ref || !sha ? <div className={`${card} text-sm text-muted-foreground`}>{can.edit
             ? <>No files yet. {project.kind === "panel" ? "Open the Addon Workshop and save to main, or upload" : "Upload"} a tar archive from Releases.</>
             : "This addon has not been published yet."}</div> : <>
             <section aria-label="Files" className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
@@ -206,10 +215,8 @@ function AddonPage({ projectId }: { projectId?: string }) {
             {can.edit && project.kind === "panel" && <AddonAiUsage projectId={project.id} />}
             <p className="border-t border-border pt-3 text-xs text-muted-foreground">Created {formatDate(project.created_at)} · <Link className="text-primary underline-offset-2 hover:underline" to="/addons/api">API reference</Link></p>
           </section>
-          <AddonReleases project={project} latest={latest} viewing={sha ? ref : null} canTag={canTag} canRelease={can.release} busy={busy}
-            onView={next => show({ ref: next })} onTag={tagRelease} onDelete={release => {
-              if (window.confirm(release === latest ? `Delete ${release.tag}? Panels fall back to the previous release that still has files.` : `Delete ${release.tag}?`)) void mutate(() => deleteRelease(project.id, release.tag), `Deleted ${release.tag}.`)
-            }}>
+          <AddonReleases project={project} latest={latest} viewing={sha && !showReleases ? ref : null} canTag={canTag} canRelease={can.release} busy={busy}
+            onView={next => show({ ref: next })} onTag={tagRelease} onDelete={removeRelease} onShowAll={() => show({ releases: true })}>
             {can.edit && <details className="mt-4 border-t border-border pt-3 text-xs">
               <summary className="flex cursor-pointer items-center gap-1.5 font-medium text-muted-foreground hover:text-foreground"><Upload className="size-3.5" /> Upload a tar archive</summary>
               <div className="mt-2 space-y-2">
