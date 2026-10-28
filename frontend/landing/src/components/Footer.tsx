@@ -19,7 +19,7 @@ const GITHUB_SPONSORS_URL = "https://github.com/sponsors/Emyrk";
 
 const nitroPayEnabled = Boolean(import.meta.env.CHRONICLE_NITROPAY_SITE_ID);
 
-export function Footer() {
+export function Footer({ year = new Date().getFullYear() }: { year?: number }) {
   const [cryptoModalOpen, setCryptoModalOpen] = useState(false);
 
   return (
@@ -140,7 +140,7 @@ export function Footer() {
 
           {/* Legal */}
           <div className="text-sm text-muted-foreground">
-            <p>© {new Date().getFullYear()} Chronicle</p>
+            <p>© {year} Chronicle</p>
             <a
               href={PRIVACY_URL}
               className="mt-2 inline-block text-xs hover:text-foreground transition-colors"

@@ -20,6 +20,12 @@ pnpm build      # → dist/
 make landing
 ```
 
+## Search rendering
+
+The production build fetches every configured `/api/v1/discovery` source, renders the complete server directory into `dist/index.html`, and hydrates that markup in the browser. Crawlers therefore receive server names, descriptions, and links without needing to execute JavaScript. If discovery is temporarily unavailable during a build, the static `SERVERS` registry remains the fallback.
+
+The build also writes `dist/sitemap.xml`; `public/robots.txt` advertises it to crawlers.
+
 ## Adding a server
 
 1. Add an entry to `src/data/servers.ts`
