@@ -7,6 +7,7 @@ import { ArrowLeft, BookOpen, Code2, Download, FileCode, FileImage, FileJson, Fi
 import { addonPath, authorPath, createRelease, deleteRelease, latestRelease, nextReleaseTag, uploadDraft } from "./api"
 import { AddonIcon } from "./AddonIcon"
 import { AddonReleases, VersionPicker } from "./AddonReleases"
+import { AdRailStack } from "@/components/Ads/AdRailStack"
 import { AddonDescription } from "./AddonDescription"
 import { AddonStar } from "./AddonStar"
 import { AddonAiUsage, AddonContributors } from "./AddonTeam"
@@ -134,88 +135,94 @@ function AddonPage({ projectId }: { projectId?: string }) {
     if (tag) void mutate(async () => { await createRelease(project.id, project.revision, tag); show({ ref: null }) }, `Released ${tag}.`)
   }
 
-  return <main className="container mx-auto max-w-6xl space-y-6 px-4 py-8">
-    <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" to="/addons"><ArrowLeft className="size-4" /> All addons</Link>
-    <header className="flex flex-wrap items-end justify-between gap-4 border-b pb-5">
-      <div className="min-w-0 flex-1">
-        <h1 className="flex items-center gap-3 text-2xl font-semibold"><AddonIcon name={refIcon} className="size-6 text-muted-foreground" />{project.name}
-          <span className="rounded-full border border-border px-2 py-0.5 text-xs font-normal text-muted-foreground">{kindLabel(project.kind)}</span></h1>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {project.author ? <>by <Link to={authorPath(project.author)} className="font-mono hover:text-foreground hover:underline">{project.author}</Link></> : "Unnamed author"}
-          {can.edit && <span className="font-mono"> · /{project.slug} · revision {project.revision}</span>} · updated {formatDate(project.updated_at)}
-        </p>
-        <AddonDescription key={project.id} project={project} canEdit={can.release} onSaved={() => void pageQuery.refetch()} />
-      </div>
-      <div className="flex flex-wrap items-start gap-2">
-        <AddonStar key={project.id} project={project} canUse={can.use} />
-        {project.kind === "panel" && can.edit && <Link className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90" to={workshop}><Code2 className="size-4" /> Open in Addon Workshop</Link>}
-      </div>
-    </header>
-    {can.manage && !project.author && <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-      This addon has no named address yet. <Link className="text-primary underline underline-offset-2" to="/addons">Claim an author name</Link> to publish it at /addons/&lt;you&gt;/{project.slug}.</p>}
-    {error && <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}{error.includes("revision") && " Reload the project before retrying."}</p>}
-    {notice && <p role="status" className="rounded-md border border-emerald-600/30 bg-emerald-600/10 p-3 text-sm">{notice}</p>}
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
-      <div className="min-w-0 space-y-4">
-        {!ref || !sha ? <div className={`${card} text-sm text-muted-foreground`}>{can.edit
-          ? <>No files yet. {project.kind === "panel" ? "Open the Addon Workshop and save to main, or upload" : "Upload"} a tar archive from Releases.</>
-          : "This addon has not been published yet."}</div> : <>
-          <section aria-label="Files" className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-            <div className="flex flex-wrap items-center gap-3 border-b border-border bg-muted/30 px-4 py-2">
-              <VersionPicker project={project} latest={latest} viewing={ref} onView={next => show({ ref: next })} />
-              <span className="font-mono text-xs text-muted-foreground" title={sha}>{shortSha(sha)}</span>
-              {files && <span className="text-xs text-muted-foreground">{files.length} {files.length === 1 ? "file" : "files"}</span>}
-              <a className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" href={packageDownloadURL(project, sha)} download={`${project.slug}-${shortSha(sha)}.zip`}><Download className="size-3.5" /> Download</a>
-            </div>
-            {filesQuery.isPending ? <p className="p-4 text-sm text-muted-foreground">Loading files…</p>
-              : filesQuery.isError ? <p role="alert" className="p-4 text-sm text-destructive">{filesQuery.error.message}</p>
-              : <ul className="divide-y divide-border/60">{files!.map(file => <li key={file.path}>
-                <button type="button" onClick={() => show({ file: file.path })} aria-current={selected?.path === file.path}
-                  className={`flex w-full items-center gap-3 px-4 py-2 text-left text-sm hover:bg-muted/60 ${selected?.path === file.path ? "bg-muted" : ""}`}>
-                  {fileIcon(file.path)}<span className="min-w-0 flex-1 truncate font-mono text-[13px]">{file.path}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">{formatBytes(file.bytes.byteLength)}</span>
-                </button>
-              </li>)}</ul>}
-          </section>
-          {files && <section aria-label={selected?.path ?? "README"} className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-            <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-2 text-sm font-medium">
-              {fileIcon(selected?.path ?? "README.md")}<span className="font-mono text-[13px]">{selected?.path ?? "README.md"}</span>
-              {selected && selected.path !== "README.md" && files.some(file => file.path === "README.md") &&
-                <button type="button" className="ml-auto text-xs font-normal text-muted-foreground hover:text-foreground" onClick={() => show({ file: null })}>Show README</button>}
-            </div>
-            {selected ? <FileViewer file={selected} images={images} />
-              : <p className="p-6 text-sm text-muted-foreground">This build has no README.md. {project.kind === "panel" && can.edit && <>Add one from the README.md tab in the <Link className="text-primary underline underline-offset-2" to={workshop}>Addon Workshop</Link>.</>}</p>}
-          </section>}
-        </>}
-      </div>
-      <aside className="space-y-4">
-        <section className={`${card} space-y-3 text-sm`} aria-label="About">
-          <h2 className="font-semibold">About</h2>
-          {about ? <dl className="space-y-2 text-xs">
-            <div><dt className="text-muted-foreground">Streams</dt><dd className="mt-1 flex flex-wrap gap-1">{about.streams.length ? about.streams.map(stream =>
-              <span key={stream} className="rounded bg-muted px-1.5 py-0.5 font-mono">{stream}</span>) : <span className="text-muted-foreground">None</span>}</dd></div>
-            <div><dt className="text-muted-foreground">Capabilities</dt><dd className="mt-1 font-mono">{about.capabilities.join(", ") || "None"}</dd></div>
-            <div><dt className="text-muted-foreground">Replays</dt><dd className="mt-1">{about.streamScope === "instance" ? "Whole instance" : "Selected encounters"}{about.maxEvents !== undefined && `, up to ${about.maxEvents.toLocaleString()} events`}</dd></div>
-          </dl> : <p className="text-xs text-muted-foreground">{ref ? "Details appear once the files load." : "Details appear once a build exists."}</p>}
-          {/* Cost stays with the people building the addon; visitors never see it. */}
-          {can.edit && project.kind === "panel" && <AddonAiUsage projectId={project.id} />}
-          <p className="border-t border-border pt-3 text-xs text-muted-foreground">Created {formatDate(project.created_at)} · <Link className="text-primary underline-offset-2 hover:underline" to="/addons/api">API reference</Link></p>
-        </section>
-        <AddonReleases project={project} latest={latest} viewing={sha ? ref : null} canTag={canTag} canRelease={can.release} busy={busy}
-          onView={next => show({ ref: next })} onTag={tagRelease} onDelete={release => {
-            if (window.confirm(release === latest ? `Delete ${release.tag}? Panels fall back to the previous release that still has files.` : `Delete ${release.tag}?`)) void mutate(() => deleteRelease(project.id, release.tag), `Deleted ${release.tag}.`)
-          }}>
-          {can.edit && <details className="mt-4 border-t border-border pt-3 text-xs">
-            <summary className="flex cursor-pointer items-center gap-1.5 font-medium text-muted-foreground hover:text-foreground"><Upload className="size-3.5" /> Upload a tar archive</summary>
-            <div className="mt-2 space-y-2">
-              <p className="text-muted-foreground">An uncompressed tar with project.json at its root, a Lua entrypoint and an optional README.md. It replaces main.</p>
-              <input type="file" accept=".tar,application/x-tar" className="block w-full" onChange={event => setArchive(event.target.files?.[0] ?? null)} />
-              <button className={smallButton} type="button" disabled={busy || !archive} onClick={() => { if (archive) void mutate(() => uploadDraft(project.id, project.revision, archive), "Uploaded to main.") }}>Upload draft</button>
-            </div>
-          </details>}
-        </AddonReleases>
-        {can.edit && <AddonContributors project={project} canManage={can.manage} />}
-      </aside>
+  return <div className="mx-auto flex w-full max-w-[2080px] items-start justify-center gap-6 px-4 py-8">
+    <div className="hidden self-stretch 2xl:block">
+      <AdRailStack primaryPlacement="addon-left-rail" secondaryPlacement="addon-left-rail-lower" railLayout="paired-wide" />
     </div>
-  </main>
+    <main className="w-full min-w-0 max-w-6xl space-y-6">
+      <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" to="/addons"><ArrowLeft className="size-4" /> All addons</Link>
+      <header className="flex flex-wrap items-end justify-between gap-4 border-b pb-5">
+        <div className="min-w-0 flex-1">
+          <h1 className="flex items-center gap-3 text-2xl font-semibold"><AddonIcon name={refIcon} className="size-6 text-muted-foreground" />{project.name}
+            <span className="rounded-full border border-border px-2 py-0.5 text-xs font-normal text-muted-foreground">{kindLabel(project.kind)}</span></h1>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {project.author ? <>by <Link to={authorPath(project.author)} className="font-mono hover:text-foreground hover:underline">{project.author}</Link></> : "Unnamed author"}
+            {can.edit && <span className="font-mono"> · /{project.slug} · revision {project.revision}</span>} · updated {formatDate(project.updated_at)}
+          </p>
+          <AddonDescription key={project.id} project={project} canEdit={can.release} onSaved={() => void pageQuery.refetch()} />
+        </div>
+        <div className="flex flex-wrap items-start gap-2">
+          <AddonStar key={project.id} project={project} canUse={can.use} />
+          {project.kind === "panel" && can.edit && <Link className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90" to={workshop}><Code2 className="size-4" /> Open in Addon Workshop</Link>}
+        </div>
+      </header>
+      {can.manage && !project.author && <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+        This addon has no named address yet. <Link className="text-primary underline underline-offset-2" to="/addons">Claim an author name</Link> to publish it at /addons/&lt;you&gt;/{project.slug}.</p>}
+      {error && <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}{error.includes("revision") && " Reload the project before retrying."}</p>}
+      {notice && <p role="status" className="rounded-md border border-emerald-600/30 bg-emerald-600/10 p-3 text-sm">{notice}</p>}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <div className="min-w-0 space-y-4">
+          {!ref || !sha ? <div className={`${card} text-sm text-muted-foreground`}>{can.edit
+            ? <>No files yet. {project.kind === "panel" ? "Open the Addon Workshop and save to main, or upload" : "Upload"} a tar archive from Releases.</>
+            : "This addon has not been published yet."}</div> : <>
+            <section aria-label="Files" className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
+              <div className="flex flex-wrap items-center gap-3 border-b border-border bg-muted/30 px-4 py-2">
+                <VersionPicker project={project} latest={latest} viewing={ref} onView={next => show({ ref: next })} />
+                <span className="font-mono text-xs text-muted-foreground" title={sha}>{shortSha(sha)}</span>
+                {files && <span className="text-xs text-muted-foreground">{files.length} {files.length === 1 ? "file" : "files"}</span>}
+                <a className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" href={packageDownloadURL(project, sha)} download={`${project.slug}-${shortSha(sha)}.zip`}><Download className="size-3.5" /> Download</a>
+              </div>
+              {filesQuery.isPending ? <p className="p-4 text-sm text-muted-foreground">Loading files…</p>
+                : filesQuery.isError ? <p role="alert" className="p-4 text-sm text-destructive">{filesQuery.error.message}</p>
+                : <ul className="divide-y divide-border/60">{files!.map(file => <li key={file.path}>
+                  <button type="button" onClick={() => show({ file: file.path })} aria-current={selected?.path === file.path}
+                    className={`flex w-full items-center gap-3 px-4 py-2 text-left text-sm hover:bg-muted/60 ${selected?.path === file.path ? "bg-muted" : ""}`}>
+                    {fileIcon(file.path)}<span className="min-w-0 flex-1 truncate font-mono text-[13px]">{file.path}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{formatBytes(file.bytes.byteLength)}</span>
+                  </button>
+                </li>)}</ul>}
+            </section>
+            {files && <section aria-label={selected?.path ?? "README"} className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
+              <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-2 text-sm font-medium">
+                {fileIcon(selected?.path ?? "README.md")}<span className="font-mono text-[13px]">{selected?.path ?? "README.md"}</span>
+                {selected && selected.path !== "README.md" && files.some(file => file.path === "README.md") &&
+                  <button type="button" className="ml-auto text-xs font-normal text-muted-foreground hover:text-foreground" onClick={() => show({ file: null })}>Show README</button>}
+              </div>
+              {selected ? <FileViewer file={selected} images={images} />
+                : <p className="p-6 text-sm text-muted-foreground">This build has no README.md. {project.kind === "panel" && can.edit && <>Add one from the README.md tab in the <Link className="text-primary underline underline-offset-2" to={workshop}>Addon Workshop</Link>.</>}</p>}
+            </section>}
+          </>}
+        </div>
+        <aside className="space-y-4">
+          <section className={`${card} space-y-3 text-sm`} aria-label="About">
+            <h2 className="font-semibold">About</h2>
+            {about ? <dl className="space-y-2 text-xs">
+              <div><dt className="text-muted-foreground">Streams</dt><dd className="mt-1 flex flex-wrap gap-1">{about.streams.length ? about.streams.map(stream =>
+                <span key={stream} className="rounded bg-muted px-1.5 py-0.5 font-mono">{stream}</span>) : <span className="text-muted-foreground">None</span>}</dd></div>
+              <div><dt className="text-muted-foreground">Capabilities</dt><dd className="mt-1 font-mono">{about.capabilities.join(", ") || "None"}</dd></div>
+              <div><dt className="text-muted-foreground">Replays</dt><dd className="mt-1">{about.streamScope === "instance" ? "Whole instance" : "Selected encounters"}{about.maxEvents !== undefined && `, up to ${about.maxEvents.toLocaleString()} events`}</dd></div>
+            </dl> : <p className="text-xs text-muted-foreground">{ref ? "Details appear once the files load." : "Details appear once a build exists."}</p>}
+            {/* Cost stays with the people building the addon; visitors never see it. */}
+            {can.edit && project.kind === "panel" && <AddonAiUsage projectId={project.id} />}
+            <p className="border-t border-border pt-3 text-xs text-muted-foreground">Created {formatDate(project.created_at)} · <Link className="text-primary underline-offset-2 hover:underline" to="/addons/api">API reference</Link></p>
+          </section>
+          <AddonReleases project={project} latest={latest} viewing={sha ? ref : null} canTag={canTag} canRelease={can.release} busy={busy}
+            onView={next => show({ ref: next })} onTag={tagRelease} onDelete={release => {
+              if (window.confirm(release === latest ? `Delete ${release.tag}? Panels fall back to the previous release that still has files.` : `Delete ${release.tag}?`)) void mutate(() => deleteRelease(project.id, release.tag), `Deleted ${release.tag}.`)
+            }}>
+            {can.edit && <details className="mt-4 border-t border-border pt-3 text-xs">
+              <summary className="flex cursor-pointer items-center gap-1.5 font-medium text-muted-foreground hover:text-foreground"><Upload className="size-3.5" /> Upload a tar archive</summary>
+              <div className="mt-2 space-y-2">
+                <p className="text-muted-foreground">An uncompressed tar with project.json at its root, a Lua entrypoint and an optional README.md. It replaces main.</p>
+                <input type="file" accept=".tar,application/x-tar" className="block w-full" onChange={event => setArchive(event.target.files?.[0] ?? null)} />
+                <button className={smallButton} type="button" disabled={busy || !archive} onClick={() => { if (archive) void mutate(() => uploadDraft(project.id, project.revision, archive), "Uploaded to main.") }}>Upload draft</button>
+              </div>
+            </details>}
+          </AddonReleases>
+          {can.edit && <AddonContributors project={project} canManage={can.manage} />}
+        </aside>
+      </div>
+    </main>
+    <AdRailStack primaryPlacement="addon-right-rail" secondaryPlacement="addon-right-rail-lower" railLayout="paired-wide" />
+  </div>
 }
