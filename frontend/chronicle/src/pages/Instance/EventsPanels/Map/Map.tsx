@@ -29,6 +29,7 @@ import {
   INITIAL_MAP_FRAMING,
   manualMapFraming,
   pinMapFraming,
+  prefersReducedMotion,
   reconcileMapFraming,
   type MapFraming,
   type MapPoint,
@@ -57,7 +58,8 @@ import { MapSettingsOverlay } from "./MapSettingsOverlay";
 import { DEFAULT_EFFECT_SETTINGS, useEffectSettings } from "./mapViewSettings";
 import { DEFAULT_WALK_AVATAR, readStoredWalkAvatar, storeWalkAvatar } from "./walkAvatars";
 import { useMapScene } from "./useMapScene";
-import { encounterJumps, mapPresentationForSelection } from "./wholeRun";
+import { encounterJumps, firstBossPullMs, mapPresentationForSelection } from "./wholeRun";
+import { mapAutoplayStart, parseMapPanelOptions } from "./mapPanelOptions";
 import { PlanControls } from "./plan/PlanControls";
 import { ROLE_TOKENS, usePlanEditor, usePlanShortcuts, type PlanRosterEntry } from "./plan/usePlanEditor";
 import type { PlanItem } from "./plan/mapPlan";
@@ -534,6 +536,9 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     storeShown(ENEMY_FRAMES_STORAGE_KEY, shown);
   };
   const [meterWindows, setMeterWindows] = useMeterWindows();
+  const mapOptions = parseMapPanelOptions(props.panelOption);
+  // Collapsed (the Watch preset): only the gear shows until it opens the toolbar.
+  const [toolbarOpen, setToolbarOpen] = useState(!mapOptions.toolbarCollapsed);
   // Display settings and the settings overlay that sets them (all kept in local storage).
   const [effectSettings, updateEffectSettings] = useEffectSettings();
   const alignmentOverlay = alignmentOverlayForMapMode(effectSettings.alignmentOverlay, meshWanted);
@@ -595,7 +600,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     panel: RAID_FRAMES_PANEL,
     context: props.context,
     durationMs: props.durationMs,
-    enabled: !mini && !mobile && (showRaidFrames || showEnemyFrames || framesWanted),
+    enabled: !mini && !mobile && ((toolbarOpen && (showRaidFrames || showEnemyFrames)) || framesWanted),
   });
   const auras = useEmbeddedPanel({ panel: UNIT_AURAS_PANEL, context: props.context, durationMs: props.durationMs, enabled: !mini && !mobile && framesWanted });
   const cursorMs = sync?.enabled && sync.currentTimestamp ? sync.currentTimestamp.getTime() : null;
@@ -623,6 +628,32 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
   const handleUserViewport = useCallback((viewport: MapViewport) => {
     setFraming((current) => manualMapFraming(current, viewport));
   }, []);
+
+  // Autoplay (the Watch preset): once the scene is first ready, start the
+  // page's Replay at 1× unless it is already on or driven from elsewhere.
+  const autoplayWanted = mapOptions.autoplay && !mini && !mobile;
+  const autoplayDoneRef = useRef(false);
+  const instanceEncounters = props.context.instance.encounters;
+  const processedEncounters = props.result?.encounters;
+  useEffect(() => {
+    if (!autoplayWanted || autoplayDoneRef.current || !liveScene || !sync) return;
+    autoplayDoneRef.current = true;
+    if (sync.enabled || sync.readOnly || sync.externalDriver !== "none") return;
+    const runStartMs = liveScene.wholeRun ? liveScene.runStartMs : null;
+    const runEndMs = liveScene.wholeRun ? liveScene.runEndMs : null;
+    const firstPullMs = runStartMs !== null && runEndMs !== null && processedEncounters
+      ? firstBossPullMs(encounterJumps(instanceEncounters, processedEncounters, runStartMs, runEndMs), processedEncounters)
+      : null;
+    const start = mapAutoplayStart({
+      startMs: runStartMs ?? liveScene.encounterStartMs,
+      firstPullMs,
+      reducedMotion: prefersReducedMotion(),
+    });
+    sync.setPlaybackSpeed(1);
+    sync.enable();
+    sync.setTimestamp(new Date(start.timestampMs));
+    if (start.play) sync.play();
+  }, [autoplayWanted, instanceEncounters, liveScene, processedEncounters, sync]);
 
   // With the pointer over the map (or already immersive): Ctrl/Cmd+Shift+F fills
   // the window, Ctrl/Cmd+Alt+F goes fullscreen; Esc leaves window fullscreen. On
@@ -862,7 +893,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
             onClose={closeMobileWorld}
           />
         )}
-        {!mobile && framingControls}
+        {!mobile && toolbarOpen && framingControls}
         {!mobile && mini && <ExpandMapButton context={props.context} overlay />}
         {!mobile && previewOn && (
           <>
@@ -928,7 +959,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
         {!mini && !mobile && (<>
           {/* Top-left: the Raid Frames panel itself, drawn as an overlay (one
               implementation for the map and the panel). The inspect frame below moves freely. */}
-          <UnitInspectContext.Provider value={inspectSelection}>
+          {toolbarOpen && <UnitInspectContext.Provider value={inspectSelection}>
             <div className="pointer-events-none absolute bottom-2 left-2 top-2 z-30 flex max-w-[calc(100%-1rem)] flex-col items-start gap-1.5">
               {showRaidFrames ? (
                 <div className="group/raid flex max-w-full shrink-0 items-start gap-0.5">
@@ -983,17 +1014,17 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
                 </button>
               )}
             </div>
-          </UnitInspectContext.Provider>
+          </UnitInspectContext.Provider>}
           <button
             type="button"
-            onClick={() => setSettingsOpen(true)}
-            title="Map settings"
-            aria-label="Map settings"
+            onClick={() => toolbarOpen ? setSettingsOpen(true) : setToolbarOpen(true)}
+            title={toolbarOpen ? "Map settings" : "Show the map toolbar"}
+            aria-label={toolbarOpen ? "Map settings" : "Show the map toolbar"}
             className="absolute right-2 top-2 z-40 grid h-7 w-7 place-items-center rounded-sm border border-black/80 bg-black/75 text-white/70 shadow-[0_4px_16px_rgba(0,0,0,.5)] hover:bg-black/90 hover:text-white"
           >
             <Settings2 className="h-4 w-4" />
           </button>
-          {show3D && (
+          {show3D && toolbarOpen && (
             <button
               type="button"
               onClick={() => setWalking(!walking)}
@@ -1011,7 +1042,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               <Footprints className="h-4 w-4" />
             </button>
           )}
-          {show3D && (
+          {show3D && toolbarOpen && (
             <button
               type="button"
               onClick={() => {
@@ -1144,12 +1175,12 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
             />
           )}
           <InspectCards guids={pinned} onRemove={unpin} raidFrames={raidFrames} auras={auras} />
-          <MeterWindows windows={meterWindows} onChange={setMeterWindows} context={props.context} durationMs={props.durationMs} />
+          {toolbarOpen && <MeterWindows windows={meterWindows} onChange={setMeterWindows} context={props.context} durationMs={props.durationMs} />}
           {/* Fullscreen hides the page's Replay controls: the same transport bar over the map. */}
           {immersive && <FullscreenReplayBar />}
         </>)}
       </div>
-      {!mini && !mobile && jumps.length > 0 && ready.runStartMs !== null && (
+      {!mini && !mobile && toolbarOpen && jumps.length > 0 && ready.runStartMs !== null && (
         <div className="flex flex-col gap-1 px-3 py-2">
           <div className="relative h-1.5 rounded bg-white/10" aria-hidden>
             {jumps.map((jump) => (
@@ -1228,11 +1259,26 @@ function MapTelemetryWarning({ props, children }: { props: PanelRenderProps<MapR
 }
 
 function MapContent({ forceMini = false, ...props }: PanelRenderProps<MapResult> & { forceMini?: boolean }) {
-  const [wholeRun, setWholeRun] = useState(false);
+  // The whole-run option (the Watch preset) opens on the whole run instead of the 2D overview.
+  const wholeRunOption = parseMapPanelOptions(props.panelOption).wholeRun;
+  const [wholeRun, setWholeRun] = useState(wholeRunOption);
   const isMobile = useIsMobile();
   // The Mini Map panel is always mini; a Map panel is mini with the (older) "mini" option.
   const mini = forceMini || isMiniMapOption(props.panelOption);
   const selectedCount = props.context.selectedEncounterIds.length;
+  const runEncounters = props.context.instance.encounters;
+  const onSelectEncounters = props.context.onSelectEncounters;
+  const selectRunEncounters = useCallback(() => {
+    const ids = runEncounters
+      .filter((encounter) => encounter.kill_type !== "wipe" && encounter.kill_type !== "reset")
+      .map((encounter) => encounter.id);
+    onSelectEncounters?.(ids);
+  }, [onSelectEncounters, runEncounters]);
+  // With nothing selected there is no data to replay: the whole-run option selects the run.
+  const needsRunSelection = wholeRunOption && wholeRun && selectedCount === 0;
+  useEffect(() => {
+    if (needsRunSelection) selectRunEncounters();
+  }, [needsRunSelection, selectRunEncounters]);
   if (isMobile) {
     return (
       <MapTelemetryWarning props={props}>
@@ -1258,12 +1304,7 @@ function MapContent({ forceMini = false, ...props }: PanelRenderProps<MapResult>
   // With nothing selected there is no data to replay: take the run's encounters
   // (what the page selects by default) so the processor has the whole run.
   const startWholeRun = () => {
-    if (selectedCount === 0) {
-      const ids = props.context.instance.encounters
-        .filter((encounter) => encounter.kill_type !== "wipe" && encounter.kill_type !== "reset")
-        .map((encounter) => encounter.id);
-      props.context.onSelectEncounters?.(ids);
-    }
+    if (selectedCount === 0) selectRunEncounters();
     setWholeRun(true);
   };
   const wholeRunButton = (

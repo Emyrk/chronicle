@@ -1,14 +1,19 @@
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
 import type { EventsPanelType } from "./EventsPanels";
 import type { PanelFilter } from "./EventsPanels/processors/filters";
+import { readLayoutAppearance } from "@/features/layoutBook/parseLayout";
 import {
   DEFAULT_INSTANCE_LAYOUT_ITEMS,
   DEFAULT_INSTANCE_PANEL_TYPES,
+  DEFAULT_INSTANCE_PANEL_OPTIONS,
   DEFAULT_INSTANCE_PANEL_FILTERS,
   POSITION_SUMMARY_CAPABILITY,
   POSITION_SUMMARY_LAYOUT_ITEMS,
   POSITION_SUMMARY_PANEL_TYPES,
 } from "./viewDefaults";
+import { WATCH_MAP_PANEL_OPTION } from "./EventsPanels/Map/mapPanelOptions";
+import { COMPACT_DEATHS_PANEL_OPTION } from "./EventsPanels/Deaths/compactDeaths";
+import { METER_BARS_PANEL_OPTION } from "./EventsPanels/metricPanelLiveState";
 
 // ── Preset Layout Definition ────────────────────────────────────────────────
 
@@ -87,6 +92,87 @@ export function resizeMapPresetForViewport(layoutItems: readonly GridEditorItem[
   });
 }
 
+/** The Watch preset's side column (Party, Deaths, Damage), sharing the map's rows in its 3:4:2 proportion. */
+export function watchPresetSideRows(mapRows: number): { party: number; deaths: number; damage: number } {
+  const party = Math.max(1, Math.round((mapRows * 3) / 9));
+  const damage = Math.max(1, Math.round((mapRows * 2) / 9));
+  return { party, deaths: Math.max(1, mapRows - party - damage), damage };
+}
+
+/** Resize only the stable Watch preset items: the map as in the Map preset, the side column beside it. */
+export function resizeWatchPresetForViewport(layoutItems: readonly GridEditorItem[], viewportHeight: number): GridEditorItem[] {
+  const mapRows = mapPresetRowsForViewport(viewportHeight);
+  const side = watchPresetSideRows(mapRows);
+  const sized: Record<string, { y: number; h: number }> = {
+    "panel-1": { y: 1, h: mapRows },
+    "panel-2": { y: 1, h: side.party },
+    "panel-3": { y: 1 + side.party, h: side.deaths },
+    "panel-4": { y: 1 + side.party + side.deaths, h: side.damage },
+  };
+  return layoutItems.map((item) => {
+    if (item.id === "strip-1") return item.y === 0 ? item : { ...item, y: 0 };
+    const size = sized[item.id];
+    if (!size) return item;
+    return item.y === size.y && item.h === size.h ? item : { ...item, ...size };
+  });
+}
+
+/**
+ * The Watch preset as the log's owner sees it: the grid cannot collapse an
+ * empty strip, so the Sidekick strip is dropped and the replay strip takes
+ * the full row.
+ */
+export function withoutOwnerSidekickStrip(presetId: string | null, layoutItems: GridEditorItem[], isOwner: boolean): GridEditorItem[] {
+  if (presetId !== "watch" || !isOwner) return layoutItems;
+  const sidekick = layoutItems.find((item) => item.id === "strip-2" && item.stripType === "sidekick");
+  if (!sidekick) return layoutItems;
+  return layoutItems
+    .filter((item) => item !== sidekick)
+    .map((item) => item.id === "strip-1" && item.y === sidekick.y ? { ...item, x: 0, w: 12 } : item);
+}
+
+// Focus mode's chrome above the grid (padding plus the preset row), and fit's minimum row height.
+const FOCUS_CHROME_PX = 72;
+const GRID_ROW_MIN_PX = 96;
+
+/** Watch's Director stage rows on this viewport: map 6 over a row of 3 when they fit, fewer rows (map still on top) when they don't. */
+export function watchDirectorRows(viewportHeight: number): { map: number; row: number } {
+  const panelRows = Math.floor((viewportHeight - FOCUS_CHROME_PX - GRID_ROW_MIN_PX) / GRID_ROW_MIN_PX);
+  if (panelRows >= 9) return { map: 6, row: 3 };
+  return { map: Math.max(2, panelRows - 2), row: 2 };
+}
+
+/**
+ * Watch in focus mode, the Director stage: the map full width, the replay strip
+ * (and the Sidekick strip beside it, when shown) under it, Party / Deaths /
+ * Damage as a row of three. Only the stable Watch items move, and they keep
+ * their ids so the panels stay mounted.
+ */
+export function arrangeWatchPresetForFocus(layoutItems: readonly GridEditorItem[], viewportHeight: number): GridEditorItem[] {
+  const rows = watchDirectorRows(viewportHeight);
+  const sidekick = layoutItems.some((item) => item.id === "strip-2" && item.stripType === "sidekick");
+  const placed: Record<string, { x: number; y: number; w: number; h: number }> = {
+    "panel-1": { x: 0, y: 0, w: 12, h: rows.map },
+    "strip-1": { x: 0, y: rows.map, w: sidekick ? 9 : 12, h: 1 },
+    ...(sidekick ? { "strip-2": { x: 9, y: rows.map, w: 3, h: 1 } } : {}),
+    "panel-2": { x: 0, y: rows.map + 1, w: 4, h: rows.row },
+    "panel-3": { x: 4, y: rows.map + 1, w: 4, h: rows.row },
+    "panel-4": { x: 8, y: rows.map + 1, w: 4, h: rows.row },
+  };
+  return layoutItems.map((item) => {
+    const place = placed[item.id];
+    if (!place) return item;
+    return item.x === place.x && item.y === place.y && item.w === place.w && item.h === place.h ? item : { ...item, ...place };
+  });
+}
+
+/** The visible grid for a preset on this viewport: the Map and Watch presets fit it (Watch becomes the Director stage in focus mode), others are untouched. */
+export function resizePresetForViewport(presetId: string | null, layoutItems: GridEditorItem[], viewportHeight: number, focused = false): GridEditorItem[] {
+  if (presetId === "map") return resizeMapPresetForViewport(layoutItems, viewportHeight);
+  if (presetId === "watch") return focused ? arrangeWatchPresetForFocus(layoutItems, viewportHeight) : resizeWatchPresetForViewport(layoutItems, viewportHeight);
+  return layoutItems;
+}
+
 // ── Shared timeline series config ───────────────────────────────────────────
 // All presets share the same 5-series timeline (Damage Done, Healing, Damage
 // Taken, Effective Healing, Friendly Fire) with different hidden series per
@@ -151,6 +237,48 @@ const HEAL_TARGET_PLAYERS_FILTER: PanelFilter = { type: "target_type", value: "s
 // ── Preset Definitions ──────────────────────────────────────────────────────
 
 export const PRESET_LAYOUTS: PresetLayout[] = [
+  {
+    // Picture first, people second, numbers last and small.
+    id: "watch",
+    label: "Watch",
+    kind: "panels",
+    seamless: true,
+    fit: true,
+    layoutItems: [
+      { id: "strip-1", title: "Replay", kind: "strip", stripType: "replay", orientation: "horizontal", x: 0, y: 0, w: 9, h: 1, minW: 6, minH: 1, maxH: 2 },
+      // The ask, for visitors; Share for members; dropped for the owner (withoutOwnerSidekickStrip).
+      { id: "strip-2", title: "Sidekick", kind: "strip", stripType: "sidekick", orientation: "horizontal", x: 9, y: 0, w: 3, h: 1, minW: 3, minH: 1, maxH: 1 },
+      { id: "panel-1", title: "Map", x: 0, y: 1, w: 8, h: 9, minW: 6 },
+      { id: "panel-2", title: "Party", x: 8, y: 1, w: 4, h: 3, minW: 3 },
+      { id: "panel-3", title: "Deaths", x: 8, y: 4, w: 4, h: 4, minW: 3 },
+      { id: "panel-4", title: "Damage", x: 8, y: 8, w: 4, h: 2, minW: 3 },
+    ],
+    mobileVariant: {
+      fit: false,
+      layoutItems: [
+        { id: "panel-1", title: "Map", x: 0, y: 0, w: 12, h: 4, minW: 4 },
+        { id: "strip-1", title: "Replay", kind: "strip", stripType: "replay", orientation: "horizontal", x: 0, y: 4, w: 12, h: 1, minW: 6, minH: 1, maxH: 2 },
+        { id: "panel-2", title: "Party", x: 0, y: 5, w: 12, h: 2, minW: 4 },
+        { id: "panel-3", title: "Deaths", x: 0, y: 7, w: 12, h: 3, minW: 4 },
+        { id: "strip-2", title: "Sidekick", kind: "strip", stripType: "sidekick", orientation: "horizontal", x: 0, y: 10, w: 12, h: 1, minW: 6, minH: 1, maxH: 1 },
+      ],
+    },
+    panelTypes: {
+      "panel-1": "map",
+      "panel-2": "raid_frames",
+      "panel-3": "deaths",
+      "panel-4": "damage_done",
+    },
+    panelOptions: {
+      "panel-1": WATCH_MAP_PANEL_OPTION,
+      "panel-3": COMPACT_DEATHS_PANEL_OPTION,
+      "panel-4": `g:merged,p:owner,${METER_BARS_PANEL_OPTION}`,
+    },
+    panelFilters: {
+      "panel-4": [DAMAGE_TIME_RANGE_FILTER, DAMAGE_TARGET_ENEMIES_FILTER],
+    },
+    requiredCapabilities: ["unit-position"],
+  },
   {
     id: "summary",
     label: "Summary",
@@ -420,3 +548,40 @@ export function presetLayoutById(presetId: string, capabilities: readonly string
 }
 
 export const DEFAULT_PRESET_ID = "summary";
+
+/** The preset a log opens on before the viewer picks one: Watch when it has positions (desktop only), else Summary. */
+export function defaultPresetIdFor(capabilities: readonly string[], mobile = false): string {
+  return !mobile && capabilities.includes(POSITION_SUMMARY_CAPABILITY) ? "watch" : DEFAULT_PRESET_ID;
+}
+
+/**
+ * The built-in default layout for a log: the preset `requestedPresetId` names
+ * (a `?preset=` deep link) when the log offers it, else Watch for logs with
+ * positions (desktop only), else the Summary grid.
+ */
+export function defaultInstanceLayout(capabilities: readonly string[], mobile = false, requestedPresetId?: string | null) {
+  const requested = requestedPresetId && getAvailablePresetLayouts(capabilities, mobile).some((preset) => preset.id === requestedPresetId)
+    ? requestedPresetId
+    : null;
+  const presetId = requested ?? defaultPresetIdFor(capabilities, mobile);
+  // Unrequested Summary keeps the historical default grid and options.
+  const preset = requested || presetId !== DEFAULT_PRESET_ID ? presetLayoutById(presetId, capabilities, mobile) : undefined;
+  if (preset && isPanelPresetLayout(preset)) {
+    return {
+      presetId,
+      items: preset.layoutItems,
+      panelTypes: preset.panelTypes,
+      panelOptions: preset.panelOptions,
+      panelFilters: preset.panelFilters,
+      appearance: readLayoutAppearance(preset),
+    };
+  }
+  return {
+    presetId: DEFAULT_PRESET_ID,
+    items: DEFAULT_INSTANCE_LAYOUT_ITEMS,
+    panelTypes: DEFAULT_INSTANCE_PANEL_TYPES,
+    panelOptions: DEFAULT_INSTANCE_PANEL_OPTIONS,
+    panelFilters: DEFAULT_INSTANCE_PANEL_FILTERS,
+    appearance: {},
+  };
+}

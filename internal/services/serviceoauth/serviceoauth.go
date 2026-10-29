@@ -5,8 +5,11 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -22,6 +25,7 @@ import (
 	"github.com/coder/serpent"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/ory/fosite"
 	"github.com/ory/fosite/compose"
 	"github.com/ory/fosite/handler/rfc8628"
@@ -38,6 +42,10 @@ const (
 	installationPlatformParam = "installation_platform"
 	installationVersionParam  = "installation_version"
 	sidekickSessionExtraKey   = "sidekick_installation_id"
+
+	// utmCookie is set by the public /download page from the landing's utm_*
+	// params (frontend/chronicle/src/utils/utm.ts).
+	utmCookie = "chronicle_utm"
 )
 
 type sidekickMetadata struct {
@@ -107,6 +115,7 @@ type Service struct {
 	router          chi.Router
 	browserApproval http.Handler
 	deviceLimiter   *deviceAuthorizationLimiter
+	logger          *slog.Logger
 }
 
 func New(broker *services.Services) *Service { return &Service{broker: broker} }
@@ -122,7 +131,8 @@ func (s *Service) Start(ctx context.Context) error {
 	if err := s.configure(ctx, servicedbstore.DatabaseStore(s.broker), serviceaccessurl.AccessURL(s.broker)); err != nil {
 		return err
 	}
-	servicelogger.Logger(s.broker).Info("oauth service started")
+	s.logger = servicelogger.Logger(s.broker)
+	s.logger.Info("oauth service started")
 	return nil
 }
 
@@ -255,10 +265,91 @@ func (s *Service) revoke(w http.ResponseWriter, r *http.Request) {
 	s.provider.WriteRevocationResponse(r.Context(), w, err)
 }
 
+// campaignCookie returns the visitor's campaign utm_* params from the landing
+// cookie, or nil without one.
+func campaignCookie(r *http.Request) url.Values {
+	cookie, err := r.Cookie(utmCookie)
+	if err != nil {
+		return nil
+	}
+	raw, err := url.QueryUnescape(cookie.Value)
+	if err != nil {
+		return nil
+	}
+	campaign, err := url.ParseQuery(raw)
+	if err != nil {
+		return nil
+	}
+	return campaign
+}
+
+// installationCampaign is the campaign stored on a Sidekick installation at
+// device approval.
+type installationCampaign struct {
+	Source, Medium, Campaign, Content pgtype.Text
+}
+
+func (c installationCampaign) present() bool {
+	return c.Source.Valid || c.Medium.Valid || c.Campaign.Valid || c.Content.Valid
+}
+
+// campaignFromCookie returns the stored utm_* fields from the landing cookie.
+// A missing, empty or over-long (> 100 chars) value is left NULL.
+func campaignFromCookie(r *http.Request) installationCampaign {
+	campaign := campaignCookie(r)
+	field := func(key string) pgtype.Text {
+		value := campaign.Get(key)
+		return pgtype.Text{String: value, Valid: value != "" && len(value) <= 100}
+	}
+	return installationCampaign{
+		Source:   field("utm_source"),
+		Medium:   field("utm_medium"),
+		Campaign: field("utm_campaign"),
+		Content:  field("utm_content"),
+	}
+}
+
+// withCampaign returns the pairing URL with the visitor's campaign utm_* params
+// added, so they survive the sign-in round trip and a new account can be
+// attributed to the ad that brought it.
+func withCampaign(r *http.Request) string {
+	target := *r.URL
+	campaign := campaignCookie(r)
+	if campaign == nil {
+		return target.RequestURI()
+	}
+	query := target.Query()
+	for key, values := range campaign {
+		if strings.HasPrefix(key, "utm_") && len(values) > 0 && !query.Has(key) {
+			query.Set(key, values[0])
+		}
+	}
+	target.RawQuery = query.Encode()
+	return target.RequestURI()
+}
+
+// logPairComplete records the landing funnel's pair_complete event
+// (docs/landing-funnel-events.md) with the campaign the pairing browser came
+// from, if any. No user identifiers are attached.
+func (s *Service) logPairComplete(r *http.Request) {
+	logger := s.logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	attrs := []any{"event", "pair_complete"}
+	campaign := campaignCookie(r)
+	for _, key := range slices.Sorted(maps.Keys(campaign)) {
+		if value := campaign.Get(key); strings.HasPrefix(key, "utm_") && value != "" {
+			attrs = append(attrs, key, value)
+		}
+	}
+	logger.InfoContext(r.Context(), "funnel event", attrs...)
+}
+
 func (s *Service) browserApprovalHandler(w http.ResponseWriter, r *http.Request) {
 	authClaims, ok := chronauth.AuthenticatedClaims(r.Context())
 	if !ok {
-		http.Redirect(w, r, "/login?from="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
+		http.Redirect(w, r, "/login?from="+url.QueryEscape(withCampaign(r)), http.StatusSeeOther)
 		return
 	}
 	switch r.Method {
@@ -307,7 +398,7 @@ func (s *Service) browserApprovalHandler(w http.ResponseWriter, r *http.Request)
 			}
 		}
 		subject := authClaims.Subject.String()
-		if err := s.store.approveDevice(r.Context(), signature, subject, state); err != nil {
+		if err := s.store.approveDevice(r.Context(), signature, subject, state, campaignFromCookie(r)); err != nil {
 			if errors.Is(err, fosite.ErrNotFound) {
 				renderDevicePage(w, http.StatusNotFound, devicePageData{
 					State: devicePageError, Title: "This code has expired",
@@ -320,6 +411,9 @@ func (s *Service) browserApprovalHandler(w http.ResponseWriter, r *http.Request)
 				Message: "Chronicle could not complete the authorization. Return to Sidekick and try again.",
 			})
 			return
+		}
+		if state == fosite.UserCodeAccepted {
+			s.logPairComplete(r)
 		}
 		renderDevicePage(w, http.StatusOK, page)
 	default:
@@ -378,7 +472,7 @@ func (s *Service) authenticateBearer(r *http.Request) (context.Context, bool) {
 	if err != nil {
 		return r.Context(), false
 	}
-	ctx := chronauth.WithClaims(r.Context(), &claims.Claims{Subject: userID})
+	ctx := withOAuthBearer(chronauth.WithClaims(r.Context(), &claims.Claims{Subject: userID}))
 	if installationID, ok := sidekickInstallationIDFromSession(request.GetSession()); ok {
 		ctx = withSidekickInstallationID(ctx, installationID)
 	}

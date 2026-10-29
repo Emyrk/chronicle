@@ -108,6 +108,7 @@ func (s *Service) Start(ctx context.Context) error {
 	riverqueue.AddWorker(q, chron.NewWorkerLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerReLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerRegressionSnapshot())
+
 	if !bot.Disabled() {
 		bot.SetQueue(q)
 		riverqueue.AddWorker(q, bot.NewWorkerSyncDiscordUser())

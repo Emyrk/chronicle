@@ -260,6 +260,10 @@ type SiteConfig struct {
 	// ExternalVerification advertises the tenant's external character
 	// verification provider (never includes the URL or secret).
 	ExternalVerification *ExternalVerificationPublic `json:"external_verification,omitempty"`
+	// LandingFeaturedInstanceID is the admin-chosen instance replayed on the
+	// /start landing hero. Empty when unset (the server may still fall back to
+	// its deployment default).
+	LandingFeaturedInstanceID string `json:"landing_featured_instance_id,omitempty"`
 }
 
 // UpdateSiteConfigRequest allows partial updates to site configuration.
@@ -272,6 +276,9 @@ type UpdateSiteConfigRequest struct {
 	Discoverable        *bool     `json:"discoverable,omitempty"`
 	DefaultFormat       *string   `json:"default_format,omitempty"`
 	AvailableFormats    []string  `json:"available_formats,omitempty"`
+	// LandingFeaturedInstanceID sets the landing hero's featured instance.
+	// An empty string clears it.
+	LandingFeaturedInstanceID *string `json:"landing_featured_instance_id,omitempty"`
 }
 
 // SetUserRolesRequest is the request body for setting a user's Chronicle roles.

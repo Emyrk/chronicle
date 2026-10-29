@@ -64,16 +64,6 @@ export const POSITION_SUMMARY_PANEL_TYPES: Record<string, EventsPanelType> = {
   "panel-6": "mini_map",
 };
 
-/** The built-in default layout for a log: the position summary when the log has positions (desktop only). */
-export function defaultInstanceLayout(capabilities: readonly string[], mobile = false) {
-  const positions = !mobile && capabilities.includes(POSITION_SUMMARY_CAPABILITY);
-  return {
-    items: positions ? POSITION_SUMMARY_LAYOUT_ITEMS : DEFAULT_INSTANCE_LAYOUT_ITEMS,
-    panelTypes: positions ? POSITION_SUMMARY_PANEL_TYPES : DEFAULT_INSTANCE_PANEL_TYPES,
-    panelOptions: DEFAULT_INSTANCE_PANEL_OPTIONS,
-  };
-}
-
 // ── Mobile defaults ──────────────────────────────────────────────────────────
 
 

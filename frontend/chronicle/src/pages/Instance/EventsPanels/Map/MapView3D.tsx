@@ -69,6 +69,8 @@ export interface MapView3DProps {
    * a zoom); Follow turns it back on.
    */
   cinematic?: boolean;
+  /** Each new key (after the first) cuts the cinematic camera straight to its shot instead of springing there. */
+  cutKey?: number;
   /** Called with a unit's guid when it is clicked on the map. */
   onUnitClick?: (guid: string) => void;
   /** Display settings (effects, bars); the defaults when left out. */
@@ -118,6 +120,8 @@ export interface MapView3DProps {
    * mesh) as it was instead of tearing the scene down, until fresh props arrive.
    */
   frozen?: boolean;
+  /** Whether to draw the N/S compass dial (the landing hero's backdrop hides it). */
+  showCompass?: boolean;
 }
 
 const NO_DEBUFFS: readonly number[] = [];
@@ -185,6 +189,7 @@ export default function MapView3D({
   onDungeonMeshState,
   focus = null,
   cinematic = false,
+  cutKey = 0,
   onUnitClick,
   effectSettings: effectSettingsProp,
   topDownKey = 0,
@@ -197,6 +202,7 @@ export default function MapView3D({
   presenceSurface,
   unitRoles = null,
   frozen = false,
+  showCompass = true,
   debuffSpellIds = NO_DEBUFFS,
   followGuid = null,
   onFollowChange,
@@ -465,6 +471,10 @@ export default function MapView3D({
     if (!frozen) sceneRef.current?.setEffectClock(cursorMs, playing, playbackSpeed);
   }, [cursorMs, frozen, playbackSpeed, playing]);
 
+  useEffect(() => {
+    if (cutKey > 0) sceneRef.current?.cutDirector();
+  }, [cutKey]);
+
   // Each new key (after the first) asks for the top-down view.
   useEffect(() => {
     if (topDownKey > 0) sceneRef.current?.resetCamera(true);
@@ -559,7 +569,7 @@ export default function MapView3D({
           </div>
         </div>
       )}
-      <MapCompass northRadians={compassYaw} />
+      {showCompass && <MapCompass northRadians={compassYaw} />}
       {effectHover && <EffectTooltip hover={effectHover} />}
     </div>
   );

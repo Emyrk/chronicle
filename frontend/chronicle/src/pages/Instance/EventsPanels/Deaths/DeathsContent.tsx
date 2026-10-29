@@ -6,6 +6,8 @@ import type { UnitDeaths } from "./deaths.processor";
 import type { DeathsSummaryResult } from "./deathsSummary.processor";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { useDeathsBreakout } from "./DeathsBreakout";
+import { useSyncModeContextOptional } from "../../SyncModeContext";
+import { COMPACT_DEATH_SEEK_LEAD_MS, compactDeathRows, formatDeathClock, isCompactDeathsOption } from "./compactDeaths";
 
 /**
  * Aggregate death counts across selected encounters.
@@ -41,6 +43,58 @@ function aggregateForEncounters(
 }
 
 type DeathsContentProps = PanelRenderProps<DeathsSummaryResult>;
+
+/** Compact mode: one row per player death (time, victim, killer); a row seeks the replay to just before it. */
+function CompactDeaths({ result, context }: { result: DeathsSummaryResult | null; context: DeathsContentProps["context"] }) {
+  const sync = useSyncModeContextOptional();
+  // Not memoized on `result`: Replay progress updates mutate the same state object.
+  const rows = compactDeathRows(result?.PlayerDeathRows ?? [], context.selectedEncounterIds);
+  // Times count from the first selected encounter's start, like the Replay strip.
+  const startMs = useMemo(() => {
+    const selected = new Set(context.selectedEncounterIds);
+    const starts = context.instance.encounters
+      .filter((encounter) => selected.has(encounter.id))
+      .map((encounter) => Date.parse(encounter.start_time))
+      .filter(Number.isFinite);
+    return starts.length > 0 ? Math.min(...starts) : null;
+  }, [context.instance.encounters, context.selectedEncounterIds]) ?? rows[0]?.dateMilli ?? 0;
+  const canSeek = Boolean(sync && !sync.readOnly && sync.externalDriver === "none");
+
+  if (rows.length === 0) {
+    return <div className="flex h-full items-center justify-center text-xs text-muted-foreground">No deaths yet</div>;
+  }
+  return (
+    <div className="styled-scrollbar h-full min-h-0 overflow-y-auto">
+      <ul className="flex flex-col">
+        {rows.map((row, index) => (
+          <li key={`${row.playerID}-${row.dateMilli}-${index}`}>
+            <button
+              type="button"
+              disabled={!canSeek}
+              onClick={() => {
+                if (!sync) return;
+                sync.enable();
+                sync.setTimestamp(new Date(row.dateMilli - COMPACT_DEATH_SEEK_LEAD_MS));
+                sync.play();
+              }}
+              title={canSeek ? `Watch ${row.playerName}'s death from 10 s before` : undefined}
+              className="flex w-full min-w-0 items-center gap-2 rounded-sm px-1.5 py-1 text-left text-xs enabled:hover:bg-muted/60"
+            >
+              <span className="w-12 shrink-0 font-mono text-2xs text-muted-foreground">{formatDeathClock(row.dateMilli - startMs)}</span>
+              <span
+                className="min-w-0 max-w-[45%] shrink-0 truncate font-medium"
+                style={{ color: `var(--color-class-${row.className.toLowerCase()})` }}
+              >
+                {row.playerName}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-muted-foreground" title={row.killerName}>{row.killerName}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export const DeathsContent = (props: DeathsContentProps) => {
   const { result, context, loading, processing } = props;
@@ -79,6 +133,14 @@ export const DeathsContent = (props: DeathsContentProps) => {
 
   // Compute display total
   const total = deathsData.reduce((sum, d) => sum + d.value, 0);
+
+  if (isCompactDeathsOption(props.panelOption)) {
+    return (
+      <GenericPanel {...effectiveProps}>
+        <CompactDeaths result={cachedResult} context={context} />
+      </GenericPanel>
+    );
+  }
 
   return (
     <GenericPanel {...effectiveProps}>

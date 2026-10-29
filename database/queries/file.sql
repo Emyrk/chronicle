@@ -37,6 +37,8 @@ INSERT INTO
     format,
     flavor,
     unlisted,
+    upload_source,
+    sidekick_installation_id,
     created_at,
     updated_at
   )
@@ -49,7 +51,9 @@ VALUES
     $5,
     $6,
     $7,
-    $8
+    $8,
+    $9,
+    $10
   )
 RETURNING *
 ;

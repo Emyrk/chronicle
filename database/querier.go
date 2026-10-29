@@ -63,6 +63,9 @@ type sqlcQuerier interface {
 	CountLuaProjectsByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 	CountRaidCompositionsByUser(ctx context.Context, arg CountRaidCompositionsByUserParams) (int64, error)
 	CountReadyLuaProjectArtifactGarbage(ctx context.Context) (int64, error)
+	// Log groups uploaded by any of the user's Sidekick installations; 1 right
+	// after an upload means it was the account's first (the first_upload event).
+	CountSidekickLogGroupsByUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountUserAuthLinks(ctx context.Context) (int64, error)
 	CountUserGearLists(ctx context.Context, arg CountUserGearListsParams) (int64, error)
 	CountUserGearProgressions(ctx context.Context, arg CountUserGearProgressionsParams) (int64, error)
@@ -602,6 +605,20 @@ type sqlcQuerier interface {
 	IsLayoutTrackedByUser(ctx context.Context, arg IsLayoutTrackedByUserParams) (bool, error)
 	IsLogInstanceInvalid(ctx context.Context, id uuid.UUID) (bool, error)
 	IsParsedLogGroupVisible(ctx context.Context, id uuid.UUID) (bool, error)
+	// The /start montage's candidates: for each instance name on the tenant, its
+	// fastest positional runs by the default speedrun board's rules
+	// (SpeedrunLeaderboard with full timing: qualified, meeting the version
+	// requirements, one run per duplicate group, each difficulty its own board).
+	// Unlike the board, a run without a guild is a candidate too. Only public,
+	// listed, finalized, valid runs whose log recorded unit positions are
+	// returned, up to @per_instance per instance name, best first. speedrun_rank
+	// is the place the run's time takes on its board: one more than the other
+	// guilds whose best run there is faster.
+	LandingMontageRuns(ctx context.Context, perInstance int32) ([]LandingMontageRunsRow, error)
+	// The newest public, listed, finalized instances on the tenant whose log
+	// recorded unit positions and that have a boss encounter, for the /start
+	// hero's pick. Newest first.
+	LandingPositionalInstances(ctx context.Context, limitCount int32) ([]LandingPositionalInstancesRow, error)
 	ListActiveAdminTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListActivePublicTelemetryNotices(ctx context.Context) ([]TelemetryNotice, error)
 	ListAddonAuthorsByUsers(ctx context.Context, userIds []uuid.UUID) ([]AddonAuthor, error)
@@ -954,6 +971,8 @@ type sqlcQuerier interface {
 	// Assigns or removes a tenant from a server.
 	// Pass NULL to remove the tenant assignment.
 	SetServerTenant(ctx context.Context, arg SetServerTenantParams) error
+	// The first campaign wins: a row that already holds any utm_* is left as is.
+	SetSidekickInstallationCampaign(ctx context.Context, arg SetSidekickInstallationCampaignParams) error
 	// Assigns or removes a default dataset from a tenant.
 	// Pass NULL to remove the assignment.
 	SetTenantDataset(ctx context.Context, arg SetTenantDatasetParams) error
@@ -972,6 +991,9 @@ type sqlcQuerier interface {
 	SpeedrunGuildClears(ctx context.Context, arg SpeedrunGuildClearsParams) ([]SpeedrunGuildClearsRow, error)
 	// Returns distinct (instance, difficulty) boards that have at least one
 	// qualified speedrun. Each difficulty has its own leaderboard.
+	// Each board carries its record: the first place of SpeedrunLeaderboard with
+	// full timing and no filters (zero/NULL record columns when no run ranks there),
+	// with its instance and whether its log recorded unit positions (a replay).
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	SpeedrunInstanceBoards(ctx context.Context) ([]SpeedrunInstanceBoardsRow, error)
 	// Returns the leaderboard for a given instance name.
@@ -1032,6 +1054,8 @@ type sqlcQuerier interface {
 	UpdateRetentionPolicyStats(ctx context.Context, arg UpdateRetentionPolicyStatsParams) error
 	UpdateSidekickHeartbeat(ctx context.Context, arg UpdateSidekickHeartbeatParams) (SidekickInstallation, error)
 	UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigParams) (SiteConfig, error)
+	// NULL clears the setting, so this cannot share UpdateSiteConfig's COALESCE pattern.
+	UpdateSiteConfigLandingFeaturedInstance(ctx context.Context, landingFeaturedInstanceID uuid.NullUUID) (SiteConfig, error)
 	UpdateTelemetryHeartbeat(ctx context.Context) error
 	// Only non-null params are applied; NULL means "keep existing value".
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Tenant, error)

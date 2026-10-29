@@ -1758,16 +1758,7 @@ export function useAdminOutdatedInstances(instanceName?: string, parserVersion?:
     },
   });
 }
-export function useSiteConfig() {
-  return useQuery({
-    queryKey: ["site-config"],
-    queryFn: async () => {
-      const response = await fetch("/api/v1/site-config");
-      if (!response.ok) throw new Error("Failed to fetch site config");
-      return response.json() as Promise<SiteConfig>;
-    },
-  });
-}
+export { useSiteConfig } from "./siteConfigQuery";
 
 // useDiscoverableServers lists every discoverable Chronicle server, even from a tenant subdomain.
 export function useDiscoverableServers() {
@@ -1914,11 +1905,15 @@ export function useUpdateSiteConfig() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
       });
-      if (!response.ok) throw new Error("Failed to update site config");
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(body?.message || "Failed to update site config");
+      }
       return response.json() as Promise<SiteConfig>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["site-config"] });
+      queryClient.invalidateQueries({ queryKey: ["landing-featured"] });
     },
   });
 }

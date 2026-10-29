@@ -1471,6 +1471,15 @@ export class MapScene3D {
     this.requestRender();
   }
 
+  /** Cuts the Director straight to its next shot (the replay jumped), instead of springing there from the old one. */
+  cutDirector() {
+    if (!this.director) return;
+    this.directorGoal.seeded = false;
+    this.directorInFrame.clear();
+    this.engageDirector(true);
+    this.requestRender();
+  }
+
   // Hands the camera back to the Director, springing from wherever it is now.
   // The first shot after an asynchronous mesh load can opt to snap into place.
   // Already following: nothing to seed, or the springs would stutter.
@@ -3511,8 +3520,9 @@ export class MapScene3D {
     this.controls.touches.ONE = THREE.TOUCH.ROTATE;
     this.controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
     const next = clampMobileMapInput(input ?? IDLE_MOBILE_MAP_INPUT);
-    const wasActive = Object.values(this.mobileInput).some((value) => value !== 0);
-    const active = Object.values(next).some((value) => value !== 0);
+    // Idle is every axis 0 and `jump` false; counting false as input kept the frame loop from ever idling.
+    const wasActive = Object.values(this.mobileInput).some((value) => value !== 0 && value !== false);
+    const active = Object.values(next).some((value) => value !== 0 && value !== false);
     if (!this.walk && !wasActive && active) {
       this.handleControlsStart();
       this.keyMoveLastMs = 0;
@@ -3525,7 +3535,7 @@ export class MapScene3D {
   // Moves the camera for held keyboard keys or the mobile controls; true while either is active.
   private updateKeyboardCamera(now: number): boolean {
     const mobile = this.mobileInput;
-    const mobileActive = Object.values(mobile).some((value) => value !== 0);
+    const mobileActive = Object.values(mobile).some((value) => value !== 0 && value !== false);
     if (this.walk || (this.heldActions.size === 0 && !mobileActive)) return false;
     const dt = this.keyMoveLastMs ? Math.min(KEY_MAX_STEP_S, (now - this.keyMoveLastMs) / 1000) : 0;
     this.keyMoveLastMs = now;

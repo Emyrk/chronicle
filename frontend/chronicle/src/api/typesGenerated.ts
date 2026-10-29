@@ -2726,6 +2726,119 @@ export type KillType = "clean" | "partial" | "reset" | "wipe";
 
 export const KillTypes: KillType[] = ["clean", "partial", "reset", "wipe"];
 
+// From chroniclesdk/landing.go
+/**
+ * LandingFeaturedBoss is one boss encounter (kill or wipe), ordered by pull.
+ * Offsets are milliseconds from the instance start.
+ */
+export interface LandingFeaturedBoss {
+    readonly id: string;
+    readonly name: string;
+    readonly kill: boolean;
+    readonly start_offset_ms: number;
+    readonly end_offset_ms: number;
+}
+
+// From chroniclesdk/landing.go
+/**
+ * LandingFeaturedDeath is a player death, ordered by time.
+ */
+export interface LandingFeaturedDeath {
+    readonly offset_ms: number;
+    readonly victim_name: string;
+    readonly victim_class: string;
+    /**
+     * KillerName is empty when the log does not attribute the death.
+     */
+    readonly killer_name?: string;
+}
+
+// From chroniclesdk/landing.go
+/**
+ * LandingFeaturedEncounter is one boss encounter. Offsets are milliseconds
+ * from the instance start.
+ */
+export interface LandingFeaturedEncounter {
+    readonly id: string;
+    readonly name: string;
+    readonly kill: boolean;
+    readonly start_offset_ms: number;
+    readonly end_offset_ms: number;
+}
+
+// From chroniclesdk/landing.go
+/**
+ * LandingFeaturedResponse is the public payload behind the /start hero.
+ * Entries is the montage the hero plays in order, looping: the admin-set
+ * featured instance first when one is configured, then, for each instance
+ * with a published dungeon mesh, its fastest qualified speedrun among runs
+ * with unit positions (by the speedrun board's rules, though a run without a
+ * guild counts), best ranked first (at most six in all). Without
+ * such ranked runs the montage is the tenant's newest public run with unit
+ * positions whose last boss pull has a published dungeon mesh. It is empty
+ * when nothing qualifies or the configured instance cannot be shown (missing,
+ * unlisted, invalidated); the landing then shows its poster only.
+ */
+export interface LandingFeaturedResponse {
+    readonly entries: readonly LandingFeaturedRun[];
+    /**
+     * Featured is the first entry, or nil when there is none.
+     */
+    readonly featured: LandingFeaturedRun | null;
+}
+
+// From chroniclesdk/landing.go
+export interface LandingFeaturedRun {
+    readonly instance_id: string;
+    readonly instance_name: string;
+    /**
+     * DurationMs spans the instance's first to last event.
+     */
+    readonly duration_ms: number;
+    readonly player_count: number;
+    readonly bosses: readonly LandingFeaturedBoss[];
+    readonly deaths: readonly LandingFeaturedDeath[];
+    readonly upload: LandingFeaturedUpload;
+    /**
+     * Encounter is the boss pull the hero plays: the run's last boss kill, or
+     * its last wipe when no boss died. Nil when the run has no boss encounter.
+     */
+    readonly encounter: LandingFeaturedEncounter | null;
+    /**
+     * Speedrun is the place the run's time takes on its instance's speedrun
+     * board, when the montage picked it as that instance's best replayed run.
+     */
+    readonly speedrun: LandingFeaturedSpeedrun | null;
+}
+
+// From chroniclesdk/landing.go
+/**
+ * LandingFeaturedSpeedrun is a run's place on the speedrun board (full
+ * timing, the board's default) for its instance and difficulty.
+ */
+export interface LandingFeaturedSpeedrun {
+    /**
+     * Rank is the place the run's time takes on the board.
+     */
+    readonly rank: number;
+    readonly duration_ms: number;
+}
+
+// From chroniclesdk/landing.go
+export interface LandingFeaturedUpload {
+    readonly source: LandingUploadSource;
+    /**
+     * DelayMs is the time from the instance's last event to the upload
+     * completing. Nil when it cannot be derived.
+     */
+    readonly delay_ms: number | null;
+}
+
+// From chroniclesdk/landing.go
+export type LandingUploadSource = "api" | "manual" | "sidekick" | "unknown";
+
+export const LandingUploadSources: LandingUploadSource[] = ["api", "manual", "sidekick", "unknown"];
+
 // From chroniclesdk/panel_layout.go
 export interface LayoutDefaultsResponse {
     readonly default_desktop_layout_id: string | null;
@@ -3670,6 +3783,11 @@ export interface RecentInstance {
     readonly difficulty_name: string;
     readonly max_players: number;
     readonly dynamic_difficulty: number;
+    /**
+     * HasPositions is true when the log recorded unit positions, so the run
+     * has a replay. Set by /raidlogs/recent only.
+     */
+    readonly has_positions?: boolean;
 }
 
 // From chroniclesdk/log.go
@@ -4094,6 +4212,35 @@ export interface SidekickIssueReport {
 }
 
 // From chroniclesdk/sidekick.go
+/**
+ * SidekickRelease is the latest published Chronicle Sidekick release, served
+ * from a server-side cache of the chronicle-sidekick GitHub releases API.
+ */
+export interface SidekickRelease {
+    /**
+     * Available is false when no published release was found; links then fall
+     * back to ReleasesURL.
+     */
+    readonly available: boolean;
+    readonly version: string;
+    readonly published_at?: string;
+    readonly releases_url: string;
+    readonly assets: readonly SidekickReleaseAsset[];
+}
+
+// From chroniclesdk/sidekick.go
+export interface SidekickReleaseAsset {
+    /**
+     * OS is "macos", "windows" or "linux".
+     */
+    readonly os: string;
+    readonly name: string;
+    readonly size: number;
+    readonly sha256?: string;
+    readonly url: string;
+}
+
+// From chroniclesdk/sidekick.go
 export interface SidekickStatusRequest {
     readonly platform?: string;
     readonly version?: string;
@@ -4248,6 +4395,12 @@ export interface SiteConfig {
      * verification provider (never includes the URL or secret).
      */
     readonly external_verification?: ExternalVerificationPublic;
+    /**
+     * LandingFeaturedInstanceID is the admin-chosen instance replayed on the
+     * /start landing hero. Empty when unset (the server may still fall back to
+     * its deployment default).
+     */
+    readonly landing_featured_instance_id?: string;
 }
 
 // From chroniclesdk/stats.go
@@ -4275,6 +4428,24 @@ export const SocialPlatforms: SocialPlatform[] = ["discord", "twitch", "twitter"
 export interface SocketBonus {
     readonly enchantment_id: number;
     readonly name: string;
+}
+
+// From chroniclesdk/log.go
+/**
+ * SpeedrunBoardRecord is the fastest ranked full clear of one board.
+ */
+export interface SpeedrunBoardRecord {
+    readonly duration_ms: number;
+    readonly completion_time: string;
+    readonly guild_name: string;
+    /**
+     * InstanceID is the record run, for opening its replay from the throne.
+     */
+    readonly instance_id: string;
+    /**
+     * HasPositions is true when the record run's log recorded unit positions (a replay).
+     */
+    readonly has_positions?: boolean;
 }
 
 // From chroniclesdk/log.go
@@ -4380,10 +4551,14 @@ export interface SpeedrunGuildClearsEntry {
  * SpeedrunInstanceBoard identifies one leaderboard: each (instance,
  * difficulty) combination has its own board. DifficultyName may be empty for
  * runs whose logs recorded no difficulty.
+ *
+ * Record is the board's first place under full timing, nil when no run ranks
+ * there yet (an unclaimed throne on the landing page).
  */
 export interface SpeedrunInstanceBoard {
     readonly instance_name: string;
     readonly difficulty_name: string;
+    readonly record?: SpeedrunBoardRecord;
 }
 
 // From chroniclesdk/log.go
@@ -5001,6 +5176,11 @@ export interface UpdateSiteConfigRequest {
     readonly discoverable?: boolean;
     readonly default_format?: string;
     readonly available_formats?: readonly string[];
+    /**
+     * LandingFeaturedInstanceID sets the landing hero's featured instance.
+     * An empty string clears it.
+     */
+    readonly landing_featured_instance_id?: string;
 }
 
 // From chroniclesdk/guild_page.go
@@ -5460,6 +5640,12 @@ export interface WoWInstance {
     readonly invalidated_at?: string;
     readonly invalid_reason?: string;
     readonly vehicle_control_intervals?: VehicleControlMetadata;
+    /**
+     * Upload is the log group's upload provenance, and LogOwner the user who
+     * uploaded it. Both are only populated on the detail endpoint.
+     */
+    readonly upload?: LandingFeaturedUpload;
+    readonly log_owner?: string;
 }
 
 // From chroniclesdk/log.go

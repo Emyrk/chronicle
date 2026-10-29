@@ -92,6 +92,10 @@ const (
 	CheckSidekickConfigOverridesConfigObject                    CheckConstraint = "sidekick_config_overrides_config_object"                       // sidekick_config_overrides
 	CheckSidekickInstallationsNameCheck                         CheckConstraint = "sidekick_installations_name_check"                             // sidekick_installations
 	CheckSidekickInstallationsPlatformCheck                     CheckConstraint = "sidekick_installations_platform_check"                         // sidekick_installations
+	CheckSidekickInstallationsUtmCampaignCheck                  CheckConstraint = "sidekick_installations_utm_campaign_check"                     // sidekick_installations
+	CheckSidekickInstallationsUtmContentCheck                   CheckConstraint = "sidekick_installations_utm_content_check"                      // sidekick_installations
+	CheckSidekickInstallationsUtmMediumCheck                    CheckConstraint = "sidekick_installations_utm_medium_check"                       // sidekick_installations
+	CheckSidekickInstallationsUtmSourceCheck                    CheckConstraint = "sidekick_installations_utm_source_check"                       // sidekick_installations
 	CheckSidekickInstallationsVersionCheck                      CheckConstraint = "sidekick_installations_version_check"                          // sidekick_installations
 	CheckSidekickIssuesCodeCheck                                CheckConstraint = "sidekick_issues_code_check"                                    // sidekick_issues
 	CheckSidekickIssuesDetailsCheck                             CheckConstraint = "sidekick_issues_details_check"                                 // sidekick_issues

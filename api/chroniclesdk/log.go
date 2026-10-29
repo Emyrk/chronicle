@@ -169,6 +169,10 @@ type WoWInstance struct {
 	InvalidatedAt           *time.Time              `json:"invalidated_at,omitempty"`
 	InvalidReason           string                  `json:"invalid_reason,omitempty"`
 	VehicleControlIntervals *VehicleControlMetadata `json:"vehicle_control_intervals,omitempty"`
+	// Upload is the log group's upload provenance, and LogOwner the user who
+	// uploaded it. Both are only populated on the detail endpoint.
+	Upload   *LandingFeaturedUpload `json:"upload,omitempty"`
+	LogOwner *uuid.UUID             `json:"log_owner,omitempty"`
 }
 
 // KillType represents the outcome of an encounter.
@@ -559,9 +563,24 @@ type SpeedrunVersionStatus struct {
 // SpeedrunInstanceBoard identifies one leaderboard: each (instance,
 // difficulty) combination has its own board. DifficultyName may be empty for
 // runs whose logs recorded no difficulty.
+//
+// Record is the board's first place under full timing, nil when no run ranks
+// there yet (an unclaimed throne on the landing page).
 type SpeedrunInstanceBoard struct {
-	InstanceName   string `json:"instance_name"`
-	DifficultyName string `json:"difficulty_name"`
+	InstanceName   string               `json:"instance_name"`
+	DifficultyName string               `json:"difficulty_name"`
+	Record         *SpeedrunBoardRecord `json:"record,omitempty"`
+}
+
+// SpeedrunBoardRecord is the fastest ranked full clear of one board.
+type SpeedrunBoardRecord struct {
+	DurationMs     int64     `json:"duration_ms"`
+	CompletionTime time.Time `json:"completion_time"`
+	GuildName      string    `json:"guild_name"`
+	// InstanceID is the record run, for opening its replay from the throne.
+	InstanceID uuid.UUID `json:"instance_id"`
+	// HasPositions is true when the record run's log recorded unit positions (a replay).
+	HasPositions bool `json:"has_positions,omitempty"`
 }
 
 // SpeedrunLeaderboardEntry is one row in the leaderboard.
@@ -638,6 +657,9 @@ type RecentInstance struct {
 	DifficultyName    string            `json:"difficulty_name"`
 	MaxPlayers        int               `json:"max_players"`
 	DynamicDifficulty int               `json:"dynamic_difficulty"`
+	// HasPositions is true when the log recorded unit positions, so the run
+	// has a replay. Set by /raidlogs/recent only.
+	HasPositions bool `json:"has_positions,omitempty"`
 }
 
 // RecentEncounter is a simplified encounter summary for the recent raids list.

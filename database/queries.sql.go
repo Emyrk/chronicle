@@ -5910,7 +5910,7 @@ func (q *sqlQuerier) GetWoWLogFilesByGroupID(ctx context.Context, wowLogID uuid.
 
 const getWoWLogGroupByID = `-- name: GetWoWLogGroupByID :one
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted, wow_log_groups.upload_source, wow_log_groups.sidekick_installation_id,
   u.username AS owner_name,
   COALESCE(
       jsonb_agg(
@@ -5965,6 +5965,8 @@ func (q *sqlQuerier) GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetW
 		&i.WoWLogGroup.InvalidReason,
 		&i.WoWLogGroup.ParseGeneration,
 		&i.WoWLogGroup.Unlisted,
+		&i.WoWLogGroup.UploadSource,
+		&i.WoWLogGroup.SidekickInstallationID,
 		&i.OwnerName,
 		&i.Files,
 	)
@@ -5973,7 +5975,7 @@ func (q *sqlQuerier) GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetW
 
 const getWoWLogGroupsByOwner = `-- name: GetWoWLogGroupsByOwner :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted, wow_log_groups.upload_source, wow_log_groups.sidekick_installation_id,
   files_agg.files,
   instances_output.output AS processing_output,
   parsed_bytes_agg.parsed_bytes
@@ -6105,6 +6107,8 @@ func (q *sqlQuerier) GetWoWLogGroupsByOwner(ctx context.Context, arg GetWoWLogGr
 			&i.WoWLogGroup.InvalidReason,
 			&i.WoWLogGroup.ParseGeneration,
 			&i.WoWLogGroup.Unlisted,
+			&i.WoWLogGroup.UploadSource,
+			&i.WoWLogGroup.SidekickInstallationID,
 			&i.Files,
 			&i.ProcessingOutput,
 			&i.ParsedBytes,
@@ -6201,6 +6205,8 @@ INSERT INTO
     format,
     flavor,
     unlisted,
+    upload_source,
+    sidekick_installation_id,
     created_at,
     updated_at
   )
@@ -6213,20 +6219,24 @@ VALUES
     $5,
     $6,
     $7,
-    $8
+    $8,
+    $9,
+    $10
   )
-RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason, parse_generation, unlisted
+RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason, parse_generation, unlisted, upload_source, sidekick_installation_id
 `
 
 type InsertWoWLogGroupParams struct {
-	ID        uuid.UUID          `db:"id" json:"id"`
-	Owner     uuid.UUID          `db:"owner" json:"owner"`
-	LogType   LogType            `db:"log_type" json:"log_type"`
-	Format    NullLogFormat      `db:"format" json:"format"`
-	Flavor    []string           `db:"flavor" json:"flavor"`
-	Unlisted  bool               `db:"unlisted" json:"unlisted"`
-	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	ID                     uuid.UUID          `db:"id" json:"id"`
+	Owner                  uuid.UUID          `db:"owner" json:"owner"`
+	LogType                LogType            `db:"log_type" json:"log_type"`
+	Format                 NullLogFormat      `db:"format" json:"format"`
+	Flavor                 []string           `db:"flavor" json:"flavor"`
+	Unlisted               bool               `db:"unlisted" json:"unlisted"`
+	UploadSource           NullUploadSource   `db:"upload_source" json:"upload_source"`
+	SidekickInstallationID uuid.NullUUID      `db:"sidekick_installation_id" json:"sidekick_installation_id"`
+	CreatedAt              pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 func (q *sqlQuerier) InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGroupParams) (WoWLogGroup, error) {
@@ -6237,6 +6247,8 @@ func (q *sqlQuerier) InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGrou
 		arg.Format,
 		arg.Flavor,
 		arg.Unlisted,
+		arg.UploadSource,
+		arg.SidekickInstallationID,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -6253,6 +6265,8 @@ func (q *sqlQuerier) InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGrou
 		&i.InvalidReason,
 		&i.ParseGeneration,
 		&i.Unlisted,
+		&i.UploadSource,
+		&i.SidekickInstallationID,
 	)
 	return i, err
 }
@@ -6304,7 +6318,7 @@ func (q *sqlQuerier) InvalidateWoWLogGroup(ctx context.Context, arg InvalidateWo
 
 const listAllWoWLogGroupsWithOwner = `-- name: ListAllWoWLogGroupsWithOwner :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted, wow_log_groups.upload_source, wow_log_groups.sidekick_installation_id,
   u.username AS owner_name,
   files_agg.files,
   instances_output.output AS processing_output
@@ -6428,6 +6442,8 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAl
 			&i.WoWLogGroup.InvalidReason,
 			&i.WoWLogGroup.ParseGeneration,
 			&i.WoWLogGroup.Unlisted,
+			&i.WoWLogGroup.UploadSource,
+			&i.WoWLogGroup.SidekickInstallationID,
 			&i.OwnerName,
 			&i.Files,
 			&i.ProcessingOutput,
@@ -6444,7 +6460,7 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAl
 
 const listAllWoWLogGroupsWithOwnerPaginated = `-- name: ListAllWoWLogGroupsWithOwnerPaginated :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor, wow_log_groups.invalidated_at, wow_log_groups.invalid_reason, wow_log_groups.parse_generation, wow_log_groups.unlisted, wow_log_groups.upload_source, wow_log_groups.sidekick_installation_id,
   u.username AS owner_name,
   files_agg.files,
   files_agg.total_size_bytes,
@@ -6619,6 +6635,8 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, 
 			&i.WoWLogGroup.InvalidReason,
 			&i.WoWLogGroup.ParseGeneration,
 			&i.WoWLogGroup.Unlisted,
+			&i.WoWLogGroup.UploadSource,
+			&i.WoWLogGroup.SidekickInstallationID,
 			&i.OwnerName,
 			&i.Files,
 			&i.TotalSizeBytes,
@@ -11028,6 +11046,163 @@ func (q *sqlQuerier) ListResolvedItemPrices(ctx context.Context, arg ListResolve
 	return items, nil
 }
 
+const landingMontageRuns = `-- name: LandingMontageRuns :many
+WITH board AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        sr.instance_id,
+        sr.instance_name,
+        li.difficulty_name,
+        sr.guild_id,
+        li.realm_id,
+        COALESCE(sr.ranked_duration_ms, sr.duration_ms)::bigint AS duration_ms,
+        li.capabilities,
+        li.log_group_id,
+        li.invalidated_at
+    FROM instance_speedruns sr
+    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+    JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+    LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
+    WHERE sr.qualified = true
+      AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
+      AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
+    ORDER BY COALESCE(li.duplicate_group_id, li.id), COALESCE(sr.ranked_duration_ms, sr.duration_ms) ASC
+),
+guild_best AS (
+    SELECT instance_name, difficulty_name, guild_id, MIN(duration_ms) AS duration_ms
+    FROM board
+    WHERE guild_id IS NOT NULL
+    GROUP BY instance_name, difficulty_name, guild_id
+),
+positional AS (
+    SELECT
+        b.instance_id,
+        b.instance_name,
+        b.realm_id,
+        b.duration_ms,
+        (
+            SELECT COUNT(*)
+            FROM guild_best gb
+            WHERE gb.instance_name = b.instance_name
+              AND gb.difficulty_name = b.difficulty_name
+              AND gb.guild_id IS DISTINCT FROM b.guild_id
+              AND gb.duration_ms < b.duration_ms
+        ) + 1 AS speedrun_rank
+    FROM board b
+    JOIN parsed_log_group plg ON plg.id = b.log_group_id AND plg.finalized_at IS NOT NULL
+    JOIN wow_log_groups wlg ON wlg.id = plg.id AND plg.parse_generation = wlg.parse_generation
+    WHERE 'unit-position' = ANY(b.capabilities)
+      AND b.invalidated_at IS NULL
+),
+numbered AS (
+    SELECT
+        p.instance_id, p.instance_name, p.realm_id, p.duration_ms, p.speedrun_rank,
+        ROW_NUMBER() OVER (PARTITION BY p.instance_name ORDER BY p.speedrun_rank, p.duration_ms, p.instance_id) AS instance_place
+    FROM positional p
+)
+SELECT
+    instance_id,
+    instance_name,
+    realm_id,
+    duration_ms,
+    speedrun_rank::bigint AS speedrun_rank
+FROM numbered
+WHERE instance_place <= $1::int
+ORDER BY instance_name, instance_place
+`
+
+type LandingMontageRunsRow struct {
+	InstanceID   uuid.UUID `db:"instance_id" json:"instance_id"`
+	InstanceName string    `db:"instance_name" json:"instance_name"`
+	RealmID      uuid.UUID `db:"realm_id" json:"realm_id"`
+	DurationMs   int64     `db:"duration_ms" json:"duration_ms"`
+	SpeedrunRank int64     `db:"speedrun_rank" json:"speedrun_rank"`
+}
+
+// The /start montage's candidates: for each instance name on the tenant, its
+// fastest positional runs by the default speedrun board's rules
+// (SpeedrunLeaderboard with full timing: qualified, meeting the version
+// requirements, one run per duplicate group, each difficulty its own board).
+// Unlike the board, a run without a guild is a candidate too. Only public,
+// listed, finalized, valid runs whose log recorded unit positions are
+// returned, up to @per_instance per instance name, best first. speedrun_rank
+// is the place the run's time takes on its board: one more than the other
+// guilds whose best run there is faster.
+func (q *sqlQuerier) LandingMontageRuns(ctx context.Context, perInstance int32) ([]LandingMontageRunsRow, error) {
+	rows, err := q.db.Query(ctx, landingMontageRuns, perInstance)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LandingMontageRunsRow
+	for rows.Next() {
+		var i LandingMontageRunsRow
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.InstanceName,
+			&i.RealmID,
+			&i.DurationMs,
+			&i.SpeedrunRank,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const landingPositionalInstances = `-- name: LandingPositionalInstances :many
+SELECT li.id, li.realm_id
+FROM log_instances li
+JOIN parsed_log_group plg ON plg.id = li.log_group_id
+JOIN wow_log_groups wlg ON wlg.id = plg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
+  AND NOT wlg.unlisted
+WHERE 'unit-position' = ANY(li.capabilities)
+  AND li.invalidated_at IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM log_instance_encounters lie
+      WHERE lie.instance_id = li.id
+        AND lie.boss
+        AND lie.kill_type IN ('clean', 'partial', 'wipe')
+  )
+ORDER BY COALESCE(li.start_time, wlg.created_at) DESC, li.id DESC
+LIMIT $1::int
+`
+
+type LandingPositionalInstancesRow struct {
+	ID      uuid.UUID `db:"id" json:"id"`
+	RealmID uuid.UUID `db:"realm_id" json:"realm_id"`
+}
+
+// The newest public, listed, finalized instances on the tenant whose log
+// recorded unit positions and that have a boss encounter, for the /start
+// hero's pick. Newest first.
+func (q *sqlQuerier) LandingPositionalInstances(ctx context.Context, limitCount int32) ([]LandingPositionalInstancesRow, error) {
+	rows, err := q.db.Query(ctx, landingPositionalInstances, limitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LandingPositionalInstancesRow
+	for rows.Next() {
+		var i LandingPositionalInstancesRow
+		if err := rows.Scan(&i.ID, &i.RealmID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getLeaderboardVersionRequirements = `-- name: GetLeaderboardVersionRequirements :one
 SELECT instance_name, min_parser_version, min_parser_version_num, min_addon_version, min_addon_version_num, updated_at FROM leaderboard_version_requirements WHERE instance_name = $1
 `
@@ -14526,6 +14701,10 @@ WITH matching_runs AS (
                 AND lip_filter.unit_guid = $7
           )
       )
+      AND (
+          NOT $8::boolean
+          OR 'unit-position' = ANY(li.capabilities)
+      )
 ),
 instance_rows AS (
     SELECT
@@ -14552,7 +14731,8 @@ instance_rows AS (
         li.recorder_name,
         li.difficulty_name,
         li.max_players,
-        li.dynamic_difficulty
+        li.dynamic_difficulty,
+        ('unit-position' = ANY(li.capabilities))::boolean AS has_positions
     FROM log_instances li
     JOIN matching_runs ON matching_runs.run_id = COALESCE(li.duplicate_group_id, li.id)
     JOIN parsed_log_group plg ON plg.id = li.log_group_id
@@ -14593,7 +14773,7 @@ instance_rows AS (
 ),
 ranked_instances AS (
     SELECT
-        instance_rows.id, instance_rows.slug, instance_rows.name, instance_rows.realm_id, instance_rows.realm_name, instance_rows.uploader_id, instance_rows.uploader_name, instance_rows.uploaded_at, instance_rows.first_encounter_time, instance_rows.player_count, instance_rows.boss_count, instance_rows.encounter_count, instance_rows.boss_kills, instance_rows.duration_ms, instance_rows.combat_duration_ms, instance_rows.guild_id, instance_rows.guild_name, instance_rows.has_youtube_video, instance_rows.duplicate_group_id, instance_rows.run_id, instance_rows.recorder_name, instance_rows.difficulty_name, instance_rows.max_players, instance_rows.dynamic_difficulty,
+        instance_rows.id, instance_rows.slug, instance_rows.name, instance_rows.realm_id, instance_rows.realm_name, instance_rows.uploader_id, instance_rows.uploader_name, instance_rows.uploaded_at, instance_rows.first_encounter_time, instance_rows.player_count, instance_rows.boss_count, instance_rows.encounter_count, instance_rows.boss_kills, instance_rows.duration_ms, instance_rows.combat_duration_ms, instance_rows.guild_id, instance_rows.guild_name, instance_rows.has_youtube_video, instance_rows.duplicate_group_id, instance_rows.run_id, instance_rows.recorder_name, instance_rows.difficulty_name, instance_rows.max_players, instance_rows.dynamic_difficulty, instance_rows.has_positions,
         ROW_NUMBER() OVER (
             PARTITION BY instance_rows.run_id
             ORDER BY
@@ -14607,12 +14787,22 @@ ranked_instances AS (
     JOIN matching_runs USING (run_id)
 ),
 selected_runs AS (
-    SELECT id, run_id, first_encounter_time
+    SELECT
+        id,
+        run_id,
+        first_encounter_time,
+        -- prefer_replay groups runs: replays, then videos, then the rest.
+        CASE
+            WHEN NOT $9::boolean THEN 0
+            WHEN has_positions THEN 0
+            WHEN has_youtube_video THEN 1
+            ELSE 2
+        END AS preference_rank
     FROM ranked_instances
     WHERE representative_rank = 1
-    ORDER BY first_encounter_time DESC, id DESC
-    LIMIT CASE WHEN $9::int > 0 THEN $9 ELSE NULL END
-    OFFSET $8
+    ORDER BY preference_rank ASC, first_encounter_time DESC, id DESC
+    LIMIT CASE WHEN $11::int > 0 THEN $11 ELSE NULL END
+    OFFSET $10
 )
 SELECT
     ranked_instances.id,
@@ -14636,10 +14826,12 @@ SELECT
     ranked_instances.recorder_name,
     ranked_instances.difficulty_name,
     ranked_instances.max_players,
-    ranked_instances.dynamic_difficulty
+    ranked_instances.dynamic_difficulty,
+    ranked_instances.has_positions
 FROM ranked_instances
 JOIN selected_runs USING (run_id)
 ORDER BY
+    selected_runs.preference_rank ASC,
     selected_runs.first_encounter_time DESC,
     selected_runs.id DESC,
     ranked_instances.representative_rank ASC
@@ -14653,6 +14845,8 @@ type ListRecentInstanceGroupsParams struct {
 	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
 	GuildID       uuid.UUID          `db:"guild_id" json:"guild_id"`
 	PlayerGuid    guid.GUID          `db:"player_guid" json:"player_guid"`
+	HasPositions  bool               `db:"has_positions" json:"has_positions"`
+	PreferReplay  bool               `db:"prefer_replay" json:"prefer_replay"`
 	OffsetCount   int32              `db:"offset_count" json:"offset_count"`
 	LimitCount    int32              `db:"limit_count" json:"limit_count"`
 }
@@ -14680,6 +14874,7 @@ type ListRecentInstanceGroupsRow struct {
 	DifficultyName     string             `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers         int32              `db:"max_players" json:"max_players"`
 	DynamicDifficulty  int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
+	HasPositions       bool               `db:"has_positions" json:"has_positions"`
 }
 
 // Pages logical runs, then returns every upload in each selected duplicate group.
@@ -14694,6 +14889,8 @@ func (q *sqlQuerier) ListRecentInstanceGroups(ctx context.Context, arg ListRecen
 		arg.RealmID,
 		arg.GuildID,
 		arg.PlayerGuid,
+		arg.HasPositions,
+		arg.PreferReplay,
 		arg.OffsetCount,
 		arg.LimitCount,
 	)
@@ -14727,6 +14924,7 @@ func (q *sqlQuerier) ListRecentInstanceGroups(ctx context.Context, arg ListRecen
 			&i.DifficultyName,
 			&i.MaxPlayers,
 			&i.DynamicDifficulty,
+			&i.HasPositions,
 		); err != nil {
 			return nil, err
 		}
@@ -21491,7 +21689,7 @@ func (q *sqlQuerier) UpsertPendingModificationRequest(ctx context.Context, arg U
 }
 
 const findMatchingServerUpload = `-- name: FindMatchingServerUpload :one
-SELECT wlg.id, wlg.owner, wlg.created_at, wlg.updated_at, wlg.log_type, wlg.format, wlg.flavor, wlg.invalidated_at, wlg.invalid_reason, wlg.parse_generation, wlg.unlisted
+SELECT wlg.id, wlg.owner, wlg.created_at, wlg.updated_at, wlg.log_type, wlg.format, wlg.flavor, wlg.invalidated_at, wlg.invalid_reason, wlg.parse_generation, wlg.unlisted, wlg.upload_source, wlg.sidekick_installation_id
 FROM wow_log_groups wlg
 JOIN server_upload_meta sm ON sm.log_group_id = wlg.id
 WHERE wlg.owner = $1
@@ -21537,6 +21735,8 @@ func (q *sqlQuerier) FindMatchingServerUpload(ctx context.Context, arg FindMatch
 		&i.InvalidReason,
 		&i.ParseGeneration,
 		&i.Unlisted,
+		&i.UploadSource,
+		&i.SidekickInstallationID,
 	)
 	return i, err
 }
@@ -21680,6 +21880,22 @@ func (q *sqlQuerier) GetSharedViewByInstanceAndHash(ctx context.Context, arg Get
 	return i, err
 }
 
+const countSidekickLogGroupsByUser = `-- name: CountSidekickLogGroupsByUser :one
+SELECT COUNT(*)
+FROM wow_log_groups g
+JOIN sidekick_installations si ON si.id = g.sidekick_installation_id
+WHERE si.user_id = $1
+`
+
+// Log groups uploaded by any of the user's Sidekick installations; 1 right
+// after an upload means it was the account's first (the first_upload event).
+func (q *sqlQuerier) CountSidekickLogGroupsByUser(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countSidekickLogGroupsByUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteSidekickConfigOverride = `-- name: DeleteSidekickConfigOverride :one
 DELETE FROM sidekick_config_overrides sco
 USING sidekick_installations si
@@ -21728,7 +21944,7 @@ SET disconnected_at = NOW(),
 WHERE id = $1
   AND user_id = $2
   AND disconnected_at IS NULL
-RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at, utm_source, utm_medium, utm_campaign, utm_content
 `
 
 type DisconnectSidekickInstallationParams struct {
@@ -21750,6 +21966,10 @@ func (q *sqlQuerier) DisconnectSidekickInstallation(ctx context.Context, arg Dis
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UtmSource,
+		&i.UtmMedium,
+		&i.UtmCampaign,
+		&i.UtmContent,
 	)
 	return i, err
 }
@@ -21788,7 +22008,7 @@ func (q *sqlQuerier) GetSidekickConfigOverride(ctx context.Context, arg GetSidek
 }
 
 const getSidekickInstallationByUser = `-- name: GetSidekickInstallationByUser :one
-SELECT id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+SELECT id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at, utm_source, utm_medium, utm_campaign, utm_content
 FROM sidekick_installations
 WHERE id = $1
   AND user_id = $2
@@ -21813,6 +22033,10 @@ func (q *sqlQuerier) GetSidekickInstallationByUser(ctx context.Context, arg GetS
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UtmSource,
+		&i.UtmMedium,
+		&i.UtmCampaign,
+		&i.UtmContent,
 	)
 	return i, err
 }
@@ -21858,7 +22082,7 @@ func (q *sqlQuerier) InsertSidekickOAuthGrant(ctx context.Context, arg InsertSid
 }
 
 const listSidekickInstallationsByUser = `-- name: ListSidekickInstallationsByUser :many
-SELECT id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+SELECT id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at, utm_source, utm_medium, utm_campaign, utm_content
 FROM sidekick_installations
 WHERE user_id = $1
 ORDER BY disconnected_at NULLS FIRST, created_at DESC
@@ -21884,6 +22108,10 @@ func (q *sqlQuerier) ListSidekickInstallationsByUser(ctx context.Context, userID
 			&i.DisconnectedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UtmSource,
+			&i.UtmMedium,
+			&i.UtmCampaign,
+			&i.UtmContent,
 		); err != nil {
 			return nil, err
 		}
@@ -21979,7 +22207,7 @@ SET name = $1,
 WHERE id = $2
   AND user_id = $3
   AND disconnected_at IS NULL
-RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at, utm_source, utm_medium, utm_campaign, utm_content
 `
 
 type RenameSidekickInstallationParams struct {
@@ -22002,6 +22230,10 @@ func (q *sqlQuerier) RenameSidekickInstallation(ctx context.Context, arg RenameS
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UtmSource,
+		&i.UtmMedium,
+		&i.UtmCampaign,
+		&i.UtmContent,
 	)
 	return i, err
 }
@@ -22055,6 +22287,42 @@ func (q *sqlQuerier) RevokeActiveSidekickOAuthGrants(ctx context.Context, sideki
 	return items, nil
 }
 
+const setSidekickInstallationCampaign = `-- name: SetSidekickInstallationCampaign :exec
+UPDATE sidekick_installations
+SET utm_source = $1,
+    utm_medium = $2,
+    utm_campaign = $3,
+    utm_content = $4
+WHERE id = $5
+  AND user_id = $6
+  AND utm_source IS NULL
+  AND utm_medium IS NULL
+  AND utm_campaign IS NULL
+  AND utm_content IS NULL
+`
+
+type SetSidekickInstallationCampaignParams struct {
+	UtmSource   pgtype.Text `db:"utm_source" json:"utm_source"`
+	UtmMedium   pgtype.Text `db:"utm_medium" json:"utm_medium"`
+	UtmCampaign pgtype.Text `db:"utm_campaign" json:"utm_campaign"`
+	UtmContent  pgtype.Text `db:"utm_content" json:"utm_content"`
+	ID          uuid.UUID   `db:"id" json:"id"`
+	UserID      uuid.UUID   `db:"user_id" json:"user_id"`
+}
+
+// The first campaign wins: a row that already holds any utm_* is left as is.
+func (q *sqlQuerier) SetSidekickInstallationCampaign(ctx context.Context, arg SetSidekickInstallationCampaignParams) error {
+	_, err := q.db.Exec(ctx, setSidekickInstallationCampaign,
+		arg.UtmSource,
+		arg.UtmMedium,
+		arg.UtmCampaign,
+		arg.UtmContent,
+		arg.ID,
+		arg.UserID,
+	)
+	return err
+}
+
 const touchSidekickUpload = `-- name: TouchSidekickUpload :execrows
 UPDATE sidekick_installations
 SET last_seen_at = NOW(),
@@ -22087,7 +22355,7 @@ SET platform = $1,
 WHERE id = $3
   AND user_id = $4
   AND disconnected_at IS NULL
-RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at, utm_source, utm_medium, utm_campaign, utm_content
 `
 
 type UpdateSidekickHeartbeatParams struct {
@@ -22116,6 +22384,10 @@ func (q *sqlQuerier) UpdateSidekickHeartbeat(ctx context.Context, arg UpdateSide
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UtmSource,
+		&i.UtmMedium,
+		&i.UtmCampaign,
+		&i.UtmContent,
 	)
 	return i, err
 }
@@ -22216,7 +22488,7 @@ ON CONFLICT (id) DO UPDATE SET
   disconnected_at = NULL,
   updated_at = NOW()
 WHERE sidekick_installations.user_id = EXCLUDED.user_id
-RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at
+RETURNING id, user_id, name, platform, version, last_seen_at, last_upload_at, disconnected_at, created_at, updated_at, utm_source, utm_medium, utm_campaign, utm_content
 `
 
 type UpsertSidekickInstallationParams struct {
@@ -22247,6 +22519,10 @@ func (q *sqlQuerier) UpsertSidekickInstallation(ctx context.Context, arg UpsertS
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UtmSource,
+		&i.UtmMedium,
+		&i.UtmCampaign,
+		&i.UtmContent,
 	)
 	return i, err
 }
@@ -22285,7 +22561,7 @@ func (q *sqlQuerier) UpsertSidekickWoWDirectory(ctx context.Context, arg UpsertS
 }
 
 const getSiteConfig = `-- name: GetSiteConfig :one
-SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled FROM site_config WHERE id = TRUE
+SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, landing_featured_instance_id FROM site_config WHERE id = TRUE
 `
 
 func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
@@ -22302,6 +22578,7 @@ func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
 		&i.ClientUploadsDisabled,
 		&i.ParseConfig,
 		&i.AdsEnabled,
+		&i.LandingFeaturedInstanceID,
 	)
 	return i, err
 }
@@ -22317,7 +22594,7 @@ UPDATE site_config SET
     ads_enabled = COALESCE($7, ads_enabled),
     updated_at = now()
 WHERE id = TRUE
-RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled
+RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, landing_featured_instance_id
 `
 
 type UpdateSiteConfigParams struct {
@@ -22352,6 +22629,35 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 		&i.ClientUploadsDisabled,
 		&i.ParseConfig,
 		&i.AdsEnabled,
+		&i.LandingFeaturedInstanceID,
+	)
+	return i, err
+}
+
+const updateSiteConfigLandingFeaturedInstance = `-- name: UpdateSiteConfigLandingFeaturedInstance :one
+UPDATE site_config SET
+    landing_featured_instance_id = $1::uuid,
+    updated_at = now()
+WHERE id = TRUE
+RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, ads_enabled, landing_featured_instance_id
+`
+
+// NULL clears the setting, so this cannot share UpdateSiteConfig's COALESCE pattern.
+func (q *sqlQuerier) UpdateSiteConfigLandingFeaturedInstance(ctx context.Context, landingFeaturedInstanceID uuid.NullUUID) (SiteConfig, error) {
+	row := q.db.QueryRow(ctx, updateSiteConfigLandingFeaturedInstance, landingFeaturedInstanceID)
+	var i SiteConfig
+	err := row.Scan(
+		&i.ID,
+		&i.SignupsEnabled,
+		&i.UpdatedAt,
+		&i.Branding,
+		&i.Discoverable,
+		&i.DefaultFormat,
+		&i.AvailableFormats,
+		&i.ClientUploadsDisabled,
+		&i.ParseConfig,
+		&i.AdsEnabled,
+		&i.LandingFeaturedInstanceID,
 	)
 	return i, err
 }
@@ -22936,23 +23242,63 @@ func (q *sqlQuerier) SpeedrunGuildClears(ctx context.Context, arg SpeedrunGuildC
 }
 
 const speedrunInstanceBoards = `-- name: SpeedrunInstanceBoards :many
-SELECT DISTINCT sr.instance_name, li.difficulty_name
-FROM instance_speedruns sr
-JOIN log_instances li ON li.id = sr.instance_id
-JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
-JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
-WHERE sr.qualified = true
-  AND sr.boss_to_boss_duration_ms IS NOT NULL
-ORDER BY sr.instance_name, li.difficulty_name
+WITH boards AS (
+    SELECT DISTINCT sr.instance_name, li.difficulty_name
+    FROM instance_speedruns sr
+    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+    JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+    WHERE sr.qualified = true
+      AND sr.boss_to_boss_duration_ms IS NOT NULL
+)
+SELECT
+    boards.instance_name,
+    boards.difficulty_name,
+    COALESCE(record.duration_ms, 0)::bigint AS record_duration_ms,
+    record.completion_time AS record_completion_time,
+    COALESCE(record.guild_name, '')::text AS record_guild_name,
+    COALESCE(record.instance_id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS record_instance_id,
+    COALESCE(record.has_positions, false)::boolean AS record_has_positions
+FROM boards
+LEFT JOIN LATERAL (
+    SELECT
+        COALESCE(sr.ranked_duration_ms, sr.duration_ms)::bigint AS duration_ms,
+        COALESCE(sr.ranked_completion_time, sr.completion_time)::timestamptz AS completion_time,
+        g.name AS guild_name,
+        sr.instance_id,
+        ('unit-position' = ANY(li.capabilities)) AS has_positions
+    FROM instance_speedruns sr
+    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+    JOIN guilds g ON sr.guild_id = g.id
+    JOIN wow_server_realms wsr ON sr.realm_id = wsr.id
+    LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
+    WHERE sr.instance_name = boards.instance_name
+      AND li.difficulty_name = boards.difficulty_name
+      AND sr.qualified = true
+      AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
+      AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
+    ORDER BY COALESCE(sr.ranked_duration_ms, sr.duration_ms) ASC
+    LIMIT 1
+) record ON true
+ORDER BY boards.instance_name, boards.difficulty_name
 `
 
 type SpeedrunInstanceBoardsRow struct {
-	InstanceName   string `db:"instance_name" json:"instance_name"`
-	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+	InstanceName         string             `db:"instance_name" json:"instance_name"`
+	DifficultyName       string             `db:"difficulty_name" json:"difficulty_name"`
+	RecordDurationMs     int64              `db:"record_duration_ms" json:"record_duration_ms"`
+	RecordCompletionTime pgtype.Timestamptz `db:"record_completion_time" json:"record_completion_time"`
+	RecordGuildName      string             `db:"record_guild_name" json:"record_guild_name"`
+	RecordInstanceID     uuid.UUID          `db:"record_instance_id" json:"record_instance_id"`
+	RecordHasPositions   bool               `db:"record_has_positions" json:"record_has_positions"`
 }
 
 // Returns distinct (instance, difficulty) boards that have at least one
 // qualified speedrun. Each difficulty has its own leaderboard.
+// Each board carries its record: the first place of SpeedrunLeaderboard with
+// full timing and no filters (zero/NULL record columns when no run ranks there),
+// with its instance and whether its log recorded unit positions (a replay).
 // JOINs wow_server_realms so RLS tenant filtering cascades.
 func (q *sqlQuerier) SpeedrunInstanceBoards(ctx context.Context) ([]SpeedrunInstanceBoardsRow, error) {
 	rows, err := q.db.Query(ctx, speedrunInstanceBoards)
@@ -22963,7 +23309,15 @@ func (q *sqlQuerier) SpeedrunInstanceBoards(ctx context.Context) ([]SpeedrunInst
 	var items []SpeedrunInstanceBoardsRow
 	for rows.Next() {
 		var i SpeedrunInstanceBoardsRow
-		if err := rows.Scan(&i.InstanceName, &i.DifficultyName); err != nil {
+		if err := rows.Scan(
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.RecordDurationMs,
+			&i.RecordCompletionTime,
+			&i.RecordGuildName,
+			&i.RecordInstanceID,
+			&i.RecordHasPositions,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -26076,7 +26430,7 @@ UPDATE wow_log_groups
 SET unlisted = true,
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason, parse_generation, unlisted
+RETURNING id, owner, created_at, updated_at, log_type, format, flavor, invalidated_at, invalid_reason, parse_generation, unlisted, upload_source, sidekick_installation_id
 `
 
 func (q *sqlQuerier) MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) (WoWLogGroup, error) {
@@ -26094,6 +26448,8 @@ func (q *sqlQuerier) MarkWoWLogGroupUnlisted(ctx context.Context, id uuid.UUID) 
 		&i.InvalidReason,
 		&i.ParseGeneration,
 		&i.Unlisted,
+		&i.UploadSource,
+		&i.SidekickInstallationID,
 	)
 	return i, err
 }

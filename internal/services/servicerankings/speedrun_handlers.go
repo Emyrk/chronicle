@@ -94,7 +94,8 @@ func (s *Service) handleSpeedrunLeaderboard(w http.ResponseWriter, r *http.Reque
 }
 
 // handleSpeedrunInstances returns the list of (instance, difficulty) boards
-// that have qualified speedruns. Each difficulty has its own board.
+// that have qualified speedruns, each with its record. Each difficulty has its
+// own board.
 //
 //	GET /speedrun/instances
 func (s *Service) handleSpeedrunInstances(w http.ResponseWriter, r *http.Request) {
@@ -116,6 +117,15 @@ func (s *Service) handleSpeedrunInstances(w http.ResponseWriter, r *http.Request
 		boards[i] = chroniclesdk.SpeedrunInstanceBoard{
 			InstanceName:   row.InstanceName,
 			DifficultyName: row.DifficultyName,
+		}
+		if row.RecordCompletionTime.Valid {
+			boards[i].Record = &chroniclesdk.SpeedrunBoardRecord{
+				DurationMs:     row.RecordDurationMs,
+				CompletionTime: row.RecordCompletionTime.Time,
+				GuildName:      row.RecordGuildName,
+				InstanceID:     row.RecordInstanceID,
+				HasPositions:   row.RecordHasPositions,
+			}
 		}
 	}
 

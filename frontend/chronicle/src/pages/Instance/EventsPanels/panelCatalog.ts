@@ -35,6 +35,7 @@ export const PANEL_AI_DESCRIPTIONS: Record<BuiltinPanelType, string> = {
   timeline: "Plots selected damage, healing, resource, extra-attack, or death metrics over encounter time.",
   map: "Interactive encounter map and replay showing unit movement, positions, routes, and spatial events.",
   mini_map: "Compact encounter map and replay for reviewing spatial positioning and movement.",
+  threat: "Estimated threat table on an enemy (logs carry no threat): per-class stance, form and buff modifiers, heals, taunts, threat drops, the inferred tank and 110%/130% pull lines.",
   raid_frames: "Replay-oriented raid frames showing health, resources, casts, and unit state over time.",
   activity_log: "Chronological human-readable log of selected damage, healing, aura, and cast activity.",
   status: "Visualizes player and enemy health, casts, shields, and related status timelines around combat events.",

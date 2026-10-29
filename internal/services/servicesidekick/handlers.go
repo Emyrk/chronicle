@@ -333,4 +333,36 @@ func (s *Service) RecordUpload(ctx context.Context) {
 	}); err != nil {
 		s.logger.ErrorContext(ctx, "record sidekick upload", "sidekick_id", installationID, "error", err)
 	}
+	// The landing funnel's first_upload (docs/landing-funnel-events.md): the
+	// account's first log group from any Sidekick, with the campaign stored on
+	// the installation. No user identifiers.
+	count, err := s.zed.CountSidekickLogGroupsByUser(ctx, claims.Subject)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "count sidekick log groups", "sidekick_id", installationID, "error", err)
+		return
+	}
+	if count != 1 {
+		return
+	}
+	attrs := []any{"event", "first_upload"}
+	installation, err := s.zed.GetSidekickInstallationByUser(ctx, database.GetSidekickInstallationByUserParams{
+		SidekickID: installationID, UserID: claims.Subject,
+	})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "get sidekick installation campaign", "sidekick_id", installationID, "error", err)
+	}
+	for _, field := range []struct {
+		key   string
+		value pgtype.Text
+	}{
+		{"utm_campaign", installation.UtmCampaign},
+		{"utm_content", installation.UtmContent},
+		{"utm_medium", installation.UtmMedium},
+		{"utm_source", installation.UtmSource},
+	} {
+		if field.value.Valid {
+			attrs = append(attrs, field.key, field.value.String)
+		}
+	}
+	s.logger.InfoContext(ctx, "funnel event", attrs...)
 }

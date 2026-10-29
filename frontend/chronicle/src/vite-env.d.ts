@@ -7,6 +7,10 @@ interface Window {
 
 interface ImportMetaEnv {
   readonly VITE_SERVER_NAME: string;
+  /** /start hero: the featured public instance replayed in 3D (unset: the poster only). */
+  readonly VITE_LANDING_FEATURED_INSTANCE?: string;
+  /** /start hero: seconds into the featured run where the replay starts. */
+  readonly VITE_LANDING_FEATURED_START_S?: string;
   readonly CHRONICLE_PREVIEW_ADS: boolean;
   readonly CHRONICLE_PREVIEW_ADS_DEMO: boolean;
 }

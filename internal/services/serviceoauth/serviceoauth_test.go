@@ -1,9 +1,11 @@
 package serviceoauth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -95,6 +97,112 @@ func TestDevicePageRedirectsSignedOutUsersToLogin(t *testing.T) {
 	service.serveBrowserApproval(recorder, httptest.NewRequest(http.MethodGet, "/oauth/device?user_code=ABCD-EFGH", nil))
 	require.Equal(t, http.StatusSeeOther, recorder.Code)
 	require.Equal(t, "/login?from=%2Foauth%2Fdevice%3Fuser_code%3DABCD-EFGH", recorder.Header().Get("Location"))
+}
+
+func TestDevicePageCarriesCampaignThroughLogin(t *testing.T) {
+	t.Parallel()
+	service := &Service{}
+	service.SetBrowserAuth()
+
+	req := httptest.NewRequest(http.MethodGet, "/oauth/device?user_code=ABCD-EFGH", nil)
+	req.AddCookie(&http.Cookie{Name: utmCookie, Value: url.QueryEscape("utm_source=x&utm_content=A&other=1")})
+	recorder := httptest.NewRecorder()
+	service.serveBrowserApproval(recorder, req)
+	require.Equal(t, http.StatusSeeOther, recorder.Code)
+	require.Equal(t, "/login?from="+url.QueryEscape("/oauth/device?user_code=ABCD-EFGH&utm_content=A&utm_source=x"), recorder.Header().Get("Location"))
+}
+
+func TestDeviceApprovalLogsPairCompleteWithCampaign(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	db, _ := dbtestutil.NewDB(t)
+	service := &Service{}
+	require.NoError(t, service.configure(ctx, db, "https://chronicle.example"))
+	var logs bytes.Buffer
+	service.logger = slog.New(slog.NewJSONHandler(&logs, nil))
+
+	userID := uuid.New()
+	_, err := db.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "pair-user"})
+	require.NoError(t, err)
+	service.SetBrowserAuth(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r.WithContext(chronauth.WithClaims(r.Context(), &claims.Claims{Subject: userID})))
+		})
+	})
+	device := postForm[deviceAuthorizationResponse](t, service, "/device/authorize", url.Values{
+		"client_id": {ClientID},
+		"scope":     {ScopeAll},
+	}, http.StatusOK)
+
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/device", strings.NewReader(url.Values{
+		"user_code": {device.UserCode},
+		"decision":  {"approve"},
+	}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: utmCookie, Value: url.QueryEscape("utm_source=reddit&utm_content=hero-a&other=1")})
+	rec := httptest.NewRecorder()
+	service.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var event map[string]any
+	require.NoError(t, json.Unmarshal(logs.Bytes(), &event), logs.String())
+	require.Equal(t, "funnel event", event["msg"])
+	require.Equal(t, "pair_complete", event["event"])
+	require.Equal(t, "reddit", event["utm_source"])
+	require.Equal(t, "hero-a", event["utm_content"])
+	require.NotContains(t, event, "other")
+	require.NotContains(t, logs.String(), userID.String())
+}
+
+func TestDeviceApprovalStoresFirstCampaignOnInstallation(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	db, _ := dbtestutil.NewDB(t)
+	service := &Service{}
+	require.NoError(t, service.configure(ctx, db, "https://chronicle.example"))
+
+	userID := uuid.New()
+	_, err := db.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "campaign-user"})
+	require.NoError(t, err)
+	service.SetBrowserAuth(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r.WithContext(chronauth.WithClaims(r.Context(), &claims.Claims{Subject: userID})))
+		})
+	})
+	installationID := uuid.New()
+	approve := func(campaign string) database.SidekickInstallation {
+		device := postForm[deviceAuthorizationResponse](t, service, "/device/authorize", url.Values{
+			"client_id":         {ClientID},
+			"scope":             {ScopeAll},
+			installationIDParam: {installationID.String()},
+		}, http.StatusOK)
+		req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/device", strings.NewReader(url.Values{
+			"user_code": {device.UserCode},
+			"decision":  {"approve"},
+		}.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(&http.Cookie{Name: utmCookie, Value: url.QueryEscape(campaign)})
+		rec := httptest.NewRecorder()
+		service.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		installation, err := db.GetSidekickInstallationByUser(ctx, database.GetSidekickInstallationByUserParams{
+			SidekickID: installationID, UserID: userID,
+		})
+		require.NoError(t, err)
+		return installation
+	}
+
+	first := approve("utm_source=reddit&utm_medium=paid&utm_campaign=launch&utm_content=hero-a&utm_term=raid")
+	require.Equal(t, pgtype.Text{String: "reddit", Valid: true}, first.UtmSource)
+	require.Equal(t, pgtype.Text{String: "paid", Valid: true}, first.UtmMedium)
+	require.Equal(t, pgtype.Text{String: "launch", Valid: true}, first.UtmCampaign)
+	require.Equal(t, pgtype.Text{String: "hero-a", Valid: true}, first.UtmContent)
+
+	again := approve("utm_source=youtube&utm_content=hero-b")
+	require.Equal(t, first.UtmSource, again.UtmSource)
+	require.Equal(t, first.UtmMedium, again.UtmMedium)
+	require.Equal(t, first.UtmCampaign, again.UtmCampaign)
+	require.Equal(t, first.UtmContent, again.UtmContent)
 }
 
 func TestDeviceAuthorizationRefreshAndRevocation(t *testing.T) {

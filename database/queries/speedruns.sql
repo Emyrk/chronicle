@@ -232,15 +232,50 @@ OFFSET @result_offset::bigint;
 -- name: SpeedrunInstanceBoards :many
 -- Returns distinct (instance, difficulty) boards that have at least one
 -- qualified speedrun. Each difficulty has its own leaderboard.
+-- Each board carries its record: the first place of SpeedrunLeaderboard with
+-- full timing and no filters (zero/NULL record columns when no run ranks there),
+-- with its instance and whether its log recorded unit positions (a replay).
 -- JOINs wow_server_realms so RLS tenant filtering cascades.
-SELECT DISTINCT sr.instance_name, li.difficulty_name
-FROM instance_speedruns sr
-JOIN log_instances li ON li.id = sr.instance_id
-JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
-JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
-WHERE sr.qualified = true
-  AND sr.boss_to_boss_duration_ms IS NOT NULL
-ORDER BY sr.instance_name, li.difficulty_name;
+WITH boards AS (
+    SELECT DISTINCT sr.instance_name, li.difficulty_name
+    FROM instance_speedruns sr
+    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+    JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+    WHERE sr.qualified = true
+      AND sr.boss_to_boss_duration_ms IS NOT NULL
+)
+SELECT
+    boards.instance_name,
+    boards.difficulty_name,
+    COALESCE(record.duration_ms, 0)::bigint AS record_duration_ms,
+    record.completion_time AS record_completion_time,
+    COALESCE(record.guild_name, '')::text AS record_guild_name,
+    COALESCE(record.instance_id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS record_instance_id,
+    COALESCE(record.has_positions, false)::boolean AS record_has_positions
+FROM boards
+LEFT JOIN LATERAL (
+    SELECT
+        COALESCE(sr.ranked_duration_ms, sr.duration_ms)::bigint AS duration_ms,
+        COALESCE(sr.ranked_completion_time, sr.completion_time)::timestamptz AS completion_time,
+        g.name AS guild_name,
+        sr.instance_id,
+        ('unit-position' = ANY(li.capabilities)) AS has_positions
+    FROM instance_speedruns sr
+    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
+    JOIN guilds g ON sr.guild_id = g.id
+    JOIN wow_server_realms wsr ON sr.realm_id = wsr.id
+    LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
+    WHERE sr.instance_name = boards.instance_name
+      AND li.difficulty_name = boards.difficulty_name
+      AND sr.qualified = true
+      AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
+      AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
+    ORDER BY COALESCE(sr.ranked_duration_ms, sr.duration_ms) ASC
+    LIMIT 1
+) record ON true
+ORDER BY boards.instance_name, boards.difficulty_name;
 
 -- name: SpeedrunDifficulties :many
 -- Returns distinct difficulty names that have at least one qualified speedrun

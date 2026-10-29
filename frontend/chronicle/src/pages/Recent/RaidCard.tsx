@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Clock, Copy, Users, CheckCircle, XCircle, Youtube, Swords } from "lucide-react";
+import { Box, Clock, Copy, Users, CheckCircle, XCircle, Youtube, Swords } from "lucide-react";
 import type { RecentInstance } from "@/api/typesGenerated";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import { HeroicBadge } from "@/components/HeroicBadge";
@@ -38,9 +38,11 @@ interface RaidCardProps {
   bossCount?: number;
   /** Average guild parse for this raid; shown as a badge in the top-right corner. */
   parseScore?: number;
+  /** Shows an "Explore in 3D" action on runs with unit positions (the landing); the card still links to the run. */
+  onExplore?: (instance: RecentInstance) => void;
 }
 
-export function RaidCard({ instance, instances, bossCount, parseScore }: RaidCardProps) {
+export function RaidCard({ instance, instances, bossCount, parseScore, onExplore }: RaidCardProps) {
   const uploads = instances && instances.length > 0 ? instances : [instance];
   const [activeUploadIndex, setActiveUploadIndex] = useState(0);
   const [imageError, setImageError] = useState(false);
@@ -109,6 +111,17 @@ export function RaidCard({ instance, instances, bossCount, parseScore }: RaidCar
         </div>
       )}
 
+      {onExplore && activeInstance.has_positions && (
+        <button
+          type="button"
+          onClick={() => onExplore(activeInstance)}
+          className="absolute left-2 top-2 z-30 flex h-7 items-center gap-1.5 rounded-full border border-white/20 bg-black/75 px-2.5 text-xs font-semibold text-white shadow-lg backdrop-blur-md hover:border-primary hover:bg-black/90 focus-visible:border-primary focus-visible:outline-none"
+        >
+          <Box className="h-3.5 w-3.5" aria-hidden="true" />
+          Explore in 3D
+        </button>
+      )}
+
       <Link to={instanceUrl} className="block h-full">
         <div className="relative h-full rounded-lg overflow-hidden cursor-pointer transition-all hover:scale-[1.02] hover:shadow-xl">
         {/* Solid color fallback background */}
@@ -139,7 +152,7 @@ export function RaidCard({ instance, instances, bossCount, parseScore }: RaidCar
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/30" />
         
         {/* Badge stack - top right corner */}
-        {(parseScore !== undefined || activeInstance.has_youtube_video || isHeroic(activeInstance)) && (
+        {(parseScore !== undefined || activeInstance.has_positions || activeInstance.has_youtube_video || isHeroic(activeInstance)) && (
           <div className={`absolute right-2 z-20 flex flex-col items-end gap-1.5 ${uploads.length > 1 ? "top-11" : "top-2"}`}>
             {parseScore !== undefined && (
               <div
@@ -147,6 +160,12 @@ export function RaidCard({ instance, instances, bossCount, parseScore }: RaidCar
                 title="Average guild parse for this raid"
               >
                 {Math.round(parseScore)}
+              </div>
+            )}
+            {activeInstance.has_positions && (
+              <div className="flex items-center gap-1.5 bg-sky-600/75 backdrop-blur-sm text-white/85 px-2 py-1 rounded shadow-lg" title="Has a 3D replay">
+                <Box className="h-4 w-4" />
+                <span className="text-xs font-semibold">3D replay</span>
               </div>
             )}
             {activeInstance.has_youtube_video && (

@@ -1,5 +1,9 @@
 const FOCUS_PREFIX = "f:";
 const NO_RANKS_TOKEN = "noranks";
+/** Show the meter as bars only: names, no columns, a click opens the full preset (the Watch preset). */
+export const METER_BARS_PANEL_OPTION = "bars";
+/** Show the meter as compact rows with value + share columns and "+N more" (the landing column, the hero's glass meter). */
+export const METER_VALUES_PANEL_OPTION = "values";
 const MAX_OPTION_LENGTH = 4096;
 const MAX_TOKEN_LENGTH = 1024;
 
@@ -24,6 +28,14 @@ export function parseMetricPanelLiveState(option: string | null | undefined): Me
     focusedEntityId,
     showRanks: !tokens.includes(NO_RANKS_TOKEN),
   };
+}
+
+export function isMeterBarsOption(option: string | null | undefined): boolean {
+  return parseTokens(option).includes(METER_BARS_PANEL_OPTION);
+}
+
+export function isMeterValuesOption(option: string | null | undefined): boolean {
+  return parseTokens(option).includes(METER_VALUES_PANEL_OPTION);
 }
 
 export function updateMetricPanelLiveState(
