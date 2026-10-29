@@ -279,7 +279,7 @@ func (s *Service) listIndividualLeaderboard(w http.ResponseWriter, r *http.Reque
 	}
 
 	metric := normalizeIndividualLeaderboardMetric(q.Get("metric"))
-	rows, err := s.db.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
+	rows, err := s.db.RankingsLeaderboardNoJIT(ctx, database.RankingsLeaderboardParams{
 		Metric:           metric,
 		QueryOffset:      offset,
 		QueryLimit:       limit,

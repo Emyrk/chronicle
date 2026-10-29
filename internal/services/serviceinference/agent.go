@@ -258,7 +258,7 @@ func (s *Service) executeTool(ctx context.Context, tc toolContext, name, args st
 		if in.Encounter != "" {
 			encounters = []string{in.Encounter}
 		}
-		rows, err := s.db.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{Metric: in.Metric, QueryLimit: in.Limit, Class: in.Class, Spec: in.Spec, Role: in.Role, InstanceNames: []string{in.InstanceName}, EncounterNames: encounters, SinceDays: 0, HideUnknowns: true})
+		rows, err := s.db.RankingsLeaderboardNoJIT(ctx, database.RankingsLeaderboardParams{Metric: in.Metric, QueryLimit: in.Limit, Class: in.Class, Spec: in.Spec, Role: in.Role, InstanceNames: []string{in.InstanceName}, EncounterNames: encounters, SinceDays: 0, HideUnknowns: true})
 		if err != nil {
 			return "", err
 		}

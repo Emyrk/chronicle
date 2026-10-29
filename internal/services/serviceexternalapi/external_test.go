@@ -78,7 +78,7 @@ func (f *fakeExternalAPIStore) ListExternalAPICharacterLogs(_ context.Context, p
 	f.logsParams = params
 	return f.logs, nil
 }
-func (f *fakeExternalAPIStore) RankingsLeaderboard(_ context.Context, params database.RankingsLeaderboardParams) ([]database.RankingsLeaderboardRow, error) {
+func (f *fakeExternalAPIStore) RankingsLeaderboardNoJIT(_ context.Context, params database.RankingsLeaderboardParams) ([]database.RankingsLeaderboardRow, error) {
 	f.dpsLeaderboardParams = params
 	return f.dpsLeaderboard, nil
 }
