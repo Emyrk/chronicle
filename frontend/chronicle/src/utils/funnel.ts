@@ -5,7 +5,7 @@ import { campaignParams } from "./utm";
 export type FunnelEvent = "land" | "hero_play_3s" | "scrub_or_bossjump" | "cta_sidekick" | "download_start";
 
 /** Where a Get Sidekick / Download click came from: /start, or the run page's Sidekick strip. */
-export type CtaPlacement = "nav" | "hero" | "band" | "ghost_card" | "run_strip";
+export type CtaPlacement = "nav" | "hero" | "band" | "ghost_card" | "koth" | "run_strip";
 
 /** Sends a funnel event, with the visitor's campaign utm_* params (from the URL, else the landing cookie). */
 export function trackFunnel(event: FunnelEvent, params: Record<string, string> = {}): void {
