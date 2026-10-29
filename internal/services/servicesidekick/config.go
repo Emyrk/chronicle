@@ -38,10 +38,10 @@ func (s *Service) accountConfig(ctx context.Context, userID uuid.UUID) (chronicl
 	payload, err := s.zed.GetSidekickAccountConfig(ctx, userID)
 	if err == nil {
 		config, err = decodeSidekickConfig(payload)
+		if err != nil {
+			return chroniclesdk.SidekickAccountConfigResponse{}, err
+		}
 	} else if !errors.Is(err, pgx.ErrNoRows) {
-		return chroniclesdk.SidekickAccountConfigResponse{}, err
-	}
-	if err != nil {
 		return chroniclesdk.SidekickAccountConfigResponse{}, err
 	}
 	hash, err := config.Hash()
