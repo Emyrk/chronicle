@@ -188,6 +188,18 @@ func (z *Authz) GuildRosterMembers(ctx context.Context, guildID uuid.UUID) ([]Gu
 	return members, nil
 }
 
+// GuildHasLeader reports whether the guild has at least one direct leader.
+func (z *Authz) GuildHasLeader(ctx context.Context, guildID uuid.UUID) (bool, error) {
+	f := rel.NewFilter("guild", guildID.String(), "leader")
+	for _, err := range z.spice.ReadRelationships(ctx, z.DefaultConsistencyStrategy(), f) {
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
 // AddGuildMember writes the member relation to SpiceDB only.
 func (z *Authz) AddGuildMember(ctx context.Context, guildID, userID uuid.UUID) error {
 	b := policy.New()

@@ -66,6 +66,8 @@ func (h *Handler) Routes() http.Handler {
 			r.With(h.proofPermission(false)).Post("/proofs", h.SubmitProof)
 			r.Get("/proofs/cooldown", h.GetMyProofCooldown)
 			r.Get("/proofs", h.ListMyProofs)
+			r.With(h.proofPermission(false)).Post("/guild-proofs", h.SubmitGuildProof)
+			r.Get("/guild-proofs/cooldown", h.GetMyGuildProofCooldown)
 			r.Put("/primary", h.SetMyPrimaryCharacter)
 			// Sync links from the deployment's external verification
 			// provider, and fetch the cached result of the last sync.

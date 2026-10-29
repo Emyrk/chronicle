@@ -29,7 +29,8 @@ func TestValidateSubjects(t *testing.T) {
 		subject Subject
 		valid   bool
 	}{
-		{"future guild", Subject{Type: "guild", Name: "My Guild"}, true},
+		{"guild missing ID", Subject{Type: "guild", Name: "My Guild"}, false},
+		{"guild", Subject{Type: "guild", GuildID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, Name: "My Guild"}, true},
 		{"missing type", Subject{Name: "Unknown"}, false},
 		{"character missing realm", Subject{Type: "character", CharacterGUID: &character}, false},
 		{"character missing GUID", Subject{Type: "character", RealmID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}, false},
@@ -98,7 +99,7 @@ func TestProofCooldownSerializesConcurrentTenants(t *testing.T) {
 	img.Set(0, 0, color.RGBA{R: 255, A: 255})
 	var photo bytes.Buffer
 	require.NoError(t, jpeg.Encode(&photo, img, nil))
-	subjects := []Subject{{Type: "guild", Name: "Example"}}
+	subjects := []Subject{{Type: "test", Name: "Example"}}
 	type outcome struct {
 		id  uuid.UUID
 		err error

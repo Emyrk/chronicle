@@ -13,12 +13,13 @@ type ProofCharacter struct {
 
 type ProofSubject struct {
 	ProofCharacter
-	Name      string `json:"name"`
-	RealmName string `json:"realm_name"`
-	Class     string `json:"class,omitempty"`
-	GuildName string `json:"guild_name,omitempty"`
-	Status    string `json:"status"`
-	Warning   string `json:"warning,omitempty"`
+	GuildID   *uuid.UUID `json:"guild_id,omitempty"`
+	Name      string     `json:"name"`
+	RealmName string     `json:"realm_name"`
+	Class     string     `json:"class,omitempty"`
+	GuildName string     `json:"guild_name,omitempty"`
+	Status    string     `json:"status"`
+	Warning   string     `json:"warning,omitempty"`
 }
 
 type ProofRequest struct {
@@ -62,7 +63,8 @@ type TenantProofGrant struct {
 
 type ProofDecision struct {
 	ProofCharacter
-	Approved bool `json:"approved"`
+	GuildID  *uuid.UUID `json:"guild_id,omitempty"`
+	Approved bool       `json:"approved"`
 }
 
 type DecideProofRequest struct {

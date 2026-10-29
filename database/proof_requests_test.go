@@ -112,3 +112,39 @@ func TestProofPendingCharacterIsExclusive(t *testing.T) {
 	require.EqualValues(t, 1, n)
 	require.NoError(t, insert(ids[1]))
 }
+
+func TestProofPendingGuildIsExclusive(t *testing.T) {
+	t.Parallel()
+	pool, db, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitShort)
+	userID := uuid.New()
+	_, err := db.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "guild-proof-" + userID.String()[:8]})
+	require.NoError(t, err)
+	guildID := uuid.New()
+	_, err = pool.Exec(ctx, "INSERT INTO guilds (id, realm_id, name) VALUES ($1, $2, $3)", guildID, realmID, "Claimable Guild")
+	require.NoError(t, err)
+
+	requestIDs := []uuid.UUID{uuid.New(), uuid.New()}
+	for _, id := range requestIDs {
+		_, err := db.InsertProofRequest(ctx, database.InsertProofRequestParams{
+			ID: id, TenantID: uuid.New(), ApplicantID: userID, Purpose: "guild-ownership", EvidenceKey: id.String() + ".jpg",
+		})
+		require.NoError(t, err)
+	}
+	insert := func(requestID uuid.UUID) error {
+		return db.InsertProofSubject(ctx, database.InsertProofSubjectParams{
+			RequestID: requestID, SubjectType: "guild", GuildID: uuid.NullUUID{UUID: guildID, Valid: true},
+			Name: "Claimable Guild", RealmName: "test-realm",
+		})
+	}
+	require.NoError(t, insert(requestIDs[0]))
+	require.True(t, database.IsUniqueViolation(insert(requestIDs[1]), database.UniqueProofRequestSubjectsPendingGuild))
+	subjects, err := db.ListProofSubjects(ctx, requestIDs[0])
+	require.NoError(t, err)
+	require.Len(t, subjects, 1)
+	require.Equal(t, guildID, subjects[0].GuildID.UUID)
+	n, err := db.DecideProofSubject(ctx, database.DecideProofSubjectParams{ID: subjects[0].ID, Status: "rejected"})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+	require.NoError(t, insert(requestIDs[1]))
+}

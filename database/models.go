@@ -2210,6 +2210,7 @@ type ProofRequestSubject struct {
 	RealmName     string        `db:"realm_name" json:"realm_name"`
 	Status        string        `db:"status" json:"status"`
 	Warning       string        `db:"warning" json:"warning"`
+	GuildID       uuid.NullUUID `db:"guild_id" json:"guild_id"`
 }
 
 type RaidComposition struct {

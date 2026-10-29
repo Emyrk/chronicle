@@ -1708,6 +1708,7 @@ export interface GuildInfo {
     readonly logo_url: string;
     readonly can_edit: boolean;
     readonly can_view_roster: boolean;
+    readonly can_claim: boolean;
 }
 
 // From chroniclesdk/guild_page.go
@@ -3340,6 +3341,7 @@ export interface ProofCooldownResponse {
 
 // From chroniclesdk/proofs.go
 export interface ProofDecision extends ProofCharacter {
+    readonly guild_id?: string;
     readonly approved: boolean;
 }
 
@@ -3365,6 +3367,7 @@ export interface ProofRequest {
 
 // From chroniclesdk/proofs.go
 export interface ProofSubject extends ProofCharacter {
+    readonly guild_id?: string;
     readonly name: string;
     readonly realm_name: string;
     readonly class?: string;

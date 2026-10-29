@@ -37,7 +37,7 @@ const tabs: Tab[] = [
   { path: "/admin/logs", label: "Logs", icon: FileText },
   { path: "/admin/leaderboard", label: "Leaderboard", icon: Trophy },
   { path: "/admin/site-settings", label: "Site Settings", icon: Shield },
-  { path: "/admin/photo-proofs", label: "Photo Proof Review", icon: Camera },
+  { path: "/admin/photo-proofs", label: "Proof Review", icon: Camera },
   { path: "/admin/users", label: "Manage Users", icon: Users },
   { path: "/admin/storage", label: "Storage Grants", icon: HardDrive },
   { path: "/admin/regression", label: "Regression", icon: FlaskConical },

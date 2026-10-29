@@ -16,6 +16,8 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/authzed/gochugaru/rel"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -250,15 +252,29 @@ func (api *API) GetGuildPage(w http.ResponseWriter, r *http.Request) {
 
 	canEdit := false
 	canViewRoster := false
+	canClaim := false
 	// Check if user can edit
 	// TODO: This should be an auth check call
 	actor, ok := authz.ActorFromContext(ctx)
 	if ok {
-		zg := policy.New().Guild(guild.ID)
-		results, err := api.Zed.Check(ctx, nil, zg.CanAdmin_guild_User(actor), zg.CanView_chronicle_roster_User(actor))
-		if err == nil && len(results) == 2 {
+		builder := policy.New()
+		zg := builder.Guild(guild.ID)
+		checks := []rel.Interface{zg.CanAdmin_guild_User(actor), zg.CanView_chronicle_roster_User(actor)}
+		if tenant := servicetenant.TenantFromContext(ctx); tenant != nil {
+			checks = append(checks, builder.Wow_tenant(tenant.ID).CanSubmit_photo_proof_User(actor))
+		}
+		results, err := api.Zed.Check(ctx, nil, checks...)
+		if err == nil && len(results) >= 2 {
 			canEdit = results[0]
 			canViewRoster = results[1]
+		}
+		if !canEdit && len(results) == 3 && results[2] {
+			hasLeader, err := api.Zed.GuildHasLeader(ctx, guild.ID)
+			if err != nil {
+				httpapi.InternalServerError(w, err)
+				return
+			}
+			canClaim = !hasLeader
 		}
 	}
 
@@ -270,6 +286,7 @@ func (api *API) GetGuildPage(w http.ResponseWriter, r *http.Request) {
 		HasPage:       true,
 		CanEdit:       canEdit,
 		CanViewRoster: canViewRoster,
+		CanClaim:      canClaim,
 	}
 
 	page, err := api.Opts.Zed.GetFullGuildPage(ctx, guild.ID)

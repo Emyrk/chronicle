@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { BadgeCheck, Check, ChevronLeft, ChevronRight, Server, User, X } from "lucide-react";
+import { BadgeCheck, Check, ChevronLeft, ChevronRight, Crown, Server, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ProofRequest } from "@/pages/Settings/PhotoProof";
@@ -11,7 +11,11 @@ import { getClassColorVar } from "@/pages/ArmoryPage/types";
 type Draft = { choices: Record<string, boolean>; message: string };
 const EMPTY_DRAFT: Draft = { choices: {}, message: "" };
 
-const subjectKey = (subject: { realm_id: string; character_guid: string }) => `${subject.realm_id}/${subject.character_guid}`;
+type ProofSubject = ProofRequest["subjects"][number];
+
+const subjectKey = (subject: ProofSubject) => subject.guild_id
+  ? `guild/${subject.guild_id}`
+  : `character/${subject.realm_id}/${subject.character_guid}`;
 
 function TenantBadge({ request, large = false }: { request: ProofRequest; large?: boolean }) {
   return <span className={cn("inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 font-medium text-primary", large ? "px-3 py-1 text-base" : "px-2 py-0.5 text-sm")} title={`Tenant ${request.tenant_id}`}>
@@ -70,7 +74,7 @@ function Evidence({ id, onAvailable }: { id: string; onAvailable: () => void }) 
   }, [id]);
   if (error) return <p className="text-sm text-destructive">Evidence unavailable. Do not approve without reviewing it.</p>;
   if (!url) return <div className="flex aspect-[4/3] items-center justify-center rounded border bg-black/40 text-sm text-muted-foreground">Loading evidence...</div>;
-  return <a href={url} target="_blank" rel="noreferrer" title="Open full-size screenshot"><img src={url} onLoad={onAvailable} alt="Applicant's character selection screenshot" className="max-h-[70vh] w-full rounded border object-contain bg-black" /></a>;
+  return <a href={url} target="_blank" rel="noreferrer" title="Open full-size screenshot"><img src={url} onLoad={onAvailable} alt="Applicant's proof screenshot" className="max-h-[70vh] w-full rounded border object-contain bg-black" /></a>;
 }
 
 function Review({ request, draft, onDraftChange }: { request: ProofRequest; draft: Draft; onDraftChange: (draft: Draft) => void }) {
@@ -83,7 +87,12 @@ function Review({ request, draft, onDraftChange }: { request: ProofRequest; draf
     mutationFn: async () => {
       const response = await fetch(`/api/v1/linked/admin/proofs/${encodeURIComponent(request.id)}/decision`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: message.trim(), decisions: request.subjects.map((subject) => ({ realm_id: subject.realm_id, character_guid: subject.character_guid, approved: choices[subjectKey(subject)] })) }),
+        body: JSON.stringify({
+          message: message.trim(),
+          decisions: request.subjects.map((subject) => subject.guild_id
+            ? { guild_id: subject.guild_id, approved: choices[subjectKey(subject)] }
+            : { realm_id: subject.realm_id, character_guid: subject.character_guid, approved: choices[subjectKey(subject)] }),
+        }),
       });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
@@ -93,6 +102,7 @@ function Review({ request, draft, onDraftChange }: { request: ProofRequest; draf
     onSuccess: () => { toast.success("Decision saved"); queryClient.invalidateQueries({ queryKey: ["admin-proofs"] }); },
     onError: (error) => toast.error(error.message),
   });
+  const isGuildClaim = request.purpose === "guild-ownership";
   const undecided = request.subjects.filter((subject) => choices[subjectKey(subject)] === undefined).length;
 
   return <article className="rounded-lg border">
@@ -109,21 +119,37 @@ function Review({ request, draft, onDraftChange }: { request: ProofRequest; draf
         {request.message && <div className="rounded bg-muted/50 p-3 text-sm whitespace-pre-wrap"><span className="block text-xs text-muted-foreground">Applicant message</span>{request.message}</div>}
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-medium">Characters ({request.subjects.length})</h3>
-            {request.subjects.length > 1 && <div className="flex gap-1">
+            <h3 className="text-sm font-medium">{isGuildClaim ? "Guild claim" : `Characters (${request.subjects.length})`}</h3>
+            {!isGuildClaim && request.subjects.length > 1 && <div className="flex gap-1">
               <Button size="sm" variant="ghost" onClick={() => setAll(true)}>Approve all</Button>
               <Button size="sm" variant="ghost" onClick={() => setAll(false)}>Deny all</Button>
             </div>}
           </div>
-          <p className="text-xs text-muted-foreground">Check the realm and each name against the screenshot. Existing links cannot be reassigned by this review.</p>
+          <p className="text-xs text-muted-foreground">
+            {isGuildClaim
+              ? "Confirm the screenshot shows this guild's roster, realm, and evidence that the applicant holds the guild-leader rank."
+              : "Check the realm and each name against the screenshot. Existing links cannot be reassigned by this review."}
+          </p>
           {request.subjects.map((subject) => {
             const key = subjectKey(subject);
             const choice = choices[key];
             return <div key={key} className={cn("rounded border p-3 space-y-2 text-sm", choice === true && "border-green-500/50 bg-green-500/5", choice === false && "border-destructive/50 bg-destructive/5")}>
-              <Link className="font-medium hover:underline" to={`/armory/${encodeURIComponent(subject.realm_name)}/${subject.character_guid}`} target="_blank">
-                <span style={subject.class ? { color: getClassColorVar(subject.class) } : undefined}>{subject.name}</span> <span className="text-muted-foreground">· {subject.realm_name}</span>
-              </Link>
-              <p className={cn("text-xs", subject.guild_name ? "text-foreground/80" : "text-muted-foreground")}>{subject.guild_name ? `<${subject.guild_name}>` : "No guild"}</p>
+              {subject.guild_id ? (
+                <div className="flex items-center gap-2">
+                  <span className="rounded-md bg-amber-500/15 p-1.5 text-amber-500"><Crown className="size-4" /></span>
+                  <div>
+                    <Link className="font-medium hover:underline" to={`/g/${subject.guild_id}`} target="_blank">&lt;{subject.name}&gt;</Link>
+                    <p className="text-xs text-muted-foreground">{subject.realm_name} · Guild ID <code>{subject.guild_id}</code></p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <Link className="font-medium hover:underline" to={`/armory/${encodeURIComponent(subject.realm_name)}/${subject.character_guid}`} target="_blank">
+                    <span style={subject.class ? { color: getClassColorVar(subject.class) } : undefined}>{subject.name}</span> <span className="text-muted-foreground">· {subject.realm_name}</span>
+                  </Link>
+                  <p className={cn("text-xs", subject.guild_name ? "text-foreground/80" : "text-muted-foreground")}>{subject.guild_name ? `<${subject.guild_name}>` : "No guild"}</p>
+                </>
+              )}
               {subject.warning && <p className="text-amber-500">{subject.warning}</p>}
               <div className="flex gap-2">
                 <Button size="sm" variant={choice === true ? "default" : "outline"} className={cn(choice === true && "bg-green-600 hover:bg-green-600/90 text-white")} onClick={() => setChoice(key, true)}><Check className="size-3.5" />Approve</Button>
@@ -135,7 +161,7 @@ function Review({ request, draft, onDraftChange }: { request: ProofRequest; draf
         <label className="block text-sm space-y-1"><span>Response to applicant</span><textarea className="w-full min-h-20 rounded-md border bg-background p-2" maxLength={2000} value={message} onChange={(event) => onDraftChange({ ...draft, message: event.target.value })} placeholder="Explain approvals or denials" /></label>
         <div className="flex items-center gap-3">
           <Button disabled={!evidenceAvailable || decide.isPending || undecided > 0} onClick={() => decide.mutate()}>{decide.isPending ? "Saving..." : "Save decision"}</Button>
-          {undecided > 0 && <span className="text-xs text-muted-foreground">{undecided} character{undecided === 1 ? "" : "s"} still need a decision</span>}
+          {undecided > 0 && <span className="text-xs text-muted-foreground">{undecided} {isGuildClaim ? "guild claim still needs" : `character${undecided === 1 ? "" : "s"} still need`} a decision</span>}
         </div>
       </div>
     </div>

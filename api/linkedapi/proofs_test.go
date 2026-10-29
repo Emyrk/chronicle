@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/chroniclebot"
@@ -77,6 +78,50 @@ func (q *characterLinkDecisionQueue) Insert(_ context.Context, args river.JobArg
 	q.calls++
 	q.args = args.(chroniclebot.ArgsSendDiscordDM)
 	return nil, q.err
+}
+
+type guildClaimDecisionQueue struct {
+	args  chroniclebot.ArgsSendDiscordDM
+	calls int
+	err   error
+}
+
+func (q *guildClaimDecisionQueue) Insert(_ context.Context, args river.JobArgs, _ *river.InsertOpts) (*rivertype.JobInsertResult, error) {
+	q.calls++
+	q.args = args.(chroniclebot.ArgsSendDiscordDM)
+	return nil, q.err
+}
+
+func TestGuildClaimDecisionNotificationIsBestEffort(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(testservices.Authz(t))
+	applicantID := uuid.New()
+	_, err := zed.InsertUser(ctx, database.InsertUserParams{ID: applicantID, Username: "guild-applicant-" + applicantID.String()[:8]})
+	require.NoError(t, err)
+	_, err = zed.InsertUserAuth(ctx, database.InsertUserAuthParams{ID: uuid.New(), UserID: applicantID, Provider: "discord", LinkedID: "discord-guild-applicant"})
+	require.NoError(t, err)
+	bot, err := chroniclebot.New(ctx, testutil.Logger(t), chroniclebot.Config{Token: "test", PrimaryDomain: "chronicle.example"})
+	require.NoError(t, err)
+	queue := &guildClaimDecisionQueue{err: errors.New("queue unavailable")}
+	h := &Handler{zed: zed, bot: bot, queue: queue, accessURL: &url.URL{Scheme: "https", Host: "legacy.chronicle.example"}}
+	guildID := uuid.New()
+	proofID := uuid.New()
+	h.notifyGuildClaimDecision(ctx, chroniclesdk.ProofRequest{
+		ID: proofID, ApplicantID: applicantID, TenantID: uuid.New(), TenantName: "Turtle WoW", TenantSlug: "turtle", Status: "approved", Response: "Verified.",
+		Subjects: []chroniclesdk.ProofSubject{{GuildID: &guildID, Name: "Claimed Guild", RealmName: "Realm", Status: "approved"}},
+	})
+	require.Equal(t, 1, queue.calls)
+	require.Equal(t, "discord-guild-applicant", queue.args.DiscordID)
+	require.Equal(t, proofID.String(), queue.args.UniqueKey)
+	require.Len(t, queue.args.Message.Embeds, 1)
+	embed := queue.args.Message.Embeds[0]
+	require.Equal(t, "Guild page claimed", embed.Title)
+	require.Equal(t, "https://turtle.chronicle.example/g/"+guildID.String(), embed.URL)
+	require.Len(t, embed.Fields, 3)
+	require.Equal(t, "Claimed Guild (Realm)", embed.Fields[0].Value)
+	require.Equal(t, "Turtle WoW", embed.Fields[1].Value)
+	require.Equal(t, "Verified.", embed.Fields[2].Value)
 }
 
 func TestCharacterLinkDecisionNotificationIsBestEffort(t *testing.T) {
@@ -277,7 +322,7 @@ func TestAdminProofsIncludeRootDomainRequests(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
 	var photo bytes.Buffer
 	require.NoError(t, jpeg.Encode(&photo, img, nil))
-	id, err := h.proofs.Create(ctx, uuid.Nil, applicant, "character-link", "", photo.Bytes(), []serviceproof.Subject{{Type: "guild", Name: "Example"}})
+	id, err := h.proofs.Create(ctx, uuid.Nil, applicant, "character-link", "", photo.Bytes(), []serviceproof.Subject{{Type: "test", Name: "Example"}})
 	require.NoError(t, err)
 
 	r := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
@@ -291,4 +336,69 @@ func TestAdminProofsIncludeRootDomainRequests(t *testing.T) {
 	require.NotNil(t, proofs[0].Applicant)
 	require.Equal(t, "root-"+applicant.String()[:8], proofs[0].Applicant.Username)
 	require.False(t, proofs[0].Applicant.DiscordLinked)
+}
+
+func TestGuildProofApprovalClaimsOnlyUnclaimedGuild(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(testservices.Authz(t))
+	objects, err := storage.NewLocalStorageAt(t.TempDir())
+	require.NoError(t, err)
+	h := &Handler{zed: zed, proofs: serviceproof.New(zed, objects)}
+
+	serverID, realmID := uuid.New(), uuid.New()
+	_, err = zed.InsertWoWServer(ctx, database.InsertWoWServerParams{ID: serverID, Name: "proof-server-" + serverID.String()})
+	require.NoError(t, err)
+	_, err = zed.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{ID: realmID, ServerID: serverID, Name: "proof-realm-" + realmID.String()})
+	require.NoError(t, err)
+	guild, err := zed.UpsertGuild(ctx, database.UpsertGuildParams{RealmID: realmID, Name: "Claim Test Guild", CreatedAt: database.Timestamptz(time.Now())})
+	require.NoError(t, err)
+	reviewer := uuid.New()
+	_, err = zed.InsertUser(ctx, database.InsertUserParams{ID: reviewer, Username: "reviewer-" + reviewer.String()[:8]})
+	require.NoError(t, err)
+
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	var photo bytes.Buffer
+	require.NoError(t, jpeg.Encode(&photo, img, nil))
+	create := func(applicant uuid.UUID) (database.ProofRequest, []database.ProofRequestSubject) {
+		_, createErr := zed.InsertUser(ctx, database.InsertUserParams{ID: applicant, Username: "claimant-" + applicant.String()[:8]})
+		require.NoError(t, createErr)
+		id, createErr := h.proofs.Create(ctx, uuid.Nil, applicant, guildOwnershipPurpose, "", photo.Bytes(), []serviceproof.Subject{{
+			Type: "guild", GuildID: uuid.NullUUID{UUID: guild.ID, Valid: true}, Name: guild.Name, RealmName: "Proof Realm",
+		}})
+		require.NoError(t, createErr)
+		request, subjects, createErr := h.proofs.Get(ctx, serviceproof.Scope{TenantID: uuid.Nil}, id)
+		require.NoError(t, createErr)
+		return request, subjects
+	}
+
+	applicant := uuid.New()
+	require.NoError(t, zed.AddGuildMember(ctx, guild.ID, applicant))
+	request, subjects := create(applicant)
+	approved := true
+	err = h.decideGuildProof(ctx, serviceproof.Scope{TenantID: uuid.Nil}, request, subjects, reviewer, chroniclesdk.DecideProofRequest{
+		Decisions: []chroniclesdk.ProofDecision{{GuildID: &guild.ID, Approved: approved}},
+	})
+	require.NoError(t, err)
+	hasLeader, err := zed.GuildHasLeader(ctx, guild.ID)
+	require.NoError(t, err)
+	require.True(t, hasLeader)
+	roster, err := zed.GuildRosterMembers(ctx, guild.ID)
+	require.NoError(t, err)
+	require.Len(t, roster, 1)
+	require.Equal(t, applicant, roster[0].UserID)
+	require.Equal(t, []string{"leader"}, roster[0].Roles)
+	canEdit, err := zed.CheckOne(ctx, nil, policy.New().Guild(guild.ID).CanAdmin_guild_User(policy.New().User(applicant)))
+	require.NoError(t, err)
+	require.True(t, canEdit)
+
+	secondApplicant := uuid.New()
+	secondRequest, secondSubjects := create(secondApplicant)
+	err = h.decideGuildProof(ctx, serviceproof.Scope{TenantID: uuid.Nil}, secondRequest, secondSubjects, reviewer, chroniclesdk.DecideProofRequest{
+		Decisions: []chroniclesdk.ProofDecision{{GuildID: &guild.ID, Approved: true}},
+	})
+	require.ErrorIs(t, err, serviceproof.ErrConflict)
+	secondCanEdit, err := zed.CheckOne(ctx, nil, policy.New().Guild(guild.ID).CanAdmin_guild_User(policy.New().User(secondApplicant)))
+	require.NoError(t, err)
+	require.False(t, secondCanEdit)
 }

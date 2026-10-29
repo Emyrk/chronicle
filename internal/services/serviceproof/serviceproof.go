@@ -120,6 +120,7 @@ type Subject struct {
 	Type          string
 	RealmID       uuid.NullUUID
 	CharacterGUID *guid.GUID
+	GuildID       uuid.NullUUID
 	Name          string
 	RealmName     string
 }
@@ -131,6 +132,9 @@ func validateSubjects(subjects []Subject) error {
 		}
 		if subject.Type == "character" && (!subject.RealmID.Valid || subject.CharacterGUID == nil) {
 			return errors.New("character proof subject requires a realm and GUID")
+		}
+		if subject.Type == "guild" && !subject.GuildID.Valid {
+			return errors.New("guild proof subject requires a guild")
 		}
 	}
 	return nil
@@ -181,7 +185,7 @@ func (s *Service) Create(ctx context.Context, tenantID, applicant uuid.UUID, pur
 		for _, subject := range subjects {
 			if err := tx.InsertProofSubject(ctx, database.InsertProofSubjectParams{
 				RequestID: id, SubjectType: subject.Type, RealmID: subject.RealmID,
-				CharacterGuid: subject.CharacterGUID, Name: subject.Name, RealmName: subject.RealmName,
+				CharacterGuid: subject.CharacterGUID, GuildID: subject.GuildID, Name: subject.Name, RealmName: subject.RealmName,
 			}); err != nil {
 				return err
 			}

@@ -16959,8 +16959,8 @@ func (q *sqlQuerier) InsertProofRequest(ctx context.Context, arg InsertProofRequ
 }
 
 const insertProofSubject = `-- name: InsertProofSubject :exec
-INSERT INTO proof_request_subjects (request_id, subject_type, realm_id, character_guid, name, realm_name)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO proof_request_subjects (request_id, subject_type, realm_id, character_guid, guild_id, name, realm_name)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
 type InsertProofSubjectParams struct {
@@ -16968,6 +16968,7 @@ type InsertProofSubjectParams struct {
 	SubjectType   string        `db:"subject_type" json:"subject_type"`
 	RealmID       uuid.NullUUID `db:"realm_id" json:"realm_id"`
 	CharacterGuid *guid.GUID    `db:"character_guid" json:"character_guid"`
+	GuildID       uuid.NullUUID `db:"guild_id" json:"guild_id"`
 	Name          string        `db:"name" json:"name"`
 	RealmName     string        `db:"realm_name" json:"realm_name"`
 }
@@ -16978,6 +16979,7 @@ func (q *sqlQuerier) InsertProofSubject(ctx context.Context, arg InsertProofSubj
 		arg.SubjectType,
 		arg.RealmID,
 		arg.CharacterGuid,
+		arg.GuildID,
 		arg.Name,
 		arg.RealmName,
 	)
@@ -17213,7 +17215,7 @@ func (q *sqlQuerier) ListProofSubjectClasses(ctx context.Context, requestID uuid
 }
 
 const listProofSubjects = `-- name: ListProofSubjects :many
-SELECT id, request_id, subject_type, realm_id, character_guid, name, realm_name, status, warning FROM proof_request_subjects WHERE request_id = $1 ORDER BY id
+SELECT id, request_id, subject_type, realm_id, character_guid, name, realm_name, status, warning, guild_id FROM proof_request_subjects WHERE request_id = $1 ORDER BY id
 `
 
 func (q *sqlQuerier) ListProofSubjects(ctx context.Context, requestID uuid.UUID) ([]ProofRequestSubject, error) {
@@ -17235,6 +17237,7 @@ func (q *sqlQuerier) ListProofSubjects(ctx context.Context, requestID uuid.UUID)
 			&i.RealmName,
 			&i.Status,
 			&i.Warning,
+			&i.GuildID,
 		); err != nil {
 			return nil, err
 		}

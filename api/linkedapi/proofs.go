@@ -348,6 +348,21 @@ func (h *Handler) proofResponse(ctx context.Context, scope serviceproof.Scope, i
 		guildBySubject[subject.SubjectID] = subject.GuildName.String
 	}
 	for _, s := range subjects {
+		if s.SubjectType == "guild" && s.GuildID.Valid {
+			guildID := s.GuildID.UUID
+			warning := s.Warning
+			claimed, claimErr := h.zed.GuildHasLeader(ctx, guildID)
+			if claimErr != nil {
+				return chroniclesdk.ProofRequest{}, claimErr
+			}
+			if claimed && s.Status == "pending" {
+				warning = "Guild has already been claimed"
+			}
+			out.Subjects = append(out.Subjects, chroniclesdk.ProofSubject{
+				GuildID: &guildID, Name: s.Name, RealmName: s.RealmName, Status: s.Status, Warning: warning,
+			})
+			continue
+		}
 		if !s.RealmID.Valid || s.CharacterGuid == nil {
 			continue
 		}
@@ -501,13 +516,37 @@ func (h *Handler) DecideProof(w http.ResponseWriter, r *http.Request) {
 	// Resolve the API's realm/GUID identities into subject IDs. The service
 	// rechecks this exact set after locking the pending request.
 	scope := reviewProofScope(r.Context())
-	_, subjects, err := h.proofs.Get(r.Context(), scope, id)
+	request, subjects, err := h.proofs.Get(r.Context(), scope, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		proofError(w, r, http.StatusConflict, "Proof already decided or character already linked")
 		return
 	}
 	if err != nil {
 		httpapi.InternalServerError(w, err)
+		return
+	}
+	reviewer := chronauth.AuthenticationState(r).Claims.Subject
+	if request.Purpose == guildOwnershipPurpose {
+		err = h.decideGuildProof(r.Context(), scope, request, subjects, reviewer, input)
+		if errors.Is(err, serviceproof.ErrConflict) {
+			proofError(w, r, http.StatusConflict, "Proof already decided or guild already claimed")
+			return
+		}
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		result, err := h.proofResponse(r.Context(), scope, id)
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		h.notifyGuildClaimDecision(r.Context(), result)
+		httpapi.Write(r.Context(), w, http.StatusOK, result)
+		return
+	}
+	if request.Purpose != "character-link" {
+		proofError(w, r, http.StatusConflict, "Unsupported proof purpose")
 		return
 	}
 	byCharacter := make(map[string]uuid.UUID, len(subjects))
@@ -532,7 +571,6 @@ func (h *Handler) DecideProof(w http.ResponseWriter, r *http.Request) {
 		}
 		decisions[subjectID] = decision.Approved
 	}
-	reviewer := chronauth.AuthenticationState(r).Claims.Subject
 	err = h.proofs.Decide(r.Context(), scope, id, reviewer, "character-link", input.Message, decisions, func(ctx context.Context, tx *authz.AuthzTX, row database.ProofRequest, subject database.ProofRequestSubject) error {
 		if !subject.RealmID.Valid || subject.CharacterGuid == nil || subject.SubjectType != "character" {
 			return serviceproof.ErrConflict
