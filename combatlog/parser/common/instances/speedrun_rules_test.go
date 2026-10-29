@@ -71,10 +71,9 @@ func TestBlackwingLairDamageTargets(t *testing.T) {
 		return rankings.DamageTargets{Mode: rankings.DamageTargetsEntries, EntryIDs: ids}
 	}
 	common := map[string]rankings.DamageTargets{
-		"Razorgore the Untamed": entries(12435, 12416, 12420, 12422, 14456, 50142, 52153),
-		"Broodlord Lashlayer":   entries(12017, 14022, 14024, 14025, 14023),
-		"Firemaw":               bossOnly,
-		"Chromaggus":            bossOnly,
+		"Broodlord Lashlayer": entries(12017, 14022, 14024, 14025, 14023),
+		"Firemaw":             bossOnly,
+		"Chromaggus":          bossOnly,
 	}
 	commonNefarian := []uint32{11583, 14668, 14605, 14261, 14262, 14263, 14264, 14265, 14302}
 

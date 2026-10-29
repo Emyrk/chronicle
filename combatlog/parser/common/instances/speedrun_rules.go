@@ -179,15 +179,6 @@ func BlackwingLairDamageTargets(fl database.WoWFlavor) map[string]rankings.Damag
 	}
 
 	rules := map[string]rankings.DamageTargets{
-		"Razorgore the Untamed": entries(
-			12435, // Razorgore the Untamed
-			12416, // Blackwing Legionnaire
-			12420, // Blackwing Mage
-			12422, // Death Talon Dragonspawn
-			14456, // Blackwing Guardsman
-			50142, // Blackwing Marksman
-			52153, // Death Talon Scorcher
-		),
 		"Broodlord Lashlayer": entries(12017, 14022, 14024, 14025, 14023), // Corrupted Whelps
 		"Firemaw":             bossOnly,
 		"Chromaggus":          bossOnly,
