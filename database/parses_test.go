@@ -200,6 +200,60 @@ func TestInstanceRankingRecordsPreservePlayerDeathsNullability(t *testing.T) {
 	assert.Equal(t, int32(2), rows[0].PlayerDeaths.Int32)
 }
 
+func TestInsertEncounterDpsRankingKeepsLatestBossOccurrence(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitShort)
+	instanceID := uuid.New()
+	baseTime := time.Date(2026, 10, 29, 1, 0, 0, 0, time.UTC)
+
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Ragnaros", instanceName: "Molten Core",
+		playerGUID: "P-CANONICAL", playerClass: "PRIEST", playerSpec: "Holy",
+		durationSecs: 100, damageDone: 90_000, healingDone: 10_000,
+		dps: 900, hps: 100, killedAt: baseTime, isBoss: true,
+		instanceID: instanceID,
+	})
+
+	insertOccurrence := func(encounterID uuid.UUID, name string, dps, hps float64, killedAt time.Time) uuid.UUID {
+		t.Helper()
+		_, err := store.InsertEncounter(ctx, database.InsertEncounterParams{
+			ID: encounterID, InstanceID: instanceID, Name: "Ragnaros",
+			KillType: database.KillTypeClean, Remaining: guid.GUIDs{}, Boss: true,
+			StartTime: database.Timestamptz(killedAt.Add(-100 * time.Second)),
+			EndTime:   database.Timestamptz(killedAt),
+		})
+		require.NoError(t, err)
+		require.NoError(t, store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
+			EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
+			InstanceID:  instanceID, EncounterName: "Ragnaros", InstanceName: "Molten Core",
+			PlayerGuid: "P-CANONICAL", PlayerName: name, PlayerClass: "PRIEST", PlayerSpec: "Holy",
+			RealmID: realmID, RealmName: "test-realm",
+			DamageDone: int64(dps * 100), HealingDone: int64(hps * 100),
+			DurationSecs: 100, Dps: dps, Hps: hps,
+			KilledAt: database.Timestamptz(killedAt), LogHashedSlug: "canonical-regression",
+		}))
+		return encounterID
+	}
+
+	// An earlier occurrence never replaces the original, even with much higher metrics.
+	insertOccurrence(uuid.New(), "Earlier high score", 2_000, 2_000, baseTime.Add(-time.Minute))
+	// A later occurrence replaces the original regardless of its metrics.
+	insertOccurrence(uuid.New(), "Later occurrence", 200, 100, baseTime.Add(time.Minute))
+	// Equal timestamps prefer the highest encounter ID for deterministic results.
+	insertOccurrence(uuid.MustParse("00000000-0000-0000-0000-000000000001"), "Lower encounter ID", 3_000, 3_000, baseTime.Add(2*time.Minute))
+	winningEncounterID := insertOccurrence(uuid.MustParse("00000000-0000-0000-0000-000000000002"), "Latest tie winner", 300, 100, baseTime.Add(2*time.Minute))
+
+	rows, err := store.InstanceRankingRecords(ctx, instanceID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, winningEncounterID, rows[0].EncounterID.UUID)
+	assert.Equal(t, "Latest tie winner", rows[0].PlayerName)
+	assert.Equal(t, 300.0, rows[0].Dps)
+	assert.Equal(t, 100.0, rows[0].Hps)
+}
+
 func TestTrashRankingsAllowDistinctSubSpecs(t *testing.T) {
 	t.Parallel()
 
@@ -233,10 +287,34 @@ func TestTrashRankingsAllowDistinctSubSpecs(t *testing.T) {
 		LogHashedSlug: "sub-spec-regression",
 	}))
 
+	require.NoError(t, store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
+		InstanceID:    instanceID,
+		EncounterName: "Trash",
+		InstanceName:  "Molten Core",
+		PlayerGuid:    "P-FERAL",
+		PlayerName:    "Player-P-FERAL",
+		PlayerClass:   "DRUID",
+		PlayerSpec:    "Feral",
+		PlayerSubSpec: "Cat",
+		RealmID:       realmID,
+		RealmName:     "test-realm",
+		DamageDone:    180_000,
+		DurationSecs:  300,
+		Dps:           600,
+		KilledAt:      database.Timestamptz(killedAt.Add(2 * time.Minute)),
+		LogHashedSlug: "trash-canonical-regression",
+	}))
+
 	rows, err := store.InstanceRankingRecords(ctx, instanceID)
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 	assert.ElementsMatch(t, []string{"Cat", "Bear"}, []string{rows[0].PlayerSubSpec, rows[1].PlayerSubSpec})
+	for _, row := range rows {
+		if row.PlayerSubSpec == "Cat" {
+			assert.Equal(t, 600.0, row.Dps)
+			assert.Equal(t, "trash-canonical-regression", row.LogHashedSlug)
+		}
+	}
 }
 
 func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
@@ -306,8 +384,7 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	insertEncounterRanking(duplicateID, "Lucifron", "P-HEALER", "Healer", "PRIEST", "Holy", "Bear", 900, 10, baseTime)
 	insertEncounterRanking(duplicateID, "Magmadar", "P-HEALER", "Healer", "PRIEST", "Holy", "Bear", 900, 10, baseTime.Add(time.Minute))
 	insertEncounterRanking(duplicateID, "Ragnaros", "P-HEALER", "Healer", "PRIEST", "Holy", "Bear", 900, 10, baseTime.Add(2*time.Minute))
-	// Equal-HPS duplicate encounter rows prefer the latest kill, and per-run
-	// display metadata uses the same deterministic timestamp tie-breaker.
+	// The latest timestamped repeated encounter replaces the earlier occurrence.
 	insertEncounterRanking(duplicateID, "Lucifron", "P-HEALER", "Latest Healer", "PRIEST", "Holy", "Bear", 1800, 20, baseTime.Add(3*time.Minute))
 	// A separate truncated run has higher per-encounter HPS, but must not rank
 	// when the query explicitly requires all three encounters.
@@ -501,8 +578,8 @@ func TestRankingsBoxPlotUsesSingleDuplicateInstance(t *testing.T) {
 	insertEncounterRanking(canonicalID, "Molten Core", "Lucifron", "Holy", 100, 10, baseTime)
 	insertEncounterRanking(duplicateID, "Molten Core", "Lucifron", "Holy", 900, 10, baseTime)
 	insertEncounterRanking(duplicateID, "Molten Core", "Magmadar", "Discipline", 900, 10, baseTime.Add(time.Minute))
-	// Equal-HPS duplicate encounter rows prefer the latest kill. Selecting the
-	// newer Discipline row makes the run complete under one consistent spec.
+	// The latest timestamped Discipline occurrence makes the retained clear
+	// internally consistent for spec-grouped statistics.
 	insertEncounterRanking(duplicateID, "Molten Core", "Lucifron", "Discipline", 1800, 20, baseTime.Add(2*time.Minute))
 	insertEncounterRanking(incompleteID, "Molten Core", "Lucifron", "Holy", 2000, 10, baseTime)
 	insertEncounterRanking(unrelatedID, "Blackwing Lair", "Razorgore", "Holy", 5000, 10, baseTime)

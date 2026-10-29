@@ -3282,6 +3282,8 @@ CREATE INDEX idx_dbc_cooldown_spells_class ON dbc_cooldown_spells USING btree (d
 
 CREATE INDEX idx_dbc_spells_name ON dbc_spells USING btree (dataset_id, name);
 
+CREATE UNIQUE INDEX idx_edr_boss_canonical_unique ON encounter_dps_rankings USING btree (instance_id, player_guid, encounter_name) WHERE (encounter_id IS NOT NULL);
+
 CREATE INDEX idx_edr_boss_coverage_by_instance ON encounter_dps_rankings USING btree (instance_id, encounter_name) WHERE (encounter_id IS NOT NULL);
 
 CREATE INDEX idx_edr_class_spec ON encounter_dps_rankings USING btree (player_class, player_spec);

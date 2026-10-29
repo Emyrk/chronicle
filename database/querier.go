@@ -518,6 +518,10 @@ type sqlcQuerier interface {
 	InsertDiscordMembershipGrantCheck(ctx context.Context, arg InsertDiscordMembershipGrantCheckParams) (DiscordMembershipGrantCheck, error)
 	InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error)
 	InsertEncounterCharacterFights(ctx context.Context, arg []InsertEncounterCharacterFightsParams) *InsertEncounterCharacterFightsBatchResults
+	// Boss encounters keep the latest timestamped occurrence per player and
+	// encounter name in an uploaded instance so repeated clears cannot form a
+	// synthetic best-of run.
+	// Trash keeps one aggregate per player/spec/sub-spec.
 	InsertEncounterDpsRanking(ctx context.Context, arg InsertEncounterDpsRankingParams) error
 	InsertEncounterPhase(ctx context.Context, arg InsertEncounterPhaseParams) error
 	InsertGuildPagePanel(ctx context.Context, arg InsertGuildPagePanelParams) (GuildPagePanel, error)
@@ -851,7 +855,8 @@ type sqlcQuerier interface {
 	// A "run" is one instance_id (deduplicated by duplicate_group_id).
 	// Within a run, damage and duration are summed across encounters to get run DPS.
 	// Each player appears once with their highest-DPS run.
-	// Deduplicates by (player, encounter, duplicate_group) before aggregating.
+	// Boss encounters are canonicalized on insert; duplicate uploads are still
+	// reduced to one representative instance per logical run before aggregating.
 	// Explicit encounter selections define the required run coverage. Without an
 	// explicit selection, compute coverage per realm because different realms can
 	// record different encounter names for the same instance.
