@@ -107,20 +107,6 @@ function HealthBar({ health }: { health: MapUnitHealth }) {
   );
 }
 
-function EncounterRoute({ points, viewport }: { points: MapPoint[]; viewport: MapViewport }) {
-  if (points.length < 2) return null;
-  const path = points
-    .map((point) => viewportPoint(point, viewport))
-    .map((point) => `${point.leftPercent},${point.topPercent}`)
-    .join(" ");
-  return (
-    <svg className="pointer-events-none absolute inset-0 z-10 size-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-      <polyline points={path} fill="none" stroke="rgba(0,0,0,.88)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-      <polyline points={path} fill="none" stroke="rgba(251,191,36,.92)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-    </svg>
-  );
-}
-
 function MovementTrails({
   markers,
   viewport,
@@ -200,10 +186,9 @@ function MapMarker({ marker, viewport }: { marker: MapSceneMarker; viewport: Map
   );
 }
 
-export function MapView2D({ ground, markers, routePoints, projectSample, trailSeconds, view, onUserViewport }: {
+export function MapView2D({ ground, markers, projectSample, trailSeconds, view, onUserViewport }: {
   ground: MapSceneGround;
   markers: MapSceneMarker[];
-  routePoints: MapPoint[];
   projectSample: (sample: MapPositionSample) => MapPoint | null;
   trailSeconds: number;
   view: MapViewRequest;
@@ -313,7 +298,6 @@ export function MapView2D({ ground, markers, routePoints, projectSample, trailSe
     >
       <MapArtworkLayer ground={ground} viewport={viewport} />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_45%,rgba(0,0,0,.28))]" />
-      <EncounterRoute points={routePoints} viewport={viewport} />
       <MovementTrails markers={markers} viewport={viewport} trailSeconds={trailSeconds} projectSample={projectSample} />
       {markers.map((marker) => <MapMarker key={marker.guid} marker={marker} viewport={viewport} />)}
       <MapCompass />

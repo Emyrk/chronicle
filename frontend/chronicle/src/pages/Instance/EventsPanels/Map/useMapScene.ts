@@ -23,7 +23,6 @@ import {
   calibratedDungeonMapPoint,
   dominantMapId,
   dungeonMapPoint,
-  encounterRouteSamples,
   focusCentre,
   latestHealthAt,
   replayPositionAt,
@@ -66,25 +65,6 @@ function cachedFocusBounds(
   }
   if (!byKey.has(key)) byKey.set(key, compute());
   return byKey.get(key) ?? null;
-}
-
-const routePointsCache = new WeakMap<Map<string, MapPositionSample[]>, Map<string, MapPoint[]>>();
-
-function cachedRoutePoints(
-  positionsByUnit: Map<string, MapPositionSample[]>,
-  key: string,
-  compute: () => MapPoint[],
-): MapPoint[] {
-  let byKey = routePointsCache.get(positionsByUnit);
-  if (!byKey) {
-    byKey = new Map();
-    routePointsCache.set(positionsByUnit, byKey);
-  }
-  const cached = byKey.get(key);
-  if (cached) return cached;
-  const points = compute();
-  byKey.set(key, points);
-  return points;
 }
 
 // The merged run is rebuilt only when more of the result has streamed in.
@@ -252,8 +232,6 @@ export type MapScene =
     /** The preferred 2D artwork retained while the active ground switches to mesh coordinates. */
     alignmentGround: MapSceneGround | null;
     markers: MapSceneMarker[];
-    /** The encounter's median player route projected onto the active 2D canvas. */
-    routePoints: MapPoint[];
     /** Every debuff spell seen on a player in the encounter (stable per encounter), to look up dispel types. */
     debuffSpellIds: number[];
     /** The world map the scene shows (the encounter's), which raid plans are drawn for. */
@@ -462,15 +440,6 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const projectionKey = artwork.kind === "zone"
     ? `zone:${artwork.map.id}:${artwork.assignment.id}`
     : `instance:${artwork.instance.mapID}:${selectedFloorNumber}:${overlayAvailable}:${normalizedUIMap ? "ui-map" : meshCanvas ? "mesh" : renderCanvas ? "render" : "calibrated"}`;
-  const routePoints = cachedRoutePoints(encounter.positionsByUnit, `${mapId}|${projectionKey}`, () =>
-    encounterRouteSamples(
-      encounter,
-      (guid) => Boolean(props.context.instance.players?.[guid]),
-    ).flatMap((sample) => {
-      if (sample.mapId !== mapId) return [];
-      const point = projectSample(sample);
-      return point ? [point] : [];
-    }));
 
   const selectedPlayers = props.context.entitySelection.playerIds;
   const bossGuids = new Set((wholeRun ? props.context.instance.encounters : instanceEncounter ? [instanceEncounter] : [])
@@ -584,7 +553,6 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       ? { iconBaseUrl, canvas: availableFlatCanvas.canvas }
       : null,
     markers,
-    routePoints,
     debuffSpellIds: encounterDebuffSpellIds(encounter.debuffsByUnit),
     worldMapId: artworkMapId ?? mapId,
     projectSample,

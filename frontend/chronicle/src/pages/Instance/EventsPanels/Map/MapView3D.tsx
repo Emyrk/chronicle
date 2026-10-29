@@ -38,7 +38,6 @@ export interface MapView3DProps {
   /** Preferred 2D artwork to blend over the mesh for alignment debugging. */
   alignmentGround?: MapSceneGround | null;
   markers: MapSceneMarker[];
-  routePoints: MapPoint[];
   projectSample: (sample: MapPositionSample) => MapPoint | null;
   /** Whether x/y are world-yard coordinates; normalized UI-map coordinates cannot calibrate physical scale. */
   worldCoordinates?: boolean;
@@ -168,7 +167,6 @@ export default function MapView3D({
   ground,
   alignmentGround = null,
   markers,
-  routePoints,
   projectSample,
   worldCoordinates = true,
   cursorMs,
@@ -276,10 +274,6 @@ export default function MapView3D({
   useEffect(() => {
     sceneRef.current?.setAlignmentOverlay(showAlignmentOverlay);
   }, [showAlignmentOverlay]);
-
-  useEffect(() => {
-    if (!frozen) sceneRef.current?.setRoute(routePoints);
-  }, [frozen, routePoints]);
 
   const yardSample = markers[0]?.sample;
   const floorBounds = "bounds" in ground.canvas ? ground.canvas.bounds : undefined;

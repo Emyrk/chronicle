@@ -4,7 +4,6 @@ import {
   createMapPanel,
   mapPresentationForSelection,
   preferredMeshState,
-  routePointsForMapMode,
 } from "./Map";
 
 describe("map presentation", () => {
@@ -39,14 +38,6 @@ describe("map presentation", () => {
     expect(alignmentOverlayForMapMode(true, true)).toBe(true);
     expect(alignmentOverlayForMapMode(true, false)).toBe(false);
     expect(alignmentOverlayForMapMode(false, true)).toBe(false);
-  });
-
-  it("hides a single encounter route in 2D mode", () => {
-    const route = [{ leftPercent: 25, topPercent: 75 }];
-
-    expect(routePointsForMapMode(route, false, false)).toEqual([]);
-    expect(routePointsForMapMode(route, true, false)).toBe(route);
-    expect(routePointsForMapMode(route, false, true)).toBe(route);
   });
 
   it("prefers published dungeon meshes until the user explicitly chooses otherwise", () => {

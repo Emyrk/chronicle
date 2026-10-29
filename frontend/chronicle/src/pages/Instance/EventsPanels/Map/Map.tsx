@@ -31,7 +31,6 @@ import {
   pinMapFraming,
   reconcileMapFraming,
   type MapFraming,
-  type MapPoint,
   type MapViewport,
 } from "./mapModel";
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus, MapUnitRoles } from "./MapScene3D";
@@ -91,10 +90,6 @@ export function preferredMeshState(stored: boolean | null): boolean {
 
 export function alignmentOverlayForMapMode(requested: boolean, meshWanted: boolean): boolean {
   return requested && meshWanted;
-}
-
-export function routePointsForMapMode(routePoints: MapPoint[], meshWanted: boolean, wholeRun: boolean): MapPoint[] {
-  return meshWanted || wholeRun ? routePoints : [];
 }
 
 const RAID_FRAMES_STORAGE_KEY = "chronicle.map.raidFrames";
@@ -687,12 +682,10 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     setStoredMesh(next);
     storeMesh(next);
   };
-  const routePoints = routePointsForMapMode(ready.routePoints, meshWanted, wholeRun);
   const view2D = (
     <MapView2D
       ground={ready.ground}
       markers={ready.markers}
-      routePoints={routePoints}
       projectSample={ready.projectSample}
       trailSeconds={effectSettings.trailSeconds}
       view={view}
@@ -815,7 +808,6 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
               ground={ready.ground}
               alignmentGround={ready.alignmentGround}
               markers={ready.markers}
-              routePoints={routePoints}
               projectSample={ready.projectSample}
               worldCoordinates={props.context.instance.positionCoordinateSpace !== "ui-map-normalized"}
               cursorMs={ready.cursorMs}
