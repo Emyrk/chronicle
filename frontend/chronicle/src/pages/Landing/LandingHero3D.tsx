@@ -362,8 +362,12 @@ function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, on
   const stats = useHeroStats(instance, encounterId, shown && span && currentMs !== null ? span.startMs + playableMs : null, HERO_STREAMS);
   const cursorDamage = stats?.damage ?? null;
   const liveMeter = useMemo(() => meter && cursorDamage ? { ...meter, damage: cursorDamage } : meter, [cursorDamage, meter]);
-  const renderRaidFrames = useMemo(() => stats?.frames ? () => <HeroRaidFramesCard instance={instance} stats={stats} /> : null, [instance, stats]);
-  const renderThreat = useMemo(() => stats?.threat ? () => <HeroThreatCard stats={stats} /> : null, [stats]);
+  const renderRaidFrames = useMemo(() => stats?.frames
+    ? (onSwitch: (() => void) | null) => <HeroRaidFramesCard instance={instance} stats={stats} onSwitch={onSwitch} />
+    : null, [instance, stats]);
+  const renderThreat = useMemo(() => stats?.threat?.rows.length
+    ? (onSwitch: (() => void) | null) => <HeroThreatCard stats={stats} onSwitch={onSwitch} />
+    : null, [stats]);
   useEffect(() => {
     if (!shown || !span || currentMs === null) {
       onReplay(null);

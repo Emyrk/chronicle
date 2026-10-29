@@ -83,12 +83,13 @@ tank is the top-threat unit.
 
 ### Rendering
 
-The panel shows one enemy's table: the entity-selected enemy, else the enemy
-with the most total threat in the latest encounter that has threat. It is drawn
-with MeterBars' values mode:
+The panel shows one enemy's table: the entity-selected enemy, else the
+encounter's boss once it has threat, else the enemy with the most total threat,
+in the latest encounter that has threat. It is drawn with MeterBars' values
+mode:
 
-- the tank on top with a `TANK` tag; each row shows threat and % of the tank's
-  threat;
+- the tank pinned on top with a `TANK` tag; each row shows threat and % of the
+  tank's threat;
 - marker lines at 110 % (melee pull) and 130 % (ranged pull) of the tank's
   threat, and a `PULLS` tag on any row over its line;
 - a short log of aggro changes (the boss's melee target switching), taunts and
@@ -141,7 +142,7 @@ The panel's log for the pull:
 ```
  8.0s  Foxygon dies, threat reset          (the first tank)
  8.2s  Venoxis turns from Foxygon to Katq
-13.8s  Racca forces Venoxis (Mocking Blow / Challenging Shout)
+13.8s  Racca forces every enemy (Challenging Shout)
 23.7s  Racca taunts Venoxis
 27.3s  Venoxis turns from Racca to Katq (est. 105% of Racca)
 ...

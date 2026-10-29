@@ -1,6 +1,5 @@
 import { Info } from "lucide-react";
 import type { PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
-import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { formatNumber } from "@/lib/format";
 import { MeterBars } from "../MeterBars";
 import type { MeterValuesOptions } from "../meterBarsModel";
@@ -16,20 +15,13 @@ export const THREAT_RULE =
 
 const PULL_COLOR = "#ec1337";
 
-/** "(estimated)" with the rule on hover. */
+/** "(estimated)" with the rule on hover (a native tooltip, so the landing's 3D chunk stays lean). */
 export function ThreatEstimatedLabel() {
   return (
-    <HintTooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex cursor-help items-center gap-1 text-[10px] text-muted-foreground" data-threat-rule>
-          (estimated)
-          <Info className="h-3 w-3" aria-label="How threat is estimated" />
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-80 p-2 text-xs">
-        {THREAT_RULE}
-      </TooltipContent>
-    </HintTooltip>
+    <span title={THREAT_RULE} className="inline-flex cursor-help items-center gap-1 text-[10px] text-muted-foreground" data-threat-rule>
+      (estimated)
+      <Info className="h-3 w-3" aria-label={THREAT_RULE} />
+    </span>
   );
 }
 
@@ -52,6 +44,7 @@ export function ThreatMeter({ view, limit, onOpen, openLabel }: { view: ThreatVi
     formatShare: (share) => `${Math.round(share * 100)}%`,
     scaleMax,
     limit,
+    pinFirst: (chartRow) => byGuid.get(chartRow.playerID)?.isTank === true,
     tagFor: (chartRow) => {
       const row = byGuid.get(chartRow.playerID);
       if (row?.isTank) return { label: "tank" };

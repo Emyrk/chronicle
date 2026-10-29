@@ -509,10 +509,15 @@ export function tankOf(entry: ThreatTable, nowMs: number): string | null {
 }
 
 /**
- * The table to show: the selected enemy, else the enemy with the most total threat, in the latest
- * selected encounter that has one.
+ * The table to show: the selected enemy, else a boss (`bossIds`) with threat, else the enemy with the most
+ * total threat, in the latest selected encounter that has one.
  */
-export function buildThreatView(result: ThreatResult, encounterIds: readonly string[], enemyIds: ReadonlySet<string>): ThreatView | null {
+export function buildThreatView(
+  result: ThreatResult,
+  encounterIds: readonly string[],
+  enemyIds: ReadonlySet<string>,
+  bossIds: ReadonlySet<string> = new Set(),
+): ThreatView | null {
   const order = result.latestEncounterId && encounterIds.includes(result.latestEncounterId)
     ? [result.latestEncounterId, ...[...encounterIds].reverse()]
     : [...encounterIds].reverse();
@@ -527,7 +532,9 @@ export function buildThreatView(result: ThreatResult, encounterIds: readonly str
         if (chosen) break;
         continue;
       }
-      if (!chosen || tableTotal(entry) > tableTotal(chosen)) chosen = entry;
+      const boss = bossIds.has(entry.enemy);
+      const chosenBoss = chosen !== null && bossIds.has(chosen.enemy);
+      if (!chosen || (boss && !chosenBoss) || (boss === chosenBoss && tableTotal(entry) > tableTotal(chosen))) chosen = entry;
     }
     if (!chosen) continue;
     const tank = tankOf(chosen, encounter.nowMs);

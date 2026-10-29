@@ -28,7 +28,10 @@ function describe(entry: ThreatLogEntry, name: (guid: string) => string): string
 }
 
 export function ThreatContent({ result, context }: PanelRenderProps<ThreatResult>) {
-  const view: ThreatView | null = buildThreatView(result, context.selectedEncounterIds, context.entitySelection.enemyIds);
+  const bosses = new Set(context.instance.encounters
+    .filter((encounter) => context.selectedEncounterIds.includes(encounter.id))
+    .flatMap((encounter) => (encounter.enemies ?? []).filter((enemy) => enemy.boss).map((enemy) => enemy.id)));
+  const view: ThreatView | null = buildThreatView(result, context.selectedEncounterIds, context.entitySelection.enemyIds, bosses);
   if (!view) {
     return <div className="flex h-full items-center justify-center text-xs text-muted-foreground">No threat yet</div>;
   }
@@ -41,9 +44,11 @@ export function ThreatContent({ result, context }: PanelRenderProps<ThreatResult
         <span className="truncate font-medium">{view.enemyName}</span>
         <ThreatEstimatedLabel />
       </div>
-      <ThreatMeter view={view} limit={view.rows.length} openLabel={view.enemyName} />
+      <div className="shrink-0">
+        <ThreatMeter view={view} limit={view.rows.length} openLabel={view.enemyName} />
+      </div>
       {log.length > 0 && (
-        <ul className="flex flex-col gap-0.5 border-t border-border pt-2 text-[11px] text-muted-foreground">
+        <ul className="flex shrink-0 flex-col gap-0.5 border-t border-border pt-2 text-[11px] text-muted-foreground">
           {log.map((entry, index) => (
             <li key={index} className="flex gap-2">
               <span className="font-mono">{formatOffset(entry.offsetMs)}</span>

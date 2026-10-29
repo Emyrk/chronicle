@@ -274,5 +274,6 @@ describe("tank inference and the view", () => {
     const state = run([damage(MAGE, BOSS, 3000), damage(MAGE, ADD, 1000)]);
     expect(buildThreatView(state, [ENC], new Set())?.enemy).toBe(BOSS);
     expect(buildThreatView(state, [ENC], new Set([ADD]))?.enemy).toBe(ADD);
+    expect(buildThreatView(state, [ENC], new Set(), new Set([ADD]))?.enemy).toBe(ADD);
   });
 });

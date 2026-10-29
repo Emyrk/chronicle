@@ -125,6 +125,8 @@ export function useHeroStats(instance: Instance, encounterId: string | null, cur
   const damageResult = damage?.encounterId === encounterId ? damage.result : null;
   const framesResult = frames.data ?? null;
   const threatResult = threat?.encounterId === encounterId ? threat.result : null;
+  const bossIds = useMemo(() => new Set((instance.encounters.find((encounter) => encounter.id === encounterId)?.enemies ?? [])
+    .filter((enemy) => enemy.boss).map((enemy) => enemy.id)), [encounterId, instance]);
   // One object per change, so the hero reports it only when it moves.
   return useMemo(() => {
     if (!encounterId || cursorMs === null) return null;
@@ -137,9 +139,9 @@ export function useHeroStats(instance: Instance, encounterId: string | null, cur
       elapsedMs,
       damage: rows && meterTotals(rows.map((row) => ({ name: row.playerName, className: row.className, amount: row.value })), elapsedMs),
       frames: framesResult,
-      threat: threatResult && buildThreatView(threatResult, [encounterId], NO_SELECTION.enemyIds),
+      threat: threatResult && buildThreatView(threatResult, [encounterId], NO_SELECTION.enemyIds, bossIds),
     };
-  }, [cursorMs, damageResult, encounterId, encounterStartMs, framesResult, threatResult]);
+  }, [bossIds, cursorMs, damageResult, encounterId, encounterStartMs, framesResult, threatResult]);
 }
 
 export type HeroStats = NonNullable<ReturnType<typeof useHeroStats>>;

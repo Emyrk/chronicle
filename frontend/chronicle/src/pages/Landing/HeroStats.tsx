@@ -51,8 +51,17 @@ function HeroRaidFrames({ instance, stats }: { instance: Instance; stats: HeroSt
   );
 }
 
+/** Switches the stats column's shared slot to the other card. */
+function SwitchButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="rounded border border-white/15 px-1.5 text-[10px] text-muted-foreground hover:text-foreground">
+      {label}
+    </button>
+  );
+}
+
 /** The stats column's Raid Frames card, in the glass meter's chrome, timed from the pull's start. */
-export function HeroRaidFramesCard({ instance, stats }: { instance: Instance; stats: HeroStats }) {
+export function HeroRaidFramesCard({ instance, stats, onSwitch }: { instance: Instance; stats: HeroStats; onSwitch?: (() => void) | null }) {
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-white/10 bg-card/60 p-3 shadow-lg backdrop-blur-md">
       <div className="flex items-center justify-between gap-2">
@@ -60,7 +69,10 @@ export function HeroRaidFramesCard({ instance, stats }: { instance: Instance; st
           <Users className="h-4 w-4" aria-hidden />
           Raid Frames
         </span>
-        <span className="font-mono text-[10px] text-muted-foreground">{formatClock(stats.elapsedMs)}</span>
+        <span className="flex items-center gap-2">
+          {onSwitch && <SwitchButton label="Threat" onClick={onSwitch} />}
+          <span className="font-mono text-[10px] text-muted-foreground">{formatClock(stats.elapsedMs)}</span>
+        </span>
       </div>
       <HeroRaidFrames instance={instance} stats={stats} />
     </div>
@@ -68,7 +80,7 @@ export function HeroRaidFramesCard({ instance, stats }: { instance: Instance; st
 }
 
 /** The stats column's Threat (estimated) card: the run page's threat table on the pull's main enemy at the cursor. */
-export function HeroThreatCard({ stats }: { stats: HeroStats }) {
+export function HeroThreatCard({ stats, onSwitch }: { stats: HeroStats; onSwitch?: (() => void) | null }) {
   const view = stats.threat;
   if (!view || view.rows.length === 0) return null;
   return (
@@ -78,9 +90,14 @@ export function HeroThreatCard({ stats }: { stats: HeroStats }) {
           <Flame className="h-4 w-4 shrink-0" aria-hidden />
           <span className="truncate">Threat on {view.enemyName}</span>
         </span>
-        <ThreatEstimatedLabel />
+        <span className="flex shrink-0 items-center gap-2">
+          <ThreatEstimatedLabel />
+          {/* Raid Frames only show from lg up. */}
+          {onSwitch && <span className="hidden lg:inline"><SwitchButton label="Raid Frames" onClick={onSwitch} /></span>}
+        </span>
       </div>
-      <ThreatMeter view={view} openLabel={`Threat on ${view.enemyName}`} />
+      {/* The tank and the two nearest to pulling: the column has no height for more beside the meter and frames. */}
+      <ThreatMeter view={view} limit={3} openLabel={`Threat on ${view.enemyName}`} />
     </div>
   );
 }
