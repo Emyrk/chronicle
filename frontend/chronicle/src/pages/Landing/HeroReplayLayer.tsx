@@ -15,10 +15,15 @@ interface NavigatorConnection {
   saveData?: boolean;
 }
 
-/** No 3D for reduced motion, data saver, or a browser without WebGL2: the poster stays. */
-function canShow3D(): boolean {
+/** Phones, data saver and reduced motion keep the clip (or poster) until the visitor asks for the 3D. */
+function autoplays3D(): boolean {
   if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return false;
-  if ((navigator as Navigator & { connection?: NavigatorConnection }).connection?.saveData) return false;
+  if (window.matchMedia?.("(max-width: 899px)").matches) return false;
+  return !(navigator as Navigator & { connection?: NavigatorConnection }).connection?.saveData;
+}
+
+/** No 3D at all without WebGL2. */
+function hasWebGL2(): boolean {
   try {
     const gl = document.createElement("canvas").getContext("webgl2");
     gl?.getExtension("WEBGL_lose_context")?.loseContext();
@@ -94,20 +99,27 @@ function HeroSlot({ slotKey, entry, active, hidden, onPullEnd, onReplay }: {
  * With several entries it plays entries[index]'s pull, and once that plays,
  * preloads the next entry (hidden, so never more than one mesh ahead); at the
  * end of a pull it cuts to the next entry if that is ready, else loops the pull.
+ * On phones, with data saver or reduced motion it mounts only once `requested`
+ * (the visitor touched the scrubber, a boss chip or the meter); a request
+ * elsewhere skips the idle wait.
  * Sends hero_play_3s once the 3D replay has played for 3 s on screen, or,
  * with 3D suppressed (or no featured run), once the poster has been on screen for 3 s.
  */
-export function HeroReplayLayer({ entries, index, onAdvance, onReplay }: {
+export function HeroReplayLayer({ entries, index, requested = false, onAdvance, onReplay }: {
   /** The montage; empty leaves the poster. */
   entries: HeroEntry[];
   /** The entry playing. */
   index: number;
+  /** The visitor asked for the live replay: load it now. */
+  requested?: boolean;
   /** Moves the montage on to the next entry. */
   onAdvance: () => void;
   onReplay: (replay: HeroReplay | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [allowed] = useState(() => entries.length > 0 && canShow3D());
+  const [webgl] = useState(() => entries.length > 0 && hasWebGL2());
+  const [auto] = useState(autoplays3D);
+  const allowed = webgl && (auto || requested);
   const [inView, setInView] = useState(false);
   const [load, setLoad] = useState(false);
   const pageVisible = usePageVisible();
@@ -157,7 +169,7 @@ export function HeroReplayLayer({ entries, index, onAdvance, onReplay }: {
   }, [heroMode]);
 
   useEffect(() => {
-    if (!allowed || load || !inView) return;
+    if (!allowed || load || requested || !inView) return;
     // Two frames: the shell has painted at least once before the 3D work starts.
     let cancelIdle: (() => void) | null = null;
     let frame = requestAnimationFrame(() => {
@@ -169,11 +181,13 @@ export function HeroReplayLayer({ entries, index, onAdvance, onReplay }: {
       cancelAnimationFrame(frame);
       cancelIdle?.();
     };
-  }, [allowed, inView, load]);
+  }, [allowed, inView, load, requested]);
+  // A request mounts it at once.
+  const mounted = load || (allowed && requested);
 
   return (
     <div ref={ref} className="absolute inset-0">
-      {load && current >= 0 && (
+      {mounted && current >= 0 && (
         <HeroSlot
           key={currentKey}
           slotKey={currentKey}
@@ -184,7 +198,7 @@ export function HeroReplayLayer({ entries, index, onAdvance, onReplay }: {
           onReplay={handleReplay}
         />
       )}
-      {load && nextKey && playedKey === currentKey && (
+      {mounted && nextKey && playedKey === currentKey && (
         <HeroSlot key={nextKey} slotKey={nextKey} entry={entries[next]} active={false} hidden onReplay={handleReplay} />
       )}
     </div>

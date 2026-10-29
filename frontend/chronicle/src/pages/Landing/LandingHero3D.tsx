@@ -6,6 +6,8 @@ import { transformToInstance } from "@/pages/Instance/transformInstance";
 import type { Instance } from "@/pages/Instance/InstancePage";
 import { deathsProcessor, type DeathEvent, type DeathsResult } from "@/pages/Instance/EventsPanels/Deaths/deaths.processor";
 import { processIncrementally } from "@/pages/Instance/EventsPanels/mainThreadProcessor";
+import { damageDoneProcessor, type DamageDoneResult } from "@/pages/Instance/EventsPanels/DamageDone/damageDone.processor";
+import { unifiedHealingProcessor, type UnifiedHealingResult } from "@/pages/Instance/EventsPanels/processors/healing.processor";
 import type { PanelRenderProps } from "@/pages/Instance/EventsPanels/types";
 import { dungeonMeshLiquid, dungeonMeshUrl } from "@/pages/Instance/EventsPanels/Map/dungeonMeshes";
 import { mapProcessor, type MapResult } from "@/pages/Instance/EventsPanels/Map/map.processor";
@@ -15,6 +17,7 @@ import { MapView2D } from "@/pages/Instance/EventsPanels/Map/MapView2D";
 import MapView3D from "@/pages/Instance/EventsPanels/Map/MapView3D";
 import { previewSpeed, useMapScene } from "@/pages/Instance/EventsPanels/Map/useMapScene";
 import { serializableContext, type HeroDeathBeat, type HeroDeathRecap, type HeroReplay, type HeroWindow } from "./heroReplay";
+import { meterTotals, type HeroMeterData } from "./heroMeter";
 
 // The Map panel's streams without auras: those only tint debuffed players,
 // and they are by far the biggest download (1.3 MB of 1.6 MB on the Ruins run).
@@ -30,6 +33,9 @@ const NO_PLAN_ITEMS: [] = [];
 const NO_ROUTE: [] = [];
 // The deaths processor's streams the replay already fetched, so the death cards' recaps download nothing more.
 const HERO_DEATH_STREAMS = deathsProcessor.streams.filter((stream) => HERO_STREAMS.includes(stream));
+// The glass meter's panels on the streams the replay already fetched (healing without absorbs and mana gains).
+const HERO_DAMAGE_STREAMS = damageDoneProcessor.streams.filter((stream) => HERO_STREAMS.includes(stream));
+const HERO_HEALING_STREAMS = unifiedHealingProcessor.streams.filter((stream) => HERO_STREAMS.includes(stream));
 /** A death card's strip covers this long before the death. */
 const DEATH_STRIP_MS = 10_000;
 
@@ -115,7 +121,10 @@ function heroDeathRecap(death: DeathEvent, instanceStartMs: number): HeroDeathRe
   return {
     offsetMs: death.dateMilli - instanceStartMs,
     victimName: death.playerName,
+    victimClass: death.className,
+    killerName: death.killerName || null,
     killingBlow: death.attribution?.sourceName || lastHit?.ability || null,
+    killingBlowAmount: death.attribution?.amount ?? lastHit?.beat.amount ?? null,
     beats,
   };
 }
@@ -145,6 +154,45 @@ function useHeroDeaths(instance: Instance, encounterId: string | null, enabled: 
   });
 }
 
+// After the positions: the run page's Damage Done and Healing Done panels' processors, summed per player.
+function useHeroMeterAmounts(instance: Instance, encounterIds: string[] | undefined, enabled: boolean) {
+  const events = useInstanceEventsContext();
+  return useQuery({
+    queryKey: ["landing-hero-meter", instance.id, encounterIds],
+    enabled: enabled && encounterIds !== undefined,
+    staleTime: Infinity,
+    retry: false,
+    queryFn: async () => {
+      const load = async (streams: StreamType[]) =>
+        new Map(await Promise.all(streams.map(async (type) => [type, await events.fetchStream(type)] as [StreamType, CachedStream])));
+      const context = serializableContext(instance, encounterIds!);
+      const [damage, healing] = await Promise.all([
+        processIncrementally<DamageDoneResult>({ panelId: "damage_done", streams: await load(HERO_DAMAGE_STREAMS), context, stopAtTimestamp: null, previousState: null }),
+        processIncrementally<UnifiedHealingResult>({ panelId: "healing_done", streams: await load(HERO_HEALING_STREAMS), context, stopAtTimestamp: null, previousState: null }),
+      ]);
+      if (damage.error) throw new Error(damage.error);
+      if (healing.error) throw new Error(healing.error);
+      // Players only, summed over the selected encounters.
+      const sum = (perEncounter: (encounterId: string) => Iterable<[string, number]>) => {
+        const totals = new Map<string, number>();
+        for (const encounterId of encounterIds!) {
+          for (const [guid, amount] of perEncounter(encounterId)) totals.set(guid, (totals.get(guid) ?? 0) + amount);
+        }
+        return [...totals].flatMap(([guid, amount]) => {
+          const player = instance.players?.[guid];
+          return player ? [{ name: player.name, className: player.class, amount }] : [];
+        });
+      };
+      return {
+        damage: sum((encounterId) => [...damage.result.EncounterDamage.get(encounterId)?.values() ?? []]
+          .map((unit): [string, number] => [unit.playerID, [...unit.target.values()].reduce((total, amount) => total + amount, 0)])),
+        healing: sum((encounterId) => [...healing.result.EncounterHealingByHealer.get(encounterId)?.values() ?? []]
+          .map((healer): [string, number] => [healer.playerID, healer.effectiveTotal])),
+      };
+    },
+  });
+}
+
 function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, onReplay, still = false }: Omit<LandingHero3DProps, "instanceId"> & { instance: Instance }) {
   const encounterId = pull?.encounterId ?? null;
   const run = useHeroRun(instance, encounterId);
@@ -158,6 +206,7 @@ function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, on
     : processedRecaps?.map((recap) => ({ ...recap, offsetMs: recap.offsetMs - pullStartOffsetMs })) ?? null,
   [processedRecaps, pullStartOffsetMs]);
   const result = run.data?.result ?? null;
+  const meterAmounts = useHeroMeterAmounts(instance, run.data?.selectedEncounterIds, run.isSuccess).data ?? null;
   const span = useMemo(() => {
     if (!result || result.encounters.size === 0) return null;
     if (encounterId && pullStartOffsetMs !== null && pullEndOffsetMs !== null) {
@@ -177,6 +226,26 @@ function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, on
       .sort((left, right) => left[0] - right[0]);
     return { startMs, endMs, durationMs: Math.max(1, endMs - startMs), playable, encounterStartMs: startMs, encounterEndMs: endMs };
   }, [encounterId, instanceStartMs, pullEndOffsetMs, pullStartOffsetMs, result]);
+  // The meter's rates over the time fought: the pull, or every encounter of the run.
+  const meter = useMemo((): HeroMeterData | null => {
+    if (!meterAmounts || !result) return null;
+    const encounters = [...result.encounters.values()];
+    const foughtMs = encounterId
+      ? (span ? span.encounterEndMs - span.encounterStartMs : 0)
+      : encounters.reduce((total, encounter) => total + encounter.endMs - encounter.startMs, 0);
+    return {
+      damage: meterTotals(meterAmounts.damage, foughtMs),
+      healing: meterTotals(meterAmounts.healing, foughtMs),
+      deaths: (deathRecaps ?? []).map((recap) => ({
+        victim: recap.victimName,
+        className: recap.victimClass,
+        atMs: recap.offsetMs,
+        ability: recap.killingBlow,
+        amount: recap.killingBlowAmount,
+        source: recap.killerName,
+      })),
+    };
+  }, [deathRecaps, encounterId, meterAmounts, result, span]);
   const speed = pull ? HERO_PULL_SPEED : span ? previewSpeed(span.durationMs, HERO_MAX_SPEED) : 1;
 
   // The hero's own clock, in run time (window time for a pull); useMapScene's preview loops it over the run.
@@ -291,8 +360,8 @@ function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, on
       onReplay(null);
       return;
     }
-    onReplay({ currentMs, playing: userPlaying, togglePlay, seek, deathRecaps });
-  }, [currentMs, deathRecaps, onReplay, seek, shown, span, togglePlay, userPlaying]);
+    onReplay({ currentMs, playing: userPlaying, togglePlay, seek, deathRecaps, meter });
+  }, [currentMs, deathRecaps, meter, onReplay, seek, shown, span, togglePlay, userPlaying]);
   useEffect(() => () => onReplay(null), [onReplay]);
 
   if (!ready || unavailable) return null;

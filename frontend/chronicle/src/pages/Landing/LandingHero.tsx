@@ -4,6 +4,8 @@ import type { LandingFeaturedDeath, LandingFeaturedRun } from "@/api/typesGenera
 import { Button } from "@/components/ui/button";
 import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
 import { trackFunnel } from "@/utils/funnel";
+import { HeroClipLayer } from "./HeroClipLayer";
+import type { HeroClip } from "./heroClips";
 import type { HeroDeathRecap, HeroReplay } from "./heroReplay";
 
 // Boss chips shown inline on desktop; the rest collapse into a "+N" chip.
@@ -23,6 +25,19 @@ interface LandingHeroProps {
   /** Portrait crop served below the lg breakpoint, where the hero is taller than wide. */
   posterPortrait?: string;
   posterAlt: string;
+  /** The pre-rendered clip playing over the poster until the live 3D shows; null leaves the poster. */
+  clip?: HeroClip | null;
+  /** The clip loops on its own (the only one); otherwise `onClipEnded` moves on after each pass. */
+  clipLoops?: boolean;
+  onClipEnded?: () => void;
+  /** The live 3D replay shows (over the clip): the caption and scrubber follow `featured`. */
+  live?: boolean;
+  /** Asks for the live 3D now (the scrubber or a boss chip was touched before it showed). */
+  onRequestLive?: () => void;
+  /** The tenant's name from site config, for the copy. */
+  siteName?: string;
+  /** The glass meter, docked over the replay from 900 px up. */
+  meter?: ReactNode;
   /** The featured run (scoped to the boss pull the hero plays). Without one the hero shows the poster and copy only. */
   featured?: LandingFeaturedRun | null;
   /** Playback position in ms from the run start; the 3D replay drives it. */
@@ -148,7 +163,12 @@ function recapFor(death: LandingFeaturedDeath, recaps: HeroDeathRecap[] | null |
  * keys drive the 3D replay once it plays (`playback`); before that they only
  * move the time label.
  */
-function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; currentMs: number; playback?: HeroReplay | null }) {
+function HeroScrubber({ run, currentMs, playback, onRequestLive }: {
+  run: LandingFeaturedRun;
+  currentMs: number;
+  playback?: HeroReplay | null;
+  onRequestLive?: () => void;
+}) {
   const trackRef = useRef<HTMLDivElement>(null);
   // While dragging, the bar shows the pointer's time rather than the replay's.
   const [dragMs, setDragMs] = useState<number | null>(null);
@@ -177,16 +197,15 @@ function HeroScrubber({ run, currentMs, playback }: { run: LandingFeaturedRun; c
   // The first touch of the scrubber's controls, once per page view.
   const interacted = useRef(false);
   const trackInteraction = (control: "play_pause" | "boss_jump" | "drag" | "death_jump") => {
+    // Any touch before the live replay shows asks for it.
+    if (!playback) onRequestLive?.();
     if (interacted.current) return;
     interacted.current = true;
     trackFunnel("scrub_or_bossjump", { control });
   };
-  const chipClick = (name: string) => {
-    const jump = jumpTo(name);
-    return jump && (() => {
-      trackInteraction("boss_jump");
-      jump();
-    });
+  const chipClick = (name: string) => () => {
+    trackInteraction("boss_jump");
+    jumpTo(name)?.();
   };
 
   const clampMs = (ms: number) => Math.min(run.duration_ms, Math.max(0, ms));
@@ -387,6 +406,13 @@ export function LandingHero({
   poster,
   posterPortrait,
   posterAlt,
+  clip,
+  clipLoops = false,
+  onClipEnded,
+  live = false,
+  onRequestLive,
+  siteName,
+  meter,
   featured,
   currentMs = 0,
   playback,
@@ -394,20 +420,60 @@ export function LandingHero({
   layer3D,
 }: LandingHeroProps) {
   const bossName = featured ? currentBossName(featured, currentMs) : undefined;
-  const delayMs = featured?.upload.source === "sidekick" ? featured.upload.delay_ms : null;
+  const delayMs = live && featured?.upload.source === "sidekick" ? featured.upload.delay_ms : null;
   const delayMinutes = delayMs != null ? Math.max(1, Math.round(delayMs / 60_000)) : 0;
+  // The caption names what plays: the clip's pull until the live replay takes over.
+  const caption = live && featured
+    ? [featured.instance_name, bossName].filter(Boolean).join(" · ")
+    : clip ? `${clip.instance_name} · ${clip.boss}` : featured ? [featured.instance_name, bossName].filter(Boolean).join(" · ") : null;
+
+  // The clip starts only once the poster (the LCP image) has painted.
+  const posterRef = useRef<HTMLImageElement>(null);
+  const [posterPainted, setPosterPainted] = useState(false);
+  useEffect(() => {
+    const img = posterRef.current;
+    if (!img) return;
+    let frame = 0;
+    const painted = () => {
+      frame = requestAnimationFrame(() => {
+        frame = requestAnimationFrame(() => setPosterPainted(true));
+      });
+    };
+    if (img.complete) painted();
+    else {
+      img.addEventListener("load", painted, { once: true });
+      img.addEventListener("error", painted, { once: true });
+    }
+    return () => {
+      cancelAnimationFrame(frame);
+      img.removeEventListener("load", painted);
+      img.removeEventListener("error", painted);
+    };
+  }, []);
+  // The live 3D's fade over the clip takes 700 ms; the clip stops decoding after it.
+  const [clipCovered, setClipCovered] = useState(false);
+  useEffect(() => {
+    if (!live) return;
+    const timer = window.setTimeout(() => setClipCovered(true), 800);
+    return () => {
+      window.clearTimeout(timer);
+      setClipCovered(false);
+    };
+  }, [live]);
 
   return (
     <section id="top" className="relative h-[520px] overflow-hidden border-b bg-card lg:h-[580px]">
       <picture>
         {posterPortrait ? <source media="(max-width: 1023px)" srcSet={posterPortrait} /> : null}
         <img
+          ref={posterRef}
           src={poster}
           alt={posterAlt}
           fetchPriority="high"
           className="absolute inset-0 h-full w-full object-cover object-[center_55%]"
         />
       </picture>
+      {clip ? <HeroClipLayer clip={clip} start={posterPainted} paused={clipCovered} loop={clipLoops} onEnded={() => onClipEnded?.()} /> : null}
       {layer3D ? <div className="absolute inset-0">{layer3D}</div> : null}
       {/* The page background over the poster; index.html's poster shell draws the same gradients. */}
       <div className="absolute inset-0 bg-gradient-to-b from-background/25 via-background/35 to-background/95 lg:hidden" />
@@ -415,38 +481,32 @@ export function LandingHero({
       <div className="absolute inset-x-0 bottom-0 hidden h-[150px] bg-gradient-to-b from-background/0 to-background/95 lg:block" />
 
       <div className="relative mx-auto flex h-full max-w-[1180px] flex-col justify-end gap-3 px-4 pb-[18px] pt-4 lg:justify-start lg:gap-[18px] lg:px-8 lg:pb-0 lg:pt-[52px]">
-        {featured && (
-          <div className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary lg:text-xs">
+        {caption && (
+          // Keyed by what plays, so the switch from the clip to the live run crossfades.
+          <div key={caption} className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary animate-in fade-in-0 duration-500 lg:text-xs">
             <span className="inline-block h-2 w-2 rounded-full bg-primary" />
-            Playing now · {featured.instance_name}
-            {bossName && <span> · {bossName}</span>}
+            Playing now · {caption}
           </div>
         )}
-        {featured?.speedrun && (
+        {live && featured?.speedrun && (
           // The montage entry's place on its speedrun board.
           <div className="-mt-1.5 text-xs text-muted-foreground lg:-mt-3 lg:text-[13px]">
             Fastest replayed {featured.instance_name} clear · {formatClock(featured.speedrun.duration_ms)} · rank {featured.speedrun.rank}
           </div>
         )}
         <h1 className="m-0 max-w-[640px] text-[34px] font-bold leading-[1.06] tracking-tight text-foreground lg:text-[54px] lg:leading-[1.04]">
-          Your dungeon run, replayed in 3D.
+          Every dungeon you run, saved in detail.
         </h1>
         <p className="m-0 max-w-[540px] text-[15px] leading-normal text-foreground/85 lg:text-lg">
-          Sidekick sits in your tray and uploads the fight while you loot. Watch your group walk the real floor, see
-          who died to what, send the link to the party.
+          Sidekick sits in your tray and uploads each fight{siteName ? ` to ${siteName}` : ""} in the background while you play.
         </p>
-        <div className="mt-1 hidden flex-wrap items-center gap-3 lg:flex">
-          <Button asChild variant="button-bright" size="lg" className="h-12 text-base font-semibold">
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <Button asChild variant="button-bright" size="lg" className="h-11 text-[15px] font-semibold lg:h-12 lg:text-base">
             <a href={getSidekickHref} onClick={() => trackFunnel("cta_sidekick", { placement: "hero" })} className="no-underline">
               Get Sidekick, free
             </a>
           </Button>
-          <Button asChild variant="outline" size="lg" className="h-12 text-base">
-            <a href="#runs" className="no-underline">
-              Open this replay
-            </a>
-          </Button>
-          <span className="text-[13px] text-muted-foreground">Mac &amp; Windows · no account to watch</span>
+          <span className="text-xs text-muted-foreground lg:text-[13px]">Mac &amp; Windows · no account to watch</span>
         </div>
         {delayMs != null && (
           <div className="hidden items-center gap-2.5 self-start rounded-md border bg-background/70 px-3 py-2 text-[13px] text-foreground/85 lg:inline-flex">
@@ -456,10 +516,11 @@ export function LandingHero({
         )}
         {featured && (
           <div className="mt-1 lg:mt-auto lg:pb-[22px]">
-            <HeroScrubber run={featured} currentMs={currentMs} playback={playback} />
+            <HeroScrubber run={featured} currentMs={currentMs} playback={playback} onRequestLive={onRequestLive} />
           </div>
         )}
       </div>
+      {meter}
     </section>
   );
 }

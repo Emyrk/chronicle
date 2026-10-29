@@ -133,7 +133,10 @@ for (const [variant, { bitrate, budget }] of Object.entries(VARIANTS)) {
   // The first frame, what the clip opens on.
   const png = join(work, `${stem}.png`);
   ffmpeg("-i", loopPath, "-frames:v", "1", png);
-  execFileSync("cwebp", ["-quiet", "-q", "70", png, "-o", poster]);
+  // The portrait poster is the phone hero's LCP image: smaller and lighter, so it shares the first-paint bandwidth
+  // with the app's entry chunk and stylesheet (/start LCP ≤ 2.5 s on simulated mobile).
+  const posterOptions = variant === "portrait" ? ["-q", "50", "-m", "6", "-resize", "540", "720"] : ["-q", "70"];
+  execFileSync("cwebp", ["-quiet", ...posterOptions, png, "-o", poster]);
   for (const [file, limit] of [[mp4, budget], [webm, budget], [poster, POSTER_BUDGET]]) {
     const size = statSync(file).size;
     console.log(`${file.split("/").pop()}: ${(size / 1024).toFixed(0)} KB${size > limit ? `  OVER BUDGET (${limit / 1000} KB)` : ""}`);
