@@ -194,7 +194,20 @@ const SUPPORTED_INSTANCES: SupportedInstance[] = INSTANCES.map((instance) => ({
 
 const handlers = [
   http.get("/api/v1/site-config", () => HttpResponse.json({ signups_enabled: true, client_uploads_disabled: false, billing_enabled: false, ads_enabled: false, tenant: null })),
-  http.get("/api/v1/whoami", () => new HttpResponse(null, { status: 401 })),
+  // Signed in, with every mock character saved as a favorite for the Add player quick picks.
+  http.get("/api/v1/whoami", () => HttpResponse.json({
+    user_id: "user-storybook",
+    session_id: "session-storybook",
+    roles: [],
+    max_storage_bytes: 0,
+    consumed_storage_bytes: 0,
+    preferences: {},
+    ads_free: false,
+  })),
+  http.get("/api/v1/me/favorites", () => HttpResponse.json({
+    guilds: [],
+    players: PLAYERS.map(searchResult),
+  })),
   http.get("/api/v1/raidlogs/supported", () => HttpResponse.json(SUPPORTED_INSTANCES)),
   http.get("/api/v1/armory/search", ({ request }) => {
     const query = (new URL(request.url).searchParams.get("q") ?? "").toLowerCase();

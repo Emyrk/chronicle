@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ChartNoAxesCombined, Check, CheckCircle, CircleQuestionMark, Database, ExternalLink, Eye, EyeOff, HeartPulse, Keyboard, Layers3, List, Map, MousePointerClick, Percent, Plus, Search, Settings2, Swords, Trash2 } from "lucide-react";
-import type { ArmoryPlayer, ArmorySearchResult, CharacterPerformanceRun } from "@/api/typesGenerated";
+import { ChartNoAxesCombined, Check, CheckCircle, CircleQuestionMark, Database, ExternalLink, Eye, EyeOff, HeartPulse, Keyboard, Layers3, List, Map, MousePointerClick, Percent, Plus, Search, Settings2, Star, Swords, Trash2 } from "lucide-react";
+import type { ArmoryPlayer, ArmorySearchResult, CharacterPerformanceRun, FavoritePlayer } from "@/api/typesGenerated";
 import {
   useArmorySearch,
+  useMyFavorites,
   useSupportedInstanceProgressionBosses,
   useSupportedInstanceRankingEncounterSets,
 } from "@/api/queries";
@@ -27,6 +28,7 @@ import {
 } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { specializationIconUrl } from "@/config/specializationIcon";
+import { useAuth } from "@/hooks/useAuth";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { cn } from "@/lib/utils";
 import { getClassIconUrl } from "../characterDisplay";
@@ -97,6 +99,8 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebouncedValue(searchQuery.trim(), 250);
   const playerSearch = useArmorySearch({ q: debouncedSearch, realm: state.realmName });
+  const { isAuthenticated } = useAuth();
+  const favorites = useMyFavorites({ enabled: isAuthenticated });
   const selectedPlayerProfiles = state.players.flatMap((selection) => {
     const profile = players.find((player) => player.id === selection.id);
     return profile ? [{ selection, profile }] : [];
@@ -166,6 +170,13 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
       runs: filteredRuns[index]?.runs ?? [],
     };
   });
+  const isSelected = (id: string) => selectedPlayers.some((item) => item.id === id);
+  // Comparisons are realm-scoped, so only saved characters from this realm can be added.
+  const savedPlayers = (favorites.data?.players ?? [])
+    .filter((player) => player.realm_name === state.realmName && !isSelected(player.id));
+  const searchResults = (playerSearch.data?.players ?? [])
+    .filter((result) => !isSelected(result.id))
+    .slice(0, 12);
   const configuredSeries = playerDialog && playerDialog !== "add"
     ? series.find((item) => item.player.id === playerDialog)
     : undefined;
@@ -221,7 +232,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
     });
   };
 
-  const addPlayer = (result: ArmorySearchResult) => {
+  const addPlayer = (result: Pick<ArmorySearchResult, "id">) => {
     if (state.players.length >= MAX_COMPARISON_PLAYERS || state.players.some((item) => item.id === result.id)) return;
     onStateChange({
       ...state,
@@ -503,33 +514,36 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                     className="pl-9"
                   />
                 </div>
-                <div className="max-h-72 overflow-y-auto rounded-md border border-border styled-scrollbar">
-                  {debouncedSearch.length < 2 ? (
-                    <div className="p-6 text-center text-sm text-muted-foreground">Enter at least two characters.</div>
-                  ) : playerSearch.isLoading ? (
-                    <div className="p-6 text-center text-sm text-muted-foreground">Searching…</div>
-                  ) : (playerSearch.data?.players ?? []).filter((result) => !selectedPlayers.some((item) => item.id === result.id)).length === 0 ? (
-                    <div className="p-6 text-center text-sm text-muted-foreground">No available players found.</div>
-                  ) : (
-                    (playerSearch.data?.players ?? [])
-                      .filter((result) => !selectedPlayers.some((item) => item.id === result.id))
-                      .slice(0, 12)
-                      .map((result) => (
-                        <button
-                          key={result.id}
-                          type="button"
-                          onClick={() => addPlayer(result)}
-                          className="flex w-full items-center justify-between border-b border-border/60 px-3 py-2.5 text-left last:border-0 hover:bg-accent/50"
-                        >
-                          <span>
-                            <span className="font-medium" style={{ color: getClassColorVar(result.class) }}>{result.name}</span>
-                            <span className="ml-2 text-xs text-muted-foreground">{result.class}</span>
-                          </span>
-                          <span className="text-xs text-muted-foreground">{result.guild_name ? `<${result.guild_name}>` : result.realm_name}</span>
-                        </button>
+                {debouncedSearch.length < 2 ? (
+                  <>
+                    <p className="-mt-1 text-[11px] text-muted-foreground/70">Type at least 2 characters to search.</p>
+                    {savedPlayers.length > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                          <Star className="h-3.5 w-3.5 fill-amber-300 text-amber-300" />
+                          Your saved characters
+                        </div>
+                        <div className="max-h-72 overflow-y-auto rounded-md border border-border styled-scrollbar">
+                          {savedPlayers.map((player) => (
+                            <PlayerPickRow key={player.id} player={player} onSelect={() => addPlayer(player)} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="max-h-72 overflow-y-auto rounded-md border border-border styled-scrollbar">
+                    {playerSearch.isLoading ? (
+                      <div className="p-6 text-center text-sm text-muted-foreground">Searching…</div>
+                    ) : searchResults.length === 0 ? (
+                      <div className="p-6 text-center text-sm text-muted-foreground">No available players found.</div>
+                    ) : (
+                      searchResults.map((result) => (
+                        <PlayerPickRow key={result.id} player={result} onSelect={() => addPlayer(result)} />
                       ))
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
               </div>
             </>
           ) : configuredSeries ? (
@@ -1342,6 +1356,22 @@ function PerformanceTable({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function PlayerPickRow({ player, onSelect }: { player: ArmorySearchResult | FavoritePlayer; onSelect: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="flex w-full items-center justify-between border-b border-border/60 px-3 py-2.5 text-left last:border-0 hover:bg-accent/50"
+    >
+      <span>
+        <span className="font-medium" style={{ color: getClassColorVar(player.class) }}>{player.name}</span>
+        <span className="ml-2 text-xs text-muted-foreground">{player.class}</span>
+      </span>
+      <span className="text-xs text-muted-foreground">{player.guild_name ? `<${player.guild_name}>` : player.realm_name}</span>
+    </button>
   );
 }
 
