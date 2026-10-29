@@ -14,6 +14,7 @@ import {
   performanceEncounterSections,
   performanceValue,
   selectPerformanceEncounterNames,
+  summarizePerformanceRuns,
 } from "./performanceExplorerModel";
 
 function encounter(overrides: Partial<CharacterEncounterStats> = {}): CharacterEncounterStats {
@@ -331,5 +332,69 @@ describe("performanceValue", () => {
     expect(performanceValue(value, "dps", "raw")).toBe(200);
     expect(performanceValue(value, "hps", "raw")).toBe(60);
     expect(performanceValue(value, "dps", "parse")).toBe(87.5);
+  });
+});
+
+describe("summarizePerformanceRuns", () => {
+  const parses = [80, 90, 85, 95, 70, 100];
+  const runs = parses.map((parse, index) => run({
+    run_id: `run-${index}`,
+    started_at: `2026-01-0${index + 1}T00:00:00Z`,
+    average_parse: parse,
+    player_deaths: index % 2,
+    alive_percentage: index % 2 === 0 ? 100 : 90,
+  }));
+
+  it("summarizes best, typical, floor, and spread", () => {
+    const summary = summarizePerformanceRuns(runs, "dps", "parse");
+    expect(summary).toMatchObject({ runCount: 6, best: 100, typical: 87.5, averageDeaths: 0.5, averageAlive: 95 });
+    expect(summary?.floor).toBeCloseTo(75);
+    expect(summary?.spread).toBeCloseTo(12.5);
+  });
+
+  it("separates outliers from the whiskers", () => {
+    const withOutlier = [...runs, run({ run_id: "bad", started_at: "2026-01-07T00:00:00Z", average_parse: 20 })];
+    const summary = summarizePerformanceRuns(withOutlier, "dps", "parse");
+    expect(summary).toMatchObject({ lowerQuartile: 75, upperQuartile: 92.5, lowWhisker: 70, highWhisker: 100, outliers: [20] });
+  });
+
+  it("does not flag runs close to a tightly grouped player's typical run", () => {
+    const tight = [1230, 1232, 1235, 1236, 1238, 1240, 1261].map((dps, index) => run({
+      run_id: `tight-${index}`,
+      started_at: `2026-03-0${index + 1}T00:00:00Z`,
+      dps,
+    }));
+    const summary = summarizePerformanceRuns(tight, "dps", "raw");
+    expect(summary?.outliers).toEqual([]);
+    expect(summary?.highWhisker).toBe(1261);
+
+    const withDisaster = [...tight, run({ run_id: "dc", started_at: "2026-03-09T00:00:00Z", dps: 600 })];
+    expect(summarizePerformanceRuns(withDisaster, "dps", "raw")?.outliers).toEqual([600]);
+  });
+
+  it("reads a fast improver as inconsistent and fits their trend", () => {
+    const climbing = Array.from({ length: 10 }, (_, index) => run({
+      run_id: `climb-${index}`,
+      started_at: `2026-02-${String(index + 1).padStart(2, "0")}T00:00:00Z`,
+      average_parse: 70 + index * 3,
+    }));
+    const bouncing = climbing.map((item, index) => ({ ...item, average_parse: index % 2 === 0 ? 70 : 97 }));
+
+    const climbingSummary = summarizePerformanceRuns(climbing, "dps", "parse");
+    expect(climbingSummary?.consistency).toBeGreaterThan(10);
+    expect(climbingSummary?.trend?.slope).toBeCloseTo(3);
+    expect(summarizePerformanceRuns(bouncing, "dps", "parse")?.trend?.slope).toBeCloseTo(0);
+    expect(summarizePerformanceRuns(climbing.slice(0, 2), "dps", "parse")?.consistency).toBeNull();
+  });
+
+  it("uses the latest five runs for recent once there are more than five", () => {
+    expect(summarizePerformanceRuns(runs, "dps", "parse")?.recent).toBe(90);
+    expect(summarizePerformanceRuns(runs.slice(0, 5), "dps", "parse")?.recent).toBeNull();
+  });
+
+  it("returns null without runs and skips missing death data", () => {
+    expect(summarizePerformanceRuns([], "dps", "parse")).toBeNull();
+    const summary = summarizePerformanceRuns([run({ player_deaths: undefined, alive_percentage: undefined })], "hps", "raw");
+    expect(summary).toMatchObject({ best: 60, typical: 60, averageDeaths: null, averageAlive: null });
   });
 });

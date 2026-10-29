@@ -285,3 +285,153 @@ export function performanceValue(
   if (display === "parse") return run.average_parse ?? 0;
   return metric === "hps" ? run.hps : run.dps;
 }
+
+export function performanceParseColor(score: number): string {
+  if (score >= 99) return "#e6cc80";
+  if (score >= 95) return "#ff8000";
+  if (score >= 75) return "#a335ee";
+  if (score >= 50) return "#0070ff";
+  if (score >= 25) return "#1eff00";
+  return "#9d9d9d";
+}
+
+export const PERFORMANCE_RECENT_RUN_COUNT = 5;
+
+/** A run must sit at least this far beyond the middle half to be an outlier, in parse points. */
+const MIN_OUTLIER_PARSE_GAP = 10;
+/** The same minimum gap in Raw mode, as a fraction of the typical run. */
+const MIN_OUTLIER_RAW_GAP = 0.1;
+
+export interface PerformanceTrendLine {
+  /** Change per day. */
+  slope: number;
+  /** Value at the Unix epoch, in days. */
+  intercept: number;
+}
+
+export interface PerformanceSummary {
+  runCount: number;
+  best: number;
+  typical: number;
+  /** Median of the latest runs; null until there are more runs than the recent window. */
+  recent: number | null;
+  /** 10th percentile run. */
+  floor: number;
+  /** Interquartile range. */
+  spread: number;
+  lowerQuartile: number;
+  upperQuartile: number;
+  /** Lowest and highest runs that are not outliers. */
+  lowWhisker: number;
+  highWhisker: number;
+  /**
+   * Runs beyond 1.5x spread from the middle half, and at least a minimum gap
+   * from it, so tightly grouped players don't get ordinary runs flagged. Ascending.
+   */
+  outliers: number[];
+  /** Theil–Sen trend through the runs; null below 3 runs. */
+  trend: PerformanceTrendLine | null;
+  /**
+   * The spread (interquartile range) once there are enough runs to judge it;
+   * null below 3 runs. A fast improver reads as inconsistent by design.
+   */
+  consistency: number | null;
+  averageDeaths: number | null;
+  averageAlive: number | null;
+}
+
+export function summarizePerformanceRuns(
+  runs: readonly CharacterPerformanceRun[],
+  metric: "dps" | "hps",
+  display: "raw" | "parse",
+): PerformanceSummary | null {
+  if (runs.length === 0) return null;
+
+  const values = runs.map((run) => performanceValue(run, metric, display)).sort((a, b) => a - b);
+  const recentValues = [...runs]
+    .sort((a, b) => b.started_at.localeCompare(a.started_at))
+    .slice(0, PERFORMANCE_RECENT_RUN_COUNT)
+    .map((run) => performanceValue(run, metric, display))
+    .sort((a, b) => a - b);
+  const deaths = runs.flatMap((run) => run.player_deaths == null ? [] : [run.player_deaths]);
+  const alive = runs.flatMap((run) => run.alive_percentage == null ? [] : [run.alive_percentage]);
+  const typical = quantile(values, 0.5);
+  const lowerQuartile = quantile(values, 0.25);
+  const upperQuartile = quantile(values, 0.75);
+  const spread = upperQuartile - lowerQuartile;
+  const minimumGap = display === "parse" ? MIN_OUTLIER_PARSE_GAP : Math.abs(typical) * MIN_OUTLIER_RAW_GAP;
+  const fenceGap = Math.max(spread * 1.5, minimumGap);
+  const lowFence = lowerQuartile - fenceGap;
+  const highFence = upperQuartile + fenceGap;
+  const inside = values.filter((value) => value >= lowFence && value <= highFence);
+  const fit = runs.length >= 3
+    ? fitTrend(runs.map((run) => ({
+      day: Date.parse(run.started_at) / DAY_MS,
+      value: performanceValue(run, metric, display),
+    })))
+    : null;
+
+  return {
+    runCount: runs.length,
+    best: values[values.length - 1],
+    typical,
+    recent: runs.length > PERFORMANCE_RECENT_RUN_COUNT ? quantile(recentValues, 0.5) : null,
+    floor: quantile(values, 0.1),
+    spread,
+    lowerQuartile,
+    upperQuartile,
+    lowWhisker: inside[0],
+    highWhisker: inside[inside.length - 1],
+    outliers: values.filter((value) => value < lowFence || value > highFence),
+    trend: fit,
+    consistency: runs.length >= 3 ? spread : null,
+    averageDeaths: deaths.length > 0 ? mean(deaths) : null,
+    averageAlive: alive.length > 0 ? mean(alive) : null,
+  };
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The trend line's value at a timestamp in milliseconds. */
+export function performanceTrendValue(trend: PerformanceTrendLine, timestamp: number): number {
+  return trend.intercept + trend.slope * (timestamp / DAY_MS);
+}
+
+/** Theil–Sen trend line (median of pairwise slopes), which a few outlier nights barely move. */
+function fitTrend(points: readonly { day: number; value: number }[]): PerformanceTrendLine {
+  const slopes: number[] = [];
+  for (let i = 0; i < points.length; i += 1) {
+    for (let j = i + 1; j < points.length; j += 1) {
+      const run = points[j].day - points[i].day;
+      if (run !== 0) slopes.push((points[j].value - points[i].value) / run);
+    }
+  }
+  const slope = slopes.length > 0 ? quantile(slopes.sort((a, b) => a - b), 0.5) : 0;
+  const intercept = quantile(points.map((point) => point.value - slope * point.day).sort((a, b) => a - b), 0.5);
+  return { slope, intercept };
+}
+
+/** Linear-interpolated quantile of an ascending, non-empty list. */
+function quantile(sorted: readonly number[], q: number): number {
+  const position = (sorted.length - 1) * q;
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  return sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower);
+}
+
+function mean(values: readonly number[]): number {
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+/** Consistency label from the spread: parse points in Parse mode, percent of the typical run in Raw mode. */
+export function consistencyLabel(spread: number, typical: number, display: "raw" | "parse"): "High" | "Med" | "Low" {
+  const scaled = display === "parse" ? spread : (spread / Math.max(typical, 1)) * 100;
+  if (scaled <= 4) return "High";
+  if (scaled <= 8) return "Med";
+  return "Low";
+}
+
+/** One decimal for parses, whole numbers with separators for DPS/HPS. */
+export function formatStat(value: number, display: "raw" | "parse"): string {
+  return display === "parse" ? value.toFixed(1) : Math.round(value).toLocaleString();
+}

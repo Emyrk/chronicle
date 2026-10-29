@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Check, CheckCircle, CircleQuestionMark, Database, ExternalLink, Eye, EyeOff, HeartPulse, Keyboard, Layers3, List, Map, MousePointerClick, Percent, Plus, Search, Settings2, Swords, Trash2 } from "lucide-react";
-import type { ArmoryPlayer, ArmorySearchResult, CharacterPerformanceRun } from "@/api/typesGenerated";
+import { ChartNoAxesCombined, Check, CheckCircle, CircleQuestionMark, Database, ExternalLink, Eye, EyeOff, HeartPulse, Keyboard, Layers3, List, Map, MousePointerClick, Percent, Plus, Search, Settings2, Star, Swords, Trash2 } from "lucide-react";
+import type { ArmoryPlayer, ArmorySearchResult, CharacterPerformanceRun, FavoritePlayer } from "@/api/typesGenerated";
 import {
   useArmorySearch,
+  useMyFavorites,
   useSupportedInstanceProgressionBosses,
   useSupportedInstanceRankingEncounterSets,
 } from "@/api/queries";
@@ -27,6 +28,7 @@ import {
 } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { specializationIconUrl } from "@/config/specializationIcon";
+import { useAuth } from "@/hooks/useAuth";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { cn } from "@/lib/utils";
 import { getClassIconUrl } from "../characterDisplay";
@@ -47,15 +49,27 @@ import {
   filterPerformanceRunSeries,
   formatDeathsAlive,
   performanceEncounterSections,
+  performanceParseColor,
+  performanceTrendValue,
   performanceValue,
   selectPerformanceEncounterNames,
+  summarizePerformanceRuns,
   type PerformanceDateRange,
   type PerformancePointShape,
 } from "./performanceExplorerModel";
+import { PerformanceSummaryPanel, SummaryViewToggle, type SummaryView } from "./PerformanceSummary";
+import { NumbersExplainer } from "./NumbersExplainer";
 
 type DisplayMode = PerformanceDisplayMode;
 
 type PlayerDialog = "add" | string | null;
+
+type DetailTab = "runs" | "numbers";
+
+const DETAIL_TABS: readonly { value: DetailTab; label: string }[] = [
+  { value: "runs", label: "Run summary" },
+  { value: "numbers", label: "How the numbers work" },
+];
 
 interface SelectedPerformancePlayer {
   id: string;
@@ -85,6 +99,7 @@ interface PerformanceExplorerProps {
 }
 
 const MAX_COMPARISON_PLAYERS = 5;
+const TREND_COLOR = "#34d399";
 
 export function PerformanceExplorer({ players, state, onStateChange }: PerformanceExplorerProps) {
   const primaryPlayer = players[0];
@@ -98,9 +113,13 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
   const [playerDialog, setPlayerDialog] = useState<PlayerDialog>(null);
   const [mobileEncounterOpen, setMobileEncounterOpen] = useState(false);
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  const [summaryView, setSummaryView] = useState<SummaryView>("numbers");
+  const [detailTab, setDetailTab] = useState<DetailTab>("runs");
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebouncedValue(searchQuery.trim(), 250);
   const playerSearch = useArmorySearch({ q: debouncedSearch });
+  const { isAuthenticated } = useAuth();
+  const favorites = useMyFavorites({ enabled: isAuthenticated });
   const selectedPlayerProfiles = state.players.flatMap((selection) => {
     const profile = players.find((player) => (
       player.id === selection.id
@@ -176,10 +195,21 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
       runs: filteredRuns[index]?.runs ?? [],
     };
   });
+  const isSelected = (player: Pick<ArmorySearchResult, "id" | "realm_name">) => selectedPlayers.some((item) => (
+    performancePlayerKey(item) === performancePlayerKey({ id: player.id, realmName: player.realm_name })
+  ));
+  const savedPlayers = (favorites.data?.players ?? []).filter((player) => !isSelected(player));
+  const searchResults = (playerSearch.data?.players ?? [])
+    .filter((result) => !isSelected(result))
+    .slice(0, 12);
+  const playerLabel = (player: SelectedPerformancePlayer) => (
+    showPlayerRealms ? `${player.name} · ${player.realmName}` : player.name
+  );
   const configuredSeries = playerDialog && playerDialog !== "add"
     ? series.find((item) => performancePlayerKey(item.player) === playerDialog)
     : undefined;
   const visibleSeries = series.filter((item) => !item.player.hidden);
+  const performanceLoading = selectedPlayers.some((player, index) => !player.hidden && performanceQueries[index]?.isLoading);
   const omittedParseCount = display === "parse"
     ? visibleSeries.reduce((count, item) => count + item.rawRuns.length - item.runs.length, 0)
     : 0;
@@ -232,7 +262,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
     });
   };
 
-  const addPlayer = (result: ArmorySearchResult) => {
+  const addPlayer = (result: Pick<ArmorySearchResult, "id" | "realm_name">) => {
     const selection = { id: result.id, realmName: result.realm_name, spec: null, subSpec: null, hidden: false };
     const key = performancePlayerKey(selection);
     if (state.players.length >= MAX_COMPARISON_PLAYERS || state.players.some((item) => performancePlayerKey(item) === key)) return;
@@ -251,22 +281,24 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
   };
 
   return (
-    <Card className="overflow-hidden border-border/80 bg-gradient-to-b from-card to-card/70 py-4 sm:py-6">
-      <CardContent className="space-y-5 px-3 sm:px-6">
+    <Card className="overflow-hidden border-border/80 bg-gradient-to-b from-card to-card/70 py-3 sm:py-4">
+      <CardContent className="space-y-4 px-3 sm:px-5">
         {variants.length === 0 ? (
           <EmptyState loading={encountersQuery.isLoading} />
         ) : (
           <>
-            <div className="flex items-start justify-between gap-4 border-b border-border/60 pb-5">
-              <label className="block min-w-0 max-w-xl flex-1 space-y-1.5 text-xs font-medium text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <Map className="h-3.5 w-3.5 text-sky-400" />
-                  Instance
-                </span>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/60 pb-3">
+              <h1 className="flex shrink-0 items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-foreground">
+                <ChartNoAxesCombined className="h-4 w-4 text-sky-400" />
+                Player Analysis
+              </h1>
+              <label className="relative min-w-0 basis-full sm:max-w-md sm:flex-1 sm:basis-auto">
+                <span className="sr-only">Instance</span>
+                <Map className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-sky-400" />
                 <select
                   value={variant?.key ?? ""}
                   onChange={(event) => selectVariant(event.target.value)}
-                  className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-sky-500/70"
+                  className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-3 text-sm text-foreground outline-none focus:border-sky-500/70"
                 >
                   {variants.map((item) => (
                     <option key={item.key} value={item.key}>
@@ -275,17 +307,75 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                   ))}
                 </select>
               </label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="hidden h-8 w-8 shrink-0 text-sky-400 hover:bg-sky-400/10 hover:text-sky-300 sm:inline-flex"
-                title="Keyboard shortcuts"
-                aria-label="Show keyboard shortcuts"
-                onClick={() => setShortcutHelpOpen(true)}
-              >
-                <Keyboard className="h-4 w-4" />
-              </Button>
+              <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+                <div className="grid flex-1 grid-cols-2 gap-1 rounded-lg border border-white/10 bg-black/20 p-1 sm:flex-none">
+                  <button
+                    type="button"
+                    onClick={() => onStateChange({ ...state, metric: "dps" })}
+                    className={cn(
+                      "flex items-center justify-center gap-1.5 rounded-md px-3 py-0.5 text-xs font-medium transition-all",
+                      metric === "dps"
+                        ? "bg-red-500/20 text-red-300 shadow-[0_0_12px_rgba(239,68,68,0.5)] ring-1 ring-inset ring-red-400/50"
+                        : "text-muted-foreground hover:text-red-300",
+                    )}
+                  >
+                    <Swords className="h-3.5 w-3.5" />
+                    DPS
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onStateChange({ ...state, metric: "hps" })}
+                    className={cn(
+                      "flex items-center justify-center gap-1.5 rounded-md px-3 py-0.5 text-xs font-medium transition-all",
+                      metric === "hps"
+                        ? "bg-emerald-500/20 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.5)] ring-1 ring-inset ring-emerald-400/50"
+                        : "text-muted-foreground hover:text-emerald-300",
+                    )}
+                  >
+                    <HeartPulse className="h-3.5 w-3.5" />
+                    HPS
+                  </button>
+                </div>
+                <div className="grid flex-1 grid-cols-2 gap-1 rounded-lg border border-white/10 bg-black/20 p-1 sm:flex-none">
+                  <button
+                    type="button"
+                    onClick={() => onStateChange({ ...state, display: "raw" })}
+                    className={cn(
+                      "flex items-center justify-center gap-1.5 rounded-md px-3 py-0.5 text-xs font-medium transition-colors",
+                      display === "raw"
+                        ? "bg-white/15 text-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <Database className="h-3.5 w-3.5" />
+                    Raw
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onStateChange({ ...state, display: "parse" })}
+                    className={cn(
+                      "flex items-center justify-center gap-1.5 rounded-md px-3 py-0.5 text-xs font-medium transition-colors",
+                      display === "parse"
+                        ? "bg-white/15 text-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <Percent className="h-3.5 w-3.5" />
+                    Parse
+                  </button>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="hidden h-8 w-8 shrink-0 text-sky-400 hover:bg-sky-400/10 hover:text-sky-300 sm:inline-flex"
+                  title="Keyboard shortcuts"
+                  aria-label="Show keyboard shortcuts"
+                  onClick={() => setShortcutHelpOpen(true)}
+                >
+                  <Keyboard className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
 
             <div className="flex flex-col lg:flex-row">
@@ -300,145 +390,129 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                 />
               </aside>
 
-              <div className="min-w-0 flex-1 pt-5 lg:pl-6 lg:pt-0">
-                <div className="pb-4">
-                  <div className="min-w-0 space-y-2">
-                    <div className="hidden text-xs font-medium text-muted-foreground sm:block">Players</div>
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-2">
-                      <div className="flex w-full flex-col gap-1 sm:w-auto">
-                        <div className="grid w-full grid-cols-2 gap-1 rounded-lg border border-white/10 bg-black/20 p-1 sm:w-auto">
-                          <button
-                            type="button"
-                            onClick={() => onStateChange({ ...state, metric: "dps" })}
-                            className={cn(
-                              "flex items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all",
-                              metric === "dps"
-                                ? "bg-red-500/20 text-red-300 shadow-[0_0_12px_rgba(239,68,68,0.5)] ring-1 ring-inset ring-red-400/50"
-                                : "text-muted-foreground hover:text-red-300",
-                            )}
-                          >
-                            <Swords className="h-3.5 w-3.5" />
-                            DPS
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onStateChange({ ...state, metric: "hps" })}
-                            className={cn(
-                              "flex items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all",
-                              metric === "hps"
-                                ? "bg-emerald-500/20 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.5)] ring-1 ring-inset ring-emerald-400/50"
-                                : "text-muted-foreground hover:text-emerald-300",
-                            )}
-                          >
-                            <HeartPulse className="h-3.5 w-3.5" />
-                            HPS
-                          </button>
-                        </div>
-                        <div className="grid w-full grid-cols-2 gap-1 rounded-lg border border-white/10 bg-black/20 p-1 sm:w-auto">
-                          <button
-                            type="button"
-                            onClick={() => onStateChange({ ...state, display: "raw" })}
-                            className={cn(
-                              "flex items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                              display === "raw"
-                                ? "bg-white/15 text-foreground"
-                                : "text-muted-foreground hover:text-foreground",
-                            )}
-                          >
-                            <Database className="h-3.5 w-3.5" />
-                            Raw
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onStateChange({ ...state, display: "parse" })}
-                            className={cn(
-                              "flex items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                              display === "parse"
-                                ? "bg-white/15 text-foreground"
-                                : "text-muted-foreground hover:text-foreground",
-                            )}
-                          >
-                            <Percent className="h-3.5 w-3.5" />
-                            Parse
-                          </button>
-                        </div>
-                      </div>
-                      <div className="text-xs font-medium text-muted-foreground sm:hidden">Players</div>
-                      <div aria-hidden="true" className="hidden w-px self-stretch bg-border/80 sm:block" />
-                      <div className="flex min-w-0 items-end gap-2">
-                        <div className="grid min-w-0 flex-1 grid-cols-2 gap-1 sm:flex-none sm:grid-flow-col sm:grid-cols-none sm:grid-rows-2">
-                        {series.map(({ player: selectedPlayer, specShapes }) => (
-                          <PlayerShapesTooltip
-                            key={performancePlayerKey(selectedPlayer)}
-                            color={selectedPlayer.color}
-                            specShapes={specShapes}
-                          >
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                if (event.shiftKey) togglePlayerVisibility(selectedPlayer);
-                                else setPlayerDialog(performancePlayerKey(selectedPlayer));
-                              }}
-                              className={cn(
-                                "group flex h-8 min-w-0 items-center gap-2 rounded-md border border-border bg-background/70 pr-2 text-left text-xs transition-all hover:bg-accent/50 sm:min-w-40",
-                                selectedPlayer.hidden && "opacity-45 saturate-50",
-                              )}
-                              style={{ borderColor: selectedPlayer.color }}
-                              aria-label={`${selectedPlayer.name}. ${selectedPlayer.hidden ? "Hidden, Shift+click to show" : "Shift+click to hide"}`}
-                            >
-                              <img
-                                src={getClassIconUrl(selectedPlayer.className)}
-                                alt={`${selectedPlayer.className} class`}
-                                className="size-8 shrink-0 rounded-l-[5px] border-r object-cover"
-                                style={{ borderColor: selectedPlayer.color }}
-                              />
-                              <span className="min-w-0 flex-1 leading-tight">
-                                <span className="block truncate font-semibold" style={{ color: selectedPlayer.color }}>
-                                  {selectedPlayer.name}
-                                </span>
-                                <span className="block truncate text-[10px] text-muted-foreground">
-                                  {selectedPlayer.spec ? `${selectedPlayer.spec}${selectedPlayer.subSpec ? ` / ${selectedPlayer.subSpec}` : ""}` : "All specs"}
-                                  {showPlayerRealms && ` · ${selectedPlayer.realmName}`}
-                                </span>
-                              </span>
-                              {selectedPlayer.hidden && <EyeOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
-                              <Settings2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-foreground" />
-                            </button>
-                          </PlayerShapesTooltip>
-                        ))}
-                        <Button
+              <div className="min-w-0 flex-1 space-y-4 lg:pl-6">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+                  <div className="grid min-w-0 flex-1 grid-cols-2 gap-1.5 sm:flex sm:flex-wrap sm:items-center">
+                    {series.map(({ player: selectedPlayer, specShapes }) => (
+                      <PlayerShapesTooltip
+                        key={performancePlayerKey(selectedPlayer)}
+                        color={selectedPlayer.color}
+                        specShapes={specShapes}
+                      >
+                        <button
                           type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8 min-w-0 px-3 text-xs sm:min-w-32"
-                          disabled={selectedPlayers.length >= MAX_COMPARISON_PLAYERS}
-                          onClick={() => setPlayerDialog("add")}
+                          onClick={(event) => {
+                            if (event.shiftKey) togglePlayerVisibility(selectedPlayer);
+                            else setPlayerDialog(performancePlayerKey(selectedPlayer));
+                          }}
+                          className={cn(
+                            "group flex h-8 min-w-0 items-center gap-2 rounded-md border border-border bg-background/70 pr-2 text-left text-xs transition-all hover:bg-accent/50 sm:min-w-40",
+                            selectedPlayer.hidden && "opacity-45 saturate-50",
+                          )}
+                          style={{ borderColor: selectedPlayer.color }}
+                          aria-label={`${selectedPlayer.name}. ${selectedPlayer.hidden ? "Hidden, Shift+click to show" : "Shift+click to hide"}`}
                         >
-                          <Plus className="h-3.5 w-3.5" />
-                          Add player
-                        </Button>
-                      </div>
-                        <span className="text-[10px] text-muted-foreground/60">{selectedPlayers.length}/5</span>
-                      </div>
-                    </div>
+                          <img
+                            src={getClassIconUrl(selectedPlayer.className)}
+                            alt={`${selectedPlayer.className} class`}
+                            className="size-8 shrink-0 rounded-l-[5px] border-r object-cover"
+                            style={{ borderColor: selectedPlayer.color }}
+                          />
+                          <span className="min-w-0 flex-1 leading-tight">
+                            <span className="block truncate font-semibold" style={{ color: selectedPlayer.color }}>
+                              {selectedPlayer.name}
+                            </span>
+                            <span className="block truncate text-[10px] text-muted-foreground">
+                              {selectedPlayer.spec ? `${selectedPlayer.spec}${selectedPlayer.subSpec ? ` / ${selectedPlayer.subSpec}` : ""}` : "All specs"}
+                              {showPlayerRealms && ` · ${selectedPlayer.realmName}`}
+                            </span>
+                          </span>
+                          {selectedPlayer.hidden && <EyeOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                          <Settings2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-foreground" />
+                        </button>
+                      </PlayerShapesTooltip>
+                    ))}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 min-w-0 px-3 text-xs"
+                      disabled={selectedPlayers.length >= MAX_COMPARISON_PLAYERS}
+                      onClick={() => setPlayerDialog("add")}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add player
+                      <span className="text-[10px] text-muted-foreground/60">{selectedPlayers.length}/{MAX_COMPARISON_PLAYERS}</span>
+                    </Button>
                   </div>
+                  {!performanceLoading && <SummaryViewToggle view={summaryView} onChange={setSummaryView} className="shrink-0 self-end sm:self-start" />}
                 </div>
+
+                {!performanceLoading && (
+                  <PerformanceSummaryPanel
+                    players={visibleSeries.map(({ player: summaryPlayer, runs }) => ({
+                      id: performancePlayerKey(summaryPlayer),
+                      name: playerLabel(summaryPlayer),
+                      className: summaryPlayer.className,
+                      color: summaryPlayer.color,
+                      runs,
+                    }))}
+                    metric={metric}
+                    display={display}
+                    view={summaryView}
+                  />
+                )}
 
                 <PerformanceTrend
                   series={visibleSeries}
                   metric={metric}
                   display={display}
-                  loading={selectedPlayers.some((player, index) => !player.hidden && performanceQueries[index]?.isLoading)}
+                  loading={performanceLoading}
                   omittedParseCount={omittedParseCount}
                   showPlayerRealms={showPlayerRealms}
                 />
 
-                <PerformanceTable
-                  series={visibleSeries}
-                  metric={metric}
-                  display={display}
-                  showPlayerRealms={showPlayerRealms}
-                />
+                <div className="space-y-3 border-t border-border/60 pt-4">
+                  <div role="tablist" aria-label="Details" className="flex gap-5 border-b border-border/60">
+                    {DETAIL_TABS.map((tab) => (
+                      <button
+                        key={tab.value}
+                        type="button"
+                        role="tab"
+                        aria-selected={detailTab === tab.value}
+                        onClick={() => setDetailTab(tab.value)}
+                        className={cn(
+                          "-mb-px border-b-2 pb-2 text-sm font-semibold transition-colors",
+                          detailTab === tab.value
+                            ? "border-[#5F8FA6] text-foreground"
+                            : "border-transparent text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                  {detailTab === "runs" ? (
+                    <PerformanceTable
+                      series={visibleSeries}
+                      metric={metric}
+                      display={display}
+                      showPlayerRealms={showPlayerRealms}
+                    />
+                  ) : (
+                    <NumbersExplainer
+                      players={visibleSeries.map(({ player: explainedPlayer, runs }) => ({
+                        id: performancePlayerKey(explainedPlayer),
+                        name: playerLabel(explainedPlayer),
+                        className: explainedPlayer.className,
+                        color: explainedPlayer.color,
+                        runs,
+                      }))}
+                      metric={metric}
+                      display={display}
+                    />
+                  )}
+                </div>
               </div>
             </div>
           </>
@@ -519,39 +593,36 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                     className="pl-9"
                   />
                 </div>
-                <div className="max-h-72 overflow-y-auto rounded-md border border-border styled-scrollbar">
-                  {debouncedSearch.length < 2 ? (
-                    <div className="p-6 text-center text-sm text-muted-foreground">Enter at least two characters.</div>
-                  ) : playerSearch.isLoading ? (
-                    <div className="p-6 text-center text-sm text-muted-foreground">Searching…</div>
-                  ) : (playerSearch.data?.players ?? []).filter((result) => !selectedPlayers.some((item) => (
-                    performancePlayerKey(item) === performancePlayerKey({ id: result.id, realmName: result.realm_name })
-                  ))).length === 0 ? (
-                    <div className="p-6 text-center text-sm text-muted-foreground">No available players found.</div>
-                  ) : (
-                    (playerSearch.data?.players ?? [])
-                      .filter((result) => !selectedPlayers.some((item) => (
-                        performancePlayerKey(item) === performancePlayerKey({ id: result.id, realmName: result.realm_name })
-                      )))
-                      .slice(0, 12)
-                      .map((result) => (
-                        <button
-                          key={performancePlayerKey({ id: result.id, realmName: result.realm_name })}
-                          type="button"
-                          onClick={() => addPlayer(result)}
-                          className="flex w-full items-center justify-between border-b border-border/60 px-3 py-2.5 text-left last:border-0 hover:bg-accent/50"
-                        >
-                          <span>
-                            <span className="font-medium" style={{ color: getClassColorVar(result.class) }}>{result.name}</span>
-                            <span className="ml-2 text-xs text-muted-foreground">{result.class}</span>
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {result.guild_name ? `<${result.guild_name}> · ` : ""}{result.realm_name}
-                          </span>
-                        </button>
+                {debouncedSearch.length < 2 ? (
+                  <>
+                    <p className="-mt-1 text-[11px] text-muted-foreground/70">Type at least 2 characters to search.</p>
+                    {savedPlayers.length > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                          <Star className="h-3.5 w-3.5 fill-amber-300 text-amber-300" />
+                          Your saved characters
+                        </div>
+                        <div className="max-h-72 overflow-y-auto rounded-md border border-border styled-scrollbar">
+                          {savedPlayers.map((player) => (
+                            <PlayerPickRow key={performancePlayerKey({ id: player.id, realmName: player.realm_name })} player={player} onSelect={() => addPlayer(player)} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="max-h-72 overflow-y-auto rounded-md border border-border styled-scrollbar">
+                    {playerSearch.isLoading ? (
+                      <div className="p-6 text-center text-sm text-muted-foreground">Searching…</div>
+                    ) : searchResults.length === 0 ? (
+                      <div className="p-6 text-center text-sm text-muted-foreground">No available players found.</div>
+                    ) : (
+                      searchResults.map((result) => (
+                        <PlayerPickRow key={performancePlayerKey({ id: result.id, realmName: result.realm_name })} player={result} onSelect={() => addPlayer(result)} />
                       ))
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
               </div>
             </>
           ) : configuredSeries ? (
@@ -868,6 +939,15 @@ function PerformanceTrend({
         color: "#f59e0b",
         opacity: 0.9,
       });
+  // With one player, draw their trend line so improvement is visible next to Consistency.
+  const trendSummary = series.length === 1 ? summarizePerformanceRuns(series[0].runs, metric, display) : null;
+  const trendLine = trendSummary?.trend && minTime !== maxTime
+    ? {
+        start: performanceTrendValue(trendSummary.trend, minTime),
+        end: performanceTrendValue(trendSummary.trend, maxTime),
+        perWeek: trendSummary.trend.slope * 7,
+      }
+    : null;
   const parseTierBands = display === "parse"
     ? [
         { min: 0, max: 25, color: "#9d9d9d" },
@@ -918,32 +998,41 @@ function PerformanceTrend({
   };
 
   return (
-    <div className="space-y-3 border-t border-border/60 pt-5">
-      {performanceMarkers.length > 0 && (
-        <div className="flex flex-wrap justify-end gap-x-4 gap-y-1 px-1 text-[11px] text-muted-foreground">
-          {performanceMarkers.map((marker) => (
-            <div key={marker.key} className="flex items-center gap-2">
-              <span
-                className="w-6 border-t-2"
-                style={{
-                  borderColor: marker.color,
-                  borderTopStyle: marker.key === "average" ? "dashed" : "dotted",
-                }}
-                aria-hidden="true"
-              />
-              <span>{marker.label}</span>
-              <span className="font-mono font-medium tabular-nums" style={{ color: marker.color }}>
-                {formatValue(marker.value)}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+    <div className="space-y-3">
       <div
         className="relative h-72 cursor-crosshair overflow-visible rounded-lg border border-border/70 bg-black/10"
         onPointerMove={updateHoverDay}
         onPointerLeave={() => setHoverDay(null)}
       >
+        {(performanceMarkers.length > 0 || trendLine) && (
+          <div className="pointer-events-none absolute top-1.5 right-2 z-10 flex flex-wrap justify-end gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+            {performanceMarkers.map((marker) => (
+              <div key={marker.key} className="flex items-center gap-2">
+                <span
+                  className="w-6 border-t-2"
+                  style={{
+                    borderColor: marker.color,
+                    borderTopStyle: marker.key === "average" ? "dashed" : "dotted",
+                  }}
+                  aria-hidden="true"
+                />
+                <span>{marker.label}</span>
+                <span className="font-mono font-medium tabular-nums" style={{ color: marker.color }}>
+                  {formatValue(marker.value)}
+                </span>
+              </div>
+            ))}
+            {trendLine && (
+              <div className="flex items-center gap-2">
+                <span className="w-6 border-t-2" style={{ borderColor: TREND_COLOR }} aria-hidden="true" />
+                <span>Trend</span>
+                <span className="font-mono font-medium tabular-nums" style={{ color: TREND_COLOR }}>
+                  {trendLine.perWeek >= 0 ? "+" : "−"}{formatValue(Math.abs(trendLine.perWeek))}/wk
+                </span>
+              </div>
+            )}
+          </div>
+        )}
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none h-full w-full" aria-hidden="true">
           {parseTierBands.map((band) => (
             <rect
@@ -959,6 +1048,20 @@ function PerformanceTrend({
           {yAxisTicks.map((tick) => (
             <line key={tick.position} x1="4" x2="96" y1={tick.position} y2={tick.position} stroke="currentColor" strokeWidth="0.25" className="text-border" vectorEffect="non-scaling-stroke" />
           ))}
+          {trendLine && (
+            <>
+              <line
+                x1={x(minTime)}
+                x2={x(maxTime)}
+                y1={y(trendLine.start)}
+                y2={y(trendLine.end)}
+                stroke={TREND_COLOR}
+                strokeWidth="1.5"
+                opacity="0.9"
+                vectorEffect="non-scaling-stroke"
+              />
+            </>
+          )}
           {performanceMarkers.map((marker) => (
             <line
               key={marker.key}
@@ -1023,7 +1126,7 @@ function PerformanceTrend({
           const pointY = y(rawValue);
           const value = formatValue(rawValue);
           const valueLabel = display === "parse" ? "Parse" : metric.toUpperCase();
-          const pointColor = display === "parse" ? parseColor(rawValue) : pointPlayer.color;
+          const pointColor = display === "parse" ? performanceParseColor(rawValue) : pointPlayer.color;
 
           return (
             <div
@@ -1073,7 +1176,7 @@ function PerformanceTrend({
                     })}
                   </div>
                   {group.points.map(({ player: pointPlayer, run, value, shape }) => {
-                    const valueColor = display === "parse" ? parseColor(value) : pointPlayer.color;
+                    const valueColor = display === "parse" ? performanceParseColor(value) : pointPlayer.color;
                     const rawMetricValue = metric === "hps" ? run.hps : run.dps;
                     return (
                       <div key={`${performancePlayerKey(pointPlayer)}-${run.run_id}`} className="px-1.5 py-1">
@@ -1198,8 +1301,7 @@ function PerformanceTable({
     .sort((a, b) => b.run.started_at.localeCompare(a.run.started_at));
 
   return (
-    <div className="space-y-2 border-t border-border/60 pt-5">
-      <div className="text-sm font-semibold">Run summary</div>
+    <div className="space-y-2">
 
       <div className="sm:hidden">
         <div className="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] gap-2 border-b border-border px-2 pb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -1245,7 +1347,7 @@ function PerformanceTable({
                 </span>
                 <span
                   className="font-mono font-semibold tabular-nums"
-                  style={{ color: display === "parse" && value != null ? parseColor(value) : undefined }}
+                  style={{ color: display === "parse" && value != null ? performanceParseColor(value) : undefined }}
                 >
                   {value == null ? "—" : display === "parse" ? Math.round(value) : Math.round(value).toLocaleString()}
                 </span>
@@ -1312,7 +1414,7 @@ function PerformanceTable({
                 <td className="py-2 pr-4 text-right font-mono tabular-nums">{formatDeathsAlive(run)}</td>
                 <td className="py-2 pr-4 text-right font-mono tabular-nums">{formatCompact(metric === "hps" ? run.healing_done + run.absorbed_done : run.damage_done)}</td>
                 <td className="py-2 pr-4 text-right font-mono font-semibold tabular-nums">{Math.round(metric === "hps" ? run.hps : run.dps).toLocaleString()}</td>
-                <td className="py-2 pr-4 text-right font-mono tabular-nums" style={{ color: run.average_parse == null ? undefined : parseColor(run.average_parse) }}>
+                <td className="py-2 pr-4 text-right font-mono tabular-nums" style={{ color: run.average_parse == null ? undefined : performanceParseColor(run.average_parse) }}>
                   {run.average_parse == null ? "—" : Math.round(run.average_parse)}
                 </td>
                 <td className="py-1 text-right">
@@ -1370,6 +1472,24 @@ function PerformanceTable({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function PlayerPickRow({ player, onSelect }: { player: ArmorySearchResult | FavoritePlayer; onSelect: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="flex w-full items-center justify-between border-b border-border/60 px-3 py-2.5 text-left last:border-0 hover:bg-accent/50"
+    >
+      <span>
+        <span className="font-medium" style={{ color: getClassColorVar(player.class) }}>{player.name}</span>
+        <span className="ml-2 text-xs text-muted-foreground">{player.class}</span>
+      </span>
+      <span className="text-xs text-muted-foreground">
+        {player.guild_name ? `<${player.guild_name}> · ` : ""}{player.realm_name}
+      </span>
+    </button>
   );
 }
 
@@ -1567,14 +1687,5 @@ function formatDuration(seconds: number) {
 
 function formatCompact(value: number) {
   return new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 2 }).format(value);
-}
-
-function parseColor(score: number) {
-  if (score >= 99) return "#e6cc80";
-  if (score >= 95) return "#ff8000";
-  if (score >= 75) return "#a335ee";
-  if (score >= 50) return "#0070ff";
-  if (score >= 25) return "#1eff00";
-  return "#9d9d9d";
 }
 
