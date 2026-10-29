@@ -1,5 +1,18 @@
 [
   {
+    "id": "ranked-damage",
+    "title": "Ranked damage and ranked time",
+    "description": "Turn on Ranked in Damage Done to see the damage that counts toward rankings, with overkill and non-ranked targets moved to Excluded. Ranked DPS now stops the clock when the last ranked target dies, and the new Rulesets tab lists every encounter's targets.",
+    "publishedAt": "2026-10-28",
+    "rarity": "rare",
+    "tag": "Feature",
+    "icon": "ability_warrior_decisivestrike",
+    "flavor": "Overkill is just showing off.",
+    "hintTitle": "Ranked damage and time",
+    "hintDescription": "Turn on Ranked in Damage Done to split damage into what counts and what is Excluded. Ranked DPS is timed until the last ranked target dies. Each encounter's rules are on Leaderboards → Rulesets.",
+    "hintHref": "/leaderboards/rulesets"
+  },
+  {
     "id": "character-cosmetics",
     "title": "Character cosmetics are live",
     "description": "Supporters can customize linked characters with separate name, background, and border treatments that appear across raid analysis.",

@@ -28,6 +28,7 @@ var releaseIDs = []string{
 	"focus-mode",
 	"layout-editing",
 	"character-cosmetics",
+	"ranked-damage",
 }
 
 func CurrentID() string {
