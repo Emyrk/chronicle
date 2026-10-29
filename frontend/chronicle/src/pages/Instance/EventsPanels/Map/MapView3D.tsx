@@ -120,6 +120,8 @@ export interface MapView3DProps {
    * mesh) as it was instead of tearing the scene down, until fresh props arrive.
    */
   frozen?: boolean;
+  /** Whether to draw the N/S compass dial (the landing hero's backdrop hides it). */
+  showCompass?: boolean;
 }
 
 const NO_DEBUFFS: readonly number[] = [];
@@ -200,6 +202,7 @@ export default function MapView3D({
   presenceSurface,
   unitRoles = null,
   frozen = false,
+  showCompass = true,
   debuffSpellIds = NO_DEBUFFS,
   followGuid = null,
   onFollowChange,
@@ -562,7 +565,7 @@ export default function MapView3D({
           </div>
         </div>
       )}
-      <MapCompass northRadians={compassYaw} />
+      {showCompass && <MapCompass northRadians={compassYaw} />}
       {effectHover && <EffectTooltip hover={effectHover} />}
     </div>
   );
