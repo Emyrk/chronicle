@@ -58,6 +58,14 @@ export function exploreRunFromInstance(instance: Instance): LandingFeaturedRun {
   };
 }
 
+/**
+ * The live 3D's run as the hero sees a featured run when the landing payload has none: built from its loaded
+ * instance, with the deaths processed so far (`recaps` timed from the instance's start, so a pull's window scopes them).
+ */
+export function liveHeroRun(instance: Instance, recaps: readonly HeroDeathRecap[] | null): LandingFeaturedRun {
+  return { ...exploreRunFromInstance(instance), deaths: deathsFromRecaps(recaps ?? []) };
+}
+
 /** The scrubber's death dots from the replay's processed recaps (already timed like the scrubber). */
 export function deathsFromRecaps(recaps: readonly HeroDeathRecap[]): LandingFeaturedDeath[] {
   return recaps
