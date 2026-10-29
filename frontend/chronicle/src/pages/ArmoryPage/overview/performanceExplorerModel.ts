@@ -285,3 +285,68 @@ export function performanceValue(
   if (display === "parse") return run.average_parse ?? 0;
   return metric === "hps" ? run.hps : run.dps;
 }
+
+export function performanceParseColor(score: number): string {
+  if (score >= 99) return "#e6cc80";
+  if (score >= 95) return "#ff8000";
+  if (score >= 75) return "#a335ee";
+  if (score >= 50) return "#0070ff";
+  if (score >= 25) return "#1eff00";
+  return "#9d9d9d";
+}
+
+export const PERFORMANCE_RECENT_RUN_COUNT = 5;
+
+export interface PerformanceSummary {
+  runCount: number;
+  best: number;
+  typical: number;
+  /** Median of the latest runs; null until there are more runs than the recent window. */
+  recent: number | null;
+  /** 10th percentile run. */
+  floor: number;
+  /** Interquartile range; lower is more consistent. */
+  spread: number;
+  averageDeaths: number | null;
+  averageAlive: number | null;
+}
+
+export function summarizePerformanceRuns(
+  runs: readonly CharacterPerformanceRun[],
+  metric: "dps" | "hps",
+  display: "raw" | "parse",
+): PerformanceSummary | null {
+  if (runs.length === 0) return null;
+
+  const values = runs.map((run) => performanceValue(run, metric, display)).sort((a, b) => a - b);
+  const recentValues = [...runs]
+    .sort((a, b) => b.started_at.localeCompare(a.started_at))
+    .slice(0, PERFORMANCE_RECENT_RUN_COUNT)
+    .map((run) => performanceValue(run, metric, display))
+    .sort((a, b) => a - b);
+  const deaths = runs.flatMap((run) => run.player_deaths == null ? [] : [run.player_deaths]);
+  const alive = runs.flatMap((run) => run.alive_percentage == null ? [] : [run.alive_percentage]);
+
+  return {
+    runCount: runs.length,
+    best: values[values.length - 1],
+    typical: quantile(values, 0.5),
+    recent: runs.length > PERFORMANCE_RECENT_RUN_COUNT ? quantile(recentValues, 0.5) : null,
+    floor: quantile(values, 0.1),
+    spread: quantile(values, 0.75) - quantile(values, 0.25),
+    averageDeaths: deaths.length > 0 ? mean(deaths) : null,
+    averageAlive: alive.length > 0 ? mean(alive) : null,
+  };
+}
+
+/** Linear-interpolated quantile of an ascending, non-empty list. */
+function quantile(sorted: readonly number[], q: number): number {
+  const position = (sorted.length - 1) * q;
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  return sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower);
+}
+
+function mean(values: readonly number[]): number {
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}

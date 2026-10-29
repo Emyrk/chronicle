@@ -153,15 +153,8 @@ function AnalysisContent({
   onStateChange: (state: PerformanceComparisonState) => void;
 }) {
   return (
-    <div className="mx-auto flex w-full max-w-[1920px] items-start gap-6 px-2 py-4 sm:px-4 sm:py-8">
+    <div className="mx-auto flex w-full max-w-[1920px] items-start gap-6 px-2 py-3 sm:px-4 sm:py-4">
       <div className="min-w-0 flex-1">
-        <div className="mb-4 flex items-center justify-center border-b border-border pb-3 sm:mb-6">
-          <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-foreground">
-            <ChartNoAxesCombined className="h-4 w-4 text-sky-400" />
-            Player Analysis
-          </div>
-        </div>
-
         <main>
           <PerformanceExplorer players={players} state={state} onStateChange={onStateChange} />
         </main>
