@@ -3,12 +3,17 @@ package servicesidekick
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/api/chronauth"
+	"github.com/Emyrk/chronicle/api/chronauth/claims"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/go-chi/chi/v5"
@@ -46,6 +51,31 @@ func TestMountedRoutes(t *testing.T) {
 		http.MethodPut + " /api/v1/sidekick/status":                     {},
 		http.MethodGet + " /api/v1/admin/users/{userID}/sidekicks/":     {},
 	}, actual)
+}
+
+func TestListMySidekicksWithoutSavedConfig(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	db, _ := dbtestutil.NewDB(t)
+	userID := uuid.New()
+	_, err := db.InsertUser(ctx, database.InsertUserParams{
+		ID: userID, Username: "sidekick-list-" + userID.String()[:8],
+	})
+	require.NoError(t, err)
+
+	service := &Service{zed: authz.NewDatabaseOnly(slog.Default(), db)}
+	service.setupRoutes()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req = req.WithContext(chronauth.WithClaims(req.Context(), &claims.Claims{Subject: userID}))
+	recorder := httptest.NewRecorder()
+	service.AccountRoutes().ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	var response chroniclesdk.ListSidekicksResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, chroniclesdk.DefaultSidekickConfig(), response.AccountConfig.Config)
+	require.NotEmpty(t, response.AccountConfig.Hash)
+	require.Empty(t, response.Sidekicks)
 }
 
 func TestEffectiveSidekickConfigPrecedence(t *testing.T) {
