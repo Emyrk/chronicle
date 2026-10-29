@@ -3,8 +3,8 @@ import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } 
 import { useQuery } from "@tanstack/react-query"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { ArrowLeft, BookOpen, Code2, Download, FileCode, FileImage, FileJson, FileText, Upload, Users } from "lucide-react"
-import { addonPath, authorPath, createRelease, deleteRelease, latestRelease, nextReleaseTag, uploadDraft, type LuaRelease } from "./api"
+import { ArrowLeft, BookOpen, Code2, Download, FileCode, FileImage, FileJson, FileText, Trash2, Upload, Users } from "lucide-react"
+import { addonPath, authorPath, createRelease, deleteProject, deleteRelease, latestRelease, nextReleaseTag, uploadDraft, type LuaRelease } from "./api"
 import { AddonIcon } from "./AddonIcon"
 import { AddonReleases, ReleasesTable, VersionPicker } from "./AddonReleases"
 import { AdRailStack } from "@/components/Ads/AdRailStack"
@@ -146,6 +146,17 @@ function AddonPage({ projectId }: { projectId?: string }) {
     if (tag) void mutate(async () => { await createRelease(project.id, project.revision, tag); show({ ref: null }) }, `Released ${tag}.`)
   }
 
+  const removeProject = async () => {
+    if (!window.confirm(`Delete ${project.name}? This permanently deletes main, every release, contributor access, and stored files. People tracking it will no longer be able to use it.`)) return
+    setBusy(true); setError(""); setNotice("")
+    try {
+      await deleteProject(project.id)
+      navigate(project.author ? authorPath(project.author) : "/addons", { replace: true })
+    } catch (e) {
+      setError(errorMessage(e)); setBusy(false)
+    }
+  }
+
   return <div className="mx-auto flex w-full max-w-[2080px] items-start justify-center gap-6 px-4 py-8">
     <div className="hidden self-stretch 2xl:block">
       <AdRailStack primaryPlacement="addon-left-rail" secondaryPlacement="addon-left-rail-lower" railLayout="paired-wide" />
@@ -167,6 +178,9 @@ function AddonPage({ projectId }: { projectId?: string }) {
           {can.edit && <button type="button" aria-pressed={tab === "contributors"} onClick={() => show({ tab: tab === "contributors" ? undefined : "contributors" })}
             className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent ${tab === "contributors" ? "border-primary/50 bg-muted" : "border-border"}`}>
             <Users className="size-4" /> Contributors</button>}
+          {can.manage && <button type="button" disabled={busy} onClick={() => void removeProject()}
+            className="inline-flex items-center gap-2 rounded-md border border-destructive/40 px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50">
+            <Trash2 className="size-4" /> Delete addon</button>}
           {project.kind === "panel" && can.edit && <Link className="inline-flex items-center gap-2 rounded-md bg-primary-darker px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-darker/90" to={workshop}><Code2 className="size-4" /> Open in Addon Workshop</Link>}
         </div>
       </header>

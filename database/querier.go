@@ -60,6 +60,7 @@ type sqlcQuerier interface {
 	CountGuildDiscordInstallationsByDiscordGuildID(ctx context.Context, discordGuildID string) (int64, error)
 	CountGuilds(ctx context.Context, arg CountGuildsParams) (int64, error)
 	CountLuaProjectStars(ctx context.Context, projectIds []uuid.UUID) ([]CountLuaProjectStarsRow, error)
+	CountLuaProjectsByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 	CountRaidCompositionsByUser(ctx context.Context, arg CountRaidCompositionsByUserParams) (int64, error)
 	CountReadyLuaProjectArtifactGarbage(ctx context.Context) (int64, error)
 	CountUserAuthLinks(ctx context.Context) (int64, error)
@@ -129,6 +130,8 @@ type sqlcQuerier interface {
 	DeleteInferenceConnectionByOwner(ctx context.Context, arg DeleteInferenceConnectionByOwnerParams) error
 	DeleteLogInstanceByIDAndGroup(ctx context.Context, arg DeleteLogInstanceByIDAndGroupParams) (uuid.UUID, error)
 	DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
+	// Queue every stored package before cascades remove the project's dependent rows.
+	DeleteLuaProject(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteLuaProjectArtifactGarbage(ctx context.Context, objectKey string) error
 	DeleteLuaProjectContributor(ctx context.Context, arg DeleteLuaProjectContributorParams) (int64, error)
 	DeleteLuaProjectRelease(ctx context.Context, arg DeleteLuaProjectReleaseParams) (int64, error)
@@ -781,6 +784,8 @@ type sqlcQuerier interface {
 	ListWoWServersByTenantID(ctx context.Context, tenantID uuid.NullUUID) ([]WowServer, error)
 	ListWorlds(ctx context.Context) ([]World, error)
 	LockLogFilePartSequence(ctx context.Context, logFileID uuid.UUID) (uuid.UUID, error)
+	// Serializes addon creation for one owner so concurrent requests cannot exceed the quota.
+	LockLuaProjectOwner(ctx context.Context, ownerID uuid.UUID) (uuid.UUID, error)
 	LockPendingProofRequest(ctx context.Context, arg LockPendingProofRequestParams) (ProofRequest, error)
 	// Root-domain site admins only (AdminBypass context).
 	LockPendingProofRequestByID(ctx context.Context, id uuid.UUID) (ProofRequest, error)

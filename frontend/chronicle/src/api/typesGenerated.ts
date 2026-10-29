@@ -2957,6 +2957,15 @@ export interface LuaProjectPermissions {
 
 // From chroniclesdk/lua_project.go
 /**
+ * LuaProjectQuota is the caller's owned-addon resource allowance.
+ */
+export interface LuaProjectQuota {
+    readonly owned: number;
+    readonly limit: number;
+}
+
+// From chroniclesdk/lua_project.go
+/**
  * LuaProjectRelease is a tagged snapshot of main. Only the newest few keep their files; older ones stay
  * listed with no SHA256 and Available false.
  */

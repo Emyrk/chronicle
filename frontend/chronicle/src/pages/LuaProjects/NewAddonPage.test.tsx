@@ -8,9 +8,10 @@ import { NewAddonPage } from "./NewAddonPage"
 
 vi.mock("@/api/queries", () => ({ useAuthorizationCheck: vi.fn(), useSession: vi.fn() }))
 
-function render(element: ReactElement, author: string | null = "steven") {
+function render(element: ReactElement, author: string | null = "steven", owned = 0) {
   const client = new QueryClient()
   client.setQueryData(["addon-author", "me"], author)
+  client.setQueryData(["addon-project-quota", "me"], { owned, limit: 3 })
   return renderToStaticMarkup(<QueryClientProvider client={client}><MemoryRouter>{element}</MemoryRouter></QueryClientProvider>)
 }
 
@@ -26,6 +27,15 @@ describe("new addon page", () => {
     vi.mocked(useAuthorizationCheck).mockReturnValue({ data: { createLuaProject: false }, isPending: false } as unknown as ReturnType<typeof useAuthorizationCheck>)
     const html = render(<NewAddonPage />)
     expect(html).toContain("You do not have permission to create addons")
+    expect(html).not.toContain("Create addon</button>")
+  })
+
+  it("blocks creation at the resource limit", () => {
+    vi.mocked(useSession).mockReturnValue({ data: { user_id: "me" }, isLoading: false } as ReturnType<typeof useSession>)
+    vi.mocked(useAuthorizationCheck).mockReturnValue({ data: { createLuaProject: true }, isPending: false } as unknown as ReturnType<typeof useAuthorizationCheck>)
+    const html = render(<NewAddonPage />, "steven", 3)
+    expect(html).toContain("You own 3 of 3 addons")
+    expect(html).toContain("shared storage and processing resources")
     expect(html).not.toContain("Create addon</button>")
   })
 

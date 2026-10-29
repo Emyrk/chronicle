@@ -22,6 +22,10 @@ type Authorizer interface {
 	Delete(ctx context.Context, filter *rel.PreconditionedFilter) error
 }
 
+type relationshipDeleter interface {
+	DeleteRelationships(ctx context.Context, filter *rel.Filter) error
+}
+
 type DatabaseAuthorizer interface {
 	Authorizer
 	database.StoreQueries
@@ -66,8 +70,38 @@ func (z *Authz) Delete(ctx context.Context, filter *rel.PreconditionedFilter) er
 	return nil
 }
 
+func relationshipDeletes(relationships []rel.Relationship) rel.Txn {
+	deletes := rel.Txn{}
+	for _, relationship := range relationships {
+		deletes.Delete(relationship)
+	}
+	return deletes
+}
+
 func (z *AuthzTX) Delete(ctx context.Context, filter *rel.PreconditionedFilter) error {
 	return z.parent.Delete(ctx, filter)
+}
+
+func (z *Authz) DeleteRelationships(ctx context.Context, filter *rel.Filter) error {
+	return z.Delete(ctx, rel.NewPreconditionedFilter(filter))
+}
+
+func (z *AuthzTX) DeleteRelationships(ctx context.Context, filter *rel.Filter) error {
+	// Delete only the relationships in this consistent snapshot. A concurrent
+	// relationship write is not part of this transaction and must not be removed
+	// or recreated by its rollback compensation.
+	var relationships []rel.Relationship
+	for relationship, err := range z.parent.spice.ReadRelationships(ctx, consistency.Full(), filter) {
+		if err != nil {
+			return err
+		}
+		relationships = append(relationships, *relationship)
+	}
+	if len(relationships) == 0 {
+		return nil
+	}
+	_, err := z.Write(ctx, relationshipDeletes(relationships))
+	return err
 }
 
 func (z *Authz) CheckOne(ctx context.Context, cs *consistency.Strategy, rs rel.Interface) (bool, error) {

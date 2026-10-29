@@ -393,6 +393,25 @@ func (z *interceptor) CreateLuaProject(ctx context.Context, arg database.CreateL
 	return project, nil
 }
 
+func (z *interceptor) DeleteLuaProject(ctx context.Context, id uuid.UUID) (int64, error) {
+	deleted, err := z.Store.DeleteLuaProject(ctx, id)
+	if err != nil || deleted == 0 {
+		return deleted, err
+	}
+	obj := policy.New().Lua_project(id).Object()
+	filter := rel.NewFilter(obj.Typ, obj.ID, "")
+	var deleteErr error
+	if deleter, ok := z.Authorizer.(relationshipDeleter); ok {
+		deleteErr = deleter.DeleteRelationships(ctx, filter)
+	} else {
+		deleteErr = z.Delete(ctx, rel.NewPreconditionedFilter(filter))
+	}
+	if deleteErr != nil {
+		return deleted, fmt.Errorf("delete lua project authz relations: %w", deleteErr)
+	}
+	return deleted, nil
+}
+
 // luaContributorRelations maps lua_project_contributors permissions to SpiceDB relations.
 var luaContributorRelations = []string{"edit", "release"}
 

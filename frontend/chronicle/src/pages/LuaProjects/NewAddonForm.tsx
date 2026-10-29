@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from "react"
 import { useNavigate } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import { Sparkles } from "lucide-react"
 import { useAuthorizationCheck, useSession } from "@/api/queries"
-import { addonPath, createProject, urlName } from "./api"
+import { addonPath, createProject, getProjectQuota, urlName } from "./api"
 import { errorMessage, primaryButton, welcomeBox } from "./addonUi"
 
 /**
@@ -12,6 +13,7 @@ import { errorMessage, primaryButton, welcomeBox } from "./addonUi"
 export function NewAddonForm({ author }: { author: string }) {
   const { data: session, isLoading: sessionLoading } = useSession()
   const permission = useAuthorizationCheck({ createLuaProject: "chronicle:chronicle#create_lua_project" }, { enabled: !!session })
+  const quota = useQuery({ queryKey: ["addon-project-quota", session?.user_id], enabled: !!session, queryFn: getProjectQuota })
   const navigate = useNavigate()
   const [name, setName] = useState("")
   const [slug, setSlug] = useState("")
@@ -24,6 +26,7 @@ export function NewAddonForm({ author }: { author: string }) {
     try {
       // Guides are hidden as a new addon kind for now; existing guide addons still work.
       const project = await createProject("panel", name.trim(), slug.trim())
+      await quota.refetch()
       navigate(addonPath(project, "/edit"))
     } catch (e) { setError(errorMessage(e)); setBusy(false) }
   }
@@ -34,9 +37,18 @@ export function NewAddonForm({ author }: { author: string }) {
         "You do not have permission to create addons. Ask a technical administrator for the Addon Author role."}</p>}
   </div>
 
+  if (quota.isPending) return <div className={`${welcomeBox} text-sm text-muted-foreground`}>Checking addon resource limit…</div>
+  if (quota.isError) return <div className={`${welcomeBox} text-sm text-destructive`} role="alert">Could not check your addon resource limit. Please try again.</div>
+  if (quota.data.owned >= quota.data.limit) return <div className={`${welcomeBox} space-y-2 text-sm`}>
+    <h2 className="font-semibold">Addon ownership limit</h2>
+    <p>You own {quota.data.owned} of {quota.data.limit} addons.</p>
+    <p className="text-xs text-muted-foreground">This limit keeps each account&apos;s use of shared storage and processing resources bounded. Delete an addon before creating another.</p>
+  </div>
+
   return <form onSubmit={create} className={`${welcomeBox} space-y-4`}>
     <div className="flex items-center gap-2"><span className="flex size-6 items-center justify-center rounded-full bg-violet-400/15 text-violet-300"><Sparkles className="size-3.5" /></span>
       <h2 className="font-semibold">Step 2: name your addon</h2></div>
+    <p className="text-xs text-muted-foreground">{quota.data.owned} of {quota.data.limit} addon slots used. The limit bounds shared storage and processing usage.</p>
     <fieldset className="min-w-0 space-y-4">
       <label className="block text-sm font-medium">Name<input className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={name} maxLength={120} required
         onChange={event => { setName(event.target.value); setSlug(urlName(event.target.value, 80)) }} /></label>
