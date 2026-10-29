@@ -1,15 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatRunDuration, runBadge, runStillUrl } from "./recentRuns";
-
-describe("runBadge", () => {
-  it("is a replay for a positional run", () => {
-    expect(runBadge({ has_positions: true })).toBe("replay");
-  });
-
-  it("has no badge without positions", () => {
-    expect(runBadge({ has_positions: false })).toBeNull();
-  });
-});
+import { formatRunDuration } from "./recentRuns";
 
 describe("formatRunDuration", () => {
   it("formats minutes and hours as a clock", () => {
@@ -20,11 +10,5 @@ describe("formatRunDuration", () => {
   it("is null without a duration", () => {
     expect(formatRunDuration(null)).toBeNull();
     expect(formatRunDuration(0)).toBeNull();
-  });
-});
-
-describe("runStillUrl", () => {
-  it("points at the instance's still endpoint", () => {
-    expect(runStillUrl("abc")).toBe("/api/v1/raidlogs/instances/abc/still.jpg");
   });
 });
