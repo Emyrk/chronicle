@@ -410,6 +410,20 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, pageRows, 1)
 	assert.Equal(t, "A-HEALER", pageRows[0].PlayerGuid)
+
+	assert.Equal(t, "Alphabetical Healer", pageRows[0].PlayerName)
+	assert.Equal(t, int64(2), pageRows[0].TotalCount)
+
+	secondPageRows, err := store.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
+		Metric: "hps", QueryLimit: 1, QueryOffset: 1,
+		InstanceNames:  []string{"Molten Core"},
+		EncounterNames: []string{"Lucifron", "Magmadar", "Ragnaros"},
+	})
+	require.NoError(t, err)
+	require.Len(t, secondPageRows, 1)
+	assert.Equal(t, "P-HEALER", secondPageRows[0].PlayerGuid)
+	assert.Equal(t, "Newest Run", secondPageRows[0].PlayerName)
+	assert.Equal(t, int64(2), secondPageRows[0].TotalCount)
 }
 
 func TestRankingsBoxPlotUsesSingleDuplicateInstance(t *testing.T) {
