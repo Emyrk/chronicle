@@ -18,7 +18,7 @@ import { AlertTriangle, ChevronLeft, Layers, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useParsePills } from "../parsePills";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
-import { isMeterBarsOption, parseMetricPanelLiveState, updateMetricPanelLiveState } from "../metricPanelLiveState";
+import { isMeterBarsOption, isMeterValuesOption, parseMetricPanelLiveState, updateMetricPanelLiveState } from "../metricPanelLiveState";
 import { MeterBars } from "../MeterBars";
 
 /** Update a single token prefix in panelOption, preserving all other tokens. */
@@ -334,12 +334,17 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
     ? formatNumber(total / (props.durationMs / 1000), 1)
     : formatNumber(total, 0);
 
-  if (isMeterBarsOption(panelOption)) {
+  const meterValues = isMeterValuesOption(panelOption);
+  if (meterValues || isMeterBarsOption(panelOption)) {
     // Same encounter selection: the preset switch keeps it.
     const openDamage = context.onApplyPreset ? () => context.onApplyPreset?.("damage") : undefined;
+    const durationMs = props.durationMs;
+    const values = meterValues
+      ? { formatValue: (value: number) => (props.perSecond && durationMs ? formatNumber(value / (durationMs / 1000), 1) : formatNumber(value, 0)) }
+      : undefined;
     return (
       <GenericPanel {...effectiveProps}>
-        <MeterBars data={damageData} onOpen={openDamage} openLabel="Open the Damage tab" />
+        <MeterBars data={damageData} onOpen={openDamage} openLabel="Open the Damage tab" values={values} />
       </GenericPanel>
     );
   }
