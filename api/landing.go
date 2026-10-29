@@ -368,7 +368,7 @@ func (a *API) datasetMeshMaps(ctx context.Context, realmID uuid.UUID) (map[int32
 	if err != nil {
 		return nil, fmt.Errorf("fetch maps manifest: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("fetch maps manifest: status %d", res.StatusCode)
 	}
