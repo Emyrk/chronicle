@@ -431,12 +431,9 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
 realm_encounter_counts AS (
     SELECT
         d.realm_id,
-        CASE
-            WHEN cardinality(@encounter_names :: text[]) > 0
-                THEN cardinality(@encounter_names :: text[])::bigint
-            ELSE COUNT(DISTINCT d.encounter_name)
-        END AS encounter_count
+        COUNT(DISTINCT d.encounter_name) AS encounter_count
     FROM deduped d
+    WHERE COALESCE(cardinality(@encounter_names :: text[]), 0) = 0
     GROUP BY d.realm_id
 ),
 -- Step 1: aggregate per player per run (sum encounters within a single instance run).
@@ -478,10 +475,15 @@ per_run AS (
         COALESCE((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC))[1], '')::text AS talent_sub_spec,
         COALESCE((array_agg(d.talent_layout ORDER BY d.damage_done DESC))[1], '')::text AS talent_layout
     FROM deduped d
-    JOIN realm_encounter_counts rec ON rec.realm_id = d.realm_id
+    LEFT JOIN realm_encounter_counts rec ON rec.realm_id = d.realm_id
     GROUP BY d.player_guid, d.run_id, rec.encounter_count
-    -- Only include runs where player has data for ALL encounters on their realm.
-    HAVING COUNT(DISTINCT d.encounter_name) = rec.encounter_count
+    -- Explicit selections compare directly with their requested cardinality. If
+    -- no encounters were selected, require every encounter found on the realm.
+    HAVING COUNT(DISTINCT d.encounter_name) = CASE
+        WHEN cardinality(@encounter_names :: text[]) > 0
+            THEN cardinality(@encounter_names :: text[])::bigint
+        ELSE rec.encounter_count
+    END
 ),
 -- Step 2: pick each player's best run.
 aggregated AS (
@@ -647,12 +649,9 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
 realm_encounter_counts AS (
     SELECT
         d.realm_id,
-        CASE
-            WHEN cardinality(@encounter_names :: text[]) > 0
-                THEN cardinality(@encounter_names :: text[])::bigint
-            ELSE COUNT(DISTINCT d.encounter_name)
-        END AS encounter_count
+        COUNT(DISTINCT d.encounter_name) AS encounter_count
     FROM deduped d
+    WHERE COALESCE(cardinality(@encounter_names :: text[]), 0) = 0
     GROUP BY d.realm_id
 ),
 -- Aggregate per player per run: sum damage/duration across encounters in one run.
@@ -668,9 +667,13 @@ per_run AS (
             ELSE SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0)
         END)::double precision AS metric_value
     FROM deduped d
-    JOIN realm_encounter_counts rec ON rec.realm_id = d.realm_id
+    LEFT JOIN realm_encounter_counts rec ON rec.realm_id = d.realm_id
     GROUP BY d.player_guid, d.run_id, d.player_class, d.player_spec, d.player_sub_spec, rec.encounter_count
-    HAVING COUNT(DISTINCT d.encounter_name) = rec.encounter_count
+    HAVING COUNT(DISTINCT d.encounter_name) = CASE
+        WHEN cardinality(@encounter_names :: text[]) > 0
+            THEN cardinality(@encounter_names :: text[])::bigint
+        ELSE rec.encounter_count
+    END
 )
 SELECT
     s.player_class,

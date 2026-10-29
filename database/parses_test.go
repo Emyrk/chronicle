@@ -359,6 +359,24 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 		assert.Equal(t, 30.0, rows[0].DurationSecs)
 		assert.Equal(t, 90.0, rows[0].Hps)
 	}
+
+	emptySelectionRows, err := store.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
+		Metric: "hps", QueryLimit: 10,
+		InstanceNames: []string{"Molten Core"},
+	})
+	require.NoError(t, err)
+	require.Len(t, emptySelectionRows, 1)
+	assert.Equal(t, duplicateID.String(), emptySelectionRows[0].LogHashedSlug)
+	assert.Equal(t, int64(2700), emptySelectionRows[0].HealingDone)
+	assert.Equal(t, 90.0, emptySelectionRows[0].Hps)
+
+	duplicateSelectionRows, err := store.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
+		Metric: "hps", QueryLimit: 10,
+		InstanceNames:  []string{"Molten Core"},
+		EncounterNames: []string{"Lucifron", "Lucifron", "Magmadar", "Ragnaros"},
+	})
+	require.NoError(t, err)
+	assert.Empty(t, duplicateSelectionRows)
 }
 
 func TestRankingsBoxPlotUsesSingleDuplicateInstance(t *testing.T) {
@@ -451,4 +469,23 @@ func TestRankingsBoxPlotUsesSingleDuplicateInstance(t *testing.T) {
 	assert.Equal(t, "Holy", rows[0].PlayerSpec)
 	assert.Equal(t, int64(1), rows[0].Count)
 	assert.Equal(t, 90.0, rows[0].MedianDps)
+
+	emptySelectionRows, err := store.RankingsBoxPlotStats(ctx, database.RankingsBoxPlotStatsParams{
+		Metric:        "hps",
+		InstanceNames: []string{"Molten Core"},
+		GroupByClass:  false,
+	})
+	require.NoError(t, err)
+	require.Len(t, emptySelectionRows, 1)
+	assert.Equal(t, int64(1), emptySelectionRows[0].Count)
+	assert.Equal(t, 90.0, emptySelectionRows[0].MedianDps)
+
+	duplicateSelectionRows, err := store.RankingsBoxPlotStats(ctx, database.RankingsBoxPlotStatsParams{
+		Metric:         "hps",
+		InstanceNames:  []string{"Molten Core"},
+		EncounterNames: []string{"Lucifron", "Lucifron", "Magmadar"},
+		GroupByClass:   false,
+	})
+	require.NoError(t, err)
+	assert.Empty(t, duplicateSelectionRows)
 }
