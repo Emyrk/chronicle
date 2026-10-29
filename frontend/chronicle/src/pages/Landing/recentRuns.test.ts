@@ -2,14 +2,12 @@ import { describe, expect, it } from "vitest";
 import { formatRunDuration, runBadge, runStillUrl } from "./recentRuns";
 
 describe("runBadge", () => {
-  it("is 3D only for a positional run on a meshed map", () => {
-    expect(runBadge({ has_positions: true }, "3d")).toBe("3d");
-    expect(runBadge({ has_positions: true }, "2d")).toBe("2d");
-    expect(runBadge({ has_positions: true }, "coming")).toBe("2d");
+  it("is a replay for a positional run", () => {
+    expect(runBadge({ has_positions: true })).toBe("replay");
   });
 
   it("has no badge without positions", () => {
-    expect(runBadge({ has_positions: false }, "3d")).toBeNull();
+    expect(runBadge({ has_positions: false })).toBeNull();
   });
 });
 

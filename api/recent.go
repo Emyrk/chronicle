@@ -27,6 +27,7 @@ const recentInstancesCacheControl = "public, max-age=60, stale-while-revalidate=
 // @Param realm_id query string false "Filter by realm UUID"
 // @Param guild_id query string false "Filter by guild UUID"
 // @Param has_positions query bool false "Only runs whose log recorded unit positions (a replay)"
+// @Param prefer query string false "Ordering preference: replay lists runs with positions, then runs with a video, then the rest (each newest first)"
 // @Success 200 {object} chroniclesdk.RecentInstancesResponse
 // @Router /api/v1/raidlogs/recent [get]
 func (api *API) RecentInstances(w http.ResponseWriter, r *http.Request) {
@@ -158,6 +159,7 @@ func (api *API) instancesByTimeRange(w http.ResponseWriter, r *http.Request, gro
 			GuildID:       guildID,
 			PlayerGuid:    playerGUID,
 			HasPositions:  q.Get("has_positions") == "true",
+			PreferReplay:  q.Get("prefer") == "replay",
 			LimitCount:    queryLimit,
 			OffsetCount:   offsetCount,
 		})

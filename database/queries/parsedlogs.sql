@@ -556,10 +556,20 @@ ranked_instances AS (
     JOIN matching_runs USING (run_id)
 ),
 selected_runs AS (
-    SELECT id, run_id, first_encounter_time
+    SELECT
+        id,
+        run_id,
+        first_encounter_time,
+        -- prefer_replay groups runs: replays, then videos, then the rest.
+        CASE
+            WHEN NOT @prefer_replay::boolean THEN 0
+            WHEN has_positions THEN 0
+            WHEN has_youtube_video THEN 1
+            ELSE 2
+        END AS preference_rank
     FROM ranked_instances
     WHERE representative_rank = 1
-    ORDER BY first_encounter_time DESC, id DESC
+    ORDER BY preference_rank ASC, first_encounter_time DESC, id DESC
     LIMIT CASE WHEN @limit_count::int > 0 THEN @limit_count ELSE NULL END
     OFFSET @offset_count
 )
@@ -590,6 +600,7 @@ SELECT
 FROM ranked_instances
 JOIN selected_runs USING (run_id)
 ORDER BY
+    selected_runs.preference_rank ASC,
     selected_runs.first_encounter_time DESC,
     selected_runs.id DESC,
     ranked_instances.representative_rank ASC;
