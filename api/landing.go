@@ -275,11 +275,22 @@ func landingTimeRange(startTime, endTime pgtype.Timestamptz, encounters []databa
 	return start, end, !start.IsZero() && !end.IsZero()
 }
 
+// landingMinBossPull drops near-zero duplicate boss pulls some logs carry:
+// the Ruins of Lordaeron run ends on a 15 ms Rath'mael pull after the real
+// 31.6 s kill, while its real boss pulls last 26-39 s. 3 s keeps any real pull.
+const landingMinBossPull = 3 * time.Second
+
+// landingBossPull reports whether enc is a boss pull worth showing.
+func landingBossPull(enc database.LogInstanceEncounter) bool {
+	return enc.Boss && enc.StartTime.Valid && enc.EndTime.Valid &&
+		enc.EndTime.Time.Sub(enc.StartTime.Time) >= landingMinBossPull
+}
+
 // lastBossEncounter is the last boss kill, else the last boss wipe.
 func lastBossEncounter(encounters []database.LogInstanceEncounter) (database.LogInstanceEncounter, bool) {
 	var kill, wipe *database.LogInstanceEncounter
 	for i, enc := range encounters {
-		if !enc.Boss || !enc.StartTime.Valid || !enc.EndTime.Valid {
+		if !landingBossPull(enc) {
 			continue
 		}
 		switch enc.KillType {
@@ -375,7 +386,7 @@ func (a *API) loadLandingRun(ctx context.Context, id uuid.UUID, encounters []dat
 
 	sort.Slice(encounters, func(i, j int) bool { return encounters[i].StartTime.Time.Before(encounters[j].StartTime.Time) })
 	for _, enc := range encounters {
-		if !enc.Boss {
+		if !landingBossPull(enc) {
 			continue
 		}
 		run.Bosses = append(run.Bosses, chroniclesdk.LandingFeaturedBoss{
