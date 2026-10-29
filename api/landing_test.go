@@ -157,24 +157,25 @@ func TestLandingMontage(t *testing.T) {
 	}
 
 	start := time.Date(2026, 10, 20, 20, 0, 0, 0, time.UTC)
-	run := func(day int, capabilities []string, mapID int32, board string, duration time.Duration) uuid.UUID {
+	run := func(day int, capabilities []string, mapID int32, board string, duration time.Duration, guilded bool) uuid.UUID {
 		t.Helper()
 		at := start.Add(time.Duration(day) * 24 * time.Hour)
 		id := seedLandingInstance(t, store, at, at.Add(time.Hour), capabilities, mapID)
-		seedLandingSpeedrun(t, store, id, board, duration)
+		seedLandingSpeedrun(t, store, id, board, duration, guilded)
 		return id
 	}
 	positions := []string{"unit-position"}
-	// Zul'Gurub's rank-1 run has no positions: its best replayed run is rank 2.
-	run(1, nil, 33, "Zul'Gurub", 20*time.Minute)
-	zg := run(2, positions, 33, "Zul'Gurub", 25*time.Minute)
-	run(3, positions, 33, "Zul'Gurub", 30*time.Minute)
+	// Zul'Gurub's rank-1 run has no positions: its best replayed run (one
+	// without a guild, which the board itself leaves out) takes rank 2.
+	run(1, nil, 33, "Zul'Gurub", 20*time.Minute, true)
+	zg := run(2, positions, 33, "Zul'Gurub", 25*time.Minute, false)
+	run(3, positions, 33, "Zul'Gurub", 30*time.Minute, true)
 	// Molten Core's best run is replayed: rank 1, so it plays first.
-	mc := run(4, positions, 34, "Molten Core", 40*time.Minute)
+	mc := run(4, positions, 34, "Molten Core", 40*time.Minute, true)
 	// Onyxia's Lair has no published mesh: skipped.
-	run(5, positions, 35, "Onyxia's Lair", 10*time.Minute)
+	run(5, positions, 35, "Onyxia's Lair", 10*time.Minute, true)
 	// The newest positional run, unranked: not in the montage.
-	run(6, positions, 33, "", 0)
+	run(6, positions, 33, "", 0, true)
 
 	resp := getEntries()
 	require.Len(t, resp.Entries, 2)
@@ -195,9 +196,10 @@ func TestLandingMontage(t *testing.T) {
 	require.Equal(t, override, resp.Featured.InstanceID)
 }
 
-// seedLandingSpeedrun ranks the instance on board's speedrun board, for its
-// own guild, in duration. An empty board leaves it unranked.
-func seedLandingSpeedrun(t *testing.T, store database.Store, instanceID uuid.UUID, board string, duration time.Duration) {
+// seedLandingSpeedrun records a qualified speedrun of duration on board's
+// speedrun board, for its own guild when guilded. An empty board leaves it
+// unranked.
+func seedLandingSpeedrun(t *testing.T, store database.Store, instanceID uuid.UUID, board string, duration time.Duration, guilded bool) {
 	t.Helper()
 	if board == "" {
 		return
@@ -206,11 +208,15 @@ func seedLandingSpeedrun(t *testing.T, store database.Store, instanceID uuid.UUI
 	row, err := store.InstanceWithUnlisted(ctx, instanceID)
 	require.NoError(t, err)
 	inst := row.LogInstancesGuild
-	g, err := store.UpsertGuild(ctx, database.UpsertGuildParams{RealmID: inst.RealmID, Name: "guild-" + instanceID.String()[:8], CreatedAt: inst.StartTime})
-	require.NoError(t, err)
+	var guildID uuid.NullUUID
+	if guilded {
+		g, err := store.UpsertGuild(ctx, database.UpsertGuildParams{RealmID: inst.RealmID, Name: "guild-" + instanceID.String()[:8], CreatedAt: inst.StartTime})
+		require.NoError(t, err)
+		guildID = uuid.NullUUID{UUID: g.ID, Valid: true}
+	}
 	require.NoError(t, store.InsertInstanceSpeedrun(ctx, database.InsertInstanceSpeedrunParams{
 		InstanceID: instanceID, InstanceName: board, RealmID: inst.RealmID,
-		GuildID: uuid.NullUUID{UUID: g.ID, Valid: true}, Qualified: true,
+		GuildID: guildID, Qualified: true,
 		StartTime: inst.StartTime, CompletionTime: database.Timestamptz(inst.StartTime.Time.Add(duration)),
 		DurationMs: duration.Milliseconds(), Proof: []byte(`{"proof":[]}`),
 	}))

@@ -23,9 +23,10 @@ LIMIT @limit_count::int;
 
 -- name: LandingMontageRuns :many
 -- The /start montage's candidates: for each instance name on the tenant, its
--- fastest positional runs on the default speedrun board (SpeedrunLeaderboard
--- with full timing: qualified, guilded, meeting the version requirements, one
--- run per duplicate group, each difficulty its own board). Only public,
+-- fastest positional runs by the default speedrun board's rules
+-- (SpeedrunLeaderboard with full timing: qualified, meeting the version
+-- requirements, one run per duplicate group, each difficulty its own board).
+-- Unlike the board, a run without a guild is a candidate too. Only public,
 -- listed, finalized, valid runs whose log recorded unit positions are
 -- returned, up to @per_instance per instance name, best first. speedrun_rank
 -- is the place the run's time takes on its board: one more than the other
@@ -47,7 +48,6 @@ WITH board AS (
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
     WHERE sr.qualified = true
-      AND sr.guild_id IS NOT NULL
       AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
       AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
     ORDER BY COALESCE(li.duplicate_group_id, li.id), COALESCE(sr.ranked_duration_ms, sr.duration_ms) ASC
@@ -55,6 +55,7 @@ WITH board AS (
 guild_best AS (
     SELECT instance_name, difficulty_name, guild_id, MIN(duration_ms) AS duration_ms
     FROM board
+    WHERE guild_id IS NOT NULL
     GROUP BY instance_name, difficulty_name, guild_id
 ),
 positional AS (
@@ -68,7 +69,7 @@ positional AS (
             FROM guild_best gb
             WHERE gb.instance_name = b.instance_name
               AND gb.difficulty_name = b.difficulty_name
-              AND gb.guild_id != b.guild_id
+              AND gb.guild_id IS DISTINCT FROM b.guild_id
               AND gb.duration_ms < b.duration_ms
         ) + 1 AS speedrun_rank
     FROM board b
