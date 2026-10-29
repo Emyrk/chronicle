@@ -18,9 +18,10 @@ export interface HeroWindow {
  * The featured run's boss pull (from a few seconds before it), and the run as
  * the scrubber sees it: that window only, its bosses and deaths timed from the
  * window's start. A run without a boss pull plays whole (window null).
+ * `encounterId` picks another of the run's boss pulls (the boss rail).
  */
-export function heroWindow(run: LandingFeaturedRun): { window: HeroWindow | null; run: LandingFeaturedRun } {
-  const encounter = run.encounter;
+export function heroWindow(run: LandingFeaturedRun, encounterId?: string | null): { window: HeroWindow | null; run: LandingFeaturedRun } {
+  const encounter = run.bosses.find((boss) => boss.id === encounterId) ?? run.encounter;
   if (!encounter) return { window: null, run };
   const startOffsetMs = Math.max(0, encounter.start_offset_ms - HERO_PULL_LEAD_MS);
   const endOffsetMs = encounter.end_offset_ms;
@@ -30,7 +31,9 @@ export function heroWindow(run: LandingFeaturedRun): { window: HeroWindow | null
       ...run,
       duration_ms: endOffsetMs - startOffsetMs,
       bosses: [{
+        id: encounter.id,
         name: encounter.name,
+        kill: encounter.kill,
         start_offset_ms: encounter.start_offset_ms - startOffsetMs,
         end_offset_ms: endOffsetMs - startOffsetMs,
       }],

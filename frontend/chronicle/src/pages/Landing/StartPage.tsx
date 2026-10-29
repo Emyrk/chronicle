@@ -5,6 +5,7 @@ import { useSiteConfig } from "@/api/siteConfigQuery";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { trackFunnel } from "@/utils/funnel";
+import { BossRail } from "./BossRail";
 import { useHeroClips, visitClip } from "./heroClips";
 import { HeroMeter } from "./HeroMeter";
 import { clipMeter, type HeroMeterPane } from "./heroMeter";
@@ -18,6 +19,9 @@ import { whenIdle } from "./whenIdle";
 const StartBelowFold = lazy(() => import("./StartBelowFold"));
 
 const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
+
+/** A boss picked on the rail holds the montage on that pull this long (or until the replay is scrolled away). */
+const BOSS_PICK_HOLD_MS = 60_000;
 
 // The 3D hero's run when the site setting names none.
 const FALLBACK_FEATURED_INSTANCE: string | undefined = import.meta.env.VITE_LANDING_FEATURED_INSTANCE || undefined;
@@ -233,20 +237,40 @@ export function StartPage() {
   const { data: landing, isError: landingFailed } = useLandingFeatured();
   const { data: siteConfig } = useSiteConfig();
   const siteName = (siteConfig?.tenant?.branding ?? siteConfig?.branding)?.display_name;
-  // The montage, each entry a run's boss pull (a payload from before montages has the one featured run).
-  const heroes = useMemo(() => {
-    const runs = landing?.entries?.length ? landing.entries : landing?.featured ? [landing.featured] : [];
-    return runs.map(heroWindow);
-  }, [landing]);
+  // The montage's runs (a payload from before montages has the one featured run).
+  const runs = useMemo(() => landing?.entries?.length ? landing.entries : landing?.featured ? [landing.featured] : [], [landing]);
+  // A boss pull picked on the rail for the entry at `index`; `hold` pauses the montage on it.
+  const [bossPick, setBossPick] = useState<{ index: number; encounterId: string; hold: boolean } | null>(null);
+  // Each entry a run's boss pull: its last one, or the one picked on the rail.
+  const heroes = useMemo(
+    () => runs.map((run, index) => heroWindow(run, bossPick?.index === index ? bossPick.encounterId : null)),
+    [bossPick, runs],
+  );
   // The 3D hero plays them in turn (the build-time instance's whole run when there are none).
   const heroEntries = useMemo((): HeroEntry[] => heroes.length > 0
     ? heroes.map((hero) => ({ instanceId: hero.run.instance_id, pull: hero.window }))
     : FALLBACK_FEATURED_INSTANCE ? [{ instanceId: FALLBACK_FEATURED_INSTANCE }] : [],
   [heroes]);
   const [heroIndex, setHeroIndex] = useState(0);
-  const advanceHero = useCallback(() => setHeroIndex((index) => index + 1), []);
+  const holding = bossPick?.hold ?? false;
+  const advanceHero = useCallback(() => {
+    if (holding) return;
+    setHeroIndex((index) => index + 1);
+    setBossPick(null);
+  }, [holding]);
   // The scrubber and caption follow the entry playing, spanning its pull only.
-  const hero = heroes.length > 0 ? heroes[heroIndex % heroes.length] : null;
+  const current = heroes.length > 0 ? heroIndex % heroes.length : -1;
+  const hero = current >= 0 ? heroes[current] : null;
+  // Set once the visitor touches the scrubber, a boss chip or the meter before the live 3D shows.
+  const [liveRequested, setLiveRequested] = useState(false);
+  const requestLive = useCallback(() => setLiveRequested(true), []);
+  const pickBoss = useCallback((encounterId: string) => {
+    setBossPick({ index: current, encounterId, hold: true });
+    requestLive();
+  }, [current, requestLive]);
+  const releaseHold = useCallback(() => setBossPick((pick) => pick && { ...pick, hold: false }), []);
+  // The hero and its boss rail: scrolling it away releases a held pick.
+  const replaySectionRef = useRef<HTMLDivElement>(null);
   // The live 3D replay's position and controls, for the hero's scrubber; null while the poster shows.
   const [replay, setReplay] = useState<HeroReplay | null>(null);
   // The pre-rendered clips play until the live 3D shows: index.html picked this visit's (and painted its poster),
@@ -257,9 +281,6 @@ export function StartPage() {
   const nextClip = useCallback(() => setClipPasses((passes) => passes + 1), []);
   const firstClip = clips ? Math.max(0, clips.findIndex((clip) => clip.slug === visit?.slug)) : 0;
   const clip = clips?.length ? clips[(firstClip + clipPasses) % clips.length] : null;
-  // Set once the visitor touches the scrubber, a boss chip or the meter before the live 3D shows.
-  const [liveRequested, setLiveRequested] = useState(false);
-  const requestLive = useCallback(() => setLiveRequested(true), []);
   // The glass meter: the clip's numbers, then the live run's once processed.
   const [pane, setPane] = useState<HeroMeterPane>("damage_done");
   const meter = replay?.meter ?? (clip ? clipMeter(clip) : null);
@@ -269,6 +290,18 @@ export function StartPage() {
     // A clip has no healing numbers: the live replay brings them.
     if (next === "healing_done" && !meter?.healing) requestLive();
   };
+
+  useEffect(() => {
+    if (!holding) return;
+    const timer = window.setTimeout(releaseHold, BOSS_PICK_HOLD_MS);
+    const element = replaySectionRef.current;
+    const observer = new IntersectionObserver(([entry]) => !entry.isIntersecting && releaseHold());
+    if (element) observer.observe(element);
+    return () => {
+      window.clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [bossPick, holding, releaseHold]);
 
   // The funnel's denominator: one per visit to /start, with its campaign.
   useEffect(() => trackFunnel("land"), []);
@@ -281,39 +314,46 @@ export function StartPage() {
   return (
     <div className="flex min-h-screen flex-col overflow-x-hidden bg-background text-foreground">
       <LandingNav getSidekickHref={getSidekickHref} />
-      <LandingHero
-        poster={visit?.poster ?? clip?.poster ?? `${IMAGES}/ruins-courtyard-poster.jpg`}
-        posterPortrait={visit?.posterPortrait ?? clip?.portrait.poster ?? `${IMAGES}/ruins-courtyard-poster-portrait.jpg`}
-        posterAlt="3D replay of a dungeon boss fight"
-        clip={clip}
-        clipLoops={clips?.length === 1}
-        onClipEnded={nextClip}
-        live={replay !== null}
-        onRequestLive={requestLive}
-        siteName={siteName}
-        meter={meter && (
-          <div className="pointer-events-none absolute inset-0 mx-auto hidden max-w-[1180px] min-[900px]:block">
-            <HeroMeter
-              data={meter}
-              sourceKey={meterKey}
-              pane={pane}
-              onPaneChange={changePane}
-              className="pointer-events-auto absolute right-4 top-4 w-[300px] lg:right-8 lg:top-auto lg:bottom-[112px] lg:w-[320px]"
-            />
+      <div ref={replaySectionRef}>
+        <LandingHero
+          poster={visit?.poster ?? clip?.poster ?? `${IMAGES}/ruins-courtyard-poster.jpg`}
+          posterPortrait={visit?.posterPortrait ?? clip?.portrait.poster ?? `${IMAGES}/ruins-courtyard-poster-portrait.jpg`}
+          posterAlt="3D replay of a dungeon boss fight"
+          clip={clip}
+          clipLoops={clips?.length === 1}
+          onClipEnded={nextClip}
+          live={replay !== null}
+          onRequestLive={requestLive}
+          siteName={siteName}
+          meter={meter && (
+            <div className="pointer-events-none absolute inset-0 mx-auto hidden max-w-[1180px] min-[900px]:block">
+              <HeroMeter
+                data={meter}
+                sourceKey={meterKey}
+                pane={pane}
+                onPaneChange={changePane}
+                className="pointer-events-auto absolute right-4 top-4 w-[300px] lg:right-8 lg:top-auto lg:bottom-[112px] lg:w-[320px]"
+              />
+            </div>
+          )}
+          featured={hero?.run}
+          currentMs={replay?.currentMs}
+          playback={replay}
+          getSidekickHref={getSidekickHref}
+          layer3D={landing || landingFailed ? <HeroReplayLayer entries={heroEntries} index={heroIndex} requested={liveRequested} onAdvance={advanceHero} onReplay={setReplay} /> : null}
+        />
+        {meter && (
+          // Below 900 px the meter is a card under the hero's CTA.
+          <div className="border-b bg-card px-4 py-4 min-[900px]:hidden">
+            <HeroMeter data={meter} sourceKey={meterKey} pane={pane} onPaneChange={changePane} />
           </div>
         )}
-        featured={hero?.run}
-        currentMs={replay?.currentMs}
-        playback={replay}
-        getSidekickHref={getSidekickHref}
-        layer3D={landing || landingFailed ? <HeroReplayLayer entries={heroEntries} index={heroIndex} requested={liveRequested} onAdvance={advanceHero} onReplay={setReplay} /> : null}
-      />
-      {meter && (
-        // Below 900 px the meter is a card under the hero's CTA.
-        <div className="border-b bg-card px-4 py-4 min-[900px]:hidden">
-          <HeroMeter data={meter} sourceKey={meterKey} pane={pane} onPaneChange={changePane} />
-        </div>
-      )}
+        <BossRail
+          bosses={landing || landingFailed ? runs[current]?.bosses ?? [] : undefined}
+          selectedId={hero?.window?.encounterId ?? null}
+          onPick={pickBoss}
+        />
+      </div>
       <SendLinkSection />
       <HowItWorks />
       <BelowFold />

@@ -379,7 +379,9 @@ func (a *API) loadLandingRun(ctx context.Context, id uuid.UUID, encounters []dat
 			continue
 		}
 		run.Bosses = append(run.Bosses, chroniclesdk.LandingFeaturedBoss{
+			ID:            enc.ID,
 			Name:          enc.Name,
+			Kill:          enc.KillType == database.KillTypeClean || enc.KillType == database.KillTypePartial,
 			StartOffsetMs: enc.StartTime.Time.Sub(start).Milliseconds(),
 			EndOffsetMs:   enc.EndTime.Time.Sub(start).Milliseconds(),
 		})

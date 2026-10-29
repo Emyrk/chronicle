@@ -56,9 +56,11 @@ type LandingFeaturedEncounter struct {
 // LandingFeaturedBoss is one boss encounter (kill or wipe), ordered by pull.
 // Offsets are milliseconds from the instance start.
 type LandingFeaturedBoss struct {
-	Name          string `json:"name"`
-	StartOffsetMs int64  `json:"start_offset_ms"`
-	EndOffsetMs   int64  `json:"end_offset_ms"`
+	ID            uuid.UUID `json:"id"`
+	Name          string    `json:"name"`
+	Kill          bool      `json:"kill"`
+	StartOffsetMs int64     `json:"start_offset_ms"`
+	EndOffsetMs   int64     `json:"end_offset_ms"`
 }
 
 // LandingFeaturedDeath is a player death, ordered by time.
