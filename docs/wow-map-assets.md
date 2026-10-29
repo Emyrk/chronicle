@@ -203,6 +203,43 @@ Dev, Storybook and production all read the GLBs from the icon CDN (`forever/maps
 
 The icon CDN applies its CORS policy to every map asset response, not per object or content type: requests for keys under the map namespace answer with `Access-Control-Allow-Origin: *` and `Vary: Origin`. Nothing extra needs to be set on the R2 bucket for meshes. The frontend uses the canonical asset URL for both ordinary images and CORS-enabled texture or mesh requests, so they share one browser cache entry.
 
+### CDN caching
+
+Meshes and renders are content-addressed (the Map Foundry names them `<mapID>[-floor-N]-<sha16>-<name>`), so they are written with `Cache-Control: public, max-age=31536000, immutable`, by the Foundry upload (`frontend/telemetry/src/routes/maps.ts`) and by `upload-maps-r2.sh`. Manifests (`manifest*.json`) are written with `public, max-age=3600` and must never be made immutable: a publish changes them in place.
+
+Cloudflare does not cache `.glb` by default (it is not on its list of cacheable extensions), so without a rule meshes answer `cf-cache-status: DYNAMIC` and every visitor downloads them from R2. Add this rule in the `chronicleclassic.com` zone under **Caching → Cache Rules → Create rule**:
+
+- **Rule name:** `Map assets: immutable`
+- **When incoming requests match… → Edit expression:**
+
+  ```
+  (http.host eq "icons.chronicleclassic.com" and (http.request.uri.path contains "/maps/3d/" or http.request.uri.path contains "/maps/renders/"))
+  ```
+
+- **Cache eligibility:** Eligible for cache (the Cache Rules form of "Cache Everything").
+- **Edge TTL:** Use cache-control header if present, use default Cloudflare caching behavior if not.
+- **Browser TTL:** Respect origin TTL.
+- Leave the cache key and everything else at the defaults. Deploy.
+
+The expression matches only `<ns>/maps/3d/*` and `<ns>/maps/renders/*`, so manifests keep their one-hour behaviour. Check after deploying (the second request should say `HIT`):
+
+```bash
+url=https://icons.chronicleclassic.com/turtle/maps/3d/309-a5ca5828ca9b1161-zul-gurub-v002-open-top.glb
+for i in 1 2; do curl -s -o /dev/null -D - -r 0-0 "$url" | grep -iE 'cf-cache-status|cache-control'; done
+```
+
+Objects uploaded before the header existed (hand uploads such as `forever/maps/3d/wailing-caverns-open-top.glb` and `forever/maps/renders/*-shaded*.png`) need it backfilled. `frontend/imagecache/backfill-maps-cache-control.sh` lists them (a dry run by default). Without credentials it reads the published manifests and checks through the CDN. With `R2_ENDPOINT` and R2 credentials it lists the whole bucket prefix, so it also finds unreferenced rollback copies. `--apply` rewrites each object's metadata in place and keeps its `Content-Type`:
+
+```bash
+cd frontend/imagecache
+./backfill-maps-cache-control.sh                                   # dry run via the CDN
+R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com AWS_PROFILE=<r2-profile> \
+  ./backfill-maps-cache-control.sh                                 # dry run against the bucket
+R2_ENDPOINT=... AWS_PROFILE=... ./backfill-maps-cache-control.sh --apply
+```
+
+Responses already in the edge cache keep their old headers until they expire, so purge the URLs the script printed (Caching → Configuration → Custom Purge) after `--apply`.
+
 ## Manually uploaded Forever maps
 
 The tracked `frontend/imagecache/map-layers/forever/manifest.renders.json` registers hand-uploaded PNG or WebP images at `forever/maps/renders/`. Its product-only target and named entries attach by world `mapID`; unknown IDs create floorless instances. `frontend/imagecache/meshes/forever/manifest.meshes.json` independently registers placeable GLBs with verified bounds and frame (see [Adding a dungeon](#adding-a-dungeon)). No separate path-only 3D layer or generated raw-render layer is published.

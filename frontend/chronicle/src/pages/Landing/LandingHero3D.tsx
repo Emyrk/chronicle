@@ -6,7 +6,6 @@ import { transformToInstance } from "@/pages/Instance/transformInstance";
 import type { Instance } from "@/pages/Instance/InstancePage";
 import { deathsProcessor, type DeathEvent, type DeathsResult } from "@/pages/Instance/EventsPanels/Deaths/deaths.processor";
 import { processIncrementally } from "@/pages/Instance/EventsPanels/mainThreadProcessor";
-import type { SerializableProcessorContext } from "@/pages/Instance/EventsPanels/processorTypes";
 import type { PanelRenderProps } from "@/pages/Instance/EventsPanels/types";
 import { dungeonMeshLiquid, dungeonMeshUrl } from "@/pages/Instance/EventsPanels/Map/dungeonMeshes";
 import { mapProcessor, type MapResult } from "@/pages/Instance/EventsPanels/Map/map.processor";
@@ -15,7 +14,7 @@ import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "@/page
 import { MapView2D } from "@/pages/Instance/EventsPanels/Map/MapView2D";
 import MapView3D from "@/pages/Instance/EventsPanels/Map/MapView3D";
 import { previewSpeed, useMapScene } from "@/pages/Instance/EventsPanels/Map/useMapScene";
-import type { HeroDeathBeat, HeroDeathRecap, HeroReplay, HeroWindow } from "./heroReplay";
+import { serializableContext, type HeroDeathBeat, type HeroDeathRecap, type HeroReplay, type HeroWindow } from "./heroReplay";
 
 // The Map panel's streams without auras: those only tint debuffed players,
 // and they are by far the biggest download (1.3 MB of 1.6 MB on the Ruins run).
@@ -65,19 +64,6 @@ function playableRunMs(ms: number, encounters: readonly [number, number][], dura
     if (at <= end) return at;
   }
   return encounters[0]?.[0] ?? at;
-}
-
-function serializableContext(instance: Instance, selectedEncounterIds: string[]): SerializableProcessorContext {
-  return {
-    players: Object.fromEntries(Object.entries(instance.players ?? {})
-      .map(([guid, player]) => [guid, { name: player.name, class: player.class, level: player.level }])),
-    units: Object.fromEntries(Object.entries(instance.units ?? {})
-      .map(([guid, unit]) => [guid, { name: unit.name, owner: unit.owner?.toString() ?? null, entry: unit.entry }])),
-    selectedEncounterIds,
-    entitySelection: { enemyIds: [], playerIds: [] },
-    capabilities: instance.capabilities ?? [],
-    positionCoordinateSpace: instance.positionCoordinateSpace,
-  };
 }
 
 // Positions first: the featured run's streams, through the Map panel's processor (on the main thread, yielding).
@@ -201,6 +187,13 @@ function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, on
   // Bumped on a jump (a boss chip, a death): the camera cuts to the new shot rather than gliding there.
   const [cutKey, setCutKey] = useState(0);
   const playing = userPlaying && active && meshState === "ready";
+  // Another pull (the boss rail) plays from its window's start.
+  const [clockPull, setClockPull] = useState(encounterId);
+  if (clockPull !== encounterId) {
+    setClockPull(encounterId);
+    setRunMs(0);
+    setUserPlaying(true);
+  }
   // The clock and the end callback as the timer reads them, without restarting it.
   const runMsRef = useRef(runMs);
   const onPullEndRef = useRef(onPullEnd);
@@ -258,6 +251,13 @@ function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, on
   const [held, setHeld] = useState<typeof live>(null);
   if (live && (!held || held.mapName !== live.mapName || held.mesh !== live.mesh)) setHeld(live);
   const ready = live ?? held;
+  // The camera cuts to another pull once its scene is up (until then the last pull's view holds, frozen).
+  const [cutPull, setCutPull] = useState(encounterId);
+  const livePull = live && run.data ? encounterId : null;
+  if (livePull !== null && livePull !== cutPull) {
+    setCutPull(livePull);
+    setCutKey((key) => key + 1);
+  }
 
   // Then the camera framing, as the Map panel's default: on a boss pull the fight (the Director frames it, cinematic below),
   // across the whole run the party Follow.

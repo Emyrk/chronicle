@@ -73,7 +73,9 @@ func TestLandingFeatured(t *testing.T) {
 		DurationMs:   (30 * time.Minute).Milliseconds(),
 		PlayerCount:  2,
 		Bosses: []chroniclesdk.LandingFeaturedBoss{{
+			ID:            butcherKill(t, store, instanceID),
 			Name:          "The Butcher",
+			Kill:          true,
 			StartOffsetMs: (10 * time.Minute).Milliseconds(),
 			EndOffsetMs:   (12 * time.Minute).Milliseconds(),
 		}},
@@ -116,7 +118,20 @@ func TestLandingFeatured(t *testing.T) {
 		StartOffsetMs: (10 * time.Minute).Milliseconds(),
 		EndOffsetMs:   (12 * time.Minute).Milliseconds(),
 	}, picked.Encounter)
-	require.Len(t, picked.Bosses, 2)
+	// Every boss pull of the run, kills and wipes, in order, timed from the run's start.
+	require.Equal(t, []chroniclesdk.LandingFeaturedBoss{{
+		ID:            butcherKill(t, store, newer),
+		Name:          "The Butcher",
+		Kill:          true,
+		StartOffsetMs: (10 * time.Minute).Milliseconds(),
+		EndOffsetMs:   (12 * time.Minute).Milliseconds(),
+	}, {
+		ID:            encounterNamed(t, store, newer, "Overseer"),
+		Name:          "Overseer",
+		Kill:          false,
+		StartOffsetMs: (20 * time.Minute).Milliseconds(),
+		EndOffsetMs:   (21 * time.Minute).Milliseconds(),
+	}}, picked.Bosses)
 
 	// The admin's featured run wins over the pick, playing its own last boss pull.
 	require.Equal(t, http.StatusOK, setFeatured(older.String()))
@@ -225,14 +240,20 @@ func seedLandingSpeedrun(t *testing.T, store database.Store, instanceID uuid.UUI
 // butcherKill is the seeded instance's The Butcher encounter.
 func butcherKill(t *testing.T, store database.Store, instanceID uuid.UUID) uuid.UUID {
 	t.Helper()
+	return encounterNamed(t, store, instanceID, "The Butcher")
+}
+
+// encounterNamed is the instance's encounter called name.
+func encounterNamed(t *testing.T, store database.Store, instanceID uuid.UUID, name string) uuid.UUID {
+	t.Helper()
 	encounters, err := store.EncountersByInstanceID(testutil.Context(t, testutil.WaitShort), instanceID)
 	require.NoError(t, err)
 	for _, enc := range encounters {
-		if enc.Name == "The Butcher" {
+		if enc.Name == name {
 			return enc.ID
 		}
 	}
-	t.Fatalf("no The Butcher encounter on %s", instanceID)
+	t.Fatalf("no %s encounter on %s", name, instanceID)
 	return uuid.Nil
 }
 

@@ -1,0 +1,109 @@
+[
+  {
+    "slug": "-8uWqvAo4Qa4Oa5l",
+    "instance_name": "Zul'Gurub",
+    "boss": "Hakkar",
+    "mp4": "zg-hakkar.e03f747a.mp4",
+    "webm": "zg-hakkar.47be4d8e.webm",
+    "poster": "zg-hakkar.5e485f45.webp",
+    "portrait": {
+      "mp4": "zg-hakkar-portrait.1ef0fff3.mp4",
+      "webm": "zg-hakkar-portrait.3a4080b4.webm",
+      "poster": "zg-hakkar-portrait.ea9c0199.webp"
+    },
+    "meter": {
+      "total": 535403,
+      "dps": 4153,
+      "rows": [
+        {
+          "name": "Katq",
+          "class": "WARRIOR",
+          "dps": 637,
+          "share": 0.153
+        },
+        {
+          "name": "Stevexd",
+          "class": "WARRIOR",
+          "dps": 553,
+          "share": 0.133
+        },
+        {
+          "name": "Redpala",
+          "class": "PALADIN",
+          "dps": 534,
+          "share": 0.128
+        },
+        {
+          "name": "Zoidra",
+          "class": "HUNTER",
+          "dps": 533,
+          "share": 0.128
+        },
+        {
+          "name": "Soller",
+          "class": "SHAMAN",
+          "dps": 486,
+          "share": 0.117
+        }
+      ],
+      "death": {
+        "victim": "Katq",
+        "class": "WARRIOR",
+        "at_ms": 4953,
+        "ability": "Blood Siphon",
+        "amount": 264,
+        "source": "Katq"
+      }
+    }
+  },
+  {
+    "slug": "cpegIP_Qz9m6JEnZ",
+    "instance_name": "Molten Core",
+    "boss": "Ragnaros",
+    "mp4": "mc-ragnaros.74f12304.mp4",
+    "webm": "mc-ragnaros.c8d84ab5.webm",
+    "poster": "mc-ragnaros.d3702349.webp",
+    "portrait": {
+      "mp4": "mc-ragnaros-portrait.00961839.mp4",
+      "webm": "mc-ragnaros-portrait.e10a68b5.webm",
+      "poster": "mc-ragnaros-portrait.3a20428c.webp"
+    },
+    "meter": {
+      "total": 1399419,
+      "dps": 10903,
+      "rows": [
+        {
+          "name": "Otitupsos",
+          "class": "WARLOCK",
+          "dps": 793,
+          "share": 0.073
+        },
+        {
+          "name": "Arsham",
+          "class": "WARLOCK",
+          "dps": 779,
+          "share": 0.071
+        },
+        {
+          "name": "Sheenmage",
+          "class": "MAGE",
+          "dps": 749,
+          "share": 0.069
+        },
+        {
+          "name": "Hemuel",
+          "class": "WARLOCK",
+          "dps": 722,
+          "share": 0.066
+        },
+        {
+          "name": "Skurridizo",
+          "class": "HUNTER",
+          "dps": 602,
+          "share": 0.055
+        }
+      ],
+      "death": null
+    }
+  }
+]
