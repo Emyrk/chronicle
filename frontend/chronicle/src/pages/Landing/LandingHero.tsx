@@ -453,12 +453,12 @@ export function LandingHero({
   // The live 3D's fade over the clip takes 700 ms; the clip stops decoding after it.
   const [clipCovered, setClipCovered] = useState(false);
   useEffect(() => {
-    if (!live) {
-      setClipCovered(false);
-      return;
-    }
+    if (!live) return;
     const timer = window.setTimeout(() => setClipCovered(true), 800);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      setClipCovered(false);
+    };
   }, [live]);
 
   return (

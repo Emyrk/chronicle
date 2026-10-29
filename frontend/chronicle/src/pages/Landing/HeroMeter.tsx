@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Heart, Skull, Swords } from "lucide-react";
+import type { PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { cn } from "@/lib/utils";
-import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
+import { MeterBars } from "@/pages/Instance/EventsPanels/MeterBars";
 import type { HeroMeterData, HeroMeterDeath, HeroMeterPane, HeroMeterTotals } from "./heroMeter";
 
 /** Bars the meter shows. */
@@ -16,6 +17,13 @@ const PANES: { value: HeroMeterPane; label: string; icon: ReactNode }[] = [
 
 const NUMBER = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const COMPACT = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+
+/** The section below with the whole replay. */
+const BELOW = "#runs";
+
+function openBelow() {
+  document.querySelector(BELOW)?.scrollIntoView({ behavior: "smooth" });
+}
 
 function formatClock(ms: number) {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -87,7 +95,7 @@ function DeathLine({ death }: { death: HeroMeterDeath }) {
       <span className="min-w-0 truncate text-muted-foreground">
         {death.ability ? <>to <span className="text-foreground/85">{death.ability}</span></> : "died"}
         {death.amount ? ` ${NUMBER.format(death.amount)}` : ""}
-        {death.source && death.source !== death.ability ? ` · ${death.source}` : ""}
+        {death.source && death.source !== death.ability && death.source !== death.victim ? ` · ${death.source}` : ""}
       </span>
       <span className="ml-auto shrink-0 font-mono text-muted-foreground">{formatClock(death.atMs)}</span>
     </div>
@@ -95,28 +103,26 @@ function DeathLine({ death }: { death: HeroMeterDeath }) {
 }
 
 function Bars({ totals, unit }: { totals: HeroMeterTotals; unit: string }) {
-  const top = totals.rows[0]?.perSecond ?? 0;
+  const data = useMemo((): PlayerMetricChartData[] => totals.rows.map((row) => ({
+    playerID: row.name,
+    playerName: row.name,
+    className: row.className,
+    specialization: "",
+    value: row.perSecond,
+  })), [totals]);
   return (
     <>
       <div className="flex items-baseline justify-between gap-3">
         <span className="font-mono text-lg font-semibold text-foreground">{COMPACT.format(totals.total)}</span>
         <span className="text-xs text-muted-foreground">raid {unit} <span className="font-mono text-foreground">{NUMBER.format(totals.perSecond)}</span></span>
       </div>
-      <ul className="m-0 flex list-none flex-col gap-1 p-0">
-        {totals.rows.slice(0, TOP_ROWS).map((row) => (
-          <li key={row.name} className="relative flex h-6 items-center gap-2 overflow-hidden rounded-sm bg-white/5 pr-2 text-xs">
-            <span
-              aria-hidden
-              className="absolute inset-y-0 left-0"
-              style={{ width: `${top > 0 ? (row.perSecond / top) * 100 : 0}%`, background: `var(--color-class-${row.className.toLowerCase()})`, opacity: 0.55 }}
-            />
-            <ClassIcon cls={row.className} className="relative h-6 w-6 shrink-0" />
-            <span className="relative min-w-0 truncate font-medium text-white [text-shadow:0_1px_2px_rgba(0,0,0,.8)]">{row.name}</span>
-            <span className="relative ml-auto shrink-0 font-mono text-white [text-shadow:0_1px_2px_rgba(0,0,0,.8)]">{NUMBER.format(row.perSecond)}</span>
-            <span className="relative w-9 shrink-0 text-right font-mono text-white/70 [text-shadow:0_1px_2px_rgba(0,0,0,.8)]">{Math.round(row.share * 100)}%</span>
-          </li>
-        ))}
-      </ul>
+      {/* Shares of the raid's rate, not of the rows shown: a clip's manifest carries its top five only. */}
+      <MeterBars
+        data={data}
+        onOpen={openBelow}
+        openLabel="The whole replay, below"
+        values={{ formatValue: (value) => NUMBER.format(value), shareBase: totals.perSecond, formatShare: (share) => `${Math.round(share * 100)}%`, limit: TOP_ROWS }}
+      />
     </>
   );
 }
@@ -155,7 +161,7 @@ export function HeroMeter({ data, sourceKey, pane, onPaneChange, className }: {
           <div className="text-xs text-muted-foreground">Loading the live replay…</div>
         )}
       </div>
-      <a href="#runs" className="text-xs text-link no-underline hover:underline">
+      <a href={BELOW} className="text-xs text-link no-underline hover:underline">
         Healing, threat, the whole replay: below
       </a>
     </div>

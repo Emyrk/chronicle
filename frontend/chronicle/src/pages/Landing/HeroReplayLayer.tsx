@@ -169,12 +169,7 @@ export function HeroReplayLayer({ entries, index, requested = false, onAdvance, 
   }, [heroMode]);
 
   useEffect(() => {
-    if (!allowed || load) return;
-    if (requested) {
-      setLoad(true);
-      return;
-    }
-    if (!inView) return;
+    if (!allowed || load || requested || !inView) return;
     // Two frames: the shell has painted at least once before the 3D work starts.
     let cancelIdle: (() => void) | null = null;
     let frame = requestAnimationFrame(() => {
@@ -187,10 +182,12 @@ export function HeroReplayLayer({ entries, index, requested = false, onAdvance, 
       cancelIdle?.();
     };
   }, [allowed, inView, load, requested]);
+  // A request mounts it at once.
+  const mounted = load || (allowed && requested);
 
   return (
     <div ref={ref} className="absolute inset-0">
-      {load && current >= 0 && (
+      {mounted && current >= 0 && (
         <HeroSlot
           key={currentKey}
           slotKey={currentKey}
@@ -201,7 +198,7 @@ export function HeroReplayLayer({ entries, index, requested = false, onAdvance, 
           onReplay={handleReplay}
         />
       )}
-      {load && nextKey && playedKey === currentKey && (
+      {mounted && nextKey && playedKey === currentKey && (
         <HeroSlot key={nextKey} slotKey={nextKey} entry={entries[next]} active={false} hidden onReplay={handleReplay} />
       )}
     </div>
