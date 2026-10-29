@@ -1,11 +1,11 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useLandingFeatured } from "@/api/landingFeatured";
 import { useSiteConfig } from "@/api/siteConfigQuery";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { trackFunnel } from "@/utils/funnel";
-import { HeroReplayLayer } from "./HeroReplayLayer";
+import { HeroReplayLayer, type HeroEntry } from "./HeroReplayLayer";
 import { heroWindow, type HeroReplay } from "./heroReplay";
 import { LandingHero } from "./LandingHero";
 import { IMAGES } from "./startPageStyle";
@@ -230,10 +230,20 @@ export function StartPage() {
   const { data: landing, isError: landingFailed } = useLandingFeatured();
   const { data: siteConfig } = useSiteConfig();
   const siteName = (siteConfig?.tenant?.branding ?? siteConfig?.branding)?.display_name;
-  // The 3D hero replays the featured run (the build-time instance when none is set); undefined until that is known.
-  const heroInstanceId = landing || landingFailed ? landing?.featured?.instance_id ?? FALLBACK_FEATURED_INSTANCE : undefined;
-  // It loops the featured run's boss pull; the scrubber spans that pull only.
-  const hero = useMemo(() => (landing?.featured ? heroWindow(landing.featured) : null), [landing]);
+  // The montage, each entry a run's boss pull (a payload from before montages has the one featured run).
+  const heroes = useMemo(() => {
+    const runs = landing?.entries?.length ? landing.entries : landing?.featured ? [landing.featured] : [];
+    return runs.map(heroWindow);
+  }, [landing]);
+  // The 3D hero plays them in turn (the build-time instance's whole run when there are none).
+  const heroEntries = useMemo((): HeroEntry[] => heroes.length > 0
+    ? heroes.map((hero) => ({ instanceId: hero.run.instance_id, pull: hero.window }))
+    : FALLBACK_FEATURED_INSTANCE ? [{ instanceId: FALLBACK_FEATURED_INSTANCE }] : [],
+  [heroes]);
+  const [heroIndex, setHeroIndex] = useState(0);
+  const advanceHero = useCallback(() => setHeroIndex((index) => index + 1), []);
+  // The scrubber and caption follow the entry playing, spanning its pull only.
+  const hero = heroes.length > 0 ? heroes[heroIndex % heroes.length] : null;
   // The live 3D replay's position and controls, for the hero's scrubber; null while the poster shows.
   const [replay, setReplay] = useState<HeroReplay | null>(null);
 
@@ -256,7 +266,7 @@ export function StartPage() {
         currentMs={replay?.currentMs}
         playback={replay}
         getSidekickHref={getSidekickHref}
-        layer3D={landing || landingFailed ? <HeroReplayLayer instanceId={heroInstanceId} pull={hero?.window} onReplay={setReplay} /> : null}
+        layer3D={landing || landingFailed ? <HeroReplayLayer entries={heroEntries} index={heroIndex} onAdvance={advanceHero} onReplay={setReplay} /> : null}
       />
       <SendLinkSection />
       <HowItWorks />

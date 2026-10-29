@@ -2766,13 +2766,21 @@ export interface LandingFeaturedEncounter {
 // From chroniclesdk/landing.go
 /**
  * LandingFeaturedResponse is the public payload behind the /start hero.
- * Featured is the admin-set featured instance when one is configured, else
- * the tenant's newest public run with unit positions whose last boss pull has
- * a published dungeon mesh. It is nil when neither exists or the configured
- * instance cannot be shown (missing, unlisted, invalidated); the landing then
- * shows its poster only.
+ * Entries is the montage the hero plays in order, looping: the admin-set
+ * featured instance first when one is configured, then, for each instance
+ * with a published dungeon mesh, its fastest qualified speedrun among runs
+ * with unit positions (by the speedrun board's rules, though a run without a
+ * guild counts), best ranked first (at most six in all). Without
+ * such ranked runs the montage is the tenant's newest public run with unit
+ * positions whose last boss pull has a published dungeon mesh. It is empty
+ * when nothing qualifies or the configured instance cannot be shown (missing,
+ * unlisted, invalidated); the landing then shows its poster only.
  */
 export interface LandingFeaturedResponse {
+    readonly entries: readonly LandingFeaturedRun[];
+    /**
+     * Featured is the first entry, or nil when there is none.
+     */
     readonly featured: LandingFeaturedRun | null;
 }
 
@@ -2793,6 +2801,24 @@ export interface LandingFeaturedRun {
      * its last wipe when no boss died. Nil when the run has no boss encounter.
      */
     readonly encounter: LandingFeaturedEncounter | null;
+    /**
+     * Speedrun is the place the run's time takes on its instance's speedrun
+     * board, when the montage picked it as that instance's best replayed run.
+     */
+    readonly speedrun: LandingFeaturedSpeedrun | null;
+}
+
+// From chroniclesdk/landing.go
+/**
+ * LandingFeaturedSpeedrun is a run's place on the speedrun board (full
+ * timing, the board's default) for its instance and difficulty.
+ */
+export interface LandingFeaturedSpeedrun {
+    /**
+     * Rank is the place the run's time takes on the board.
+     */
+    readonly rank: number;
+    readonly duration_ms: number;
 }
 
 // From chroniclesdk/landing.go

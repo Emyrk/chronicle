@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useInstance } from "@/api/queries";
 import { InstanceEventsProvider, useInstanceEventsContext, type CachedStream, type StreamType } from "@/hooks/instanceEvents";
@@ -45,6 +45,8 @@ interface LandingHero3DProps {
   pull?: HeroWindow | null;
   /** The hero is on screen and the tab visible: the clock runs. Otherwise the clock and the scene's frame loop stop. */
   active: boolean;
+  /** Called each time the pull reaches its end (the clock then loops back to the window's start). */
+  onPullEnd?: () => void;
   /** The replay's state for the scrubber once the mesh is up and the scene shows, or null (not yet, or it failed). */
   onReplay: (replay: HeroReplay | null) => void;
   /** A replay still (the run-still page): a map without a mesh, or whose mesh failed, shows its 2D tiles. */
@@ -157,7 +159,7 @@ function useHeroDeaths(instance: Instance, encounterId: string | null, enabled: 
   });
 }
 
-function HeroScene({ instance, startOffsetMs, pull = null, active, onReplay, still = false }: Omit<LandingHero3DProps, "instanceId"> & { instance: Instance }) {
+function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, onReplay, still = false }: Omit<LandingHero3DProps, "instanceId"> & { instance: Instance }) {
   const encounterId = pull?.encounterId ?? null;
   const run = useHeroRun(instance, encounterId);
   const processedRecaps = useHeroDeaths(instance, encounterId, run.isSuccess).data ?? null;
@@ -199,6 +201,13 @@ function HeroScene({ instance, startOffsetMs, pull = null, active, onReplay, sti
   // Bumped on a jump (a boss chip, a death): the camera cuts to the new shot rather than gliding there.
   const [cutKey, setCutKey] = useState(0);
   const playing = userPlaying && active && meshState === "ready";
+  // The clock and the end callback as the timer reads them, without restarting it.
+  const runMsRef = useRef(runMs);
+  const onPullEndRef = useRef(onPullEnd);
+  useEffect(() => {
+    runMsRef.current = runMs;
+    onPullEndRef.current = onPullEnd;
+  });
   useEffect(() => {
     if (!playing || !span) return;
     let last = performance.now();
@@ -207,10 +216,11 @@ function HeroScene({ instance, startOffsetMs, pull = null, active, onReplay, sti
       // Capped, so a throttled timer never leaps the replay ahead.
       const step = Math.min(now - last, 4 * TICK_MS) * speed;
       last = now;
+      if (encounterId && playableRunMs(runMsRef.current, span.playable, span.durationMs) + step >= span.durationMs) onPullEndRef.current?.();
       setRunMs((ms) => playableRunMs(playableRunMs(ms, span.playable, span.durationMs) + step, span.playable, span.durationMs));
     }, TICK_MS);
     return () => window.clearInterval(timer);
-  }, [playing, span, speed]);
+  }, [encounterId, playing, span, speed]);
 
   const props = useMemo((): PanelRenderProps<MapResult> => ({
     result: result ?? mapProcessor.createState(),

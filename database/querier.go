@@ -597,6 +597,16 @@ type sqlcQuerier interface {
 	IsLayoutTrackedByUser(ctx context.Context, arg IsLayoutTrackedByUserParams) (bool, error)
 	IsLogInstanceInvalid(ctx context.Context, id uuid.UUID) (bool, error)
 	IsParsedLogGroupVisible(ctx context.Context, id uuid.UUID) (bool, error)
+	// The /start montage's candidates: for each instance name on the tenant, its
+	// fastest positional runs by the default speedrun board's rules
+	// (SpeedrunLeaderboard with full timing: qualified, meeting the version
+	// requirements, one run per duplicate group, each difficulty its own board).
+	// Unlike the board, a run without a guild is a candidate too. Only public,
+	// listed, finalized, valid runs whose log recorded unit positions are
+	// returned, up to @per_instance per instance name, best first. speedrun_rank
+	// is the place the run's time takes on its board: one more than the other
+	// guilds whose best run there is faster.
+	LandingMontageRuns(ctx context.Context, perInstance int32) ([]LandingMontageRunsRow, error)
 	// The newest public, listed, finalized instances on the tenant whose log
 	// recorded unit positions and that have a boss encounter, for the /start
 	// hero's pick. Newest first.

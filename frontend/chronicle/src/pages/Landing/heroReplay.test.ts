@@ -17,6 +17,7 @@ const run: LandingFeaturedRun = {
   ],
   upload: { source: "sidekick", delay_ms: null },
   encounter: { id: "hakkar", name: "Hakkar", kill: true, start_offset_ms: 3_000_000, end_offset_ms: 3_200_000 },
+  speedrun: null,
 };
 
 describe("heroWindow", () => {
