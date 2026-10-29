@@ -35,7 +35,7 @@ class LegacyTerrainDispatchTest(unittest.TestCase):
 
     def test_legacy_minimap_name(self):
         self.assertEqual(fetch_map.legacy_minimap_name("EmeraldSanctum", 31, 30),
-                         "World\\Minimaps\\EmeraldSanctum\\map31_30.blp")
+                         "textures\\Minimap\\EmeraldSanctum\\map31_30.blp")
 
 
 class PlacementBoundsTest(unittest.TestCase):

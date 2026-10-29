@@ -457,7 +457,7 @@ def mpq_world_kind(wdt, cfg):
 
 
 def legacy_minimap_name(directory, x, y):
-    return "World\\Minimaps\\%s\\map%d_%d.blp" % (directory, x, y)
+    return "textures\\Minimap\\%s\\map%d_%d.blp" % (directory, x, y)
 
 
 def mpq_archive_provenance(chain):
