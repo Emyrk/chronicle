@@ -102,7 +102,7 @@ function DeathLine({ death }: { death: HeroMeterDeath }) {
   );
 }
 
-function Bars({ totals, unit, rows }: { totals: HeroMeterTotals; unit: string; rows: number }) {
+function Bars({ totals, unit, rows, onOpen }: { totals: HeroMeterTotals; unit: string; rows: number; onOpen: (() => void) | null }) {
   const data = useMemo((): PlayerMetricChartData[] => totals.rows.map((row) => ({
     playerID: row.name,
     playerName: row.name,
@@ -119,8 +119,8 @@ function Bars({ totals, unit, rows }: { totals: HeroMeterTotals; unit: string; r
       {/* Shares of the raid's rate, not of the rows shown: a clip's manifest carries its top five only. */}
       <MeterBars
         data={data}
-        onOpen={openBelow}
-        openLabel="The whole replay, below"
+        onOpen={onOpen ?? undefined}
+        openLabel={onOpen === openBelow ? "The whole replay, below" : "Show the stats"}
         values={{ formatValue: (value) => NUMBER.format(value), shareBase: totals.perSecond, formatShare: (share) => `${Math.round(share * 100)}%`, limit: rows }}
       />
     </>
@@ -132,14 +132,17 @@ function Bars({ totals, unit, rows }: { totals: HeroMeterTotals; unit: string; r
  * chrome, its header the run page's pane dropdown. `sourceKey` names the run
  * the numbers belong to; a new one crossfades the body. A pane without
  * numbers yet (a clip carries damage only) shows a loading line. `rows` caps the bars (5).
+ * `onOpen` replaces what a bar click does (null: nothing) and drops the link below; `action` sits right of the dropdown.
  */
-export function HeroMeter({ data, sourceKey, pane, onPaneChange, className, rows = TOP_ROWS }: {
+export function HeroMeter({ data, sourceKey, pane, onPaneChange, className, rows = TOP_ROWS, onOpen = openBelow, action }: {
   data: HeroMeterData;
   sourceKey: string;
   pane: HeroMeterPane;
   onPaneChange: (pane: HeroMeterPane) => void;
   className?: string;
   rows?: number;
+  onOpen?: (() => void) | null;
+  action?: ReactNode;
 }) {
   const totals = pane === "damage_done" ? data.damage : pane === "healing_done" ? data.healing : null;
   const firstDeath = data.deaths[0];
@@ -147,6 +150,7 @@ export function HeroMeter({ data, sourceKey, pane, onPaneChange, className, rows
     <div className={cn("flex flex-col gap-2.5 rounded-lg border border-white/10 bg-card/60 p-3 shadow-lg backdrop-blur-md", className)}>
       <div className="flex items-center justify-between gap-2">
         <PaneSelector value={pane} onChange={onPaneChange} />
+        {action}
       </div>
       <div key={`${sourceKey}-${pane}`} className="flex flex-col gap-2 animate-in fade-in-0 duration-500">
         {pane === "deaths" ? (
@@ -155,16 +159,18 @@ export function HeroMeter({ data, sourceKey, pane, onPaneChange, className, rows
             : <div className="text-xs text-muted-foreground">No one died on this pull.</div>
         ) : totals ? (
           <>
-            <Bars totals={totals} unit={pane === "damage_done" ? "DPS" : "HPS"} rows={rows} />
+            <Bars totals={totals} unit={pane === "damage_done" ? "DPS" : "HPS"} rows={rows} onOpen={onOpen} />
             {firstDeath && <DeathLine death={firstDeath} />}
           </>
         ) : (
           <div className="text-xs text-muted-foreground">Loading the live replay…</div>
         )}
       </div>
-      <a href={BELOW} className="text-xs text-link no-underline hover:underline">
-        Healing, threat, the whole replay: below
-      </a>
+      {onOpen === openBelow && (
+        <a href={BELOW} className="text-xs text-link no-underline hover:underline">
+          Healing, threat, the whole replay: below
+        </a>
+      )}
     </div>
   );
 }

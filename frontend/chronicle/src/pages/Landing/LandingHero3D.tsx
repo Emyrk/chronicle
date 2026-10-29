@@ -401,8 +401,8 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
   // A pull reports the hero's clock, from the pull's first position sample (the clock skips the frames before it).
   const currentMs = cursorMs === null ? null : pull ? playableMs : cursorMs - instanceStartMs;
   // The live stats follow the hero's clock from the pull's start (chips, the scrubber and deaths move it through `seek`):
-  // the meter's damage and the threat table at the cursor, and the raid frames.
-  const stats = useHeroStats(instance, explore ? null : encounterId, shown && span && currentMs !== null ? span.startMs + playableMs : null, HERO_STREAMS);
+  // the meter's damage and the threat table at the cursor, and the raid frames. Explore's modal shows them too.
+  const stats = useHeroStats(instance, encounterId, shown && span && currentMs !== null ? span.startMs + playableMs : null, HERO_STREAMS);
   const cursorDamage = stats?.damage ?? null;
   const liveMeter = useMemo(() => meter && cursorDamage ? { ...meter, damage: cursorDamage } : meter, [cursorDamage, meter]);
   const renderRaidFrames = useMemo(() => stats?.frames
