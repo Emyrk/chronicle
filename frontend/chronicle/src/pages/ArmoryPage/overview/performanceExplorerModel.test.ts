@@ -352,6 +352,12 @@ describe("summarizePerformanceRuns", () => {
     expect(summary?.spread).toBeCloseTo(12.5);
   });
 
+  it("separates outliers from the whiskers", () => {
+    const withOutlier = [...runs, run({ run_id: "bad", started_at: "2026-01-07T00:00:00Z", average_parse: 20 })];
+    const summary = summarizePerformanceRuns(withOutlier, "dps", "parse");
+    expect(summary).toMatchObject({ lowerQuartile: 75, upperQuartile: 92.5, lowWhisker: 70, highWhisker: 100, outliers: [20] });
+  });
+
   it("uses the latest five runs for recent once there are more than five", () => {
     expect(summarizePerformanceRuns(runs, "dps", "parse")?.recent).toBe(90);
     expect(summarizePerformanceRuns(runs.slice(0, 5), "dps", "parse")?.recent).toBeNull();

@@ -307,6 +307,13 @@ export interface PerformanceSummary {
   floor: number;
   /** Interquartile range; lower is more consistent. */
   spread: number;
+  lowerQuartile: number;
+  upperQuartile: number;
+  /** Lowest and highest runs inside the Tukey fences (1.5x spread beyond the quartiles). */
+  lowWhisker: number;
+  highWhisker: number;
+  /** Runs outside the Tukey fences, ascending. */
+  outliers: number[];
   averageDeaths: number | null;
   averageAlive: number | null;
 }
@@ -326,6 +333,12 @@ export function summarizePerformanceRuns(
     .sort((a, b) => a - b);
   const deaths = runs.flatMap((run) => run.player_deaths == null ? [] : [run.player_deaths]);
   const alive = runs.flatMap((run) => run.alive_percentage == null ? [] : [run.alive_percentage]);
+  const lowerQuartile = quantile(values, 0.25);
+  const upperQuartile = quantile(values, 0.75);
+  const spread = upperQuartile - lowerQuartile;
+  const lowFence = lowerQuartile - spread * 1.5;
+  const highFence = upperQuartile + spread * 1.5;
+  const inside = values.filter((value) => value >= lowFence && value <= highFence);
 
   return {
     runCount: runs.length,
@@ -333,7 +346,12 @@ export function summarizePerformanceRuns(
     typical: quantile(values, 0.5),
     recent: runs.length > PERFORMANCE_RECENT_RUN_COUNT ? quantile(recentValues, 0.5) : null,
     floor: quantile(values, 0.1),
-    spread: quantile(values, 0.75) - quantile(values, 0.25),
+    spread,
+    lowerQuartile,
+    upperQuartile,
+    lowWhisker: inside[0],
+    highWhisker: inside[inside.length - 1],
+    outliers: values.filter((value) => value < lowFence || value > highFence),
     averageDeaths: deaths.length > 0 ? mean(deaths) : null,
     averageAlive: alive.length > 0 ? mean(alive) : null,
   };

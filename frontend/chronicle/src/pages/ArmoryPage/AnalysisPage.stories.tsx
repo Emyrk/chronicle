@@ -150,8 +150,10 @@ function performanceRuns(player: MockPlayer, url: URL): CharacterPerformanceResp
     let pick = random() * totalWeight;
     const spec = player.specs.find((option) => (pick -= option.weight) < 0) ?? player.specs[0];
     const specPenalty = spec === player.specs[0] ? 0 : -4;
+    // An occasional disaster night (disconnect, early death) gives the box plot real outliers.
+    const disaster = random() < 0.05 ? -25 : 0;
     const parse = Math.max(1, Math.min(99.9,
-      player.base + player.trend * progress + selectionOffset + specPenalty + (random() - 0.5) * 2 * player.noise
+      player.base + player.trend * progress + selectionOffset + specPenalty + disaster + (random() - 0.5) * 2 * player.noise
       - (offPurpose ? 75 : 0)));
     const throughput = Math.max(10, (offPurpose ? player.throughput * 0.08 : player.throughput) * (0.55 + parse / 200));
     const duration = encounters.length * (170 + random() * 80);
