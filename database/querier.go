@@ -864,7 +864,9 @@ type sqlcQuerier interface {
 	// metadata is intentionally deferred until after pagination.
 	// Step 2: pick each player's best run using only the narrow score rows.
 	// Step 3: paginate before computing wide display metadata.
-	// Step 4: hydrate display-only fields for the selected page.
+	// Step 4: hydrate display-only fields for only the selected page. score_rows
+	// already contains the exact filtered and Trash-deduplicated ranking IDs, so the
+	// wide joins below do not repeat filtering or touch non-page talent builds.
 	RankingsLeaderboard(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error)
 	// Distinct realm names that have DPS ranking data, for the realm filter dropdown.
 	// Rows with an empty realm name are excluded: they cannot be filtered on, and
