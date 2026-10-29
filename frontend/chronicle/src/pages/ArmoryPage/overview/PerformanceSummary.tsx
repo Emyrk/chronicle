@@ -7,6 +7,8 @@ import { getClassColorVar } from "../types";
 import type { ParseMetric } from "./util";
 import type { PerformanceDisplayMode } from "./performanceComparisonState";
 import {
+  consistencyLabel,
+  formatStat,
   PERFORMANCE_RECENT_RUN_COUNT,
   performanceParseColor,
   summarizePerformanceRuns,
@@ -473,16 +475,4 @@ function columnLeaders(
     leaders[column.key] = column.higherIsBetter ? Math.max(...values) : Math.min(...values);
   }
   return leaders;
-}
-
-/** Parse points in Parse mode, percent of the typical run in Raw mode. */
-function consistencyLabel(spread: number, typical: number, display: PerformanceDisplayMode) {
-  const scaled = display === "parse" ? spread : (spread / Math.max(typical, 1)) * 100;
-  if (scaled <= 4) return "High";
-  if (scaled <= 8) return "Med";
-  return "Low";
-}
-
-function formatStat(value: number, display: PerformanceDisplayMode) {
-  return display === "parse" ? value.toFixed(1) : Math.round(value).toLocaleString();
 }

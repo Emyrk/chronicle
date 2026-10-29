@@ -422,3 +422,16 @@ function quantile(sorted: readonly number[], q: number): number {
 function mean(values: readonly number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
+
+/** Consistency label from the spread: parse points in Parse mode, percent of the typical run in Raw mode. */
+export function consistencyLabel(spread: number, typical: number, display: "raw" | "parse"): "High" | "Med" | "Low" {
+  const scaled = display === "parse" ? spread : (spread / Math.max(typical, 1)) * 100;
+  if (scaled <= 4) return "High";
+  if (scaled <= 8) return "Med";
+  return "Low";
+}
+
+/** One decimal for parses, whole numbers with separators for DPS/HPS. */
+export function formatStat(value: number, display: "raw" | "parse"): string {
+  return display === "parse" ? value.toFixed(1) : Math.round(value).toLocaleString();
+}

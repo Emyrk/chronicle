@@ -53,10 +53,18 @@ import {
   type PerformancePointShape,
 } from "./performanceExplorerModel";
 import { PerformanceSummaryPanel, SummaryViewToggle, type SummaryView } from "./PerformanceSummary";
+import { NumbersExplainer } from "./NumbersExplainer";
 
 type DisplayMode = PerformanceDisplayMode;
 
 type PlayerDialog = "add" | string | null;
+
+type DetailTab = "runs" | "numbers";
+
+const DETAIL_TABS: readonly { value: DetailTab; label: string }[] = [
+  { value: "runs", label: "Run summary" },
+  { value: "numbers", label: "How the numbers work" },
+];
 
 interface SelectedPerformancePlayer {
   id: string;
@@ -100,6 +108,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
   const [mobileEncounterOpen, setMobileEncounterOpen] = useState(false);
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [summaryView, setSummaryView] = useState<SummaryView>("numbers");
+  const [detailTab, setDetailTab] = useState<DetailTab>("runs");
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebouncedValue(searchQuery.trim(), 250);
   const playerSearch = useArmorySearch({ q: debouncedSearch, realm: state.realmName });
@@ -441,7 +450,42 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                   omittedParseCount={omittedParseCount}
                 />
 
-                <PerformanceTable series={visibleSeries} metric={metric} display={display} />
+                <div className="space-y-3 border-t border-border/60 pt-4">
+                  <div role="tablist" aria-label="Details" className="flex gap-5 border-b border-border/60">
+                    {DETAIL_TABS.map((tab) => (
+                      <button
+                        key={tab.value}
+                        type="button"
+                        role="tab"
+                        aria-selected={detailTab === tab.value}
+                        onClick={() => setDetailTab(tab.value)}
+                        className={cn(
+                          "-mb-px border-b-2 pb-2 text-sm font-semibold transition-colors",
+                          detailTab === tab.value
+                            ? "border-[#5F8FA6] text-foreground"
+                            : "border-transparent text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                  {detailTab === "runs" ? (
+                    <PerformanceTable series={visibleSeries} metric={metric} display={display} />
+                  ) : (
+                    <NumbersExplainer
+                      players={visibleSeries.map(({ player: explainedPlayer, runs }) => ({
+                        id: explainedPlayer.id,
+                        name: explainedPlayer.name,
+                        className: explainedPlayer.className,
+                        color: explainedPlayer.color,
+                        runs,
+                      }))}
+                      metric={metric}
+                      display={display}
+                    />
+                  )}
+                </div>
               </div>
             </div>
           </>
@@ -1224,8 +1268,7 @@ function PerformanceTable({
     .sort((a, b) => b.run.started_at.localeCompare(a.run.started_at));
 
   return (
-    <div className="space-y-2 border-t border-border/60 pt-5">
-      <div className="text-sm font-semibold">Run summary</div>
+    <div className="space-y-2">
 
       <div className="sm:hidden">
         <div className="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] gap-2 border-b border-border px-2 pb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
