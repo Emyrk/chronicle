@@ -214,6 +214,14 @@ test("Map Foundry uploads, drafts, previews, and publishes floor assets without 
   assert.equal(reader.instances[0]?.floors[0]?.renders?.path, floorZeroPath);
   assert.equal(reader.instances[0]?.floors[1]?.renders?.path, uploaded.path);
   assert.equal(reader.instances[0]?.floors[1]?.mesh?.path, uploadedMesh.path);
+
+  // Content-addressed assets are immutable at the CDN; manifests stay short-lived.
+  for (const path of [uploaded.path, uploadedMesh.path]) {
+    assert.equal((await bucket.head(`forever/maps/${path}`))?.httpMetadata?.cacheControl, "public, max-age=31536000, immutable");
+  }
+  for (const layer of ["manifest.renders.json", "manifest.meshes.json", "manifest.json"]) {
+    assert.equal((await bucket.head(`forever/maps/${layer}`))?.httpMetadata?.cacheControl, "public, max-age=3600");
+  }
 });
 
 test("Map Foundry keeps missing multipart floor as a legacy map-level upload", async () => {
