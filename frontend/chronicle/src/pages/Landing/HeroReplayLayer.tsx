@@ -51,32 +51,91 @@ function usePageVisible(): boolean {
   return visible;
 }
 
+/** One montage entry: a public instance with unit positions and a published dungeon mesh, and the boss pull to loop. */
+export interface HeroEntry {
+  instanceId: string;
+  /** Without one the whole run plays. */
+  pull?: HeroWindow | null;
+}
+
+/** One entry's replay. A hidden slot preloads (instance, streams, mesh) without playing or showing. */
+function HeroSlot({ slotKey, entry, active, hidden, onPullEnd, onReplay }: {
+  slotKey: string;
+  entry: HeroEntry;
+  active: boolean;
+  hidden: boolean;
+  onPullEnd?: () => void;
+  onReplay: (slotKey: string, replay: HeroReplay | null) => void;
+}) {
+  const report = useCallback((replay: HeroReplay | null) => onReplay(slotKey, replay), [onReplay, slotKey]);
+  return (
+    // visibility, not an opacity fade: the cut to a preloaded entry is hard, and its scene keeps its size while hidden.
+    <div className="absolute inset-0" style={hidden ? { visibility: "hidden" } : undefined}>
+      <SilentBoundary>
+        <Suspense fallback={null}>
+          <LandingHero3D
+            instanceId={entry.instanceId}
+            startOffsetMs={FEATURED_START_OFFSET_MS}
+            pull={entry.pull}
+            active={active}
+            onPullEnd={onPullEnd}
+            onReplay={report}
+          />
+        </Suspense>
+      </SilentBoundary>
+    </div>
+  );
+}
+
 /**
  * The hero's 3D slot: mounts LandingHero3D after the shell's first paint,
  * once the hero is on screen and the browser is idle (or 1.5 s passed), and
  * pauses it while the hero is scrolled away or the tab is hidden.
+ * With several entries it plays entries[index]'s pull, and once that plays,
+ * preloads the next entry (hidden, so never more than one mesh ahead); at the
+ * end of a pull it cuts to the next entry if that is ready, else loops the pull.
  * Sends hero_play_3s once the 3D replay has played for 3 s on screen, or,
  * with 3D suppressed (or no featured run), once the poster has been on screen for 3 s.
  */
-export function HeroReplayLayer({ instanceId, pull, onReplay }: {
-  /** The featured run: a public instance with unit positions and a published dungeon mesh; without one, the poster stays. */
-  instanceId?: string;
-  /** The featured run's boss pull to loop; without one the whole run plays. */
-  pull?: HeroWindow | null;
+export function HeroReplayLayer({ entries, index, onAdvance, onReplay }: {
+  /** The montage; empty leaves the poster. */
+  entries: HeroEntry[];
+  /** The entry playing. */
+  index: number;
+  /** Moves the montage on to the next entry. */
+  onAdvance: () => void;
   onReplay: (replay: HeroReplay | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [allowed] = useState(() => Boolean(instanceId) && canShow3D());
+  const [allowed] = useState(() => entries.length > 0 && canShow3D());
   const [inView, setInView] = useState(false);
   const [load, setLoad] = useState(false);
   const pageVisible = usePageVisible();
   const [playing3D, setPlaying3D] = useState(false);
+  // The slot whose replay has played (the next entry preloads only then), and the preloaded slot that is ready to show.
+  const [playedKey, setPlayedKey] = useState<string | null>(null);
+  const [readyKey, setReadyKey] = useState<string | null>(null);
   const heroPlaySent = useRef(false);
 
-  const handleReplay = useCallback((replay: HeroReplay | null) => {
+  const current = entries.length > 0 ? index % entries.length : -1;
+  const next = entries.length > 1 ? (current + 1) % entries.length : -1;
+  // Keyed by entry, so the preloaded slot is the one that plays after the cut.
+  const currentKey = `entry-${current}`;
+  const nextKey = next < 0 ? null : `entry-${next}`;
+
+  const handleReplay = useCallback((slotKey: string, replay: HeroReplay | null) => {
+    if (slotKey !== currentKey) {
+      setReadyKey((key) => (replay ? slotKey : key === slotKey ? null : key));
+      return;
+    }
     onReplay(replay);
     setPlaying3D(replay?.playing ?? false);
-  }, [onReplay]);
+    if (replay?.playing) setPlayedKey(slotKey);
+  }, [currentKey, onReplay]);
+  const nextReady = nextKey !== null && readyKey === nextKey;
+  const handlePullEnd = useCallback(() => {
+    if (nextReady) onAdvance();
+  }, [nextReady, onAdvance]);
 
   useEffect(() => {
     const element = ref.current;
@@ -114,18 +173,19 @@ export function HeroReplayLayer({ instanceId, pull, onReplay }: {
 
   return (
     <div ref={ref} className="absolute inset-0">
-      {load && instanceId && (
-        <SilentBoundary>
-          <Suspense fallback={null}>
-            <LandingHero3D
-              instanceId={instanceId}
-              startOffsetMs={FEATURED_START_OFFSET_MS}
-              pull={pull}
-              active={inView && pageVisible}
-              onReplay={handleReplay}
-            />
-          </Suspense>
-        </SilentBoundary>
+      {load && current >= 0 && (
+        <HeroSlot
+          key={currentKey}
+          slotKey={currentKey}
+          entry={entries[current]}
+          active={inView && pageVisible}
+          hidden={false}
+          onPullEnd={nextKey ? handlePullEnd : undefined}
+          onReplay={handleReplay}
+        />
+      )}
+      {load && nextKey && playedKey === currentKey && (
+        <HeroSlot key={nextKey} slotKey={nextKey} entry={entries[next]} active={false} hidden onReplay={handleReplay} />
       )}
     </div>
   );

@@ -422,6 +422,12 @@ export function LandingHero({
             {bossName && <span> · {bossName}</span>}
           </div>
         )}
+        {featured?.speedrun && (
+          // The montage entry's place on its speedrun board.
+          <div className="-mt-1.5 text-xs text-muted-foreground lg:-mt-3 lg:text-[13px]">
+            Fastest replayed {featured.instance_name} clear · {formatClock(featured.speedrun.duration_ms)} · rank {featured.speedrun.rank}
+          </div>
+        )}
         <h1 className="m-0 max-w-[640px] text-[34px] font-bold leading-[1.06] tracking-tight text-foreground lg:text-[54px] lg:leading-[1.04]">
           Your dungeon run, replayed in 3D.
         </h1>

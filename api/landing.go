@@ -36,6 +36,14 @@ const landingFeaturedTTL = 3 * time.Minute
 // pick looks through for one whose last boss pull has a published mesh.
 const landingPickCandidates = 20
 
+// landingMontageMax bounds the hero's montage, the admin's featured run included.
+const landingMontageMax = 6
+
+// landingMontagePerInstance bounds how many of an instance's best positional
+// speedruns the montage looks through for one whose last boss pull has a
+// published mesh.
+const landingMontagePerInstance = 3
+
 // landingFeaturedCache holds the /start hero payload per tenant. It is hit by
 // every ad click, so it is computed once per TTL rather than per request.
 type landingFeaturedCache struct {
@@ -48,7 +56,7 @@ type landingFeaturedEntry struct {
 	expires time.Time
 }
 
-func (c *landingFeaturedCache) get(ctx context.Context, tenantID uuid.UUID, load func(context.Context) (*chroniclesdk.LandingFeaturedRun, error)) (chroniclesdk.LandingFeaturedResponse, error) {
+func (c *landingFeaturedCache) get(ctx context.Context, tenantID uuid.UUID, load func(context.Context) ([]chroniclesdk.LandingFeaturedRun, error)) (chroniclesdk.LandingFeaturedResponse, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -59,15 +67,19 @@ func (c *landingFeaturedCache) get(ctx context.Context, tenantID uuid.UUID, load
 	if c.entries == nil {
 		c.entries = make(map[uuid.UUID]landingFeaturedEntry)
 	}
-	run, err := load(ctx)
+	entries, err := load(ctx)
 	if err != nil {
 		// Serve the last good payload and retry soon.
 		entry.expires = time.Now().Add(5 * time.Second)
 		c.entries[tenantID] = entry
 		return entry.resp, err
 	}
+	resp := chroniclesdk.LandingFeaturedResponse{Entries: []chroniclesdk.LandingFeaturedRun{}}
+	if len(entries) > 0 {
+		resp = chroniclesdk.LandingFeaturedResponse{Entries: entries, Featured: &entries[0]}
+	}
 	c.entries[tenantID] = landingFeaturedEntry{
-		resp:    chroniclesdk.LandingFeaturedResponse{Featured: run},
+		resp:    resp,
 		expires: time.Now().Add(landingFeaturedTTL),
 	}
 	return c.entries[tenantID].resp, nil
@@ -79,9 +91,9 @@ func (c *landingFeaturedCache) invalidate() {
 	c.entries = nil
 }
 
-// LandingFeatured returns hero metadata for the featured run on /start.
+// LandingFeatured returns hero metadata for the montage of runs on /start.
 //
-//	@Summary  Featured run for the landing hero
+//	@Summary  Featured runs for the landing hero
 //	@Tags     Public
 //	@Success  200 {object} chroniclesdk.LandingFeaturedResponse
 //	@Router   /api/v1/landing/featured [get]
@@ -111,50 +123,137 @@ func (a *API) landingFeaturedInstanceID(config database.SiteConfig) uuid.UUID {
 	return a.Opts.LandingFeaturedID
 }
 
-func (a *API) loadLandingFeatured(ctx context.Context) (*chroniclesdk.LandingFeaturedRun, error) {
+func (a *API) loadLandingFeatured(ctx context.Context) ([]chroniclesdk.LandingFeaturedRun, error) {
 	db := a.Opts.Zed
 	config, err := db.GetSiteConfig(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get site config: %w", err)
 	}
-	if id := a.landingFeaturedInstanceID(config); id != uuid.Nil {
-		return a.loadLandingRun(ctx, id, nil)
+	var entries []chroniclesdk.LandingFeaturedRun
+	overrideID := a.landingFeaturedInstanceID(config)
+	if overrideID != uuid.Nil {
+		run, err := a.loadLandingRun(ctx, overrideID, nil)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, *run)
 	}
-	return a.pickLandingRun(ctx)
+	meshes := a.landingMeshes()
+	montage, err := a.landingMontage(ctx, meshes, overrideID, landingMontageMax-len(entries))
+	if err != nil {
+		return nil, err
+	}
+	entries = append(entries, montage...)
+	if len(entries) > 0 {
+		return entries, nil
+	}
+	run, err := a.pickLandingRun(ctx, meshes)
+	if err != nil || run == nil {
+		return nil, err
+	}
+	return []chroniclesdk.LandingFeaturedRun{*run}, nil
+}
+
+// landingMeshes answers which maps have a published dungeon mesh, reading
+// each realm's maps manifest once per pick.
+type landingMeshes struct {
+	read    func(context.Context, uuid.UUID) (map[int32]bool, error)
+	byRealm map[uuid.UUID]map[int32]bool
+}
+
+func (a *API) landingMeshes() *landingMeshes {
+	read := a.landingMeshMaps
+	if read == nil {
+		read = a.datasetMeshMaps
+	}
+	return &landingMeshes{read: read, byRealm: make(map[uuid.UUID]map[int32]bool)}
+}
+
+// meshedLastBoss loads the instance's encounters and reports whether its last
+// boss pull has a published dungeon mesh.
+func (a *API) meshedLastBoss(ctx context.Context, m *landingMeshes, realmID, instanceID uuid.UUID) ([]database.LogInstanceEncounter, bool, error) {
+	meshes, ok := m.byRealm[realmID]
+	if !ok {
+		var err error
+		meshes, err = m.read(ctx, realmID)
+		if err != nil {
+			return nil, false, fmt.Errorf("published meshes for realm %s: %w", realmID, err)
+		}
+		m.byRealm[realmID] = meshes
+	}
+	encounters, err := a.Opts.Zed.EncountersByInstanceID(ctx, instanceID)
+	if err != nil {
+		return nil, false, fmt.Errorf("get encounters: %w", err)
+	}
+	last, ok := lastBossEncounter(encounters)
+	return encounters, ok && meshes[last.MapID], nil
+}
+
+// landingMontage picks, for each instance with a published mesh, its best
+// positional run on the speedrun board whose last boss pull has that mesh,
+// best ranked first, at most limit. skip (the admin's featured run) is left
+// out.
+func (a *API) landingMontage(ctx context.Context, meshes *landingMeshes, skip uuid.UUID, limit int) ([]chroniclesdk.LandingFeaturedRun, error) {
+	db := a.Opts.Zed
+	rows, err := db.LandingMontageRuns(ctx, landingMontagePerInstance)
+	if err != nil {
+		return nil, fmt.Errorf("list montage runs: %w", err)
+	}
+	type pick struct {
+		row        database.LandingMontageRunsRow
+		encounters []database.LogInstanceEncounter
+	}
+	var picks []pick
+	// Rows come grouped by instance name, best first: the first meshed one wins.
+	for _, row := range rows {
+		if row.InstanceID == skip || (len(picks) > 0 && picks[len(picks)-1].row.InstanceName == row.InstanceName) {
+			continue
+		}
+		encounters, ok, err := a.meshedLastBoss(ctx, meshes, row.RealmID, row.InstanceID)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			picks = append(picks, pick{row: row, encounters: encounters})
+		}
+	}
+	sort.SliceStable(picks, func(i, j int) bool {
+		if picks[i].row.SpeedrunRank != picks[j].row.SpeedrunRank {
+			return picks[i].row.SpeedrunRank < picks[j].row.SpeedrunRank
+		}
+		return picks[i].row.DurationMs < picks[j].row.DurationMs
+	})
+	if len(picks) > limit {
+		picks = picks[:max(0, limit)]
+	}
+	entries := make([]chroniclesdk.LandingFeaturedRun, 0, len(picks))
+	for _, p := range picks {
+		run, err := a.loadLandingRun(ctx, p.row.InstanceID, p.encounters)
+		if err != nil {
+			return nil, err
+		}
+		run.Speedrun = &chroniclesdk.LandingFeaturedSpeedrun{Rank: p.row.SpeedrunRank, DurationMs: p.row.DurationMs}
+		entries = append(entries, *run)
+	}
+	return entries, nil
 }
 
 // pickLandingRun is the tenant's newest public run with unit positions whose
 // last boss pull has a published dungeon mesh for its map, or nil.
-func (a *API) pickLandingRun(ctx context.Context) (*chroniclesdk.LandingFeaturedRun, error) {
+func (a *API) pickLandingRun(ctx context.Context, meshes *landingMeshes) (*chroniclesdk.LandingFeaturedRun, error) {
 	db := a.Opts.Zed
 	candidates, err := db.LandingPositionalInstances(ctx, landingPickCandidates)
 	if err != nil {
 		return nil, fmt.Errorf("list positional instances: %w", err)
 	}
-	meshMaps := a.landingMeshMaps
-	if meshMaps == nil {
-		meshMaps = a.datasetMeshMaps
-	}
-	// Candidates share realms, so each realm's manifest is read once.
-	meshesByRealm := make(map[uuid.UUID]map[int32]bool)
 	for _, candidate := range candidates {
-		meshes, ok := meshesByRealm[candidate.RealmID]
-		if !ok {
-			meshes, err = meshMaps(ctx, candidate.RealmID)
-			if err != nil {
-				return nil, fmt.Errorf("published meshes for realm %s: %w", candidate.RealmID, err)
-			}
-			meshesByRealm[candidate.RealmID] = meshes
-		}
-		encounters, err := db.EncountersByInstanceID(ctx, candidate.ID)
+		encounters, ok, err := a.meshedLastBoss(ctx, meshes, candidate.RealmID, candidate.ID)
 		if err != nil {
-			return nil, fmt.Errorf("get encounters: %w", err)
+			return nil, err
 		}
-		last, ok := lastBossEncounter(encounters)
-		if !ok || !meshes[last.MapID] {
-			continue
+		if ok {
+			return a.loadLandingRun(ctx, candidate.ID, encounters)
 		}
-		return a.loadLandingRun(ctx, candidate.ID, encounters)
 	}
 	return nil, nil
 }

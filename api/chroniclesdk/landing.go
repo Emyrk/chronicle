@@ -3,12 +3,17 @@ package chroniclesdk
 import "github.com/google/uuid"
 
 // LandingFeaturedResponse is the public payload behind the /start hero.
-// Featured is the admin-set featured instance when one is configured, else
-// the tenant's newest public run with unit positions whose last boss pull has
-// a published dungeon mesh. It is nil when neither exists or the configured
-// instance cannot be shown (missing, unlisted, invalidated); the landing then
-// shows its poster only.
+// Entries is the montage the hero plays in order, looping: the admin-set
+// featured instance first when one is configured, then, for each instance
+// with a published dungeon mesh, its best run on the speedrun board among
+// runs with unit positions, best ranked first (at most six in all). Without
+// such ranked runs the montage is the tenant's newest public run with unit
+// positions whose last boss pull has a published dungeon mesh. It is empty
+// when nothing qualifies or the configured instance cannot be shown (missing,
+// unlisted, invalidated); the landing then shows its poster only.
 type LandingFeaturedResponse struct {
+	Entries []LandingFeaturedRun `json:"entries"`
+	// Featured is the first entry, or nil when there is none.
 	Featured *LandingFeaturedRun `json:"featured"`
 }
 
@@ -24,6 +29,17 @@ type LandingFeaturedRun struct {
 	// Encounter is the boss pull the hero plays: the run's last boss kill, or
 	// its last wipe when no boss died. Nil when the run has no boss encounter.
 	Encounter *LandingFeaturedEncounter `json:"encounter"`
+	// Speedrun is the run's place on its instance's speedrun board, when the
+	// montage picked it as that instance's best replayed run.
+	Speedrun *LandingFeaturedSpeedrun `json:"speedrun"`
+}
+
+// LandingFeaturedSpeedrun is a run's place on the speedrun board (full
+// timing, the board's default) for its instance and difficulty.
+type LandingFeaturedSpeedrun struct {
+	// Rank is the place the run's time takes on the board.
+	Rank       int64 `json:"rank"`
+	DurationMs int64 `json:"duration_ms"`
 }
 
 // LandingFeaturedEncounter is one boss encounter. Offsets are milliseconds

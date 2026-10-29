@@ -131,6 +131,91 @@ func TestLandingFeatured(t *testing.T) {
 	require.Equal(t, instanceID, getFeatured().InstanceID)
 }
 
+func TestLandingMontage(t *testing.T) {
+	t.Parallel()
+
+	store, _ := dbtestutil.NewDB(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+
+	zed := authz.NewDatabaseOnly(testutil.Logger(t), store)
+	opts := &Options{Zed: zed, Logger: testutil.Logger(t)}
+	// Maps 33 and 34 have a published dungeon mesh; 35 does not.
+	handlerAPI := &API{AppContext: ctx, Opts: opts, landingMeshMaps: func(context.Context, uuid.UUID) (map[int32]bool, error) {
+		return map[int32]bool{33: true, 34: true}, nil
+	}}
+	router := chi.NewRouter()
+	router.Get("/landing/featured", handlerAPI.LandingFeatured)
+	getEntries := func() chroniclesdk.LandingFeaturedResponse {
+		t.Helper()
+		handlerAPI.landing.invalidate()
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/landing/featured", nil))
+		require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+		var out chroniclesdk.LandingFeaturedResponse
+		require.NoError(t, json.Unmarshal(res.Body.Bytes(), &out))
+		return out
+	}
+
+	start := time.Date(2026, 10, 20, 20, 0, 0, 0, time.UTC)
+	run := func(day int, capabilities []string, mapID int32, board string, duration time.Duration) uuid.UUID {
+		t.Helper()
+		at := start.Add(time.Duration(day) * 24 * time.Hour)
+		id := seedLandingInstance(t, store, at, at.Add(time.Hour), capabilities, mapID)
+		seedLandingSpeedrun(t, store, id, board, duration)
+		return id
+	}
+	positions := []string{"unit-position"}
+	// Zul'Gurub's rank-1 run has no positions: its best replayed run is rank 2.
+	run(1, nil, 33, "Zul'Gurub", 20*time.Minute)
+	zg := run(2, positions, 33, "Zul'Gurub", 25*time.Minute)
+	run(3, positions, 33, "Zul'Gurub", 30*time.Minute)
+	// Molten Core's best run is replayed: rank 1, so it plays first.
+	mc := run(4, positions, 34, "Molten Core", 40*time.Minute)
+	// Onyxia's Lair has no published mesh: skipped.
+	run(5, positions, 35, "Onyxia's Lair", 10*time.Minute)
+	// The newest positional run, unranked: not in the montage.
+	run(6, positions, 33, "", 0)
+
+	resp := getEntries()
+	require.Len(t, resp.Entries, 2)
+	require.Equal(t, mc, resp.Entries[0].InstanceID)
+	require.Equal(t, &chroniclesdk.LandingFeaturedSpeedrun{Rank: 1, DurationMs: (40 * time.Minute).Milliseconds()}, resp.Entries[0].Speedrun)
+	require.Equal(t, zg, resp.Entries[1].InstanceID)
+	require.Equal(t, &chroniclesdk.LandingFeaturedSpeedrun{Rank: 2, DurationMs: (25 * time.Minute).Milliseconds()}, resp.Entries[1].Speedrun)
+	require.Equal(t, butcherKill(t, store, zg), resp.Entries[1].Encounter.ID)
+	require.NotNil(t, resp.Featured)
+	require.Equal(t, mc, resp.Featured.InstanceID)
+
+	// The admin's featured run plays first, without a board place.
+	override := seedLandingInstance(t, store, start, start.Add(time.Hour), nil, 0)
+	opts.LandingFeaturedID = override
+	resp = getEntries()
+	require.Equal(t, []uuid.UUID{override, mc, zg}, []uuid.UUID{resp.Entries[0].InstanceID, resp.Entries[1].InstanceID, resp.Entries[2].InstanceID})
+	require.Nil(t, resp.Entries[0].Speedrun)
+	require.Equal(t, override, resp.Featured.InstanceID)
+}
+
+// seedLandingSpeedrun ranks the instance on board's speedrun board, for its
+// own guild, in duration. An empty board leaves it unranked.
+func seedLandingSpeedrun(t *testing.T, store database.Store, instanceID uuid.UUID, board string, duration time.Duration) {
+	t.Helper()
+	if board == "" {
+		return
+	}
+	ctx := testutil.Context(t, testutil.WaitShort)
+	row, err := store.InstanceWithUnlisted(ctx, instanceID)
+	require.NoError(t, err)
+	inst := row.LogInstancesGuild
+	g, err := store.UpsertGuild(ctx, database.UpsertGuildParams{RealmID: inst.RealmID, Name: "guild-" + instanceID.String()[:8], CreatedAt: inst.StartTime})
+	require.NoError(t, err)
+	require.NoError(t, store.InsertInstanceSpeedrun(ctx, database.InsertInstanceSpeedrunParams{
+		InstanceID: instanceID, InstanceName: board, RealmID: inst.RealmID,
+		GuildID: uuid.NullUUID{UUID: g.ID, Valid: true}, Qualified: true,
+		StartTime: inst.StartTime, CompletionTime: database.Timestamptz(inst.StartTime.Time.Add(duration)),
+		DurationMs: duration.Milliseconds(), Proof: []byte(`{"proof":[]}`),
+	}))
+}
+
 // butcherKill is the seeded instance's The Butcher encounter.
 func butcherKill(t *testing.T, store database.Store, instanceID uuid.UUID) uuid.UUID {
 	t.Helper()
