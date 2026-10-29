@@ -16,7 +16,7 @@ export interface PanelPackage {
   maxEvents?: number
   capabilities: GuideCapability[]
   assets: ReadonlyMap<string, Uint8Array>
-  /** The optional root README.md, shown on the addon page and never executed. */
+  /** The optional root README.md, shown on the module page and never executed. */
   readme?: string
 }
 

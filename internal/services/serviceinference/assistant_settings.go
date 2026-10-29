@@ -16,7 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 )
 
-// addonWorkshopPanelAssistantID builds panel addons. Guide and other addon workshops get their own IDs.
+// addonWorkshopPanelAssistantID is the legacy persisted ID for the panel Module Workshop. Future module kinds get their own IDs.
 const addonWorkshopPanelAssistantID = "addon-workshop-panel"
 
 // assistantSettingsOrder is the order assistants appear in the user's AI settings.

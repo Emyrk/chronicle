@@ -2,7 +2,7 @@ import { unzip, type Unzipped } from "fflate"
 import { inspectArchive, normalizeExtractedFiles } from "../Guides/package/archive"
 import type { PanelPackage } from "../Guides/package/panelLoader"
 import { PANEL_STREAM_SCOPES, PANEL_STREAMS, type PanelStream, type PanelStreamScope } from "../Guides/runtime/panelEvents"
-import { ADDON_ICON_NAMES } from "./addonIcons"
+import { MODULE_ICON_NAMES } from "./moduleIcons"
 import type { LuaProject } from "./api"
 
 const encoder = new TextEncoder()
@@ -35,7 +35,7 @@ export async function readLuaDraftZip(bytes: Uint8Array, project: Pick<LuaProjec
   return result
 }
 
-/** A new addon's starting point: a hello-world panel that runs as is, with pointers to the next step. */
+/** A new module's starting point: a hello-world panel that runs as is, with pointers to the next step. */
 export function initialEditorFiles(project: Pick<LuaProject, "kind" | "name" | "slug">): EditorFiles {
   return {
     manifest: JSON.stringify({ manifest_version: 1, kind: project.kind, name: project.name, slug: project.slug,
@@ -62,7 +62,7 @@ hint:SetText("Edit main.lua, then press Run preview to see your changes.")
 `,
     readme: `# ${project.name}
 
-Describe what this addon shows and how to use it. This README appears on the addon's page.
+Describe what this module shows and how to use it. This README appears on the module's page.
 
 ## Files
 
@@ -70,7 +70,7 @@ Describe what this addon shows and how to use it. This README appears on the add
 - \`project.json\` says what the panel needs, such as the event streams it reads.
 - \`README.md\` is this page.
 
-See the Addon API reference for every event, frame and method.
+See the Module API reference for every event, frame and method.
 `,
   }
 }
@@ -98,8 +98,8 @@ export function validateEditorFiles(project: Pick<LuaProject, "kind" | "name" | 
     manifest.entrypoint !== "main.lua") {
     throw new Error("project.json must match this project's kind, name and slug, use manifest_version 1 and main.lua, with no unknown fields.")
   }
-  if (manifest.icon !== undefined && (typeof manifest.icon !== "string" || !ADDON_ICON_NAMES.includes(manifest.icon))) {
-    throw new Error(`Unknown icon in project.json. Use a name from the icon list in the Addon API reference, such as "swords" or "heart-pulse".`)
+  if (manifest.icon !== undefined && (typeof manifest.icon !== "string" || !MODULE_ICON_NAMES.includes(manifest.icon))) {
+    throw new Error(`Unknown icon in project.json. Use a name from the icon list in the Module API reference, such as "swords" or "heart-pulse".`)
   }
   assertStringList(manifest.capabilities, ["ui", "input"], "capabilities")
   assertStringList(manifest.streams, PANEL_STREAMS, "streams")

@@ -100,7 +100,7 @@ describe("Lua browser source model", () => {
     expect(() => buildEditorTar({ ...project, kind: "guide" }, files)).toThrow()
   })
 
-  it("starts new addons with a hello-world panel that runs as is", () => {
+  it("starts new modules with a hello-world panel that runs as is", () => {
     validateEditorFiles(project, files)
     const manifest = JSON.parse(files.manifest) as { capabilities: ("ui" | "input")[] }
     const runtime = createGuideRuntime({ entrypoint: "main.lua", sources: { "main.lua": files.lua }, capabilities: manifest.capabilities, panelStreams: [] })

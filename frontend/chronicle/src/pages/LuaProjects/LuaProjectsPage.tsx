@@ -5,10 +5,10 @@ import { FolderOpen, Search } from "lucide-react"
 import { useSession } from "@/api/queries"
 import { authorPath, getMyAuthor, latestRelease, listProjects, listPublicProjects, type LuaProject } from "./api"
 import { AdRailStack } from "@/components/Ads/AdRailStack"
-import { AddonList } from "./AddonCard"
-import { AddonWelcome, ClaimAuthorForm, SignInPrompt } from "./AddonWelcome"
-import { NewAddonForm } from "./NewAddonForm"
-import { button, card, errorMessage } from "./addonUi"
+import { ModuleList } from "./ModuleCard"
+import { ModuleWelcome, ClaimAuthorForm, SignInPrompt } from "./ModuleWelcome"
+import { NewModuleForm } from "./NewModuleForm"
+import { button, card, errorMessage } from "./moduleUi"
 
 type GallerySort = "popular" | "newest"
 const sorts: { id: GallerySort; label: string }[] = [{ id: "popular", label: "Popular" }, { id: "newest", label: "Newest" }]
@@ -22,58 +22,58 @@ function galleryOrder(projects: LuaProject[], sort: GallerySort, query: string):
   return [...matches].sort((a, b) => released(b).localeCompare(released(a)))
 }
 
-/** /addons: a gallery of released addons, a way to your own at /addons/<author>, and the welcome for newcomers. */
+/** /modules: a gallery of released modules, a way to your own at /modules/<author>, and the welcome for newcomers. */
 export function LuaProjectsPage() {
   const { data: session, isLoading: sessionLoading } = useSession()
-  const authorQuery = useQuery({ queryKey: ["addon-author", session?.user_id], enabled: !!session, queryFn: getMyAuthor })
+  const authorQuery = useQuery({ queryKey: ["module-author", session?.user_id], enabled: !!session, queryFn: getMyAuthor })
   const author = authorQuery.data
-  const mineQuery = useQuery({ queryKey: ["my-addons", session?.user_id], enabled: !!session, queryFn: listProjects })
-  const publicQuery = useQuery({ queryKey: ["public-addons"], queryFn: ({ signal }) => listPublicProjects(signal) })
+  const mineQuery = useQuery({ queryKey: ["my-modules", session?.user_id], enabled: !!session, queryFn: listProjects })
+  const publicQuery = useQuery({ queryKey: ["public-modules"], queryFn: ({ signal }) => listPublicProjects(signal) })
   const [sort, setSort] = useState<GallerySort>("popular")
   const [query, setQuery] = useState("")
   const shown = useMemo(() => galleryOrder(publicQuery.data ?? [], sort, query), [publicQuery.data, sort, query])
-  // Newcomers get the welcome until their first addon exists: sign in, claim a name, then create.
+  // Newcomers get the welcome until their first module exists: sign in, claim a name, then create.
   const welcome = !sessionLoading && (!session || (authorQuery.isSuccess && (author === null || (mineQuery.isSuccess && mineQuery.data.length === 0))))
 
   return <div className="mx-auto flex w-full max-w-[2080px] items-start justify-center gap-6 px-4 py-10">
     <div className="hidden self-stretch 2xl:block">
-      <AdRailStack primaryPlacement="addons-left-rail" secondaryPlacement="addons-left-rail-lower" railLayout="paired-wide" />
+      <AdRailStack primaryPlacement="modules-left-rail" secondaryPlacement="modules-left-rail-lower" railLayout="paired-wide" />
     </div>
     <main className="w-full min-w-0 max-w-6xl space-y-8">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b pb-7">
         <div>
-          <p className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">Creator workspace / Addons</p>
-          <h1 className="text-3xl font-semibold tracking-tight">Addons</h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Raid panels for Chronicle, written in Lua by the community. Track an addon to add it to your raid panels, or build your own in the Addon Workshop.</p>
+          <p className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">Creator workspace / Modules</p>
+          <h1 className="text-3xl font-semibold tracking-tight">Modules</h1>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Raid panels for Chronicle, written in Lua by the community. Track a module to add it to your raid panels, or build your own in the Module Workshop.</p>
         </div>
-        {author && <Link to={authorPath(author)} className={button}><FolderOpen className="size-4" /> My addons</Link>}
+        {author && <Link to={authorPath(author)} className={button}><FolderOpen className="size-4" /> My modules</Link>}
       </header>
-      {welcome && <AddonWelcome step={!session || !author ? 0 : 1} author={author ?? undefined}>
-        {!session ? <SignInPrompt /> : !author ? <ClaimAuthorForm onClaimed={() => void authorQuery.refetch()} /> : <NewAddonForm author={author} />}
-      </AddonWelcome>}
-      <section aria-label="Browse addons" className="space-y-4">
+      {welcome && <ModuleWelcome step={!session || !author ? 0 : 1} author={author ?? undefined}>
+        {!session ? <SignInPrompt /> : !author ? <ClaimAuthorForm onClaimed={() => void authorQuery.refetch()} /> : <NewModuleForm author={author} />}
+      </ModuleWelcome>}
+      <section aria-label="Browse modules" className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">Browse addons</h2>
+          <h2 className="text-lg font-semibold">Browse modules</h2>
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <label className="flex min-w-0 flex-1 items-center gap-2 rounded-md border bg-background px-3 py-1.5 text-sm sm:w-64 sm:flex-none">
               <Search className="size-4 shrink-0 text-muted-foreground" />
               <input className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground" type="search" placeholder="Search"
-                aria-label="Search addons" value={query} onChange={event => setQuery(event.target.value)} />
+                aria-label="Search modules" value={query} onChange={event => setQuery(event.target.value)} />
             </label>
-            <div role="radiogroup" aria-label="Sort addons" className="inline-flex rounded-md border p-0.5 text-sm">
+            <div role="radiogroup" aria-label="Sort modules" className="inline-flex rounded-md border p-0.5 text-sm">
               {sorts.map(option => <button key={option.id} type="button" role="radio" aria-checked={sort === option.id} onClick={() => setSort(option.id)}
                 className={`rounded px-3 py-1 ${sort === option.id ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{option.label}</button>)}
             </div>
           </div>
         </div>
-        {publicQuery.isPending ? <div className="space-y-px overflow-hidden rounded-xl border border-border/60" aria-label="Loading addons">
+        {publicQuery.isPending ? <div className="space-y-px overflow-hidden rounded-xl border border-border/60" aria-label="Loading modules">
           {Array.from({ length: 6 }, (_, index) => <div key={index} className="h-20 animate-pulse bg-muted/30" />)}</div> :
           publicQuery.isError ? <p role="alert" className="text-sm text-destructive">{errorMessage(publicQuery.error)}</p> :
-            publicQuery.data.length === 0 ? <p className={`${card} text-sm text-muted-foreground`}>No addons have been released yet.</p> :
-              shown.length === 0 ? <p className={`${card} text-sm text-muted-foreground`}>No addons match “{query.trim()}”.</p> :
-                <AddonList projects={shown} ranked={sort === "popular" && !query.trim()} showAuthor />}
+            publicQuery.data.length === 0 ? <p className={`${card} text-sm text-muted-foreground`}>No modules have been released yet.</p> :
+              shown.length === 0 ? <p className={`${card} text-sm text-muted-foreground`}>No modules match “{query.trim()}”.</p> :
+                <ModuleList projects={shown} ranked={sort === "popular" && !query.trim()} showAuthor />}
       </section>
     </main>
-    <AdRailStack primaryPlacement="addons-right-rail" secondaryPlacement="addons-right-rail-lower" railLayout="paired-wide" />
+    <AdRailStack primaryPlacement="modules-right-rail" secondaryPlacement="modules-right-rail-lower" railLayout="paired-wide" />
   </div>
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { renderToStaticMarkup } from "react-dom/server"
-import { AddonReleases, ReleasesTable } from "./AddonReleases"
+import { ModuleReleases, ReleasesTable } from "./ModuleReleases"
 import { latestRelease, type LuaProject } from "./api"
 
 const release = (tag: string, available: boolean) =>
@@ -12,9 +12,9 @@ const project: LuaProject = {
 }
 const noop = () => {}
 
-describe("addon releases", () => {
+describe("module releases", () => {
   it("lists only releases with files in the sidebar, and links to the rest", () => {
-    const html = renderToStaticMarkup(<AddonReleases project={project} latest={latestRelease(project)} viewing="v5" canTag={false} canRelease={false}
+    const html = renderToStaticMarkup(<ModuleReleases project={project} latest={latestRelease(project)} viewing="v5" canTag={false} canRelease={false}
       busy={false} onView={noop} onTag={noop} onDelete={noop} onShowAll={noop} />)
     for (const tag of ["v5", "v4", "v3"]) expect(html).toContain(`>${tag}</span>`)
     expect(html).not.toContain(">v2</span>")

@@ -17,7 +17,7 @@ describe("Lua project authoring API", () => {
     }))
   })
 
-  it("reads quota and deletes whole addons", async () => {
+  it("reads quota and deletes whole modules", async () => {
     const fetch = vi.fn().mockResolvedValueOnce(response({ owned: 2, limit: 3 })).mockResolvedValueOnce({ ...response(), status: 204 })
     vi.stubGlobal("fetch", fetch)
     expect(await getProjectQuota()).toEqual({ owned: 2, limit: 3 })

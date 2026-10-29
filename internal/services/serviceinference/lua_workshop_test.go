@@ -103,7 +103,7 @@ func TestLuaEditorContinuationIsBoundToProjectScope(t *testing.T) {
 func TestLuaWorkshopPromptIncludesAPIReference(t *testing.T) {
 	t.Parallel()
 	system := assistants[addonWorkshopPanelAssistantID].System
-	for _, want := range []string{"# Addon API reference", "## Events", "Chronicle.GetUnit", "## Limits", "chronicle.v1.ui"} {
+	for _, want := range []string{"# Module API reference", "## Events", "Chronicle.GetUnit", "## Limits", "chronicle.v1.ui"} {
 		require.Contains(t, system, want)
 	}
 }

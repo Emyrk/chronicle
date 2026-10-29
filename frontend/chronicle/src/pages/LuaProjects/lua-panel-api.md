@@ -1,12 +1,12 @@
-# Addon API reference
+# Module API reference
 
-Chronicle addons are small Lua programs that extend Chronicle. This reference covers **instance panel** addons, which turn a raid log into your own panel on the instance page; guide, guild and armory addons will follow the same model. Addons run in a sandboxed browser worker (Lua 5.3 via Fengari) with no network, file or page access. Chronicle replays the log's events into your code, and your code draws the panel with a small WoW-style UI API.
+Chronicle modules are small Lua programs that extend Chronicle. This reference covers **instance panel** modules, which turn a raid log into your own panel on the instance page; guide, guild and armory modules will follow the same model. Modules run in a sandboxed browser worker (Lua 5.3 via Fengari) with no network, file or page access. Chronicle replays the log's events into your code, and your code draws the panel with a small WoW-style UI API.
 
-Chronicle addons run on Chronicle in your browser, not in the game client: they do not go in your `Interface/AddOns` folder.
+Chronicle modules run on Chronicle in your browser, not in the game client: they do not go in your `Interface/AddOns` folder.
 
 ## Quick start
 
-An instance panel addon is two files: `project.json` (what the panel needs) and `main.lua` (what it does). This panel shows total damage for the selected encounters:
+An instance panel module is two files: `project.json` (what the panel needs) and `main.lua` (what it does). This panel shows total damage for the selected encounters:
 
 ```lua
 local damage = require("chronicle.v1.events.damage")
@@ -23,16 +23,16 @@ damage.onComplete(function()
 end)
 ```
 
-with `"streams": ["damage"]` in `project.json`. Use **Preview** in the Addon Workshop to run it on a real instance before you save and publish.
+with `"streams": ["damage"]` in `project.json`. Use **Preview** in the Module Workshop to run it on a real instance before you save and publish.
 
-## How an addon runs
+## How a module runs
 
 1. **Startup.** `main.lua` runs once. Create frames and register callbacks here.
 2. **Replay.** Chronicle sends every event in scope from every stream you declared, in log order, encounter by encounter, to your `onEvent` callbacks.
-3. **Complete.** Your `onComplete` callback runs once after the last event. Draw your results here. Addons without a stream never get this callback.
-4. **Clicks.** If the addon declares `input`, `OnClick` handlers run whenever a viewer clicks.
+3. **Complete.** Your `onComplete` callback runs once after the last event. Draw your results here. Modules without a stream never get this callback.
+4. **Clicks.** If the module declares `input`, `OnClick` handlers run whenever a viewer clicks.
 
-When the viewer changes the encounter selection, the addon starts again from step 1 with a fresh Lua state. Nothing persists between runs.
+When the viewer changes the encounter selection, the module starts again from step 1 with a fresh Lua state. Nothing persists between runs.
 
 ## project.json
 
@@ -59,9 +59,9 @@ When the viewer changes the encounter selection, the addon starts again from ste
 | `capabilities` | yes | `"ui"` to draw; add `"input"` to handle clicks. |
 | `streams` | yes | The event streams to receive, e.g. `["damage", "heal", "aura"]`. Any of the streams in [Streams and fields](#streams-and-fields); `[]` for none. Each stream is a separate download, so declare only what you use. |
 | `stream_scope` | no | `"selection"` (default): only the encounters the viewer selected. `"instance"`: every encounter in the log, each tagged with `selected`. |
-| `max_events` | no | A positive integer. The addon stops with an error after this many events. Omit it to receive everything. |
+| `max_events` | no | A positive integer. The module stops with an error after this many events. Omit it to receive everything. |
 | `assets` | no | Image files (PNG, JPEG, WebP, up to 2 MiB each) for `SetTexture`. Uploaded packages only; the browser editor is asset-free. |
-| `icon` | no | The icon shown next to the addon in the panel selector and on its page. One of the [icon names](#icons) below; omit it for the generic addon icon. |
+| `icon` | no | The icon shown next to the module in the panel selector and on its page. One of the [icon names](#icons) below; omit it for the generic module icon. |
 
 ### Icons
 
@@ -69,7 +69,7 @@ When the viewer changes the encounter selection, the addon starts again from ste
 
 `activity`, `anchor`, `axe`, `backpack`, `banknote`, `bell`, `blocks`, `book-open`, `bomb`, `bot`, `brain`, `chart-bar`, `chart-column`, `chart-line`, `chart-pie`, `chart-scatter`, `clock`, `cloud`, `compass`, `crosshair`, `crown`, `droplet`, `eye`, `feather`, `flag`, `flame`, `flask-conical`, `footprints`, `gauge`, `gem`, `ghost`, `hammer`, `heart`, `heart-pulse`, `hourglass`, `info`, `leaf`, `list`, `list-ordered`, `map`, `map-pin`, `medal`, `moon`, `mountain`, `radar`, `repeat`, `route`, `ruler`, `scroll-text`, `shield`, `shield-alert`, `shield-check`, `skull`, `snowflake`, `sparkles`, `star`, `sun`, `sword`, `swords`, `table`, `target`, `tent`, `timer`, `trophy`, `trending-up`, `users`, `wand`, `wand-sparkles`, `wind`, `zap`
 
-A package may also include a `README.md` at its root (Markdown, up to 64 KiB). The addon's page shows it, like a repository README; edit it in the Workshop's **README.md** tab. It is never run, and its images load only from the package's own files.
+A package may also include a `README.md` at its root (Markdown, up to 64 KiB). The module's page shows it, like a repository README; edit it in the Workshop's **README.md** tab. It is never run, and its images load only from the package's own files.
 
 ## Events
 
@@ -170,7 +170,7 @@ local image = frame:CreateTexture("my-icon")
 local button = CreateFrame("Button", "my-button", UIParent)
 ```
 
-`CreateFrame(type, id, parent)` accepts `"Frame"`, `"FontString"`, `"Texture"` and `"Button"`. `id` must be unique within the addon; omit it to get a generated one. `parent` defaults to `UIParent`, the panel's root. Objects persist until you call `:Destroy()`, so create them once and update them, rather than creating new ones each time.
+`CreateFrame(type, id, parent)` accepts `"Frame"`, `"FontString"`, `"Texture"` and `"Button"`. `id` must be unique within the module; omit it to get a generated one. `parent` defaults to `UIParent`, the panel's root. Objects persist until you call `:Destroy()`, so create them once and update them, rather than creating new ones each time.
 
 ### Panel size and scrolling
 
@@ -226,7 +226,7 @@ Whole numbers arrive as Lua integers, so `tostring(event.amount)` prints `42`, n
 
 ## Limits
 
-These protect viewers' browsers from runaway addons. There is no limit on how many events an addon receives unless you set `max_events`.
+These protect viewers' browsers from runaway modules. There is no limit on how many events a module receives unless you set `max_events`.
 
 | Limit | Value | Error |
 | --- | --- | --- |
@@ -241,23 +241,23 @@ These protect viewers' browsers from runaway addons. There is no limit on how ma
 
 ## Performance
 
-The footer under every addon panel shows events processed, events per second and the replay time, like the built-in panels. Hover the `?` for the full breakdown: your `onEvent` time, decoding, UI updates, `onComplete`, startup, transfer and drawing.
+The footer under every module panel shows events processed, events per second and the replay time, like the built-in panels. Hover the `?` for the full breakdown: your `onEvent` time, decoding, UI updates, `onComplete`, startup, transfer and drawing.
 
 - **Aggregate in `onEvent`, draw in `onComplete`.** Calling UI methods for every event is slow and can hit the UI change limit.
-- **Keep `onEvent` small.** Each call has a fixed cost of a few microseconds; most addons spend their time there.
+- **Keep `onEvent` small.** Each call has a fixed cost of a few microseconds; most modules spend their time there.
 - **Cache unit lookups** in a Lua table keyed by GUID.
 - **Declare only the streams you use.** Each one is downloaded and decoded; `unit_position` and `unit_resources` are large.
 - **Prefer `stream_scope: "selection"`.** Unselected encounters are then skipped without being read. Use `"instance"` only when you need the whole log.
 
 ## Publishing
 
-An addon has one **main** and a few **releases**.
+A module has one **main** and a few **releases**.
 
-1. **Save to main** stores your changes. Anyone who can view the addon can choose main in the panel selector to try unreleased changes; everyone else keeps the latest release.
+1. **Save to main** stores your changes. Anyone who can view the module can choose main in the panel selector to try unreleased changes; everyone else keeps the latest release.
 2. **Tag release** snapshots main under a tag you choose, such as `v1.2` (letters, digits, `.`, `-` and `_`, up to 32 characters; not `main`). Panels run the newest release, so tagging is how changes reach everyone.
-3. Only the newest three releases keep their files. Older releases stay listed on the addon's page as "no longer available", and panels never fall back to them.
+3. Only the newest three releases keep their files. Older releases stay listed on the module's page as "no longer available", and panels never fall back to them.
 
-The Addon Workshop header shows whether your working copy is unsaved, saved to main, or released. Ctrl/⌘+S saves from anywhere on the page.
+The Module Workshop header shows whether your working copy is unsaved, saved to main, or released. Ctrl/⌘+S saves from anywhere on the page.
 
 ## FAQ
 
@@ -270,18 +270,18 @@ If `GetUnit(guid)` is not a player but has `owner`, look up the owner instead. S
 **How do I colour by class?**
 Read `unit.class` and map it to a colour; the example below includes the standard class colours.
 
-**My addon shows nothing.**
+**My module shows nothing.**
 Make sure `project.json` lists every stream you subscribe to in `streams`. Make sure you draw in `onComplete`, or update frames in `onEvent`. Then run **Startup check** in the editor to catch Lua errors.
 
 **My panel is cut off.**
 Content past the panel's edge scrolls. Set `UIParent:SetHeight(...)` to the height your rows need so the panel scrolls to all of it. See [Panel size and scrolling](#panel-size-and-scrolling).
 
-When an addon stops, Chronicle shows what went wrong, where (file, line, and whether it was startup, `onEvent`, `onComplete` or a click), and how to fix it. In the workshop, **Ask the assistant to fix it** sends that explanation to the assistant.
+When a module stops, Chronicle shows what went wrong, where (file, line, and whether it was startup, `onEvent`, `onComplete` or a click), and how to fix it. In the workshop, **Ask the assistant to fix it** sends that explanation to the assistant.
 
-**"Addon stopped: instruction budget exceeded".**
+**"Module stopped: instruction budget exceeded".**
 One callback did too much work, for example sorting a large table inside `onEvent`. Move heavy work to `onComplete`, and keep each callback under 100,000 instructions.
 
-**"Addon stopped: operation limit exceeded".**
+**"Module stopped: operation limit exceeded".**
 More than 2,000 UI changes happened in one startup, callback or 100-event batch. Draw in `onComplete` instead of on every event, and reuse frames.
 
 **"panel exceeded its max_events".**
@@ -293,10 +293,10 @@ Yes. Set `"stream_scope": "instance"` and use `event.selected` to tell the two a
 **Can I use talents, gear, healing, casts or auras?**
 Not yet. Only the damage stream and the unit facts above are available.
 
-**Can my addon load data from the internet or remember things between views?**
-No. Addons have no network or storage access, and every run starts fresh.
+**Can my module load data from the internet or remember things between views?**
+No. Modules have no network or storage access, and every run starts fresh.
 
-**Does my addon run on Chronicle's servers, or in the game?**
+**Does my module run on Chronicle's servers, or in the game?**
 No. It runs only in the viewer's browser, in a sandboxed worker.
 
 ## Example: damage by player, with pets and class colours

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { ArrowLeft, Trash2, UserPlus } from "lucide-react"
 import { describeUsage, formatUsage, usageFromApi, addUsage, type ChatUsage } from "@/features/chat/usage"
 import { getContributorUsage, listContributors, putContributor, removeContributor, urlNameInput, type LuaContributorPermission, type LuaProject, type LuaProjectContributor } from "./api"
-import { errorMessage, smallButton } from "./addonUi"
+import { errorMessage, smallButton } from "./moduleUi"
 
 const PERMISSIONS: { id: LuaContributorPermission; label: string; title: string }[] = [
   { id: "edit", label: "Edit", title: "Open the Workshop and save to main" },
@@ -12,9 +12,9 @@ const PERMISSIONS: { id: LuaContributorPermission; label: string; title: string 
 
 const contributorName = (contributor: LuaProjectContributor) => contributor.author || contributor.username
 
-/** People the owner shared the addon with, in the main column. Anyone who can edit sees the list; only the owner changes it. */
-export function AddonContributors({ project, canManage, onClose }: { project: Pick<LuaProject, "id" | "author">; canManage: boolean; onClose: () => void }) {
-  const query = useQuery({ queryKey: ["addon-contributors", project.id], queryFn: () => listContributors(project.id) })
+/** People the owner shared the module with, in the main column. Anyone who can edit sees the list; only the owner changes it. */
+export function ModuleContributors({ project, canManage, onClose }: { project: Pick<LuaProject, "id" | "author">; canManage: boolean; onClose: () => void }) {
+  const query = useQuery({ queryKey: ["module-contributors", project.id], queryFn: () => listContributors(project.id) })
   const [author, setAuthor] = useState("")
   const [grants, setGrants] = useState<LuaContributorPermission[]>(["edit"])
   const [busy, setBusy] = useState(false)
@@ -64,15 +64,15 @@ export function AddonContributors({ project, canManage, onClose }: { project: Pi
           onClick={() => setGrants(current => toggle(current, permission.id))} className={chip(grants.includes(permission.id))}>{permission.label}</button>)}</div>
         <button type="submit" className={`${smallButton} inline-flex items-center gap-1.5`} disabled={busy || !author || grants.length === 0}><UserPlus className="size-3.5" /> Share</button>
       </div>
-      <p className="text-[11px] text-muted-foreground">They need an author name, which they claim on the Addons page.</p>
+      <p className="text-[11px] text-muted-foreground">They need an author name, which they claim on the Modules page.</p>
     </form>}
     {error && <p role="alert" className="px-4 pb-3 text-xs text-destructive">{error}</p>}
   </section>
 }
 
-/** AI assistant usage on the addon, per person. Hidden when the viewer has no AI access. */
-export function AddonAiUsage({ projectId }: { projectId: string }) {
-  const query = useQuery({ queryKey: ["addon-ai-usage", projectId], queryFn: () => getContributorUsage(projectId), retry: false })
+/** AI assistant usage on the module, per person. Hidden when the viewer has no AI access. */
+export function ModuleAiUsage({ projectId }: { projectId: string }) {
+  const query = useQuery({ queryKey: ["module-ai-usage", projectId], queryFn: () => getContributorUsage(projectId), retry: false })
   if (!query.data?.length) return null
   const rows = query.data.map(row => ({ name: row.author || row.username, usage: usageFromApi(row.usage) }))
   const total = rows.reduce<ChatUsage | undefined>((sum, row) => addUsage(sum, row.usage), undefined)!

@@ -99,8 +99,8 @@ func TestCanonicalLuaZIP(t *testing.T) {
 	require.Empty(t, icon)
 	_, err = canonicalLuaZIP(bytes.NewReader(luaTestTar(t, luaTestEntry("main.lua", "return {}"), luaTestEntry("project.json", strings.Replace(withIcon, "heart-pulse", "HeartPulse", 1)))), "panel", "Example", "example")
 	require.ErrorContains(t, err, "unsupported icon")
-	require.True(t, luaAddonIcons["swords"])
-	require.False(t, luaAddonIcons[""])
+	require.True(t, luaModuleIcons["swords"])
+	require.False(t, luaModuleIcons[""])
 	// A root README.md is allowed as documentation; nested or invalid ones are not.
 	_, err = canonicalLuaZIP(bytes.NewReader(luaTestTar(t, append(entries, luaTestEntry("README.md", "# Example\n"))...)), "panel", "Example", "example")
 	require.NoError(t, err)

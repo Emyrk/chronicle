@@ -2155,9 +2155,9 @@ export function useArmoryPlayer(realmName?: string, playerIdentifier?: string) {
   return useQuery(armoryPlayerQuery(realmName, playerIdentifier));
 }
 
-export function useArmoryPlayers(realmName: string, playerIdentifiers: readonly string[]) {
+export function useArmoryPlayers(players: readonly { realmName: string; id: string }[]) {
   return useQueries({
-    queries: playerIdentifiers.slice(0, 5).map((playerIdentifier) => armoryPlayerQuery(realmName, playerIdentifier)),
+    queries: players.slice(0, 5).map((player) => armoryPlayerQuery(player.realmName, player.id)),
   });
 }
 

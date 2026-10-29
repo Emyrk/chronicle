@@ -9,8 +9,8 @@ import type { GuideCapability, RetainedScene } from "../../../Guides/protocol/ty
 import type { EventStreams, PanelEvent, PanelStream, PanelStreamScope } from "../../../Guides/runtime/panelEvents"
 import type { PanelReplayMetrics } from "../../../Guides/runtime/panelWorker"
 import type { PanelUnits } from "../../../Guides/runtime/panelUnits"
-import { explainAddonError, type AddonErrorContext, type AddonErrorExplanation, type AddonPhase } from "../../../Guides/runtime/addonErrors"
-import { AddonErrorCard } from "./AddonErrorCard"
+import { explainModuleError, type ModuleErrorContext, type ModuleErrorExplanation, type ModulePhase } from "../../../Guides/runtime/moduleErrors"
+import { ModuleErrorCard } from "./ModuleErrorCard"
 
 /** Worker phases plus host-side wall time (includes copying the stream to the worker) and page drawing time. */
 export type LuaPanelRunMetrics = PanelReplayMetrics & { wallMs: number; drawMs: number }
@@ -31,7 +31,7 @@ export interface LuaPanelHostProps {
   units?: PanelUnits
   /** Called once per completed replay. */
   onMetrics?: (metrics: LuaPanelRunMetrics) => void
-  /** Shows an "Ask the assistant to fix it" button on errors (Addon Workshop only). */
+  /** Shows an "Ask the assistant to fix it" button on errors (Module Workshop only). */
   onAskAssistant?: (prompt: string) => void
 }
 
@@ -43,7 +43,7 @@ const EMPTY_ASSETS: ReadonlyMap<string, string> = new Map()
 export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", maxEvents, capabilities, events = EMPTY_EVENTS, eventStreams, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS, units, onMetrics, onAskAssistant }: LuaPanelHostProps) {
   const [scene, setScene] = useState<RetainedScene>(createInitialScene)
   const sceneRef = useRef(scene)
-  const [error, setError] = useState<AddonErrorExplanation | null>(null)
+  const [error, setError] = useState<ModuleErrorExplanation | null>(null)
   const [progress, setProgress] = useState<number | null>(null)
   const [metrics, setMetrics] = useState<LuaPanelRunMetrics | null>(null)
   const workerRef = useRef<Worker | null>(null)
@@ -57,10 +57,10 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
     const runtime = new Worker(new URL("../../../Guides/runtime/panelWorker.ts", import.meta.url), { type: "module" })
     workerRef.current = runtime
     let watchdog: ReturnType<typeof setTimeout> | undefined
-    const stop = (reason: string, context?: AddonErrorContext) => {
+    const stop = (reason: string, context?: ModuleErrorContext) => {
       clearTimeout(watchdog)
       runtime.terminate()
-      setError(explainAddonError(reason, context))
+      setError(explainModuleError(reason, context))
     }
     const armWatchdog = () => {
       clearTimeout(watchdog)
@@ -69,7 +69,7 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
     runtime.onmessage = ({ data }: MessageEvent<unknown>) => {
       try {
         if (data && typeof data === "object" && "type" in data && data.type === "error") {
-          const context = data as { phase?: AddonPhase; events?: number }
+          const context = data as { phase?: ModulePhase; events?: number }
           stop(String("message" in data ? data.message : "Panel failed"), { phase: context.phase, events: context.events }); return
         }
         if (data && typeof data === "object" && "type" in data && data.type === "replay-complete") {
@@ -116,7 +116,7 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
     for (const event of events) workerRef.current?.postMessage({ type: "event", event })
   }, [events])
 
-  if (error) return <AddonErrorCard error={error} onAskAssistant={onAskAssistant} />
+  if (error) return <ModuleErrorCard error={error} onAskAssistant={onAskAssistant} />
   return <div className="flex min-h-0 flex-1 flex-col">
     {/* Content larger than the panel (or than UIParent:SetSize asks for) scrolls instead of being cut off. */}
     <div className="styled-scrollbar relative min-h-[240px] flex-1 overflow-auto" data-lua-panel-host>
@@ -163,7 +163,7 @@ function LuaRunMetricsBar({ metrics, progress }: { metrics: LuaPanelRunMetrics |
           <button type="button" aria-label="Panel timing details" className="-m-1 p-1 text-muted-foreground/70 hover:text-foreground"><HelpCircle className="size-3" /></button>
         </TooltipTrigger>
         <TooltipContent side="top" align="end" sideOffset={6} className="w-64 p-3 font-mono text-[11px]">
-          <div className="mb-2 font-sans text-xs font-semibold">Addon timing</div>
+          <div className="mb-2 font-sans text-xs font-semibold">Module timing</div>
           <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-0.5">
             {rows.map(row)}
             <span className="border-t border-border pt-1 font-semibold">Worker total</span>

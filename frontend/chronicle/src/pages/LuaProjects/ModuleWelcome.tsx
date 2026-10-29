@@ -3,27 +3,27 @@ import { Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { AtSign, Check, Globe, LogIn, Sparkles, Tag, TriangleAlert } from "lucide-react"
 import { claimAuthor, MIN_AUTHOR_NAME, suggestAuthor, urlNameInput, validAuthorName } from "./api"
-import { button, card, errorMessage, primaryButton, welcomeBox } from "./addonUi"
+import { button, card, errorMessage, primaryButton, welcomeBox } from "./moduleUi"
 
 // Each step has its own color: name (blue), build (violet), release (emerald).
 const STEPS: { icon: ReactNode; title: string; text: string; tone: string; ring: string }[] = [
   { icon: <AtSign className="size-4" />, title: "Claim your author name", tone: "border-sky-400/50 bg-sky-400/15 text-sky-300", ring: "ring-sky-400/15",
-    text: "It is the first part of your addon links, and how other authors invite you to their addons." },
-  { icon: <Sparkles className="size-4" />, title: "Build in the Addon Workshop", tone: "border-violet-400/50 bg-violet-400/15 text-violet-300", ring: "ring-violet-400/15",
-    text: "Name your addon, and the Workshop opens. Write a sandboxed Lua panel with the assistant's help, and try it on real raid logs as you go." },
+    text: "It is the first part of your module links, and how other authors invite you to their modules." },
+  { icon: <Sparkles className="size-4" />, title: "Build in the Module Workshop", tone: "border-violet-400/50 bg-violet-400/15 text-violet-300", ring: "ring-violet-400/15",
+    text: "Name your module, and the Workshop opens. Write a sandboxed Lua panel with the assistant's help, and try it on real raid logs as you go." },
   { icon: <Tag className="size-4" />, title: "Tag a release", tone: "border-emerald-400/50 bg-emerald-400/15 text-emerald-300", ring: "ring-emerald-400/15",
     text: "Save your work to main while it is in progress. Tag a release when it is ready, and everyone can add it to their panels." },
 ]
 
 /**
- * What a newcomer sees on /addons until their first addon exists: the three steps, with `step` the one to do now.
+ * What a newcomer sees on /modules until their first module exists: the three steps, with `step` the one to do now.
  * Done steps get a tick, later ones stay muted, and `children` is the form for the current step.
  */
-export function AddonWelcome({ step, author, children }: { step: number; author?: string; children: ReactNode }) {
+export function ModuleWelcome({ step, author, children }: { step: number; author?: string; children: ReactNode }) {
   return <section aria-label="Get started" className={`${card} grid gap-8 p-6 md:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] md:p-8`}>
     <div>
-      <h2 className="text-xl font-semibold tracking-tight">{step === 0 ? "Welcome! Make your first addon" : "Nice! Now make your first addon"}</h2>
-      <p className="mt-2 text-sm text-muted-foreground">Addons are your own panels for Chronicle's raid view, written in Lua. Getting started takes three steps.</p>
+      <h2 className="text-xl font-semibold tracking-tight">{step === 0 ? "Welcome! Make your first module" : "Nice! Now make your first module"}</h2>
+      <p className="mt-2 text-sm text-muted-foreground">Modules are your own panels for Chronicle's raid view, written in Lua. Getting started takes three steps.</p>
       <ol className="mt-6">
         {STEPS.map((item, index) => {
           const done = index < step, current = index === step
@@ -43,14 +43,14 @@ export function AddonWelcome({ step, author, children }: { step: number; author?
 export function SignInPrompt() {
   return <div className={`${welcomeBox} space-y-3 text-sm`}>
     <p className="font-medium">Sign in to get started.</p>
-    <p className="text-muted-foreground">Anyone can add released addons to their raid panels. Making one needs an account.</p>
-    <Link to="/login?from=/addons" className={`${primaryButton} w-fit`}><LogIn className="size-4" /> Sign in</Link>
+    <p className="text-muted-foreground">Anyone can add released modules to their raid panels. Making one needs an account.</p>
+    <Link to="/login?from=/modules" className={`${primaryButton} w-fit`}><LogIn className="size-4" /> Sign in</Link>
   </div>
 }
 
 /** Pre-filled with the caller's username. Claiming asks once more, because the name cannot change later. */
 export function ClaimAuthorForm({ onClaimed }: { onClaimed: (name: string) => void }) {
-  const suggestion = useQuery({ queryKey: ["addon-author-suggestion"], queryFn: suggestAuthor, staleTime: Infinity })
+  const suggestion = useQuery({ queryKey: ["module-author-suggestion"], queryFn: suggestAuthor, staleTime: Infinity })
   const [typed, setTyped] = useState<string | null>(null)
   const name = typed ?? suggestion.data ?? ""
   const [confirming, setConfirming] = useState(false)
@@ -71,14 +71,14 @@ export function ClaimAuthorForm({ onClaimed }: { onClaimed: (name: string) => vo
     <label className="block text-sm font-medium">Author name
       <input className="mt-1 w-full rounded-md border bg-background px-3 py-2 font-mono disabled:opacity-60" value={name} disabled={confirming || busy}
         onChange={event => setTyped(urlNameInput(event.target.value))} placeholder={suggestion.isPending ? "Loading…" : "your-name"} minLength={MIN_AUTHOR_NAME} maxLength={32} required /></label>
-    <p className="break-all font-mono text-xs text-muted-foreground">/addons/<span className="text-foreground">{name || "your-name"}</span>/my-addon</p>
+    <p className="break-all font-mono text-xs text-muted-foreground">/modules/<span className="text-foreground">{name || "your-name"}</span>/my-module</p>
     {name && !valid && <p className="text-xs text-amber-300">Use at least {MIN_AUTHOR_NAME} characters: lowercase letters, numbers and single hyphens.</p>}
     {suggestion.data && typed === null && !confirming && <p className="text-xs text-muted-foreground">Suggested from your username. You can change it before you claim it.</p>}
     <p className="flex gap-2 rounded-md border border-border bg-muted/30 p-2.5 text-xs text-muted-foreground"><Globe className="mt-0.5 size-3.5 shrink-0" />
-      <span>Becoming an addon author makes this name public. Anyone can see it on your addons and in their links, so pick one you are happy to share.</span></p>
+      <span>Becoming a module author makes this name public. Anyone can see it on your modules and in their links, so pick one you are happy to share.</span></p>
     {confirming ? <div role="alert" className="space-y-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
       <p className="flex gap-2"><TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-500" />
-        <span>Claim <strong className="font-mono">{name}</strong> for good? It will be public, and author names cannot be changed later, because your addon links use them.</span></p>
+        <span>Claim <strong className="font-mono">{name}</strong> for good? It will be public, and author names cannot be changed later, because your module links use them.</span></p>
       <div className="flex flex-wrap gap-2">
         <button className={primaryButton} disabled={busy} type="submit">{busy ? "Claiming…" : `Yes, claim “${name}”`}</button>
         <button className={button} disabled={busy} type="button" onClick={() => setConfirming(false)}>Change it</button>

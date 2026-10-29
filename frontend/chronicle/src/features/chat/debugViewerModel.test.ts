@@ -11,7 +11,7 @@ function snapshot(runId: string, iteration: number, phase: DebugSnapshotEvent["p
     usage: { promptTokens: totalTokens, completionTokens: 0, totalTokens },
   };
 }
-const system: DebugMessage = { role: "system", content: "You help.\n\n# Addon API reference\nIntro\n\n## Events\n```lua\n# not a heading\n```\n### Fields\nsource" };
+const system: DebugMessage = { role: "system", content: "You help.\n\n# Module API reference\nIntro\n\n## Events\n```lua\n# not a heading\n```\n### Fields\nsource" };
 const user: DebugMessage = { role: "user", content: "hi" };
 const call: DebugMessage = { role: "assistant", content: "", toolCalls: [{ id: "c1", name: "read_lua_files", arguments: "{}" }] };
 const request = { type: "CLIENT_TOOL_REQUEST", runId: "r1", threadId: "t", toolCallId: "c1", toolName: "read_lua_files", arguments: {},
@@ -38,7 +38,7 @@ describe("debug viewer model", () => {
 
   it("outlines the prompt by heading and ignores headings inside code fences", () => {
     expect(promptSections(system.content).map((section) => [section.title, section.level])).toEqual([
-      ["Preamble", 0], ["Addon API reference", 1], ["Events", 2], ["Fields", 3],
+      ["Preamble", 0], ["Module API reference", 1], ["Events", 2], ["Fields", 3],
     ]);
   });
 

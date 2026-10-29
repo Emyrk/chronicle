@@ -1,5 +1,5 @@
 -- name: LockLuaProjectOwner :one
--- Serializes addon creation for one owner so concurrent requests cannot exceed the quota.
+-- Serializes module creation for one owner so concurrent requests cannot exceed the quota.
 SELECT id FROM users WHERE id = @owner_id FOR UPDATE;
 
 -- name: CountLuaProjectsByOwner :one
@@ -29,7 +29,7 @@ WHERE owner_id = @user_id OR id IN (SELECT project_id FROM lua_project_contribut
 ORDER BY updated_at DESC LIMIT 100;
 
 -- name: ListLuaProjectsByOwner :many
--- An author's own addons, for /addons/<author>.
+-- An author's own modules, for /modules/<author>.
 SELECT * FROM lua_projects WHERE owner_id = @owner_id ORDER BY updated_at DESC LIMIT 100;
 
 -- name: GetLuaProject :one
@@ -41,13 +41,13 @@ SELECT p.* FROM lua_projects p JOIN addon_authors a ON a.user_id = p.owner_id
 WHERE a.name = @author AND p.slug = @slug;
 
 -- name: ListPublicLuaProjects :many
--- Addons with a release people can still run, most tracked first, then newest release.
+-- Modules with a release people can still run, most tracked first, then newest release.
 SELECT p.* FROM lua_projects p
 JOIN LATERAL (SELECT max(r.published_at) AS published_at FROM lua_project_releases r WHERE r.project_id = p.id AND r.hash IS NOT NULL) latest ON latest.published_at IS NOT NULL
 ORDER BY (SELECT count(*) FROM lua_project_stars s WHERE s.project_id = p.id) DESC, latest.published_at DESC LIMIT 100;
 
 -- name: GetPublicLuaProject :one
--- An addon with something to run: main or a release with files.
+-- A module with something to run: main or a release with files.
 SELECT * FROM lua_projects p WHERE p.id = @id
   AND (p.draft_hash IS NOT NULL OR EXISTS (SELECT 1 FROM lua_project_releases r WHERE r.project_id = p.id AND r.hash IS NOT NULL));
 
@@ -151,16 +151,16 @@ WHERE p.id = @id AND (p.draft_hash = @hash OR EXISTS (SELECT 1 FROM lua_project_
 SELECT object_key, mime_type, content_encoding, uncompressed_size_bytes, stored_size_bytes
 FROM lua_project_artifacts WHERE project_id = @project_id AND hash = @hash;
 
--- name: GetAddonAuthorByUser :one
+-- name: GetModuleAuthorByUser :one
 SELECT * FROM addon_authors WHERE user_id = @user_id;
 
--- name: GetAddonAuthorByName :one
+-- name: GetModuleAuthorByName :one
 SELECT * FROM addon_authors WHERE name = @name;
 
--- name: ListAddonAuthorsByUsers :many
+-- name: ListModuleAuthorsByUsers :many
 SELECT * FROM addon_authors WHERE user_id = ANY(@user_ids::uuid[]);
 
--- name: InsertAddonAuthor :one
+-- name: InsertModuleAuthor :one
 INSERT INTO addon_authors (user_id, name) VALUES (@user_id, @name) RETURNING *;
 
 -- name: ListLuaProjectContributors :many
@@ -187,7 +187,7 @@ INSERT INTO lua_project_stars (project_id, user_id) VALUES (@project_id, @user_i
 DELETE FROM lua_project_stars WHERE project_id = @project_id AND user_id = @user_id;
 
 -- name: ListStarredLuaProjects :many
--- Addons the user tracks, most recently starred first.
+-- Modules the user tracks, most recently starred first.
 SELECT p.* FROM lua_projects p JOIN lua_project_stars s ON s.project_id = p.id
 WHERE s.user_id = @user_id ORDER BY s.created_at DESC LIMIT 200;
 

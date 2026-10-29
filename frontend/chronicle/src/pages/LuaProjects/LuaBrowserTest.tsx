@@ -19,7 +19,7 @@ export function LuaBrowserTest({ panel }: { panel: PanelPackage }) {
     })
   }
 
-  return <div className="flex min-w-0 items-center gap-2" aria-label="Addon startup check">
+  return <div className="flex min-w-0 items-center gap-2" aria-label="Module startup check">
     <button type="button" disabled={running} onClick={run} title="Load the unsaved source in a sandboxed worker. No events are processed."
       className="whitespace-nowrap rounded-md border border-border px-2.5 py-1 text-xs hover:bg-accent disabled:opacity-50">{running ? "Checking…" : "Startup check"}</button>
     {result && <p role="status" title={result.message} className={`truncate text-xs ${result.ok ? "text-emerald-400" : "text-destructive"}`}>{result.ok ? "✓ Passed" : result.message}</p>}

@@ -5,6 +5,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -25,7 +26,16 @@ func (s *Service) handleCharacterEncounterStats(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	rows, err := s.store.GetCharacterEncounterStats(ctx, playerGUID)
+	realmID, err := parseOptionalUUID(r.URL.Query().Get("realm_id"))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid realm_id"})
+		return
+	}
+
+	rows, err := s.store.GetCharacterEncounterStats(ctx, database.GetCharacterEncounterStatsParams{
+		PlayerGuid: playerGUID,
+		RealmID:    realmID,
+	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{

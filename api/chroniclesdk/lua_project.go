@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// LuaProjectQuota is the caller's owned-addon resource allowance.
+// LuaProjectQuota is the caller's owned-module resource allowance.
 type LuaProjectQuota struct {
 	Owned int64 `json:"owned"`
 	Limit int64 `json:"limit"`
@@ -23,7 +23,7 @@ type CreateLuaProjectReleaseRequest struct {
 	ExpectedRevision int64  `json:"expected_revision"`
 }
 
-// LuaProjectMain is the addon's latest saved source. Anyone who can view the addon can run it.
+// LuaProjectMain is the module's latest saved source. Anyone who can view the module can run it.
 type LuaProjectMain struct {
 	SHA256    string    `json:"sha256"`
 	Icon      string    `json:"icon,omitempty"`
@@ -39,7 +39,7 @@ type LuaProjectRelease struct {
 	Icon        string     `json:"icon,omitempty"`
 	PublishedAt time.Time  `json:"published_at"`
 	PublishedBy *uuid.UUID `json:"published_by,omitempty"`
-	// PublishedByAuthor is the publisher's addon author name.
+	// PublishedByAuthor is the publisher's module author name.
 	PublishedByAuthor string `json:"published_by_author,omitempty"`
 }
 
@@ -52,12 +52,12 @@ type LuaProject struct {
 	Revision int64     `json:"revision"`
 	// Description is a short summary, up to LuaProjectDescriptionMax characters. It lives outside the manifest.
 	Description string `json:"description"`
-	// Author is the owner's addon author name, the first part of /addons/<author>/<slug>. Absent until claimed.
+	// Author is the owner's module author name, the first part of /modules/<author>/<slug>. Absent until claimed.
 	Author string          `json:"author,omitempty"`
 	Main   *LuaProjectMain `json:"main,omitempty"`
 	// Releases are newest first. Panels run the newest one that is still available.
 	Releases []LuaProjectRelease `json:"releases"`
-	// Stars counts the people tracking the addon. Starred says whether the caller is one of them.
+	// Stars counts the people tracking the module. Starred says whether the caller is one of them.
 	Stars     int64     `json:"stars"`
 	Starred   bool      `json:"starred"`
 	CreatedAt time.Time `json:"created_at"`
@@ -67,7 +67,7 @@ type LuaProject struct {
 // LuaProjectDescriptionMax is the longest description, in characters.
 const LuaProjectDescriptionMax = 300
 
-// UpdateLuaProjectRequest changes an addon's settings.
+// UpdateLuaProjectRequest changes an module's settings.
 type UpdateLuaProjectRequest struct {
 	Description string `json:"description"`
 }
@@ -78,7 +78,7 @@ type LuaProjectStar struct {
 	Starred bool  `json:"starred"`
 }
 
-// LuaProjectPermissions are what the viewing user may do with an addon.
+// LuaProjectPermissions are what the viewing user may do with an module.
 type LuaProjectPermissions struct {
 	View    bool `json:"view"`
 	Use     bool `json:"use"`
@@ -87,30 +87,30 @@ type LuaProjectPermissions struct {
 	Manage  bool `json:"manage"`
 }
 
-// LuaProjectPage is an addon with what the viewing user may do with it.
+// LuaProjectPage is an module with what the viewing user may do with it.
 type LuaProjectPage struct {
 	Project     LuaProject            `json:"project"`
 	Permissions LuaProjectPermissions `json:"permissions"`
 }
 
-// AddonAuthorPage is /addons/<author>: the author and the addons the caller may view.
-type AddonAuthorPage struct {
+// ModuleAuthorPage is /modules/<author>: the author and the modules the caller may view.
+type ModuleAuthorPage struct {
 	Author   string       `json:"author"`
 	Projects []LuaProject `json:"projects"`
 }
 
-type AddonAuthor struct {
+type ModuleAuthor struct {
 	Name string `json:"name"`
 }
 
-type ClaimAddonAuthorRequest struct {
+type ClaimModuleAuthorRequest struct {
 	Name string `json:"name"`
 }
 
-// LuaProjectContributor is someone the owner shared an addon with.
+// LuaProjectContributor is someone the owner shared an module with.
 type LuaProjectContributor struct {
 	UserID uuid.UUID `json:"user_id"`
-	// Author is their addon author name; Username is their display name.
+	// Author is their module author name; Username is their display name.
 	Author   string `json:"author,omitempty"`
 	Username string `json:"username"`
 	// Permissions are any of "edit" and "release".

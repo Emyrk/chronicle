@@ -11,7 +11,7 @@ profiles, rankings, guild pages, and game-data tools.
 - Browse recent raids and a user's uploaded logs.
 - Inspect each log's parsing state, instances, encounters, and metadata.
 - Detect supported raids and dungeons, including tracked bosses and trash.
-- Track parser, log-format, addon, and data-version compatibility.
+- Track parser, log-format, module, and data-version compatibility.
 - Reprocess logs when newer parsing logic or game data becomes available.
 
 ## Raid and encounter analysis
@@ -97,7 +97,7 @@ from the normal selector while it is under development.
 - Equipment.
 - Loot.
 - Guilds.
-- Addon Relay Stats.
+- Module Relay Stats.
 - Logging Metadata.
 - Metrics.
 - All Activity.

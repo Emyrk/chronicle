@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { addonPath, authorPath, urlName, urlNameInput, validAuthorName } from "./api"
-import { isAddonId } from "./addonRoute"
+import { modulePath, authorPath, urlName, urlNameInput, validAuthorName } from "./api"
+import { isModuleId } from "./moduleRoute"
 
-describe("addon names", () => {
+describe("module names", () => {
   it("suggests URL-safe names from display text", () => {
     expect(urlName("Interrupt Tracker!")).toBe("interrupt-tracker")
     expect(urlName("  Émile's  Kicks  ")).toBe("emile-s-kicks")
@@ -15,11 +15,11 @@ describe("addon names", () => {
   })
 
   it("uses the named address once the owner has an author name", () => {
-    expect(addonPath({ id: "00000000-0000-4000-8000-000000000001", author: "steven", slug: "interrupt-tracker" }, "/edit")).toBe("/addons/steven/interrupt-tracker/edit")
-    expect(addonPath({ id: "00000000-0000-4000-8000-000000000001", slug: "interrupt-tracker" })).toBe("/addons/id/00000000-0000-4000-8000-000000000001")
-    expect(authorPath("steven")).toBe("/addons/steven")
-    expect(isAddonId("00000000-0000-4000-8000-000000000001")).toBe(true)
-    expect(isAddonId("steven")).toBe(false)
+    expect(modulePath({ id: "00000000-0000-4000-8000-000000000001", author: "steven", slug: "interrupt-tracker" }, "/edit")).toBe("/modules/steven/interrupt-tracker/edit")
+    expect(modulePath({ id: "00000000-0000-4000-8000-000000000001", slug: "interrupt-tracker" })).toBe("/modules/id/00000000-0000-4000-8000-000000000001")
+    expect(authorPath("steven")).toBe("/modules/steven")
+    expect(isModuleId("00000000-0000-4000-8000-000000000001")).toBe(true)
+    expect(isModuleId("steven")).toBe(false)
     expect([validAuthorName("stev"), validAuthorName("steven"), validAuthorName("steven-"), validAuthorName("a".repeat(33))]).toEqual([false, true, false, false])
   })
 })

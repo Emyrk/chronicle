@@ -2,7 +2,7 @@ import type { ReactNode } from "react"
 import { ArrowLeft, Check, ChevronDown, GitCommitHorizontal, Tag, Trash2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/DropdownMenu/DropdownMenu"
 import type { LuaProject, LuaRelease } from "./api"
-import { smallButton } from "./addonUi"
+import { smallButton } from "./moduleUi"
 import { MAIN_REF, shortSha, timeAgo, type PackageRef } from "./packageFiles"
 
 const exact = (iso: string) => new Date(iso).toLocaleString()
@@ -23,8 +23,8 @@ type Props = {
   children?: ReactNode
 }
 
-/** The addon's runnable builds as a timeline: main on top, then the releases that still have files, newest first. */
-export function AddonReleases({ project, latest, viewing, canTag, canRelease, busy, onView, onTag, onDelete, onShowAll, children }: Props) {
+/** The module's runnable builds as a timeline: main on top, then the releases that still have files, newest first. */
+export function ModuleReleases({ project, latest, viewing, canTag, canRelease, busy, onView, onTag, onDelete, onShowAll, children }: Props) {
   const main = project.main
   const unreleased = !!main && latest?.sha256 !== main.sha256
   const releases = project.releases.filter(release => release.available)

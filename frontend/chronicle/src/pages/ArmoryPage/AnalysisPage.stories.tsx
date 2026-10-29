@@ -54,6 +54,8 @@ interface MockPlayer {
   luckyRun?: number;
   /** Real captured runs served for every instance this player has, instead of generated ones. */
   fixtureRuns?: CharacterPerformanceRun[];
+  /** Defaults to the mock realm; set for cross-realm comparisons. */
+  realm?: string;
   instances: string[];
 }
 
@@ -70,7 +72,7 @@ const PLAYERS: MockPlayer[] = [
   { id: "0x00000000000A0009", name: "Fennick", className: "DRUID", guild: "Ironbound", role: "heal", specs: [{ spec: "Restoration", weight: 1 }], base: 83, trend: 6, noise: 5, throughput: 650, deathRate: 0.3, cadence: 2, instances: ["Naxxramas", "Blackwing Lair"] },
   { id: "0x00000000000A000A", name: "Rhovan", className: "HUNTER", guild: "Ashen Covenant", role: "dps", specs: [{ spec: "Marksmanship", weight: 1 }], base: 89, trend: -3, noise: 6, throughput: 1190, deathRate: 0.6, cadence: 2, instances: ["Naxxramas", "Blackwing Lair"] },
   { id: "0x00000000000A000B", name: "Brindle", className: "DRUID", guild: "Wildfire", role: "dps", specs: [{ spec: "Feral", weight: 1 }], base: 70, trend: 2, noise: 11, throughput: 1150, deathRate: 0.9, cadence: 2, luckyRun: 6, instances: ["Naxxramas", "Blackwing Lair"] },
-  { id: "0x00000000000014A0", name: "Baraddek", className: "SHAMAN", guild: "let the family eat", role: "dps", specs: [{ spec: "Enhancement", weight: 1 }], base: 0, trend: 0, noise: 0, throughput: 0, deathRate: 0, cadence: 1, fixtureRuns: BARADDEK_MOLTEN_CORE_RUNS, instances: ["Naxxramas"] },
+  { id: "0x00000000000014A0", name: "Baraddek", className: "SHAMAN", guild: "let the family eat", role: "dps", specs: [{ spec: "Enhancement", weight: 1 }], base: 0, trend: 0, noise: 0, throughput: 0, deathRate: 0, cadence: 1, fixtureRuns: BARADDEK_MOLTEN_CORE_RUNS, realm: "Eversong Wilds", instances: ["Naxxramas"] },
 ];
 
 const playerById = (id: string) => PLAYERS.find((player) => player.id.toLowerCase() === id.toLowerCase());
@@ -95,8 +97,8 @@ function seededRandom(seed: number) {
 function searchResult(player: MockPlayer): ArmorySearchResult {
   return {
     id: player.id,
-    realm_name: REALM,
-    realm_id: "realm-nordanaar",
+    realm_name: player.realm ?? REALM,
+    realm_id: `realm-${(player.realm ?? REALM).toLowerCase().replaceAll(" ", "-")}`,
     name: player.name,
     class: player.className,
     race: "Human",
@@ -242,6 +244,7 @@ function pathFor(names: string[], extra = "") {
   for (const name of names) {
     const player = PLAYERS.find((item) => item.name === name)!;
     search.append("player", player.id);
+    search.append("player_realm", player.realm ?? REALM);
     search.append("spec", "");
     search.append("subspec", "");
   }

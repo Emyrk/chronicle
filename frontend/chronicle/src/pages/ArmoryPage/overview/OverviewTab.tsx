@@ -83,7 +83,7 @@ export function OverviewTab({
   );
 
   // Journey mode: participation, progression, and loot.
-  const encountersQuery = useCharacterEncounters(player.id, !isPerformance);
+  const encountersQuery = useCharacterEncounters(player.id, player.realm_id, !isPerformance);
   const lootQuery = useArmoryLoot(player.realm_name, player.id, !isPerformance);
   const { data: bossCounts } = useSupportedInstanceBossCounts();
   const { data: progressionBosses } = useSupportedInstanceProgressionBosses();
@@ -107,7 +107,7 @@ export function OverviewTab({
   const performanceHistoryPath = `/performance-history?${serializePerformanceComparisonState({
     ...DEFAULT_PERFORMANCE_COMPARISON_STATE,
     realmName: player.realm_name,
-    players: [{ id: player.id, spec: null, subSpec: null, hidden: false }],
+    players: [{ id: player.id, realmName: player.realm_name, spec: null, subSpec: null, hidden: false }],
     metric,
   }).toString()}`;
 

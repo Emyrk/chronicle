@@ -7,8 +7,8 @@ import { useInstance } from "@/api/queries"
 import type { RecentInstancesResponse } from "@/api/typesGenerated"
 import { useInferenceCapability } from "@/features/chat/runtime"
 import { useConfirmLinkNavigation } from "@/hooks/useConfirmLinkNavigation"
-import { addonPath, createRelease, getProject, getProjectPage, latestRelease, nextReleaseTag, type LuaProject } from "./api"
-import { useAddonPage } from "./addonRoute"
+import { modulePath, createRelease, getProject, getProjectPage, latestRelease, nextReleaseTag, type LuaProject } from "./api"
+import { useModulePage } from "./moduleRoute"
 import { LuaBrowserTest } from "./LuaBrowserTest"
 import { panelPackageFromWorkingCopy, validateEditorFiles, type EditorFiles } from "./editorFiles"
 import { applyLuaFileEdit, editorFileKey, LUA_EDITOR_CAPABILITY, parseLuaFileEdit, workingCopyFiles, type LuaToolFile } from "./luaEditorTools"
@@ -65,12 +65,12 @@ function releaseStatus(project: LuaProject, copy: LuaWorkingCopy | null): { labe
 const iconButton = "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
 const paneButton = "inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
 
-/** The Workshop at /addons/<author>/<slug>/edit: resolves the addon, then opens it by ID. */
-export function AddonWorkspaceByPath() {
-  const page = useAddonPage()
+/** The Workshop at /modules/<author>/<slug>/edit: resolves the module, then opens it by ID. */
+export function ModuleWorkspaceByPath() {
+  const page = useModulePage()
   if (page.data) return <LuaProjectWorkspacePage projectId={page.data.project.id} />
-  return <main className="container mx-auto px-4 py-10 text-sm">{page.isPending ? "Loading addon…"
-    : <><Link to="/addons">← Addons</Link><p role="alert" className="mt-4">{page.error?.message ?? "Addon not found."}</p></>}</main>
+  return <main className="container mx-auto px-4 py-10 text-sm">{page.isPending ? "Loading module…"
+    : <><Link to="/modules">← Modules</Link><p role="alert" className="mt-4">{page.error?.message ?? "Module not found."}</p></>}</main>
 }
 
 export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { projectId?: string } = {}) {
@@ -83,9 +83,9 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
     queryFn: () => getProjectPage(projectId).then(page => page.permissions), retry: false })
   const canTagReleases = permissionsQuery.data?.release ?? false
   const [copy, setCopy] = useState<LuaWorkingCopy | null>(null)
-  useConfirmLinkNavigation(!!copy?.dirty, "Leave the Addon Workshop and discard your unsaved source changes?")
+  useConfirmLinkNavigation(!!copy?.dirty, "Leave the Module Workshop and discard your unsaved source changes?")
   const [proposal, setProposal] = useState<LuaSourceProposal | null>(null)
-  // Reopen the preview on the instance and encounters last used for this addon.
+  // Reopen the preview on the instance and encounters last used for this module.
   const [savedSelection] = useState(() => readPreviewSelection(projectId))
   const [instanceId, setInstanceId] = useState(savedSelection?.instanceId ?? "")
   const [instanceInput, setInstanceInput] = useState("")
@@ -143,10 +143,10 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
   }, [])
-  // Tagging a release snapshots main; everyone running the addon moves to it.
+  // Tagging a release snapshots main; everyone running the module moves to it.
   async function release() {
     if (publishing || !copy || !project) return
-    const tag = window.prompt(`${copy.dirty ? "Your changes are saved to main first. " : ""}Tag this release (everyone running the addon gets it):`, nextReleaseTag(project.releases))?.trim()
+    const tag = window.prompt(`${copy.dirty ? "Your changes are saved to main first. " : ""}Tag this release (everyone running the module gets it):`, nextReleaseTag(project.releases))?.trim()
     if (!tag) return
     setPublishing(true)
     try {
@@ -155,7 +155,7 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
       if (!latest?.main) throw new Error("Save to main before releasing.")
       await createRelease(latest.id, latest.revision, tag)
       await projectQuery.refetch()
-      toast.success(`Released ${tag}. Panels running the addon pick it up on their next load.`)
+      toast.success(`Released ${tag}. Panels running the module pick it up on their next load.`)
     } catch (error) {
       toast.error(errorMessage(error, "Release failed."))
       await projectQuery.refetch().catch(() => {})
@@ -303,12 +303,12 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
 
   return <div className="flex flex-col border-b border-border lg:h-[calc(100dvh-70px)] lg:min-h-[560px]">
     <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-4 py-2">
-      <Link className="text-xs text-muted-foreground hover:text-foreground" to={addonPath(project)}>← Overview</Link>
+      <Link className="text-xs text-muted-foreground hover:text-foreground" to={modulePath(project)}>← Overview</Link>
       <span aria-hidden className="h-4 w-px bg-border" />
       <h1 className="text-base font-semibold">{project.name}</h1>
       <span className="font-mono text-xs text-muted-foreground">{project.slug}</span>
-      <a className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" href="/addons/api" target="_blank" rel="noreferrer"
-        title="Addon API reference and FAQ (opens in a new tab)"><BookOpen className="size-3.5" /> API reference</a>
+      <a className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" href="/modules/api" target="_blank" rel="noreferrer"
+        title="Module API reference and FAQ (opens in a new tab)"><BookOpen className="size-3.5" /> API reference</a>
       <div className="ml-auto flex flex-wrap items-center gap-2">
         <span role="status" className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground" title={copy?.validation || undefined}>
           <span aria-hidden className={`size-2 rounded-full ${status.tone}`} />{status.label}
@@ -319,7 +319,7 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
           className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${copy?.dirty ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border border-border hover:bg-accent"}`}>
           <Save className="size-3.5" /> {copy?.saving && !publishing ? "Saving…" : "Save to main"}</button>
         {canTagReleases && <button type="button" disabled={!canRelease} onClick={() => void release()}
-          title={released ? "Main is already the latest release." : "Tag main as a release. Everyone running the addon moves to it."}
+          title={released ? "Main is already the latest release." : "Tag main as a release. Everyone running the module moves to it."}
           className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${!copy?.dirty && canRelease ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border border-border hover:bg-accent"}`}>
           <Rocket className="size-3.5" /> {publishing ? "Releasing…" : copy?.dirty ? "Save & tag release" : "Tag release"}</button>}
       </div>

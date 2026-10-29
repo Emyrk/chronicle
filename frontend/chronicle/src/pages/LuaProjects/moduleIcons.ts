@@ -71,13 +71,13 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react"
-import names from "./addonIcons.json"
+import names from "./moduleIcons.json"
 
 /**
- * The icons an addon may name in project.json "icon". addonIcons.json is the list the server checks
- * uploads against; this map must cover exactly those names (see addonIcons.test.ts).
+ * The icons a module may name in project.json "icon". moduleIcons.json is the list the server checks
+ * uploads against; this map must cover exactly those names (see moduleIcons.test.ts).
  */
-export const ADDON_ICONS: Readonly<Record<string, LucideIcon>> = {
+export const MODULE_ICONS: Readonly<Record<string, LucideIcon>> = {
   "activity": Activity,
   "anchor": Anchor,
   "axe": Axe,
@@ -150,9 +150,9 @@ export const ADDON_ICONS: Readonly<Record<string, LucideIcon>> = {
   "zap": Zap,
 }
 
-export const ADDON_ICON_NAMES: readonly string[] = names
+export const MODULE_ICON_NAMES: readonly string[] = names
 
-/** The component for an addon icon name, or the generic addon icon when it names none or an unknown one. */
-export function addonIconComponent(name?: string | null): LucideIcon {
-  return (name && Object.hasOwn(ADDON_ICONS, name) ? ADDON_ICONS[name] : undefined) ?? Blocks
+/** The component for a module icon name, or the generic module icon when it names none or an unknown one. */
+export function moduleIconComponent(name?: string | null): LucideIcon {
+  return (name && Object.hasOwn(MODULE_ICONS, name) ? MODULE_ICONS[name] : undefined) ?? Blocks
 }

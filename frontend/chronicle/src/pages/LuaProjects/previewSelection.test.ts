@@ -7,7 +7,7 @@ describe("preview selection", () => {
     vi.stubGlobal("localStorage", { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) })
   })
 
-  it("round-trips per addon and ignores malformed values", () => {
+  it("round-trips per module and ignores malformed values", () => {
     writePreviewSelection("p1", { instanceId: "i1", encounterIds: ["e1", "e2"] })
     expect(readPreviewSelection("p1")).toEqual({ instanceId: "i1", encounterIds: ["e1", "e2"] })
     expect(readPreviewSelection("p2")).toBeNull()

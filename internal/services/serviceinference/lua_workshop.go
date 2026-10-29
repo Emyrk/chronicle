@@ -2,8 +2,8 @@ package serviceinference
 
 import "github.com/Emyrk/chronicle/frontend"
 
-// luaWorkshopSystem embeds the Addon API reference so the assistant always
-// sees the same runtime documentation as users (see frontend/addon_api.go).
+// luaWorkshopSystem embeds the Module API reference so the assistant always
+// sees the same runtime documentation as users (see frontend/module_api.go).
 var luaWorkshopSystem = `You are the Chronicle Lua workshop assistant. You help the owner build a Lua panel that renders raid metrics inside Chronicle.
 
 Tools:
@@ -16,11 +16,11 @@ Your edits only change the unsaved working copy. The user reviews, saves, and pu
 
 Workshop rules:
 - Name, slug, kind, entrypoint and assets in project.json are fixed; do not change them.
-- README.md is Markdown shown on the addon's page: what the panel shows, how to read it, and which streams it uses. Keep it current when the panel's behavior changes, and offer to write one if it is empty.
+- README.md is Markdown shown on the module's page: what the panel shows, how to read it, and which streams it uses. Keep it current when the panel's behavior changes, and offer to write one if it is empty.
 - Only set max_events if the user wants the panel to stop with an error after that many events.
 - Aggregate in plain Lua tables per event and draw once on completion.
 - Use only the APIs in the reference below. Do not ask the user what events or units look like; the reference documents them. If something truly is not covered, say so plainly.
 
-The complete Addon API reference follows. It is the same document users read at /addons/api.
+The complete Module API reference follows. It is the same document users read at /modules/api.
 
-` + frontend.AddonAPIReference
+` + frontend.ModuleAPIReference

@@ -22,47 +22,47 @@ import (
 	"github.com/Emyrk/chronicle/database/authz/policy"
 )
 
-// addonAuthorName matches the addon_authors name check: the first part of /addons/<author>/<slug>.
-var addonAuthorName = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+// moduleAuthorName matches the addon_authors name check: the first part of /modules/<author>/<slug>.
+var moduleAuthorName = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
-// reservedAddonAuthorNames would collide with /addons routes or read as official. Names under
-// minAddonAuthorName characters, such as "api", "id", "edit" and GitHub's "page", are already
+// reservedModuleAuthorNames would collide with /modules routes or read as official. Names under
+// minModuleAuthorName characters, such as "api", "id", "edit" and GitHub's "page", are already
 // ruled out by length. GitHub's reserved oddballs are documented at:
 // https://github.com/Mottie/github-reserved-names/blob/master/oddballs.md
-var reservedAddonAuthorNames = map[string]bool{
-	"admin": true, "addons": true, "assets": true, "author": true, "authors": true, "avatars": true,
+var reservedModuleAuthorNames = map[string]bool{
+	"admin": true, "addons": true, "modules": true, "assets": true, "author": true, "authors": true, "avatars": true,
 	"bookmarks": true, "browse": true, "checks": true, "chronicle": true, "conversations": true,
 	"create": true, "explore": true, "featured": true, "help": true, "labels": true, "login": true,
-	"media": true, "my-addons": true, "nodes": true, "official": true, "owners": true, "popular": true,
+	"media": true, "my-addons": true, "my-modules": true, "nodes": true, "official": true, "owners": true, "popular": true,
 	"registry": true, "seats": true, "settings": true, "shared": true, "support": true, "tasks": true,
 	"uploads": true, "workshop": true,
 }
 
-// minAddonAuthorName applies to new names only: the database still allows the shorter names claimed before.
-const minAddonAuthorName = 5
+// minModuleAuthorName applies to new names only: the database still allows the shorter names claimed before.
+const minModuleAuthorName = 5
 
-func validAddonAuthorName(name string) bool {
-	return len(name) >= minAddonAuthorName && len(name) <= 32 && addonAuthorName.MatchString(name) && !reservedAddonAuthorNames[name]
+func validModuleAuthorName(name string) bool {
+	return len(name) >= minModuleAuthorName && len(name) <= 32 && moduleAuthorName.MatchString(name) && !reservedModuleAuthorNames[name]
 }
 
-// suggestAddonAuthorName turns a username into an author name: lowercase letters, digits and single hyphens.
-func suggestAddonAuthorName(username string) string {
-	name := strings.Trim(nonAddonAuthorChars.ReplaceAllString(strings.ToLower(username), "-"), "-")
-	if name != "" && len(name) < minAddonAuthorName {
-		name += "-addons"
+// suggestModuleAuthorName turns a username into an author name: lowercase letters, digits and single hyphens.
+func suggestModuleAuthorName(username string) string {
+	name := strings.Trim(nonModuleAuthorChars.ReplaceAllString(strings.ToLower(username), "-"), "-")
+	if name != "" && len(name) < minModuleAuthorName {
+		name += "-modules"
 	}
 	return strings.TrimRight(name[:min(len(name), 32)], "-")
 }
 
-var nonAddonAuthorChars = regexp.MustCompile(`[^a-z0-9]+`)
+var nonModuleAuthorChars = regexp.MustCompile(`[^a-z0-9]+`)
 
-// addonAuthorNames maps each user to their author name, when they have one.
-func (a *API) addonAuthorNames(ctx context.Context, users []uuid.UUID) (map[uuid.UUID]string, error) {
+// moduleAuthorNames maps each user to their author name, when they have one.
+func (a *API) moduleAuthorNames(ctx context.Context, users []uuid.UUID) (map[uuid.UUID]string, error) {
 	names := make(map[uuid.UUID]string, len(users))
 	if len(users) == 0 {
 		return names, nil
 	}
-	rows, err := a.Opts.Zed.ListAddonAuthorsByUsers(ctx, users)
+	rows, err := a.Opts.Zed.ListModuleAuthorsByUsers(ctx, users)
 	if err != nil {
 		return nil, err
 	}
@@ -72,8 +72,8 @@ func (a *API) addonAuthorNames(ctx context.Context, users []uuid.UUID) (map[uuid
 	return names, nil
 }
 
-func (a *API) GetMyAddonAuthor(w http.ResponseWriter, r *http.Request) {
-	author, err := a.Opts.Zed.GetAddonAuthorByUser(r.Context(), chronauth.MustAuthenticatedClaims(r.Context()).Subject)
+func (a *API) GetMyModuleAuthor(w http.ResponseWriter, r *http.Request) {
+	author, err := a.Opts.Zed.GetModuleAuthorByUser(r.Context(), chronauth.MustAuthenticatedClaims(r.Context()).Subject)
 	// No name yet is a normal state, so it is not an error the browser logs.
 	if errors.Is(err, pgx.ErrNoRows) {
 		w.WriteHeader(http.StatusNoContent)
@@ -83,31 +83,31 @@ func (a *API) GetMyAddonAuthor(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.AddonAuthor{Name: author.Name})
+	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.ModuleAuthor{Name: author.Name})
 }
 
-// SuggestAddonAuthor offers the caller's username as an author name, numbered when it is taken.
+// SuggestModuleAuthor offers the caller's username as an author name, numbered when it is taken.
 // The name is empty when no free variant was found; the caller then picks one.
-func (a *API) SuggestAddonAuthor(w http.ResponseWriter, r *http.Request) {
+func (a *API) SuggestModuleAuthor(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	user, err := a.Opts.Zed.GetUserByID(ctx, chronauth.MustAuthenticatedClaims(ctx).Subject)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	base := suggestAddonAuthorName(user.Username)
+	base := suggestModuleAuthorName(user.Username)
 	for i := 1; i <= 9 && base != ""; i++ {
 		name := base
 		if i > 1 {
 			suffix := "-" + strconv.Itoa(i)
 			name = strings.TrimRight(base[:min(len(base), 32-len(suffix))], "-") + suffix
 		}
-		if !validAddonAuthorName(name) {
+		if !validModuleAuthorName(name) {
 			continue
 		}
-		_, err := a.Opts.Zed.GetAddonAuthorByName(ctx, name)
+		_, err := a.Opts.Zed.GetModuleAuthorByName(ctx, name)
 		if errors.Is(err, pgx.ErrNoRows) {
-			httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.AddonAuthor{Name: name})
+			httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.ModuleAuthor{Name: name})
 			return
 		}
 		if err != nil {
@@ -115,21 +115,21 @@ func (a *API) SuggestAddonAuthor(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.AddonAuthor{})
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.ModuleAuthor{})
 }
 
-// ClaimAddonAuthor sets the caller's author name once; addon URLs depend on it staying put.
-func (a *API) ClaimAddonAuthor(w http.ResponseWriter, r *http.Request) {
+// ClaimModuleAuthor sets the caller's author name once; module URLs depend on it staying put.
+func (a *API) ClaimModuleAuthor(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1024)
-	var req chroniclesdk.ClaimAddonAuthorRequest
+	var req chroniclesdk.ClaimModuleAuthorRequest
 	if !httpapi.Read(r.Context(), w, r, &req) {
 		return
 	}
-	if !validAddonAuthorName(req.Name) {
+	if !validModuleAuthorName(req.Name) {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: "Author names are 5-32 lowercase letters, digits and single hyphens, and some names are reserved."})
 		return
 	}
-	author, err := a.Opts.Zed.InsertAddonAuthor(r.Context(), database.InsertAddonAuthorParams{UserID: chronauth.MustAuthenticatedClaims(r.Context()).Subject, Name: req.Name})
+	author, err := a.Opts.Zed.InsertModuleAuthor(r.Context(), database.InsertModuleAuthorParams{UserID: chronauth.MustAuthenticatedClaims(r.Context()).Subject, Name: req.Name})
 	if err != nil {
 		var pg *pgconn.PgError
 		if errors.As(err, &pg) && pg.Code == "23505" {
@@ -143,10 +143,10 @@ func (a *API) ClaimAddonAuthor(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	httpapi.Write(r.Context(), w, http.StatusCreated, chroniclesdk.AddonAuthor{Name: author.Name})
+	httpapi.Write(r.Context(), w, http.StatusCreated, chroniclesdk.ModuleAuthor{Name: author.Name})
 }
 
-// writeLuaProjectPage answers for anyone who may view the addon, including its main: viewers may run it.
+// writeLuaProjectPage answers for anyone who may view the module, including its main: viewers may run it.
 func (a *API) writeLuaProjectPage(w http.ResponseWriter, r *http.Request, p database.LuaProject) {
 	permissions, err := a.luaProjectPermissions(r, p.ID)
 	if err != nil {
@@ -154,8 +154,8 @@ func (a *API) writeLuaProjectPage(w http.ResponseWriter, r *http.Request, p data
 		return
 	}
 	if !permissions.View {
-		// Same answer as a missing addon, so private addons do not leak their existence.
-		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Addon not found."})
+		// Same answer as a missing module, so private modules do not leak their existence.
+		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Module not found."})
 		return
 	}
 	projects, err := a.luaProjectResponses(r.Context(), p)
@@ -174,7 +174,7 @@ func (a *API) GetLuaProjectPage(w http.ResponseWriter, r *http.Request) {
 	}
 	p, err := a.Opts.Zed.GetLuaProject(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Addon not found."})
+		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Module not found."})
 		return
 	}
 	if err != nil {
@@ -184,11 +184,11 @@ func (a *API) GetLuaProjectPage(w http.ResponseWriter, r *http.Request) {
 	a.writeLuaProjectPage(w, r, p)
 }
 
-// GetLuaProjectPageByPath resolves /addons/<author>/<slug>.
+// GetLuaProjectPageByPath resolves /modules/<author>/<slug>.
 func (a *API) GetLuaProjectPageByPath(w http.ResponseWriter, r *http.Request) {
 	p, err := a.Opts.Zed.GetLuaProjectByAuthorSlug(r.Context(), database.GetLuaProjectByAuthorSlugParams{Author: chi.URLParam(r, "author"), Slug: chi.URLParam(r, "slug")})
 	if errors.Is(err, pgx.ErrNoRows) {
-		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Addon not found."})
+		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "Module not found."})
 		return
 	}
 	if err != nil {
@@ -198,10 +198,10 @@ func (a *API) GetLuaProjectPageByPath(w http.ResponseWriter, r *http.Request) {
 	a.writeLuaProjectPage(w, r, p)
 }
 
-// GetAddonAuthorPage lists an author's addons for /addons/<author>, keeping only those the caller may view.
-func (a *API) GetAddonAuthorPage(w http.ResponseWriter, r *http.Request) {
+// GetModuleAuthorPage lists an author's modules for /modules/<author>, keeping only those the caller may view.
+func (a *API) GetModuleAuthorPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	author, err := a.Opts.Zed.GetAddonAuthorByName(ctx, chi.URLParam(r, "author"))
+	author, err := a.Opts.Zed.GetModuleAuthorByName(ctx, chi.URLParam(r, "author"))
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{Message: "Author not found."})
 		return
@@ -235,7 +235,7 @@ func (a *API) GetAddonAuthorPage(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.AddonAuthorPage{Author: author.Name, Projects: out})
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.ModuleAuthorPage{Author: author.Name, Projects: out})
 }
 
 func (a *API) ListLuaProjectContributors(w http.ResponseWriter, r *http.Request) {
@@ -329,9 +329,9 @@ func (a *API) luaContributorTarget(w http.ResponseWriter, r *http.Request, id uu
 		httpapi.InternalServerError(w, err)
 		return database.LuaProject{}, database.AddonAuthor{}, false
 	}
-	author, err := a.Opts.Zed.GetAddonAuthorByName(r.Context(), chi.URLParam(r, "author"))
+	author, err := a.Opts.Zed.GetModuleAuthorByName(r.Context(), chi.URLParam(r, "author"))
 	if errors.Is(err, pgx.ErrNoRows) {
-		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "No one has that author name. Contributors claim one on the Addons page."})
+		httpapi.Write(r.Context(), w, http.StatusNotFound, chroniclesdk.Response{Message: "No one has that author name. Contributors claim one on the Modules page."})
 		return database.LuaProject{}, database.AddonAuthor{}, false
 	}
 	if err != nil {
@@ -341,7 +341,7 @@ func (a *API) luaContributorTarget(w http.ResponseWriter, r *http.Request, id uu
 	return project, author, true
 }
 
-// publicLuaProjectRoutes serves addons to everyone, signed in or not. They still need the signed-in user,
+// publicLuaProjectRoutes serves modules to everyone, signed in or not. They still need the signed-in user,
 // if any, so owners and contributors get their own view and permissions: optional authentication attaches
 // the SpiceDB actor without requiring a session.
 func (a *API) publicLuaProjectRoutes(r chi.Router) {
@@ -349,7 +349,10 @@ func (a *API) publicLuaProjectRoutes(r chi.Router) {
 	r.Get("/lua-projects", a.ListPublicLuaProjects)
 	r.Get("/lua-projects/{projectID}", a.GetPublicLuaProject)
 	r.Get("/lua-projects/{projectID}/page", a.GetLuaProjectPage)
-	r.Get("/addons/{author}", a.GetAddonAuthorPage)
+	r.Get("/modules/{author}", a.GetModuleAuthorPage)
+	r.Get("/modules/{author}/{slug}", a.GetLuaProjectPageByPath)
+	// Legacy aliases keep old links and API clients working.
+	r.Get("/addons/{author}", a.GetModuleAuthorPage)
 	r.Get("/addons/{author}/{slug}", a.GetLuaProjectPageByPath)
 	r.Get("/lua-projects/{projectID}/artifacts/{hash}/package", a.DownloadLuaProject)
 }

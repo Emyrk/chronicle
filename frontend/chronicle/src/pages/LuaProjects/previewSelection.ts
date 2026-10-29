@@ -1,4 +1,4 @@
-/** The instance and encounters an addon was last previewed against, remembered per addon in this browser. */
+/** The instance and encounters a module was last previewed against, remembered per module in this browser. */
 export interface PreviewSelection { instanceId: string; encounterIds: string[] }
 
 const key = (projectId: string) => `lua-workshop-preview:${projectId}`

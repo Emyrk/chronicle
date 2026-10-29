@@ -2,7 +2,7 @@ import { unzip, type Unzipped } from "fflate"
 import { inspectArchive, normalizeExtractedFiles } from "../Guides/package/archive"
 import { latestRelease, publicPackageURL, type LuaProject } from "./api"
 
-/** Which build of an addon the page is showing: "main" or a release tag. */
+/** Which build of a module the page is showing: "main" or a release tag. */
 export type PackageRef = string
 export type PackageFile = { path: string; bytes: Uint8Array }
 
@@ -19,7 +19,7 @@ export function defaultRef(project: Pick<LuaProject, "releases" | "main">): Pack
   return latestRelease(project)?.tag ?? (project.main ? MAIN_REF : null)
 }
 
-/** Main and releases are both served by hash to anyone who can view the addon. */
+/** Main and releases are both served by hash to anyone who can view the module. */
 export function packageDownloadURL(project: Pick<LuaProject, "id">, sha: string): string {
   return publicPackageURL(project.id, sha)
 }
