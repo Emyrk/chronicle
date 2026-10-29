@@ -249,7 +249,7 @@ func (t *SpeedrunTracker) ReentryBoundary() (time.Time, time.Duration, bool) {
 }
 
 // ReentryGap returns the inactivity gap required before a later entry starts a
-// new run. Raids default to 24 hours; dungeon rules opt into a shorter gap.
+// new run. Raids default to 6 hours; dungeon rules opt into a shorter gap.
 func (t *SpeedrunTracker) ReentryGap() time.Duration {
 	if t.rules.ReentryGap > 0 {
 		return t.rules.ReentryGap

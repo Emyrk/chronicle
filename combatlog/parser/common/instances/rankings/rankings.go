@@ -36,7 +36,7 @@ type LevelRangeRequirement struct {
 
 // SpeedrunRules defines all requirements for a valid speedrun.
 const (
-	DefaultReentryGap        = 24 * time.Hour
+	DefaultReentryGap        = 6 * time.Hour
 	BossCompletionReentryGap = time.Hour
 	DungeonReentryGap        = 15 * time.Minute
 )
@@ -47,8 +47,8 @@ type SpeedrunRules struct {
 	// RankedStartAfterRequirement starts ranked clear timing at the end of the
 	// fight that satisfies the named requirement instead of at the first fight.
 	RankedStartAfterRequirement string `json:"ranked_start_after_requirement,omitempty"`
-	// ReentryGap controls when a completed run can be split from a later entry
-	// into the same zone. Zero uses DefaultReentryGap.
+	// ReentryGap controls when a run can be split from a later entry into the
+	// same zone. Zero uses DefaultReentryGap.
 	ReentryGap time.Duration `json:"-"`
 }
 

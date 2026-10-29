@@ -63,48 +63,55 @@ func TestHookableShouldStartNewRun(t *testing.T) {
 
 	completedAt := time.Date(2026, 7, 19, 18, 53, 23, 0, time.UTC)
 
-	t.Run("raid requires more than twenty four hours", func(t *testing.T) {
+	t.Run("raid splits after six hours", func(t *testing.T) {
 		t.Parallel()
 		h := completedHookable(completedAt, completedAt, 0)
-		assert.False(t, h.ShouldStartNewRun(completedAt.Add(24*time.Hour)))
-		assert.True(t, h.ShouldStartNewRun(completedAt.Add(24*time.Hour+time.Millisecond)))
+		assert.False(t, h.ShouldStartNewRun(completedAt.Add(6*time.Hour-time.Millisecond)))
+		assert.True(t, h.ShouldStartNewRun(completedAt.Add(6*time.Hour)))
 	})
 
 	t.Run("all raid bosses killed allows reentry after one hour", func(t *testing.T) {
 		t.Parallel()
 		h := bossesCompletedHookable(completedAt, completedAt, 0)
-		assert.False(t, h.ShouldStartNewRun(completedAt.Add(time.Hour)))
-		assert.True(t, h.ShouldStartNewRun(completedAt.Add(time.Hour+time.Millisecond)))
+		assert.False(t, h.ShouldStartNewRun(completedAt.Add(time.Hour-time.Millisecond)))
+		assert.True(t, h.ShouldStartNewRun(completedAt.Add(time.Hour)))
 	})
 
 	t.Run("configured shorter gap still applies after all bosses", func(t *testing.T) {
 		t.Parallel()
 		h := bossesCompletedHookable(completedAt, completedAt, rankings.DungeonReentryGap)
-		assert.False(t, h.ShouldStartNewRun(completedAt.Add(rankings.DungeonReentryGap)))
-		assert.True(t, h.ShouldStartNewRun(completedAt.Add(rankings.DungeonReentryGap+time.Millisecond)))
+		assert.False(t, h.ShouldStartNewRun(completedAt.Add(rankings.DungeonReentryGap-time.Millisecond)))
+		assert.True(t, h.ShouldStartNewRun(completedAt.Add(rankings.DungeonReentryGap)))
 	})
 
-	t.Run("dungeon requires more than fifteen minutes", func(t *testing.T) {
+	t.Run("dungeon splits after fifteen minutes", func(t *testing.T) {
 		t.Parallel()
 		h := completedHookable(completedAt, completedAt, rankings.DungeonReentryGap)
-		assert.False(t, h.ShouldStartNewRun(completedAt.Add(15*time.Minute)))
-		assert.True(t, h.ShouldStartNewRun(completedAt.Add(15*time.Minute+time.Millisecond)))
+		assert.False(t, h.ShouldStartNewRun(completedAt.Add(15*time.Minute-time.Millisecond)))
+		assert.True(t, h.ShouldStartNewRun(completedAt.Add(15*time.Minute)))
 	})
 
 	t.Run("gap starts at last activity after completion", func(t *testing.T) {
 		t.Parallel()
 		lastActivity := completedAt.Add(time.Hour)
 		h := completedHookable(completedAt, lastActivity, rankings.DungeonReentryGap)
-		assert.False(t, h.ShouldStartNewRun(lastActivity.Add(15*time.Minute)))
-		assert.True(t, h.ShouldStartNewRun(lastActivity.Add(15*time.Minute+time.Millisecond)))
+		assert.False(t, h.ShouldStartNewRun(lastActivity.Add(15*time.Minute-time.Millisecond)))
+		assert.True(t, h.ShouldStartNewRun(lastActivity.Add(15*time.Minute)))
 	})
 
-	t.Run("incomplete run never splits", func(t *testing.T) {
+	t.Run("incomplete raid splits after six hours", func(t *testing.T) {
 		t.Parallel()
 		tracker := rankings.NewSpeedrunTracker(rankings.SpeedrunRules{
 			Requirements: []rankings.SpeedrunRequirement{{Name: "Boss", EntryIDs: []uint32{1}, Count: 1}},
 		}, nil, nil)
 		h := &Hookable{speedrunTracker: tracker, lastActivity: completedAt}
+		assert.False(t, h.ShouldStartNewRun(completedAt.Add(6*time.Hour-time.Millisecond)))
+		assert.True(t, h.ShouldStartNewRun(completedAt.Add(6*time.Hour)))
+	})
+
+	t.Run("instance without speedrun rules never splits", func(t *testing.T) {
+		t.Parallel()
+		h := &Hookable{lastActivity: completedAt}
 		assert.False(t, h.ShouldStartNewRun(completedAt.Add(7*24*time.Hour)))
 	})
 }
