@@ -222,10 +222,14 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
     if (encounterId && pullStartOffsetMs !== null && pullEndOffsetMs !== null) {
       const encounter = result.encounters.get(encounterId);
       if (!encounter) return null;
-      // One span, the window: nothing to skip inside one pull.
+      // One span, the window, played from the pull's first position sample: the log's positions can start a second
+      // or two after the pull, and the scene would hold still until then.
       const startMs = instanceStartMs + pullStartOffsetMs;
       const durationMs = Math.max(1, pullEndOffsetMs - pullStartOffsetMs);
-      return { startMs, endMs: startMs + durationMs, durationMs, playable: [[0, durationMs]] as [number, number][], encounterStartMs: encounter.startMs, encounterEndMs: encounter.endMs };
+      let firstSampleMs = Infinity;
+      for (const samples of encounter.positionsByUnit.values()) firstSampleMs = Math.min(firstSampleMs, samples[0]?.timestampMs ?? Infinity);
+      const playFromMs = Number.isFinite(firstSampleMs) ? Math.min(Math.max(0, firstSampleMs - startMs), durationMs - 1) : 0;
+      return { startMs, endMs: startMs + durationMs, durationMs, playable: [[playFromMs, durationMs]] as [number, number][], encounterStartMs: encounter.startMs, encounterEndMs: encounter.endMs };
     }
     const encounters = [...result.encounters.values()];
     const startMs = Math.min(...encounters.map((encounter) => encounter.startMs));
@@ -320,7 +324,7 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
   const playableMs = span ? playableRunMs(runMs, span.playable, span.durationMs) : runMs;
   // Always the mesh's own projection: the landing never shows the 2D tiles, not even while the mesh loads.
   // A pull is the single encounter the Watch tab's Map panel shows; its preview runs from the encounter's first sample
-  // and loops at its last, so outside them (the lead-in, the window's tail) the scene holds the nearest sample.
+  // and loops at its last, so outside them (any lead-in, the window's tail) the scene holds the nearest sample.
   const pullElapsedMs = span
     ? Math.min(Math.max(0, span.startMs + playableMs - span.encounterStartMs), Math.max(0, span.encounterEndMs - span.encounterStartMs - 1))
     : 0;
@@ -392,7 +396,7 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
     if (options?.cut) setCutKey((key) => key + 1);
   }, [instanceStartMs, pull, span]);
   const cursorMs = ready?.cursorMs ?? null;
-  // A pull reports the hero's clock: it moves through the lead-in, where the scene holds the pull's first sample.
+  // A pull reports the hero's clock, from the pull's first position sample (the clock skips the frames before it).
   const currentMs = cursorMs === null ? null : pull ? playableMs : cursorMs - instanceStartMs;
   // The live stats follow the hero's clock from the pull's start (chips, the scrubber and deaths move it through `seek`):
   // the meter's damage and the threat table at the cursor, and the raid frames.
@@ -456,6 +460,8 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
         debuffSpellIds={ready.debuffSpellIds}
         planItems={NO_PLAN_ITEMS}
         frozen={!live}
+        // The compass only where the camera is free (Explore): on the hero backdrop and the still it sits over the overlays.
+        showCompass={explore}
       />
       {explore && shown && (
         <div className="absolute left-3 top-3 flex items-center gap-2 rounded-md border bg-background/80 px-2.5 py-1.5 text-xs text-foreground shadow-lg backdrop-blur-sm lg:left-4 lg:top-4">

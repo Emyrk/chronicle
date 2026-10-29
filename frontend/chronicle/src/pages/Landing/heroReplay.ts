@@ -5,8 +5,8 @@ import type { SerializableProcessorContext } from "@/pages/Instance/EventsPanels
 import type { HeroPlayback } from "./LandingHero";
 import type { HeroMeterData } from "./heroMeter";
 
-/** The hero starts this long before the boss pull. */
-export const HERO_PULL_LEAD_MS = 5_000;
+/** The hero starts this long before the boss pull: on the pull itself, so the battle is moving at once (≤ 1 s if its first frames prove empty). */
+export const HERO_PULL_LEAD_MS = 0;
 
 /** The boss pull the hero loops, in ms from the instance's start. */
 export interface HeroWindow {
@@ -16,7 +16,7 @@ export interface HeroWindow {
 }
 
 /**
- * The featured run's boss pull (from a few seconds before it), and the run as
+ * The featured run's boss pull (from HERO_PULL_LEAD_MS before it), and the run as
  * the scrubber sees it: that window only, its bosses and deaths timed from the
  * window's start. A run without a boss pull plays whole (window null).
  * `encounterId` picks another of the run's boss pulls (the boss rail).
