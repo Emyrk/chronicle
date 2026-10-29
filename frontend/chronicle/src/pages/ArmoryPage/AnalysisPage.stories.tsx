@@ -10,6 +10,7 @@ import type {
   SupportedInstance,
 } from "@/api/typesGenerated";
 import { TooltipProvider } from "@/components/ui/Tooltip/tooltip";
+import { BARADDEK_MOLTEN_CORE_RUNS } from "./AnalysisPage.fixtures";
 import { PerformanceComparisonPage } from "./AnalysisPage";
 
 const REALM = "Nordanaar";
@@ -51,6 +52,8 @@ interface MockPlayer {
   maxRuns?: number;
   /** Index of one run (0 = latest) that lands far above the rest, to show a best-run outlier. */
   luckyRun?: number;
+  /** Real captured runs served for every instance this player has, instead of generated ones. */
+  fixtureRuns?: CharacterPerformanceRun[];
   instances: string[];
 }
 
@@ -67,6 +70,7 @@ const PLAYERS: MockPlayer[] = [
   { id: "0x00000000000A0009", name: "Fennick", className: "DRUID", guild: "Ironbound", role: "heal", specs: [{ spec: "Restoration", weight: 1 }], base: 83, trend: 6, noise: 5, throughput: 650, deathRate: 0.3, cadence: 2, instances: ["Naxxramas", "Blackwing Lair"] },
   { id: "0x00000000000A000A", name: "Rhovan", className: "HUNTER", guild: "Ashen Covenant", role: "dps", specs: [{ spec: "Marksmanship", weight: 1 }], base: 89, trend: -3, noise: 6, throughput: 1190, deathRate: 0.6, cadence: 2, instances: ["Naxxramas", "Blackwing Lair"] },
   { id: "0x00000000000A000B", name: "Brindle", className: "DRUID", guild: "Wildfire", role: "dps", specs: [{ spec: "Feral", weight: 1 }], base: 70, trend: 2, noise: 11, throughput: 1150, deathRate: 0.9, cadence: 2, luckyRun: 6, instances: ["Naxxramas", "Blackwing Lair"] },
+  { id: "0x00000000000014A0", name: "Baraddek", className: "SHAMAN", guild: "let the family eat", role: "dps", specs: [{ spec: "Enhancement", weight: 1 }], base: 0, trend: 0, noise: 0, throughput: 0, deathRate: 0, cadence: 1, fixtureRuns: BARADDEK_MOLTEN_CORE_RUNS, instances: ["Naxxramas"] },
 ];
 
 const playerById = (id: string) => PLAYERS.find((player) => player.id.toLowerCase() === id.toLowerCase());
@@ -137,6 +141,7 @@ function performanceRuns(player: MockPlayer, url: URL): CharacterPerformanceResp
   if (!player.instances.includes(instanceName) || encounters.length === 0) {
     return { player_guid: player.id, metric, runs: [] };
   }
+  if (player.fixtureRuns) return { player_guid: player.id, metric, runs: player.fixtureRuns };
 
   const random = seededRandom(hashSeed(`${player.id}|${instanceName}`));
   // A small per-boss-selection offset so changing bosses visibly moves the numbers.
@@ -266,7 +271,7 @@ type Story = StoryObj<typeof meta>;
 /**
  * One player. Use "Add player" to compare: the mock realm has Velyndra, Morthul, Brakkus,
  * Quellin, Sinnet, Tavrin (BWL only), Holtmar (2 runs), Lumessa and Fennick (healers), Rhovan, and
- * Brindle (swingy, with one outlier night).
+ * Brindle (swingy, with one outlier night), and Baraddek (real captured runs).
  */
 export const OnePlayer: Story = {};
 
@@ -288,6 +293,14 @@ export const Healers: Story = {
 /** A swingy player in Parse mode: Low consistency, and a best run marked as an outlier. */
 export const ErraticPlayer: Story = {
   parameters: { path: pathFor(["Brindle"], "&display=parse") },
+};
+
+/**
+ * Real data: Baraddek's Molten Core runs from capy, served as Naxxramas. His parse climbs from
+ * the 20s to the 90s over three months, so the trend line and Consistency have a real slope to handle.
+ */
+export const RealClimbingPlayer: Story = {
+  parameters: { path: pathFor(["Baraddek"], "&display=parse") },
 };
 
 /** No player selected yet: the search landing page. Try "vel" or "mor". */
