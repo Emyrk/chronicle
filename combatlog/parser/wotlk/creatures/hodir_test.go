@@ -174,16 +174,16 @@ func TestHodirFullWipeAuraCleanupDoesNotMarkSurrender(t *testing.T) {
 	require.NotEqual(t, period.EndStateSlain, hodir.LastEndState())
 }
 
-func TestHodirAuraCleanupAllowedAfterPlayerDeathCooldown(t *testing.T) {
+func TestHodirAuraCleanupIgnoresEarlierPlayerDeaths(t *testing.T) {
 	t.Parallel()
 
 	all := newHodirTestCharacters()
 	players := []guid.GUID{1, 2}
 	hodirID := creatureGUID(hodirEntry)
-	start := time.Date(2026, time.August, 28, 18, 56, 10, 0, time.UTC)
+	start := time.Date(2026, time.October, 29, 1, 47, 1, 577000000, time.UTC)
 
 	_, err := all.Process(&messages.Damage{
-		MessageBase: messages.Base(start),
+		MessageBase: messages.Base(start.Add(-time.Second)),
 		Caster:      &players[0],
 		Target:      hodirID,
 		Amount:      1,
@@ -191,12 +191,14 @@ func TestHodirAuraCleanupAllowedAfterPlayerDeathCooldown(t *testing.T) {
 	})
 	require.NoError(t, err)
 	_, err = all.Process(&messages.Slain{
-		MessageBase: messages.Base(start.Add(time.Second)),
+		MessageBase: messages.Base(start),
 		Victim:      players[0],
 	})
 	require.NoError(t, err)
 
-	lastDamage := start.Add(time.Second + hodirAuraCleanupDeathCooldown)
+	// Observed instance 5qmPS2lu8uHrbUQn: a player died about two seconds before
+	// Hodir surrendered. Player deaths do not distinguish a kill from a wipe.
+	lastDamage := start.Add(2 * time.Second)
 	_, err = all.Process(&messages.Damage{
 		MessageBase: messages.Base(lastDamage),
 		Caster:      &players[1],
@@ -207,7 +209,7 @@ func TestHodirAuraCleanupAllowedAfterPlayerDeathCooldown(t *testing.T) {
 	require.NoError(t, err)
 	for i := range scriptedKeeperAuraCleanupThreshold {
 		_, err = all.Process(&messages.Aura{
-			MessageBase: messages.Base(lastDamage.Add(50*time.Millisecond + time.Duration(i)*time.Millisecond)),
+			MessageBase: messages.Base(lastDamage.Add(2*time.Millisecond + time.Duration(i)*time.Millisecond)),
 			Target:      hodirID,
 			SpellName:   fmt.Sprintf("Removed debuff %d", i),
 			State:       types.AuraStateRemoved,
