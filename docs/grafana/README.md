@@ -1,8 +1,11 @@
-# Chronicle Grafana dashboard
+# Chronicle Grafana dashboards
 
-`chronicle-operations.json` is a ready-to-import operational dashboard for Chronicle's Prometheus metrics.
+Chronicle includes two ready-to-import dashboards for its Prometheus metrics:
 
-It includes rows for:
+- `chronicle-operations.json` covers service health and background processing.
+- `chronicle-http-traffic.json` investigates HTTP request volume, rate, and latency by route template and method.
+
+The operations dashboard includes rows for:
 
 - Service availability and API latency
 - Combat-log parsing health and throughput
@@ -12,24 +15,25 @@ It includes rows for:
 - Billing reconciliation and Stripe entitlement synchronization
 - Authentication activity and leader election
 
-The dashboard targets Grafana 10 or newer and uses only built-in panels.
+Both dashboards target Grafana 10 or newer and use only built-in panels.
 
 ## Import through the Grafana UI
 
 1. Open **Dashboards > New > Import**.
-2. Upload `chronicle-operations.json` or paste its contents.
+2. Upload one of the dashboard JSON files or paste its contents.
 3. Open the imported dashboard.
 4. Select the Prometheus datasource that scrapes Chronicle.
 5. Select the appropriate **Prometheus job** variable.
 
-The dashboard UID is `chronicle-operations`. Importing a newer version with the same UID updates the existing dashboard.
+The dashboard UIDs are `chronicle-operations` and `chronicle-http-traffic`. Importing a newer version with the same UID updates the corresponding existing dashboard.
 
 ## File provisioning
 
-Copy the dashboard JSON into a directory visible to Grafana, for example:
+Copy one or both dashboard JSON files into a directory visible to Grafana, for example:
 
 ```text
 /etc/grafana/provisioning/dashboards/chronicle/chronicle-operations.json
+/etc/grafana/provisioning/dashboards/chronicle/chronicle-http-traffic.json
 ```
 
 Create a dashboard provider such as `/etc/grafana/provisioning/dashboards/chronicle.yml`:
@@ -59,10 +63,19 @@ services:
   grafana:
     volumes:
       - ./docs/grafana/chronicle-operations.json:/etc/grafana/provisioning/dashboards/chronicle/chronicle-operations.json:ro
+      - ./docs/grafana/chronicle-http-traffic.json:/etc/grafana/provisioning/dashboards/chronicle/chronicle-http-traffic.json:ro
       - ./deploy/grafana/chronicle.yml:/etc/grafana/provisioning/dashboards/chronicle.yml:ro
 ```
 
 The provider YAML is intentionally an example rather than a tracked deployment file because Grafana paths, organizations, and folder policy vary between installations.
+
+## HTTP traffic dashboard
+
+`chronicle-http-traffic.json` helps identify route and method combinations receiving unusually high traffic. It includes request totals for the selected time range, current request rates, traffic trends, and route latency comparisons.
+
+The `path` label contains the matched chi route template, such as `/api/v1/instances/{id}`, rather than the raw URL. This keeps Prometheus label cardinality bounded and groups requests for different resource IDs into the same route.
+
+The current HTTP metrics do not include response status, client IP, user ID, or raw URL labels. The dashboard can show which route templates are receiving traffic, but it cannot identify the caller or separate successful requests from errors.
 
 ## Variables
 
@@ -71,6 +84,7 @@ The provider YAML is intentionally an example rather than a tracked deployment f
 | `datasource` | Prometheus datasource containing Chronicle metrics |
 | `job` | One Prometheus scrape job, usually one Chronicle deployment or environment |
 | `instance` | Chronicle replicas used by process-local panels |
+| `method` | HTTP methods on the traffic dashboard |
 | `queue` | River queues |
 | `route` | API route templates |
 | `cache` | In-process cache names |

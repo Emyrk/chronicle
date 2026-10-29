@@ -1001,7 +1001,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "End-to-end log-parse worker duration.",
+      "description": "End-to-end log-parse worker duration. Lines span idle periods where no parse completed within the Prometheus rate window.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1039,7 +1039,7 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"

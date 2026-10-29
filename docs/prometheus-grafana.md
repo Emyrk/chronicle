@@ -50,9 +50,12 @@ For multiple Chronicle replicas, use the labels supplied by your Prometheus serv
 
 The River queue depth and oldest-job-age gauges are database-global values collected by every Chronicle replica. When several replicas are scraped, use `max` across replicas for those metrics instead of `sum`, which would count the same database rows more than once. River execution counters and histograms are local to the worker process and should be summed across replicas. Configured worker capacity is also per process and should be summed for fleet-wide capacity.
 
-## Included Grafana dashboard
+## Included Grafana dashboards
 
-Chronicle includes an importable dashboard at [`docs/grafana/chronicle-operations.json`](grafana/chronicle-operations.json). It covers API traffic, parser outcomes and bottlenecks, River queues, cache behavior, authentication, and leader election.
+Chronicle includes two importable dashboards:
+
+- [`docs/grafana/chronicle-operations.json`](grafana/chronicle-operations.json) covers service health, parser outcomes and bottlenecks, River queues, cache behavior, authentication, and leader election.
+- [`docs/grafana/chronicle-http-traffic.json`](grafana/chronicle-http-traffic.json) investigates HTTP request volume, rate, and latency by route template and method.
 
 See [`docs/grafana/README.md`](grafana/README.md) for import and file-provisioning instructions.
 
