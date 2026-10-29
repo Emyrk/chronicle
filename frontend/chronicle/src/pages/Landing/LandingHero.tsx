@@ -36,6 +36,8 @@ interface LandingHeroProps {
    * gradients and copy (HeroReplayLayer mounts the lazy LandingHero3D here).
    */
   layer3D?: ReactNode;
+  /** The live stats column, docked on the replay's right on desktop once the 3D replay plays a pull. */
+  stats?: ReactNode;
 }
 
 export interface HeroPlayback {
@@ -392,6 +394,7 @@ export function LandingHero({
   playback,
   getSidekickHref,
   layer3D,
+  stats,
 }: LandingHeroProps) {
   const bossName = featured ? currentBossName(featured, currentMs) : undefined;
   const delayMs = featured?.upload.source === "sidekick" ? featured.upload.delay_ms : null;
@@ -454,6 +457,12 @@ export function LandingHero({
             Recorded by Sidekick. Online {delayMinutes} {delayMinutes === 1 ? "minute" : "minutes"} after the group left.
           </div>
         )}
+        {stats ? (
+          // Over the replay, right of the copy and above the scrubber; it arrives with the 3D, so nothing shifts.
+          <div className="absolute right-8 top-[52px] hidden max-h-[calc(100%-52px-128px)] w-[300px] overflow-y-auto styled-scrollbar lg:block xl:w-[360px]">
+            {stats}
+          </div>
+        ) : null}
         {featured && (
           <div className="mt-1 lg:mt-auto lg:pb-[22px]">
             <HeroScrubber run={featured} currentMs={currentMs} playback={playback} />

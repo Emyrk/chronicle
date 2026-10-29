@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { LandingFeaturedRun } from "@/api/typesGenerated";
 import type { Instance } from "@/pages/Instance/InstancePage";
 import type { SerializableProcessorContext } from "@/pages/Instance/EventsPanels/processorTypes";
@@ -67,7 +68,12 @@ export interface HeroReplay extends HeroPlayback {
   currentMs: number;
   /** The player deaths' recaps once processed (from streams the replay already fetched); null until then. */
   deathRecaps: HeroDeathRecap[] | null;
+  /** The live stats for the playing pull at the replay's cursor (drawn by the 3D chunk), or null without a pull. */
+  renderStats: ((layout: HeroStatsLayout) => ReactNode) | null;
 }
+
+/** Where the live stats show: the column beside the replay (desktop) or the 3-row strip under it (phone). */
+export type HeroStatsLayout = "column" | "strip";
 
 /** The processors' context for the run: its players and units, the given encounters, no entity selection. */
 export function serializableContext(instance: Instance, selectedEncounterIds: string[]): SerializableProcessorContext {

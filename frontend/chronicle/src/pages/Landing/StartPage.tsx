@@ -297,8 +297,10 @@ export function StartPage() {
           currentMs={replay?.currentMs}
           playback={replay}
           getSidekickHref={getSidekickHref}
+          stats={isMobile ? null : replay?.renderStats?.("column")}
           layer3D={landing || landingFailed ? <HeroReplayLayer entries={heroEntries} index={heroIndex} onAdvance={advanceHero} onReplay={setReplay} /> : null}
         />
+        {isMobile && replay?.renderStats?.("strip")}
         <BossRail
           bosses={landing || landingFailed ? runs[current]?.bosses ?? [] : undefined}
           selectedId={hero?.window?.encounterId ?? null}

@@ -14,7 +14,9 @@ import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "@/page
 import { MapView2D } from "@/pages/Instance/EventsPanels/Map/MapView2D";
 import MapView3D from "@/pages/Instance/EventsPanels/Map/MapView3D";
 import { previewSpeed, useMapScene } from "@/pages/Instance/EventsPanels/Map/useMapScene";
-import { serializableContext, type HeroDeathBeat, type HeroDeathRecap, type HeroReplay, type HeroWindow } from "./heroReplay";
+import { HeroStatsView } from "./HeroStats";
+import { useHeroStats } from "./useHeroStats";
+import { serializableContext, type HeroDeathBeat, type HeroDeathRecap, type HeroReplay, type HeroStatsLayout, type HeroWindow } from "./heroReplay";
 
 // The Map panel's streams without auras: those only tint debuffed players,
 // and they are by far the biggest download (1.3 MB of 1.6 MB on the Ruins run).
@@ -286,13 +288,19 @@ function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, on
   const cursorMs = ready?.cursorMs ?? null;
   // A pull reports the hero's clock: it moves through the lead-in, where the scene holds the pull's first sample.
   const currentMs = cursorMs === null ? null : pull ? playableMs : cursorMs - instanceStartMs;
+  // The live stats follow the hero's clock (run time), from the pull's start; chips, the scrubber and deaths move it by `seek`.
+  const stats = useHeroStats(instance, encounterId, shown && span && currentMs !== null ? span.startMs + playableMs : null, HERO_STREAMS);
+  const renderStats = useMemo(
+    () => stats && ((layout: HeroStatsLayout) => <HeroStatsView instance={instance} stats={stats} layout={layout} />),
+    [instance, stats],
+  );
   useEffect(() => {
     if (!shown || !span || currentMs === null) {
       onReplay(null);
       return;
     }
-    onReplay({ currentMs, playing: userPlaying, togglePlay, seek, deathRecaps });
-  }, [currentMs, deathRecaps, onReplay, seek, shown, span, togglePlay, userPlaying]);
+    onReplay({ currentMs, playing: userPlaying, togglePlay, seek, deathRecaps, renderStats });
+  }, [currentMs, deathRecaps, onReplay, renderStats, seek, shown, span, togglePlay, userPlaying]);
   useEffect(() => () => onReplay(null), [onReplay]);
 
   if (!ready || unavailable) return null;
