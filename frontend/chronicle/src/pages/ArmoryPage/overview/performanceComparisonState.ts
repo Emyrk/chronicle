@@ -3,6 +3,11 @@ import type { PerformanceDateRange } from "./performanceExplorerModel";
 
 export type PerformanceDisplayMode = "raw" | "parse";
 
+/** The detail tab under the chart. */
+export type PerformanceDetailTab = "runs" | "numbers" | "gear";
+
+const DETAIL_TABS: readonly PerformanceDetailTab[] = ["runs", "numbers", "gear"];
+
 export interface PerformancePlayerSelection {
   id: string;
   realmName: string;
@@ -27,6 +32,7 @@ export interface PerformanceComparisonState {
   encounters: string[];
   showAverage: boolean;
   showBestThreeAverage: boolean;
+  detailTab: PerformanceDetailTab;
 }
 
 export const DEFAULT_PERFORMANCE_COMPARISON_STATE: PerformanceComparisonState = {
@@ -41,6 +47,7 @@ export const DEFAULT_PERFORMANCE_COMPARISON_STATE: PerformanceComparisonState = 
   encounters: [],
   showAverage: true,
   showBestThreeAverage: true,
+  detailTab: "runs",
 };
 
 export function parsePerformanceComparisonState(searchParams: URLSearchParams): PerformanceComparisonState {
@@ -76,6 +83,7 @@ export function parsePerformanceComparisonState(searchParams: URLSearchParams): 
     encounters: searchParams.getAll("encounter").filter(Boolean),
     showAverage: searchParams.get("average") !== "0",
     showBestThreeAverage: searchParams.get("best") !== "0",
+    detailTab: DETAIL_TABS.find((tab) => tab === searchParams.get("tab")) ?? "runs",
   };
 }
 
@@ -98,5 +106,6 @@ export function serializePerformanceComparisonState(state: PerformanceComparison
   state.encounters.forEach((encounter) => searchParams.append("encounter", encounter));
   if (!state.showAverage) searchParams.set("average", "0");
   if (!state.showBestThreeAverage) searchParams.set("best", "0");
+  if (state.detailTab !== "runs") searchParams.set("tab", state.detailTab);
   return searchParams;
 }
