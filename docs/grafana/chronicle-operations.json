@@ -1690,12 +1690,79 @@
       "type": "bargauge"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Per-game-instance parse, finalization, and database insertion latency. instance_name identifies the raid or dungeon, not the Prometheus scrape target.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "s",
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
+      "id": 55,
+      "options": {
+        "displayMode": "gradient",
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "topk(20, histogram_quantile(0.95, sum by (le, instance_name, stage) (rate(chronicle_logparse_instance_duration_seconds_bucket{job=~\"$job\", instance=~\"$instance\"}[$__rate_interval]))))",
+          "legendFormat": "{{instance_name}} \u00b7 {{stage}}",
+          "range": false,
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "title": "Slowest instance stages by p95",
+      "type": "bargauge"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 42
+        "y": 50
       },
       "id": 24,
       "panels": [],
@@ -1761,7 +1828,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 43
+        "y": 51
       },
       "id": 25,
       "options": {
@@ -1854,7 +1921,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 43
+        "y": 51
       },
       "id": 26,
       "options": {
@@ -1955,7 +2022,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 51
+        "y": 59
       },
       "id": 27,
       "options": {
@@ -2026,7 +2093,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 51
+        "y": 59
       },
       "id": 28,
       "options": {
@@ -2120,7 +2187,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 51
+        "y": 59
       },
       "id": 29,
       "options": {
@@ -2213,7 +2280,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 58
+        "y": 66
       },
       "id": 30,
       "options": {
@@ -2306,7 +2373,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 58
+        "y": 66
       },
       "id": 31,
       "options": {
@@ -2399,7 +2466,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 58
+        "y": 66
       },
       "id": 32,
       "options": {
@@ -2492,7 +2559,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 65
+        "y": 73
       },
       "id": 33,
       "options": {
@@ -2585,7 +2652,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 65
+        "y": 73
       },
       "id": 34,
       "options": {
@@ -2651,7 +2718,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 65
+        "y": 73
       },
       "id": 35,
       "options": {
@@ -2693,7 +2760,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 72
+        "y": 80
       },
       "id": 36,
       "panels": [],
@@ -2737,7 +2804,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 73
+        "y": 81
       },
       "id": 37,
       "options": {
@@ -2809,7 +2876,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 73
+        "y": 81
       },
       "id": 38,
       "options": {
@@ -2903,7 +2970,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 73
+        "y": 81
       },
       "id": 39,
       "options": {
@@ -2976,7 +3043,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 80
+        "y": 88
       },
       "id": 40,
       "options": {
@@ -3020,7 +3087,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 88
+        "y": 96
       },
       "id": 48,
       "panels": [],
@@ -3063,7 +3130,7 @@
         "h": 5,
         "w": 6,
         "x": 0,
-        "y": 89
+        "y": 97
       },
       "id": 49,
       "options": {
@@ -3135,7 +3202,7 @@
         "h": 5,
         "w": 6,
         "x": 6,
-        "y": 89
+        "y": 97
       },
       "id": 50,
       "options": {
@@ -3207,7 +3274,7 @@
         "h": 5,
         "w": 6,
         "x": 12,
-        "y": 89
+        "y": 97
       },
       "id": 51,
       "options": {
@@ -3279,7 +3346,7 @@
         "h": 5,
         "w": 6,
         "x": 18,
-        "y": 89
+        "y": 97
       },
       "id": 52,
       "options": {
@@ -3374,7 +3441,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 94
+        "y": 102
       },
       "id": 53,
       "options": {
@@ -3446,7 +3513,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 94
+        "y": 102
       },
       "id": 54,
       "options": {
@@ -3487,7 +3554,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 102
+        "y": 110
       },
       "id": 41,
       "panels": [],
@@ -3530,7 +3597,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 103
+        "y": 111
       },
       "id": 42,
       "options": {
@@ -3624,7 +3691,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 103
+        "y": 111
       },
       "id": 43,
       "options": {
@@ -3717,7 +3784,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 103
+        "y": 111
       },
       "id": 44,
       "options": {
@@ -3788,7 +3855,7 @@
         "h": 5,
         "w": 8,
         "x": 0,
-        "y": 110
+        "y": 118
       },
       "id": 45,
       "options": {
@@ -3852,7 +3919,7 @@
         "h": 5,
         "w": 8,
         "x": 8,
-        "y": 110
+        "y": 118
       },
       "id": 46,
       "options": {
@@ -3916,7 +3983,7 @@
         "h": 5,
         "w": 8,
         "x": 16,
-        "y": 110
+        "y": 118
       },
       "id": 47,
       "options": {
@@ -4169,6 +4236,6 @@
   "timezone": "browser",
   "title": "Chronicle Operations",
   "uid": "chronicle-operations",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }

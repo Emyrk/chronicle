@@ -460,10 +460,15 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			continue
 		}
 
+		instanceName := inst.Name()
+		instParseDuration := encountersState.InstanceProcessDuration(inst)
 		instReport := chroniclesdk.InstanceReport{
-			Name:             inst.Name(),
+			Name:             instanceName,
+			ParseDuration:    chroniclesdk.DurationFrom(instParseDuration),
 			FinalizeDuration: chroniclesdk.DurationFrom(instFinalizeDuration),
 		}
+		metrics.instanceDuration.WithLabelValues(instanceName, "parse").Observe(instParseDuration.Seconds())
+		metrics.instanceDuration.WithLabelValues(instanceName, "finalize").Observe(instFinalizeDuration.Seconds())
 
 		if err != nil {
 			jobOut.InstanceFailures[fmt.Sprintf("%s_%d", inst.Name(), i)] = err.Error()
@@ -858,6 +863,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		instDBDuration := time.Since(dbInsertStart)
 		totalDBInsertDuration += instDBDuration
 		instReport.DBInsertDuration = chroniclesdk.DurationFrom(instDBDuration)
+		metrics.instanceDuration.WithLabelValues(instanceName, "db_insert").Observe(instDBDuration.Seconds())
 		report.Instances = append(report.Instances, instReport)
 
 		if err != nil {

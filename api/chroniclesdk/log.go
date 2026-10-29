@@ -274,6 +274,7 @@ type MissedSpell struct {
 // InstanceReport contains timing details for a single parsed instance.
 type InstanceReport struct {
 	Name             string   `json:"name"`
+	ParseDuration    Duration `json:"parse_duration_ms"`
 	FinalizeDuration Duration `json:"finalize_duration_ms"`
 	DBInsertDuration Duration `json:"db_insert_duration_ms"`
 	EncounterCount   int      `json:"encounter_count"`

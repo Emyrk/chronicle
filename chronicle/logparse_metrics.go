@@ -20,6 +20,7 @@ type logParseMetrics struct {
 	finalizeDuration prometheus.Histogram
 	dbInsertDuration prometheus.Histogram
 	consumerDuration *prometheus.HistogramVec
+	instanceDuration *prometheus.HistogramVec
 }
 
 // newLogParseMetrics creates metrics for log parsing with the given registerer.
@@ -34,6 +35,8 @@ func newLogParseMetrics(reg prometheus.Registerer) *logParseMetrics {
 	jobBuckets := []float64{1, 5, 10, 30, 60, 120, 300, 600}
 	// Buckets for stage durations (100ms to 5min)
 	stageBuckets := []float64{0.1, 0.5, 1, 5, 10, 30, 60, 120, 300}
+	// Per-instance event processing can complete faster than aggregate stages.
+	instanceBuckets := []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10, 30, 60, 120, 300}
 
 	return &logParseMetrics{
 		jobsTotal: factory.NewCounterVec(prometheus.CounterOpts{
@@ -118,5 +121,13 @@ func newLogParseMetrics(reg prometheus.Registerer) *logParseMetrics {
 			Help:      "Time spent in each code-defined parser or consumer stage",
 			Buckets:   stageBuckets,
 		}, []string{"consumer"}),
+
+		instanceDuration: factory.NewHistogramVec(prometheus.HistogramOpts{
+			Namespace: "chronicle",
+			Subsystem: "logparse",
+			Name:      "instance_duration_seconds",
+			Help:      "Time spent parsing, finalizing, or inserting each parsed game instance",
+			Buckets:   instanceBuckets,
+		}, []string{"instance_name", "stage"}),
 	}
 }
