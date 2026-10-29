@@ -369,6 +369,10 @@ export default function MapView3D({
   }, [unitRoles]);
 
   useEffect(() => {
+    sceneRef.current?.setChipScale(effectSettings.chipScalePercent / 100);
+  }, [effectSettings.chipScalePercent]);
+
+  useEffect(() => {
     sceneRef.current?.setAboveDisc(effectSettings.aboveDisc);
   }, [effectSettings.aboveDisc]);
 
