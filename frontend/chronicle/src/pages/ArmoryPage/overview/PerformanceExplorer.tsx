@@ -58,18 +58,22 @@ import {
   type PerformancePointShape,
 } from "./performanceExplorerModel";
 import { PerformanceSummaryPanel, SummaryViewToggle, type SummaryView } from "./PerformanceSummary";
+import { GearPanel } from "./GearTimeline";
 import { NumbersExplainer } from "./NumbersExplainer";
 
 type DisplayMode = PerformanceDisplayMode;
 
 type PlayerDialog = "add" | string | null;
 
-type DetailTab = "runs" | "numbers";
+type DetailTab = "runs" | "numbers" | "gear";
 
 const DETAIL_TABS: readonly { value: DetailTab; label: string }[] = [
   { value: "runs", label: "Run summary" },
   { value: "numbers", label: "How the numbers work" },
+  { value: "gear", label: "Gear" },
 ];
+
+const DATE_RANGE_DAYS: Record<PerformanceDateRange, number> = { "180d": 180, "60d": 60, "30d": 30 };
 
 interface SelectedPerformancePlayer {
   id: string;
@@ -115,6 +119,8 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [summaryView, setSummaryView] = useState<SummaryView>("numbers");
   const [detailTab, setDetailTab] = useState<DetailTab>("runs");
+  // Hovering a night in the run chart or the gear timeline highlights it in the other.
+  const [linkedHoverTime, setLinkedHoverTime] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebouncedValue(searchQuery.trim(), 250);
   const playerSearch = useArmorySearch({ q: debouncedSearch });
@@ -470,6 +476,8 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                   loading={performanceLoading}
                   omittedParseCount={omittedParseCount}
                   showPlayerRealms={showPlayerRealms}
+                  linkedTime={linkedHoverTime}
+                  onHoverTimeChange={setLinkedHoverTime}
                 />
 
                 <div className="space-y-3 border-t border-border/60 pt-4">
@@ -492,7 +500,23 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                       </button>
                     ))}
                   </div>
-                  {detailTab === "runs" ? (
+                  {detailTab === "gear" ? (
+                    variant && (
+                      <GearPanel
+                        players={visibleSeries.map(({ player: gearPlayer }) => ({
+                          key: performancePlayerKey(gearPlayer),
+                          id: gearPlayer.id,
+                          name: playerLabel(gearPlayer),
+                          className: gearPlayer.className,
+                          realmName: gearPlayer.realmName,
+                        }))}
+                        instanceName={variant.instanceName}
+                        rangeDays={DATE_RANGE_DAYS[dateRange]}
+                        hoverTime={linkedHoverTime}
+                        onHoverTimeChange={setLinkedHoverTime}
+                      />
+                    )
+                  ) : detailTab === "runs" ? (
                     <PerformanceTable
                       series={visibleSeries}
                       metric={metric}
@@ -873,6 +897,8 @@ function PerformanceTrend({
   loading,
   omittedParseCount,
   showPlayerRealms,
+  linkedTime,
+  onHoverTimeChange,
 }: {
   series: readonly PerformanceSeries[];
   metric: ParseMetric;
@@ -880,8 +906,16 @@ function PerformanceTrend({
   loading: boolean;
   omittedParseCount: number;
   showPlayerRealms: boolean;
+  /** A time hovered elsewhere (the gear timeline); its day is highlighted when the chart has runs then. */
+  linkedTime: number | null;
+  onHoverTimeChange: (time: number | null) => void;
 }) {
-  const [hoverDay, setHoverDay] = useState<number | null>(null);
+  const [ownHoverDay, setOwnHoverDay] = useState<number | null>(null);
+  const setHoverDay = (day: number | null) => {
+    setOwnHoverDay(day);
+    onHoverTimeChange(day);
+  };
+  const hoverDay = ownHoverDay ?? (linkedTime === null ? null : startOfLocalDay(linkedTime));
 
   if (loading) return <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">Loading performance…</div>;
 
