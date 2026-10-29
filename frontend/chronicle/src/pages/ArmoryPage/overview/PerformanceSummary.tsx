@@ -70,7 +70,7 @@ const STAT_COLUMNS: readonly StatColumn[] = [
   {
     key: "consistency",
     label: "Consistency",
-    help: "How closely runs follow the player's own trend line: the middle half of runs land within this distance of it. A player who is steadily improving still counts as consistent, and outlier nights don't affect it. Lower is steadier.",
+    help: "How closely runs follow the player's own trend line: the middle half of runs land within ± this distance of it. A player who is steadily improving still counts as consistent, and outlier nights don't affect it. High means steady runs; Low means they swing a lot. With one player selected, the chart draws this trend line.",
     higherIsBetter: false,
   },
   {
@@ -304,10 +304,10 @@ function OutlierMark() {
   return (
     <HintTooltip>
       <TooltipTrigger asChild>
-        <sup tabIndex={0} className="ml-0.5 cursor-help font-sans text-[10px] font-semibold text-amber-300 no-underline">outlier</sup>
+        <sup tabIndex={0} aria-label="Outlier" className="ml-0.5 cursor-help text-xs font-semibold text-amber-300">*</sup>
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-64 text-left leading-relaxed">
-        This best run is far above the player's usual range, so Typical and Floor are better guides to what they normally do.
+        Outlier: this best run is far above the player's usual range, so Typical and Floor are better guides to what they normally do.
       </TooltipContent>
     </HintTooltip>
   );
@@ -454,10 +454,9 @@ function columnLeaders(
 /** Parse points in Parse mode, percent of the typical run in Raw mode. */
 function consistencyLabel(spread: number, typical: number, display: PerformanceDisplayMode) {
   const scaled = display === "parse" ? spread : (spread / Math.max(typical, 1)) * 100;
-  if (scaled <= 4) return "Very steady";
-  if (scaled <= 8) return "Steady";
-  if (scaled <= 14) return "Mixed";
-  return "Erratic";
+  if (scaled <= 4) return "High";
+  if (scaled <= 8) return "Med";
+  return "Low";
 }
 
 function formatStat(value: number, display: PerformanceDisplayMode) {

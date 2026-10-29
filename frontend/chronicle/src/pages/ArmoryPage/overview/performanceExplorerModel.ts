@@ -297,6 +297,18 @@ export function performanceParseColor(score: number): string {
 
 export const PERFORMANCE_RECENT_RUN_COUNT = 5;
 
+/** A run must sit at least this far beyond the middle half to be an outlier, in parse points. */
+const MIN_OUTLIER_PARSE_GAP = 10;
+/** The same minimum gap in Raw mode, as a fraction of the typical run. */
+const MIN_OUTLIER_RAW_GAP = 0.1;
+
+export interface PerformanceTrendLine {
+  /** Change per day. */
+  slope: number;
+  /** Value at the Unix epoch, in days. */
+  intercept: number;
+}
+
 export interface PerformanceSummary {
   runCount: number;
   best: number;
@@ -305,18 +317,23 @@ export interface PerformanceSummary {
   recent: number | null;
   /** 10th percentile run. */
   floor: number;
-  /** Interquartile range; lower is more consistent. */
+  /** Interquartile range. */
   spread: number;
   lowerQuartile: number;
   upperQuartile: number;
-  /** Lowest and highest runs inside the Tukey fences (1.5x spread beyond the quartiles). */
+  /** Lowest and highest runs that are not outliers. */
   lowWhisker: number;
   highWhisker: number;
-  /** Runs outside the Tukey fences, ascending. */
-  outliers: number[];
   /**
-   * Interquartile range of each run's distance from the player's own trend line,
-   * so steady improvement is not counted as inconsistency. Null below 3 runs.
+   * Runs beyond 1.5x spread from the middle half, and at least a minimum gap
+   * from it, so tightly grouped players don't get ordinary runs flagged. Ascending.
+   */
+  outliers: number[];
+  /** Theil–Sen trend through the runs; null below 3 runs. */
+  trend: PerformanceTrendLine | null;
+  /**
+   * Interquartile range of each run's distance from the trend line, so steady
+   * improvement is not counted as inconsistency. Null below 3 runs.
    */
   consistency: number | null;
   averageDeaths: number | null;
@@ -338,17 +355,26 @@ export function summarizePerformanceRuns(
     .sort((a, b) => a - b);
   const deaths = runs.flatMap((run) => run.player_deaths == null ? [] : [run.player_deaths]);
   const alive = runs.flatMap((run) => run.alive_percentage == null ? [] : [run.alive_percentage]);
+  const typical = quantile(values, 0.5);
   const lowerQuartile = quantile(values, 0.25);
   const upperQuartile = quantile(values, 0.75);
   const spread = upperQuartile - lowerQuartile;
-  const lowFence = lowerQuartile - spread * 1.5;
-  const highFence = upperQuartile + spread * 1.5;
+  const minimumGap = display === "parse" ? MIN_OUTLIER_PARSE_GAP : Math.abs(typical) * MIN_OUTLIER_RAW_GAP;
+  const fenceGap = Math.max(spread * 1.5, minimumGap);
+  const lowFence = lowerQuartile - fenceGap;
+  const highFence = upperQuartile + fenceGap;
   const inside = values.filter((value) => value >= lowFence && value <= highFence);
+  const fit = runs.length >= 3
+    ? fitTrend(runs.map((run) => ({
+      day: Date.parse(run.started_at) / DAY_MS,
+      value: performanceValue(run, metric, display),
+    })))
+    : null;
 
   return {
     runCount: runs.length,
     best: values[values.length - 1],
-    typical: quantile(values, 0.5),
+    typical,
     recent: runs.length > PERFORMANCE_RECENT_RUN_COUNT ? quantile(recentValues, 0.5) : null,
     floor: quantile(values, 0.1),
     spread,
@@ -357,12 +383,8 @@ export function summarizePerformanceRuns(
     lowWhisker: inside[0],
     highWhisker: inside[inside.length - 1],
     outliers: values.filter((value) => value < lowFence || value > highFence),
-    consistency: runs.length >= 3
-      ? detrendedSpread(runs.map((run) => ({
-        day: Date.parse(run.started_at) / DAY_MS,
-        value: performanceValue(run, metric, display),
-      })))
-      : null,
+    trend: fit && { slope: fit.slope, intercept: fit.intercept },
+    consistency: fit?.spread ?? null,
     averageDeaths: deaths.length > 0 ? mean(deaths) : null,
     averageAlive: alive.length > 0 ? mean(alive) : null,
   };
@@ -370,11 +392,16 @@ export function summarizePerformanceRuns(
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** The trend line's value at a timestamp in milliseconds. */
+export function performanceTrendValue(trend: PerformanceTrendLine, timestamp: number): number {
+  return trend.intercept + trend.slope * (timestamp / DAY_MS);
+}
+
 /**
- * Spread of runs around a Theil–Sen trend line (median of pairwise slopes),
- * which a few outlier nights barely move.
+ * Theil–Sen trend line (median of pairwise slopes), which a few outlier nights
+ * barely move, and the spread of runs around it.
  */
-function detrendedSpread(points: readonly { day: number; value: number }[]): number {
+function fitTrend(points: readonly { day: number; value: number }[]): PerformanceTrendLine & { spread: number } {
   const slopes: number[] = [];
   for (let i = 0; i < points.length; i += 1) {
     for (let j = i + 1; j < points.length; j += 1) {
@@ -387,7 +414,7 @@ function detrendedSpread(points: readonly { day: number; value: number }[]): num
   const residuals = points
     .map((point) => point.value - (intercept + slope * point.day))
     .sort((a, b) => a - b);
-  return quantile(residuals, 0.75) - quantile(residuals, 0.25);
+  return { slope, intercept, spread: quantile(residuals, 0.75) - quantile(residuals, 0.25) };
 }
 
 /** Linear-interpolated quantile of an ascending, non-empty list. */

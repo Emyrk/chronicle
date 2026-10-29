@@ -358,6 +358,20 @@ describe("summarizePerformanceRuns", () => {
     expect(summary).toMatchObject({ lowerQuartile: 75, upperQuartile: 92.5, lowWhisker: 70, highWhisker: 100, outliers: [20] });
   });
 
+  it("does not flag runs close to a tightly grouped player's typical run", () => {
+    const tight = [1230, 1232, 1235, 1236, 1238, 1240, 1261].map((dps, index) => run({
+      run_id: `tight-${index}`,
+      started_at: `2026-03-0${index + 1}T00:00:00Z`,
+      dps,
+    }));
+    const summary = summarizePerformanceRuns(tight, "dps", "raw");
+    expect(summary?.outliers).toEqual([]);
+    expect(summary?.highWhisker).toBe(1261);
+
+    const withDisaster = [...tight, run({ run_id: "dc", started_at: "2026-03-09T00:00:00Z", dps: 600 })];
+    expect(summarizePerformanceRuns(withDisaster, "dps", "raw")?.outliers).toEqual([600]);
+  });
+
   it("does not count steady improvement as inconsistency", () => {
     const climbing = Array.from({ length: 10 }, (_, index) => run({
       run_id: `climb-${index}`,

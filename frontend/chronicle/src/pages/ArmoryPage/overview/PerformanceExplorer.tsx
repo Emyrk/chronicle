@@ -45,8 +45,10 @@ import {
   formatDeathsAlive,
   performanceEncounterSections,
   performanceParseColor,
+  performanceTrendValue,
   performanceValue,
   selectPerformanceEncounterNames,
+  summarizePerformanceRuns,
   type PerformanceDateRange,
   type PerformancePointShape,
 } from "./performanceExplorerModel";
@@ -83,6 +85,7 @@ interface PerformanceExplorerProps {
 }
 
 const MAX_COMPARISON_PLAYERS = 5;
+const TREND_COLOR = "#34d399";
 
 export function PerformanceExplorer({ players, state, onStateChange }: PerformanceExplorerProps) {
   const primaryPlayer = players[0];
@@ -863,6 +866,15 @@ function PerformanceTrend({
         color: "#f59e0b",
         opacity: 0.9,
       });
+  // With one player, draw the trend line Consistency is measured against, banded by ± half its spread.
+  const trendSummary = series.length === 1 ? summarizePerformanceRuns(series[0].runs, metric, display) : null;
+  const trendLine = trendSummary?.trend && trendSummary.consistency !== null && minTime !== maxTime
+    ? {
+        start: performanceTrendValue(trendSummary.trend, minTime),
+        end: performanceTrendValue(trendSummary.trend, maxTime),
+        band: trendSummary.consistency / 2,
+      }
+    : null;
   const parseTierBands = display === "parse"
     ? [
         { min: 0, max: 25, color: "#9d9d9d" },
@@ -919,26 +931,35 @@ function PerformanceTrend({
         onPointerMove={updateHoverDay}
         onPointerLeave={() => setHoverDay(null)}
       >
-      {performanceMarkers.length > 0 && (
-        <div className="pointer-events-none absolute top-1.5 right-2 z-10 flex flex-wrap justify-end gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-          {performanceMarkers.map((marker) => (
-            <div key={marker.key} className="flex items-center gap-2">
-              <span
-                className="w-6 border-t-2"
-                style={{
-                  borderColor: marker.color,
-                  borderTopStyle: marker.key === "average" ? "dashed" : "dotted",
-                }}
-                aria-hidden="true"
-              />
-              <span>{marker.label}</span>
-              <span className="font-mono font-medium tabular-nums" style={{ color: marker.color }}>
-                {formatValue(marker.value)}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+        {(performanceMarkers.length > 0 || trendLine) && (
+          <div className="pointer-events-none absolute top-1.5 right-2 z-10 flex flex-wrap justify-end gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+            {performanceMarkers.map((marker) => (
+              <div key={marker.key} className="flex items-center gap-2">
+                <span
+                  className="w-6 border-t-2"
+                  style={{
+                    borderColor: marker.color,
+                    borderTopStyle: marker.key === "average" ? "dashed" : "dotted",
+                  }}
+                  aria-hidden="true"
+                />
+                <span>{marker.label}</span>
+                <span className="font-mono font-medium tabular-nums" style={{ color: marker.color }}>
+                  {formatValue(marker.value)}
+                </span>
+              </div>
+            ))}
+            {trendLine && (
+              <div className="flex items-center gap-2">
+                <span className="w-6 border-t-2" style={{ borderColor: TREND_COLOR }} aria-hidden="true" />
+                <span>Trend</span>
+                <span className="font-mono font-medium tabular-nums" style={{ color: TREND_COLOR }}>
+                  ±{formatValue(trendLine.band)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none h-full w-full" aria-hidden="true">
           {parseTierBands.map((band) => (
             <rect
@@ -954,6 +975,30 @@ function PerformanceTrend({
           {yAxisTicks.map((tick) => (
             <line key={tick.position} x1="4" x2="96" y1={tick.position} y2={tick.position} stroke="currentColor" strokeWidth="0.25" className="text-border" vectorEffect="non-scaling-stroke" />
           ))}
+          {trendLine && (
+            <>
+              <polygon
+                points={[
+                  `${x(minTime)},${y(trendLine.start + trendLine.band)}`,
+                  `${x(maxTime)},${y(trendLine.end + trendLine.band)}`,
+                  `${x(maxTime)},${y(trendLine.end - trendLine.band)}`,
+                  `${x(minTime)},${y(trendLine.start - trendLine.band)}`,
+                ].join(" ")}
+                fill={TREND_COLOR}
+                opacity="0.08"
+              />
+              <line
+                x1={x(minTime)}
+                x2={x(maxTime)}
+                y1={y(trendLine.start)}
+                y2={y(trendLine.end)}
+                stroke={TREND_COLOR}
+                strokeWidth="1.5"
+                opacity="0.9"
+                vectorEffect="non-scaling-stroke"
+              />
+            </>
+          )}
           {performanceMarkers.map((marker) => (
             <line
               key={marker.key}
