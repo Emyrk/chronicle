@@ -1,4 +1,6 @@
 import type { LandingFeaturedRun } from "@/api/typesGenerated";
+import type { Instance } from "@/pages/Instance/InstancePage";
+import type { SerializableProcessorContext } from "@/pages/Instance/EventsPanels/processorTypes";
 import type { HeroPlayback } from "./LandingHero";
 import type { HeroMeterData } from "./heroMeter";
 
@@ -70,4 +72,18 @@ export interface HeroReplay extends HeroPlayback {
   deathRecaps: HeroDeathRecap[] | null;
   /** The glass meter's live numbers for what plays (from the same streams); null until processed. */
   meter: HeroMeterData | null;
+}
+
+/** The processors' context for the run: its players and units, the given encounters, no entity selection. */
+export function serializableContext(instance: Instance, selectedEncounterIds: string[]): SerializableProcessorContext {
+  return {
+    players: Object.fromEntries(Object.entries(instance.players ?? {})
+      .map(([guid, player]) => [guid, { name: player.name, class: player.class, level: player.level }])),
+    units: Object.fromEntries(Object.entries(instance.units ?? {})
+      .map(([guid, unit]) => [guid, { name: unit.name, owner: unit.owner?.toString() ?? null, entry: unit.entry }])),
+    selectedEncounterIds,
+    entitySelection: { enemyIds: [], playerIds: [] },
+    capabilities: instance.capabilities ?? [],
+    positionCoordinateSpace: instance.positionCoordinateSpace,
+  };
 }

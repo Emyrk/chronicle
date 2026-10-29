@@ -6,7 +6,6 @@ import { transformToInstance } from "@/pages/Instance/transformInstance";
 import type { Instance } from "@/pages/Instance/InstancePage";
 import { deathsProcessor, type DeathEvent, type DeathsResult } from "@/pages/Instance/EventsPanels/Deaths/deaths.processor";
 import { processIncrementally } from "@/pages/Instance/EventsPanels/mainThreadProcessor";
-import type { SerializableProcessorContext } from "@/pages/Instance/EventsPanels/processorTypes";
 import { damageDoneProcessor, type DamageDoneResult } from "@/pages/Instance/EventsPanels/DamageDone/damageDone.processor";
 import { unifiedHealingProcessor, type UnifiedHealingResult } from "@/pages/Instance/EventsPanels/processors/healing.processor";
 import type { PanelRenderProps } from "@/pages/Instance/EventsPanels/types";
@@ -17,7 +16,7 @@ import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "@/page
 import { MapView2D } from "@/pages/Instance/EventsPanels/Map/MapView2D";
 import MapView3D from "@/pages/Instance/EventsPanels/Map/MapView3D";
 import { previewSpeed, useMapScene } from "@/pages/Instance/EventsPanels/Map/useMapScene";
-import type { HeroDeathBeat, HeroDeathRecap, HeroReplay, HeroWindow } from "./heroReplay";
+import { serializableContext, type HeroDeathBeat, type HeroDeathRecap, type HeroReplay, type HeroWindow } from "./heroReplay";
 import { meterTotals, type HeroMeterData } from "./heroMeter";
 
 // The Map panel's streams without auras: those only tint debuffed players,
@@ -71,19 +70,6 @@ function playableRunMs(ms: number, encounters: readonly [number, number][], dura
     if (at <= end) return at;
   }
   return encounters[0]?.[0] ?? at;
-}
-
-function serializableContext(instance: Instance, selectedEncounterIds: string[]): SerializableProcessorContext {
-  return {
-    players: Object.fromEntries(Object.entries(instance.players ?? {})
-      .map(([guid, player]) => [guid, { name: player.name, class: player.class, level: player.level }])),
-    units: Object.fromEntries(Object.entries(instance.units ?? {})
-      .map(([guid, unit]) => [guid, { name: unit.name, owner: unit.owner?.toString() ?? null, entry: unit.entry }])),
-    selectedEncounterIds,
-    entitySelection: { enemyIds: [], playerIds: [] },
-    capabilities: instance.capabilities ?? [],
-    positionCoordinateSpace: instance.positionCoordinateSpace,
-  };
 }
 
 // Positions first: the featured run's streams, through the Map panel's processor (on the main thread, yielding).
