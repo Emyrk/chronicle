@@ -386,3 +386,75 @@ func TestExternalAPILeaderboardDuplicateLogsFollowTimingMode(t *testing.T) {
 	assertMode(true, bossWinner, fullWinner, 35*time.Minute,
 		"https://youtube.com/watch?v=ranked", "https://youtube.com/watch?v=full")
 }
+
+func TestSpeedrunInstanceBoardsCarryRecord(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitShort)
+	startedAt := time.Date(2026, time.August, 1, 20, 0, 0, 0, time.UTC)
+
+	slowGuildID := uuid.New()
+	fastGuildID := uuid.New()
+	_, err := pool.Exec(ctx, "INSERT INTO guilds (id, realm_id, name) VALUES ($1, $2, $3), ($4, $2, $5)",
+		slowGuildID, realmID, "Slow Raiders", fastGuildID, "Fast Raiders")
+	require.NoError(t, err)
+
+	userID := uuid.New()
+	_, err = store.InsertUser(ctx, database.InsertUserParams{
+		ID: userID, Username: "u-" + userID.String()[:8],
+	})
+	require.NoError(t, err)
+	logGroupID := uuid.New()
+	_, err = store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+		ID: logGroupID, Owner: userID, LogType: database.LogTypeV1,
+		CreatedAt: database.Timestamptz(startedAt), UpdatedAt: database.Timestamptz(startedAt),
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
+
+	insertRun := func(instanceName string, guildID uuid.NullUUID, rankedDuration time.Duration, offset time.Duration) {
+		t.Helper()
+		id := uuid.New()
+		clearStart := startedAt.Add(offset)
+		clearEnd := clearStart.Add(rankedDuration)
+		_, err := store.InsertInstance(ctx, database.InsertInstanceParams{
+			ID: id, RealmID: realmID, LogGroupID: logGroupID,
+			Name: instanceName, HashedSlug: pgtype.Text{String: "board-" + id.String()[:8], Valid: true},
+			GuildID:   guildID,
+			StartTime: database.Timestamptz(clearStart), EndTime: database.Timestamptz(clearEnd),
+			Capabilities: []string{}, MaxPlayers: 40,
+		})
+		require.NoError(t, err)
+		require.NoError(t, store.InsertInstanceSpeedrun(ctx, database.InsertInstanceSpeedrunParams{
+			InstanceID: id, InstanceName: instanceName, RealmID: realmID,
+			GuildID: guildID, Qualified: true,
+			StartTime: database.Timestamptz(clearStart), CompletionTime: database.Timestamptz(clearEnd),
+			DurationMs:      int64(rankedDuration / time.Millisecond),
+			RankedStartTime: database.Timestamptz(clearStart), RankedCompletionTime: database.Timestamptz(clearEnd),
+			RankedDurationMs:    pgtype.Int8{Int64: int64(rankedDuration / time.Millisecond), Valid: true},
+			BossToBossStartTime: database.Timestamptz(clearStart), BossToBossCompletionTime: database.Timestamptz(clearEnd),
+			BossToBossDurationMs: pgtype.Int8{Int64: int64(rankedDuration / time.Millisecond), Valid: true},
+			Proof:                []byte(`{"proof":[]}`),
+		}))
+	}
+
+	insertRun("Molten Core", uuid.NullUUID{UUID: slowGuildID, Valid: true}, 50*time.Minute, 0)
+	insertRun("Molten Core", uuid.NullUUID{UUID: fastGuildID, Valid: true}, 40*time.Minute, 2*time.Hour)
+	// A qualified run without a guild lists the board but cannot rank on it.
+	insertRun("Zul'Gurub", uuid.NullUUID{}, 30*time.Minute, 0)
+
+	boards, err := store.SpeedrunInstanceBoards(ctx)
+	require.NoError(t, err)
+	require.Len(t, boards, 2)
+
+	require.Equal(t, "Molten Core", boards[0].InstanceName)
+	require.EqualValues(t, 40*time.Minute/time.Millisecond, boards[0].RecordDurationMs)
+	require.Equal(t, "Fast Raiders", boards[0].RecordGuildName)
+	require.True(t, startedAt.Add(2*time.Hour+40*time.Minute).Equal(boards[0].RecordCompletionTime.Time))
+
+	require.Equal(t, "Zul'Gurub", boards[1].InstanceName)
+	require.False(t, boards[1].RecordCompletionTime.Valid)
+	require.Zero(t, boards[1].RecordDurationMs)
+	require.Empty(t, boards[1].RecordGuildName)
+}

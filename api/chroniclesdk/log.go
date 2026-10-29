@@ -552,9 +552,20 @@ type SpeedrunVersionStatus struct {
 // SpeedrunInstanceBoard identifies one leaderboard: each (instance,
 // difficulty) combination has its own board. DifficultyName may be empty for
 // runs whose logs recorded no difficulty.
+//
+// Record is the board's first place under full timing, nil when no run ranks
+// there yet (an unclaimed throne on the landing page).
 type SpeedrunInstanceBoard struct {
-	InstanceName   string `json:"instance_name"`
-	DifficultyName string `json:"difficulty_name"`
+	InstanceName   string               `json:"instance_name"`
+	DifficultyName string               `json:"difficulty_name"`
+	Record         *SpeedrunBoardRecord `json:"record,omitempty"`
+}
+
+// SpeedrunBoardRecord is the fastest ranked full clear of one board.
+type SpeedrunBoardRecord struct {
+	DurationMs     int64     `json:"duration_ms"`
+	CompletionTime time.Time `json:"completion_time"`
+	GuildName      string    `json:"guild_name"`
 }
 
 // SpeedrunLeaderboardEntry is one row in the leaderboard.
