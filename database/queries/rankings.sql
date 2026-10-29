@@ -439,44 +439,19 @@ realm_encounter_counts AS (
     WHERE COALESCE(cardinality(@encounter_names :: text[]), 0) = 0
     GROUP BY d.realm_id
 ),
--- Step 1: aggregate per player per run (sum encounters within a single instance run).
-per_run AS (
+-- Step 1: calculate only the values needed to rank each player/run. Display
+-- metadata is intentionally deferred until after pagination.
+per_run_scores AS (
     SELECT
         d.player_guid,
         d.run_id,
-        ((array_agg(d.player_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS player_name,
-        ((array_agg(d.player_class ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS player_class,
-        (string_agg(DISTINCT d.player_spec, '/' ORDER BY d.player_spec))::text AS player_spec,
-        (string_agg(DISTINCT d.player_sub_spec, '/' ORDER BY d.player_sub_spec))::text AS player_sub_spec,
-        ((array_agg(d.player_role ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS player_role,
-        MAX(d.player_level)::smallint AS player_level,
-        ((array_agg(d.instance_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS instance_name,
-        ((array_agg(d.encounter_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS encounter_name,
-        ((array_agg(d.difficulty_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS difficulty_name,
-        MAX(d.max_players)::smallint AS max_players,
-        ((array_agg(d.realm_id ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::uuid AS realm_id,
-        ((array_agg(d.realm_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS realm_name,
-        ((array_agg(d.guild_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS guild_name,
         SUM(d.damage_done)::bigint AS damage_done,
         SUM(d.healing_done)::bigint AS healing_done,
         SUM(d.absorbed_done)::bigint AS absorbed_done,
-        COALESCE((CASE
-            WHEN COUNT(d.alive_percentage) = COUNT(*) THEN
-                SUM(d.duration_secs * d.alive_percentage) / NULLIF(SUM(d.duration_secs), 0)
-            ELSE NULL
-        END), -1)::double precision AS alive_percentage,
-        COALESCE((CASE
-            WHEN COUNT(d.player_deaths) = COUNT(*) THEN SUM(d.player_deaths)
-            ELSE NULL
-        END), -1)::integer AS player_deaths,
         SUM(d.duration_secs)::double precision AS duration_secs,
         (SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS dps,
         (SUM(d.healing_done + d.absorbed_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS hps,
-        COALESCE(MAX(d.avg_ilvl), 0)::smallint AS avg_ilvl,
-        ((array_agg(d.log_hashed_slug ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS log_hashed_slug,
-        MAX(d.killed_at)::timestamptz AS killed_at,
-        COALESCE((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1], '')::text AS talent_sub_spec,
-        COALESCE((array_agg(d.talent_layout ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1], '')::text AS talent_layout
+        MAX(d.killed_at)::timestamptz AS killed_at
     FROM deduped d
     LEFT JOIN realm_encounter_counts rec ON rec.realm_id = d.realm_id
     GROUP BY d.player_guid, d.run_id, rec.encounter_count
@@ -488,51 +463,80 @@ per_run AS (
         ELSE rec.encounter_count
     END
 ),
--- Step 2: pick each player's best run.
-aggregated AS (
-    SELECT DISTINCT ON (pr.player_guid)
-        pr.player_guid,
-        pr.player_name,
-        pr.player_class,
-        pr.player_spec,
-        pr.player_sub_spec,
-        pr.player_role,
-        pr.player_level,
-        pr.instance_name,
-        pr.encounter_name,
-        pr.difficulty_name,
-        pr.max_players,
-        pr.realm_id,
-        pr.realm_name,
-        pr.guild_name,
-        pr.damage_done,
-        pr.healing_done,
-        pr.absorbed_done,
-        pr.alive_percentage,
-        pr.player_deaths,
-        pr.duration_secs,
-        pr.dps,
-        pr.hps,
-        pr.avg_ilvl,
-        pr.log_hashed_slug,
-        pr.killed_at,
-        pr.talent_sub_spec,
-        pr.talent_layout
-    FROM per_run pr
-    ORDER BY pr.player_guid,
-        (CASE WHEN @metric :: text = 'hps' THEN pr.hps ELSE pr.dps END) DESC,
-        pr.killed_at DESC,
-        pr.run_id ASC
+-- Step 2: pick each player's best run using only the narrow score rows.
+best_per_player AS (
+    SELECT DISTINCT ON (prs.player_guid)
+        prs.*
+    FROM per_run_scores prs
+    ORDER BY prs.player_guid,
+        (CASE WHEN @metric :: text = 'hps' THEN prs.hps ELSE prs.dps END) DESC,
+        prs.killed_at DESC,
+        prs.run_id ASC
+),
+-- Step 3: paginate before computing wide display metadata.
+paged AS (
+    SELECT
+        bpp.*,
+        COUNT(*) OVER() AS total_count
+    FROM best_per_player bpp
+    WHERE (CASE WHEN @metric :: text = 'hps' THEN bpp.hps ELSE bpp.dps END) > 0
+    ORDER BY (CASE WHEN @metric :: text = 'hps' THEN bpp.hps ELSE bpp.dps END) DESC,
+        bpp.player_guid ASC
+    LIMIT @query_limit::bigint
+    OFFSET @query_offset::bigint
 )
+-- Step 4: hydrate display-only fields for the selected page.
 SELECT
-    a.*,
-    COUNT(*) OVER() AS total_count
-FROM aggregated a
-WHERE (CASE WHEN @metric :: text = 'hps' THEN a.hps ELSE a.dps END) > 0
-ORDER BY (CASE WHEN @metric :: text = 'hps' THEN a.hps ELSE a.dps END) DESC,
-    a.player_guid ASC
-LIMIT @query_limit::bigint
-OFFSET @query_offset::bigint;
+    p.player_guid,
+    ((array_agg(d.player_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS player_name,
+    ((array_agg(d.player_class ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS player_class,
+    (string_agg(DISTINCT d.player_spec, '/' ORDER BY d.player_spec))::text AS player_spec,
+    (string_agg(DISTINCT d.player_sub_spec, '/' ORDER BY d.player_sub_spec))::text AS player_sub_spec,
+    ((array_agg(d.player_role ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS player_role,
+    MAX(d.player_level)::smallint AS player_level,
+    ((array_agg(d.instance_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS instance_name,
+    ((array_agg(d.encounter_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS encounter_name,
+    ((array_agg(d.difficulty_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS difficulty_name,
+    MAX(d.max_players)::smallint AS max_players,
+    ((array_agg(d.realm_id ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::uuid AS realm_id,
+    ((array_agg(d.realm_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS realm_name,
+    ((array_agg(d.guild_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS guild_name,
+    p.damage_done,
+    p.healing_done,
+    p.absorbed_done,
+    COALESCE((CASE
+        WHEN COUNT(d.alive_percentage) = COUNT(*) THEN
+            SUM(d.duration_secs * d.alive_percentage) / NULLIF(SUM(d.duration_secs), 0)
+        ELSE NULL
+    END), -1)::double precision AS alive_percentage,
+    COALESCE((CASE
+        WHEN COUNT(d.player_deaths) = COUNT(*) THEN SUM(d.player_deaths)
+        ELSE NULL
+    END), -1)::integer AS player_deaths,
+    p.duration_secs,
+    p.dps,
+    p.hps,
+    COALESCE(MAX(d.avg_ilvl), 0)::smallint AS avg_ilvl,
+    ((array_agg(d.log_hashed_slug ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS log_hashed_slug,
+    p.killed_at,
+    COALESCE((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1], '')::text AS talent_sub_spec,
+    COALESCE((array_agg(d.talent_layout ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1], '')::text AS talent_layout,
+    p.total_count
+FROM paged p
+JOIN deduped d ON d.player_guid = p.player_guid AND d.run_id = p.run_id
+GROUP BY
+    p.player_guid,
+    p.run_id,
+    p.damage_done,
+    p.healing_done,
+    p.absorbed_done,
+    p.duration_secs,
+    p.dps,
+    p.hps,
+    p.killed_at,
+    p.total_count
+ORDER BY (CASE WHEN @metric :: text = 'hps' THEN p.hps ELSE p.dps END) DESC,
+    p.player_guid ASC;
 
 -- name: RankingsFilterOptions :many
 -- Distinct class/spec/sub-spec combinations available to the public rankings UI.

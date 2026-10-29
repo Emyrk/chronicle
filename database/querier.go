@@ -855,8 +855,11 @@ type sqlcQuerier interface {
 	// Explicit encounter selections define the required run coverage. Without an
 	// explicit selection, compute coverage per realm because different realms can
 	// record different encounter names for the same instance.
-	// Step 1: aggregate per player per run (sum encounters within a single instance run).
-	// Step 2: pick each player's best run.
+	// Step 1: calculate only the values needed to rank each player/run. Display
+	// metadata is intentionally deferred until after pagination.
+	// Step 2: pick each player's best run using only the narrow score rows.
+	// Step 3: paginate before computing wide display metadata.
+	// Step 4: hydrate display-only fields for the selected page.
 	RankingsLeaderboard(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error)
 	// Distinct realm names that have DPS ranking data, for the realm filter dropdown.
 	// Rows with an empty realm name are excluded: they cannot be filtered on, and
