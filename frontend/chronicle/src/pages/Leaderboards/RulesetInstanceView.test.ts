@@ -16,12 +16,12 @@ describe("DPS ruleset", () => {
       },
     }
     expect(damageRuleRows(instance)).toEqual([
-      { name: "Garr", mode: "entries", targets: [
+      { name: "Garr", mode: "entries", rankedTime: "window", targets: [
         { id: 12057, name: "Garr", boss: true },
         { id: 12099, name: "Firesworn", boss: false },
         { id: 999, name: "Creature 999", boss: false },
       ] },
-      { name: "Lucifron", mode: "boss-only", targets: [] },
+      { name: "Lucifron", mode: "boss-only", rankedTime: "window", targets: [] },
     ])
   })
 
@@ -31,6 +31,7 @@ describe("DPS ruleset", () => {
     expect(rows[0]).toMatchObject({
       name: "Assembly of Iron",
       mode: "phase-kill",
+      rankedTime: "full",
       targets: [
         { id: 32867, name: "Steelbreaker", boss: true },
         { id: 32927, name: "Runemaster Molgeim", boss: true },

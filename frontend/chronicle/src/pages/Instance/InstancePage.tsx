@@ -69,6 +69,14 @@ export interface Encounter {
   remaining?: string[]; // GUIDs of enemies that did not die
   /** Optional phases within this encounter (sorted by order). */
   phases?: EncounterPhase[];
+  /** Interval scored for boss rankings, when shorter than the full encounter. */
+  ranking_window?: EncounterRankingWindow;
+}
+
+/** Ranked interval as offsets from the encounter start. */
+export interface EncounterRankingWindow {
+  start_offset_ms: number;
+  end_offset_ms: number;
 }
 
 export interface Instance {
@@ -223,6 +231,10 @@ function transformToInstance(
         end_time: new Date(new Date(enc.start_time).getTime() + phase.end_offset_ms).toISOString(),
         kill_type: phase.kill_type,
       })),
+      ranking_window: enc.ranking_window && {
+        start_offset_ms: enc.ranking_window.start_offset_ms,
+        end_offset_ms: enc.ranking_window.end_offset_ms,
+      },
     };
   });
 
