@@ -177,6 +177,84 @@ def decode_alpha(mcal, ofs, flags, big_alpha):
     return a.astype(np.float32) / 255.0
 
 
+def read_mtex(buf):
+    """Texture names from a legacy MTEX payload, preserving file order."""
+    return [name.decode("ascii") for name in buf.split(b"\0") if name]
+
+
+def _mcnk_range(buf, off, size, rel, length, what):
+    """Validate a legacy MCNK payload-relative offset and return its absolute position."""
+    start, end = off, off + size
+    pos = off + rel
+    if rel < 128 or pos < start or length < 0 or pos + length > end or pos + length > len(buf):
+        raise ValueError("malformed MCNK %s offset %d length %d (chunk size %d)" % (what, rel, length, size))
+    return pos
+
+
+def read_monolithic_adt(path):
+    """Normalize a 1.12 monolithic ADT to the split-reader shape.
+
+    Legacy MCNK header offsets point directly at MCVT/MCLY/MCAL payloads. Reading them avoids
+    treating MCNR bytes as nested chunk headers, which is unreliable in observed 1.12 files.
+    M2 placements are counted but intentionally not normalized into geometry.
+    """
+    with open(path, "rb") as source:
+        buf = source.read()
+    out = {"chunks": [], "mh2o": None, "textures": [], "m2_placements": 0, "wmo_placements": 0}
+    for tag, off, size in chunks(buf):
+        if off + size > len(buf):
+            raise ValueError("malformed top-level %s chunk size %d" % (tag, size))
+        if tag == "MTEX":
+            out["textures"] = read_mtex(buf[off:off + size])
+        elif tag == "MH2O":
+            out["mh2o"] = (buf, off, size)
+        elif tag == "MDDF":
+            if size % 36:
+                raise ValueError("malformed MDDF size %d" % size)
+            out["m2_placements"] += size // 36
+        elif tag == "MODF":
+            if size % 64:
+                raise ValueError("malformed MODF size %d" % size)
+            out["wmo_placements"] += size // 64
+        elif tag == "MCNK":
+            if size < 128:
+                raise ValueError("malformed MCNK header size %d" % size)
+            flags, ix, iy, nlayers = struct.unpack_from("<4I", buf, off)
+            mcvt_rel = struct.unpack_from("<I", buf, off + 0x14)[0]
+            mcly_rel = struct.unpack_from("<I", buf, off + 0x1C)[0]
+            mcal_rel = struct.unpack_from("<I", buf, off + 0x24)[0]
+            mcal_size = struct.unpack_from("<I", buf, off + 0x28)[0]
+            holes_lo = struct.unpack_from("<H", buf, off + 0x3C)[0]
+            pos = struct.unpack_from("<3f", buf, off + 0x68)
+
+            hp = _mcnk_range(buf, off, size, mcvt_rel, 145 * 4, "MCVT")
+            heights = np.frombuffer(buf, "<f4", 145, hp).astype(np.float64) + pos[2]
+            lp = _mcnk_range(buf, off, size, mcly_rel, nlayers * 16, "MCLY") if nlayers else None
+            layers = []
+            for i in range(nlayers):
+                tex, layer_flags, alpha_ofs, _effect = struct.unpack_from("<4I", buf, lp + 16 * i)
+                layers.append({"tex": tex, "flags": layer_flags, "ofs": alpha_ofs})
+            if nlayers > 1:
+                ap = _mcnk_range(buf, off, size, mcal_rel, mcal_size, "MCAL")
+                mcal = buf[ap:ap + mcal_size]
+            else:
+                mcal = b""
+            alphas = [None]
+            for layer in layers[1:]:
+                if layer["ofs"] + 2048 > len(mcal):
+                    raise ValueError("malformed MCAL layer offset %d (alpha size %d)" %
+                                     (layer["ofs"], len(mcal)))
+                alphas.append(decode_alpha(mcal, layer["ofs"], layer["flags"], False))
+            out["chunks"].append({"ix": ix, "iy": iy, "x0": pos[0], "y0": pos[1],
+                                  "holes_hi": None, "holes_lo": holes_lo, "heights": heights,
+                                  "layers": layers, "alphas": alphas})
+    out["chunks"].sort(key=lambda c: (c["iy"], c["ix"]))
+    if out["wmo_placements"]:
+        raise SystemExit("legacy monolithic ADT contains %d WMO placement(s); MODF terrain placement support "
+                         "is not implemented, refusing to omit them" % out["wmo_placements"])
+    return out
+
+
 # ------------------------------------------------------------------ obj0 ADT: WMO placements
 
 def read_obj0_modf(path):
@@ -344,6 +422,12 @@ class Obj:
 BAKE_VERSION = 2  # in the atlas filename: 1 = 1 texel in N, nearest; 2 = box-prefiltered to the sampled density, bilinear
 
 
+def legacy_texture_key(name):
+    """Stable filesystem key for a named MPQ texture."""
+    import hashlib
+    return "legacy_" + hashlib.sha256(name.lower().replace("/", "\\").encode("utf-8")).hexdigest()[:16]
+
+
 def prefiltered(tex_dir, fid, s, tex_cache):
     """Ground texture `fid` as float RGB, box-filtered (area-averaged) down to s x s = the density the
     atlas samples it at. v1 picked 1 source texel in (1024/s) with no filtering, which turned a
@@ -467,6 +551,7 @@ def main():
     raw = os.path.join(mdir, "raw")
     tiles = json.load(open(os.path.join(raw, "tiles.json")))
     fetch = json.load(open(os.path.join(mdir, "fetch.json")))
+    layout = fetch.get("layout", "split")
     big_alpha = bool(fetch.get("mphd_flags", 0) & 0x84)  # 0x4 big alpha, 0x80 height texturing -> 8-bit maps
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     texdir = os.path.join(os.path.dirname(os.path.abspath(a.out)), "textures")
@@ -486,11 +571,20 @@ def main():
 
     for t in tiles:
         tag = "%02d_%02d" % (t["x"], t["y"])
-        rootp = os.path.join(raw, "adt", tag + "_root.adt")
-        if not os.path.exists(rootp):
-            continue  # outside the fetched crop
-        root = read_root_adt(rootp)
-        mdid, per_chunk = read_tex0_adt(os.path.join(raw, "adt", tag + "_tex0.adt"), big_alpha)
+        if layout == "monolithic-1.12":
+            rootp = os.path.join(raw, "adt", tag + ".adt")
+            if not os.path.exists(rootp):
+                continue
+            root = read_monolithic_adt(rootp)
+            mdid = [legacy_texture_key(name) for name in root["textures"]]
+            per_chunk = [{"layers": c["layers"], "alphas": c["alphas"]} for c in root["chunks"]]
+            stats["m2_placements_omitted"] = stats.get("m2_placements_omitted", 0) + root["m2_placements"]
+        else:
+            rootp = os.path.join(raw, "adt", tag + "_root.adt")
+            if not os.path.exists(rootp):
+                continue  # outside the fetched crop
+            root = read_root_adt(rootp)
+            mdid, per_chunk = read_tex0_adt(os.path.join(raw, "adt", tag + "_tex0.adt"), big_alpha)
         # ground
         meshes = [chunk_mesh(c, crop) for c in root["chunks"]]
         if not any(m for m in meshes):
@@ -523,8 +617,9 @@ def main():
             if quads:
                 obj.quads("liquid_%s" % tag, quads, "liquid")
                 stats["water_quads"] += len(quads)
-        # WMO placements
-        for n, pl in enumerate(read_obj0_modf(os.path.join(raw, "adt", tag + "_obj0.adt"))):
+        # WMO placements. Legacy monolithic ADTs were rejected above if MODF was present.
+        placements = [] if layout == "monolithic-1.12" else read_obj0_modf(os.path.join(raw, "adt", tag + "_obj0.adt"))
+        for n, pl in enumerate(placements):
             # keep a WMO whose MODF extents overlap the crop (not just its origin: the Lordaeron palace
             # dome's origin sits outside a walls-only crop while the dome itself is in the middle of it)
             if crop and not wmo_in_crop(pl, crop):
@@ -571,7 +666,7 @@ def main():
                     obj.quads("liquid_wmo_%d_%s_%d_%03d" % (pl["fid"], tag, n, gi), lq, "liquid")
             stats["wmo_instances"] += 1
         # M2 doodads (spike)
-        if a.m2:
+        if a.m2 and layout != "monolithic-1.12":
             for n, pl in enumerate(read_obj0_mddf(os.path.join(raw, "adt", tag + "_obj0.adt"))):
                 wx, wy = MAPC - pl["pos"][2], MAPC - pl["pos"][0]
                 if crop and not (crop["x"][0] <= wx <= crop["x"][1] and crop["y"][0] <= wy <= crop["y"][1]):

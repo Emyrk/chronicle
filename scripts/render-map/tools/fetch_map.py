@@ -135,7 +135,8 @@ def chunks(buf, start=0, end=None):
 
 
 def wdt_placements(path):
-    buf = open(path, "rb").read()
+    with open(path, "rb") as source:
+        buf = source.read()
     out = []
     for tag, off, size in chunks(buf):
         if tag == "MODF":
@@ -221,7 +222,8 @@ def place_obj(obj, root, pl, allow_stale_bounds=False):
 
 
 def wdt_mphd_flags(path):
-    buf = open(path, "rb").read()
+    with open(path, "rb") as source:
+        buf = source.read()
     for tag, off, size in chunks(buf):
         if tag == "MPHD":
             return struct.unpack_from("<I", buf, off)[0]
@@ -243,7 +245,8 @@ def tile_in_crop(t, crop):
 
 def wdt_tiles(path):
     """ADT tiles present (MAIN flag bit 0) with their MAID file ids."""
-    buf = open(path, "rb").read()
+    with open(path, "rb") as source:
+        buf = source.read()
     present, maid = [], None
     for tag, off, size in chunks(buf):
         if tag == "MAIN":
@@ -442,32 +445,168 @@ def fetch_terrain(a, cfg, mdir, raw, product, region, build, wdt_fid, how, tiles
                                                               json.dumps(prov["adt_stats"])))
 
 
-# ------------------------------------------------------------------ 1.12 MPQ client (WMO maps only)
+# ------------------------------------------------------------------ 1.12 MPQ client (named WMO and monolithic terrain maps)
 
-def fetch_mpq_wmo(a, cfg, mdir, raw, need):
-    """map.yaml `source: mpq`, `client: <dir with Data/>`: same raw/ layout as a CDN fetch, files by
-    NAME from the client's archive chain (tools/mpq_chain.py, read-only). WMO maps only: 1.12 WDT
-    has MWMO (names) instead of FileDataIDs, roots have MOTX names and no GFID (groups are
-    <root>_NNN.wmo, count from MOHD), groups MOPY. Terrain (monolithic ADT, MCLQ) is not built."""
+def mpq_world_kind(wdt, cfg):
+    """Choose the legacy MPQ path without treating a terrain WDT as an unsupported WMO."""
+    placements = wdt_placements(wdt)
+    tiles = wdt_tiles(wdt)
+    if tiles and not placements and not cfg.get("placed_wmo"):
+        return "terrain"
+    return "wmo"
+
+
+def legacy_minimap_name(directory, x, y):
+    return "World\\Minimaps\\%s\\map%d_%d.blp" % (directory, x, y)
+
+
+def mpq_archive_provenance(chain):
+    return [{"name": os.path.basename(path), "bytes": os.path.getsize(path), "sha256": sha(path)}
+            for path in chain.archives]
+
+
+def fetch_mpq(a, cfg, mdir, raw, need):
     sys.path.insert(0, HERE)
     import mpq_chain
-    import wmo2obj
     chain = mpq_chain.Chain(cfg["client"])
-    got = {}  # raw-relative path -> {name, archive}
+    got = {}
 
     def get(name, rel):
         p = os.path.join(raw, rel)
         if need(p):
-            w = chain.get(name, p)
+            winner = chain.get(name, p)
         else:
-            w = chain.winner(name)
-        if not w:
+            winner = chain.winner(name)
+        if not winner:
             raise SystemExit("%s not in %s" % (name, chain.data))
-        got[rel] = {"name": w[2], "archive": w[0], "archives": [h[0] for h in chain.files[name.lower()]]}
+        hits = chain.files[name.lower().replace("/", "\\")]
+        got[rel] = {"name": winner[2], "archive": winner[0], "archives": [h[0] for h in hits]}
         return p
 
+    directory = cfg["directory"]
+    wdt = get("World\\Maps\\%s\\%s.wdt" % (directory, directory), "map.wdt")
+    if mpq_world_kind(wdt, cfg) == "terrain":
+        return fetch_mpq_terrain(a, cfg, mdir, raw, need, chain, get, got, wdt)
+    return fetch_mpq_wmo(a, cfg, mdir, raw, need, chain=chain, get=get, got=got, wdt=wdt)
+
+
+def fetch_mpq_terrain(a, cfg, mdir, raw, need, chain, get, got, wdt):
+    """Fetch and convert named 1.12 monolithic terrain ADTs through the resolved MPQ chain."""
+    from PIL import Image
+    sys.path.insert(0, HERE)
+    import adt2obj
+    import mpq_chain
+
+    directory = cfg["directory"]
+    tiles = wdt_tiles(wdt)
+    if not tiles:
+        raise SystemExit("legacy terrain WDT has no active MAIN tiles")
+    use_minimap = cfg.get("minimap", True)
+    os.makedirs(os.path.join(raw, "adt"), exist_ok=True)
+    if use_minimap:
+        os.makedirs(os.path.join(raw, "minimap"), exist_ok=True)
+
+    texture_names = set()
+    m2_count = 0
+    normalized_tiles = []
+    sizes = set()
+    for tile in tiles:
+        x, y = tile["x"], tile["y"]
+        tag = "%02d_%02d" % (x, y)
+        adt_name = "World\\Maps\\%s\\%s_%d_%d.adt" % (directory, directory, x, y)
+        adt_rel = os.path.join("adt", tag + ".adt")
+        adt_path = get(adt_name, adt_rel)
+        parsed = adt2obj.read_monolithic_adt(adt_path)
+        texture_names.update(parsed["textures"])
+        m2_count += parsed["m2_placements"]
+        row = {"x": x, "y": y, "adt": adt_rel.replace(os.sep, "/"), "adt_name": adt_name}
+        if use_minimap:
+            minimap_name = legacy_minimap_name(directory, x, y)
+            blp_rel = os.path.join("minimap", tag + ".blp")
+            blp = get(minimap_name, blp_rel)
+            png = os.path.join(raw, "minimap", tag + ".png")
+            if need(png):
+                blp_to_png(blp, png, "RGBA")
+            sizes.add(Image.open(png).size)
+            row.update({"minimap": blp_rel.replace(os.sep, "/"),
+                        "minimap_png": os.path.relpath(png, raw).replace(os.sep, "/"),
+                        "minimap_name": minimap_name})
+        normalized_tiles.append(row)
+    if len(sizes) > 1:
+        raise SystemExit("minimap tiles differ in size: %s" % sorted(sizes))
+    json.dump(normalized_tiles, open(os.path.join(raw, "tiles.json"), "w"), indent=1)
+
+    texture_rows = []
+    tdir = os.path.join(raw, "terrain-textures")
+    os.makedirs(tdir, exist_ok=True)
+    for name in sorted(texture_names, key=str.lower):
+        key = adt2obj.legacy_texture_key(name)
+        rel = os.path.join("terrain-textures", key + ".blp")
+        blp = get(name, rel)
+        png = os.path.join(tdir, key + ".png")
+        if need(png):
+            blp_to_png(blp, png, "RGB")
+        winner = chain.winner(name)
+        texture_rows.append({"name": winner[2], "key": key, "archive": winner[0],
+                             "archives": [h[0] for h in chain.files[name.lower().replace("/", "\\")]]})
+
+    xs, ys = [t["x"] for t in normalized_tiles], [t["y"] for t in normalized_tiles]
+    files = {}
+    for dp, _, fns in os.walk(raw):
+        for fn in fns:
+            path = os.path.join(dp, fn)
+            files[os.path.relpath(path, raw)] = sha(path)
+    prov = {
+        "slug": a.slug, "kind": "terrain", "source": "mpq", "layout": "monolithic-1.12",
+        "fetched": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "product": None, "region": None, "build": None, "wdt_fid": None, "root_fid": None,
+        "client": cfg["client"], "stormlib_commit": mpq_chain.STORMLIB_COMMIT,
+        "archives": mpq_archive_provenance(chain), "mpq_files": got,
+        "tiles": normalized_tiles, "minimap": use_minimap,
+        "tile_px": sorted(sizes)[0][0] if sizes else None, "tile_yards": 533.33333,
+        "tile_range": {"x": [min(xs), max(xs)], "y": [min(ys), max(ys)]},
+        "mphd_flags": wdt_mphd_flags(wdt), "crop": cfg.get("crop"),
+        "crop_tiles": [[t["x"], t["y"]] for t in normalized_tiles if tile_in_crop(t, cfg.get("crop"))],
+        "terrain_textures": texture_rows, "m2_placements_omitted": m2_count, "wmo_fids": [],
+        "files": files,
+    }
+    json.dump(prov, open(os.path.join(mdir, "fetch.json"), "w"), indent=2)
+    obj = os.path.join(raw, "obj", "%s.obj" % a.slug)
+    sh([sys.executable, "-I", os.path.join(HERE, "adt2obj.py"), mdir, "--out", obj,
+        "--chunk-px", str(cfg.get("atlas_chunk_px", 128))])
+    prov["obj"] = os.path.relpath(obj, raw)
+    prov["adt_stats"] = json.load(open(os.path.splitext(obj)[0] + ".stats.json"))
+    prov["stats"] = prov["adt_stats"]
+    for dp, _, fns in os.walk(os.path.join(raw, "obj")):
+        for fn in fns:
+            path = os.path.join(dp, fn)
+            prov["files"][os.path.relpath(path, raw)] = sha(path)
+    json.dump(prov, open(os.path.join(mdir, "fetch.json"), "w"), indent=2)
+    log("done: legacy terrain, %d tiles, %d textures, %d M2 placements omitted" %
+        (len(normalized_tiles), len(texture_rows), m2_count))
+
+
+def fetch_mpq_wmo(a, cfg, mdir, raw, need, chain=None, get=None, got=None, wdt=None):
+    """Fetch a named 1.12 global or ADT-placed WMO from the client's resolved archive chain."""
+    sys.path.insert(0, HERE)
+    import mpq_chain
+    import wmo2obj
+    if chain is None:
+        chain = mpq_chain.Chain(cfg["client"])
+        got = {}
+
+        def get(name, rel):
+            p = os.path.join(raw, rel)
+            winner = chain.get(name, p) if need(p) else chain.winner(name)
+            if not winner:
+                raise SystemExit("%s not in %s" % (name, chain.data))
+            hits = chain.files[name.lower().replace("/", "\\")]
+            got[rel] = {"name": winner[2], "archive": winner[0], "archives": [h[0] for h in hits]}
+            return p
+
     d = cfg["directory"]
-    wdt = get("World\\Maps\\%s\\%s.wdt" % (d, d), "map.wdt")
+    if wdt is None:
+        wdt = get("World\\Maps\\%s\\%s.wdt" % (d, d), "map.wdt")
     buf = open(wdt, "rb").read()
     mwmo = next((buf[o:o + s].split(b"\0")[0].decode("ascii") for t, o, s in chunks(buf) if t == "MWMO"), "")
     pl = wdt_placements(wdt)
@@ -490,8 +629,8 @@ def fetch_mpq_wmo(a, cfg, mdir, raw, need):
     if placed:
         pass
     elif not mwmo or len(pl) != 1 or any(pl[0]["position"]) or any(pl[0]["rotation"]) or abs(pl[0]["scale"] - 1) > 1e-6:
-        raise SystemExit("unsupported 1.12 world shape (need one origin-placed WMO; terrain is not built "
-                         "for the MPQ source):\n" + json.dumps(pl, indent=2))
+        raise SystemExit("unsupported 1.12 world shape (need one origin-placed WMO or an active-tile terrain WDT):\n" +
+                         json.dumps(pl, indent=2))
     root = get(mwmo, "root.wmo")
     momt, gslots = wmo2obj.read_root(root)
     stem = mwmo[:-4]
@@ -525,8 +664,7 @@ def fetch_mpq_wmo(a, cfg, mdir, raw, need):
         "fetched": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
         "product": None, "region": None, "build": None, "wdt_fid": None, "root_fid": None,
         "client": cfg["client"], "stormlib_commit": mpq_chain.STORMLIB_COMMIT,
-        "archives": [{"name": os.path.basename(x), "bytes": os.path.getsize(x),
-                      "mtime": int(os.path.getmtime(x))} for x in chain.archives],
+        "archives": mpq_archive_provenance(chain),
         "root": mwmo, "groups": groups, "textures": texnames, "textures_missing": missing,
         "mpq_files": got, "placement": pl[0], "placed_wmo": bool(placed), "obj": os.path.relpath(obj, raw),
         "files": files,
@@ -561,7 +699,7 @@ def main():
         return a.force or not os.path.exists(path)
 
     if cfg.get("source") == "mpq":
-        return fetch_mpq_wmo(a, cfg, mdir, raw, need)
+        return fetch_mpq(a, cfg, mdir, raw, need)
     product, region = cfg["product"], cfg.get("region", "us")
     ensure_cascget()
 

@@ -166,11 +166,15 @@ then wait for the operator's explicit publish approval.
 
 Terrain, in detail (`tools/adt2obj.py`, run by `fetch_map.py`):
 
-- **Crop.** `map.yaml crop: {x: [min, max], y: [min, max]}` in world yards limits which tiles
-  are fetched (root/tex0/obj0 ADTs), which chunks are meshed and which placements are kept.
-  Without it the whole map is fetched and rendered (Excavation Site = 39 tiles, 2.8M tris,
+- **Crop.** `map.yaml crop: {x: [min, max], y: [min, max]}` in world yards limits which CDN split
+  ADTs are fetched, which chunks are meshed and which placements are kept. The MPQ path stores every
+  active monolithic ADT for stable named provenance, then applies the crop while meshing.
+  Without a crop the whole map is fetched and rendered (Excavation Site = 39 tiles, 2.8M tris,
   217 MB OBJ, five Blender imports of ~2 min each). Find the region of interest on the
   minimap stitch and convert pixels to yards with the manifest's `world_transform`.
+- **Layouts.** CDN terrain keeps root, texture, and object data in split ADTs. A 1.12 MPQ terrain
+  uses one monolithic `XX_YY.adt`; `adt2obj.py` selects the layout from `fetch.json` and normalizes it
+  in memory, without synthesizing split files, so the existing atlas, OBJ, and GLB stages stay shared.
 - **Heightmap.** `MCNK.position` is `(world x, world y, z)` of the chunk's +x/+y corner;
   `IndexX` runs along −y, `IndexY` along −x; 145 heights per chunk (9×9 outer + 8×8 inner),
   holes from the high-res 64-bit mask when flag 0x10000 is set, else the 4×4 low-res mask.
@@ -312,8 +316,8 @@ client's `Data/` read-only through StormLib (built into `cache/mpq/`, pinned by
   also works), `directory:` (no product/build/wdt_fid; e.g. `name`, `map_id: 249`,
   `directory: OnyxiaLairInstance`, `rot: -90`, lava `water_tint`/`water_color`), then
   `fetch_map.py` and `render_set.py` as usual. `fetch.json` records the archive chain (name, bytes,
-  mtime), the winning archive per file and every sha256. The client can change under you (a launcher
-  update); compare `fetch.json → archives` before trusting an old raw/.
+  sha256), the winning archive per file and every fetched-file sha256. The client can change under you
+  (a launcher update); compare `fetch.json → archives` before trusting an old raw/.
 - **A terrain WDT whose raid is one placed WMO** (Blackwing Lair: 16 tiles of outdoor dressing, the
   raid is `blackrock_upper_guild.wmo` in ADT 33_45 at yaw 35°): `placed_wmo:` in map.yaml (CDN: the
   root FileDataID; MPQ: the file name). fetch_map reads the ADTs for that WMO's MODF (one uniqueID),
@@ -322,8 +326,13 @@ client's `Data/` read-only through StormLib (built into `cache/mpq/`, pinned by
   client can replace the WMO without refreshing the WDT's cached MODF bounds; only for that evidenced
   case, set `allow_stale_placement_bounds: true`. Position and rotation still come from the MODF, while
   `fetch.json` records the extent error, `bounds_verified: false`, and `stale_bounds_allowed: true`.
-- **Terrain maps from MPQ are NOT built** (monolithic ADT, MCLQ, MTEX: a 1.12 terrain reader is
-  unwritten). A changed terrain map on a fork: stop and report.
+- **Render a fork's 1.12 terrain map** with the same `source: mpq`, `client`, and `directory` fields.
+  Active `MAIN` tiles are fetched by name as `raw/adt/XX_YY.adt`; named minimap and `MTEX` BLPs are
+  resolved through the same archive chain. `fetch.json` records `layout: monolithic-1.12`, tile range,
+  MPHD flags, texture names and archive winners, archive/file hashes, and omitted M2 counts. The reader
+  supports legacy monolithic `MCNK` heights and holes, `MCLY`, 2048-byte 4-bit `MCAL`, and optional
+  `MH2O`. M2 doodads are counted but not meshed. Any ADT `MODF` placement aborts rather than silently
+  dropping WMO geometry; add explicit legacy MODF support before rendering such a terrain map.
 - Inventory of what a fork's custom patches touch: `mpq_inventory.py --custom-from <first custom
   archive>` (OctoWoW: patch-3..A) writes it as Markdown.
 
