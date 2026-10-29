@@ -14,6 +14,7 @@ import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "@/page
 import { MapView2D } from "@/pages/Instance/EventsPanels/Map/MapView2D";
 import MapView3D from "@/pages/Instance/EventsPanels/Map/MapView3D";
 import { previewSpeed, useMapScene } from "@/pages/Instance/EventsPanels/Map/useMapScene";
+import { liveHeroRun } from "./explore3D";
 import { serializableContext, type HeroDeathBeat, type HeroDeathRecap, type HeroReplay, type HeroWindow } from "./heroReplay";
 import { meterTotals, type HeroMeterData } from "./heroMeter";
 import { HeroRaidFramesCard, HeroThreatCard } from "./HeroStats";
@@ -215,6 +216,7 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
     ? processedRecaps
     : processedRecaps?.map((recap) => ({ ...recap, offsetMs: recap.offsetMs - pullStartOffsetMs })) ?? null,
   [processedRecaps, pullStartOffsetMs]);
+  const liveRun = useMemo(() => liveHeroRun(instance, processedRecaps), [instance, processedRecaps]);
   const result = run.data?.result ?? null;
   const meterAmounts = useHeroMeterAmounts(instance, run.data?.selectedEncounterIds, run.isSuccess).data ?? null;
   const span = useMemo(() => {
@@ -414,8 +416,8 @@ export function HeroScene({ instance, startOffsetMs, pull = null, active, onPull
       onReplay(null);
       return;
     }
-    onReplay({ currentMs, playing: userPlaying, togglePlay, seek, deathRecaps, meter: liveMeter, renderRaidFrames, renderThreat });
-  }, [currentMs, deathRecaps, liveMeter, onReplay, renderRaidFrames, renderThreat, seek, shown, span, togglePlay, userPlaying]);
+    onReplay({ run: liveRun, currentMs, playing: userPlaying, togglePlay, seek, deathRecaps, meter: liveMeter, renderRaidFrames, renderThreat });
+  }, [currentMs, deathRecaps, liveMeter, liveRun, onReplay, renderRaidFrames, renderThreat, seek, shown, span, togglePlay, userPlaying]);
   useEffect(() => () => onReplay(null), [onReplay]);
 
   if (!ready || unavailable) return null;

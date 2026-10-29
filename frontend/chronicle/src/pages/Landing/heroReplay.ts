@@ -70,6 +70,8 @@ export interface HeroDeathRecap {
 
 /** What the live 3D hero reports to the shell's scrubber once it plays. */
 export interface HeroReplay extends HeroPlayback {
+  /** The run playing, built from its loaded instance: the hero's run when the landing payload has none. */
+  run: LandingFeaturedRun;
   /** Where the replay is, in ms from the instance's start (the featured run's offsets), or from the window's start when one plays. */
   currentMs: number;
   /** The player deaths' recaps once processed (from streams the replay already fetched); null until then. */
