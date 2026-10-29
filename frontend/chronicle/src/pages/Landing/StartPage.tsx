@@ -20,6 +20,9 @@ const StartBelowFold = lazy(() => import("./StartBelowFold"));
 
 const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
 
+/** Bars in the meter strip under the replay below 900 px. */
+const PHONE_METER_ROWS = 3;
+
 /** A boss picked on the rail holds the montage on that pull this long (or until the replay is scrolled away). */
 const BOSS_PICK_HOLD_MS = 60_000;
 
@@ -327,13 +330,12 @@ export function StartPage() {
           siteName={siteName}
           meter={meter && (
             <div className="pointer-events-none absolute inset-0 mx-auto hidden max-w-[1180px] min-[900px]:block">
-              <HeroMeter
-                data={meter}
-                sourceKey={meterKey}
-                pane={pane}
-                onPaneChange={changePane}
-                className="pointer-events-auto absolute right-4 top-4 w-[300px] lg:right-8 lg:top-auto lg:bottom-[112px] lg:w-[320px]"
-              />
+              {/* The stats column, following the replay's cursor: the glass meter, Threat (estimated) under it once that
+                  panel exists (#1425), then Raid Frames (from lg up, where the column has the height). */}
+              <div className="pointer-events-auto absolute right-4 top-4 flex w-[300px] flex-col gap-2 lg:right-8 lg:top-auto lg:bottom-[112px] lg:w-[320px]">
+                <HeroMeter data={meter} sourceKey={meterKey} pane={pane} onPaneChange={changePane} />
+                {replay?.renderRaidFrames && <div className="hidden lg:block">{replay.renderRaidFrames()}</div>}
+              </div>
             </div>
           )}
           featured={hero?.run}
@@ -343,9 +345,9 @@ export function StartPage() {
           layer3D={landing || landingFailed ? <HeroReplayLayer entries={heroEntries} index={heroIndex} requested={liveRequested} onAdvance={advanceHero} onReplay={setReplay} /> : null}
         />
         {meter && (
-          // Below 900 px the meter is a card under the hero's CTA.
+          // Below 900 px the meter is a strip under the replay, its top three bars.
           <div className="border-b bg-card px-4 py-4 min-[900px]:hidden">
-            <HeroMeter data={meter} sourceKey={meterKey} pane={pane} onPaneChange={changePane} />
+            <HeroMeter data={meter} sourceKey={meterKey} pane={pane} onPaneChange={changePane} rows={PHONE_METER_ROWS} />
           </div>
         )}
         <BossRail

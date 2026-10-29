@@ -7,7 +7,6 @@
 import { Swords, Skull, PawPrint, Flame } from "lucide-react";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import type { PanelProcessor } from "../processorTypes";
-import type { PanelFilter } from "../processors/filters";
 import { MERGED_GROUPING_OPTIONS, PET_PANEL_GROUPING_OPTIONS, PET_GROUPING_OPTIONS } from "../processors/resolveEntity";
 import {
   damageDoneProcessor,
@@ -17,6 +16,7 @@ import {
   type DamageDoneState,
 } from "../processors";
 import { DamageDoneContent } from "./DamageDoneContent";
+import { damageDoneDefaultFilters, damageDoneFixedFilters } from "./damageDoneFilters";
 import type { DamageSourceType } from "./damageDone.processor";
 
 // Re-export for convenience
@@ -62,46 +62,8 @@ export function createDamageDonePanel(
 ): PanelDefinition<DamageDoneState, any> {
   const config = DAMAGE_SOURCE_CONFIGS[sourceType];
   const processor = processorOverride ?? config.processor;
-  const fixedFilters: PanelFilter[] = (() => {
-    const dmg = ["damage"] as string[];
-    switch (sourceType) {
-      case "enemies":
-        return [
-          { type: "source_type" as const, value: ["enemy", "enemy_pet"], applyTo: dmg },
-        ];
-      case "pets":
-        return [
-          { type: "source_type" as const, value: "pet", applyTo: dmg },
-          { type: "target_type" as const, value: ["player", "pet"], negate: true, applyTo: dmg },
-        ];
-      case "friendly_fire":
-        return [
-          { type: "source_type" as const, value: ["player", "pet"], applyTo: dmg },
-          { type: "target_type" as const, value: ["player", "pet"], applyTo: dmg },
-        ];
-      case "players":
-      default:
-        return [
-          { type: "source_type" as const, value: ["player", "pet"], applyTo: dmg },
-          { type: "target_type" as const, value: ["player", "pet"], negate: true, applyTo: dmg },
-        ];
-    }
-  })();
-
-  // Default target filters — pre-populated in the filter editor, removable by the user.
-  // Matches the hardcoded entity selection logic in the processor (which gates breakouts).
-  const defaultFilters: PanelFilter[] = (() => {
-    const dmg = ["damage"] as string[];
-    switch (sourceType) {
-      case "enemies":
-        return [{ type: "target_type" as const, value: "selected_players", applyTo: dmg }];
-      case "players":
-      case "pets":
-        return [{ type: "target_type" as const, value: "selected_enemies", applyTo: dmg }];
-      case "friendly_fire":
-        return [{ type: "target_type" as const, value: "selected_players", applyTo: dmg }];
-    }
-  })();
+  const fixedFilters = damageDoneFixedFilters(sourceType);
+  const defaultFilters = damageDoneDefaultFilters(sourceType);
 
   // { type: "time_range" as const, value: "controller", applyTo:[]}
   return {

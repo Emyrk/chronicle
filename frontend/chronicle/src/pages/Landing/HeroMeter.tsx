@@ -102,7 +102,7 @@ function DeathLine({ death }: { death: HeroMeterDeath }) {
   );
 }
 
-function Bars({ totals, unit }: { totals: HeroMeterTotals; unit: string }) {
+function Bars({ totals, unit, rows }: { totals: HeroMeterTotals; unit: string; rows: number }) {
   const data = useMemo((): PlayerMetricChartData[] => totals.rows.map((row) => ({
     playerID: row.name,
     playerName: row.name,
@@ -121,7 +121,7 @@ function Bars({ totals, unit }: { totals: HeroMeterTotals; unit: string }) {
         data={data}
         onOpen={openBelow}
         openLabel="The whole replay, below"
-        values={{ formatValue: (value) => NUMBER.format(value), shareBase: totals.perSecond, formatShare: (share) => `${Math.round(share * 100)}%`, limit: TOP_ROWS }}
+        values={{ formatValue: (value) => NUMBER.format(value), shareBase: totals.perSecond, formatShare: (share) => `${Math.round(share * 100)}%`, limit: rows }}
       />
     </>
   );
@@ -131,14 +131,15 @@ function Bars({ totals, unit }: { totals: HeroMeterTotals; unit: string }) {
  * The hero's glass meter: the playing pull's numbers in the run page's panel
  * chrome, its header the run page's pane dropdown. `sourceKey` names the run
  * the numbers belong to; a new one crossfades the body. A pane without
- * numbers yet (a clip carries damage only) shows a loading line.
+ * numbers yet (a clip carries damage only) shows a loading line. `rows` caps the bars (5).
  */
-export function HeroMeter({ data, sourceKey, pane, onPaneChange, className }: {
+export function HeroMeter({ data, sourceKey, pane, onPaneChange, className, rows = TOP_ROWS }: {
   data: HeroMeterData;
   sourceKey: string;
   pane: HeroMeterPane;
   onPaneChange: (pane: HeroMeterPane) => void;
   className?: string;
+  rows?: number;
 }) {
   const totals = pane === "damage_done" ? data.damage : pane === "healing_done" ? data.healing : null;
   const firstDeath = data.deaths[0];
@@ -154,7 +155,7 @@ export function HeroMeter({ data, sourceKey, pane, onPaneChange, className }: {
             : <div className="text-xs text-muted-foreground">No one died on this pull.</div>
         ) : totals ? (
           <>
-            <Bars totals={totals} unit={pane === "damage_done" ? "DPS" : "HPS"} />
+            <Bars totals={totals} unit={pane === "damage_done" ? "DPS" : "HPS"} rows={rows} />
             {firstDeath && <DeathLine death={firstDeath} />}
           </>
         ) : (

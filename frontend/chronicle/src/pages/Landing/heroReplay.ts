@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { LandingFeaturedRun } from "@/api/typesGenerated";
 import type { Instance } from "@/pages/Instance/InstancePage";
 import type { SerializableProcessorContext } from "@/pages/Instance/EventsPanels/processorTypes";
@@ -73,8 +74,10 @@ export interface HeroReplay extends HeroPlayback {
   currentMs: number;
   /** The player deaths' recaps once processed (from streams the replay already fetched); null until then. */
   deathRecaps: HeroDeathRecap[] | null;
-  /** The glass meter's live numbers for what plays (from the same streams); null until processed. */
+  /** The glass meter's live numbers for what plays (from the same streams); null until processed. On a pull its damage follows the cursor. */
   meter: HeroMeterData | null;
+  /** The playing pull's Raid Frames at the cursor, drawn by the 3D chunk (the stats column); null without a pull. */
+  renderRaidFrames: (() => ReactNode) | null;
 }
 
 /** The processors' context for the run: its players and units, the given encounters, no entity selection. */
