@@ -1435,7 +1435,9 @@ CREATE TABLE log_instance_encounters (
     start_time timestamp with time zone NOT NULL,
     end_time timestamp with time zone NOT NULL,
     kill_type kill_type NOT NULL,
-    map_id integer DEFAULT 0 NOT NULL
+    map_id integer DEFAULT 0 NOT NULL,
+    ranking_start_offset_ms bigint,
+    ranking_end_offset_ms bigint
 );
 
 CREATE TABLE log_instance_events (

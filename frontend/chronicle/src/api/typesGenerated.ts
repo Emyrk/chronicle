@@ -5342,6 +5342,7 @@ export interface WoWEncounter {
     readonly remaining?: readonly GUID[];
     readonly start_time: string;
     readonly end_time: string;
+    readonly ranking_window?: WoWRankingWindow;
 }
 
 // From chroniclesdk/log.go
@@ -5530,6 +5531,18 @@ export interface WoWParsedLogJobOutput {
      * Report contains detailed timing and performance metrics for the parse job.
      */
     readonly report?: LogParseReport;
+}
+
+// From chroniclesdk/log.go
+/**
+ * WoWRankingWindow marks the interval scored for boss rankings, relative to the
+ * original encounter start. Absent when the full encounter is scored.
+ */
+export interface WoWRankingWindow {
+    readonly basis: string; // "selected-unit-activity"
+    readonly start_offset_ms: number;
+    readonly end_offset_ms: number;
+    readonly duration_ms: number;
 }
 
 // From types/constants.go

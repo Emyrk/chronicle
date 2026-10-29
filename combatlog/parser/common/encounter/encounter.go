@@ -42,6 +42,10 @@ type Encounter struct {
 	Remaining []guid.GUID
 	Boss      bool
 
+	// RankingWindow is the complete activity span of the units selected for
+	// boss rankings. Nil means rankings use the full encounter duration.
+	RankingWindow *RankingWindow
+
 	// Phases are optional sub-ranges within the encounter, ordered by Phase.Order.
 	Phases []Phase
 }
@@ -69,6 +73,13 @@ func (e Encounter) NamedString(db *unitdb.Units) string {
 	return str.String()
 }
 
+// RankingWindow is the interval used for boss rankings within an encounter.
+// The original encounter boundaries and events remain unchanged.
+type RankingWindow struct {
+	Start time.Time
+	End   time.Time
+}
+
 // Fight represents a single combat encounter with one or more hostile creatures.
 // A fight starts when the first hostile becomes active and ends when the last
 // hostile becomes inactive. Hostiles with overlapping activity periods are
@@ -81,6 +92,8 @@ type Fight struct {
 	// that belong to this fight.
 	Hostiles     map[guid.GUID]CharacterFight
 	PlayerDeaths []messages.Message
+
+	RankingWindow *RankingWindow
 
 	// Phases holds live-materialized encounter phases. Populated during the
 	// fight by the phase tracker and copied at finalization. The final phase's

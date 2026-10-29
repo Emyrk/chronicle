@@ -684,16 +684,23 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 					return ctx.Err()
 				}
 
+				var rankingStart, rankingEnd pgtype.Int8
+				if enc.RankingWindow != nil {
+					rankingStart = pgtype.Int8{Int64: enc.RankingWindow.Start.Sub(enc.Combat.Start).Milliseconds(), Valid: true}
+					rankingEnd = pgtype.Int8{Int64: enc.RankingWindow.End.Sub(enc.Combat.Start).Milliseconds(), Valid: true}
+				}
 				dbencounter, err := tx.InsertEncounter(ctx, database.InsertEncounterParams{
-					ID:         enc.Combat.EncounterID,
-					InstanceID: dbinstance.ID,
-					Name:       enc.Name,
-					MapID:      int32(enc.Combat.MapID),
-					KillType:   database.KillType(enc.KillType),
-					Remaining:  enc.Remaining,
-					Boss:       enc.Boss,
-					StartTime:  database.Timestamptz(enc.Combat.Start),
-					EndTime:    database.Timestamptz(enc.Combat.End),
+					ID:                   enc.Combat.EncounterID,
+					InstanceID:           dbinstance.ID,
+					Name:                 enc.Name,
+					MapID:                int32(enc.Combat.MapID),
+					KillType:             database.KillType(enc.KillType),
+					Remaining:            enc.Remaining,
+					Boss:                 enc.Boss,
+					RankingStartOffsetMs: rankingStart,
+					RankingEndOffsetMs:   rankingEnd,
+					StartTime:            database.Timestamptz(enc.Combat.Start),
+					EndTime:              database.Timestamptz(enc.Combat.End),
 				})
 				if err != nil {
 					return fmt.Errorf("insert encounter: %w", err)
@@ -1476,7 +1483,11 @@ func insertDPSRankings(
 		if enc.KillType != encounter.KillTypeClean && enc.KillType != encounter.KillTypePartial {
 			continue
 		}
-		durationSecs := enc.Combat.End.Sub(enc.Combat.Start).Seconds()
+		encounterDurationSecs := enc.Combat.End.Sub(enc.Combat.Start).Seconds()
+		rankingDurationSecs := encounterDurationSecs
+		if enc.RankingWindow != nil {
+			rankingDurationSecs = enc.RankingWindow.End.Sub(enc.RankingWindow.Start).Seconds()
+		}
 
 		survivabilityResult := finalized.Rankings.Survivability[enc.Combat.EncounterID]
 
@@ -1560,11 +1571,11 @@ func insertDPSRankings(
 
 			totalDamage := stats.RankedDamageDone + ownerDamage[unitGUID]
 			totalUnranked := stats.UnrankedDamageDone + ownerUnranked[unitGUID]
-			dps := float64(totalDamage) / durationSecs
+			dps := float64(totalDamage) / rankingDurationSecs
 			totalHealing := stats.HealingDone + ownerHealing[unitGUID]
 			totalAbsorbed := stats.HealingAbsorbed + ownerAbsorb[unitGUID]
-			hps := float64(totalHealing+totalAbsorbed) / durationSecs
-			playerSurvivability := rankings.PlayerSurvivability{AliveDurationSecs: durationSecs, AlivePercentage: 100}
+			hps := float64(totalHealing+totalAbsorbed) / rankingDurationSecs
+			playerSurvivability := rankings.PlayerSurvivability{AliveDurationSecs: rankingDurationSecs, AlivePercentage: 100}
 			if survivabilityResult != nil {
 				if tracked, ok := survivabilityResult.Players[unitGUID]; ok {
 					playerSurvivability = tracked
@@ -1597,7 +1608,7 @@ func insertDPSRankings(
 				GuildName:          playerGuildName,
 				DamageDone:         totalDamage,
 				UnrankedDamageDone: totalUnranked,
-				DurationSecs:       durationSecs,
+				DurationSecs:       rankingDurationSecs,
 				Dps:                dps,
 				HealingDone:        totalHealing,
 				AbsorbedDone:       totalAbsorbed,

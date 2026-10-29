@@ -35,7 +35,6 @@ type lifeTransition struct {
 }
 
 type playerLifeState struct {
-	deaths      int32
 	dead        bool
 	transitions []lifeTransition
 }
@@ -74,7 +73,6 @@ func (t *SurvivabilityTracker) ProcessMessage(active bool, _ uuid.UUID, m messag
 		if state.dead {
 			return nil
 		}
-		state.deaths++
 		state.dead = true
 		state.transitions = append(state.transitions, lifeTransition{at: msg.Date(), dead: true})
 	case *messages.Resurrection:
@@ -105,7 +103,11 @@ func (t *SurvivabilityTracker) FightFinalized(encounterID uuid.UUID, start, end 
 	for playerGUID, state := range t.players {
 		var deadDuration time.Duration
 		var deadSince *time.Time
+		var deaths int32
 		for _, transition := range state.transitions {
+			if transition.dead && !transition.at.Before(start) && !transition.at.After(end) {
+				deaths++
+			}
 			at := transition.at
 			if at.Before(start) {
 				at = start
@@ -142,7 +144,7 @@ func (t *SurvivabilityTracker) FightFinalized(encounterID uuid.UUID, start, end 
 			alivePercentage = float64(aliveDuration) / float64(duration) * 100
 		}
 		result.Players[playerGUID] = PlayerSurvivability{
-			Deaths:            state.deaths,
+			Deaths:            deaths,
 			AliveDurationSecs: aliveDuration.Seconds(),
 			AlivePercentage:   alivePercentage,
 		}
