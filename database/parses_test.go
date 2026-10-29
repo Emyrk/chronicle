@@ -200,6 +200,62 @@ func TestInstanceRankingRecordsPreservePlayerDeathsNullability(t *testing.T) {
 	assert.Equal(t, int32(2), rows[0].PlayerDeaths.Int32)
 }
 
+func TestInsertEncounterDpsRankingKeepsCanonicalBossOccurrence(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitShort)
+	instanceID := uuid.New()
+	baseTime := time.Date(2026, 10, 29, 1, 0, 0, 0, time.UTC)
+
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Ragnaros", instanceName: "Molten Core",
+		playerGUID: "P-CANONICAL", playerClass: "PRIEST", playerSpec: "Holy",
+		durationSecs: 100, damageDone: 10_000, healingDone: 50_000,
+		dps: 100, hps: 500, killedAt: baseTime, isBoss: true,
+		instanceID: instanceID,
+	})
+
+	insertOccurrence := func(encounterID uuid.UUID, name string, dps, hps float64, killedAt time.Time) uuid.UUID {
+		t.Helper()
+		_, err := store.InsertEncounter(ctx, database.InsertEncounterParams{
+			ID: encounterID, InstanceID: instanceID, Name: "Ragnaros",
+			KillType: database.KillTypeClean, Remaining: guid.GUIDs{}, Boss: true,
+			StartTime: database.Timestamptz(killedAt.Add(-100 * time.Second)),
+			EndTime:   database.Timestamptz(killedAt),
+		})
+		require.NoError(t, err)
+		require.NoError(t, store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
+			EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
+			InstanceID:  instanceID, EncounterName: "Ragnaros", InstanceName: "Molten Core",
+			PlayerGuid: "P-CANONICAL", PlayerName: name, PlayerClass: "PRIEST", PlayerSpec: "Holy",
+			RealmID: realmID, RealmName: "test-realm",
+			DamageDone: int64(dps * 100), HealingDone: int64(hps * 100),
+			DurationSecs: 100, Dps: dps, Hps: hps,
+			KilledAt: database.Timestamptz(killedAt), LogHashedSlug: "canonical-regression",
+		}))
+		return encounterID
+	}
+
+	// A lower combined score does not replace the original occurrence.
+	insertOccurrence(uuid.New(), "Lower combined score", 200, 350, baseTime.Add(time.Minute))
+	// A larger combined score replaces it.
+	insertOccurrence(uuid.New(), "Higher combined score", 700, 0, baseTime.Add(2*time.Minute))
+	// A lower combined score never replaces the winner, even when it is newer.
+	insertOccurrence(uuid.New(), "Newer but lower", 300, 300, baseTime.Add(3*time.Minute))
+	// Equal combined scores prefer the latest occurrence, then the highest encounter ID.
+	insertOccurrence(uuid.MustParse("00000000-0000-0000-0000-000000000001"), "Latest tied score", 600, 100, baseTime.Add(4*time.Minute))
+	winningEncounterID := insertOccurrence(uuid.MustParse("00000000-0000-0000-0000-000000000002"), "Encounter tie winner", 600, 100, baseTime.Add(4*time.Minute))
+
+	rows, err := store.InstanceRankingRecords(ctx, instanceID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, winningEncounterID, rows[0].EncounterID.UUID)
+	assert.Equal(t, "Encounter tie winner", rows[0].PlayerName)
+	assert.Equal(t, 600.0, rows[0].Dps)
+	assert.Equal(t, 100.0, rows[0].Hps)
+}
+
 func TestTrashRankingsAllowDistinctSubSpecs(t *testing.T) {
 	t.Parallel()
 
@@ -233,10 +289,34 @@ func TestTrashRankingsAllowDistinctSubSpecs(t *testing.T) {
 		LogHashedSlug: "sub-spec-regression",
 	}))
 
+	require.NoError(t, store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
+		InstanceID:    instanceID,
+		EncounterName: "Trash",
+		InstanceName:  "Molten Core",
+		PlayerGuid:    "P-FERAL",
+		PlayerName:    "Player-P-FERAL",
+		PlayerClass:   "DRUID",
+		PlayerSpec:    "Feral",
+		PlayerSubSpec: "Cat",
+		RealmID:       realmID,
+		RealmName:     "test-realm",
+		DamageDone:    180_000,
+		DurationSecs:  300,
+		Dps:           600,
+		KilledAt:      database.Timestamptz(killedAt.Add(2 * time.Minute)),
+		LogHashedSlug: "trash-canonical-regression",
+	}))
+
 	rows, err := store.InstanceRankingRecords(ctx, instanceID)
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 	assert.ElementsMatch(t, []string{"Cat", "Bear"}, []string{rows[0].PlayerSubSpec, rows[1].PlayerSubSpec})
+	for _, row := range rows {
+		if row.PlayerSubSpec == "Cat" {
+			assert.Equal(t, 600.0, row.Dps)
+			assert.Equal(t, "trash-canonical-regression", row.LogHashedSlug)
+		}
+	}
 }
 
 func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
@@ -306,8 +386,8 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	insertEncounterRanking(duplicateID, "Lucifron", "P-HEALER", "Healer", "PRIEST", "Holy", "Bear", 900, 10, baseTime)
 	insertEncounterRanking(duplicateID, "Magmadar", "P-HEALER", "Healer", "PRIEST", "Holy", "Bear", 900, 10, baseTime.Add(time.Minute))
 	insertEncounterRanking(duplicateID, "Ragnaros", "P-HEALER", "Healer", "PRIEST", "Holy", "Bear", 900, 10, baseTime.Add(2*time.Minute))
-	// Equal-HPS duplicate encounter rows prefer the latest kill, and per-run
-	// display metadata uses the same deterministic timestamp tie-breaker.
+	// Equal canonical-score encounter rows prefer the latest kill, and per-run
+	// display metadata uses the stored canonical occurrence.
 	insertEncounterRanking(duplicateID, "Lucifron", "P-HEALER", "Latest Healer", "PRIEST", "Holy", "Bear", 1800, 20, baseTime.Add(3*time.Minute))
 	// A separate truncated run has higher per-encounter HPS, but must not rank
 	// when the query explicitly requires all three encounters.
