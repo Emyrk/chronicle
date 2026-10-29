@@ -72,6 +72,7 @@ export function useCharacterParses(playerGuid?: string, metric: "dps" | "hps" = 
 
 export interface CharacterPerformanceParams {
   playerGuid?: string;
+  realmID?: string;
   instanceName?: string;
   encounterNames: string[];
   difficultyName?: string;
@@ -81,6 +82,7 @@ export interface CharacterPerformanceParams {
 
 function characterPerformanceQuery(params: CharacterPerformanceParams) {
   const searchParams = new URLSearchParams();
+  if (params.realmID) searchParams.set("realm_id", params.realmID);
   if (params.instanceName) searchParams.set("instance_name", params.instanceName);
   if (params.encounterNames.length > 0) searchParams.set("encounter_names", params.encounterNames.join(","));
   if (params.difficultyName) searchParams.set("difficulty_name", params.difficultyName);
@@ -110,13 +112,17 @@ export function useCharacterPerformances(params: readonly CharacterPerformancePa
 }
 
 /** Per-encounter kill aggregates for a character across all recorded logs. */
-export function useCharacterEncounters(playerGuid?: string, enabled = true) {
+export function useCharacterEncounters(playerGuid?: string, realmID?: string, enabled = true) {
   return useQuery({
-    queryKey: ["rankings", "character-encounters", playerGuid],
-    queryFn: () =>
-      fetchJSON<CharacterEncounterStatsResponse>(
-        `/api/v1/rankings/characters/${encodeURIComponent(playerGuid!)}/encounters`,
-      ),
+    queryKey: ["rankings", "character-encounters", playerGuid, realmID],
+    queryFn: () => {
+      const searchParams = new URLSearchParams();
+      if (realmID) searchParams.set("realm_id", realmID);
+      const query = searchParams.size > 0 ? `?${searchParams.toString()}` : "";
+      return fetchJSON<CharacterEncounterStatsResponse>(
+        `/api/v1/rankings/characters/${encodeURIComponent(playerGuid!)}/encounters${query}`,
+      );
+    },
     staleTime: RANKINGS_STALE_TIME,
     enabled: enabled && !!playerGuid,
     retry: retryUnlessClientError,

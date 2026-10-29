@@ -231,7 +231,7 @@ type sqlcQuerier interface {
 	// Rankings rows exist only for clean/partial kills; trash rows
 	// (encounter_id IS NULL) are excluded. Duplicate uploads of the same raid
 	// night are collapsed via duplicate_group_id.
-	GetCharacterEncounterStats(ctx context.Context, playerGuid string) ([]GetCharacterEncounterStatsRow, error)
+	GetCharacterEncounterStats(ctx context.Context, arg GetCharacterEncounterStatsParams) ([]GetCharacterEncounterStatsRow, error)
 	// Loot received by one character, newest first. Duplicate uploads of the
 	// same raid night are collapsed by (run, item, nth drop): each uploader's
 	// clock differs, so drops are matched by their order within the upload

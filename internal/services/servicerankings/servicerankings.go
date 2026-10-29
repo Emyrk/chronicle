@@ -23,6 +23,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"github.com/coder/serpent"
 )
@@ -588,6 +589,17 @@ func normalizeMetric(m string) string {
 // underscores this is a no-op.
 func normalizeClassName(dbClass string) string {
 	return strings.ReplaceAll(dbClass, "_", "")
+}
+
+func parseOptionalUUID(s string) (uuid.NullUUID, error) {
+	if s == "" {
+		return uuid.NullUUID{}, nil
+	}
+	id, err := uuid.Parse(s)
+	if err != nil {
+		return uuid.NullUUID{}, err
+	}
+	return uuid.NullUUID{UUID: id, Valid: true}, nil
 }
 
 // parseMaxPlayers parses the max_players board filter. 0 disables the filter.

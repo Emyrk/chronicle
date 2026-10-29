@@ -11,8 +11,8 @@ describe("performance comparison URL state", () => {
       ...DEFAULT_PERFORMANCE_COMPARISON_STATE,
       realmName: "N'Zoth",
       players: [
-        { id: "player-1", spec: "Shadow", subSpec: "Deep Shadow", hidden: false },
-        { id: "player-2", spec: "Fire", subSpec: null, hidden: true },
+        { id: "player-1", realmName: "N'Zoth", spec: "Shadow", subSpec: "Deep Shadow", hidden: false },
+        { id: "player-2", realmName: "Tel'Abim", spec: "Fire", subSpec: null, hidden: true },
       ],
       metric: "hps" as const,
       display: "parse" as const,
@@ -43,13 +43,14 @@ describe("performance comparison URL state", () => {
 
   it("restores hidden players by id without changing player alignment", () => {
     const searchParams = new URLSearchParams();
+    searchParams.set("realm", "N'Zoth");
     searchParams.append("player", "player-1");
     searchParams.append("player", "player-2");
     searchParams.append("hidden", "player-2");
 
     expect(parsePerformanceComparisonState(searchParams).players).toEqual([
-      { id: "player-1", spec: null, subSpec: null, hidden: false },
-      { id: "player-2", spec: null, subSpec: null, hidden: true },
+      { id: "player-1", realmName: "N'Zoth", spec: null, subSpec: null, hidden: false },
+      { id: "player-2", realmName: "N'Zoth", spec: null, subSpec: null, hidden: true },
     ]);
   });
 
@@ -57,14 +58,16 @@ describe("performance comparison URL state", () => {
     const searchParams = new URLSearchParams();
     searchParams.append("player", "player-1");
     searchParams.append("player", "player-2");
+    searchParams.append("player_realm", "N'Zoth");
+    searchParams.append("player_realm", "Tel'Abim");
     searchParams.append("spec", "");
     searchParams.append("spec", "Fire");
     searchParams.append("subspec", "");
     searchParams.append("subspec", "Deep Fire");
 
     expect(parsePerformanceComparisonState(searchParams).players).toEqual([
-      { id: "player-1", spec: null, subSpec: null, hidden: false },
-      { id: "player-2", spec: "Fire", subSpec: "Deep Fire", hidden: false },
+      { id: "player-1", realmName: "N'Zoth", spec: null, subSpec: null, hidden: false },
+      { id: "player-2", realmName: "Tel'Abim", spec: "Fire", subSpec: "Deep Fire", hidden: false },
     ]);
   });
 });

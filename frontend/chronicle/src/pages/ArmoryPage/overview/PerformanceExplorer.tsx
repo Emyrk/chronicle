@@ -32,7 +32,12 @@ import { cn } from "@/lib/utils";
 import { getClassIconUrl } from "../characterDisplay";
 import { getClassColorVar } from "../types";
 import type { ParseMetric } from "./util";
-import type { PerformanceComparisonState, PerformanceDisplayMode } from "./performanceComparisonState";
+import {
+  performancePlayerKey,
+  type PerformanceComparisonState,
+  type PerformanceDisplayMode,
+  type PerformancePlayerSelection,
+} from "./performanceComparisonState";
 import {
   assignChartCollisionOffsets,
   assignPerformanceSeriesColors,
@@ -57,6 +62,7 @@ interface SelectedPerformancePlayer {
   name: string;
   className: string;
   realmName: string;
+  realmID: string;
   spec: string | null;
   subSpec: string | null;
   hidden: boolean;
@@ -82,7 +88,7 @@ const MAX_COMPARISON_PLAYERS = 5;
 
 export function PerformanceExplorer({ players, state, onStateChange }: PerformanceExplorerProps) {
   const primaryPlayer = players[0];
-  const encountersQuery = useCharacterEncounters(primaryPlayer.id);
+  const encountersQuery = useCharacterEncounters(primaryPlayer.id, primaryPlayer.realm_id);
   const progressionBossesQuery = useSupportedInstanceProgressionBosses();
   const rankingEncounterSetsQuery = useSupportedInstanceRankingEncounterSets();
   const variants = useMemo(
@@ -94,9 +100,12 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebouncedValue(searchQuery.trim(), 250);
-  const playerSearch = useArmorySearch({ q: debouncedSearch, realm: state.realmName });
+  const playerSearch = useArmorySearch({ q: debouncedSearch });
   const selectedPlayerProfiles = state.players.flatMap((selection) => {
-    const profile = players.find((player) => player.id === selection.id);
+    const profile = players.find((player) => (
+      player.id === selection.id
+      && player.realm_name.localeCompare(selection.realmName, undefined, { sensitivity: "accent" }) === 0
+    ));
     return profile ? [{ selection, profile }] : [];
   });
   const seriesColors = assignPerformanceSeriesColors(selectedPlayerProfiles.map(({ profile }) => profile.class));
@@ -105,11 +114,13 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
     name: profile.name,
     className: profile.class,
     realmName: profile.realm_name,
+    realmID: profile.realm_id,
     spec: selection.spec,
     subSpec: selection.subSpec,
     hidden: selection.hidden,
     color: seriesColors[index],
   }));
+  const showPlayerRealms = new Set(selectedPlayers.map((player) => player.realmName)).size > 1;
   const variant = variants.find((item) => (
     item.instanceName === state.instanceName
     && item.difficultyName === state.difficultyName
@@ -130,6 +141,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
   const { metric, display, dateRange } = state;
   const performanceQueries = useCharacterPerformances(selectedPlayers.map((selectedPlayer) => ({
     playerGuid: selectedPlayer.id,
+    realmID: selectedPlayer.realmID,
     instanceName: variant?.instanceName,
     encounterNames: effectiveEncounters,
     difficultyName: variant?.difficultyName,
@@ -165,7 +177,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
     };
   });
   const configuredSeries = playerDialog && playerDialog !== "add"
-    ? series.find((item) => item.player.id === playerDialog)
+    ? series.find((item) => performancePlayerKey(item.player) === playerDialog)
     : undefined;
   const visibleSeries = series.filter((item) => !item.player.hidden);
   const omittedParseCount = display === "parse"
@@ -204,32 +216,37 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
     }
   };
 
-  const updatePlayerFilter = (id: string, spec: string | null, subSpec: string | null = null) => {
+  const updatePlayerFilter = (player: PerformancePlayerSelection, spec: string | null, subSpec: string | null = null) => {
+    const key = performancePlayerKey(player);
     onStateChange({
       ...state,
-      players: state.players.map((item) => item.id === id ? { ...item, spec, subSpec } : item),
+      players: state.players.map((item) => performancePlayerKey(item) === key ? { ...item, spec, subSpec } : item),
     });
   };
 
-  const togglePlayerVisibility = (id: string) => {
+  const togglePlayerVisibility = (player: PerformancePlayerSelection) => {
+    const key = performancePlayerKey(player);
     onStateChange({
       ...state,
-      players: state.players.map((item) => item.id === id ? { ...item, hidden: !item.hidden } : item),
+      players: state.players.map((item) => performancePlayerKey(item) === key ? { ...item, hidden: !item.hidden } : item),
     });
   };
 
   const addPlayer = (result: ArmorySearchResult) => {
-    if (state.players.length >= MAX_COMPARISON_PLAYERS || state.players.some((item) => item.id === result.id)) return;
+    const selection = { id: result.id, realmName: result.realm_name, spec: null, subSpec: null, hidden: false };
+    const key = performancePlayerKey(selection);
+    if (state.players.length >= MAX_COMPARISON_PLAYERS || state.players.some((item) => performancePlayerKey(item) === key)) return;
     onStateChange({
       ...state,
-      players: [...state.players, { id: result.id, spec: null, subSpec: null, hidden: false }],
+      players: [...state.players, selection],
     });
     setSearchQuery("");
-    setPlayerDialog(result.id);
+    setPlayerDialog(key);
   };
 
-  const removePlayer = (id: string) => {
-    onStateChange({ ...state, players: state.players.filter((item) => item.id !== id) });
+  const removePlayer = (player: PerformancePlayerSelection) => {
+    const key = performancePlayerKey(player);
+    onStateChange({ ...state, players: state.players.filter((item) => performancePlayerKey(item) !== key) });
     setPlayerDialog(null);
   };
 
@@ -352,15 +369,15 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                         <div className="grid min-w-0 flex-1 grid-cols-2 gap-1 sm:flex-none sm:grid-flow-col sm:grid-cols-none sm:grid-rows-2">
                         {series.map(({ player: selectedPlayer, specShapes }) => (
                           <PlayerShapesTooltip
-                            key={selectedPlayer.id}
+                            key={performancePlayerKey(selectedPlayer)}
                             color={selectedPlayer.color}
                             specShapes={specShapes}
                           >
                             <button
                               type="button"
                               onClick={(event) => {
-                                if (event.shiftKey) togglePlayerVisibility(selectedPlayer.id);
-                                else setPlayerDialog(selectedPlayer.id);
+                                if (event.shiftKey) togglePlayerVisibility(selectedPlayer);
+                                else setPlayerDialog(performancePlayerKey(selectedPlayer));
                               }}
                               className={cn(
                                 "group flex h-8 min-w-0 items-center gap-2 rounded-md border border-border bg-background/70 pr-2 text-left text-xs transition-all hover:bg-accent/50 sm:min-w-40",
@@ -381,6 +398,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                                 </span>
                                 <span className="block truncate text-[10px] text-muted-foreground">
                                   {selectedPlayer.spec ? `${selectedPlayer.spec}${selectedPlayer.subSpec ? ` / ${selectedPlayer.subSpec}` : ""}` : "All specs"}
+                                  {showPlayerRealms && ` · ${selectedPlayer.realmName}`}
                                 </span>
                               </span>
                               {selectedPlayer.hidden && <EyeOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
@@ -412,9 +430,15 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                   display={display}
                   loading={selectedPlayers.some((player, index) => !player.hidden && performanceQueries[index]?.isLoading)}
                   omittedParseCount={omittedParseCount}
+                  showPlayerRealms={showPlayerRealms}
                 />
 
-                <PerformanceTable series={visibleSeries} metric={metric} display={display} />
+                <PerformanceTable
+                  series={visibleSeries}
+                  metric={metric}
+                  display={display}
+                  showPlayerRealms={showPlayerRealms}
+                />
               </div>
             </div>
           </>
@@ -481,7 +505,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
               <DialogHeader>
                 <DialogTitle>Add player</DialogTitle>
                 <DialogDescription>
-                  Compare up to five players from {primaryPlayer.realm_name} on the same encounters and date range.
+                  Compare up to five players across realms on the same encounters and date range.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
@@ -500,15 +524,19 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                     <div className="p-6 text-center text-sm text-muted-foreground">Enter at least two characters.</div>
                   ) : playerSearch.isLoading ? (
                     <div className="p-6 text-center text-sm text-muted-foreground">Searching…</div>
-                  ) : (playerSearch.data?.players ?? []).filter((result) => !selectedPlayers.some((item) => item.id === result.id)).length === 0 ? (
+                  ) : (playerSearch.data?.players ?? []).filter((result) => !selectedPlayers.some((item) => (
+                    performancePlayerKey(item) === performancePlayerKey({ id: result.id, realmName: result.realm_name })
+                  ))).length === 0 ? (
                     <div className="p-6 text-center text-sm text-muted-foreground">No available players found.</div>
                   ) : (
                     (playerSearch.data?.players ?? [])
-                      .filter((result) => !selectedPlayers.some((item) => item.id === result.id))
+                      .filter((result) => !selectedPlayers.some((item) => (
+                        performancePlayerKey(item) === performancePlayerKey({ id: result.id, realmName: result.realm_name })
+                      )))
                       .slice(0, 12)
                       .map((result) => (
                         <button
-                          key={result.id}
+                          key={performancePlayerKey({ id: result.id, realmName: result.realm_name })}
                           type="button"
                           onClick={() => addPlayer(result)}
                           className="flex w-full items-center justify-between border-b border-border/60 px-3 py-2.5 text-left last:border-0 hover:bg-accent/50"
@@ -517,7 +545,9 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                             <span className="font-medium" style={{ color: getClassColorVar(result.class) }}>{result.name}</span>
                             <span className="ml-2 text-xs text-muted-foreground">{result.class}</span>
                           </span>
-                          <span className="text-xs text-muted-foreground">{result.guild_name ? `<${result.guild_name}>` : result.realm_name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {result.guild_name ? `<${result.guild_name}> · ` : ""}{result.realm_name}
+                          </span>
                         </button>
                       ))
                   )}
@@ -530,7 +560,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                 <DialogTitle className="flex items-center gap-2">
                   <span className="size-2.5 rounded-full" style={{ backgroundColor: configuredSeries.player.color }} />
                   <PlayerNameWithShapes
-                    name={configuredSeries.player.name}
+                    name={`${configuredSeries.player.name}${showPlayerRealms ? ` · ${configuredSeries.player.realmName}` : ""}`}
                     color={configuredSeries.player.color}
                     specShapes={configuredSeries.specShapes}
                     textColor={getClassColorVar(configuredSeries.player.className)}
@@ -549,7 +579,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                       label="All"
                       description="Every spec"
                       icon={<Layers3 className="size-6" />}
-                      onClick={() => updatePlayerFilter(configuredSeries.player.id, null)}
+                      onClick={() => updatePlayerFilter(configuredSeries.player, null)}
                     />
                     {configuredSeries.specs.map((option) => (
                       <SpecOptionCard
@@ -568,7 +598,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                             className="size-10 rounded-md object-cover shadow-sm"
                           />
                         )}
-                        onClick={() => updatePlayerFilter(configuredSeries.player.id, option)}
+                        onClick={() => updatePlayerFilter(configuredSeries.player, option)}
                       />
                     ))}
                   </div>
@@ -585,7 +615,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                         label="All"
                         description={`Every ${configuredSeries.player.spec} build`}
                         icon={<Layers3 className="size-6" />}
-                        onClick={() => updatePlayerFilter(configuredSeries.player.id, configuredSeries.player.spec)}
+                        onClick={() => updatePlayerFilter(configuredSeries.player, configuredSeries.player.spec)}
                       />
                       {configuredSeries.subSpecs.map((option) => (
                         <SpecOptionCard
@@ -600,7 +630,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                               className="size-10 rounded-md object-cover shadow-sm"
                             />
                           )}
-                          onClick={() => updatePlayerFilter(configuredSeries.player.id, configuredSeries.player.spec, option)}
+                          onClick={() => updatePlayerFilter(configuredSeries.player, configuredSeries.player.spec, option)}
                         />
                       ))}
                     </div>
@@ -616,12 +646,12 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => togglePlayerVisibility(configuredSeries.player.id)}
+                    onClick={() => togglePlayerVisibility(configuredSeries.player)}
                   >
                     {configuredSeries.player.hidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                     {configuredSeries.player.hidden ? "Show player data" : "Hide player data"}
                   </Button>
-                  <Button variant="destructive" size="sm" onClick={() => removePlayer(configuredSeries.player.id)}>
+                  <Button variant="destructive" size="sm" onClick={() => removePlayer(configuredSeries.player)}>
                     <Trash2 className="h-4 w-4" />
                     Remove player
                   </Button>
@@ -771,12 +801,14 @@ function PerformanceTrend({
   display,
   loading,
   omittedParseCount,
+  showPlayerRealms,
 }: {
   series: readonly PerformanceSeries[];
   metric: ParseMetric;
   display: DisplayMode;
   loading: boolean;
   omittedParseCount: number;
+  showPlayerRealms: boolean;
 }) {
   const [hoverDay, setHoverDay] = useState<number | null>(null);
 
@@ -785,7 +817,7 @@ function PerformanceTrend({
   const chartPoints = series.flatMap((item) => item.runs.map((run) => {
     const timestamp = new Date(run.started_at).getTime();
     return {
-      id: `${item.player.id}-${run.run_id}`,
+      id: `${performancePlayerKey(item.player)}-${run.run_id}`,
       player: item.player,
       run,
       value: performanceValue(run, metric, display),
@@ -967,7 +999,7 @@ function PerformanceTrend({
             if (playerPoints.length < 2) return null;
             return (
               <polyline
-                key={item.player.id}
+                key={performancePlayerKey(item.player)}
                 points={playerPoints.map((point) => `${x(point.day)},${y(point.value)}`).join(" ")}
                 fill="none"
                 stroke={item.player.color}
@@ -1007,7 +1039,7 @@ function PerformanceTrend({
                 type="button"
                 className="flex size-5 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 style={{ "--tw-ring-color": pointPlayer.color } as React.CSSProperties}
-                aria-label={`${pointPlayer.name}, ${new Date(run.started_at).toLocaleDateString()}, ${value} ${valueLabel}`}
+                aria-label={`${pointPlayer.name}${showPlayerRealms ? `, ${pointPlayer.realmName}` : ""}, ${new Date(run.started_at).toLocaleDateString()}, ${value} ${valueLabel}`}
               >
                 <PerformancePointShape
                   shape={shape}
@@ -1044,7 +1076,7 @@ function PerformanceTrend({
                     const valueColor = display === "parse" ? parseColor(value) : pointPlayer.color;
                     const rawMetricValue = metric === "hps" ? run.hps : run.dps;
                     return (
-                      <div key={`${pointPlayer.id}-${run.run_id}`} className="px-1.5 py-1">
+                      <div key={`${performancePlayerKey(pointPlayer)}-${run.run_id}`} className="px-1.5 py-1">
                         <div className="flex items-center justify-between gap-5">
                           <span className="flex min-w-0 items-center gap-2 font-medium">
                             <PerformancePointShape
@@ -1053,7 +1085,9 @@ function PerformanceTrend({
                               fillColor={valueColor}
                               className="size-2"
                             />
-                            <span className="truncate" style={{ color: getClassColorVar(pointPlayer.className) }}>{pointPlayer.name}</span>
+                            <span className="truncate" style={{ color: getClassColorVar(pointPlayer.className) }}>
+                              {pointPlayer.name}{showPlayerRealms && ` · ${pointPlayer.realmName}`}
+                            </span>
                           </span>
                           <span className="shrink-0 font-mono font-semibold tabular-nums" style={{ color: valueColor }}>
                             {formatValue(value)}
@@ -1146,10 +1180,12 @@ function PerformanceTable({
   series,
   metric,
   display,
+  showPlayerRealms,
 }: {
   series: readonly PerformanceSeries[];
   metric: ParseMetric;
   display: DisplayMode;
+  showPlayerRealms: boolean;
 }) {
   const [selectedRow, setSelectedRow] = useState<{ player: SelectedPerformancePlayer; run: CharacterPerformanceRun } | null>(null);
   const rows = series
@@ -1176,7 +1212,7 @@ function PerformanceTable({
             const value = display === "parse" ? run.average_parse : metric === "hps" ? run.hps : run.dps;
             return (
               <button
-                key={`${rowPlayer.id}-${run.run_id}`}
+                key={`${performancePlayerKey(rowPlayer)}-${run.run_id}`}
                 type="button"
                 onClick={() => setSelectedRow({ player: rowPlayer, run })}
                 className="grid w-full grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-2 border-b border-border/40 px-2 py-2 text-left text-xs odd:bg-black/5 even:bg-black/20 hover:bg-accent/20 last:border-0"
@@ -1200,7 +1236,7 @@ function PerformanceTable({
                     />
                   )}
                   <PlayerNameWithShapes
-                    name={rowPlayer.name}
+                    name={`${rowPlayer.name}${showPlayerRealms ? ` · ${rowPlayer.realmName}` : ""}`}
                     color={rowPlayer.color}
                     specShapes={specShapes}
                     className="truncate font-medium"
@@ -1237,7 +1273,7 @@ function PerformanceTable({
           <tbody>
             {rows.map(({ player: rowPlayer, run, shape, specShapes }) => (
               <tr
-                key={`${rowPlayer.id}-${run.run_id}`}
+                key={`${performancePlayerKey(rowPlayer)}-${run.run_id}`}
                 className="border-b border-border/40 odd:bg-black/5 even:bg-black/20 hover:bg-accent/20 last:border-0"
               >
                 <td className="py-2 pr-4 whitespace-nowrap">{new Date(run.started_at).toLocaleDateString()}</td>
@@ -1249,7 +1285,7 @@ function PerformanceTable({
                     className="mr-2 size-2"
                   />
                   <PlayerNameWithShapes
-                    name={rowPlayer.name}
+                    name={`${rowPlayer.name}${showPlayerRealms ? ` · ${rowPlayer.realmName}` : ""}`}
                     color={rowPlayer.color}
                     specShapes={specShapes}
                     className="font-medium"
@@ -1305,7 +1341,7 @@ function PerformanceTable({
           {selectedRow && (
             <div className="rounded-md border border-border/70 bg-black/10 px-3 py-2 text-sm">
               <div className="font-medium" style={{ color: getClassColorVar(selectedRow.player.className) }}>
-                {selectedRow.player.name}
+                {selectedRow.player.name}{showPlayerRealms && ` · ${selectedRow.player.realmName}`}
               </div>
               <div className="mt-0.5 text-xs text-muted-foreground">
                 {new Date(selectedRow.run.started_at).toLocaleString(undefined, {

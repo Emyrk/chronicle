@@ -36,11 +36,18 @@ func (s *Service) handleCharacterPerformance(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	realmID, err := parseOptionalUUID(q.Get("realm_id"))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Invalid realm_id"})
+		return
+	}
+
 	metric := normalizeMetric(q.Get("metric"))
 	rows, err := s.store.GetCharacterPerformanceRuns(ctx, database.GetCharacterPerformanceRunsParams{
 		Metric:         metric,
 		EncounterNames: encounterNames,
 		PlayerGuid:     playerGUID,
+		RealmID:        realmID,
 		InstanceName:   instanceName,
 		DifficultyName: q.Get("difficulty_name"),
 		MaxPlayers:     parseMaxPlayers(q.Get("max_players")),

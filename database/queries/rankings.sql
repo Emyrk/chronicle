@@ -826,6 +826,7 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
 JOIN log_instances li ON li.id = edr.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
 WHERE edr.player_guid = @player_guid
+  AND (sqlc.narg(realm_id)::uuid IS NULL OR edr.realm_id = sqlc.narg(realm_id))
   AND edr.encounter_id IS NOT NULL
 GROUP BY edr.instance_name, edr.encounter_name, edr.difficulty_name, edr.max_players
 ORDER BY edr.instance_name, edr.encounter_name;
@@ -864,6 +865,7 @@ raw_rows AS MATERIALIZED (
     JOIN selected_encounters selected ON selected.encounter_name = edr.encounter_name
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
     WHERE edr.player_guid = @player_guid
+      AND (sqlc.narg(realm_id)::uuid IS NULL OR rr.realm_id = sqlc.narg(realm_id))
       AND edr.encounter_id IS NOT NULL
       AND rr.instance_name = @instance_name
       AND (@difficulty_name::text = '' OR rr.difficulty_name = @difficulty_name)

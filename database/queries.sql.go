@@ -18124,10 +18124,16 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
 JOIN log_instances li ON li.id = edr.instance_id
 JOIN wow_log_groups li_group ON li_group.id = li.log_group_id AND NOT li_group.unlisted
 WHERE edr.player_guid = $1
+  AND ($2::uuid IS NULL OR edr.realm_id = $2)
   AND edr.encounter_id IS NOT NULL
 GROUP BY edr.instance_name, edr.encounter_name, edr.difficulty_name, edr.max_players
 ORDER BY edr.instance_name, edr.encounter_name
 `
+
+type GetCharacterEncounterStatsParams struct {
+	PlayerGuid string        `db:"player_guid" json:"player_guid"`
+	RealmID    uuid.NullUUID `db:"realm_id" json:"realm_id"`
+}
 
 type GetCharacterEncounterStatsRow struct {
 	InstanceName   string             `db:"instance_name" json:"instance_name"`
@@ -18143,8 +18149,8 @@ type GetCharacterEncounterStatsRow struct {
 // Rankings rows exist only for clean/partial kills; trash rows
 // (encounter_id IS NULL) are excluded. Duplicate uploads of the same raid
 // night are collapsed via duplicate_group_id.
-func (q *sqlQuerier) GetCharacterEncounterStats(ctx context.Context, playerGuid string) ([]GetCharacterEncounterStatsRow, error) {
-	rows, err := q.db.Query(ctx, getCharacterEncounterStats, playerGuid)
+func (q *sqlQuerier) GetCharacterEncounterStats(ctx context.Context, arg GetCharacterEncounterStatsParams) ([]GetCharacterEncounterStatsRow, error) {
+	rows, err := q.db.Query(ctx, getCharacterEncounterStats, arg.PlayerGuid, arg.RealmID)
 	if err != nil {
 		return nil, err
 	}
@@ -18201,10 +18207,11 @@ raw_rows AS MATERIALIZED (
     JOIN selected_encounters selected ON selected.encounter_name = edr.encounter_name
     JOIN wow_server_realms tenant_realm ON tenant_realm.id = rr.realm_id
     WHERE edr.player_guid = $3
+      AND ($4::uuid IS NULL OR rr.realm_id = $4)
       AND edr.encounter_id IS NOT NULL
-      AND rr.instance_name = $4
-      AND ($5::text = '' OR rr.difficulty_name = $5)
-      AND ($6::smallint = 0 OR rr.max_players = $6)
+      AND rr.instance_name = $5
+      AND ($6::text = '' OR rr.difficulty_name = $6)
+      AND ($7::smallint = 0 OR rr.max_players = $7)
     ORDER BY rr.run_id, edr.encounter_name,
         (CASE WHEN $1::text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
 ),
@@ -18217,7 +18224,7 @@ parse_rows AS MATERIALIZED (
     JOIN log_instances psr_instance ON psr_instance.id = psr.instance_id
     JOIN wow_log_groups psr_group ON psr_group.id = psr_instance.log_group_id AND NOT psr_group.unlisted
     JOIN selected_encounters selected ON selected.encounter_name = psr.encounter_name
-    WHERE psr.tenant_id = $7
+    WHERE psr.tenant_id = $8
       AND psr.player_guid = $3
       AND psr.metric = $1
       AND psr.status IN ('ok', 'low_confidence')
@@ -18272,13 +18279,14 @@ ORDER BY started_at ASC, run_id ASC
 `
 
 type GetCharacterPerformanceRunsParams struct {
-	Metric         string    `db:"metric" json:"metric"`
-	EncounterNames []string  `db:"encounter_names" json:"encounter_names"`
-	PlayerGuid     string    `db:"player_guid" json:"player_guid"`
-	InstanceName   string    `db:"instance_name" json:"instance_name"`
-	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16     `db:"max_players" json:"max_players"`
-	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	Metric         string        `db:"metric" json:"metric"`
+	EncounterNames []string      `db:"encounter_names" json:"encounter_names"`
+	PlayerGuid     string        `db:"player_guid" json:"player_guid"`
+	RealmID        uuid.NullUUID `db:"realm_id" json:"realm_id"`
+	InstanceName   string        `db:"instance_name" json:"instance_name"`
+	DifficultyName string        `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16         `db:"max_players" json:"max_players"`
+	TenantID       uuid.UUID     `db:"tenant_id" json:"tenant_id"`
 }
 
 type GetCharacterPerformanceRunsRow struct {
@@ -18313,6 +18321,7 @@ func (q *sqlQuerier) GetCharacterPerformanceRuns(ctx context.Context, arg GetCha
 		arg.Metric,
 		arg.EncounterNames,
 		arg.PlayerGuid,
+		arg.RealmID,
 		arg.InstanceName,
 		arg.DifficultyName,
 		arg.MaxPlayers,

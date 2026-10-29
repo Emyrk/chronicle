@@ -24,14 +24,14 @@ import { PerformanceExplorer } from "./overview/PerformanceExplorer";
 export function PerformanceComparisonPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const state = parsePerformanceComparisonState(searchParams);
-  const playerQueries = useArmoryPlayers(state.realmName, state.players.map((player) => player.id));
+  const playerQueries = useArmoryPlayers(state.players);
 
   if (!state.realmName || state.players.length === 0) {
     return <PerformanceComparisonLanding onSelect={(realmName, playerId) => {
       setSearchParams(serializePerformanceComparisonState({
         ...DEFAULT_PERFORMANCE_COMPARISON_STATE,
         realmName,
-        players: [{ id: playerId, spec: null, subSpec: null, hidden: false }],
+        players: [{ id: playerId, realmName, spec: null, subSpec: null, hidden: false }],
       }));
     }} />;
   }
@@ -71,7 +71,7 @@ export function ArmoryAnalysisRedirect() {
   const search = serializePerformanceComparisonState({
     ...DEFAULT_PERFORMANCE_COMPARISON_STATE,
     realmName,
-    players: playerIdentifier ? [{ id: playerIdentifier, spec: null, subSpec: null, hidden: false }] : [],
+    players: playerIdentifier ? [{ id: playerIdentifier, realmName, spec: null, subSpec: null, hidden: false }] : [],
   });
   return <Navigate replace to={`/performance-history?${search.toString()}`} />;
 }
