@@ -1798,7 +1798,9 @@ CREATE TABLE proof_request_subjects (
     realm_name text DEFAULT ''::text NOT NULL,
     status text DEFAULT 'pending'::text NOT NULL,
     warning text DEFAULT ''::text NOT NULL,
+    guild_id uuid,
     CONSTRAINT proof_request_subjects_check CHECK (((subject_type <> 'character'::text) OR ((realm_id IS NOT NULL) AND (character_guid IS NOT NULL)))),
+    CONSTRAINT proof_request_subjects_guild_identity CHECK (((subject_type <> 'guild'::text) OR (guild_id IS NOT NULL))),
     CONSTRAINT proof_request_subjects_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text]))),
     CONSTRAINT proof_request_subjects_subject_type_check CHECK ((subject_type <> ''::text))
 );
@@ -3502,6 +3504,8 @@ CREATE INDEX oauth_token_sessions_request_id_idx ON oauth_token_sessions USING b
 
 CREATE UNIQUE INDEX proof_request_subjects_pending_character ON proof_request_subjects USING btree (realm_id, character_guid) WHERE ((subject_type = 'character'::text) AND (status = 'pending'::text));
 
+CREATE UNIQUE INDEX proof_request_subjects_pending_guild ON proof_request_subjects USING btree (guild_id) WHERE ((subject_type = 'guild'::text) AND (status = 'pending'::text));
+
 CREATE INDEX proof_requests_applicant_created ON proof_requests USING btree (applicant_id, created_at DESC);
 
 CREATE INDEX proof_requests_evidence_cleanup ON proof_requests USING btree (id) WHERE evidence_delete_pending;
@@ -3945,6 +3949,9 @@ ALTER TABLE ONLY parse_score_results
 
 ALTER TABLE ONLY parsed_log_group
     ADD CONSTRAINT parsed_log_group_id_fkey FOREIGN KEY (id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY proof_request_subjects
+    ADD CONSTRAINT proof_request_subjects_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id);
 
 ALTER TABLE ONLY proof_request_subjects
     ADD CONSTRAINT proof_request_subjects_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);

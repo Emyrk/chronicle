@@ -16,6 +16,7 @@ type GuildInfo struct {
 	LogoURL       string    `json:"logo_url"`
 	CanEdit       bool      `json:"can_edit"`
 	CanViewRoster bool      `json:"can_view_roster"`
+	CanClaim      bool      `json:"can_claim"`
 }
 
 type GuildPageConfig struct {

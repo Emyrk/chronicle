@@ -70,6 +70,20 @@ func TestInTx_UpsertGuildWritesSpiceDBRelationship(t *testing.T) {
 	require.NotEqual(t, uuid.Nil, guild.ID)
 }
 
+func TestGuildHasLeader(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(testservices.Authz(t))
+	guildID, leaderID := uuid.New(), uuid.New()
+	hasLeader, err := zed.GuildHasLeader(ctx, guildID)
+	require.NoError(t, err)
+	require.False(t, hasLeader)
+	require.NoError(t, zed.SetGuildMemberRole(ctx, guildID, leaderID, "leader"))
+	hasLeader, err = zed.GuildHasLeader(ctx, guildID)
+	require.NoError(t, err)
+	require.True(t, hasLeader)
+}
+
 func TestManageConsumablesRole(t *testing.T) {
 	t.Parallel()
 

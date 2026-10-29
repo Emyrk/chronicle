@@ -16,6 +16,7 @@ import { Shield, PanelLeft, UserPlus, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FavoriteButton } from "@/components/Favorites";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { GuildClaimDialog } from "./GuildClaimDialog";
 import { ensureRequiredRaidsTab, orderGuildPageTabs } from "./guildPageTabs";
 
 // Helper to check if an item should be visible on current device
@@ -140,54 +141,57 @@ export function GuildPage() {
       <GuildPageHeader
         guild={pageConfig.guild}
         theme={pageConfig.theme}
-        leading={joinButtonVisible ? (
-          myRequest ? (
-            <Button variant="outline" size="sm" disabled>
-              <Clock className="h-4 w-4 mr-2" />
-              Request Pending
-            </Button>
-          ) : showJoinDialog ? (
-            <div className="flex items-center gap-2 bg-background border border-border rounded-lg p-2 shadow-lg">
-              <input
-                type="text"
-                placeholder="Optional message..."
-                value={joinMessage}
-                onChange={(e) => setJoinMessage(e.target.value)}
-                className="bg-transparent border border-border rounded px-2 py-1 text-sm w-48 focus:outline-none focus:ring-1 focus:ring-primary"
-                maxLength={500}
-              />
-              <Button
-                size="sm"
-                disabled={createJoinRequest.isPending}
-                onClick={() => {
-                  createJoinRequest.mutate({ message: joinMessage }, {
-                    onSuccess: () => {
-                      setShowJoinDialog(false);
-                      setJoinMessage("");
-                    },
-                  });
-                }}
-              >
-                {createJoinRequest.isPending ? "Sending..." : "Send"}
+        leading={pageConfig.guild.can_claim || joinButtonVisible ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {pageConfig.guild.can_claim && <GuildClaimDialog guild={pageConfig.guild} />}
+            {joinButtonVisible && (myRequest ? (
+              <Button variant="outline" size="sm" disabled>
+                <Clock className="h-4 w-4 mr-2" />
+                Request Pending
               </Button>
+            ) : showJoinDialog ? (
+              <div className="flex items-center gap-2 bg-background border border-border rounded-lg p-2 shadow-lg">
+                <input
+                  type="text"
+                  placeholder="Optional message..."
+                  value={joinMessage}
+                  onChange={(e) => setJoinMessage(e.target.value)}
+                  className="bg-transparent border border-border rounded px-2 py-1 text-sm w-48 focus:outline-none focus:ring-1 focus:ring-primary"
+                  maxLength={500}
+                />
+                <Button
+                  size="sm"
+                  disabled={createJoinRequest.isPending}
+                  onClick={() => {
+                    createJoinRequest.mutate({ message: joinMessage }, {
+                      onSuccess: () => {
+                        setShowJoinDialog(false);
+                        setJoinMessage("");
+                      },
+                    });
+                  }}
+                >
+                  {createJoinRequest.isPending ? "Sending..." : "Send"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setShowJoinDialog(false); setJoinMessage(""); }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
               <Button
-                variant="ghost"
+                className="bg-blue-600 hover:bg-blue-700 text-white"
                 size="sm"
-                onClick={() => { setShowJoinDialog(false); setJoinMessage(""); }}
+                onClick={() => setShowJoinDialog(true)}
               >
-                Cancel
+                <UserPlus className="h-4 w-4 mr-2" />
+                Join Guild
               </Button>
-            </div>
-          ) : (
-            <Button
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-              size="sm"
-              onClick={() => setShowJoinDialog(true)}
-            >
-              <UserPlus className="h-4 w-4 mr-2" />
-              Join Guild
-            </Button>
-          )
+            ))}
+          </div>
         ) : undefined}
       />
 

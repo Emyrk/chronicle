@@ -6,6 +6,13 @@ type CheckConstraint string
 
 // CheckConstraint enums.
 const (
+	CheckAddonAuthorsNameCheck                                  CheckConstraint = "addon_authors_name_check"                                      // addon_authors
+	CheckCacheGenerationsGenerationCheck                        CheckConstraint = "cache_generations_generation_check"                            // cache_generations
+	CheckCacheGenerationsScopeCheck                             CheckConstraint = "cache_generations_scope_check"                                 // cache_generations
+	CheckLogFilePartsSequenceCheck                              CheckConstraint = "log_file_parts_sequence_check"                                 // log_file_parts
+	CheckLogFilePartsStatusCheck                                CheckConstraint = "log_file_parts_status_check"                                   // log_file_parts
+	CheckLogGroupArtifactsSizeBytesCheck                        CheckConstraint = "log_group_artifacts_size_bytes_check"                          // log_group_artifacts
+	CheckUsersCharacterCosmeticsCheck                           CheckConstraint = "users_character_cosmetics_check"                               // users
 	CheckClassBuffIgnoresNormalizedNameCheck                    CheckConstraint = "class_buff_ignores_normalized_name_check"                      // class_buff_ignores
 	CheckCustomPanelReleasesCommitShaFormat                     CheckConstraint = "custom_panel_releases_commit_sha_format"                       // custom_panel_releases
 	CheckCustomPanelReleasesManifestObject                      CheckConstraint = "custom_panel_releases_manifest_object"                         // custom_panel_releases
@@ -40,6 +47,8 @@ const (
 	CheckInferenceClientToolRequestsStateRevisionCheck          CheckConstraint = "inference_client_tool_requests_state_revision_check"           // inference_client_tool_requests
 	CheckInferenceClientToolRequestsStatusCheck                 CheckConstraint = "inference_client_tool_requests_status_check"                   // inference_client_tool_requests
 	CheckInferenceThreadsCheck                                  CheckConstraint = "inference_threads_check"                                       // inference_threads
+	CheckInferenceUsageContextCheck                             CheckConstraint = "inference_usage_context_check"                                 // inference_usage
+	CheckInferenceUserConfigObject                              CheckConstraint = "inference_user_config_object"                                  // inference_user_config
 	CheckInstanceOverviewMetricsBossDurationNonnegative         CheckConstraint = "instance_overview_metrics_boss_duration_nonnegative"           // instance_overview_metrics
 	CheckInstanceOverviewMetricsBossWithinCombat                CheckConstraint = "instance_overview_metrics_boss_within_combat"                  // instance_overview_metrics
 	CheckInstanceOverviewMetricsCombatDurationNonnegative       CheckConstraint = "instance_overview_metrics_combat_duration_nonnegative"         // instance_overview_metrics
@@ -50,8 +59,6 @@ const (
 	CheckItemDailyPricesAuctionHouseFactionCheck                CheckConstraint = "item_daily_prices_auction_house_faction_check"                 // item_daily_prices
 	CheckItemDailyPricesItemIDCheck                             CheckConstraint = "item_daily_prices_item_id_check"                               // item_daily_prices
 	CheckItemDailyPricesPriceCopperCheck                        CheckConstraint = "item_daily_prices_price_copper_check"                          // item_daily_prices
-	CheckLogFilePartsSequenceCheck                              CheckConstraint = "log_file_parts_sequence_check"                                 // log_file_parts
-	CheckLogFilePartsStatusCheck                                CheckConstraint = "log_file_parts_status_check"                                   // log_file_parts
 	CheckLogInstanceEncounterPhasesCheck                        CheckConstraint = "log_instance_encounter_phases_check"                           // log_instance_encounter_phases
 	CheckLogInstanceEncounterPhasesPhaseOrderCheck              CheckConstraint = "log_instance_encounter_phases_phase_order_check"               // log_instance_encounter_phases
 	CheckLogInstanceEncounterPhasesStartOffsetMsCheck           CheckConstraint = "log_instance_encounter_phases_start_offset_ms_check"           // log_instance_encounter_phases
@@ -62,6 +69,14 @@ const (
 	CheckWowServerRealmsPricingAuctionHouseCheck                CheckConstraint = "wow_server_realms_pricing_auction_house_check"                 // wow_server_realms
 	CheckWowServerRealmsPricingConfigComplete                   CheckConstraint = "wow_server_realms_pricing_config_complete"                     // wow_server_realms
 	CheckWowServersPricingProviderCheck                         CheckConstraint = "wow_servers_pricing_provider_check"                            // wow_servers
+	CheckLuaProjectArtifactsHashCheck                           CheckConstraint = "lua_project_artifacts_hash_check"                              // lua_project_artifacts
+	CheckLuaProjectArtifactsStoredSizeBytesCheck                CheckConstraint = "lua_project_artifacts_stored_size_bytes_check"                 // lua_project_artifacts
+	CheckLuaProjectArtifactsUncompressedSizeBytesCheck          CheckConstraint = "lua_project_artifacts_uncompressed_size_bytes_check"           // lua_project_artifacts
+	CheckLuaProjectContributorsPermissionsCheck                 CheckConstraint = "lua_project_contributors_permissions_check"                    // lua_project_contributors
+	CheckLuaProjectReleasesHashCheck                            CheckConstraint = "lua_project_releases_hash_check"                               // lua_project_releases
+	CheckLuaProjectReleasesTagCheck                             CheckConstraint = "lua_project_releases_tag_check"                                // lua_project_releases
+	CheckLuaProjectsDescriptionLength                           CheckConstraint = "lua_projects_description_length"                               // lua_projects
+	CheckLuaProjectsKindCheck                                   CheckConstraint = "lua_projects_kind_check"                                       // lua_projects
 	CheckOauthDeviceSessionsSidekickInstallationNameCheck       CheckConstraint = "oauth_device_sessions_sidekick_installation_name_check"        // oauth_device_sessions
 	CheckOauthDeviceSessionsSidekickInstallationPlatformCheck   CheckConstraint = "oauth_device_sessions_sidekick_installation_platform_check"    // oauth_device_sessions
 	CheckOauthDeviceSessionsSidekickInstallationVersionCheck    CheckConstraint = "oauth_device_sessions_sidekick_installation_version_check"     // oauth_device_sessions
@@ -70,6 +85,7 @@ const (
 	CheckOauthTokenSessionsTokenTypeCheck                       CheckConstraint = "oauth_token_sessions_token_type_check"                         // oauth_token_sessions
 	CheckParseScoreResultsMetricCheck                           CheckConstraint = "parse_score_results_metric_check"                              // parse_score_results
 	CheckProofRequestSubjectsCheck                              CheckConstraint = "proof_request_subjects_check"                                  // proof_request_subjects
+	CheckProofRequestSubjectsGuildIdentity                      CheckConstraint = "proof_request_subjects_guild_identity"                         // proof_request_subjects
 	CheckProofRequestSubjectsStatusCheck                        CheckConstraint = "proof_request_subjects_status_check"                           // proof_request_subjects
 	CheckProofRequestSubjectsSubjectTypeCheck                   CheckConstraint = "proof_request_subjects_subject_type_check"                     // proof_request_subjects
 	CheckProofRequestsCheck                                     CheckConstraint = "proof_requests_check"                                          // proof_requests

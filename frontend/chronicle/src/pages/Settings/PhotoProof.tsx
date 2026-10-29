@@ -1,43 +1,26 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Camera, Check, ChevronRight, Clock, ImageUp, Maximize2, Search, Users } from "lucide-react";
+import { Camera, Check, ChevronRight, Clock, Maximize2, Search, Users } from "lucide-react";
 import { useArmorySearch } from "@/api/queries";
-import type { ArmorySearchResult, ProofApplicant, ProofCooldownResponse } from "@/api/typesGenerated";
+import type {
+  ArmorySearchResult,
+  ProofCooldownResponse,
+  ProofRequest as APIProofRequest,
+  ProofSubject as APIProofSubject,
+} from "@/api/typesGenerated";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ProofScreenshotDropzone } from "@/components/ProofScreenshotDropzone";
+import { encodeProofScreenshot } from "@/lib/proofScreenshot";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-export type ProofSubject = {
-  realm_id: string;
-  character_guid: string;
-  name: string;
-  realm_name: string;
-  class?: string;
-  guild_name?: string;
-  status: string;
-  warning?: string;
-};
+export type ProofSubject = APIProofSubject;
+export type ProofRequest = APIProofRequest;
 
 type SelectedProofCharacter = ProofSubject & Pick<ArmorySearchResult, "class" | "guild_name">;
-
-export type ProofRequest = {
-  id: string;
-  tenant_id: string;
-  tenant_name?: string;
-  tenant_slug?: string;
-  purpose: string;
-  status: string;
-  message: string;
-  response?: string;
-  created_at: string;
-  reviewed_at?: string;
-  subjects: ProofSubject[];
-  applicant_id?: string;
-  applicant?: ProofApplicant;
-};
 
 async function proofResponse(response: Response): Promise<ProofRequest> {
   if (!response.ok) {
@@ -77,70 +60,7 @@ function cooldownText(remainingMs: number) {
   return hours ? `${hours}h${rest ? ` ${rest}m` : ""}` : `${minutes}m`;
 }
 
-// The browser handles source formats (PNG, WebP, HEIC where supported). Never
-// upload the original: remove its metadata and bound the encoded JPEG size.
-async function encodeScreenshot(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file);
-  try {
-    const canvas = document.createElement("canvas");
-    let scale = Math.min(1, 2560 / Math.max(bitmap.width, bitmap.height));
-    for (let attempt = 0; attempt < 5; attempt++) {
-      canvas.width = Math.round(bitmap.width * scale);
-      canvas.height = Math.round(bitmap.height * scale);
-      const context = canvas.getContext("2d");
-      if (!context) throw new Error("Image conversion is unavailable in this browser");
-      context.fillStyle = "white";
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-      const quality = attempt < 2 ? 0.86 - attempt * 0.14 : 0.72;
-      const result = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
-      if (result && result.size <= 4 * 1024 * 1024) return result;
-      scale *= 0.8;
-    }
-    throw new Error("Screenshot is too large to upload. Try a smaller image.");
-  } finally {
-    bitmap.close();
-  }
-}
-
 const EXAMPLE_SCREENSHOT = "/c/images/photo-proof-example.webp";
-
-// Remount (via key) to clear the selection.
-function ScreenshotDropzone({ file, onChange }: { file: File | null; onChange: (file: File | null) => void }) {
-  const [preview, setPreview] = useState<string | null>(null);
-  const [dragging, setDragging] = useState(false);
-  const previewRef = useRef<string | null>(null);
-  useEffect(() => () => { if (previewRef.current) URL.revokeObjectURL(previewRef.current); }, []);
-  const choose = (next: File | null) => {
-    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
-    previewRef.current = next ? URL.createObjectURL(next) : null;
-    setPreview(previewRef.current);
-    onChange(next);
-  };
-
-  return <label
-    className={`relative flex aspect-[4/3] cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-lg border-2 border-dashed p-4 text-center transition-colors ${dragging ? "border-primary bg-primary/10" : "border-border hover:border-primary/60 hover:bg-muted/40"}`}
-    onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
-    onDragLeave={() => setDragging(false)}
-    onDrop={(event) => {
-      event.preventDefault();
-      setDragging(false);
-      const dropped = event.dataTransfer.files?.[0];
-      if (dropped?.type.startsWith("image/")) choose(dropped);
-      else toast.error("Drop an image file.");
-    }}
-  >
-    <input type="file" accept="image/*" className="sr-only" onChange={(event) => choose(event.target.files?.[0] ?? null)} />
-    {preview ? <>
-      <img src={preview} alt="Selected screenshot" className="absolute inset-0 size-full bg-black object-contain" />
-      <span className="absolute inset-x-0 bottom-0 truncate bg-black/70 px-3 py-1.5 text-xs text-white">{file?.name} · Click to change</span>
-    </> : <>
-      <ImageUp className="size-8 text-muted-foreground" />
-      <span className="text-sm font-medium">Upload your screenshot</span>
-      <span className="text-xs text-muted-foreground">Click to browse or drag an image here</span>
-    </>}
-  </label>;
-}
 
 function StepLabel({ step, title, done, htmlFor }: { step: number; title: string; done?: boolean; htmlFor?: string }) {
   return <label htmlFor={htmlFor} className="flex items-center gap-2 text-sm font-medium">
@@ -195,7 +115,7 @@ export function PhotoProofCard({ callout }: { callout?: string }) {
     mutationFn: async () => {
       if (!file || selected.length === 0) throw new Error("Choose a screenshot and at least one character");
       const form = new FormData();
-      form.append("photo", await encodeScreenshot(file), "character-select.jpg");
+      form.append("photo", await encodeProofScreenshot(file), "character-select.jpg");
       form.append("characters", JSON.stringify(selected.map(({ realm_id, character_guid }) => ({ realm_id, character_guid }))));
       form.append("message", message.trim());
       const response = await fetch("/api/v1/linked/me/proofs", { method: "POST", credentials: "include", body: form });
@@ -250,7 +170,7 @@ export function PhotoProofCard({ callout }: { callout?: string }) {
       <div className="space-y-2">
         <StepLabel step={1} title="Upload your character selection screenshot" done={!!file} />
         <div className="grid gap-3 sm:grid-cols-2">
-          <ScreenshotDropzone key={fileInputKey} file={file} onChange={setFile} />
+          <ProofScreenshotDropzone key={fileInputKey} file={file} onChange={setFile} />
           <ProofExample />
         </div>
       </div>
@@ -353,8 +273,10 @@ export function PhotoProofHistory() {
           <ProofStatus status={request.status} />
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1">
-          {request.subjects.map((subject) => <span key={`${subject.realm_id}-${subject.character_guid}`} className="inline-flex items-center gap-1.5">
-            <Link className="font-medium hover:underline" to={`/armory/${encodeURIComponent(subject.realm_name)}/${subject.character_guid}`}>{subject.name}</Link>
+          {request.subjects.map((subject) => <span key={subject.guild_id ?? `${subject.realm_id}-${subject.character_guid}`} className="inline-flex items-center gap-1.5">
+            {subject.guild_id
+              ? <Link className="font-medium hover:underline" to={`/g/${subject.guild_id}`}>&lt;{subject.name}&gt; · {subject.realm_name}</Link>
+              : <Link className="font-medium hover:underline" to={`/armory/${encodeURIComponent(subject.realm_name)}/${subject.character_guid}`}>{subject.name}</Link>}
             {subject.status !== request.status && <ProofStatus status={subject.status} />}
             {subject.warning && <span className="text-xs text-yellow-500">{subject.warning}</span>}
           </span>)}
