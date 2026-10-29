@@ -372,7 +372,7 @@ describe("summarizePerformanceRuns", () => {
     expect(summarizePerformanceRuns(withDisaster, "dps", "raw")?.outliers).toEqual([600]);
   });
 
-  it("does not count steady improvement as inconsistency", () => {
+  it("reads a fast improver as inconsistent and fits their trend", () => {
     const climbing = Array.from({ length: 10 }, (_, index) => run({
       run_id: `climb-${index}`,
       started_at: `2026-02-${String(index + 1).padStart(2, "0")}T00:00:00Z`,
@@ -381,9 +381,9 @@ describe("summarizePerformanceRuns", () => {
     const bouncing = climbing.map((item, index) => ({ ...item, average_parse: index % 2 === 0 ? 70 : 97 }));
 
     const climbingSummary = summarizePerformanceRuns(climbing, "dps", "parse");
-    expect(climbingSummary?.spread).toBeGreaterThan(10);
-    expect(climbingSummary?.consistency).toBeCloseTo(0);
-    expect(summarizePerformanceRuns(bouncing, "dps", "parse")?.consistency).toBeGreaterThan(20);
+    expect(climbingSummary?.consistency).toBeGreaterThan(10);
+    expect(climbingSummary?.trend?.slope).toBeCloseTo(3);
+    expect(summarizePerformanceRuns(bouncing, "dps", "parse")?.trend?.slope).toBeCloseTo(0);
     expect(summarizePerformanceRuns(climbing.slice(0, 2), "dps", "parse")?.consistency).toBeNull();
   });
 

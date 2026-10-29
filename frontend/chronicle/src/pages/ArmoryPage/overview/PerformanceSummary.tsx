@@ -70,7 +70,7 @@ const STAT_COLUMNS: readonly StatColumn[] = [
   {
     key: "consistency",
     label: "Consistency",
-    help: "How closely runs follow the player's own trend line: the middle half of runs land within ± this distance of it. A player who is steadily improving still counts as consistent, and outlier nights don't affect it. High means steady runs; Low means they swing a lot. With one player selected, the chart draws this trend line.",
+    help: "How tightly runs cluster: the middle half of runs sit within ± this of their midpoint. Outlier nights don't affect it. High means steady runs; Low means they swing a lot. A player who is improving quickly naturally reads as less consistent, because their early and recent runs are far apart. Check Recent and the chart's trend line to tell improvement from erratic play.",
     higherIsBetter: false,
   },
   {
@@ -175,7 +175,9 @@ function SummaryTile({ label, help, children }: { label: string; help: string; c
   return (
     <div className="min-w-0">
       <StatLabel label={label} help={help} className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground" />
-      <div className="mt-0.5 truncate font-mono text-lg font-semibold tabular-nums">{children}</div>
+      <div className="mt-0.5 flex flex-wrap items-baseline font-mono text-lg font-semibold tabular-nums [&_[data-slot=marker]]:w-auto">
+        {children}
+      </div>
     </div>
   );
 }
@@ -319,7 +321,7 @@ function StatValue({
  * underline off the marker.
  */
 function MarkerSlot({ className, children }: { className: string; children?: ReactNode }) {
-  return <span className={cn("ml-1 inline-block text-left text-xs font-normal", className)}>{children}</span>;
+  return <span data-slot="marker" className={cn("ml-1 inline-block text-left text-xs font-normal", className)}>{children}</span>;
 }
 
 function OutlierMark() {

@@ -332,8 +332,8 @@ export interface PerformanceSummary {
   /** Theil–Sen trend through the runs; null below 3 runs. */
   trend: PerformanceTrendLine | null;
   /**
-   * Interquartile range of each run's distance from the trend line, so steady
-   * improvement is not counted as inconsistency. Null below 3 runs.
+   * The spread (interquartile range) once there are enough runs to judge it;
+   * null below 3 runs. A fast improver reads as inconsistent by design.
    */
   consistency: number | null;
   averageDeaths: number | null;
@@ -383,8 +383,8 @@ export function summarizePerformanceRuns(
     lowWhisker: inside[0],
     highWhisker: inside[inside.length - 1],
     outliers: values.filter((value) => value < lowFence || value > highFence),
-    trend: fit && { slope: fit.slope, intercept: fit.intercept },
-    consistency: fit?.spread ?? null,
+    trend: fit,
+    consistency: runs.length >= 3 ? spread : null,
     averageDeaths: deaths.length > 0 ? mean(deaths) : null,
     averageAlive: alive.length > 0 ? mean(alive) : null,
   };
@@ -397,11 +397,8 @@ export function performanceTrendValue(trend: PerformanceTrendLine, timestamp: nu
   return trend.intercept + trend.slope * (timestamp / DAY_MS);
 }
 
-/**
- * Theil–Sen trend line (median of pairwise slopes), which a few outlier nights
- * barely move, and the spread of runs around it.
- */
-function fitTrend(points: readonly { day: number; value: number }[]): PerformanceTrendLine & { spread: number } {
+/** Theil–Sen trend line (median of pairwise slopes), which a few outlier nights barely move. */
+function fitTrend(points: readonly { day: number; value: number }[]): PerformanceTrendLine {
   const slopes: number[] = [];
   for (let i = 0; i < points.length; i += 1) {
     for (let j = i + 1; j < points.length; j += 1) {
@@ -411,10 +408,7 @@ function fitTrend(points: readonly { day: number; value: number }[]): Performanc
   }
   const slope = slopes.length > 0 ? quantile(slopes.sort((a, b) => a - b), 0.5) : 0;
   const intercept = quantile(points.map((point) => point.value - slope * point.day).sort((a, b) => a - b), 0.5);
-  const residuals = points
-    .map((point) => point.value - (intercept + slope * point.day))
-    .sort((a, b) => a - b);
-  return { slope, intercept, spread: quantile(residuals, 0.75) - quantile(residuals, 0.25) };
+  return { slope, intercept };
 }
 
 /** Linear-interpolated quantile of an ascending, non-empty list. */

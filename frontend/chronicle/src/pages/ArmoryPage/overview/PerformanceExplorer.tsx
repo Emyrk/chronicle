@@ -866,13 +866,13 @@ function PerformanceTrend({
         color: "#f59e0b",
         opacity: 0.9,
       });
-  // With one player, draw the trend line Consistency is measured against, banded by ± half its spread.
+  // With one player, draw their trend line so improvement is visible next to Consistency.
   const trendSummary = series.length === 1 ? summarizePerformanceRuns(series[0].runs, metric, display) : null;
-  const trendLine = trendSummary?.trend && trendSummary.consistency !== null && minTime !== maxTime
+  const trendLine = trendSummary?.trend && minTime !== maxTime
     ? {
         start: performanceTrendValue(trendSummary.trend, minTime),
         end: performanceTrendValue(trendSummary.trend, maxTime),
-        band: trendSummary.consistency / 2,
+        perWeek: trendSummary.trend.slope * 7,
       }
     : null;
   const parseTierBands = display === "parse"
@@ -954,7 +954,7 @@ function PerformanceTrend({
                 <span className="w-6 border-t-2" style={{ borderColor: TREND_COLOR }} aria-hidden="true" />
                 <span>Trend</span>
                 <span className="font-mono font-medium tabular-nums" style={{ color: TREND_COLOR }}>
-                  ±{formatValue(trendLine.band)}
+                  {trendLine.perWeek >= 0 ? "+" : "−"}{formatValue(Math.abs(trendLine.perWeek))}/wk
                 </span>
               </div>
             )}
@@ -977,16 +977,6 @@ function PerformanceTrend({
           ))}
           {trendLine && (
             <>
-              <polygon
-                points={[
-                  `${x(minTime)},${y(trendLine.start + trendLine.band)}`,
-                  `${x(maxTime)},${y(trendLine.end + trendLine.band)}`,
-                  `${x(maxTime)},${y(trendLine.end - trendLine.band)}`,
-                  `${x(minTime)},${y(trendLine.start - trendLine.band)}`,
-                ].join(" ")}
-                fill={TREND_COLOR}
-                opacity="0.08"
-              />
               <line
                 x1={x(minTime)}
                 x2={x(maxTime)}
