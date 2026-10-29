@@ -280,7 +280,7 @@ func (s *State) Zone(z messages.Zone) {
 			s.CurrentInstance.UpdateMapID(z.MapID)
 		}
 		// Concatenated logs can re-enter the same zone with the same instance ID.
-		// Split only after the completed run has been inactive for its configured gap.
+		// Split after the prior run has been inactive for its configured gap.
 		if s.CurrentInstance == nil || !s.CurrentInstance.ShouldStartNewRun(z.Seen) {
 			return
 		}
