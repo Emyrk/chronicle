@@ -345,44 +345,29 @@ representative_instances AS (
     UNION ALL
     SELECT id, run_id FROM fallback_representative_instances
 ),
-filtered_rankings AS (
+score_candidates AS (
+    -- Keep the hot scoring path narrow. Display metadata and talent builds are
+    -- loaded only for the paginated player/run pairs below.
     SELECT
         edr.id,
         edr.encounter_id,
+        edr.instance_id,
         edr.player_guid,
-        edr.player_name,
-        edr.player_class,
-        edr.player_spec,
-        edr.player_sub_spec,
-        edr.player_role,
-        edr.player_level,
-        edr.instance_name,
         edr.encounter_name,
-        edr.difficulty_name,
-        edr.max_players,
         edr.realm_id,
-        edr.realm_name,
-        edr.guild_name,
         edr.damage_done,
         edr.healing_done,
         edr.absorbed_done,
         edr.dps,
         edr.hps,
-        edr.alive_percentage,
-        edr.player_deaths,
         edr.duration_secs,
-        edr.avg_ilvl,
-        COALESCE(NULLIF(edr_instance.hashed_slug, ''), edr.instance_id::text) AS log_hashed_slug,
         edr.killed_at,
-        tb.sub_spec AS talent_sub_spec,
-        tb.talent_layout AS talent_layout,
         ri.run_id
     FROM encounter_dps_rankings edr
 JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
 JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
     JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
-    LEFT JOIN talent_builds tb ON tb.id = edr.talent_build_id
     WHERE CASE
         WHEN cardinality(@instance_names :: text[]) > 0 THEN edr.instance_name = ANY(@instance_names :: text[])
         ELSE true
@@ -429,18 +414,18 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
     END
     AND (CASE WHEN @metric :: text = 'hps' THEN edr.hps ELSE edr.dps END) > 0
 ),
-ranking_rows AS (
+score_rows AS (
     -- Boss encounters are canonicalized at insert time. Trash retains separate
     -- spec/sub-spec aggregates and therefore still selects one matching row per run.
     SELECT boss.*
-    FROM filtered_rankings boss
+    FROM score_candidates boss
     WHERE boss.encounter_id IS NOT NULL
     UNION ALL
     SELECT trash.*
     FROM (
         SELECT DISTINCT ON (candidate.player_guid, candidate.encounter_name, candidate.run_id)
             candidate.*
-        FROM filtered_rankings candidate
+        FROM score_candidates candidate
         WHERE candidate.encounter_id IS NULL
         ORDER BY candidate.player_guid, candidate.encounter_name, candidate.run_id,
             (CASE WHEN @metric :: text = 'hps' THEN candidate.hps ELSE candidate.dps END) DESC,
@@ -455,7 +440,7 @@ realm_encounter_counts AS (
     SELECT
         d.realm_id,
         COUNT(DISTINCT d.encounter_name) AS encounter_count
-    FROM ranking_rows d
+    FROM score_rows d
     WHERE COALESCE(cardinality(@encounter_names :: text[]), 0) = 0
     GROUP BY d.realm_id
 ),
@@ -465,6 +450,7 @@ per_run_scores AS (
     SELECT
         d.player_guid,
         d.run_id,
+        d.instance_id,
         SUM(d.damage_done)::bigint AS damage_done,
         SUM(d.healing_done)::bigint AS healing_done,
         SUM(d.absorbed_done)::bigint AS absorbed_done,
@@ -472,9 +458,9 @@ per_run_scores AS (
         (SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS dps,
         (SUM(d.healing_done + d.absorbed_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS hps,
         MAX(d.killed_at)::timestamptz AS killed_at
-    FROM ranking_rows d
+    FROM score_rows d
     LEFT JOIN realm_encounter_counts rec ON rec.realm_id = d.realm_id
-    GROUP BY d.player_guid, d.run_id, rec.encounter_count
+    GROUP BY d.player_guid, d.run_id, d.instance_id, rec.encounter_count
     -- Explicit selections compare directly with their requested cardinality. If
     -- no encounters were selected, require every encounter found on the realm.
     HAVING COUNT(DISTINCT d.encounter_name) = CASE
@@ -504,8 +490,46 @@ paged AS (
         bpp.player_guid ASC
     LIMIT @query_limit::bigint
     OFFSET @query_offset::bigint
+),
+-- Step 4: hydrate display-only fields for only the selected page. score_rows
+-- already contains the exact filtered and Trash-deduplicated ranking IDs, so the
+-- wide joins below do not repeat filtering or touch non-page talent builds.
+hydration_rows AS (
+    SELECT
+        edr.instance_id,
+        edr.player_guid,
+        edr.player_name,
+        edr.player_class,
+        edr.player_spec,
+        edr.player_sub_spec,
+        edr.player_role,
+        edr.player_level,
+        edr.instance_name,
+        edr.encounter_name,
+        edr.difficulty_name,
+        edr.max_players,
+        edr.realm_id,
+        edr.realm_name,
+        edr.guild_name,
+        edr.damage_done,
+        edr.alive_percentage,
+        edr.player_deaths,
+        edr.duration_secs,
+        edr.avg_ilvl,
+        COALESCE(NULLIF(edr_instance.hashed_slug, ''), edr.instance_id::text) AS log_hashed_slug,
+        edr.killed_at,
+        tb.sub_spec AS talent_sub_spec,
+        tb.talent_layout AS talent_layout
+    FROM paged p
+    JOIN score_rows score
+      ON score.instance_id = p.instance_id
+     AND score.player_guid = p.player_guid
+    JOIN encounter_dps_rankings edr ON edr.id = score.id
+    JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
+    JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
+    JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
+    LEFT JOIN talent_builds tb ON tb.id = edr.talent_build_id
 )
--- Step 4: hydrate display-only fields for the selected page.
 SELECT
     p.player_guid,
     ((array_agg(d.player_name ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1])::text AS player_name,
@@ -543,10 +567,13 @@ SELECT
     COALESCE((array_agg(d.talent_layout ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1], '')::text AS talent_layout,
     p.total_count
 FROM paged p
-JOIN ranking_rows d ON d.player_guid = p.player_guid AND d.run_id = p.run_id
+JOIN hydration_rows d
+  ON d.instance_id = p.instance_id
+ AND d.player_guid = p.player_guid
 GROUP BY
     p.player_guid,
     p.run_id,
+    p.instance_id,
     p.damage_done,
     p.healing_done,
     p.absorbed_done,

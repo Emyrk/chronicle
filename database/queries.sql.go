@@ -19458,44 +19458,29 @@ representative_instances AS (
     UNION ALL
     SELECT id, run_id FROM fallback_representative_instances
 ),
-filtered_rankings AS (
+score_candidates AS (
+    -- Keep the hot scoring path narrow. Display metadata and talent builds are
+    -- loaded only for the paginated player/run pairs below.
     SELECT
         edr.id,
         edr.encounter_id,
+        edr.instance_id,
         edr.player_guid,
-        edr.player_name,
-        edr.player_class,
-        edr.player_spec,
-        edr.player_sub_spec,
-        edr.player_role,
-        edr.player_level,
-        edr.instance_name,
         edr.encounter_name,
-        edr.difficulty_name,
-        edr.max_players,
         edr.realm_id,
-        edr.realm_name,
-        edr.guild_name,
         edr.damage_done,
         edr.healing_done,
         edr.absorbed_done,
         edr.dps,
         edr.hps,
-        edr.alive_percentage,
-        edr.player_deaths,
         edr.duration_secs,
-        edr.avg_ilvl,
-        COALESCE(NULLIF(edr_instance.hashed_slug, ''), edr.instance_id::text) AS log_hashed_slug,
         edr.killed_at,
-        tb.sub_spec AS talent_sub_spec,
-        tb.talent_layout AS talent_layout,
         ri.run_id
     FROM encounter_dps_rankings edr
 JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
 JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
     JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
-    LEFT JOIN talent_builds tb ON tb.id = edr.talent_build_id
     WHERE CASE
         WHEN cardinality($6 :: text[]) > 0 THEN edr.instance_name = ANY($6 :: text[])
         ELSE true
@@ -19542,18 +19527,18 @@ JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NO
     END
     AND (CASE WHEN $1 :: text = 'hps' THEN edr.hps ELSE edr.dps END) > 0
 ),
-ranking_rows AS (
+score_rows AS (
     -- Boss encounters are canonicalized at insert time. Trash retains separate
     -- spec/sub-spec aggregates and therefore still selects one matching row per run.
-    SELECT boss.id, boss.encounter_id, boss.player_guid, boss.player_name, boss.player_class, boss.player_spec, boss.player_sub_spec, boss.player_role, boss.player_level, boss.instance_name, boss.encounter_name, boss.difficulty_name, boss.max_players, boss.realm_id, boss.realm_name, boss.guild_name, boss.damage_done, boss.healing_done, boss.absorbed_done, boss.dps, boss.hps, boss.alive_percentage, boss.player_deaths, boss.duration_secs, boss.avg_ilvl, boss.log_hashed_slug, boss.killed_at, boss.talent_sub_spec, boss.talent_layout, boss.run_id
-    FROM filtered_rankings boss
+    SELECT boss.id, boss.encounter_id, boss.instance_id, boss.player_guid, boss.encounter_name, boss.realm_id, boss.damage_done, boss.healing_done, boss.absorbed_done, boss.dps, boss.hps, boss.duration_secs, boss.killed_at, boss.run_id
+    FROM score_candidates boss
     WHERE boss.encounter_id IS NOT NULL
     UNION ALL
-    SELECT trash.id, trash.encounter_id, trash.player_guid, trash.player_name, trash.player_class, trash.player_spec, trash.player_sub_spec, trash.player_role, trash.player_level, trash.instance_name, trash.encounter_name, trash.difficulty_name, trash.max_players, trash.realm_id, trash.realm_name, trash.guild_name, trash.damage_done, trash.healing_done, trash.absorbed_done, trash.dps, trash.hps, trash.alive_percentage, trash.player_deaths, trash.duration_secs, trash.avg_ilvl, trash.log_hashed_slug, trash.killed_at, trash.talent_sub_spec, trash.talent_layout, trash.run_id
+    SELECT trash.id, trash.encounter_id, trash.instance_id, trash.player_guid, trash.encounter_name, trash.realm_id, trash.damage_done, trash.healing_done, trash.absorbed_done, trash.dps, trash.hps, trash.duration_secs, trash.killed_at, trash.run_id
     FROM (
         SELECT DISTINCT ON (candidate.player_guid, candidate.encounter_name, candidate.run_id)
-            candidate.id, candidate.encounter_id, candidate.player_guid, candidate.player_name, candidate.player_class, candidate.player_spec, candidate.player_sub_spec, candidate.player_role, candidate.player_level, candidate.instance_name, candidate.encounter_name, candidate.difficulty_name, candidate.max_players, candidate.realm_id, candidate.realm_name, candidate.guild_name, candidate.damage_done, candidate.healing_done, candidate.absorbed_done, candidate.dps, candidate.hps, candidate.alive_percentage, candidate.player_deaths, candidate.duration_secs, candidate.avg_ilvl, candidate.log_hashed_slug, candidate.killed_at, candidate.talent_sub_spec, candidate.talent_layout, candidate.run_id
-        FROM filtered_rankings candidate
+            candidate.id, candidate.encounter_id, candidate.instance_id, candidate.player_guid, candidate.encounter_name, candidate.realm_id, candidate.damage_done, candidate.healing_done, candidate.absorbed_done, candidate.dps, candidate.hps, candidate.duration_secs, candidate.killed_at, candidate.run_id
+        FROM score_candidates candidate
         WHERE candidate.encounter_id IS NULL
         ORDER BY candidate.player_guid, candidate.encounter_name, candidate.run_id,
             (CASE WHEN $1 :: text = 'hps' THEN candidate.hps ELSE candidate.dps END) DESC,
@@ -19565,7 +19550,7 @@ realm_encounter_counts AS (
     SELECT
         d.realm_id,
         COUNT(DISTINCT d.encounter_name) AS encounter_count
-    FROM ranking_rows d
+    FROM score_rows d
     WHERE COALESCE(cardinality($7 :: text[]), 0) = 0
     GROUP BY d.realm_id
 ),
@@ -19573,6 +19558,7 @@ per_run_scores AS (
     SELECT
         d.player_guid,
         d.run_id,
+        d.instance_id,
         SUM(d.damage_done)::bigint AS damage_done,
         SUM(d.healing_done)::bigint AS healing_done,
         SUM(d.absorbed_done)::bigint AS absorbed_done,
@@ -19580,9 +19566,9 @@ per_run_scores AS (
         (SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS dps,
         (SUM(d.healing_done + d.absorbed_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS hps,
         MAX(d.killed_at)::timestamptz AS killed_at
-    FROM ranking_rows d
+    FROM score_rows d
     LEFT JOIN realm_encounter_counts rec ON rec.realm_id = d.realm_id
-    GROUP BY d.player_guid, d.run_id, rec.encounter_count
+    GROUP BY d.player_guid, d.run_id, d.instance_id, rec.encounter_count
     -- Explicit selections compare directly with their requested cardinality. If
     -- no encounters were selected, require every encounter found on the realm.
     HAVING COUNT(DISTINCT d.encounter_name) = CASE
@@ -19593,7 +19579,7 @@ per_run_scores AS (
 ),
 best_per_player AS (
     SELECT DISTINCT ON (prs.player_guid)
-        prs.player_guid, prs.run_id, prs.damage_done, prs.healing_done, prs.absorbed_done, prs.duration_secs, prs.dps, prs.hps, prs.killed_at
+        prs.player_guid, prs.run_id, prs.instance_id, prs.damage_done, prs.healing_done, prs.absorbed_done, prs.duration_secs, prs.dps, prs.hps, prs.killed_at
     FROM per_run_scores prs
     ORDER BY prs.player_guid,
         (CASE WHEN $1 :: text = 'hps' THEN prs.hps ELSE prs.dps END) DESC,
@@ -19602,7 +19588,7 @@ best_per_player AS (
 ),
 paged AS (
     SELECT
-        bpp.player_guid, bpp.run_id, bpp.damage_done, bpp.healing_done, bpp.absorbed_done, bpp.duration_secs, bpp.dps, bpp.hps, bpp.killed_at,
+        bpp.player_guid, bpp.run_id, bpp.instance_id, bpp.damage_done, bpp.healing_done, bpp.absorbed_done, bpp.duration_secs, bpp.dps, bpp.hps, bpp.killed_at,
         COUNT(*) OVER() AS total_count
     FROM best_per_player bpp
     WHERE (CASE WHEN $1 :: text = 'hps' THEN bpp.hps ELSE bpp.dps END) > 0
@@ -19610,6 +19596,42 @@ paged AS (
         bpp.player_guid ASC
     LIMIT $14::bigint
     OFFSET $13::bigint
+),
+hydration_rows AS (
+    SELECT
+        edr.instance_id,
+        edr.player_guid,
+        edr.player_name,
+        edr.player_class,
+        edr.player_spec,
+        edr.player_sub_spec,
+        edr.player_role,
+        edr.player_level,
+        edr.instance_name,
+        edr.encounter_name,
+        edr.difficulty_name,
+        edr.max_players,
+        edr.realm_id,
+        edr.realm_name,
+        edr.guild_name,
+        edr.damage_done,
+        edr.alive_percentage,
+        edr.player_deaths,
+        edr.duration_secs,
+        edr.avg_ilvl,
+        COALESCE(NULLIF(edr_instance.hashed_slug, ''), edr.instance_id::text) AS log_hashed_slug,
+        edr.killed_at,
+        tb.sub_spec AS talent_sub_spec,
+        tb.talent_layout AS talent_layout
+    FROM paged p
+    JOIN score_rows score
+      ON score.instance_id = p.instance_id
+     AND score.player_guid = p.player_guid
+    JOIN encounter_dps_rankings edr ON edr.id = score.id
+    JOIN log_instances edr_instance ON edr_instance.id = edr.instance_id
+    JOIN wow_log_groups edr_group ON edr_group.id = edr_instance.log_group_id AND NOT edr_group.unlisted
+    JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
+    LEFT JOIN talent_builds tb ON tb.id = edr.talent_build_id
 )
 SELECT
     p.player_guid,
@@ -19648,10 +19670,13 @@ SELECT
     COALESCE((array_agg(d.talent_layout ORDER BY d.damage_done DESC, d.killed_at DESC, d.encounter_name ASC))[1], '')::text AS talent_layout,
     p.total_count
 FROM paged p
-JOIN ranking_rows d ON d.player_guid = p.player_guid AND d.run_id = p.run_id
+JOIN hydration_rows d
+  ON d.instance_id = p.instance_id
+ AND d.player_guid = p.player_guid
 GROUP BY
     p.player_guid,
     p.run_id,
+    p.instance_id,
     p.damage_done,
     p.healing_done,
     p.absorbed_done,
@@ -19725,7 +19750,9 @@ type RankingsLeaderboardRow struct {
 // metadata is intentionally deferred until after pagination.
 // Step 2: pick each player's best run using only the narrow score rows.
 // Step 3: paginate before computing wide display metadata.
-// Step 4: hydrate display-only fields for the selected page.
+// Step 4: hydrate display-only fields for only the selected page. score_rows
+// already contains the exact filtered and Trash-deduplicated ranking IDs, so the
+// wide joins below do not repeat filtering or touch non-page talent builds.
 func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error) {
 	rows, err := q.db.Query(ctx, rankingsLeaderboard,
 		arg.Metric,
