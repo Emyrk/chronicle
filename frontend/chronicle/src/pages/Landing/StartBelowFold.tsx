@@ -2,9 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import type { RecentInstancesResponse } from "@/api/typesGenerated";
+import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import { RaidCard } from "@/pages/Recent/RaidCard";
 import { groupDuplicateInstances } from "@/utils/groupDuplicates";
 import { trackFunnel } from "@/utils/funnel";
+import type { ExploreTarget } from "./explore3D";
 import { KingOfTheHill } from "./KingOfTheHill";
 
 // Public Sidekick downloads; the utm cookie set on landing carries attribution.
@@ -26,7 +28,7 @@ function useRecentRuns() {
   });
 }
 
-function RecentRuns() {
+function RecentRuns({ onExplore }: { onExplore: (target: ExploreTarget) => void }) {
   const { data } = useRecentRuns();
   // The endpoint lists every upload of a duplicate run, its representative first; one card per run, as on /recent.
   const groups = groupDuplicateInstances([...(data?.instances ?? [])]).slice(0, 3);
@@ -41,7 +43,12 @@ function RecentRuns() {
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {groups.map((group) => (
-          <RaidCard key={group[0].id} instance={group[0]} instances={group} />
+          <RaidCard
+            key={group[0].id}
+            instance={group[0]}
+            instances={group}
+            onExplore={(run) => onExplore({ placement: "recent", instanceId: run.id, poster: getInstanceBackground(run.name) })}
+          />
         ))}
         <Link
           to="/download"
@@ -90,12 +97,15 @@ function ClosingBand() {
   );
 }
 
-/** Everything on /start below how-it-works: its own chunk, so none of it (or its requests) goes out before first paint. */
-export default function StartBelowFold() {
+/**
+ * Everything on /start below how-it-works: its own chunk, so none of it (or its requests) goes out before first paint.
+ * `onExplore` opens the Explore modal on a recent run or a throne's record.
+ */
+export default function StartBelowFold({ onExplore }: { onExplore: (target: ExploreTarget) => void }) {
   return (
     <>
-      <RecentRuns />
-      <KingOfTheHill />
+      <RecentRuns onExplore={onExplore} />
+      <KingOfTheHill onExplore={onExplore} />
       <ClosingBand />
     </>
   );

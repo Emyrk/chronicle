@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
-import { Pause, Play } from "lucide-react";
+import { Pause, Play, Rotate3d } from "lucide-react";
 import type { LandingFeaturedDeath, LandingFeaturedRun } from "@/api/typesGenerated";
 import { Button } from "@/components/ui/button";
 import { ClassIcon } from "@/pages/RaidPlanner/ClassIcon";
@@ -51,6 +51,8 @@ interface LandingHeroProps {
    * gradients and copy (HeroReplayLayer mounts the lazy LandingHero3D here).
    */
   layer3D?: ReactNode;
+  /** Opens the Explore modal: the button by the scrubber (`hero`), or the stage's live chip (`hero_chip`). */
+  onExplore?: (placement: "hero" | "hero_chip") => void;
 }
 
 export interface HeroPlayback {
@@ -161,13 +163,17 @@ function recapFor(death: LandingFeaturedDeath, recaps: HeroDeathRecap[] | null |
 /**
  * Scrubber chrome pinned to the hero bottom. Dragging, the death dots and the
  * keys drive the 3D replay once it plays (`playback`); before that they only
- * move the time label.
+ * move the time label. The Explore modal reuses it without the funnel event.
  */
-function HeroScrubber({ run, currentMs, playback, onRequestLive }: {
+export function HeroScrubber({ run, currentMs, playback, onRequestLive, onExplore, trackInteractions = true }: {
   run: LandingFeaturedRun;
   currentMs: number;
   playback?: HeroReplay | null;
   onRequestLive?: () => void;
+  /** Shows the "Explore in 3D" button at the end of the bar. */
+  onExplore?: () => void;
+  /** Sends scrub_or_bossjump on the first touch (the hero's scrubber only). */
+  trackInteractions?: boolean;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   // While dragging, the bar shows the pointer's time rather than the replay's.
@@ -199,7 +205,7 @@ function HeroScrubber({ run, currentMs, playback, onRequestLive }: {
   const trackInteraction = (control: "play_pause" | "boss_jump" | "drag" | "death_jump") => {
     // Any touch before the live replay shows asks for it.
     if (!playback) onRequestLive?.();
-    if (interacted.current) return;
+    if (interacted.current || !trackInteractions) return;
     interacted.current = true;
     trackFunnel("scrub_or_bossjump", { control });
   };
@@ -379,6 +385,16 @@ function HeroScrubber({ run, currentMs, playback, onRequestLive }: {
             )}
           </div>
         )}
+        {onExplore && (
+          <button
+            type="button"
+            onClick={onExplore}
+            className="flex h-11 shrink-0 items-center gap-1.5 rounded-md border border-primary bg-background/70 px-3 text-xs font-semibold text-foreground hover:bg-primary/20 lg:h-auto lg:py-1"
+          >
+            <Rotate3d className="h-4 w-4" aria-hidden="true" />
+            <span>Explore<span className="hidden sm:inline"> in 3D</span></span>
+          </button>
+        )}
       </div>
       {chips.length > 0 && (
         <div className="styled-scrollbar flex gap-1.5 overflow-x-auto lg:hidden">
@@ -418,6 +434,7 @@ export function LandingHero({
   playback,
   getSidekickHref,
   layer3D,
+  onExplore,
 }: LandingHeroProps) {
   const bossName = featured ? currentBossName(featured, currentMs) : undefined;
   const delayMs = live && featured?.upload.source === "sidekick" ? featured.upload.delay_ms : null;
@@ -483,9 +500,22 @@ export function LandingHero({
       <div className="relative mx-auto flex h-full max-w-[1180px] flex-col justify-end gap-3 px-4 pb-[18px] pt-4 lg:justify-start lg:gap-[18px] lg:px-8 lg:pb-0 lg:pt-[52px]">
         {caption && (
           // Keyed by what plays, so the switch from the clip to the live run crossfades.
-          <div key={caption} className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary animate-in fade-in-0 duration-500 lg:text-xs">
-            <span className="inline-block h-2 w-2 rounded-full bg-primary" />
-            Playing now · {caption}
+          <div key={caption} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 animate-in fade-in-0 duration-500">
+            <div className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary lg:text-xs">
+              <span className="inline-block h-2 w-2 rounded-full bg-primary" />
+              Playing now · {caption}
+            </div>
+            {live && onExplore && (
+              // Desktop, once the backdrop is the live scene: says it is real and opens it.
+              <button
+                type="button"
+                onClick={() => onExplore("hero_chip")}
+                className="hidden items-center gap-1.5 rounded-full border border-primary/60 bg-background/70 px-2.5 py-0.5 text-[11px] font-semibold text-foreground hover:border-primary hover:bg-primary/20 min-[900px]:inline-flex"
+              >
+                <span className="inline-block h-1.5 w-1.5 rounded-full motion-safe:animate-pulse bg-[#7ed98a]" />
+                Live 3D · explore
+              </button>
+            )}
           </div>
         )}
         {live && featured?.speedrun && (
@@ -516,7 +546,13 @@ export function LandingHero({
         )}
         {featured && (
           <div className="mt-1 lg:mt-auto lg:pb-[22px]">
-            <HeroScrubber run={featured} currentMs={currentMs} playback={playback} onRequestLive={onRequestLive} />
+            <HeroScrubber
+              run={featured}
+              currentMs={currentMs}
+              playback={playback}
+              onRequestLive={onRequestLive}
+              onExplore={onExplore ? () => onExplore("hero") : undefined}
+            />
           </div>
         )}
       </div>

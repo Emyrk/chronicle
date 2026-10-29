@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useInstance } from "@/api/queries";
 import { InstanceEventsProvider, useInstanceEventsContext, type CachedStream, type StreamType } from "@/hooks/instanceEvents";
-import { transformToInstance } from "@/pages/Instance/transformInstance";
 import type { Instance } from "@/pages/Instance/InstancePage";
 import { deathsProcessor, type DeathEvent, type DeathsResult } from "@/pages/Instance/EventsPanels/Deaths/deaths.processor";
 import { processIncrementally } from "@/pages/Instance/EventsPanels/mainThreadProcessor";
@@ -11,7 +9,7 @@ import { unifiedHealingProcessor, type UnifiedHealingResult } from "@/pages/Inst
 import type { PanelRenderProps } from "@/pages/Instance/EventsPanels/types";
 import { dungeonMeshLiquid, dungeonMeshUrl } from "@/pages/Instance/EventsPanels/Map/dungeonMeshes";
 import { mapProcessor, type MapResult } from "@/pages/Instance/EventsPanels/Map/map.processor";
-import { FULL_MAP_VIEWPORT } from "@/pages/Instance/EventsPanels/Map/mapModel";
+import { FULL_MAP_VIEWPORT, type MapViewport } from "@/pages/Instance/EventsPanels/Map/mapModel";
 import type { DungeonMeshRequest, DungeonMeshState, MapSceneFocus } from "@/pages/Instance/EventsPanels/Map/MapScene3D";
 import { MapView2D } from "@/pages/Instance/EventsPanels/Map/MapView2D";
 import MapView3D from "@/pages/Instance/EventsPanels/Map/MapView3D";
@@ -20,6 +18,7 @@ import { serializableContext, type HeroDeathBeat, type HeroDeathRecap, type Hero
 import { meterTotals, type HeroMeterData } from "./heroMeter";
 import { HeroRaidFramesCard, HeroThreatCard } from "./HeroStats";
 import { useHeroStats } from "./useHeroStats";
+import { useLandingInstance } from "./useLandingInstance";
 
 // The Map panel's streams without auras: those only tint debuffed players,
 // and they are by far the biggest download (1.3 MB of 1.6 MB on the Ruins run).
@@ -58,6 +57,15 @@ interface LandingHero3DProps {
   onReplay: (replay: HeroReplay | null) => void;
   /** A replay still (the run-still page): a map without a mesh, or whose mesh failed, shows its 2D tiles. */
   still?: boolean;
+  /**
+   * The Explore modal's scene: the visitor drives the camera (orbit, pan, zoom; clicking a player follows them),
+   * as on the run page's Map panel. Off, the hero's backdrop: the cinematic camera only, no pointer input.
+   */
+  explore?: boolean;
+  /** Starts paused (reduced motion in the Explore modal). */
+  startPaused?: boolean;
+  /** Where in the pull's window the replay begins, in ms (the hero's position when the Explore modal takes over). */
+  initialMs?: number;
 }
 
 /**
@@ -195,7 +203,7 @@ function useHeroMeterAmounts(instance: Instance, encounterIds: string[] | undefi
   });
 }
 
-function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, onReplay, still = false }: Omit<LandingHero3DProps, "instanceId"> & { instance: Instance }) {
+export function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, onReplay, still = false, explore = false, startPaused = false, initialMs = 0 }: Omit<LandingHero3DProps, "instanceId"> & { instance: Instance }) {
   const encounterId = pull?.encounterId ?? null;
   const run = useHeroRun(instance, encounterId);
   const processedRecaps = useHeroDeaths(instance, encounterId, run.isSuccess).data ?? null;
@@ -251,19 +259,26 @@ function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, on
   const speed = pull ? HERO_PULL_SPEED : span ? previewSpeed(span.durationMs, HERO_MAX_SPEED) : 1;
 
   // The hero's own clock, in run time (window time for a pull); useMapScene's preview loops it over the run.
-  const [runMs, setRunMs] = useState(pull ? 0 : startOffsetMs);
-  const [userPlaying, setUserPlaying] = useState(true);
+  const [runMs, setRunMs] = useState(pull ? initialMs : startOffsetMs);
+  const [userPlaying, setUserPlaying] = useState(!startPaused);
   const [meshState, setMeshState] = useState<DungeonMeshState>("loading");
   const [unavailable, setUnavailable] = useState(false);
   // Bumped on a jump (a boss chip, a death): the camera cuts to the new shot rather than gliding there.
   const [cutKey, setCutKey] = useState(0);
   const playing = userPlaying && active && meshState === "ready";
-  // Another pull (the boss rail) plays from its window's start.
+  // Explore: once the visitor orbits, pans or zooms, the camera holds their view (the Director stands down);
+  // clicking a player follows them (the Director on that unit), as on the run page's Map panel.
+  const [userView, setUserView] = useState<MapViewport | null>(null);
+  const [viewRevision, setViewRevision] = useState(0);
+  const [followGuid, setFollowGuid] = useState<string | null>(null);
+  // Another pull (the boss rail) plays from its window's start, framed afresh.
   const [clockPull, setClockPull] = useState(encounterId);
   if (clockPull !== encounterId) {
     setClockPull(encounterId);
     setRunMs(0);
-    setUserPlaying(true);
+    setUserPlaying(!startPaused);
+    setUserView(null);
+    setFollowGuid(null);
   }
   // The clock and the end callback as the timer reads them, without restarting it.
   const runMsRef = useRef(runMs);
@@ -341,9 +356,31 @@ function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, on
   // Then the GLB, through the scene's dungeonMeshBytes path.
   const mesh = ready?.mesh ?? null;
   const iconBaseUrl = instance.iconBaseUrl;
+  // Explore on a map without a mesh: its tiles are the ground, ready at once (the backdrop shows nothing instead).
+  if (explore && ready !== null && mesh === null && meshState !== "ready") setMeshState("ready");
   const dungeonMesh = useMemo((): DungeonMeshRequest | null =>
     mesh && iconBaseUrl ? { url: dungeonMeshUrl(mesh, iconBaseUrl), bounds: mesh.bounds, liquid: dungeonMeshLiquid(mesh) } : null,
   [iconBaseUrl, mesh]);
+
+  const cinematic = !explore || userView === null;
+  const followGroup = () => {
+    setUserView(null);
+    setFollowGuid(null);
+    setViewRevision((revision) => revision + 1);
+  };
+  // Clicking the followed player again lets go; following takes the camera back from the visitor.
+  const followUnit = (guid: string) => {
+    if (followGuid === guid) {
+      setFollowGuid(null);
+      return;
+    }
+    if (userView) {
+      setUserView(null);
+      setViewRevision((revision) => revision + 1);
+    }
+    setFollowGuid(guid);
+  };
+  const followedName = followGuid ? instance.players?.[followGuid]?.name ?? instance.units?.[followGuid]?.name ?? null : null;
 
   const stillTiles = still && ready !== null && (ready.mesh === null || meshState === "failed");
   const shown = ready !== null && (meshState === "ready" || stillTiles) && !unavailable;
@@ -359,7 +396,7 @@ function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, on
   const currentMs = cursorMs === null ? null : pull ? playableMs : cursorMs - instanceStartMs;
   // The live stats follow the hero's clock from the pull's start (chips, the scrubber and deaths move it through `seek`):
   // the meter's damage and the threat table at the cursor, and the raid frames.
-  const stats = useHeroStats(instance, encounterId, shown && span && currentMs !== null ? span.startMs + playableMs : null, HERO_STREAMS);
+  const stats = useHeroStats(instance, explore ? null : encounterId, shown && span && currentMs !== null ? span.startMs + playableMs : null, HERO_STREAMS);
   const cursorDamage = stats?.damage ?? null;
   const liveMeter = useMemo(() => meter && cursorDamage ? { ...meter, damage: cursorDamage } : meter, [cursorDamage, meter]);
   const renderRaidFrames = useMemo(() => stats?.frames
@@ -389,8 +426,8 @@ function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, on
   return (
     // Fades in over the poster (which stays underneath) once the mesh is up; until then nothing new shows.
     <div
-      aria-hidden
-      className="pointer-events-none absolute inset-0 transition-opacity duration-700"
+      aria-hidden={!explore}
+      className={`absolute inset-0 transition-opacity duration-700 ${explore ? "" : "pointer-events-none"}`}
       style={{ opacity: shown ? 1 : 0 }}
     >
       <MapView3D
@@ -401,31 +438,47 @@ function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, on
         cursorMs={ready.cursorMs}
         playing={ready.playing}
         playbackSpeed={ready.playbackSpeed}
-        view={{ viewport: autoFit ?? FULL_MAP_VIEWPORT, key: "hero" }}
+        view={{ viewport: userView ?? autoFit ?? FULL_MAP_VIEWPORT, key: explore ? `explore-${viewRevision}` : "hero" }}
+        onUserViewport={explore ? setUserView : undefined}
+        onUnitClick={explore ? followUnit : undefined}
+        followGuid={explore ? followGuid : undefined}
+        onFollowChange={explore ? setFollowGuid : undefined}
         effects={ready.effects}
         bossGuids={ready.bossGuids}
         tankGuids={ready.tankGuids}
         onUnavailable={() => setUnavailable(true)}
         dungeonMesh={dungeonMesh}
-        onDungeonMeshState={setMeshState}
+        // Explore keeps playing on the tiles should the mesh fail.
+        onDungeonMeshState={explore ? (state) => setMeshState(state === "failed" ? "ready" : state) : setMeshState}
         focus={focus}
-        cinematic
+        cinematic={cinematic}
         cutKey={cutKey}
         debuffSpellIds={ready.debuffSpellIds}
         planItems={NO_PLAN_ITEMS}
         frozen={!live}
       />
+      {explore && shown && (
+        <div className="absolute left-3 top-3 flex items-center gap-2 rounded-md border bg-background/80 px-2.5 py-1.5 text-xs text-foreground shadow-lg backdrop-blur-sm lg:left-4 lg:top-4">
+          {followedName && <span>Following <span className="font-semibold">{followedName}</span></span>}
+          <button type="button" onClick={followGroup} className="rounded-sm border bg-card px-2 py-1 text-xs hover:border-primary">
+            Follow the group
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-/** The landing hero's live layer: the featured run's boss pull (or the whole run) replayed in 3D, muted and looping. */
-export default function LandingHero3D({ instanceId, ...props }: LandingHero3DProps) {
-  const { data: apiInstance } = useInstance(instanceId);
-  const instance = useMemo(() => apiInstance ? transformToInstance(apiInstance) : null, [apiInstance]);
+/**
+ * The landing hero's live layer: the featured run's boss pull (or the whole run) replayed in 3D, muted and looping.
+ * `children` render inside the run's stream cache: the Explore modal, taking over the hero's loaded run.
+ */
+export default function LandingHero3D({ instanceId, children, ...props }: LandingHero3DProps & { children?: ReactNode }) {
+  const instance = useLandingInstance(instanceId);
   return (
     <InstanceEventsProvider instanceId={instanceId}>
       {instance && <HeroScene instance={instance} {...props} />}
+      {children}
     </InstanceEventsProvider>
   );
 }

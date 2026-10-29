@@ -123,6 +123,8 @@ func (s *Service) handleSpeedrunInstances(w http.ResponseWriter, r *http.Request
 				DurationMs:     row.RecordDurationMs,
 				CompletionTime: row.RecordCompletionTime.Time,
 				GuildName:      row.RecordGuildName,
+				InstanceID:     row.RecordInstanceID,
+				HasPositions:   row.RecordHasPositions,
 			}
 		}
 	}

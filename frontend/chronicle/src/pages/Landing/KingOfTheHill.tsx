@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { getInstanceArtCrop } from "@/pages/Logs/utils/instanceImages";
 import { trackFunnel } from "@/utils/funnel";
+import type { ExploreTarget } from "./explore3D";
 import {
   crownLeader,
   filterThrones,
@@ -243,8 +244,9 @@ function Podium({ throne, siteName }: { throne: Throne; siteName: string | undef
   );
 }
 
-function TimeToBeat({ throne }: { throne: Throne }) {
+function TimeToBeat({ throne, onExplore }: { throne: Throne; onExplore?: (target: ExploreTarget) => void }) {
   const isMobile = useIsMobile();
+  const record = throne.record;
   return (
     <div className="flex flex-col gap-2 rounded-[calc(var(--radius)+4px)] border border-primary bg-primary-darker p-4 text-primary-foreground shadow-sm lg:gap-3 lg:p-5">
       <span className="font-mono text-[10px] uppercase tracking-[0.2em] lg:text-[11px]">Time to beat</span>
@@ -255,7 +257,15 @@ function TimeToBeat({ throne }: { throne: Throne }) {
         Log your next {throne.title} clear with Sidekick and it is on this board the same night.
         <span className="hidden lg:inline"> Beat the time and the crown moves.</span>
       </p>
-      {/* Slot for a "fastest replayed run" variant (plays in the hero montage, #1409); not built yet. */}
+      {record?.has_positions && onExplore && (
+        <button
+          type="button"
+          onClick={() => onExplore({ placement: "koth", instanceId: record.instance_id, poster: getInstanceArtCrop(throne.instanceName) })}
+          className="inline-flex min-h-11 items-center justify-center rounded-[calc(var(--radius)-2px)] border border-[#e0b45c] px-4 text-sm font-semibold text-[#e0b45c] hover:bg-[#e0b45c]/10 lg:min-h-9"
+        >
+          Watch the record in 3D
+        </button>
+      )}
       <a
         href={isMobile ? "#send-link" : "#get"}
         onClick={() => trackFunnel("cta_sidekick", { placement: "koth" })}
@@ -268,7 +278,7 @@ function TimeToBeat({ throne }: { throne: Throne }) {
 }
 
 /** King of the Hill: who holds each speedrun record on this tenant, a wall of every throne, and the selected throne's podium. */
-export function KingOfTheHill() {
+export function KingOfTheHill({ onExplore }: { onExplore?: (target: ExploreTarget) => void }) {
   const { data: boards } = useThroneBoards();
   const { data: supported } = useSupportedInstances();
   const { data: siteConfig } = useSiteConfig();
@@ -395,7 +405,7 @@ export function KingOfTheHill() {
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_1fr] lg:gap-4">
         <Podium throne={selected} siteName={siteName} />
-        <TimeToBeat throne={selected} />
+        <TimeToBeat throne={selected} onExplore={onExplore} />
       </div>
     </section>
   );

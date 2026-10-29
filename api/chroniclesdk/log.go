@@ -566,6 +566,10 @@ type SpeedrunBoardRecord struct {
 	DurationMs     int64     `json:"duration_ms"`
 	CompletionTime time.Time `json:"completion_time"`
 	GuildName      string    `json:"guild_name"`
+	// InstanceID is the record run, for opening its replay from the throne.
+	InstanceID uuid.UUID `json:"instance_id"`
+	// HasPositions is true when the record run's log recorded unit positions (a replay).
+	HasPositions bool `json:"has_positions,omitempty"`
 }
 
 // SpeedrunLeaderboardEntry is one row in the leaderboard.
