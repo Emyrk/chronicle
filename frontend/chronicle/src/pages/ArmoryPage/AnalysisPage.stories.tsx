@@ -49,6 +49,8 @@ interface MockPlayer {
   cadence: number;
   /** Limits history, for low-data players. */
   maxRuns?: number;
+  /** Index of one run (0 = latest) that lands far above the rest, to show a best-run outlier. */
+  luckyRun?: number;
   instances: string[];
 }
 
@@ -64,6 +66,7 @@ const PLAYERS: MockPlayer[] = [
   { id: "0x00000000000A0008", name: "Lumessa", className: "PRIEST", guild: "Ashen Covenant", role: "heal", specs: [{ spec: "Holy", weight: 1 }], base: 88, trend: 4, noise: 4, throughput: 720, deathRate: 0.2, cadence: 2, instances: ["Naxxramas", "Blackwing Lair"] },
   { id: "0x00000000000A0009", name: "Fennick", className: "DRUID", guild: "Ironbound", role: "heal", specs: [{ spec: "Restoration", weight: 1 }], base: 83, trend: 6, noise: 5, throughput: 650, deathRate: 0.3, cadence: 2, instances: ["Naxxramas", "Blackwing Lair"] },
   { id: "0x00000000000A000A", name: "Rhovan", className: "HUNTER", guild: "Ashen Covenant", role: "dps", specs: [{ spec: "Marksmanship", weight: 1 }], base: 89, trend: -3, noise: 6, throughput: 1190, deathRate: 0.6, cadence: 2, instances: ["Naxxramas", "Blackwing Lair"] },
+  { id: "0x00000000000A000B", name: "Brindle", className: "DRUID", guild: "Wildfire", role: "dps", specs: [{ spec: "Feral", weight: 1 }], base: 70, trend: 2, noise: 11, throughput: 1150, deathRate: 0.9, cadence: 2, luckyRun: 6, instances: ["Naxxramas", "Blackwing Lair"] },
 ];
 
 const playerById = (id: string) => PLAYERS.find((player) => player.id.toLowerCase() === id.toLowerCase());
@@ -152,8 +155,9 @@ function performanceRuns(player: MockPlayer, url: URL): CharacterPerformanceResp
     const specPenalty = spec === player.specs[0] ? 0 : -4;
     // An occasional disaster night (disconnect, early death) gives the box plot real outliers.
     const disaster = random() < 0.05 ? -25 : 0;
+    const lucky = runs.length === player.luckyRun ? 30 : 0;
     const parse = Math.max(1, Math.min(99.9,
-      player.base + player.trend * progress + selectionOffset + specPenalty + disaster + (random() - 0.5) * 2 * player.noise
+      player.base + player.trend * progress + selectionOffset + specPenalty + disaster + lucky + (random() - 0.5) * 2 * player.noise
       - (offPurpose ? 75 : 0)));
     const throughput = Math.max(10, (offPurpose ? player.throughput * 0.08 : player.throughput) * (0.55 + parse / 200));
     const duration = encounters.length * (170 + random() * 80);
@@ -261,7 +265,8 @@ type Story = StoryObj<typeof meta>;
 
 /**
  * One player. Use "Add player" to compare: the mock realm has Velyndra, Morthul, Brakkus,
- * Quellin, Sinnet, Tavrin (BWL only), Holtmar (2 runs), Lumessa and Fennick (healers), and Rhovan.
+ * Quellin, Sinnet, Tavrin (BWL only), Holtmar (2 runs), Lumessa and Fennick (healers), Rhovan, and
+ * Brindle (swingy, with one outlier night).
  */
 export const OnePlayer: Story = {};
 
@@ -278,6 +283,11 @@ export const FullRoster: Story = {
 /** Healers in HPS mode. */
 export const Healers: Story = {
   parameters: { path: pathFor(["Lumessa", "Fennick"], "&metric=hps&display=parse") },
+};
+
+/** A swingy player in Parse mode: Low consistency, and a best run marked as an outlier. */
+export const ErraticPlayer: Story = {
+  parameters: { path: pathFor(["Brindle"], "&display=parse") },
 };
 
 /** No player selected yet: the search landing page. Try "vel" or "mor". */
