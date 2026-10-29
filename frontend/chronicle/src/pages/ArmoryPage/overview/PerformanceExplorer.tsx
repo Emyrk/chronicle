@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ChartNoAxesCombined, Check, CheckCircle, CircleQuestionMark, Database, ExternalLink, Eye, EyeOff, HeartPulse, Keyboard, Layers3, List, Map, MousePointerClick, Percent, Plus, Search, Settings2, Star, Swords, Trash2 } from "lucide-react";
+import { ChartNoAxesCombined, Check, CheckCircle, CircleQuestionMark, Database, ExternalLink, Eye, EyeOff, GraduationCap, HeartPulse, Keyboard, Layers3, List, Map, MousePointerClick, Percent, Plus, Search, Settings2, Shirt, Star, Swords, Trash2 } from "lucide-react";
 import type { ArmoryPlayer, ArmorySearchResult, CharacterPerformanceRun, FavoritePlayer } from "@/api/typesGenerated";
 import {
   useArmorySearch,
@@ -37,6 +37,7 @@ import type { ParseMetric } from "./util";
 import {
   performancePlayerKey,
   type PerformanceComparisonState,
+  type PerformanceDetailTab,
   type PerformanceDisplayMode,
   type PerformancePlayerSelection,
 } from "./performanceComparisonState";
@@ -65,12 +66,10 @@ type DisplayMode = PerformanceDisplayMode;
 
 type PlayerDialog = "add" | string | null;
 
-type DetailTab = "runs" | "numbers" | "gear";
-
-const DETAIL_TABS: readonly { value: DetailTab; label: string }[] = [
-  { value: "runs", label: "Run summary" },
-  { value: "numbers", label: "How the numbers work" },
-  { value: "gear", label: "Gear" },
+const DETAIL_TABS: readonly { value: PerformanceDetailTab; label: string; icon: typeof List }[] = [
+  { value: "runs", label: "Run summary", icon: List },
+  { value: "numbers", label: "How the numbers work", icon: GraduationCap },
+  { value: "gear", label: "Gear", icon: Shirt },
 ];
 
 const DATE_RANGE_DAYS: Record<PerformanceDateRange, number> = { "180d": 180, "60d": 60, "30d": 30 };
@@ -118,7 +117,6 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
   const [mobileEncounterOpen, setMobileEncounterOpen] = useState(false);
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [summaryView, setSummaryView] = useState<SummaryView>("numbers");
-  const [detailTab, setDetailTab] = useState<DetailTab>("runs");
   // Hovering a night in the run chart or the gear timeline highlights it in the other.
   const [linkedHoverTime, setLinkedHoverTime] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -163,7 +161,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
       progressionBossesQuery.data,
       rankingEncounterSetsQuery.data,
     );
-  const { metric, display, dateRange } = state;
+  const { metric, display, dateRange, detailTab } = state;
   const performanceQueries = useCharacterPerformances(selectedPlayers.map((selectedPlayer) => ({
     playerGuid: selectedPlayer.id,
     realmID: selectedPlayer.realmID,
@@ -480,62 +478,69 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                   onHoverTimeChange={setLinkedHoverTime}
                 />
 
-                <div className="space-y-3 border-t border-border/60 pt-4">
-                  <div role="tablist" aria-label="Details" className="flex gap-5 border-b border-border/60">
-                    {DETAIL_TABS.map((tab) => (
-                      <button
-                        key={tab.value}
-                        type="button"
-                        role="tab"
-                        aria-selected={detailTab === tab.value}
-                        onClick={() => setDetailTab(tab.value)}
-                        className={cn(
-                          "-mb-px border-b-2 pb-2 text-sm font-semibold transition-colors",
-                          detailTab === tab.value
-                            ? "border-[#5F8FA6] text-foreground"
-                            : "border-transparent text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
+                <div className="pt-2">
+                  {/* Folder tabs: the active tab shares the panel's background and opens into it. */}
+                  <div role="tablist" aria-label="Details" className="flex gap-1 overflow-x-auto border-b border-border styled-scrollbar">
+                    {DETAIL_TABS.map(({ value, label, icon: Icon }) => {
+                      const active = detailTab === value;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          role="tab"
+                          aria-selected={active}
+                          onClick={() => onStateChange({ ...state, detailTab: value })}
+                          className={cn(
+                            "-mb-px flex shrink-0 items-center gap-2 rounded-t-lg border px-4 py-2 text-sm font-semibold transition-colors",
+                            active
+                              ? "border-border border-b-transparent bg-white/[0.04] text-foreground shadow-[inset_0_2px_0_0_#5F8FA6]"
+                              : "border-transparent text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                          )}
+                        >
+                          <Icon className={cn("h-4 w-4", active && "text-sky-400")} />
+                          {label}
+                        </button>
+                      );
+                    })}
                   </div>
-                  {detailTab === "gear" ? (
-                    variant && (
-                      <GearPanel
-                        players={visibleSeries.map(({ player: gearPlayer }) => ({
-                          key: performancePlayerKey(gearPlayer),
-                          id: gearPlayer.id,
-                          name: playerLabel(gearPlayer),
-                          className: gearPlayer.className,
-                          realmName: gearPlayer.realmName,
-                        }))}
-                        instanceName={variant.instanceName}
-                        rangeDays={DATE_RANGE_DAYS[dateRange]}
-                        hoverTime={linkedHoverTime}
-                        onHoverTimeChange={setLinkedHoverTime}
+                  <div role="tabpanel" className="rounded-b-lg border border-t-0 border-border bg-white/[0.04] p-3 sm:p-4">
+                    {detailTab === "gear" ? (
+                      variant && (
+                        <GearPanel
+                          players={visibleSeries.map(({ player: gearPlayer }) => ({
+                            key: performancePlayerKey(gearPlayer),
+                            id: gearPlayer.id,
+                            name: playerLabel(gearPlayer),
+                            className: gearPlayer.className,
+                            realmName: gearPlayer.realmName,
+                          }))}
+                          instanceName={variant.instanceName}
+                          rangeDays={DATE_RANGE_DAYS[dateRange]}
+                          hoverTime={linkedHoverTime}
+                          onHoverTimeChange={setLinkedHoverTime}
+                        />
+                      )
+                    ) : detailTab === "runs" ? (
+                      <PerformanceTable
+                        series={visibleSeries}
+                        metric={metric}
+                        display={display}
+                        showPlayerRealms={showPlayerRealms}
                       />
-                    )
-                  ) : detailTab === "runs" ? (
-                    <PerformanceTable
-                      series={visibleSeries}
-                      metric={metric}
-                      display={display}
-                      showPlayerRealms={showPlayerRealms}
-                    />
-                  ) : (
-                    <NumbersExplainer
-                      players={visibleSeries.map(({ player: explainedPlayer, runs }) => ({
-                        id: performancePlayerKey(explainedPlayer),
-                        name: playerLabel(explainedPlayer),
-                        className: explainedPlayer.className,
-                        color: explainedPlayer.color,
-                        runs,
-                      }))}
-                      metric={metric}
-                      display={display}
-                    />
-                  )}
+                    ) : (
+                      <NumbersExplainer
+                        players={visibleSeries.map(({ player: explainedPlayer, runs }) => ({
+                          id: performancePlayerKey(explainedPlayer),
+                          name: playerLabel(explainedPlayer),
+                          className: explainedPlayer.className,
+                          color: explainedPlayer.color,
+                          runs,
+                        }))}
+                        metric={metric}
+                        display={display}
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

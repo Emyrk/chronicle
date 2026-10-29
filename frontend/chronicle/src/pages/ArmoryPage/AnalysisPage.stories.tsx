@@ -384,6 +384,11 @@ export const RealClimbingPlayer: Story = {
   parameters: { path: pathFor(["Baraddek"], "&display=parse") },
 };
 
+/** A shared link that opens straight on the Gear tab (`tab=gear`). */
+export const LinkedGearTab: Story = {
+  parameters: { path: pathFor(["Baraddek"], "&display=parse&tab=gear") },
+};
+
 /** No player selected yet: the search landing page. Try "vel" or "mor". */
 export const Landing: Story = {
   parameters: { path: "/performance-history" },
