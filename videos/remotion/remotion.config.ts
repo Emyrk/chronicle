@@ -20,6 +20,10 @@ Config.overrideWebpackConfig((currentConfiguration) => {
     ...configuration,
     resolve: {
       ...configuration.resolve,
+      modules: [
+        path.resolve(projectRoot, "node_modules"),
+        ...(configuration.resolve?.modules ?? ["node_modules"]),
+      ],
       extensionAlias: {
         ".js": [".ts", ".js"],
         ".jsx": [".tsx", ".jsx"],
