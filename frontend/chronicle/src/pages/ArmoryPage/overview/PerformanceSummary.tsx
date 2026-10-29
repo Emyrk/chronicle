@@ -31,7 +31,7 @@ interface SummaryRow {
 // Players with fewer runs are shown but never marked as a column leader.
 const MIN_COMPARABLE_RUNS = 3;
 
-type StatKey = "best" | "typical" | "recent" | "floor" | "spread" | "averageDeaths";
+type StatKey = "best" | "typical" | "recent" | "floor" | "consistency" | "averageDeaths";
 
 interface StatColumn {
   key: StatKey;
@@ -68,9 +68,9 @@ const STAT_COLUMNS: readonly StatColumn[] = [
     higherIsBetter: true,
   },
   {
-    key: "spread",
-    label: "Spread",
-    help: "The gap between the 25th and 75th percentile runs, which covers the middle half. Smaller means more consistent. Outliers don't affect it.",
+    key: "consistency",
+    label: "Consistency",
+    help: "How closely runs follow the player's own trend line: the middle half of runs land within this distance of it. A player who is steadily improving still counts as consistent, and outlier nights don't affect it. Lower is steadier.",
     higherIsBetter: false,
   },
   {
@@ -181,7 +181,7 @@ function SummaryTile({ label, help, children }: { label: string; help: string; c
 }
 
 function SummaryTable({ rows, display }: { rows: readonly SummaryRow[]; display: PerformanceDisplayMode }) {
-  const leaders = columnLeaders(rows.map((row) => row.summary));
+  const leaders = columnLeaders(rows.map((row) => row.summary), display);
 
   return (
     <div className="overflow-x-auto styled-scrollbar">
@@ -214,7 +214,7 @@ function SummaryTable({ rows, display }: { rows: readonly SummaryRow[]; display:
                       <span
                         className={cn(
                           leaders[column.key] !== undefined
-                            && summary[column.key] === leaders[column.key]
+                            && comparableValue(summary, column.key, display) === leaders[column.key]
                             && !lowSample
                             && "font-semibold underline decoration-sky-400 decoration-2 underline-offset-4",
                         )}
@@ -269,9 +269,17 @@ function StatValue({
 
   const value = summary[column.key];
   if (value === null) {
-    return <span className="text-muted-foreground" title={`Needs more than ${PERFORMANCE_RECENT_RUN_COUNT} runs`}>—</span>;
+    const needs = column.key === "recent" ? `more than ${PERFORMANCE_RECENT_RUN_COUNT}` : "at least 3";
+    return <span className="text-muted-foreground" title={`Needs ${needs} runs`}>—</span>;
   }
-  if (column.key === "spread") return <>{formatStat(value, display)}</>;
+  if (column.key === "consistency") {
+    return (
+      <>
+        <span className="font-sans text-sm font-medium">{consistencyLabel(value, summary.typical, display)}</span>
+        <span className="ml-1.5 text-xs font-normal text-muted-foreground">±{formatStat(value / 2, display)}</span>
+      </>
+    );
+  }
 
   const delta = column.key === "recent" ? value - summary.typical : 0;
   const deltaThreshold = display === "parse" ? 0.5 : summary.typical * 0.01;
@@ -418,7 +426,17 @@ function BoxPlotRow({
   );
 }
 
-function columnLeaders(summaries: readonly (PerformanceSummary | null)[]): Partial<Record<StatKey, number>> {
+/** The value a column ranks on; Raw-mode consistency is relative to the player's typical run. */
+function comparableValue(summary: PerformanceSummary, key: StatKey, display: PerformanceDisplayMode): number | null {
+  const value = summary[key];
+  if (key === "consistency" && value !== null && display === "raw") return value / Math.max(summary.typical, 1);
+  return value;
+}
+
+function columnLeaders(
+  summaries: readonly (PerformanceSummary | null)[],
+  display: PerformanceDisplayMode,
+): Partial<Record<StatKey, number>> {
   const eligible = summaries.filter((summary): summary is PerformanceSummary => (
     summary !== null && summary.runCount >= MIN_COMPARABLE_RUNS
   ));
@@ -426,11 +444,20 @@ function columnLeaders(summaries: readonly (PerformanceSummary | null)[]): Parti
 
   const leaders: Partial<Record<StatKey, number>> = {};
   for (const column of STAT_COLUMNS) {
-    const values = eligible.flatMap((summary) => summary[column.key] ?? []);
+    const values = eligible.flatMap((summary) => comparableValue(summary, column.key, display) ?? []);
     if (values.length < 2) continue;
     leaders[column.key] = column.higherIsBetter ? Math.max(...values) : Math.min(...values);
   }
   return leaders;
+}
+
+/** Parse points in Parse mode, percent of the typical run in Raw mode. */
+function consistencyLabel(spread: number, typical: number, display: PerformanceDisplayMode) {
+  const scaled = display === "parse" ? spread : (spread / Math.max(typical, 1)) * 100;
+  if (scaled <= 4) return "Very steady";
+  if (scaled <= 8) return "Steady";
+  if (scaled <= 14) return "Mixed";
+  return "Erratic";
 }
 
 function formatStat(value: number, display: PerformanceDisplayMode) {

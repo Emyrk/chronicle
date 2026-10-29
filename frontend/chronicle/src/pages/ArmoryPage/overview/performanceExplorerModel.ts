@@ -314,6 +314,11 @@ export interface PerformanceSummary {
   highWhisker: number;
   /** Runs outside the Tukey fences, ascending. */
   outliers: number[];
+  /**
+   * Interquartile range of each run's distance from the player's own trend line,
+   * so steady improvement is not counted as inconsistency. Null below 3 runs.
+   */
+  consistency: number | null;
   averageDeaths: number | null;
   averageAlive: number | null;
 }
@@ -352,9 +357,37 @@ export function summarizePerformanceRuns(
     lowWhisker: inside[0],
     highWhisker: inside[inside.length - 1],
     outliers: values.filter((value) => value < lowFence || value > highFence),
+    consistency: runs.length >= 3
+      ? detrendedSpread(runs.map((run) => ({
+        day: Date.parse(run.started_at) / DAY_MS,
+        value: performanceValue(run, metric, display),
+      })))
+      : null,
     averageDeaths: deaths.length > 0 ? mean(deaths) : null,
     averageAlive: alive.length > 0 ? mean(alive) : null,
   };
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Spread of runs around a Theil–Sen trend line (median of pairwise slopes),
+ * which a few outlier nights barely move.
+ */
+function detrendedSpread(points: readonly { day: number; value: number }[]): number {
+  const slopes: number[] = [];
+  for (let i = 0; i < points.length; i += 1) {
+    for (let j = i + 1; j < points.length; j += 1) {
+      const run = points[j].day - points[i].day;
+      if (run !== 0) slopes.push((points[j].value - points[i].value) / run);
+    }
+  }
+  const slope = slopes.length > 0 ? quantile(slopes.sort((a, b) => a - b), 0.5) : 0;
+  const intercept = quantile(points.map((point) => point.value - slope * point.day).sort((a, b) => a - b), 0.5);
+  const residuals = points
+    .map((point) => point.value - (intercept + slope * point.day))
+    .sort((a, b) => a - b);
+  return quantile(residuals, 0.75) - quantile(residuals, 0.25);
 }
 
 /** Linear-interpolated quantile of an ascending, non-empty list. */

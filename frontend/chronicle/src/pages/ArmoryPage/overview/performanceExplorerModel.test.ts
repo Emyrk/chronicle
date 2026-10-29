@@ -358,6 +358,21 @@ describe("summarizePerformanceRuns", () => {
     expect(summary).toMatchObject({ lowerQuartile: 75, upperQuartile: 92.5, lowWhisker: 70, highWhisker: 100, outliers: [20] });
   });
 
+  it("does not count steady improvement as inconsistency", () => {
+    const climbing = Array.from({ length: 10 }, (_, index) => run({
+      run_id: `climb-${index}`,
+      started_at: `2026-02-${String(index + 1).padStart(2, "0")}T00:00:00Z`,
+      average_parse: 70 + index * 3,
+    }));
+    const bouncing = climbing.map((item, index) => ({ ...item, average_parse: index % 2 === 0 ? 70 : 97 }));
+
+    const climbingSummary = summarizePerformanceRuns(climbing, "dps", "parse");
+    expect(climbingSummary?.spread).toBeGreaterThan(10);
+    expect(climbingSummary?.consistency).toBeCloseTo(0);
+    expect(summarizePerformanceRuns(bouncing, "dps", "parse")?.consistency).toBeGreaterThan(20);
+    expect(summarizePerformanceRuns(climbing.slice(0, 2), "dps", "parse")?.consistency).toBeNull();
+  });
+
   it("uses the latest five runs for recent once there are more than five", () => {
     expect(summarizePerformanceRuns(runs, "dps", "parse")?.recent).toBe(90);
     expect(summarizePerformanceRuns(runs.slice(0, 5), "dps", "parse")?.recent).toBeNull();

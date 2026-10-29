@@ -359,58 +359,60 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
               </aside>
 
               <div className="min-w-0 flex-1 space-y-4 lg:pl-6">
-                <div className="grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap sm:items-center">
-                  {series.map(({ player: selectedPlayer, specShapes }) => (
-                    <PlayerShapesTooltip
-                      key={selectedPlayer.id}
-                      color={selectedPlayer.color}
-                      specShapes={specShapes}
-                    >
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          if (event.shiftKey) togglePlayerVisibility(selectedPlayer.id);
-                          else setPlayerDialog(selectedPlayer.id);
-                        }}
-                        className={cn(
-                          "group flex h-8 min-w-0 items-center gap-2 rounded-md border border-border bg-background/70 pr-2 text-left text-xs transition-all hover:bg-accent/50 sm:min-w-40",
-                          selectedPlayer.hidden && "opacity-45 saturate-50",
-                        )}
-                        style={{ borderColor: selectedPlayer.color }}
-                        aria-label={`${selectedPlayer.name}. ${selectedPlayer.hidden ? "Hidden, Shift+click to show" : "Shift+click to hide"}`}
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+                  <div className="grid min-w-0 flex-1 grid-cols-2 gap-1.5 sm:flex sm:flex-wrap sm:items-center">
+                    {series.map(({ player: selectedPlayer, specShapes }) => (
+                      <PlayerShapesTooltip
+                        key={selectedPlayer.id}
+                        color={selectedPlayer.color}
+                        specShapes={specShapes}
                       >
-                        <img
-                          src={getClassIconUrl(selectedPlayer.className)}
-                          alt={`${selectedPlayer.className} class`}
-                          className="size-8 shrink-0 rounded-l-[5px] border-r object-cover"
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            if (event.shiftKey) togglePlayerVisibility(selectedPlayer.id);
+                            else setPlayerDialog(selectedPlayer.id);
+                          }}
+                          className={cn(
+                            "group flex h-8 min-w-0 items-center gap-2 rounded-md border border-border bg-background/70 pr-2 text-left text-xs transition-all hover:bg-accent/50 sm:min-w-40",
+                            selectedPlayer.hidden && "opacity-45 saturate-50",
+                          )}
                           style={{ borderColor: selectedPlayer.color }}
-                        />
-                        <span className="min-w-0 flex-1 leading-tight">
-                          <span className="block truncate font-semibold" style={{ color: selectedPlayer.color }}>
-                            {selectedPlayer.name}
+                          aria-label={`${selectedPlayer.name}. ${selectedPlayer.hidden ? "Hidden, Shift+click to show" : "Shift+click to hide"}`}
+                        >
+                          <img
+                            src={getClassIconUrl(selectedPlayer.className)}
+                            alt={`${selectedPlayer.className} class`}
+                            className="size-8 shrink-0 rounded-l-[5px] border-r object-cover"
+                            style={{ borderColor: selectedPlayer.color }}
+                          />
+                          <span className="min-w-0 flex-1 leading-tight">
+                            <span className="block truncate font-semibold" style={{ color: selectedPlayer.color }}>
+                              {selectedPlayer.name}
+                            </span>
+                            <span className="block truncate text-[10px] text-muted-foreground">
+                              {selectedPlayer.spec ? `${selectedPlayer.spec}${selectedPlayer.subSpec ? ` / ${selectedPlayer.subSpec}` : ""}` : "All specs"}
+                            </span>
                           </span>
-                          <span className="block truncate text-[10px] text-muted-foreground">
-                            {selectedPlayer.spec ? `${selectedPlayer.spec}${selectedPlayer.subSpec ? ` / ${selectedPlayer.subSpec}` : ""}` : "All specs"}
-                          </span>
-                        </span>
-                        {selectedPlayer.hidden && <EyeOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
-                        <Settings2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-foreground" />
-                      </button>
-                    </PlayerShapesTooltip>
-                  ))}
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-8 min-w-0 px-3 text-xs"
-                    disabled={selectedPlayers.length >= MAX_COMPARISON_PLAYERS}
-                    onClick={() => setPlayerDialog("add")}
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Add player
-                    <span className="text-[10px] text-muted-foreground/60">{selectedPlayers.length}/{MAX_COMPARISON_PLAYERS}</span>
-                  </Button>
-                  {!performanceLoading && <SummaryViewToggle view={summaryView} onChange={setSummaryView} className="sm:ml-auto" />}
+                          {selectedPlayer.hidden && <EyeOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                          <Settings2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-foreground" />
+                        </button>
+                      </PlayerShapesTooltip>
+                    ))}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 min-w-0 px-3 text-xs"
+                      disabled={selectedPlayers.length >= MAX_COMPARISON_PLAYERS}
+                      onClick={() => setPlayerDialog("add")}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add player
+                      <span className="text-[10px] text-muted-foreground/60">{selectedPlayers.length}/{MAX_COMPARISON_PLAYERS}</span>
+                    </Button>
+                  </div>
+                  {!performanceLoading && <SummaryViewToggle view={summaryView} onChange={setSummaryView} className="shrink-0 self-end sm:self-start" />}
                 </div>
 
                 {!performanceLoading && (
