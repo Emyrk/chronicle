@@ -34,6 +34,16 @@ describe("exploreRunFromInstance", () => {
     expect(exploreRunFromInstance(instance([encounter("A", true, "wipe", 1, 2), encounter("B", true, "reset", 3, 4)])).encounter?.id).toBe("B");
     expect(exploreRunFromInstance(instance([encounter("trash", false, "clean", 1, 2)])).encounter).toBeNull();
   });
+
+  it("drops near-zero duplicate boss pulls", () => {
+    const run = exploreRunFromInstance(instance([
+      encounter("Bjork", true, "clean", 10, 11),
+      encounter("Rath'mael", true, "clean", 20, 20.5),
+      { ...encounter("Rath'mael dup", true, "clean", 25, 25), end_time: new Date(Date.parse(START) + 25 * 60_000 + 15).toISOString() },
+    ]));
+    expect(run.bosses.map((boss) => boss.id)).toEqual(["Bjork", "Rath'mael"]);
+    expect(run.encounter?.id).toBe("Rath'mael");
+  });
 });
 
 describe("deathsFromRecaps", () => {

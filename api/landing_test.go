@@ -211,6 +211,46 @@ func TestLandingMontage(t *testing.T) {
 	require.Equal(t, override, resp.Featured.InstanceID)
 }
 
+// TestLandingSkipsNearZeroPull checks a near-zero duplicate of the last boss
+// pull (the Ruins log ends on a 15 ms Rath'mael pull) neither becomes the
+// hero pull nor shows in the boss list, for the pick and the montage alike.
+func TestLandingSkipsNearZeroPull(t *testing.T) {
+	t.Parallel()
+
+	store, _ := dbtestutil.NewDB(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+
+	zed := authz.NewDatabaseOnly(testutil.Logger(t), store)
+	handlerAPI := &API{AppContext: ctx, Opts: &Options{Zed: zed, Logger: testutil.Logger(t)}, landingMeshMaps: func(context.Context, uuid.UUID) (map[int32]bool, error) {
+		return map[int32]bool{33: true}, nil
+	}}
+	router := chi.NewRouter()
+	router.Get("/landing/featured", handlerAPI.LandingFeatured)
+
+	start := time.Date(2026, 10, 20, 20, 0, 0, 0, time.UTC)
+	dupStart := start.Add(20 * time.Minute)
+	id := seedLandingInstance(t, store, start, start.Add(30*time.Minute), []string{"unit-position"}, 33,
+		database.InsertEncounterParams{Name: "The Butcher", Boss: true, KillType: database.KillTypeClean, MapID: 33,
+			StartTime: database.Timestamptz(dupStart), EndTime: database.Timestamptz(dupStart.Add(15 * time.Millisecond))})
+	seedLandingSpeedrun(t, store, id, "Ruins of Lordaeron", 30*time.Minute, true)
+
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/landing/featured", nil))
+	require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+	var out chroniclesdk.LandingFeaturedResponse
+	require.NoError(t, json.Unmarshal(res.Body.Bytes(), &out))
+	require.NotNil(t, out.Featured)
+	require.Len(t, out.Entries, 1, "the montage plays the run")
+	for _, run := range []chroniclesdk.LandingFeaturedRun{*out.Featured, out.Entries[0]} {
+		require.Equal(t, id, run.InstanceID)
+		require.NotNil(t, run.Encounter)
+		require.Equal(t, (10 * time.Minute).Milliseconds(), run.Encounter.StartOffsetMs, "the real kill, not the duplicate")
+		require.Equal(t, (12 * time.Minute).Milliseconds(), run.Encounter.EndOffsetMs)
+		require.Len(t, run.Bosses, 1, "the duplicate is left out")
+		require.Equal(t, run.Encounter.ID, run.Bosses[0].ID)
+	}
+}
+
 // seedLandingSpeedrun records a qualified speedrun of duration on board's
 // speedrun board, for its own guild when guilded. An empty board leaves it
 // unranked.
