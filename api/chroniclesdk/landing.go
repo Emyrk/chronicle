@@ -3,8 +3,11 @@ package chroniclesdk
 import "github.com/google/uuid"
 
 // LandingFeaturedResponse is the public payload behind the /start hero.
-// Featured is nil when no featured instance is configured or it cannot be
-// shown (missing, unlisted, invalidated); the landing then shows its poster only.
+// Featured is the admin-set featured instance when one is configured, else
+// the tenant's newest public run with unit positions whose last boss pull has
+// a published dungeon mesh. It is nil when neither exists or the configured
+// instance cannot be shown (missing, unlisted, invalidated); the landing then
+// shows its poster only.
 type LandingFeaturedResponse struct {
 	Featured *LandingFeaturedRun `json:"featured"`
 }
@@ -18,6 +21,19 @@ type LandingFeaturedRun struct {
 	Bosses      []LandingFeaturedBoss  `json:"bosses"`
 	Deaths      []LandingFeaturedDeath `json:"deaths"`
 	Upload      LandingFeaturedUpload  `json:"upload"`
+	// Encounter is the boss pull the hero plays: the run's last boss kill, or
+	// its last wipe when no boss died. Nil when the run has no boss encounter.
+	Encounter *LandingFeaturedEncounter `json:"encounter"`
+}
+
+// LandingFeaturedEncounter is one boss encounter. Offsets are milliseconds
+// from the instance start.
+type LandingFeaturedEncounter struct {
+	ID            uuid.UUID `json:"id"`
+	Name          string    `json:"name"`
+	Kill          bool      `json:"kill"`
+	StartOffsetMs int64     `json:"start_offset_ms"`
+	EndOffsetMs   int64     `json:"end_offset_ms"`
 }
 
 // LandingFeaturedBoss is one boss encounter (kill or wipe), ordered by pull.

@@ -1,6 +1,6 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { trackFunnel } from "@/utils/funnel";
-import type { HeroReplay } from "./heroReplay";
+import type { HeroReplay, HeroWindow } from "./heroReplay";
 import { whenIdle } from "./whenIdle";
 
 // The 3D chunk (three.js, the Map scene, the featured run's data): requested only once the trigger below fires.
@@ -58,9 +58,11 @@ function usePageVisible(): boolean {
  * Sends hero_play_3s once the 3D replay has played for 3 s on screen, or,
  * with 3D suppressed (or no featured run), once the poster has been on screen for 3 s.
  */
-export function HeroReplayLayer({ instanceId, onReplay }: {
+export function HeroReplayLayer({ instanceId, pull, onReplay }: {
   /** The featured run: a public instance with unit positions and a published dungeon mesh; without one, the poster stays. */
   instanceId?: string;
+  /** The featured run's boss pull to loop; without one the whole run plays. */
+  pull?: HeroWindow | null;
   onReplay: (replay: HeroReplay | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -118,6 +120,7 @@ export function HeroReplayLayer({ instanceId, onReplay }: {
             <LandingHero3D
               instanceId={instanceId}
               startOffsetMs={FEATURED_START_OFFSET_MS}
+              pull={pull}
               active={inView && pageVisible}
               onReplay={handleReplay}
             />

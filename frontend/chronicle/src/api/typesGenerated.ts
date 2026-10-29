@@ -2752,9 +2752,25 @@ export interface LandingFeaturedDeath {
 
 // From chroniclesdk/landing.go
 /**
+ * LandingFeaturedEncounter is one boss encounter. Offsets are milliseconds
+ * from the instance start.
+ */
+export interface LandingFeaturedEncounter {
+    readonly id: string;
+    readonly name: string;
+    readonly kill: boolean;
+    readonly start_offset_ms: number;
+    readonly end_offset_ms: number;
+}
+
+// From chroniclesdk/landing.go
+/**
  * LandingFeaturedResponse is the public payload behind the /start hero.
- * Featured is nil when no featured instance is configured or it cannot be
- * shown (missing, unlisted, invalidated); the landing then shows its poster only.
+ * Featured is the admin-set featured instance when one is configured, else
+ * the tenant's newest public run with unit positions whose last boss pull has
+ * a published dungeon mesh. It is nil when neither exists or the configured
+ * instance cannot be shown (missing, unlisted, invalidated); the landing then
+ * shows its poster only.
  */
 export interface LandingFeaturedResponse {
     readonly featured: LandingFeaturedRun | null;
@@ -2772,6 +2788,11 @@ export interface LandingFeaturedRun {
     readonly bosses: readonly LandingFeaturedBoss[];
     readonly deaths: readonly LandingFeaturedDeath[];
     readonly upload: LandingFeaturedUpload;
+    /**
+     * Encounter is the boss pull the hero plays: the run's last boss kill, or
+     * its last wipe when no boss died. Nil when the run has no boss encounter.
+     */
+    readonly encounter: LandingFeaturedEncounter | null;
 }
 
 // From chroniclesdk/landing.go

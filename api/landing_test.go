@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -33,11 +34,14 @@ func TestLandingFeatured(t *testing.T) {
 
 	start := time.Date(2026, 10, 20, 20, 0, 0, 0, time.UTC)
 	end := start.Add(30 * time.Minute)
-	instanceID := seedLandingInstance(t, store, start, end)
+	instanceID := seedLandingInstance(t, store, start, end, nil, 0)
 
 	zed := authz.NewDatabaseOnly(testutil.Logger(t), store)
 	opts := &Options{Zed: zed, Logger: testutil.Logger(t)}
-	handlerAPI := &API{AppContext: ctx, Opts: opts}
+	// Map 33 has a published dungeon mesh; every other map does not.
+	handlerAPI := &API{AppContext: ctx, Opts: opts, landingMeshMaps: func(context.Context, uuid.UUID) (map[int32]bool, error) {
+		return map[int32]bool{33: true}, nil
+	}}
 	router := chi.NewRouter()
 	router.Get("/landing/featured", handlerAPI.LandingFeatured)
 	router.Put("/site-config", handlerAPI.AdminUpdateSiteConfig)
@@ -59,7 +63,7 @@ func TestLandingFeatured(t *testing.T) {
 		return res.Code
 	}
 
-	require.Nil(t, getFeatured(), "nothing configured")
+	require.Nil(t, getFeatured(), "nothing configured and no positional run")
 
 	require.Equal(t, http.StatusOK, setFeatured(instanceID.String()))
 	delay := (3 * time.Minute).Milliseconds()
@@ -78,6 +82,13 @@ func TestLandingFeatured(t *testing.T) {
 			{OffsetMs: (11 * time.Minute).Milliseconds(), VictimName: "Healy", VictimClass: "PRIEST", KillerName: "The Butcher"},
 		},
 		Upload: chroniclesdk.LandingFeaturedUpload{Source: chroniclesdk.LandingUploadSourceSidekick, DelayMs: &delay},
+		Encounter: &chroniclesdk.LandingFeaturedEncounter{
+			ID:            butcherKill(t, store, instanceID),
+			Name:          "The Butcher",
+			Kill:          true,
+			StartOffsetMs: (10 * time.Minute).Milliseconds(),
+			EndOffsetMs:   (12 * time.Minute).Milliseconds(),
+		},
 	}, getFeatured())
 
 	require.Equal(t, http.StatusBadRequest, setFeatured("not-a-uuid"))
@@ -86,13 +97,57 @@ func TestLandingFeatured(t *testing.T) {
 	require.Equal(t, http.StatusOK, setFeatured(""))
 	require.Nil(t, getFeatured(), "setting cleared")
 
-	// The deployment default applies while the site setting is empty.
+	// With nothing configured, the hero plays the newest positional run whose
+	// last boss pull has a mesh: its last kill, not a later wipe.
+	older := seedLandingInstance(t, store, start.Add(24*time.Hour), end.Add(24*time.Hour), []string{"unit-position"}, 33)
+	newer := seedLandingInstance(t, store, start.Add(48*time.Hour), end.Add(48*time.Hour), []string{"unit-position"}, 33,
+		database.InsertEncounterParams{Name: "Overseer", Boss: true, KillType: database.KillTypeWipe, MapID: 33,
+			StartTime: database.Timestamptz(start.Add(48*time.Hour + 20*time.Minute)), EndTime: database.Timestamptz(start.Add(48*time.Hour + 21*time.Minute))})
+	// Newer still, but on a map without a published mesh.
+	seedLandingInstance(t, store, start.Add(72*time.Hour), end.Add(72*time.Hour), []string{"unit-position"}, 34)
+	handlerAPI.landing.invalidate()
+	picked := getFeatured()
+	require.NotNil(t, picked)
+	require.Equal(t, newer, picked.InstanceID)
+	require.Equal(t, &chroniclesdk.LandingFeaturedEncounter{
+		ID:            butcherKill(t, store, newer),
+		Name:          "The Butcher",
+		Kill:          true,
+		StartOffsetMs: (10 * time.Minute).Milliseconds(),
+		EndOffsetMs:   (12 * time.Minute).Milliseconds(),
+	}, picked.Encounter)
+	require.Len(t, picked.Bosses, 2)
+
+	// The admin's featured run wins over the pick, playing its own last boss pull.
+	require.Equal(t, http.StatusOK, setFeatured(older.String()))
+	overridden := getFeatured()
+	require.Equal(t, older, overridden.InstanceID)
+	require.Equal(t, butcherKill(t, store, older), overridden.Encounter.ID)
+	require.Equal(t, http.StatusOK, setFeatured(""))
+
+	// The deployment default applies while the site setting is empty, and wins over the pick.
 	opts.LandingFeaturedID = instanceID
 	handlerAPI.landing.invalidate()
 	require.Equal(t, instanceID, getFeatured().InstanceID)
 }
 
-func seedLandingInstance(t *testing.T, store database.Store, start, end time.Time) uuid.UUID {
+// butcherKill is the seeded instance's The Butcher encounter.
+func butcherKill(t *testing.T, store database.Store, instanceID uuid.UUID) uuid.UUID {
+	t.Helper()
+	encounters, err := store.EncountersByInstanceID(testutil.Context(t, testutil.WaitShort), instanceID)
+	require.NoError(t, err)
+	for _, enc := range encounters {
+		if enc.Name == "The Butcher" {
+			return enc.ID
+		}
+	}
+	t.Fatalf("no The Butcher encounter on %s", instanceID)
+	return uuid.Nil
+}
+
+// seedLandingInstance seeds a run with a trash pull and a The Butcher kill on
+// mapID, plus the extra encounters.
+func seedLandingInstance(t *testing.T, store database.Store, start, end time.Time, capabilities []string, mapID int32, extra ...database.InsertEncounterParams) uuid.UUID {
 	t.Helper()
 	ctx := testutil.Context(t, testutil.WaitMedium)
 
@@ -115,18 +170,18 @@ func seedLandingInstance(t *testing.T, store database.Store, start, end time.Tim
 		ID: instanceID, RealmID: realmID, LogGroupID: logGroupID,
 		Name: "Ruins of Lordaeron", DifficultyName: "Normal", MaxPlayers: 5,
 		StartTime: database.Timestamptz(start), EndTime: database.Timestamptz(end),
-		Capabilities: []string{},
+		Capabilities: append([]string{}, capabilities...),
 	})
 	require.NoError(t, err)
 
 	tank := guid.GUID(1)
 	healer := guid.GUID(2)
 	butcher := guid.GUID(0xF130000001000001)
-	for _, enc := range []database.InsertEncounterParams{
-		{Name: "Trash", Boss: false, StartTime: database.Timestamptz(start.Add(4 * time.Minute)), EndTime: database.Timestamptz(start.Add(6 * time.Minute))},
-		{Name: "The Butcher", Boss: true, StartTime: database.Timestamptz(start.Add(10 * time.Minute)), EndTime: database.Timestamptz(start.Add(12 * time.Minute))},
-	} {
-		enc.ID, enc.InstanceID, enc.KillType, enc.Remaining = uuid.New(), instanceID, database.KillTypeClean, guid.GUIDs{}
+	for _, enc := range append([]database.InsertEncounterParams{
+		{Name: "Trash", Boss: false, KillType: database.KillTypeClean, MapID: mapID, StartTime: database.Timestamptz(start.Add(4 * time.Minute)), EndTime: database.Timestamptz(start.Add(6 * time.Minute))},
+		{Name: "The Butcher", Boss: true, KillType: database.KillTypeClean, MapID: mapID, StartTime: database.Timestamptz(start.Add(10 * time.Minute)), EndTime: database.Timestamptz(start.Add(12 * time.Minute))},
+	}, extra...) {
+		enc.ID, enc.InstanceID, enc.Remaining = uuid.New(), instanceID, guid.GUIDs{}
 		_, err = store.InsertEncounter(ctx, enc)
 		require.NoError(t, err)
 	}

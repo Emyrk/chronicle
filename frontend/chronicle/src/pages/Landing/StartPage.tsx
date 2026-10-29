@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useLandingFeatured } from "@/api/landingFeatured";
 import { useSiteConfig } from "@/api/siteConfigQuery";
@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { trackFunnel } from "@/utils/funnel";
 import { HeroReplayLayer } from "./HeroReplayLayer";
-import type { HeroReplay } from "./heroReplay";
+import { heroWindow, type HeroReplay } from "./heroReplay";
 import { LandingHero } from "./LandingHero";
 import { IMAGES } from "./startPageStyle";
 import { whenIdle } from "./whenIdle";
@@ -232,6 +232,8 @@ export function StartPage() {
   const siteName = (siteConfig?.tenant?.branding ?? siteConfig?.branding)?.display_name;
   // The 3D hero replays the featured run (the build-time instance when none is set); undefined until that is known.
   const heroInstanceId = landing || landingFailed ? landing?.featured?.instance_id ?? FALLBACK_FEATURED_INSTANCE : undefined;
+  // It loops the featured run's boss pull; the scrubber spans that pull only.
+  const hero = useMemo(() => (landing?.featured ? heroWindow(landing.featured) : null), [landing]);
   // The live 3D replay's position and controls, for the hero's scrubber; null while the poster shows.
   const [replay, setReplay] = useState<HeroReplay | null>(null);
 
@@ -250,11 +252,11 @@ export function StartPage() {
         poster={`${IMAGES}/ruins-courtyard-poster.jpg`}
         posterPortrait={`${IMAGES}/ruins-courtyard-poster-portrait.jpg`}
         posterAlt="3D replay: a five-player group fighting on the stone platform in the Ruins of Lordaeron courtyard"
-        featured={landing?.featured}
+        featured={hero?.run}
         currentMs={replay?.currentMs}
         playback={replay}
         getSidekickHref={getSidekickHref}
-        layer3D={landing || landingFailed ? <HeroReplayLayer instanceId={heroInstanceId} onReplay={setReplay} /> : null}
+        layer3D={landing || landingFailed ? <HeroReplayLayer instanceId={heroInstanceId} pull={hero?.window} onReplay={setReplay} /> : null}
       />
       <SendLinkSection />
       <HowItWorks />
