@@ -2768,8 +2768,9 @@ export interface LandingFeaturedEncounter {
  * LandingFeaturedResponse is the public payload behind the /start hero.
  * Entries is the montage the hero plays in order, looping: the admin-set
  * featured instance first when one is configured, then, for each instance
- * with a published dungeon mesh, its best run on the speedrun board among
- * runs with unit positions, best ranked first (at most six in all). Without
+ * with a published dungeon mesh, its fastest qualified speedrun among runs
+ * with unit positions (by the speedrun board's rules, though a run without a
+ * guild counts), best ranked first (at most six in all). Without
  * such ranked runs the montage is the tenant's newest public run with unit
  * positions whose last boss pull has a published dungeon mesh. It is empty
  * when nothing qualifies or the configured instance cannot be shown (missing,
@@ -2801,8 +2802,8 @@ export interface LandingFeaturedRun {
      */
     readonly encounter: LandingFeaturedEncounter | null;
     /**
-     * Speedrun is the run's place on its instance's speedrun board, when the
-     * montage picked it as that instance's best replayed run.
+     * Speedrun is the place the run's time takes on its instance's speedrun
+     * board, when the montage picked it as that instance's best replayed run.
      */
     readonly speedrun: LandingFeaturedSpeedrun | null;
 }
