@@ -21,12 +21,6 @@ export function dungeonMapKind(names: readonly string[], manifest: WowMapManifes
   return entry?.mesh ? "3d" : entry ? "2d" : "coming";
 }
 
-/** The supported instance's own name and zone names, matched to a run's instance name. */
-export function dungeonNames(name: string, instances: readonly SupportedInstance[]): string[] {
-  const instance = instances.find((candidate) => normalizedName(candidate.name) === normalizedName(name));
-  return [name, ...(instance?.zone_names ?? [])];
-}
-
 /**
  * The tenant's supported instances, each marked by its maps manifest entry:
  * a mesh is a 3D floor, any other entry a 2D map, no entry still coming.

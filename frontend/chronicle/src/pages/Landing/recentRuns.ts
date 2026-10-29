@@ -1,12 +1,9 @@
 import type { RecentInstance } from "@/api/typesGenerated";
-import type { DungeonShelfKind } from "./dungeonShelf";
+export type RunBadge = "replay";
 
-export type RunBadge = "3d" | "2d";
-
-/** 3D when the run's map has a published mesh, 2D otherwise, none when the log has no positions. */
-export function runBadge(run: Pick<RecentInstance, "has_positions">, mapKind: DungeonShelfKind): RunBadge | null {
-  if (!run.has_positions) return null;
-  return mapKind === "3d" ? "3d" : "2d";
+/** A replay badge when the log recorded unit positions. Every map gets a mesh, so it is always "3D replay". */
+export function runBadge(run: Pick<RecentInstance, "has_positions">): RunBadge | null {
+  return run.has_positions ? "replay" : null;
 }
 
 /** The run's replay still (640x360 JPG), rendered by the server after the upload. */

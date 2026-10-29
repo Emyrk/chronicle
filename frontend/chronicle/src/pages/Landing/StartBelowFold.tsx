@@ -8,7 +8,7 @@ import { useTenantDatasetScope } from "@/hooks/useDatasetId";
 import { getInstanceArtCrop } from "@/pages/Logs/utils/instanceImages";
 import { fetchMapManifest } from "@/pages/Technical/mapManifest";
 import { trackFunnel } from "@/utils/funnel";
-import { dungeonMapKind, dungeonNames, dungeonShelfCards } from "./dungeonShelf";
+import { dungeonShelfCards } from "./dungeonShelf";
 import { formatRunDuration, runBadge, runStillUrl, type RunBadge } from "./recentRuns";
 import { IMAGES } from "./startPageStyle";
 
@@ -67,8 +67,8 @@ function useMapManifest() {
   });
 }
 
-// Only runs with a replay: their cards show a still, never a wall of placeholders.
-const RECENT_RUNS_URL = "/api/v1/raidlogs/recent?days=60&limit=3&has_positions=true";
+// Replays first (their cards show a still), then video runs, then the rest, so the rail always fills.
+const RECENT_RUNS_URL = "/api/v1/raidlogs/recent?days=60&limit=3&prefer=replay";
 
 function useRecentRuns() {
   return useQuery({
@@ -83,7 +83,8 @@ function useRecentRuns() {
 }
 
 function RunCard({ run, badge }: { run: RecentInstance; badge: RunBadge | null }) {
-  const [still, setStill] = useState<"loading" | "loaded" | "missing">("loading");
+  // Only replays have a still; don't request one for a backfilled regular run.
+  const [still, setStill] = useState<"loading" | "loaded" | "missing">(run.has_positions ? "loading" : "missing");
   const [artFailed, setArtFailed] = useState(false);
   const duration = formatRunDuration(run.duration_ms);
   const href = `/instances/${run.slug || run.id}`;
@@ -118,13 +119,9 @@ function RunCard({ run, badge }: { run: RecentInstance; badge: RunBadge | null }
             className={`absolute inset-0 h-full w-full object-cover ${still === "loaded" ? "" : "invisible"}`}
           />
         )}
-        {badge && (
-          <span
-            className={`absolute left-2.5 top-2.5 rounded-md bg-background/85 px-2 py-[3px] text-[11px] font-semibold tracking-[0.08em] ${
-              badge === "3d" ? "text-primary" : "text-muted-foreground"
-            }`}
-          >
-            {badge === "3d" ? "3D REPLAY" : "2D MAP"}
+        {badge === "replay" && (
+          <span className="absolute left-2.5 top-2.5 rounded-md bg-background/85 px-2 py-[3px] text-[11px] font-semibold tracking-[0.08em] text-primary">
+            3D REPLAY
           </span>
         )}
         {duration && (
@@ -145,8 +142,6 @@ function RunCard({ run, badge }: { run: RecentInstance; badge: RunBadge | null }
 
 function RecentRuns() {
   const { data } = useRecentRuns();
-  const { data: instances } = useSupportedInstances();
-  const { data: manifest } = useMapManifest();
   const runs = (data?.instances ?? [])
     // The endpoint lists every upload of a duplicate run, its representative first; one card per run.
     .filter((run, i, all) => !run.duplicate_group_id || all.findIndex((other) => other.duplicate_group_id === run.duplicate_group_id) === i)
@@ -162,7 +157,7 @@ function RecentRuns() {
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {runs.map((run) => (
-          <RunCard key={run.id} run={run} badge={runBadge(run, dungeonMapKind(dungeonNames(run.name, instances ?? []), manifest))} />
+          <RunCard key={run.id} run={run} badge={runBadge(run)} />
         ))}
         <Link
           to="/download"

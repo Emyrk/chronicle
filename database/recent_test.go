@@ -169,3 +169,92 @@ func TestListRecentInstanceGroupsFiltersToRunsWithPositions(t *testing.T) {
 	require.Equal(t, withPositionsID, rows[0].ID)
 	require.True(t, rows[0].HasPositions)
 }
+
+func TestListRecentInstanceGroupsPreferReplayOrdersReplaysThenVideos(t *testing.T) {
+	t.Parallel()
+
+	_, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+
+	userID := uuid.New()
+	_, err := store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "recent-prefer-user"})
+	require.NoError(t, err)
+
+	baseTime := time.Date(2026, 9, 1, 18, 0, 0, 0, time.UTC)
+	insertInstance := func(name string, uploadedAt time.Time, capabilities []string, video bool) uuid.UUID {
+		t.Helper()
+		logGroupID := uuid.New()
+		_, err := store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+			ID:        logGroupID,
+			Owner:     userID,
+			LogType:   database.LogTypeV1,
+			CreatedAt: database.Timestamptz(uploadedAt),
+			UpdatedAt: database.Timestamptz(uploadedAt),
+		})
+		require.NoError(t, err)
+		require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
+		instanceID := uuid.New()
+		_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
+			ID:           instanceID,
+			RealmID:      realmID,
+			LogGroupID:   logGroupID,
+			Name:         name,
+			HashedSlug:   pgtype.Text{String: instanceID.String(), Valid: true},
+			Capabilities: capabilities,
+		})
+		require.NoError(t, err)
+		if video {
+			require.NoError(t, store.InsertStampedYoutubeVideo(ctx, database.InsertStampedYoutubeVideoParams{
+				LogInstanceID: uuid.NullUUID{UUID: instanceID, Valid: true},
+				InstanceSlug:  pgtype.Text{String: instanceID.String(), Valid: true},
+				CreatedAt:     database.Timestamptz(uploadedAt),
+				ExportedAt:    database.Timestamptz(uploadedAt),
+				VideoUrl:      "https://www.youtube.com/watch?v=" + name,
+				Payload:       []database.VideoTimestamp{},
+			}))
+		}
+		return instanceID
+	}
+
+	positions := []string{"unit-position"}
+	// Inserted oldest to newest; the plain runs are the newest uploads.
+	oldReplayID := insertInstance("old-replay", baseTime, positions, false)
+	oldVideoID := insertInstance("old-video", baseTime.Add(1*time.Minute), []string{}, true)
+	newReplayID := insertInstance("new-replay", baseTime.Add(2*time.Minute), positions, true)
+	newVideoID := insertInstance("new-video", baseTime.Add(3*time.Minute), []string{}, true)
+	oldOtherID := insertInstance("old-other", baseTime.Add(4*time.Minute), []string{}, false)
+	newOtherID := insertInstance("new-other", baseTime.Add(5*time.Minute), []string{}, false)
+
+	params := database.ListRecentInstanceGroupsParams{
+		StartTime: database.Timestamptz(baseTime.Add(-time.Hour)),
+		EndTime:   database.Timestamptz(baseTime.Add(time.Hour)),
+	}
+	ids := func(rows []database.ListRecentInstanceGroupsRow) []uuid.UUID {
+		out := make([]uuid.UUID, 0, len(rows))
+		for _, row := range rows {
+			out = append(out, row.ID)
+		}
+		return out
+	}
+
+	rows, err := store.ListRecentInstanceGroups(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{newOtherID, oldOtherID, newVideoID, newReplayID, oldVideoID, oldReplayID}, ids(rows),
+		"without prefer_replay the order is newest first")
+
+	params.PreferReplay = true
+	want := []uuid.UUID{newReplayID, oldReplayID, newVideoID, oldVideoID, newOtherID, oldOtherID}
+	rows, err = store.ListRecentInstanceGroups(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, want, ids(rows), "replays, then videos, then the rest, each newest first")
+
+	params.LimitCount = 2
+	var paged []uuid.UUID
+	for offset := int32(0); offset < int32(len(want)); offset += params.LimitCount {
+		params.OffsetCount = offset
+		rows, err = store.ListRecentInstanceGroups(ctx, params)
+		require.NoError(t, err)
+		paged = append(paged, ids(rows)...)
+	}
+	require.Equal(t, want, paged, "paging walks the same preferred order without gaps or repeats")
+}
