@@ -904,8 +904,9 @@ WHERE encounter_count = (SELECT COUNT(*) FROM selected_encounters)
 ORDER BY started_at ASC, run_id ASC;
 
 -- name: InsertEncounterDpsRanking :exec
--- Boss encounters keep the earliest occurrence per player and encounter name in
--- an uploaded instance so repeated clears cannot form a synthetic best-of run.
+-- Boss encounters keep the latest timestamped occurrence per player and
+-- encounter name in an uploaded instance so repeated clears cannot form a
+-- synthetic best-of run.
 -- Trash keeps one aggregate per player/spec/sub-spec.
 WITH boss_insert AS (
     INSERT INTO encounter_dps_rankings (
@@ -958,10 +959,10 @@ WITH boss_insert AS (
         killed_at = EXCLUDED.killed_at,
         created_at = EXCLUDED.created_at
     WHERE
-        EXCLUDED.killed_at < encounter_dps_rankings.killed_at
+        EXCLUDED.killed_at > encounter_dps_rankings.killed_at
         OR (
             EXCLUDED.killed_at = encounter_dps_rankings.killed_at
-            AND EXCLUDED.encounter_id < encounter_dps_rankings.encounter_id
+            AND EXCLUDED.encounter_id > encounter_dps_rankings.encounter_id
         )
     RETURNING id
 )

@@ -18415,10 +18415,10 @@ WITH boss_insert AS (
         killed_at = EXCLUDED.killed_at,
         created_at = EXCLUDED.created_at
     WHERE
-        EXCLUDED.killed_at < encounter_dps_rankings.killed_at
+        EXCLUDED.killed_at > encounter_dps_rankings.killed_at
         OR (
             EXCLUDED.killed_at = encounter_dps_rankings.killed_at
-            AND EXCLUDED.encounter_id < encounter_dps_rankings.encounter_id
+            AND EXCLUDED.encounter_id > encounter_dps_rankings.encounter_id
         )
     RETURNING id
 )
@@ -18512,8 +18512,9 @@ type InsertEncounterDpsRankingParams struct {
 	KilledAt           pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
 }
 
-// Boss encounters keep the earliest occurrence per player and encounter name in
-// an uploaded instance so repeated clears cannot form a synthetic best-of run.
+// Boss encounters keep the latest timestamped occurrence per player and
+// encounter name in an uploaded instance so repeated clears cannot form a
+// synthetic best-of run.
 // Trash keeps one aggregate per player/spec/sub-spec.
 func (q *sqlQuerier) InsertEncounterDpsRanking(ctx context.Context, arg InsertEncounterDpsRankingParams) error {
 	_, err := q.db.Exec(ctx, insertEncounterDpsRanking,
