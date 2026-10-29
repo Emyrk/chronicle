@@ -208,9 +208,10 @@ export function HeroMeter({ data, sourceKey, pane, onPaneChange, className, rows
   const breakouts = data.breakouts ?? null;
   const encounterId = breakouts?.encounterId ?? null;
   const [drill, setDrill] = useState<Drill | null>(null);
-  // Another pane or pull leaves the drill-in; a clip's drill-in takes the live pull once it plays.
+  // Another pane or pull leaves the drill-in; a clip's drill-in takes the live pull once it plays, unless the live
+  // run lacks that player (the clip can be another run).
   if (drill && (drill.pane !== pane || (drill.encounterId !== null && encounterId !== null && drill.encounterId !== encounterId))) setDrill(null);
-  else if (drill && drill.encounterId === null && encounterId !== null) setDrill({ ...drill, encounterId });
+  else if (drill && drill.encounterId === null && breakouts) setDrill(breakouts.hasPlayer(drill.name) ? { ...drill, encounterId: breakouts.encounterId } : null);
   const drillInto = (row: PlayerMetricChartData) => {
     if (pane === "deaths") return;
     // The live replay without a pull has no breakouts to show.

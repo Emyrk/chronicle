@@ -173,6 +173,7 @@ export function useHeroStats(instance: Instance, encounterId: string | null, cur
     const breakouts: HeroMeterBreakouts | null = damageResult && {
       encounterId,
       elapsedMs,
+      hasPlayer: (name) => guidsByName.has(name),
       player: (pane, name) => {
         const guid = guidsByName.get(name);
         if (!guid) return null;

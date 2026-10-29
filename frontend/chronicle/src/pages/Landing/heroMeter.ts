@@ -55,6 +55,8 @@ export interface HeroMeterBreakouts {
   /** Where the cursor is, in ms from the pull's start. */
   elapsedMs: number;
   player: (pane: HeroMeterDrillPane, name: string) => HeroMeterBreakout | null;
+  /** The player is in the run (a clip's bar can name someone the live run lacks). */
+  hasPlayer: (name: string) => boolean;
 }
 
 /** What the meter shows for one pull. A null pane has no numbers for it (a clip carries damage only). */
