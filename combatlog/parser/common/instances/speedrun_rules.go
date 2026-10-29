@@ -169,6 +169,13 @@ func MoltenCoreSpeedrunRequirements(fl database.WoWFlavor) []rankings.SpeedrunRe
 	return mc
 }
 
+// BlackwingLairDamageTargets limits Broodlord rankings to boss damage.
+func BlackwingLairDamageTargets() map[string]rankings.DamageTargets {
+	return map[string]rankings.DamageTargets{
+		"Broodlord Lashlayer": {Mode: rankings.DamageTargetsBossOnly},
+	}
+}
+
 // BlackwingLairProgressionBosses returns the ordered boss encounters used for
 // progression. Vanilla+ adds the Decapitator and Krixix, combines Ebonroc with
 // Flamegor, and records Vaelastrasz as part of the Nefarian encounter.
