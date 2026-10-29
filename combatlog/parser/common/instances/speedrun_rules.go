@@ -169,14 +169,10 @@ func MoltenCoreSpeedrunRequirements(fl database.WoWFlavor) []rankings.SpeedrunRe
 	return mc
 }
 
-// BlackwingLairDamageTargets limits Broodlord rankings to the boss and the
-// whelps that belong to its encounter.
+// BlackwingLairDamageTargets limits Broodlord rankings to boss damage.
 func BlackwingLairDamageTargets() map[string]rankings.DamageTargets {
 	return map[string]rankings.DamageTargets{
-		"Broodlord Lashlayer": {
-			Mode:     rankings.DamageTargetsEntries,
-			EntryIDs: []uint32{12017, 14022, 14024, 14025, 14023},
-		},
+		"Broodlord Lashlayer": {Mode: rankings.DamageTargetsBossOnly},
 	}
 }
 
