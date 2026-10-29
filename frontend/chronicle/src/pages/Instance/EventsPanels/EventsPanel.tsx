@@ -85,6 +85,7 @@ import { createRaidCompositionPanel } from "./RaidComposition/RaidComposition";
 import { createMapPanel } from "./Map/Map";
 import { createFriendlyClassBuffsPanel } from "./FriendlyClassBuffs/FriendlyClassBuffs";
 import { createRaidFramesPanel } from "./RaidFrames/RaidFrames";
+import { createThreatPanel } from "./Threat/Threat";
 import { createActivityLogPanel } from "./ActivityLog/ActivityLog";
 
 import { createDispelsDonePanel, createDispelsReceivedPanel } from "./Dispel/Dispel";
@@ -150,6 +151,7 @@ const BUILTIN_PANELS = {
   map: createMapPanel(),
   mini_map: createMapPanel({ mini: true }),
   raid_frames: createRaidFramesPanel(),
+  threat: createThreatPanel(),
   activity_log: createActivityLogPanel(),
   status: createStatusPanel(),
   healer_casts: createHealerCastsPanel(),

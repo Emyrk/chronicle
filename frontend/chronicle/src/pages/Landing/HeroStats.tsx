@@ -1,7 +1,8 @@
-import { Users } from "lucide-react";
+import { Flame, Users } from "lucide-react";
 import type { Instance } from "@/pages/Instance/InstancePage";
 import { latestResourceAt } from "@/pages/Instance/EventsPanels/RaidFrames/raidFrames.processor";
 import { POWER_COLORS, percent } from "@/pages/Instance/EventsPanels/RaidFrames/raidFrameShared";
+import { ThreatEstimatedLabel, ThreatMeter } from "@/pages/Instance/EventsPanels/Threat/ThreatMeter";
 import type { HeroStats } from "./useHeroStats";
 
 function formatClock(ms: number) {
@@ -62,6 +63,24 @@ export function HeroRaidFramesCard({ instance, stats }: { instance: Instance; st
         <span className="font-mono text-[10px] text-muted-foreground">{formatClock(stats.elapsedMs)}</span>
       </div>
       <HeroRaidFrames instance={instance} stats={stats} />
+    </div>
+  );
+}
+
+/** The stats column's Threat (estimated) card: the run page's threat table on the pull's main enemy at the cursor. */
+export function HeroThreatCard({ stats }: { stats: HeroStats }) {
+  const view = stats.threat;
+  if (!view || view.rows.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-white/10 bg-card/60 p-3 shadow-lg backdrop-blur-md" data-hero-threat>
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-foreground">
+          <Flame className="h-4 w-4 shrink-0" aria-hidden />
+          <span className="truncate">Threat on {view.enemyName}</span>
+        </span>
+        <ThreatEstimatedLabel />
+      </div>
+      <ThreatMeter view={view} openLabel={`Threat on ${view.enemyName}`} />
     </div>
   );
 }

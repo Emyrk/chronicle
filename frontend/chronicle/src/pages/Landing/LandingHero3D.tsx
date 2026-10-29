@@ -18,7 +18,7 @@ import MapView3D from "@/pages/Instance/EventsPanels/Map/MapView3D";
 import { previewSpeed, useMapScene } from "@/pages/Instance/EventsPanels/Map/useMapScene";
 import { serializableContext, type HeroDeathBeat, type HeroDeathRecap, type HeroReplay, type HeroWindow } from "./heroReplay";
 import { meterTotals, type HeroMeterData } from "./heroMeter";
-import { HeroRaidFramesCard } from "./HeroStats";
+import { HeroRaidFramesCard, HeroThreatCard } from "./HeroStats";
 import { useHeroStats } from "./useHeroStats";
 
 // The Map panel's streams without auras: those only tint debuffed players,
@@ -358,18 +358,19 @@ function HeroScene({ instance, startOffsetMs, pull = null, active, onPullEnd, on
   // A pull reports the hero's clock: it moves through the lead-in, where the scene holds the pull's first sample.
   const currentMs = cursorMs === null ? null : pull ? playableMs : cursorMs - instanceStartMs;
   // The live stats follow the hero's clock from the pull's start (chips, the scrubber and deaths move it through `seek`):
-  // the meter's damage at the cursor, and the raid frames.
+  // the meter's damage and the threat table at the cursor, and the raid frames.
   const stats = useHeroStats(instance, encounterId, shown && span && currentMs !== null ? span.startMs + playableMs : null, HERO_STREAMS);
   const cursorDamage = stats?.damage ?? null;
   const liveMeter = useMemo(() => meter && cursorDamage ? { ...meter, damage: cursorDamage } : meter, [cursorDamage, meter]);
   const renderRaidFrames = useMemo(() => stats?.frames ? () => <HeroRaidFramesCard instance={instance} stats={stats} /> : null, [instance, stats]);
+  const renderThreat = useMemo(() => stats?.threat ? () => <HeroThreatCard stats={stats} /> : null, [stats]);
   useEffect(() => {
     if (!shown || !span || currentMs === null) {
       onReplay(null);
       return;
     }
-    onReplay({ currentMs, playing: userPlaying, togglePlay, seek, deathRecaps, meter: liveMeter, renderRaidFrames });
-  }, [currentMs, deathRecaps, liveMeter, onReplay, renderRaidFrames, seek, shown, span, togglePlay, userPlaying]);
+    onReplay({ currentMs, playing: userPlaying, togglePlay, seek, deathRecaps, meter: liveMeter, renderRaidFrames, renderThreat });
+  }, [currentMs, deathRecaps, liveMeter, onReplay, renderRaidFrames, renderThreat, seek, shown, span, togglePlay, userPlaying]);
   useEffect(() => () => onReplay(null), [onReplay]);
 
   if (!ready || unavailable) return null;

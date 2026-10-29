@@ -69,7 +69,8 @@ Multiplicative. Talents are not in the log: **max-rank talents are assumed**
 **Unknown stance or form.** Stances and forms usually start before the pull, so
 the log may never show them (the landing hero loads no aura stream at all). A
 warrior, druid or paladin whose stance, form or Righteous Fury is unknown is
-assumed to be tanking — Defensive Stance, Bear Form, Righteous Fury — while an
+assumed to be tanking — Defensive Stance, Bear Form, Righteous Fury (the last only
+when no aura stream is loaded) — while an
 enemy has melee'd them at least once this encounter; otherwise Battle/Berserker
 (0.8), caster form (1.0), no Righteous Fury.
 
@@ -129,5 +130,35 @@ The time range follows the run page (and the Watch tab's cursor in sync mode).
 
 ## Accuracy check
 
-See the section added after the processor landed (one real pull from the octo
-ZG run, comparing estimated threat at an observed aggro change).
+Run: octo ZG `-8uWqvAo4Qa4Oa5l` (instance `b180e8ed-c802-4ec7-b9c1-dc887368d1c6`),
+**High Priest Venoxis** (encounter `ada43d47-e3af-412b-876c-803a40291c05`), all
+seven threat streams, processed offline with `processIncrementally` exactly as
+the panel does. Detected from auras: Racca Defensive Stance, Katq and Stevexd
+Berserker Stance, Salvation on most of the DPS.
+
+The panel's log for the pull:
+
+```
+ 8.0s  Foxygon dies, threat reset          (the first tank)
+ 8.2s  Venoxis turns from Foxygon to Katq
+13.8s  Racca forces Venoxis (Mocking Blow / Challenging Shout)
+23.7s  Racca taunts Venoxis
+27.3s  Venoxis turns from Racca to Katq (est. 105% of Racca)
+...
+40.0s  Katq dies, threat reset
+```
+
+At 27.3 s Katq — a Berserker Stance warrior, so a melee pull at 110% — takes
+Venoxis off the taunting tank. The estimate puts Katq at **105%** of Racca at
+that swing: within 5 points of the melee pull line. The model matches the
+observed pulled aggro; Racca taunts it back at 35.9 s and Katq dies at 40.0 s.
+
+Same pull with only the landing hero's streams (no `aura`, no
+`resource_change`): Katq's stance is unknown and Venoxis had already meleed
+Katq at 8.2 s, so Katq reads as tanking (Defensive Stance) and the pull shows at
+146%, and Salvation is missing from the DPS. The landing column is therefore a
+coarser estimate than the run page.
+
+Other pulls in the run do not line up as well, e.g. Hakkar turning to players
+at 65–93% of the tank, and Arlokk, whose threat resets are not modelled — boss
+mechanics from the known-gaps list.

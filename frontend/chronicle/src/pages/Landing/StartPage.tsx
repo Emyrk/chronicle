@@ -330,10 +330,11 @@ export function StartPage() {
           siteName={siteName}
           meter={meter && (
             <div className="pointer-events-none absolute inset-0 mx-auto hidden max-w-[1180px] min-[900px]:block">
-              {/* The stats column, following the replay's cursor: the glass meter, Threat (estimated) under it once that
-                  panel exists (#1425), then Raid Frames (from lg up, where the column has the height). */}
+              {/* The stats column, following the replay's cursor: the glass meter, Threat (estimated) under it, then
+                  Raid Frames (from lg up, where the column has the height). */}
               <div className="pointer-events-auto absolute right-4 top-4 flex w-[300px] flex-col gap-2 lg:right-8 lg:top-auto lg:bottom-[112px] lg:w-[320px]">
                 <HeroMeter data={meter} sourceKey={meterKey} pane={pane} onPaneChange={changePane} />
+                {replay?.renderThreat?.()}
                 {replay?.renderRaidFrames && <div className="hidden lg:block">{replay.renderRaidFrames()}</div>}
               </div>
             </div>

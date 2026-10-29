@@ -78,6 +78,8 @@ export interface HeroReplay extends HeroPlayback {
   meter: HeroMeterData | null;
   /** The playing pull's Raid Frames at the cursor, drawn by the 3D chunk (the stats column); null without a pull. */
   renderRaidFrames: (() => ReactNode) | null;
+  /** The playing pull's Threat (estimated) at the cursor, drawn by the 3D chunk (the stats column); null without a pull. */
+  renderThreat: (() => ReactNode) | null;
 }
 
 /** The processors' context for the run: its players and units, the given encounters, no entity selection. */

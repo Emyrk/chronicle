@@ -7,6 +7,7 @@ import { damageDoneDefaultFilters, damageDoneFixedFilters } from "@/pages/Instan
 import { aggregateForEncounters } from "@/pages/Instance/EventsPanels/DamageDone/aggregateDamageDone";
 import { processIncrementally, type IncrementalProcessorState } from "@/pages/Instance/EventsPanels/mainThreadProcessor";
 import { raidFramesProcessor, type RaidFramesResult } from "@/pages/Instance/EventsPanels/RaidFrames/raidFrames.processor";
+import { buildThreatView, threatProcessor, type ThreatResult } from "@/pages/Instance/EventsPanels/Threat/threat.processor";
 import { serializableContext } from "./heroReplay";
 import { meterTotals } from "./heroMeter";
 
@@ -23,7 +24,9 @@ function heroStreams(panelStreams: readonly StreamType[], fetched: readonly Stre
 /**
  * The live stats for the playing pull at `cursorMs` (absolute): Damage Done cumulative from the pull's start
  * (the run page's processor and filters, stopped at the cursor as the Watch tab's sync mode does) as the glass
- * meter's totals, and Raid Frames processed once for the pull, for reading at the cursor.
+ * meter's totals, the run page's Threat (estimated) table at the cursor the same way (on the hero's streams, so
+ * without auras: unknown stances read as tanking once meleed), and Raid Frames processed once for the pull, for
+ * reading at the cursor.
  */
 export function useHeroStats(instance: Instance, encounterId: string | null, cursorMs: number | null, fetched: readonly StreamType[]) {
   const events = useInstanceEventsContext();
@@ -52,14 +55,16 @@ export function useHeroStats(instance: Instance, encounterId: string | null, cur
 
   // Damage at the cursor: resumed forward from the last call; a seek back starts the pull over.
   const [damage, setDamage] = useState<{ encounterId: string; result: DamageDoneResult } | null>(null);
+  const [threat, setThreat] = useState<{ encounterId: string; result: ThreatResult } | null>(null);
   // The run the loop works on, read afresh each time round; its state resumes only for the same context.
-  const latest = useRef({ damageContext, encounterId, fetched });
+  const latest = useRef({ context, damageContext, encounterId, fetched });
   const damageState = useRef<{ context: typeof damageContext; state: IncrementalProcessorState<DamageDoneResult> } | null>(null);
+  const threatState = useRef<{ context: typeof context; state: IncrementalProcessorState<ThreatResult> } | null>(null);
   const running = useRef(false);
   const pending = useRef<number | null>(null);
   const mounted = useRef(true);
   useEffect(() => {
-    latest.current = { damageContext, encounterId, fetched };
+    latest.current = { context, damageContext, encounterId, fetched };
   });
   useEffect(() => {
     mounted.current = true;
@@ -78,8 +83,8 @@ export function useHeroStats(instance: Instance, encounterId: string | null, cur
         while (pending.current !== null && mounted.current) {
           const stopAt = new Date(pending.current);
           pending.current = null;
-          const { damageContext: context, encounterId: id, fetched: available } = latest.current;
-          if (!context || !id) break;
+          const { context: pullContext, damageContext: context, encounterId: id, fetched: available } = latest.current;
+          if (!context || !pullContext || !id) break;
           const streams = heroStreams(damageDoneProcessor.streams, available);
           const loaded = await Promise.all(streams.map(async (type) => [type, await events.fetchStream(type)] as [StreamType, CachedStream]));
           const previous = damageState.current?.context === context ? damageState.current.state : null;
@@ -93,6 +98,19 @@ export function useHeroStats(instance: Instance, encounterId: string | null, cur
           if (processed.error || !mounted.current) break;
           damageState.current = { context, state: processed };
           setDamage({ encounterId: id, result: processed.result });
+          const threatStreams = heroStreams(threatProcessor.streams, available);
+          const threatLoaded = await Promise.all(threatStreams.map(async (type) => [type, await events.fetchStream(type)] as [StreamType, CachedStream]));
+          const threatPrevious = threatState.current?.context === pullContext ? threatState.current.state : null;
+          const threatProcessed = await processIncrementally<ThreatResult>({
+            panelId: threatProcessor.id,
+            streams: new Map(threatLoaded),
+            context: pullContext,
+            stopAtTimestamp: stopAt,
+            previousState: threatPrevious,
+          });
+          if (threatProcessed.error || !mounted.current) break;
+          threatState.current = { context: pullContext, state: threatProcessed };
+          setThreat({ encounterId: id, result: threatProcessed.result });
         }
       } finally {
         running.current = false;
@@ -106,6 +124,7 @@ export function useHeroStats(instance: Instance, encounterId: string | null, cur
   }, [encounterId, instance]);
   const damageResult = damage?.encounterId === encounterId ? damage.result : null;
   const framesResult = frames.data ?? null;
+  const threatResult = threat?.encounterId === encounterId ? threat.result : null;
   // One object per change, so the hero reports it only when it moves.
   return useMemo(() => {
     if (!encounterId || cursorMs === null) return null;
@@ -118,8 +137,9 @@ export function useHeroStats(instance: Instance, encounterId: string | null, cur
       elapsedMs,
       damage: rows && meterTotals(rows.map((row) => ({ name: row.playerName, className: row.className, amount: row.value })), elapsedMs),
       frames: framesResult,
+      threat: threatResult && buildThreatView(threatResult, [encounterId], NO_SELECTION.enemyIds),
     };
-  }, [cursorMs, damageResult, encounterId, encounterStartMs, framesResult]);
+  }, [cursorMs, damageResult, encounterId, encounterStartMs, framesResult, threatResult]);
 }
 
 export type HeroStats = NonNullable<ReturnType<typeof useHeroStats>>;
