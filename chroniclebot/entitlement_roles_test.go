@@ -131,7 +131,11 @@ func TestSyncDiscordUserKeepsMembershipWhenTierRoleWriteFails(t *testing.T) {
 		GuildID: "guild", HonoredRoleID: "honored", ReveredRoleID: "revered", ExaltedRoleID: "exalted", DB: store,
 	}}
 	zed := &tierRoleTestAuthorizer{recordingAuthorizer: &recordingAuthorizer{}, StoreQueries: store}
-	require.NoError(t, bot.SyncDiscordUser(context.Background(), zed, "discord-user", userID))
+	result, err := bot.syncDiscordUser(context.Background(), zed, "discord-user", userID)
+	require.NoError(t, err)
+	require.Len(t, result.Warnings, 1)
+	require.Contains(t, result.Warnings[0], "sync Discord paid-tier roles: remove Discord tier role honored")
+	require.Contains(t, result.Warnings[0], "Missing Permissions")
 	require.Equal(t, 1, memberFetches, "reuse the existing Discord member fetch")
 	require.Equal(t, 1, roleWrites)
 	require.True(t, store.memberChecked, "role mutation failures must not block membership grants")
