@@ -6,17 +6,20 @@ import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { trackFunnel } from "@/utils/funnel";
 import { BossRail } from "./BossRail";
+import type { ExploreTarget } from "./explore3D";
 import { useHeroClips, visitClip } from "./heroClips";
 import { HeroMeter } from "./HeroMeter";
 import { clipMeter, type HeroMeterPane } from "./heroMeter";
 import { HeroReplayLayer, type HeroEntry } from "./HeroReplayLayer";
 import { heroWindow, type HeroReplay } from "./heroReplay";
-import { LandingHero } from "./LandingHero";
+import { HeroScrubber, LandingHero } from "./LandingHero";
 import { IMAGES } from "./startPageStyle";
 import { whenIdle } from "./whenIdle";
 
 // The sections below how-it-works and their queries: requested only once the trigger in BelowFold fires.
 const StartBelowFold = lazy(() => import("./StartBelowFold"));
+// The Explore modal: requested only when it opens.
+const Explore3DModal = lazy(() => import("./Explore3DModal"));
 
 const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
 
@@ -200,7 +203,7 @@ function HowItWorks() {
  * passed) or this slot nears the viewport, whichever comes first. Holds a screen of
  * height until then, so the footer never shows (or shifts) in its place.
  */
-function BelowFold() {
+function BelowFold({ onExplore }: { onExplore: (target: ExploreTarget) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [load, setLoad] = useState(false);
 
@@ -226,7 +229,7 @@ function BelowFold() {
   const placeholder = <div ref={ref} className="min-h-screen" />;
   return load ? (
     <Suspense fallback={placeholder}>
-      <StartBelowFold />
+      <StartBelowFold onExplore={onExplore} />
     </Suspense>
   ) : (
     placeholder
@@ -311,6 +314,33 @@ export function StartPage() {
   // The funnel's denominator: one per visit to /start, with its campaign.
   useEffect(() => trackFunnel("land"), []);
 
+  // The Explore modal and whether it took over the hero's live scene (decided on open, so it never moves).
+  const [explore, setExplore] = useState<(ExploreTarget & { hosted: boolean }) | null>(null);
+  const openExplore = useCallback((target: ExploreTarget, hosted = false) => {
+    trackFunnel("explore_3d_open", { placement: target.placement });
+    setExplore({ ...target, hosted });
+  }, []);
+  const closeExplore = useCallback(() => setExplore(null), []);
+  // From the hero: the playing pull, from where it is; the live backdrop hands over its loaded run when it plays.
+  const exploreHero = (placement: "hero" | "hero_chip") => {
+    const run = current >= 0 ? runs[current] : null;
+    if (!run) return;
+    openExplore({
+      placement,
+      instanceId: run.instance_id,
+      run,
+      encounterId: hero?.window?.encounterId ?? null,
+      startMs: replay?.currentMs,
+      poster: clip?.poster ?? visit?.poster ?? null,
+    }, replay !== null);
+  };
+  const exploreModal = explore && (
+    // Its own boundary: the modal's chunk loading never suspends the hero around it.
+    <Suspense fallback={<div className="fixed inset-0 z-[100] bg-background/80" />}>
+      <Explore3DModal target={explore} onClose={closeExplore} Scrubber={HeroScrubber} Rail={BossRail} />
+    </Suspense>
+  );
+
   // Our hero now covers the static poster index.html painted before the bundle loaded.
   useLayoutEffect(() => {
     document.getElementById("start-poster-shell")?.remove();
@@ -353,7 +383,18 @@ export function StartPage() {
           currentMs={replay?.currentMs}
           playback={replay}
           getSidekickHref={getSidekickHref}
-          layer3D={landing || landingFailed ? <HeroReplayLayer entries={heroEntries} index={heroIndex} requested={liveRequested} onAdvance={advanceHero} onReplay={setReplay} /> : null}
+          layer3D={landing || landingFailed ? (
+            <HeroReplayLayer
+              entries={heroEntries}
+              index={heroIndex}
+              requested={liveRequested}
+              paused={explore !== null}
+              explore={explore?.hosted ? exploreModal : null}
+              onAdvance={advanceHero}
+              onReplay={setReplay}
+            />
+          ) : null}
+          onExplore={hero ? exploreHero : undefined}
         />
         {meter && (
           // Below 900 px the meter is a strip under the replay, its top three bars.
@@ -369,7 +410,8 @@ export function StartPage() {
       </div>
       <SendLinkSection />
       <HowItWorks />
-      <BelowFold />
+      <BelowFold onExplore={openExplore} />
+      {explore && !explore.hosted && exploreModal}
       <footer className="mt-auto flex flex-wrap gap-3 border-t px-4 py-3.5 text-[11px] text-muted-foreground lg:gap-[18px] lg:px-8 lg:py-[18px] lg:text-xs">
         <span>{siteName ? `Chronicle for ${siteName}` : "Chronicle"}</span>
         {FOOTER_LINKS.map((link) => (

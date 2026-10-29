@@ -413,7 +413,7 @@ func TestSpeedrunInstanceBoardsCarryRecord(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
 
-	insertRun := func(instanceName string, guildID uuid.NullUUID, rankedDuration time.Duration, offset time.Duration) {
+	insertRun := func(instanceName string, guildID uuid.NullUUID, rankedDuration time.Duration, offset time.Duration, capabilities ...string) uuid.UUID {
 		t.Helper()
 		id := uuid.New()
 		clearStart := startedAt.Add(offset)
@@ -423,7 +423,7 @@ func TestSpeedrunInstanceBoardsCarryRecord(t *testing.T) {
 			Name: instanceName, HashedSlug: pgtype.Text{String: "board-" + id.String()[:8], Valid: true},
 			GuildID:   guildID,
 			StartTime: database.Timestamptz(clearStart), EndTime: database.Timestamptz(clearEnd),
-			Capabilities: []string{}, MaxPlayers: 40,
+			Capabilities: append([]string{}, capabilities...), MaxPlayers: 40,
 		})
 		require.NoError(t, err)
 		require.NoError(t, store.InsertInstanceSpeedrun(ctx, database.InsertInstanceSpeedrunParams{
@@ -437,10 +437,11 @@ func TestSpeedrunInstanceBoardsCarryRecord(t *testing.T) {
 			BossToBossDurationMs: pgtype.Int8{Int64: int64(rankedDuration / time.Millisecond), Valid: true},
 			Proof:                []byte(`{"proof":[]}`),
 		}))
+		return id
 	}
 
 	insertRun("Molten Core", uuid.NullUUID{UUID: slowGuildID, Valid: true}, 50*time.Minute, 0)
-	insertRun("Molten Core", uuid.NullUUID{UUID: fastGuildID, Valid: true}, 40*time.Minute, 2*time.Hour)
+	fastID := insertRun("Molten Core", uuid.NullUUID{UUID: fastGuildID, Valid: true}, 40*time.Minute, 2*time.Hour, "unit-position")
 	// A qualified run without a guild lists the board but cannot rank on it.
 	insertRun("Zul'Gurub", uuid.NullUUID{}, 30*time.Minute, 0)
 
@@ -452,9 +453,13 @@ func TestSpeedrunInstanceBoardsCarryRecord(t *testing.T) {
 	require.EqualValues(t, 40*time.Minute/time.Millisecond, boards[0].RecordDurationMs)
 	require.Equal(t, "Fast Raiders", boards[0].RecordGuildName)
 	require.True(t, startedAt.Add(2*time.Hour+40*time.Minute).Equal(boards[0].RecordCompletionTime.Time))
+	require.Equal(t, fastID, boards[0].RecordInstanceID)
+	require.True(t, boards[0].RecordHasPositions)
 
 	require.Equal(t, "Zul'Gurub", boards[1].InstanceName)
 	require.False(t, boards[1].RecordCompletionTime.Valid)
 	require.Zero(t, boards[1].RecordDurationMs)
 	require.Empty(t, boards[1].RecordGuildName)
+	require.Equal(t, uuid.Nil, boards[1].RecordInstanceID)
+	require.False(t, boards[1].RecordHasPositions)
 }

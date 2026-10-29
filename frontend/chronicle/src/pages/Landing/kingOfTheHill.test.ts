@@ -17,7 +17,7 @@ function board(instance_name: string, record?: { guild: string; at: string; ms?:
   return {
     instance_name,
     difficulty_name,
-    record: record && { guild_name: record.guild, completion_time: record.at, duration_ms: record.ms ?? 1_800_000 },
+    record: record && { guild_name: record.guild, completion_time: record.at, duration_ms: record.ms ?? 1_800_000, instance_id: `${instance_name}-record` },
   };
 }
 

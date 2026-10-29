@@ -233,7 +233,8 @@ OFFSET @result_offset::bigint;
 -- Returns distinct (instance, difficulty) boards that have at least one
 -- qualified speedrun. Each difficulty has its own leaderboard.
 -- Each board carries its record: the first place of SpeedrunLeaderboard with
--- full timing and no filters (zero/NULL record columns when no run ranks there).
+-- full timing and no filters (zero/NULL record columns when no run ranks there),
+-- with its instance and whether its log recorded unit positions (a replay).
 -- JOINs wow_server_realms so RLS tenant filtering cascades.
 WITH boards AS (
     SELECT DISTINCT sr.instance_name, li.difficulty_name
@@ -249,13 +250,17 @@ SELECT
     boards.difficulty_name,
     COALESCE(record.duration_ms, 0)::bigint AS record_duration_ms,
     record.completion_time AS record_completion_time,
-    COALESCE(record.guild_name, '')::text AS record_guild_name
+    COALESCE(record.guild_name, '')::text AS record_guild_name,
+    COALESCE(record.instance_id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS record_instance_id,
+    COALESCE(record.has_positions, false)::boolean AS record_has_positions
 FROM boards
 LEFT JOIN LATERAL (
     SELECT
         COALESCE(sr.ranked_duration_ms, sr.duration_ms)::bigint AS duration_ms,
         COALESCE(sr.ranked_completion_time, sr.completion_time)::timestamptz AS completion_time,
-        g.name AS guild_name
+        g.name AS guild_name,
+        sr.instance_id,
+        ('unit-position' = ANY(li.capabilities)) AS has_positions
     FROM instance_speedruns sr
     JOIN log_instances li ON li.id = sr.instance_id
     JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted

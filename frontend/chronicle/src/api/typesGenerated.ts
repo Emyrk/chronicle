@@ -4428,6 +4428,14 @@ export interface SpeedrunBoardRecord {
     readonly duration_ms: number;
     readonly completion_time: string;
     readonly guild_name: string;
+    /**
+     * InstanceID is the record run, for opening its replay from the throne.
+     */
+    readonly instance_id: string;
+    /**
+     * HasPositions is true when the record run's log recorded unit positions (a replay).
+     */
+    readonly has_positions?: boolean;
 }
 
 // From chroniclesdk/log.go

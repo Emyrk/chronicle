@@ -38,9 +38,11 @@ interface RaidCardProps {
   bossCount?: number;
   /** Average guild parse for this raid; shown as a badge in the top-right corner. */
   parseScore?: number;
+  /** Shows an "Explore in 3D" action on runs with unit positions (the landing); the card still links to the run. */
+  onExplore?: (instance: RecentInstance) => void;
 }
 
-export function RaidCard({ instance, instances, bossCount, parseScore }: RaidCardProps) {
+export function RaidCard({ instance, instances, bossCount, parseScore, onExplore }: RaidCardProps) {
   const uploads = instances && instances.length > 0 ? instances : [instance];
   const [activeUploadIndex, setActiveUploadIndex] = useState(0);
   const [imageError, setImageError] = useState(false);
@@ -107,6 +109,17 @@ export function RaidCard({ instance, instances, bossCount, parseScore }: RaidCar
             ))}
           </div>
         </div>
+      )}
+
+      {onExplore && activeInstance.has_positions && (
+        <button
+          type="button"
+          onClick={() => onExplore(activeInstance)}
+          className="absolute left-2 top-2 z-30 flex h-7 items-center gap-1.5 rounded-full border border-white/20 bg-black/75 px-2.5 text-xs font-semibold text-white shadow-lg backdrop-blur-md hover:border-primary hover:bg-black/90 focus-visible:border-primary focus-visible:outline-none"
+        >
+          <Box className="h-3.5 w-3.5" aria-hidden="true" />
+          Explore in 3D
+        </button>
       )}
 
       <Link to={instanceUrl} className="block h-full">

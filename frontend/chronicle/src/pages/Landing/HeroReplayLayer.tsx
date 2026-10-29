@@ -64,13 +64,15 @@ export interface HeroEntry {
 }
 
 /** One entry's replay. A hidden slot preloads (instance, streams, mesh) without playing or showing. */
-function HeroSlot({ slotKey, entry, active, hidden, onPullEnd, onReplay }: {
+function HeroSlot({ slotKey, entry, active, hidden, onPullEnd, onReplay, children }: {
   slotKey: string;
   entry: HeroEntry;
   active: boolean;
   hidden: boolean;
   onPullEnd?: () => void;
   onReplay: (slotKey: string, replay: HeroReplay | null) => void;
+  /** Rendered inside the entry's run (its stream cache): the Explore modal taking it over. */
+  children?: ReactNode;
 }) {
   const report = useCallback((replay: HeroReplay | null) => onReplay(slotKey, replay), [onReplay, slotKey]);
   return (
@@ -85,7 +87,9 @@ function HeroSlot({ slotKey, entry, active, hidden, onPullEnd, onReplay }: {
             active={active}
             onPullEnd={onPullEnd}
             onReplay={report}
-          />
+          >
+            {children}
+          </LandingHero3D>
         </Suspense>
       </SilentBoundary>
     </div>
@@ -104,14 +108,20 @@ function HeroSlot({ slotKey, entry, active, hidden, onPullEnd, onReplay }: {
  * elsewhere skips the idle wait.
  * Sends hero_play_3s once the 3D replay has played for 3 s on screen, or,
  * with 3D suppressed (or no featured run), once the poster has been on screen for 3 s.
+ * While `paused` (the Explore modal is open) the replay holds still; `explore` renders
+ * inside the playing entry's run, so the modal reuses its instance, streams and mesh.
  */
-export function HeroReplayLayer({ entries, index, requested = false, onAdvance, onReplay }: {
+export function HeroReplayLayer({ entries, index, requested = false, paused = false, explore, onAdvance, onReplay }: {
   /** The montage; empty leaves the poster. */
   entries: HeroEntry[];
   /** The entry playing. */
   index: number;
   /** The visitor asked for the live replay: load it now. */
   requested?: boolean;
+  /** The Explore modal is open: the backdrop pauses. */
+  paused?: boolean;
+  /** The Explore modal, taking over the playing entry. */
+  explore?: ReactNode;
   /** Moves the montage on to the next entry. */
   onAdvance: () => void;
   onReplay: (replay: HeroReplay | null) => void;
@@ -158,7 +168,7 @@ export function HeroReplayLayer({ entries, index, requested = false, onAdvance, 
   }, []);
 
   // A 3 s stretch of uninterrupted play on screen; a pause, scroll-away or hidden tab restarts it.
-  const heroMode = !inView || !pageVisible ? null : allowed ? (playing3D ? "3d" : null) : "poster";
+  const heroMode = !inView || !pageVisible || paused ? null : allowed ? (playing3D ? "3d" : null) : "poster";
   useEffect(() => {
     if (!heroMode || heroPlaySent.current) return;
     const timer = window.setTimeout(() => {
@@ -192,11 +202,13 @@ export function HeroReplayLayer({ entries, index, requested = false, onAdvance, 
           key={currentKey}
           slotKey={currentKey}
           entry={entries[current]}
-          active={inView && pageVisible}
+          active={inView && pageVisible && !paused}
           hidden={false}
           onPullEnd={nextKey ? handlePullEnd : undefined}
           onReplay={handleReplay}
-        />
+        >
+          {explore}
+        </HeroSlot>
       )}
       {mounted && nextKey && playedKey === currentKey && (
         <HeroSlot key={nextKey} slotKey={nextKey} entry={entries[next]} active={false} hidden onReplay={handleReplay} />
