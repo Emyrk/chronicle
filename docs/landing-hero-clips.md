@@ -14,7 +14,7 @@ dungeon, in `frontend/chronicle/public/c/images/landing/clips/`, listed in `clip
   "mp4": "zg-hakkar.e03f747a.mp4",        // 1280x720, H.264, faststart, muted
   "webm": "zg-hakkar.47be4d8e.webm",      // 1280x720, VP9, muted
   "poster": "zg-hakkar.5e485f45.webp",    // the clip's first frame
-  "portrait": { "mp4": "…", "webm": "…", "poster": "…" },   // 720x960, same moment
+  "portrait": { "mp4": "…", "webm": "…", "poster": "…" },   // 720x960, same moment (the poster 540x720)
   "meter": {
     "total": 535403,                      // the players' damage over the whole pull
     "dps": 4153,                          // total / pull duration
@@ -29,7 +29,9 @@ the clip. `death` is the first player death inside the clip (`at_ms` counts from
 `null` when no one dies on screen. Each clip is 8 s and loops: its last second crossfades into the frames just
 before its first, so the end runs into the start.
 
-Budgets: ≤ 1.2 MB per landscape video, ≤ 600 KB per portrait video, ≤ 100 KB per poster. The script prints
+Budgets: ≤ 1.2 MB per landscape video, ≤ 600 KB per portrait video, ≤ 100 KB per poster. The portrait poster
+is the phone hero's LCP image, so the script writes it at 540x720 and WebP quality 50 (about 30 KB): heavier,
+and `/start` misses its 2.5 s LCP on simulated mobile. The script prints
 `OVER BUDGET` when a file exceeds its budget.
 
 ## Caching

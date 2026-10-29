@@ -4,10 +4,13 @@ import { useInstanceEventsContext, type CachedStream, type StreamType } from "@/
 import type { Instance } from "@/pages/Instance/InstancePage";
 import { damageDoneProcessor, type DamageDoneResult } from "@/pages/Instance/EventsPanels/DamageDone/damageDone.processor";
 import { damageDoneDefaultFilters, damageDoneFixedFilters } from "@/pages/Instance/EventsPanels/DamageDone/damageDoneFilters";
+import { aggregateForEncounters } from "@/pages/Instance/EventsPanels/DamageDone/aggregateDamageDone";
 import { processIncrementally, type IncrementalProcessorState } from "@/pages/Instance/EventsPanels/mainThreadProcessor";
 import { raidFramesProcessor, type RaidFramesResult } from "@/pages/Instance/EventsPanels/RaidFrames/raidFrames.processor";
 import { serializableContext } from "./heroReplay";
+import { meterTotals } from "./heroMeter";
 
+const NO_SELECTION = { enemyIds: new Set<string>(), playerIds: new Set<string>() };
 // The run page's Damage Done (players) with its fixed and default target filters; its time range is the pull's
 // start to the cursor, where the processor stops.
 const DAMAGE_FILTERS = [...damageDoneFixedFilters("players"), ...damageDoneDefaultFilters("players")];
@@ -19,8 +22,8 @@ function heroStreams(panelStreams: readonly StreamType[], fetched: readonly Stre
 
 /**
  * The live stats for the playing pull at `cursorMs` (absolute): Damage Done cumulative from the pull's start
- * (the run page's processor, stopped at the cursor as the Watch tab's sync mode does), and Raid Frames
- * processed once for the pull and read at the cursor.
+ * (the run page's processor and filters, stopped at the cursor as the Watch tab's sync mode does) as the glass
+ * meter's totals, and Raid Frames processed once for the pull, for reading at the cursor.
  */
 export function useHeroStats(instance: Instance, encounterId: string | null, cursorMs: number | null, fetched: readonly StreamType[]) {
   const events = useInstanceEventsContext();
@@ -104,14 +107,19 @@ export function useHeroStats(instance: Instance, encounterId: string | null, cur
   const damageResult = damage?.encounterId === encounterId ? damage.result : null;
   const framesResult = frames.data ?? null;
   // One object per change, so the hero reports it only when it moves.
-  return useMemo(() => encounterId && cursorMs !== null ? {
-    encounterId,
-    cursorMs,
-    // DPS over the pull so far, as the run page's Damage Done over the same window.
-    elapsedMs: encounterStartMs === null ? 0 : cursorMs - encounterStartMs,
-    damage: damageResult,
-    frames: framesResult,
-  } : null, [cursorMs, damageResult, encounterId, encounterStartMs, framesResult]);
+  return useMemo(() => {
+    if (!encounterId || cursorMs === null) return null;
+    // Rates over the pull so far, as the run page's Damage Done over the same window; its rows, as the meter shows them.
+    const elapsedMs = encounterStartMs === null ? 0 : cursorMs - encounterStartMs;
+    const rows = damageResult ? aggregateForEncounters("players", damageResult, [encounterId], NO_SELECTION) : null;
+    return {
+      encounterId,
+      cursorMs,
+      elapsedMs,
+      damage: rows && meterTotals(rows.map((row) => ({ name: row.playerName, className: row.className, amount: row.value })), elapsedMs),
+      frames: framesResult,
+    };
+  }, [cursorMs, damageResult, encounterId, encounterStartMs, framesResult]);
 }
 
 export type HeroStats = NonNullable<ReturnType<typeof useHeroStats>>;
