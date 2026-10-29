@@ -17,6 +17,7 @@ import { POWER_COLORS } from "../RaidFrames/raidFrameShared";
 import { activeDebuffsAt, type MapDebuff, type MapEncounterPositions, type MapPositionSample, type MapResult } from "./map.processor";
 import { inferRoles } from "../Roles/roles.processor";
 import { deriveRecentHealGain, isDeadAt, type EncounterEffects } from "./replayEffects";
+import { shouldShowMapUnit } from "./mapUnitVisibility";
 import {
   AUTO_FIT_MIN_SPAN_YARDS,
   autoFitViewport,
@@ -277,6 +278,8 @@ export interface MapSceneOptions {
    * stopped reporting drop off the map.
    */
   wholeRun?: boolean;
+  /** Reveal units suppressed by map-specific visibility rules. */
+  showHiddenUnits?: boolean;
   /**
    * A clock of the scene's own for when the page's Replay is off (the mini
    * map's preview): `elapsedMs` of real time loops the encounter at
@@ -327,13 +330,29 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
     if (!encounter || cursorMs === null) return [];
     return Array.from(encounter.positionsByUnit.entries()).flatMap(([guid, positions]) => {
       const player = props.context.instance.players?.[guid];
+      const metadata = props.context.instance.units?.[guid];
+      if (!player && !shouldShowMapUnit(
+        props.context.instance.name,
+        props.context.instance.flavor ?? [],
+        metadata?.entry,
+        options.showHiddenUnits,
+      )) return [];
       const sample = replayPositionAt(positions, cursorMs, Boolean(player), wholeRun ? RUN_UNIT_STALE_MS : undefined);
       if (!sample) return [];
       // Across a run, nobody should glide between distant encounter samples or linger after telemetry stops.
       if (wholeRun && isStaleRunSample(sample, cursorMs)) return [];
       return [{ guid, sample, positions }];
     });
-  }, [cursorMs, encounter, props.context.instance.players, wholeRun]);
+  }, [
+    cursorMs,
+    encounter,
+    options.showHiddenUnits,
+    props.context.instance.flavor,
+    props.context.instance.name,
+    props.context.instance.players,
+    props.context.instance.units,
+    wholeRun,
+  ]);
   const mapId = dominantMapId(visibleUnits.map((unit) => unit.sample));
   const representativeSample = visibleUnits.find((unit) => unit.sample.mapId === mapId)?.sample;
   // A run has no single instance encounter: the first with a map stands in for artwork lookup.

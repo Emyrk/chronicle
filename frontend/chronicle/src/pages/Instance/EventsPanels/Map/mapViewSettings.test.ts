@@ -31,6 +31,16 @@ describe("map view settings", () => {
     });
   });
 
+  it("hides map-specific units by default", () => {
+    expect(readStoredEffectSettings().showHiddenUnits).toBe(false);
+  });
+
+  it("restores the saved hidden-unit visibility setting", () => {
+    localStorage.setItem(EFFECTS_STORAGE_KEY, JSON.stringify({ showHiddenUnits: true }));
+
+    expect(readStoredEffectSettings().showHiddenUnits).toBe(true);
+  });
+
   it("defaults the 3D chip scale to 100 percent", () => {
     expect(readStoredEffectSettings().chipScalePercent).toBe(100);
   });

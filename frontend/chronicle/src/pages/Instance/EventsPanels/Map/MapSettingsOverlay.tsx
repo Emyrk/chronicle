@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Gamepad2, Globe, PersonStanding, RotateCcw, Scan, Sparkles, UserRound, X, type LucideIcon } from "lucide-react";
+import { Bug, Gamepad2, Globe, PersonStanding, RotateCcw, Scan, Sparkles, UserRound, X, type LucideIcon } from "lucide-react";
 import { Switch } from "@/components/ui/Switch/Switch";
 import { cn } from "@/lib/utils";
 import { DEFAULT_AD_STRAFE, MAP_CONTROL_KEYBINDS } from "./mapControls";
@@ -53,6 +53,7 @@ const TAB_STORAGE_KEY = "chronicle.map.settingsTab";
 const UNIT_KEYS = ["chipScalePercent", "bars", "aboveDisc", "trailSeconds"] as const satisfies readonly (keyof EffectSettings)[];
 const COMBAT_KEYS = ["enabled", "heals", "overheal", "periodic", "castMode", "onlySelected", "maxEffects"] as const satisfies readonly (keyof EffectSettings)[];
 const WORLD_KEYS = ["alignmentOverlay"] as const satisfies readonly (keyof EffectSettings)[];
+const DEVELOPER_KEYS = ["showHiddenUnits"] as const satisfies readonly (keyof EffectSettings)[];
 
 function defaultsFor(keys: readonly (keyof EffectSettings)[]): Partial<EffectSettings> {
   return Object.fromEntries(keys.map((key) => [key, DEFAULT_EFFECT_SETTINGS[key]]));
@@ -235,6 +236,26 @@ export function MapSettingsOverlay({
           onEffectSettings(defaultsFor(WORLD_KEYS));
         },
       } : undefined,
+    },
+    {
+      id: "developer",
+      label: "Developer",
+      icon: Bug,
+      content: (
+        <Section title="Diagnostics">
+          <Toggle
+            label="Show hidden units"
+            detail="Reveal map markers suppressed by instance-specific cleanup rules"
+            checked={effectSettings.showHiddenUnits}
+            changed={changed("showHiddenUnits")}
+            onChange={(showHiddenUnits) => onEffectSettings({ showHiddenUnits })}
+          />
+        </Section>
+      ),
+      reset: {
+        changed: DEVELOPER_KEYS.some(changed),
+        apply: () => onEffectSettings(defaultsFor(DEVELOPER_KEYS)),
+      },
     },
     {
       id: "controls",

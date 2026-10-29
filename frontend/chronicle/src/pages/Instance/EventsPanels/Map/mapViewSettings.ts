@@ -22,6 +22,8 @@ export interface EffectSettings {
   chipScalePercent: number;
   /** Translucent 2D artwork over the dungeon mesh for coordinate debugging. */
   alignmentOverlay: boolean;
+  /** Reveal units suppressed by map-specific cleanup rules. */
+  showHiddenUnits: boolean;
 }
 
 export const EFFECTS_STORAGE_KEY = "chronicle.map.effects3d";
@@ -42,6 +44,7 @@ export const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
   trailSeconds: 0,
   chipScalePercent: 100,
   alignmentOverlay: false,
+  showHiddenUnits: false,
 };
 
 export const ABOVE_DISC_MODES: { value: AboveDiscMode; label: string; title: string }[] = [

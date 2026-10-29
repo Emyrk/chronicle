@@ -413,6 +413,8 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     retry: false,
     queryFn: () => fetchMiniatureUrls(),
   });
+  // Display settings and the settings overlay that sets them (all kept in local storage).
+  const [effectSettings, updateEffectSettings] = useEffectSettings();
   const [webglUnavailable, setWebglUnavailable] = useState(false);
   const show3D = !webglUnavailable;
   // "3D map": the real dungeon mesh as the ground. Units project onto it with
@@ -450,6 +452,7 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     rawDungeonProjection: show3D && meshOn && meshState === "ready",
     preferRenderedCanvas: !show3D || !meshOn || (mobile && !mobileWorldOpen),
     wholeRun,
+    showHiddenUnits: effectSettings.showHiddenUnits,
     preview,
   });
   // A new encounter starts its preview from the beginning.
@@ -529,8 +532,6 @@ function SingleEncounterReplayMap({ wholeRun = false, onExitWholeRun, mini = fal
     storeShown(ENEMY_FRAMES_STORAGE_KEY, shown);
   };
   const [meterWindows, setMeterWindows] = useMeterWindows();
-  // Display settings and the settings overlay that sets them (all kept in local storage).
-  const [effectSettings, updateEffectSettings] = useEffectSettings();
   const alignmentOverlay = alignmentOverlayForMapMode(effectSettings.alignmentOverlay, meshWanted);
   useEffect(() => {
     if (alignmentOverlay !== effectSettings.alignmentOverlay) {
