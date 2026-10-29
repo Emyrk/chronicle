@@ -169,6 +169,60 @@ func MoltenCoreSpeedrunRequirements(fl database.WoWFlavor) []rankings.SpeedrunRe
 	return mc
 }
 
+// BlackwingLairDamageTargets selects the bosses and encounter adds that
+// contribute to ranked damage. Vanilla Plus replaces Vaelastrasz with a
+// Nefarian-phase boss and combines Flamegor with Ebonroc.
+func BlackwingLairDamageTargets(fl database.WoWFlavor) map[string]rankings.DamageTargets {
+	bossOnly := rankings.DamageTargets{Mode: rankings.DamageTargetsBossOnly}
+	entries := func(ids ...uint32) rankings.DamageTargets {
+		return rankings.DamageTargets{Mode: rankings.DamageTargetsEntries, EntryIDs: ids}
+	}
+
+	rules := map[string]rankings.DamageTargets{
+		"Razorgore the Untamed": entries(
+			12435, // Razorgore the Untamed
+			12416, // Blackwing Legionnaire
+			12420, // Blackwing Mage
+			12422, // Death Talon Dragonspawn
+			14456, // Blackwing Guardsman
+			50142, // Blackwing Marksman
+			52153, // Death Talon Scorcher
+		),
+		"Broodlord Lashlayer": entries(12017, 14022, 14024, 14025, 14023), // Corrupted Whelps
+		"Firemaw":             bossOnly,
+		"Chromaggus":          bossOnly,
+	}
+
+	nefarianTargets := []uint32{
+		11583, // Nefarian
+		14668, // Corrupted Infernal
+		14605, // Bone Construct
+		14261, // Blue Drakonid
+		14262, // Green Drakonid
+		14263, // Bronze Drakonid
+		14264, // Red Drakonid
+		14265, // Black Drakonid
+		14302, // Chromatic Drakonid
+	}
+	if fl.Has(database.FlavorVanillaPlus) {
+		rules["Elementium Decapitator Mk III"] = bossOnly
+		rules["Master Elemental Shaper Krixix"] = bossOnly
+		rules["Flamegor & Ebonroc"] = entries(11981, 14601)
+		nefarianTargets = append(nefarianTargets, 25123) // Vaelastrasz the Chained
+	} else {
+		rules["Vaelastrasz the Corrupt"] = bossOnly
+		rules["Ebonroc"] = bossOnly
+		rules["Flamegor"] = bossOnly
+	}
+	rules["Nefarian"] = entries(nefarianTargets...)
+
+	if fl.Has(database.FlavorOctoWoW, database.FlavorTurtle, database.FlavorNightmareOfUrsol) {
+		rules["Ezzel Darkbrewer"] = bossOnly
+	}
+
+	return rules
+}
+
 // BlackwingLairProgressionBosses returns the ordered boss encounters used for
 // progression. Vanilla+ adds the Decapitator and Krixix, combines Ebonroc with
 // Flamegor, and records Vaelastrasz as part of the Nefarian encounter.

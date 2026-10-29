@@ -313,6 +313,7 @@ var (
 		ProgressionBosses: BlackwingLairProgressionBosses,
 		FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
 			return &rankings.Rankings{
+				DamageByEncounter: BlackwingLairDamageTargets(fl),
 				Speedrun: &rankings.SpeedrunRules{
 					Requirements: BlackwingLairSpeedrunRequirements(fl),
 					LevelRange:   Level60Cap(fl),
