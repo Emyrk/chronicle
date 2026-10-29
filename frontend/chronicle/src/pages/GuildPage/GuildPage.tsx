@@ -16,7 +16,7 @@ import { Shield, PanelLeft, UserPlus, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FavoriteButton } from "@/components/Favorites";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { GuildClaimDialog } from "./GuildClaimDialog";
+import { GuildClaimDialog, GuildClaimLockedButton } from "./GuildClaimDialog";
 import { ensureRequiredRaidsTab, orderGuildPageTabs } from "./guildPageTabs";
 
 // Helper to check if an item should be visible on current device
@@ -141,9 +141,10 @@ export function GuildPage() {
       <GuildPageHeader
         guild={pageConfig.guild}
         theme={pageConfig.theme}
-        leading={pageConfig.guild.can_claim || joinButtonVisible ? (
+        leading={pageConfig.guild.can_claim || pageConfig.guild.claim_locked || joinButtonVisible ? (
           <div className="flex flex-wrap items-center gap-2">
             {pageConfig.guild.can_claim && <GuildClaimDialog guild={pageConfig.guild} />}
+            {pageConfig.guild.claim_locked && <GuildClaimLockedButton />}
             {joinButtonVisible && (myRequest ? (
               <Button variant="outline" size="sm" disabled>
                 <Clock className="h-4 w-4 mr-2" />

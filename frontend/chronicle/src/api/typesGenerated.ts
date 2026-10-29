@@ -1744,6 +1744,11 @@ export interface GuildInfo {
     readonly can_edit: boolean;
     readonly can_view_roster: boolean;
     readonly can_claim: boolean;
+    /**
+     * ClaimLocked is true when the guild is unclaimed but the user lacks the
+     * permission to submit a claim (e.g. not Honored).
+     */
+    readonly claim_locked: boolean;
 }
 
 // From chroniclesdk/guild_page.go
@@ -3497,6 +3502,10 @@ export interface ProofSubject extends ProofCharacter {
     readonly realm_name: string;
     readonly class?: string;
     readonly guild_name?: string;
+    /**
+     * CharacterName is the claiming character on a guild subject.
+     */
+    readonly character_name?: string;
     readonly status: string;
     readonly warning?: string;
 }

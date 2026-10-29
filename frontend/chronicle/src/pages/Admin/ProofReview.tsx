@@ -140,6 +140,9 @@ function Review({ request, draft, onDraftChange }: { request: ProofRequest; draf
                   <div>
                     <Link className="font-medium hover:underline" to={`/g/${subject.guild_id}`} target="_blank">&lt;{subject.name}&gt;</Link>
                     <p className="text-xs text-muted-foreground">{subject.realm_name} · Guild ID <code>{subject.guild_id}</code></p>
+                    {subject.character_name && <p className="text-xs text-muted-foreground">Claiming as{" "}
+                      <Link className="font-medium hover:underline" to={`/armory/${encodeURIComponent(subject.realm_name)}/${subject.character_guid}`} target="_blank" style={subject.class ? { color: getClassColorVar(subject.class) } : undefined}>{subject.character_name}</Link>
+                    </p>}
                   </div>
                 </div>
               ) : (

@@ -17,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/chroniclebot"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
@@ -77,6 +78,30 @@ func (h *Handler) SubmitGuildProof(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	characterGUID, err := guid.FromString(r.FormValue("character_guid"))
+	if err != nil {
+		proofError(w, r, http.StatusBadRequest, "Select the character that leads this guild")
+		return
+	}
+	player, err := h.zed.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{RealmID: guild.RealmID, Identifier: characterGUID})
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && player.GuildID.UUID != guild.ID) {
+		proofError(w, r, http.StatusBadRequest, "That character is not in this guild's armory roster")
+		return
+	}
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	link, err := h.zed.GetUserCharacterLink(ctx, database.GetUserCharacterLinkParams{CharacterGuid: characterGUID, RealmID: guild.RealmID})
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && link.UserID != applicant) {
+		proofError(w, r, http.StatusBadRequest, fmt.Sprintf("Link %s to your account before claiming this guild", player.Name))
+		return
+	}
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
 	file, header, err := r.FormFile("photo")
 	if err != nil || header.Size > serviceproof.MaxImage {
 		proofError(w, r, http.StatusBadRequest, "A JPEG screenshot no larger than 8 MB is required")
@@ -92,7 +117,9 @@ func (h *Handler) SubmitGuildProof(w http.ResponseWriter, r *http.Request) {
 	tenantID := servicetenant.TenantIDFromContext(ctx)
 	subjects := []serviceproof.Subject{{
 		Type: "guild", GuildID: uuid.NullUUID{UUID: guild.ID, Valid: true},
-		Name: guild.Name, RealmName: guild.RealmName,
+		RealmID:       uuid.NullUUID{UUID: guild.RealmID, Valid: true},
+		CharacterGUID: &characterGUID,
+		Name:          guild.Name, RealmName: guild.RealmName,
 	}}
 	id, err := h.proofs.Create(ctx, tenantID, applicant, guildOwnershipPurpose, r.FormValue("message"), image, subjects)
 	var cooldown *serviceproof.CooldownError
