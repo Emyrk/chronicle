@@ -28,6 +28,9 @@ type Store interface {
 	sqlcQuerier
 	DBTX
 
+	RankingsLeaderboardNoJIT(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error)
+	RankingsBoxPlotStatsNoJIT(ctx context.Context, arg RankingsBoxPlotStatsParams) ([]RankingsBoxPlotStatsRow, error)
+
 	Ping(ctx context.Context) (time.Duration, error)
 	InTx(ctx context.Context, f func(Store) error, opts *pgx.TxOptions) error
 	Close() error

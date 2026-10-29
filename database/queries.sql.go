@@ -18100,6 +18100,15 @@ func (q *sqlQuerier) UpsertRankingRun(ctx context.Context, arg UpsertRankingRunP
 	return created, err
 }
 
+const disableJITForTransaction = `-- name: DisableJITForTransaction :exec
+SET LOCAL jit = off
+`
+
+func (q *sqlQuerier) DisableJITForTransaction(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, disableJITForTransaction)
+	return err
+}
+
 const getCharacterEncounterStats = `-- name: GetCharacterEncounterStats :many
 SELECT
   edr.instance_name,

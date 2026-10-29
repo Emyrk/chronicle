@@ -270,6 +270,9 @@ FROM ranking_rows r
 GROUP BY r.encounter_name
 ORDER BY (r.encounter_name = 'Trash'), r.encounter_name;
 
+-- name: DisableJITForTransaction :exec
+SET LOCAL jit = off;
+
 -- name: RankingsLeaderboard :many
 -- Returns paginated DPS rankings showing each player's best single run.
 -- A "run" is one instance_id (deduplicated by duplicate_group_id).

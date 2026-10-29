@@ -411,6 +411,9 @@ func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
 	persistedRows, err := store.RankingsLeaderboard(ctx, equivalenceParams)
 	require.NoError(t, err)
 	assert.Equal(t, fallbackRows, persistedRows)
+	noJITRows, err := store.RankingsLeaderboardNoJIT(ctx, equivalenceParams)
+	require.NoError(t, err)
+	assert.Equal(t, persistedRows, noJITRows)
 
 	for _, params := range []database.RankingsLeaderboardParams{
 		{
@@ -596,6 +599,14 @@ func TestRankingsBoxPlotUsesSingleDuplicateInstance(t *testing.T) {
 	assert.Equal(t, "Discipline", rows[0].PlayerSpec)
 	assert.Equal(t, int64(1), rows[0].Count)
 	assert.Equal(t, 90.0, rows[0].MedianDps)
+	noJITRows, err := store.RankingsBoxPlotStatsNoJIT(ctx, database.RankingsBoxPlotStatsParams{
+		Metric:         "hps",
+		InstanceNames:  []string{"Molten Core"},
+		EncounterNames: []string{"Lucifron", "Magmadar"},
+		GroupByClass:   false,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, rows, noJITRows)
 
 	emptySelectionRows, err := store.RankingsBoxPlotStats(ctx, database.RankingsBoxPlotStatsParams{
 		Metric:        "hps",
