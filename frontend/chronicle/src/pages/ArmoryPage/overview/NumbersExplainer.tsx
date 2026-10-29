@@ -94,27 +94,29 @@ export function NumbersExplainer({
             <RunStrip item={selected} position={scale.position} display={display} labeled />
           </div>
         ) : (
-          <div className="mt-3 space-y-1">
-            {explained.map((item) => (
-              <div key={item.player.id} className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[9rem_minmax(0,1fr)]">
-                <button
-                  type="button"
-                  aria-pressed={item === selected}
-                  onClick={() => setSelectedId(item.player.id)}
-                  className={cn(
-                    "min-w-0 rounded-md px-2 py-1 text-left transition-colors",
-                    item === selected ? "bg-white/10" : "hover:bg-white/5",
-                  )}
-                >
-                  <span className="block truncate text-sm font-medium"><PlayerNameText player={item.player} /></span>
-                  <span className="block font-mono text-[11px] text-muted-foreground tabular-nums">Typical {fmt(item.summary.typical)}</span>
-                </button>
-                <RunStrip item={item} position={scale.position} display={display} />
-              </div>
-            ))}
+          <div className="mt-3">
+            <div className="divide-y divide-border/50 border-b border-border/50">
+              {explained.map((item) => (
+                <div key={item.player.id} className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3 py-1.5 sm:grid-cols-[9rem_minmax(0,1fr)]">
+                  <button
+                    type="button"
+                    aria-pressed={item === selected}
+                    onClick={() => setSelectedId(item.player.id)}
+                    className={cn(
+                      "min-w-0 rounded-md px-2 py-1 text-left transition-colors",
+                      item === selected ? "bg-white/10" : "hover:bg-white/5",
+                    )}
+                  >
+                    <span className="block truncate text-sm font-medium"><PlayerNameText player={item.player} /></span>
+                    <span className="block font-mono text-[11px] text-muted-foreground tabular-nums">Typical {fmt(item.summary.typical)}</span>
+                  </button>
+                  <RunStrip item={item} position={scale.position} display={display} />
+                </div>
+              ))}
+            </div>
             <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 sm:grid-cols-[9rem_minmax(0,1fr)]">
               <span />
-              <div className="relative h-4 border-t border-border/60">
+              <div className="relative h-4">
                 {scale.ticks.map((tick, index) => (
                   <span
                     key={tick}
