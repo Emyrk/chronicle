@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Clock, Copy, Users, CheckCircle, XCircle, Youtube, Swords } from "lucide-react";
+import { Box, Clock, Copy, Users, CheckCircle, XCircle, Youtube, Swords } from "lucide-react";
 import type { RecentInstance } from "@/api/typesGenerated";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import { HeroicBadge } from "@/components/HeroicBadge";
@@ -139,7 +139,7 @@ export function RaidCard({ instance, instances, bossCount, parseScore }: RaidCar
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/30" />
         
         {/* Badge stack - top right corner */}
-        {(parseScore !== undefined || activeInstance.has_youtube_video || isHeroic(activeInstance)) && (
+        {(parseScore !== undefined || activeInstance.has_positions || activeInstance.has_youtube_video || isHeroic(activeInstance)) && (
           <div className={`absolute right-2 z-20 flex flex-col items-end gap-1.5 ${uploads.length > 1 ? "top-11" : "top-2"}`}>
             {parseScore !== undefined && (
               <div
@@ -147,6 +147,12 @@ export function RaidCard({ instance, instances, bossCount, parseScore }: RaidCar
                 title="Average guild parse for this raid"
               >
                 {Math.round(parseScore)}
+              </div>
+            )}
+            {activeInstance.has_positions && (
+              <div className="flex items-center gap-1.5 bg-sky-600/75 backdrop-blur-sm text-white/85 px-2 py-1 rounded shadow-lg" title="Has a 3D replay">
+                <Box className="h-4 w-4" />
+                <span className="text-xs font-semibold">3D replay</span>
               </div>
             )}
             {activeInstance.has_youtube_video && (

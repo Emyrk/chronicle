@@ -14623,12 +14623,22 @@ ranked_instances AS (
     JOIN matching_runs USING (run_id)
 ),
 selected_runs AS (
-    SELECT id, run_id, first_encounter_time
+    SELECT
+        id,
+        run_id,
+        first_encounter_time,
+        -- prefer_replay groups runs: replays, then videos, then the rest.
+        CASE
+            WHEN NOT $9::boolean THEN 0
+            WHEN has_positions THEN 0
+            WHEN has_youtube_video THEN 1
+            ELSE 2
+        END AS preference_rank
     FROM ranked_instances
     WHERE representative_rank = 1
-    ORDER BY first_encounter_time DESC, id DESC
-    LIMIT CASE WHEN $10::int > 0 THEN $10 ELSE NULL END
-    OFFSET $9
+    ORDER BY preference_rank ASC, first_encounter_time DESC, id DESC
+    LIMIT CASE WHEN $11::int > 0 THEN $11 ELSE NULL END
+    OFFSET $10
 )
 SELECT
     ranked_instances.id,
@@ -14657,6 +14667,7 @@ SELECT
 FROM ranked_instances
 JOIN selected_runs USING (run_id)
 ORDER BY
+    selected_runs.preference_rank ASC,
     selected_runs.first_encounter_time DESC,
     selected_runs.id DESC,
     ranked_instances.representative_rank ASC
@@ -14671,6 +14682,7 @@ type ListRecentInstanceGroupsParams struct {
 	GuildID       uuid.UUID          `db:"guild_id" json:"guild_id"`
 	PlayerGuid    guid.GUID          `db:"player_guid" json:"player_guid"`
 	HasPositions  bool               `db:"has_positions" json:"has_positions"`
+	PreferReplay  bool               `db:"prefer_replay" json:"prefer_replay"`
 	OffsetCount   int32              `db:"offset_count" json:"offset_count"`
 	LimitCount    int32              `db:"limit_count" json:"limit_count"`
 }
@@ -14714,6 +14726,7 @@ func (q *sqlQuerier) ListRecentInstanceGroups(ctx context.Context, arg ListRecen
 		arg.GuildID,
 		arg.PlayerGuid,
 		arg.HasPositions,
+		arg.PreferReplay,
 		arg.OffsetCount,
 		arg.LimitCount,
 	)
