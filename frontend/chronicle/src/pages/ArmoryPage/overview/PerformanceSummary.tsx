@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { CircleHelp } from "lucide-react";
 import type { CharacterPerformanceRun } from "@/api/typesGenerated";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
@@ -21,7 +21,7 @@ export interface PerformanceSummaryPlayer {
   runs: readonly CharacterPerformanceRun[];
 }
 
-type SummaryView = "numbers" | "boxplot";
+export type SummaryView = "numbers" | "boxplot";
 
 interface SummaryRow {
   player: PerformanceSummaryPlayer;
@@ -81,44 +81,53 @@ const STAT_COLUMNS: readonly StatColumn[] = [
   },
 ];
 
+/** Switches the summary between the numbers and the box plot. */
+export function SummaryViewToggle({
+  view,
+  onChange,
+  className,
+}: {
+  view: SummaryView;
+  onChange: (view: SummaryView) => void;
+  className?: string;
+}) {
+  return (
+    <div className={cn("grid grid-cols-2 gap-1 rounded-md border border-white/10 bg-black/20 p-0.5", className)} role="group" aria-label="Summary view">
+      {(["numbers", "boxplot"] as const).map((option) => (
+        <button
+          key={option}
+          type="button"
+          aria-pressed={view === option}
+          onClick={() => onChange(option)}
+          className={cn(
+            "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+            view === option ? "bg-white/15 text-foreground" : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {option === "numbers" ? "Numbers" : "Box plot"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** Headline stats for the runs currently charted, as numbers or a box plot. */
 export function PerformanceSummaryPanel({
   players,
   metric,
   display,
+  view,
 }: {
   players: readonly PerformanceSummaryPlayer[];
   metric: ParseMetric;
   display: PerformanceDisplayMode;
+  view: SummaryView;
 }) {
-  const [view, setView] = useState<SummaryView>("numbers");
   const rows: SummaryRow[] = players.map((player) => ({ player, summary: summarizePerformanceRuns(player.runs, metric, display) }));
   if (rows.every((row) => row.summary === null)) return null;
 
   return (
     <div className="rounded-lg border border-border/60 bg-black/10">
-      <div className="flex items-center gap-3 border-b border-border/60 px-3 py-1.5">
-        <span className="text-xs font-medium text-muted-foreground">Summary</span>
-        <span className="hidden text-[11px] text-muted-foreground/70 sm:inline">
-          Hover a label for what it means.
-        </span>
-        <div className="ml-auto grid grid-cols-2 gap-1 rounded-md border border-white/10 bg-black/20 p-0.5" role="group" aria-label="Summary view">
-          {(["numbers", "boxplot"] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              aria-pressed={view === option}
-              onClick={() => setView(option)}
-              className={cn(
-                "rounded px-2.5 py-0.5 text-xs font-medium transition-colors",
-                view === option ? "bg-white/15 text-foreground" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {option === "numbers" ? "Numbers" : "Box plot"}
-            </button>
-          ))}
-        </div>
-      </div>
       {view === "boxplot" ? (
         <SummaryBoxPlot rows={rows} display={display} />
       ) : rows.length === 1 ? (

@@ -50,7 +50,7 @@ import {
   type PerformanceDateRange,
   type PerformancePointShape,
 } from "./performanceExplorerModel";
-import { PerformanceSummaryPanel } from "./PerformanceSummary";
+import { PerformanceSummaryPanel, SummaryViewToggle, type SummaryView } from "./PerformanceSummary";
 
 type DisplayMode = PerformanceDisplayMode;
 
@@ -96,6 +96,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
   const [playerDialog, setPlayerDialog] = useState<PlayerDialog>(null);
   const [mobileEncounterOpen, setMobileEncounterOpen] = useState(false);
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  const [summaryView, setSummaryView] = useState<SummaryView>("numbers");
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebouncedValue(searchQuery.trim(), 250);
   const playerSearch = useArmorySearch({ q: debouncedSearch, realm: state.realmName });
@@ -409,6 +410,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                     Add player
                     <span className="text-[10px] text-muted-foreground/60">{selectedPlayers.length}/{MAX_COMPARISON_PLAYERS}</span>
                   </Button>
+                  {!performanceLoading && <SummaryViewToggle view={summaryView} onChange={setSummaryView} className="sm:ml-auto" />}
                 </div>
 
                 {!performanceLoading && (
@@ -422,6 +424,7 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
                     }))}
                     metric={metric}
                     display={display}
+                    view={summaryView}
                   />
                 )}
 
@@ -908,9 +911,14 @@ function PerformanceTrend({
   };
 
   return (
-    <div className="space-y-3 border-t border-border/60 pt-5">
+    <div className="space-y-3">
+      <div
+        className="relative h-72 cursor-crosshair overflow-visible rounded-lg border border-border/70 bg-black/10"
+        onPointerMove={updateHoverDay}
+        onPointerLeave={() => setHoverDay(null)}
+      >
       {performanceMarkers.length > 0 && (
-        <div className="flex flex-wrap justify-end gap-x-4 gap-y-1 px-1 text-[11px] text-muted-foreground">
+        <div className="pointer-events-none absolute top-1.5 right-2 z-10 flex flex-wrap justify-end gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
           {performanceMarkers.map((marker) => (
             <div key={marker.key} className="flex items-center gap-2">
               <span
@@ -929,11 +937,6 @@ function PerformanceTrend({
           ))}
         </div>
       )}
-      <div
-        className="relative h-72 cursor-crosshair overflow-visible rounded-lg border border-border/70 bg-black/10"
-        onPointerMove={updateHoverDay}
-        onPointerLeave={() => setHoverDay(null)}
-      >
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none h-full w-full" aria-hidden="true">
           {parseTierBands.map((band) => (
             <rect
